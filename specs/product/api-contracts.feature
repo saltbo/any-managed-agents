@@ -1,4 +1,4 @@
-@planned @api @openapi
+@planned @api @openapi @cli
 Feature: API contracts and automation
   Developers can automate the control plane without using a custom runtime SDK.
 
@@ -15,8 +15,12 @@ Feature: API contracts and automation
     Then the response uses a stable error envelope
     And the envelope includes type, message, and safe structured details
 
-  Scenario: Keep OpenAPI scoped to the control plane
-    When a developer uses the OpenAPI document for automation
-    Then the contract covers only control-plane resources
-    And runtime session interaction remains Cloudflare Agent SDK-compatible
-    And the project does not maintain a generated client SDK as a product surface
+  Scenario: Generate typed clients from OpenAPI
+    When a developer needs automation
+    Then clients can be generated from the OpenAPI document
+    And generated clients manage only control-plane resources
+
+  Scenario: Provide a CLI for operators
+    When an operator uses the CLI
+    Then the CLI can manage agents, sessions, providers, vaults, governance, usage, and audit records
+    And runtime session interaction still uses Cloudflare Agent SDK-compatible endpoints
