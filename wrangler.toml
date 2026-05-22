@@ -1,7 +1,9 @@
 name = "any-managed-agents"
 main = "./workers/bootstrap.ts"
-compatibility_date = "2026-05-22"
+compatibility_date = "2026-05-07"
 compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+preview_urls = true
 
 [assets]
 binding = "ASSETS"
@@ -17,7 +19,7 @@ binding = "AI"
 [[d1_databases]]
 binding = "DB"
 database_name = "any-managed-agents-db"
-database_id = "replace-with-production-d1-database-id"
+database_id = "1b821d59-c74b-47e4-9af3-3d83de81dc1c"
 migrations_dir = "./migrations"
 
 [[durable_objects.bindings]]
@@ -33,8 +35,18 @@ enabled = true
 
 [env.staging]
 
+[env.staging.vars]
+AMA_DEFAULT_MODEL = "@cf/meta/llama-3.1-8b-instruct"
+
+[env.staging.ai]
+binding = "AI"
+
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "any-managed-agents-db-staging"
-database_id = "replace-with-staging-d1-database-id"
+database_id = "8a30ad06-ace4-4cf7-a70d-61adc0e3e042"
 migrations_dir = "./migrations"
+
+[[env.staging.durable_objects.bindings]]
+name = "MANAGED_AGENT"
+class_name = "ManagedAgent"
