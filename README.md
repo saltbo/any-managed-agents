@@ -26,6 +26,7 @@ workers/bootstrap.ts     Cloudflare Worker entry
 server/                  Hono API, Drizzle schema, Agent classes
 src/                     React app
 migrations/              D1 migrations
+docs/product/            Product-level specs and platform boundaries
 specs/product/           Product specs in Gherkin
 test/bdd/                Step definitions for executable specs
 ```
@@ -52,3 +53,9 @@ Object bindings local and intentionally omits the Workers AI binding so CI does
 not need Cloudflare deployment credentials.
 
 See [docs/infra/cloudflare-deploy.md](docs/infra/cloudflare-deploy.md).
+
+## Product Spec
+
+The product-level platform boundaries are documented in
+[docs/product/spec.md](docs/product/spec.md) and enforced through BDD specs in
+`specs/product/`.
