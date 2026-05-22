@@ -1,0 +1,26 @@
+name = "any-managed-agents-test"
+main = "./workers/bootstrap.ts"
+compatibility_date = "2026-05-07"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*", "/agents/*"]
+
+[vars]
+AMA_DEFAULT_MODEL = "@cf/meta/llama-3.1-8b-instruct"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "any-managed-agents-db-test"
+database_id = "test"
+migrations_dir = "./migrations"
+
+[[durable_objects.bindings]]
+name = "MANAGED_AGENT"
+class_name = "ManagedAgent"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ManagedAgent"]

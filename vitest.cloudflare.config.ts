@@ -9,7 +9,7 @@ export default defineConfig({
       const migrations = await readD1Migrations(migrationsPath)
 
       return {
-        wrangler: { configPath: './wrangler.toml' },
+        wrangler: { configPath: './wrangler.test.toml' },
         miniflare: {
           bindings: { TEST_MIGRATIONS: migrations },
         },

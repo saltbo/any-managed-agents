@@ -48,4 +48,8 @@ values in `wrangler.toml`.
 GitHub Actions runs checks only: lint, typecheck, BDD specs, Cloudflare runtime
 tests, and build. Deploys are handled by Cloudflare's CI/deploy pipeline.
 
+Cloudflare runtime tests use `wrangler.test.toml`, which keeps D1 and Durable
+Object bindings local and intentionally omits the Workers AI binding so CI does
+not need Cloudflare deployment credentials.
+
 See [docs/infra/cloudflare-deploy.md](docs/infra/cloudflare-deploy.md).
