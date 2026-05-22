@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "CLOUDFLARE_ENV=staging vite dev",
     "build": "vite build",
+    "build:staging": "CLOUDFLARE_ENV=staging vite build",
     "deploy": "npm run db:migrate:d1:prod && wrangler deploy",
     "db:generate": "drizzle-kit generate",
     "db:migrate:d1": "wrangler d1 migrations apply any-managed-agents-db-staging --local --env staging",

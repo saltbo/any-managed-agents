@@ -40,8 +40,7 @@ npm run test:cf
 npm run dev
 ```
 
-Before deploying, create D1 databases and replace placeholder `database_id`
-values in `wrangler.toml`.
+Production and staging D1 databases are configured in `wrangler.toml`.
 
 ## CI and Deploy
 

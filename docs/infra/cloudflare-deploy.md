@@ -10,13 +10,12 @@ GitHub Actions is intentionally limited to CI checks. Production and staging dep
 - Production D1 database: `any-managed-agents-db`
 - Staging D1 database: `any-managed-agents-db-staging`
 
-Replace the placeholder D1 `database_id` values in `wrangler.toml` after creating the databases.
-
 ## Cloudflare build settings
 
 Use these settings when connecting the GitHub repository in Cloudflare:
 
-- Build command: `npm run build`
+- Production build command: `npm run build`
+- Staging build command: `npm run build:staging`
 - Deploy command: managed by Cloudflare Workers Builds
 - Root directory: repository root
 - Production branch: `master`
