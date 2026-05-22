@@ -27,4 +27,17 @@ npm run db:migrate:d1:staging
 npm run db:migrate:d1:prod
 ```
 
+## Durable Object migration bootstrap
+
+Cloudflare Workers Builds deploys with `wrangler versions upload`. The first deployment that introduces a Durable Object migration cannot use version upload; Cloudflare requires the migration to be applied through a non-versioned deployment first.
+
+For a brand-new Worker, run this once after creating D1 resources and before relying on Workers Builds:
+
+```bash
+npm run build
+npx wrangler deploy
+```
+
+After that bootstrap deployment, Workers Builds can upload new versions normally.
+
 GitHub Actions must not be granted Cloudflare deployment credentials unless this policy changes.

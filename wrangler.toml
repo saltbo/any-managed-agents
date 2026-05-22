@@ -2,6 +2,8 @@ name = "any-managed-agents"
 main = "./workers/bootstrap.ts"
 compatibility_date = "2026-05-07"
 compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+preview_urls = true
 
 [assets]
 binding = "ASSETS"
