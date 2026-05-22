@@ -1,4 +1,4 @@
-@planned @oma-aligned @testing
+@planned @testing
 Feature: Scenario tests
   Product scenarios validate end-to-end behavior.
 

@@ -1,4 +1,4 @@
-@planned @oma-aligned @mcp @governance
+@planned @mcp @governance
 Feature: MCP policy enforcement
   Runtime MCP calls obey project and organization policy.
 

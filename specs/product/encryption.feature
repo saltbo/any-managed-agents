@@ -1,4 +1,4 @@
-@planned @oma-aligned @security
+@planned @security
 Feature: Encryption
   Secret material is encrypted or stored as secret references.
 

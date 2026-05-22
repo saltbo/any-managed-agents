@@ -1,4 +1,4 @@
-@planned @oma-aligned @sessions
+@planned @sessions
 Feature: Session stop
   Users can stop running sessions.
 

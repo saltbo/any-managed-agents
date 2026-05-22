@@ -1,4 +1,4 @@
-@planned @oma-aligned @ui @environments
+@planned @ui @environments
 Feature: Environment detail
   Users inspect reusable sandbox environment configuration.
 

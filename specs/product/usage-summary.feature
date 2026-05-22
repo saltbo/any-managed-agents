@@ -1,4 +1,4 @@
-@planned @oma-aligned @usage
+@planned @usage
 Feature: Usage summary
   Operators inspect usage and cost.
 

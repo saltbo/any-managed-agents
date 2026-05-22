@@ -1,4 +1,4 @@
-@planned @oma-aligned @auth
+@planned @auth
 Feature: Authentication guard
   Protected routes reject unauthenticated access.
 

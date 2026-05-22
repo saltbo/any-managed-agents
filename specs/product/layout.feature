@@ -1,4 +1,4 @@
-@planned @oma-aligned @ui
+@planned @ui
 Feature: Layout
   The web console provides stable navigation and project context.
 

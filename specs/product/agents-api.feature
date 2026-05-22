@@ -1,4 +1,4 @@
-@planned @oma-aligned @api @agents
+@planned @api @agents
 Feature: Agents API
   The control plane exposes APIs for project-scoped agent definitions.
 

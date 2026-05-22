@@ -1,4 +1,4 @@
-@planned @oma-aligned @docs
+@planned @docs
 Feature: Integration snippets
   Developers can copy minimal examples for SDK and API usage.
 

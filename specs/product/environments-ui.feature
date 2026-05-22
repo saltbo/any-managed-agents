@@ -1,4 +1,4 @@
-@planned @oma-aligned @ui @environments
+@planned @ui @environments
 Feature: Environments UI
   Users manage sandbox environments from the web console.
 

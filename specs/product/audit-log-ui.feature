@@ -1,4 +1,4 @@
-@planned @oma-aligned @ui @audit
+@planned @ui @audit
 Feature: Audit log UI
   Operators inspect project and organization audit history.
 

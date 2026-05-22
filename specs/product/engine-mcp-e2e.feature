@@ -1,4 +1,4 @@
-@planned @oma-aligned @mcp @runtime
+@planned @mcp @runtime
 Feature: MCP engine end-to-end
   MCP calls work through approved runtime policy.
 

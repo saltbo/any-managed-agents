@@ -1,4 +1,4 @@
-@planned @oma-aligned @ui @agents
+@planned @ui @agents
 Feature: Agent detail
   Users inspect and operate a versioned agent definition.
 

@@ -1,4 +1,4 @@
-@planned @oma-aligned @sessions @events
+@planned @sessions @events
 Feature: Session events
   Session events represent runtime history.
 

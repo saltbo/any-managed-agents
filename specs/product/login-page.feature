@@ -1,4 +1,4 @@
-@planned @oma-aligned @ui @auth
+@planned @ui @auth
 Feature: Login page
   Users sign in through a dedicated page.
 

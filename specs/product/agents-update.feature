@@ -1,4 +1,4 @@
-@planned @oma-aligned @agents
+@planned @agents
 Feature: Agent updates
   Agent changes are versioned instead of mutating running sessions.
 

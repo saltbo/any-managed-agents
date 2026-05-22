@@ -1,4 +1,4 @@
-@planned @oma-aligned @sessions @ui
+@planned @sessions @ui
 Feature: Sessions list bulk archive
   Users archive multiple sessions from the sessions list.
 

@@ -1,4 +1,4 @@
-@planned @oma-aligned @sessions @ui
+@planned @sessions @ui
 Feature: Sessions UI
   Users browse and inspect sessions.
 

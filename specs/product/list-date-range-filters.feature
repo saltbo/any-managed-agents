@@ -1,4 +1,4 @@
-@planned @oma-aligned @ui
+@planned @ui
 Feature: List date range filters
   Resource lists support time-based filtering.
 

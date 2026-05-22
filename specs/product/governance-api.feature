@@ -1,4 +1,4 @@
-@planned @oma-aligned @api @governance
+@planned @api @governance
 Feature: Governance API
   Operators manage governance policy through the control plane.
 

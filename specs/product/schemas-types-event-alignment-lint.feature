@@ -1,4 +1,4 @@
-@planned @oma-aligned @lint @schema @events
+@planned @lint @schema @events
 Feature: Schema type event alignment lint
   Event schemas, TypeScript types, and UI handling remain aligned.
 

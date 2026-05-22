@@ -1,4 +1,4 @@
-@planned @oma-aligned @lint @api
+@planned @lint @api
 Feature: Update body field alignment
   Update request fields match schemas, handlers, and docs.
 

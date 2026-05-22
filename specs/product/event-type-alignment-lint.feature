@@ -1,4 +1,4 @@
-@planned @oma-aligned @lint @events
+@planned @lint @events
 Feature: Event type alignment lint
   Event type identifiers stay consistent across schema, runtime, and UI.
 

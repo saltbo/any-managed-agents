@@ -1,4 +1,4 @@
-@planned @oma-aligned @runtime
+@planned @runtime
 Feature: Engine error termination
   Runtime errors terminate sessions in a visible and recoverable state.
 

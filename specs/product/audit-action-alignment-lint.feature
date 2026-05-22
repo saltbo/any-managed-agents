@@ -1,4 +1,4 @@
-@planned @oma-aligned @lint @audit
+@planned @lint @audit
 Feature: Audit action alignment lint
   Audit action names stay aligned across server, UI, and specs.
 

@@ -1,4 +1,4 @@
-@planned @oma-aligned @vaults @ui
+@planned @vaults @ui
 Feature: Vaults UI
   Users manage project vaults from the web console.
 

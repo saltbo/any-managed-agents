@@ -1,4 +1,4 @@
-@planned @oma-aligned @vaults @ui
+@planned @vaults @ui
 Feature: Vault detail
   Users inspect vault metadata without exposing secrets.
 

@@ -1,4 +1,4 @@
-@planned @oma-aligned @testing
+@planned @testing
 Feature: Server tests
   Server behavior is covered by focused tests.
 

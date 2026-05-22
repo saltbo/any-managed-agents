@@ -1,4 +1,4 @@
-@planned @oma-aligned @mcp
+@planned @mcp
 Feature: MCP client integration
   The runtime integrates with approved MCP clients and connectors.
 

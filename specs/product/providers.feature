@@ -1,4 +1,4 @@
-@planned @oma-aligned @providers
+@planned @providers
 Feature: Providers
   Operators configure model providers.
 

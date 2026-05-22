@@ -1,4 +1,4 @@
-@planned @oma-aligned @ui @api
+@planned @ui @api
 Feature: List route pagination
   Large resource lists are paginated consistently.
 

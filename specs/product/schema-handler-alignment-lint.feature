@@ -1,4 +1,4 @@
-@planned @oma-aligned @lint @schema
+@planned @lint @schema
 Feature: Schema handler alignment lint
   Schemas and handlers stay synchronized.
 

@@ -1,4 +1,4 @@
-@planned @oma-aligned @sessions @tools
+@planned @sessions @tools
 Feature: Session detail tool tracing
   Tool calls are visible in session detail.
 

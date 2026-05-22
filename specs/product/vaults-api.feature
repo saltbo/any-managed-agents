@@ -1,4 +1,4 @@
-@planned @oma-aligned @api @vaults
+@planned @api @vaults
 Feature: Vaults API
   The control plane manages vaults and credential references.
 

@@ -1,4 +1,4 @@
-@planned @oma-aligned @api @environments
+@planned @api @environments
 Feature: Environments API
   The control plane manages reusable sandbox environments.
 

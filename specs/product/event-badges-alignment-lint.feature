@@ -1,4 +1,4 @@
-@planned @oma-aligned @lint @events
+@planned @lint @events
 Feature: Event badge alignment lint
   Event badges are consistent across UI and specs.
 

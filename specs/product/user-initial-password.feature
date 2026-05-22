@@ -1,4 +1,4 @@
-@planned @oma-aligned @auth
+@planned @auth
 Feature: User initial password
   Initial admin credentials are handled safely.
 

@@ -1,4 +1,4 @@
-@planned @oma-aligned @providers @governance
+@planned @providers @governance
 Feature: Provider access
   Teams and projects can restrict model providers.
 

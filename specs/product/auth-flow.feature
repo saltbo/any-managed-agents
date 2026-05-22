@@ -1,4 +1,4 @@
-@planned @oma-aligned @auth
+@planned @auth
 Feature: Authentication flow
   Users sign in and receive a session for the control plane and runtime.
 

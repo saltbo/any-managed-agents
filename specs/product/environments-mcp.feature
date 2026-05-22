@@ -1,4 +1,4 @@
-@planned @oma-aligned @environments @mcp
+@planned @environments @mcp
 Feature: Environment MCP policy
   Environments can include MCP connector constraints.
 

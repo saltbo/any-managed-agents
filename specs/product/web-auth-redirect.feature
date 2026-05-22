@@ -1,4 +1,4 @@
-@planned @oma-aligned @web @auth
+@planned @web @auth
 Feature: Web auth redirect
   The web app redirects users based on authentication state.
 

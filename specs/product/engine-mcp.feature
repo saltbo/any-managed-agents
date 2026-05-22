@@ -1,4 +1,4 @@
-@planned @oma-aligned @mcp @runtime
+@planned @mcp @runtime
 Feature: MCP engine
   The runtime enforces MCP connector policy.
 

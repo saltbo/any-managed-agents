@@ -1,4 +1,4 @@
-@planned @oma-aligned @api @sessions
+@planned @api @sessions
 Feature: Sessions API
   The control plane exposes APIs for session lifecycle and metadata.
 

@@ -1,4 +1,4 @@
-@planned @oma-aligned @mcp @ui
+@planned @mcp @ui
 Feature: MCP discovery
   Users discover available MCP connectors.
 

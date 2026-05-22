@@ -1,4 +1,4 @@
-@planned @oma-aligned @auth
+@planned @auth
 Feature: Login
   Login creates a secure user session.
 

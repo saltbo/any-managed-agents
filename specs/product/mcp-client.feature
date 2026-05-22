@@ -1,4 +1,4 @@
-@planned @oma-aligned @mcp
+@planned @mcp
 Feature: MCP client
   The MCP client handles connector lifecycle and errors.
 

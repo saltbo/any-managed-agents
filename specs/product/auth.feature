@@ -1,4 +1,4 @@
-@planned @oma-aligned @auth
+@planned @auth
 Feature: Authentication
   The platform authenticates users and applies tenant context.
 

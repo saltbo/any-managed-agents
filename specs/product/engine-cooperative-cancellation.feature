@@ -1,4 +1,4 @@
-@planned @oma-aligned @runtime
+@planned @runtime
 Feature: Engine cooperative cancellation
   Running sessions can be stopped without starting additional work.
 

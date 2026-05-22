@@ -1,4 +1,4 @@
-@planned @oma-aligned @api @events
+@planned @api @events
 Feature: Events API
   Clients can list and stream session events.
 

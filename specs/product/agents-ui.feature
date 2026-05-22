@@ -1,4 +1,4 @@
-@planned @oma-aligned @ui @agents
+@planned @ui @agents
 Feature: Agents UI
   Users manage project agents from the web console.
 

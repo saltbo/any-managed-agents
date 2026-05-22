@@ -1,4 +1,4 @@
-@planned @oma-aligned @mcp
+@planned @mcp
 Feature: MCP connections
   Projects manage MCP connection records.
 

@@ -1,4 +1,4 @@
-@planned @oma-aligned @web @api
+@planned @web @api
 Feature: Web API client consolidation
   Web code uses a single control-plane API client.
 

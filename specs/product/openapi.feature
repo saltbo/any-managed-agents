@@ -1,4 +1,4 @@
-@planned @oma-aligned @openapi
+@planned @openapi
 Feature: OpenAPI
   The control plane publishes an OpenAPI contract.
 

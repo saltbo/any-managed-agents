@@ -1,4 +1,4 @@
-@planned @oma-aligned @safety
+@planned @safety
 Feature: Destructive operations
   Destructive actions require explicit intent and auditability.
 

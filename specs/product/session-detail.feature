@@ -1,4 +1,4 @@
-@planned @oma-aligned @sessions @ui
+@planned @sessions @ui
 Feature: Session detail
   Users inspect transcripts and runtime state for a session.
 

@@ -1,4 +1,4 @@
-@planned @oma-aligned @governance
+@planned @governance
 Feature: Governance configuration
   Governance can be loaded from declarative configuration.
 

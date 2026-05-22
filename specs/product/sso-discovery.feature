@@ -1,4 +1,4 @@
-@planned @oma-aligned @auth @sso
+@planned @auth @sso
 Feature: SSO discovery
   Organizations can discover supported sign-in methods.
 

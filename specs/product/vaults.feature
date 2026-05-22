@@ -1,4 +1,4 @@
-@planned @oma-aligned @vaults
+@planned @vaults
 Feature: Vaults
   Vaults provide scoped access to credentials.
 
