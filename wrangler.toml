@@ -1,0 +1,40 @@
+name = "any-managed-agents"
+main = "./workers/bootstrap.ts"
+compatibility_date = "2026-05-22"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*", "/agents/*"]
+
+[vars]
+AMA_DEFAULT_MODEL = "@cf/meta/llama-3.1-8b-instruct"
+
+[ai]
+binding = "AI"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "any-managed-agents-db"
+database_id = "replace-with-production-d1-database-id"
+migrations_dir = "./migrations"
+
+[[durable_objects.bindings]]
+name = "MANAGED_AGENT"
+class_name = "ManagedAgent"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ManagedAgent"]
+
+[observability]
+enabled = true
+
+[env.staging]
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "any-managed-agents-db-staging"
+database_id = "replace-with-staging-d1-database-id"
+migrations_dir = "./migrations"
