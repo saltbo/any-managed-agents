@@ -45,3 +45,5 @@ Sandbox runtime:
 ## Spec Discipline
 
 Product behavior should be described in BDD specs before implementation. These specs are primarily for agents and developers, not for end users.
+
+See `specs/product/spec-index.md` for the current product spec map.
