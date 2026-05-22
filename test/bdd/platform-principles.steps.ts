@@ -32,14 +32,42 @@ Then('agent runtime traffic must use the Cloudflare Agent SDK protocol', () => {
 })
 
 Then('the platform must not define a competing custom agent runtime SDK', () => {
-  const packageJson = read('package.json')
-  assert.doesNotMatch(packageJson, /"@any-managed-agents\/sdk"/)
+  const spec = read('docs/product/spec.md')
+  assert.match(spec, /does not maintain a competing runtime SDK/)
+  assert.match(spec, /Runtime interaction must remain compatible with Cloudflare Agent SDK/)
 })
 
 Then('product APIs may exist only for control-plane resource management', () => {
   const spec = read('docs/product/spec.md')
   assert.match(spec, /The platform owns the control plane/)
   assert.match(spec, /The platform does not own a custom runtime SDK/)
+})
+
+Then('the platform must provide a thin Any Managed Agents SDK', () => {
+  const sdk = read('docs/product/sdk.md')
+  assert.match(sdk, /provides a thin product SDK/)
+  assert.match(sdk, /wraps the public control-plane API/)
+})
+
+Then(
+  'the SDK must manage agents, environments, sessions, providers, vaults, governance, usage, and audit resources',
+  () => {
+    const sdk = read('docs/product/sdk.md')
+    assert.match(sdk, /agents/)
+    assert.match(sdk, /environments/)
+    assert.match(sdk, /sessions/)
+    assert.match(sdk, /provider/)
+    assert.match(sdk, /vault/)
+    assert.match(sdk, /governance/)
+    assert.match(sdk, /usage/)
+    assert.match(sdk, /audit/)
+  },
+)
+
+Then('runtime helpers in the SDK must delegate to Cloudflare Agent SDK-compatible endpoints', () => {
+  const sdk = read('docs/product/sdk.md')
+  assert.match(sdk, /connect to a running session/)
+  assert.match(sdk, /Cloudflare Agents SDK-compatible runtime endpoint/)
 })
 
 Then('sandbox execution must use Cloudflare Sandbox SDK', () => {
@@ -49,7 +77,8 @@ Then('sandbox execution must use Cloudflare Sandbox SDK', () => {
 
 Then('the platform must not define a competing custom sandbox SDK', () => {
   const spec = read('docs/product/spec.md')
-  assert.match(spec, /does not maintain a competing client SDK/)
+  assert.match(spec, /does not maintain a competing runtime SDK/)
+  assert.match(spec, /Sandbox execution must remain compatible with Cloudflare Sandbox SDK/)
 })
 
 Then('Workers AI must be supported as a first-class model provider', () => {

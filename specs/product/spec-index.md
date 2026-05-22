@@ -4,6 +4,8 @@ The product specs describe the intended end state for Any Managed Agents. Files 
 
 This directory covers managed-agents capability areas as clean-room Any Managed Agents specs. Coverage is by product capability, not by copying another project's file layout. Cloudflare Workers, Cloudflare Agent SDK, Cloudflare Sandbox SDK, D1, Durable Objects, and Workers AI are architectural constraints.
 
+The platform provides a thin Any Managed Agents SDK for product resources. Cloudflare Agent SDK remains the runtime protocol, and Cloudflare Sandbox SDK remains the sandbox execution foundation.
+
 ## Core Platform
 
 - `platform-principles.feature` - Cloudflare-native platform boundaries and SDK ownership rules
@@ -39,7 +41,7 @@ This directory covers managed-agents capability areas as clean-room Any Managed 
 - `governance-api.feature`, `governance-config.feature` - governance coverage
 - `usage-audit.feature` - usage reporting and audit records
 - `audit-auto.feature`, `audit-log-ui.feature`, `usage-summary.feature` - audit and usage coverage
-- `api-contracts.feature` - OpenAPI and error contracts for control-plane automation
+- `api-contracts.feature` - OpenAPI, product SDK, and error contracts for control-plane automation
 - `openapi.feature`, `web-api-client-consolidation.feature` - API contract coverage
 - `cli.feature`, `cli-client.feature`, `cli-contract.feature`, `cli-smoke-test.feature` - optional control-plane CLI coverage, not runtime SDK coverage
 - `web-ui.feature` - web console navigation and resource workflows

@@ -4,9 +4,9 @@ Thanks for helping build Any Managed Agents. This document explains the project 
 
 ## Project Goal
 
-Any Managed Agents is a Cloudflare-native managed agents platform. It can be deployed on Cloudflare Workers, uses Cloudflare Agent SDK for runtime traffic, and is designed to use Cloudflare Sandbox SDK for sandbox execution.
+Any Managed Agents is a Cloudflare-native managed agents platform. It can be deployed on Cloudflare Workers, provides a thin product SDK, uses Cloudflare Agent SDK for runtime traffic, and is designed to use Cloudflare Sandbox SDK for sandbox execution.
 
-The platform provides the control plane. It does not define a competing custom runtime SDK.
+The platform provides the control plane and product SDK. It does not define a competing custom runtime SDK.
 
 ## Technology Stack
 
@@ -16,6 +16,7 @@ The platform provides the control plane. It does not define a competing custom r
 - Hono
 - Cloudflare Workers
 - Cloudflare Agent SDK
+- Any Managed Agents SDK generated from the control-plane API
 - Cloudflare Workers AI
 - Cloudflare D1
 - Cloudflare Durable Objects
@@ -32,11 +33,13 @@ The project is a single npm package. Do not introduce pnpm workspaces or a monor
 
 ```txt
 Client
+  -> Any Managed Agents SDK
   -> /api/*
      -> Hono control-plane routes
      -> D1 metadata and governance state
 
 Client
+  -> Any Managed Agents SDK runtime helper
   -> Cloudflare Agent SDK
   -> /agents/*
   -> Agent Durable Object
@@ -62,6 +65,21 @@ The control plane owns product resources:
 - governance rules
 
 Control-plane routes live under `server/routes/` and are mounted under `/api/*`.
+
+### Product SDK
+
+The product SDK wraps the control-plane API for developer workflows:
+
+- agents
+- environments
+- sessions
+- providers
+- vaults
+- governance
+- usage
+- audit
+
+The SDK may provide small runtime helpers, such as connecting to a session, but those helpers must delegate to Cloudflare Agents SDK-compatible endpoints instead of defining a separate runtime protocol.
 
 ### Runtime Plane
 
@@ -162,5 +180,6 @@ After that bootstrap, Cloudflare Workers Builds can upload versions normally.
 - Prefer existing project patterns.
 - Do not add a dependency unless it removes real complexity.
 - Do not introduce a custom runtime SDK.
+- Keep the product SDK thin and generated from the API contract where possible.
 - Do not bypass Cloudflare Agent SDK for agent runtime traffic.
 - Do not introduce workspace tooling.

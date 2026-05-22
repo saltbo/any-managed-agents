@@ -15,6 +15,11 @@ Feature: Platform principles
     And the platform must not define a competing custom agent runtime SDK
     And product APIs may exist only for control-plane resource management
 
+  Scenario: Product SDK manages platform resources
+    Then the platform must provide a thin Any Managed Agents SDK
+    And the SDK must manage agents, environments, sessions, providers, vaults, governance, usage, and audit resources
+    And runtime helpers in the SDK must delegate to Cloudflare Agent SDK-compatible endpoints
+
   Scenario: Sandbox execution uses Cloudflare Sandbox SDK
     Then sandbox execution must use Cloudflare Sandbox SDK
     And the platform must not define a competing custom sandbox SDK

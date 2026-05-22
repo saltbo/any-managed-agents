@@ -13,9 +13,9 @@ Feature: Agent sessions
 
   Scenario: Connect to a session with Cloudflare Agent SDK
     Given a session exists
-    When the client connects through Cloudflare Agent SDK
+    When the client connects through the Any Managed Agents SDK session helper
     Then runtime traffic is routed through /agents/*
-    And the platform does not require a custom runtime client SDK
+    And the helper delegates to Cloudflare Agent SDK-compatible runtime behavior
 
   Scenario: Stop a running session
     Given a session is running
