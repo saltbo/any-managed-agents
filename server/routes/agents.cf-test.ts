@@ -2,6 +2,22 @@ import { SELF } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 
 describe('[CF] /api/agents', () => {
+  it('returns the stable error envelope for validation failures', async () => {
+    const res = await SELF.fetch('https://example.com/api/agents', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: '' }),
+    })
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({
+      error: {
+        type: 'validation_error',
+        message: 'Invalid request',
+      },
+    })
+  })
+
   it('persists agent definitions and creates sessions through D1', async () => {
     const createRes = await SELF.fetch('https://example.com/api/agents', {
       method: 'POST',

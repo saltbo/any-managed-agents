@@ -1,11 +1,11 @@
-import { Hono } from 'hono'
+import { swaggerUI } from '@hono/swagger-ui'
 import { cors } from 'hono/cors'
-import type { Env } from './env'
+import { createApiRouter } from './openapi'
 import agents from './routes/agents'
 import health from './routes/health'
 
 export function createApp() {
-  const app = new Hono<{ Bindings: Env }>()
+  const app = createApiRouter()
 
   app.use(
     '/*',
@@ -18,6 +18,18 @@ export function createApp() {
 
   app.route('/api/health', health)
   app.route('/api/agents', agents)
+
+  app.doc('/api/openapi.json', {
+    openapi: '3.0.0',
+    info: {
+      title: 'Any Managed Agents API',
+      version: '0.1.0',
+      description: 'Control-plane API for Any Managed Agents.',
+    },
+    servers: [{ url: '/api' }],
+  })
+
+  app.get('/api/docs', swaggerUI({ url: '/api/openapi.json' }))
 
   app.all('/agents/*', async (c) => {
     const { routeAgentRequest } = await import('agents')

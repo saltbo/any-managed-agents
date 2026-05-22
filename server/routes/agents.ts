@@ -1,17 +1,52 @@
+import { createRoute, z } from '@hono/zod-openapi'
 import { eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
-import { Hono } from 'hono'
-import { z } from 'zod'
 import { agentDefinitions, sessions } from '../db/schema'
-import type { Env } from '../env'
+import { createApiRouter, ErrorResponseSchema } from '../openapi'
 
-const app = new Hono<{ Bindings: Env }>()
+const app = createApiRouter()
 
-const CreateAgentSchema = z.object({
-  name: z.string().min(1).max(120),
-  description: z.string().max(1000).optional(),
-  model: z.string().min(1).optional(),
-  systemPrompt: z.string().max(8000).optional(),
+const AgentSchema = z
+  .object({
+    id: z.string().openapi({ example: 'agent_abc123' }),
+    name: z.string().openapi({ example: 'Research assistant' }),
+    description: z.string().nullable().openapi({ example: 'Answers with citations.' }),
+    model: z.string().openapi({ example: '@cf/meta/llama-3.1-8b-instruct' }),
+    systemPrompt: z.string().nullable().openapi({ example: 'Answer with citations.' }),
+    createdAt: z.string().datetime().openapi({ example: '2026-05-22T00:00:00.000Z' }),
+    updatedAt: z.string().datetime().openapi({ example: '2026-05-22T00:00:00.000Z' }),
+  })
+  .openapi('Agent')
+
+const CreateAgentSchema = z
+  .object({
+    name: z.string().min(1).max(120).openapi({ example: 'Research assistant' }),
+    description: z.string().max(1000).optional().openapi({ example: 'Answers with citations.' }),
+    model: z.string().min(1).optional().openapi({ example: '@cf/meta/llama-3.1-8b-instruct' }),
+    systemPrompt: z.string().max(8000).optional().openapi({ example: 'Answer with citations.' }),
+  })
+  .openapi('CreateAgentRequest')
+
+const SessionSchema = z
+  .object({
+    id: z.string().openapi({ example: 'session_abc123' }),
+    agentId: z.string().openapi({ example: 'agent_abc123' }),
+    durableObjectName: z.string().openapi({ example: 'session_abc123' }),
+    status: z.string().openapi({ example: 'idle' }),
+    createdAt: z.string().datetime().openapi({ example: '2026-05-22T00:00:00.000Z' }),
+    updatedAt: z.string().datetime().openapi({ example: '2026-05-22T00:00:00.000Z' }),
+    agentUrl: z.string().openapi({ example: '/agents/managed-agent/session_abc123' }),
+  })
+  .openapi('Session')
+
+const AgentParamsSchema = z.object({
+  agentId: z.string().openapi({
+    param: {
+      name: 'agentId',
+      in: 'path',
+    },
+    example: 'agent_abc123',
+  }),
 })
 
 function newId(prefix: string) {
@@ -22,25 +57,101 @@ function now() {
   return new Date().toISOString()
 }
 
-app.get('/', async (c) => {
+const listAgentsRoute = createRoute({
+  method: 'get',
+  path: '/',
+  tags: ['Agents'],
+  summary: 'List agents',
+  responses: {
+    200: {
+      description: 'Agent list',
+      content: {
+        'application/json': {
+          schema: z.object({ data: z.array(AgentSchema) }),
+        },
+      },
+    },
+  },
+})
+
+const createAgentRoute = createRoute({
+  method: 'post',
+  path: '/',
+  tags: ['Agents'],
+  summary: 'Create an agent',
+  request: {
+    body: {
+      required: true,
+      content: {
+        'application/json': {
+          schema: CreateAgentSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    201: {
+      description: 'Created agent',
+      content: {
+        'application/json': {
+          schema: AgentSchema,
+        },
+      },
+    },
+    400: {
+      description: 'Validation error',
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+})
+
+const createSessionRoute = createRoute({
+  method: 'post',
+  path: '/{agentId}/sessions',
+  tags: ['Sessions'],
+  summary: 'Create a session for an agent',
+  request: {
+    params: AgentParamsSchema,
+  },
+  responses: {
+    201: {
+      description: 'Created session',
+      content: {
+        'application/json': {
+          schema: SessionSchema,
+        },
+      },
+    },
+    404: {
+      description: 'Agent not found',
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+})
+
+app.openapi(listAgentsRoute, async (c) => {
   const db = drizzle(c.env.DB)
   const rows = await db.select().from(agentDefinitions).limit(100)
   return c.json({ data: rows })
 })
 
-app.post('/', async (c) => {
-  const parsed = CreateAgentSchema.safeParse(await c.req.json())
-  if (!parsed.success) {
-    return c.json({ error: { type: 'validation_error', issues: parsed.error.issues } }, 400)
-  }
-
+app.openapi(createAgentRoute, async (c) => {
+  const body = c.req.valid('json')
   const timestamp = now()
   const row = {
     id: newId('agent'),
-    name: parsed.data.name,
-    description: parsed.data.description ?? null,
-    model: parsed.data.model ?? c.env.AMA_DEFAULT_MODEL ?? '@cf/meta/llama-3.1-8b-instruct',
-    systemPrompt: parsed.data.systemPrompt ?? null,
+    name: body.name,
+    description: body.description ?? null,
+    model: body.model ?? c.env.AMA_DEFAULT_MODEL ?? '@cf/meta/llama-3.1-8b-instruct',
+    systemPrompt: body.systemPrompt ?? null,
     createdAt: timestamp,
     updatedAt: timestamp,
   }
@@ -51,8 +162,8 @@ app.post('/', async (c) => {
   return c.json(row, 201)
 })
 
-app.post('/:agentId/sessions', async (c) => {
-  const agentId = c.req.param('agentId')
+app.openapi(createSessionRoute, async (c) => {
+  const { agentId } = c.req.valid('param')
   const db = drizzle(c.env.DB)
   const agent = await db
     .select({ id: agentDefinitions.id })

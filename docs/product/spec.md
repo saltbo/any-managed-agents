@@ -6,6 +6,7 @@ Any Managed Agents is a Cloudflare-native managed agents system. It is inspired 
 
 - The platform can be deployed on Cloudflare Workers.
 - The platform provides a thin Any Managed Agents SDK for product resource management.
+- The control-plane API contract is generated from Hono route schemas.
 - The agent runtime uses Cloudflare Agent SDK directly.
 - Sandbox execution uses Cloudflare Sandbox SDK directly.
 - The platform does not maintain a competing runtime SDK for agent runtime or sandbox execution.

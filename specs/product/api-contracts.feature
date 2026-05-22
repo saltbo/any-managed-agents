@@ -8,6 +8,7 @@ Feature: API contracts and automation
   Scenario: Publish OpenAPI documentation
     When a developer requests the OpenAPI document
     Then the document describes control-plane resources, request bodies, responses, and error shapes
+    And the document is generated from Hono route schemas instead of hand-written OpenAPI JSON
     And it does not describe a custom replacement for Cloudflare Agent SDK runtime traffic
 
   Scenario: Provide consistent API errors

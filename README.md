@@ -15,6 +15,7 @@ The platform owns the control plane for agents, environments, sessions, provider
 
 - Deploys to Cloudflare Workers
 - Provides a thin SDK for agent, environment, and session management
+- Generates OpenAPI documentation from Hono route schemas
 - Uses Cloudflare Agent SDK for agent runtime routing
 - Uses D1 and Durable Objects for Cloudflare-native state
 - Supports Workers AI as a first-class model provider

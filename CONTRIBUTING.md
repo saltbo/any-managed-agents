@@ -66,6 +66,16 @@ The control plane owns product resources:
 
 Control-plane routes live under `server/routes/` and are mounted under `/api/*`.
 
+All control-plane APIs must be implemented with `@hono/zod-openapi`:
+
+- define request and response schemas with `z` from `@hono/zod-openapi`
+- define routes with `createRoute`
+- register handlers with `app.openapi`
+- expose the generated contract through `/api/openapi.json`
+- expose interactive docs through `/api/docs`
+
+Do not add new control-plane routes with plain `app.get`, `app.post`, or manual OpenAPI JSON. The route implementation, validation schema, response schema, OpenAPI contract, and tests should change together.
+
 ### Product SDK
 
 The product SDK wraps the control-plane API for developer workflows:
