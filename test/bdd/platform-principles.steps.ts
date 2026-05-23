@@ -105,3 +105,85 @@ Then('BDD specs are not the primary end-user interface', () => {
   const spec = read('docs/product/spec.md')
   assert.match(spec, /not for end users/)
 })
+
+Then('the v1 release docs describe FlareAuth OIDC setup', () => {
+  const readme = read('README.md')
+  const deploy = read('docs/infra/cloudflare-deploy.md')
+  const envExample = read('.env.example')
+  assert.match(readme, /FlareAuth OIDC/)
+  assert.match(deploy, /FLAREAUTH_ISSUER/)
+  assert.match(deploy, /FLAREAUTH_CLIENT_ID/)
+  assert.match(deploy, /FLAREAUTH_REDIRECT_URI/)
+  assert.match(deploy, /PKCE/)
+  assert.match(envExample, /FLAREAUTH_ISSUER=/)
+})
+
+Then('the v1 release docs describe Cloudflare Sandbox and Pi runtime setup', () => {
+  const deploy = read('docs/infra/cloudflare-deploy.md')
+  const dockerfile = read('Dockerfile')
+  assert.match(deploy, /Cloudflare Sandbox/)
+  assert.match(deploy, /Dockerfile/)
+  assert.match(deploy, /pi-bridge\.mjs/)
+  assert.match(dockerfile, /npm install -g @earendil-works\/pi-coding-agent/)
+})
+
+Then('the v1 release docs describe Workers AI model configuration', () => {
+  const deploy = read('docs/infra/cloudflare-deploy.md')
+  const envExample = read('.env.example')
+  assert.match(deploy, /AMA_WORKERS_AI_ACCOUNT_ID/)
+  assert.match(deploy, /AMA_WORKERS_AI_API_KEY/)
+  assert.match(deploy, /cloudflare-workers-ai/)
+  assert.match(envExample, /AMA_DEFAULT_MODEL=@cf\/moonshotai\/kimi-k2\.6/)
+})
+
+Then('the v1 release docs forbid request-time package installation for the runtime image', () => {
+  const deploy = read('docs/infra/cloudflare-deploy.md')
+  assert.match(deploy, /must not install npm packages during session start/)
+  assert.match(deploy, /baked into the container image/)
+})
+
+Then('the v1 web console can create environments, agents, and sessions', () => {
+  const app = read('src/App.tsx')
+  const api = read('src/lib/api.ts')
+  assert.match(app, /Create Environment/)
+  assert.match(app, /Create Agent/)
+  assert.match(app, /startAgentSession/)
+  assert.match(api, /createEnvironment/)
+  assert.match(api, /createAgent/)
+  assert.match(api, /createSession/)
+})
+
+Then('the v1 web console can send runtime tasks and inspect session events', () => {
+  const app = read('src/App.tsx')
+  const api = read('src/lib/api.ts')
+  assert.match(app, /Send task/)
+  assert.match(app, /Transcript and runtime events/)
+  assert.match(api, /sendRuntimeTask/)
+  assert.match(api, /listSessionEvents/)
+})
+
+Then('v1 release checks include lint, typecheck, unit tests, BDD, Cloudflare tests, and build', () => {
+  const packageJson = read('package.json')
+  assert.match(packageJson, /"lint":/)
+  assert.match(packageJson, /"typecheck":/)
+  assert.match(packageJson, /"test":/)
+  assert.match(packageJson, /"bdd":/)
+  assert.match(packageJson, /"test:cf":/)
+  assert.match(packageJson, /"build":/)
+})
+
+Then('no external SDK source code is maintained in this repository', () => {
+  const contributing = read('CONTRIBUTING.md')
+  const sdk = read('docs/product/sdk.md')
+  assert.match(contributing, /does not maintain SDK source code/)
+  assert.match(sdk, /Product SDKs are generated and maintained in separate repositories/)
+})
+
+Then('v1 secret handling stores references and metadata instead of raw secret values', () => {
+  const schema = read('server/db/schema.ts')
+  const environments = read('server/routes/environments.ts')
+  const app = read('src/App.tsx')
+  assert.match(schema, /secretRefs/)
+  assert.match(environments, /SecretRefSchema/)
+  assert.doesNotMatch(app, /secret value/i)
+})

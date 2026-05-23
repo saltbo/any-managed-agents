@@ -76,3 +76,24 @@ See `specs/product/spec-index.md` for the current product spec map.
 See `docs/product/decisions.md` for fixed product decisions.
 
 See `docs/product/sdk.md` for the SDK ownership boundary.
+
+## v1.0 Acceptance
+
+The first release is accepted when a signed-in user can create an environment,
+create an agent, start a session, send a task to the Pi runtime through the AMA
+runtime proxy, inspect persisted session events, and stop the session.
+
+Release verification must include:
+
+- FlareAuth OIDC login through `openid-client`, with no hand-written OIDC token
+  parsing or validation.
+- Agent, environment, and session CRUD covered by Cloudflare integration tests.
+- OpenAPI generated from Hono route schemas for auth, agents, environments, and
+  sessions.
+- UI coverage for signed-out and signed-in console states.
+- BDD release acceptance scenarios in `specs/product/`.
+- `npm run lint`, `npm run typecheck`, `npm test`, `npm run bdd`,
+  `npm run test:cf`, and `npm run build`.
+
+Secrets must remain in Cloudflare Secrets or external vaults. D1 may store
+metadata, policy, snapshots, and secret references, but not raw secret values.
