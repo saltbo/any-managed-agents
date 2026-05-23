@@ -23,6 +23,18 @@ Then('the response JSON field {string} should be {string}', async (field: string
   assert.equal(body[field], expected)
 })
 
+Then('the response error type should be {string}', async (expected: string) => {
+  const body = (await response.clone().json()) as { error?: { type?: string } }
+  assert.equal(body.error?.type, expected)
+})
+
+Then('the response should not include tenant data', async () => {
+  const body = (await response.clone().json()) as Record<string, unknown>
+  assert.equal('data' in body, false)
+  assert.equal('organization' in body, false)
+  assert.equal('project' in body, false)
+})
+
 Then('the OpenAPI document should include path {string}', async (path: string) => {
   const body = (await response.clone().json()) as { paths?: Record<string, unknown> }
   assert.ok(body.paths?.[path], `Expected OpenAPI path ${path}`)

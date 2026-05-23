@@ -1,6 +1,7 @@
 import { createRoute, z } from '@hono/zod-openapi'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
+import { requireAuth } from '../auth/session'
 import { agentDefinitions, sessions } from '../db/schema'
 import { createApiRouter, ErrorResponseSchema } from '../openapi'
 
@@ -9,6 +10,7 @@ const app = createApiRouter()
 const AgentSchema = z
   .object({
     id: z.string().openapi({ example: 'agent_abc123' }),
+    projectId: z.string().nullable().openapi({ example: 'project_abc123' }),
     name: z.string().openapi({ example: 'Research assistant' }),
     description: z.string().nullable().openapi({ example: 'Answers with citations.' }),
     model: z.string().openapi({ example: '@cf/meta/llama-3.1-8b-instruct' }),
@@ -31,6 +33,7 @@ const SessionSchema = z
   .object({
     id: z.string().openapi({ example: 'session_abc123' }),
     agentId: z.string().openapi({ example: 'agent_abc123' }),
+    projectId: z.string().nullable().openapi({ example: 'project_abc123' }),
     durableObjectName: z.string().openapi({ example: 'session_abc123' }),
     status: z.string().openapi({ example: 'idle' }),
     createdAt: z.string().datetime().openapi({ example: '2026-05-22T00:00:00.000Z' }),
@@ -71,6 +74,14 @@ const listAgentsRoute = createRoute({
         },
       },
     },
+    401: {
+      description: 'Authentication required',
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
   },
 })
 
@@ -106,6 +117,14 @@ const createAgentRoute = createRoute({
         },
       },
     },
+    401: {
+      description: 'Authentication required',
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
   },
 })
 
@@ -134,20 +153,44 @@ const createSessionRoute = createRoute({
         },
       },
     },
+    401: {
+      description: 'Authentication required',
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
   },
 })
 
 app.openapi(listAgentsRoute, async (c) => {
   const db = drizzle(c.env.DB)
-  const rows = await db.select().from(agentDefinitions).limit(100)
-  return c.json({ data: rows })
+  const auth = await requireAuth(c, db)
+  if (auth instanceof Response) {
+    return auth
+  }
+
+  const rows = await db
+    .select()
+    .from(agentDefinitions)
+    .where(eq(agentDefinitions.projectId, auth.project.id))
+    .limit(100)
+  return c.json({ data: rows }, 200)
 })
 
 app.openapi(createAgentRoute, async (c) => {
   const body = c.req.valid('json')
+  const db = drizzle(c.env.DB)
+  const auth = await requireAuth(c, db)
+  if (auth instanceof Response) {
+    return auth
+  }
+
   const timestamp = now()
   const row = {
     id: newId('agent'),
+    projectId: auth.project.id,
     name: body.name,
     description: body.description ?? null,
     model: body.model ?? c.env.AMA_DEFAULT_MODEL ?? '@cf/meta/llama-3.1-8b-instruct',
@@ -156,7 +199,6 @@ app.openapi(createAgentRoute, async (c) => {
     updatedAt: timestamp,
   }
 
-  const db = drizzle(c.env.DB)
   await db.insert(agentDefinitions).values(row)
 
   return c.json(row, 201)
@@ -165,10 +207,15 @@ app.openapi(createAgentRoute, async (c) => {
 app.openapi(createSessionRoute, async (c) => {
   const { agentId } = c.req.valid('param')
   const db = drizzle(c.env.DB)
+  const auth = await requireAuth(c, db)
+  if (auth instanceof Response) {
+    return auth
+  }
+
   const agent = await db
     .select({ id: agentDefinitions.id })
     .from(agentDefinitions)
-    .where(eq(agentDefinitions.id, agentId))
+    .where(and(eq(agentDefinitions.id, agentId), eq(agentDefinitions.projectId, auth.project.id)))
     .get()
 
   if (!agent) {
@@ -180,7 +227,8 @@ app.openapi(createSessionRoute, async (c) => {
   const row = {
     id,
     agentId,
-    durableObjectName: id,
+    projectId: auth.project.id,
+    durableObjectName: `org_${auth.organization.id}:project_${auth.project.id}:session_${id}`,
     status: 'idle',
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -191,7 +239,7 @@ app.openapi(createSessionRoute, async (c) => {
   return c.json(
     {
       ...row,
-      agentUrl: `/agents/managed-agent/${id}`,
+      agentUrl: `/agents/managed-agent/${row.durableObjectName}`,
     },
     201,
   )

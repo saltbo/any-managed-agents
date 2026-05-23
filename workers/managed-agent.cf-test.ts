@@ -2,13 +2,13 @@ import { SELF } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 
 describe('[CF] ManagedAgent routing', () => {
-  it('routes SDK Agent requests to a Durable Object instance', async () => {
+  it('rejects SDK Agent requests without an AMA session', async () => {
     const res = await SELF.fetch('https://example.com/agents/managed-agent/cf-runtime-test/state')
 
-    expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({
-      state: {
-        status: 'idle',
+    expect(res.status).toBe(401)
+    expect(await res.json()).toMatchObject({
+      error: {
+        type: 'authentication_required',
       },
     })
   })

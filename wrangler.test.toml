@@ -10,6 +10,12 @@ run_worker_first = ["/api/*", "/agents/*"]
 
 [vars]
 AMA_DEFAULT_MODEL = "@cf/meta/llama-3.1-8b-instruct"
+FLAREAUTH_ISSUER = "https://flareauth.test"
+FLAREAUTH_CLIENT_ID = "ama-test"
+FLAREAUTH_REDIRECT_URI = "https://example.com/api/auth/callback"
+AMA_SESSION_SECRET = "test-session-secret-at-least-32-bytes"
+AMA_COOKIE_SECURE = "true"
+AMA_ALLOWED_ORIGINS = "https://example.com"
 
 [[d1_databases]]
 binding = "DB"
