@@ -1,5 +1,58 @@
 @import "tailwindcss";
 
 html {
-  color-scheme: dark;
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+@layer components {
+  .panel {
+    @apply rounded-md border border-slate-200 bg-white p-4 shadow-sm;
+  }
+
+  .panel-title {
+    @apply text-sm font-semibold text-slate-950;
+  }
+
+  .item {
+    @apply flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-4 shadow-sm md:flex-row md:items-start md:justify-between;
+  }
+
+  .icon-button {
+    @apply inline-grid size-10 place-items-center rounded-md border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50;
+  }
+
+  .button-primary {
+    @apply inline-flex h-10 items-center justify-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-medium text-white hover:bg-slate-800;
+  }
+
+  .field-label {
+    @apply text-xs font-medium uppercase text-slate-500;
+  }
+
+  .input {
+    @apply h-10 rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-slate-400;
+  }
+
+  .textarea {
+    @apply min-h-20 resize-y rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400;
+  }
 }
