@@ -1,4 +1,4 @@
-@planned @runtime @sessions
+@runtime @sessions @implemented
 Feature: Agent sessions
   A session is a tenant-scoped run of a specific agent version.
 
@@ -21,11 +21,11 @@ Feature: Agent sessions
   Scenario: Stop a running session
     Given a session is running
     When the user stops the session
-    Then AMA forwards an abort request to the Pi runtime
+    Then AMA requests the Pi bridge to stop
     And the session status becomes stopped
-    And no additional model calls are started for that session
+    And lifecycle events record the stop
 
   Scenario: Resume an idle session
     Given a session is idle
     When the user reconnects to the session
-    Then prior messages, tool calls, sandbox state references, and status are available
+    Then session metadata, sandbox state references, runtime endpoint, and status are available

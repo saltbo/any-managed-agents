@@ -1,8 +1,7 @@
-@planned @ui @auth
+@ui @auth @implemented
 Feature: Login page
   Users sign in through a dedicated page.
 
-  Scenario: Render login form
+  Scenario: Render FlareAuth sign-in action
     When the user opens the login page
-    Then the form supports credentials, validation errors, and redirect after successful sign in
-
+    Then the page offers FlareAuth sign-in and preserves the requested return path

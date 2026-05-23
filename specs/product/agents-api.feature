@@ -15,3 +15,8 @@ Feature: Agents API
     And the OpenAPI path "/api/agents/{agentId}" should include method "delete"
     And the OpenAPI document should include path "/api/agents/{agentId}/versions"
     And the OpenAPI document should include path "/api/agents/{agentId}/sessions"
+
+  Scenario: Manage project agents through the API
+    Then the agents API supports create, read, update, version history, archive, and list
+    And the agents API enforces auth, project tenancy, model policy, tool policy, and environment availability
+    And agent sessions keep immutable agent and environment snapshots

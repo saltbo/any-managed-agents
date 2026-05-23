@@ -12,6 +12,8 @@ Feature: v1.0 release acceptance
   Scenario: Release surface covers the create-session-to-run-task workflow
     Then the v1 web console can create environments, agents, and sessions
     And the v1 web console can send runtime tasks and inspect session events
+    Given the Worker app is initialized
+    When I request GET "/api/openapi.json"
     And the OpenAPI document should include path "/api/sessions"
     And the OpenAPI path "/api/sessions" should include method "post"
     And the OpenAPI document should include path "/api/sessions/{sessionId}/events"

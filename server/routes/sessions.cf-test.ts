@@ -19,6 +19,7 @@ async function createEnvironment(cookie: string) {
     body: JSON.stringify({
       name: 'Pi workspace',
       packages: [{ name: '@earendil-works/pi-coding-agent', version: 'prebuilt' }],
+      secretRefs: [{ name: 'CLOUDFLARE_API_KEY', ref: 'wrangler_secret:AMA_WORKERS_AI_API_KEY' }],
       runtimeImage: { image: 'ama-pi-runtime' },
     }),
   })
@@ -146,6 +147,17 @@ describe('[CF] /api/sessions', () => {
         metadata: {},
       }),
     ])
+    expect(JSON.stringify(events.data)).not.toContain('raw-secret')
+    expect(JSON.stringify(events.data)).not.toContain('flareauth-access-token')
+
+    const inactiveRuntimeRes = await jsonFetch(`/runtime/sessions/${created.id}/rpc`, cookie)
+    expect(inactiveRuntimeRes.status).toBe(409)
+    await expect(inactiveRuntimeRes.json()).resolves.toMatchObject({
+      error: {
+        type: 'conflict',
+        message: 'Session runtime is not active',
+      },
+    })
 
     const archiveRes = await jsonFetch(`/api/sessions/${created.id}`, cookie, { method: 'DELETE' })
     expect(archiveRes.status).toBe(204)
