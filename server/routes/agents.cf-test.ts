@@ -58,7 +58,7 @@ describe('[CF] /api/agents', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         name: 'Research assistant',
-        model: '@cf/meta/llama-3.1-8b-instruct',
+        model: '@cf/moonshotai/kimi-k2.6',
         systemPrompt: 'Answer with citations.',
       }),
     })
@@ -82,7 +82,7 @@ describe('[CF] /api/agents', () => {
         name: 'Research assistant',
         instructions: 'Answer with citations.',
         provider: 'workers-ai',
-        model: '@cf/meta/llama-3.1-8b-instruct',
+        model: '@cf/moonshotai/kimi-k2.6',
         allowedTools: ['web.search'],
         sandboxPolicy: { network: 'enabled', filesystem: 'workspace' },
         defaultEnvironmentId: environment.id,

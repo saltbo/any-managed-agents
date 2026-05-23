@@ -55,7 +55,7 @@ export class ManagedAgent extends Agent<Env, ManagedAgentState> {
       this.setState({ status: 'running', lastPrompt: prompt, updatedAt: createdAt })
 
       try {
-        const model = body.model ?? this.env.AMA_DEFAULT_MODEL ?? '@cf/meta/llama-3.1-8b-instruct'
+        const model = body.model ?? this.env.AMA_DEFAULT_MODEL ?? '@cf/moonshotai/kimi-k2.6'
         const result = (await this.env.AI.run(model, { prompt })) as {
           response?: string
           text?: string

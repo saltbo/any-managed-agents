@@ -275,7 +275,7 @@ describe('[CF] auth and tenancy', () => {
       headers: { 'content-type': 'application/json', cookie },
       body: JSON.stringify({
         name: 'Research assistant',
-        model: '@cf/meta/llama-3.1-8b-instruct',
+        model: '@cf/moonshotai/kimi-k2.6',
       }),
     })
     expect(createRes.status).toBe(201)

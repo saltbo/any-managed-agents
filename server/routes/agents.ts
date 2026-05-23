@@ -2,13 +2,14 @@ import { createRoute, z } from '@hono/zod-openapi'
 import { and, desc, eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import { requireAuth } from '../auth/session'
-import { agentDefinitions, agentDefinitionVersions, environments, environmentVersions, sessions } from '../db/schema'
+import { agentDefinitions, agentDefinitionVersions, environments } from '../db/schema'
 import { createApiRouter, ErrorResponseSchema } from '../openapi'
+import { createSessionForAgent } from './sessions'
 
 const app = createApiRouter()
 
 const DEFAULT_PROVIDER = 'workers-ai'
-const DEFAULT_MODEL = '@cf/meta/llama-3.1-8b-instruct'
+const DEFAULT_MODEL = '@cf/moonshotai/kimi-k2.6'
 const BLOCKED_TOOLS = new Set(['secrets.read', 'filesystem.host', 'network.raw'])
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
@@ -113,7 +114,6 @@ const ListQuerySchema = z.object({
 
 type AgentRow = typeof agentDefinitions.$inferSelect
 type AgentVersionRow = typeof agentDefinitionVersions.$inferSelect
-type EnvironmentVersionRow = typeof environmentVersions.$inferSelect
 
 function newId(prefix: string) {
   return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
@@ -584,88 +584,7 @@ app.openapi(createSessionRoute, async (c) => {
     return auth
   }
 
-  const agent = await findAgent(db, agentId, auth.project.id)
-  if (!agent) {
-    return c.json({ error: { type: 'not_found', message: 'Agent not found' } }, 404)
-  }
-  if (agent.status !== 'active') {
-    return c.json({ error: { type: 'conflict', message: 'Archived agents cannot create sessions' } }, 409)
-  }
-
-  const agentVersion = await currentAgentVersion(db, agent)
-  if (!agentVersion) {
-    throw new Error('Agent current version is required')
-  }
-  const agentSnapshot = serializeAgentVersion(agentVersion)
-  let environmentVersion: EnvironmentVersionRow | null = null
-  if (agentVersion.defaultEnvironmentId) {
-    const environment = await db
-      .select()
-      .from(environments)
-      .where(
-        and(
-          eq(environments.id, agentVersion.defaultEnvironmentId),
-          eq(environments.projectId, auth.project.id),
-          eq(environments.status, 'active'),
-        ),
-      )
-      .get()
-    if (!environment?.currentVersionId) {
-      return c.json({ error: { type: 'conflict', message: 'Default environment is archived or unavailable' } }, 409)
-    }
-    environmentVersion =
-      (await db
-        .select()
-        .from(environmentVersions)
-        .where(
-          and(
-            eq(environmentVersions.id, environment.currentVersionId),
-            eq(environmentVersions.projectId, auth.project.id),
-          ),
-        )
-        .get()) ?? null
-  }
-
-  const timestamp = now()
-  const id = newId('session')
-  const environmentSnapshot = environmentVersion
-    ? {
-        ...environmentVersion,
-        packages: parseJson(environmentVersion.packages),
-        variables: parseJson(environmentVersion.variables),
-        secretRefs: parseJson(environmentVersion.secretRefs),
-        networkPolicy: parseJson(environmentVersion.networkPolicy),
-        resourceLimits: parseJson(environmentVersion.resourceLimits),
-        runtimeImage: parseJson(environmentVersion.runtimeImage),
-        metadata: parseJson(environmentVersion.metadata),
-      }
-    : null
-  const row = {
-    id,
-    agentId,
-    agentVersionId: agentVersion.id,
-    agentSnapshot: stringify(agentSnapshot),
-    environmentId: agentVersion.defaultEnvironmentId,
-    environmentVersionId: environmentVersion?.id ?? null,
-    environmentSnapshot: environmentSnapshot ? stringify(environmentSnapshot) : null,
-    projectId: auth.project.id,
-    durableObjectName: `org_${auth.organization.id}:project_${auth.project.id}:session_${id}`,
-    status: 'idle',
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  }
-
-  await db.insert(sessions).values(row)
-
-  return c.json(
-    {
-      ...row,
-      agentSnapshot,
-      environmentSnapshot,
-      agentUrl: `/agents/managed-agent/${row.durableObjectName}`,
-    },
-    201,
-  )
+  return await createSessionForAgent(c, db, auth, agentId)
 })
 
 export default app

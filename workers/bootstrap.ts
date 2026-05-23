@@ -1,6 +1,7 @@
 import { createApp } from '../server/app'
 import type { Env } from '../server/env'
 
+export { Sandbox } from '@cloudflare/sandbox'
 export { ManagedAgent } from '../server/agents/managed-agent'
 
 const app = createApp()
