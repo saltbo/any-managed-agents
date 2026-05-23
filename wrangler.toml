@@ -12,8 +12,9 @@ not_found_handling = "single-page-application"
 run_worker_first = ["/api/*", "/agents/*", "/runtime/*"]
 
 [vars]
-AMA_DEFAULT_MODEL = "@cf/meta/llama-3.1-8b-instruct"
+AMA_DEFAULT_MODEL = "@cf/moonshotai/kimi-k2.6"
 AMA_PI_BRIDGE_PORT = "8788"
+AMA_WORKERS_AI_ACCOUNT_ID = "94a89d03c0fc785c8dcbd3c674d6742a"
 FLAREAUTH_ISSUER = "https://auth.example.com"
 FLAREAUTH_CLIENT_ID = "replace-with-flareauth-client-id"
 FLAREAUTH_REDIRECT_URI = "https://replace-with-worker-host/api/auth/callback"
@@ -58,8 +59,9 @@ enabled = true
 [env.staging]
 
 [env.staging.vars]
-AMA_DEFAULT_MODEL = "@cf/meta/llama-3.1-8b-instruct"
+AMA_DEFAULT_MODEL = "@cf/moonshotai/kimi-k2.6"
 AMA_PI_BRIDGE_PORT = "8788"
+AMA_WORKERS_AI_ACCOUNT_ID = "94a89d03c0fc785c8dcbd3c674d6742a"
 FLAREAUTH_ISSUER = "https://auth.example.com"
 FLAREAUTH_CLIENT_ID = "replace-with-flareauth-staging-client-id"
 FLAREAUTH_REDIRECT_URI = "https://replace-with-staging-worker-host/api/auth/callback"

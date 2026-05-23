@@ -81,7 +81,7 @@ describe('[CF] /api/sessions', () => {
       piProcessId: `proc_${created.id}`,
       runtimeEndpointPath: `/runtime/sessions/${created.id}/rpc`,
       metadata: { runtime: 'pi', protocol: 'pi-rpc-jsonl', runtimeMode: 'test', bridge: 'fake' },
-      modelConfig: { provider: 'workers-ai', model: '@cf/meta/llama-3.1-8b-instruct' },
+      modelConfig: { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6' },
     })
     expect(created.environmentVersionId).toMatch(/^envver_/)
     expect(created.startedAt).toEqual(expect.any(String))

@@ -12,6 +12,8 @@ export interface Env {
   AMA_PI_BRIDGE_COMMAND?: string
   AMA_PI_BRIDGE_PORT?: string
   AMA_WORKERS_AI_ACCOUNT_ID?: string
+  AMA_WORKERS_AI_API_KEY?: string
+  AMA_WORKERS_AI_API_TOKEN?: string
   AMA_AI_GATEWAY_ID?: string
   FLAREAUTH_ISSUER?: string
   FLAREAUTH_CLIENT_ID?: string

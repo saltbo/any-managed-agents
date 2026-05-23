@@ -9,7 +9,7 @@ import { createSessionForAgent } from './sessions'
 const app = createApiRouter()
 
 const DEFAULT_PROVIDER = 'workers-ai'
-const DEFAULT_MODEL = '@cf/meta/llama-3.1-8b-instruct'
+const DEFAULT_MODEL = '@cf/moonshotai/kimi-k2.6'
 const BLOCKED_TOOLS = new Set(['secrets.read', 'filesystem.host', 'network.raw'])
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())

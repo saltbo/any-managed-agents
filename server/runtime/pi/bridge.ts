@@ -24,6 +24,9 @@ export interface SafeRuntimeError {
 }
 
 const DEFAULT_BRIDGE_PORT = 8788
+const PI_PROVIDER_NAMES: Record<string, string> = {
+  'workers-ai': 'cloudflare-workers-ai',
+}
 
 async function getSandboxBinding() {
   const { getSandbox } = await import('@cloudflare/sandbox')
@@ -36,6 +39,10 @@ function bridgePort(env: Env) {
 
 export function runtimeEndpointPath(sessionId: string) {
   return `/runtime/sessions/${sessionId}/rpc`
+}
+
+function piProviderName(provider: string) {
+  return PI_PROVIDER_NAMES[provider] ?? provider
 }
 
 export function safeRuntimeError(error: unknown): SafeRuntimeError {
@@ -61,9 +68,10 @@ export async function startPiBridge(env: Env, input: PiBridgeStartInput): Promis
   }
 
   const port = bridgePort(env)
+  const provider = piProviderName(input.provider)
   const command =
     env.AMA_PI_BRIDGE_COMMAND ??
-    `node /opt/ama/pi-bridge.mjs --port ${port} --session-id ${input.sessionId} --provider ${input.provider} --model ${input.model}`
+    `node /opt/ama/pi-bridge.mjs --port ${port} --session-id ${input.sessionId} --provider ${provider} --model ${input.model}`
   const getSandbox = await getSandboxBinding()
   const sandbox = getSandbox(env.SANDBOX, input.sandboxId, {
     keepAlive: true,
@@ -91,9 +99,10 @@ export async function startPiBridge(env: Env, input: PiBridgeStartInput): Promis
       env: {
         AMA_SESSION_ID: input.sessionId,
         AMA_SANDBOX_ID: input.sandboxId,
-        PI_PROVIDER: input.provider,
+        PI_PROVIDER: provider,
         PI_MODEL: input.model,
         CLOUDFLARE_ACCOUNT_ID: env.AMA_WORKERS_AI_ACCOUNT_ID,
+        CLOUDFLARE_API_KEY: env.AMA_WORKERS_AI_API_KEY ?? env.AMA_WORKERS_AI_API_TOKEN,
         CLOUDFLARE_AI_GATEWAY_ID: env.AMA_AI_GATEWAY_ID,
       },
       processId: `pi-${input.sessionId}`,
