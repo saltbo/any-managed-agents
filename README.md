@@ -34,13 +34,21 @@ Requirements:
 - Node.js 24+
 - npm
 - Cloudflare account and Wrangler login for deployment
+- FlareAuth OIDC application for login
+- Cloudflare Sandbox/Containers access for Pi runtime sessions
 
 ```bash
 git clone https://github.com/saltbo/any-managed-agents.git
 cd any-managed-agents
 npm install
+cp .env.example .env
 npm run dev
 ```
+
+For local API checks, configure the FlareAuth issuer/client values, a random
+`AMA_SESSION_SECRET`, and Workers AI account settings. The v1 runtime uses Pi in
+a Cloudflare Sandbox container and the Pi Cloudflare provider name
+`cloudflare-workers-ai`; the default model is `@cf/moonshotai/kimi-k2.6`.
 
 Run the checks:
 
@@ -56,6 +64,12 @@ npm run build
 ## Deployment
 
 The project is configured for Cloudflare Workers. GitHub Actions only runs CI checks; deployment is handled by Cloudflare Workers Builds.
+
+Before deploying v1.0, create the D1 databases, configure FlareAuth with
+`/api/auth/callback`, set Wrangler secrets for `FLAREAUTH_CLIENT_SECRET`,
+`AMA_SESSION_SECRET`, and `AMA_WORKERS_AI_API_KEY`, and build the Pi runtime
+image from this repository's `Dockerfile`. Runtime dependencies must be baked
+into that image; request-time npm installation is not part of the session path.
 
 For a new Cloudflare Worker with Durable Objects, run one bootstrap deployment before relying on Workers Builds:
 
