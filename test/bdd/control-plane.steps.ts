@@ -39,3 +39,8 @@ Then('the OpenAPI document should include path {string}', async (path: string) =
   const body = (await response.clone().json()) as { paths?: Record<string, unknown> }
   assert.ok(body.paths?.[path], `Expected OpenAPI path ${path}`)
 })
+
+Then('the OpenAPI path {string} should include method {string}', async (path: string, method: string) => {
+  const body = (await response.clone().json()) as { paths?: Record<string, Record<string, unknown>> }
+  assert.ok(body.paths?.[path]?.[method], `Expected OpenAPI path ${path} to include ${method}`)
+})
