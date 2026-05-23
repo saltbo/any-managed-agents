@@ -142,6 +142,8 @@ export const sessions = sqliteTable('sessions', {
   agentId: text('agent_id')
     .notNull()
     .references(() => agentDefinitions.id),
+  organizationId: text('organization_id').references(() => organizations.id),
+  createdByUserId: text('created_by_user_id').references(() => users.id),
   agentVersionId: text('agent_version_id').references(() => agentDefinitionVersions.id),
   agentSnapshot: text('agent_snapshot'),
   environmentId: text('environment_id').references(() => environments.id),
@@ -149,7 +151,40 @@ export const sessions = sqliteTable('sessions', {
   environmentSnapshot: text('environment_snapshot'),
   projectId: text('project_id').references(() => projects.id),
   durableObjectName: text('durable_object_name').notNull(),
+  sandboxId: text('sandbox_id'),
+  piRuntimeId: text('pi_runtime_id'),
+  piProcessId: text('pi_process_id'),
+  runtimeEndpointPath: text('runtime_endpoint_path'),
+  modelProvider: text('model_provider'),
+  modelConfig: text('model_config'),
   status: text('status').notNull(),
+  statusReason: text('status_reason'),
+  metadata: text('metadata').notNull().default('{}'),
+  startedAt: text('started_at'),
+  stoppedAt: text('stopped_at'),
+  archivedAt: text('archived_at'),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
+})
+
+export const sessionEvents = sqliteTable('session_events', {
+  id: text('id').primaryKey(),
+  organizationId: text('organization_id')
+    .notNull()
+    .references(() => organizations.id),
+  projectId: text('project_id')
+    .notNull()
+    .references(() => projects.id),
+  sessionId: text('session_id')
+    .notNull()
+    .references(() => sessions.id),
+  sequence: integer('sequence').notNull(),
+  type: text('type').notNull(),
+  visibility: text('visibility').notNull(),
+  role: text('role'),
+  parentEventId: text('parent_event_id'),
+  correlationId: text('correlation_id'),
+  payload: text('payload').notNull(),
+  metadata: text('metadata').notNull().default('{}'),
+  createdAt: text('created_at').notNull(),
 })

@@ -8,10 +8,11 @@ preview_urls = true
 [assets]
 binding = "ASSETS"
 not_found_handling = "single-page-application"
-run_worker_first = ["/api/*", "/agents/*"]
+run_worker_first = ["/api/*", "/agents/*", "/runtime/*"]
 
 [vars]
 AMA_DEFAULT_MODEL = "@cf/meta/llama-3.1-8b-instruct"
+AMA_PI_BRIDGE_PORT = "8788"
 FLAREAUTH_ISSUER = "https://auth.example.com"
 FLAREAUTH_CLIENT_ID = "replace-with-flareauth-client-id"
 FLAREAUTH_REDIRECT_URI = "https://replace-with-worker-host/api/auth/callback"
@@ -32,9 +33,22 @@ migrations_dir = "./migrations"
 name = "MANAGED_AGENT"
 class_name = "ManagedAgent"
 
+[[durable_objects.bindings]]
+name = "SANDBOX"
+class_name = "Sandbox"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["ManagedAgent"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["Sandbox"]
+
+[[containers]]
+class_name = "Sandbox"
+image = "registry.cloudflare.com/94a89d03c0fc785c8dcbd3c674d6742a/ama-pi-runtime:0.75.4"
+max_instances = 10
 
 [observability]
 enabled = true
@@ -43,6 +57,7 @@ enabled = true
 
 [env.staging.vars]
 AMA_DEFAULT_MODEL = "@cf/meta/llama-3.1-8b-instruct"
+AMA_PI_BRIDGE_PORT = "8788"
 FLAREAUTH_ISSUER = "https://auth.example.com"
 FLAREAUTH_CLIENT_ID = "replace-with-flareauth-staging-client-id"
 FLAREAUTH_REDIRECT_URI = "https://replace-with-staging-worker-host/api/auth/callback"
@@ -62,3 +77,12 @@ migrations_dir = "./migrations"
 [[env.staging.durable_objects.bindings]]
 name = "MANAGED_AGENT"
 class_name = "ManagedAgent"
+
+[[env.staging.durable_objects.bindings]]
+name = "SANDBOX"
+class_name = "Sandbox"
+
+[[env.staging.containers]]
+class_name = "Sandbox"
+image = "registry.cloudflare.com/94a89d03c0fc785c8dcbd3c674d6742a/ama-pi-runtime:0.75.4"
+max_instances = 10

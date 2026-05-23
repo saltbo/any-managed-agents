@@ -10,6 +10,8 @@ import agents from './routes/agents'
 import auth from './routes/auth'
 import environments from './routes/environments'
 import health from './routes/health'
+import sessionRoutes from './routes/sessions'
+import { proxyPiRuntime } from './runtime/pi/bridge'
 
 export function createApp() {
   const app = createApiRouter()
@@ -34,6 +36,7 @@ export function createApp() {
   app.route('/api/auth', auth)
   app.route('/api/agents', agents)
   app.route('/api/environments', environments)
+  app.route('/api/sessions', sessionRoutes)
 
   app.doc('/api/openapi.json', {
     openapi: '3.0.0',
@@ -46,6 +49,32 @@ export function createApp() {
   })
 
   app.get('/api/docs', swaggerUI({ url: '/api/openapi.json' }))
+
+  app.all('/runtime/sessions/:sessionId/*', async (c) => {
+    const db = drizzle(c.env.DB)
+    const resolvedAuth = await requireAuth(c, db)
+    if (resolvedAuth instanceof Response) {
+      return resolvedAuth
+    }
+
+    const sessionId = c.req.param('sessionId')
+    const session = await db
+      .select()
+      .from(sessions)
+      .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, resolvedAuth.project.id)))
+      .get()
+    if (!session) {
+      return errorResponse(c, 404, 'not_found', 'Session not found')
+    }
+    if (session.status !== 'idle' && session.status !== 'running') {
+      return errorResponse(c, 409, 'conflict', 'Session runtime is not active')
+    }
+    if (!session.sandboxId) {
+      return errorResponse(c, 409, 'conflict', 'Session runtime is unavailable')
+    }
+
+    return await proxyPiRuntime(c.env, session.sandboxId, c.req.raw)
+  })
 
   app.all('/agents/*', async (c) => {
     const db = drizzle(c.env.DB)
