@@ -184,6 +184,22 @@ describe('[CF] auth and tenancy', () => {
     })
   })
 
+  it('rejects protected APIs with a tampered AMA session', async () => {
+    const cookie = await signIn()
+    const res = await SELF.fetch('https://example.com/api/agents', {
+      headers: { cookie: `${cookie}tampered` },
+    })
+
+    expect(res.status).toBe(401)
+    expect(await res.json()).toMatchObject({
+      error: {
+        type: 'authentication_required',
+        message: 'Authentication required',
+        details: { reason: 'missing_or_invalid_session' },
+      },
+    })
+  })
+
   it('returns a stable error envelope for invalid OIDC callbacks', async () => {
     const res = await SELF.fetch('https://example.com/api/auth/callback?code=valid-code&state=wrong-state', {
       redirect: 'manual',

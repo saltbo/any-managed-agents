@@ -14,3 +14,8 @@ Feature: Environments API
     And the OpenAPI path "/api/environments/{environmentId}" should include method "patch"
     And the OpenAPI path "/api/environments/{environmentId}" should include method "delete"
     And the OpenAPI document should include path "/api/environments/{environmentId}/versions"
+
+  Scenario: Manage project environments through the API
+    Then the environments API supports create, read, update, version history, archive, and list
+    And the environments API enforces auth and project tenancy
+    And environment secret handling stores references and never returns raw secret values
