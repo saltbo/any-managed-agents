@@ -6,4 +6,4 @@ Feature: CLI
     Given an authenticated operator
     When the operator uses CLI resource commands
     Then all commands are scoped to the selected organization and project
-    And agent runtime interaction remains Cloudflare Agent SDK-compatible
+    And agent runtime interaction remains Pi protocol-compatible

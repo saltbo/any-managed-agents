@@ -8,19 +8,20 @@ Feature: Agent sessions
   Scenario: Start a session from an agent
     When the user starts a session
     Then the platform stores a session record in D1
-    And the session is bound to an Agent Durable Object
     And the session uses a snapshot of the selected agent version
+    And the session uses a snapshot of the selected environment
+    And the session records its sandbox id, Pi session or runtime id, and status
 
-  Scenario: Connect to a session with Cloudflare Agent SDK
+  Scenario: Connect to a session with Pi protocol
     Given a session exists
-    When the client connects through an external SDK session helper or Cloudflare Agent SDK client
-    Then runtime traffic is routed through /agents/*
-    And the helper delegates to Cloudflare Agent SDK-compatible runtime behavior
+    When the client connects through an external SDK session helper or direct runtime client
+    Then runtime traffic uses Pi protocol or a transparent AMA proxy around Pi protocol
+    And the helper does not define an incompatible replacement runtime protocol
 
   Scenario: Stop a running session
     Given a session is running
     When the user stops the session
-    Then the Agent Durable Object receives a cancellation signal
+    Then AMA forwards an abort request to the Pi runtime
     And the session status becomes stopped
     And no additional model calls are started for that session
 

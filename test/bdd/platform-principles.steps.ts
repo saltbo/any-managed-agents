@@ -18,29 +18,31 @@ Then('the application must run on Cloudflare Workers', () => {
   assert.match(wrangler, /compatibility_date = /)
 })
 
-Then('the application must use Cloudflare-compatible platform services for runtime state', () => {
+Then('the application must use Cloudflare-compatible platform services for control-plane state', () => {
   const wrangler = read('wrangler.toml')
   assert.match(wrangler, /\[\[d1_databases\]\]/)
   assert.match(wrangler, /\[\[durable_objects\.bindings\]\]/)
 })
 
-Then('agent runtime traffic must use the Cloudflare Agent SDK protocol', () => {
-  const app = read('server/app.ts')
-  const agent = read('server/agents/managed-agent.ts')
-  assert.match(app, /routeAgentRequest/)
-  assert.match(agent, /from 'agents'/)
+Then('agent runtime traffic must use Pi protocol through Cloudflare Sandbox', () => {
+  const spec = read('docs/product/spec.md')
+  const decisions = read('docs/product/decisions.md')
+  assert.match(spec, /v1\.0 agent runtime is Pi coding agent running inside a per-session Cloudflare Sandbox/)
+  assert.match(spec, /Runtime traffic uses Pi protocol directly or through a transparent AMA proxy/)
+  assert.match(decisions, /v1\.0 runs Pi coding agent inside one Cloudflare Sandbox per session/)
 })
 
-Then('the platform must not define a competing custom agent runtime SDK', () => {
+Then('the platform must not define a competing custom agent runtime protocol', () => {
   const spec = read('docs/product/spec.md')
-  assert.match(spec, /does not maintain a competing runtime SDK/)
-  assert.match(spec, /Runtime interaction must remain compatible with Cloudflare Agent SDK/)
+  assert.match(spec, /does not maintain a competing runtime SDK or incompatible runtime protocol/)
+  assert.match(spec, /AMA must proxy or adapt Pi protocol rather than inventing a new incompatible runtime protocol/)
+  assert.match(spec, /Cloudflare Agents SDK is not the v1\.0 runtime contract/)
 })
 
 Then('product APIs may exist only for control-plane resource management', () => {
   const spec = read('docs/product/spec.md')
   assert.match(spec, /The platform owns the control plane/)
-  assert.match(spec, /The platform does not own a custom runtime SDK/)
+  assert.match(spec, /Product SDKs manage control-plane resources/)
 })
 
 Then('this repository must publish the Any Managed Agents OpenAPI contract', () => {
@@ -56,21 +58,21 @@ Then('this repository must not maintain language SDK source code', () => {
   assert.match(contributing, /separate SDK repositories/)
 })
 
-Then('external SDK runtime helpers must delegate to Cloudflare Agent SDK-compatible endpoints', () => {
+Then('external SDK runtime helpers must delegate to Pi runtime endpoints', () => {
   const sdk = read('docs/product/sdk.md')
   assert.match(sdk, /connect to a running session/)
-  assert.match(sdk, /Cloudflare Agents SDK-compatible runtime endpoint/)
+  assert.match(sdk, /Pi protocol or a transparent AMA Pi proxy endpoint/)
 })
 
-Then('sandbox execution must use Cloudflare Sandbox SDK', () => {
+Then('sandbox execution must use Cloudflare Sandbox', () => {
   const spec = read('docs/product/spec.md')
-  assert.match(spec, /Sandbox execution uses Cloudflare Sandbox SDK directly/)
+  assert.match(spec, /Cloudflare Sandbox owns the filesystem, shell, process isolation/)
 })
 
 Then('the platform must not define a competing custom sandbox SDK', () => {
   const spec = read('docs/product/spec.md')
-  assert.match(spec, /does not maintain a competing runtime SDK/)
-  assert.match(spec, /Sandbox execution must remain compatible with Cloudflare Sandbox SDK/)
+  assert.match(spec, /AMA must not define a custom sandbox SDK/)
+  assert.match(spec, /Cloudflare Sandbox owns the filesystem, shell, process isolation/)
 })
 
 Then('Workers AI must be supported as a first-class model provider', () => {

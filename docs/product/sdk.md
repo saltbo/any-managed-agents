@@ -8,7 +8,8 @@ This repository does not maintain language SDKs. It publishes the Any Managed Ag
 User application
   -> external Any Managed Agents SDK or direct HTTP
   -> Any Managed Agents OpenAPI control-plane API
-  -> Cloudflare Agents SDK / Cloudflare Sandbox SDK
+  -> AMA runtime proxy
+  -> Pi coding agent in Cloudflare Sandbox
 ```
 
 ## External Any Managed Agents SDKs
@@ -19,27 +20,29 @@ External SDK repositories use this repository's OpenAPI document as their source
 - create and manage environments
 - create, start, stop, resume, and inspect sessions
 - manage provider, vault, policy, usage, and audit resources
-- connect to a running session through a Cloudflare Agents SDK-compatible runtime endpoint
+- connect to a running session through Pi protocol or a transparent AMA Pi proxy endpoint
 
 SDKs should stay thin. They wrap the public control-plane API and provide a small set of ergonomic helpers, such as `sessions.connect(sessionId)`. SDK source, release process, and language-specific packaging do not live in this repository.
 
-## Cloudflare Agents SDK
+## Runtime Protocol
 
-Cloudflare Agents SDK remains the runtime protocol and runtime client foundation.
+Pi protocol is the v1.0 runtime protocol. Pi coding agent is the v1.0 runtime implementation inside Cloudflare Sandbox.
 
-The platform must not create a competing runtime protocol for WebSocket, RPC, state sync, streaming, or Agent Durable Object routing. Runtime session traffic should remain compatible with Cloudflare Agents SDK concepts such as agent class names, instance names, `AgentClient`, `useAgent`, and `agentFetch`.
+The platform must not create a competing runtime protocol for RPC, session events, prompts, abort, follow-up, steering, or tool calls. Runtime session traffic should use Pi protocol directly or a transparent AMA proxy around Pi RPC and JSON event streams.
 
-## Cloudflare Sandbox SDK
+Cloudflare Agents SDK is not the v1.0 runtime contract. It may become a future adapter, but v1.0 must not require `/agents/*` compatibility.
 
-Cloudflare Sandbox SDK remains the sandbox execution foundation.
+## Cloudflare Sandbox
 
-The platform uses sandbox capabilities internally to execute commands, manage files, and run processes. The SDK should not expose the raw sandbox as the primary public product surface. Users manage `Environment` resources; the platform maps those environment descriptions to per-session sandbox runtime behavior.
+Cloudflare Sandbox remains the sandbox execution foundation.
+
+The platform uses sandbox capabilities internally to provide filesystem, shell, process isolation, and per-session execution for Pi. SDKs should not expose the raw sandbox as the primary public product surface. Users manage `Environment` resources; the platform maps those environment descriptions to per-session sandbox runtime behavior.
 
 ## Product Model
 
 - `Agent` is a managed definition: instructions, tools, model policy, sandbox requirements, governance rules, and versions.
-- `Environment` is a long-lived sandbox environment description.
+- `Environment` is a long-lived sandbox and runtime configuration, not a running sandbox.
 - `Sandbox` is a per-session runtime instance created from an environment snapshot.
-- `Session` is a concrete run of an agent in an environment, with runtime state, one sandbox instance, events, transcript, tool calls, and status.
+- `Session` is a concrete run of an agent, binding an agent version snapshot, environment snapshot, sandbox id, Pi session or runtime id, events, transcript, tool calls, and status.
 
 External SDKs should make this model explicit.

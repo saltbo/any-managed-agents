@@ -10,11 +10,11 @@ Feature: Quickstart
   Scenario: Run the default Workers AI agent
     Given Workers AI is available
     When the developer creates an agent with the default model
-    Then the agent can respond through the Cloudflare Agent SDK runtime
+    Then the agent can respond through the Pi runtime in Cloudflare Sandbox
     And no Anthropic credential is required
 
   Scenario: Add sandbox execution
-    Given Cloudflare Sandbox SDK is configured
+    Given Cloudflare Sandbox is configured
     When the developer enables sandbox access for the agent
     Then the agent can run an approved command in an isolated sandbox
     And command output is visible in the session debug view

@@ -2,9 +2,9 @@
 
 The product specs describe the intended end state for Any Managed Agents. Files tagged `@planned` are accepted target behavior and are excluded from the default executable BDD run until implementation begins.
 
-This directory covers managed-agents capability areas as clean-room Any Managed Agents specs. Coverage is by product capability, not by copying another project's file layout. Cloudflare Workers, Cloudflare Agent SDK, Cloudflare Sandbox SDK, D1, Durable Objects, and Workers AI are architectural constraints.
+This directory covers managed-agents capability areas as clean-room Any Managed Agents specs. Coverage is by product capability, not by copying another project's file layout. Cloudflare Workers, Pi coding agent, Cloudflare Sandbox, D1, Durable Objects, and Workers AI are architectural constraints.
 
-This repository publishes the OpenAPI contract for product resources. Language SDKs are generated and maintained in separate repositories. Cloudflare Agent SDK remains the runtime protocol, and Cloudflare Sandbox SDK remains the sandbox execution foundation.
+This repository publishes the OpenAPI contract for product resources. Language SDKs are generated and maintained in separate repositories. Pi protocol is the v1.0 runtime protocol, and Cloudflare Sandbox remains the sandbox execution foundation.
 
 ## Core Platform
 
@@ -18,7 +18,7 @@ This repository publishes the OpenAPI contract for product resources. Language S
 - `agents-control-plane.feature` - agent definitions, versions, validation, and archive behavior
 - `agent-builder.feature` - guided UI for creating and testing agents
 - `agent-detail.feature`, `agents-api.feature`, `agents-ui.feature`, `agents-update.feature` - agent API and UI coverage
-- `sessions-runtime.feature` - session lifecycle and Cloudflare Agent SDK runtime routing
+- `sessions-runtime.feature` - session lifecycle and Pi runtime proxy behavior
 - `events-streaming.feature` - transcript, debug, and event streaming behavior
 - `session-detail.feature`, `session-detail-tool-tracing.feature`, `session-stop.feature`, `sessions-api.feature`, `sessions-events.feature`, `sessions-list-bulk-archive.feature`, `sessions-ui.feature` - session coverage
 
@@ -26,7 +26,7 @@ This repository publishes the OpenAPI contract for product resources. Language S
 
 - `environments.feature` - long-lived environment descriptions
 - `environment-detail.feature`, `environments-api.feature`, `environments-mcp.feature`, `environments-ui.feature` - environment coverage
-- `sandbox-execution.feature` - per-session Cloudflare Sandbox SDK execution, files, commands, lifecycle, and policy
+- `sandbox-execution.feature` - per-session Cloudflare Sandbox execution, files, commands, lifecycle, and policy
 - `tools-mcp.feature` - tool configuration, MCP discovery, approval, and runtime enforcement
 - `engine-cooperative-cancellation.feature`, `engine-error-termination.feature`, `engine-mcp.feature`, `engine-mcp-e2e.feature` - runtime engine coverage
 - `mcp-client.feature`, `mcp-client-integration.feature`, `mcp-connections.feature`, `mcp-discovery.feature`, `mcp-policy-enforcement.feature` - MCP coverage
@@ -43,7 +43,7 @@ This repository publishes the OpenAPI contract for product resources. Language S
 - `audit-auto.feature`, `audit-log-ui.feature`, `usage-summary.feature` - audit and usage coverage
 - `api-contracts.feature` - OpenAPI, external SDK, and error contracts for control-plane automation
 - `openapi.feature`, `web-api-client-consolidation.feature` - API contract coverage
-- `cli.feature`, `cli-client.feature`, `cli-contract.feature`, `cli-smoke-test.feature` - optional control-plane CLI coverage, not runtime SDK coverage
+- `cli.feature`, `cli-client.feature`, `cli-contract.feature`, `cli-smoke-test.feature` - optional control-plane CLI coverage, not runtime protocol coverage
 - `web-ui.feature` - web console navigation and resource workflows
 - `layout.feature`, `list-date-range-filters.feature`, `list-route-pagination.feature` - UI infrastructure coverage
 - `quickstart.feature` - first-run developer path

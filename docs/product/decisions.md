@@ -4,11 +4,21 @@ These decisions define the intended end state for Any Managed Agents.
 
 ## Environment and Sandbox
 
-- `Environment` is a long-lived description of an execution environment.
+- `Environment` is a long-lived sandbox and runtime configuration, not a running sandbox.
 - `Sandbox` is a runtime instance created from an environment snapshot.
 - Each running `Session` owns exactly one sandbox.
 - Sandbox instances follow the session lifecycle and are not reused across sessions.
+- Cloudflare Sandbox owns filesystem, shell, process isolation, and the per-session execution environment.
 - Sandbox instances are execution environments only and must not expose public ports or preview URLs.
+
+## Runtime Boundary
+
+- v1.0 runs Pi coding agent inside one Cloudflare Sandbox per session.
+- Pi coding agent owns the runtime protocol, agent loop, built-in coding tools, session events, and prompt, abort, follow-up, and steer semantics.
+- AMA owns auth, tenancy, users, organizations, projects, agent, environment, and session metadata, OpenAPI CRUD, sandbox lifecycle, runtime proxy, UI, audit metadata, and usage metadata.
+- Runtime traffic uses Pi protocol directly or a transparent AMA proxy around Pi RPC and JSON event streams.
+- AMA must not define a new incompatible runtime SDK or runtime protocol.
+- Cloudflare Agents SDK is not the v1.0 runtime contract and v1.0 must not require `/agents/*` compatibility. It may become a future adapter.
 
 ## SDK Ownership
 
@@ -16,7 +26,7 @@ These decisions define the intended end state for Any Managed Agents.
 - This repository publishes the control-plane OpenAPI document.
 - TypeScript, Python, Go, and other SDKs should live in separate repositories.
 - External SDKs must be generated from or mechanically aligned with this repository's OpenAPI document.
-- Runtime helpers in external SDKs must delegate to Cloudflare Agent SDK-compatible endpoints.
+- Runtime helpers in external SDKs must delegate to Pi protocol or transparent AMA Pi proxy endpoints.
 
 ## Authentication
 
@@ -41,4 +51,3 @@ These decisions define the intended end state for Any Managed Agents.
 - Gherkin is the product spec format.
 - Cucumber is the executable spec runner.
 - E2E specs use Cucumber step definitions backed by Playwright.
-

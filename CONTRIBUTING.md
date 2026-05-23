@@ -4,9 +4,9 @@ Thanks for helping build Any Managed Agents. This document explains the project 
 
 ## Project Goal
 
-Any Managed Agents is a Cloudflare-native managed agents platform. It can be deployed on Cloudflare Workers, publishes an OpenAPI control-plane contract, uses Cloudflare Agent SDK for runtime traffic, and is designed to use Cloudflare Sandbox SDK for sandbox execution.
+Any Managed Agents is a Cloudflare-native managed agents platform. It can be deployed on Cloudflare Workers, publishes an OpenAPI control-plane contract, and runs Pi coding agent inside a per-session Cloudflare Sandbox for v1.0 runtime execution.
 
-The platform provides the control plane. Language SDKs are generated and maintained in separate repositories. This repository does not define a competing custom runtime SDK.
+The platform provides the control plane. Language SDKs are generated and maintained in separate repositories. This repository does not define a competing custom runtime SDK or incompatible runtime protocol.
 
 ## Technology Stack
 
@@ -15,8 +15,8 @@ The platform provides the control plane. Language SDKs are generated and maintai
 - React 19
 - Hono
 - Cloudflare Workers
-- Cloudflare Agent SDK
-- Cloudflare Sandbox SDK
+- Pi coding agent
+- Cloudflare Sandbox
 - Cloudflare Workers AI
 - Cloudflare D1
 - Cloudflare Durable Objects
@@ -40,14 +40,13 @@ Client
      -> D1 metadata and governance state
 
 Client
-  -> external SDK runtime helper or direct Cloudflare Agent SDK client
-  -> Cloudflare Agent SDK
-  -> /agents/*
-  -> Agent Durable Object
+  -> external SDK runtime helper or direct runtime client
+  -> AMA runtime proxy
+  -> Pi RPC / JSON event stream
 
-Agent Durable Object
-  -> model provider adapters
-  -> Cloudflare Sandbox SDK per-session sandbox
+AMA session lifecycle
+  -> Cloudflare Sandbox per-session sandbox
+  -> Pi coding agent process
 ```
 
 ### Control Plane
@@ -60,6 +59,10 @@ The control plane owns product resources:
 - model policy
 - sandbox policy
 - session metadata
+- environment metadata
+- sandbox lifecycle
+- runtime proxy
+- UI surfaces
 - usage and cost records
 - audit records
 - Cloudflare Secrets references
@@ -83,24 +86,24 @@ This repository does not maintain SDK source code. It publishes `/api/openapi.js
 
 OpenAPI changes must be treated as SDK contract changes. Keep route schemas stable and version breaking changes intentionally.
 
-External SDKs may provide small runtime helpers, such as connecting to a session, but those helpers must delegate to Cloudflare Agents SDK-compatible endpoints instead of defining a separate runtime protocol.
+External SDKs may provide small runtime helpers, such as connecting to a session, but those helpers must delegate to Pi protocol or transparent AMA Pi proxy endpoints instead of defining a separate runtime protocol.
 
 ### Runtime Plane
 
-Agent runtime traffic must remain compatible with Cloudflare Agent SDK. The Worker forwards `/agents/*` requests to the SDK router instead of defining a custom runtime protocol.
+v1.0 runtime traffic uses Pi protocol directly or through a transparent AMA proxy around Pi RPC and JSON event streams. AMA owns authentication, tenancy, session lookup, sandbox lifecycle, audit metadata, usage metadata, and proxying. Pi coding agent owns the runtime protocol, agent loop, built-in coding tools, session events, and prompt, abort, follow-up, and steer semantics.
 
-Agent classes live under `server/agents/`.
+Cloudflare Agents SDK is not the v1.0 runtime contract. It may become a future adapter, but v1.0 work must not require `/agents/*` compatibility.
 
 ### Environment and Sandbox
 
-`Environment` is a long-lived description stored by the control plane. It defines packages, variables, network policy, resource limits, and metadata.
+`Environment` is a long-lived sandbox and runtime configuration stored by the control plane. It defines packages, variables, network policy, resource limits, Pi runtime configuration, and metadata. It is not a running sandbox.
 
-`Sandbox` is a runtime instance created from an environment snapshot. It is owned 1:1 by a session, follows the session lifecycle, and must not expose public ports.
+`Sandbox` is a runtime instance created from an environment snapshot. It is owned 1:1 by a session, follows the session lifecycle, provides filesystem, shell, process isolation, and per-session execution, and must not expose public ports.
 
 ### Storage
 
 - D1 stores control-plane metadata.
-- Durable Objects own live agent/session runtime state.
+- Durable Objects may own control-plane coordination state when needed, but Pi in Cloudflare Sandbox owns v1.0 live runtime behavior.
 - Cloudflare Secrets stores provider credentials and other secret values.
 - D1 migrations live in `migrations/`.
 - Drizzle schema lives in `server/db/schema.ts`.
@@ -193,8 +196,8 @@ After that bootstrap, Cloudflare Workers Builds can upload versions normally.
 - Keep changes small and scoped.
 - Prefer existing project patterns.
 - Do not add a dependency unless it removes real complexity.
-- Do not introduce a custom runtime SDK.
+- Do not introduce a custom runtime SDK or incompatible runtime protocol.
 - Do not add SDK source code to this repository.
-- Do not bypass Cloudflare Agent SDK for agent runtime traffic.
+- Do not require Cloudflare Agents SDK or `/agents/*` compatibility for v1.0 runtime traffic.
 - Do not store raw secret values in D1.
 - Do not introduce workspace tooling.
