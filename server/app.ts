@@ -1,7 +1,13 @@
 import { swaggerUI } from '@hono/swagger-ui'
+import { and, eq } from 'drizzle-orm'
+import { drizzle } from 'drizzle-orm/d1'
 import { cors } from 'hono/cors'
+import { requireAuth } from './auth/session'
+import { sessions } from './db/schema'
+import { errorResponse } from './errors'
 import { createApiRouter } from './openapi'
 import agents from './routes/agents'
+import auth from './routes/auth'
 import health from './routes/health'
 
 export function createApp() {
@@ -10,13 +16,21 @@ export function createApp() {
   app.use(
     '/*',
     cors({
-      origin: '*',
+      origin: (origin, c) => {
+        const allowedOrigins = c.env.AMA_ALLOWED_ORIGINS
+        if (!allowedOrigins) {
+          return null
+        }
+        return allowedOrigins.split(',').includes(origin) ? origin : null
+      },
       allowMethods: ['GET', 'POST', 'OPTIONS'],
       allowHeaders: ['Content-Type', 'Authorization'],
+      credentials: true,
     }),
   )
 
   app.route('/api/health', health)
+  app.route('/api/auth', auth)
   app.route('/api/agents', agents)
 
   app.doc('/api/openapi.json', {
@@ -32,6 +46,26 @@ export function createApp() {
   app.get('/api/docs', swaggerUI({ url: '/api/openapi.json' }))
 
   app.all('/agents/*', async (c) => {
+    const db = drizzle(c.env.DB)
+    const resolvedAuth = await requireAuth(c, db)
+    if (resolvedAuth instanceof Response) {
+      return resolvedAuth
+    }
+
+    const durableObjectName = c.req.path.split('/').slice(3, 4)[0]
+    if (!durableObjectName) {
+      return errorResponse(c, 404, 'not_found', 'Agent session not found')
+    }
+
+    const session = await db
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(and(eq(sessions.durableObjectName, durableObjectName), eq(sessions.projectId, resolvedAuth.project.id)))
+      .get()
+    if (!session) {
+      return errorResponse(c, 404, 'not_found', 'Agent session not found')
+    }
+
     const { routeAgentRequest } = await import('agents')
     const response = await routeAgentRequest(c.req.raw, c.env)
     return response ?? c.text('Agent not found', 404)
@@ -41,15 +75,7 @@ export function createApp() {
 
   app.onError((err, c) => {
     console.error(err)
-    return c.json(
-      {
-        error: {
-          type: 'internal_error',
-          message: err instanceof Error ? err.message : 'Internal server error',
-        },
-      },
-      500,
-    )
+    return c.json({ error: { type: 'internal_error', message: 'Internal server error' } }, 500)
   })
 
   return app

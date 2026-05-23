@@ -7,6 +7,7 @@ export const ErrorResponseSchema = z
       type: z.string().openapi({ example: 'validation_error' }),
       message: z.string().openapi({ example: 'Invalid request' }),
       issues: z.array(z.unknown()).optional(),
+      details: z.record(z.string(), z.unknown()).optional(),
     }),
   })
   .openapi('ErrorResponse')
