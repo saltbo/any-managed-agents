@@ -180,7 +180,9 @@ describe('[CF] /api/agents', () => {
     const agent = (await agentRes.json()) as { id: string }
 
     await jsonFetch(`/api/environments/${environment.id}`, cookie, { method: 'DELETE' })
-    const archivedEnvironmentSessionRes = await jsonFetch(`/api/agents/${agent.id}/sessions`, cookie, { method: 'POST' })
+    const archivedEnvironmentSessionRes = await jsonFetch(`/api/agents/${agent.id}/sessions`, cookie, {
+      method: 'POST',
+    })
     expect(archivedEnvironmentSessionRes.status).toBe(409)
     await expect(archivedEnvironmentSessionRes.json()).resolves.toMatchObject({
       error: { type: 'conflict', message: 'Default environment is archived or unavailable' },

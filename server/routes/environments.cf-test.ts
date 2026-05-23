@@ -53,7 +53,12 @@ describe('[CF] /api/environments', () => {
       }),
     })
     expect(createRes.status).toBe(201)
-    const created = (await createRes.json()) as { id: string; currentVersionId: string; version: number; secretRefs: unknown[] }
+    const created = (await createRes.json()) as {
+      id: string
+      currentVersionId: string
+      version: number
+      secretRefs: unknown[]
+    }
     expect(created.version).toBe(1)
     expect(JSON.stringify(created)).not.toContain('raw-secret')
 
@@ -76,7 +81,9 @@ describe('[CF] /api/environments', () => {
 
     const versionsRes = await jsonFetch(`/api/environments/${created.id}/versions`, cookie)
     expect(versionsRes.status).toBe(200)
-    const versions = (await versionsRes.json()) as { data: Array<{ version: number; packages: Array<{ name: string }> }> }
+    const versions = (await versionsRes.json()) as {
+      data: Array<{ version: number; packages: Array<{ name: string }> }>
+    }
     expect(versions.data.map((version) => version.version)).toEqual([2, 1])
     expect(versions.data.find((version) => version.version === 1)?.packages).toEqual([
       { name: 'tsx', version: 'latest' },

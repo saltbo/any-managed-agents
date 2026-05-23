@@ -80,9 +80,20 @@ const EnvironmentVersionSchema = z
 const EnvironmentPayloadSchema = z.object({
   name: z.string().min(1).max(120).openapi({ example: 'Node workspace' }),
   description: z.string().max(1000).optional().openapi({ example: 'Default Node.js environment.' }),
-  packages: z.array(PackageSchema).max(200).optional().openapi({ example: [{ name: 'tsx', version: 'latest' }] }),
-  variables: z.record(z.string(), VariableSchema).optional().openapi({ example: { NODE_ENV: { required: true } } }),
-  secretRefs: z.array(SecretRefSchema).max(100).optional().openapi({ example: [{ name: 'NPM_TOKEN', ref: 'vault_secret_123' }] }),
+  packages: z
+    .array(PackageSchema)
+    .max(200)
+    .optional()
+    .openapi({ example: [{ name: 'tsx', version: 'latest' }] }),
+  variables: z
+    .record(z.string(), VariableSchema)
+    .optional()
+    .openapi({ example: { NODE_ENV: { required: true } } }),
+  secretRefs: z
+    .array(SecretRefSchema)
+    .max(100)
+    .optional()
+    .openapi({ example: [{ name: 'NPM_TOKEN', ref: 'vault_secret_123' }] }),
   networkPolicy: NetworkPolicySchema.optional().openapi({ example: { mode: 'restricted' } }),
   resourceLimits: ResourceLimitsSchema.optional().openapi({ example: { memoryMb: 512 } }),
   runtimeImage: RuntimeImageSchema.optional().openapi({ example: { image: 'node:24' } }),
@@ -176,11 +187,18 @@ async function currentVersion(db: ReturnType<typeof drizzle>, environment: Envir
   if (!environment.currentVersionId) {
     return null
   }
-  return (await db
-    .select()
-    .from(environmentVersions)
-    .where(and(eq(environmentVersions.id, environment.currentVersionId), eq(environmentVersions.environmentId, environment.id)))
-    .get()) ?? null
+  return (
+    (await db
+      .select()
+      .from(environmentVersions)
+      .where(
+        and(
+          eq(environmentVersions.id, environment.currentVersionId),
+          eq(environmentVersions.environmentId, environment.id),
+        ),
+      )
+      .get()) ?? null
+  )
 }
 
 async function createVersion(
@@ -317,9 +335,10 @@ app.openapi(listRoute, async (c) => {
   }
 
   const { includeArchived } = c.req.valid('query')
-  const where = includeArchived === 'true'
-    ? eq(environments.projectId, auth.project.id)
-    : and(eq(environments.projectId, auth.project.id), eq(environments.status, 'active'))
+  const where =
+    includeArchived === 'true'
+      ? eq(environments.projectId, auth.project.id)
+      : and(eq(environments.projectId, auth.project.id), eq(environments.status, 'active'))
   const rows = await db.select().from(environments).where(where).limit(100)
   const data = await Promise.all(rows.map(async (row) => serializeEnvironment(row, await currentVersion(db, row))))
   return c.json({ data }, 200)
@@ -472,7 +491,9 @@ app.openapi(versionsRoute, async (c) => {
   const rows = await db
     .select()
     .from(environmentVersions)
-    .where(and(eq(environmentVersions.environmentId, environmentId), eq(environmentVersions.projectId, auth.project.id)))
+    .where(
+      and(eq(environmentVersions.environmentId, environmentId), eq(environmentVersions.projectId, auth.project.id)),
+    )
     .orderBy(desc(environmentVersions.version))
   return c.json({ data: rows.map(serializeVersion) }, 200)
 })

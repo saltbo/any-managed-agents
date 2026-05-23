@@ -66,7 +66,11 @@ const AgentPayloadSchema = z.object({
   provider: z.string().min(1).optional().openapi({ example: DEFAULT_PROVIDER }),
   model: z.string().min(1).optional().openapi({ example: DEFAULT_MODEL }),
   systemPrompt: z.string().max(8000).optional().openapi({ example: 'Answer with citations.' }),
-  allowedTools: z.array(z.string().min(1)).max(100).optional().openapi({ example: ['web.search'] }),
+  allowedTools: z
+    .array(z.string().min(1))
+    .max(100)
+    .optional()
+    .openapi({ example: ['web.search'] }),
   sandboxPolicy: SandboxPolicySchema.optional().openapi({ example: { network: 'enabled' } }),
   defaultEnvironmentId: z.string().min(1).nullable().optional().openapi({ example: 'env_abc123' }),
   metadata: JsonObjectSchema.optional().openapi({ example: { owner: 'platform' } }),
@@ -270,11 +274,13 @@ async function currentAgentVersion(db: ReturnType<typeof drizzle>, agent: AgentR
   if (!agent.currentVersionId) {
     return null
   }
-  return (await db
-    .select()
-    .from(agentDefinitionVersions)
-    .where(and(eq(agentDefinitionVersions.id, agent.currentVersionId), eq(agentDefinitionVersions.agentId, agent.id)))
-    .get()) ?? null
+  return (
+    (await db
+      .select()
+      .from(agentDefinitionVersions)
+      .where(and(eq(agentDefinitionVersions.id, agent.currentVersionId), eq(agentDefinitionVersions.agentId, agent.id)))
+      .get()) ?? null
+  )
 }
 
 const listAgentsRoute = createRoute({
@@ -374,7 +380,10 @@ const createSessionRoute = createRoute({
     201: { description: 'Created session', content: { 'application/json': { schema: SessionSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
     404: { description: 'Agent not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
-    409: { description: 'Archived agent or environment', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    409: {
+      description: 'Archived agent or environment',
+      content: { 'application/json': { schema: ErrorResponseSchema } },
+    },
   },
 })
 
@@ -386,9 +395,10 @@ app.openapi(listAgentsRoute, async (c) => {
   }
 
   const { includeArchived } = c.req.valid('query')
-  const where = includeArchived === 'true'
-    ? eq(agentDefinitions.projectId, auth.project.id)
-    : and(eq(agentDefinitions.projectId, auth.project.id), eq(agentDefinitions.status, 'active'))
+  const where =
+    includeArchived === 'true'
+      ? eq(agentDefinitions.projectId, auth.project.id)
+      : and(eq(agentDefinitions.projectId, auth.project.id), eq(agentDefinitions.status, 'active'))
   const rows = await db.select().from(agentDefinitions).where(where).limit(100)
   const data = await Promise.all(rows.map(async (row) => serializeAgent(row, await currentAgentVersion(db, row))))
   return c.json({ data }, 200)
@@ -435,7 +445,13 @@ app.openapi(createAgentRoute, async (c) => {
     updatedAt: timestamp,
   }
   await db.insert(agentDefinitions).values(row)
-  const version = await createAgentVersion(db, row, { ...row, allowedTools, sandboxPolicy, metadata, createdAt: timestamp })
+  const version = await createAgentVersion(db, row, {
+    ...row,
+    allowedTools,
+    sandboxPolicy,
+    metadata,
+    createdAt: timestamp,
+  })
   await db.update(agentDefinitions).set({ currentVersionId: version.id }).where(eq(agentDefinitions.id, row.id))
 
   return c.json(serializeAgent({ ...row, currentVersionId: version.id }, version), 201)
@@ -479,7 +495,8 @@ app.openapi(updateAgentRoute, async (c) => {
     systemPrompt: body.systemPrompt ?? agent.systemPrompt,
     allowedTools: body.allowedTools ?? parseJson<string[]>(agent.allowedTools),
     sandboxPolicy: body.sandboxPolicy ?? parseJson<Record<string, unknown>>(agent.sandboxPolicy),
-    defaultEnvironmentId: body.defaultEnvironmentId === undefined ? agent.defaultEnvironmentId : body.defaultEnvironmentId,
+    defaultEnvironmentId:
+      body.defaultEnvironmentId === undefined ? agent.defaultEnvironmentId : body.defaultEnvironmentId,
     metadata: body.metadata ?? parseJson<Record<string, unknown>>(agent.metadata),
   }
   const validation =
@@ -510,7 +527,10 @@ app.openapi(updateAgentRoute, async (c) => {
     currentVersionId: version?.id ?? agent.currentVersionId,
     updatedAt: timestamp,
   }
-  await db.update(agentDefinitions).set(updated).where(and(eq(agentDefinitions.id, agentId), eq(agentDefinitions.projectId, auth.project.id)))
+  await db
+    .update(agentDefinitions)
+    .set(updated)
+    .where(and(eq(agentDefinitions.id, agentId), eq(agentDefinitions.projectId, auth.project.id)))
 
   return c.json(serializeAgent({ ...agent, ...updated }, version), 200)
 })
@@ -593,11 +613,17 @@ app.openapi(createSessionRoute, async (c) => {
     if (!environment?.currentVersionId) {
       return c.json({ error: { type: 'conflict', message: 'Default environment is archived or unavailable' } }, 409)
     }
-    environmentVersion = (await db
-      .select()
-      .from(environmentVersions)
-      .where(and(eq(environmentVersions.id, environment.currentVersionId), eq(environmentVersions.projectId, auth.project.id)))
-      .get()) ?? null
+    environmentVersion =
+      (await db
+        .select()
+        .from(environmentVersions)
+        .where(
+          and(
+            eq(environmentVersions.id, environment.currentVersionId),
+            eq(environmentVersions.projectId, auth.project.id),
+          ),
+        )
+        .get()) ?? null
   }
 
   const timestamp = now()
