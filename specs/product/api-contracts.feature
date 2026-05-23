@@ -9,7 +9,7 @@ Feature: API contracts and automation
     When a developer requests the OpenAPI document
     Then the document describes control-plane resources, request bodies, responses, and error shapes
     And the document is generated from Hono route schemas instead of hand-written OpenAPI JSON
-    And it does not describe a custom replacement for Cloudflare Agent SDK runtime traffic
+    And it does not describe a custom replacement for Pi runtime traffic
 
   Scenario: Provide consistent API errors
     When an API request fails validation, authentication, authorization, policy, or runtime checks
@@ -26,4 +26,4 @@ Feature: API contracts and automation
   Scenario: Keep automation separate from runtime protocol
     When an operator automates agent, session, provider, vault, governance, usage, or audit management
     Then automation uses an external Any Managed Agents SDK or the control-plane API
-    And runtime session interaction still uses Cloudflare Agent SDK-compatible endpoints
+    And runtime session interaction still uses Pi protocol or transparent AMA Pi proxy endpoints

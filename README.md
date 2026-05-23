@@ -9,14 +9,14 @@ Cloudflare-native managed agents for any model, tool, and sandbox.
 
 Any Managed Agents is an open, self-hostable managed agents platform designed to run on Cloudflare Workers. It is inspired by CMA and Claude Managed Agents, but it is not locked to Anthropic or any single model provider.
 
-The platform owns the control plane for agents, environments, sessions, providers, policy, usage, and governance. This repository publishes the OpenAPI contract for that control plane; language SDKs are generated and maintained in separate repositories. Runtime traffic stays compatible with Cloudflare Agent SDK, and sandbox execution is designed to use Cloudflare Sandbox SDK directly.
+The platform owns the control plane for agents, environments, sessions, providers, policy, usage, and governance. This repository publishes the OpenAPI contract for that control plane; language SDKs are generated and maintained in separate repositories. v1.0 runtime traffic uses Pi protocol directly or through a transparent AMA proxy to Pi running inside a per-session Cloudflare Sandbox.
 
 ## Features
 
 - Deploys to Cloudflare Workers
 - Publishes OpenAPI documentation for external SDK generation
 - Generates OpenAPI documentation from Hono route schemas
-- Uses Cloudflare Agent SDK for agent runtime routing
+- Runs Pi coding agent inside per-session Cloudflare Sandbox
 - Uses D1 and Durable Objects for Cloudflare-native state
 - Supports Workers AI as a first-class model provider
 - Supports all configured model providers through provider adapters
@@ -70,7 +70,7 @@ See [docs/infra/cloudflare-deploy.md](docs/infra/cloudflare-deploy.md) for the f
 
 ```txt
 workers/          Cloudflare Worker entry
-server/           Hono API, D1 schema, Agent classes
+server/           Hono API, D1 schema, and platform services
 src/              React app
 migrations/       D1 migrations
 specs/product/    Product behavior in Gherkin

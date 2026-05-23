@@ -17,9 +17,9 @@ Feature: Authentication and tenancy
 
   Scenario: Apply tenant context to agent runtime requests
     Given a session belongs to a project
-    When the user connects through Cloudflare Agent SDK
-    Then the Agent Durable Object receives the project and user context
-    And the runtime rejects access from users outside the project
+    When the user connects through the AMA runtime proxy
+    Then the AMA runtime proxy resolves the project and user context
+    And AMA rejects access from users outside the project before forwarding to Pi
 
   Scenario: Scope resource identifiers by tenant
     When the platform creates agent runtime state

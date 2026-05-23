@@ -8,20 +8,20 @@ Feature: Platform principles
 
   Scenario: The platform can be deployed on Cloudflare
     Then the application must run on Cloudflare Workers
-    And the application must use Cloudflare-compatible platform services for runtime state
+    And the application must use Cloudflare-compatible platform services for control-plane state
 
-  Scenario: Agent runtime uses Cloudflare Agent SDK
-    Then agent runtime traffic must use the Cloudflare Agent SDK protocol
-    And the platform must not define a competing custom agent runtime SDK
+  Scenario: Agent runtime uses Pi in Cloudflare Sandbox
+    Then agent runtime traffic must use Pi protocol through Cloudflare Sandbox
+    And the platform must not define a competing custom agent runtime protocol
     And product APIs may exist only for control-plane resource management
 
   Scenario: OpenAPI is the SDK contract boundary
     Then this repository must publish the Any Managed Agents OpenAPI contract
     And this repository must not maintain language SDK source code
-    And external SDK runtime helpers must delegate to Cloudflare Agent SDK-compatible endpoints
+    And external SDK runtime helpers must delegate to Pi runtime endpoints
 
-  Scenario: Sandbox execution uses Cloudflare Sandbox SDK
-    Then sandbox execution must use Cloudflare Sandbox SDK
+  Scenario: Sandbox execution uses Cloudflare Sandbox
+    Then sandbox execution must use Cloudflare Sandbox
     And the platform must not define a competing custom sandbox SDK
 
   Scenario: Model providers are not vendor locked

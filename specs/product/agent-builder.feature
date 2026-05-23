@@ -18,7 +18,7 @@ Feature: Agent builder
   Scenario: Configure sandbox access
     When the user enables sandbox execution
     Then the builder requires an environment and sandbox policy
-    And the resulting agent version can request Cloudflare Sandbox SDK execution
+    And the resulting agent version can request Cloudflare Sandbox execution
 
   Scenario: Test an agent before publishing
     Given the user has configured an agent draft

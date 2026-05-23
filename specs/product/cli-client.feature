@@ -5,4 +5,4 @@ Feature: CLI client
   Scenario: Use the CLI with API credentials
     Given an operator has API credentials
     When the operator runs CLI commands
-    Then the CLI manages control-plane resources without replacing Cloudflare Agent SDK runtime traffic
+    Then the CLI manages control-plane resources without replacing Pi runtime traffic
