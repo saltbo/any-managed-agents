@@ -4,9 +4,9 @@ Thanks for helping build Any Managed Agents. This document explains the project 
 
 ## Project Goal
 
-Any Managed Agents is a Cloudflare-native managed agents platform. It can be deployed on Cloudflare Workers, provides a thin product SDK, uses Cloudflare Agent SDK for runtime traffic, and is designed to use Cloudflare Sandbox SDK for sandbox execution.
+Any Managed Agents is a Cloudflare-native managed agents platform. It can be deployed on Cloudflare Workers, publishes an OpenAPI control-plane contract, uses Cloudflare Agent SDK for runtime traffic, and is designed to use Cloudflare Sandbox SDK for sandbox execution.
 
-The platform provides the control plane and product SDK. It does not define a competing custom runtime SDK.
+The platform provides the control plane. Language SDKs are generated and maintained in separate repositories. This repository does not define a competing custom runtime SDK.
 
 ## Technology Stack
 
@@ -16,16 +16,17 @@ The platform provides the control plane and product SDK. It does not define a co
 - Hono
 - Cloudflare Workers
 - Cloudflare Agent SDK
-- Any Managed Agents SDK generated from the control-plane API
+- Cloudflare Sandbox SDK
 - Cloudflare Workers AI
 - Cloudflare D1
 - Cloudflare Durable Objects
+- Cloudflare Secrets
 - Drizzle ORM
 - Tailwind CSS v4
 - Biome
 - Vitest
 - Cloudflare Vitest pool
-- Gherkin + Cucumber.js
+- Gherkin + Cucumber.js + Playwright
 
 The project is a single npm package. Do not introduce pnpm workspaces or a monorepo layout.
 
@@ -33,20 +34,20 @@ The project is a single npm package. Do not introduce pnpm workspaces or a monor
 
 ```txt
 Client
-  -> Any Managed Agents SDK
+  -> external SDK or direct HTTP
   -> /api/*
      -> Hono control-plane routes
      -> D1 metadata and governance state
 
 Client
-  -> Any Managed Agents SDK runtime helper
+  -> external SDK runtime helper or direct Cloudflare Agent SDK client
   -> Cloudflare Agent SDK
   -> /agents/*
   -> Agent Durable Object
 
 Agent Durable Object
-  -> Workers AI / model providers
-  -> Cloudflare Sandbox SDK
+  -> model provider adapters
+  -> Cloudflare Sandbox SDK per-session sandbox
 ```
 
 ### Control Plane
@@ -55,13 +56,13 @@ The control plane owns product resources:
 
 - organizations, projects, and users
 - agent definitions
-- provider configuration
+- provider configuration for all supported providers
 - model policy
 - sandbox policy
 - session metadata
 - usage and cost records
 - audit records
-- vault and secret references
+- Cloudflare Secrets references
 - governance rules
 
 Control-plane routes live under `server/routes/` and are mounted under `/api/*`.
@@ -76,20 +77,13 @@ All control-plane APIs must be implemented with `@hono/zod-openapi`:
 
 Do not add new control-plane routes with plain `app.get`, `app.post`, or manual OpenAPI JSON. The route implementation, validation schema, response schema, OpenAPI contract, and tests should change together.
 
-### Product SDK
+### SDK Repositories
 
-The product SDK wraps the control-plane API for developer workflows:
+This repository does not maintain SDK source code. It publishes `/api/openapi.json`; separate SDK repositories generate language clients from that contract.
 
-- agents
-- environments
-- sessions
-- providers
-- vaults
-- governance
-- usage
-- audit
+OpenAPI changes must be treated as SDK contract changes. Keep route schemas stable and version breaking changes intentionally.
 
-The SDK may provide small runtime helpers, such as connecting to a session, but those helpers must delegate to Cloudflare Agents SDK-compatible endpoints instead of defining a separate runtime protocol.
+External SDKs may provide small runtime helpers, such as connecting to a session, but those helpers must delegate to Cloudflare Agents SDK-compatible endpoints instead of defining a separate runtime protocol.
 
 ### Runtime Plane
 
@@ -97,10 +91,17 @@ Agent runtime traffic must remain compatible with Cloudflare Agent SDK. The Work
 
 Agent classes live under `server/agents/`.
 
+### Environment and Sandbox
+
+`Environment` is a long-lived description stored by the control plane. It defines packages, variables, network policy, resource limits, and metadata.
+
+`Sandbox` is a runtime instance created from an environment snapshot. It is owned 1:1 by a session, follows the session lifecycle, and must not expose public ports.
+
 ### Storage
 
 - D1 stores control-plane metadata.
 - Durable Objects own live agent/session runtime state.
+- Cloudflare Secrets stores provider credentials and other secret values.
 - D1 migrations live in `migrations/`.
 - Drizzle schema lives in `server/db/schema.ts`.
 
@@ -125,6 +126,7 @@ npm run lint
 npm run typecheck
 npm test
 npm run bdd
+npm run bdd:e2e
 npm run test:cf
 npm run build
 ```
@@ -155,7 +157,8 @@ If you discover new behavior while implementing, update the spec before continui
 ## Testing Strategy
 
 - `npm test` runs ordinary Vitest tests.
-- `npm run bdd` runs executable product specs.
+- `npm run bdd` runs executable product specs with Cucumber.
+- `npm run bdd:e2e` runs executable E2E specs with Cucumber step definitions backed by Playwright.
 - `npm run test:cf` runs Cloudflare runtime tests with D1 and Durable Objects.
 - `npm run build` proves the Worker and client can be bundled.
 
@@ -181,6 +184,7 @@ After that bootstrap, Cloudflare Workers Builds can upload versions normally.
 - `npm run typecheck` passes
 - `npm test` passes
 - `npm run bdd` passes
+- `npm run bdd:e2e` passes when E2E specs are implemented or changed
 - `npm run test:cf` passes when Cloudflare runtime behavior changes
 - `npm run build` passes
 
@@ -190,6 +194,7 @@ After that bootstrap, Cloudflare Workers Builds can upload versions normally.
 - Prefer existing project patterns.
 - Do not add a dependency unless it removes real complexity.
 - Do not introduce a custom runtime SDK.
-- Keep the product SDK thin and generated from the API contract where possible.
+- Do not add SDK source code to this repository.
 - Do not bypass Cloudflare Agent SDK for agent runtime traffic.
+- Do not store raw secret values in D1.
 - Do not introduce workspace tooling.

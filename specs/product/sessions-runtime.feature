@@ -13,7 +13,7 @@ Feature: Agent sessions
 
   Scenario: Connect to a session with Cloudflare Agent SDK
     Given a session exists
-    When the client connects through the Any Managed Agents SDK session helper
+    When the client connects through an external SDK session helper or Cloudflare Agent SDK client
     Then runtime traffic is routed through /agents/*
     And the helper delegates to Cloudflare Agent SDK-compatible runtime behavior
 

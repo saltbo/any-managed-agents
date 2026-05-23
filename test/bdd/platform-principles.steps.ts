@@ -43,28 +43,20 @@ Then('product APIs may exist only for control-plane resource management', () => 
   assert.match(spec, /The platform does not own a custom runtime SDK/)
 })
 
-Then('the platform must provide a thin Any Managed Agents SDK', () => {
+Then('this repository must publish the Any Managed Agents OpenAPI contract', () => {
+  const app = read('server/app.ts')
   const sdk = read('docs/product/sdk.md')
-  assert.match(sdk, /provides a thin product SDK/)
-  assert.match(sdk, /wraps the public control-plane API/)
+  assert.match(app, /\/api\/openapi\.json/)
+  assert.match(sdk, /publishes the Any Managed Agents control-plane OpenAPI contract/)
 })
 
-Then(
-  'the SDK must manage agents, environments, sessions, providers, vaults, governance, usage, and audit resources',
-  () => {
-    const sdk = read('docs/product/sdk.md')
-    assert.match(sdk, /agents/)
-    assert.match(sdk, /environments/)
-    assert.match(sdk, /sessions/)
-    assert.match(sdk, /provider/)
-    assert.match(sdk, /vault/)
-    assert.match(sdk, /governance/)
-    assert.match(sdk, /usage/)
-    assert.match(sdk, /audit/)
-  },
-)
+Then('this repository must not maintain language SDK source code', () => {
+  const contributing = read('CONTRIBUTING.md')
+  assert.match(contributing, /does not maintain SDK source code/)
+  assert.match(contributing, /separate SDK repositories/)
+})
 
-Then('runtime helpers in the SDK must delegate to Cloudflare Agent SDK-compatible endpoints', () => {
+Then('external SDK runtime helpers must delegate to Cloudflare Agent SDK-compatible endpoints', () => {
   const sdk = read('docs/product/sdk.md')
   assert.match(sdk, /connect to a running session/)
   assert.match(sdk, /Cloudflare Agents SDK-compatible runtime endpoint/)
@@ -92,9 +84,9 @@ Then('Anthropic must not be required for the platform to operate', () => {
   assert.doesNotMatch(envExample, /ANTHROPIC_API_KEY/)
 })
 
-Then('the model layer must allow additional providers', () => {
+Then('the model layer must support all configured providers', () => {
   const spec = read('docs/product/spec.md')
-  assert.match(spec, /model layer supports multiple providers/)
+  assert.match(spec, /model layer supports all configured providers/)
 })
 
 Then('BDD specs must describe product and platform behavior', () => {

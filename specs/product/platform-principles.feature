@@ -15,10 +15,10 @@ Feature: Platform principles
     And the platform must not define a competing custom agent runtime SDK
     And product APIs may exist only for control-plane resource management
 
-  Scenario: Product SDK manages platform resources
-    Then the platform must provide a thin Any Managed Agents SDK
-    And the SDK must manage agents, environments, sessions, providers, vaults, governance, usage, and audit resources
-    And runtime helpers in the SDK must delegate to Cloudflare Agent SDK-compatible endpoints
+  Scenario: OpenAPI is the SDK contract boundary
+    Then this repository must publish the Any Managed Agents OpenAPI contract
+    And this repository must not maintain language SDK source code
+    And external SDK runtime helpers must delegate to Cloudflare Agent SDK-compatible endpoints
 
   Scenario: Sandbox execution uses Cloudflare Sandbox SDK
     Then sandbox execution must use Cloudflare Sandbox SDK
@@ -27,7 +27,7 @@ Feature: Platform principles
   Scenario: Model providers are not vendor locked
     Then Workers AI must be supported as a first-class model provider
     And Anthropic must not be required for the platform to operate
-    And the model layer must allow additional providers
+    And the model layer must support all configured providers
 
   Scenario: BDD specs are the agent-facing acceptance contract
     Then BDD specs must describe product and platform behavior

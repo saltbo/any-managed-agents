@@ -1,19 +1,19 @@
-# SDK Boundary
+# SDK and API Boundary
 
-Any Managed Agents provides a thin product SDK for developers, but it does not replace Cloudflare's runtime SDKs.
+This repository does not maintain language SDKs. It publishes the Any Managed Agents control-plane OpenAPI contract. Product SDKs are generated and maintained in separate repositories.
 
 ## SDK Layers
 
 ```txt
 User application
-  -> Any Managed Agents SDK
-  -> Any Managed Agents control-plane API
+  -> external Any Managed Agents SDK or direct HTTP
+  -> Any Managed Agents OpenAPI control-plane API
   -> Cloudflare Agents SDK / Cloudflare Sandbox SDK
 ```
 
-## Any Managed Agents SDK
+## External Any Managed Agents SDKs
 
-The Any Managed Agents SDK is the developer entry point for product resources:
+External SDK repositories use this repository's OpenAPI document as their source of truth. Those SDKs are the developer entry point for product resources:
 
 - create, read, update, archive, and version agents
 - create and manage environments
@@ -21,7 +21,7 @@ The Any Managed Agents SDK is the developer entry point for product resources:
 - manage provider, vault, policy, usage, and audit resources
 - connect to a running session through a Cloudflare Agents SDK-compatible runtime endpoint
 
-The SDK should stay thin. It wraps the public control-plane API and provides a small set of ergonomic helpers, such as `sessions.connect(sessionId)`.
+SDKs should stay thin. They wrap the public control-plane API and provide a small set of ergonomic helpers, such as `sessions.connect(sessionId)`. SDK source, release process, and language-specific packaging do not live in this repository.
 
 ## Cloudflare Agents SDK
 
@@ -33,13 +33,13 @@ The platform must not create a competing runtime protocol for WebSocket, RPC, st
 
 Cloudflare Sandbox SDK remains the sandbox execution foundation.
 
-The platform uses sandbox capabilities internally to execute commands, manage files, run processes, and expose services for an environment. The Any Managed Agents SDK should not expose the raw sandbox as the primary public product surface. Users manage `Environment` resources; the platform maps those resources to sandbox runtime behavior.
+The platform uses sandbox capabilities internally to execute commands, manage files, and run processes. The SDK should not expose the raw sandbox as the primary public product surface. Users manage `Environment` resources; the platform maps those environment descriptions to per-session sandbox runtime behavior.
 
 ## Product Model
 
 - `Agent` is a managed definition: instructions, tools, model policy, sandbox requirements, governance rules, and versions.
-- `Environment` is the sandbox-backed runtime environment where an agent can execute work.
-- `Session` is a concrete run of an agent in an environment, with runtime state, events, transcript, tool calls, and status.
+- `Environment` is a long-lived sandbox environment description.
+- `Sandbox` is a per-session runtime instance created from an environment snapshot.
+- `Session` is a concrete run of an agent in an environment, with runtime state, one sandbox instance, events, transcript, tool calls, and status.
 
-The SDK should make this model explicit.
-
+External SDKs should make this model explicit.

@@ -6,8 +6,8 @@ Feature: Authentication and tenancy
     Given an organization with a project and a user exists
 
   Scenario: Sign in to the control plane
-    When the user signs in with valid credentials
-    Then the response includes an httpOnly session cookie
+    When the user signs in through FlareAuth
+    Then the platform accepts the FlareAuth session
     And subsequent control-plane requests resolve the user, organization, and project
 
   Scenario: Reject unauthenticated control-plane access

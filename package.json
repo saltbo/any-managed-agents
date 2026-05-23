@@ -17,6 +17,7 @@
     "test": "vitest run --passWithNoTests",
     "test:cf": "vitest run --config vitest.cloudflare.config.ts",
     "bdd": "NODE_OPTIONS='--import tsx' cucumber-js --tags 'not @planned' --import test/bdd/**/*.steps.ts specs/product/**/*.feature",
+    "bdd:e2e": "NODE_OPTIONS='--import tsx' cucumber-js --tags '@e2e and not @planned' --import test/bdd/**/*.steps.ts specs/product/**/*.feature",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write ."
@@ -46,6 +47,7 @@
     "@cloudflare/vitest-pool-workers": "^0.15.2",
     "@cloudflare/workers-types": "^4.20260505.1",
     "@cucumber/cucumber": "^12.9.0",
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/vite": "^4.2.2",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^25.8.0",

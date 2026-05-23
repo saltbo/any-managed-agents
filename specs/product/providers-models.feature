@@ -1,6 +1,6 @@
 @planned @providers @models
 Feature: Model providers
-  The platform supports multiple model providers without binding the product to Anthropic.
+  The platform supports all configured model providers without binding the product to Anthropic.
 
   Background:
     Given a project has provider access configured
@@ -10,10 +10,15 @@ Feature: Model providers
     Then the runtime calls the Cloudflare Workers AI binding
     And usage is attributed to the project and session
 
-  Scenario: Configure external model providers
-    When an operator adds an OpenAI-compatible or Anthropic provider
+  Scenario: Configure model providers
+    When an operator adds Workers AI, Anthropic, OpenAI, OpenAI-compatible, Ollama, or another supported provider
     Then the platform stores provider metadata in D1
-    And credentials are stored as secrets or vault references
+    And credentials are stored in Cloudflare Secrets
+
+  Scenario: Route through provider adapters
+    When a session requests any configured provider
+    Then the runtime uses the provider adapter for that provider
+    And usage, errors, and policy decisions are normalized across providers
 
   Scenario: Enforce provider policy
     Given a team is allowed to use only selected providers and models

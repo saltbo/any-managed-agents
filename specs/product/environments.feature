@@ -1,20 +1,20 @@
 @planned @environments @sandbox
 Feature: Execution environments
-  Projects define reusable execution environments for sandboxed agent work.
+  Projects define reusable environment descriptions for sandboxed agent work.
 
   Background:
     Given a signed-in user has access to a project
 
   Scenario: Create an environment
     When the user creates an environment with packages, variables, network policy, and metadata
-    Then the platform stores the environment definition in D1
+    Then the platform stores the long-lived environment definition in D1
     And later sessions can reference the environment by id
 
   Scenario: Attach an environment to an agent
     Given an environment exists
     When the user selects the environment for an agent
-    Then new sessions for that agent inherit the environment policy
-    And sandbox creation uses the environment configuration
+    Then new sessions for that agent inherit an environment snapshot
+    And sandbox creation uses the environment snapshot
 
   Scenario: Restrict environment networking
     Given an environment allows only selected outbound hosts
@@ -27,3 +27,9 @@ Feature: Execution environments
     When the user changes packages, variables, or network policy
     Then the platform creates a new environment version
     And existing sessions continue using their original environment snapshot
+
+  Scenario: Environment is not a sandbox instance
+    Given an environment exists
+    When no session is running
+    Then no sandbox instance is required
+    And the environment remains available for future sessions

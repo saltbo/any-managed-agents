@@ -7,13 +7,14 @@ Feature: Vaults and secrets
 
   Scenario: Store provider credentials
     When the user stores an API key or provider token
-    Then the secret value is encrypted or stored through a secret reference
+    Then the secret value is stored in Cloudflare Secrets
+    And D1 stores only secret metadata and references
     And API responses never include the raw secret value
 
   Scenario: Attach vaults to an agent session
     Given an agent requires credentials
     When the user starts a session with an allowed vault
-    Then the runtime can resolve approved secret references
+    Then the runtime can resolve approved Cloudflare Secrets references
     And the transcript shows only redacted values
 
   Scenario: Rotate a credential
