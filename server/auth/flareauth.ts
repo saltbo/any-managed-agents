@@ -69,6 +69,34 @@ async function createOidcClient(env: Env) {
       config.clientId,
       clientMetadata,
       config.clientSecret ? client.ClientSecretPost(config.clientSecret) : client.None(),
+      {
+        [client.customFetch]: async (url, init) => {
+          const requestUrl = new URL(String(url))
+          if (
+            requestUrl.origin === new URL(config.issuer).origin &&
+            (requestUrl.pathname === '/api/auth/.well-known/openid-configuration' ||
+              requestUrl.pathname === '/.well-known/openid-configuration/api/auth')
+          ) {
+            return Response.json({
+              issuer: config.issuer,
+              authorization_endpoint: `${config.issuer}/oauth2/authorize`,
+              token_endpoint: `${config.issuer}/oauth2/token`,
+              jwks_uri: `${config.issuer}/jwks`,
+              userinfo_endpoint: `${config.issuer}/oauth2/userinfo`,
+              end_session_endpoint: `${config.issuer}/oauth2/end-session`,
+              response_types_supported: ['code'],
+              grant_types_supported: ['authorization_code', 'refresh_token'],
+              token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'],
+              code_challenge_methods_supported: ['S256'],
+              scopes_supported: ['openid', 'profile', 'email', 'offline_access'],
+              subject_types_supported: ['public'],
+              id_token_signing_alg_values_supported: ['EdDSA'],
+            })
+          }
+          const response = await fetch(requestUrl.toString(), init as RequestInit)
+          return response
+        },
+      },
     )
   } catch (err) {
     throw toOidcError(err)
