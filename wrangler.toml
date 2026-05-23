@@ -84,5 +84,6 @@ class_name = "Sandbox"
 
 [[env.staging.containers]]
 class_name = "Sandbox"
+name = "any-managed-agents-staging-sandbox"
 image = "registry.cloudflare.com/94a89d03c0fc785c8dcbd3c674d6742a/ama-pi-runtime:0.75.4"
 max_instances = 10
