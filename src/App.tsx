@@ -328,6 +328,26 @@ export function App() {
               <p className="text-xs font-medium uppercase text-slate-500">{auth?.organization.name}</p>
               <h1 className="text-xl font-semibold">{titleForView(view)}</h1>
             </div>
+            <nav className="grid grid-cols-3 gap-2 lg:hidden" aria-label="Primary">
+              <MobileNavButton
+                icon={<Bot size={16} />}
+                active={view === 'agents'}
+                onClick={() => setView('agents')}
+                label="Agents"
+              />
+              <MobileNavButton
+                icon={<Server size={16} />}
+                active={view === 'environments'}
+                onClick={() => setView('environments')}
+                label="Environments"
+              />
+              <MobileNavButton
+                icon={<MessageSquare size={16} />}
+                active={view === 'sessions'}
+                onClick={() => setView('sessions')}
+                label="Sessions"
+              />
+            </nav>
             <div className="flex flex-wrap items-center gap-2">
               <label className="relative">
                 <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
@@ -451,6 +471,29 @@ function NavButton({
     >
       {icon}
       {label}
+    </button>
+  )
+}
+
+function MobileNavButton({
+  icon,
+  active,
+  onClick,
+  label,
+}: {
+  icon: React.ReactNode
+  active: boolean
+  onClick: () => void
+  label: string
+}) {
+  return (
+    <button
+      className={`inline-flex h-10 min-w-0 items-center justify-center gap-2 rounded-md border px-2 text-sm ${active ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'}`}
+      type="button"
+      onClick={onClick}
+    >
+      {icon}
+      <span className="truncate">{label}</span>
     </button>
   )
 }
