@@ -8,6 +8,7 @@ import { errorResponse } from './errors'
 import { createApiRouter } from './openapi'
 import agents from './routes/agents'
 import auth from './routes/auth'
+import environments from './routes/environments'
 import health from './routes/health'
 
 export function createApp() {
@@ -23,7 +24,7 @@ export function createApp() {
         }
         return allowedOrigins.split(',').includes(origin) ? origin : null
       },
-      allowMethods: ['GET', 'POST', 'OPTIONS'],
+      allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
       allowHeaders: ['Content-Type', 'Authorization'],
       credentials: true,
     }),
@@ -32,6 +33,7 @@ export function createApp() {
   app.route('/api/health', health)
   app.route('/api/auth', auth)
   app.route('/api/agents', agents)
+  app.route('/api/environments', environments)
 
   app.doc('/api/openapi.json', {
     openapi: '3.0.0',
