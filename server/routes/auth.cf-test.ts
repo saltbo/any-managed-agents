@@ -1,4 +1,5 @@
 import { SELF } from 'cloudflare:test'
+import { exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 interface TestClaims {
@@ -13,6 +14,9 @@ interface TestClaims {
 
 let currentClaims: TestClaims
 let malformedUserinfo: boolean
+let currentNonce: string
+let privateKey: CryptoKey
+let publicJwk: JsonWebKey
 
 function defaultClaims(): TestClaims {
   return {
@@ -38,7 +42,12 @@ function mockFlareAuth() {
           authorization_endpoint: 'https://flareauth.test/oauth/authorize',
           token_endpoint: 'https://flareauth.test/oauth/token',
           userinfo_endpoint: 'https://flareauth.test/oauth/userinfo',
+          jwks_uri: 'https://flareauth.test/oauth/jwks',
         })
+      }
+
+      if (url.pathname === '/oauth/jwks') {
+        return Response.json({ keys: [{ ...publicJwk, kid: 'test-key', alg: 'RS256', use: 'sig' }] })
       }
 
       if (url.pathname === '/oauth/token') {
@@ -47,7 +56,12 @@ function mockFlareAuth() {
         expect(body.get('grant_type')).toBe('authorization_code')
         expect(body.get('client_id')).toBe('ama-test')
         expect(body.get('code_verifier')).toBeTruthy()
-        return Response.json({ access_token: 'flareauth-access-token' })
+        return Response.json({
+          access_token: 'flareauth-access-token',
+          token_type: 'Bearer',
+          expires_in: 3600,
+          id_token: await createIdToken(),
+        })
       }
 
       if (url.pathname === '/oauth/userinfo') {
@@ -63,6 +77,17 @@ function mockFlareAuth() {
   )
 }
 
+async function createIdToken() {
+  return new SignJWT({ nonce: currentNonce })
+    .setProtectedHeader({ alg: 'RS256', kid: 'test-key' })
+    .setIssuer('https://flareauth.test')
+    .setSubject(currentClaims.sub)
+    .setAudience('ama-test')
+    .setIssuedAt()
+    .setExpirationTime('5m')
+    .sign(privateKey)
+}
+
 async function startLogin() {
   const loginRes = await SELF.fetch('https://example.com/api/auth/login?returnTo=/dashboard', {
     redirect: 'manual',
@@ -74,8 +99,11 @@ async function startLogin() {
 
   const location = loginRes.headers.get('location')
   expect(location).toBeTruthy()
-  const state = new URL(location ?? '').searchParams.get('state')
+  const authorizationUrl = new URL(location ?? '')
+  const state = authorizationUrl.searchParams.get('state')
+  currentNonce = authorizationUrl.searchParams.get('nonce') ?? ''
   expect(state).toBeTruthy()
+  expect(currentNonce).toBeTruthy()
   return { loginCookie, state }
 }
 
@@ -87,6 +115,9 @@ async function signIn(claims = defaultClaims()) {
     headers: { cookie: cookiePair(loginCookie, '__Host-ama_oidc') },
     redirect: 'manual',
   })
+  if (callbackRes.status !== 302) {
+    throw new Error(await callbackRes.text())
+  }
   expect(callbackRes.status).toBe(302)
   expect(callbackRes.headers.get('location')).toBe('/dashboard')
 
@@ -104,9 +135,13 @@ function cookiePair(setCookie: string | null, name: string) {
 }
 
 describe('[CF] auth and tenancy', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    const keyPair = await generateKeyPair('RS256')
+    privateKey = keyPair.privateKey
+    publicJwk = await exportJWK(keyPair.publicKey)
     currentClaims = defaultClaims()
     malformedUserinfo = false
+    currentNonce = ''
     mockFlareAuth()
   })
 
@@ -159,9 +194,23 @@ describe('[CF] auth and tenancy', () => {
       error: {
         type: 'oidc_error',
         message: 'Invalid OIDC callback',
-        details: {
-          reason: 'invalid_state',
-        },
+      },
+    })
+  })
+
+  it('delegates callback state validation to the OIDC client', async () => {
+    const { loginCookie } = await startLogin()
+
+    const res = await SELF.fetch('https://example.com/api/auth/callback?code=valid-code&state=wrong-state', {
+      headers: { cookie: cookiePair(loginCookie, '__Host-ama_oidc') },
+      redirect: 'manual',
+    })
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({
+      error: {
+        type: 'oidc_error',
+        message: 'Invalid OIDC callback',
       },
     })
   })

@@ -1,7 +1,7 @@
 import { createRoute, z } from '@hono/zod-openapi'
 import { eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
-import { createLoginAttempt, exchangeCodeForUserInfo, OidcError, upsertLocalPrincipal } from '../auth/flareauth'
+import { createLoginAttempt, exchangeCallbackForUserInfo, OidcError, upsertLocalPrincipal } from '../auth/flareauth'
 import {
   clearLoginStateCookie,
   clearSessionCookie,
@@ -117,19 +117,23 @@ app.openapi(loginRoute, async (c) => {
 })
 
 app.openapi(callbackRoute, async (c) => {
-  const code = c.req.query('code')
-  const state = c.req.query('state')
   const loginState = await readLoginState(c)
   clearLoginStateCookie(c)
 
-  if (!code || !state || !loginState || loginState.state !== state) {
-    return errorResponse(c, 400, 'oidc_error', 'Invalid OIDC callback', { reason: 'invalid_state' })
+  if (!loginState) {
+    return errorResponse(c, 400, 'oidc_error', 'Invalid OIDC callback', { reason: 'missing_login_state' })
   }
 
   try {
     const timestamp = new Date().toISOString()
     const db = drizzle(c.env.DB)
-    const claims = await exchangeCodeForUserInfo(c.env, code, loginState.verifier, loginState.nonce)
+    const claims = await exchangeCallbackForUserInfo(
+      c.env,
+      new URL(c.req.url),
+      loginState.verifier,
+      loginState.state,
+      loginState.nonce,
+    )
     const principal = await upsertLocalPrincipal(db, claims, timestamp)
     await createSession(c, db, {
       id: newId('auth_session'),

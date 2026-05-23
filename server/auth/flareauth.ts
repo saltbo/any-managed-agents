@@ -1,15 +1,8 @@
 import { and, eq } from 'drizzle-orm'
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
+import * as client from 'openid-client'
 import { memberships, organizations, projects, users } from '../db/schema'
 import type { Env } from '../env'
-import { base64UrlDecode, randomToken, sha256 } from './crypto'
-
-interface OidcMetadata {
-  authorization_endpoint: string
-  token_endpoint: string
-  userinfo_endpoint: string
-  issuer: string
-}
 
 export interface OidcLoginAttempt {
   authorizationUrl: string
@@ -59,41 +52,43 @@ export function requireOidcConfig(env: Env) {
   }
 }
 
-export async function discoverOidcMetadata(env: Env): Promise<OidcMetadata> {
-  const { issuer } = requireOidcConfig(env)
-  const res = await fetch(`${issuer}/.well-known/openid-configuration`)
-  if (!res.ok) {
-    throw new OidcError('Unable to discover FlareAuth OIDC metadata')
+async function createOidcClient(env: Env) {
+  const config = requireOidcConfig(env)
+  const clientMetadata: Partial<client.ClientMetadata> = {
+    redirect_uris: [config.redirectUri],
+    response_types: ['code'],
+    token_endpoint_auth_method: config.clientSecret ? 'client_secret_post' : 'none',
+  }
+  if (config.clientSecret) {
+    clientMetadata.client_secret = config.clientSecret
   }
 
-  const metadata = await readOidcJson<Partial<OidcMetadata>>(res)
-  if (
-    metadata.issuer !== issuer ||
-    !metadata.authorization_endpoint ||
-    !metadata.token_endpoint ||
-    !metadata.userinfo_endpoint
-  ) {
-    throw new OidcError('Invalid FlareAuth OIDC metadata')
+  try {
+    return await client.discovery(
+      new URL(config.issuer),
+      config.clientId,
+      clientMetadata,
+      config.clientSecret ? client.ClientSecretPost(config.clientSecret) : client.None(),
+    )
+  } catch (err) {
+    throw toOidcError(err)
   }
-
-  return metadata as OidcMetadata
 }
 
 export async function createLoginAttempt(env: Env): Promise<OidcLoginAttempt> {
   const config = requireOidcConfig(env)
-  const metadata = await discoverOidcMetadata(env)
-  const verifier = randomToken()
-  const state = randomToken()
-  const nonce = randomToken()
-  const url = new URL(metadata.authorization_endpoint)
-  url.searchParams.set('response_type', 'code')
-  url.searchParams.set('client_id', config.clientId)
-  url.searchParams.set('redirect_uri', config.redirectUri)
-  url.searchParams.set('scope', 'openid email profile')
-  url.searchParams.set('state', state)
-  url.searchParams.set('nonce', nonce)
-  url.searchParams.set('code_challenge', await sha256(verifier))
-  url.searchParams.set('code_challenge_method', 'S256')
+  const oidcClient = await createOidcClient(env)
+  const verifier = client.randomPKCECodeVerifier()
+  const state = client.randomState()
+  const nonce = client.randomNonce()
+  const url = client.buildAuthorizationUrl(oidcClient, {
+    redirect_uri: config.redirectUri,
+    scope: 'openid email profile',
+    state,
+    nonce,
+    code_challenge: await client.calculatePKCECodeChallenge(verifier),
+    code_challenge_method: 'S256',
+  })
 
   return {
     authorizationUrl: url.toString(),
@@ -103,74 +98,50 @@ export async function createLoginAttempt(env: Env): Promise<OidcLoginAttempt> {
   }
 }
 
-export async function exchangeCodeForUserInfo(env: Env, code: string, verifier: string, expectedNonce: string) {
-  const config = requireOidcConfig(env)
-  const metadata = await discoverOidcMetadata(env)
-  const body = new URLSearchParams({
-    grant_type: 'authorization_code',
-    code,
-    redirect_uri: config.redirectUri,
-    client_id: config.clientId,
-    code_verifier: verifier,
-  })
-  if (config.clientSecret) {
-    body.set('client_secret', config.clientSecret)
+export async function exchangeCallbackForUserInfo(
+  env: Env,
+  callbackUrl: URL,
+  verifier: string,
+  expectedState: string,
+  expectedNonce: string,
+) {
+  const oidcClient = await createOidcClient(env)
+  const tokenResponse = await runOidc(() =>
+    client.authorizationCodeGrant(oidcClient, callbackUrl, {
+      expectedNonce,
+      expectedState,
+      pkceCodeVerifier: verifier,
+    }),
+  )
+  const idTokenClaims = tokenResponse.claims()
+  if (!idTokenClaims?.sub) {
+    throw new OidcError('FlareAuth token response did not include validated ID token claims')
   }
 
-  const tokenRes = await fetch(metadata.token_endpoint, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body,
-  })
-  if (!tokenRes.ok) {
-    throw new OidcError('FlareAuth token exchange failed')
-  }
-
-  const tokenBody = await readOidcJson<{ access_token?: string; id_token?: string }>(tokenRes)
-  if (!tokenBody.access_token) {
-    throw new OidcError('FlareAuth token response did not include an access token')
-  }
-
-  if (tokenBody.id_token) {
-    const payload = decodeJwtPayload(tokenBody.id_token)
-    if (payload.nonce && payload.nonce !== expectedNonce) {
-      throw new OidcError('FlareAuth ID token nonce mismatch')
-    }
-  }
-
-  const userinfoRes = await fetch(metadata.userinfo_endpoint, {
-    headers: { authorization: `Bearer ${tokenBody.access_token}` },
-  })
-  if (!userinfoRes.ok) {
-    throw new OidcError('FlareAuth userinfo lookup failed')
-  }
-
-  const claims = await readOidcJson<Partial<UserInfoClaims>>(userinfoRes)
-  if (!claims.sub || !claims.email) {
+  const claims = await runOidc(() => client.fetchUserInfo(oidcClient, tokenResponse.access_token, idTokenClaims.sub))
+  if (!claims.email) {
     throw new OidcError('FlareAuth userinfo did not include required user claims')
   }
 
   return claims as UserInfoClaims
 }
 
-function decodeJwtPayload(jwt: string) {
-  const [, payload] = jwt.split('.')
-  if (!payload) {
-    throw new OidcError('Invalid FlareAuth ID token')
-  }
+async function runOidc<T>(operation: () => Promise<T>) {
   try {
-    return JSON.parse(new TextDecoder().decode(base64UrlDecode(payload))) as { nonce?: string }
-  } catch {
-    throw new OidcError('Invalid FlareAuth ID token')
+    return await operation()
+  } catch (err) {
+    throw toOidcError(err)
   }
 }
 
-async function readOidcJson<T>(res: Response): Promise<T> {
-  try {
-    return (await res.json()) as T
-  } catch {
-    throw new OidcError('FlareAuth response was not valid JSON')
+function toOidcError(err: unknown) {
+  if (err instanceof OidcError) {
+    return err
   }
+  if (err instanceof Error) {
+    return new OidcError(err.message)
+  }
+  return new OidcError('FlareAuth OIDC operation failed')
 }
 
 function newId(prefix: string) {
