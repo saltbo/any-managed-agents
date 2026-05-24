@@ -93,8 +93,9 @@ describe('[CF] /api/environments', () => {
     expect(archiveRes.status).toBe(204)
 
     const listRes = await jsonFetch('/api/environments', cookie)
-    const list = (await listRes.json()) as { data: Array<{ id: string }> }
+    const list = (await listRes.json()) as { data: Array<{ id: string }>; pagination: { hasMore: boolean } }
     expect(list.data).not.toContainEqual(expect.objectContaining({ id: created.id }))
+    expect(list.pagination.hasMore).toBe(false)
 
     const archivedListRes = await jsonFetch('/api/environments?includeArchived=true', cookie)
     const archivedList = (await archivedListRes.json()) as { data: Array<{ id: string; status: string }> }
@@ -102,6 +103,55 @@ describe('[CF] /api/environments', () => {
 
     const archivedReadRes = await jsonFetch(`/api/environments/${created.id}`, cookie)
     expect(archivedReadRes.status).toBe(200)
+  })
+
+  it('lists environments with pagination, search, status, and date filters', async () => {
+    const cookie = await signIn()
+    const alphaRes = await jsonFetch('/api/environments', cookie, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Alpha workspace' }),
+    })
+    const alpha = (await alphaRes.json()) as { id: string; createdAt: string }
+    const betaRes = await jsonFetch('/api/environments', cookie, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Beta workspace' }),
+    })
+    const beta = (await betaRes.json()) as { id: string; createdAt: string }
+    await jsonFetch(`/api/environments/${alpha.id}`, cookie, { method: 'DELETE' })
+
+    const pagedRes = await jsonFetch('/api/environments?includeArchived=true&limit=1', cookie)
+    const paged = (await pagedRes.json()) as {
+      data: Array<{ id: string }>
+      pagination: { hasMore: boolean; nextCursor: string | null }
+    }
+    expect(paged.data).toHaveLength(1)
+    expect(paged.pagination.hasMore).toBe(true)
+    expect(paged.pagination.nextCursor).toEqual(expect.any(String))
+
+    const nextPageRes = await jsonFetch(
+      `/api/environments?includeArchived=true&limit=1&cursor=${paged.pagination.nextCursor}`,
+      cookie,
+    )
+    const nextPage = (await nextPageRes.json()) as { data: Array<{ id: string }> }
+    expect(nextPage.data.map((environment) => environment.id)).not.toEqual(
+      paged.data.map((environment) => environment.id),
+    )
+
+    const searchRes = await jsonFetch('/api/environments?includeArchived=true&search=Alpha', cookie)
+    const search = (await searchRes.json()) as { data: Array<{ id: string }> }
+    expect(search.data).toEqual([expect.objectContaining({ id: alpha.id })])
+
+    const statusRes = await jsonFetch('/api/environments?includeArchived=true&status=archived', cookie)
+    const status = (await statusRes.json()) as { data: Array<{ id: string; status: string }> }
+    expect(status.data).toContainEqual(expect.objectContaining({ id: alpha.id, status: 'archived' }))
+    expect(status.data.every((environment) => environment.status === 'archived')).toBe(true)
+
+    const dateRes = await jsonFetch(
+      `/api/environments?includeArchived=true&createdFrom=${encodeURIComponent(alpha.createdAt)}&createdTo=${encodeURIComponent(beta.createdAt)}`,
+      cookie,
+    )
+    const date = (await dateRes.json()) as { data: Array<{ id: string }> }
+    expect(date.data.map((environment) => environment.id)).toEqual(expect.arrayContaining([alpha.id, beta.id]))
   })
 
   it('returns 404 for cross-project environment access', async () => {

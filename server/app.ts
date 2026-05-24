@@ -5,7 +5,7 @@ import { cors } from 'hono/cors'
 import { requireAuth } from './auth/session'
 import { sessions } from './db/schema'
 import { errorResponse } from './errors'
-import { createApiRouter } from './openapi'
+import { ApiSecuritySchemes, createApiRouter } from './openapi'
 import agents from './routes/agents'
 import auth from './routes/auth'
 import environments from './routes/environments'
@@ -37,6 +37,8 @@ export function createApp() {
   app.route('/api/agents', agents)
   app.route('/api/environments', environments)
   app.route('/api/sessions', sessionRoutes)
+
+  app.openAPIRegistry.registerComponent('securitySchemes', 'cookieAuth', ApiSecuritySchemes.cookieAuth)
 
   app.doc('/api/openapi.json', {
     openapi: '3.0.0',

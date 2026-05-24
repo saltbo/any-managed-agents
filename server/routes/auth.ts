@@ -13,7 +13,7 @@ import {
 } from '../auth/session'
 import { appSessions } from '../db/schema'
 import { errorResponse } from '../errors'
-import { createApiRouter, ErrorResponseSchema } from '../openapi'
+import { AuthenticatedOperation, createApiRouter, ErrorResponseSchema } from '../openapi'
 
 const app = createApiRouter()
 
@@ -41,6 +41,7 @@ const AuthContextSchema = z
 const loginRoute = createRoute({
   method: 'get',
   path: '/login',
+  operationId: 'startLogin',
   tags: ['Auth'],
   summary: 'Start FlareAuth OIDC login',
   responses: {
@@ -57,6 +58,7 @@ const loginRoute = createRoute({
 const callbackRoute = createRoute({
   method: 'get',
   path: '/callback',
+  operationId: 'completeLogin',
   tags: ['Auth'],
   summary: 'Complete FlareAuth OIDC login',
   responses: {
@@ -73,8 +75,10 @@ const callbackRoute = createRoute({
 const logoutRoute = createRoute({
   method: 'post',
   path: '/logout',
+  operationId: 'logout',
   tags: ['Auth'],
   summary: 'Clear the AMA session',
+  ...AuthenticatedOperation,
   responses: {
     204: {
       description: 'Logged out',
@@ -85,8 +89,10 @@ const logoutRoute = createRoute({
 const meRoute = createRoute({
   method: 'get',
   path: '/me',
+  operationId: 'getAuthContext',
   tags: ['Auth'],
   summary: 'Return the current AMA auth context',
+  ...AuthenticatedOperation,
   responses: {
     200: {
       description: 'Current auth context',

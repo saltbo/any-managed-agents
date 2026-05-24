@@ -89,8 +89,9 @@ describe('[CF] /api/sessions', () => {
 
     const listRes = await jsonFetch('/api/sessions', cookie)
     expect(listRes.status).toBe(200)
-    const list = (await listRes.json()) as { data: Array<{ id: string }> }
+    const list = (await listRes.json()) as { data: Array<{ id: string }>; pagination: { hasMore: boolean } }
     expect(list.data).toContainEqual(expect.objectContaining({ id: created.id }))
+    expect(list.pagination.hasMore).toBe(false)
 
     const readRes = await jsonFetch(`/api/sessions/${created.id}`, cookie)
     expect(readRes.status).toBe(200)
@@ -121,8 +122,10 @@ describe('[CF] /api/sessions', () => {
         parentEventId: string | null
         correlationId: string | null
       }>
+      pagination: { limit: number; hasMore: boolean; nextCursor: string | null }
     }
     expect(events.data.map((event) => event.sequence)).toEqual([1, 2, 3])
+    expect(events.pagination).toMatchObject({ limit: 100, hasMore: false, nextCursor: null })
     expect(events.data.map((event) => event.type)).toEqual(['lifecycle', 'sandbox', 'lifecycle'])
     expect(events.data).toEqual([
       expect.objectContaining({
@@ -150,6 +153,18 @@ describe('[CF] /api/sessions', () => {
     expect(JSON.stringify(events.data)).not.toContain('raw-secret')
     expect(JSON.stringify(events.data)).not.toContain('flareauth-access-token')
 
+    const pagedEventsRes = await jsonFetch(`/api/sessions/${created.id}/events?limit=1`, cookie)
+    const pagedEvents = (await pagedEventsRes.json()) as {
+      data: Array<{ sequence: number; type: string }>
+      pagination: { hasMore: boolean; nextCursor: string | null }
+    }
+    expect(pagedEvents.data).toEqual([expect.objectContaining({ sequence: 1, type: 'lifecycle' })])
+    expect(pagedEvents.pagination).toMatchObject({ hasMore: true, nextCursor: '1' })
+
+    const filteredEventsRes = await jsonFetch(`/api/sessions/${created.id}/events?afterSequence=1&type=sandbox`, cookie)
+    const filteredEvents = (await filteredEventsRes.json()) as { data: Array<{ sequence: number; type: string }> }
+    expect(filteredEvents.data).toEqual([expect.objectContaining({ sequence: 2, type: 'sandbox' })])
+
     const inactiveRuntimeRes = await jsonFetch(`/runtime/sessions/${created.id}/rpc`, cookie)
     expect(inactiveRuntimeRes.status).toBe(409)
     await expect(inactiveRuntimeRes.json()).resolves.toMatchObject({
@@ -166,6 +181,50 @@ describe('[CF] /api/sessions', () => {
     expect(archivedListRes.status).toBe(200)
     const archivedList = (await archivedListRes.json()) as { data: Array<{ id: string; status: string }> }
     expect(archivedList.data).toContainEqual(expect.objectContaining({ id: created.id, status: 'archived' }))
+  })
+
+  it('lists sessions with pagination, status, search, and date filters', async () => {
+    const cookie = await signIn()
+    const environment = await createEnvironment(cookie)
+    const agent = await createAgent(cookie, environment.id)
+
+    const firstRes = await jsonFetch('/api/sessions', cookie, {
+      method: 'POST',
+      body: JSON.stringify({ agentId: agent.id }),
+    })
+    const first = (await firstRes.json()) as { id: string; agentId: string; createdAt: string }
+    const secondRes = await jsonFetch('/api/sessions', cookie, {
+      method: 'POST',
+      body: JSON.stringify({ agentId: agent.id }),
+    })
+    const second = (await secondRes.json()) as { id: string; agentId: string; createdAt: string }
+
+    const pagedRes = await jsonFetch('/api/sessions?limit=1', cookie)
+    const paged = (await pagedRes.json()) as {
+      data: Array<{ id: string }>
+      pagination: { hasMore: boolean; nextCursor: string | null }
+    }
+    expect(paged.data).toHaveLength(1)
+    expect(paged.pagination.hasMore).toBe(true)
+
+    const nextPageRes = await jsonFetch(`/api/sessions?limit=1&cursor=${paged.pagination.nextCursor}`, cookie)
+    const nextPage = (await nextPageRes.json()) as { data: Array<{ id: string }> }
+    expect(nextPage.data.map((session) => session.id)).not.toEqual(paged.data.map((session) => session.id))
+
+    const statusRes = await jsonFetch('/api/sessions?status=idle', cookie)
+    const statusList = (await statusRes.json()) as { data: Array<{ id: string; status: string }> }
+    expect(statusList.data.map((session) => session.status)).toEqual(['idle', 'idle'])
+
+    const searchRes = await jsonFetch(`/api/sessions?search=${agent.id}`, cookie)
+    const searchList = (await searchRes.json()) as { data: Array<{ id: string }> }
+    expect(searchList.data.map((session) => session.id)).toEqual(expect.arrayContaining([first.id, second.id]))
+
+    const dateRes = await jsonFetch(
+      `/api/sessions?createdFrom=${encodeURIComponent(first.createdAt)}&createdTo=${encodeURIComponent(second.createdAt)}`,
+      cookie,
+    )
+    const dateList = (await dateRes.json()) as { data: Array<{ id: string }> }
+    expect(dateList.data.map((session) => session.id)).toEqual(expect.arrayContaining([first.id, second.id]))
   })
 
   it('enforces auth and project tenancy for session lifecycle', async () => {

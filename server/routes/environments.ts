@@ -1,9 +1,17 @@
 import { createRoute, z } from '@hono/zod-openapi'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, gte, like, lt, lte, or } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import { requireAuth } from '../auth/session'
 import { environments, environmentVersions } from '../db/schema'
-import { createApiRouter, ErrorResponseSchema } from '../openapi'
+import {
+  AuthenticatedOperation,
+  createApiRouter,
+  ErrorResponseSchema,
+  listQuerySchema,
+  listResponseSchema,
+  paginateRows,
+  parseListCursor,
+} from '../openapi'
 
 const app = createApiRouter()
 
@@ -108,12 +116,12 @@ const EnvironmentParamsSchema = z.object({
     example: 'env_abc123',
   }),
 })
-const ListQuerySchema = z.object({
-  includeArchived: z
-    .enum(['true', 'false'])
-    .optional()
-    .openapi({ param: { name: 'includeArchived', in: 'query' }, example: 'false' }),
-})
+const ListQuerySchema = listQuerySchema(['active', 'archived'])
+const EnvironmentListResponseSchema = listResponseSchema('EnvironmentListResponse', EnvironmentSchema)
+const EnvironmentVersionListResponseSchema = listResponseSchema(
+  'EnvironmentVersionListResponse',
+  EnvironmentVersionSchema,
+)
 
 type EnvironmentRow = typeof environments.$inferSelect
 type EnvironmentVersionRow = typeof environmentVersions.$inferSelect
@@ -243,14 +251,17 @@ async function createVersion(
 const listRoute = createRoute({
   method: 'get',
   path: '/',
+  operationId: 'listEnvironments',
   tags: ['Environments'],
   summary: 'List environments',
+  ...AuthenticatedOperation,
   request: { query: ListQuerySchema },
   responses: {
     200: {
       description: 'Environment list',
-      content: { 'application/json': { schema: z.object({ data: z.array(EnvironmentSchema) }) } },
+      content: { 'application/json': { schema: EnvironmentListResponseSchema } },
     },
+    400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
   },
 })
@@ -258,8 +269,10 @@ const listRoute = createRoute({
 const createRouteConfig = createRoute({
   method: 'post',
   path: '/',
+  operationId: 'createEnvironment',
   tags: ['Environments'],
   summary: 'Create an environment',
+  ...AuthenticatedOperation,
   request: { body: { required: true, content: { 'application/json': { schema: CreateEnvironmentSchema } } } },
   responses: {
     201: { description: 'Created environment', content: { 'application/json': { schema: EnvironmentSchema } } },
@@ -271,8 +284,10 @@ const createRouteConfig = createRoute({
 const readRoute = createRoute({
   method: 'get',
   path: '/{environmentId}',
+  operationId: 'readEnvironment',
   tags: ['Environments'],
   summary: 'Read an environment',
+  ...AuthenticatedOperation,
   request: { params: EnvironmentParamsSchema },
   responses: {
     200: { description: 'Environment', content: { 'application/json': { schema: EnvironmentSchema } } },
@@ -284,8 +299,10 @@ const readRoute = createRoute({
 const updateRoute = createRoute({
   method: 'patch',
   path: '/{environmentId}',
+  operationId: 'updateEnvironment',
   tags: ['Environments'],
   summary: 'Update an environment',
+  ...AuthenticatedOperation,
   request: {
     params: EnvironmentParamsSchema,
     body: { required: true, content: { 'application/json': { schema: UpdateEnvironmentSchema } } },
@@ -301,8 +318,10 @@ const updateRoute = createRoute({
 const archiveRoute = createRoute({
   method: 'delete',
   path: '/{environmentId}',
+  operationId: 'archiveEnvironment',
   tags: ['Environments'],
   summary: 'Archive an environment',
+  ...AuthenticatedOperation,
   request: { params: EnvironmentParamsSchema },
   responses: {
     204: { description: 'Environment archived' },
@@ -314,13 +333,15 @@ const archiveRoute = createRoute({
 const versionsRoute = createRoute({
   method: 'get',
   path: '/{environmentId}/versions',
+  operationId: 'listEnvironmentVersions',
   tags: ['Environments'],
   summary: 'List environment versions',
+  ...AuthenticatedOperation,
   request: { params: EnvironmentParamsSchema },
   responses: {
     200: {
       description: 'Environment versions',
-      content: { 'application/json': { schema: z.object({ data: z.array(EnvironmentVersionSchema) }) } },
+      content: { 'application/json': { schema: EnvironmentVersionListResponseSchema } },
     },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
     404: { description: 'Environment not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
@@ -334,14 +355,45 @@ app.openapi(listRoute, async (c) => {
     return auth
   }
 
-  const { includeArchived } = c.req.valid('query')
-  const where =
-    includeArchived === 'true'
-      ? eq(environments.projectId, auth.project.id)
-      : and(eq(environments.projectId, auth.project.id), eq(environments.status, 'active'))
-  const rows = await db.select().from(environments).where(where).limit(100)
-  const data = await Promise.all(rows.map(async (row) => serializeEnvironment(row, await currentVersion(db, row))))
-  return c.json({ data }, 200)
+  const { includeArchived, status, search, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
+  let parsedCursor: ReturnType<typeof parseListCursor> | null = null
+  try {
+    parsedCursor = cursor ? parseListCursor(cursor) : null
+  } catch {
+    return c.json(
+      {
+        error: {
+          type: 'validation_error',
+          message: 'Invalid list cursor',
+          details: { fields: { cursor: 'Cursor is invalid.' } },
+        },
+      },
+      400,
+    )
+  }
+  const statusFilter = status ?? (includeArchived === 'true' ? undefined : 'active')
+  const filters = [
+    eq(environments.projectId, auth.project.id),
+    statusFilter ? eq(environments.status, statusFilter) : undefined,
+    search ? like(environments.name, `%${search}%`) : undefined,
+    createdFrom ? gte(environments.createdAt, createdFrom) : undefined,
+    createdTo ? lte(environments.createdAt, createdTo) : undefined,
+    parsedCursor
+      ? or(
+          lt(environments.createdAt, parsedCursor.createdAt),
+          and(eq(environments.createdAt, parsedCursor.createdAt), lt(environments.id, parsedCursor.id)),
+        )
+      : undefined,
+  ].filter((filter) => filter !== undefined)
+  const rows = await db
+    .select()
+    .from(environments)
+    .where(and(...filters))
+    .orderBy(desc(environments.createdAt), desc(environments.id))
+    .limit(limit + 1)
+  const page = paginateRows(rows, limit)
+  const data = await Promise.all(page.data.map(async (row) => serializeEnvironment(row, await currentVersion(db, row))))
+  return c.json({ data, pagination: page.pagination }, 200)
 })
 
 app.openapi(createRouteConfig, async (c) => {
@@ -495,7 +547,19 @@ app.openapi(versionsRoute, async (c) => {
       and(eq(environmentVersions.environmentId, environmentId), eq(environmentVersions.projectId, auth.project.id)),
     )
     .orderBy(desc(environmentVersions.version))
-  return c.json({ data: rows.map(serializeVersion) }, 200)
+  return c.json(
+    {
+      data: rows.map(serializeVersion),
+      pagination: {
+        limit: rows.length,
+        nextCursor: null,
+        hasMore: false,
+        firstId: rows[0]?.id ?? null,
+        lastId: rows.at(-1)?.id ?? null,
+      },
+    },
+    200,
+  )
 })
 
 export default app

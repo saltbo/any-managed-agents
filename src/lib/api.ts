@@ -128,6 +128,38 @@ export interface SessionEvent {
   createdAt: string
 }
 
+export interface ListPagination {
+  limit: number
+  nextCursor: string | null
+  hasMore: boolean
+  firstId: string | null
+  lastId: string | null
+}
+
+export interface ListResponse<T> {
+  data: T[]
+  pagination: ListPagination
+}
+
+export interface ListOptions {
+  includeArchived?: boolean
+  search?: string
+  status?: string
+  createdFrom?: string
+  createdTo?: string
+  limit?: number
+  cursor?: string
+}
+
+export interface SessionEventListOptions {
+  afterSequence?: number
+  limit?: number
+  type?: SessionEvent['type']
+  visibility?: SessionEvent['visibility']
+  createdFrom?: string
+  createdTo?: string
+}
+
 export interface EnvironmentInput {
   name: string
   description?: string
@@ -190,35 +222,50 @@ async function request<T>(path: string, init: RequestInit = {}) {
   return body as T
 }
 
-function listQuery(includeArchived: boolean) {
-  return includeArchived ? '?includeArchived=true' : ''
+function queryString(options: object = {}) {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(options as Record<string, string | number | boolean | undefined>)) {
+    if (value !== undefined && value !== false) {
+      params.set(key, String(value))
+    }
+  }
+  const query = params.toString()
+  return query ? `?${query}` : ''
+}
+
+function listOptions(options: ListOptions | boolean = {}) {
+  return typeof options === 'boolean' ? { includeArchived: options } : options
 }
 
 export const api = {
   me: () => request<AuthContext>('/api/auth/me'),
   logout: () => request<void>('/api/auth/logout', { method: 'POST' }),
-  listAgents: (includeArchived = false) => request<{ data: Agent[] }>(`/api/agents${listQuery(includeArchived)}`),
+  listAgents: (options: ListOptions | boolean = {}) =>
+    request<ListResponse<Agent>>(`/api/agents${queryString(listOptions(options))}`),
   createAgent: (input: AgentInput) => request<Agent>('/api/agents', { method: 'POST', body: JSON.stringify(input) }),
   updateAgent: (id: string, input: Partial<AgentInput>) =>
     request<Agent>(`/api/agents/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
   archiveAgent: (id: string) => request<void>(`/api/agents/${id}`, { method: 'DELETE' }),
-  listAgentVersions: (id: string) => request<{ data: AgentVersion[] }>(`/api/agents/${id}/versions`),
+  listAgentVersions: (id: string) => request<ListResponse<AgentVersion>>(`/api/agents/${id}/versions`),
   startAgentSession: (id: string) => request<Session>(`/api/agents/${id}/sessions`, { method: 'POST' }),
-  listEnvironments: (includeArchived = false) =>
-    request<{ data: Environment[] }>(`/api/environments${listQuery(includeArchived)}`),
+  listEnvironments: (options: ListOptions | boolean = {}) =>
+    request<ListResponse<Environment>>(`/api/environments${queryString(listOptions(options))}`),
   createEnvironment: (input: EnvironmentInput) =>
     request<Environment>('/api/environments', { method: 'POST', body: JSON.stringify(input) }),
   updateEnvironment: (id: string, input: Partial<EnvironmentInput>) =>
     request<Environment>(`/api/environments/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
   archiveEnvironment: (id: string) => request<void>(`/api/environments/${id}`, { method: 'DELETE' }),
-  listEnvironmentVersions: (id: string) => request<{ data: EnvironmentVersion[] }>(`/api/environments/${id}/versions`),
-  listSessions: (includeArchived = false) => request<{ data: Session[] }>(`/api/sessions${listQuery(includeArchived)}`),
+  listEnvironmentVersions: (id: string) =>
+    request<ListResponse<EnvironmentVersion>>(`/api/environments/${id}/versions`),
+  listSessions: (options: ListOptions | boolean = {}) =>
+    request<ListResponse<Session>>(`/api/sessions${queryString(listOptions(options))}`),
   createSession: (agentId: string) =>
     request<Session>('/api/sessions', { method: 'POST', body: JSON.stringify({ agentId }) }),
   readSession: (id: string) => request<Session>(`/api/sessions/${id}`),
   stopSession: (id: string) => request<Session>(`/api/sessions/${id}/stop`, { method: 'POST' }),
   archiveSession: (id: string) => request<void>(`/api/sessions/${id}`, { method: 'DELETE' }),
-  listSessionEvents: (id: string) => request<{ data: SessionEvent[] }>(`/api/sessions/${id}/events`),
+  listSessionEvents: (id: string, options: SessionEventListOptions = {}) =>
+    request<ListResponse<SessionEvent>>(`/api/sessions/${id}/events${queryString(options)}`),
   sendRuntimeTask: (session: Session, message: string) =>
     request<{ accepted?: boolean }>(session.runtimeEndpointPath, {
       method: 'POST',
