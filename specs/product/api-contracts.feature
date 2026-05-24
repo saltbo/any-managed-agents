@@ -38,4 +38,4 @@ Feature: API contracts and automation
     When an automation agent needs to operate AMA from a terminal
     Then the project provides a skill that teaches the agent how to configure and use restish with the AMA OpenAPI document
     And the skill covers common workflows for agents, environments, sessions, providers, vaults, governance, usage, and audit
-    And the skill instructs runtime task interaction to use AMA runtime endpoints or Pi-compatible helpers rather than inventing a separate CLI protocol
+    And the skill instructs runtime message interaction to use AMA runtime endpoints or Pi-compatible helpers rather than inventing a separate CLI protocol

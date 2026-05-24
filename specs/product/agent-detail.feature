@@ -5,13 +5,13 @@ Feature: Agent detail
   Scenario: View agent configuration and versions
     Given an agent exists
     When the user opens the agent detail page
-    Then the page shows instructions, model, tools, environment, policy, versions, and archive state
+    Then the page shows instructions, model, tools, policy, versions, and archive state
 
   Scenario: Inspect normalized agent configuration
     Given an agent exists with tools, MCP connectors, metadata, sandbox policy, and versions
     When the user opens the agent detail page
-    Then the header shows name, status, provider, model, current version, and timestamps
-    And the configuration view shows instructions, default environment, tools, MCP connectors, metadata, and sandbox policy without exposing secrets
+    Then the header shows name, status, and timestamps
+    And the configuration view shows instructions, provider, model, tools, MCP connectors, metadata, and sandbox policy without exposing secrets
     And the versions view shows each immutable version with change time and runtime-relevant fields
 
   Scenario: Edit an agent from detail
@@ -25,5 +25,5 @@ Feature: Agent detail
     Given an agent is active
     When the user chooses archive and confirms the destructive action
     Then the agent status becomes archived
-    And start-session actions are disabled
+    And create-session actions are disabled
     And existing sessions remain linked and readable

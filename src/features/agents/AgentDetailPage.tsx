@@ -1,12 +1,23 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Pencil } from 'lucide-react'
+import { useState } from 'react'
 import { useParams } from 'react-router'
-import { AgentDetailView } from '@/console/views'
+import { Button } from '@/components/ui/button'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { PageHeader, StatusBadge } from '@/console/components'
+import { formatDate, parseJsonObject, parseTools, stringifyJson } from '@/console/format'
+import { AgentForm } from '@/console/forms'
+import type { AgentFormState } from '@/console/types'
 import { useConsoleContext } from '@/features/console/console-context'
-import { api } from '@/lib/api'
+import { type Agent, api } from '@/lib/api'
+import { AgentDetailView } from './AgentDetailView'
 
 export function AgentDetailPage() {
   const { agentId } = useParams()
+  const queryClient = useQueryClient()
   const context = useConsoleContext()
+  const [editing, setEditing] = useState(false)
+  const [form, setForm] = useState<AgentFormState | null>(null)
   const listAgent = context.agents.find((item) => item.id === agentId)
   const agentQuery = useQuery({
     queryKey: ['agent', agentId ?? ''],
@@ -14,14 +25,103 @@ export function AgentDetailPage() {
     enabled: Boolean(agentId),
     ...(listAgent ? { placeholderData: listAgent } : {}),
   })
+  const versionsQuery = useQuery({
+    queryKey: ['agent', agentId ?? '', 'versions'],
+    queryFn: () => api.listAgentVersions(agentId as string),
+    enabled: Boolean(agentId),
+  })
   const agent = agentQuery.data ?? null
+  const updateAgent = useMutation({
+    mutationFn: (input: AgentFormState) =>
+      api.updateAgent(agentId as string, {
+        name: input.name,
+        description: input.description,
+        instructions: input.instructions,
+        systemPrompt: input.instructions,
+        provider: input.provider,
+        model: input.model,
+        allowedTools: parseTools(input.allowedTools),
+        mcpConnectors: parseTools(input.mcpConnectors),
+        sandboxPolicy: parseJsonObject(input.sandboxPolicy, 'Sandbox policy'),
+        metadata: parseJsonObject(input.metadata, 'Metadata'),
+      }),
+    onSuccess: () => {
+      setEditing(false)
+      context.refresh()
+      void queryClient.invalidateQueries({ queryKey: ['agent', agentId ?? ''] })
+      void queryClient.invalidateQueries({ queryKey: ['agent', agentId ?? '', 'versions'] })
+    },
+  })
+  const openEdit = () => {
+    if (!agent) return
+    setForm(agentToForm(agent))
+    setEditing(true)
+  }
+
   return (
-    <AgentDetailView
-      agent={agent}
-      environments={context.environments}
-      sessions={context.sessions}
-      onStartSession={context.startSession}
-      onArchive={context.archiveAgent}
-    />
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        eyebrow="Agent"
+        title={agent?.name ?? 'Agent detail'}
+        titleAccessory={agent ? <StatusBadge value={agent.status} /> : null}
+        description={
+          agent
+            ? `${agent.description ?? 'No description'} · Created ${formatDate(agent.createdAt)} · Updated ${formatDate(agent.updatedAt)}`
+            : 'Inspect runtime configuration, version snapshot, and related sessions.'
+        }
+        actions={
+          agent ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" variant="outline" onClick={openEdit}>
+                <Pencil data-icon="inline-start" />
+                Edit agent
+              </Button>
+              <Button type="button" onClick={() => context.openCreateSession(agent.id)}>
+                Create session
+              </Button>
+            </div>
+          ) : null
+        }
+      />
+      <AgentDetailView agent={agent} versions={versionsQuery.data?.data ?? []} sessions={context.sessions} />
+      <Sheet open={editing} onOpenChange={setEditing}>
+        <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
+          <SheetHeader>
+            <SheetTitle>Edit Agent</SheetTitle>
+            <SheetDescription>Saving runtime fields creates a new immutable agent version.</SheetDescription>
+          </SheetHeader>
+          <div className="px-4 pb-4">
+            {form ? (
+              <AgentForm
+                value={form}
+                setValue={setForm}
+                submitLabel={updateAgent.isPending ? 'Saving agent' : 'Save changes'}
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  updateAgent.mutate(form)
+                }}
+              />
+            ) : null}
+            {updateAgent.error instanceof Error ? (
+              <p className="mt-3 text-sm text-destructive">{updateAgent.error.message}</p>
+            ) : null}
+          </div>
+        </SheetContent>
+      </Sheet>
+    </div>
   )
+}
+
+function agentToForm(agent: Agent): AgentFormState {
+  return {
+    name: agent.name,
+    description: agent.description ?? '',
+    instructions: agent.instructions ?? '',
+    provider: agent.provider,
+    model: agent.model,
+    allowedTools: agent.allowedTools.join('\n'),
+    mcpConnectors: agent.mcpConnectors.join('\n'),
+    sandboxPolicy: stringifyJson(agent.sandboxPolicy),
+    metadata: stringifyJson(agent.metadata),
+  }
 }

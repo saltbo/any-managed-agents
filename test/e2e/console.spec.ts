@@ -36,15 +36,14 @@ const agent = {
   id: 'agent_1',
   projectId: 'project_1',
   name: 'Coding agent',
-  description: 'Runs tasks',
-  instructions: 'Do the task',
+  description: 'Runs work',
+  instructions: 'Do the work',
   provider: 'workers-ai',
   model: '@cf/moonshotai/kimi-k2.6',
-  systemPrompt: 'Do the task',
+  systemPrompt: 'Do the work',
   allowedTools: ['read', 'write'],
   mcpConnectors: [],
   sandboxPolicy: { network: 'enabled' },
-  defaultEnvironmentId: 'env_1',
   metadata: {},
   status: 'active',
   archivedAt: null,
@@ -64,12 +63,15 @@ const session = {
   environmentId: 'env_1',
   environmentVersionId: 'envver_1',
   environmentSnapshot: { ...environment, environmentId: 'env_1' },
+  title: null,
+  resourceRefs: [],
+  vaultRefs: [],
   durableObjectName: 'session_1',
   sandboxId: 'sandbox_1',
   piRuntimeId: 'pi_1',
   piProcessId: 'process_1',
-  runtimeEndpointPath: '/api/sessions/session_1/runtime',
-  agentUrl: '/api/sessions/session_1/runtime',
+  runtimeEndpointPath: '/runtime/sessions/session_1/rpc',
+  agentUrl: '/runtime/sessions/session_1/rpc',
   modelProvider: 'workers-ai',
   modelConfig: { model: '@cf/moonshotai/kimi-k2.6' },
   status: 'idle',
@@ -88,6 +90,56 @@ function json(route: Route, body: unknown, status = 200) {
 
 async function mockApi(page: Page) {
   const state = { sessions: [] as (typeof session)[], events: [] as Array<Record<string, unknown>> }
+  await page.addInitScript(() => {
+    class MockRuntimeWebSocket extends EventTarget {
+      static CONNECTING = 0
+      static OPEN = 1
+      static CLOSING = 2
+      static CLOSED = 3
+      readyState = MockRuntimeWebSocket.CONNECTING
+      url: string
+
+      constructor(url: string) {
+        super()
+        this.url = url
+        queueMicrotask(() => {
+          this.readyState = MockRuntimeWebSocket.OPEN
+          this.dispatchEvent(new Event('open'))
+        })
+      }
+
+      send(data: string) {
+        const command = JSON.parse(data) as { id?: string; type?: string; message?: string }
+        this.emit({ type: 'response', id: command.id, command: command.type, success: true })
+        if (command.type === 'prompt' || command.type === 'follow_up') {
+          const content = `Received: ${command.message}`
+          this.emit({
+            type: 'message_update',
+            id: `${command.id}_assistant`,
+            message: { role: 'assistant', content },
+            assistantMessageEvent: { text: content },
+          })
+          this.emit({
+            type: 'tool_execution_end',
+            id: `${command.id}_tool`,
+            toolCall: { id: `${command.id}_tool`, name: 'write_file', output: { ok: true }, durationMs: 4 },
+          })
+          this.emit({ type: 'message_end', id: `${command.id}_assistant`, message: { role: 'assistant', content } })
+          this.emit({ type: 'agent_end', id: `${command.id}_end`, willRetry: false })
+        }
+      }
+
+      close() {
+        this.readyState = MockRuntimeWebSocket.CLOSED
+        this.dispatchEvent(new Event('close'))
+      }
+
+      private emit(payload: Record<string, unknown>) {
+        queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(payload) })))
+      }
+    }
+    window.WebSocket = MockRuntimeWebSocket as unknown as typeof WebSocket
+  })
   await page.route('**/*', async (route) => {
     const request = route.request()
     const url = new URL(request.url())
@@ -97,6 +149,8 @@ async function mockApi(page: Page) {
     if (path === '/api/auth/me') return json(route, auth)
     if (path === '/api/agents' && method === 'GET') return json(route, { data: [agent] })
     if (path === '/api/agents/agent_1' && method === 'GET') return json(route, agent)
+    if (path === '/api/agents/agent_1/versions' && method === 'GET')
+      return json(route, { data: [session.agentSnapshot] })
     if (path === '/api/environments' && method === 'GET') return json(route, { data: [environment] })
     if (path === '/api/environments/env_1' && method === 'GET') return json(route, environment)
     if (path === '/api/sessions' && method === 'GET') return json(route, { data: state.sessions })
@@ -108,39 +162,12 @@ async function mockApi(page: Page) {
     if (path === '/api/governance/policy') return json(route, governancePolicy())
     if (path === '/api/usage/summary') return json(route, usageSummary())
     if (path === '/api/audit-records') return json(route, { data: [] })
-    if (path === '/api/agents/agent_1/sessions' && method === 'POST') {
+    if (path === '/api/sessions' && method === 'POST') {
       state.sessions = [session]
       return json(route, session)
     }
     if (path === '/api/sessions/session_1/events') return json(route, { data: state.events })
     if (path === '/api/sessions/session_1' && method === 'GET') return json(route, session)
-    if (path === '/api/sessions/session_1/runtime' && method === 'POST') {
-      state.events = [
-        {
-          id: 'event_1',
-          organizationId: 'org_1',
-          projectId: 'project_1',
-          sessionId: 'session_1',
-          sequence: 1,
-          type: 'message',
-          visibility: 'transcript',
-          role: 'assistant',
-          parentEventId: null,
-          correlationId: null,
-          payload: { text: 'AMA task completed' },
-          metadata: {},
-          createdAt: now,
-        },
-      ]
-      return json(route, { accepted: true })
-    }
-    if (path === '/api/sessions/session_1/runtime' && method === 'GET') {
-      return route.fulfill({
-        status: 200,
-        contentType: 'application/x-ndjson',
-        body: '{"type":"agent_end","message":"AMA task completed"}\n',
-      })
-    }
     return route.continue()
   })
 }
@@ -149,7 +176,7 @@ for (const scenario of [
   { name: 'desktop', viewport: { width: 1280, height: 900 } },
   { name: 'mobile 390px', viewport: { width: 390, height: 900 } },
 ]) {
-  test(`console navigation and session task workflow at ${scenario.name}`, async ({ browser }) => {
+  test(`console navigation and session chat workflow at ${scenario.name}`, async ({ browser }) => {
     const page = await browser.newPage({ viewport: scenario.viewport })
     await mockApi(page)
 
@@ -170,10 +197,23 @@ for (const scenario of [
     }
 
     await page.getByRole('link', { name: 'Agents' }).first().click()
-    await page.getByRole('button', { name: 'Start session' }).click()
-    await expect(page.getByText('Session started')).toBeVisible()
-    await page.getByRole('button', { name: 'Send task' }).click()
-    await expect(page.getByText('Task sent to runtime')).toBeVisible()
+    await page.getByRole('button', { name: 'Create session' }).click()
+    await expect(page.getByRole('heading', { name: 'Create Session' })).toBeVisible()
+    await page.getByRole('dialog').getByRole('button', { name: 'Create session' }).click()
+    await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'Session created' })).toBeVisible()
+    await expect(page.getByRole('tab', { name: 'Transcript' })).toBeVisible()
+    await page.getByRole('button', { name: 'Open agent details' }).click()
+    await expect(page.getByRole('heading', { name: 'Coding agent' })).toBeVisible()
+    await expect(page.getByText('Agent id')).toBeVisible()
+    await page.getByRole('button', { name: 'Close', exact: true }).click()
+    await page.getByRole('button', { name: 'Open environment details' }).click()
+    await expect(page.getByRole('heading', { name: 'Node workspace' })).toBeVisible()
+    await expect(page.getByText('Environment id')).toBeVisible()
+    await page.getByRole('button', { name: 'Close', exact: true }).click()
+    await page.getByPlaceholder('Send a message to the agent').fill('Create ama-message.txt')
+    await page.getByRole('button', { name: 'Send' }).click()
+    await expect(page.getByText(/Received: Create ama-message/)).toBeVisible()
+    await expect(page.getByText('write_file')).toBeVisible()
 
     const hasHorizontalOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth,

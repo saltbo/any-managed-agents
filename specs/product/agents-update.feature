@@ -1,4 +1,4 @@
-@planned @agents
+@agents
 Feature: Agent updates
   Agent changes are versioned instead of mutating running sessions.
 
@@ -6,4 +6,3 @@ Feature: Agent updates
     Given an agent has active sessions
     When the user changes runtime-relevant configuration
     Then a new agent version is created and active sessions keep their original snapshot
-

@@ -64,6 +64,10 @@ Given('a project has an active environment', () => {
   runCloudflareRouteTest('server/routes/agents.cf-test.ts')
 })
 
+Given('a project has an active model provider', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
 Given('an agent exists with version 1', () => {
   runCloudflareRouteTest('server/routes/agents.cf-test.ts')
 })
@@ -78,6 +82,10 @@ Given('a project has active and archived agents created across multiple dates', 
 
 Given('an agent exists with existing sessions', () => {
   runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+Given('an agent has active sessions', () => {
+  runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
 })
 
 Given('a project has active and archived environments created across multiple dates', () => {
@@ -134,7 +142,7 @@ When('the user opens the console', () => {
   runUnitTest('src/App.test.tsx')
 })
 
-When('the user starts a session', () => {
+When('the user creates a session with an agent and environment', () => {
   runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
 })
 
@@ -167,18 +175,19 @@ When('the user creates an agent with a name and instructions', () => {
 })
 
 When(
-  'the user creates an agent with instructions, provider, model, allowed tools, MCP connectors, sandbox policy, metadata, and a default environment',
+  'the user creates an agent with instructions, provider, model, allowed tools, MCP connectors, sandbox policy, and metadata',
   () => {
     runCloudflareRouteTest('server/routes/agents.cf-test.ts')
   },
 )
 
-When(
-  'the user changes instructions, model config, tools, MCP connectors, sandbox policy, metadata, or default environment',
-  () => {
-    runCloudflareRouteTest('server/routes/agents.cf-test.ts')
-  },
-)
+When('the user changes instructions, model config, tools, MCP connectors, sandbox policy, or metadata', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+When('the user changes runtime-relevant configuration', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
 
 When('the user updates only the description', () => {
   runCloudflareRouteTest('server/routes/agents.cf-test.ts')
@@ -284,6 +293,10 @@ Then('the agents API enforces auth, project tenancy, model policy, tool policy, 
   runCloudflareRouteTest('server/routes/agents.cf-test.ts')
 })
 
+Then('the agents API enforces auth, project tenancy, model policy, and tool policy', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
 Then('agent sessions keep immutable agent and environment snapshots', () => {
   runCloudflareRouteTest('server/routes/agents.cf-test.ts')
   runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
@@ -301,12 +314,9 @@ Then('optional fields use stable empty values instead of disappearing from the r
   runCloudflareRouteTest('server/routes/agents.cf-test.ts')
 })
 
-Then(
-  'the first agent version stores the instructions, model config, tool policy, sandbox policy, metadata, and default environment reference',
-  () => {
-    runCloudflareRouteTest('server/routes/agents.cf-test.ts')
-  },
-)
+Then('the first agent version stores the instructions, model config, tool policy, sandbox policy, and metadata', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
 
 Then('the response echoes the normalized runtime configuration', () => {
   runCloudflareRouteTest('server/routes/agents.cf-test.ts')
@@ -314,6 +324,13 @@ Then('the response echoes the normalized runtime configuration', () => {
 
 Then(
   'blocked tools, unavailable models, archived environments, and invalid sandbox policies are rejected with field-level validation details',
+  () => {
+    runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+  },
+)
+
+Then(
+  'blocked tools, unavailable models, and invalid sandbox policies are rejected with field-level validation details',
   () => {
     runCloudflareRouteTest('server/routes/agents.cf-test.ts')
   },
@@ -604,6 +621,11 @@ Then('the session uses a snapshot of the selected agent version', () => {
   runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
 })
 
+Then('a new agent version is created and active sessions keep their original snapshot', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+  runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
+})
+
 Then('the session uses a snapshot of the selected environment', () => {
   runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
 })
@@ -701,7 +723,7 @@ Then('mocked browser scenario evidence covers desktop and 390px mobile workflows
     /width: 1280, height: 900/,
     /width: 390, height: 844/,
     /Create environment/,
-    /Send task/,
+    /Send/,
   )
 })
 
@@ -741,7 +763,7 @@ Then('mobile navigation labels remain readable without truncation', () => {
   runUnitTest('src/App.test.tsx')
 })
 
-Then('the v1 console supports sending runtime tasks and inspecting session events', () => {
+Then('the v1 console supports sending runtime messages and inspecting session events', () => {
   runUnitTest('src/App.test.tsx')
 })
 

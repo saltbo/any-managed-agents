@@ -14,11 +14,11 @@ Feature: Agents API
     And the OpenAPI path "/api/agents/{agentId}" should include method "patch"
     And the OpenAPI path "/api/agents/{agentId}" should include method "delete"
     And the OpenAPI document should include path "/api/agents/{agentId}/versions"
-    And the OpenAPI document should include path "/api/agents/{agentId}/sessions"
+    And the OpenAPI document should include path "/api/sessions"
 
   Scenario: Manage project agents through the API
     Then the agents API supports create, read, update, version history, archive, and list
-    And the agents API enforces auth, project tenancy, model policy, tool policy, and environment availability
+    And the agents API enforces auth, project tenancy, model policy, and tool policy
     And agent sessions keep immutable agent and environment snapshots
 
   Scenario: Create an agent with the smallest useful configuration
@@ -27,18 +27,18 @@ Feature: Agents API
     Then the response includes an agent id, current version id, project id, timestamps, and archive state
     And the agent defaults to the project default model provider and model
     And optional fields use stable empty values instead of disappearing from the response
-    And the first agent version stores the instructions, model config, tool policy, sandbox policy, metadata, and default environment reference
+    And the first agent version stores the instructions, model config, tool policy, sandbox policy, and metadata
 
   Scenario: Create an agent with full runtime configuration
-    Given a project has an active environment
-    When the user creates an agent with instructions, provider, model, allowed tools, MCP connectors, sandbox policy, metadata, and a default environment
+    Given a project has an active model provider
+    When the user creates an agent with instructions, provider, model, allowed tools, MCP connectors, sandbox policy, and metadata
     Then the response echoes the normalized runtime configuration
-    And blocked tools, unavailable models, archived environments, and invalid sandbox policies are rejected with field-level validation details
+    And blocked tools, unavailable models, and invalid sandbox policies are rejected with field-level validation details
     And secret material is never accepted directly inside agent metadata, tools, or connector configuration
 
   Scenario: Update an agent with versioned runtime semantics
     Given an agent exists with version 1
-    When the user changes instructions, model config, tools, MCP connectors, sandbox policy, metadata, or default environment
+    When the user changes instructions, model config, tools, MCP connectors, sandbox policy, or metadata
     Then the platform creates version 2
     And the current agent points at version 2
     And sessions created before the update keep the version 1 snapshot

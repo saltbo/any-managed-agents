@@ -1,9 +1,33 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { Given, Then } from '@cucumber/cucumber'
+import { existsSync, readFileSync } from 'node:fs'
+import { Given, Then, When } from '@cucumber/cucumber'
 
 function read(path: string) {
   return readFileSync(path, 'utf8')
+}
+
+function readConsoleFeatureViews() {
+  return [
+    'src/features/agents/AgentsView.tsx',
+    'src/features/agents/AgentDetailView.tsx',
+    'src/features/environments/EnvironmentsView.tsx',
+    'src/features/environments/EnvironmentDetailView.tsx',
+    'src/features/sessions/SessionsView.tsx',
+    'src/features/sessions/SessionDetailView.tsx',
+    'src/features/providers/ProvidersView.tsx',
+    'src/features/providers/ProviderDetailView.tsx',
+    'src/features/vaults/VaultsView.tsx',
+    'src/features/vaults/VaultDetailView.tsx',
+    'src/features/mcp/McpView.tsx',
+    'src/features/usage/UsageView.tsx',
+    'src/features/audit/AuditView.tsx',
+    'src/features/settings/GovernanceView.tsx',
+    'src/features/quickstart/QuickstartView.tsx',
+    'src/features/console/json-block.tsx',
+    'src/features/console/related-resources-table.tsx',
+  ]
+    .map(read)
+    .join('\n')
 }
 
 Given('the platform is designed as a self-hostable Cloudflare Workers application', () => {
@@ -146,9 +170,11 @@ Then('the v1 web console can create environments, agents, and sessions', () => {
   const app = read('src/App.tsx')
   const router = read('src/app/router.tsx')
   const layout = read('src/features/console/ConsoleLayout.tsx')
+  const controller = read('src/features/console/use-console-controller.ts')
+  const createSheet = read('src/features/console/CreateResourceSheet.tsx')
   const api = read('src/lib/api.ts')
   const forms = read('src/console/forms.tsx')
-  const views = read('src/console/views.tsx')
+  const views = readConsoleFeatureViews()
   const components = read('src/console/components.tsx')
   assert.match(app, /QueryClientProvider/)
   assert.match(app, /RouterProvider/)
@@ -156,31 +182,35 @@ Then('the v1 web console can create environments, agents, and sessions', () => {
   assert.match(router, /AgentsPage/)
   assert.match(router, /EnvironmentsPage/)
   assert.match(router, /SessionsPage/)
-  assert.match(layout, /useQuery/)
-  assert.match(layout, /useMutation/)
-  assert.match(layout, /viewFromPath/)
+  assert.match(controller, /useQuery/)
+  assert.match(controller, /useMutation/)
+  assert.match(controller, /viewFromPath/)
   assert.match(layout, /@\/components\/ui\/button/)
-  assert.match(layout, /@\/components\/ui\/sheet/)
+  assert.match(createSheet, /@\/components\/ui\/sheet/)
   assert.match(forms, /@\/components\/ui\/input/)
   assert.match(forms, /@\/components\/ui\/select/)
   assert.match(views, /@\/components\/ui\/card/)
   assert.match(views, /@\/components\/ui\/scroll-area/)
   assert.match(components, /@\/components\/ui\/badge/)
-  assert.match(layout, /createMode/)
+  assert.match(controller, /createMode/)
   assert.doesNotMatch(layout, /Acceptance Path/)
-  assert.match(layout, /startAgentSession/)
+  assert.match(controller, /openCreateSession/)
   assert.match(api, /createEnvironment/)
   assert.match(api, /createAgent/)
   assert.match(api, /createSession/)
 })
 
-Then('the v1 web console can send runtime tasks and inspect session events', () => {
-  const views = read('src/console/views.tsx')
-  const api = read('src/lib/api.ts')
-  assert.match(views, /Send task/)
-  assert.match(views, /Transcript and runtime events/)
-  assert.match(api, /sendRuntimeTask/)
-  assert.match(api, /listSessionEvents/)
+Then('the v1 web console can send runtime messages and inspect session events', () => {
+  const runtimeHook = read('src/features/sessions/use-pi-runtime-session.ts')
+  const runtimePanel = read('src/features/sessions/SessionRuntimePanel.tsx')
+  assert.match(runtimePanel, /Send/)
+  assert.match(runtimePanel, /Transcript/)
+  assert.match(runtimeHook, /new WebSocket/)
+  assert.match(runtimeHook, /sendPrompt/)
+  assert.match(runtimePanel, /MessageResponse/)
+  assert.match(runtimePanel, /Tool/)
+  assert.doesNotMatch(runtimeHook, /EventSource/)
+  assert.doesNotMatch(runtimeHook, /readRuntimeEvents/)
 })
 
 Then('v1 release checks include lint, typecheck, unit tests, BDD, Cloudflare tests, and build', () => {
@@ -237,7 +267,7 @@ Then(
     const environmentsPage = read('src/features/environments/EnvironmentsPage.tsx')
     const sessionsPage = read('src/features/sessions/SessionsPage.tsx')
     const productComponents = read('src/console/components.tsx')
-    const productViews = read('src/console/views.tsx')
+    const productViews = readConsoleFeatureViews()
     assert.match(app, /QueryClientProvider/)
     assert.match(app, /RouterProvider/)
     assert.doesNotMatch(app, /AgentsView|EnvironmentForm|SessionsView|useQuery|useMutation/)
@@ -246,22 +276,73 @@ Then(
     assert.match(router, /EnvironmentsPage/)
     assert.match(router, /SessionsPage/)
     assert.match(layout, /ConsoleContextProvider/)
+    assert.match(layout, /ConsoleShell/)
+    assert.match(layout, /CreateResourceSheet/)
+    assert.doesNotMatch(layout, /useQuery|useMutation|AgentForm|EnvironmentForm|SessionForm/)
+    assert.doesNotMatch(layout, /<header/)
     assert.match(agentsPage, /useConsoleContext/)
     assert.match(environmentsPage, /useConsoleContext/)
     assert.match(sessionsPage, /useConsoleContext/)
     assert.match(productComponents, /StatusBadge/)
     assert.match(productViews, /AgentsView/)
+    assert.equal(existsSync('src/console/views.tsx'), false)
   },
 )
 
+Then('the shared shell keeps user controls out of the content topbar', () => {
+  const shell = read('src/features/console/ConsoleShell.tsx')
+  const standards = read('docs/product/ui-ux-standards.md')
+  assert.doesNotMatch(shell, /<header/)
+  assert.doesNotMatch(shell, /SearchField|ArchivedToggle|RefreshCw|aria-label="Refresh"/)
+  assert.match(shell, /<UserMenu placement="sidebar" \/>/)
+  assert.match(shell, /<UserMenu placement="mobile" \/>/)
+  assert.match(shell, /isSidebar \? 'mt-4 border-t pt-3'/)
+  assert.match(shell, /fixed bottom-4 left-4 z-20 lg:hidden/)
+  assert.doesNotMatch(shell, /bottom-4 right-4|lg:right-/)
+  assert.match(shell, /DropdownMenu/)
+  assert.match(shell, /const contentSide = isSidebar \? 'right' : 'top'/)
+  assert.match(shell, /side=\{contentSide\}/)
+  assert.match(shell, /ArrowRight/)
+  assert.doesNotMatch(shell, /Log out\s*\n\s*<ArrowRight/)
+  assert.match(standards, /right content area must not add a duplicate sticky topbar/)
+  assert.match(standards, /desktop places it in the sidebar footer/)
+  assert.match(standards, /menu opens from the right side of the sidebar/)
+  assert.match(standards, /Logout is a direct menu action and must not use a submenu arrow/)
+})
+
+Then('feature operations stay out of the shared console context', () => {
+  const context = read('src/features/console/console-context.tsx')
+  const controller = read('src/features/console/use-console-controller.ts')
+  const agentActions = read('src/features/agents/use-agent-actions.ts')
+  const environmentActions = read('src/features/environments/use-environment-actions.ts')
+  const sessionActions = read('src/features/sessions/use-session-actions.ts')
+  const providerActions = read('src/features/providers/use-provider-actions.ts')
+  const vaultActions = read('src/features/vaults/use-vault-actions.ts')
+  const mcpActions = read('src/features/mcp/use-mcp-actions.ts')
+  const standards = read('docs/product/ui-ux-standards.md')
+  const sharedOperationNames =
+    /archiveAgent|archiveEnvironment|archiveProvider|archiveVault|disconnectMcpConnection|stopSession|archiveSession/
+
+  assert.doesNotMatch(context, sharedOperationNames)
+  assert.doesNotMatch(controller, /api\.(archive|stop|disconnect)/)
+  assert.match(agentActions, /api\.archiveAgent/)
+  assert.match(environmentActions, /api\.archiveEnvironment/)
+  assert.match(sessionActions, /api\.stopSession/)
+  assert.match(sessionActions, /api\.archiveSession/)
+  assert.match(providerActions, /api\.archiveProvider/)
+  assert.match(vaultActions, /api\.archiveVault/)
+  assert.match(mcpActions, /api\.disconnectMcpConnection/)
+  assert.match(standards, /Shared context is not a page-operation service locator/)
+})
+
 Then('the web console uses React Query for server state instead of feature-level ad hoc loading loops', () => {
-  const layout = read('src/features/console/ConsoleLayout.tsx')
+  const controller = read('src/features/console/use-console-controller.ts')
   const agentsPage = read('src/features/agents/AgentsPage.tsx')
   const environmentsPage = read('src/features/environments/EnvironmentsPage.tsx')
   const sessionsPage = read('src/features/sessions/SessionsPage.tsx')
-  assert.match(layout, /useQuery/)
-  assert.match(layout, /useMutation/)
-  assert.match(layout, /invalidateQueries/)
+  assert.match(controller, /useQuery/)
+  assert.match(controller, /useMutation/)
+  assert.match(controller, /invalidateQueries/)
   assert.doesNotMatch(agentsPage, /useEffect|fetch\(/)
   assert.doesNotMatch(environmentsPage, /useEffect|fetch\(/)
   assert.doesNotMatch(sessionsPage, /useEffect|fetch\(/)
@@ -270,7 +351,7 @@ Then('the web console uses React Query for server state instead of feature-level
 Then('console pages compose shadcn primitives instead of legacy custom global component classes', () => {
   const styles = read('src/styles.css')
   const forms = read('src/console/forms.tsx')
-  const views = read('src/console/views.tsx')
+  const views = readConsoleFeatureViews()
   const components = read('src/console/components.tsx')
   assert.doesNotMatch(styles, /\.panel|\.button-primary|\.icon-button|\.field-label|\.input|\.textarea/)
   assert.match(forms, /@\/components\/ui\/input/)
@@ -284,7 +365,6 @@ Then('console pages compose shadcn primitives instead of legacy custom global co
 
 Then('console forms use shadcn Field primitives for labels and helper text', () => {
   const forms = read('src/console/forms.tsx')
-  const views = read('src/console/views.tsx')
   const field = read('src/components/ui/field.tsx')
   const standards = read('docs/product/ui-ux-standards.md')
   assert.match(field, /FieldGroup/)
@@ -292,8 +372,6 @@ Then('console forms use shadcn Field primitives for labels and helper text', () 
   assert.match(forms, /FieldGroup/)
   assert.match(forms, /FieldLabel/)
   assert.match(forms, /FieldDescription/)
-  assert.match(views, /@\/components\/ui\/field/)
-  assert.match(views, /FieldLabel htmlFor="runtime-task"/)
   assert.match(
     standards,
     /Forms must use shadcn `FieldGroup`, `Field`, `FieldLabel`, `FieldDescription`, and `FieldError`/,
@@ -302,10 +380,365 @@ Then('console forms use shadcn Field primitives for labels and helper text', () 
   assert.doesNotMatch(forms, /className="space-y-|className="grid gap-1\.5"|<label className=/)
 })
 
+Then('browser clients use WebSocket for bidirectional Pi RPC commands and events', () => {
+  const hook = read('src/features/sessions/use-pi-runtime-session.ts')
+  const server = read('server/app.ts')
+  assert.match(hook, /new WebSocket/)
+  assert.match(hook, /sendPrompt/)
+  assert.match(server, /\/ws/)
+  assert.match(server, /WebSocketPair/)
+  assert.match(server, /handleRuntimeWebSocketMessage/)
+})
+
+Then('AMA does not inject custom response or lifecycle events into the Pi runtime stream', () => {
+  const server = read('server/app.ts')
+  assert.doesNotMatch(server, /sendRuntimeJson\(socket, \{\s*type: 'response'/)
+  assert.doesNotMatch(server, /websocket_message_completed|message_started|message_completed/)
+})
+
+Then('clients do not poll the runtime endpoint for NDJSON transcripts', () => {
+  const api = read('src/lib/api.ts')
+  const hook = read('src/features/sessions/use-pi-runtime-session.ts')
+  assert.doesNotMatch(api, /readRuntimeEvents|sendRuntimeMessage/)
+  assert.doesNotMatch(hook, /EventSource|setInterval|application\/x-ndjson/)
+})
+
+When('the user sends a message and the agent responds', () => {
+  const server = read('server/app.ts')
+  assert.match(server, /recordRuntimeMessageSubmission/)
+  assert.match(server, /recordTestRuntimeMessageOutcome/)
+})
+
+Then('the platform records Pi runtime events in order', () => {
+  const server = read('server/app.ts')
+  assert.match(server, /appendPiRuntimeEvent/)
+  assert.match(server, /max\(sessionEvents.sequence\)/)
+  assert.match(server, /sequence: \(latest\?\.sequence \?\? 0\) \+ 1/)
+})
+
+Then('each stored runtime event preserves the Pi event type and payload', () => {
+  const schema = read('server/db/schema.ts')
+  const app = read('server/app.ts')
+  assert.match(schema, /organizationId/)
+  assert.match(schema, /projectId/)
+  assert.match(schema, /sessionId/)
+  assert.match(schema, /sequence/)
+  assert.match(schema, /createdAt/)
+  assert.match(app, /type: piEventType\(values\.event\)/)
+  assert.match(app, /payload: JSON\.stringify\(redactRuntimeValue\(values\.event\)\)/)
+})
+
+Then('AMA control-plane lifecycle events are not mixed into the Pi runtime event log', () => {
+  const app = read('server/app.ts')
+  const routes = read('server/routes/sessions.ts')
+  assert.doesNotMatch(app, /reason: 'message_started'|reason: 'message_completed'|websocket_message_completed/)
+  assert.doesNotMatch(routes, /session_created/)
+  assert.match(routes, /recordAudit/)
+})
+
+When('the client subscribes to session events', () => {
+  const hook = read('src/features/sessions/use-pi-runtime-session.ts')
+  assert.match(hook, /new WebSocket/)
+})
+
+Then('message deltas, tool calls, sandbox process updates, and final results are streamed over WebSocket', () => {
+  const reducer = read('src/features/sessions/pi-runtime.ts')
+  assert.match(reducer, /message_update/)
+  assert.match(reducer, /tool_execution_start/)
+  assert.match(reducer, /bridge_exit/)
+  assert.match(reducer, /agent_end/)
+})
+
+Then('the stream carries Pi AgentSessionEvent payloads', () => {
+  const reducer = read('src/features/sessions/pi-runtime.ts')
+  assert.match(reducer, /agent_start/)
+  assert.match(reducer, /turn_start/)
+  assert.match(reducer, /message_end/)
+  assert.match(reducer, /tool_execution_end/)
+})
+
+Then('reconnection can continue from the last acknowledged sequence', () => {
+  const routes = read('server/routes/sessions.ts')
+  assert.match(routes, /events\/stream/)
+  assert.match(routes, /cursor/)
+})
+
+When('the user opens a session detail page', () => {
+  const page = read('src/features/sessions/SessionDetailPage.tsx')
+  assert.match(page, /SessionDetailView/)
+})
+
+Then('transcript is derived from Pi runtime events', () => {
+  const panel = read('src/features/sessions/SessionRuntimePanel.tsx')
+  const reducer = read('src/features/sessions/pi-runtime.ts')
+  assert.match(panel, /Conversation/)
+  assert.match(panel, /MessageResponse/)
+  assert.match(reducer, /messageFromPiEvent/)
+  assert.match(reducer, /mergePersistedEvents/)
+})
+
+Then('debug shows the full Pi runtime event stream with structured metadata', () => {
+  const panel = read('src/features/sessions/SessionRuntimePanel.tsx')
+  assert.match(panel, /details/)
+  assert.match(panel, /stringifyJson/)
+})
+
+When('a tool, provider, or sandbox emits sensitive values', () => {
+  const app = read('server/app.ts')
+  assert.match(app, /redactRuntimeValue/)
+})
+
+Then('event storage and event streams redact the secret values', () => {
+  const app = read('server/app.ts')
+  assert.match(app, /SENSITIVE_KEY/)
+  assert.match(app, /REDACTED/)
+})
+
+Then('audit records keep only safe references', () => {
+  const app = read('server/app.ts')
+  assert.match(app, /recordAudit/)
+  assert.match(app, /redactRuntimeValue/)
+})
+
+When('the user opens session detail', () => {
+  const views = readConsoleFeatureViews()
+  assert.match(views, /SessionDetailView/)
+})
+
+Then('transcript, debug events, status, agent snapshot, model, and sandbox references are visible', () => {
+  const views = readConsoleFeatureViews()
+  const panel = read('src/features/sessions/SessionRuntimePanel.tsx')
+  assert.match(panel, /Transcript/)
+  assert.match(panel, /Debug/)
+  assert.match(views, /StatusBadge/)
+  assert.match(views, /agentSnapshot/)
+  assert.match(views, /modelProvider/)
+  assert.match(views, /sandboxId/)
+})
+
+Given('a session exists with immutable agent and environment snapshots', () => {
+  const routes = read('server/routes/sessions.ts')
+  assert.match(routes, /agentSnapshot/)
+  assert.match(routes, /environmentSnapshot/)
+})
+
+Then(
+  'the header shows title or id, status, agent, model provider, model, environment, duration, and runtime endpoint',
+  () => {
+    const views = readConsoleFeatureViews()
+    assert.match(views, /session.title/)
+    assert.match(views, /StatusBadge/)
+    assert.match(views, /agentName/)
+    assert.match(views, /modelProvider/)
+    assert.match(views, /modelConfig/)
+    assert.match(views, /environmentName/)
+    assert.match(views, /formatDuration/)
+    assert.match(views, /runtimeEndpointPath/)
+  },
+)
+
+Then(
+  'the snapshot panel shows agent instructions, tools, sandbox policy, environment packages, network policy, and safe secret references',
+  () => {
+    const views = readConsoleFeatureViews()
+    assert.match(views, /instructions|systemPrompt/)
+    assert.match(views, /allowedTools/)
+    assert.match(views, /sandboxPolicy/)
+    assert.match(views, /packages/)
+    assert.match(views, /networkPolicy/)
+    assert.match(views, /secretRefs/)
+  },
+)
+
+Then('sandbox identifiers and Pi runtime identifiers are visible for debugging', () => {
+  const views = readConsoleFeatureViews()
+  assert.match(views, /sandboxId/)
+  assert.match(views, /piRuntimeId/)
+  assert.match(views, /piProcessId/)
+})
+
+Given('a session is idle and has an active runtime endpoint', () => {
+  const bridge = read('server/runtime/pi/bridge.ts')
+  assert.match(bridge, /runtimeEndpointPath/)
+})
+
+When('the user sends a message from the session detail composer', () => {
+  const panel = read('src/features/sessions/SessionRuntimePanel.tsx')
+  assert.match(panel, /onSend/)
+})
+
+Then('the UI opens a WebSocket session to the AMA Pi runtime endpoint', () => {
+  const hook = read('src/features/sessions/use-pi-runtime-session.ts')
+  assert.match(hook, /runtimeWebSocketUrl/)
+  assert.match(hook, /new WebSocket/)
+})
+
+Then('the UI sends the message as a Pi RPC prompt command', () => {
+  const page = read('src/features/sessions/SessionDetailPage.tsx')
+  assert.match(page, /sendPrompt/)
+})
+
+Then('the input shows a pending state while the message is accepted', () => {
+  const prompt = read('src/components/ai-elements/prompt-input.tsx')
+  assert.match(prompt, /busy/)
+  assert.match(prompt, /Abort running agent/)
+})
+
+Then(
+  'the transcript and debug views receive the same Pi runtime event stream without HTTP polling or a full page reload',
+  () => {
+    const hook = read('src/features/sessions/use-pi-runtime-session.ts')
+    const panel = read('src/features/sessions/SessionRuntimePanel.tsx')
+    assert.match(hook, /addEventListener\('message'/)
+    assert.match(panel, /runtime.messages/)
+    assert.match(panel, /runtime.debugEvents/)
+    assert.doesNotMatch(hook, /fetch\(|setInterval/)
+  },
+)
+
+Then('failures show a recoverable error message with the session left inspectable', () => {
+  const panel = read('src/features/sessions/SessionRuntimePanel.tsx')
+  const reducer = read('src/features/sessions/pi-runtime.ts')
+  assert.match(reducer, /messageFromRuntimeError/)
+  assert.match(panel, /variant="destructive"/)
+  assert.doesNotMatch(panel, /Banner/)
+})
+
+Given('a session receives Pi agent message, tool execution, lifecycle, and usage events', () => {
+  const reducer = read('src/features/sessions/pi-runtime.ts')
+  assert.match(reducer, /message_update/)
+  assert.match(reducer, /tool_execution_end/)
+  assert.match(reducer, /agent_start/)
+  assert.match(reducer, /usage/)
+})
+
+When('the user opens transcript mode', () => {
+  const panel = read('src/features/sessions/SessionRuntimePanel.tsx')
+  assert.match(panel, /value="transcript"/)
+})
+
+Then('user and assistant messages render as chat turns', () => {
+  const panel = read('src/features/sessions/SessionRuntimePanel.tsx')
+  assert.match(panel, /Message /)
+  assert.match(panel, /item.role/)
+})
+
+Then('tool executions render as structured tool rows', () => {
+  const panel = read('src/features/sessions/SessionRuntimePanel.tsx')
+  assert.match(panel, /<Tool/)
+})
+
+Then('runtime progress renders as status rows', () => {
+  const panel = read('src/features/sessions/SessionRuntimePanel.tsx')
+  assert.match(panel, /runtime.connection/)
+  assert.match(panel, /runtime.runState/)
+})
+
+Then('raw JSON payloads are available only in debug detail panels', () => {
+  const panel = read('src/features/sessions/SessionRuntimePanel.tsx')
+  assert.match(panel, /details/)
+  assert.match(panel, /stringifyJson\(event.payload\)/)
+})
+
+Given('a session has Pi runtime events', () => {
+  const app = read('server/app.ts')
+  assert.match(app, /appendPiRuntimeEvent/)
+  assert.match(app, /piEventType/)
+  assert.doesNotMatch(app, /visibility: 'audit'/)
+})
+
+When('the user opens the session detail page', () => {
+  const page = read('src/features/sessions/SessionDetailPage.tsx')
+  assert.match(page, /SessionDetailView/)
+})
+
+When('the user selects transcript mode', () => {
+  const panel = read('src/features/sessions/SessionRuntimePanel.tsx')
+  assert.match(panel, /TabsTrigger value="transcript"/)
+})
+
+Then('conversation-level messages and final results are emphasized', () => {
+  const panel = read('src/features/sessions/SessionRuntimePanel.tsx')
+  assert.match(panel, /MessageResponse/)
+})
+
+Then('non-transcript Pi events are hidden but still available in debug mode', () => {
+  const panel = read('src/features/sessions/SessionRuntimePanel.tsx')
+  assert.match(panel, /TabsContent value="debug"/)
+})
+
+When('the user selects debug mode', () => {
+  const panel = read('src/features/sessions/SessionRuntimePanel.tsx')
+  assert.match(panel, /TabsTrigger value="debug"/)
+})
+
+Then('every Pi runtime event is visible with type, sequence, timestamp, payload summary, and raw detail panel', () => {
+  const panel = read('src/features/sessions/SessionRuntimePanel.tsx')
+  assert.match(panel, /event.type/)
+  assert.match(panel, /event.id/)
+  assert.match(panel, /formatTime/)
+  assert.match(panel, /stringifyJson/)
+})
+
+Given('a session has events', () => {
+  const api = read('src/lib/api.ts')
+  assert.match(api, /listSessionEvents/)
+})
+
+When('the user copies or downloads events', () => {
+  const panel = read('src/features/sessions/SessionRuntimePanel.tsx')
+  assert.match(panel, /copyEvents/)
+  assert.match(panel, /downloadEvents/)
+})
+
+Then('exported content preserves event order and safe metadata', () => {
+  const panel = read('src/features/sessions/SessionRuntimePanel.tsx')
+  assert.match(panel, /sort\(\(a, b\) => a.sequence - b.sequence\)/)
+})
+
+Then('secret values remain redacted', () => {
+  const app = read('server/app.ts')
+  assert.match(app, /redactRuntimeValue/)
+})
+
+Given('a session has messages, tool calls, and sandbox events', () => {
+  const reducer = read('src/features/sessions/pi-runtime.ts')
+  assert.match(reducer, /message_update/)
+  assert.match(reducer, /tool_execution_update/)
+  assert.match(reducer, /bridge_exit/)
+})
+
+Then('the transcript view shows Pi runtime messages as chat turns', () => {
+  const panel = read('src/features/sessions/SessionRuntimePanel.tsx')
+  assert.match(panel, /ConversationContent/)
+  assert.match(panel, /MessageResponse/)
+})
+
+Then('tool calls render with structured status, input summary, output summary, and duration', () => {
+  const tool = read('src/components/ai-elements/tool.tsx')
+  assert.match(tool, /status/)
+  assert.match(tool, /Input/)
+  assert.match(tool, /Output/)
+  assert.match(tool, /durationMs/)
+})
+
+Then('the debug view shows runtime events with structured details', () => {
+  const panel = read('src/features/sessions/SessionRuntimePanel.tsx')
+  assert.match(panel, /filteredDebugEvents/)
+  assert.match(panel, /details/)
+})
+
+Then('the composer sends normal chat messages instead of a task form', () => {
+  const prompt = read('src/components/ai-elements/prompt-input.tsx')
+  const panel = read('src/features/sessions/SessionRuntimePanel.tsx')
+  assert.match(prompt, /Send a message to the agent/)
+  assert.doesNotMatch(panel, /task/i)
+})
+
 Then('console date and time rendering uses the shared dayjs formatter', () => {
   const packageJson = read('package.json')
   const format = read('src/console/format.ts')
-  const views = read('src/console/views.tsx')
+  const views = readConsoleFeatureViews()
   assert.match(packageJson, /"dayjs":/)
   assert.match(format, /from 'dayjs'/)
   assert.match(format, /dayjs\(value\)\.format/)
@@ -315,7 +748,7 @@ Then('console date and time rendering uses the shared dayjs formatter', () => {
 Then('destructive console actions require the shared confirmation dialog', () => {
   const alertDialog = read('src/components/ui/alert-dialog.tsx')
   const components = read('src/console/components.tsx')
-  const views = read('src/console/views.tsx')
+  const views = readConsoleFeatureViews()
   assert.match(alertDialog, /AlertDialogPrimitive/)
   assert.match(components, /ConfirmAction/)
   assert.match(components, /@\/components\/ui\/alert-dialog/)
@@ -328,6 +761,25 @@ Then('destructive console actions require the shared confirmation dialog', () =>
   assert.doesNotMatch(views, /onClick=\{\(\) => onArchive\(environment\.id\)\}/)
   assert.doesNotMatch(views, /onClick=\{\(\) => onStop\(selectedSession\.id\)\}/)
   assert.doesNotMatch(views, /onClick=\{\(\) => onArchive\(selectedSession\.id\)\}/)
+})
+
+Then('operation feedback uses toast notifications instead of page-flow text', () => {
+  const app = read('src/App.tsx')
+  const toaster = read('src/components/ui/sonner.tsx')
+  const controller = read('src/features/console/use-console-controller.ts')
+  const layout = read('src/features/console/ConsoleLayout.tsx')
+  const shell = read('src/features/console/ConsoleShell.tsx')
+  const runtimePanel = read('src/features/sessions/SessionRuntimePanel.tsx')
+  const standards = read('docs/product/ui-ux-standards.md')
+  assert.match(app, /<Toaster \/>/)
+  assert.match(toaster, /sonner/)
+  assert.match(controller, /toast\.success/)
+  assert.match(controller, /toast\.error/)
+  assert.match(runtimePanel, /toast\.success/)
+  assert.doesNotMatch(layout, /Banner|Session created|Agent created|Environment created|toast\./)
+  assert.doesNotMatch(shell, /Banner|Session created|Agent created|Environment created/)
+  assert.match(standards, /must use the shared toast component/)
+  assert.match(standards, /must not render success or failure text inside the page content flow/)
 })
 
 Then('the UI\\/UX standards are indexed with the product specs', () => {

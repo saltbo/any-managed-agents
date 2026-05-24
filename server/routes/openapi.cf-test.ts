@@ -71,7 +71,7 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths).toHaveProperty('/api/agents')
     expect(doc.paths).toHaveProperty('/api/agents/{agentId}')
     expect(doc.paths).toHaveProperty('/api/agents/{agentId}/versions')
-    expect(doc.paths).toHaveProperty('/api/agents/{agentId}/sessions')
+    expect(doc.paths).toHaveProperty('/api/sessions')
     expect(doc.paths).toHaveProperty('/api/environments')
     expect(doc.paths).toHaveProperty('/api/environments/{environmentId}')
     expect(doc.paths).toHaveProperty('/api/environments/{environmentId}/versions')

@@ -1,8 +1,10 @@
 import dayjs from 'dayjs'
 import localizedFormat from 'dayjs/plugin/localizedFormat'
+import relativeTime from 'dayjs/plugin/relativeTime'
 import type { View } from './types'
 
 dayjs.extend(localizedFormat)
+dayjs.extend(relativeTime)
 
 export function titleForView(view: View) {
   const titles: Record<View, string> = {
@@ -46,6 +48,26 @@ export function formatDate(value: string | null) {
   return value ? dayjs(value).format('lll') : 'None'
 }
 
+export function formatTime(value: string | null) {
+  return value ? dayjs(value).format('HH:mm:ss') : 'None'
+}
+
+export function formatRelativeTime(value: string | null) {
+  return value ? dayjs(value).fromNow() : 'None'
+}
+
+export function formatDuration(start: string | null, end: string | null) {
+  if (!start) return 'None'
+  const startAt = dayjs(start)
+  const endAt = end ? dayjs(end) : dayjs()
+  const seconds = Math.max(0, endAt.diff(startAt, 'second'))
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ${seconds % 60}s`
+  const hours = Math.floor(minutes / 60)
+  return `${hours}h ${minutes % 60}m`
+}
+
 export function parsePackages(value: string) {
   return value
     .split('\n')
@@ -79,6 +101,22 @@ export function parseTools(value: string) {
 
 export function stringifyJson(value: unknown) {
   return JSON.stringify(value, null, 2)
+}
+
+export function parseJsonObject(value: string, label: string) {
+  const parsed = JSON.parse(value || '{}') as unknown
+  if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
+    throw new Error(`${label} must be a JSON object.`)
+  }
+  return parsed as Record<string, unknown>
+}
+
+export function parseJsonObjectArray(value: string, label: string) {
+  const parsed = JSON.parse(value || '[]') as unknown
+  if (!Array.isArray(parsed) || parsed.some((item) => !item || Array.isArray(item) || typeof item !== 'object')) {
+    throw new Error(`${label} must be a JSON array of objects.`)
+  }
+  return parsed as Record<string, unknown>[]
 }
 
 export function formatCostMicros(value: number, currency = 'USD') {

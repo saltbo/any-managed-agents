@@ -10,8 +10,8 @@ Feature: Sessions API
   @planned
   Scenario: Create a session from an active agent and environment
     Given a signed-in user has access to a project
-    And the project has an active agent with an active default environment
-    When the user creates a session for the agent
+    And the project has an active agent and an active environment
+    When the user creates a session with the agent and environment
     Then the response includes a session id, project id, organization id, status, timestamps, durable object name, sandbox id, runtime endpoint, and model config
     And the session stores immutable agent and environment snapshots
     And the session starts the Pi bridge inside a Cloudflare Sandbox
@@ -35,10 +35,10 @@ Feature: Sessions API
     And no session record is left in an active state
 
   @planned
-  Scenario: Run a task through the session runtime endpoint
+  Scenario: Run a message through the session runtime endpoint
     Given an idle session has a running Pi bridge
-    When the user sends a runtime task to the session runtime endpoint
-    Then the runtime accepts the task
+    When the user sends a runtime message to the session runtime endpoint
+    Then the runtime accepts the message
     And the session status becomes running while work is in progress
     And the Pi runtime can call approved tools inside the Cloudflare Sandbox
     And message, tool, sandbox, usage, lifecycle, and error events are stored in sequence

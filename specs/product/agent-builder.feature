@@ -7,7 +7,7 @@ Feature: Agent builder
 
   Scenario: Configure core agent settings
     When the user opens the agent builder
-    Then the builder captures name, description, instructions, model, and default environment
+    Then the builder captures name, description, instructions, and model
     And required fields are validated before saving
 
   Scenario: Configure tools and approvals
@@ -17,7 +17,7 @@ Feature: Agent builder
 
   Scenario: Configure sandbox access
     When the user enables sandbox execution
-    Then the builder requires an environment and sandbox policy
+    Then the builder captures sandbox policy
     And the resulting agent version can request Cloudflare Sandbox execution
 
   Scenario: Test an agent before publishing
@@ -28,7 +28,7 @@ Feature: Agent builder
 
   Scenario: Build an agent from a guided first-run flow
     When the user describes the agent goal in natural language or picks a template
-    Then the builder drafts name, instructions, model choice, tool policy, MCP connectors, and default environment recommendations
+    Then the builder drafts name, instructions, model choice, tool policy, and MCP connectors
     And the user can inspect and edit the generated configuration before saving
     And the builder asks for one missing decision at a time instead of blocking on a long form
 

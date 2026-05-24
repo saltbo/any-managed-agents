@@ -17,14 +17,14 @@ Feature: Agents UI
   Scenario: Render the agents table
     Given the project has active and archived agents
     When the user opens the agents page
-    Then each row shows name, model provider, model, status, default environment, version, created time, and updated time
+    Then each row shows name, model provider, model, status, version, created time, and updated time
     And archived rows are visually distinct when the archived filter is enabled
     And clicking a row opens the agent detail route
     And row actions do not trigger accidental navigation
 
   Scenario: Create an agent from the agents page
-    Given active environments exist
+    Given a model provider is available
     When the user starts the create-agent flow
     Then the form uses the shared form components and validation states
-    And the user can choose a model provider, model, default environment, tools, and sandbox policy
+    And the user can choose a model provider, model, tools, and sandbox policy
     And saving creates the agent and returns to the browsable agents list with the new row selected or visible

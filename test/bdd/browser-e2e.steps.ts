@@ -3,7 +3,7 @@ import { once } from 'node:events'
 import { createServer as createNetServer } from 'node:net'
 import path from 'node:path'
 import { Then } from '@cucumber/cucumber'
-import { type Browser, chromium, type Page, type Route } from '@playwright/test'
+import { type Browser, chromium, type Page, type Route, type WebSocketRoute } from '@playwright/test'
 import type { ViteDevServer } from 'vite'
 
 const now = '2026-05-23T00:00:00.000Z'
@@ -16,7 +16,7 @@ interface ResourceState {
 }
 
 Then(
-  'a browser verifies the v1 create-session-to-run-task UI workflow with mocked API responses on desktop and mobile',
+  'a browser verifies the v1 create-session-to-chat UI workflow with mocked API responses on desktop and mobile',
   { timeout: 120_000 },
   async () => {
     const port = await freePort()
@@ -38,36 +38,74 @@ async function runBrowserWorkflow(browser: Browser, port: number, viewport: { wi
   const state: ResourceState = { environments: {}, agents: {}, sessions: {}, events: {} }
   const page = await browser.newPage({ viewport })
   try {
+    await page.routeWebSocket(/\/runtime\/sessions\/[^/]+\/ws$/, mockRuntimeWebSocket)
     await page.route('**/*', (route) => routeRequest(route, state))
 
     await page.goto(`http://127.0.0.1:${port}/quickstart`)
     await page.getByRole('link', { name: 'Environments' }).click()
     await page.getByRole('button', { name: 'Create environment' }).click()
     await page.getByRole('button', { name: 'Save environment' }).click()
-    await expectText(page, 'Environment created')
+    await expectToast(page, 'Environment created')
 
     await page.getByRole('link', { name: 'Agents' }).click()
     await page.getByRole('button', { name: 'Create agent' }).click()
     await page.getByRole('button', { name: 'Save agent' }).click()
-    await expectText(page, 'Agent created')
-    await page.getByRole('button', { name: 'Start session' }).click()
-    await expectText(page, 'Session started')
+    await expectToast(page, 'Agent created')
+    await page.getByRole('button', { name: 'Create session' }).click()
+    await expectText(page, 'Create Session')
+    await page.getByRole('dialog').getByRole('button', { name: 'Create session' }).click()
+    await expectToast(page, 'Session created')
 
-    await page.getByRole('button', { name: 'Send task' }).click()
-    await expectText(page, 'Task sent to runtime')
-    await expectText(page, 'AMA task completed')
+    await expectText(page, 'Transcript')
+    await page.getByPlaceholder('Send a message to the agent').fill('Create ama-message.txt')
+    await page.getByRole('button', { name: 'Send' }).click()
+    await expectText(page, 'Received: Create ama-message.txt')
+    await expectText(page, 'write_file')
 
-    await page.getByRole('button', { name: 'Stop session' }).click()
+    await page.getByRole('button', { name: 'Actions' }).click()
+    await page.getByRole('menuitem', { name: 'Stop session' }).click()
     await page.getByRole('alertdialog').getByRole('button', { name: 'Stop session' }).click()
-    await expectText(page, 'Session stopped')
+    await expectToast(page, 'Session stopped')
 
     assert.equal(Object.keys(state.environments).length, 1)
     assert.equal(Object.keys(state.agents).length, 1)
     assert.equal(Object.keys(state.sessions).length, 1)
-    assert.ok(Object.values(state.events).some((events) => events.some((event) => event.type === 'message')))
+    assert.ok(Object.values(state.events).some((events) => events.some((event) => event.type === 'lifecycle')))
   } finally {
     await page.close()
   }
+}
+
+function mockRuntimeWebSocket(socket: WebSocketRoute) {
+  socket.onMessage((data) => {
+    const command = JSON.parse(String(data)) as { id?: string; type?: string; message?: string }
+    emitRuntimeEvent(socket, { type: 'response', id: command.id, command: command.type, success: true })
+    if (command.type !== 'prompt' && command.type !== 'follow_up') {
+      return
+    }
+    const content = `Received: ${command.message}`
+    emitRuntimeEvent(socket, {
+      type: 'message_update',
+      id: `${command.id}_assistant`,
+      message: { role: 'assistant', content },
+      assistantMessageEvent: { text: content },
+    })
+    emitRuntimeEvent(socket, {
+      type: 'tool_execution_end',
+      id: `${command.id}_tool`,
+      toolCall: { id: `${command.id}_tool`, name: 'write_file', output: { ok: true }, durationMs: 4 },
+    })
+    emitRuntimeEvent(socket, {
+      type: 'message_end',
+      id: `${command.id}_assistant`,
+      message: { role: 'assistant', content },
+    })
+    emitRuntimeEvent(socket, { type: 'agent_end', id: `${command.id}_end`, willRetry: false })
+  })
+}
+
+function emitRuntimeEvent(socket: WebSocketRoute, payload: Record<string, unknown>) {
+  socket.send(JSON.stringify(payload))
 }
 
 async function routeRequest(route: Route, state: ResourceState) {
@@ -117,24 +155,28 @@ function handleApiRequest(
 
   if (url.pathname === '/api/agents') {
     if (method === 'POST') {
-      const environmentId = Object.keys(state.environments)[0] ?? null
-      const agent = agentFixture('agent_1', readName(body, 'Coding agent'), environmentId)
+      const agent = agentFixture('agent_1', readName(body, 'Coding agent'))
       state.agents[agent.id as string] = agent
       return json(agent, 201)
     }
     return list(Object.values(state.agents))
   }
 
-  if (url.pathname.match(/^\/api\/agents\/[^/]+\/sessions$/) && method === 'POST') {
-    const agentId = url.pathname.split('/')[3] ?? 'agent_1'
-    const agent = state.agents[agentId] ?? agentFixture(agentId, 'Coding agent', null)
-    const environmentId = (agent.defaultEnvironmentId as string | null) ?? null
+  if (url.pathname === '/api/sessions' && method === 'POST') {
+    const payload = body as Record<string, unknown>
+    const agentId = typeof payload.agentId === 'string' ? payload.agentId : 'agent_1'
+    const environmentId = typeof payload.environmentId === 'string' ? payload.environmentId : 'env_1'
     const session = sessionFixture('session_1', agentId, environmentId)
     state.sessions[session.id as string] = session
     state.events[session.id as string] = [
       eventFixture(session.id as string, 1, 'lifecycle', 'debug', { status: 'idle', reason: 'runtime_ready' }),
     ]
     return json(session, 201)
+  }
+
+  if (url.pathname.match(/^\/api\/agents\/[^/]+\/versions$/)) {
+    const agentId = url.pathname.split('/')[3] ?? 'agent_1'
+    return list([{ ...agentFixture(agentId, 'Coding agent'), id: 'agentver_1', agentId, version: 1 }])
   }
 
   if (url.pathname.startsWith('/api/agents/')) {
@@ -170,24 +212,6 @@ function handleApiRequest(
       state.sessions[url.pathname.split('/')[3] ?? ''] ?? {},
       state.sessions[url.pathname.split('/')[3] ?? ''] ? 200 : 404,
     )
-  }
-
-  if (url.pathname.match(/^\/runtime\/sessions\/[^/]+\/rpc$/)) {
-    const sessionId = url.pathname.split('/')[3] ?? ''
-    if (method === 'POST') {
-      state.events[sessionId]?.push(
-        eventFixture(sessionId, state.events[sessionId].length + 1, 'message', 'transcript', {
-          content: 'Create ama-task.txt with exactly: AMA task completed',
-        }),
-      )
-      state.events[sessionId]?.push(
-        eventFixture(sessionId, state.events[sessionId].length + 1, 'message', 'transcript', {
-          content: 'AMA task completed',
-        }),
-      )
-      return json({ accepted: true })
-    }
-    return { contentType: 'application/x-ndjson', body: '{"type":"agent_end","message":"AMA task completed"}\n' }
   }
 
   if (url.pathname === '/api/providers') return list([providerFixture()])
@@ -246,7 +270,7 @@ function environmentFixture(id: string, name: string) {
   }
 }
 
-function agentFixture(id: string, name: string, defaultEnvironmentId: string | null) {
+function agentFixture(id: string, name: string) {
   return {
     id,
     projectId: 'project_1',
@@ -259,7 +283,6 @@ function agentFixture(id: string, name: string, defaultEnvironmentId: string | n
     allowedTools: ['read', 'write'],
     mcpConnectors: [],
     sandboxPolicy: { network: 'enabled' },
-    defaultEnvironmentId,
     metadata: {},
     status: 'active',
     archivedAt: null,
@@ -277,12 +300,15 @@ function sessionFixture(id: string, agentId: string, environmentId: string | nul
     projectId: 'project_1',
     agentId,
     agentVersionId: 'agentver_1',
-    agentSnapshot: { ...agentFixture(agentId, 'Coding agent', environmentId), id: 'agentver_1', agentId, version: 1 },
+    agentSnapshot: { ...agentFixture(agentId, 'Coding agent'), id: 'agentver_1', agentId, version: 1 },
     environmentId,
     environmentVersionId: environmentId ? 'envver_1' : null,
     environmentSnapshot: environmentId
       ? { ...environmentFixture(environmentId, 'Node workspace'), environmentId }
       : null,
+    title: null,
+    resourceRefs: [],
+    vaultRefs: [],
     durableObjectName: id,
     sandboxId: id,
     piRuntimeId: `pi_${id}`,
@@ -383,6 +409,10 @@ function usageFixture() {
 
 async function expectText(page: Page, text: string) {
   await page.getByText(text).first().waitFor()
+}
+
+async function expectToast(page: Page, text: string) {
+  await page.locator('[data-sonner-toast]').filter({ hasText: text }).first().waitFor()
 }
 
 async function freePort() {

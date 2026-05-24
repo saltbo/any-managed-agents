@@ -1,20 +1,39 @@
-import { useQuery } from '@tanstack/react-query'
-import { useEffect } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router'
 import { EmptyState } from '@/console/components'
-import { SessionDetailView } from '@/console/views'
 import { useConsoleContext } from '@/features/console/console-context'
 import { api } from '@/lib/api'
+import { SessionDetailView } from './SessionDetailView'
+import { usePiRuntimeSession } from './use-pi-runtime-session'
+import { useSessionActions } from './use-session-actions'
 
 export function SessionDetailPage() {
   const { sessionId } = useParams()
   const context = useConsoleContext()
+  const queryClient = useQueryClient()
+  const actions = useSessionActions()
+  const [message, setMessage] = useState('')
   const sessionQuery = useQuery({
     queryKey: ['session', sessionId ?? ''],
     queryFn: () => api.readSession(sessionId as string),
     enabled: Boolean(sessionId),
+    refetchInterval: (query) => (query.state.data?.status === 'pending' ? 2000 : false),
   })
   const session = sessionQuery.data ?? null
+  const agent = session ? context.agents.find((item) => item.id === session.agentId) : null
+  const environment = session?.environmentId
+    ? context.environments.find((item) => item.id === session.environmentId)
+    : null
+  const refreshEvents = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['sessions', sessionId ?? '', 'events'] })
+    void queryClient.invalidateQueries({ queryKey: ['console', 'resources'] })
+  }, [queryClient, sessionId])
+  const runtime = usePiRuntimeSession({
+    session: session && (session.status === 'idle' || session.status === 'running') ? session : null,
+    events: context.sessionEvents,
+    onEventsChanged: refreshEvents,
+  })
 
   useEffect(() => {
     if (sessionId) context.setSelectedSessionId(sessionId)
@@ -27,19 +46,27 @@ export function SessionDetailPage() {
   if (sessionQuery.isPending) return <EmptyState title="Loading session" body="Reading the requested session." />
   if (!session) return <EmptyState title="Session not found" body="The requested session is not in this project." />
   return (
-    <SessionDetailView
-      session={session}
-      events={context.sessionEvents}
-      runtimeTranscript={context.runtimeTranscript}
-      onStop={context.stopSession}
-      onArchive={context.archiveSession}
-      onRefreshEvents={context.refreshEvents}
-      taskMessage={context.taskMessage}
-      setTaskMessage={context.setTaskMessage}
-      onSendTask={(event) => {
-        event.preventDefault()
-        context.sendTask()
-      }}
-    />
+    <div className="min-h-[calc(100dvh-8rem)]">
+      <SessionDetailView
+        session={session}
+        agentName={agent?.name}
+        environmentName={environment?.name}
+        events={context.sessionEvents}
+        runtime={runtime.state}
+        onStop={actions.stopSession}
+        onArchive={actions.archiveSession}
+        onRefreshEvents={refreshEvents}
+        chatMessage={message}
+        setChatMessage={setMessage}
+        onSendMessage={(value) => {
+          if (runtime.state.runState === 'running') {
+            runtime.sendFollowUp(value)
+          } else {
+            runtime.sendPrompt(value)
+          }
+        }}
+        onAbortRuntime={runtime.abort}
+      />
+    </div>
   )
 }

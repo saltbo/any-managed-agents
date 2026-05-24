@@ -55,7 +55,6 @@ export interface Agent {
   allowedTools: string[]
   mcpConnectors: string[]
   sandboxPolicy: Record<string, unknown>
-  defaultEnvironmentId: string | null
   metadata: Record<string, unknown>
   status: 'active' | 'archived'
   archivedAt: string | null
@@ -77,7 +76,6 @@ export interface AgentVersion {
   allowedTools: string[]
   mcpConnectors: string[]
   sandboxPolicy: Record<string, unknown>
-  defaultEnvironmentId: string | null
   metadata: Record<string, unknown>
   createdAt: string
 }
@@ -103,6 +101,9 @@ export interface Session {
   environmentId: string | null
   environmentVersionId: string | null
   environmentSnapshot: EnvironmentVersion | null
+  title: string | null
+  resourceRefs: Record<string, unknown>[]
+  vaultRefs: Record<string, unknown>[]
   durableObjectName: string
   sandboxId: string | null
   piRuntimeId: string | null
@@ -127,8 +128,8 @@ export interface SessionEvent {
   projectId: string
   sessionId: string
   sequence: number
-  type: 'message' | 'tool' | 'sandbox' | 'policy' | 'usage' | 'error' | 'lifecycle'
-  visibility: 'transcript' | 'debug' | 'audit'
+  type: string
+  visibility: 'runtime' | 'transcript' | 'debug' | 'audit'
   role: string | null
   parentEventId: string | null
   correlationId: string | null
@@ -367,8 +368,16 @@ export interface AgentInput {
   allowedTools?: string[]
   mcpConnectors?: string[]
   sandboxPolicy?: Record<string, unknown>
-  defaultEnvironmentId?: string | null
   metadata?: Record<string, unknown>
+}
+
+export interface SessionInput {
+  agentId: string
+  environmentId: string
+  title?: string
+  metadata?: Record<string, unknown>
+  resourceRefs?: Record<string, unknown>[]
+  vaultRefs?: Record<string, unknown>[]
 }
 
 export interface ProviderInput {
@@ -448,7 +457,6 @@ export const api = {
     request<Agent>(`/api/agents/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
   archiveAgent: (id: string) => request<void>(`/api/agents/${id}`, { method: 'DELETE' }),
   listAgentVersions: (id: string) => request<ListResponse<AgentVersion>>(`/api/agents/${id}/versions`),
-  startAgentSession: (id: string) => request<Session>(`/api/agents/${id}/sessions`, { method: 'POST' }),
   listEnvironments: (options: ListOptions | boolean = {}) =>
     request<ListResponse<Environment>>(`/api/environments${queryString(listOptions(options))}`),
   readEnvironment: (id: string) => request<Environment>(`/api/environments/${id}`),
@@ -461,9 +469,10 @@ export const api = {
     request<ListResponse<EnvironmentVersion>>(`/api/environments/${id}/versions`),
   listSessions: (options: ListOptions | boolean = {}) =>
     request<ListResponse<Session>>(`/api/sessions${queryString(listOptions(options))}`),
-  createSession: (agentId: string) =>
-    request<Session>('/api/sessions', { method: 'POST', body: JSON.stringify({ agentId }) }),
+  createSession: (input: SessionInput) =>
+    request<Session>('/api/sessions', { method: 'POST', body: JSON.stringify(input) }),
   readSession: (id: string) => request<Session>(`/api/sessions/${id}`),
+  reconnectSession: (id: string) => request<Session>(`/api/sessions/${id}/reconnect`),
   stopSession: (id: string) => request<Session>(`/api/sessions/${id}/stop`, { method: 'POST' }),
   archiveSession: (id: string) => request<void>(`/api/sessions/${id}`, { method: 'DELETE' }),
   listSessionEvents: (id: string, options: SessionEventListOptions = {}) =>
@@ -491,38 +500,4 @@ export const api = {
     request<GovernancePolicy>('/api/governance/policy', { method: 'PUT', body: JSON.stringify(input) }),
   readUsageSummary: () => request<UsageSummary>('/api/usage/summary'),
   listAuditRecords: () => request<ListResponse<AuditRecord>>('/api/audit-records'),
-  sendRuntimeTask: (session: Session, message: string) =>
-    request<{ accepted?: boolean }>(session.runtimeEndpointPath, {
-      method: 'POST',
-      body: JSON.stringify({ type: 'prompt', message }),
-    }),
-  readRuntimeEvents: async (session: Session, timeoutMs = 60_000) => {
-    const response = await fetch(session.runtimeEndpointPath, { credentials: 'include' })
-    if (!response.ok || !response.body) {
-      throw new ApiError(response.statusText, response.status, await response.text())
-    }
-
-    const reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let transcript = ''
-    const startedAt = Date.now()
-    try {
-      while (Date.now() - startedAt < timeoutMs) {
-        const result = await Promise.race([
-          reader.read(),
-          new Promise<{ done: true; value?: undefined }>((resolve) => setTimeout(() => resolve({ done: true }), 5000)),
-        ])
-        if (result.done) {
-          break
-        }
-        transcript += decoder.decode(result.value, { stream: true })
-        if (transcript.includes('"type":"agent_end"') || transcript.includes('"type":"bridge_exit"')) {
-          break
-        }
-      }
-    } finally {
-      await reader.cancel().catch(() => undefined)
-    }
-    return transcript
-  },
 }

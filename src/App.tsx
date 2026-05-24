@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useState } from 'react'
 import { RouterProvider } from 'react-router'
 import { createAppRouter } from '@/app/router'
+import { Toaster } from '@/components/ui/sonner'
 
 export function App() {
   const [queryClient] = useState(
@@ -20,6 +21,7 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
+      <Toaster />
     </QueryClientProvider>
   )
 }

@@ -60,6 +60,13 @@ async function createOrganizationCredential(cookie: string) {
 }
 
 async function createSession(cookie: string, allowedTools = ['mcp:github.repo.read']) {
+  const environmentRes = await jsonFetch('/api/environments', cookie, {
+    method: 'POST',
+    body: JSON.stringify({ name: 'MCP session environment' }),
+  })
+  expect(environmentRes.status).toBe(201)
+  const environment = (await environmentRes.json()) as { id: string }
+
   const agentRes = await jsonFetch('/api/agents', cookie, {
     method: 'POST',
     body: JSON.stringify({ name: 'MCP agent', allowedTools }),
@@ -68,7 +75,7 @@ async function createSession(cookie: string, allowedTools = ['mcp:github.repo.re
   const agent = (await agentRes.json()) as { id: string }
   const sessionRes = await jsonFetch('/api/sessions', cookie, {
     method: 'POST',
-    body: JSON.stringify({ agentId: agent.id }),
+    body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
   })
   expect(sessionRes.status).toBe(201)
   return (await sessionRes.json()) as { id: string }
@@ -300,10 +307,20 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
       error: { type: 'policy_denied', details: { category: 'mcp', resourceId: 'github' } },
     })
 
-    const eventsRes = await jsonFetch(`/api/sessions/${session.id}/events?type=policy`, cookie)
+    const eventsRes = await jsonFetch(`/api/sessions/${session.id}/events`, cookie)
     expect(eventsRes.status).toBe(200)
-    await expect(eventsRes.json()).resolves.toMatchObject({
-      data: [expect.objectContaining({ type: 'policy', payload: expect.objectContaining({ connectorId: 'github' }) })],
+    await expect(eventsRes.json()).resolves.toMatchObject({ data: [] })
+
+    const auditRes = await jsonFetch('/api/audit-records?action=runtime_mcp_tool.call', cookie)
+    expect(auditRes.status).toBe(200)
+    await expect(auditRes.json()).resolves.toMatchObject({
+      data: [
+        expect.objectContaining({
+          action: 'runtime_mcp_tool.call',
+          outcome: 'denied',
+          metadata: expect.objectContaining({ connectorId: 'github' }),
+        }),
+      ],
     })
   })
 
@@ -479,14 +496,13 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
       body: JSON.stringify({
         name: 'Environment MCP agent',
         allowedTools: ['mcp:github.repo.read'],
-        defaultEnvironmentId: environment.id,
       }),
     })
     expect(agentRes.status).toBe(201)
     const agent = (await agentRes.json()) as { id: string }
     const sessionRes = await jsonFetch('/api/sessions', cookie, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id }),
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
     })
     expect(sessionRes.status).toBe(201)
     const session = (await sessionRes.json()) as { id: string }

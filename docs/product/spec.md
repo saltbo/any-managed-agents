@@ -64,10 +64,10 @@ Sandbox runtime:
 
 ## Product Model
 
-- `Agent` is a long-lived managed definition: instructions, tools, model policy, default environment, governance rules, and versions.
+- `Agent` is a long-lived managed definition: instructions, tools, model policy, governance rules, and versions. Agents do not bind environments.
 - `Environment` is a long-lived sandbox and runtime configuration: packages, variables, network policy, resource limits, Pi runtime configuration, and metadata. It is not a running sandbox.
 - `Sandbox` is an ephemeral runtime instance created from an environment snapshot for exactly one session.
-- `Session` is a concrete run of an agent. Each session binds an agent version snapshot, environment snapshot, sandbox id, Pi session or runtime id, and status. Each running session owns exactly one sandbox.
+- `Session` is a concrete run of an agent in an explicitly selected environment. Each session binds an agent version snapshot, environment snapshot, sandbox id, Pi session or runtime id, and status. Each running session owns exactly one sandbox.
 
 Sandbox instances follow the session lifecycle, are not reusable across sessions, and must not expose public ports.
 
@@ -84,7 +84,7 @@ See `docs/product/sdk.md` for the SDK ownership boundary.
 ## v1.0 Acceptance
 
 The first release is accepted when a signed-in user can create an environment,
-create an agent, start a session, send a task to the Pi runtime through the AMA
+create an agent, create a session by selecting an agent and environment, send a task to the Pi runtime through the AMA
 runtime proxy, inspect persisted session events, and stop the session.
 
 Release verification must include:

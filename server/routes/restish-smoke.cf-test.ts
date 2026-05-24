@@ -84,7 +84,6 @@ describe('[CF] restish/OpenAPI smoke path', () => {
       body: JSON.stringify({
         name: 'Restish smoke agent',
         instructions: 'Run smoke checks through documented control-plane operations.',
-        defaultEnvironmentId: environment.id,
       }),
     })
     expect(agentRes.status).toBe(201)
@@ -92,7 +91,7 @@ describe('[CF] restish/OpenAPI smoke path', () => {
 
     const sessionRes = await jsonFetch('/api/sessions', cookie, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id }),
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
     })
     expect(sessionRes.status).toBe(201)
     const session = (await sessionRes.json()) as {

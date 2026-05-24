@@ -1,5 +1,5 @@
 import { createRoute, z } from '@hono/zod-openapi'
-import { and, desc, eq, isNull, like, lt, max, or } from 'drizzle-orm'
+import { and, desc, eq, isNull, like, lt, or } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
 import { recordAudit, requestId } from '../audit'
@@ -8,7 +8,6 @@ import {
   mcpCatalogEntries,
   mcpConnections,
   mcpConnectionTools,
-  sessionEvents,
   sessions,
   vaultCredentials,
   vaultCredentialVersions,
@@ -479,39 +478,6 @@ async function replaceConnectionTools(db: Db, auth: AuthContext, connection: Con
       updatedAt: timestamp,
     })),
   )
-}
-
-async function appendSessionEvent(
-  db: Db,
-  auth: AuthContext,
-  values: {
-    sessionId: string
-    type: 'tool' | 'policy'
-    visibility: 'debug' | 'audit'
-    payload: Record<string, unknown>
-    metadata?: Record<string, unknown>
-  },
-) {
-  const latest = await db
-    .select({ sequence: max(sessionEvents.sequence) })
-    .from(sessionEvents)
-    .where(eq(sessionEvents.sessionId, values.sessionId))
-    .get()
-  await db.insert(sessionEvents).values({
-    id: newId('event'),
-    organizationId: auth.organization.id,
-    projectId: auth.project.id,
-    sessionId: values.sessionId,
-    sequence: (latest?.sequence ?? 0) + 1,
-    type: values.type,
-    visibility: values.visibility,
-    role: null,
-    parentEventId: null,
-    correlationId: null,
-    payload: stringify(values.payload),
-    metadata: stringify(values.metadata ?? {}),
-    createdAt: now(),
-  })
 }
 
 function normalizedMcpError(value: unknown) {
@@ -1058,12 +1024,6 @@ app.openapi(callToolRoute, async (c) => {
     session,
   })
   if (!decision.allowed) {
-    await appendSessionEvent(db, auth, {
-      sessionId: session.id,
-      type: 'policy',
-      visibility: 'audit',
-      payload: { connectorId: connection.connectorId, toolName, decision },
-    })
     await recordAudit(db, {
       auth,
       action: 'mcp_tool.call',
@@ -1087,11 +1047,15 @@ app.openapi(callToolRoute, async (c) => {
   const simulatedError = body.input?.simulateError
   if (simulatedError) {
     const error = normalizedMcpError(simulatedError)
-    await appendSessionEvent(db, auth, {
+    await recordAudit(db, {
+      auth,
+      action: 'mcp_tool.call',
+      resourceType: 'mcp_tool',
+      resourceId: tool.id,
+      outcome: 'failure',
+      requestId: requestId(c),
       sessionId: session.id,
-      type: 'tool',
-      visibility: 'debug',
-      payload: { connectorId: connection.connectorId, toolName, status: 'error', error },
+      metadata: { connectorId: connection.connectorId, toolName, error },
     })
     return errorResponse(c, 502, 'mcp_error', error.message, { mcpError: error })
   }
@@ -1104,11 +1068,15 @@ app.openapi(callToolRoute, async (c) => {
     output,
     durationMs: Date.now() - started,
   }
-  await appendSessionEvent(db, auth, {
+  await recordAudit(db, {
+    auth,
+    action: 'mcp_tool.call',
+    resourceType: 'mcp_tool',
+    resourceId: tool.id,
+    outcome: 'success',
+    requestId: requestId(c),
     sessionId: session.id,
-    type: 'tool',
-    visibility: 'debug',
-    payload: { ...result, inputSummary: Object.keys(body.input ?? {}) },
+    metadata: { ...result, inputSummary: Object.keys(body.input ?? {}) },
   })
   return c.json(result, 200)
 })

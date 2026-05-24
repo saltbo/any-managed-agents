@@ -26,11 +26,9 @@ function newId(prefix: string) {
   return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
 }
 
-type RuntimeEventType = 'message' | 'tool' | 'sandbox' | 'policy' | 'usage' | 'error' | 'lifecycle'
-type RuntimeEventVisibility = 'transcript' | 'debug' | 'audit'
-
 const REDACTED_VALUE = '[REDACTED]'
-const SENSITIVE_KEY = /api[_-]?key|authorization|credential|password|secret|token/i
+const SENSITIVE_KEY =
+  /api[_-]?key|authorization|credential|password|secret|(^|[_-])token($|[_-])|access[_-]?token|refresh[_-]?token/i
 
 function redactRuntimeValue(value: unknown): unknown {
   if (Array.isArray(value)) {
@@ -50,18 +48,17 @@ function redactRuntimeValue(value: unknown): unknown {
   return value
 }
 
-async function appendRuntimeEvent(
+function piEventType(event: Record<string, unknown>) {
+  return typeof event.type === 'string' && event.type ? event.type : 'message'
+}
+
+async function appendPiRuntimeEvent(
   db: ReturnType<typeof drizzle>,
   values: {
     auth: AuthContext
     sessionId: string
-    type: RuntimeEventType
-    visibility: RuntimeEventVisibility
-    payload: Record<string, unknown>
+    event: Record<string, unknown>
     metadata?: Record<string, unknown>
-    role?: string | null
-    parentEventId?: string | null
-    correlationId?: string | null
   },
 ) {
   for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -78,13 +75,13 @@ async function appendRuntimeEvent(
         projectId: values.auth.project.id,
         sessionId: values.sessionId,
         sequence: (latest?.sequence ?? 0) + 1,
-        type: values.type,
-        visibility: values.visibility,
-        role: values.role ?? null,
-        parentEventId: values.parentEventId ?? null,
-        correlationId: values.correlationId ?? null,
-        payload: JSON.stringify(redactRuntimeValue(values.payload)),
-        metadata: JSON.stringify(redactRuntimeValue(values.metadata ?? {})),
+        type: piEventType(values.event),
+        visibility: 'runtime',
+        role: null,
+        parentEventId: null,
+        correlationId: null,
+        payload: JSON.stringify(redactRuntimeValue(values.event)),
+        metadata: JSON.stringify(redactRuntimeValue(values.metadata ?? { source: 'pi' })),
         createdAt: new Date().toISOString(),
       })
       return eventId
@@ -94,7 +91,7 @@ async function appendRuntimeEvent(
       }
     }
   }
-  throw new Error('Unable to append runtime event')
+  throw new Error('Unable to append Pi runtime event')
 }
 
 async function appendRuntimePolicyEvent(
@@ -105,22 +102,37 @@ async function appendRuntimePolicyEvent(
     payload: Record<string, unknown>
   },
 ) {
-  await appendRuntimeEvent(db, {
+  await recordAudit(db, {
     auth: values.auth,
-    sessionId: values.sessionId,
-    type: 'policy',
-    visibility: 'audit',
-    payload: values.payload,
+    action: 'runtime.policy',
+    resourceType: 'session',
+    resourceId: values.sessionId,
+    outcome: 'denied',
+    metadata: values.payload,
   })
 }
 
-function runtimeTaskMessage(body: unknown) {
+type RuntimeCommand = {
+  id?: string
+  type: 'get_state' | 'prompt' | 'steer' | 'follow_up' | 'abort'
+  message?: string
+}
+
+function runtimeCommand(body: unknown): RuntimeCommand | null {
   if (!body || typeof body !== 'object') {
-    return ''
+    return null
   }
   const record = body as Record<string, unknown>
-  const value = record.message ?? record.input ?? record.prompt ?? record.task
-  return typeof value === 'string' ? value : ''
+  const type = record.type
+  if (type !== 'get_state' && type !== 'prompt' && type !== 'steer' && type !== 'follow_up' && type !== 'abort') {
+    return null
+  }
+  const message = typeof record.message === 'string' ? record.message : undefined
+  return {
+    type,
+    ...(typeof record.id === 'string' ? { id: record.id } : {}),
+    ...(message ? { message } : {}),
+  }
 }
 
 function runtimeToolCalls(body: unknown) {
@@ -133,100 +145,70 @@ function runtimeToolCalls(body: unknown) {
     : []
 }
 
-async function recordRuntimeTaskSubmission(
+async function recordRuntimeMessageSubmission(
   db: ReturnType<typeof drizzle>,
   auth: AuthContext,
   session: typeof sessions.$inferSelect,
-  body: unknown,
+  _body: unknown,
 ) {
   const timestamp = new Date().toISOString()
-  const correlationId = newId('task')
-  const message = runtimeTaskMessage(body)
+  const correlationId = newId('message')
   await db
     .update(sessions)
     .set({ status: 'running', statusReason: null, updatedAt: timestamp })
     .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
-  await appendRuntimeEvent(db, {
-    auth,
-    sessionId: session.id,
-    type: 'lifecycle',
-    visibility: 'audit',
-    correlationId,
-    payload: { status: 'running', reason: 'task_started' },
-  })
-  if (message) {
-    await appendRuntimeEvent(db, {
-      auth,
-      sessionId: session.id,
-      type: 'message',
-      visibility: 'transcript',
-      role: 'user',
-      correlationId,
-      payload: { content: message },
-    })
-  }
   return correlationId
 }
 
-async function recordTestRuntimeTaskOutcome(
+async function recordTestRuntimeMessageOutcome(
   db: ReturnType<typeof drizzle>,
   auth: AuthContext,
   session: typeof sessions.$inferSelect,
   body: unknown,
-  correlationId: string,
+  _correlationId: string,
 ) {
   for (const [index, call] of runtimeToolCalls(body).entries()) {
     const toolCallId = typeof call.id === 'string' ? call.id : `tool_${index + 1}`
     const toolName = typeof call.name === 'string' ? call.name : 'tool'
     const durationMs = typeof call.durationMs === 'number' ? call.durationMs : 0
-    const approvalState = typeof call.approvalState === 'string' ? call.approvalState : 'approved'
-    const startedAt = new Date(Date.now() - durationMs).toISOString()
-    const callEventId = await appendRuntimeEvent(db, {
+    await appendPiRuntimeEvent(db, {
       auth,
       sessionId: session.id,
-      type: 'tool',
-      visibility: 'debug',
-      correlationId: toolCallId,
-      payload: {
-        phase: 'call',
-        toolCallId,
-        toolName,
-        approvalState,
-        input: call.input ?? {},
-        startedAt,
+      event: {
+        type: 'tool_execution_start',
+        id: toolCallId,
+        toolCall: {
+          id: toolCallId,
+          name: toolName,
+          input: call.input ?? {},
+        },
       },
     })
-    await appendRuntimeEvent(db, {
+    await appendPiRuntimeEvent(db, {
       auth,
       sessionId: session.id,
-      type: 'tool',
-      visibility: 'debug',
-      parentEventId: callEventId,
-      correlationId: toolCallId,
-      payload: {
-        phase: 'result',
-        toolCallId,
-        toolName,
-        approvalState,
-        output: call.output ?? {},
-        error: call.error ?? null,
-        status: call.error ? 'error' : 'success',
-        durationMs,
+      event: {
+        type: 'tool_execution_end',
+        id: toolCallId,
+        toolCall: {
+          id: toolCallId,
+          name: toolName,
+          output: call.output ?? {},
+          error: call.error ?? null,
+          durationMs,
+        },
       },
     })
   }
 
   const record = body && typeof body === 'object' ? (body as Record<string, unknown>) : {}
   if (record.simulateError) {
-    const rawMessage = typeof record.errorMessage === 'string' ? record.errorMessage : 'Runtime task failed'
+    const rawMessage = typeof record.errorMessage === 'string' ? record.errorMessage : 'Runtime message failed'
     const safeMessage = redactRuntimeValue(rawMessage) as string
-    await appendRuntimeEvent(db, {
+    await appendPiRuntimeEvent(db, {
       auth,
       sessionId: session.id,
-      type: 'error',
-      visibility: 'debug',
-      correlationId,
-      payload: { type: 'runtime_error', message: safeMessage },
+      event: { type: 'error', message: safeMessage },
     })
     await db
       .update(sessions)
@@ -235,36 +217,28 @@ async function recordTestRuntimeTaskOutcome(
     return
   }
 
-  await appendRuntimeEvent(db, {
+  await appendPiRuntimeEvent(db, {
     auth,
     sessionId: session.id,
-    type: 'message',
-    visibility: 'transcript',
-    role: 'assistant',
-    correlationId,
-    payload: { content: typeof record.response === 'string' ? record.response : 'Task accepted by Pi runtime.' },
+    event: {
+      type: 'message_end',
+      message: {
+        role: 'assistant',
+        content: typeof record.response === 'string' ? record.response : 'Message accepted by Pi runtime.',
+      },
+    },
   })
-  await appendRuntimeEvent(db, {
+  await appendPiRuntimeEvent(db, {
     auth,
     sessionId: session.id,
-    type: 'usage',
-    visibility: 'debug',
-    correlationId,
-    payload: {
+    event: {
+      type: 'usage',
       provider: session.modelProvider,
       model: session.modelConfig ? (JSON.parse(session.modelConfig) as Record<string, unknown>).model : null,
       promptTokens: 0,
       completionTokens: 0,
       totalTokens: 0,
     },
-  })
-  await appendRuntimeEvent(db, {
-    auth,
-    sessionId: session.id,
-    type: 'lifecycle',
-    visibility: 'audit',
-    correlationId,
-    payload: { status: 'idle', reason: 'task_completed' },
   })
   await db
     .update(sessions)
@@ -282,17 +256,18 @@ async function recordRuntimeProxyFailure(
     return
   }
   const safeMessage = `Pi runtime returned ${response.status}`
-  await appendRuntimeEvent(db, {
-    auth,
-    sessionId: session.id,
-    type: 'error',
-    visibility: 'debug',
-    payload: { type: 'runtime_error', message: safeMessage, status: response.status },
-  })
   await db
     .update(sessions)
     .set({ status: 'error', statusReason: safeMessage, updatedAt: new Date().toISOString() })
     .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
+  await recordAudit(db, {
+    auth,
+    action: 'runtime.proxy',
+    resourceType: 'session',
+    resourceId: session.id,
+    outcome: 'failure',
+    metadata: { message: safeMessage, status: response.status },
+  })
 }
 
 async function ingestPiRuntimeLine(
@@ -311,26 +286,24 @@ async function ingestPiRuntimeLine(
   } catch {
     parsed = { content: line }
   }
+  await appendPiRuntimeEvent(db, {
+    auth,
+    sessionId: session.id,
+    event: parsed,
+  })
   const type = typeof parsed.type === 'string' ? parsed.type : 'message'
-  if (type === 'agent_end') {
-    const finalContent = parsed.content ?? parsed.message ?? parsed.data
-    if (finalContent) {
-      await appendRuntimeEvent(db, {
-        auth,
-        sessionId: session.id,
-        type: 'message',
-        visibility: 'transcript',
-        role: 'assistant',
-        payload: { content: finalContent },
-      })
+  if (type === 'response') {
+    if (parsed.success === false) {
+      const message = runtimeErrorMessage(parsed)
+      await db
+        .update(sessions)
+        .set({ status: 'error', statusReason: message, updatedAt: new Date().toISOString() })
+        .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
+      return true
     }
-    await appendRuntimeEvent(db, {
-      auth,
-      sessionId: session.id,
-      type: 'lifecycle',
-      visibility: 'audit',
-      payload: { status: 'idle', reason: 'task_completed' },
-    })
+    return false
+  }
+  if (type === 'agent_end') {
     await db
       .update(sessions)
       .set({ status: 'idle', statusReason: null, updatedAt: new Date().toISOString() })
@@ -340,13 +313,6 @@ async function ingestPiRuntimeLine(
   if (type === 'bridge_exit') {
     const failed = parsed.code !== 0 && parsed.code !== null
     const status = failed ? 'error' : 'idle'
-    await appendRuntimeEvent(db, {
-      auth,
-      sessionId: session.id,
-      type: 'lifecycle',
-      visibility: 'audit',
-      payload: { status, reason: 'runtime_exit', code: parsed.code ?? null, signal: parsed.signal ?? null },
-    })
     await db
       .update(sessions)
       .set({
@@ -357,47 +323,21 @@ async function ingestPiRuntimeLine(
       .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
     return true
   }
-  if (type === 'bridge_stderr' || type === 'error') {
-    await appendRuntimeEvent(db, {
-      auth,
-      sessionId: session.id,
-      type: 'error',
-      visibility: 'debug',
-      payload: { type: 'runtime_error', message: parsed.data ?? parsed.message ?? 'Runtime error' },
-    })
-    return false
-  }
-  if (type === 'tool_call' || type === 'tool_result') {
-    await appendRuntimeEvent(db, {
-      auth,
-      sessionId: session.id,
-      type: 'tool',
-      visibility: 'debug',
-      parentEventId: typeof parsed.parentEventId === 'string' ? parsed.parentEventId : null,
-      correlationId: typeof parsed.toolCallId === 'string' ? parsed.toolCallId : null,
-      payload: parsed,
-    })
-    return false
-  }
-  if (type === 'usage') {
-    await appendRuntimeEvent(db, {
-      auth,
-      sessionId: session.id,
-      type: 'usage',
-      visibility: 'debug',
-      payload: parsed,
-    })
-    return false
-  }
-  await appendRuntimeEvent(db, {
-    auth,
-    sessionId: session.id,
-    type: 'message',
-    visibility: 'transcript',
-    role: typeof parsed.role === 'string' ? parsed.role : 'assistant',
-    payload: { content: parsed.content ?? parsed.message ?? parsed.data ?? line },
-  })
   return false
+}
+
+function runtimeErrorMessage(payload: Record<string, unknown>) {
+  const error = payload.error
+  if (typeof error === 'string') {
+    return error
+  }
+  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
+    return error.message
+  }
+  if (typeof payload.message === 'string') {
+    return payload.message
+  }
+  return 'Runtime command failed'
 }
 
 async function drainPiRuntimeEvents(
@@ -407,6 +347,7 @@ async function drainPiRuntimeEvents(
   db: ReturnType<typeof drizzle>,
   auth: AuthContext,
   session: typeof sessions.$inferSelect,
+  onLine?: (line: string) => void,
 ) {
   const streamRequest = new Request(request.url, { method: 'GET', headers: request.headers })
   const response = await proxyPiRuntime(env, sandboxId, streamRequest)
@@ -426,6 +367,7 @@ async function drainPiRuntimeEvents(
       const lines = pending.split('\n')
       pending = lines.pop() ?? ''
       for (const line of lines) {
+        onLine?.(line)
         const terminal = await ingestPiRuntimeLine(db, auth, session, line)
         if (terminal) {
           await reader.cancel().catch(() => undefined)
@@ -435,10 +377,138 @@ async function drainPiRuntimeEvents(
     }
     const final = `${pending}${decoder.decode()}`
     if (final.trim()) {
+      onLine?.(final)
       await ingestPiRuntimeLine(db, auth, session, final)
     }
   } finally {
     await reader.cancel().catch(() => undefined)
+  }
+}
+
+function createWebSocketPair() {
+  const pair = new WebSocketPair()
+  const [client, server] = Object.values(pair) as [WebSocket, WebSocket]
+  return { client, server }
+}
+
+function sendRuntimeJson(socket: WebSocket, payload: Record<string, unknown>) {
+  socket.send(JSON.stringify(payload))
+}
+
+async function handleTestRuntimeWebSocket(
+  socket: WebSocket,
+  db: ReturnType<typeof drizzle>,
+  auth: AuthContext,
+  session: typeof sessions.$inferSelect,
+  command: RuntimeCommand,
+) {
+  const commandId = command.id ?? newId('rpc')
+  if (command.type === 'get_state') {
+    sendRuntimeJson(socket, {
+      type: 'session_info_changed',
+      status: session.status,
+      sessionId: session.id,
+      sandboxId: session.sandboxId,
+    })
+    return
+  }
+  if (command.type === 'abort') {
+    sendRuntimeJson(socket, { type: 'agent_end', willRetry: false, reason: 'aborted' })
+    return
+  }
+  if (!command.message) {
+    return
+  }
+
+  const correlationId = await recordRuntimeMessageSubmission(db, auth, session, command)
+  const response = `Received: ${command.message}`
+  const events = [
+    { type: 'agent_start', sessionId: session.id },
+    { type: 'turn_start', sessionId: session.id },
+    { type: 'message_start', id: `${commandId}_assistant`, message: { role: 'assistant', content: '' } },
+    {
+      type: 'message_update',
+      id: `${commandId}_assistant`,
+      message: { role: 'assistant', content: response },
+      assistantMessageEvent: { text: response },
+    },
+    {
+      type: 'tool_execution_start',
+      id: `${commandId}_tool`,
+      toolCall: { id: `${commandId}_tool`, name: 'write_file', input: { path: 'ama-message.txt' } },
+    },
+    {
+      type: 'tool_execution_end',
+      id: `${commandId}_tool`,
+      toolCall: {
+        id: `${commandId}_tool`,
+        name: 'write_file',
+        input: { path: 'ama-message.txt' },
+        output: { ok: true },
+        durationMs: 8,
+      },
+    },
+    {
+      type: 'message_end',
+      id: `${commandId}_assistant`,
+      message: { role: 'assistant', content: response },
+    },
+    { type: 'turn_end', sessionId: session.id },
+    { type: 'agent_end', sessionId: session.id, willRetry: false },
+  ]
+  for (const event of events) {
+    sendRuntimeJson(socket, event)
+  }
+  await recordTestRuntimeMessageOutcome(db, auth, session, { ...command, response, toolCalls: [] }, correlationId)
+}
+
+async function handleRuntimeWebSocketMessage(
+  socket: WebSocket,
+  env: Env,
+  db: ReturnType<typeof drizzle>,
+  auth: AuthContext,
+  session: typeof sessions.$inferSelect,
+  requestUrl: string,
+  data: unknown,
+) {
+  let parsed: unknown
+  try {
+    parsed = typeof data === 'string' ? JSON.parse(data) : JSON.parse(String(data))
+  } catch {
+    socket.close(1003, 'Invalid runtime command JSON')
+    return
+  }
+  const command = runtimeCommand(parsed)
+  if (!command) {
+    socket.close(1003, 'Invalid Pi runtime command')
+    return
+  }
+  if (env.AMA_RUNTIME_MODE === 'test') {
+    await handleTestRuntimeWebSocket(socket, db, auth, session, command)
+    return
+  }
+  const rpcUrl = new URL(requestUrl)
+  rpcUrl.pathname = `/runtime/sessions/${session.id}/rpc`
+  const proxyRequest = new Request(rpcUrl, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(command),
+  })
+  if (command.type !== 'get_state') {
+    await recordRuntimeMessageSubmission(db, auth, session, command)
+  }
+  const response = await proxyPiRuntime(env, session.sandboxId ?? '', proxyRequest)
+  await recordRuntimeProxyFailure(db, auth, session, response.clone())
+  if (!response.ok) {
+    socket.close(1011, `Pi runtime returned ${response.status}`)
+    return
+  }
+  if (response.ok) {
+    await drainPiRuntimeEvents(env, session.sandboxId ?? '', proxyRequest, db, auth, session, (line) => {
+      if (line.trim()) {
+        socket.send(line.endsWith('\n') ? line : `${line}\n`)
+      }
+    })
   }
 }
 
@@ -512,6 +582,24 @@ export function createApp() {
     }
 
     const path = c.req.path.replace(`/runtime/sessions/${sessionId}`, '')
+    if (path === '/ws') {
+      if (c.req.header('upgrade')?.toLowerCase() !== 'websocket') {
+        return errorResponse(c, 426, 'conflict', 'Runtime endpoint requires a WebSocket upgrade')
+      }
+      const { client, server } = createWebSocketPair()
+      server.accept()
+      server.addEventListener('message', (event) => {
+        c.executionCtx.waitUntil(
+          handleRuntimeWebSocketMessage(server, c.env, db, resolvedAuth, session, c.req.url, event.data).catch(() => {
+            server.close(1011, 'Runtime processing failed')
+          }),
+        )
+      })
+      server.addEventListener('close', () => {
+        server.close()
+      })
+      return new Response(null, { status: 101, webSocket: client })
+    }
     const mcpMatch = path.match(/^\/mcp\/([^/]+)\/tools\/([^/]+)\/calls$/)
     if (mcpMatch && c.req.method === 'POST') {
       const connectorId = decodeURIComponent(mcpMatch[1] ?? '')
@@ -570,9 +658,9 @@ export function createApp() {
               .clone()
               .json()
               .catch(() => ({}))
-      const correlationId = await recordRuntimeTaskSubmission(db, resolvedAuth, session, body)
+      const correlationId = await recordRuntimeMessageSubmission(db, resolvedAuth, session, body)
       if (c.env.AMA_RUNTIME_MODE === 'test') {
-        await recordTestRuntimeTaskOutcome(db, resolvedAuth, session, body, correlationId)
+        await recordTestRuntimeMessageOutcome(db, resolvedAuth, session, body, correlationId)
       }
     }
 

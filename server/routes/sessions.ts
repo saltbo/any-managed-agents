@@ -1,5 +1,5 @@
 import { createRoute, z } from '@hono/zod-openapi'
-import { and, desc, eq, gt, gte, like, lt, lte, max, ne, or } from 'drizzle-orm'
+import { and, desc, eq, gt, gte, like, lt, lte, ne, or } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
 import { recordAudit, requestId } from '../audit'
@@ -33,8 +33,8 @@ import { runtimeEndpointPath, safeRuntimeError, startPiBridge, stopPiBridge } fr
 const app = createApiRouter()
 
 const SESSION_STATUSES = ['pending', 'running', 'idle', 'stopped', 'error', 'archived', 'requires-action'] as const
-const EVENT_TYPES = ['message', 'tool', 'sandbox', 'policy', 'usage', 'error', 'lifecycle'] as const
-const EVENT_VISIBILITIES = ['transcript', 'debug', 'audit'] as const
+const EVENT_VISIBILITIES = ['runtime', 'transcript', 'debug', 'audit'] as const
+const RUNTIME_START_TIMEOUT_MS = 120_000
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
 const AgentVersionSchema = z
@@ -50,7 +50,6 @@ const AgentVersionSchema = z
     allowedTools: z.array(z.string()),
     mcpConnectors: z.array(z.string()),
     sandboxPolicy: JsonObjectSchema,
-    defaultEnvironmentId: z.string().nullable(),
     metadata: JsonObjectSchema,
     createdAt: z.string().datetime(),
   })
@@ -86,6 +85,9 @@ export const SessionSchema = z
     environmentId: z.string().nullable().openapi({ example: 'env_abc123' }),
     environmentVersionId: z.string().nullable().openapi({ example: 'envver_abc123' }),
     environmentSnapshot: EnvironmentVersionSchema.nullable(),
+    title: z.string().nullable().openapi({ example: 'Implement billing export' }),
+    resourceRefs: z.array(JsonObjectSchema).openapi({ example: [{ type: 'repository', id: 'repo_abc123' }] }),
+    vaultRefs: z.array(JsonObjectSchema).openapi({ example: [{ type: 'credential', id: 'cred_abc123' }] }),
     durableObjectName: z.string().openapi({ example: 'org_org123:project_project123:session_session123' }),
     sandboxId: z.string().nullable().openapi({ example: 'session_abc123' }),
     piRuntimeId: z.string().nullable().openapi({ example: 'pi_session_abc123' }),
@@ -112,7 +114,7 @@ const SessionEventSchema = z
     projectId: z.string(),
     sessionId: z.string(),
     sequence: z.number().int(),
-    type: z.enum(EVENT_TYPES),
+    type: z.string(),
     visibility: z.enum(EVENT_VISIBILITIES),
     role: z.string().nullable(),
     parentEventId: z.string().nullable(),
@@ -126,7 +128,21 @@ const SessionEventSchema = z
 const CreateSessionSchema = z
   .object({
     agentId: z.string().min(1).openapi({ example: 'agent_abc123' }),
+    environmentId: z.string().min(1).openapi({ example: 'env_abc123' }),
+    title: z.string().min(1).max(160).optional().openapi({ example: 'Implement billing export' }),
+    metadata: JsonObjectSchema.optional().openapi({ example: { ticket: 'AMA-123' } }),
+    resourceRefs: z
+      .array(JsonObjectSchema)
+      .max(50)
+      .optional()
+      .openapi({ example: [{ type: 'repository', id: 'repo_abc123' }] }),
+    vaultRefs: z
+      .array(JsonObjectSchema)
+      .max(50)
+      .optional()
+      .openapi({ example: [{ type: 'credential', id: 'cred_abc123' }] }),
   })
+  .strict()
   .openapi('CreateSessionRequest')
 
 const UpdateSessionSchema = z
@@ -148,13 +164,13 @@ const StopSessionQuerySchema = z.object({
 const ListQuerySchema = listQuerySchema(SESSION_STATUSES)
 const EventsQuerySchema = eventListQuerySchema().extend({
   type: z
-    .enum(EVENT_TYPES)
+    .string()
     .optional()
-    .openapi({ param: { name: 'type', in: 'query' }, example: 'message' }),
+    .openapi({ param: { name: 'type', in: 'query' }, example: 'message_update' }),
   visibility: z
     .enum(EVENT_VISIBILITIES)
     .optional()
-    .openapi({ param: { name: 'visibility', in: 'query' }, example: 'transcript' }),
+    .openapi({ param: { name: 'visibility', in: 'query' }, example: 'runtime' }),
   createdFrom: z
     .string()
     .datetime()
@@ -192,6 +208,20 @@ function stringify(value: unknown) {
   return JSON.stringify(value)
 }
 
+function secretKey(key: string) {
+  return /secret|token|password|api[_-]?key/i.test(key)
+}
+
+function hasSecretMaterial(value: unknown): boolean {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+  if (Array.isArray(value)) {
+    return value.some(hasSecretMaterial)
+  }
+  return Object.entries(value).some(([key, child]) => secretKey(key) || hasSecretMaterial(child))
+}
+
 function serializeAgentVersion(row: AgentVersionRow) {
   return {
     id: row.id,
@@ -205,7 +235,6 @@ function serializeAgentVersion(row: AgentVersionRow) {
     allowedTools: JSON.parse(row.allowedTools) as string[],
     mcpConnectors: JSON.parse(row.mcpConnectors) as string[],
     sandboxPolicy: JSON.parse(row.sandboxPolicy) as Record<string, unknown>,
-    defaultEnvironmentId: row.defaultEnvironmentId,
     metadata: JSON.parse(row.metadata) as Record<string, unknown>,
     createdAt: row.createdAt,
   }
@@ -242,6 +271,9 @@ function serializeSession(row: SessionRow) {
     environmentId: row.environmentId,
     environmentVersionId: row.environmentVersionId,
     environmentSnapshot: parseJson<ReturnType<typeof serializeEnvironmentVersion>>(row.environmentSnapshot),
+    title: row.title,
+    resourceRefs: parseJson<Record<string, unknown>[]>(row.resourceRefs) ?? [],
+    vaultRefs: parseJson<Record<string, unknown>[]>(row.vaultRefs) ?? [],
     durableObjectName: row.durableObjectName,
     sandboxId: row.sandboxId,
     piRuntimeId: row.piRuntimeId,
@@ -268,7 +300,7 @@ function serializeEvent(row: SessionEventRow) {
     projectId: row.projectId,
     sessionId: row.sessionId,
     sequence: row.sequence,
-    type: row.type as (typeof EVENT_TYPES)[number],
+    type: row.type,
     visibility: row.visibility as (typeof EVENT_VISIBILITIES)[number],
     role: row.role,
     parentEventId: row.parentEventId,
@@ -288,50 +320,6 @@ function mcpConnectorIds(snapshot: Record<string, unknown>) {
         : null,
     )
     .filter((connectorId): connectorId is string => typeof connectorId === 'string')
-}
-
-async function appendSessionEvent(
-  db: Db,
-  values: {
-    auth: AuthContext
-    sessionId: string
-    type: (typeof EVENT_TYPES)[number]
-    visibility: (typeof EVENT_VISIBILITIES)[number]
-    payload: Record<string, unknown>
-    metadata?: Record<string, unknown>
-    role?: string | null
-  },
-) {
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const latest = await db
-      .select({ sequence: max(sessionEvents.sequence) })
-      .from(sessionEvents)
-      .where(eq(sessionEvents.sessionId, values.sessionId))
-      .get()
-
-    try {
-      await db.insert(sessionEvents).values({
-        id: newId('event'),
-        organizationId: values.auth.organization.id,
-        projectId: values.auth.project.id,
-        sessionId: values.sessionId,
-        sequence: (latest?.sequence ?? 0) + 1,
-        type: values.type,
-        visibility: values.visibility,
-        role: values.role ?? null,
-        parentEventId: null,
-        correlationId: null,
-        payload: stringify(values.payload),
-        metadata: stringify(values.metadata ?? {}),
-        createdAt: now(),
-      })
-      return
-    } catch (error) {
-      if (attempt === 4 || !String(error).includes('UNIQUE')) {
-        throw error
-      }
-    }
-  }
 }
 
 async function resolveMcpSnapshot(
@@ -416,7 +404,33 @@ async function findSession(db: Db, auth: AuthContext, sessionId: string) {
   )
 }
 
-export async function createSessionForAgent(c: Context<{ Bindings: Env }>, db: Db, auth: AuthContext, agentId: string) {
+export async function createSessionForAgent(
+  c: Context<{ Bindings: Env }>,
+  db: Db,
+  auth: AuthContext,
+  agentId: string,
+  environmentId: string,
+  options: {
+    title?: string
+    metadata?: Record<string, unknown>
+    resourceRefs?: Record<string, unknown>[]
+    vaultRefs?: Record<string, unknown>[]
+  } = {},
+) {
+  if (
+    hasSecretMaterial(options.metadata) ||
+    hasSecretMaterial(options.resourceRefs) ||
+    hasSecretMaterial(options.vaultRefs)
+  ) {
+    return errorResponse(c, 400, 'validation_error', 'Invalid session configuration', {
+      fields: {
+        metadata: 'Secret material must be stored in vault references.',
+        resourceRefs: 'Resource references must not contain secret material.',
+        vaultRefs: 'Vault references must not contain raw secret material.',
+      },
+    })
+  }
+
   const agent = await db
     .select()
     .from(agentDefinitions)
@@ -461,33 +475,33 @@ export async function createSessionForAgent(c: Context<{ Bindings: Env }>, db: D
     })
   }
 
-  let environmentVersion: EnvironmentVersionRow | null = null
-  if (agentVersion.defaultEnvironmentId) {
-    const environment = await db
+  const environment = await db
+    .select()
+    .from(environments)
+    .where(
+      and(
+        eq(environments.id, environmentId),
+        eq(environments.projectId, auth.project.id),
+        eq(environments.status, 'active'),
+      ),
+    )
+    .get()
+  if (!environment?.currentVersionId) {
+    return errorResponse(c, 409, 'conflict', 'Selected environment is archived or unavailable')
+  }
+  const environmentVersion =
+    (await db
       .select()
-      .from(environments)
+      .from(environmentVersions)
       .where(
         and(
-          eq(environments.id, agentVersion.defaultEnvironmentId),
-          eq(environments.projectId, auth.project.id),
-          eq(environments.status, 'active'),
+          eq(environmentVersions.id, environment.currentVersionId),
+          eq(environmentVersions.projectId, auth.project.id),
         ),
       )
-      .get()
-    if (!environment?.currentVersionId) {
-      return errorResponse(c, 409, 'conflict', 'Default environment is archived or unavailable')
-    }
-    environmentVersion =
-      (await db
-        .select()
-        .from(environmentVersions)
-        .where(
-          and(
-            eq(environmentVersions.id, environment.currentVersionId),
-            eq(environmentVersions.projectId, auth.project.id),
-          ),
-        )
-        .get()) ?? null
+      .get()) ?? null
+  if (!environmentVersion) {
+    return errorResponse(c, 409, 'conflict', 'Selected environment is archived or unavailable')
   }
 
   const timestamp = now()
@@ -502,9 +516,12 @@ export async function createSessionForAgent(c: Context<{ Bindings: Env }>, db: D
     createdByUserId: auth.user.id,
     agentVersionId: agentVersion.id,
     agentSnapshot: stringify(agentSnapshot),
-    environmentId: agentVersion.defaultEnvironmentId,
+    environmentId,
     environmentVersionId: environmentVersion?.id ?? null,
     environmentSnapshot: environmentSnapshot ? stringify(environmentSnapshot) : null,
+    title: options.title ?? null,
+    resourceRefs: stringify(options.resourceRefs ?? []),
+    vaultRefs: stringify(options.vaultRefs ?? []),
     projectId: auth.project.id,
     durableObjectName: `org_${auth.organization.id}:project_${auth.project.id}:session_${id}`,
     sandboxId,
@@ -515,7 +532,7 @@ export async function createSessionForAgent(c: Context<{ Bindings: Env }>, db: D
     modelConfig: stringify({ provider: agentSnapshot.provider, model: agentSnapshot.model }),
     status: 'pending',
     statusReason: null,
-    metadata: stringify({}),
+    metadata: stringify(options.metadata ?? {}),
     startedAt: null,
     stoppedAt: null,
     archivedAt: null,
@@ -523,34 +540,83 @@ export async function createSessionForAgent(c: Context<{ Bindings: Env }>, db: D
     updatedAt: timestamp,
   }
   await db.insert(sessions).values(pending)
-  await appendSessionEvent(db, {
+  await recordAudit(db, {
     auth,
+    action: 'session.create',
+    resourceType: 'session',
+    resourceId: id,
+    outcome: 'success',
+    requestId: requestId(c),
     sessionId: id,
-    type: 'lifecycle',
-    visibility: 'audit',
-    payload: { status: 'pending', reason: 'session_created' },
+    metadata: { status: 'pending' },
   })
 
-  try {
-    const mcpSnapshot = await resolveMcpSnapshot(db, auth, id, agentSnapshot, environmentSnapshot)
-    const runtime = await startPiBridge(c.env, {
-      sessionId: id,
-      sandboxId,
-      provider: agentSnapshot.provider,
-      model: agentSnapshot.model,
+  const startRuntime = () =>
+    startSessionRuntime(c.env, db, auth, {
+      pending,
       agentSnapshot,
       environmentSnapshot,
-      mcpSnapshot,
     })
+
+  if (c.env.AMA_RUNTIME_MODE !== 'test') {
+    c.executionCtx.waitUntil(startRuntime())
+    return c.json(serializeSession(pending), 201)
+  }
+
+  await startRuntime()
+  const started = await findSession(db, auth, id)
+  if (!started) {
+    throw new Error('Created session was not persisted')
+  }
+  return c.json(serializeSession(started), 201)
+}
+
+async function startSessionRuntime(
+  env: Env,
+  db: Db,
+  auth: AuthContext,
+  input: {
+    pending: SessionRow
+    agentSnapshot: ReturnType<typeof serializeAgentVersion>
+    environmentSnapshot: ReturnType<typeof serializeEnvironmentVersion> | null
+  },
+) {
+  const { pending, agentSnapshot, environmentSnapshot } = input
+  const sessionId = pending.id
+  const sandboxId = pending.sandboxId ?? sessionId.toLowerCase()
+  try {
+    const mcpSnapshot = await resolveMcpSnapshot(db, auth, sessionId, agentSnapshot, environmentSnapshot)
+    const runtime = await withTimeout(
+      startPiBridge(env, {
+        sessionId,
+        sandboxId,
+        provider: agentSnapshot.provider,
+        model: agentSnapshot.model,
+        agentSnapshot,
+        environmentSnapshot,
+        mcpSnapshot,
+      }),
+      RUNTIME_START_TIMEOUT_MS,
+      'Pi runtime startup timed out',
+    )
+    const current = await findSession(db, auth, sessionId)
+    if (!current || current.status !== 'pending') {
+      if (current?.status !== 'idle') {
+        await stopPiBridge(env, sandboxId, runtime.piRuntimeId).catch(() => undefined)
+      }
+      return
+    }
     const startedAt = now()
+    const existingMetadata = parseJson<Record<string, unknown>>(pending.metadata) ?? {}
     const metadata = {
+      ...existingMetadata,
       ...runtime.metadata,
       runtime: 'pi',
       protocol: 'pi-rpc-jsonl',
       mcpConnectors: mcpConnectorIds(mcpSnapshot),
     }
     const started = {
-      sandboxId: runtime.sandboxId,
+      sandboxId,
       piRuntimeId: runtime.piRuntimeId,
       piProcessId: runtime.piProcessId,
       runtimeEndpointPath: runtime.runtimeEndpointPath,
@@ -559,37 +625,66 @@ export async function createSessionForAgent(c: Context<{ Bindings: Env }>, db: D
       startedAt,
       updatedAt: startedAt,
     }
-    await db.update(sessions).set(started).where(eq(sessions.id, id))
-    await appendSessionEvent(db, {
+    await db
+      .update(sessions)
+      .set(started)
+      .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, auth.project.id), eq(sessions.status, 'pending')))
+    await recordAudit(db, {
       auth,
-      sessionId: id,
-      type: 'sandbox',
-      visibility: 'debug',
-      payload: {
+      action: 'session.runtime.start',
+      resourceType: 'session',
+      resourceId: sessionId,
+      outcome: 'success',
+      sessionId,
+      metadata: {
         sandboxId: runtime.sandboxId,
         piRuntimeId: runtime.piRuntimeId,
         runtimeEndpointPath: runtime.runtimeEndpointPath,
       },
     })
-    return c.json(serializeSession({ ...pending, ...started }), 201)
   } catch (error) {
     const safeError = safeRuntimeError(error)
     const failedAt = now()
     const failed = {
       status: 'error',
       statusReason: safeError.message,
-      metadata: stringify({ runtime: 'pi', error: safeError }),
+      metadata: stringify({
+        ...(parseJson<Record<string, unknown>>(pending.metadata) ?? {}),
+        runtime: 'pi',
+        error: safeError,
+      }),
       updatedAt: failedAt,
     }
-    await db.update(sessions).set(failed).where(eq(sessions.id, id))
-    await appendSessionEvent(db, {
+    await db
+      .update(sessions)
+      .set(failed)
+      .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, auth.project.id), eq(sessions.status, 'pending')))
+    await recordAudit(db, {
       auth,
-      sessionId: id,
-      type: 'error',
-      visibility: 'debug',
-      payload: { ...safeError },
+      action: 'session.runtime.start',
+      resourceType: 'session',
+      resourceId: sessionId,
+      outcome: 'failure',
+      sessionId,
+      metadata: { ...safeError },
     })
-    return c.json(serializeSession({ ...pending, ...failed }), 201)
+    await stopPiBridge(env, sandboxId, null).catch(() => undefined)
+  }
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string) {
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(message)), timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout)
+    }
   }
 }
 
@@ -625,13 +720,15 @@ async function stopSession(
       .update(sessions)
       .set({ status: 'error', statusReason: safeError.message, updatedAt: failedAt })
       .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
-    await appendSessionEvent(db, {
+    await recordAudit(db, {
       auth,
+      action: 'session.stop',
+      resourceType: 'session',
+      resourceId: session.id,
+      outcome: 'failure',
+      requestId: requestId(c),
       sessionId: session.id,
-      type: 'error',
-      visibility: 'debug',
-      payload: { ...safeError },
-      metadata: { action: 'stop' },
+      metadata: { runtime: safeError },
     })
     return errorResponse(c, 409, 'conflict', 'Session runtime could not be stopped', { runtime: safeError })
   }
@@ -641,13 +738,6 @@ async function stopSession(
     .update(sessions)
     .set({ status: 'stopped', stoppedAt, updatedAt: stoppedAt })
     .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
-  await appendSessionEvent(db, {
-    auth,
-    sessionId: session.id,
-    type: 'lifecycle',
-    visibility: 'audit',
-    payload: { status: 'stopped', reason, sandboxId: session.sandboxId, piRuntimeId: session.piRuntimeId },
-  })
   await recordAudit(db, {
     auth,
     action: 'session.stop',
@@ -678,12 +768,15 @@ async function archiveSession(c: Context<{ Bindings: Env }>, db: Db, auth: AuthC
     .update(sessions)
     .set({ status: 'archived', archivedAt, updatedAt: archivedAt })
     .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
-  await appendSessionEvent(db, {
+  await recordAudit(db, {
     auth,
+    action: 'session.archive',
+    resourceType: 'session',
+    resourceId: session.id,
+    outcome: 'success',
+    requestId: requestId(c),
     sessionId: session.id,
-    type: 'lifecycle',
-    visibility: 'audit',
-    payload: { status: 'archived' },
+    metadata: { status: 'archived' },
   })
   return c.body(null, 204)
 }
@@ -701,12 +794,15 @@ async function archiveSessionAndRead(c: Context<{ Bindings: Env }>, db: Db, auth
     .update(sessions)
     .set({ status: 'archived', archivedAt, updatedAt: archivedAt })
     .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
-  await appendSessionEvent(db, {
+  await recordAudit(db, {
     auth,
+    action: 'session.archive',
+    resourceType: 'session',
+    resourceId: session.id,
+    outcome: 'success',
+    requestId: requestId(c),
     sessionId: session.id,
-    type: 'lifecycle',
-    visibility: 'audit',
-    payload: { status: 'archived' },
+    metadata: { status: 'archived' },
   })
   const archived = await findSession(db, auth, session.id)
   if (!archived) {
@@ -725,6 +821,7 @@ const createSessionRoute = createRoute({
   request: { body: { required: true, content: { 'application/json': { schema: CreateSessionSchema } } } },
   responses: {
     201: { description: 'Created session', content: { 'application/json': { schema: SessionSchema } } },
+    400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
     404: { description: 'Agent not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
     403: { description: 'Policy denied', content: { 'application/json': { schema: ErrorResponseSchema } } },
@@ -888,13 +985,18 @@ const streamEventsRoute = createRoute({
 })
 
 app.openapi(createSessionRoute, async (c) => {
-  const { agentId } = c.req.valid('json')
+  const { agentId, environmentId, title, metadata, resourceRefs, vaultRefs } = c.req.valid('json')
   const db = drizzle(c.env.DB)
   const auth = await requireAuth(c, db)
   if (auth instanceof Response) {
     return auth
   }
-  return await createSessionForAgent(c, db, auth, agentId)
+  return await createSessionForAgent(c, db, auth, agentId, environmentId, {
+    ...(title !== undefined ? { title } : {}),
+    ...(metadata !== undefined ? { metadata } : {}),
+    ...(resourceRefs !== undefined ? { resourceRefs } : {}),
+    ...(vaultRefs !== undefined ? { vaultRefs } : {}),
+  })
 })
 
 app.openapi(listSessionsRoute, async (c) => {
@@ -1035,7 +1137,7 @@ app.openapi(listEventsRoute, async (c) => {
     eq(sessionEvents.sessionId, sessionId),
     gt(sessionEvents.sequence, afterSequence ?? 0),
     type ? eq(sessionEvents.type, type) : undefined,
-    visibility ? eq(sessionEvents.visibility, visibility) : undefined,
+    eq(sessionEvents.visibility, visibility ?? 'runtime'),
     createdFrom ? gte(sessionEvents.createdAt, createdFrom) : undefined,
     createdTo ? lte(sessionEvents.createdAt, createdTo) : undefined,
   ].filter((filter) => filter !== undefined)
@@ -1067,7 +1169,7 @@ async function eventsNdjsonResponse(c: Context<{ Bindings: Env }>, sessionId: st
     eq(sessionEvents.sessionId, sessionId),
     gt(sessionEvents.sequence, afterSequence ?? 0),
     type ? eq(sessionEvents.type, type) : undefined,
-    visibility ? eq(sessionEvents.visibility, visibility) : undefined,
+    eq(sessionEvents.visibility, visibility ?? 'runtime'),
     createdFrom ? gte(sessionEvents.createdAt, createdFrom) : undefined,
     createdTo ? lte(sessionEvents.createdAt, createdTo) : undefined,
   ].filter((filter) => filter !== undefined)
@@ -1107,7 +1209,7 @@ async function streamEventsNdjsonResponse(c: Context<{ Bindings: Env }>, session
           eq(sessionEvents.sessionId, sessionId),
           gt(sessionEvents.sequence, lastSequence),
           type ? eq(sessionEvents.type, type) : undefined,
-          visibility ? eq(sessionEvents.visibility, visibility) : undefined,
+          eq(sessionEvents.visibility, visibility ?? 'runtime'),
           createdFrom ? gte(sessionEvents.createdAt, createdFrom) : undefined,
           createdTo ? lte(sessionEvents.createdAt, createdTo) : undefined,
         ].filter((filter) => filter !== undefined)

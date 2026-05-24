@@ -57,8 +57,23 @@ describe('route schema and handler alignment', () => {
   it('keeps session write fields aligned across handlers and OpenAPI schemas', async () => {
     const doc = await openApiDoc()
 
-    expect([...new Set(bodyFields(routeSources.sessions))]).toEqual(['agentId', 'status'])
-    expect(schemaFields(doc, 'CreateSessionRequest')).toEqual(['agentId'])
+    expect([...new Set(bodyFields(routeSources.sessions))]).toEqual([
+      'agentId',
+      'environmentId',
+      'metadata',
+      'resourceRefs',
+      'status',
+      'title',
+      'vaultRefs',
+    ])
+    expect(schemaFields(doc, 'CreateSessionRequest')).toEqual([
+      'agentId',
+      'environmentId',
+      'metadata',
+      'resourceRefs',
+      'title',
+      'vaultRefs',
+    ])
     expect(schemaFields(doc, 'UpdateSessionRequest')).toEqual(['status'])
   })
 })

@@ -44,6 +44,6 @@ Feature: Model providers
   @planned
   Scenario: Use provider adapters without changing session protocol
     Given an agent uses any supported provider
-    When a session sends a runtime task
+    When a session sends a runtime message
     Then provider-specific calls happen behind the Pi/provider adapter boundary
     And clients continue to interact through the AMA runtime endpoint or Pi-compatible helpers

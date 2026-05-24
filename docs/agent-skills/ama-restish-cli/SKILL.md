@@ -37,7 +37,7 @@ Use OpenAPI operation names or documented `/api` paths. Do not invent local comm
 | Resource | Read/list | Create/update | Archive/delete or command |
 | --- | --- | --- | --- |
 | Health | `getHealth` | n/a | n/a |
-| Agents | `listAgents`, `readAgent`, `listAgentVersions` | `createAgent`, `updateAgent` | `archiveAgent`, `createAgentSession` |
+| Agents | `listAgents`, `readAgent`, `listAgentVersions` | `createAgent`, `updateAgent` | `archiveAgent` |
 | Environments | `listEnvironments`, `readEnvironment`, `listEnvironmentVersions` | `createEnvironment`, `updateEnvironment` | `archiveEnvironment` |
 | Sessions | `listSessions`, `readSession`, `readSessionReconnect`, `listSessionEvents`, `exportSessionEvents`, `streamSessionEvents` | `createSession`, `updateSession` | `stopSession`, `archiveSession` |
 | Providers | `listProviders`, `readProvider`, `listProviderModels` | `createProvider`, `updateProvider`, `upsertProviderModel` | `deleteProvider` |
@@ -54,10 +54,10 @@ printf '%s\n' '{"name":"Node workspace","packages":[{"name":"tsx","version":"lat
   | restish ama create-environment --rsh-output-format json
 
 restish ama list-agents --rsh-output-format json
-printf '%s\n' '{"name":"Research assistant","instructions":"Answer with citations.","defaultEnvironmentId":"env_abc123"}' \
+printf '%s\n' '{"name":"Research assistant","instructions":"Answer with citations."}' \
   | restish ama create-agent --rsh-output-format json
 
-printf '%s\n' '{"agentId":"agent_abc123"}' \
+printf '%s\n' '{"agentId":"agent_abc123","environmentId":"env_abc123"}' \
   | restish ama create-session --rsh-output-format json
 restish ama read-session sessionId:"session_abc123"
 restish ama list-session-events sessionId:"session_abc123" --rsh-output-format json

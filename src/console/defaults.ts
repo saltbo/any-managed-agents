@@ -1,4 +1,4 @@
-import type { AgentFormState, EnvironmentFormState, ProviderFormState, VaultFormState } from './types'
+import type { AgentFormState, EnvironmentFormState, ProviderFormState, SessionFormState, VaultFormState } from './types'
 
 export const emptyEnvironment: EnvironmentFormState = {
   name: 'Node workspace',
@@ -10,9 +10,23 @@ export const emptyEnvironment: EnvironmentFormState = {
 
 export const emptyAgent: AgentFormState = {
   name: 'Coding agent',
-  description: 'Executes development tasks in a managed sandbox.',
+  description: 'Executes development work in a managed sandbox.',
   instructions: 'You are a focused coding agent. Make changes, run checks, and report the result.',
+  provider: 'workers-ai',
+  model: '@cf/moonshotai/kimi-k2.6',
   allowedTools: 'read\nwrite\nshell',
+  mcpConnectors: '',
+  sandboxPolicy: '{\n  "network": "enabled",\n  "filesystem": "workspace"\n}',
+  metadata: '{}',
+}
+
+export const emptySession: SessionFormState = {
+  agentId: '',
+  environmentId: '',
+  title: '',
+  metadata: '{}',
+  resourceRefs: '[]',
+  vaultRefs: '[]',
 }
 
 export const emptyProvider: ProviderFormState = {

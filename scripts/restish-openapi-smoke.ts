@@ -139,13 +139,12 @@ async function main() {
       )
     }
     if (request.method === 'POST' && url.pathname === '/api/agents') {
-      const body = JSON.parse(await readBody(request)) as { name: string; defaultEnvironmentId: string }
+      const body = JSON.parse(await readBody(request)) as { name: string }
       result = jsonResponse(
         {
           id: 'agent_restish_smoke',
           projectId: 'project_restish_smoke',
           name: body.name,
-          defaultEnvironmentId: body.defaultEnvironmentId,
           currentVersionId: 'agentver_restish_smoke',
           version: 1,
           status: 'active',
@@ -234,13 +233,15 @@ async function main() {
         {
           name: 'Restish smoke agent',
           instructions: 'Run smoke checks through documented control-plane operations.',
-          defaultEnvironmentId: environment.id,
         },
       ),
     ) as { id: string }
 
     const session = JSON.parse(
-      await runRestish(home, ['ama', 'create-session', '--rsh-output-format', 'json'], { agentId: agent.id }),
+      await runRestish(home, ['ama', 'create-session', '--rsh-output-format', 'json'], {
+        agentId: agent.id,
+        environmentId: environment.id,
+      }),
     ) as { runtimeEndpointPath: string; status: string }
 
     if (session.status !== 'idle' || session.runtimeEndpointPath !== '/runtime/sessions/session_restish_smoke/rpc') {

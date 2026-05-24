@@ -6,7 +6,6 @@ import { requireAuth } from '../auth/session'
 import {
   agentDefinitions,
   agentDefinitionVersions,
-  environments,
   mcpConnections,
   providerConfigs,
   providerModels,
@@ -20,7 +19,6 @@ import {
   paginateRows,
   parseListCursor,
 } from '../openapi'
-import { createSessionForAgent, SessionSchema } from './sessions'
 
 const app = createApiRouter()
 
@@ -49,7 +47,6 @@ const AgentSchema = z
     allowedTools: z.array(z.string()).openapi({ example: ['web.search'] }),
     mcpConnectors: z.array(z.string()).openapi({ example: ['github'] }),
     sandboxPolicy: JsonObjectSchema.openapi({ example: { network: 'enabled', filesystem: 'workspace' } }),
-    defaultEnvironmentId: z.string().nullable().openapi({ example: 'env_abc123' }),
     metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
     status: z.enum(['active', 'archived']).openapi({ example: 'active' }),
     archivedAt: z.string().datetime().nullable().openapi({ example: null }),
@@ -73,33 +70,33 @@ const AgentVersionSchema = z
     allowedTools: z.array(z.string()).openapi({ example: ['web.search'] }),
     mcpConnectors: z.array(z.string()).openapi({ example: ['github'] }),
     sandboxPolicy: JsonObjectSchema.openapi({ example: { network: 'enabled' } }),
-    defaultEnvironmentId: z.string().nullable().openapi({ example: 'env_abc123' }),
     metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
     createdAt: z.string().datetime().openapi({ example: '2026-05-22T00:00:00.000Z' }),
   })
   .openapi('AgentVersion')
 
-const AgentPayloadSchema = z.object({
-  name: z.string().min(1).max(120).openapi({ example: 'Research assistant' }),
-  description: z.string().max(1000).optional().openapi({ example: 'Answers with citations.' }),
-  instructions: z.string().max(8000).optional().openapi({ example: 'Answer with citations.' }),
-  provider: z.string().min(1).optional().openapi({ example: DEFAULT_PROVIDER }),
-  model: z.string().min(1).optional().openapi({ example: DEFAULT_MODEL }),
-  systemPrompt: z.string().max(8000).optional().openapi({ example: 'Answer with citations.' }),
-  allowedTools: z
-    .array(z.string().min(1))
-    .max(100)
-    .optional()
-    .openapi({ example: ['web.search'] }),
-  mcpConnectors: z
-    .array(z.string().min(1).max(120))
-    .max(50)
-    .optional()
-    .openapi({ example: ['github'] }),
-  sandboxPolicy: SandboxPolicySchema.optional().openapi({ example: { network: 'enabled' } }),
-  defaultEnvironmentId: z.string().min(1).nullable().optional().openapi({ example: 'env_abc123' }),
-  metadata: JsonObjectSchema.optional().openapi({ example: { owner: 'platform' } }),
-})
+const AgentPayloadSchema = z
+  .object({
+    name: z.string().min(1).max(120).openapi({ example: 'Research assistant' }),
+    description: z.string().max(1000).optional().openapi({ example: 'Answers with citations.' }),
+    instructions: z.string().max(8000).optional().openapi({ example: 'Answer with citations.' }),
+    provider: z.string().min(1).optional().openapi({ example: DEFAULT_PROVIDER }),
+    model: z.string().min(1).optional().openapi({ example: DEFAULT_MODEL }),
+    systemPrompt: z.string().max(8000).optional().openapi({ example: 'Answer with citations.' }),
+    allowedTools: z
+      .array(z.string().min(1))
+      .max(100)
+      .optional()
+      .openapi({ example: ['web.search'] }),
+    mcpConnectors: z
+      .array(z.string().min(1).max(120))
+      .max(50)
+      .optional()
+      .openapi({ example: ['github'] }),
+    sandboxPolicy: SandboxPolicySchema.optional().openapi({ example: { network: 'enabled' } }),
+    metadata: JsonObjectSchema.optional().openapi({ example: { owner: 'platform' } }),
+  })
+  .strict()
 
 const CreateAgentSchema = AgentPayloadSchema.openapi('CreateAgentRequest')
 const UpdateAgentSchema = AgentPayloadSchema.partial().openapi('UpdateAgentRequest')
@@ -281,29 +278,6 @@ async function validateMcpConnectors(db: ReturnType<typeof drizzle>, projectId: 
   return null
 }
 
-async function validateDefaultEnvironment(
-  db: ReturnType<typeof drizzle>,
-  projectId: string,
-  defaultEnvironmentId: string | null,
-) {
-  if (!defaultEnvironmentId) {
-    return null
-  }
-
-  const environment = await db
-    .select({ id: environments.id })
-    .from(environments)
-    .where(
-      and(
-        eq(environments.id, defaultEnvironmentId),
-        eq(environments.projectId, projectId),
-        eq(environments.status, 'active'),
-      ),
-    )
-    .get()
-  return environment ? null : { defaultEnvironmentId: 'Default environment is not available for this project.' }
-}
-
 function serializeAgent(row: AgentRow, version: AgentVersionRow | null) {
   return {
     id: row.id,
@@ -317,7 +291,6 @@ function serializeAgent(row: AgentRow, version: AgentVersionRow | null) {
     allowedTools: parseJson<string[]>(row.allowedTools),
     mcpConnectors: parseJson<string[]>(row.mcpConnectors),
     sandboxPolicy: parseJson<Record<string, unknown>>(row.sandboxPolicy),
-    defaultEnvironmentId: row.defaultEnvironmentId,
     metadata: parseJson<Record<string, unknown>>(row.metadata),
     status: row.status as 'active' | 'archived',
     archivedAt: row.archivedAt,
@@ -341,7 +314,6 @@ function serializeAgentVersion(row: AgentVersionRow) {
     allowedTools: parseJson<string[]>(row.allowedTools),
     mcpConnectors: parseJson<string[]>(row.mcpConnectors),
     sandboxPolicy: parseJson<Record<string, unknown>>(row.sandboxPolicy),
-    defaultEnvironmentId: row.defaultEnvironmentId,
     metadata: parseJson<Record<string, unknown>>(row.metadata),
     createdAt: row.createdAt,
   }
@@ -358,7 +330,6 @@ async function createAgentVersion(
     allowedTools: string[]
     mcpConnectors: string[]
     sandboxPolicy: Record<string, unknown>
-    defaultEnvironmentId: string | null
     metadata: Record<string, unknown>
     createdAt: string
   },
@@ -386,7 +357,6 @@ async function createAgentVersion(
     allowedTools: stringify(values.allowedTools),
     mcpConnectors: stringify(values.mcpConnectors),
     sandboxPolicy: stringify(values.sandboxPolicy),
-    defaultEnvironmentId: values.defaultEnvironmentId,
     metadata: stringify(values.metadata),
     createdAt: values.createdAt,
   }
@@ -516,26 +486,6 @@ const listAgentVersionsRoute = createRoute({
   },
 })
 
-const createSessionRoute = createRoute({
-  method: 'post',
-  path: '/{agentId}/sessions',
-  operationId: 'createAgentSession',
-  tags: ['Sessions'],
-  summary: 'Create a session for an agent',
-  ...AuthenticatedOperation,
-  request: { params: AgentParamsSchema },
-  responses: {
-    201: { description: 'Created session', content: { 'application/json': { schema: SessionSchema } } },
-    401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
-    404: { description: 'Agent not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
-    403: { description: 'Policy denied', content: { 'application/json': { schema: ErrorResponseSchema } } },
-    409: {
-      description: 'Archived agent or environment',
-      content: { 'application/json': { schema: ErrorResponseSchema } },
-    },
-  },
-})
-
 app.openapi(listAgentsRoute, async (c) => {
   const db = drizzle(c.env.DB)
   const auth = await requireAuth(c, db)
@@ -597,8 +547,7 @@ app.openapi(createAgentRoute, async (c) => {
     (await validateConfiguredProviderModel(db, auth.project.id, provider, model, c.env.AMA_DEFAULT_MODEL)) ??
     validateAllowedTools(allowedTools) ??
     (await validateMcpConnectors(db, auth.project.id, mcpConnectors)) ??
-    (hasSecretMaterial(metadata) ? { metadata: 'Secret material must be stored in a vault.' } : null) ??
-    (await validateDefaultEnvironment(db, auth.project.id, body.defaultEnvironmentId ?? null))
+    (hasSecretMaterial(metadata) ? { metadata: 'Secret material must be stored in a vault.' } : null)
   if (validation) {
     return c.json(domainValidation('Invalid agent configuration', validation), 400)
   }
@@ -616,7 +565,6 @@ app.openapi(createAgentRoute, async (c) => {
     allowedTools: stringify(allowedTools),
     mcpConnectors: stringify(mcpConnectors),
     sandboxPolicy: stringify(sandboxPolicy),
-    defaultEnvironmentId: body.defaultEnvironmentId ?? null,
     metadata: stringify(metadata),
     status: 'active',
     archivedAt: null,
@@ -680,16 +628,13 @@ app.openapi(updateAgentRoute, async (c) => {
     allowedTools: body.allowedTools ?? parseJson<string[]>(agent.allowedTools),
     mcpConnectors: body.mcpConnectors ?? parseJson<string[]>(agent.mcpConnectors),
     sandboxPolicy: body.sandboxPolicy ?? parseJson<Record<string, unknown>>(agent.sandboxPolicy),
-    defaultEnvironmentId:
-      body.defaultEnvironmentId === undefined ? agent.defaultEnvironmentId : body.defaultEnvironmentId,
     metadata: mergeMetadata(parseJson<Record<string, unknown>>(agent.metadata), body.metadata),
   }
   const validation =
     (await validateConfiguredProviderModel(db, auth.project.id, next.provider, next.model, c.env.AMA_DEFAULT_MODEL)) ??
     validateAllowedTools(next.allowedTools) ??
     (await validateMcpConnectors(db, auth.project.id, next.mcpConnectors)) ??
-    (hasSecretMaterial(next.metadata) ? { metadata: 'Secret material must be stored in a vault.' } : null) ??
-    (await validateDefaultEnvironment(db, auth.project.id, next.defaultEnvironmentId))
+    (hasSecretMaterial(next.metadata) ? { metadata: 'Secret material must be stored in a vault.' } : null)
   if (validation) {
     return c.json(domainValidation('Invalid agent configuration', validation), 400)
   }
@@ -703,7 +648,6 @@ app.openapi(updateAgentRoute, async (c) => {
     body.allowedTools !== undefined ||
     body.mcpConnectors !== undefined ||
     body.sandboxPolicy !== undefined ||
-    body.defaultEnvironmentId !== undefined ||
     body.metadata !== undefined
   const version = runtimeChanged
     ? await createAgentVersion(db, agent, { ...next, createdAt: timestamp })
@@ -787,17 +731,6 @@ app.openapi(listAgentVersionsRoute, async (c) => {
     },
     200,
   )
-})
-
-app.openapi(createSessionRoute, async (c) => {
-  const { agentId } = c.req.valid('param')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
-
-  return await createSessionForAgent(c, db, auth, agentId)
 })
 
 export default app

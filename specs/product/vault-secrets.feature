@@ -14,7 +14,7 @@ Feature: Vaults and secrets
   @planned
   Scenario: Attach vaults to an agent session
     Given an agent requires credentials
-    When the user starts a session with an allowed vault
+    When the user creates a session with an allowed vault
     Then the runtime can resolve approved Cloudflare Secrets references
     And the transcript shows only redacted values
 

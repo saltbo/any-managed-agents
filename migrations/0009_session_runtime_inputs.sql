@@ -1,0 +1,3 @@
+ALTER TABLE sessions ADD COLUMN title TEXT;
+ALTER TABLE sessions ADD COLUMN resource_refs TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE sessions ADD COLUMN vault_refs TEXT NOT NULL DEFAULT '[]';

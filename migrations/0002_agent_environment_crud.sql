@@ -2,7 +2,6 @@ ALTER TABLE agent_definitions ADD COLUMN instructions TEXT;
 ALTER TABLE agent_definitions ADD COLUMN provider TEXT NOT NULL DEFAULT 'workers-ai';
 ALTER TABLE agent_definitions ADD COLUMN allowed_tools TEXT NOT NULL DEFAULT '[]';
 ALTER TABLE agent_definitions ADD COLUMN sandbox_policy TEXT NOT NULL DEFAULT '{}';
-ALTER TABLE agent_definitions ADD COLUMN default_environment_id TEXT;
 ALTER TABLE agent_definitions ADD COLUMN metadata TEXT NOT NULL DEFAULT '{}';
 ALTER TABLE agent_definitions ADD COLUMN status TEXT NOT NULL DEFAULT 'active';
 ALTER TABLE agent_definitions ADD COLUMN current_version_id TEXT;
@@ -18,7 +17,6 @@ CREATE TABLE IF NOT EXISTS agent_definition_versions (
   system_prompt TEXT,
   allowed_tools TEXT NOT NULL,
   sandbox_policy TEXT NOT NULL,
-  default_environment_id TEXT,
   metadata TEXT NOT NULL,
   created_at TEXT NOT NULL,
   FOREIGN KEY (agent_id) REFERENCES agent_definitions(id),
@@ -77,7 +75,6 @@ INSERT INTO agent_definition_versions (
   system_prompt,
   allowed_tools,
   sandbox_policy,
-  default_environment_id,
   metadata,
   created_at
 )
@@ -92,7 +89,6 @@ SELECT
   system_prompt,
   allowed_tools,
   sandbox_policy,
-  default_environment_id,
   metadata,
   created_at
 FROM agent_definitions

@@ -1,4 +1,4 @@
-@planned @sessions @ui
+@implemented @sessions @ui
 Feature: Session detail
   Users inspect transcripts and runtime state for a session.
 
@@ -14,21 +14,30 @@ Feature: Session detail
     And the snapshot panel shows agent instructions, tools, sandbox policy, environment packages, network policy, and safe secret references
     And sandbox identifiers and Pi runtime identifiers are visible for debugging
 
-  Scenario: Send a runtime task from session detail
+  Scenario: Send a chat message from session detail
     Given a session is idle and has an active runtime endpoint
-    When the user sends a task from the session detail input
-    Then the UI calls the session runtime endpoint
-    And the input shows a pending state while the task is accepted
-    And the transcript and debug views receive new events without a full page reload
+    When the user sends a message from the session detail composer
+    Then the UI opens a WebSocket session to the AMA Pi runtime endpoint
+    And the UI sends the message as a Pi RPC prompt command
+    And the input shows a pending state while the message is accepted
+    And the transcript and debug views receive the same Pi runtime event stream without HTTP polling or a full page reload
     And failures show a recoverable error message with the session left inspectable
 
+  Scenario: Render Pi runtime events as a chat transcript
+    Given a session receives Pi agent message, tool execution, lifecycle, and usage events
+    When the user opens transcript mode
+    Then user and assistant messages render as chat turns
+    And tool executions render as structured tool rows
+    And runtime progress renders as status rows
+    And raw JSON payloads are available only in debug detail panels
+
   Scenario: View transcript and debug modes
-    Given a session has message, tool, sandbox, usage, lifecycle, policy, and error events
+    Given a session has Pi runtime events
     When the user selects transcript mode
     Then conversation-level messages and final results are emphasized
-    And debug-only details are hidden but still available in debug mode
+    And non-transcript Pi events are hidden but still available in debug mode
     When the user selects debug mode
-    Then every event is visible with type, sequence, timestamp, payload summary, and raw detail panel
+    Then every Pi runtime event is visible with type, sequence, timestamp, payload summary, and raw detail panel
 
   Scenario: Export and copy session events
     Given a session has events

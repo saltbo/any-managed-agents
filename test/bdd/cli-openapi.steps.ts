@@ -558,7 +558,7 @@ Then(
 )
 
 Then(
-  'the skill instructs runtime task interaction to use AMA runtime endpoints or Pi-compatible helpers rather than inventing a separate CLI protocol',
+  'the skill instructs runtime message interaction to use AMA runtime endpoints or Pi-compatible helpers rather than inventing a separate CLI protocol',
   () => {
     assertSkillDocs()
   },

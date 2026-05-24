@@ -297,6 +297,13 @@ describe('[CF] auth and tenancy', () => {
     expect(createRes.status).toBe(201)
     const agent = (await createRes.json()) as { id: string; projectId: string }
     expect(agent.projectId).toMatch(/^project_/)
+    const environmentRes = await SELF.fetch('https://example.com/api/environments', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ name: 'Runtime environment' }),
+    })
+    expect(environmentRes.status).toBe(201)
+    const environment = (await environmentRes.json()) as { id: string }
 
     const listRes = await SELF.fetch('https://example.com/api/agents', {
       headers: { cookie },
@@ -306,9 +313,10 @@ describe('[CF] auth and tenancy', () => {
     expect(listBody.data).toContainEqual(expect.objectContaining({ id: agent.id, projectId: agent.projectId }))
     expect(listBody.data.every((row) => row.projectId === agent.projectId)).toBe(true)
 
-    const sessionRes = await SELF.fetch(`https://example.com/api/agents/${agent.id}/sessions`, {
+    const sessionRes = await SELF.fetch('https://example.com/api/sessions', {
       method: 'POST',
-      headers: { cookie },
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
     })
     expect(sessionRes.status).toBe(201)
     const session = (await sessionRes.json()) as { durableObjectName: string; agentUrl: string; projectId: string }
@@ -331,10 +339,18 @@ describe('[CF] auth and tenancy', () => {
     })
     expect(createRes.status).toBe(201)
     const agent = (await createRes.json()) as { id: string }
-
-    const sessionRes = await SELF.fetch(`https://example.com/api/agents/${agent.id}/sessions`, {
+    const environmentRes = await SELF.fetch('https://example.com/api/environments', {
       method: 'POST',
-      headers: { cookie: tenantACookie },
+      headers: { 'content-type': 'application/json', cookie: tenantACookie },
+      body: JSON.stringify({ name: 'Tenant A environment' }),
+    })
+    expect(environmentRes.status).toBe(201)
+    const environment = (await environmentRes.json()) as { id: string }
+
+    const sessionRes = await SELF.fetch('https://example.com/api/sessions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: tenantACookie },
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
     })
     expect(sessionRes.status).toBe(201)
     const session = (await sessionRes.json()) as { agentUrl: string }

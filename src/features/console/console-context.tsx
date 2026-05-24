@@ -39,27 +39,13 @@ export interface ConsoleContextValue {
   setSelectedSessionId: (value: string) => void
   setSelectedSession: (value: Session) => void
   sessionEvents: SessionEvent[]
-  runtimeTranscript: string
-  taskMessage: string
-  setTaskMessage: (value: string) => void
-  notice: string | null
-  error: string | null
   busy: boolean
   refresh: () => void
   openCreateAgent: () => void
   openCreateEnvironment: () => void
   openCreateProvider: () => void
   openCreateVault: () => void
-  archiveAgent: (id: string) => void
-  archiveEnvironment: (id: string) => void
-  archiveProvider: (id: string) => void
-  archiveVault: (id: string) => void
-  disconnectMcpConnection: (id: string) => void
-  startSession: (agentId: string) => void
-  stopSession: (id: string) => void
-  archiveSession: (id: string) => void
-  refreshEvents: () => void
-  sendTask: () => void
+  openCreateSession: (agentId?: string) => void
 }
 
 const ConsoleContext = createContext<ConsoleContextValue | null>(null)

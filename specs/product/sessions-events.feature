@@ -6,9 +6,9 @@ Feature: Session events
     When the runtime emits a message, tool, sandbox, policy, usage, or error event
     Then the event is stored with stable ordering and safe metadata
 
-  Scenario: Store task lifecycle events
-    Given a user sends a runtime task
-    When the runtime accepts, starts, streams, completes, or fails the task
+  Scenario: Store message lifecycle events
+    Given a user sends a runtime message
+    When the runtime accepts, starts, streams, completes, or fails the message
     Then lifecycle events are stored with monotonically increasing sequence numbers
     And message events preserve user-visible content
     And debug events preserve safe runtime diagnostics

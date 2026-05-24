@@ -37,6 +37,65 @@ function noContent() {
   return new Response(null, { status: 204 })
 }
 
+function installMockRuntimeWebSocket() {
+  const sentCommands: unknown[] = []
+  class MockRuntimeWebSocket extends EventTarget {
+    static CONNECTING = 0
+    static OPEN = 1
+    static CLOSING = 2
+    static CLOSED = 3
+    readonly url: string
+    readyState = MockRuntimeWebSocket.CONNECTING
+
+    constructor(url: string) {
+      super()
+      this.url = url
+      queueMicrotask(() => {
+        this.readyState = MockRuntimeWebSocket.OPEN
+        this.dispatchEvent(new Event('open'))
+      })
+    }
+
+    send(data: string) {
+      const command = JSON.parse(data) as { id?: string; type?: string; message?: string }
+      sentCommands.push(command)
+      this.emit({ type: 'response', id: command.id, command: command.type, success: true })
+      if (command.type === 'prompt' || command.type === 'follow_up') {
+        const content = `Received: ${command.message}`
+        this.emit({
+          type: 'message_update',
+          id: `${command.id}_assistant`,
+          message: { role: 'assistant', content },
+          assistantMessageEvent: { text: content },
+        })
+        this.emit({
+          type: 'tool_execution_end',
+          id: `${command.id}_tool`,
+          toolCall: { id: `${command.id}_tool`, name: 'write_file', output: { ok: true }, durationMs: 4 },
+        })
+        this.emit({
+          type: 'message_end',
+          id: `${command.id}_assistant`,
+          message: { role: 'assistant', content },
+        })
+        this.emit({ type: 'agent_end', id: `${command.id}_end`, willRetry: false })
+      }
+    }
+
+    close() {
+      this.readyState = MockRuntimeWebSocket.CLOSED
+      this.dispatchEvent(new Event('close'))
+    }
+
+    private emit(payload: Record<string, unknown>) {
+      queueMicrotask(() => this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(payload) })))
+    }
+  }
+
+  vi.stubGlobal('WebSocket', MockRuntimeWebSocket)
+  return { sentCommands }
+}
+
 function environment(overrides: Partial<Environment> = {}): Environment {
   return {
     id: 'env_1',
@@ -67,15 +126,14 @@ function agent(overrides: Partial<Agent> = {}): Agent {
     id: 'agent_1',
     projectId: 'project_1',
     name: 'Coding agent',
-    description: 'Runs tasks',
-    instructions: 'Do the task',
+    description: 'Runs work',
+    instructions: 'Do the work',
     provider: 'workers-ai',
     model: '@cf/moonshotai/kimi-k2.6',
-    systemPrompt: 'Do the task',
+    systemPrompt: 'Do the work',
     allowedTools: ['read', 'write'],
     mcpConnectors: [],
     sandboxPolicy: { network: 'enabled' },
-    defaultEnvironmentId: 'env_1',
     metadata: {},
     status: 'active',
     archivedAt: null,
@@ -99,14 +157,13 @@ function session(overrides: Partial<Session> = {}): Session {
       agentId: 'agent_1',
       projectId: 'project_1',
       version: 1,
-      instructions: 'Do the task',
+      instructions: 'Do the work',
       provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
-      systemPrompt: 'Do the task',
+      systemPrompt: 'Do the work',
       allowedTools: ['read', 'write'],
       mcpConnectors: [],
       sandboxPolicy: { network: 'enabled' },
-      defaultEnvironmentId: 'env_1',
       metadata: {},
       createdAt: now,
     },
@@ -117,12 +174,15 @@ function session(overrides: Partial<Session> = {}): Session {
       environmentId: 'env_1',
       version: 1,
     },
+    title: null,
+    resourceRefs: [],
+    vaultRefs: [],
     durableObjectName: 'session_1',
     sandboxId: 'sandbox_1',
     piRuntimeId: 'pi_1',
     piProcessId: 'process_1',
-    runtimeEndpointPath: '/api/sessions/session_1/runtime',
-    agentUrl: '/api/sessions/session_1/runtime',
+    runtimeEndpointPath: '/runtime/sessions/session_1/rpc',
+    agentUrl: '/runtime/sessions/session_1/rpc',
     modelProvider: 'workers-ai',
     modelConfig: { model: '@cf/moonshotai/kimi-k2.6' },
     status: 'idle',
@@ -144,12 +204,12 @@ function event(overrides: Partial<SessionEvent> = {}): SessionEvent {
     projectId: 'project_1',
     sessionId: 'session_1',
     sequence: 1,
-    type: 'message',
-    visibility: 'transcript',
-    role: 'assistant',
+    type: 'message_end',
+    visibility: 'runtime',
+    role: null,
     parentEventId: null,
     correlationId: null,
-    payload: { text: 'AMA task completed' },
+    payload: { type: 'message_end', message: { role: 'assistant', content: 'AMA message completed' } },
     metadata: {},
     createdAt: now,
     ...overrides,
@@ -428,13 +488,31 @@ function mockConsoleApi(seed?: {
       return jsonResponse({ data: state.agents })
     }
     if (url === '/api/agents' && method === 'POST') {
-      const created = agent({ id: 'agent_created', defaultEnvironmentId: state.environments[0]?.id ?? null })
+      const created = agent({ id: 'agent_created' })
       state.agents = [created]
       return jsonResponse(created)
     }
-    if (url.startsWith('/api/agents/') && url.endsWith('/sessions') && method === 'POST') {
-      const agentId = url.split('/')[3] ?? ''
-      const created = session({ agentId })
+    if (url.startsWith('/api/agents/') && url.endsWith('/versions') && method === 'GET') {
+      const found = state.agents.find((item) => url === `/api/agents/${item.id}/versions`)
+      return found ? jsonResponse({ data: [session({ agentId: found.id }).agentSnapshot] }) : jsonResponse({ data: [] })
+    }
+    if (url === '/api/sessions' && method === 'POST') {
+      const body = JSON.parse(String(init?.body ?? '{}')) as {
+        agentId: string
+        environmentId: string
+        title?: string
+        metadata?: Record<string, unknown>
+        resourceRefs?: Record<string, unknown>[]
+        vaultRefs?: Record<string, unknown>[]
+      }
+      const created = session({
+        agentId: body.agentId,
+        environmentId: body.environmentId,
+        title: body.title ?? null,
+        metadata: body.metadata ?? {},
+        resourceRefs: body.resourceRefs ?? [],
+        vaultRefs: body.vaultRefs ?? [],
+      })
       state.sessions = [created]
       return jsonResponse(created)
     }
@@ -449,15 +527,6 @@ function mockConsoleApi(seed?: {
       return url === '/api/sessions/session_1/events'
         ? jsonResponse({ data: state.events })
         : jsonResponse({ data: [] })
-    }
-    if (url.startsWith('/api/sessions/') && url.endsWith('/runtime') && method === 'POST') {
-      state.events = [event()]
-      return jsonResponse({ accepted: true })
-    }
-    if (url.startsWith('/api/sessions/') && url.endsWith('/runtime') && method === 'GET') {
-      return new Response('{"type":"agent_end","message":"AMA task completed"}\n', {
-        headers: { 'content-type': 'application/x-ndjson' },
-      })
     }
     if (url === '/api/sessions/session_1/stop' && method === 'POST') {
       state.sessions = [session({ status: 'stopped', stoppedAt: now })]
@@ -483,14 +552,27 @@ function primaryNav() {
 }
 
 async function confirmAction(triggerName: string, confirmName = triggerName) {
-  fireEvent.click(screen.getByRole('button', { name: triggerName }))
+  const trigger = screen.queryByRole('button', { name: triggerName })
+  if (trigger) {
+    fireEvent.click(trigger)
+  } else {
+    const actions = screen.getByRole('button', { name: 'Actions' })
+    fireEvent.pointerDown(actions)
+    fireEvent.click(actions)
+    fireEvent.click(await screen.findByRole('menuitem', { name: triggerName }))
+  }
   const dialog = await screen.findByRole('alertdialog')
   fireEvent.click(within(dialog).getByRole('button', { name: confirmName }))
+}
+
+function expectToast(element: HTMLElement) {
+  expect(element.closest('[data-sonner-toast]')).toBeTruthy()
 }
 
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
   window.history.pushState({}, '', '/')
 })
 
@@ -512,7 +594,8 @@ describe('App', () => {
   })
 
   it('drives the v1 console from resource creation through runtime events', async () => {
-    const { fetchMock } = mockConsoleApi()
+    mockConsoleApi()
+    const { sentCommands } = installMockRuntimeWebSocket()
 
     render(<App />)
 
@@ -555,7 +638,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create environment' }))
     expect(await screen.findByRole('heading', { name: 'Create Environment' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Save environment' }))
-    expect(await screen.findByText('Environment created')).toBeTruthy()
+    expectToast(await screen.findByText('Environment created'))
     expect(screen.queryByRole('heading', { name: 'Create Environment' })).toBeNull()
 
     fireEvent.click(primaryNav().getByRole('link', { name: 'Agents' }))
@@ -563,23 +646,24 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
     expect(await screen.findByRole('heading', { name: 'Create Agent' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Save agent' }))
-    expect(await screen.findByText('Agent created')).toBeTruthy()
+    expectToast(await screen.findByText('Agent created'))
     expect(screen.getByText('Coding agent')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Start session' }))
-    expect(await screen.findByText('Session started')).toBeTruthy()
-    expect(window.location.pathname).toBe('/sessions')
-    expect(await screen.findByRole('heading', { name: 'Sessions' })).toBeTruthy()
-    expect(await screen.findByText('Session detail')).toBeTruthy()
-    expect(screen.getByText('No transcript events yet.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Create session' }))
+    expect(await screen.findByRole('heading', { name: 'Create Session' })).toBeTruthy()
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Create session' }))
+    expectToast(await screen.findByText('Session created'))
+    expect(window.location.pathname).toBe('/sessions/session_1')
+    expect(await screen.findByRole('tab', { name: 'Transcript' })).toBeTruthy()
+    expect(screen.getByText('No messages yet')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Send task' }))
-    expect(await screen.findByText('Task sent to runtime')).toBeTruthy()
-    expect(screen.getAllByText(/AMA task completed/).length).toBeGreaterThan(1)
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/sessions/session_1/runtime',
-      expect.objectContaining({ method: 'POST' }),
-    )
+    fireEvent.change(screen.getByPlaceholderText('Send a message to the agent'), {
+      target: { value: 'Create ama-message.txt with exactly: AMA message completed' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    expect(await screen.findByText(/Received: Create ama-message/)).toBeTruthy()
+    expect(await screen.findByText('write_file')).toBeTruthy()
+    expect(sentCommands).toContainEqual(expect.objectContaining({ type: 'prompt' }))
   })
 
   it('renders planned resource and detail routes', async () => {
@@ -588,17 +672,22 @@ describe('App', () => {
       agents: [agent()],
       sessions: [session()],
       events: [
-        event({ visibility: 'transcript', role: 'assistant', payload: { text: 'hello' } }),
-        event({ id: 'event_2', type: 'tool', visibility: 'debug', payload: { tool: 'read' } }),
+        event({ payload: { type: 'message_end', message: { role: 'assistant', content: 'hello' } } }),
+        event({
+          id: 'event_2',
+          type: 'tool_execution_end',
+          payload: { type: 'tool_execution_end', toolCall: { id: 'tool_1', name: 'read' } },
+        }),
       ],
     })
 
     window.history.pushState({}, '', '/agents/agent_1')
     render(<App />)
 
-    expect(await screen.findByRole('heading', { name: 'Agents' })).toBeTruthy()
-    expect(await screen.findByText('Version snapshot')).toBeTruthy()
-    expect(screen.getByText('Recent sessions')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Coding agent' })).toBeTruthy()
+    expect(await screen.findByText('Runtime configuration')).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: 'Sessions' }))
+    expect(screen.getAllByText('Sessions').length).toBeGreaterThan(1)
 
     fireEvent.click(primaryNav().getByRole('link', { name: 'Providers' }))
     expect(await screen.findByText('Workers AI')).toBeTruthy()
@@ -627,41 +716,48 @@ describe('App', () => {
   })
 
   it('boots directly into environment and session detail routes', async () => {
-    const { fetchMock } = mockConsoleApi({
+    mockConsoleApi({
       environments: [environment()],
       agents: [agent()],
-      sessions: [session(), session({ id: 'session_stale', runtimeEndpointPath: '/api/sessions/stale-list/runtime' })],
+      sessions: [
+        session(),
+        session({ id: 'session_stale', runtimeEndpointPath: '/runtime/sessions/session_stale/rpc' }),
+      ],
       detailSessions: [
         session({
           id: 'session_stale',
-          runtimeEndpointPath: '/api/sessions/session_stale/runtime',
+          runtimeEndpointPath: '/runtime/sessions/session_stale/rpc',
         }),
         session({
           id: 'session_archived',
           status: 'archived',
-          runtimeEndpointPath: '/api/sessions/session_archived/runtime',
+          runtimeEndpointPath: '/runtime/sessions/session_archived/rpc',
         }),
       ],
       events: [
-        event({ visibility: 'transcript', role: 'assistant', payload: { text: 'hello' } }),
-        event({ id: 'event_2', type: 'tool', visibility: 'debug', payload: { tool: 'read' } }),
+        event({ payload: { type: 'message_end', message: { role: 'assistant', content: 'hello' } } }),
+        event({
+          id: 'event_2',
+          type: 'tool_execution_end',
+          payload: { type: 'tool_execution_end', toolCall: { id: 'tool_1', name: 'read' } },
+        }),
       ],
     })
+    const { sentCommands } = installMockRuntimeWebSocket()
 
     window.history.pushState({}, '', '/environments/env_1')
     const { unmount } = render(<App />)
 
-    expect(await screen.findByRole('heading', { name: 'Environments' })).toBeTruthy()
-    expect(await screen.findByText('Agents using this environment')).toBeTruthy()
-    expect(screen.getByText('Sessions using this environment')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Node workspace' })).toBeTruthy()
+    expect(await screen.findByText('Sessions using this environment')).toBeTruthy()
 
     unmount()
     window.history.pushState({}, '', '/sessions/session_1')
     const sessionRoute = render(<App />)
 
-    expect(await screen.findByRole('heading', { name: 'Sessions' })).toBeTruthy()
-    expect(await screen.findByText('Session detail')).toBeTruthy()
-    expect(screen.getByText('Transcript and runtime events')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'session_1' })).toBeTruthy()
+    expect(await screen.findByRole('tab', { name: 'Transcript' })).toBeTruthy()
+    expect(screen.getByText('All events')).toBeTruthy()
     expect(await screen.findByText(/hello/)).toBeTruthy()
     expect(screen.getByRole('tab', { name: 'Debug' })).toBeTruthy()
 
@@ -669,34 +765,27 @@ describe('App', () => {
     window.history.pushState({}, '', '/sessions/session_stale')
     const staleRoute = render(<App />)
 
-    expect(await screen.findByText('Session detail')).toBeTruthy()
-    expect(await screen.findByText('session_stale')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Send task' }))
-    await screen.findByText('Task sent to runtime')
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/sessions/session_stale/runtime',
-      expect.objectContaining({ method: 'POST' }),
-    )
+    expect(await screen.findByRole('tab', { name: 'Transcript' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'session_stale' })).toBeTruthy()
+    fireEvent.change(screen.getByPlaceholderText('Send a message to the agent'), { target: { value: 'Resume stale' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    await screen.findByText(/Received: Resume stale/)
+    expect(sentCommands).toContainEqual(expect.objectContaining({ type: 'prompt', message: 'Resume stale' }))
 
     staleRoute.unmount()
     window.history.pushState({}, '', '/sessions/session_archived')
     const archivedRoute = render(<App />)
 
-    expect(await screen.findByText('Session detail')).toBeTruthy()
-    expect(await screen.findByText('session_archived')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Send task' }))
-    await screen.findByText('Task sent to runtime')
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/sessions/session_archived/runtime',
-      expect.objectContaining({ method: 'POST' }),
-    )
+    expect(await screen.findByRole('tab', { name: 'Transcript' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'session_archived' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(true)
 
     archivedRoute.unmount()
     window.history.pushState({}, '', '/sessions/missing')
     render(<App />)
 
     expect(await screen.findByText('Session not found')).toBeTruthy()
-    expect(screen.queryByText('Session detail')).toBeNull()
+    expect(screen.queryByRole('tab', { name: 'Transcript' })).toBeNull()
   })
 
   it('shows error, stopped, and archived session states', async () => {
@@ -719,14 +808,14 @@ describe('App', () => {
     expect(screen.getAllByText('stopped').length).toBeGreaterThan(0)
     expect(screen.getAllByText('archived').length).toBeGreaterThan(0)
 
+    fireEvent.click(screen.getByRole('link', { name: 'session_1' }))
+    expect(await screen.findByRole('tab', { name: 'Transcript' })).toBeTruthy()
     await confirmAction('Stop session')
-    expect(await screen.findByText('Session stopped')).toBeTruthy()
-    const statusRows = screen.getAllByText('Status').map((label) => label.closest('div'))
-    expect(statusRows.some((row) => row && within(row).queryByText('stopped'))).toBe(true)
+    expectToast(await screen.findByText('Session stopped'))
+    expect(screen.getAllByText('stopped').length).toBeGreaterThan(0)
 
     await confirmAction('Archive session')
-    expect(await screen.findByText('Session archived')).toBeTruthy()
-    expect(screen.getAllByText('archived').length).toBeGreaterThan(0)
+    expectToast(await screen.findByText('Session archived'))
   })
 
   it('surfaces load failures after the loading state', async () => {
@@ -744,16 +833,9 @@ describe('App', () => {
     expect(await screen.findByText('Control plane unavailable')).toBeTruthy()
   })
 
-  it('renders sessions, runtime events, and sends tasks through the runtime endpoint', async () => {
-    const runtimeFetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-      if ((init?.method ?? 'GET') === 'POST') {
-        return jsonResponse({ accepted: true })
-      }
-      return new Response('{"type":"agent_end","message":"AMA task completed"}\n', {
-        headers: { 'content-type': 'application/x-ndjson' },
-      })
-    })
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+  it('renders sessions, runtime events, and sends messages through the runtime endpoint', async () => {
+    const { sentCommands } = installMockRuntimeWebSocket()
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = String(input)
       if (url === '/api/auth/me') {
         return jsonResponse({
@@ -810,7 +892,7 @@ describe('App', () => {
               sessionId: 'session_1',
               sequence: 1,
               type: 'lifecycle',
-              visibility: 'transcript',
+              visibility: 'debug',
               role: null,
               parentEventId: null,
               correlationId: null,
@@ -827,9 +909,6 @@ describe('App', () => {
       if (url.startsWith('/api/sessions')) {
         return jsonResponse({ data: [sessionFixture] })
       }
-      if (url === '/runtime/sessions/session_1/rpc') {
-        return await runtimeFetch(input, init)
-      }
       throw new Error(`Unexpected fetch: ${url}`)
     })
 
@@ -837,20 +916,20 @@ describe('App', () => {
 
     await waitFor(() => expect(screen.getByText('Control Plane')).toBeTruthy())
     fireEvent.click(primaryNav().getByRole('link', { name: 'Sessions' }))
+    expect(await screen.findByRole('heading', { name: 'Sessions' })).toBeTruthy()
+    expect(screen.queryByRole('tab', { name: 'Transcript' })).toBeNull()
+    fireEvent.click(screen.getByRole('link', { name: 'session_1' }))
 
-    expect(await screen.findByText('Session detail')).toBeTruthy()
-    expect(screen.getByText('/runtime/sessions/session_1/rpc')).toBeTruthy()
-    expect(await screen.findByText(/runtime_ready/)).toBeTruthy()
+    expect(await screen.findByRole('tab', { name: 'Transcript' })).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Send task' }))
-
-    await waitFor(() => expect(runtimeFetch).toHaveBeenCalled())
-    expect(runtimeFetch.mock.calls[0]?.[0]).toBe('/runtime/sessions/session_1/rpc')
-    expect(runtimeFetch.mock.calls[0]?.[1]).toMatchObject({
-      method: 'POST',
-      credentials: 'include',
+    fireEvent.change(screen.getByPlaceholderText('Send a message to the agent'), {
+      target: { value: 'Run live check' },
     })
-    expect(await screen.findByText(/agent_end/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    await waitFor(() => expect(sentCommands).toContainEqual(expect.objectContaining({ type: 'prompt' })))
+    expect(await screen.findByText(/Received: Run live check/)).toBeTruthy()
+    expect(await screen.findByText('write_file')).toBeTruthy()
   })
 })
 
@@ -880,15 +959,14 @@ const agentFixture = {
   id: 'agent_1',
   projectId: 'project_1',
   name: 'Coding agent',
-  description: 'Runs tasks',
-  instructions: 'Do the task',
+  description: 'Runs work',
+  instructions: 'Do the work',
   provider: 'workers-ai',
   model: '@cf/moonshotai/kimi-k2.6',
-  systemPrompt: 'Do the task',
+  systemPrompt: 'Do the work',
   allowedTools: ['read', 'write'],
   mcpConnectors: [],
   sandboxPolicy: { network: 'enabled' },
-  defaultEnvironmentId: 'env_1',
   metadata: {},
   status: 'active',
   archivedAt: null,
@@ -909,20 +987,22 @@ const sessionFixture = {
     agentId: 'agent_1',
     projectId: 'project_1',
     version: 1,
-    instructions: 'Do the task',
+    instructions: 'Do the work',
     provider: 'workers-ai',
     model: '@cf/moonshotai/kimi-k2.6',
-    systemPrompt: 'Do the task',
+    systemPrompt: 'Do the work',
     allowedTools: ['read', 'write'],
     mcpConnectors: [],
     sandboxPolicy: { network: 'enabled' },
-    defaultEnvironmentId: 'env_1',
     metadata: {},
     createdAt: '2026-05-23T00:00:00.000Z',
   },
   environmentId: 'env_1',
   environmentVersionId: 'envver_1',
   environmentSnapshot: null,
+  title: null,
+  resourceRefs: [],
+  vaultRefs: [],
   durableObjectName: 'session_1',
   sandboxId: 'session_1',
   piRuntimeId: 'pi_session_1',

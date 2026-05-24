@@ -26,12 +26,12 @@ curl -fsS "$AMA_ORIGIN/api/environments" \
 curl -fsS "$AMA_ORIGIN/api/agents" \
   -H "content-type: application/json" \
   -H "cookie: $AMA_COOKIE" \
-  -d '{"name":"Research assistant","instructions":"Answer with citations.","defaultEnvironmentId":"env_abc123"}'
+  -d '{"name":"Research assistant","instructions":"Answer with citations."}'
 
 curl -fsS "$AMA_ORIGIN/api/sessions" \
   -H "content-type: application/json" \
   -H "cookie: $AMA_COOKIE" \
-  -d '{"agentId":"agent_abc123"}'
+  -d '{"agentId":"agent_abc123","environmentId":"env_abc123"}'
 ```
 
 ## restish
@@ -44,9 +44,9 @@ restish ama get-health
 restish ama list-agents --rsh-output-format json
 printf '%s\n' '{"name":"Node workspace","packages":[{"name":"tsx","version":"latest"}]}' \
   | restish ama create-environment --rsh-output-format json
-printf '%s\n' '{"name":"Research assistant","instructions":"Answer with citations.","defaultEnvironmentId":"env_abc123"}' \
+printf '%s\n' '{"name":"Research assistant","instructions":"Answer with citations."}' \
   | restish ama create-agent --rsh-output-format json
-printf '%s\n' '{"agentId":"agent_abc123"}' \
+printf '%s\n' '{"agentId":"agent_abc123","environmentId":"env_abc123"}' \
   | restish ama create-session --rsh-output-format json
 ```
 
@@ -61,7 +61,7 @@ Common control-plane workflows map to these OpenAPI operations:
 | Workflow | Operation IDs | Paths |
 | --- | --- | --- |
 | Health | `getHealth` | `GET /api/health` |
-| Agents | `listAgents`, `createAgent`, `readAgent`, `updateAgent`, `archiveAgent`, `listAgentVersions`, `createAgentSession` | `/api/agents` |
+| Agents | `listAgents`, `createAgent`, `readAgent`, `updateAgent`, `archiveAgent`, `listAgentVersions` | `/api/agents` |
 | Environments | `listEnvironments`, `createEnvironment`, `readEnvironment`, `updateEnvironment`, `archiveEnvironment`, `listEnvironmentVersions` | `/api/environments` |
 | Sessions | `listSessions`, `createSession`, `readSession`, `updateSession`, `stopSession`, `archiveSession`, `listSessionEvents`, `exportSessionEvents`, `streamSessionEvents` | `/api/sessions` |
 | Providers | `listProviders`, `createProvider`, `readProvider`, `updateProvider`, `deleteProvider`, `listProviderModels`, `upsertProviderModel` | `/api/providers` |
@@ -90,10 +90,9 @@ const environment = await client.environments.create({
 const agent = await client.agents.create({
   name: 'Research assistant',
   instructions: 'Answer with citations.',
-  defaultEnvironmentId: environment.id,
 })
 
-const session = await client.sessions.create({ agentId: agent.id })
+const session = await client.sessions.create({ agentId: agent.id, environmentId: environment.id })
 ```
 
 Runtime task interaction is separate from restish control-plane automation. Use the `runtimeEndpointPath` returned by session reads with Pi-compatible helpers or the transparent AMA runtime proxy. Do not define a new CLI-level runtime protocol.

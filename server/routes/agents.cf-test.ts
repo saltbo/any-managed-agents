@@ -103,7 +103,6 @@ describe('[CF] /api/agents', () => {
 
   it('creates, reads, updates, versions, and archives project-scoped agents', async () => {
     const cookie = await signIn()
-    const environment = await createEnvironment(cookie)
     await connectMcp(cookie)
 
     const createRes = await jsonFetch('/api/agents', cookie, {
@@ -116,7 +115,6 @@ describe('[CF] /api/agents', () => {
         allowedTools: ['web.search'],
         mcpConnectors: ['github'],
         sandboxPolicy: { network: 'enabled', filesystem: 'workspace' },
-        defaultEnvironmentId: environment.id,
         metadata: { owner: 'platform', remove: 'stale' },
       }),
     })
@@ -131,7 +129,6 @@ describe('[CF] /api/agents', () => {
       version: 1,
       allowedTools: ['web.search'],
       mcpConnectors: ['github'],
-      defaultEnvironmentId: environment.id,
     })
 
     const updateRes = await jsonFetch(`/api/agents/${created.id}`, cookie, {
@@ -276,12 +273,14 @@ describe('[CF] /api/agents', () => {
       body: JSON.stringify({
         name: 'Snapshot agent',
         instructions: 'Original instructions.',
-        defaultEnvironmentId: environment.id,
       }),
     })
     const agent = (await agentRes.json()) as { id: string }
 
-    const sessionRes = await jsonFetch(`/api/agents/${agent.id}/sessions`, cookie, { method: 'POST' })
+    const sessionRes = await jsonFetch('/api/sessions', cookie, {
+      method: 'POST',
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+    })
     expect(sessionRes.status).toBe(201)
     const session = (await sessionRes.json()) as {
       agentVersionId: string
@@ -305,22 +304,23 @@ describe('[CF] /api/agents', () => {
     expect(session.environmentSnapshot.packages).toEqual([{ name: 'tsx', version: 'latest' }])
   })
 
-  it('rejects new sessions for archived agents and archived default environments', async () => {
+  it('rejects new sessions for archived agents and archived environments', async () => {
     const cookie = await signIn()
     const environment = await createEnvironment(cookie)
     const agentRes = await jsonFetch('/api/agents', cookie, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Archived session agent', defaultEnvironmentId: environment.id }),
+      body: JSON.stringify({ name: 'Archived session agent' }),
     })
     const agent = (await agentRes.json()) as { id: string }
 
     await jsonFetch(`/api/environments/${environment.id}`, cookie, { method: 'DELETE' })
-    const archivedEnvironmentSessionRes = await jsonFetch(`/api/agents/${agent.id}/sessions`, cookie, {
+    const archivedEnvironmentSessionRes = await jsonFetch('/api/sessions', cookie, {
       method: 'POST',
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
     })
     expect(archivedEnvironmentSessionRes.status).toBe(409)
     await expect(archivedEnvironmentSessionRes.json()).resolves.toMatchObject({
-      error: { type: 'conflict', message: 'Default environment is archived or unavailable' },
+      error: { type: 'conflict', message: 'Selected environment is archived or unavailable' },
     })
 
     const noEnvironmentAgentRes = await jsonFetch('/api/agents', cookie, {
@@ -330,8 +330,9 @@ describe('[CF] /api/agents', () => {
     const noEnvironmentAgent = (await noEnvironmentAgentRes.json()) as { id: string }
     await jsonFetch(`/api/agents/${noEnvironmentAgent.id}`, cookie, { method: 'DELETE' })
 
-    const archivedAgentSessionRes = await jsonFetch(`/api/agents/${noEnvironmentAgent.id}/sessions`, cookie, {
+    const archivedAgentSessionRes = await jsonFetch('/api/sessions', cookie, {
       method: 'POST',
+      body: JSON.stringify({ agentId: noEnvironmentAgent.id, environmentId: environment.id }),
     })
     expect(archivedAgentSessionRes.status).toBe(409)
     await expect(archivedAgentSessionRes.json()).resolves.toMatchObject({
@@ -365,15 +366,6 @@ describe('[CF] /api/agents', () => {
     })
     expect(invalidPolicyRes.status).toBe(400)
 
-    const invalidEnvironmentRes = await jsonFetch('/api/agents', cookie, {
-      method: 'POST',
-      body: JSON.stringify({ name: 'Invalid environment', defaultEnvironmentId: 'env_missing' }),
-    })
-    expect(invalidEnvironmentRes.status).toBe(400)
-    await expect(invalidEnvironmentRes.json()).resolves.toMatchObject({
-      error: { details: { fields: { defaultEnvironmentId: expect.any(String) } } },
-    })
-
     const invalidMcpRes = await jsonFetch('/api/agents', cookie, {
       method: 'POST',
       body: JSON.stringify({ name: 'Invalid MCP agent', mcpConnectors: ['linear'] }),
@@ -401,21 +393,11 @@ describe('[CF] /api/agents', () => {
       error: { details: { fields: { metadata: expect.any(String) } } },
     })
 
-    const validEnvironment = await createEnvironment(cookie)
     const validAgentRes = await jsonFetch('/api/agents', cookie, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Valid environment agent', defaultEnvironmentId: validEnvironment.id }),
+      body: JSON.stringify({ name: 'Valid agent' }),
     })
-    const validAgent = (await validAgentRes.json()) as { id: string }
-    await jsonFetch(`/api/environments/${validEnvironment.id}`, cookie, { method: 'DELETE' })
-    const archivedEnvironmentUpdateRes = await jsonFetch(`/api/agents/${validAgent.id}`, cookie, {
-      method: 'PATCH',
-      body: JSON.stringify({ defaultEnvironmentId: validEnvironment.id }),
-    })
-    expect(archivedEnvironmentUpdateRes.status).toBe(400)
-    await expect(archivedEnvironmentUpdateRes.json()).resolves.toMatchObject({
-      error: { details: { fields: { defaultEnvironmentId: expect.any(String) } } },
-    })
+    expect(validAgentRes.status).toBe(201)
 
     const createRes = await jsonFetch('/api/agents', cookie, {
       method: 'POST',

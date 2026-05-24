@@ -5,7 +5,7 @@ Feature: Quickstart
   Scenario: Complete the first-run flow
     Given the developer has deployed the platform on Cloudflare
     When the developer opens the console for the first time
-    Then the platform guides them to create a project, select a provider, create an agent, and start a session
+    Then the platform guides them to create a project, select a provider, create an environment, create an agent, and create a session
 
   Scenario: Display the first-run quickstart structure
     Given the developer is signed in for the first time
@@ -18,7 +18,7 @@ Feature: Quickstart
   Scenario: Create an agent from a template or description
     Given the developer is on the agent step
     When the developer chooses a template or describes the agent goal
-    Then the platform drafts agent name, instructions, model, tools, MCP connectors, and default environment recommendations
+    Then the platform drafts agent name, instructions, model, tools, and MCP connectors
     And the developer can inspect and edit the draft before creating the agent
     And creating the agent shows the resulting agent id and version
 
@@ -28,16 +28,16 @@ Feature: Quickstart
     Then the platform creates or selects an environment
     And the environment step explains that environments are reusable sandbox templates
     And limited networking captures allowed hosts, MCP access, and package-manager access
-    And skipping the step is allowed only when the selected agent already has an active default environment
+    And the environment step must be completed before creating a session
 
-  Scenario: Start a session and send the first task
+  Scenario: Create a session and send the first task
     Given quickstart has an active agent and environment
-    When the developer starts a test session
+    When the developer creates a test session with the agent and environment
     Then the platform creates a session and shows its runtime endpoint
     And the preview shows transcript and debug modes
-    And the task input is focused with a safe example prompt
+    And the message composer is focused with a safe example prompt
     When the developer sends the prompt
-    Then the task is accepted by the Pi runtime
+    Then the message is accepted by the Pi runtime
     And session events stream into the preview without a page reload
     And final success or failure remains inspectable in the session detail page
 

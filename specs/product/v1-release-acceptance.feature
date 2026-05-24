@@ -9,9 +9,9 @@ Feature: v1.0 release acceptance
     And the v1 release docs describe Workers AI model configuration
     And the v1 release docs forbid request-time package installation for the runtime image
 
-  Scenario: Release surface covers the create-session-to-run-task workflow
+  Scenario: Release surface covers the create-session-to-chat workflow
     Then the v1 web console can create environments, agents, and sessions
-    And the v1 web console can send runtime tasks and inspect session events
+    And the v1 web console can send runtime messages and inspect session events
     Given the Worker app is initialized
     When I request GET "/api/openapi.json"
     And the OpenAPI document should include path "/api/sessions"

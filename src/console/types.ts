@@ -10,7 +10,7 @@ export type View =
   | 'audit'
   | 'settings'
 export type LoadState = 'loading' | 'ready' | 'signed-out'
-export type CreateMode = 'environment' | 'agent' | 'provider' | 'vault' | null
+export type CreateMode = 'environment' | 'agent' | 'session' | 'provider' | 'vault' | null
 
 export interface EnvironmentFormState {
   name: string
@@ -24,7 +24,21 @@ export interface AgentFormState {
   name: string
   description: string
   instructions: string
+  provider: string
+  model: string
   allowedTools: string
+  mcpConnectors: string
+  sandboxPolicy: string
+  metadata: string
+}
+
+export interface SessionFormState {
+  agentId: string
+  environmentId: string
+  title: string
+  metadata: string
+  resourceRefs: string
+  vaultRefs: string
 }
 
 export interface ProviderFormState {

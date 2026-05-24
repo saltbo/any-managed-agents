@@ -5,8 +5,8 @@ Feature: Agent sessions
   Background:
     Given a project has an active agent definition
 
-  Scenario: Start a session from an agent
-    When the user starts a session
+  Scenario: Create a session from an agent and environment
+    When the user creates a session with an agent and environment
     Then the platform stores a session record in D1
     And the session uses a snapshot of the selected agent version
     And the session uses a snapshot of the selected environment
@@ -16,6 +16,9 @@ Feature: Agent sessions
     Given a session exists
     When the client connects through an external SDK session helper or direct runtime client
     Then runtime traffic uses Pi protocol or a transparent AMA proxy around Pi protocol
+    And browser clients use WebSocket for bidirectional Pi RPC commands and events
+    And AMA does not inject custom response or lifecycle events into the Pi runtime stream
+    And clients do not poll the runtime endpoint for NDJSON transcripts
     And the helper does not define an incompatible replacement runtime protocol
 
   Scenario: Stop a running session

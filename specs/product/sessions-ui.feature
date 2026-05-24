@@ -27,4 +27,4 @@ Feature: Sessions UI
     When the user starts the create-session flow
     Then the form captures agent, optional environment override, title, metadata, resources, and vault references
     And unavailable archived dependencies are disabled with explanations
-    And successful save opens the session detail page with the runtime task input ready
+    And successful save opens the session detail page with the runtime message composer ready
