@@ -1,4 +1,4 @@
-@planned @cli
+@cli @implemented
 Feature: CLI client
   Restish acts as the CLI client for AMA control-plane resources.
 

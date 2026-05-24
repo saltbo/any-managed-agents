@@ -1,30 +1,68 @@
 import { SELF } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 
+interface OpenApiOperation {
+  operationId?: string
+  summary?: string
+  tags?: string[]
+  security?: unknown
+  parameters?: Array<{ name?: string }>
+  requestBody?: { content?: Record<string, unknown> }
+  responses?: Record<string, { content?: Record<string, { schema?: unknown }> }>
+}
+
+interface OpenApiDocument {
+  openapi: string
+  servers?: Array<{ url?: string }>
+  paths: Record<string, Record<string, OpenApiOperation>>
+  components?: {
+    schemas?: Record<string, unknown>
+    securitySchemes?: Record<string, unknown>
+  }
+}
+
+const METHODS = new Set(['get', 'post', 'put', 'patch', 'delete'])
+const PUBLIC_PATHS = new Set(['/api/health', '/api/auth/login', '/api/auth/callback'])
+const EXPECTED_RESTISH_OPERATIONS = {
+  System: ['getHealth'],
+  Agents: ['listAgents', 'createAgent'],
+  Environments: ['listEnvironments', 'createEnvironment'],
+  Sessions: ['listSessions', 'createSession'],
+  Providers: ['listProviders', 'createProvider'],
+  Vaults: ['listVaults', 'createVault'],
+  Governance: ['readEffectiveGovernancePolicy', 'readGovernancePolicy'],
+  Usage: ['listUsageRecords', 'readUsageSummary'],
+  Audit: ['listAuditRecords', 'exportAuditRecords'],
+}
+
+async function fetchOpenApi() {
+  const res = await SELF.fetch('https://example.com/api/openapi.json')
+
+  expect(res.status).toBe(200)
+  return (await res.json()) as OpenApiDocument
+}
+
+function operations(doc: OpenApiDocument) {
+  return Object.entries(doc.paths).flatMap(([path, pathItem]) =>
+    Object.entries(pathItem)
+      .filter(([method]) => METHODS.has(method))
+      .map(([method, operation]) => ({ path, method, operation })),
+  )
+}
+
+function expectJsonErrorResponse(operation: OpenApiOperation, status: string) {
+  expect(
+    operation.responses?.[status]?.content?.['application/json']?.schema,
+    `${operation.operationId} ${status} response must use the standard JSON error envelope`,
+  ).toEqual({ $ref: '#/components/schemas/ErrorResponse' })
+}
+
 describe('[CF] OpenAPI documentation', () => {
   it('publishes the generated control-plane OpenAPI document', async () => {
-    const res = await SELF.fetch('https://example.com/api/openapi.json')
-
-    expect(res.status).toBe(200)
-    const doc = (await res.json()) as {
-      openapi: string
-      paths: Record<
-        string,
-        Record<
-          string,
-          {
-            operationId?: string
-            security?: unknown
-            parameters?: Array<{ name?: string }>
-            requestBody?: { content?: Record<string, unknown> }
-            responses?: Record<number, { content?: Record<string, unknown> }>
-          }
-        >
-      >
-      components?: { schemas?: Record<string, unknown>; securitySchemes?: Record<string, unknown> }
-    }
+    const doc = await fetchOpenApi()
 
     expect(doc.openapi).toBe('3.0.0')
+    expect(doc.servers).toEqual([{ url: '/' }])
     expect(doc.paths).toHaveProperty('/api/health')
     expect(doc.paths).toHaveProperty('/api/auth/login')
     expect(doc.paths).toHaveProperty('/api/auth/callback')
@@ -174,6 +212,57 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.components?.schemas).toHaveProperty('UsageRecord')
     expect(doc.components?.schemas).toHaveProperty('UsageSummary')
     expect(doc.components?.schemas).toHaveProperty('AuditRecord')
+  })
+
+  it('is discoverable as a restish control-plane contract', async () => {
+    const doc = await fetchOpenApi()
+    const discoveredOperations = operations(doc)
+    const operationIds = discoveredOperations.map(({ operation }) => operation.operationId)
+
+    expect(new Set(operationIds).size).toBe(operationIds.length)
+
+    for (const [tag, expectedOperationIds] of Object.entries(EXPECTED_RESTISH_OPERATIONS)) {
+      for (const operationId of expectedOperationIds) {
+        const match = discoveredOperations.find(({ operation }) => operation.operationId === operationId)
+        expect(match, `Expected restish to discover ${operationId}`).toBeTruthy()
+        expect(match?.operation.tags).toContain(tag)
+      }
+    }
+
+    for (const { path, method, operation } of discoveredOperations) {
+      expect(path.startsWith('/api/'), `${method.toUpperCase()} ${path} must stay under /api`).toBe(true)
+      expect(operation.operationId, `${method.toUpperCase()} ${path} must have operationId`).toEqual(expect.any(String))
+      expect(operation.summary, `${operation.operationId} must have a summary`).toEqual(expect.any(String))
+      expect(operation.tags?.length, `${operation.operationId} must have tags`).toBeGreaterThan(0)
+      expect(
+        Object.keys(operation.responses ?? {}).some((status) => /^[23]/.test(status)),
+        `${operation.operationId} must document a success or redirect response`,
+      ).toBe(true)
+      for (const [status, response] of Object.entries(operation.responses ?? {})) {
+        if (/^2/.test(status) && status !== '204') {
+          expect(
+            response.content,
+            `${operation.operationId} ${status} response must describe output content`,
+          ).toBeTruthy()
+        }
+      }
+
+      if (!PUBLIC_PATHS.has(path)) {
+        expect(operation.security, `${operation.operationId} must declare cookie auth`).toEqual([{ cookieAuth: [] }])
+        expectJsonErrorResponse(operation, '401')
+      }
+      if (operation.requestBody) {
+        expect(
+          operation.requestBody?.content?.['application/json'],
+          `${operation.operationId} must describe JSON request body`,
+        ).toBeTruthy()
+      }
+      for (const status of ['400', '401', '403', '404', '409', '502'] as const) {
+        if (operation.responses?.[status]) {
+          expectJsonErrorResponse(operation, status)
+        }
+      }
+    }
   })
 
   it('serves interactive API docs', async () => {

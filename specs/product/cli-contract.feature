@@ -1,4 +1,4 @@
-@planned @cli
+@cli @implemented
 Feature: CLI contract
   The OpenAPI document is the CLI contract for restish automation.
 

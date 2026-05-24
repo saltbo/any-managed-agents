@@ -20,7 +20,12 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
       - run: npm ci
+      - run: go install github.com/rest-sh/restish@v0.21.2
+      - run: echo "$HOME/go/bin" >> "$GITHUB_PATH"
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test

@@ -1,4 +1,4 @@
-@planned @skill @cli
+@skill @cli @implemented
 Feature: Agent skill for AMA command-line workflows
   Automation agents use a skill to operate AMA through restish and the OpenAPI contract.
 

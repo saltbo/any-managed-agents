@@ -1,4 +1,4 @@
-@planned @api @openapi
+@api @openapi @implemented
 Feature: API contracts and automation
   Developers can automate the control plane through OpenAPI and external SDKs.
 

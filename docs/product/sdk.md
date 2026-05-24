@@ -1,6 +1,6 @@
 # SDK and API Boundary
 
-This repository does not maintain language SDKs or a bespoke CLI binary. It publishes the Any Managed Agents control-plane OpenAPI contract. Product SDKs are generated and maintained in separate repositories, and command-line automation uses restish against the same OpenAPI document.
+This repository does not maintain language SDKs or a bespoke CLI binary. It publishes the Any Managed Agents control-plane OpenAPI contract. Product SDKs are generated and maintained in separate repositories. SDKs are generated from or mechanically aligned with the OpenAPI document, and command-line automation uses restish against the same OpenAPI document.
 
 ## SDK Layers
 
@@ -28,11 +28,28 @@ SDKs should stay thin. They wrap the public control-plane API and provide a smal
 
 The CLI path is restish over OpenAPI. The OpenAPI document is the source of truth for operation discovery, request fields, response fields, authentication, and machine-readable output.
 
-This repository may include an agent-facing skill that documents restish setup and common AMA workflows. That skill is guidance for automation agents, not a separate command surface. It should reference OpenAPI operations or documented paths rather than inventing project-specific CLI commands.
+Restish is configured from the deployment document:
+
+```bash
+export AMA_ORIGIN="https://ama.example.com"
+restish api configure ama "$AMA_ORIGIN/api/openapi.json"
+restish ama get-health
+```
+
+Use the current AMA deployment origin and `/api` paths for control-plane operations. The implemented security scheme is the FlareAuth-issued AMA session cookie declared as `cookieAuth`; do not document provider API keys as AMA control-plane credentials.
+
+This repository includes:
+
+- [Integration snippets](integration-snippets.md) for curl, restish, and generated SDK-shaped examples.
+- [AMA restish CLI skill](../agent-skills/ama-restish-cli/SKILL.md) for automation agents.
+
+The skill is guidance for automation agents, not a separate command surface. It references OpenAPI operations or documented paths rather than inventing project-specific CLI commands.
 
 ## Runtime Protocol
 
 Pi protocol is the v1.0 runtime protocol. Pi coding agent is the v1.0 runtime implementation inside Cloudflare Sandbox.
+
+Restish is control-plane only. It manages API resources through OpenAPI-described `/api` operations; it does not replace Pi runtime traffic.
 
 The platform must not create a competing runtime protocol for RPC, session events, prompts, abort, follow-up, steering, or tool calls. Runtime session traffic should use Pi protocol directly or a transparent AMA proxy around Pi RPC and JSON event streams.
 
