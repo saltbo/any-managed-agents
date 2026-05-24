@@ -1,8 +1,9 @@
 import { createRoute, z } from '@hono/zod-openapi'
-import { and, desc, eq, gte, like, lt, lte, or } from 'drizzle-orm'
+import { and, desc, eq, gte, isNull, like, lt, lte, or } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
+import { recordAudit, requestId } from '../audit'
 import { requireAuth } from '../auth/session'
-import { environments, environmentVersions } from '../db/schema'
+import { environments, environmentVersions, mcpConnections, vaultCredentialVersions } from '../db/schema'
 import {
   AuthenticatedOperation,
   createApiRouter,
@@ -34,6 +35,17 @@ const NetworkPolicySchema = z
     allowedHosts: z.array(z.string().min(1).max(253)).max(100).optional(),
   })
   .strict()
+const McpPolicySchema = z
+  .object({
+    allowedConnectors: z.array(z.string().min(1).max(120)).max(100).optional(),
+    blockedConnectors: z.array(z.string().min(1).max(120)).max(100).optional(),
+    requireApprovalConnectors: z.array(z.string().min(1).max(120)).max(100).optional(),
+    requireApprovalTools: z.array(z.string().min(1).max(240)).max(200).optional(),
+    connectorApprovalModes: z.record(z.string().min(1).max(120), z.enum(['none', 'require_approval'])).optional(),
+    defaultEffect: z.enum(['allow', 'deny']).optional(),
+  })
+  .strict()
+  .openapi('EnvironmentMcpPolicy')
 const ResourceLimitsSchema = z
   .object({
     cpuMs: z.number().int().positive().optional(),
@@ -57,10 +69,13 @@ const EnvironmentSchema = z
     variables: z.record(z.string(), VariableSchema).openapi({ example: { NODE_ENV: { description: 'Runtime mode' } } }),
     secretRefs: z.array(SecretRefSchema).openapi({ example: [{ name: 'NPM_TOKEN', ref: 'vault_secret_123' }] }),
     networkPolicy: JsonObjectSchema.openapi({ example: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] } }),
+    mcpPolicy: McpPolicySchema.openapi({ example: { allowedConnectors: ['github'] } }),
+    packageManagerPolicy: JsonObjectSchema.openapi({ example: { allowedRegistries: ['registry.npmjs.org'] } }),
     resourceLimits: JsonObjectSchema.openapi({ example: { memoryMb: 512 } }),
     runtimeImage: JsonObjectSchema.openapi({ example: { image: 'node:24' } }),
     metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
     status: z.enum(['active', 'archived']).openapi({ example: 'active' }),
+    archivedAt: z.string().datetime().nullable().openapi({ example: null }),
     currentVersionId: z.string().nullable().openapi({ example: 'envver_abc123' }),
     version: z.number().int().openapi({ example: 1 }),
     createdAt: z.string().datetime().openapi({ example: '2026-05-22T00:00:00.000Z' }),
@@ -78,6 +93,8 @@ const EnvironmentVersionSchema = z
     variables: z.record(z.string(), VariableSchema).openapi({ example: { NODE_ENV: { required: true } } }),
     secretRefs: z.array(SecretRefSchema).openapi({ example: [{ name: 'NPM_TOKEN', ref: 'vault_secret_123' }] }),
     networkPolicy: JsonObjectSchema.openapi({ example: { mode: 'restricted' } }),
+    mcpPolicy: McpPolicySchema.openapi({ example: { allowedConnectors: ['github'] } }),
+    packageManagerPolicy: JsonObjectSchema.openapi({ example: { allowedRegistries: ['registry.npmjs.org'] } }),
     resourceLimits: JsonObjectSchema.openapi({ example: { memoryMb: 512 } }),
     runtimeImage: JsonObjectSchema.openapi({ example: { image: 'node:24' } }),
     metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
@@ -103,6 +120,8 @@ const EnvironmentPayloadSchema = z.object({
     .optional()
     .openapi({ example: [{ name: 'NPM_TOKEN', ref: 'vault_secret_123' }] }),
   networkPolicy: NetworkPolicySchema.optional().openapi({ example: { mode: 'restricted' } }),
+  mcpPolicy: McpPolicySchema.optional().openapi({ example: { allowedConnectors: ['github'] } }),
+  packageManagerPolicy: JsonObjectSchema.optional().openapi({ example: { allowedRegistries: ['registry.npmjs.org'] } }),
   resourceLimits: ResourceLimitsSchema.optional().openapi({ example: { memoryMb: 512 } }),
   runtimeImage: RuntimeImageSchema.optional().openapi({ example: { image: 'node:24' } }),
   metadata: JsonObjectSchema.optional().openapi({ example: { owner: 'platform' } }),
@@ -145,6 +164,141 @@ function stringify(value: unknown) {
   return JSON.stringify(value)
 }
 
+function stringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+}
+
+function domainValidation(message: string, fields: Record<string, string>) {
+  return { error: { type: 'validation_error', message, details: { fields } } }
+}
+
+function secretKey(key: string) {
+  const normalized = key.toLowerCase().replaceAll(/[^a-z0-9]/g, '')
+  return (
+    normalized.includes('secret') ||
+    normalized.includes('token') ||
+    normalized.includes('apikey') ||
+    normalized.includes('password') ||
+    normalized.includes('privatekey')
+  )
+}
+
+function hasSecretMaterial(value: unknown): boolean {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+  if (Array.isArray(value)) {
+    return value.some(hasSecretMaterial)
+  }
+  return Object.entries(value).some(([key, child]) => {
+    return secretKey(key) || hasSecretMaterial(child)
+  })
+}
+
+function isExternalSecretReference(ref: string) {
+  return (
+    ref.startsWith('cloudflare-secret:') ||
+    ref.startsWith('wrangler_secret:') ||
+    ref.startsWith('vault://') ||
+    ref.startsWith('secret://')
+  )
+}
+
+async function validateSecretRefs(
+  db: ReturnType<typeof drizzle>,
+  organizationId: string,
+  projectId: string,
+  secretRefs: SecretRef[],
+) {
+  for (const [index, secretRef] of secretRefs.entries()) {
+    const secretRefField = `secretRefs[${index}]`
+    if (!secretRef.ref.startsWith('vaultver_')) {
+      if (isExternalSecretReference(secretRef.ref)) {
+        continue
+      }
+      return { [secretRefField]: 'Secret reference must use an approved reference format.' }
+    }
+    if (secretRef.ref !== secretRef.ref.trim()) {
+      return { [secretRefField]: 'Secret reference must use an approved reference format.' }
+    }
+    if (secretRef.ref.length < 'vaultver_'.length + 1) {
+      return { [secretRefField]: 'Secret reference must use an approved reference format.' }
+    }
+    if (!/^vaultver_[A-Za-z0-9_]+$/.test(secretRef.ref)) {
+      return { [secretRefField]: 'Secret reference must use an approved reference format.' }
+    }
+    const version = await db
+      .select({ id: vaultCredentialVersions.id })
+      .from(vaultCredentialVersions)
+      .where(
+        and(
+          eq(vaultCredentialVersions.id, secretRef.ref),
+          eq(vaultCredentialVersions.organizationId, organizationId),
+          or(eq(vaultCredentialVersions.projectId, projectId), isNull(vaultCredentialVersions.projectId)),
+          or(eq(vaultCredentialVersions.status, 'active'), eq(vaultCredentialVersions.status, 'superseded')),
+        ),
+      )
+      .get()
+    if (!version) {
+      return { [secretRefField]: 'Secret reference is not an active credential version.' }
+    }
+  }
+  return null
+}
+
+async function validateMcpPolicy(
+  db: ReturnType<typeof drizzle>,
+  projectId: string,
+  mcpPolicy: Record<string, unknown>,
+) {
+  const approvalModes = mcpPolicy.connectorApprovalModes
+  const connectorIds = [
+    ...stringArray(mcpPolicy.allowedConnectors),
+    ...stringArray(mcpPolicy.blockedConnectors),
+    ...stringArray(mcpPolicy.requireApprovalConnectors),
+    ...(approvalModes && typeof approvalModes === 'object' && !Array.isArray(approvalModes)
+      ? Object.keys(approvalModes)
+      : []),
+  ]
+  for (const connectorId of new Set(connectorIds)) {
+    if (connectorId === '*') {
+      continue
+    }
+    const connection = await db
+      .select({ id: mcpConnections.id })
+      .from(mcpConnections)
+      .where(
+        and(
+          eq(mcpConnections.projectId, projectId),
+          eq(mcpConnections.connectorId, connectorId),
+          eq(mcpConnections.status, 'connected'),
+        ),
+      )
+      .get()
+    if (!connection) {
+      return { mcpPolicy: `MCP connector is not connected for this project: ${connectorId}` }
+    }
+  }
+  return null
+}
+
+function validateSecretFreeObjects(values: {
+  metadata: Record<string, unknown>
+  mcpPolicy: Record<string, unknown>
+  packageManagerPolicy: Record<string, unknown>
+}) {
+  if (hasSecretMaterial(values.metadata)) {
+    return { metadata: 'Secret material must be stored in a vault.' }
+  }
+  if (hasSecretMaterial(values.mcpPolicy)) {
+    return { mcpPolicy: 'Secret material must be stored in a vault.' }
+  }
+  if (hasSecretMaterial(values.packageManagerPolicy)) {
+    return { packageManagerPolicy: 'Secret material must be stored in a vault.' }
+  }
+  return null
+}
+
 function serializeVersion(row: EnvironmentVersionRow) {
   return {
     id: row.id,
@@ -155,6 +309,8 @@ function serializeVersion(row: EnvironmentVersionRow) {
     variables: parseJson<Record<string, Variable>>(row.variables),
     secretRefs: parseJson<SecretRef[]>(row.secretRefs),
     networkPolicy: parseJson<Record<string, unknown>>(row.networkPolicy),
+    mcpPolicy: parseJson<Record<string, unknown>>(row.mcpPolicy),
+    packageManagerPolicy: parseJson<Record<string, unknown>>(row.packageManagerPolicy),
     resourceLimits: parseJson<Record<string, unknown>>(row.resourceLimits),
     runtimeImage: parseJson<Record<string, unknown>>(row.runtimeImage),
     metadata: parseJson<Record<string, unknown>>(row.metadata),
@@ -172,10 +328,13 @@ function serializeEnvironment(row: EnvironmentRow, version: EnvironmentVersionRo
     variables: parseJson<Record<string, Variable>>(row.variables),
     secretRefs: parseJson<SecretRef[]>(row.secretRefs),
     networkPolicy: parseJson<Record<string, unknown>>(row.networkPolicy),
+    mcpPolicy: parseJson<Record<string, unknown>>(row.mcpPolicy),
+    packageManagerPolicy: parseJson<Record<string, unknown>>(row.packageManagerPolicy),
     resourceLimits: parseJson<Record<string, unknown>>(row.resourceLimits),
     runtimeImage: parseJson<Record<string, unknown>>(row.runtimeImage),
     metadata: parseJson<Record<string, unknown>>(row.metadata),
     status: row.status as 'active' | 'archived',
+    archivedAt: row.archivedAt,
     currentVersionId: row.currentVersionId,
     version: version?.version ?? 0,
     createdAt: row.createdAt,
@@ -217,6 +376,8 @@ async function createVersion(
     variables: Record<string, Variable>
     secretRefs: SecretRef[]
     networkPolicy: Record<string, unknown>
+    mcpPolicy: Record<string, unknown>
+    packageManagerPolicy: Record<string, unknown>
     resourceLimits: Record<string, unknown>
     runtimeImage: Record<string, unknown>
     metadata: Record<string, unknown>
@@ -239,6 +400,8 @@ async function createVersion(
     variables: stringify(values.variables),
     secretRefs: stringify(values.secretRefs),
     networkPolicy: stringify(values.networkPolicy),
+    mcpPolicy: stringify(values.mcpPolicy),
+    packageManagerPolicy: stringify(values.packageManagerPolicy),
     resourceLimits: stringify(values.resourceLimits),
     runtimeImage: stringify(values.runtimeImage),
     metadata: stringify(values.metadata),
@@ -311,6 +474,7 @@ const updateRoute = createRoute({
     200: { description: 'Updated environment', content: { 'application/json': { schema: EnvironmentSchema } } },
     400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    409: { description: 'Archived environment', content: { 'application/json': { schema: ErrorResponseSchema } } },
     404: { description: 'Environment not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
   },
 })
@@ -410,9 +574,18 @@ app.openapi(createRouteConfig, async (c) => {
     variables: body.variables ?? {},
     secretRefs: body.secretRefs ?? [],
     networkPolicy: body.networkPolicy ?? {},
+    mcpPolicy: body.mcpPolicy ?? {},
+    packageManagerPolicy: body.packageManagerPolicy ?? {},
     resourceLimits: body.resourceLimits ?? {},
     runtimeImage: body.runtimeImage ?? {},
     metadata: body.metadata ?? {},
+  }
+  const validation =
+    (await validateSecretRefs(db, auth.organization.id, auth.project.id, values.secretRefs)) ??
+    (await validateMcpPolicy(db, auth.project.id, values.mcpPolicy)) ??
+    validateSecretFreeObjects(values)
+  if (validation) {
+    return c.json(domainValidation('Invalid environment configuration', validation), 400)
   }
   const row = {
     id: newId('env'),
@@ -423,10 +596,13 @@ app.openapi(createRouteConfig, async (c) => {
     variables: stringify(values.variables),
     secretRefs: stringify(values.secretRefs),
     networkPolicy: stringify(values.networkPolicy),
+    mcpPolicy: stringify(values.mcpPolicy),
+    packageManagerPolicy: stringify(values.packageManagerPolicy),
     resourceLimits: stringify(values.resourceLimits),
     runtimeImage: stringify(values.runtimeImage),
     metadata: stringify(values.metadata),
     status: 'active',
+    archivedAt: null,
     currentVersionId: null,
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -465,6 +641,9 @@ app.openapi(updateRoute, async (c) => {
   if (!environment) {
     return c.json({ error: { type: 'not_found', message: 'Environment not found' } }, 404)
   }
+  if (environment.status === 'archived') {
+    return c.json({ error: { type: 'conflict', message: 'Archived environments cannot be updated' } }, 409)
+  }
 
   const next = {
     name: body.name ?? environment.name,
@@ -473,9 +652,19 @@ app.openapi(updateRoute, async (c) => {
     variables: body.variables ?? parseJson<Record<string, Variable>>(environment.variables),
     secretRefs: body.secretRefs ?? parseJson<SecretRef[]>(environment.secretRefs),
     networkPolicy: body.networkPolicy ?? parseJson<Record<string, unknown>>(environment.networkPolicy),
+    mcpPolicy: body.mcpPolicy ?? parseJson<Record<string, unknown>>(environment.mcpPolicy),
+    packageManagerPolicy:
+      body.packageManagerPolicy ?? parseJson<Record<string, unknown>>(environment.packageManagerPolicy),
     resourceLimits: body.resourceLimits ?? parseJson<Record<string, unknown>>(environment.resourceLimits),
     runtimeImage: body.runtimeImage ?? parseJson<Record<string, unknown>>(environment.runtimeImage),
     metadata: body.metadata ?? parseJson<Record<string, unknown>>(environment.metadata),
+  }
+  const validation =
+    (await validateSecretRefs(db, auth.organization.id, auth.project.id, next.secretRefs)) ??
+    (await validateMcpPolicy(db, auth.project.id, next.mcpPolicy)) ??
+    validateSecretFreeObjects(next)
+  if (validation) {
+    return c.json(domainValidation('Invalid environment configuration', validation), 400)
   }
   const timestamp = now()
   const runtimeChanged =
@@ -483,8 +672,11 @@ app.openapi(updateRoute, async (c) => {
     body.variables !== undefined ||
     body.secretRefs !== undefined ||
     body.networkPolicy !== undefined ||
+    body.mcpPolicy !== undefined ||
+    body.packageManagerPolicy !== undefined ||
     body.resourceLimits !== undefined ||
-    body.runtimeImage !== undefined
+    body.runtimeImage !== undefined ||
+    body.metadata !== undefined
   const version = runtimeChanged
     ? await createVersion(db, environment, { ...next, createdAt: timestamp })
     : await currentVersion(db, environment)
@@ -494,6 +686,8 @@ app.openapi(updateRoute, async (c) => {
     variables: stringify(next.variables),
     secretRefs: stringify(next.secretRefs),
     networkPolicy: stringify(next.networkPolicy),
+    mcpPolicy: stringify(next.mcpPolicy),
+    packageManagerPolicy: stringify(next.packageManagerPolicy),
     resourceLimits: stringify(next.resourceLimits),
     runtimeImage: stringify(next.runtimeImage),
     metadata: stringify(next.metadata),
@@ -520,10 +714,21 @@ app.openapi(archiveRoute, async (c) => {
     return c.json({ error: { type: 'not_found', message: 'Environment not found' } }, 404)
   }
 
+  const timestamp = now()
   await db
     .update(environments)
-    .set({ status: 'archived', updatedAt: now() })
+    .set({ status: 'archived', archivedAt: timestamp, updatedAt: timestamp })
     .where(and(eq(environments.id, environmentId), eq(environments.projectId, auth.project.id)))
+  await recordAudit(db, {
+    auth,
+    action: 'environment.archive',
+    resourceType: 'environment',
+    resourceId: environmentId,
+    outcome: 'success',
+    requestId: requestId(c),
+    before: serializeEnvironment(environment, await currentVersion(db, environment)),
+    after: { status: 'archived', archivedAt: timestamp },
+  })
   return c.body(null, 204)
 })
 

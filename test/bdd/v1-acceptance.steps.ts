@@ -60,6 +60,40 @@ Given('a project has an active agent definition', () => {
   runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
 })
 
+Given('a project has an active environment', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+Given('an agent exists with version 1', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+Given('an agent has instructions, description, model config, tools, sandbox policy, and metadata', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+Given('a project has active and archived agents created across multiple dates', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+Given('an agent exists with existing sessions', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+Given('a project has active and archived environments created across multiple dates', () => {
+  runCloudflareRouteTest('server/routes/environments.cf-test.ts')
+})
+
+Given('an environment is used by existing sessions', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+  runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
+})
+
+Given('an environment is archived', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+  runCloudflareRouteTest('server/routes/environments.cf-test.ts')
+})
+
 Given('a session exists', () => {
   runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
 })
@@ -128,6 +162,70 @@ When('the API client requests a date range', () => {
   runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
 })
 
+When('the user creates an agent with a name and instructions', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+When(
+  'the user creates an agent with instructions, provider, model, allowed tools, MCP connectors, sandbox policy, metadata, and a default environment',
+  () => {
+    runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+  },
+)
+
+When(
+  'the user changes instructions, model config, tools, MCP connectors, sandbox policy, metadata, or default environment',
+  () => {
+    runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+  },
+)
+
+When('the user updates only the description', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+When('the user sets a metadata key to null', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+When('the user sends an empty tools array', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+When('the user lists agents with a page size', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+When('the user archives the agent', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+When('the user creates an environment with only a name', () => {
+  runCloudflareRouteTest('server/routes/environments.cf-test.ts')
+})
+
+When(
+  'the user creates an environment with package requirements, variables, secret references, allowed outbound hosts, MCP access rules, package-manager access rules, resource limits, runtime image, and metadata',
+  () => {
+    runCloudflareRouteTest('server/routes/environments.cf-test.ts')
+  },
+)
+
+When(
+  'the user changes packages, variables, secret references, network policy, resource limits, runtime image, or metadata',
+  () => {
+    runCloudflareRouteTest('server/routes/environments.cf-test.ts')
+  },
+)
+
+When('the user creates an agent or session that references the archived environment', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+When('the user lists environments with a page size', () => {
+  runCloudflareRouteTest('server/routes/environments.cf-test.ts')
+})
+
 When('web UI calls control-plane routes', () => {
   runUnitTest('src/lib/api.test.ts')
 })
@@ -177,6 +275,103 @@ Then('agent sessions keep immutable agent and environment snapshots', () => {
   runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
 })
 
+Then('the response includes an agent id, current version id, project id, timestamps, and archive state', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+Then('the agent defaults to the project default model provider and model', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+Then('optional fields use stable empty values instead of disappearing from the response', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+Then(
+  'the first agent version stores the instructions, model config, tool policy, sandbox policy, metadata, and default environment reference',
+  () => {
+    runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+  },
+)
+
+Then('the response echoes the normalized runtime configuration', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+Then(
+  'blocked tools, unavailable models, archived environments, and invalid sandbox policies are rejected with field-level validation details',
+  () => {
+    runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+  },
+)
+
+Then('secret material is never accepted directly inside agent metadata, tools, or connector configuration', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+Then('the platform creates version 2', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+  runCloudflareRouteTest('server/routes/environments.cf-test.ts')
+})
+
+Then('the current agent points at version 2', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+Then('sessions created before the update keep the version 1 snapshot', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+Then('sessions created after the update use the version 2 snapshot', () => {
+  runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
+})
+
+Then('every omitted runtime field remains unchanged', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+Then('that key is removed while other metadata keys remain', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+Then('the agent version stores an explicit empty tools policy', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+Then('the response includes data, hasMore, firstId, and lastId', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+  runCloudflareRouteTest('server/routes/environments.cf-test.ts')
+})
+
+Then('archived agents are hidden unless includeArchived is true', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+Then('created date filters only return agents in the requested range', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+Then('results are scoped to the signed-in project', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+  runCloudflareRouteTest('server/routes/environments.cf-test.ts')
+})
+
+Then('the agent is hidden from default lists and creation flows', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+Then('new sessions cannot be created from the archived agent', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+Then('existing sessions and immutable snapshots remain readable', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+Then('the archive operation records an audit event', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
 Then('the environments API supports create, read, update, version history, archive, and list', () => {
   runCloudflareRouteTest('server/routes/environments.cf-test.ts')
 })
@@ -186,6 +381,68 @@ Then('the environments API enforces auth and project tenancy', () => {
 })
 
 Then('environment secret handling stores references and never returns raw secret values', () => {
+  runCloudflareRouteTest('server/routes/environments.cf-test.ts')
+})
+
+Then('the response includes an environment id, current version id, project id, timestamps, and archive state', () => {
+  runCloudflareRouteTest('server/routes/environments.cf-test.ts')
+})
+
+Then(
+  'package lists, variables, secret references, network policy, resource limits, runtime image, and metadata have stable default values',
+  () => {
+    runCloudflareRouteTest('server/routes/environments.cf-test.ts')
+  },
+)
+
+Then('the environment is stored as a reusable definition, not as a running sandbox instance', () => {
+  runCloudflareRouteTest('server/routes/environments.cf-test.ts')
+})
+
+Then('the response stores normalized policy fields', () => {
+  runCloudflareRouteTest('server/routes/environments.cf-test.ts')
+})
+
+Then('raw secret values are rejected', () => {
+  runCloudflareRouteTest('server/routes/environments.cf-test.ts')
+})
+
+Then('secret references are returned only as safe names and references', () => {
+  runCloudflareRouteTest('server/routes/environments.cf-test.ts')
+})
+
+Then(
+  'invalid package specs, invalid host patterns, and unsupported runtime images return field-level validation details',
+  () => {
+    runCloudflareRouteTest('server/routes/environments.cf-test.ts')
+  },
+)
+
+Then('the platform creates a new environment version', () => {
+  runCloudflareRouteTest('server/routes/environments.cf-test.ts')
+})
+
+Then('existing sessions keep their original environment snapshot', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+Then('new sessions that reference the environment use the new environment version', () => {
+  runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
+})
+
+Then('the request is rejected with a conflict error', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+})
+
+Then('the archived environment remains readable through explicit read and includeArchived list requests', () => {
+  runCloudflareRouteTest('server/routes/environments.cf-test.ts')
+})
+
+Then('archived environments are hidden unless includeArchived is true', () => {
+  runCloudflareRouteTest('server/routes/environments.cf-test.ts')
+})
+
+Then('created date filters only return environments in the requested range', () => {
   runCloudflareRouteTest('server/routes/environments.cf-test.ts')
 })
 

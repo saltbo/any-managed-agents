@@ -21,7 +21,6 @@ Feature: Agents API
     And the agents API enforces auth, project tenancy, model policy, tool policy, and environment availability
     And agent sessions keep immutable agent and environment snapshots
 
-  @planned
   Scenario: Create an agent with the smallest useful configuration
     Given a signed-in user has access to a project
     When the user creates an agent with a name and instructions
@@ -30,7 +29,6 @@ Feature: Agents API
     And optional fields use stable empty values instead of disappearing from the response
     And the first agent version stores the instructions, model config, tool policy, sandbox policy, metadata, and default environment reference
 
-  @planned
   Scenario: Create an agent with full runtime configuration
     Given a project has an active environment
     When the user creates an agent with instructions, provider, model, allowed tools, MCP connectors, sandbox policy, metadata, and a default environment
@@ -38,7 +36,6 @@ Feature: Agents API
     And blocked tools, unavailable models, archived environments, and invalid sandbox policies are rejected with field-level validation details
     And secret material is never accepted directly inside agent metadata, tools, or connector configuration
 
-  @planned
   Scenario: Update an agent with versioned runtime semantics
     Given an agent exists with version 1
     When the user changes instructions, model config, tools, MCP connectors, sandbox policy, metadata, or default environment
@@ -47,7 +44,6 @@ Feature: Agents API
     And sessions created before the update keep the version 1 snapshot
     And sessions created after the update use the version 2 snapshot
 
-  @planned
   Scenario: Partially update an agent without losing omitted fields
     Given an agent has instructions, description, model config, tools, sandbox policy, and metadata
     When the user updates only the description
@@ -57,7 +53,6 @@ Feature: Agents API
     When the user sends an empty tools array
     Then the agent version stores an explicit empty tools policy
 
-  @planned
   Scenario: List agents with pagination and filters
     Given a project has active and archived agents created across multiple dates
     When the user lists agents with a page size
@@ -66,7 +61,6 @@ Feature: Agents API
     And created date filters only return agents in the requested range
     And results are scoped to the signed-in project
 
-  @planned
   Scenario: Archive an agent safely
     Given an agent exists with existing sessions
     When the user archives the agent

@@ -20,7 +20,6 @@ Feature: Environments API
     And the environments API enforces auth and project tenancy
     And environment secret handling stores references and never returns raw secret values
 
-  @planned
   Scenario: Create an environment with default execution policy
     Given a signed-in user has access to a project
     When the user creates an environment with only a name
@@ -28,7 +27,6 @@ Feature: Environments API
     And package lists, variables, secret references, network policy, resource limits, runtime image, and metadata have stable default values
     And the environment is stored as a reusable definition, not as a running sandbox instance
 
-  @planned
   Scenario: Create an environment with package, variable, network, and resource policy
     When the user creates an environment with package requirements, variables, secret references, allowed outbound hosts, MCP access rules, package-manager access rules, resource limits, runtime image, and metadata
     Then the response stores normalized policy fields
@@ -36,7 +34,6 @@ Feature: Environments API
     And secret references are returned only as safe names and references
     And invalid package specs, invalid host patterns, and unsupported runtime images return field-level validation details
 
-  @planned
   Scenario: Version environment changes without changing existing sessions
     Given an environment is used by existing sessions
     When the user changes packages, variables, secret references, network policy, resource limits, runtime image, or metadata
@@ -44,14 +41,12 @@ Feature: Environments API
     And existing sessions keep their original environment snapshot
     And new sessions that reference the environment use the new environment version
 
-  @planned
   Scenario: Enforce environment availability for new sessions
     Given an environment is archived
     When the user creates an agent or session that references the archived environment
     Then the request is rejected with a conflict error
     And the archived environment remains readable through explicit read and includeArchived list requests
 
-  @planned
   Scenario: List environments with pagination and filters
     Given a project has active and archived environments created across multiple dates
     When the user lists environments with a page size

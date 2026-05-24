@@ -1,8 +1,16 @@
 import { createRoute, z } from '@hono/zod-openapi'
 import { and, desc, eq, gte, like, lt, lte, or } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
+import { recordAudit, requestId } from '../audit'
 import { requireAuth } from '../auth/session'
-import { agentDefinitions, agentDefinitionVersions, environments, providerConfigs, providerModels } from '../db/schema'
+import {
+  agentDefinitions,
+  agentDefinitionVersions,
+  environments,
+  mcpConnections,
+  providerConfigs,
+  providerModels,
+} from '../db/schema'
 import {
   AuthenticatedOperation,
   createApiRouter,
@@ -12,7 +20,7 @@ import {
   paginateRows,
   parseListCursor,
 } from '../openapi'
-import { createSessionForAgent } from './sessions'
+import { createSessionForAgent, SessionSchema } from './sessions'
 
 const app = createApiRouter()
 
@@ -39,10 +47,12 @@ const AgentSchema = z
     model: z.string().openapi({ example: DEFAULT_MODEL }),
     systemPrompt: z.string().nullable().openapi({ example: 'Answer with citations.' }),
     allowedTools: z.array(z.string()).openapi({ example: ['web.search'] }),
+    mcpConnectors: z.array(z.string()).openapi({ example: ['github'] }),
     sandboxPolicy: JsonObjectSchema.openapi({ example: { network: 'enabled', filesystem: 'workspace' } }),
     defaultEnvironmentId: z.string().nullable().openapi({ example: 'env_abc123' }),
     metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
     status: z.enum(['active', 'archived']).openapi({ example: 'active' }),
+    archivedAt: z.string().datetime().nullable().openapi({ example: null }),
     currentVersionId: z.string().nullable().openapi({ example: 'agentver_abc123' }),
     version: z.number().int().openapi({ example: 1 }),
     createdAt: z.string().datetime().openapi({ example: '2026-05-22T00:00:00.000Z' }),
@@ -61,6 +71,7 @@ const AgentVersionSchema = z
     model: z.string().openapi({ example: DEFAULT_MODEL }),
     systemPrompt: z.string().nullable().openapi({ example: 'Answer with citations.' }),
     allowedTools: z.array(z.string()).openapi({ example: ['web.search'] }),
+    mcpConnectors: z.array(z.string()).openapi({ example: ['github'] }),
     sandboxPolicy: JsonObjectSchema.openapi({ example: { network: 'enabled' } }),
     defaultEnvironmentId: z.string().nullable().openapi({ example: 'env_abc123' }),
     metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
@@ -80,6 +91,11 @@ const AgentPayloadSchema = z.object({
     .max(100)
     .optional()
     .openapi({ example: ['web.search'] }),
+  mcpConnectors: z
+    .array(z.string().min(1).max(120))
+    .max(50)
+    .optional()
+    .openapi({ example: ['github'] }),
   sandboxPolicy: SandboxPolicySchema.optional().openapi({ example: { network: 'enabled' } }),
   defaultEnvironmentId: z.string().min(1).nullable().optional().openapi({ example: 'env_abc123' }),
   metadata: JsonObjectSchema.optional().openapi({ example: { owner: 'platform' } }),
@@ -87,24 +103,6 @@ const AgentPayloadSchema = z.object({
 
 const CreateAgentSchema = AgentPayloadSchema.openapi('CreateAgentRequest')
 const UpdateAgentSchema = AgentPayloadSchema.partial().openapi('UpdateAgentRequest')
-
-const SessionSchema = z
-  .object({
-    id: z.string().openapi({ example: 'session_abc123' }),
-    agentId: z.string().openapi({ example: 'agent_abc123' }),
-    agentVersionId: z.string().openapi({ example: 'agentver_abc123' }),
-    agentSnapshot: AgentVersionSchema,
-    environmentId: z.string().nullable().openapi({ example: 'env_abc123' }),
-    environmentVersionId: z.string().nullable().openapi({ example: 'envver_abc123' }),
-    environmentSnapshot: z.record(z.string(), z.unknown()).nullable(),
-    projectId: z.string().openapi({ example: 'project_abc123' }),
-    durableObjectName: z.string().openapi({ example: 'session_abc123' }),
-    status: z.string().openapi({ example: 'idle' }),
-    createdAt: z.string().datetime().openapi({ example: '2026-05-22T00:00:00.000Z' }),
-    updatedAt: z.string().datetime().openapi({ example: '2026-05-22T00:00:00.000Z' }),
-    agentUrl: z.string().openapi({ example: '/agents/managed-agent/session_abc123' }),
-  })
-  .openapi('Session')
 
 const AgentParamsSchema = z.object({
   agentId: z.string().openapi({
@@ -233,6 +231,56 @@ function validateAllowedTools(allowedTools: string[]) {
   return blocked ? { allowedTools: `Tool is blocked by policy: ${blocked}` } : null
 }
 
+function secretKey(key: string) {
+  const normalized = key.toLowerCase().replaceAll(/[^a-z0-9]/g, '')
+  return (
+    normalized.includes('secret') ||
+    normalized.includes('token') ||
+    normalized.includes('apikey') ||
+    normalized.includes('password') ||
+    normalized.includes('privatekey')
+  )
+}
+
+function hasSecretMaterial(value: unknown): boolean {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+  if (Array.isArray(value)) {
+    return value.some(hasSecretMaterial)
+  }
+  return Object.entries(value).some(([key, child]) => {
+    return secretKey(key) || hasSecretMaterial(child)
+  })
+}
+
+function mergeMetadata(current: Record<string, unknown>, update: Record<string, unknown> | undefined) {
+  if (!update) {
+    return current
+  }
+  return Object.fromEntries(Object.entries({ ...current, ...update }).filter(([key]) => update[key] !== null))
+}
+
+async function validateMcpConnectors(db: ReturnType<typeof drizzle>, projectId: string, connectorIds: string[]) {
+  for (const connectorId of connectorIds) {
+    const connection = await db
+      .select({ id: mcpConnections.id })
+      .from(mcpConnections)
+      .where(
+        and(
+          eq(mcpConnections.projectId, projectId),
+          eq(mcpConnections.connectorId, connectorId),
+          eq(mcpConnections.status, 'connected'),
+        ),
+      )
+      .get()
+    if (!connection) {
+      return { mcpConnectors: `MCP connector is not connected for this project: ${connectorId}` }
+    }
+  }
+  return null
+}
+
 async function validateDefaultEnvironment(
   db: ReturnType<typeof drizzle>,
   projectId: string,
@@ -267,10 +315,12 @@ function serializeAgent(row: AgentRow, version: AgentVersionRow | null) {
     model: row.model,
     systemPrompt: row.systemPrompt,
     allowedTools: parseJson<string[]>(row.allowedTools),
+    mcpConnectors: parseJson<string[]>(row.mcpConnectors),
     sandboxPolicy: parseJson<Record<string, unknown>>(row.sandboxPolicy),
     defaultEnvironmentId: row.defaultEnvironmentId,
     metadata: parseJson<Record<string, unknown>>(row.metadata),
     status: row.status as 'active' | 'archived',
+    archivedAt: row.archivedAt,
     currentVersionId: row.currentVersionId,
     version: version?.version ?? 0,
     createdAt: row.createdAt,
@@ -289,6 +339,7 @@ function serializeAgentVersion(row: AgentVersionRow) {
     model: row.model,
     systemPrompt: row.systemPrompt,
     allowedTools: parseJson<string[]>(row.allowedTools),
+    mcpConnectors: parseJson<string[]>(row.mcpConnectors),
     sandboxPolicy: parseJson<Record<string, unknown>>(row.sandboxPolicy),
     defaultEnvironmentId: row.defaultEnvironmentId,
     metadata: parseJson<Record<string, unknown>>(row.metadata),
@@ -305,6 +356,7 @@ async function createAgentVersion(
     model: string
     systemPrompt: string | null
     allowedTools: string[]
+    mcpConnectors: string[]
     sandboxPolicy: Record<string, unknown>
     defaultEnvironmentId: string | null
     metadata: Record<string, unknown>
@@ -332,6 +384,7 @@ async function createAgentVersion(
     model: values.model,
     systemPrompt: values.systemPrompt,
     allowedTools: stringify(values.allowedTools),
+    mcpConnectors: stringify(values.mcpConnectors),
     sandboxPolicy: stringify(values.sandboxPolicy),
     defaultEnvironmentId: values.defaultEnvironmentId,
     metadata: stringify(values.metadata),
@@ -425,6 +478,7 @@ const updateAgentRoute = createRoute({
     200: { description: 'Updated agent', content: { 'application/json': { schema: AgentSchema } } },
     400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    409: { description: 'Archived agent', content: { 'application/json': { schema: ErrorResponseSchema } } },
     404: { description: 'Agent not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
   },
 })
@@ -536,11 +590,14 @@ app.openapi(createAgentRoute, async (c) => {
   )
   const model = body.model ?? c.env.AMA_DEFAULT_MODEL ?? DEFAULT_MODEL
   const allowedTools = body.allowedTools ?? []
+  const mcpConnectors = body.mcpConnectors ?? []
   const sandboxPolicy = body.sandboxPolicy ?? {}
   const metadata = body.metadata ?? {}
   const validation =
     (await validateConfiguredProviderModel(db, auth.project.id, provider, model, c.env.AMA_DEFAULT_MODEL)) ??
     validateAllowedTools(allowedTools) ??
+    (await validateMcpConnectors(db, auth.project.id, mcpConnectors)) ??
+    (hasSecretMaterial(metadata) ? { metadata: 'Secret material must be stored in a vault.' } : null) ??
     (await validateDefaultEnvironment(db, auth.project.id, body.defaultEnvironmentId ?? null))
   if (validation) {
     return c.json(domainValidation('Invalid agent configuration', validation), 400)
@@ -557,10 +614,12 @@ app.openapi(createAgentRoute, async (c) => {
     model,
     systemPrompt: body.systemPrompt ?? body.instructions ?? null,
     allowedTools: stringify(allowedTools),
+    mcpConnectors: stringify(mcpConnectors),
     sandboxPolicy: stringify(sandboxPolicy),
     defaultEnvironmentId: body.defaultEnvironmentId ?? null,
     metadata: stringify(metadata),
     status: 'active',
+    archivedAt: null,
     currentVersionId: null,
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -569,6 +628,7 @@ app.openapi(createAgentRoute, async (c) => {
   const version = await createAgentVersion(db, row, {
     ...row,
     allowedTools,
+    mcpConnectors,
     sandboxPolicy,
     metadata,
     createdAt: timestamp,
@@ -606,6 +666,9 @@ app.openapi(updateAgentRoute, async (c) => {
   if (!agent) {
     return c.json({ error: { type: 'not_found', message: 'Agent not found' } }, 404)
   }
+  if (agent.status === 'archived') {
+    return c.json({ error: { type: 'conflict', message: 'Archived agents cannot be updated' } }, 409)
+  }
 
   const next = {
     name: body.name ?? agent.name,
@@ -615,14 +678,17 @@ app.openapi(updateAgentRoute, async (c) => {
     model: body.model ?? agent.model,
     systemPrompt: body.systemPrompt ?? agent.systemPrompt,
     allowedTools: body.allowedTools ?? parseJson<string[]>(agent.allowedTools),
+    mcpConnectors: body.mcpConnectors ?? parseJson<string[]>(agent.mcpConnectors),
     sandboxPolicy: body.sandboxPolicy ?? parseJson<Record<string, unknown>>(agent.sandboxPolicy),
     defaultEnvironmentId:
       body.defaultEnvironmentId === undefined ? agent.defaultEnvironmentId : body.defaultEnvironmentId,
-    metadata: body.metadata ?? parseJson<Record<string, unknown>>(agent.metadata),
+    metadata: mergeMetadata(parseJson<Record<string, unknown>>(agent.metadata), body.metadata),
   }
   const validation =
     (await validateConfiguredProviderModel(db, auth.project.id, next.provider, next.model, c.env.AMA_DEFAULT_MODEL)) ??
     validateAllowedTools(next.allowedTools) ??
+    (await validateMcpConnectors(db, auth.project.id, next.mcpConnectors)) ??
+    (hasSecretMaterial(next.metadata) ? { metadata: 'Secret material must be stored in a vault.' } : null) ??
     (await validateDefaultEnvironment(db, auth.project.id, next.defaultEnvironmentId))
   if (validation) {
     return c.json(domainValidation('Invalid agent configuration', validation), 400)
@@ -635,14 +701,17 @@ app.openapi(updateAgentRoute, async (c) => {
     body.model !== undefined ||
     body.systemPrompt !== undefined ||
     body.allowedTools !== undefined ||
+    body.mcpConnectors !== undefined ||
     body.sandboxPolicy !== undefined ||
-    body.defaultEnvironmentId !== undefined
+    body.defaultEnvironmentId !== undefined ||
+    body.metadata !== undefined
   const version = runtimeChanged
     ? await createAgentVersion(db, agent, { ...next, createdAt: timestamp })
     : await currentAgentVersion(db, agent)
   const updated = {
     ...next,
     allowedTools: stringify(next.allowedTools),
+    mcpConnectors: stringify(next.mcpConnectors),
     sandboxPolicy: stringify(next.sandboxPolicy),
     metadata: stringify(next.metadata),
     currentVersionId: version?.id ?? agent.currentVersionId,
@@ -669,10 +738,21 @@ app.openapi(archiveAgentRoute, async (c) => {
     return c.json({ error: { type: 'not_found', message: 'Agent not found' } }, 404)
   }
 
+  const timestamp = now()
   await db
     .update(agentDefinitions)
-    .set({ status: 'archived', updatedAt: now() })
+    .set({ status: 'archived', archivedAt: timestamp, updatedAt: timestamp })
     .where(and(eq(agentDefinitions.id, agentId), eq(agentDefinitions.projectId, auth.project.id)))
+  await recordAudit(db, {
+    auth,
+    action: 'agent.archive',
+    resourceType: 'agent',
+    resourceId: agentId,
+    outcome: 'success',
+    requestId: requestId(c),
+    before: serializeAgent(agent, await currentAgentVersion(db, agent)),
+    after: { status: 'archived', archivedAt: timestamp },
+  })
   return c.body(null, 204)
 })
 
