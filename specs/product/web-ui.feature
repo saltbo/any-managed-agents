@@ -17,7 +17,7 @@ Feature: Web console
     And the v1 console supports creating environments, agents, and sessions
     And the v1 console supports sending runtime tasks and inspecting session events
 
-  @planned
+  @implemented
   Scenario: Navigate the app shell
     When the user opens the console
     Then the sidebar shows agents, sessions, providers, vaults, usage, audit, and settings

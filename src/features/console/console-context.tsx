@@ -1,6 +1,20 @@
 import { createContext, useContext } from 'react'
 import type { View } from '@/console/types'
-import type { Agent, AuthContext, Environment, Session, SessionEvent } from '@/lib/api'
+import type {
+  Agent,
+  AuditRecord,
+  AuthContext,
+  Environment,
+  GovernancePolicy,
+  McpConnection,
+  McpConnector,
+  Provider,
+  Session,
+  SessionEvent,
+  UsageSummary,
+  Vault,
+  VaultCredential,
+} from '@/lib/api'
 
 export interface ConsoleContextValue {
   auth: AuthContext
@@ -12,9 +26,18 @@ export interface ConsoleContextValue {
   agents: Agent[]
   environments: Environment[]
   sessions: Session[]
+  providers: Provider[]
+  vaults: Vault[]
+  mcpConnectors: McpConnector[]
+  mcpConnections: McpConnection[]
+  governancePolicy: GovernancePolicy | null
+  usageSummary: UsageSummary | null
+  auditRecords: AuditRecord[]
+  vaultCredentials: Record<string, VaultCredential[]>
   selectedSession: Session | null
   selectedSessionId: string | null
   setSelectedSessionId: (value: string) => void
+  setSelectedSession: (value: Session) => void
   sessionEvents: SessionEvent[]
   runtimeTranscript: string
   taskMessage: string
@@ -25,8 +48,13 @@ export interface ConsoleContextValue {
   refresh: () => void
   openCreateAgent: () => void
   openCreateEnvironment: () => void
+  openCreateProvider: () => void
+  openCreateVault: () => void
   archiveAgent: (id: string) => void
   archiveEnvironment: (id: string) => void
+  archiveProvider: (id: string) => void
+  archiveVault: (id: string) => void
+  disconnectMcpConnection: (id: string) => void
   startSession: (agentId: string) => void
   stopSession: (id: string) => void
   archiveSession: (id: string) => void

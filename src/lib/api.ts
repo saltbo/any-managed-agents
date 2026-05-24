@@ -137,6 +137,180 @@ export interface SessionEvent {
   createdAt: string
 }
 
+export interface Provider {
+  id: string
+  projectId: string
+  type: string
+  displayName: string
+  baseUrl: string | null
+  isDefault: boolean
+  status: 'active' | 'disabled' | 'deleted'
+  hasCredential: boolean
+  credentialStatus: 'not_required' | 'configured' | 'missing'
+  metadata: Record<string, unknown>
+  rateLimits: Record<string, unknown>
+  budgetPolicy: Record<string, unknown>
+  modelCatalogStatus: string
+  lastError: Record<string, unknown> | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ProviderModel {
+  id: string
+  providerId: string
+  modelId: string
+  displayName: string
+  capabilities: string[]
+  contextWindow: number | null
+  pricing: Record<string, unknown>
+  availability: 'available' | 'unavailable' | 'disabled'
+  metadata: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
+export interface Vault {
+  id: string
+  organizationId: string
+  projectId: string | null
+  name: string
+  description: string | null
+  scope: 'project' | 'organization'
+  metadata: Record<string, unknown>
+  status: 'active' | 'archived'
+  archivedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface VaultCredentialVersion {
+  id: string
+  credentialId: string
+  vaultId: string
+  organizationId: string
+  projectId: string | null
+  version: number
+  provider: 'cloudflare-secrets' | 'external-vault'
+  secretRef: string
+  externalVaultPath: string | null
+  referenceName: string
+  status: 'active' | 'superseded' | 'revoked' | 'deleted'
+  hasSecret: boolean
+  metadata: Record<string, unknown>
+  createdAt: string
+  supersededAt: string | null
+  revokedAt: string | null
+  deletedAt: string | null
+}
+
+export interface VaultCredential {
+  id: string
+  vaultId: string
+  organizationId: string
+  projectId: string | null
+  name: string
+  type: string
+  connectorBinding: Record<string, unknown>
+  metadata: Record<string, unknown>
+  status: 'active' | 'revoked'
+  activeVersionId: string | null
+  activeVersion: VaultCredentialVersion | null
+  revokedAt: string | null
+  revokedByUserId: string | null
+  revokeReason: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface McpConnector {
+  id: string
+  connectorId: string
+  name: string
+  description: string
+  category: string
+  trustLevel: string
+  capabilities: string[]
+  supportedAuthModes: string[]
+  setupRequirements: string[]
+  tools: Array<{ name: string; description: string | null; approvalMode: string }>
+  metadata: Record<string, unknown>
+  status: 'available' | 'unavailable'
+  policyStatus: 'allowed' | 'blocked' | 'approval_required'
+  connectionStatus: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface McpConnection {
+  id: string
+  organizationId: string
+  projectId: string
+  connectorId: string
+  hasCredential: boolean
+  endpointUrl: string | null
+  approvalMode: string
+  status: 'connected' | 'disabled' | 'disconnected' | 'error'
+  lastError: Record<string, unknown> | null
+  metadata: Record<string, unknown>
+  connectedAt: string
+  disconnectedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface GovernancePolicy {
+  id: string
+  organizationId: string
+  projectId: string
+  scope: 'project'
+  providerRules: Array<Record<string, unknown>>
+  modelRules: Array<Record<string, unknown>>
+  toolPolicy: Record<string, unknown>
+  mcpPolicy: Record<string, unknown>
+  sandboxPolicy: Record<string, unknown>
+  budgetPolicy: Record<string, unknown>
+  metadata: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
+export interface UsageSummaryGroup {
+  key: Record<string, unknown>
+  records: number
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+  durationMs: number
+  costMicros: number
+  currency: string
+}
+
+export interface UsageSummary {
+  totals: UsageSummaryGroup
+  groups: UsageSummaryGroup[]
+}
+
+export interface AuditRecord {
+  id: string
+  organizationId: string
+  projectId: string | null
+  actorUserId: string | null
+  actorType: string
+  action: string
+  resourceType: string
+  resourceId: string | null
+  outcome: string
+  requestId: string | null
+  correlationId: string | null
+  sessionId: string | null
+  policyCategory: string | null
+  metadata: Record<string, unknown>
+  before: Record<string, unknown>
+  after: Record<string, unknown>
+  createdAt: string
+}
+
 export interface ListPagination {
   limit: number
   nextCursor: string | null
@@ -197,6 +371,20 @@ export interface AgentInput {
   metadata?: Record<string, unknown>
 }
 
+export interface ProviderInput {
+  type: string
+  displayName: string
+  baseUrl?: string
+  isDefault?: boolean
+  credentialSecretRef?: string
+}
+
+export interface VaultInput {
+  name: string
+  description?: string
+  scope?: 'project' | 'organization'
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -254,6 +442,7 @@ export const api = {
   logout: () => request<void>('/api/auth/logout', { method: 'POST' }),
   listAgents: (options: ListOptions | boolean = {}) =>
     request<ListResponse<Agent>>(`/api/agents${queryString(listOptions(options))}`),
+  readAgent: (id: string) => request<Agent>(`/api/agents/${id}`),
   createAgent: (input: AgentInput) => request<Agent>('/api/agents', { method: 'POST', body: JSON.stringify(input) }),
   updateAgent: (id: string, input: Partial<AgentInput>) =>
     request<Agent>(`/api/agents/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
@@ -262,6 +451,7 @@ export const api = {
   startAgentSession: (id: string) => request<Session>(`/api/agents/${id}/sessions`, { method: 'POST' }),
   listEnvironments: (options: ListOptions | boolean = {}) =>
     request<ListResponse<Environment>>(`/api/environments${queryString(listOptions(options))}`),
+  readEnvironment: (id: string) => request<Environment>(`/api/environments/${id}`),
   createEnvironment: (input: EnvironmentInput) =>
     request<Environment>('/api/environments', { method: 'POST', body: JSON.stringify(input) }),
   updateEnvironment: (id: string, input: Partial<EnvironmentInput>) =>
@@ -278,6 +468,29 @@ export const api = {
   archiveSession: (id: string) => request<void>(`/api/sessions/${id}`, { method: 'DELETE' }),
   listSessionEvents: (id: string, options: SessionEventListOptions = {}) =>
     request<ListResponse<SessionEvent>>(`/api/sessions/${id}/events${queryString(options)}`),
+  listProviders: (options: ListOptions | boolean = {}) =>
+    request<ListResponse<Provider>>(`/api/providers${queryString(listOptions(options))}`),
+  readProvider: (id: string) => request<Provider>(`/api/providers/${id}`),
+  createProvider: (input: ProviderInput) =>
+    request<Provider>('/api/providers', { method: 'POST', body: JSON.stringify(input) }),
+  archiveProvider: (id: string) => request<void>(`/api/providers/${id}`, { method: 'DELETE' }),
+  listProviderModels: (id: string) => request<ListResponse<ProviderModel>>(`/api/providers/${id}/models`),
+  listVaults: (options: ListOptions | boolean = {}) =>
+    request<ListResponse<Vault>>(`/api/vaults${queryString(listOptions(options))}`),
+  readVault: (id: string) => request<Vault>(`/api/vaults/${id}`),
+  createVault: (input: VaultInput) => request<Vault>('/api/vaults', { method: 'POST', body: JSON.stringify(input) }),
+  archiveVault: (id: string) => request<void>(`/api/vaults/${id}`, { method: 'DELETE' }),
+  listVaultCredentials: (id: string, options: ListOptions | boolean = {}) =>
+    request<ListResponse<VaultCredential>>(`/api/vaults/${id}/credentials${queryString(listOptions(options))}`),
+  listMcpConnectors: () => request<ListResponse<McpConnector>>('/api/mcp/connectors'),
+  listMcpConnections: () => request<ListResponse<McpConnection>>('/api/mcp/connections'),
+  disconnectMcpConnection: (id: string) =>
+    request<void>(`/api/mcp/connections/${id}?confirm=true`, { method: 'DELETE' }),
+  readGovernancePolicy: () => request<GovernancePolicy>('/api/governance/policy'),
+  updateGovernancePolicy: (input: Partial<GovernancePolicy>) =>
+    request<GovernancePolicy>('/api/governance/policy', { method: 'PUT', body: JSON.stringify(input) }),
+  readUsageSummary: () => request<UsageSummary>('/api/usage/summary'),
+  listAuditRecords: () => request<ListResponse<AuditRecord>>('/api/audit-records'),
   sendRuntimeTask: (session: Session, message: string) =>
     request<{ accepted?: boolean }>(session.runtimeEndpointPath, {
       method: 'POST',
