@@ -298,6 +298,8 @@ function stringArray(value: unknown) {
 function policyStatus(mcpPolicy: Record<string, unknown>, connectorId: string) {
   const blocked = stringArray(mcpPolicy.blockedConnectors)
   if (blocked.includes('*') || blocked.includes(connectorId)) return 'blocked' as const
+  const allowed = stringArray(mcpPolicy.allowedConnectors)
+  if (allowed.length > 0 && !allowed.includes('*') && !allowed.includes(connectorId)) return 'blocked' as const
   const required = stringArray(mcpPolicy.requireApprovalConnectors)
   if (required.includes('*') || required.includes(connectorId)) return 'approval_required' as const
   if (mcpPolicy.defaultEffect === 'deny') return 'blocked' as const

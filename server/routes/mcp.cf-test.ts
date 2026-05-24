@@ -128,6 +128,41 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
     expect(invalidCursorRes.status).toBe(400)
   })
 
+  it('marks allow-list excluded connectors blocked and rejects connecting them', async () => {
+    const cookie = await signInUser('catalog_allow_list')
+
+    const policyRes = await jsonFetch('/api/governance/policy', cookie, {
+      method: 'PUT',
+      body: JSON.stringify({ mcpPolicy: { allowedConnectors: ['linear'] } }),
+    })
+    expect(policyRes.status).toBe(200)
+
+    const listRes = await jsonFetch('/api/mcp/connectors?search=GitHub', cookie)
+    expect(listRes.status).toBe(200)
+    const list = (await listRes.json()) as { data: Array<{ connectorId: string; policyStatus: string }> }
+    expect(list.data).toContainEqual(expect.objectContaining({ connectorId: 'github', policyStatus: 'blocked' }))
+
+    const detailRes = await jsonFetch('/api/mcp/connectors/github', cookie)
+    expect(detailRes.status).toBe(200)
+    await expect(detailRes.json()).resolves.toMatchObject({
+      connectorId: 'github',
+      policyStatus: 'blocked',
+    })
+
+    const connectRes = await jsonFetch('/api/mcp/connections', cookie, {
+      method: 'POST',
+      body: JSON.stringify({ connectorId: 'github' }),
+    })
+    expect(connectRes.status).toBe(403)
+    await expect(connectRes.json()).resolves.toMatchObject({
+      error: {
+        type: 'policy_denied',
+        message: 'MCP connector is blocked by governance policy.',
+        details: { category: 'mcp', resourceType: 'mcp_connector', resourceId: 'github' },
+      },
+    })
+  })
+
   it('connects, upserts, lists tools, disconnects, audits, and never accepts raw credential values', async () => {
     const cookie = await signInUser('connections')
     const credential = await createCredential(cookie)
