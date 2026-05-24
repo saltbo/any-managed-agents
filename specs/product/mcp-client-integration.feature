@@ -1,7 +1,8 @@
-@planned @mcp
+@mcp
 Feature: MCP client integration
   The runtime integrates with approved MCP clients and connectors.
 
+  @planned
   Scenario: Connect to an approved MCP server
     Given a connector is approved for a project
     When the runtime creates an MCP client
@@ -13,6 +14,7 @@ Feature: MCP client integration
     Then AMA rejects the tool call before contacting the MCP server
     And records a policy event on the session
 
+  @planned
   Scenario: Refresh connector credentials for runtime
     Given a connector credential has been rotated
     When a new session starts

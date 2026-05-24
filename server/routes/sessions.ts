@@ -9,6 +9,8 @@ import {
   agentDefinitionVersions,
   environments,
   environmentVersions,
+  mcpConnections,
+  mcpConnectionTools,
   sessionEvents,
   sessions,
 } from '../db/schema'
@@ -25,7 +27,7 @@ import {
   paginateSequenceRows,
   parseListCursor,
 } from '../openapi'
-import { evaluateProviderPolicy } from '../policy'
+import { evaluateMcpToolPolicy, evaluateProviderPolicy } from '../policy'
 import { runtimeEndpointPath, safeRuntimeError, startPiBridge, stopPiBridge } from '../runtime/pi/bridge'
 
 const app = createApiRouter()
@@ -309,6 +311,60 @@ async function appendSessionEvent(
   }
 }
 
+async function resolveMcpSnapshot(
+  db: Db,
+  auth: AuthContext,
+  sessionId: string,
+  agentSnapshot: ReturnType<typeof serializeAgentVersion>,
+  environmentSnapshot: ReturnType<typeof serializeEnvironmentVersion> | null,
+) {
+  const connections = await db
+    .select()
+    .from(mcpConnections)
+    .where(and(eq(mcpConnections.projectId, auth.project.id), eq(mcpConnections.status, 'connected')))
+
+  const snapshotConnections = []
+  const sessionContext = {
+    id: sessionId,
+    agentSnapshot: stringify(agentSnapshot),
+    environmentSnapshot: environmentSnapshot ? stringify(environmentSnapshot) : null,
+  }
+  for (const connection of connections) {
+    const tools = await db
+      .select()
+      .from(mcpConnectionTools)
+      .where(and(eq(mcpConnectionTools.connectionId, connection.id), eq(mcpConnectionTools.status, 'available')))
+    const allowedTools = []
+    for (const tool of tools) {
+      const decision = await evaluateMcpToolPolicy(db, auth, {
+        connectorId: connection.connectorId,
+        toolName: tool.name,
+        session: sessionContext,
+      })
+      if (decision.allowed) {
+        allowedTools.push({
+          name: tool.name,
+          description: tool.description,
+          inputSchema: parseJson<Record<string, unknown>>(tool.inputSchema) ?? {},
+          approvalMode: tool.approvalMode,
+          policyMetadata: parseJson<Record<string, unknown>>(tool.policyMetadata) ?? {},
+        })
+      }
+    }
+    if (allowedTools.length > 0) {
+      snapshotConnections.push({
+        connectionId: connection.id,
+        connectorId: connection.connectorId,
+        endpointUrl: connection.endpointUrl,
+        approvalMode: connection.approvalMode,
+        credentialRef: connection.credentialSecretRef,
+        tools: allowedTools,
+      })
+    }
+  }
+  return { connectors: snapshotConnections }
+}
+
 async function currentAgentVersion(db: Db, agent: AgentRow) {
   if (!agent.currentVersionId) {
     return null
@@ -448,6 +504,7 @@ export async function createSessionForAgent(c: Context<{ Bindings: Env }>, db: D
   })
 
   try {
+    const mcpSnapshot = await resolveMcpSnapshot(db, auth, id, agentSnapshot, environmentSnapshot)
     const runtime = await startPiBridge(c.env, {
       sessionId: id,
       sandboxId,
@@ -455,6 +512,7 @@ export async function createSessionForAgent(c: Context<{ Bindings: Env }>, db: D
       model: agentSnapshot.model,
       agentSnapshot,
       environmentSnapshot,
+      mcpSnapshot,
     })
     const startedAt = now()
     const metadata = { ...runtime.metadata, runtime: 'pi', protocol: 'pi-rpc-jsonl' }

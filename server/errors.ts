@@ -10,6 +10,7 @@ export type ErrorType =
   | 'conflict'
   | 'policy_denied'
   | 'provider_error'
+  | 'mcp_error'
   | 'oidc_error'
   | 'internal_error'
 

@@ -7,6 +7,7 @@ export interface PiBridgeStartInput {
   model: string
   agentSnapshot: Record<string, unknown>
   environmentSnapshot: Record<string, unknown> | null
+  mcpSnapshot?: Record<string, unknown>
 }
 
 export interface PiBridgeStartResult {
@@ -90,6 +91,7 @@ export async function startPiBridge(env: Env, input: PiBridgeStartInput): Promis
         model: input.model,
         agentSnapshot: input.agentSnapshot,
         environmentSnapshot: input.environmentSnapshot,
+        mcpSnapshot: input.mcpSnapshot ?? { connectors: [] },
       }),
       { encoding: 'utf-8' },
     )
