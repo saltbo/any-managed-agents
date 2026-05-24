@@ -1,4 +1,4 @@
-@planned @security @vaults
+@security @vaults
 Feature: Vaults and secrets
   Projects manage credentials without exposing secret values to clients or logs.
 
@@ -11,6 +11,7 @@ Feature: Vaults and secrets
     And D1 stores only secret metadata and references
     And API responses never include the raw secret value
 
+  @planned
   Scenario: Attach vaults to an agent session
     Given an agent requires credentials
     When the user starts a session with an allowed vault

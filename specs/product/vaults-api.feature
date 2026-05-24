@@ -1,4 +1,4 @@
-@planned @api @vaults
+@api @vaults
 Feature: Vaults API
   The control plane manages vaults and credential references.
 
@@ -32,4 +32,4 @@ Feature: Vaults API
     Then the vault is hidden from default lists and cannot be selected for new sessions
     And existing session references remain auditable
     When the user deletes an unused credential version
-    Then the operation requires explicit confirmation and an audit event
+    Then the operation requires explicit confirmation and audit metadata
