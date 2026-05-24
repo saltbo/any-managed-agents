@@ -249,7 +249,7 @@ Given('a scenario test is defined', () => {
 })
 
 When('CI executes the scenario', () => {
-  assertIncludes('package.json', /"bdd":/, /--tags 'not @planned'/)
+  assertIncludes('package.json', /"bdd":/, /not @planned and not @e2e/, /"bdd:e2e":/)
 })
 
 When('a developer requests API documentation', () => {

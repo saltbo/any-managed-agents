@@ -16,7 +16,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.server.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run --passWithNoTests",
     "test:cf": "vitest run --config vitest.cloudflare.config.ts",
-    "bdd": "NODE_OPTIONS='--import tsx' cucumber-js --tags 'not @planned' --import test/bdd/**/*.steps.ts specs/product/**/*.feature",
+    "bdd": "NODE_OPTIONS='--import tsx' cucumber-js --tags 'not @planned and not @e2e' --import test/bdd/**/*.steps.ts specs/product/**/*.feature",
     "bdd:e2e": "NODE_OPTIONS='--import tsx' cucumber-js --tags '@e2e and not @planned' --import test/bdd/**/*.steps.ts specs/product/**/*.feature",
     "smoke:restish": "NODE_OPTIONS='--import tsx' node scripts/restish-openapi-smoke.ts",
     "lint": "biome check .",
