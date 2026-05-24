@@ -20,6 +20,8 @@ async function createEnvironment(cookie: string) {
       name: 'Pi workspace',
       packages: [{ name: '@earendil-works/pi-coding-agent', version: 'prebuilt' }],
       secretRefs: [{ name: 'CLOUDFLARE_API_KEY', ref: 'wrangler_secret:AMA_WORKERS_AI_API_KEY' }],
+      mcpPolicy: { allowedConnectors: ['github'] },
+      packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
       runtimeImage: { image: 'ama-pi-runtime' },
     }),
   })
@@ -33,11 +35,42 @@ async function createAgent(cookie: string, environmentId: string) {
     body: JSON.stringify({
       name: 'Pi session agent',
       instructions: 'Work through Pi.',
+      allowedTools: ['mcp:github.repo.read'],
+      mcpConnectors: ['github'],
       defaultEnvironmentId: environmentId,
     }),
   })
   expect(res.status).toBe(201)
   return (await res.json()) as { id: string; currentVersionId: string }
+}
+
+async function connectMcp(cookie: string, connectorId: string) {
+  const vaultRes = await jsonFetch('/api/vaults', cookie, {
+    method: 'POST',
+    body: JSON.stringify({ name: `${connectorId} credentials` }),
+  })
+  expect(vaultRes.status).toBe(201)
+  const vault = (await vaultRes.json()) as { id: string }
+  const credentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, cookie, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: `${connectorId} token`,
+      type: 'api_key',
+      connectorBinding: { connectorId, name: 'token' },
+      secret: { provider: 'cloudflare-secrets', secretValue: `raw-${connectorId}-token` },
+    }),
+  })
+  expect(credentialRes.status).toBe(201)
+  const credential = (await credentialRes.json()) as { id: string; activeVersionId: string }
+  const connectRes = await jsonFetch('/api/mcp/connections', cookie, {
+    method: 'POST',
+    body: JSON.stringify({
+      connectorId,
+      credentialId: credential.id,
+      credentialVersionId: credential.activeVersionId,
+    }),
+  })
+  expect([200, 201]).toContain(connectRes.status)
 }
 
 describe('[CF] /api/sessions', () => {
@@ -51,6 +84,8 @@ describe('[CF] /api/sessions', () => {
 
   it('creates, reads, lists, reconnects, stops, archives, and records events for a Pi-backed session', async () => {
     const cookie = await signIn()
+    await connectMcp(cookie, 'github')
+    await connectMcp(cookie, 'linear')
     const environment = await createEnvironment(cookie)
     const agent = await createAgent(cookie, environment.id)
 
@@ -63,8 +98,12 @@ describe('[CF] /api/sessions', () => {
       id: string
       status: string
       agentVersionId: string
-      agentSnapshot: { instructions: string }
+      agentSnapshot: { instructions: string; mcpConnectors: string[] }
       environmentVersionId: string
+      environmentSnapshot: {
+        mcpPolicy: Record<string, unknown>
+        packageManagerPolicy: Record<string, unknown>
+      }
       sandboxId: string
       piRuntimeId: string
       piProcessId: string
@@ -76,12 +115,22 @@ describe('[CF] /api/sessions', () => {
     expect(created).toMatchObject({
       status: 'idle',
       agentVersionId: agent.currentVersionId,
-      agentSnapshot: { instructions: 'Work through Pi.' },
+      agentSnapshot: { instructions: 'Work through Pi.', mcpConnectors: ['github'] },
+      environmentSnapshot: {
+        mcpPolicy: { allowedConnectors: ['github'] },
+        packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
+      },
       sandboxId: created.id.toLowerCase(),
       piRuntimeId: `pi_${created.id}`,
       piProcessId: `proc_${created.id}`,
       runtimeEndpointPath: `/runtime/sessions/${created.id}/rpc`,
-      metadata: { runtime: 'pi', protocol: 'pi-rpc-jsonl', runtimeMode: 'test', bridge: 'fake' },
+      metadata: {
+        runtime: 'pi',
+        protocol: 'pi-rpc-jsonl',
+        runtimeMode: 'test',
+        bridge: 'fake',
+        mcpConnectors: ['github'],
+      },
       modelConfig: { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6' },
     })
     expect(created.environmentVersionId).toMatch(/^envver_/)
@@ -185,6 +234,7 @@ describe('[CF] /api/sessions', () => {
 
   it('lists sessions with pagination, status, search, and date filters', async () => {
     const cookie = await signIn()
+    await connectMcp(cookie, 'github')
     const environment = await createEnvironment(cookie)
     const agent = await createAgent(cookie, environment.id)
 
@@ -232,6 +282,7 @@ describe('[CF] /api/sessions', () => {
     expect(unauthenticatedRes.status).toBe(401)
 
     const cookie = await signIn()
+    await connectMcp(cookie, 'github')
     const environment = await createEnvironment(cookie)
     const agent = await createAgent(cookie, environment.id)
     const createRes = await jsonFetch('/api/sessions', cookie, {
@@ -268,6 +319,7 @@ describe('[CF] /api/sessions', () => {
 
   it('rereads stored snapshots after agent and environment updates', async () => {
     const cookie = await signIn()
+    await connectMcp(cookie, 'github')
     const environment = await createEnvironment(cookie)
     const agent = await createAgent(cookie, environment.id)
 
@@ -277,8 +329,12 @@ describe('[CF] /api/sessions', () => {
     })
     const created = (await createRes.json()) as {
       id: string
-      agentSnapshot: { instructions: string; version: number }
-      environmentSnapshot: { packages: Array<{ name: string; version?: string }> }
+      agentSnapshot: { instructions: string; version: number; mcpConnectors: string[] }
+      environmentSnapshot: {
+        packages: Array<{ name: string; version?: string }>
+        mcpPolicy: Record<string, unknown>
+        packageManagerPolicy: Record<string, unknown>
+      }
     }
 
     await jsonFetch(`/api/environments/${environment.id}`, cookie, {
@@ -294,9 +350,11 @@ describe('[CF] /api/sessions', () => {
     expect(rereadRes.status).toBe(200)
     await expect(rereadRes.json()).resolves.toMatchObject({
       id: created.id,
-      agentSnapshot: { instructions: 'Work through Pi.', version: 1 },
+      agentSnapshot: { instructions: 'Work through Pi.', version: 1, mcpConnectors: ['github'] },
       environmentSnapshot: {
         packages: [{ name: '@earendil-works/pi-coding-agent', version: 'prebuilt' }],
+        mcpPolicy: { allowedConnectors: ['github'] },
+        packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
       },
     })
   })

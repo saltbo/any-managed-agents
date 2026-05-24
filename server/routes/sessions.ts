@@ -48,6 +48,7 @@ const AgentVersionSchema = z
     model: z.string(),
     systemPrompt: z.string().nullable(),
     allowedTools: z.array(z.string()),
+    mcpConnectors: z.array(z.string()),
     sandboxPolicy: JsonObjectSchema,
     defaultEnvironmentId: z.string().nullable(),
     metadata: JsonObjectSchema,
@@ -65,6 +66,8 @@ const EnvironmentVersionSchema = z
     variables: JsonObjectSchema,
     secretRefs: z.array(JsonObjectSchema),
     networkPolicy: JsonObjectSchema,
+    mcpPolicy: JsonObjectSchema,
+    packageManagerPolicy: JsonObjectSchema,
     resourceLimits: JsonObjectSchema,
     runtimeImage: JsonObjectSchema,
     metadata: JsonObjectSchema,
@@ -72,7 +75,7 @@ const EnvironmentVersionSchema = z
   })
   .openapi('SessionEnvironmentSnapshot')
 
-const SessionSchema = z
+export const SessionSchema = z
   .object({
     id: z.string().openapi({ example: 'session_abc123' }),
     organizationId: z.string().openapi({ example: 'org_abc123' }),
@@ -194,6 +197,7 @@ function serializeAgentVersion(row: AgentVersionRow) {
     model: row.model,
     systemPrompt: row.systemPrompt,
     allowedTools: JSON.parse(row.allowedTools) as string[],
+    mcpConnectors: JSON.parse(row.mcpConnectors) as string[],
     sandboxPolicy: JSON.parse(row.sandboxPolicy) as Record<string, unknown>,
     defaultEnvironmentId: row.defaultEnvironmentId,
     metadata: JSON.parse(row.metadata) as Record<string, unknown>,
@@ -208,6 +212,8 @@ function serializeEnvironmentVersion(row: EnvironmentVersionRow) {
     variables: JSON.parse(row.variables) as Record<string, unknown>,
     secretRefs: JSON.parse(row.secretRefs) as Record<string, unknown>[],
     networkPolicy: JSON.parse(row.networkPolicy) as Record<string, unknown>,
+    mcpPolicy: JSON.parse(row.mcpPolicy) as Record<string, unknown>,
+    packageManagerPolicy: JSON.parse(row.packageManagerPolicy) as Record<string, unknown>,
     resourceLimits: JSON.parse(row.resourceLimits) as Record<string, unknown>,
     runtimeImage: JSON.parse(row.runtimeImage) as Record<string, unknown>,
     metadata: JSON.parse(row.metadata) as Record<string, unknown>,
@@ -267,6 +273,17 @@ function serializeEvent(row: SessionEventRow) {
   }
 }
 
+function mcpConnectorIds(snapshot: Record<string, unknown>) {
+  const connectors = Array.isArray(snapshot.connectors) ? snapshot.connectors : []
+  return connectors
+    .map((connector) =>
+      connector && typeof connector === 'object' && 'connectorId' in connector
+        ? (connector.connectorId as unknown)
+        : null,
+    )
+    .filter((connectorId): connectorId is string => typeof connectorId === 'string')
+}
+
 async function appendSessionEvent(
   db: Db,
   values: {
@@ -322,6 +339,11 @@ async function resolveMcpSnapshot(
     .select()
     .from(mcpConnections)
     .where(and(eq(mcpConnections.projectId, auth.project.id), eq(mcpConnections.status, 'connected')))
+  const agentConnectors = agentSnapshot.mcpConnectors
+  const scopedConnections =
+    agentConnectors.length === 0
+      ? connections
+      : connections.filter((connection) => agentConnectors.includes(connection.connectorId))
 
   const snapshotConnections = []
   const sessionContext = {
@@ -329,7 +351,7 @@ async function resolveMcpSnapshot(
     agentSnapshot: stringify(agentSnapshot),
     environmentSnapshot: environmentSnapshot ? stringify(environmentSnapshot) : null,
   }
-  for (const connection of connections) {
+  for (const connection of scopedConnections) {
     const tools = await db
       .select()
       .from(mcpConnectionTools)
@@ -515,7 +537,12 @@ export async function createSessionForAgent(c: Context<{ Bindings: Env }>, db: D
       mcpSnapshot,
     })
     const startedAt = now()
-    const metadata = { ...runtime.metadata, runtime: 'pi', protocol: 'pi-rpc-jsonl' }
+    const metadata = {
+      ...runtime.metadata,
+      runtime: 'pi',
+      protocol: 'pi-rpc-jsonl',
+      mcpConnectors: mcpConnectorIds(mcpSnapshot),
+    }
     const started = {
       sandboxId: runtime.sandboxId,
       piRuntimeId: runtime.piRuntimeId,

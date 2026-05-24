@@ -13,6 +13,55 @@ async function jsonFetch(path: string, cookie: string, init: RequestInit = {}) {
   })
 }
 
+async function createCredentialVersion(cookie: string) {
+  const vaultRes = await jsonFetch('/api/vaults', cookie, {
+    method: 'POST',
+    body: JSON.stringify({ name: 'Environment credentials' }),
+  })
+  expect(vaultRes.status).toBe(201)
+  const vault = (await vaultRes.json()) as { id: string }
+  const credentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, cookie, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'NPM token',
+      type: 'api_key',
+      secret: { provider: 'cloudflare-secrets', secretValue: 'raw-npm-token' },
+    }),
+  })
+  expect(credentialRes.status).toBe(201)
+  return (await credentialRes.json()) as { activeVersionId: string }
+}
+
+async function connectMcp(cookie: string) {
+  const vaultRes = await jsonFetch('/api/vaults', cookie, {
+    method: 'POST',
+    body: JSON.stringify({ name: 'MCP credentials' }),
+  })
+  expect(vaultRes.status).toBe(201)
+  const vault = (await vaultRes.json()) as { id: string }
+  const credentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, cookie, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'GitHub token',
+      type: 'api_key',
+      connectorBinding: { connectorId: 'github', name: 'token' },
+      secret: { provider: 'cloudflare-secrets', secretValue: 'raw-github-token' },
+    }),
+  })
+  expect(credentialRes.status).toBe(201)
+  const mcpCredential = (await credentialRes.json()) as { id: string; activeVersionId: string }
+  const res = await jsonFetch('/api/mcp/connections', cookie, {
+    method: 'POST',
+    body: JSON.stringify({
+      connectorId: 'github',
+      credentialId: mcpCredential.id,
+      credentialVersionId: mcpCredential.activeVersionId,
+      approvalMode: 'none',
+    }),
+  })
+  expect([200, 201]).toContain(res.status)
+}
+
 describe('[CF] /api/environments', () => {
   beforeEach(async () => {
     await setupFlareAuth()
@@ -40,14 +89,18 @@ describe('[CF] /api/environments', () => {
 
   it('creates, reads, updates, versions, and archives project-scoped environments without raw secrets', async () => {
     const cookie = await signIn()
+    const credential = await createCredentialVersion(cookie)
+    await connectMcp(cookie)
     const createRes = await jsonFetch('/api/environments', cookie, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Node workspace',
         packages: [{ name: 'tsx', version: 'latest' }],
         variables: { NODE_ENV: { description: 'Runtime mode', required: true } },
-        secretRefs: [{ name: 'NPM_TOKEN', ref: 'vault_secret_123' }],
+        secretRefs: [{ name: 'NPM_TOKEN', ref: credential.activeVersionId }],
         networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
+        mcpPolicy: { allowedConnectors: ['github'] },
+        packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
         resourceLimits: { memoryMb: 512 },
         runtimeImage: { image: 'node:24' },
       }),
@@ -67,12 +120,14 @@ describe('[CF] /api/environments', () => {
     await expect(readRes.json()).resolves.toMatchObject({
       id: created.id,
       packages: [{ name: 'tsx', version: 'latest' }],
-      secretRefs: [{ name: 'NPM_TOKEN', ref: 'vault_secret_123' }],
+      secretRefs: [{ name: 'NPM_TOKEN', ref: credential.activeVersionId }],
+      mcpPolicy: { allowedConnectors: ['github'] },
+      packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
     })
 
     const updateRes = await jsonFetch(`/api/environments/${created.id}`, cookie, {
       method: 'PATCH',
-      body: JSON.stringify({ packages: [{ name: 'vite' }] }),
+      body: JSON.stringify({ metadata: { owner: 'runtime' } }),
     })
     expect(updateRes.status).toBe(200)
     const updated = (await updateRes.json()) as { version: number; currentVersionId: string }
@@ -103,6 +158,114 @@ describe('[CF] /api/environments', () => {
 
     const archivedReadRes = await jsonFetch(`/api/environments/${created.id}`, cookie)
     expect(archivedReadRes.status).toBe(200)
+    await expect(archivedReadRes.json()).resolves.toMatchObject({ archivedAt: expect.any(String) })
+
+    const auditRes = await jsonFetch('/api/audit-records?action=environment.archive', cookie)
+    expect(auditRes.status).toBe(200)
+    await expect(auditRes.json()).resolves.toMatchObject({
+      data: [expect.objectContaining({ resourceId: created.id, outcome: 'success' })],
+    })
+
+    const archivedUpdateRes = await jsonFetch(`/api/environments/${created.id}`, cookie, {
+      method: 'PATCH',
+      body: JSON.stringify({ description: 'Cannot update archived environments' }),
+    })
+    expect(archivedUpdateRes.status).toBe(409)
+  })
+
+  it('rejects unavailable secret references and disconnected MCP policy connectors', async () => {
+    const cookie = await signIn()
+    const invalidSecretRes = await jsonFetch('/api/environments', cookie, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Invalid secret workspace',
+        secretRefs: [{ name: 'NPM_TOKEN', ref: 'vaultver_missing' }],
+      }),
+    })
+    expect(invalidSecretRes.status).toBe(400)
+    const invalidSecretBody = await invalidSecretRes.json()
+    expect(invalidSecretBody).toMatchObject({
+      error: { details: { fields: { 'secretRefs[0]': expect.any(String) } } },
+    })
+    expect(JSON.stringify(invalidSecretBody)).not.toContain('vaultver_missing')
+
+    const rawSecretRefRes = await jsonFetch('/api/environments', cookie, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Raw secret workspace',
+        secretRefs: [{ name: 'NPM_TOKEN', ref: 'raw-npm-token' }],
+      }),
+    })
+    expect(rawSecretRefRes.status).toBe(400)
+    const rawSecretRefBody = await rawSecretRefRes.json()
+    expect(rawSecretRefBody).toMatchObject({
+      error: { details: { fields: { 'secretRefs[0]': expect.any(String) } } },
+    })
+    expect(JSON.stringify(rawSecretRefBody)).not.toContain('raw-npm-token')
+
+    const rawMetadataRes = await jsonFetch('/api/environments', cookie, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Raw metadata workspace', metadata: { secretValue: 'raw-secret' } }),
+    })
+    expect(rawMetadataRes.status).toBe(400)
+    await expect(rawMetadataRes.json()).resolves.toMatchObject({
+      error: { details: { fields: { metadata: expect.any(String) } } },
+    })
+
+    const rawMetadataApiKeyRes = await jsonFetch('/api/environments', cookie, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Raw API key workspace', metadata: { api_key: 'raw-secret' } }),
+    })
+    expect(rawMetadataApiKeyRes.status).toBe(400)
+    await expect(rawMetadataApiKeyRes.json()).resolves.toMatchObject({
+      error: { details: { fields: { metadata: expect.any(String) } } },
+    })
+
+    const rawMcpPolicyRes = await jsonFetch('/api/environments', cookie, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Raw MCP policy workspace', mcpPolicy: { access_token: 'raw-secret' } }),
+    })
+    expect(rawMcpPolicyRes.status).toBe(400)
+    const rawMcpPolicyBody = await rawMcpPolicyRes.json()
+    expect(rawMcpPolicyBody).toMatchObject({
+      error: { type: 'validation_error', issues: [expect.objectContaining({ path: ['mcpPolicy'] })] },
+    })
+    expect(JSON.stringify(rawMcpPolicyBody)).not.toContain('raw-secret')
+
+    const rawPolicyRes = await jsonFetch('/api/environments', cookie, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Raw policy workspace', packageManagerPolicy: { npmToken: 'raw-secret' } }),
+    })
+    expect(rawPolicyRes.status).toBe(400)
+    await expect(rawPolicyRes.json()).resolves.toMatchObject({
+      error: { details: { fields: { packageManagerPolicy: expect.any(String) } } },
+    })
+
+    const invalidMcpRes = await jsonFetch('/api/environments', cookie, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Invalid MCP workspace', mcpPolicy: { allowedConnectors: ['linear'] } }),
+    })
+    expect(invalidMcpRes.status).toBe(400)
+    await expect(invalidMcpRes.json()).resolves.toMatchObject({
+      error: { details: { fields: { mcpPolicy: expect.any(String) } } },
+    })
+
+    const environmentRes = await jsonFetch('/api/environments', cookie, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Update boundary workspace' }),
+    })
+    expect(environmentRes.status).toBe(201)
+    const environment = (await environmentRes.json()) as { id: string }
+    const rawUpdatePolicyRes = await jsonFetch(`/api/environments/${environment.id}`, cookie, {
+      method: 'PATCH',
+      body: JSON.stringify({ mcpPolicy: { token: 'raw-secret' } }),
+    })
+    expect(rawUpdatePolicyRes.status).toBe(400)
+    const rawUpdatePolicyBody = await rawUpdatePolicyRes.json()
+    expect(rawUpdatePolicyBody).toMatchObject({
+      error: { type: 'validation_error', issues: [expect.objectContaining({ path: ['mcpPolicy'] })] },
+    })
+    expect(JSON.stringify(rawUpdatePolicyBody)).not.toContain('raw-secret')
   })
 
   it('lists environments with pagination, search, status, and date filters', async () => {

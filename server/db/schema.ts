@@ -71,10 +71,12 @@ export const agentDefinitions = sqliteTable(
     model: text('model').notNull(),
     systemPrompt: text('system_prompt'),
     allowedTools: text('allowed_tools').notNull().default('[]'),
+    mcpConnectors: text('mcp_connectors').notNull().default('[]'),
     sandboxPolicy: text('sandbox_policy').notNull().default('{}'),
     defaultEnvironmentId: text('default_environment_id'),
     metadata: text('metadata').notNull().default('{}'),
     status: text('status').notNull().default('active'),
+    archivedAt: text('archived_at'),
     currentVersionId: text('current_version_id'),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
@@ -84,25 +86,33 @@ export const agentDefinitions = sqliteTable(
   ],
 )
 
-export const agentDefinitionVersions = sqliteTable('agent_definition_versions', {
-  id: text('id').primaryKey(),
-  agentId: text('agent_id')
-    .notNull()
-    .references(() => agentDefinitions.id),
-  projectId: text('project_id')
-    .notNull()
-    .references(() => projects.id),
-  version: integer('version').notNull(),
-  instructions: text('instructions'),
-  provider: text('provider').notNull(),
-  model: text('model').notNull(),
-  systemPrompt: text('system_prompt'),
-  allowedTools: text('allowed_tools').notNull(),
-  sandboxPolicy: text('sandbox_policy').notNull(),
-  defaultEnvironmentId: text('default_environment_id'),
-  metadata: text('metadata').notNull(),
-  createdAt: text('created_at').notNull(),
-})
+export const agentDefinitionVersions = sqliteTable(
+  'agent_definition_versions',
+  {
+    id: text('id').primaryKey(),
+    agentId: text('agent_id')
+      .notNull()
+      .references(() => agentDefinitions.id),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id),
+    version: integer('version').notNull(),
+    instructions: text('instructions'),
+    provider: text('provider').notNull(),
+    model: text('model').notNull(),
+    systemPrompt: text('system_prompt'),
+    allowedTools: text('allowed_tools').notNull(),
+    mcpConnectors: text('mcp_connectors').notNull().default('[]'),
+    sandboxPolicy: text('sandbox_policy').notNull(),
+    defaultEnvironmentId: text('default_environment_id'),
+    metadata: text('metadata').notNull(),
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => [
+    index('idx_agent_definition_versions_agent_id').on(table.agentId),
+    uniqueIndex('idx_agent_definition_versions_agent_version').on(table.agentId, table.version),
+  ],
+)
 
 export const environments = sqliteTable(
   'environments',
@@ -117,10 +127,13 @@ export const environments = sqliteTable(
     variables: text('variables').notNull().default('{}'),
     secretRefs: text('secret_refs').notNull().default('[]'),
     networkPolicy: text('network_policy').notNull().default('{}'),
+    mcpPolicy: text('mcp_policy').notNull().default('{}'),
+    packageManagerPolicy: text('package_manager_policy').notNull().default('{}'),
     resourceLimits: text('resource_limits').notNull().default('{}'),
     runtimeImage: text('runtime_image').notNull().default('{}'),
     metadata: text('metadata').notNull().default('{}'),
     status: text('status').notNull().default('active'),
+    archivedAt: text('archived_at'),
     currentVersionId: text('current_version_id'),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
@@ -221,24 +234,33 @@ export const vaultCredentialVersions = sqliteTable(
   ],
 )
 
-export const environmentVersions = sqliteTable('environment_versions', {
-  id: text('id').primaryKey(),
-  environmentId: text('environment_id')
-    .notNull()
-    .references(() => environments.id),
-  projectId: text('project_id')
-    .notNull()
-    .references(() => projects.id),
-  version: integer('version').notNull(),
-  packages: text('packages').notNull(),
-  variables: text('variables').notNull(),
-  secretRefs: text('secret_refs').notNull(),
-  networkPolicy: text('network_policy').notNull(),
-  resourceLimits: text('resource_limits').notNull(),
-  runtimeImage: text('runtime_image').notNull(),
-  metadata: text('metadata').notNull(),
-  createdAt: text('created_at').notNull(),
-})
+export const environmentVersions = sqliteTable(
+  'environment_versions',
+  {
+    id: text('id').primaryKey(),
+    environmentId: text('environment_id')
+      .notNull()
+      .references(() => environments.id),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id),
+    version: integer('version').notNull(),
+    packages: text('packages').notNull(),
+    variables: text('variables').notNull(),
+    secretRefs: text('secret_refs').notNull(),
+    networkPolicy: text('network_policy').notNull(),
+    mcpPolicy: text('mcp_policy').notNull().default('{}'),
+    packageManagerPolicy: text('package_manager_policy').notNull().default('{}'),
+    resourceLimits: text('resource_limits').notNull(),
+    runtimeImage: text('runtime_image').notNull(),
+    metadata: text('metadata').notNull(),
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => [
+    index('idx_environment_versions_environment_id').on(table.environmentId),
+    uniqueIndex('idx_environment_versions_environment_version').on(table.environmentId, table.version),
+  ],
+)
 
 export const sessions = sqliteTable(
   'sessions',

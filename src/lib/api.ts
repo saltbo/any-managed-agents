@@ -30,10 +30,13 @@ export interface Environment {
   variables: Record<string, EnvironmentVariable>
   secretRefs: SecretRef[]
   networkPolicy: Record<string, unknown>
+  mcpPolicy: Record<string, unknown>
+  packageManagerPolicy: Record<string, unknown>
   resourceLimits: Record<string, unknown>
   runtimeImage: Record<string, unknown>
   metadata: Record<string, unknown>
   status: 'active' | 'archived'
+  archivedAt: string | null
   currentVersionId: string | null
   version: number
   createdAt: string
@@ -50,10 +53,12 @@ export interface Agent {
   model: string
   systemPrompt: string | null
   allowedTools: string[]
+  mcpConnectors: string[]
   sandboxPolicy: Record<string, unknown>
   defaultEnvironmentId: string | null
   metadata: Record<string, unknown>
   status: 'active' | 'archived'
+  archivedAt: string | null
   currentVersionId: string | null
   version: number
   createdAt: string
@@ -70,6 +75,7 @@ export interface AgentVersion {
   model: string
   systemPrompt: string | null
   allowedTools: string[]
+  mcpConnectors: string[]
   sandboxPolicy: Record<string, unknown>
   defaultEnvironmentId: string | null
   metadata: Record<string, unknown>
@@ -77,7 +83,10 @@ export interface AgentVersion {
 }
 
 export interface EnvironmentVersion
-  extends Omit<Environment, 'name' | 'description' | 'status' | 'currentVersionId' | 'version' | 'updatedAt'> {
+  extends Omit<
+    Environment,
+    'name' | 'description' | 'status' | 'archivedAt' | 'currentVersionId' | 'version' | 'updatedAt'
+  > {
   environmentId: string
   version: number
 }
@@ -167,6 +176,8 @@ export interface EnvironmentInput {
   variables?: Record<string, EnvironmentVariable>
   secretRefs?: SecretRef[]
   networkPolicy?: Record<string, unknown>
+  mcpPolicy?: Record<string, unknown>
+  packageManagerPolicy?: Record<string, unknown>
   resourceLimits?: Record<string, unknown>
   runtimeImage?: Record<string, unknown>
   metadata?: Record<string, unknown>
@@ -180,6 +191,7 @@ export interface AgentInput {
   model?: string
   systemPrompt?: string
   allowedTools?: string[]
+  mcpConnectors?: string[]
   sandboxPolicy?: Record<string, unknown>
   defaultEnvironmentId?: string | null
   metadata?: Record<string, unknown>

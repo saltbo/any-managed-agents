@@ -458,12 +458,17 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
     })
     expect(connectRes.status).toBe(201)
     const connection = (await connectRes.json()) as { id: string }
+    const linearConnectRes = await jsonFetch('/api/mcp/connections', cookie, {
+      method: 'POST',
+      body: JSON.stringify({ connectorId: 'linear', credentialId: credential.id }),
+    })
+    expect(linearConnectRes.status).toBe(201)
 
     const environmentRes = await jsonFetch('/api/environments', cookie, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Linear-only workspace',
-        metadata: { mcp: { allowedConnectors: ['linear'] } },
+        mcpPolicy: { allowedConnectors: ['linear'] },
       }),
     })
     expect(environmentRes.status).toBe(201)

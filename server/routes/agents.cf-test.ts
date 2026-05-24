@@ -27,6 +27,35 @@ async function createEnvironment(cookie: string) {
   return (await res.json()) as { id: string; currentVersionId: string; version: number }
 }
 
+async function connectMcp(cookie: string) {
+  const vaultRes = await jsonFetch('/api/vaults', cookie, {
+    method: 'POST',
+    body: JSON.stringify({ name: 'Agent MCP credentials' }),
+  })
+  expect(vaultRes.status).toBe(201)
+  const vault = (await vaultRes.json()) as { id: string }
+  const credentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, cookie, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'GitHub token',
+      type: 'api_key',
+      connectorBinding: { connectorId: 'github', name: 'token' },
+      secret: { provider: 'cloudflare-secrets', secretValue: 'raw-github-token' },
+    }),
+  })
+  expect(credentialRes.status).toBe(201)
+  const credential = (await credentialRes.json()) as { id: string; activeVersionId: string }
+  const connectRes = await jsonFetch('/api/mcp/connections', cookie, {
+    method: 'POST',
+    body: JSON.stringify({
+      connectorId: 'github',
+      credentialId: credential.id,
+      credentialVersionId: credential.activeVersionId,
+    }),
+  })
+  expect([200, 201]).toContain(connectRes.status)
+}
+
 describe('[CF] /api/agents', () => {
   beforeEach(async () => {
     await setupFlareAuth()
@@ -75,6 +104,7 @@ describe('[CF] /api/agents', () => {
   it('creates, reads, updates, versions, and archives project-scoped agents', async () => {
     const cookie = await signIn()
     const environment = await createEnvironment(cookie)
+    await connectMcp(cookie)
 
     const createRes = await jsonFetch('/api/agents', cookie, {
       method: 'POST',
@@ -84,8 +114,10 @@ describe('[CF] /api/agents', () => {
         provider: 'workers-ai',
         model: '@cf/moonshotai/kimi-k2.6',
         allowedTools: ['web.search'],
+        mcpConnectors: ['github'],
         sandboxPolicy: { network: 'enabled', filesystem: 'workspace' },
         defaultEnvironmentId: environment.id,
+        metadata: { owner: 'platform', remove: 'stale' },
       }),
     })
     expect(createRes.status).toBe(201)
@@ -98,22 +130,43 @@ describe('[CF] /api/agents', () => {
       id: created.id,
       version: 1,
       allowedTools: ['web.search'],
+      mcpConnectors: ['github'],
       defaultEnvironmentId: environment.id,
     })
 
     const updateRes = await jsonFetch(`/api/agents/${created.id}`, cookie, {
       method: 'PATCH',
-      body: JSON.stringify({ instructions: 'Answer briefly.' }),
+      body: JSON.stringify({ description: 'Updated description', metadata: { owner: 'runtime', remove: null } }),
     })
     expect(updateRes.status).toBe(200)
-    const updated = (await updateRes.json()) as { version: number; currentVersionId: string }
+    const updated = (await updateRes.json()) as {
+      version: number
+      currentVersionId: string
+      description: string
+      metadata: Record<string, unknown>
+      allowedTools: string[]
+    }
     expect(updated.version).toBe(2)
     expect(updated.currentVersionId).not.toBe(created.currentVersionId)
+    expect(updated).toMatchObject({
+      description: 'Updated description',
+      metadata: { owner: 'runtime' },
+      allowedTools: ['web.search'],
+    })
+    expect(updated.metadata).not.toHaveProperty('remove')
+
+    const clearToolsRes = await jsonFetch(`/api/agents/${created.id}`, cookie, {
+      method: 'PATCH',
+      body: JSON.stringify({ allowedTools: [] }),
+    })
+    expect(clearToolsRes.status).toBe(200)
+    const clearedTools = (await clearToolsRes.json()) as { version: number; allowedTools: string[] }
+    expect(clearedTools).toMatchObject({ version: 3, allowedTools: [] })
 
     const versionsRes = await jsonFetch(`/api/agents/${created.id}/versions`, cookie)
     expect(versionsRes.status).toBe(200)
     const versions = (await versionsRes.json()) as { data: Array<{ version: number; instructions: string }> }
-    expect(versions.data.map((version) => version.version)).toEqual([2, 1])
+    expect(versions.data.map((version) => version.version)).toEqual([3, 2, 1])
     expect(versions.data.find((version) => version.version === 1)?.instructions).toBe('Answer with citations.')
 
     const archiveRes = await jsonFetch(`/api/agents/${created.id}`, cookie, { method: 'DELETE' })
@@ -132,6 +185,19 @@ describe('[CF] /api/agents', () => {
 
     const archivedReadRes = await jsonFetch(`/api/agents/${created.id}`, cookie)
     expect(archivedReadRes.status).toBe(200)
+    await expect(archivedReadRes.json()).resolves.toMatchObject({ archivedAt: expect.any(String) })
+
+    const auditRes = await jsonFetch('/api/audit-records?action=agent.archive', cookie)
+    expect(auditRes.status).toBe(200)
+    await expect(auditRes.json()).resolves.toMatchObject({
+      data: [expect.objectContaining({ resourceId: created.id, outcome: 'success' })],
+    })
+
+    const archivedUpdateRes = await jsonFetch(`/api/agents/${created.id}`, cookie, {
+      method: 'PATCH',
+      body: JSON.stringify({ description: 'Cannot update archived agents' }),
+    })
+    expect(archivedUpdateRes.status).toBe(409)
   })
 
   it('lists agents with pagination, search, status, and date filters within the project', async () => {
@@ -306,6 +372,33 @@ describe('[CF] /api/agents', () => {
     expect(invalidEnvironmentRes.status).toBe(400)
     await expect(invalidEnvironmentRes.json()).resolves.toMatchObject({
       error: { details: { fields: { defaultEnvironmentId: expect.any(String) } } },
+    })
+
+    const invalidMcpRes = await jsonFetch('/api/agents', cookie, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Invalid MCP agent', mcpConnectors: ['linear'] }),
+    })
+    expect(invalidMcpRes.status).toBe(400)
+    await expect(invalidMcpRes.json()).resolves.toMatchObject({
+      error: { details: { fields: { mcpConnectors: expect.any(String) } } },
+    })
+
+    const rawSecretMetadataRes = await jsonFetch('/api/agents', cookie, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Raw secret agent', metadata: { secretValue: 'raw-secret' } }),
+    })
+    expect(rawSecretMetadataRes.status).toBe(400)
+    await expect(rawSecretMetadataRes.json()).resolves.toMatchObject({
+      error: { details: { fields: { metadata: expect.any(String) } } },
+    })
+
+    const rawTokenMetadataRes = await jsonFetch('/api/agents', cookie, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Raw token agent', metadata: { access_token: 'raw-secret' } }),
+    })
+    expect(rawTokenMetadataRes.status).toBe(400)
+    await expect(rawTokenMetadataRes.json()).resolves.toMatchObject({
+      error: { details: { fields: { metadata: expect.any(String) } } },
     })
 
     const validEnvironment = await createEnvironment(cookie)
