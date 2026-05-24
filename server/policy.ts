@@ -1,4 +1,4 @@
-import { and, desc, eq, or } from 'drizzle-orm'
+import { and, desc, eq, isNull, or } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
 import type { AuthContext } from './auth/session'
 import { budgets, governancePolicies, providerAccessRules, providerConfigs, usageRecords } from './db/schema'
@@ -40,8 +40,8 @@ export async function resolveEffectivePolicy(db: PolicyDb, auth: AuthContext) {
     modelRules: policy ? parseJson<Rule[]>(policy.modelRules, []) : [],
     accessRules: accessRules.map((rule) => ({
       id: rule.id,
-      providerId: rule.providerId,
-      modelId: rule.modelId,
+      providerId: rule.providerId ?? '*',
+      modelId: rule.modelId ?? '*',
       teamId: rule.teamId,
       effect: rule.effect,
       reason: rule.reason,
@@ -92,26 +92,35 @@ export async function evaluateProviderPolicy(
     }
   }
 
-  const accessRule = await db
+  const providerPredicates = [
+    isNull(providerAccessRules.providerId),
+    eq(providerAccessRules.providerId, '*'),
+    eq(providerAccessRules.providerId, values.providerId),
+  ]
+  if (provider) {
+    providerPredicates.push(eq(providerAccessRules.providerId, provider.id))
+  }
+  const accessRules = await db
     .select()
     .from(providerAccessRules)
     .where(
       and(
         eq(providerAccessRules.projectId, auth.project.id),
+        or(...providerPredicates),
         or(
-          eq(providerAccessRules.providerId, values.providerId),
-          eq(providerAccessRules.providerId, provider?.id ?? ''),
+          isNull(providerAccessRules.modelId),
+          eq(providerAccessRules.modelId, '*'),
+          eq(providerAccessRules.modelId, values.modelId),
         ),
-        or(eq(providerAccessRules.modelId, values.modelId), eq(providerAccessRules.modelId, '*')),
       ),
     )
-    .get()
-  if (accessRule?.effect === 'deny') {
+  const deniedAccessRule = accessRules.find((rule) => rule.effect === 'deny')
+  if (deniedAccessRule) {
     return {
       allowed: false,
       category: 'provider',
-      rule: accessRule.id,
-      message: accessRule.reason ?? 'Provider or model is denied by governance policy.',
+      rule: deniedAccessRule.id,
+      message: deniedAccessRule.reason ?? 'Provider or model is denied by governance policy.',
     }
   }
 

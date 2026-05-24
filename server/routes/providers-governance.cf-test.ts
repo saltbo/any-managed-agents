@@ -203,6 +203,42 @@ describe('[CF] providers, governance, usage, and audit', () => {
     })
   })
 
+  it('applies wildcard provider access rules created with omitted provider and model scopes', async () => {
+    const cookie = await signIn({
+      ...defaultClaims(),
+      sub: 'user_wildcard_access_rule',
+      email: 'wildcard-access@example.com',
+      org_id: 'org_flare_wildcard_access',
+      org_name: 'Wildcard Access Org',
+    })
+
+    const accessRuleRes = await jsonFetch('/api/governance/provider-access-rules', cookie, {
+      method: 'POST',
+      body: JSON.stringify({ effect: 'deny', reason: 'Project-wide model access is paused.' }),
+    })
+    expect(accessRuleRes.status).toBe(201)
+    const accessRule = (await accessRuleRes.json()) as {
+      id: string
+      providerId: string
+      modelId: string
+      effect: string
+    }
+    expect(accessRule).toMatchObject({ providerId: '*', modelId: '*', effect: 'deny' })
+
+    const evaluationRes = await jsonFetch('/api/governance/evaluations', cookie, {
+      method: 'POST',
+      body: JSON.stringify({ providerId: 'workers-ai', modelId: '@cf/moonshotai/kimi-k2.6' }),
+    })
+    expect(evaluationRes.status).toBe(403)
+    await expect(evaluationRes.json()).resolves.toMatchObject({
+      error: {
+        type: 'policy_denied',
+        message: 'Project-wide model access is paused.',
+        details: { category: 'provider', resourceType: 'provider', resourceId: 'workers-ai', ruleId: accessRule.id },
+      },
+    })
+  })
+
   it('summarizes usage deterministically for seeded D1 records', async () => {
     const cookie = await signIn()
     const context = await authContext(cookie)

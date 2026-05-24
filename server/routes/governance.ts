@@ -23,8 +23,8 @@ const RuleSchema = z
 const AccessRuleSchema = z
   .object({
     id: z.string(),
-    providerId: z.string().nullable(),
-    modelId: z.string().nullable(),
+    providerId: z.string(),
+    modelId: z.string(),
     teamId: z.string().nullable(),
     effect: z.enum(['allow', 'deny']),
     reason: z.string().nullable(),
@@ -176,8 +176,8 @@ function serializePolicy(row: GovernanceRow) {
 function serializeAccessRule(row: AccessRuleRow) {
   return {
     id: row.id,
-    providerId: row.providerId,
-    modelId: row.modelId,
+    providerId: row.providerId ?? '*',
+    modelId: row.modelId ?? '*',
     teamId: row.teamId,
     effect: row.effect as 'allow' | 'deny',
     reason: row.reason,
@@ -471,8 +471,8 @@ app.openapi(createAccessRuleRoute, async (c) => {
     id: newId('access'),
     organizationId: auth.organization.id,
     projectId: auth.project.id,
-    providerId: body.providerId ?? null,
-    modelId: body.modelId ?? null,
+    providerId: body.providerId ?? '*',
+    modelId: body.modelId ?? '*',
     teamId: body.teamId ?? null,
     effect: body.effect,
     reason: body.reason ?? null,
