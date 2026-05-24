@@ -88,7 +88,15 @@ export function Banner({ tone, message }: { tone: 'success' | 'error'; message: 
 
 export function StatusBadge({ value }: { value: string }) {
   const variant =
-    value === 'error' ? 'destructive' : value === 'archived' || value === 'stopped' ? 'secondary' : 'outline'
+    value === 'error' || value === 'missing' || value === 'blocked'
+      ? 'destructive'
+      : value === 'archived' ||
+          value === 'stopped' ||
+          value === 'disabled' ||
+          value === 'deleted' ||
+          value === 'disconnected'
+        ? 'secondary'
+        : 'outline'
   return <UiBadge variant={variant}>{value}</UiBadge>
 }
 

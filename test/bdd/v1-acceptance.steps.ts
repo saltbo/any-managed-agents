@@ -693,3 +693,11 @@ Then('mobile navigation labels remain readable without truncation', () => {
 Then('the v1 console supports sending runtime tasks and inspecting session events', () => {
   runUnitTest('src/App.test.tsx')
 })
+
+Then('the sidebar shows agents, sessions, providers, vaults, usage, audit, and settings', () => {
+  runUnitTest('src/App.test.tsx')
+})
+
+Then('the current organization and project are visible', () => {
+  runUnitTest('src/App.test.tsx')
+})

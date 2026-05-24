@@ -1,4 +1,4 @@
-import { Bot, Server } from 'lucide-react'
+import { Bot, Boxes, Cloud, Server } from 'lucide-react'
 import type { FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import type { Environment } from '@/lib/api'
-import type { AgentFormState, EnvironmentFormState } from './types'
+import type { AgentFormState, EnvironmentFormState, ProviderFormState, VaultFormState } from './types'
 
 export function EnvironmentForm({
   value,
@@ -46,7 +46,7 @@ export function EnvironmentForm({
         />
       </FieldGroup>
       <Button type="submit">
-        <Server size={16} />
+        <Server data-icon="inline-start" />
         Save environment
       </Button>
     </form>
@@ -113,8 +113,105 @@ export function AgentForm({
         </Field>
       </FieldGroup>
       <Button type="submit">
-        <Bot size={16} />
+        <Bot data-icon="inline-start" />
         Save agent
+      </Button>
+    </form>
+  )
+}
+
+export function ProviderForm({
+  value,
+  setValue,
+  onSubmit,
+}: {
+  value: ProviderFormState
+  setValue: (value: ProviderFormState) => void
+  onSubmit: (event: FormEvent) => void
+}) {
+  return (
+    <form className="flex flex-col gap-4" onSubmit={onSubmit}>
+      <FieldGroup>
+        <Field>
+          <FieldLabel>Provider type</FieldLabel>
+          <Select value={value.type} onValueChange={(type) => setValue({ ...value, type })}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {['workers-ai', 'anthropic', 'openai', 'openai-compatible', 'ollama', 'other'].map((type) => (
+                <SelectItem key={type} value={type}>
+                  {type}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <FieldDescription>Provider identifiers match the OpenAPI provider contract.</FieldDescription>
+        </Field>
+        <TextField
+          label="Display name"
+          value={value.displayName}
+          onChange={(displayName) => setValue({ ...value, displayName })}
+        />
+        <TextField
+          label="Base URL"
+          description="Required only for OpenAI-compatible or custom providers."
+          value={value.baseUrl}
+          onChange={(baseUrl) => setValue({ ...value, baseUrl })}
+        />
+        <TextField
+          label="Credential secret ref"
+          description="Secret references point at approved vaults or Cloudflare Secrets. Raw secret values are never accepted here."
+          value={value.credentialSecretRef}
+          onChange={(credentialSecretRef) => setValue({ ...value, credentialSecretRef })}
+        />
+      </FieldGroup>
+      <Button type="submit">
+        <Cloud data-icon="inline-start" />
+        Save provider
+      </Button>
+    </form>
+  )
+}
+
+export function VaultForm({
+  value,
+  setValue,
+  onSubmit,
+}: {
+  value: VaultFormState
+  setValue: (value: VaultFormState) => void
+  onSubmit: (event: FormEvent) => void
+}) {
+  return (
+    <form className="flex flex-col gap-4" onSubmit={onSubmit}>
+      <FieldGroup>
+        <TextField label="Name" value={value.name} onChange={(name) => setValue({ ...value, name })} />
+        <TextField
+          label="Description"
+          value={value.description}
+          onChange={(description) => setValue({ ...value, description })}
+        />
+        <Field>
+          <FieldLabel>Scope</FieldLabel>
+          <Select
+            value={value.scope}
+            onValueChange={(scope) => setValue({ ...value, scope: scope as VaultFormState['scope'] })}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="project">project</SelectItem>
+              <SelectItem value="organization">organization</SelectItem>
+            </SelectContent>
+          </Select>
+          <FieldDescription>Project vaults are the default for runtime credential references.</FieldDescription>
+        </Field>
+      </FieldGroup>
+      <Button type="submit">
+        <Boxes data-icon="inline-start" />
+        Save vault
       </Button>
     </form>
   )

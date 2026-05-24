@@ -3,24 +3,27 @@ import {
   Bot,
   Boxes,
   Code2,
+  DatabaseZap,
   LogOut,
   MessageSquare,
+  PlugZap,
   RefreshCw,
   Search,
   Server,
   Settings,
   ShieldCheck,
+  Vault,
 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { Banner, DisabledNav, FullscreenMessage, MobileNavButton, NavButton } from '@/console/components'
-import { emptyAgent, emptyEnvironment } from '@/console/defaults'
-import { matchesSearch, parsePackages, parseTools, parseVariables, titleForView, viewFromPath } from '@/console/format'
-import { AgentForm, EnvironmentForm } from '@/console/forms'
+import { Banner, FullscreenMessage, MobileNavButton, NavButton } from '@/console/components'
+import { emptyAgent, emptyEnvironment, emptyProvider, emptyVault } from '@/console/defaults'
+import { parsePackages, parseTools, parseVariables, titleForView, viewFromPath } from '@/console/format'
+import { AgentForm, EnvironmentForm, ProviderForm, VaultForm } from '@/console/forms'
 import type { CreateMode } from '@/console/types'
 import { ApiError, api, type Session } from '@/lib/api'
 import { ConsoleContextProvider, useConsoleContext } from './console-context'
@@ -35,10 +38,13 @@ export function ConsoleLayout() {
   const [query, setQuery] = useState('')
   const [includeArchived, setIncludeArchived] = useState(false)
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
+  const [selectedSessions, setSelectedSessions] = useState<Record<string, Session>>({})
   const [runtimeTranscript, setRuntimeTranscript] = useState('')
   const [createMode, setCreateMode] = useState<CreateMode>(null)
   const [environmentForm, setEnvironmentForm] = useState(emptyEnvironment)
   const [agentForm, setAgentForm] = useState(emptyAgent)
+  const [providerForm, setProviderForm] = useState(emptyProvider)
+  const [vaultForm, setVaultForm] = useState(emptyVault)
   const [selectedEnvironmentId, setSelectedEnvironmentId] = useState<string>('')
   const [taskMessage, setTaskMessage] = useState('Create ama-task.txt with exactly: AMA task completed')
   const [notice, setNotice] = useState<string | null>(null)
@@ -53,15 +59,46 @@ export function ConsoleLayout() {
   const resourcesQuery = useQuery({
     queryKey: resourcesQueryKey(includeArchived),
     queryFn: async () => {
-      const [agents, environments, sessions] = await Promise.all([
+      const [
+        agents,
+        environments,
+        sessions,
+        providers,
+        vaults,
+        mcpConnectors,
+        mcpConnections,
+        governancePolicy,
+        usageSummary,
+        auditRecords,
+      ] = await Promise.all([
         api.listAgents(includeArchived),
         api.listEnvironments(includeArchived),
         api.listSessions(includeArchived),
+        api.listProviders(includeArchived),
+        api.listVaults(includeArchived),
+        api.listMcpConnectors(),
+        api.listMcpConnections(),
+        api.readGovernancePolicy(),
+        api.readUsageSummary(),
+        api.listAuditRecords(),
       ])
+      const vaultCredentials = await Promise.all(
+        vaults.data.map(
+          async (vault) => [vault.id, (await api.listVaultCredentials(vault.id, includeArchived)).data] as const,
+        ),
+      )
       return {
         agents: agents.data,
         environments: environments.data,
         sessions: sessions.data,
+        providers: providers.data,
+        vaults: vaults.data,
+        mcpConnectors: mcpConnectors.data,
+        mcpConnections: mcpConnections.data,
+        governancePolicy,
+        usageSummary,
+        auditRecords: auditRecords.data,
+        vaultCredentials: Object.fromEntries(vaultCredentials),
       }
     },
     enabled: authQuery.isSuccess,
@@ -70,7 +107,18 @@ export function ConsoleLayout() {
   const agents = resourcesQuery.data?.agents ?? []
   const environments = resourcesQuery.data?.environments ?? []
   const sessions = resourcesQuery.data?.sessions ?? []
-  const selectedSession = sessions.find((session) => session.id === selectedSessionId) ?? sessions[0] ?? null
+  const providers = resourcesQuery.data?.providers ?? []
+  const vaults = resourcesQuery.data?.vaults ?? []
+  const mcpConnectors = resourcesQuery.data?.mcpConnectors ?? []
+  const mcpConnections = resourcesQuery.data?.mcpConnections ?? []
+  const governancePolicy = resourcesQuery.data?.governancePolicy ?? null
+  const usageSummary = resourcesQuery.data?.usageSummary ?? null
+  const auditRecords = resourcesQuery.data?.auditRecords ?? []
+  const vaultCredentials = resourcesQuery.data?.vaultCredentials ?? {}
+  const selectedSession =
+    selectedSessionId === null
+      ? (sessions[0] ?? null)
+      : (selectedSessions[selectedSessionId] ?? sessions.find((session) => session.id === selectedSessionId) ?? null)
 
   const eventsQuery = useQuery({
     queryKey: ['sessions', selectedSession?.id, 'events'],
@@ -94,28 +142,6 @@ export function ConsoleLayout() {
     const nextError = authError ?? resourcesQuery.error ?? eventsQuery.error
     setError(nextError instanceof Error ? nextError.message : nextError ? String(nextError) : null)
   }, [authQuery.error, resourcesQuery.error, eventsQuery.error])
-
-  const visibleAgents = useMemo(
-    () => agents.filter((agent) => matchesSearch([agent.name, agent.description, agent.model, agent.provider], query)),
-    [agents, query],
-  )
-  const visibleEnvironments = useMemo(
-    () =>
-      environments.filter((environment) =>
-        matchesSearch(
-          [environment.name, environment.description, environment.runtimeImage.image as string | undefined],
-          query,
-        ),
-      ),
-    [environments, query],
-  )
-  const visibleSessions = useMemo(
-    () =>
-      sessions.filter((session) =>
-        matchesSearch([session.id, session.agentSnapshot.systemPrompt, session.status, session.modelProvider], query),
-      ),
-    [sessions, query],
-  )
 
   const invalidateResources = () => {
     void queryClient.invalidateQueries({ queryKey: ['console', 'resources'] })
@@ -160,6 +186,39 @@ export function ConsoleLayout() {
     onError: setMutationError,
   })
 
+  const createProvider = useMutation({
+    mutationFn: () => {
+      const input = {
+        type: providerForm.type,
+        displayName: providerForm.displayName,
+        ...(providerForm.baseUrl ? { baseUrl: providerForm.baseUrl } : {}),
+        ...(providerForm.credentialSecretRef ? { credentialSecretRef: providerForm.credentialSecretRef } : {}),
+      }
+      return api.createProvider(input)
+    },
+    onSuccess: () => {
+      setCreateMode(null)
+      setNotice('Provider created')
+      invalidateResources()
+    },
+    onError: setMutationError,
+  })
+
+  const createVault = useMutation({
+    mutationFn: () =>
+      api.createVault({
+        name: vaultForm.name,
+        description: vaultForm.description,
+        scope: vaultForm.scope,
+      }),
+    onSuccess: () => {
+      setCreateMode(null)
+      setNotice('Vault created')
+      invalidateResources()
+    },
+    onError: setMutationError,
+  })
+
   const archiveAgent = useMutation({
     mutationFn: api.archiveAgent,
     onSuccess: () => {
@@ -178,10 +237,38 @@ export function ConsoleLayout() {
     onError: setMutationError,
   })
 
+  const archiveProvider = useMutation({
+    mutationFn: api.archiveProvider,
+    onSuccess: () => {
+      setNotice('Provider deleted')
+      invalidateResources()
+    },
+    onError: setMutationError,
+  })
+
+  const archiveVault = useMutation({
+    mutationFn: api.archiveVault,
+    onSuccess: () => {
+      setNotice('Vault archived')
+      invalidateResources()
+    },
+    onError: setMutationError,
+  })
+
+  const disconnectMcpConnection = useMutation({
+    mutationFn: api.disconnectMcpConnection,
+    onSuccess: () => {
+      setNotice('MCP connection disconnected')
+      invalidateResources()
+    },
+    onError: setMutationError,
+  })
+
   const startSession = useMutation({
     mutationFn: api.startAgentSession,
     onSuccess: (session: Session) => {
       setSelectedSessionId(session.id)
+      setSelectedSessions((current) => ({ ...current, [session.id]: session }))
       setNotice('Session started')
       invalidateResources()
       void navigate('/sessions')
@@ -232,8 +319,13 @@ export function ConsoleLayout() {
     resourcesQuery.isFetching ||
     createEnvironment.isPending ||
     createAgent.isPending ||
+    createProvider.isPending ||
+    createVault.isPending ||
     archiveAgent.isPending ||
     archiveEnvironment.isPending ||
+    archiveProvider.isPending ||
+    archiveVault.isPending ||
+    disconnectMcpConnection.isPending ||
     startSession.isPending ||
     stopSession.isPending ||
     archiveSession.isPending ||
@@ -271,12 +363,24 @@ export function ConsoleLayout() {
         setQuery,
         includeArchived,
         setIncludeArchived,
-        agents: visibleAgents,
-        environments: visibleEnvironments,
-        sessions: visibleSessions,
+        agents,
+        environments,
+        sessions,
+        providers,
+        vaults,
+        mcpConnectors,
+        mcpConnections,
+        governancePolicy,
+        usageSummary,
+        auditRecords,
+        vaultCredentials,
         selectedSession,
         selectedSessionId,
         setSelectedSessionId,
+        setSelectedSession: (session) => {
+          setSelectedSessionId(session.id)
+          setSelectedSessions((current) => ({ ...current, [session.id]: session }))
+        },
         sessionEvents: eventsQuery.data?.data ?? [],
         runtimeTranscript,
         taskMessage,
@@ -291,8 +395,13 @@ export function ConsoleLayout() {
         },
         openCreateAgent: () => setCreateMode('agent'),
         openCreateEnvironment: () => setCreateMode('environment'),
+        openCreateProvider: () => setCreateMode('provider'),
+        openCreateVault: () => setCreateMode('vault'),
         archiveAgent: (id) => archiveAgent.mutate(id),
         archiveEnvironment: (id) => archiveEnvironment.mutate(id),
+        archiveProvider: (id) => archiveProvider.mutate(id),
+        archiveVault: (id) => archiveVault.mutate(id),
+        disconnectMcpConnection: (id) => disconnectMcpConnection.mutate(id),
         startSession: (id) => startSession.mutate(id),
         stopSession: (id) => stopSession.mutate(id),
         archiveSession: (id) => archiveSession.mutate(id),
@@ -307,12 +416,8 @@ export function ConsoleLayout() {
       <Sheet open={createMode !== null} onOpenChange={(open) => !open && setCreateMode(null)}>
         <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
           <SheetHeader>
-            <SheetTitle>{createMode === 'environment' ? 'Create Environment' : 'Create Agent'}</SheetTitle>
-            <SheetDescription>
-              {createMode === 'environment'
-                ? 'Define a reusable runtime environment for future sessions.'
-                : 'Define an agent profile and attach its default runtime environment.'}
-            </SheetDescription>
+            <SheetTitle>{createSheetCopy(createMode).title}</SheetTitle>
+            <SheetDescription>{createSheetCopy(createMode).description}</SheetDescription>
           </SheetHeader>
           <div className="px-4 pb-4">
             {createMode === 'environment' ? (
@@ -338,6 +443,26 @@ export function ConsoleLayout() {
                 }}
               />
             ) : null}
+            {createMode === 'provider' ? (
+              <ProviderForm
+                value={providerForm}
+                setValue={setProviderForm}
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  createProvider.mutate()
+                }}
+              />
+            ) : null}
+            {createMode === 'vault' ? (
+              <VaultForm
+                value={vaultForm}
+                setValue={setVaultForm}
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  createVault.mutate()
+                }}
+              />
+            ) : null}
           </div>
         </SheetContent>
       </Sheet>
@@ -360,6 +485,12 @@ function ConsoleShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         <nav className="mt-8 space-y-1">
+          <NavButton
+            icon={<Code2 size={17} />}
+            active={context.view === 'quickstart'}
+            to="/quickstart"
+            label="Quickstart"
+          />
           <NavButton icon={<Bot size={17} />} active={context.view === 'agents'} to="/agents" label="Agents" />
           <NavButton
             icon={<Server size={17} />}
@@ -373,10 +504,22 @@ function ConsoleShell({ children }: { children: React.ReactNode }) {
             to="/sessions"
             label="Sessions"
           />
-          <DisabledNav icon={<ShieldCheck size={17} />} label="Providers" />
-          <DisabledNav icon={<Boxes size={17} />} label="Vaults" />
-          <DisabledNav icon={<Code2 size={17} />} label="Usage" />
-          <DisabledNav icon={<Settings size={17} />} label="Settings" />
+          <NavButton
+            icon={<ShieldCheck size={17} />}
+            active={context.view === 'providers'}
+            to="/providers"
+            label="Providers"
+          />
+          <NavButton icon={<Vault size={17} />} active={context.view === 'vaults'} to="/vaults" label="Vaults" />
+          <NavButton icon={<PlugZap size={17} />} active={context.view === 'mcp'} to="/mcp" label="MCP" />
+          <NavButton icon={<Code2 size={17} />} active={context.view === 'usage'} to="/usage" label="Usage" />
+          <NavButton icon={<DatabaseZap size={17} />} active={context.view === 'audit'} to="/audit" label="Audit" />
+          <NavButton
+            icon={<Settings size={17} />}
+            active={context.view === 'settings'}
+            to="/settings"
+            label="Settings"
+          />
         </nav>
       </aside>
 
@@ -390,6 +533,12 @@ function ConsoleShell({ children }: { children: React.ReactNode }) {
               <h1 className="text-xl font-medium">{titleForView(context.view)}</h1>
             </div>
             <nav className="flex gap-2 overflow-x-auto pb-1 lg:hidden" aria-label="Primary">
+              <MobileNavButton
+                icon={<Code2 size={16} />}
+                active={context.view === 'quickstart'}
+                to="/quickstart"
+                label="Quickstart"
+              />
               <MobileNavButton
                 icon={<Bot size={16} />}
                 active={context.view === 'agents'}
@@ -407,6 +556,32 @@ function ConsoleShell({ children }: { children: React.ReactNode }) {
                 active={context.view === 'sessions'}
                 to="/sessions"
                 label="Sessions"
+              />
+              <MobileNavButton
+                icon={<ShieldCheck size={16} />}
+                active={context.view === 'providers'}
+                to="/providers"
+                label="Providers"
+              />
+              <MobileNavButton
+                icon={<Vault size={16} />}
+                active={context.view === 'vaults'}
+                to="/vaults"
+                label="Vaults"
+              />
+              <MobileNavButton icon={<PlugZap size={16} />} active={context.view === 'mcp'} to="/mcp" label="MCP" />
+              <MobileNavButton icon={<Code2 size={16} />} active={context.view === 'usage'} to="/usage" label="Usage" />
+              <MobileNavButton
+                icon={<DatabaseZap size={16} />}
+                active={context.view === 'audit'}
+                to="/audit"
+                label="Audit"
+              />
+              <MobileNavButton
+                icon={<Settings size={16} />}
+                active={context.view === 'settings'}
+                to="/settings"
+                label="Settings"
               />
             </nav>
             <div className="flex flex-wrap items-center gap-2">
@@ -443,6 +618,18 @@ function ConsoleShell({ children }: { children: React.ReactNode }) {
                   Create agent
                 </Button>
               ) : null}
+              {context.view === 'providers' ? (
+                <Button type="button" onClick={context.openCreateProvider}>
+                  <ShieldCheck size={16} />
+                  Create provider
+                </Button>
+              ) : null}
+              {context.view === 'vaults' ? (
+                <Button type="button" onClick={context.openCreateVault}>
+                  <Boxes size={16} />
+                  Create vault
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 variant="outline"
@@ -470,4 +657,29 @@ function ConsoleShell({ children }: { children: React.ReactNode }) {
 
 function useConsoleContextForShell() {
   return useConsoleContext()
+}
+
+function createSheetCopy(mode: CreateMode) {
+  if (mode === 'environment') {
+    return {
+      title: 'Create Environment',
+      description: 'Define a reusable runtime environment for future sessions.',
+    }
+  }
+  if (mode === 'provider') {
+    return {
+      title: 'Create Provider',
+      description: 'Register a model provider without exposing raw credentials.',
+    }
+  }
+  if (mode === 'vault') {
+    return {
+      title: 'Create Vault',
+      description: 'Create safe credential-reference metadata for runtime integrations.',
+    }
+  }
+  return {
+    title: 'Create Agent',
+    description: 'Define an agent profile and attach its default runtime environment.',
+  }
 }
