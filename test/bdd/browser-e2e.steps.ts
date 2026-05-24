@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
-import { type ChildProcess, spawn } from 'node:child_process'
 import { once } from 'node:events'
-import { createServer } from 'node:net'
+import { createServer as createNetServer } from 'node:net'
+import path from 'node:path'
 import { Then } from '@cucumber/cucumber'
 import { type Browser, chromium, type Page, type Route } from '@playwright/test'
+import type { ViteDevServer } from 'vite'
 
 const now = '2026-05-23T00:00:00.000Z'
 
@@ -19,11 +20,10 @@ Then(
   { timeout: 120_000 },
   async () => {
     const port = await freePort()
-    const server = startVite(port)
+    const server = await startVite(port)
     let browser: Browser | null = null
 
     try {
-      await waitForServer(port)
       browser = await chromium.launch({ headless: true })
       await runBrowserWorkflow(browser, port, { width: 1280, height: 900 })
       await runBrowserWorkflow(browser, port, { width: 390, height: 844 })
@@ -386,7 +386,7 @@ async function expectText(page: Page, text: string) {
 }
 
 async function freePort() {
-  const server = createServer()
+  const server = createNetServer()
   server.listen(0, '127.0.0.1')
   await once(server, 'listening')
   const address = server.address()
@@ -397,48 +397,33 @@ async function freePort() {
   return port
 }
 
-function startVite(port: number) {
-  const { NODE_OPTIONS: _nodeOptions, ...env } = process.env
-  return spawn(npmCommand(), ['exec', 'vite', '--', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-    cwd: process.cwd(),
-    env: { ...env, CLOUDFLARE_ENV: 'staging' },
-    stdio: 'ignore',
-  })
-}
-
-async function waitForServer(port: number) {
-  const url = `http://127.0.0.1:${port}/quickstart`
-  const startedAt = Date.now()
-  while (Date.now() - startedAt < 90_000) {
-    try {
-      const response = await fetch(url)
-      if (response.ok) return
-    } catch {
-      await new Promise((resolve) => setTimeout(resolve, 250))
-    }
-  }
-  throw new Error(`Timed out waiting for Vite server at ${url}`)
-}
-
-async function stopProcess(process: ChildProcess) {
-  if (process.exitCode !== null || process.signalCode !== null) {
-    return
-  }
-
-  process.kill('SIGTERM')
-  await Promise.race([
-    once(process, 'close'),
-    new Promise<void>((resolve) =>
-      setTimeout(() => {
-        if (process.exitCode === null && process.signalCode === null) {
-          process.kill('SIGKILL')
-        }
-        resolve()
-      }, 5_000),
-    ),
+async function startVite(port: number) {
+  const [{ createServer: createViteServer }, { default: react }, { default: tailwindcss }] = await Promise.all([
+    import('vite'),
+    import('@vitejs/plugin-react-swc'),
+    import('@tailwindcss/vite'),
   ])
+  const server = await createViteServer({
+    configFile: false,
+    mode: 'development',
+    plugins: [react(), tailwindcss()],
+    resolve: {
+      alias: {
+        '@': path.resolve(process.cwd(), './src'),
+        '@server': path.resolve(process.cwd(), './server'),
+        '@shared': path.resolve(process.cwd(), './shared'),
+      },
+    },
+    server: {
+      host: '127.0.0.1',
+      port,
+      strictPort: true,
+    },
+  })
+  await server.listen()
+  return server
 }
 
-function npmCommand() {
-  return process.platform === 'win32' ? 'npm.cmd' : 'npm'
+async function stopProcess(server: ViteDevServer) {
+  await server.close()
 }

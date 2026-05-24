@@ -30,5 +30,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run bdd
+      - run: npx playwright install --with-deps chromium
+      - run: npm run bdd:e2e
       - run: npm run test:cf
       - run: npm run build
