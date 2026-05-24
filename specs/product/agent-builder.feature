@@ -25,3 +25,15 @@ Feature: Agent builder
     When the user starts a test session
     Then the draft runs in an isolated session
     And publishing creates a versioned agent definition
+
+  Scenario: Build an agent from a guided first-run flow
+    When the user describes the agent goal in natural language or picks a template
+    Then the builder drafts name, instructions, model choice, tool policy, MCP connectors, and default environment recommendations
+    And the user can inspect and edit the generated configuration before saving
+    And the builder asks for one missing decision at a time instead of blocking on a long form
+
+  Scenario: Show API examples for the created agent
+    Given the builder has created an agent
+    Then the builder shows the equivalent create-agent API call using this platform origin
+    And examples use AMA control-plane routes, not upstream vendor API URLs
+    And examples never include raw secrets

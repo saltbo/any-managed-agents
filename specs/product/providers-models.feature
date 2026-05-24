@@ -28,3 +28,15 @@ Feature: Model providers
   Scenario: Track model usage and cost
     When a provider returns token or usage metadata
     Then the platform records usage by organization, project, agent, session, provider, and model
+
+  Scenario: Normalize provider error categories
+    When any provider returns authentication, rate limit, overload, invalid model, safety, or network errors
+    Then the runtime records a normalized error type
+    And user-facing messages are safe and actionable
+    And retryable errors include retry metadata when available
+
+  Scenario: Use provider adapters without changing session protocol
+    Given an agent uses any supported provider
+    When a session sends a runtime task
+    Then provider-specific calls happen behind the Pi/provider adapter boundary
+    And clients continue to interact through the AMA runtime endpoint or Pi-compatible helpers

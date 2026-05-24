@@ -28,6 +28,13 @@ These decisions define the intended end state for Any Managed Agents.
 - External SDKs must be generated from or mechanically aligned with this repository's OpenAPI document.
 - Runtime helpers in external SDKs must delegate to Pi protocol or transparent AMA Pi proxy endpoints.
 
+## CLI Ownership
+
+- This repository does not maintain a bespoke CLI binary.
+- Command-line automation uses restish against the published control-plane OpenAPI document.
+- OpenAPI remains the source of truth for CLI operation discovery, fields, auth, and response shapes.
+- Agent-facing skills may document restish workflows, but must not introduce a separate runtime protocol or command contract.
+
 ## Authentication
 
 - Authentication integrates with FlareAuth.

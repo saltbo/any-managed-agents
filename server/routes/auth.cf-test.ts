@@ -233,7 +233,7 @@ describe('[CF] auth and tenancy', () => {
 
   it('returns a stable error envelope for invalid FlareAuth callback claims', async () => {
     const { loginCookie, state } = await startLogin()
-    currentClaims = { ...defaultClaims(), org_id: '' }
+    currentClaims = { ...defaultClaims(), email: '' }
 
     const res = await SELF.fetch(`https://example.com/api/auth/callback?code=valid-code&state=${state}`, {
       headers: { cookie: cookiePair(loginCookie, '__Host-ama_oidc') },

@@ -1,12 +1,12 @@
 # SDK and API Boundary
 
-This repository does not maintain language SDKs. It publishes the Any Managed Agents control-plane OpenAPI contract. Product SDKs are generated and maintained in separate repositories.
+This repository does not maintain language SDKs or a bespoke CLI binary. It publishes the Any Managed Agents control-plane OpenAPI contract. Product SDKs are generated and maintained in separate repositories, and command-line automation uses restish against the same OpenAPI document.
 
 ## SDK Layers
 
 ```txt
 User application
-  -> external Any Managed Agents SDK or direct HTTP
+  -> external Any Managed Agents SDK, restish, or direct HTTP
   -> Any Managed Agents OpenAPI control-plane API
   -> AMA runtime proxy
   -> Pi coding agent in Cloudflare Sandbox
@@ -23,6 +23,12 @@ External SDK repositories use this repository's OpenAPI document as their source
 - connect to a running session through Pi protocol or a transparent AMA Pi proxy endpoint
 
 SDKs should stay thin. They wrap the public control-plane API and provide a small set of ergonomic helpers, such as `sessions.connect(sessionId)`. SDK source, release process, and language-specific packaging do not live in this repository.
+
+## CLI Boundary
+
+The CLI path is restish over OpenAPI. The OpenAPI document is the source of truth for operation discovery, request fields, response fields, authentication, and machine-readable output.
+
+This repository may include an agent-facing skill that documents restish setup and common AMA workflows. That skill is guidance for automation agents, not a separate command surface. It should reference OpenAPI operations or documented paths rather than inventing project-specific CLI commands.
 
 ## Runtime Protocol
 

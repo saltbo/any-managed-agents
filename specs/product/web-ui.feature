@@ -8,7 +8,13 @@ Feature: Web console
   @implemented
   Scenario: Complete the v1 create-session-to-run-task workflow
     When the user opens the console
-    Then the v1 console supports creating environments, agents, and sessions
+    Then the v1 console uses URL routes for primary resources
+    And the v1 console is built from the project component library primitives
+    And the v1 console separates routing, forms, views, and shared UI components
+    And the v1 console keeps browsing resources as the primary screen
+    And creation is a deliberate flow instead of always-on side panels
+    And mobile navigation labels remain readable without truncation
+    And the v1 console supports creating environments, agents, and sessions
     And the v1 console supports sending runtime tasks and inspecting session events
 
   @planned

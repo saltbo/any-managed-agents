@@ -1,7 +1,9 @@
 node_modules/
 dist/
 .wrangler/
+.playwright-cli/
 .dev.vars
+.dev.vars.*
 .env
 .env.*
 !.env.example

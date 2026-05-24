@@ -7,6 +7,8 @@ Any Managed Agents is a Cloudflare-native managed agents system. It is inspired 
 - The platform can be deployed on Cloudflare Workers.
 - This repository publishes OpenAPI for product resource management; SDKs are generated and maintained in separate repositories.
 - The control-plane API contract is generated from Hono route schemas.
+- Command-line automation uses restish against the published OpenAPI document; this repository does not maintain a bespoke CLI binary.
+- The project may provide an agent-facing skill that teaches automation agents how to use restish with the AMA OpenAPI document.
 - The v1.0 agent runtime is Pi coding agent running inside a per-session Cloudflare Sandbox.
 - Runtime traffic uses Pi protocol directly or through a transparent AMA proxy around Pi RPC and JSON session events.
 - Cloudflare Agents SDK is not the v1.0 runtime contract. It may be added later as an adapter, but v1.0 must not require `/agents/*` compatibility.
@@ -45,11 +47,13 @@ AMA must not define a custom sandbox SDK. Sandbox access is an internal platform
 
 The platform owns the control-plane OpenAPI contract. Product SDKs are generated and maintained outside this repository. Product SDKs manage control-plane resources and may provide thin helpers that connect to Pi runtime sessions through the AMA proxy, but they must not define a replacement runtime protocol.
 
+Command-line usage is a control-plane concern. Operators use restish with the published OpenAPI document for resource management instead of a project-specific CLI implementation. Agent skills may wrap this workflow as documentation and task guidance, but they must still call the OpenAPI-described control plane and preserve the Pi runtime boundary.
+
 ## Runtime Shape
 
 ```txt
 Control plane:
-  client / external SDK -> /api/* -> Hono OpenAPI routes -> D1 / governance / metadata
+  client / external SDK / restish -> /api/* -> Hono OpenAPI routes -> D1 / governance / metadata
 
 Runtime proxy:
   client / external SDK helper -> AMA runtime proxy -> Pi RPC / JSON event stream

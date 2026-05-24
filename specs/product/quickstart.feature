@@ -7,6 +7,40 @@ Feature: Quickstart
     When the developer opens the console for the first time
     Then the platform guides them to create a project, select a provider, create an agent, and start a session
 
+  Scenario: Display the first-run quickstart structure
+    Given the developer is signed in for the first time
+    When the developer opens quickstart
+    Then the page shows a stepper for provider, agent, environment, session, and integration
+    And the page starts on a usable workflow rather than a marketing page
+    And each completed step shows the API call that was made against the current platform origin
+    And incomplete prerequisites are visible before the user starts a runtime session
+
+  Scenario: Create an agent from a template or description
+    Given the developer is on the agent step
+    When the developer chooses a template or describes the agent goal
+    Then the platform drafts agent name, instructions, model, tools, MCP connectors, and default environment recommendations
+    And the developer can inspect and edit the draft before creating the agent
+    And creating the agent shows the resulting agent id and version
+
+  Scenario: Configure the execution environment in quickstart
+    Given an agent was created in quickstart
+    When the developer chooses unrestricted networking, limited networking, or a custom environment
+    Then the platform creates or selects an environment
+    And the environment step explains that environments are reusable sandbox templates
+    And limited networking captures allowed hosts, MCP access, and package-manager access
+    And skipping the step is allowed only when the selected agent already has an active default environment
+
+  Scenario: Start a session and send the first task
+    Given quickstart has an active agent and environment
+    When the developer starts a test session
+    Then the platform creates a session and shows its runtime endpoint
+    And the preview shows transcript and debug modes
+    And the task input is focused with a safe example prompt
+    When the developer sends the prompt
+    Then the task is accepted by the Pi runtime
+    And session events stream into the preview without a page reload
+    And final success or failure remains inspectable in the session detail page
+
   Scenario: Run the default Workers AI agent
     Given Workers AI is available
     When the developer creates an agent with the default model
@@ -23,3 +57,11 @@ Feature: Quickstart
     When the developer checks deployment health
     Then the control plane health endpoint responds successfully
     And Cloudflare runtime tests can validate D1 and Durable Object bindings
+
+  Scenario: Show integration options after a successful session
+    Given quickstart has created a session
+    When the developer opens the integration step
+    Then examples are available for curl, restish, and generated SDKs
+    And examples use the current platform origin and /api OpenAPI contract
+    And examples use Pi-compatible runtime helpers for live session traffic
+    And examples do not include raw secrets or upstream vendor API URLs

@@ -43,8 +43,10 @@ This repository publishes the OpenAPI contract for product resources. Language S
 - `audit-auto.feature`, `audit-log-ui.feature`, `usage-summary.feature` - audit and usage coverage
 - `api-contracts.feature` - OpenAPI, external SDK, and error contracts for control-plane automation
 - `openapi.feature`, `web-api-client-consolidation.feature` - API contract coverage
-- `cli.feature`, `cli-client.feature`, `cli-contract.feature`, `cli-smoke-test.feature` - optional control-plane CLI coverage, not runtime protocol coverage
+- `cli.feature`, `cli-client.feature`, `cli-contract.feature`, `cli-smoke-test.feature` - restish-over-OpenAPI control-plane CLI coverage, not runtime protocol coverage
+- `agent-skill-cli.feature` - agent-facing skill guidance for restish CLI workflows and runtime protocol boundaries
 - `web-ui.feature` - web console navigation and resource workflows
+- `ui-ux-standards.feature` - shared console UI/UX standards for all current and future pages
 - `layout.feature`, `list-date-range-filters.feature`, `list-route-pagination.feature` - UI infrastructure coverage
 - `quickstart.feature` - first-run developer path
 - `destructive-ops.feature`, `encryption.feature`, `integration-snippets.feature`, `scenario-tests.feature`, `server-tests.feature`, `ci-cloudflare-smoke.feature`, `storage-cloudflare-d1.feature` - operations, storage, and compatibility coverage

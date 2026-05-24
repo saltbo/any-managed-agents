@@ -220,6 +220,30 @@ Then('the v1 console supports creating environments, agents, and sessions', () =
   runUnitTest('src/App.test.tsx')
 })
 
+Then('the v1 console uses URL routes for primary resources', () => {
+  runUnitTest('src/App.test.tsx')
+})
+
+Then('the v1 console is built from the project component library primitives', () => {
+  runUnitTest('src/App.test.tsx')
+})
+
+Then('the v1 console separates routing, forms, views, and shared UI components', () => {
+  runUnitTest('src/App.test.tsx')
+})
+
+Then('the v1 console keeps browsing resources as the primary screen', () => {
+  runUnitTest('src/App.test.tsx')
+})
+
+Then('creation is a deliberate flow instead of always-on side panels', () => {
+  runUnitTest('src/App.test.tsx')
+})
+
+Then('mobile navigation labels remain readable without truncation', () => {
+  runUnitTest('src/App.test.tsx')
+})
+
 Then('the v1 console supports sending runtime tasks and inspecting session events', () => {
   runUnitTest('src/App.test.tsx')
 })

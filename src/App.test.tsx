@@ -190,6 +190,11 @@ function mockConsoleApi(seed?: {
       state.events = [event()]
       return jsonResponse({ accepted: true })
     }
+    if (url === '/api/sessions/session_1/runtime' && method === 'GET') {
+      return new Response('{"type":"agent_end","message":"AMA task completed"}\n', {
+        headers: { 'content-type': 'application/x-ndjson' },
+      })
+    }
     if (url === '/api/sessions/session_1/stop' && method === 'POST') {
       state.sessions = [session({ status: 'stopped', stoppedAt: now })]
       return jsonResponse(state.sessions[0])
@@ -209,9 +214,16 @@ function primaryNav() {
   return within(screen.getByRole('navigation', { name: 'Primary' }))
 }
 
+async function confirmAction(triggerName: string, confirmName = triggerName) {
+  fireEvent.click(screen.getByRole('button', { name: triggerName }))
+  const dialog = await screen.findByRole('alertdialog')
+  fireEvent.click(within(dialog).getByRole('button', { name: confirmName }))
+}
+
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
+  window.history.pushState({}, '', '/')
 })
 
 describe('App', () => {
@@ -237,25 +249,44 @@ describe('App', () => {
     render(<App />)
 
     expect(await screen.findByText('No agents')).toBeTruthy()
-    fireEvent.click(primaryNav().getByRole('button', { name: 'Environments' }))
+    expect(screen.queryByText('Acceptance Path')).toBeNull()
+    expect(document.querySelector('[data-slot="button"]')).toBeTruthy()
+    expect(document.querySelector('[data-slot="card"]')).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Create Environment' })).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Create Agent' })).toBeNull()
+    expect(primaryNav().getByRole('link', { name: 'Agents' })).toBeTruthy()
+    expect(primaryNav().getByRole('link', { name: 'Environments' })).toBeTruthy()
+    expect(primaryNav().getByRole('link', { name: 'Sessions' })).toBeTruthy()
+
+    fireEvent.click(primaryNav().getByRole('link', { name: 'Environments' }))
+    expect(window.location.pathname).toBe('/environments')
     expect(screen.getByRole('heading', { name: 'Environments' })).toBeTruthy()
     expect(screen.getByText('No environments')).toBeTruthy()
-    fireEvent.click(primaryNav().getByRole('button', { name: 'Sessions' }))
+    fireEvent.click(primaryNav().getByRole('link', { name: 'Sessions' }))
+    expect(window.location.pathname).toBe('/sessions')
     expect(screen.getByText('No sessions')).toBeTruthy()
-    fireEvent.click(primaryNav().getByRole('button', { name: 'Agents' }))
+    fireEvent.click(primaryNav().getByRole('link', { name: 'Environments' }))
+    expect(window.location.pathname).toBe('/environments')
 
     fireEvent.click(screen.getByRole('button', { name: 'Create environment' }))
+    expect(await screen.findByRole('heading', { name: 'Create Environment' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Save environment' }))
     expect(await screen.findByText('Environment created')).toBeTruthy()
-    expect(screen.getAllByText('Ready').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('heading', { name: 'Create Environment' })).toBeNull()
 
+    fireEvent.click(primaryNav().getByRole('link', { name: 'Agents' }))
+    expect(window.location.pathname).toBe('/agents')
     fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
+    expect(await screen.findByRole('heading', { name: 'Create Agent' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Save agent' }))
     expect(await screen.findByText('Agent created')).toBeTruthy()
     expect(screen.getByText('Coding agent')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Start session' }))
     expect(await screen.findByText('Session started')).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Sessions' })).toBeTruthy()
-    expect(screen.getByText('Session detail')).toBeTruthy()
+    expect(window.location.pathname).toBe('/sessions')
+    expect(await screen.findByRole('heading', { name: 'Sessions' })).toBeTruthy()
+    expect(await screen.findByText('Session detail')).toBeTruthy()
     expect(screen.getByText('No persisted events yet.')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Send task' }))
@@ -282,17 +313,17 @@ describe('App', () => {
     render(<App />)
 
     await screen.findByText('Coding agent')
-    fireEvent.click(primaryNav().getByRole('button', { name: 'Sessions' }))
+    fireEvent.click(primaryNav().getByRole('link', { name: 'Sessions' }))
     expect(screen.getByText('Runtime crashed')).toBeTruthy()
     expect(screen.getAllByText('stopped').length).toBeGreaterThan(0)
     expect(screen.getAllByText('archived').length).toBeGreaterThan(0)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Stop session' }))
+    await confirmAction('Stop session')
     expect(await screen.findByText('Session stopped')).toBeTruthy()
     const statusRows = screen.getAllByText('Status').map((label) => label.closest('div'))
     expect(statusRows.some((row) => row && within(row).queryByText('stopped'))).toBe(true)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Archive session' }))
+    await confirmAction('Archive session')
     expect(await screen.findByText('Session archived')).toBeTruthy()
     expect(screen.getAllByText('archived').length).toBeGreaterThan(0)
   })
@@ -313,9 +344,14 @@ describe('App', () => {
   })
 
   it('renders sessions, runtime events, and sends tasks through the runtime endpoint', async () => {
-    const runtimeFetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
-      jsonResponse({ accepted: true }),
-    )
+    const runtimeFetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if ((init?.method ?? 'GET') === 'POST') {
+        return jsonResponse({ accepted: true })
+      }
+      return new Response('{"type":"agent_end","message":"AMA task completed"}\n', {
+        headers: { 'content-type': 'application/x-ndjson' },
+      })
+    })
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url = String(input)
       if (url === '/api/auth/me') {
@@ -366,11 +402,11 @@ describe('App', () => {
     render(<App />)
 
     await waitFor(() => expect(screen.getByText('Control Plane')).toBeTruthy())
-    fireEvent.click(primaryNav().getByRole('button', { name: 'Sessions' }))
+    fireEvent.click(primaryNav().getByRole('link', { name: 'Sessions' }))
 
     expect(await screen.findByText('Session detail')).toBeTruthy()
     expect(screen.getByText('/runtime/sessions/session_1/rpc')).toBeTruthy()
-    expect(screen.getByText(/runtime_ready/)).toBeTruthy()
+    expect(await screen.findByText(/runtime_ready/)).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Send task' }))
 
@@ -380,6 +416,7 @@ describe('App', () => {
       method: 'POST',
       credentials: 'include',
     })
+    expect(await screen.findByText(/agent_end/)).toBeTruthy()
   })
 })
 

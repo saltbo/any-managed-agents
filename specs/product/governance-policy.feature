@@ -26,3 +26,16 @@ Feature: Governance and policy
     When an operator provides a governance config
     Then the platform validates the config
     And applies it without requiring source code changes
+
+  Scenario: Explain policy denials to operators
+    Given a request is denied by provider, tool, MCP, sandbox, or budget policy
+    When the user inspects the failure
+    Then the response identifies the policy category and safe resource reference
+    And the UI can link to the effective policy view
+    And no secret or raw credential values are included
+
+  Scenario: Preserve historical sessions after policy changes
+    Given a session was created under an older policy
+    When governance policy changes
+    Then historical session events and snapshots remain readable
+    And reconnecting or sending new work uses the current effective policy

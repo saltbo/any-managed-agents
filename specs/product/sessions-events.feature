@@ -6,3 +6,21 @@ Feature: Session events
     When the runtime emits a message, tool, sandbox, policy, usage, or error event
     Then the event is stored with stable ordering and safe metadata
 
+  Scenario: Store task lifecycle events
+    Given a user sends a runtime task
+    When the runtime accepts, starts, streams, completes, or fails the task
+    Then lifecycle events are stored with monotonically increasing sequence numbers
+    And message events preserve user-visible content
+    And debug events preserve safe runtime diagnostics
+
+  Scenario: Query session events
+    Given a session has many events
+    When the client lists events with limit, order, type filter, or cursor
+    Then the response returns a deterministic page
+    And hasMore, firstId, lastId, and sequence boundaries allow stable pagination
+
+  Scenario: Redact sensitive event payloads
+    Given a provider, tool, MCP connector, vault, or sandbox process emits sensitive values
+    When the event is stored or streamed
+    Then secret values are replaced with safe references
+    And audit metadata records the source without exposing the secret

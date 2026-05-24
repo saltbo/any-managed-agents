@@ -96,15 +96,16 @@ async function createOidcClient(env: Env) {
           }
           const requestInit: RequestInit = {
             method: request.method,
-            headers: request.headers,
+            headers: Object.fromEntries(request.headers.entries()),
             redirect: request.redirect,
             signal: request.signal,
           }
           if (request.method !== 'GET' && request.method !== 'HEAD') {
-            requestInit.body = await request.clone().arrayBuffer()
+            requestInit.body = (init?.body as BodyInit | undefined) ?? (await request.clone().arrayBuffer())
           }
+          const useServiceBinding = env.FLAREAUTH_USE_SERVICE_BINDING !== 'false'
           const response =
-            requestUrl.origin === new URL(config.issuer).origin && env.FLAREAUTH
+            useServiceBinding && requestUrl.origin === new URL(config.issuer).origin && env.FLAREAUTH
               ? await env.FLAREAUTH.fetch(request.url, requestInit)
               : await fetch(request.url, requestInit)
           return response

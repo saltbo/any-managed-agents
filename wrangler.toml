@@ -66,8 +66,8 @@ enabled = true
 AMA_DEFAULT_MODEL = "@cf/moonshotai/kimi-k2.6"
 AMA_PI_BRIDGE_PORT = "8788"
 AMA_WORKERS_AI_ACCOUNT_ID = "94a89d03c0fc785c8dcbd3c674d6742a"
-FLAREAUTH_ISSUER = "https://auth.example.com"
-FLAREAUTH_CLIENT_ID = "replace-with-flareauth-staging-client-id"
+FLAREAUTH_ISSUER = "https://flareauth.saltbo.workers.dev/api/auth"
+FLAREAUTH_CLIENT_ID = "client_2dbe26ffc4dd4e4c9c4a90a6770b21fe"
 FLAREAUTH_REDIRECT_URI = "https://replace-with-staging-worker-host/api/auth/callback"
 AMA_COOKIE_SECURE = "true"
 AMA_COOKIE_SAME_SITE = "Lax"
@@ -75,6 +75,10 @@ AMA_ALLOWED_ORIGINS = "https://replace-with-staging-app-host"
 
 [env.staging.ai]
 binding = "AI"
+
+[[env.staging.services]]
+binding = "FLAREAUTH"
+service = "flareauth"
 
 [[env.staging.d1_databases]]
 binding = "DB"
@@ -93,5 +97,5 @@ class_name = "Sandbox"
 [[env.staging.containers]]
 class_name = "Sandbox"
 name = "any-managed-agents-staging-sandbox"
-image = "registry.cloudflare.com/94a89d03c0fc785c8dcbd3c674d6742a/ama-pi-runtime:0.75.4"
+image = "./Dockerfile"
 max_instances = 10
