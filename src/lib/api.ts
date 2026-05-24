@@ -224,4 +224,33 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ type: 'prompt', message }),
     }),
+  readRuntimeEvents: async (session: Session, timeoutMs = 60_000) => {
+    const response = await fetch(session.runtimeEndpointPath, { credentials: 'include' })
+    if (!response.ok || !response.body) {
+      throw new ApiError(response.statusText, response.status, await response.text())
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let transcript = ''
+    const startedAt = Date.now()
+    try {
+      while (Date.now() - startedAt < timeoutMs) {
+        const result = await Promise.race([
+          reader.read(),
+          new Promise<{ done: true; value?: undefined }>((resolve) => setTimeout(() => resolve({ done: true }), 5000)),
+        ])
+        if (result.done) {
+          break
+        }
+        transcript += decoder.decode(result.value, { stream: true })
+        if (transcript.includes('"type":"agent_end"') || transcript.includes('"type":"bridge_exit"')) {
+          break
+        }
+      }
+    } finally {
+      await reader.cancel().catch(() => undefined)
+    }
+    return transcript
+  },
 }

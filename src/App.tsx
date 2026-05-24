@@ -110,6 +110,7 @@ export function App() {
   const [sessions, setSessions] = useState<Session[]>([])
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
   const [sessionEvents, setSessionEvents] = useState<SessionEvent[]>([])
+  const [runtimeTranscript, setRuntimeTranscript] = useState('')
   const [environmentForm, setEnvironmentForm] = useState(emptyEnvironment)
   const [agentForm, setAgentForm] = useState(emptyAgent)
   const [selectedEnvironmentId, setSelectedEnvironmentId] = useState<string>('')
@@ -156,6 +157,7 @@ export function App() {
   const loadEvents = useCallback(async (sessionId: string | null) => {
     if (!sessionId) {
       setSessionEvents([])
+      setRuntimeTranscript('')
       return
     }
     try {
@@ -257,6 +259,7 @@ export function App() {
     }
     void runAction(async () => {
       await api.sendRuntimeTask(selectedSession, taskMessage)
+      setRuntimeTranscript(await api.readRuntimeEvents(selectedSession))
       await loadEvents(selectedSession.id)
     }, 'Task sent to runtime')
   }
@@ -404,6 +407,7 @@ export function App() {
                 sessions={visibleSessions}
                 selectedSession={selectedSession}
                 events={sessionEvents}
+                runtimeTranscript={runtimeTranscript}
                 onSelect={setSelectedSessionId}
                 onStop={(id) => void runAction(async () => void (await api.stopSession(id)), 'Session stopped')}
                 onArchive={(id) => void runAction(() => api.archiveSession(id), 'Session archived')}
@@ -674,6 +678,7 @@ function SessionsView({
   sessions,
   selectedSession,
   events,
+  runtimeTranscript,
   onSelect,
   onStop,
   onArchive,
@@ -685,6 +690,7 @@ function SessionsView({
   sessions: Session[]
   selectedSession: Session | null
   events: SessionEvent[]
+  runtimeTranscript: string
   onSelect: (id: string) => void
   onStop: (id: string) => void
   onArchive: (id: string) => void
@@ -773,6 +779,11 @@ function SessionsView({
           </form>
           <div className="mt-5 grid gap-3">
             <h3 className="text-sm font-semibold">Transcript and runtime events</h3>
+            {runtimeTranscript ? (
+              <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-md border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100">
+                {runtimeTranscript}
+              </pre>
+            ) : null}
             {events.length === 0 ? (
               <p className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">
                 No persisted events yet.
