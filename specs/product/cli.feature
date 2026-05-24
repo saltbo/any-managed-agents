@@ -1,4 +1,4 @@
-@planned @cli
+@cli @implemented
 Feature: CLI
   Command-line automation uses restish over the published OpenAPI document.
 

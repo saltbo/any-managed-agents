@@ -1,4 +1,4 @@
-@planned @docs
+@docs @implemented
 Feature: Integration snippets
   Developers can copy minimal examples for SDK and API usage.
 

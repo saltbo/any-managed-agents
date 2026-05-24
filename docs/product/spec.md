@@ -8,7 +8,7 @@ Any Managed Agents is a Cloudflare-native managed agents system. It is inspired 
 - This repository publishes OpenAPI for product resource management; SDKs are generated and maintained in separate repositories.
 - The control-plane API contract is generated from Hono route schemas.
 - Command-line automation uses restish against the published OpenAPI document; this repository does not maintain a bespoke CLI binary.
-- The project may provide an agent-facing skill that teaches automation agents how to use restish with the AMA OpenAPI document.
+- The project provides an agent-facing skill that teaches automation agents how to use restish with the AMA OpenAPI document.
 - The v1.0 agent runtime is Pi coding agent running inside a per-session Cloudflare Sandbox.
 - Runtime traffic uses Pi protocol directly or through a transparent AMA proxy around Pi RPC and JSON session events.
 - Cloudflare Agents SDK is not the v1.0 runtime contract. It may be added later as an adapter, but v1.0 must not require `/agents/*` compatibility.

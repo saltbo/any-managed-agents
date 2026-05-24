@@ -83,6 +83,10 @@ const logoutRoute = createRoute({
     204: {
       description: 'Logged out',
     },
+    401: {
+      description: 'Authentication required',
+      content: { 'application/json': { schema: ErrorResponseSchema } },
+    },
   },
 })
 

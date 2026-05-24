@@ -480,9 +480,10 @@ export function createApp() {
     info: {
       title: 'Any Managed Agents API',
       version: '0.1.0',
-      description: 'Control-plane API for Any Managed Agents.',
+      description:
+        'Control-plane API for Any Managed Agents. Command-line automation uses restish or direct HTTP against this OpenAPI document; runtime traffic remains Pi-compatible through AMA runtime proxy endpoints.',
     },
-    servers: [{ url: '/api' }],
+    servers: [{ url: '/' }],
   })
 
   app.get('/api/docs', swaggerUI({ url: '/api/openapi.json' }))
