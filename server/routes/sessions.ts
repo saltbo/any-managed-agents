@@ -2,6 +2,7 @@ import { createRoute, z } from '@hono/zod-openapi'
 import { and, desc, eq, gt, gte, like, lt, lte, max, ne, or } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
+import { recordAudit, requestId } from '../audit'
 import { type AuthContext, requireAuth } from '../auth/session'
 import {
   agentDefinitions,
@@ -24,6 +25,7 @@ import {
   paginateSequenceRows,
   parseListCursor,
 } from '../openapi'
+import { evaluateProviderPolicy } from '../policy'
 import { runtimeEndpointPath, safeRuntimeError, startPiBridge, stopPiBridge } from '../runtime/pi/bridge'
 
 const app = createApiRouter()
@@ -347,6 +349,33 @@ export async function createSessionForAgent(c: Context<{ Bindings: Env }>, db: D
   if (!agentVersion) {
     throw new Error('Agent current version is required')
   }
+  const policyDecision = await evaluateProviderPolicy(db, auth, {
+    providerId: agentVersion.provider,
+    modelId: agentVersion.model,
+  })
+  if (!policyDecision.allowed) {
+    await recordAudit(db, {
+      auth,
+      action: 'session.create',
+      resourceType: 'session',
+      outcome: 'denied',
+      requestId: requestId(c),
+      policyCategory: policyDecision.category,
+      metadata: { agentId, providerId: agentVersion.provider, modelId: agentVersion.model, decision: policyDecision },
+    })
+    return errorResponse(c, 403, 'policy_denied', policyDecision.message, {
+      category: policyDecision.category,
+      resourceType:
+        policyDecision.category === 'budget' ? 'budget' : policyDecision.category === 'model' ? 'model' : 'provider',
+      resourceId:
+        policyDecision.category === 'budget'
+          ? policyDecision.rule
+          : policyDecision.category === 'model'
+            ? agentVersion.model
+            : agentVersion.provider,
+      ruleId: policyDecision.rule,
+    })
+  }
 
   let environmentVersion: EnvironmentVersionRow | null = null
   if (agentVersion.defaultEnvironmentId) {
@@ -591,6 +620,7 @@ const createSessionRoute = createRoute({
     201: { description: 'Created session', content: { 'application/json': { schema: SessionSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
     404: { description: 'Agent not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    403: { description: 'Policy denied', content: { 'application/json': { schema: ErrorResponseSchema } } },
     409: { description: 'Conflict', content: { 'application/json': { schema: ErrorResponseSchema } } },
   },
 })

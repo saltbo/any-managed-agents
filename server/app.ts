@@ -7,10 +7,14 @@ import { sessions } from './db/schema'
 import { errorResponse } from './errors'
 import { ApiSecuritySchemes, createApiRouter } from './openapi'
 import agents from './routes/agents'
+import audit from './routes/audit'
 import auth from './routes/auth'
 import environments from './routes/environments'
+import governance from './routes/governance'
 import health from './routes/health'
+import providers from './routes/providers'
 import sessionRoutes from './routes/sessions'
+import usage from './routes/usage'
 import vaults from './routes/vaults'
 import { proxyPiRuntime } from './runtime/pi/bridge'
 
@@ -37,6 +41,10 @@ export function createApp() {
   app.route('/api/auth', auth)
   app.route('/api/agents', agents)
   app.route('/api/environments', environments)
+  app.route('/api/providers', providers)
+  app.route('/api/governance', governance)
+  app.route('/api/usage', usage)
+  app.route('/api/audit-records', audit)
   app.route('/api/sessions', sessionRoutes)
   app.route('/api/vaults', vaults)
 

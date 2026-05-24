@@ -2,7 +2,7 @@ import { createRoute, z } from '@hono/zod-openapi'
 import { and, desc, eq, gte, like, lt, lte, or } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import { requireAuth } from '../auth/session'
-import { agentDefinitions, agentDefinitionVersions, environments } from '../db/schema'
+import { agentDefinitions, agentDefinitionVersions, environments, providerConfigs, providerModels } from '../db/schema'
 import {
   AuthenticatedOperation,
   createApiRouter,
@@ -149,6 +149,80 @@ function validateProviderModel(provider: string, model: string, envDefault: stri
     return { provider: 'Provider is not available for this project.' }
   }
   if (!allowedModels(envDefault).has(model)) {
+    return { model: 'Model is not available for this provider.' }
+  }
+  return null
+}
+
+async function defaultProvider(db: ReturnType<typeof drizzle>, projectId: string) {
+  const configured = await db
+    .select({ id: providerConfigs.id, type: providerConfigs.type })
+    .from(providerConfigs)
+    .where(
+      and(
+        eq(providerConfigs.projectId, projectId),
+        eq(providerConfigs.isDefault, true),
+        eq(providerConfigs.status, 'active'),
+      ),
+    )
+    .get()
+  if (!configured) {
+    return DEFAULT_PROVIDER
+  }
+  return configured.type === DEFAULT_PROVIDER ? DEFAULT_PROVIDER : configured.id
+}
+
+async function normalizeRequestedProvider(db: ReturnType<typeof drizzle>, projectId: string, provider: string) {
+  if (provider === DEFAULT_PROVIDER) {
+    return DEFAULT_PROVIDER
+  }
+  const configured = await db
+    .select({ type: providerConfigs.type })
+    .from(providerConfigs)
+    .where(and(eq(providerConfigs.id, provider), eq(providerConfigs.projectId, projectId)))
+    .get()
+  return configured?.type === DEFAULT_PROVIDER ? DEFAULT_PROVIDER : provider
+}
+
+async function validateConfiguredProviderModel(
+  db: ReturnType<typeof drizzle>,
+  projectId: string,
+  provider: string,
+  model: string,
+  envDefault: string | undefined,
+) {
+  if (provider === DEFAULT_PROVIDER) {
+    const workersOverride = await db
+      .select({ status: providerConfigs.status })
+      .from(providerConfigs)
+      .where(and(eq(providerConfigs.projectId, projectId), eq(providerConfigs.type, DEFAULT_PROVIDER)))
+      .orderBy(desc(providerConfigs.updatedAt))
+      .get()
+    if (workersOverride && workersOverride.status !== 'active') {
+      return { provider: 'Provider is disabled or unavailable for this project.' }
+    }
+    return validateProviderModel(provider, model, envDefault)
+  }
+  const configured = await db
+    .select()
+    .from(providerConfigs)
+    .where(and(eq(providerConfigs.id, provider), eq(providerConfigs.projectId, projectId)))
+    .get()
+  if (!configured || configured.status !== 'active') {
+    return { provider: 'Provider is disabled or unavailable for this project.' }
+  }
+  const knownModels = await db
+    .select({ id: providerModels.id })
+    .from(providerModels)
+    .where(
+      and(
+        eq(providerModels.providerId, provider),
+        eq(providerModels.projectId, projectId),
+        eq(providerModels.modelId, model),
+        eq(providerModels.availability, 'available'),
+      ),
+    )
+  if (knownModels.length === 0) {
     return { model: 'Model is not available for this provider.' }
   }
   return null
@@ -400,6 +474,7 @@ const createSessionRoute = createRoute({
     201: { description: 'Created session', content: { 'application/json': { schema: SessionSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
     404: { description: 'Agent not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    403: { description: 'Policy denied', content: { 'application/json': { schema: ErrorResponseSchema } } },
     409: {
       description: 'Archived agent or environment',
       content: { 'application/json': { schema: ErrorResponseSchema } },
@@ -454,13 +529,17 @@ app.openapi(createAgentRoute, async (c) => {
     return auth
   }
 
-  const provider = body.provider ?? DEFAULT_PROVIDER
+  const provider = await normalizeRequestedProvider(
+    db,
+    auth.project.id,
+    body.provider ?? (await defaultProvider(db, auth.project.id)),
+  )
   const model = body.model ?? c.env.AMA_DEFAULT_MODEL ?? DEFAULT_MODEL
   const allowedTools = body.allowedTools ?? []
   const sandboxPolicy = body.sandboxPolicy ?? {}
   const metadata = body.metadata ?? {}
   const validation =
-    validateProviderModel(provider, model, c.env.AMA_DEFAULT_MODEL) ??
+    (await validateConfiguredProviderModel(db, auth.project.id, provider, model, c.env.AMA_DEFAULT_MODEL)) ??
     validateAllowedTools(allowedTools) ??
     (await validateDefaultEnvironment(db, auth.project.id, body.defaultEnvironmentId ?? null))
   if (validation) {
@@ -532,7 +611,7 @@ app.openapi(updateAgentRoute, async (c) => {
     name: body.name ?? agent.name,
     description: body.description ?? agent.description,
     instructions: body.instructions ?? agent.instructions,
-    provider: body.provider ?? agent.provider,
+    provider: await normalizeRequestedProvider(db, auth.project.id, body.provider ?? agent.provider),
     model: body.model ?? agent.model,
     systemPrompt: body.systemPrompt ?? agent.systemPrompt,
     allowedTools: body.allowedTools ?? parseJson<string[]>(agent.allowedTools),
@@ -542,7 +621,7 @@ app.openapi(updateAgentRoute, async (c) => {
     metadata: body.metadata ?? parseJson<Record<string, unknown>>(agent.metadata),
   }
   const validation =
-    validateProviderModel(next.provider, next.model, c.env.AMA_DEFAULT_MODEL) ??
+    (await validateConfiguredProviderModel(db, auth.project.id, next.provider, next.model, c.env.AMA_DEFAULT_MODEL)) ??
     validateAllowedTools(next.allowedTools) ??
     (await validateDefaultEnvironment(db, auth.project.id, next.defaultEnvironmentId))
   if (validation) {
