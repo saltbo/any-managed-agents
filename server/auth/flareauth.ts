@@ -70,8 +70,9 @@ async function createOidcClient(env: Env) {
       clientMetadata,
       config.clientSecret ? client.ClientSecretPost(config.clientSecret) : client.None(),
       {
-        [client.customFetch]: async (url, init) => {
-          const requestUrl = new URL(String(url))
+        [client.customFetch]: async (input, init) => {
+          const request = new Request(input, init as RequestInit)
+          const requestUrl = new URL(request.url)
           if (
             requestUrl.origin === new URL(config.issuer).origin &&
             (requestUrl.pathname === '/api/auth/.well-known/openid-configuration' ||
@@ -93,7 +94,19 @@ async function createOidcClient(env: Env) {
               id_token_signing_alg_values_supported: ['EdDSA'],
             })
           }
-          const response = await fetch(requestUrl.toString(), init as RequestInit)
+          const requestInit: RequestInit = {
+            method: request.method,
+            headers: request.headers,
+            redirect: request.redirect,
+            signal: request.signal,
+          }
+          if (request.method !== 'GET' && request.method !== 'HEAD') {
+            requestInit.body = await request.clone().arrayBuffer()
+          }
+          const response =
+            requestUrl.origin === new URL(config.issuer).origin && env.FLAREAUTH
+              ? await env.FLAREAUTH.fetch(request.url, requestInit)
+              : await fetch(request.url, requestInit)
           return response
         },
       },
@@ -188,12 +201,8 @@ export async function upsertLocalPrincipal(
   claims: UserInfoClaims,
   timestamp: string,
 ): Promise<LocalAuthPrincipal> {
-  const flareauthOrganizationId = claims.org_id ?? claims.organization_id
-  if (!flareauthOrganizationId) {
-    throw new OidcError('FlareAuth userinfo did not include an organization claim')
-  }
-
-  const organizationName = claims.org_name ?? claims.organization_name ?? 'Default organization'
+  const flareauthOrganizationId = claims.org_id ?? claims.organization_id ?? `user:${claims.sub}`
+  const organizationName = claims.org_name ?? claims.organization_name ?? 'Personal workspace'
   const roles = asStringArray(claims.roles)
   const permissions = asStringArray(claims.permissions)
   const normalizedRoles = roles.length > 0 ? roles : ['owner']

@@ -222,6 +222,6 @@ export const api = {
   sendRuntimeTask: (session: Session, message: string) =>
     request<{ accepted?: boolean }>(session.runtimeEndpointPath, {
       method: 'POST',
-      body: JSON.stringify({ type: 'user_message', message }),
+      body: JSON.stringify({ type: 'prompt', message }),
     }),
 }

@@ -25,6 +25,10 @@ AMA_ALLOWED_ORIGINS = "https://any-managed-agents.saltbo.workers.dev"
 [ai]
 binding = "AI"
 
+[[services]]
+binding = "FLAREAUTH"
+service = "flareauth"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "any-managed-agents-db"

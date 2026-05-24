@@ -5,6 +5,7 @@ export interface Env {
   DB: D1Database
   AI: Ai
   ASSETS: Fetcher
+  FLAREAUTH?: Fetcher
   MANAGED_AGENT: DurableObjectNamespace<ManagedAgent>
   SANDBOX: DurableObjectNamespace<Sandbox>
   AMA_DEFAULT_MODEL?: string
