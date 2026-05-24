@@ -269,10 +269,9 @@ function mergePersistedEvents(state: PiRuntimeState, events: SessionEvent[]) {
 function messageFromPiEvent(event: Record<string, unknown>, at: string, status: PiRuntimeMessage['status']) {
   const message = objectValue(event.message)
   const assistantMessageEvent = objectValue(event.assistantMessageEvent)
-  const role = stringField(message, 'role') ?? stringField(event, 'role') ?? 'assistant'
-  if (role === 'user') {
-    return null
-  }
+  const rawRole = stringField(message, 'role') ?? stringField(event, 'role') ?? 'assistant'
+  const role: PiRuntimeMessage['role'] =
+    rawRole === 'user' || rawRole === 'assistant' || rawRole === 'system' ? rawRole : 'assistant'
   const errorMessage = stringField(message, 'errorMessage') ?? stringField(event, 'errorMessage')
   if (errorMessage) {
     return {
@@ -290,9 +289,8 @@ function messageFromPiEvent(event: Record<string, unknown>, at: string, status: 
     return null
   }
   return {
-    id:
-      stringField(event, 'messageId') ?? stringField(message, 'id') ?? stringField(event, 'id') ?? 'assistant_current',
-    role: 'assistant' as const,
+    id: stringField(event, 'messageId') ?? stringField(message, 'id') ?? stringField(event, 'id') ?? `${role}_current`,
+    role,
     content,
     status,
     createdAt: at,
