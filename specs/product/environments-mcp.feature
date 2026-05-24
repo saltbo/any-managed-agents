@@ -1,4 +1,4 @@
-@planned @environments @mcp
+@environments @mcp
 Feature: Environment MCP policy
   Environments can include MCP connector constraints.
 
@@ -6,4 +6,3 @@ Feature: Environment MCP policy
     Given an environment restricts MCP connectors
     When a session uses the environment
     Then the runtime allows only connectors permitted by the environment and project policy
-

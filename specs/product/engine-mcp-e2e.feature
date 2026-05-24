@@ -6,4 +6,3 @@ Feature: MCP engine end-to-end
     Given an agent has access to an approved MCP connector
     When the agent calls the connector during a session
     Then the result is streamed, recorded, and scoped to the project
-

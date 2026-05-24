@@ -1,4 +1,4 @@
-@planned @mcp
+@mcp
 Feature: MCP connections
   Projects manage MCP connection records.
 

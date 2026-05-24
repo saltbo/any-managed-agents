@@ -1,4 +1,4 @@
-@planned @mcp @governance
+@mcp @governance
 Feature: MCP policy enforcement
   Runtime MCP calls obey project and organization policy.
 
@@ -6,4 +6,3 @@ Feature: MCP policy enforcement
     Given a connector is blocked by policy
     When an agent tries to call it
     Then the runtime denies the call and records a policy event
-

@@ -1,10 +1,11 @@
-@planned @tools @mcp
+@tools @mcp
 Feature: Tools and MCP
   Agents use project-approved tools and MCP servers.
 
   Background:
     Given a project has tool and MCP policies
 
+  @planned
   Scenario: Attach tools to an agent version
     When the user configures tools for an agent
     Then each tool is stored with name, description, schema, approval mode, and policy metadata
@@ -13,6 +14,7 @@ Feature: Tools and MCP
     When the user browses available MCP connectors
     Then connectors can be searched and filtered by capability, trust level, and policy status
 
+  @planned
   Scenario: Require approval for sensitive tools
     Given a tool requires human approval
     When the agent requests that tool

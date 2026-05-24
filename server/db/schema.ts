@@ -502,3 +502,86 @@ export const auditRecords = sqliteTable(
     index('idx_audit_records_action_resource').on(table.action, table.resourceType, table.resourceId),
   ],
 )
+
+export const mcpCatalogEntries = sqliteTable(
+  'mcp_catalog_entries',
+  {
+    id: text('id').primaryKey(),
+    connectorId: text('connector_id').notNull(),
+    name: text('name').notNull(),
+    description: text('description').notNull(),
+    category: text('category').notNull(),
+    trustLevel: text('trust_level').notNull(),
+    capabilities: text('capabilities').notNull().default('[]'),
+    supportedAuthModes: text('supported_auth_modes').notNull().default('[]'),
+    setupRequirements: text('setup_requirements').notNull().default('[]'),
+    tools: text('tools').notNull().default('[]'),
+    metadata: text('metadata').notNull().default('{}'),
+    status: text('status').notNull().default('available'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('idx_mcp_catalog_entries_connector').on(table.connectorId),
+    index('idx_mcp_catalog_entries_category_trust').on(table.category, table.trustLevel),
+  ],
+)
+
+export const mcpConnections = sqliteTable(
+  'mcp_connections',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organizations.id),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id),
+    connectorId: text('connector_id').notNull(),
+    credentialId: text('credential_id').references(() => vaultCredentials.id),
+    credentialVersionId: text('credential_version_id').references(() => vaultCredentialVersions.id),
+    credentialSecretRef: text('credential_secret_ref'),
+    endpointUrl: text('endpoint_url'),
+    approvalMode: text('approval_mode').notNull().default('project_policy'),
+    status: text('status').notNull().default('connected'),
+    lastError: text('last_error'),
+    metadata: text('metadata').notNull().default('{}'),
+    connectedAt: text('connected_at').notNull(),
+    disconnectedAt: text('disconnected_at'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('idx_mcp_connections_project_connector').on(table.projectId, table.connectorId),
+    index('idx_mcp_connections_project_status').on(table.projectId, table.status, table.createdAt, table.id),
+  ],
+)
+
+export const mcpConnectionTools = sqliteTable(
+  'mcp_connection_tools',
+  {
+    id: text('id').primaryKey(),
+    connectionId: text('connection_id')
+      .notNull()
+      .references(() => mcpConnections.id),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organizations.id),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id),
+    connectorId: text('connector_id').notNull(),
+    name: text('name').notNull(),
+    description: text('description'),
+    inputSchema: text('input_schema').notNull().default('{}'),
+    approvalMode: text('approval_mode').notNull().default('project_policy'),
+    policyMetadata: text('policy_metadata').notNull().default('{}'),
+    status: text('status').notNull().default('available'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('idx_mcp_connection_tools_connection_name').on(table.connectionId, table.name),
+    index('idx_mcp_connection_tools_project_connector_name').on(table.projectId, table.connectorId, table.name),
+  ],
+)
