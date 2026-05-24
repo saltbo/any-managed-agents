@@ -153,6 +153,39 @@ describe('[CF] /api/sessions', () => {
       runtimeEndpointPath: `/runtime/sessions/${created.id}/rpc`,
     })
 
+    const taskRes = await jsonFetch(`/runtime/sessions/${created.id}/rpc`, cookie, {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'prompt',
+        message: 'Inspect repository status',
+        toolCalls: [
+          {
+            id: 'call_git_status',
+            name: 'sandbox.exec',
+            input: { command: 'git status', token: 'raw-github-token' },
+            output: { stdout: 'clean', apiKey: 'secret-key' },
+            durationMs: 42,
+          },
+          {
+            id: 'call_failed_tool',
+            name: 'mcp.github.repo.read',
+            input: { repository: 'saltbo/any-managed-agents', password: 'secret-password' },
+            error: { type: 'tool_error', message: 'Repository not found', secret: 'raw-secret-token' },
+            approvalState: 'approved',
+            durationMs: 7,
+          },
+        ],
+      }),
+    })
+    expect(taskRes.status).toBe(200)
+    await expect(taskRes.json()).resolves.toMatchObject({
+      sandboxId: created.id.toLowerCase(),
+      path: '/rpc',
+      proxy: 'pi',
+    })
+    const afterTaskRes = await jsonFetch(`/api/sessions/${created.id}`, cookie)
+    await expect(afterTaskRes.json()).resolves.toMatchObject({ id: created.id, status: 'idle' })
+
     const stopRes = await jsonFetch(`/api/sessions/${created.id}/stop`, cookie, { method: 'POST' })
     expect(stopRes.status).toBe(200)
     const stopped = (await stopRes.json()) as { status: string; stoppedAt: string }
@@ -173,10 +206,23 @@ describe('[CF] /api/sessions', () => {
       }>
       pagination: { limit: number; hasMore: boolean; nextCursor: string | null }
     }
-    expect(events.data.map((event) => event.sequence)).toEqual([1, 2, 3])
+    expect(events.data.map((event) => event.sequence)).toEqual(events.data.map((_, index) => index + 1))
     expect(events.pagination).toMatchObject({ limit: 100, hasMore: false, nextCursor: null })
-    expect(events.data.map((event) => event.type)).toEqual(['lifecycle', 'sandbox', 'lifecycle'])
-    expect(events.data).toEqual([
+    expect(events.data.map((event) => event.type)).toEqual([
+      'lifecycle',
+      'sandbox',
+      'lifecycle',
+      'message',
+      'tool',
+      'tool',
+      'tool',
+      'tool',
+      'message',
+      'usage',
+      'lifecycle',
+      'lifecycle',
+    ])
+    expect(events.data.slice(0, 2)).toEqual([
       expect.objectContaining({
         visibility: 'audit',
         payload: { status: 'pending', reason: 'session_created' },
@@ -193,13 +239,81 @@ describe('[CF] /api/sessions', () => {
         },
         metadata: {},
       }),
+    ])
+    expect(events.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          visibility: 'transcript',
+          role: 'user',
+          payload: { content: 'Inspect repository status' },
+        }),
+        expect.objectContaining({
+          visibility: 'debug',
+          payload: expect.objectContaining({
+            phase: 'result',
+            toolCallId: 'call_git_status',
+            toolName: 'sandbox.exec',
+            status: 'success',
+            durationMs: 42,
+            output: { stdout: 'clean', apiKey: '[REDACTED]' },
+          }),
+        }),
+        expect.objectContaining({
+          visibility: 'debug',
+          payload: expect.objectContaining({
+            phase: 'result',
+            toolCallId: 'call_failed_tool',
+            toolName: 'mcp.github.repo.read',
+            status: 'error',
+            durationMs: 7,
+            error: { type: 'tool_error', message: 'Repository not found', secret: '[REDACTED]' },
+          }),
+        }),
+        expect.objectContaining({
+          visibility: 'audit',
+          payload: {
+            status: 'stopped',
+            reason: 'user_requested',
+            sandboxId: created.sandboxId,
+            piRuntimeId: created.piRuntimeId,
+          },
+          metadata: {},
+        }),
+      ]),
+    )
+    const toolCallEvent = events.data.find(
+      (event) => event.payload.phase === 'call' && event.payload.toolCallId === 'call_git_status',
+    )
+    const toolResultEvent = events.data.find(
+      (event) => event.payload.phase === 'result' && event.payload.toolCallId === 'call_git_status',
+    )
+    expect(toolCallEvent).toMatchObject({
+      correlationId: 'call_git_status',
+      parentEventId: null,
+      payload: expect.objectContaining({
+        input: { command: 'git status', token: '[REDACTED]' },
+        approvalState: 'approved',
+      }),
+    })
+    expect(toolResultEvent).toMatchObject({
+      correlationId: 'call_git_status',
+      parentEventId: toolCallEvent?.id,
+    })
+    expect(events.data.at(-1)).toEqual(
       expect.objectContaining({
         visibility: 'audit',
-        payload: { status: 'stopped', sandboxId: created.sandboxId, piRuntimeId: created.piRuntimeId },
+        payload: {
+          status: 'stopped',
+          reason: 'user_requested',
+          sandboxId: created.sandboxId,
+          piRuntimeId: created.piRuntimeId,
+        },
         metadata: {},
       }),
-    ])
+    )
     expect(JSON.stringify(events.data)).not.toContain('raw-secret')
+    expect(JSON.stringify(events.data)).not.toContain('raw-github-token')
+    expect(JSON.stringify(events.data)).not.toContain('secret-password')
     expect(JSON.stringify(events.data)).not.toContain('flareauth-access-token')
 
     const pagedEventsRes = await jsonFetch(`/api/sessions/${created.id}/events?limit=1`, cookie)
@@ -213,6 +327,18 @@ describe('[CF] /api/sessions', () => {
     const filteredEventsRes = await jsonFetch(`/api/sessions/${created.id}/events?afterSequence=1&type=sandbox`, cookie)
     const filteredEvents = (await filteredEventsRes.json()) as { data: Array<{ sequence: number; type: string }> }
     expect(filteredEvents.data).toEqual([expect.objectContaining({ sequence: 2, type: 'sandbox' })])
+
+    const exportRes = await jsonFetch(`/api/sessions/${created.id}/events/export?afterSequence=2&limit=2`, cookie)
+    expect(exportRes.status).toBe(200)
+    expect(exportRes.headers.get('content-type')).toContain('application/x-ndjson')
+    const exported = (await exportRes.text()).trim().split('\n').map(JSON.parse) as Array<{ sequence: number }>
+    expect(exported.map((event) => event.sequence)).toEqual([3, 4])
+
+    const streamRes = await jsonFetch(`/api/sessions/${created.id}/events/stream?afterSequence=10`, cookie)
+    expect(streamRes.status).toBe(200)
+    expect(streamRes.headers.get('content-type')).toContain('application/x-ndjson')
+    const streamed = (await streamRes.text()).trim().split('\n').map(JSON.parse) as Array<{ sequence: number }>
+    expect(streamed.map((event) => event.sequence)).toEqual([11, 12])
 
     const inactiveRuntimeRes = await jsonFetch(`/runtime/sessions/${created.id}/rpc`, cookie)
     expect(inactiveRuntimeRes.status).toBe(409)
@@ -315,6 +441,46 @@ describe('[CF] /api/sessions', () => {
       path: '/rpc',
       proxy: 'pi',
     })
+  })
+
+  it('records safe runtime errors without leaking secrets', async () => {
+    const cookie = await signIn()
+    await connectMcp(cookie, 'github')
+    const environment = await createEnvironment(cookie)
+    const agent = await createAgent(cookie, environment.id)
+    const createRes = await jsonFetch('/api/sessions', cookie, {
+      method: 'POST',
+      body: JSON.stringify({ agentId: agent.id }),
+    })
+    const created = (await createRes.json()) as { id: string }
+
+    const taskRes = await jsonFetch(`/runtime/sessions/${created.id}/rpc`, cookie, {
+      method: 'POST',
+      body: JSON.stringify({
+        message: 'Trigger failure',
+        simulateError: true,
+        errorMessage: 'Provider failed with token=raw-secret-token',
+      }),
+    })
+    expect(taskRes.status).toBe(200)
+
+    const readRes = await jsonFetch(`/api/sessions/${created.id}`, cookie)
+    expect(readRes.status).toBe(200)
+    await expect(readRes.json()).resolves.toMatchObject({
+      id: created.id,
+      status: 'error',
+      statusReason: '[REDACTED]',
+    })
+
+    const eventsRes = await jsonFetch(`/api/sessions/${created.id}/events?type=error`, cookie)
+    expect(eventsRes.status).toBe(200)
+    const events = (await eventsRes.json()) as { data: Array<{ payload: Record<string, unknown> }> }
+    expect(events.data).toHaveLength(1)
+    expect(events.data[0]?.payload).toMatchObject({
+      type: 'runtime_error',
+      message: '[REDACTED]',
+    })
+    expect(JSON.stringify(events.data)).not.toContain('token=raw-secret-token')
   })
 
   it('rereads stored snapshots after agent and environment updates', async () => {

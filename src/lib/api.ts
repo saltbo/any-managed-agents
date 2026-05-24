@@ -91,7 +91,7 @@ export interface EnvironmentVersion
   version: number
 }
 
-export type SessionStatus = 'pending' | 'running' | 'idle' | 'stopped' | 'error' | 'archived'
+export type SessionStatus = 'pending' | 'running' | 'idle' | 'stopped' | 'error' | 'archived' | 'requires-action'
 
 export interface Session {
   id: string

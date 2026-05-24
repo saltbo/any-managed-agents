@@ -17,6 +17,8 @@ Feature: v1.0 release acceptance
     And the OpenAPI document should include path "/api/sessions"
     And the OpenAPI path "/api/sessions" should include method "post"
     And the OpenAPI document should include path "/api/sessions/{sessionId}/events"
+    And the OpenAPI document should include path "/api/sessions/{sessionId}/events/export"
+    And the OpenAPI document should include path "/api/sessions/{sessionId}/events/stream"
     And the OpenAPI document should include path "/api/sessions/{sessionId}/stop"
 
   Scenario: Release checks cover implemented v1 behavior
