@@ -1,4 +1,4 @@
-@planned @analytics @audit
+@analytics @audit
 Feature: Usage and audit
   Operators can inspect usage, cost, and security-relevant actions.
 
@@ -10,6 +10,7 @@ Feature: Usage and audit
     Then usage is grouped by organization, project, provider, model, agent, and session
     And the summary includes time range filters
 
+  @planned
   Scenario: Record audit events
     When a user changes agents, providers, vaults, governance, or sessions
     Then the platform records actor, action, resource, timestamp, and safe metadata
@@ -19,6 +20,7 @@ Feature: Usage and audit
     Then the audit log includes the policy rule and resource reference
     And does not include secret values
 
+  @planned
   Scenario: Export audit records
     When an operator exports audit records for a time range
     Then the export includes stable identifiers and event metadata

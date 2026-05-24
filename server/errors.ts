@@ -8,6 +8,8 @@ export type ErrorType =
   | 'forbidden'
   | 'not_found'
   | 'conflict'
+  | 'policy_denied'
+  | 'provider_error'
   | 'oidc_error'
   | 'internal_error'
 

@@ -7,6 +7,7 @@ Feature: Audit log UI
     When the operator opens the audit log
     Then records can be filtered by actor, action, resource, project, and time range
 
+  @planned
   Scenario: Render audit log states
     Given audit records are loading
     Then the audit page shows a loading state using shared UI primitives
@@ -15,6 +16,7 @@ Feature: Audit log UI
     When records exist
     Then each row shows timestamp, actor, action, resource type, resource id, project, and outcome
 
+  @planned
   Scenario: Inspect an audit record
     Given an audit record exists for a resource change
     When the operator opens the record detail

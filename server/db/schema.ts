@@ -308,3 +308,197 @@ export const sessionEvents = sqliteTable(
     ),
   ],
 )
+
+export const providerConfigs = sqliteTable(
+  'provider_configs',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organizations.id),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id),
+    type: text('type').notNull(),
+    displayName: text('display_name').notNull(),
+    baseUrl: text('base_url'),
+    isDefault: integer('is_default', { mode: 'boolean' }).notNull().default(false),
+    status: text('status').notNull().default('active'),
+    credentialSecretRef: text('credential_secret_ref'),
+    metadata: text('metadata').notNull().default('{}'),
+    rateLimits: text('rate_limits').notNull().default('{}'),
+    budgetPolicy: text('budget_policy').notNull().default('{}'),
+    modelCatalogStatus: text('model_catalog_status').notNull().default('ready'),
+    lastError: text('last_error'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    index('idx_provider_configs_project_status_created').on(table.projectId, table.status, table.createdAt, table.id),
+    index('idx_provider_configs_project_default').on(table.projectId, table.isDefault),
+  ],
+)
+
+export const providerModels = sqliteTable(
+  'provider_models',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organizations.id),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id),
+    providerId: text('provider_id')
+      .notNull()
+      .references(() => providerConfigs.id),
+    modelId: text('model_id').notNull(),
+    displayName: text('display_name').notNull(),
+    capabilities: text('capabilities').notNull().default('[]'),
+    contextWindow: integer('context_window'),
+    pricing: text('pricing').notNull().default('{}'),
+    availability: text('availability').notNull().default('available'),
+    metadata: text('metadata').notNull().default('{}'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    index('idx_provider_models_project_provider').on(table.projectId, table.providerId, table.modelId),
+    uniqueIndex('idx_provider_models_unique_model').on(table.projectId, table.providerId, table.modelId),
+  ],
+)
+
+export const providerAccessRules = sqliteTable(
+  'provider_access_rules',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organizations.id),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id),
+    providerId: text('provider_id'),
+    modelId: text('model_id'),
+    teamId: text('team_id'),
+    effect: text('effect').notNull(),
+    reason: text('reason'),
+    metadata: text('metadata').notNull().default('{}'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [index('idx_provider_access_rules_project_provider').on(table.projectId, table.providerId, table.modelId)],
+)
+
+export const governancePolicies = sqliteTable(
+  'governance_policies',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organizations.id),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id),
+    scope: text('scope').notNull().default('project'),
+    providerRules: text('provider_rules').notNull().default('[]'),
+    modelRules: text('model_rules').notNull().default('[]'),
+    toolPolicy: text('tool_policy').notNull().default('{}'),
+    mcpPolicy: text('mcp_policy').notNull().default('{}'),
+    sandboxPolicy: text('sandbox_policy').notNull().default('{}'),
+    budgetPolicy: text('budget_policy').notNull().default('{}'),
+    metadata: text('metadata').notNull().default('{}'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [index('idx_governance_policies_project_scope').on(table.projectId, table.scope, table.updatedAt)],
+)
+
+export const budgets = sqliteTable(
+  'budgets',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organizations.id),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id),
+    scope: text('scope').notNull(),
+    providerId: text('provider_id'),
+    modelId: text('model_id'),
+    limitType: text('limit_type').notNull(),
+    limitValue: integer('limit_value').notNull(),
+    window: text('window').notNull(),
+    status: text('status').notNull().default('active'),
+    metadata: text('metadata').notNull().default('{}'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [index('idx_budgets_project_status').on(table.projectId, table.status, table.scope)],
+)
+
+export const usageRecords = sqliteTable(
+  'usage_records',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organizations.id),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id),
+    agentId: text('agent_id'),
+    agentVersionId: text('agent_version_id'),
+    sessionId: text('session_id'),
+    sessionEventId: text('session_event_id'),
+    correlationId: text('correlation_id'),
+    providerId: text('provider_id'),
+    providerType: text('provider_type').notNull(),
+    modelId: text('model_id').notNull(),
+    status: text('status').notNull(),
+    promptTokens: integer('prompt_tokens').notNull().default(0),
+    completionTokens: integer('completion_tokens').notNull().default(0),
+    totalTokens: integer('total_tokens').notNull().default(0),
+    durationMs: integer('duration_ms').notNull().default(0),
+    costMicros: integer('cost_micros').notNull().default(0),
+    currency: text('currency').notNull().default('USD'),
+    usageType: text('usage_type').notNull().default('model'),
+    metadata: text('metadata').notNull().default('{}'),
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => [
+    index('idx_usage_records_project_created').on(table.projectId, table.createdAt, table.id),
+    index('idx_usage_records_project_provider_model').on(table.projectId, table.providerType, table.modelId),
+  ],
+)
+
+export const auditRecords = sqliteTable(
+  'audit_records',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organizations.id),
+    projectId: text('project_id'),
+    actorUserId: text('actor_user_id'),
+    actorType: text('actor_type').notNull().default('user'),
+    action: text('action').notNull(),
+    resourceType: text('resource_type').notNull(),
+    resourceId: text('resource_id'),
+    outcome: text('outcome').notNull(),
+    requestId: text('request_id'),
+    correlationId: text('correlation_id'),
+    sessionId: text('session_id'),
+    policyCategory: text('policy_category'),
+    metadata: text('metadata').notNull().default('{}'),
+    before: text('before').notNull().default('{}'),
+    after: text('after').notNull().default('{}'),
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => [
+    index('idx_audit_records_org_created').on(table.organizationId, table.createdAt, table.id),
+    index('idx_audit_records_project_created').on(table.projectId, table.createdAt, table.id),
+    index('idx_audit_records_action_resource').on(table.action, table.resourceType, table.resourceId),
+  ],
+)

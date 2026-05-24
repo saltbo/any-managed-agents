@@ -1,7 +1,8 @@
-@planned @providers
+@providers
 Feature: Providers
   Operators configure model providers.
 
+  @planned
   Scenario: Configure provider
     When an operator adds a provider
     Then metadata, credentials, model catalog, rate limits, and budget policy are stored safely
@@ -25,12 +26,14 @@ Feature: Providers
     And credentials are stored through approved secret references
     And the response includes hasCredential without returning the credential value
 
+  @planned
   Scenario: Reassign the default provider
     Given a project has multiple providers
     When an operator marks one provider as default
     Then every other provider in the same project is no longer default
     And future agents without explicit provider selection use the new default
 
+  @planned
   Scenario: Discover provider models safely
     Given a provider is configured
     When model discovery succeeds
@@ -39,6 +42,7 @@ Feature: Providers
     Then the API returns a safe provider error without leaking credentials
     And existing provider configuration remains readable
 
+  @planned
   Scenario: Disable or delete a provider
     Given agents or sessions reference a provider
     When an operator disables the provider
