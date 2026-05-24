@@ -1,9 +1,17 @@
 import { createRoute, z } from '@hono/zod-openapi'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, gte, like, lt, lte, or } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import { requireAuth } from '../auth/session'
 import { agentDefinitions, agentDefinitionVersions, environments } from '../db/schema'
-import { createApiRouter, ErrorResponseSchema } from '../openapi'
+import {
+  AuthenticatedOperation,
+  createApiRouter,
+  ErrorResponseSchema,
+  listQuerySchema,
+  listResponseSchema,
+  paginateRows,
+  parseListCursor,
+} from '../openapi'
 import { createSessionForAgent } from './sessions'
 
 const app = createApiRouter()
@@ -105,12 +113,9 @@ const AgentParamsSchema = z.object({
   }),
 })
 
-const ListQuerySchema = z.object({
-  includeArchived: z
-    .enum(['true', 'false'])
-    .optional()
-    .openapi({ param: { name: 'includeArchived', in: 'query' }, example: 'false' }),
-})
+const ListQuerySchema = listQuerySchema(['active', 'archived'])
+const AgentListResponseSchema = listResponseSchema('AgentListResponse', AgentSchema)
+const AgentVersionListResponseSchema = listResponseSchema('AgentVersionListResponse', AgentVersionSchema)
 
 type AgentRow = typeof agentDefinitions.$inferSelect
 type AgentVersionRow = typeof agentDefinitionVersions.$inferSelect
@@ -286,14 +291,17 @@ async function currentAgentVersion(db: ReturnType<typeof drizzle>, agent: AgentR
 const listAgentsRoute = createRoute({
   method: 'get',
   path: '/',
+  operationId: 'listAgents',
   tags: ['Agents'],
   summary: 'List agents',
+  ...AuthenticatedOperation,
   request: { query: ListQuerySchema },
   responses: {
     200: {
       description: 'Agent list',
-      content: { 'application/json': { schema: z.object({ data: z.array(AgentSchema) }) } },
+      content: { 'application/json': { schema: AgentListResponseSchema } },
     },
+    400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
   },
 })
@@ -301,8 +309,10 @@ const listAgentsRoute = createRoute({
 const createAgentRoute = createRoute({
   method: 'post',
   path: '/',
+  operationId: 'createAgent',
   tags: ['Agents'],
   summary: 'Create an agent',
+  ...AuthenticatedOperation,
   request: { body: { required: true, content: { 'application/json': { schema: CreateAgentSchema } } } },
   responses: {
     201: { description: 'Created agent', content: { 'application/json': { schema: AgentSchema } } },
@@ -314,8 +324,10 @@ const createAgentRoute = createRoute({
 const readAgentRoute = createRoute({
   method: 'get',
   path: '/{agentId}',
+  operationId: 'readAgent',
   tags: ['Agents'],
   summary: 'Read an agent',
+  ...AuthenticatedOperation,
   request: { params: AgentParamsSchema },
   responses: {
     200: { description: 'Agent', content: { 'application/json': { schema: AgentSchema } } },
@@ -327,8 +339,10 @@ const readAgentRoute = createRoute({
 const updateAgentRoute = createRoute({
   method: 'patch',
   path: '/{agentId}',
+  operationId: 'updateAgent',
   tags: ['Agents'],
   summary: 'Update an agent',
+  ...AuthenticatedOperation,
   request: {
     params: AgentParamsSchema,
     body: { required: true, content: { 'application/json': { schema: UpdateAgentSchema } } },
@@ -344,8 +358,10 @@ const updateAgentRoute = createRoute({
 const archiveAgentRoute = createRoute({
   method: 'delete',
   path: '/{agentId}',
+  operationId: 'archiveAgent',
   tags: ['Agents'],
   summary: 'Archive an agent',
+  ...AuthenticatedOperation,
   request: { params: AgentParamsSchema },
   responses: {
     204: { description: 'Agent archived' },
@@ -357,13 +373,15 @@ const archiveAgentRoute = createRoute({
 const listAgentVersionsRoute = createRoute({
   method: 'get',
   path: '/{agentId}/versions',
+  operationId: 'listAgentVersions',
   tags: ['Agents'],
   summary: 'List agent versions',
+  ...AuthenticatedOperation,
   request: { params: AgentParamsSchema },
   responses: {
     200: {
       description: 'Agent versions',
-      content: { 'application/json': { schema: z.object({ data: z.array(AgentVersionSchema) }) } },
+      content: { 'application/json': { schema: AgentVersionListResponseSchema } },
     },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
     404: { description: 'Agent not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
@@ -373,8 +391,10 @@ const listAgentVersionsRoute = createRoute({
 const createSessionRoute = createRoute({
   method: 'post',
   path: '/{agentId}/sessions',
+  operationId: 'createAgentSession',
   tags: ['Sessions'],
   summary: 'Create a session for an agent',
+  ...AuthenticatedOperation,
   request: { params: AgentParamsSchema },
   responses: {
     201: { description: 'Created session', content: { 'application/json': { schema: SessionSchema } } },
@@ -394,14 +414,36 @@ app.openapi(listAgentsRoute, async (c) => {
     return auth
   }
 
-  const { includeArchived } = c.req.valid('query')
-  const where =
-    includeArchived === 'true'
-      ? eq(agentDefinitions.projectId, auth.project.id)
-      : and(eq(agentDefinitions.projectId, auth.project.id), eq(agentDefinitions.status, 'active'))
-  const rows = await db.select().from(agentDefinitions).where(where).limit(100)
-  const data = await Promise.all(rows.map(async (row) => serializeAgent(row, await currentAgentVersion(db, row))))
-  return c.json({ data }, 200)
+  const { includeArchived, status, search, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
+  let parsedCursor: ReturnType<typeof parseListCursor> | null = null
+  try {
+    parsedCursor = cursor ? parseListCursor(cursor) : null
+  } catch {
+    return c.json(domainValidation('Invalid list cursor', { cursor: 'Cursor is invalid.' }), 400)
+  }
+  const statusFilter = status ?? (includeArchived === 'true' ? undefined : 'active')
+  const filters = [
+    eq(agentDefinitions.projectId, auth.project.id),
+    statusFilter ? eq(agentDefinitions.status, statusFilter) : undefined,
+    search ? like(agentDefinitions.name, `%${search}%`) : undefined,
+    createdFrom ? gte(agentDefinitions.createdAt, createdFrom) : undefined,
+    createdTo ? lte(agentDefinitions.createdAt, createdTo) : undefined,
+    parsedCursor
+      ? or(
+          lt(agentDefinitions.createdAt, parsedCursor.createdAt),
+          and(eq(agentDefinitions.createdAt, parsedCursor.createdAt), lt(agentDefinitions.id, parsedCursor.id)),
+        )
+      : undefined,
+  ].filter((filter) => filter !== undefined)
+  const rows = await db
+    .select()
+    .from(agentDefinitions)
+    .where(and(...filters))
+    .orderBy(desc(agentDefinitions.createdAt), desc(agentDefinitions.id))
+    .limit(limit + 1)
+  const page = paginateRows(rows, limit)
+  const data = await Promise.all(page.data.map(async (row) => serializeAgent(row, await currentAgentVersion(db, row))))
+  return c.json({ data, pagination: page.pagination }, 200)
 })
 
 app.openapi(createAgentRoute, async (c) => {
@@ -573,7 +615,19 @@ app.openapi(listAgentVersionsRoute, async (c) => {
     .from(agentDefinitionVersions)
     .where(and(eq(agentDefinitionVersions.agentId, agentId), eq(agentDefinitionVersions.projectId, auth.project.id)))
     .orderBy(desc(agentDefinitionVersions.version))
-  return c.json({ data: rows.map(serializeAgentVersion) }, 200)
+  return c.json(
+    {
+      data: rows.map(serializeAgentVersion),
+      pagination: {
+        limit: rows.length,
+        nextCursor: null,
+        hasMore: false,
+        firstId: rows[0]?.id ?? null,
+        lastId: rows.at(-1)?.id ?? null,
+      },
+    },
+    200,
+  )
 })
 
 app.openapi(createSessionRoute, async (c) => {

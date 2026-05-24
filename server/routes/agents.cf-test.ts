@@ -121,8 +121,9 @@ describe('[CF] /api/agents', () => {
 
     const listRes = await jsonFetch('/api/agents', cookie)
     expect(listRes.status).toBe(200)
-    const list = (await listRes.json()) as { data: Array<{ id: string }> }
+    const list = (await listRes.json()) as { data: Array<{ id: string }>; pagination: { hasMore: boolean } }
     expect(list.data).not.toContainEqual(expect.objectContaining({ id: created.id }))
+    expect(list.pagination.hasMore).toBe(false)
 
     const archivedListRes = await jsonFetch('/api/agents?includeArchived=true', cookie)
     expect(archivedListRes.status).toBe(200)
@@ -131,6 +132,74 @@ describe('[CF] /api/agents', () => {
 
     const archivedReadRes = await jsonFetch(`/api/agents/${created.id}`, cookie)
     expect(archivedReadRes.status).toBe(200)
+  })
+
+  it('lists agents with pagination, search, status, and date filters within the project', async () => {
+    const cookie = await signIn()
+    const createAlphaRes = await jsonFetch('/api/agents', cookie, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Alpha research' }),
+    })
+    const alpha = (await createAlphaRes.json()) as { id: string; createdAt: string }
+    const createBetaRes = await jsonFetch('/api/agents', cookie, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Beta support' }),
+    })
+    const beta = (await createBetaRes.json()) as { id: string; createdAt: string }
+    await jsonFetch(`/api/agents/${alpha.id}`, cookie, { method: 'DELETE' })
+
+    const defaultListRes = await jsonFetch('/api/agents?limit=1', cookie)
+    expect(defaultListRes.status).toBe(200)
+    const defaultList = (await defaultListRes.json()) as {
+      data: Array<{ id: string; status: string }>
+      pagination: {
+        limit: number
+        hasMore: boolean
+        nextCursor: string | null
+        firstId: string | null
+        lastId: string | null
+      }
+    }
+    expect(defaultList.data).toEqual([expect.objectContaining({ id: beta.id, status: 'active' })])
+    expect(defaultList.pagination).toMatchObject({ limit: 1, hasMore: false, firstId: beta.id, lastId: beta.id })
+
+    const archivedListRes = await jsonFetch('/api/agents?includeArchived=true&limit=1', cookie)
+    const archivedList = (await archivedListRes.json()) as {
+      data: Array<{ id: string }>
+      pagination: { hasMore: boolean; nextCursor: string | null }
+    }
+    expect(archivedList.data).toHaveLength(1)
+    expect(archivedList.pagination.hasMore).toBe(true)
+    expect(archivedList.pagination.nextCursor).toEqual(expect.any(String))
+
+    const nextPageRes = await jsonFetch(
+      `/api/agents?includeArchived=true&limit=1&cursor=${archivedList.pagination.nextCursor}`,
+      cookie,
+    )
+    const nextPage = (await nextPageRes.json()) as { data: Array<{ id: string }> }
+    expect(nextPage.data.map((agent) => agent.id)).not.toEqual(archivedList.data.map((agent) => agent.id))
+
+    const searchRes = await jsonFetch('/api/agents?includeArchived=true&search=Alpha', cookie)
+    const searchList = (await searchRes.json()) as { data: Array<{ id: string }> }
+    expect(searchList.data).toEqual([expect.objectContaining({ id: alpha.id })])
+
+    const statusRes = await jsonFetch('/api/agents?includeArchived=true&status=archived', cookie)
+    const statusList = (await statusRes.json()) as { data: Array<{ id: string; status: string }> }
+    expect(statusList.data).toContainEqual(expect.objectContaining({ id: alpha.id, status: 'archived' }))
+    expect(statusList.data.every((agent) => agent.status === 'archived')).toBe(true)
+
+    const dateRes = await jsonFetch(
+      `/api/agents?includeArchived=true&createdFrom=${encodeURIComponent(alpha.createdAt)}&createdTo=${encodeURIComponent(beta.createdAt)}`,
+      cookie,
+    )
+    const dateList = (await dateRes.json()) as { data: Array<{ id: string }> }
+    expect(dateList.data.map((agent) => agent.id)).toEqual(expect.arrayContaining([alpha.id, beta.id]))
+
+    const invalidCursorRes = await jsonFetch('/api/agents?cursor=not-a-cursor', cookie)
+    expect(invalidCursorRes.status).toBe(400)
+    await expect(invalidCursorRes.json()).resolves.toMatchObject({
+      error: { type: 'validation_error', details: { fields: { cursor: expect.any(String) } } },
+    })
   })
 
   it('keeps session snapshots stable after agent and environment updates', async () => {

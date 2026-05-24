@@ -1,5 +1,5 @@
 import { createRoute, z } from '@hono/zod-openapi'
-import { and, desc, eq, gt, max, ne } from 'drizzle-orm'
+import { and, desc, eq, gt, gte, like, lt, lte, max, ne, or } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
 import { type AuthContext, requireAuth } from '../auth/session'
@@ -13,7 +13,17 @@ import {
 } from '../db/schema'
 import type { Env } from '../env'
 import { errorResponse } from '../errors'
-import { createApiRouter, ErrorResponseSchema } from '../openapi'
+import {
+  AuthenticatedOperation,
+  createApiRouter,
+  ErrorResponseSchema,
+  eventListQuerySchema,
+  listQuerySchema,
+  listResponseSchema,
+  paginateRows,
+  paginateSequenceRows,
+  parseListCursor,
+} from '../openapi'
 import { runtimeEndpointPath, safeRuntimeError, startPiBridge, stopPiBridge } from '../runtime/pi/bridge'
 
 const app = createApiRouter()
@@ -122,47 +132,29 @@ const ParamsSchema = z.object({
   sessionId: z.string().openapi({ param: { name: 'sessionId', in: 'path' }, example: 'session_abc123' }),
 })
 
-const ListQuerySchema = z.object({
-  includeArchived: z
-    .enum(['true', 'false'])
+const ListQuerySchema = listQuerySchema(SESSION_STATUSES)
+const EventsQuerySchema = eventListQuerySchema().extend({
+  type: z
+    .enum(EVENT_TYPES)
     .optional()
-    .openapi({
-      param: { name: 'includeArchived', in: 'query' },
-      example: 'false',
-    }),
-  limit: z.coerce
-    .number()
-    .int()
-    .min(1)
-    .max(100)
+    .openapi({ param: { name: 'type', in: 'query' }, example: 'message' }),
+  visibility: z
+    .enum(EVENT_VISIBILITIES)
     .optional()
-    .openapi({
-      param: { name: 'limit', in: 'query' },
-      example: 50,
-    }),
+    .openapi({ param: { name: 'visibility', in: 'query' }, example: 'transcript' }),
+  createdFrom: z
+    .string()
+    .datetime()
+    .optional()
+    .openapi({ param: { name: 'createdFrom', in: 'query' }, example: '2026-05-01T00:00:00.000Z' }),
+  createdTo: z
+    .string()
+    .datetime()
+    .optional()
+    .openapi({ param: { name: 'createdTo', in: 'query' }, example: '2026-05-31T23:59:59.999Z' }),
 })
-
-const EventsQuerySchema = z.object({
-  afterSequence: z.coerce
-    .number()
-    .int()
-    .min(0)
-    .optional()
-    .openapi({
-      param: { name: 'afterSequence', in: 'query' },
-      example: 0,
-    }),
-  limit: z.coerce
-    .number()
-    .int()
-    .min(1)
-    .max(200)
-    .optional()
-    .openapi({
-      param: { name: 'limit', in: 'query' },
-      example: 100,
-    }),
-})
+const SessionListResponseSchema = listResponseSchema('SessionListResponse', SessionSchema)
+const SessionEventListResponseSchema = listResponseSchema('SessionEventListResponse', SessionEventSchema)
 
 type Db = ReturnType<typeof drizzle>
 type AgentRow = typeof agentDefinitions.$inferSelect
@@ -590,8 +582,10 @@ async function archiveSessionAndRead(c: Context<{ Bindings: Env }>, db: Db, auth
 const createSessionRoute = createRoute({
   method: 'post',
   path: '/',
+  operationId: 'createSession',
   tags: ['Sessions'],
   summary: 'Create a session',
+  ...AuthenticatedOperation,
   request: { body: { required: true, content: { 'application/json': { schema: CreateSessionSchema } } } },
   responses: {
     201: { description: 'Created session', content: { 'application/json': { schema: SessionSchema } } },
@@ -604,14 +598,17 @@ const createSessionRoute = createRoute({
 const listSessionsRoute = createRoute({
   method: 'get',
   path: '/',
+  operationId: 'listSessions',
   tags: ['Sessions'],
   summary: 'List sessions',
+  ...AuthenticatedOperation,
   request: { query: ListQuerySchema },
   responses: {
     200: {
       description: 'Session list',
-      content: { 'application/json': { schema: z.object({ data: z.array(SessionSchema) }) } },
+      content: { 'application/json': { schema: SessionListResponseSchema } },
     },
+    400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
   },
 })
@@ -619,8 +616,10 @@ const listSessionsRoute = createRoute({
 const readSessionRoute = createRoute({
   method: 'get',
   path: '/{sessionId}',
+  operationId: 'readSession',
   tags: ['Sessions'],
   summary: 'Read a session',
+  ...AuthenticatedOperation,
   request: { params: ParamsSchema },
   responses: {
     200: { description: 'Session', content: { 'application/json': { schema: SessionSchema } } },
@@ -632,8 +631,10 @@ const readSessionRoute = createRoute({
 const updateSessionRoute = createRoute({
   method: 'patch',
   path: '/{sessionId}',
+  operationId: 'updateSession',
   tags: ['Sessions'],
   summary: 'Update a session lifecycle state',
+  ...AuthenticatedOperation,
   request: {
     params: ParamsSchema,
     body: { required: true, content: { 'application/json': { schema: UpdateSessionSchema } } },
@@ -649,8 +650,10 @@ const updateSessionRoute = createRoute({
 const stopSessionRoute = createRoute({
   method: 'post',
   path: '/{sessionId}/stop',
+  operationId: 'stopSession',
   tags: ['Sessions'],
   summary: 'Stop a session',
+  ...AuthenticatedOperation,
   request: { params: ParamsSchema },
   responses: {
     200: { description: 'Stopped session', content: { 'application/json': { schema: SessionSchema } } },
@@ -663,8 +666,10 @@ const stopSessionRoute = createRoute({
 const archiveSessionRoute = createRoute({
   method: 'delete',
   path: '/{sessionId}',
+  operationId: 'archiveSession',
   tags: ['Sessions'],
   summary: 'Archive a session',
+  ...AuthenticatedOperation,
   request: { params: ParamsSchema },
   responses: {
     204: { description: 'Session archived' },
@@ -676,8 +681,10 @@ const archiveSessionRoute = createRoute({
 const reconnectSessionRoute = createRoute({
   method: 'get',
   path: '/{sessionId}/reconnect',
+  operationId: 'readSessionReconnect',
   tags: ['Sessions'],
   summary: 'Read reconnect metadata',
+  ...AuthenticatedOperation,
   request: { params: ParamsSchema },
   responses: {
     200: { description: 'Reconnect metadata', content: { 'application/json': { schema: SessionSchema } } },
@@ -689,13 +696,15 @@ const reconnectSessionRoute = createRoute({
 const listEventsRoute = createRoute({
   method: 'get',
   path: '/{sessionId}/events',
+  operationId: 'listSessionEvents',
   tags: ['Sessions'],
   summary: 'List session events',
+  ...AuthenticatedOperation,
   request: { params: ParamsSchema, query: EventsQuerySchema },
   responses: {
     200: {
       description: 'Session events',
-      content: { 'application/json': { schema: z.object({ data: z.array(SessionEventSchema) }) } },
+      content: { 'application/json': { schema: SessionEventListResponseSchema } },
     },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
     404: { description: 'Session not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
@@ -719,21 +728,37 @@ app.openapi(listSessionsRoute, async (c) => {
     return auth
   }
 
-  const { includeArchived, limit } = c.req.valid('query')
-  const where =
-    includeArchived === 'true'
-      ? eq(sessions.projectId, auth.project.id)
-      : and(eq(sessions.projectId, auth.project.id), ne(sessions.status, 'archived'))
+  const { includeArchived, status, search, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
+  let parsedCursor: ReturnType<typeof parseListCursor> | null = null
+  try {
+    parsedCursor = cursor ? parseListCursor(cursor) : null
+  } catch {
+    return errorResponse(c, 400, 'validation_error', 'Invalid list cursor', {
+      fields: { cursor: 'Cursor is invalid.' },
+    })
+  }
+  const filters = [
+    eq(sessions.projectId, auth.project.id),
+    status ? eq(sessions.status, status) : includeArchived === 'true' ? undefined : ne(sessions.status, 'archived'),
+    search ? like(sessions.agentId, `%${search}%`) : undefined,
+    createdFrom ? gte(sessions.createdAt, createdFrom) : undefined,
+    createdTo ? lte(sessions.createdAt, createdTo) : undefined,
+    parsedCursor
+      ? or(
+          lt(sessions.createdAt, parsedCursor.createdAt),
+          and(eq(sessions.createdAt, parsedCursor.createdAt), lt(sessions.id, parsedCursor.id)),
+        )
+      : undefined,
+  ].filter((filter) => filter !== undefined)
   const rows = await db
     .select()
     .from(sessions)
-    .where(where)
-    .orderBy(desc(sessions.createdAt))
-    .limit(limit ?? 50)
-  const data = rows
-    .filter((row) => includeArchived === 'true' || row.status !== 'archived')
-    .map((row) => serializeSession(row))
-  return c.json({ data }, 200)
+    .where(and(...filters))
+    .orderBy(desc(sessions.createdAt), desc(sessions.id))
+    .limit(limit + 1)
+  const page = paginateRows(rows, limit)
+  const data = page.data.map((row) => serializeSession(row))
+  return c.json({ data, pagination: page.pagination }, 200)
 })
 
 app.openapi(readSessionRoute, async (c) => {
@@ -818,7 +843,7 @@ app.openapi(reconnectSessionRoute, async (c) => {
 
 app.openapi(listEventsRoute, async (c) => {
   const { sessionId } = c.req.valid('param')
-  const { afterSequence, limit } = c.req.valid('query')
+  const { afterSequence, limit = 100, type, visibility, createdFrom, createdTo } = c.req.valid('query')
   const db = drizzle(c.env.DB)
   const auth = await requireAuth(c, db)
   if (auth instanceof Response) {
@@ -829,13 +854,22 @@ app.openapi(listEventsRoute, async (c) => {
   if (!session) {
     return errorResponse(c, 404, 'not_found', 'Session not found')
   }
+  const filters = [
+    eq(sessionEvents.sessionId, sessionId),
+    gt(sessionEvents.sequence, afterSequence ?? 0),
+    type ? eq(sessionEvents.type, type) : undefined,
+    visibility ? eq(sessionEvents.visibility, visibility) : undefined,
+    createdFrom ? gte(sessionEvents.createdAt, createdFrom) : undefined,
+    createdTo ? lte(sessionEvents.createdAt, createdTo) : undefined,
+  ].filter((filter) => filter !== undefined)
   const rows = await db
     .select()
     .from(sessionEvents)
-    .where(and(eq(sessionEvents.sessionId, sessionId), gt(sessionEvents.sequence, afterSequence ?? 0)))
+    .where(and(...filters))
     .orderBy(sessionEvents.sequence)
-    .limit(limit ?? 100)
-  return c.json({ data: rows.map(serializeEvent) }, 200)
+    .limit(limit + 1)
+  const page = paginateSequenceRows(rows, limit)
+  return c.json({ data: page.data.map(serializeEvent), pagination: page.pagination }, 200)
 })
 
 export default app

@@ -1,9 +1,8 @@
-@planned @ui
+@api @implemented
 Feature: List date range filters
   Resource lists support time-based filtering.
 
-  Scenario: Filter by date range
-    Given a list page supports timestamps
-    When the user selects a date range
-    Then only matching resources are shown and the URL preserves the filter
-
+  Scenario: Filter API resources by date range
+    Given a list route supports timestamps
+    When the API client requests a date range
+    Then only matching resources are returned

@@ -64,6 +64,18 @@ Given('a session exists', () => {
   runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
 })
 
+Given('more resources exist than fit on one page', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+  runCloudflareRouteTest('server/routes/environments.cf-test.ts')
+  runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
+})
+
+Given('a list route supports timestamps', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+  runCloudflareRouteTest('server/routes/environments.cf-test.ts')
+  runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
+})
+
 Given('a session is running', () => {
   runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
 })
@@ -102,6 +114,30 @@ When('the user stops the session', () => {
 
 When('the user reconnects to the session', () => {
   runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
+})
+
+When('the API client requests the next page', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+  runCloudflareRouteTest('server/routes/environments.cf-test.ts')
+  runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
+})
+
+When('the API client requests a date range', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+  runCloudflareRouteTest('server/routes/environments.cf-test.ts')
+  runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
+})
+
+When('web UI calls control-plane routes', () => {
+  runUnitTest('src/lib/api.test.ts')
+})
+
+When('a request schema changes', () => {
+  runUnitTest('server/routes/api-contracts.test.ts')
+})
+
+When('an update request body changes', () => {
+  runUnitTest('server/routes/api-contracts.test.ts')
 })
 
 When('a developer requests API documentation', () => {
@@ -206,6 +242,34 @@ Then('session metadata, sandbox state references, runtime endpoint, and status a
 })
 
 Then('the document describes control-plane routes, schemas, auth, errors, and pagination', () => {
+  runCloudflareRouteTest('server/routes/openapi.cf-test.ts')
+})
+
+Then('the API uses stable cursor metadata', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+  runCloudflareRouteTest('server/routes/environments.cf-test.ts')
+  runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
+  runUnitTest('src/lib/api.test.ts')
+})
+
+Then('only matching resources are returned', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+  runCloudflareRouteTest('server/routes/environments.cf-test.ts')
+  runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
+  runUnitTest('src/lib/api.test.ts')
+})
+
+Then('requests use shared auth, error handling, tenancy headers, and response parsing', () => {
+  runUnitTest('src/lib/api.test.ts')
+})
+
+Then('the route handler, tests, and OpenAPI contract are updated together', () => {
+  runUnitTest('server/routes/api-contracts.test.ts')
+  runCloudflareRouteTest('server/routes/openapi.cf-test.ts')
+})
+
+Then('validation schema, handler mapping, OpenAPI docs, and tests stay aligned', () => {
+  runUnitTest('server/routes/api-contracts.test.ts')
   runCloudflareRouteTest('server/routes/openapi.cf-test.ts')
 })
 

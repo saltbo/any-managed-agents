@@ -8,8 +8,11 @@ describe('[CF] OpenAPI documentation', () => {
     expect(res.status).toBe(200)
     const doc = (await res.json()) as {
       openapi: string
-      paths: Record<string, unknown>
-      components?: { schemas?: Record<string, unknown> }
+      paths: Record<
+        string,
+        Record<string, { operationId?: string; security?: unknown; parameters?: unknown[]; responses?: unknown }>
+      >
+      components?: { schemas?: Record<string, unknown>; securitySchemes?: Record<string, unknown> }
     }
 
     expect(doc.openapi).toBe('3.0.0')
@@ -38,8 +41,24 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths['/api/sessions/{sessionId}/stop']).toHaveProperty('post')
     expect(doc.paths['/api/sessions/{sessionId}/reconnect']).toHaveProperty('get')
     expect(doc.paths['/api/sessions/{sessionId}/events']).toHaveProperty('get')
+    expect(doc.paths['/api/health'].get.security).toBeUndefined()
+    expect(doc.paths['/api/auth/login'].get.security).toBeUndefined()
+    expect(doc.paths['/api/agents'].get.security).toEqual([{ cookieAuth: [] }])
+    expect(doc.paths['/api/environments'].get.security).toEqual([{ cookieAuth: [] }])
+    expect(doc.paths['/api/sessions'].get.security).toEqual([{ cookieAuth: [] }])
+    expect(doc.paths['/api/agents'].get.operationId).toBe('listAgents')
+    expect(doc.paths['/api/environments'].get.operationId).toBe('listEnvironments')
+    expect(doc.paths['/api/sessions'].get.operationId).toBe('listSessions')
+    expect(doc.paths['/api/agents'].get.parameters?.map((parameter) => (parameter as { name?: string }).name)).toEqual(
+      expect.arrayContaining(['includeArchived', 'status', 'search', 'createdFrom', 'createdTo', 'limit', 'cursor']),
+    )
+    expect(doc.components?.securitySchemes).toHaveProperty('cookieAuth')
     expect(doc.components?.schemas).toHaveProperty('AuthContext')
     expect(doc.components?.schemas).toHaveProperty('ErrorResponse')
+    expect(doc.components?.schemas).toHaveProperty('ListPagination')
+    expect(doc.components?.schemas).toHaveProperty('AgentListResponse')
+    expect(doc.components?.schemas).toHaveProperty('EnvironmentListResponse')
+    expect(doc.components?.schemas).toHaveProperty('SessionListResponse')
     expect(doc.components?.schemas).toHaveProperty('CreateAgentRequest')
     expect(doc.components?.schemas).toHaveProperty('UpdateAgentRequest')
     expect(doc.components?.schemas).toHaveProperty('Agent')
