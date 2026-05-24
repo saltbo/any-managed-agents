@@ -32,7 +32,7 @@ import { runtimeEndpointPath, safeRuntimeError, startPiBridge, stopPiBridge } fr
 
 const app = createApiRouter()
 
-const SESSION_STATUSES = ['pending', 'running', 'idle', 'stopped', 'error', 'archived'] as const
+const SESSION_STATUSES = ['pending', 'running', 'idle', 'stopped', 'error', 'archived', 'requires-action'] as const
 const EVENT_TYPES = ['message', 'tool', 'sandbox', 'policy', 'usage', 'error', 'lifecycle'] as const
 const EVENT_VISIBILITIES = ['transcript', 'debug', 'audit'] as const
 
@@ -137,6 +137,12 @@ const UpdateSessionSchema = z
 
 const ParamsSchema = z.object({
   sessionId: z.string().openapi({ param: { name: 'sessionId', in: 'path' }, example: 'session_abc123' }),
+})
+const StopSessionQuerySchema = z.object({
+  reason: z
+    .enum(['user_requested', 'timeout', 'policy', 'runtime_error'])
+    .optional()
+    .openapi({ param: { name: 'reason', in: 'query' }, example: 'user_requested' }),
 })
 
 const ListQuerySchema = listQuerySchema(SESSION_STATUSES)
@@ -587,7 +593,13 @@ export async function createSessionForAgent(c: Context<{ Bindings: Env }>, db: D
   }
 }
 
-async function stopSession(c: Context<{ Bindings: Env }>, db: Db, auth: AuthContext, session: SessionRow) {
+async function stopSession(
+  c: Context<{ Bindings: Env }>,
+  db: Db,
+  auth: AuthContext,
+  session: SessionRow,
+  reason = 'user_requested',
+) {
   if (session.status === 'stopped') {
     return c.json(serializeSession(session), 200)
   }
@@ -634,7 +646,17 @@ async function stopSession(c: Context<{ Bindings: Env }>, db: Db, auth: AuthCont
     sessionId: session.id,
     type: 'lifecycle',
     visibility: 'audit',
-    payload: { status: 'stopped', sandboxId: session.sandboxId, piRuntimeId: session.piRuntimeId },
+    payload: { status: 'stopped', reason, sandboxId: session.sandboxId, piRuntimeId: session.piRuntimeId },
+  })
+  await recordAudit(db, {
+    auth,
+    action: 'session.stop',
+    resourceType: 'session',
+    resourceId: session.id,
+    outcome: 'success',
+    requestId: requestId(c),
+    sessionId: session.id,
+    metadata: { reason, sandboxId: session.sandboxId, piRuntimeId: session.piRuntimeId },
   })
   const stopped = await findSession(db, auth, session.id)
   if (!stopped) {
@@ -769,7 +791,10 @@ const stopSessionRoute = createRoute({
   tags: ['Sessions'],
   summary: 'Stop a session',
   ...AuthenticatedOperation,
-  request: { params: ParamsSchema },
+  request: {
+    params: ParamsSchema,
+    query: StopSessionQuerySchema,
+  },
   responses: {
     200: { description: 'Stopped session', content: { 'application/json': { schema: SessionSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
@@ -820,6 +845,42 @@ const listEventsRoute = createRoute({
     200: {
       description: 'Session events',
       content: { 'application/json': { schema: SessionEventListResponseSchema } },
+    },
+    401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    404: { description: 'Session not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
+  },
+})
+
+const exportEventsRoute = createRoute({
+  method: 'get',
+  path: '/{sessionId}/events/export',
+  operationId: 'exportSessionEvents',
+  tags: ['Sessions'],
+  summary: 'Export session events as NDJSON',
+  ...AuthenticatedOperation,
+  request: { params: ParamsSchema, query: EventsQuerySchema },
+  responses: {
+    200: {
+      description: 'Session events export',
+      content: { 'application/x-ndjson': { schema: z.string() } },
+    },
+    401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    404: { description: 'Session not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
+  },
+})
+
+const streamEventsRoute = createRoute({
+  method: 'get',
+  path: '/{sessionId}/events/stream',
+  operationId: 'streamSessionEvents',
+  tags: ['Sessions'],
+  summary: 'Stream session events as NDJSON',
+  ...AuthenticatedOperation,
+  request: { params: ParamsSchema, query: EventsQuerySchema },
+  responses: {
+    200: {
+      description: 'Session event stream',
+      content: { 'application/x-ndjson': { schema: z.string() } },
     },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
     404: { description: 'Session not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
@@ -913,6 +974,7 @@ app.openapi(updateSessionRoute, async (c) => {
 
 app.openapi(stopSessionRoute, async (c) => {
   const { sessionId } = c.req.valid('param')
+  const { reason = 'user_requested' } = c.req.valid('query')
   const db = drizzle(c.env.DB)
   const auth = await requireAuth(c, db)
   if (auth instanceof Response) {
@@ -923,7 +985,7 @@ app.openapi(stopSessionRoute, async (c) => {
   if (!session) {
     return errorResponse(c, 404, 'not_found', 'Session not found')
   }
-  return await stopSession(c, db, auth, session)
+  return await stopSession(c, db, auth, session, reason)
 })
 
 app.openapi(archiveSessionRoute, async (c) => {
@@ -985,6 +1047,103 @@ app.openapi(listEventsRoute, async (c) => {
     .limit(limit + 1)
   const page = paginateSequenceRows(rows, limit)
   return c.json({ data: page.data.map(serializeEvent), pagination: page.pagination }, 200)
+})
+
+type EventsQuery = z.infer<typeof EventsQuerySchema>
+
+async function eventsNdjsonResponse(c: Context<{ Bindings: Env }>, sessionId: string, query: EventsQuery) {
+  const { afterSequence, limit = 200, type, visibility, createdFrom, createdTo } = query
+  const db = drizzle(c.env.DB)
+  const auth = await requireAuth(c, db)
+  if (auth instanceof Response) {
+    return auth
+  }
+
+  const session = await findSession(db, auth, sessionId)
+  if (!session) {
+    return errorResponse(c, 404, 'not_found', 'Session not found')
+  }
+  const filters = [
+    eq(sessionEvents.sessionId, sessionId),
+    gt(sessionEvents.sequence, afterSequence ?? 0),
+    type ? eq(sessionEvents.type, type) : undefined,
+    visibility ? eq(sessionEvents.visibility, visibility) : undefined,
+    createdFrom ? gte(sessionEvents.createdAt, createdFrom) : undefined,
+    createdTo ? lte(sessionEvents.createdAt, createdTo) : undefined,
+  ].filter((filter) => filter !== undefined)
+  const rows = await db
+    .select()
+    .from(sessionEvents)
+    .where(and(...filters))
+    .orderBy(sessionEvents.sequence)
+    .limit(limit)
+  const body = rows.map((row) => JSON.stringify(serializeEvent(row))).join('\n')
+  return c.text(body ? `${body}\n` : '', 200, {
+    'content-type': 'application/x-ndjson; charset=utf-8',
+    'cache-control': 'no-store',
+  })
+}
+
+async function streamEventsNdjsonResponse(c: Context<{ Bindings: Env }>, sessionId: string, query: EventsQuery) {
+  const { afterSequence = 0, limit = 200, type, visibility, createdFrom, createdTo } = query
+  const db = drizzle(c.env.DB)
+  const auth = await requireAuth(c, db)
+  if (auth instanceof Response) {
+    return auth
+  }
+
+  const session = await findSession(db, auth, sessionId)
+  if (!session) {
+    return errorResponse(c, 404, 'not_found', 'Session not found')
+  }
+
+  const encoder = new TextEncoder()
+  let lastSequence = afterSequence
+  const stream = new ReadableStream({
+    async start(controller) {
+      const deadline = Date.now() + 1000
+      while (Date.now() <= deadline) {
+        const filters = [
+          eq(sessionEvents.sessionId, sessionId),
+          gt(sessionEvents.sequence, lastSequence),
+          type ? eq(sessionEvents.type, type) : undefined,
+          visibility ? eq(sessionEvents.visibility, visibility) : undefined,
+          createdFrom ? gte(sessionEvents.createdAt, createdFrom) : undefined,
+          createdTo ? lte(sessionEvents.createdAt, createdTo) : undefined,
+        ].filter((filter) => filter !== undefined)
+        const rows = await db
+          .select()
+          .from(sessionEvents)
+          .where(and(...filters))
+          .orderBy(sessionEvents.sequence)
+          .limit(limit)
+        for (const row of rows) {
+          lastSequence = row.sequence
+          controller.enqueue(encoder.encode(`${JSON.stringify(serializeEvent(row))}\n`))
+        }
+        if (rows.length >= limit) {
+          break
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100))
+      }
+      controller.close()
+    },
+  })
+  return c.body(stream, 200, {
+    'content-type': 'application/x-ndjson; charset=utf-8',
+    'cache-control': 'no-store',
+    connection: 'keep-alive',
+  })
+}
+
+app.openapi(exportEventsRoute, async (c) => {
+  const { sessionId } = c.req.valid('param')
+  return (await eventsNdjsonResponse(c, sessionId, c.req.valid('query'))) as never
+})
+
+app.openapi(streamEventsRoute, async (c) => {
+  const { sessionId } = c.req.valid('param')
+  return (await streamEventsNdjsonResponse(c, sessionId, c.req.valid('query'))) as never
 })
 
 export default app

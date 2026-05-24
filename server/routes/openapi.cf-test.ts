@@ -10,7 +10,16 @@ describe('[CF] OpenAPI documentation', () => {
       openapi: string
       paths: Record<
         string,
-        Record<string, { operationId?: string; security?: unknown; parameters?: unknown[]; responses?: unknown }>
+        Record<
+          string,
+          {
+            operationId?: string
+            security?: unknown
+            parameters?: Array<{ name?: string }>
+            requestBody?: { content?: Record<string, unknown> }
+            responses?: Record<number, { content?: Record<string, unknown> }>
+          }
+        >
       >
       components?: { schemas?: Record<string, unknown>; securitySchemes?: Record<string, unknown> }
     }
@@ -51,6 +60,8 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths).toHaveProperty('/api/sessions/{sessionId}/stop')
     expect(doc.paths).toHaveProperty('/api/sessions/{sessionId}/reconnect')
     expect(doc.paths).toHaveProperty('/api/sessions/{sessionId}/events')
+    expect(doc.paths).toHaveProperty('/api/sessions/{sessionId}/events/export')
+    expect(doc.paths).toHaveProperty('/api/sessions/{sessionId}/events/stream')
     expect(doc.paths).toHaveProperty('/api/vaults')
     expect(doc.paths).toHaveProperty('/api/vaults/{vaultId}')
     expect(doc.paths).toHaveProperty('/api/vaults/{vaultId}/credentials')
@@ -65,6 +76,17 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths['/api/sessions/{sessionId}/stop']).toHaveProperty('post')
     expect(doc.paths['/api/sessions/{sessionId}/reconnect']).toHaveProperty('get')
     expect(doc.paths['/api/sessions/{sessionId}/events']).toHaveProperty('get')
+    expect(doc.paths['/api/sessions/{sessionId}/events/export']).toHaveProperty('get')
+    expect(doc.paths['/api/sessions/{sessionId}/events/stream']).toHaveProperty('get')
+    expect(doc.paths['/api/sessions/{sessionId}/events/export'].get.responses?.[200]?.content).toHaveProperty(
+      'application/x-ndjson',
+    )
+    expect(doc.paths['/api/sessions/{sessionId}/events/stream'].get.responses?.[200]?.content).toHaveProperty(
+      'application/x-ndjson',
+    )
+    expect(doc.paths['/api/sessions/{sessionId}/stop'].post.parameters?.map((parameter) => parameter.name)).toContain(
+      'reason',
+    )
     expect(doc.paths['/api/vaults']).toHaveProperty('get')
     expect(doc.paths['/api/vaults']).toHaveProperty('post')
     expect(doc.paths['/api/vaults/{vaultId}']).toHaveProperty('get')

@@ -328,6 +328,8 @@ export const sessionEvents = sqliteTable(
       table.visibility,
       table.createdAt,
     ),
+    index('idx_session_events_session_sequence').on(table.sessionId, table.sequence),
+    uniqueIndex('idx_session_events_unique_sequence').on(table.sessionId, table.sequence),
   ],
 )
 

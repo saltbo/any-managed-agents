@@ -28,6 +28,8 @@ const DEFAULT_BRIDGE_PORT = 8788
 const PI_PROVIDER_NAMES: Record<string, string> = {
   'workers-ai': 'cloudflare-workers-ai',
 }
+const REDACTED_VALUE = '[REDACTED]'
+const SENSITIVE_TEXT = /(bearer\s+|raw-[\w-]*token|secret|token=|api[_-]?key|password=)/i
 
 async function getSandboxBinding() {
   const { getSandbox } = await import('@cloudflare/sandbox')
@@ -47,14 +49,16 @@ function piProviderName(provider: string) {
 }
 
 export function safeRuntimeError(error: unknown): SafeRuntimeError {
+  const message = error instanceof Error ? error.message : String(error)
+  const safeMessage = SENSITIVE_TEXT.test(message) ? REDACTED_VALUE : message
   if (error instanceof Error) {
     return {
       type: 'runtime_error',
-      message: error.message,
+      message: safeMessage,
       ...(error.name ? { code: error.name } : {}),
     }
   }
-  return { type: 'runtime_error', message: String(error) }
+  return { type: 'runtime_error', message: safeMessage }
 }
 
 export async function startPiBridge(env: Env, input: PiBridgeStartInput): Promise<PiBridgeStartResult> {
@@ -117,7 +121,7 @@ export async function startPiBridge(env: Env, input: PiBridgeStartInput): Promis
       piRuntimeId: process.id,
       piProcessId: String(process.pid),
       runtimeEndpointPath: runtimeEndpointPath(input.sessionId),
-      metadata: { bridgePort: port, bridgeCommand: command },
+      metadata: { bridgePort: port, bridgeCommand: command.split(/\s+/)[0] ?? 'pi-bridge' },
     }
   } catch (error) {
     await sandbox.destroy()
