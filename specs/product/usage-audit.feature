@@ -20,7 +20,6 @@ Feature: Usage and audit
     Then the audit log includes the policy rule and resource reference
     And does not include secret values
 
-  @planned
   Scenario: Export audit records
     When an operator exports audit records for a time range
     Then the export includes stable identifiers and event metadata
