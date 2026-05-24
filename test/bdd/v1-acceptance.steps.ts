@@ -238,6 +238,20 @@ When('an update request body changes', () => {
   runUnitTest('server/routes/api-contracts.test.ts')
 })
 
+When('a control-plane route changes', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+  runCloudflareRouteTest('server/routes/environments.cf-test.ts')
+  runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
+})
+
+Given('a scenario test is defined', () => {
+  assertIncludes('package.json', /"bdd":/, /cucumber-js/)
+})
+
+When('CI executes the scenario', () => {
+  assertIncludes('package.json', /"bdd":/, /not @planned and not @e2e/, /"bdd:e2e":/)
+})
+
 When('a developer requests API documentation', () => {
   runCloudflareRouteTest('server/routes/openapi.cf-test.ts')
 })
@@ -652,6 +666,43 @@ Then('the route handler, tests, and OpenAPI contract are updated together', () =
 Then('validation schema, handler mapping, OpenAPI docs, and tests stay aligned', () => {
   runUnitTest('server/routes/api-contracts.test.ts')
   runCloudflareRouteTest('server/routes/openapi.cf-test.ts')
+})
+
+Then('tests cover validation, auth, tenancy, success, and error paths', () => {
+  runCloudflareRouteTest('server/routes/agents.cf-test.ts')
+  runCloudflareRouteTest('server/routes/environments.cf-test.ts')
+  runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
+  runCloudflareRouteTest('server/routes/auth.cf-test.ts')
+})
+
+Then('tests cover OpenAPI route schema alignment', () => {
+  runUnitTest('server/routes/api-contracts.test.ts')
+  runCloudflareRouteTest('server/routes/openapi.cf-test.ts')
+})
+
+Then('Cloudflare route tests cover the v1 runtime proxy and session events', () => {
+  runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
+})
+
+Then('the test verifies user-visible behavior and runtime side effects', () => {
+  runUnitTest('src/App.test.tsx')
+  runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
+})
+
+Then('implemented product scenarios are not excluded with planned tags', () => {
+  assertIncludes('specs/product/web-ui.feature', /@implemented @e2e\n\s+Scenario: Complete the v1/)
+  assertIncludes('specs/product/server-tests.feature', /@testing @implemented/)
+  assertIncludes('specs/product/scenario-tests.feature', /@testing @implemented/)
+})
+
+Then('mocked browser scenario evidence covers desktop and 390px mobile workflows', () => {
+  assertIncludes(
+    'test/bdd/browser-e2e.steps.ts',
+    /width: 1280, height: 900/,
+    /width: 390, height: 844/,
+    /Create environment/,
+    /Send task/,
+  )
 })
 
 Then('the OpenAPI document is generated from Hono route schemas for v1 resources', () => {

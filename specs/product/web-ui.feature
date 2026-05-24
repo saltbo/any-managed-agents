@@ -5,7 +5,7 @@ Feature: Web console
   Background:
     Given a signed-in user has access to a project
 
-  @implemented
+  @implemented @e2e
   Scenario: Complete the v1 create-session-to-run-task workflow
     When the user opens the console
     Then the v1 console uses URL routes for primary resources
@@ -16,6 +16,7 @@ Feature: Web console
     And mobile navigation labels remain readable without truncation
     And the v1 console supports creating environments, agents, and sessions
     And the v1 console supports sending runtime tasks and inspecting session events
+    And a browser verifies the v1 create-session-to-run-task UI workflow with mocked API responses on desktop and mobile
 
   @implemented
   Scenario: Navigate the app shell

@@ -1,4 +1,4 @@
-@planned @audit
+@audit
 Feature: Automatic audit logging
   Security-relevant control-plane changes create audit records automatically.
 

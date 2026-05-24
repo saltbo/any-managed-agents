@@ -26,7 +26,6 @@ Feature: Providers
     And credentials are stored through approved secret references
     And the response includes hasCredential without returning the credential value
 
-  @planned
   Scenario: Reassign the default provider
     Given a project has multiple providers
     When an operator marks one provider as default
