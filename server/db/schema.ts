@@ -1,4 +1,4 @@
-import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
@@ -127,6 +127,97 @@ export const environments = sqliteTable(
   },
   (table) => [
     index('idx_environments_project_status_created').on(table.projectId, table.status, table.createdAt, table.id),
+  ],
+)
+
+export const vaults = sqliteTable(
+  'vaults',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organizations.id),
+    projectId: text('project_id').references(() => projects.id),
+    name: text('name').notNull(),
+    description: text('description'),
+    scope: text('scope').notNull().default('project'),
+    metadata: text('metadata').notNull().default('{}'),
+    status: text('status').notNull().default('active'),
+    archivedAt: text('archived_at'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    index('idx_vaults_project_status_created').on(table.projectId, table.status, table.createdAt, table.id),
+    index('idx_vaults_organization_status_created').on(table.organizationId, table.status, table.createdAt, table.id),
+  ],
+)
+
+export const vaultCredentials = sqliteTable(
+  'vault_credentials',
+  {
+    id: text('id').primaryKey(),
+    vaultId: text('vault_id')
+      .notNull()
+      .references(() => vaults.id),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organizations.id),
+    projectId: text('project_id').references(() => projects.id),
+    name: text('name').notNull(),
+    type: text('type').notNull(),
+    connectorBinding: text('connector_binding').notNull().default('{}'),
+    metadata: text('metadata').notNull().default('{}'),
+    status: text('status').notNull().default('active'),
+    activeVersionId: text('active_version_id'),
+    revokedAt: text('revoked_at'),
+    revokedByUserId: text('revoked_by_user_id').references(() => users.id),
+    revokeReason: text('revoke_reason'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    index('idx_vault_credentials_vault_status_created').on(table.vaultId, table.status, table.createdAt, table.id),
+    index('idx_vault_credentials_project_status_created').on(table.projectId, table.status, table.createdAt, table.id),
+  ],
+)
+
+export const vaultCredentialVersions = sqliteTable(
+  'vault_credential_versions',
+  {
+    id: text('id').primaryKey(),
+    credentialId: text('credential_id')
+      .notNull()
+      .references(() => vaultCredentials.id),
+    vaultId: text('vault_id')
+      .notNull()
+      .references(() => vaults.id),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organizations.id),
+    projectId: text('project_id').references(() => projects.id),
+    version: integer('version').notNull(),
+    provider: text('provider').notNull(),
+    secretRef: text('secret_ref').notNull(),
+    externalVaultPath: text('external_vault_path'),
+    referenceName: text('reference_name').notNull(),
+    status: text('status').notNull().default('active'),
+    hasSecret: integer('has_secret', { mode: 'boolean' }).notNull().default(true),
+    metadata: text('metadata').notNull().default('{}'),
+    createdAt: text('created_at').notNull(),
+    supersededAt: text('superseded_at'),
+    revokedAt: text('revoked_at'),
+    deletedAt: text('deleted_at'),
+  },
+  (table) => [
+    index('idx_vault_credential_versions_credential_version').on(table.credentialId, table.version),
+    uniqueIndex('idx_vault_credential_versions_unique_credential_version').on(table.credentialId, table.version),
+    index('idx_vault_credential_versions_vault_status_created').on(
+      table.vaultId,
+      table.status,
+      table.createdAt,
+      table.id,
+    ),
   ],
 )
 

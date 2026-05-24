@@ -189,6 +189,130 @@ Then('environment secret handling stores references and never returns raw secret
   runCloudflareRouteTest('server/routes/environments.cf-test.ts')
 })
 
+Given('a project has a vault', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+Given('a vault exists', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+Given('a vault has credentials', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+When('the user creates, rotates, lists, reads, or revokes credentials', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+When('the user creates a vault with display name, description, scope, and metadata', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+When('the user lists vaults', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+When('the user creates a credential with name, type, secret value, connector binding, and metadata', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+When('the user lists or reads credentials', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+When('the user archives the vault', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+When('the user deletes an unused credential version', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+When('the user stores an API key or provider token', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+When('the user rotates a credential', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+When('a user outside the project requests a vault or credential', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+Then('raw secret values are never returned after creation', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+Then('the response includes vault id, status, timestamps, and safe metadata', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+Then('the list supports pagination, archived filtering, and project scope', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+Then('the response includes credential id, name, type, active version, connector binding, and timestamps', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+Then('the secret value is accepted only in the create or rotate request', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+Then('the response never includes the raw secret value', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+Then('API responses never include the raw secret value', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+Then('the response includes names, types, versions, connector bindings, usage references, and timestamps', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+Then('the response exposes only hasSecret or safe reference fields instead of secret values', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+Then('the vault is hidden from default lists and cannot be selected for new sessions', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+Then('existing session references remain auditable', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+Then('the operation requires explicit confirmation and audit metadata', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+Then('the secret value is stored in Cloudflare Secrets', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+Then('D1 stores only secret metadata and references', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+Then('new sessions use the new credential version', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+Then('existing audit records keep the previous credential reference', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+Then('the request is rejected', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
+Then('no secret metadata is disclosed', () => {
+  runCloudflareRouteTest('server/routes/vaults.cf-test.ts')
+})
+
 Then('the sessions API supports create, list, read, reconnect, stop, archive, and events', () => {
   runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
 })
@@ -278,6 +402,7 @@ Then('the OpenAPI document is generated from Hono route schemas for v1 resources
   assertIncludes('server/routes/agents.ts', /createRoute/, /app\.openapi/)
   assertIncludes('server/routes/environments.ts', /createRoute/, /app\.openapi/)
   assertIncludes('server/routes/sessions.ts', /createRoute/, /app\.openapi/)
+  assertIncludes('server/routes/vaults.ts', /createRoute/, /app\.openapi/)
 })
 
 Then('the v1 console supports creating environments, agents, and sessions', () => {

@@ -11,6 +11,7 @@ import auth from './routes/auth'
 import environments from './routes/environments'
 import health from './routes/health'
 import sessionRoutes from './routes/sessions'
+import vaults from './routes/vaults'
 import { proxyPiRuntime } from './runtime/pi/bridge'
 
 export function createApp() {
@@ -37,6 +38,7 @@ export function createApp() {
   app.route('/api/agents', agents)
   app.route('/api/environments', environments)
   app.route('/api/sessions', sessionRoutes)
+  app.route('/api/vaults', vaults)
 
   app.openAPIRegistry.registerComponent('securitySchemes', 'cookieAuth', ApiSecuritySchemes.cookieAuth)
 

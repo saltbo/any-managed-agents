@@ -16,6 +16,8 @@ let currentClaims: TestClaims
 let currentNonce = ''
 let privateKey: CryptoKey
 let publicJwk: JsonWebKey
+const cloudflareSecretWrites: unknown[] = []
+const cloudflareSecretDeletes: string[] = []
 
 export function defaultClaims(): TestClaims {
   return {
@@ -35,6 +37,8 @@ export async function setupFlareAuth() {
   publicJwk = await exportJWK(keyPair.publicKey)
   currentClaims = defaultClaims()
   currentNonce = ''
+  cloudflareSecretWrites.length = 0
+  cloudflareSecretDeletes.length = 0
 
   vi.stubGlobal(
     'fetch',
@@ -70,9 +74,29 @@ export async function setupFlareAuth() {
         return Response.json(currentClaims)
       }
 
+      if (url.hostname === 'api.cloudflare.com' && url.pathname.includes('/secrets_store/stores/')) {
+        if (init?.method === 'POST') {
+          const secrets = JSON.parse(String(init.body)) as Array<{ name: string }>
+          cloudflareSecretWrites.push(secrets)
+          return Response.json({ success: true, result: secrets.map((secret) => ({ id: `secret_${secret.name}` })) })
+        }
+
+        if (init?.method === 'DELETE') {
+          cloudflareSecretDeletes.push(url.pathname.split('/').at(-1) ?? '')
+          return Response.json({ success: true, result: null })
+        }
+      }
+
       return new Response('not found', { status: 404 })
     }),
   )
+}
+
+export function cloudflareSecretRequests() {
+  return {
+    writes: [...cloudflareSecretWrites],
+    deletes: [...cloudflareSecretDeletes],
+  }
 }
 
 export async function signIn(claims = defaultClaims()) {
