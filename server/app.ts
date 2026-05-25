@@ -386,7 +386,7 @@ async function recordRuntimeProxyFailure(
 }
 
 function isRecoverableRuntimeStatus(status: number) {
-  return status === 502 || status === 503 || status === 504
+  return status === 500 || status === 502 || status === 503 || status === 504
 }
 
 async function runtimeRequestFactory(request: Request) {
