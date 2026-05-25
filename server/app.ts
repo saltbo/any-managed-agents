@@ -527,7 +527,7 @@ async function drainPiRuntimeEvents(
   session: typeof sessions.$inferSelect,
   cursor?: number | 'latest' | null,
   onLine?: (line: string) => void,
-  options: { stopOnTerminal?: boolean; signal?: AbortSignal } = {},
+  options: { persist?: boolean; stopOnTerminal?: boolean; signal?: AbortSignal } = {},
 ) {
   const streamUrl = new URL(request.url)
   if (cursor === 'latest') {
@@ -558,6 +558,9 @@ async function drainPiRuntimeEvents(
       pending = lines.pop() ?? ''
       for (const line of lines) {
         onLine?.(line)
+        if (options.persist === false) {
+          continue
+        }
         const terminal = await ingestPiRuntimeLine(db, auth, session, line)
         if (terminal && options.stopOnTerminal !== false) {
           await reader.cancel().catch(() => undefined)
@@ -568,6 +571,9 @@ async function drainPiRuntimeEvents(
     const final = `${pending}${decoder.decode()}`
     if (final.trim()) {
       onLine?.(final)
+      if (options.persist === false) {
+        return
+      }
       const terminal = await ingestPiRuntimeLine(db, auth, session, final)
       if (terminal && options.stopOnTerminal !== false) {
         await reader.cancel().catch(() => undefined)
@@ -815,7 +821,7 @@ export function createApp() {
               server.send(line.endsWith('\n') ? line : `${line}\n`)
             }
           },
-          { stopOnTerminal: false, signal: streamController.signal },
+          { persist: false, stopOnTerminal: false, signal: streamController.signal },
         ).catch((error) => {
           if (!streamController.signal.aborted) {
             sendRuntimeJson(server, { type: 'error', message: error instanceof Error ? error.message : String(error) })
