@@ -22,11 +22,19 @@ export function usePiRuntimeSession({
   const socketRef = useRef<WebSocket | null>(null)
   const refreshTimerRef = useRef<number | null>(null)
   const reconnectTimerRef = useRef<number | null>(null)
+  const sessionIdRef = useRef<string | null>(null)
   const endpoint = useMemo(() => (session ? runtimeWebSocketUrl(session.runtimeEndpointPath) : null), [session])
 
   useEffect(() => {
-    dispatch({ type: 'persisted_events', events })
-  }, [events])
+    if (sessionIdRef.current !== (session?.id ?? null)) {
+      sessionIdRef.current = session?.id ?? null
+      dispatch({ type: 'reset' })
+    }
+    dispatch({
+      type: 'persisted_events',
+      events: session ? events.filter((event) => event.sessionId === session.id) : [],
+    })
+  }, [events, session?.id])
 
   useEffect(() => {
     void connectionAttempt

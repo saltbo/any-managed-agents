@@ -43,7 +43,7 @@ export function Tool({
             <span className="text-xs text-muted-foreground">{Math.round(durationMs)}ms</span>
           ) : null}
         </div>
-        <div className="grid gap-2 p-3 text-sm md:grid-cols-2">
+        <div className="grid gap-3 p-3 text-sm">
           <ToolValue label="Input" value={input} />
           <ToolValue label={error ? 'Error' : 'Output'} value={error ?? output} tone={error ? 'error' : 'default'} />
         </div>

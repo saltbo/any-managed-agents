@@ -173,4 +173,154 @@ describe('piRuntimeReducer', () => {
       'You are running as `root`.',
     ])
   })
+
+  it('dedupes replayed persisted Pi events with the same runtime timestamps', () => {
+    const turn = [
+      event(1, 'message_end', {
+        type: 'message_end',
+        message: {
+          role: 'user',
+          timestamp: 1779675439881,
+          content: [{ type: 'text', text: 'run whoami' }],
+        },
+      }),
+      event(2, 'tool_execution_start', {
+        type: 'tool_execution_start',
+        toolCallId: 'functions.bash:0',
+        toolName: 'bash',
+        args: { command: 'whoami' },
+      }),
+      event(3, 'tool_execution_end', {
+        type: 'tool_execution_end',
+        toolCallId: 'functions.bash:0',
+        toolName: 'bash',
+        result: { content: [{ type: 'text', text: 'root\n' }] },
+        isError: false,
+      }),
+      event(4, 'message_end', {
+        type: 'message_end',
+        message: {
+          role: 'assistant',
+          timestamp: 1779675443748,
+          content: [{ type: 'text', text: 'You are running as `root`.' }],
+        },
+      }),
+    ]
+    const replay = turn.map((item, index) => ({
+      ...item,
+      id: `event_replay_${index + 1}`,
+      sequence: item.sequence + 100,
+      createdAt: new Date((item.sequence + 100) * 1000).toISOString(),
+    }))
+
+    const state = piRuntimeReducer(initialPiRuntimeState, {
+      type: 'persisted_events',
+      events: [...turn, ...replay, event(200, 'agent_end', { type: 'agent_end' })],
+    })
+
+    expect(state.tools).toHaveLength(1)
+    expect(state.messages.map((message) => message.content)).toEqual(['run whoami', 'You are running as `root`.'])
+    expect(state.debugEvents.filter((item) => item.type === 'tool_execution_start')).toHaveLength(1)
+  })
+
+  it('keeps repeated persisted commands when Pi runtime timestamps are new', () => {
+    const firstTurn = [
+      event(1, 'message_end', {
+        type: 'message_end',
+        message: {
+          role: 'user',
+          timestamp: 1779675439881,
+          content: [{ type: 'text', text: 'run whoami' }],
+        },
+      }),
+      event(2, 'tool_execution_start', {
+        type: 'tool_execution_start',
+        toolCallId: 'functions.bash:0',
+        toolName: 'bash',
+        args: { command: 'whoami' },
+      }),
+      event(3, 'tool_execution_end', {
+        type: 'tool_execution_end',
+        toolCallId: 'functions.bash:0',
+        toolName: 'bash',
+        result: { content: [{ type: 'text', text: 'root\n' }] },
+        isError: false,
+      }),
+      event(4, 'message_end', {
+        type: 'message_end',
+        message: {
+          role: 'assistant',
+          timestamp: 1779675443748,
+          content: [{ type: 'text', text: 'You are running as `root`.' }],
+        },
+      }),
+    ]
+    const secondTurn = [
+      event(20, 'message_end', {
+        type: 'message_end',
+        message: {
+          role: 'user',
+          timestamp: 1779675539881,
+          content: [{ type: 'text', text: 'run whoami' }],
+        },
+      }),
+      event(21, 'tool_execution_start', {
+        type: 'tool_execution_start',
+        toolCallId: 'functions.bash:0',
+        toolName: 'bash',
+        args: { command: 'whoami' },
+      }),
+      event(22, 'tool_execution_end', {
+        type: 'tool_execution_end',
+        toolCallId: 'functions.bash:0',
+        toolName: 'bash',
+        result: { content: [{ type: 'text', text: 'root\n' }] },
+        isError: false,
+      }),
+      event(23, 'message_end', {
+        type: 'message_end',
+        message: {
+          role: 'assistant',
+          timestamp: 1779675543748,
+          content: [{ type: 'text', text: 'You are running as `root`.' }],
+        },
+      }),
+    ]
+
+    const state = piRuntimeReducer(initialPiRuntimeState, {
+      type: 'persisted_events',
+      events: [...firstTurn, ...secondTurn, event(24, 'agent_end', { type: 'agent_end' })],
+    })
+
+    expect(state.tools).toHaveLength(2)
+    expect(state.messages.map((message) => message.content)).toEqual([
+      'run whoami',
+      'You are running as `root`.',
+      'run whoami',
+      'You are running as `root`.',
+    ])
+  })
+
+  it('ignores live events that were already loaded from history', () => {
+    const messagePayload = {
+      type: 'message_end',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'History loaded' }],
+        timestamp: 1779675000000,
+      },
+    }
+    const loaded = piRuntimeReducer(initialPiRuntimeState, {
+      type: 'persisted_events',
+      events: [event(1, 'message_end', messagePayload), event(2, 'agent_end', { type: 'agent_end' })],
+    })
+    const replayed = piRuntimeReducer(loaded, {
+      type: 'event',
+      event: messagePayload,
+      at: new Date(99_000).toISOString(),
+    })
+
+    expect(replayed.messages).toHaveLength(1)
+    expect(replayed.messages[0]?.content).toBe('History loaded')
+  })
 })
