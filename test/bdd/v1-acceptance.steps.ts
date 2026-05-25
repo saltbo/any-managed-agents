@@ -813,7 +813,7 @@ Then('the production e2e harness creates resources through public AMA APIs', () 
 Then('the production e2e harness verifies runtime chat, tool rendering, debug errors, and replay dedupe', () => {
   assertIncludes(
     'test/e2e/production-regression.spec.ts',
-    /ama-real-browser-e2e-ok/,
+    /turn <= 20/,
     /sandbox\.exec/,
     /Debug/,
     /assertNoDuplicateReplayAfterReconnect/,

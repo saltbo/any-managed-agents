@@ -24,6 +24,7 @@ function event(sequence: number, type: string, payload: Record<string, unknown>)
 const piEventPayloads = {
   message: { type: 'message', content: 'Plain runtime text' },
   response: { type: 'response', success: true, command: 'prompt' },
+  queue_update: { type: 'queue_update', pending: [] },
   agent_start: { type: 'agent_start' },
   turn_start: { type: 'turn_start' },
   message_start: { type: 'message_start', message: { role: 'assistant', timestamp: 1, content: '' } },

@@ -1,6 +1,7 @@
 export const PI_EVENT_DEFINITIONS = {
   message: { category: 'message', label: 'Message' },
   response: { category: 'lifecycle', label: 'Response' },
+  queue_update: { category: 'lifecycle', label: 'Queue update' },
   agent_start: { category: 'lifecycle', label: 'Agent start' },
   turn_start: { category: 'lifecycle', label: 'Turn start' },
   message_start: { category: 'message', label: 'Message start' },

@@ -1,5 +1,6 @@
 import { createServer } from 'node:http'
 import { spawn } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 
 const args = new Map()
 for (let index = 2; index < process.argv.length; index += 2) {
@@ -12,6 +13,7 @@ const provider = args.get('--provider') ?? process.env.PI_PROVIDER
 const model = args.get('--model') ?? process.env.PI_MODEL
 const events = []
 const clients = new Set()
+const amaSession = readAmaSession()
 
 const piArgs = ['--mode', 'rpc', '--session-dir', '/workspace/.pi-sessions']
 if (provider) {
@@ -19,6 +21,13 @@ if (provider) {
 }
 if (model) {
   piArgs.push('--model', model)
+}
+piArgs.push('--extension', '/opt/ama/ama-sandbox-tools.mjs')
+const allowedTools = amaAllowedTools(amaSession)
+if (allowedTools.length > 0) {
+  piArgs.push('--tools', allowedTools.join(','))
+} else {
+  piArgs.push('--no-tools')
 }
 
 const pi = spawn('pi', piArgs, {
@@ -83,3 +92,12 @@ createServer((request, response) => {
   response.writeHead(404, { 'content-type': 'application/json' })
   response.end(JSON.stringify({ error: 'not_found' }))
 }).listen(port)
+
+function readAmaSession() {
+  return JSON.parse(readFileSync('/workspace/.ama/session.json', 'utf8'))
+}
+
+function amaAllowedTools(session) {
+  const tools = session?.agentSnapshot?.allowedTools
+  return Array.isArray(tools) ? tools.filter((tool) => typeof tool === 'string' && tool.trim()) : []
+}
