@@ -50,8 +50,8 @@ export function SessionDetailView({
   )
   const modelName = String(session.modelConfig.model ?? 'default')
   return (
-    <div className="flex min-h-[calc(100dvh-8rem)] flex-col bg-background">
-      <header className="border-b pb-4">
+    <div className="flex min-h-[calc(100dvh-5rem)] flex-col bg-background lg:min-h-screen">
+      <header className="border-b px-4 py-4 lg:px-6">
         <div className="flex flex-col gap-5">
           <div className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <nav className="flex min-w-0 items-center gap-3 text-sm text-muted-foreground" aria-label="Breadcrumb">
@@ -88,7 +88,7 @@ export function SessionDetailView({
                 {session.title ?? session.id}
               </h1>
               <div className="shrink-0">
-                <StatusBadge value={session.status} />
+                <StatusBadge value={session.status} detail={session.status === 'error' ? session.statusReason : null} />
               </div>
               <div className="hidden min-w-0 shrink items-center gap-2 text-sm text-muted-foreground md:flex">
                 <SessionMeta

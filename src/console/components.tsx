@@ -1,5 +1,5 @@
-import { Bot } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { Bot, ChevronLeft, ChevronRight } from 'lucide-react'
+import type { ReactNode, RefObject } from 'react'
 import { Link } from 'react-router'
 import {
   AlertDialog,
@@ -16,7 +16,9 @@ import { Badge as UiBadge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table } from '@/components/ui/table'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import type { ClientPagination } from './use-client-pagination'
 
 export function FullscreenMessage({ title, body, action }: { title: string; body: string; action?: ReactNode }) {
   return (
@@ -76,7 +78,7 @@ export function DisabledNav({ icon, label }: { icon: ReactNode; label: string })
   )
 }
 
-export function StatusBadge({ value }: { value: string }) {
+export function StatusBadge({ value, detail }: { value: string; detail?: string | null }) {
   const variant =
     value === 'error' || value === 'missing' || value === 'blocked'
       ? 'destructive'
@@ -87,7 +89,26 @@ export function StatusBadge({ value }: { value: string }) {
           value === 'disconnected'
         ? 'secondary'
         : 'outline'
-  return <UiBadge variant={variant}>{value}</UiBadge>
+  const badge = <UiBadge variant={variant}>{value}</UiBadge>
+  if (!detail) {
+    return badge
+  }
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            aria-label={`${value}: ${detail}`}
+            className="inline-flex cursor-help border-0 bg-transparent p-0"
+          >
+            {badge}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>{detail}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
 }
 
 export function PageHeader({
@@ -120,17 +141,62 @@ export function PageHeader({
 
 export function TableSurface({
   children,
+  footer,
+  viewportRef,
   className,
   tableClassName,
 }: {
   children: ReactNode
+  footer?: ReactNode
+  viewportRef?: RefObject<HTMLDivElement | null>
   className?: string
   tableClassName?: string
 }) {
   return (
-    <div className={cn('overflow-hidden rounded-lg border bg-background', className)}>
-      <div className="overflow-x-auto">
+    <div
+      className={cn(
+        'flex max-h-[calc(100dvh-17rem)] min-h-0 flex-col overflow-hidden rounded-lg border bg-background',
+        className,
+      )}
+    >
+      <div ref={viewportRef} className="min-h-0 flex-1 overflow-auto">
         <Table className={cn('min-w-[760px] table-fixed', tableClassName)}>{children}</Table>
+      </div>
+      {footer ? <div className="shrink-0 border-t bg-background px-3 py-2">{footer}</div> : null}
+    </div>
+  )
+}
+
+export function TablePagination<T>({ pagination }: { pagination: ClientPagination<T> }) {
+  return (
+    <div className="flex min-w-0 items-center justify-between gap-3 text-xs text-muted-foreground">
+      <span className="truncate">
+        {pagination.start}-{pagination.end} of {pagination.total}
+      </span>
+      <div className="flex shrink-0 items-center gap-1">
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          aria-label="Previous page"
+          disabled={!pagination.canPrevious}
+          onClick={pagination.previous}
+        >
+          <ChevronLeft data-icon="inline-start" />
+        </Button>
+        <span className="min-w-16 text-center">
+          {pagination.page} / {pagination.pageCount}
+        </span>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          aria-label="Next page"
+          disabled={!pagination.canNext}
+          onClick={pagination.next}
+        >
+          <ChevronRight data-icon="inline-start" />
+        </Button>
       </div>
     </div>
   )

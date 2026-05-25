@@ -2,16 +2,19 @@ import { Archive, Play } from 'lucide-react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { ConfirmAction, EmptyState, StatusBadge, TableSurface } from '@/console/components'
+import { ConfirmAction, EmptyState, StatusBadge, TablePagination, TableSurface } from '@/console/components'
 import { formatDate } from '@/console/format'
+import type { ClientPagination } from '@/console/use-client-pagination'
 import type { Agent } from '@/lib/api'
 
 export function AgentsView({
   agents,
+  pagination,
   onCreateSession,
   onArchive,
 }: {
   agents: Agent[]
+  pagination: ClientPagination<Agent>
   onCreateSession: (id: string) => void
   onArchive: (id: string) => void
 }) {
@@ -19,7 +22,7 @@ export function AgentsView({
     return <EmptyState title="No agents" body="Create an agent, then create a session from this list." />
   }
   return (
-    <TableSurface>
+    <TableSurface viewportRef={pagination.viewportRef} footer={<TablePagination pagination={pagination} />}>
       <TableHeader>
         <TableRow>
           <TableHead>Agent</TableHead>
@@ -33,11 +36,13 @@ export function AgentsView({
       <TableBody>
         {agents.map((agent) => (
           <TableRow key={agent.id}>
-            <TableCell className="min-w-56">
-              <Link className="font-medium hover:underline" to={`/agents/${agent.id}`}>
-                {agent.name}
-              </Link>
-              <p className="mt-1 max-w-72 truncate text-xs text-muted-foreground">{agent.description ?? agent.id}</p>
+            <TableCell className="min-w-0">
+              <div className="flex min-w-0 items-center gap-2">
+                <Link className="truncate font-medium hover:underline" to={`/agents/${agent.id}`}>
+                  {agent.name}
+                </Link>
+                <span className="truncate text-xs text-muted-foreground">{agent.description ?? agent.id}</span>
+              </div>
             </TableCell>
             <TableCell>
               <div className="flex gap-1">

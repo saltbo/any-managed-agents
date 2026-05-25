@@ -2,11 +2,20 @@ import { Archive } from 'lucide-react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { ConfirmAction, EmptyState, StatusBadge, TableSurface } from '@/console/components'
-import { formatDate } from '@/console/format'
+import { ConfirmAction, EmptyState, StatusBadge, TablePagination, TableSurface } from '@/console/components'
+import { formatDate, stringifyJson } from '@/console/format'
+import type { ClientPagination } from '@/console/use-client-pagination'
 import type { Provider } from '@/lib/api'
 
-export function ProvidersView({ providers, onArchive }: { providers: Provider[]; onArchive: (id: string) => void }) {
+export function ProvidersView({
+  providers,
+  pagination,
+  onArchive,
+}: {
+  providers: Provider[]
+  pagination: ClientPagination<Provider>
+  onArchive: (id: string) => void
+}) {
   if (providers.length === 0) {
     return (
       <EmptyState
@@ -16,7 +25,7 @@ export function ProvidersView({ providers, onArchive }: { providers: Provider[];
     )
   }
   return (
-    <TableSurface>
+    <TableSurface viewportRef={pagination.viewportRef} footer={<TablePagination pagination={pagination} />}>
       <TableHeader>
         <TableRow>
           <TableHead>Provider</TableHead>
@@ -31,15 +40,20 @@ export function ProvidersView({ providers, onArchive }: { providers: Provider[];
       <TableBody>
         {providers.map((provider) => (
           <TableRow key={provider.id}>
-            <TableCell className="min-w-56">
-              <Link className="font-medium hover:underline" to={`/providers/${provider.id}`}>
-                {provider.displayName}
-              </Link>
-              <p className="mt-1 text-xs text-muted-foreground">{provider.type}</p>
+            <TableCell className="min-w-0">
+              <div className="flex min-w-0 items-center gap-2">
+                <Link className="truncate font-medium hover:underline" to={`/providers/${provider.id}`}>
+                  {provider.displayName}
+                </Link>
+                <span className="truncate text-xs text-muted-foreground">{provider.type}</span>
+              </div>
             </TableCell>
             <TableCell>
               <div className="flex gap-1">
-                <StatusBadge value={provider.status} />
+                <StatusBadge
+                  value={provider.status}
+                  detail={provider.lastError ? stringifyJson(provider.lastError) : null}
+                />
                 {provider.isDefault ? <StatusBadge value="default" /> : null}
               </div>
             </TableCell>

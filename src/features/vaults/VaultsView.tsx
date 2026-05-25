@@ -2,18 +2,27 @@ import { Archive } from 'lucide-react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { ConfirmAction, EmptyState, StatusBadge, TableSurface } from '@/console/components'
+import { ConfirmAction, EmptyState, StatusBadge, TablePagination, TableSurface } from '@/console/components'
 import { formatDate } from '@/console/format'
+import type { ClientPagination } from '@/console/use-client-pagination'
 import type { Vault } from '@/lib/api'
 
-export function VaultsView({ vaults, onArchive }: { vaults: Vault[]; onArchive: (id: string) => void }) {
+export function VaultsView({
+  vaults,
+  pagination,
+  onArchive,
+}: {
+  vaults: Vault[]
+  pagination: ClientPagination<Vault>
+  onArchive: (id: string) => void
+}) {
   if (vaults.length === 0) {
     return (
       <EmptyState title="No vaults" body="Create a vault to track safe credential references for providers and MCP." />
     )
   }
   return (
-    <TableSurface>
+    <TableSurface viewportRef={pagination.viewportRef} footer={<TablePagination pagination={pagination} />}>
       <TableHeader>
         <TableRow>
           <TableHead>Vault</TableHead>
@@ -28,11 +37,13 @@ export function VaultsView({ vaults, onArchive }: { vaults: Vault[]; onArchive: 
       <TableBody>
         {vaults.map((vault) => (
           <TableRow key={vault.id}>
-            <TableCell className="min-w-56">
-              <Link className="font-medium hover:underline" to={`/vaults/${vault.id}`}>
-                {vault.name}
-              </Link>
-              <p className="mt-1 max-w-72 truncate text-xs text-muted-foreground">{vault.description ?? vault.id}</p>
+            <TableCell className="min-w-0">
+              <div className="flex min-w-0 items-center gap-2">
+                <Link className="truncate font-medium hover:underline" to={`/vaults/${vault.id}`}>
+                  {vault.name}
+                </Link>
+                <span className="truncate text-xs text-muted-foreground">{vault.description ?? vault.id}</span>
+              </div>
             </TableCell>
             <TableCell>
               <StatusBadge value={vault.status} />

@@ -1,14 +1,21 @@
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { EmptyState, StatusBadge, TableSurface } from '@/console/components'
+import { EmptyState, StatusBadge, TablePagination, TableSurface } from '@/console/components'
 import { formatDate } from '@/console/format'
+import type { ClientPagination } from '@/console/use-client-pagination'
 import type { AuditRecord } from '@/lib/api'
 
-export function AuditView({ records }: { records: AuditRecord[] }) {
+export function AuditView({
+  records,
+  pagination,
+}: {
+  records: AuditRecord[]
+  pagination: ClientPagination<AuditRecord>
+}) {
   if (records.length === 0) {
     return <EmptyState title="No audit records" body="Security-relevant control-plane activity will appear here." />
   }
   return (
-    <TableSurface>
+    <TableSurface viewportRef={pagination.viewportRef} footer={<TablePagination pagination={pagination} />}>
       <TableHeader>
         <TableRow>
           <TableHead>Action</TableHead>

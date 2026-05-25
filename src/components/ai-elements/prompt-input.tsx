@@ -37,15 +37,21 @@ export function PromptInput({
   }
 
   return (
-    <form ref={formRef} className="sticky bottom-0 z-20 bg-background px-1 py-4" onSubmit={submit}>
+    <form
+      ref={formRef}
+      aria-label="Session message composer"
+      data-density="compact"
+      className="sticky bottom-0 z-20 bg-background px-3 py-3"
+      onSubmit={submit}
+    >
       <div
         className={cn(
-          'flex items-end gap-2 rounded-lg border bg-background p-2 shadow-sm focus-within:ring-2 focus-within:ring-ring',
+          'flex items-end gap-2 rounded-lg border bg-background p-1.5 shadow-sm focus-within:ring-2 focus-within:ring-ring',
           disabled && 'opacity-70',
         )}
       >
         <Textarea
-          className="max-h-40 min-h-10 flex-1 resize-none border-0 bg-transparent px-2 py-2 shadow-none focus-visible:ring-0"
+          className="max-h-32 min-h-9 flex-1 resize-none border-0 bg-transparent px-2 py-1.5 shadow-none focus-visible:ring-0"
           placeholder={placeholder}
           value={value}
           disabled={disabled}

@@ -34,7 +34,7 @@ export function usePiRuntimeSession({
       type: 'persisted_events',
       events: session ? events.filter((event) => event.sessionId === session.id) : [],
     })
-  }, [events, session?.id])
+  }, [events, session])
 
   useEffect(() => {
     void connectionAttempt

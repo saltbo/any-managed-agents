@@ -11,3 +11,13 @@ coverage/
 playwright-report/
 test-results/
 .DS_Store
+
+# agent skills (managed by daemon)
+.claude/skills/
+.agents/
+skills-lock.json
+
+# agent definitions (managed by daemon)
+.claude/agents/
+.codex/agents/
+.gemini/agents/

@@ -2,17 +2,20 @@ import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { ConfirmAction, EmptyState, StatusBadge, TableSurface } from '@/console/components'
+import { ConfirmAction, EmptyState, StatusBadge, TablePagination, TableSurface } from '@/console/components'
 import { formatDate, formatDuration } from '@/console/format'
+import type { ClientPagination } from '@/console/use-client-pagination'
 import type { Session } from '@/lib/api'
 
 export function SessionsView({
   sessions,
+  pagination,
   selectedIds,
   setSelectedIds,
   onArchive,
 }: {
   sessions: Session[]
+  pagination: ClientPagination<Session>
   selectedIds: string[]
   setSelectedIds: (ids: string[]) => void
   onArchive: (id: string) => void
@@ -30,7 +33,11 @@ export function SessionsView({
     return <EmptyState title="No sessions" body="Create a session from an active agent and environment." />
   }
   return (
-    <TableSurface tableClassName="min-w-[1120px] table-fixed">
+    <TableSurface
+      tableClassName="min-w-[1120px] table-fixed"
+      viewportRef={pagination.viewportRef}
+      footer={<TablePagination pagination={pagination} />}
+    >
       <colgroup>
         <col className="w-10" />
         <col className="w-[260px]" />
@@ -76,37 +83,27 @@ export function SessionsView({
               />
             </TableCell>
             <TableCell className="min-w-0">
-              <Link className="block truncate font-medium hover:underline" to={`/sessions/${session.id}`}>
-                {session.title ?? session.id}
-              </Link>
-              <span className="mt-1 block truncate text-xs text-muted-foreground">
-                {`${session.id} · ${session.modelProvider} / ${String(session.modelConfig.model ?? 'default')}`}
-              </span>
-            </TableCell>
-            <TableCell className="min-w-0">
-              <StatusBadge value={session.status} />
-              {session.statusReason ? (
-                <span className="mt-1 hidden truncate text-xs text-muted-foreground md:block">
-                  {session.statusReason}
+              <div className="flex min-w-0 items-center gap-2">
+                <Link className="truncate font-medium hover:underline" to={`/sessions/${session.id}`}>
+                  {session.title ?? session.id}
+                </Link>
+                <span className="truncate text-xs text-muted-foreground">
+                  {`${session.id} · ${session.modelProvider} / ${String(session.modelConfig.model ?? 'default')}`}
                 </span>
-              ) : null}
+              </div>
             </TableCell>
             <TableCell className="min-w-0">
-              <span className="block truncate">{session.agentSnapshot.systemPrompt ?? session.agentId}</span>
-              <span className="mt-1 block truncate text-xs text-muted-foreground">{session.agentId}</span>
+              <StatusBadge value={session.status} detail={session.status === 'error' ? session.statusReason : null} />
             </TableCell>
             <TableCell className="min-w-0">
-              <span className="block truncate">{session.modelProvider}</span>
-              <span className="mt-1 block truncate text-xs text-muted-foreground">
-                {String(session.modelConfig.model ?? 'default')}
-              </span>
+              <span className="block truncate">{`${session.agentSnapshot.systemPrompt ?? session.agentId} · ${session.agentId}`}</span>
+            </TableCell>
+            <TableCell className="min-w-0">
+              <span className="block truncate">{`${session.modelProvider} / ${String(session.modelConfig.model ?? 'default')}`}</span>
             </TableCell>
             <TableCell className="min-w-0">
               <span className="block truncate">
-                {String(session.environmentSnapshot?.runtimeImage.image ?? 'None')}
-              </span>
-              <span className="mt-1 block truncate text-xs text-muted-foreground">
-                {session.environmentId ?? 'None'}
+                {`${String(session.environmentSnapshot?.runtimeImage.image ?? 'None')} · ${session.environmentId ?? 'None'}`}
               </span>
             </TableCell>
             <TableCell className="min-w-0">

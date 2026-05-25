@@ -23,7 +23,7 @@ export function Conversation({ className, children }: { className?: string; chil
       <ScrollArea className="h-full">
         <div
           ref={viewportRef}
-          className="h-full overflow-y-auto px-1 py-5"
+          className="h-full overflow-y-auto px-1 py-4"
           onScroll={(event) => {
             const element = event.currentTarget
             setStuck(element.scrollHeight - element.scrollTop - element.clientHeight < 80)
@@ -54,5 +54,5 @@ export function Conversation({ className, children }: { className?: string; chil
 }
 
 export function ConversationContent({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cn('mx-auto flex w-full max-w-5xl flex-col gap-5', className)}>{children}</div>
+  return <div className={cn('mx-auto flex w-full max-w-5xl flex-col', className)}>{children}</div>
 }

@@ -761,6 +761,9 @@ describe('App', () => {
 
     expect(await screen.findByRole('heading', { name: 'session_1' })).toBeTruthy()
     expect(await screen.findByRole('tab', { name: 'Transcript' })).toBeTruthy()
+    expect(document.querySelector('[data-console-content="full-bleed"]')).toBeTruthy()
+    expect(document.querySelector('[data-console-surface="full-bleed"]')).toBeTruthy()
+    expect(screen.getByRole('form', { name: 'Session message composer' }).getAttribute('data-density')).toBe('compact')
     expect(screen.getByText('All events')).toBeTruthy()
     expect(await screen.findByText(/hello/)).toBeTruthy()
     expect(screen.getByRole('tab', { name: 'Debug' })).toBeTruthy()
@@ -838,7 +841,8 @@ describe('App', () => {
 
     await screen.findByText('First run workflow')
     fireEvent.click(primaryNav().getByRole('link', { name: 'Sessions' }))
-    expect(await screen.findByText('Runtime crashed')).toBeTruthy()
+    expect(await screen.findByLabelText('error: Runtime crashed')).toBeTruthy()
+    expect(screen.queryByText('Runtime crashed')).toBeNull()
     expect(screen.getAllByText('stopped').length).toBeGreaterThan(0)
     expect(screen.getAllByText('archived').length).toBeGreaterThan(0)
 
