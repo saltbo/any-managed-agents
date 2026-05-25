@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { EmptyState } from '@/console/components'
+import { EmptyState, StatusBadge } from '@/console/components'
 import { formatTime, stringifyJson } from '@/console/format'
 import type { SessionEvent } from '@/lib/api'
 import type { PiRuntimeState } from './pi-runtime'
@@ -185,7 +185,10 @@ export function SessionRuntimePanel({
               {filteredDebugEvents.map((event) => (
                 <details key={event.id} className="group p-3">
                   <summary className="flex cursor-pointer list-none flex-wrap items-center gap-3">
-                    <Badge variant={event.type === 'error' ? 'destructive' : 'outline'}>{event.type}</Badge>
+                    <StatusBadge
+                      value={event.type}
+                      detail={event.type === 'error' ? stringifyJson(event.payload) : null}
+                    />
                     <span className="font-mono text-xs text-muted-foreground">{event.id}</span>
                     <span className="ml-auto text-xs text-muted-foreground">{formatTime(event.createdAt)}</span>
                   </summary>

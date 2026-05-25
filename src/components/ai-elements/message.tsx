@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Badge } from '@/components/ui/badge'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
 export function Message({
@@ -37,9 +38,22 @@ export function Message({
           </Badge>
         ) : null}
         {status === 'error' ? (
-          <Badge variant="destructive" className="text-[10px]" title={statusDetail ?? undefined}>
-            Error
-          </Badge>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={statusDetail ? `Error: ${statusDetail}` : 'Error'}
+                  className="inline-flex cursor-help border-0 bg-transparent p-0"
+                >
+                  <Badge variant="destructive" className="text-[10px]">
+                    Error
+                  </Badge>
+                </button>
+              </TooltipTrigger>
+              {statusDetail ? <TooltipContent>{statusDetail}</TooltipContent> : null}
+            </Tooltip>
+          </TooltipProvider>
         ) : null}
       </div>
       <div className="min-w-0">{children}</div>

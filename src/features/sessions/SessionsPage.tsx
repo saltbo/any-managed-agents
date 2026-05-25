@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ConfirmAction, PageHeader } from '@/console/components'
 import { matchesSearch } from '@/console/format'
+import { useClientPagination } from '@/console/use-client-pagination'
 import { useConsoleContext } from '@/features/console/console-context'
 import type { SessionStatus } from '@/lib/api'
 import { SessionsView } from './SessionsView'
@@ -46,6 +47,7 @@ export function SessionsPage() {
       return updatedB - updatedA
     })
   }, [context.query, context.sessions, sort, status])
+  const pagination = useClientPagination(sessions)
   const archiveSelected = () => {
     for (const id of selectedIds) actions.archiveSession(id)
     setSelectedIds([])
@@ -101,7 +103,8 @@ export function SessionsPage() {
         </ConfirmAction>
       </div>
       <SessionsView
-        sessions={sessions}
+        sessions={pagination.items}
+        pagination={pagination}
         selectedIds={selectedIds}
         setSelectedIds={setSelectedIds}
         onArchive={actions.archiveSession}

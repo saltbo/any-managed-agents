@@ -1,7 +1,8 @@
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { formatTime } from '@/console/format'
+import { useClientPagination } from '@/console/use-client-pagination'
 import type { Session, SessionEvent } from '@/lib/api'
 import type { PiRuntimeState } from './pi-runtime'
 import { SessionRuntimePanel } from './SessionRuntimePanel'
@@ -128,11 +129,71 @@ function buildRuntimeState(overrides: Partial<PiRuntimeState> = {}): PiRuntimeSt
 }
 
 describe('sessions UI contracts', () => {
-  it('keeps error status detail off the table row while preserving the badge detail and adaptive surface', () => {
+  it('keeps error status detail off the table row while preserving pagination and adaptive surface', () => {
+    const sessions = Array.from({ length: 11 }, (_, index) =>
+      buildSession({
+        id: `session_${index + 1}`,
+        title: `Session ${index + 1}`,
+        status: index === 0 ? 'error' : 'idle',
+        statusReason: index === 0 ? 'Runtime crashed' : null,
+      }),
+    )
+    function Harness() {
+      const pagination = useClientPagination(sessions)
+      return (
+        <MemoryRouter>
+          <SessionsView
+            sessions={pagination.items}
+            pagination={pagination}
+            selectedIds={[]}
+            setSelectedIds={vi.fn()}
+            onArchive={vi.fn()}
+          />
+        </MemoryRouter>
+      )
+    }
+
+    render(<Harness />)
+
+    const table = screen.getByRole('table')
+    expect(within(table).getAllByRole('row')).toHaveLength(11)
+    const badgeTrigger = screen.getByLabelText('error: Runtime crashed')
+    expect(screen.queryByText('Runtime crashed')).toBeNull()
+    expect(badgeTrigger.getAttribute('aria-label')).toBe('error: Runtime crashed')
+    expect(screen.getByText('1-10 of 11')).toBeTruthy()
+    expect(table.closest('[data-slot="table-container"]')?.parentElement?.className).toContain('overflow-auto')
+    expect(table.closest('[data-slot="table-container"]')?.parentElement?.parentElement?.className).toContain(
+      'overflow-hidden',
+    )
+
+    const viewport = table.closest('[data-slot="table-container"]')?.parentElement as HTMLDivElement
+    viewport.scrollTop = 72
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    expect(screen.getByText('11-11 of 11')).toBeTruthy()
+    expect(screen.getByText('Session 11')).toBeTruthy()
+    expect(viewport.scrollTop).toBe(0)
+  })
+
+  it('renders one table row for one error session', () => {
+    const session = buildSession({ status: 'error', statusReason: 'Runtime crashed' })
     render(
       <MemoryRouter>
         <SessionsView
-          sessions={[buildSession({ status: 'error', statusReason: 'Runtime crashed' })]}
+          sessions={[session]}
+          pagination={{
+            items: [session],
+            page: 1,
+            pageCount: 1,
+            pageSize: 10,
+            total: 1,
+            start: 1,
+            end: 1,
+            canPrevious: false,
+            canNext: false,
+            viewportRef: { current: null },
+            previous: vi.fn(),
+            next: vi.fn(),
+          }}
           selectedIds={[]}
           setSelectedIds={vi.fn()}
           onArchive={vi.fn()}
@@ -171,11 +232,7 @@ describe('sessions UI contracts', () => {
     const article = screen.getByText('Runtime failed to start').closest('article')
     expect(article).toBeTruthy()
     expect(within(article as HTMLElement).getByText(formatTime(runtime.messages[0]?.createdAt ?? null))).toBeTruthy()
-    expect(
-      within(article as HTMLElement)
-        .getByText('Error')
-        .getAttribute('title'),
-    ).toBe('Runtime failed to start')
+    expect(within(article as HTMLElement).getByLabelText('Error: Runtime failed to start')).toBeTruthy()
     expect(screen.queryByText(/"message":/)).toBeNull()
   })
 })

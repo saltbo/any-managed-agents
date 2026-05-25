@@ -12,6 +12,7 @@ import {
   Vault,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { useLocation } from 'react-router'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -27,6 +28,8 @@ import { useConsoleContext } from './console-context'
 
 export function ConsoleShell({ children }: { children: ReactNode }) {
   const context = useConsoleContext()
+  const location = useLocation()
+  const fullBleed = /^\/sessions\/[^/]+/.test(location.pathname)
   return (
     <main className="min-h-screen bg-muted/40 text-foreground">
       <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col border-r bg-background px-4 py-5 lg:flex">
@@ -52,8 +55,16 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
           <MobileNav />
         </div>
 
-        <div className="p-4 pb-24 lg:p-8 lg:pb-24">
-          <section className="mx-auto max-w-6xl space-y-4">{children}</section>
+        <div
+          data-console-content={fullBleed ? 'full-bleed' : 'contained'}
+          className={fullBleed ? 'p-0' : 'p-4 pb-24 lg:p-8 lg:pb-24'}
+        >
+          <section
+            data-console-surface={fullBleed ? 'full-bleed' : 'contained'}
+            className={fullBleed ? 'min-w-0' : 'mx-auto max-w-6xl space-y-4'}
+          >
+            {children}
+          </section>
         </div>
         <UserMenu placement="mobile" />
       </section>

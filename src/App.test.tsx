@@ -761,6 +761,9 @@ describe('App', () => {
 
     expect(await screen.findByRole('heading', { name: 'session_1' })).toBeTruthy()
     expect(await screen.findByRole('tab', { name: 'Transcript' })).toBeTruthy()
+    expect(document.querySelector('[data-console-content="full-bleed"]')).toBeTruthy()
+    expect(document.querySelector('[data-console-surface="full-bleed"]')).toBeTruthy()
+    expect(screen.getByRole('form', { name: 'Session message composer' }).getAttribute('data-density')).toBe('compact')
     expect(screen.getByText('All events')).toBeTruthy()
     expect(await screen.findByText(/hello/)).toBeTruthy()
     expect(screen.getByRole('tab', { name: 'Debug' })).toBeTruthy()

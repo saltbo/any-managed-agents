@@ -2,22 +2,25 @@ import { Archive } from 'lucide-react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { ConfirmAction, EmptyState, StatusBadge, TableSurface } from '@/console/components'
+import { ConfirmAction, EmptyState, StatusBadge, TablePagination, TableSurface } from '@/console/components'
 import { formatDate, stringifyJson } from '@/console/format'
+import type { ClientPagination } from '@/console/use-client-pagination'
 import type { Environment } from '@/lib/api'
 
 export function EnvironmentsView({
   environments,
+  pagination,
   onArchive,
 }: {
   environments: Environment[]
+  pagination: ClientPagination<Environment>
   onArchive: (id: string) => void
 }) {
   if (environments.length === 0) {
     return <EmptyState title="No environments" body="Create a runtime environment before creating an agent." />
   }
   return (
-    <TableSurface>
+    <TableSurface viewportRef={pagination.viewportRef} footer={<TablePagination pagination={pagination} />}>
       <TableHeader>
         <TableRow>
           <TableHead>Environment</TableHead>
@@ -32,13 +35,15 @@ export function EnvironmentsView({
       <TableBody>
         {environments.map((environment) => (
           <TableRow key={environment.id}>
-            <TableCell className="min-w-56">
-              <Link className="font-medium hover:underline" to={`/environments/${environment.id}`}>
-                {environment.name}
-              </Link>
-              <p className="mt-1 max-w-72 truncate text-xs text-muted-foreground">
-                {environment.description ?? environment.id}
-              </p>
+            <TableCell className="min-w-0">
+              <div className="flex min-w-0 items-center gap-2">
+                <Link className="truncate font-medium hover:underline" to={`/environments/${environment.id}`}>
+                  {environment.name}
+                </Link>
+                <span className="truncate text-xs text-muted-foreground">
+                  {environment.description ?? environment.id}
+                </span>
+              </div>
             </TableCell>
             <TableCell>
               <div className="flex gap-1">

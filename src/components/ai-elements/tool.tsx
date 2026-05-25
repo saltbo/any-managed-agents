@@ -1,5 +1,6 @@
 import { CheckCircle2, Loader2, TerminalSquare, XCircle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
 export function Tool({
@@ -35,9 +36,7 @@ export function Tool({
           )}
           <TerminalSquare className="size-4 text-muted-foreground" />
           <span className="truncate font-mono text-sm">{name}</span>
-          <Badge variant="secondary" className="ml-auto capitalize">
-            {status}
-          </Badge>
+          <ToolStatusBadge status={status} error={error} />
           {createdAt ? <span className="text-xs text-muted-foreground">{formatToolTime(createdAt)}</span> : null}
           {typeof durationMs === 'number' ? (
             <span className="text-xs text-muted-foreground">{Math.round(durationMs)}ms</span>
@@ -49,6 +48,39 @@ export function Tool({
         </div>
       </div>
     </div>
+  )
+}
+
+function ToolStatusBadge({
+  status,
+  error,
+}: {
+  status: 'running' | 'success' | 'error'
+  error?: string | null | undefined
+}) {
+  const badge = (
+    <Badge variant="secondary" className="ml-auto capitalize">
+      {status}
+    </Badge>
+  )
+  if (status !== 'error' || !error) {
+    return badge
+  }
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            aria-label={`error: ${error}`}
+            className="ml-auto inline-flex cursor-help border-0 bg-transparent p-0"
+          >
+            {badge}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>{error}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   )
 }
 

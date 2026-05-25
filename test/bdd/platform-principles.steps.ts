@@ -798,3 +798,76 @@ Then('the UI\\/UX standards are indexed with the product specs', () => {
   assert.match(index, /ui-ux-standards\.feature/)
   assert.match(index, /shared console UI\/UX standards/)
 })
+
+When('the user opens a resource list page', () => {
+  assert.ok(existsSync('src/features/agents/AgentsPage.tsx'))
+})
+
+Then('the session detail route removes the contained console shell padding', () => {
+  const shell = read('src/features/console/ConsoleShell.tsx')
+  assert.match(shell, /fullBleed = \/\^\\\/sessions\\\/\[\^\/\]\+\//)
+  assert.match(shell, /data-console-content=\{fullBleed \? 'full-bleed' : 'contained'\}/)
+  assert.match(shell, /fullBleed \? 'p-0'/)
+  assert.match(shell, /data-console-surface=\{fullBleed \? 'full-bleed' : 'contained'\}/)
+})
+
+Then('the session composer is compact and bottom aligned', () => {
+  const prompt = read('src/components/ai-elements/prompt-input.tsx')
+  const panel = read('src/features/sessions/SessionRuntimePanel.tsx')
+  assert.match(prompt, /data-density="compact"/)
+  assert.match(prompt, /sticky bottom-0/)
+  assert.match(prompt, /max-h-32 min-h-9/)
+  assert.match(panel, /flex min-h-0 flex-1 flex-col/)
+})
+
+Then('transcript error details use the shared tooltip surface', () => {
+  const message = read('src/components/ai-elements/message.tsx')
+  const tool = read('src/components/ai-elements/tool.tsx')
+  const panel = read('src/features/sessions/SessionRuntimePanel.tsx')
+  assert.match(message, /@\/components\/ui\/tooltip/)
+  assert.match(tool, /@\/components\/ui\/tooltip/)
+  assert.match(panel, /StatusBadge/)
+})
+
+Then('resource tables use a viewport ref with an adaptive pagination footer', () => {
+  const components = read('src/console/components.tsx')
+  const hook = read('src/console/use-client-pagination.ts')
+  const pages = [
+    'src/features/agents/AgentsPage.tsx',
+    'src/features/environments/EnvironmentsPage.tsx',
+    'src/features/sessions/SessionsPage.tsx',
+    'src/features/providers/ProvidersPage.tsx',
+    'src/features/vaults/VaultsPage.tsx',
+    'src/features/audit/AuditPage.tsx',
+    'src/features/mcp/McpPage.tsx',
+  ]
+    .map(read)
+    .join('\n')
+  assert.match(components, /viewportRef/)
+  assert.match(components, /TablePagination/)
+  assert.match(hook, /useClientPagination/)
+  assert.match(hook, /scrollTop = 0/)
+  assert.match(pages, /useClientPagination/)
+})
+
+Then('resource list rows keep primary metadata on one line', () => {
+  const views = [
+    'src/features/agents/AgentsView.tsx',
+    'src/features/environments/EnvironmentsView.tsx',
+    'src/features/sessions/SessionsView.tsx',
+    'src/features/providers/ProvidersView.tsx',
+    'src/features/vaults/VaultsView.tsx',
+    'src/features/mcp/McpView.tsx',
+  ]
+    .map(read)
+    .join('\n')
+  assert.match(views, /items-center gap-2/)
+  assert.doesNotMatch(views, /mt-1/)
+})
+
+Then('provider and MCP error details use the shared tooltip surface', () => {
+  const providers = read('src/features/providers/ProvidersView.tsx')
+  const mcp = read('src/features/mcp/McpView.tsx')
+  assert.match(providers, /detail=\{provider\.lastError \? stringifyJson\(provider\.lastError\) : null\}/)
+  assert.match(mcp, /detail=\{connection\.lastError \? stringifyJson\(connection\.lastError\) : null\}/)
+})
