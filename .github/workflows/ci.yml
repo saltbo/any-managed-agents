@@ -29,8 +29,8 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
-      - run: npm run bdd
       - run: npx playwright install --with-deps chromium
-      - run: npm run bdd:e2e
-      - run: npm run test:cf
+      - run: npm run test:e2e
+      - name: Staging smoke dry-run only
+        run: NODE_OPTIONS='--import tsx' npx cucumber-js --dry-run --tags '@implemented and not @planned' --import 'test/e2e/**/*.steps.ts' 'specs/smoke/**/*.feature'
       - run: npm run build

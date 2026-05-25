@@ -2,6 +2,7 @@
 Feature: Authentication guard
   Protected routes reject unauthenticated access.
 
+  @implemented
   Scenario: Guard protected resources
     Given the Worker app is initialized
     When I request GET "/api/agents"

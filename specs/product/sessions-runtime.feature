@@ -1,10 +1,11 @@
-@runtime @sessions @implemented
+@runtime @sessions
 Feature: Agent sessions
   A session is a tenant-scoped run of a specific agent version.
 
   Background:
     Given a project has an active agent definition
 
+  @planned
   Scenario: Create a session from an agent and environment
     When the user creates a session with an agent and environment
     Then the platform stores a session record in D1
@@ -12,6 +13,7 @@ Feature: Agent sessions
     And the session uses a snapshot of the selected environment
     And the session records its sandbox id, Pi session or runtime id, and status
 
+  @planned
   Scenario: Connect to a session with Pi protocol
     Given a session exists
     When the client connects through an external SDK session helper or direct runtime client
@@ -21,6 +23,7 @@ Feature: Agent sessions
     And clients do not poll the runtime endpoint for NDJSON transcripts
     And the helper does not define an incompatible replacement runtime protocol
 
+  @planned
   Scenario: Stop a running session
     Given a session is running
     When the user stops the session
@@ -28,6 +31,7 @@ Feature: Agent sessions
     And the session status becomes stopped
     And lifecycle events record the stop
 
+  @planned
   Scenario: Resume an idle session
     Given a session is idle
     When the user reconnects to the session

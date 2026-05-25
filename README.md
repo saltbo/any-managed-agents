@@ -56,21 +56,32 @@ Run the checks:
 npm run lint
 npm run typecheck
 npm test
-npm run bdd
-npm run test:cf
+npm run test:e2e
 npm run build
 ```
 
-## Real Production E2E
+Test script responsibilities:
 
-The mocked browser e2e remains available for local UI coverage. A separate real
-smoke path runs against `https://ama.tftt.cc` by default, or another deployed AMA
-origin:
+- `npm test`: unit, component, route, and runtime tests, including Cloudflare Worker runtime tests.
+- `npm run test:e2e`: local end-to-end acceptance, including Playwright browser coverage, implemented BDD specs, and the restish/OpenAPI path.
+- `npm run test:smoke`: deployed staging smoke that may consume real runtime/model quota.
+
+## Browser E2E And Staging Smoke
+
+Browser e2e is a local-only check. It starts the local Vite/Worker dev server
+and must not depend on deployed origins, real model quota, or production data:
 
 ```bash
-AMA_ORIGIN=https://ama.tftt.cc \
+npm run test:e2e
+```
+
+A separate staging smoke path can run against a deployed staging origin when the
+runtime/model integration itself needs evidence:
+
+```bash
+AMA_STAGING_ORIGIN=https://any-managed-agents-staging.saltbo.workers.dev \
 AMA_E2E_STORAGE_STATE=.secrets/ama-storage-state.json \
-npm run e2e:production
+npm run test:smoke
 ```
 
 Auth input precedence is explicit. The harness uses `AMA_E2E_COOKIE` first,
@@ -85,8 +96,8 @@ precedence method.
 - `AMA_E2E_EMAIL` and `AMA_E2E_PASSWORD`: credentials for the supported
   FlareAuth browser login flow.
 
-Optional overrides are `AMA_E2E_PROVIDER` and `AMA_E2E_MODEL`; defaults target
-Workers AI and `@cf/moonshotai/kimi-k2.6`. The harness creates a test-safe
+Optional staging-smoke overrides are `AMA_E2E_PROVIDER` and `AMA_E2E_MODEL`;
+defaults target Workers AI and `@cf/moonshotai/kimi-k2.6`. The harness creates a test-safe
 environment, agent, and session through public `/api` routes, drives chat through
 the session UI/WebSocket, checks tool and error rendering, reloads the session,
 and archives created resources during cleanup. In CI, store the storage state or
@@ -120,7 +131,7 @@ server/           Hono API, D1 schema, and platform services
 src/              React app
 migrations/       D1 migrations
 specs/product/    Product behavior in Gherkin
-test/bdd/         Cucumber step definitions
+test/e2e/         Cucumber step definitions and browser helpers
 docs/             Product and infrastructure docs
 ```
 

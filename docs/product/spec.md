@@ -96,8 +96,8 @@ Release verification must include:
   sessions.
 - UI coverage for signed-out and signed-in console states.
 - BDD release acceptance scenarios in `specs/product/`.
-- `npm run lint`, `npm run typecheck`, `npm test`, `npm run bdd`,
-  `npm run test:cf`, and `npm run build`.
+- `npm run lint`, `npm run typecheck`, `npm test`, `npm run test:e2e`,
+  and `npm run build`.
 
 Secrets must remain in Cloudflare Secrets or external vaults. D1 may store
 metadata, policy, snapshots, and secret references, but not raw secret values.

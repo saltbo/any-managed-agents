@@ -1,12 +1,8 @@
-import { type APIRequestContext, type BrowserContext, expect, type Page, test } from '@playwright/test'
-
-const origin = process.env.AMA_ORIGIN ?? 'https://ama.tftt.cc'
-const storageState = process.env.AMA_E2E_STORAGE_STATE
-const sessionCookie = process.env.AMA_E2E_COOKIE
-const loginEmail = process.env.AMA_E2E_EMAIL
-const loginPassword = process.env.AMA_E2E_PASSWORD
-const effectiveStorageState = sessionCookie ? undefined : storageState
-const runId = `real-e2e-${Date.now()}`
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { Given, Then, When } from '@cucumber/cucumber'
+import { type APIRequestContext, type BrowserContext, chromium, expect, type Page } from '@playwright/test'
+import type { AmaWorld, StagingSmokeConfig, StagingSmokeEvidence } from './world'
 
 interface Environment {
   id: string
@@ -35,34 +31,158 @@ interface ListResponse<T> {
   data: T[]
 }
 
-test.use(effectiveStorageState ? { storageState: effectiveStorageState } : {})
+function assertIncludes(path: string, ...patterns: RegExp[]) {
+  const content = readFileSync(path, 'utf8')
+  for (const pattern of patterns) {
+    assert.match(content, pattern, `${path} should match ${pattern}`)
+  }
+}
 
-test.describe('real authenticated production regression', () => {
-  test.skip(
-    !effectiveStorageState && !sessionCookie && (!loginEmail || !loginPassword),
-    'Set AMA_E2E_STORAGE_STATE, AMA_E2E_COOKIE, or AMA_E2E_EMAIL/AMA_E2E_PASSWORD to run the real regression.',
+function readPackageScripts() {
+  const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as { scripts?: Record<string, string> }
+  return packageJson.scripts ?? {}
+}
+
+function stagingConfig() {
+  const origin = process.env.AMA_STAGING_ORIGIN
+  const sessionCookie = process.env.AMA_E2E_COOKIE
+  const storageState = process.env.AMA_E2E_STORAGE_STATE
+  const loginEmail = process.env.AMA_E2E_EMAIL
+  const loginPassword = process.env.AMA_E2E_PASSWORD
+  const effectiveStorageState = sessionCookie ? undefined : storageState
+
+  if (!origin) {
+    throw new Error('Set AMA_STAGING_ORIGIN to run the staging smoke against an explicit deployment origin.')
+  }
+  return {
+    origin,
+    runId: `staging-smoke-${Date.now()}`,
+    ...(effectiveStorageState ? { effectiveStorageState } : {}),
+    ...(loginEmail ? { loginEmail } : {}),
+    ...(loginPassword ? { loginPassword } : {}),
+    ...(sessionCookie ? { sessionCookie } : {}),
+  }
+}
+
+Given('staging smoke credentials are configured', function (this: AmaWorld) {
+  const config = stagingConfig()
+  if (!config.effectiveStorageState && !config.sessionCookie && (!config.loginEmail || !config.loginPassword)) {
+    throw new Error(
+      'Set AMA_E2E_STORAGE_STATE, AMA_E2E_COOKIE, or AMA_E2E_EMAIL/AMA_E2E_PASSWORD to run the staging smoke.',
+    )
+  }
+  this.stagingSmokeConfig = config
+})
+
+Then('the staging smoke command documents the required secret environment variables', () => {
+  const scripts = readPackageScripts()
+  assert.match(scripts['test:e2e'] ?? '', /specs\/product\/\*\*\/\*\.feature/)
+  assert.match(scripts['test:e2e'] ?? '', /@implemented and not @planned/)
+  assert.match(scripts['test:smoke'] ?? '', /specs\/smoke\/\*\*\/\*\.feature/)
+  assert.match(scripts['test:smoke'] ?? '', /@implemented and not @planned/)
+  assert.equal(scripts['test:smoke:dry-run'], undefined)
+  assertIncludes(
+    '.github/workflows/staging-smoke.yml',
+    /npm run test:smoke/,
+    /AMA_STAGING_ORIGIN/,
+    /AMA_E2E_STORAGE_STATE/,
+    /AMA_E2E_COOKIE/,
+    /AMA_E2E_EMAIL/,
+    /AMA_E2E_PASSWORD/,
   )
+  assertIncludes(
+    'README.md',
+    /npm run test:e2e/,
+    /AMA_STAGING_ORIGIN/,
+    /AMA_E2E_STORAGE_STATE/,
+    /AMA_E2E_COOKIE/,
+    /AMA_E2E_EMAIL/,
+    /AMA_E2E_PASSWORD/,
+    /npm run test:smoke/,
+    /Auth input precedence/,
+  )
+  assertIncludes(
+    'docs/infra/cloudflare-deploy.md',
+    /Local E2E And Staging Smoke/,
+    /npm run test:e2e/,
+    /AMA_STAGING_ORIGIN/,
+    /AMA_E2E_STORAGE_STATE/,
+    /AMA_E2E_COOKIE/,
+    /AMA_E2E_EMAIL/,
+    /AMA_E2E_PASSWORD/,
+    /Auth input precedence/,
+  )
+  assertIncludes('.gitignore', /\.secrets\//)
+})
 
-  test('creates resources, chats through the runtime, renders debug data, and avoids replay duplicates', async ({
-    page,
-  }) => {
+When('the real authenticated staging browser smoke runs', { timeout: 20 * 60_000 }, async function (this: AmaWorld) {
+  assert.ok(this.stagingSmokeConfig, 'Staging smoke credentials must be configured before running smoke')
+  this.stagingSmokeEvidence = await runStagingSmoke(this.stagingSmokeConfig)
+})
+
+Then('the staging smoke authenticates without direct auth database access', function (this: AmaWorld) {
+  assert.ok(this.stagingSmokeEvidence, 'Staging smoke must run before asserting authentication')
+  assert.equal(this.stagingSmokeEvidence.authenticated, true)
+})
+
+Then('the staging smoke creates resources through public AMA APIs', function (this: AmaWorld) {
+  assert.ok(this.stagingSmokeEvidence, 'Staging smoke must run before asserting created resources')
+  assert.match(this.stagingSmokeEvidence.environmentId, /^env_/)
+  assert.match(this.stagingSmokeEvidence.agentId, /^agent_/)
+  assert.match(this.stagingSmokeEvidence.sessionId, /^sesn_/)
+})
+
+Then(
+  'the staging smoke verifies runtime chat, tool rendering, debug errors, and replay dedupe',
+  function (this: AmaWorld) {
+    assert.ok(this.stagingSmokeEvidence, 'Staging smoke must run before asserting runtime behavior')
+    assert.equal(this.stagingSmokeEvidence.completedTurns, 20)
+    assert.equal(this.stagingSmokeEvidence.sawToolEvent, true)
+    assert.equal(this.stagingSmokeEvidence.sawToolUi, true)
+    assert.equal(this.stagingSmokeEvidence.sawErrorEvent, true)
+    assert.equal(this.stagingSmokeEvidence.sawErrorUi, true)
+    assert.equal(this.stagingSmokeEvidence.sawDebugUi, true)
+    assert.equal(this.stagingSmokeEvidence.replayDedupeOk, true)
+    assert.equal(this.stagingSmokeEvidence.persistedDedupeOk, true)
+  },
+)
+
+async function runStagingSmoke(config: StagingSmokeConfig): Promise<StagingSmokeEvidence> {
+  const browser = await chromium.launch({ headless: true })
+  const context = await browser.newContext({
+    baseURL: config.origin,
+    ...(config.effectiveStorageState ? { storageState: config.effectiveStorageState } : {}),
+  })
+  const page = await context.newPage()
+  try {
     const created: { sessionId?: string; agentId?: string; environmentId?: string } = {}
+    let authenticated = false
+    let completedTurns = 0
+    let sawToolEvent = false
+    let sawToolUi = false
+    let sawErrorEvent = false
+    let sawErrorUi = false
+    let sawDebugUi = false
+    let replayDedupeOk = false
+    let persistedDedupeOk = false
 
-    await authenticate(page)
+    await authenticate(page, config)
     await expectAuthenticated(page)
+    authenticated = true
 
+    let primaryError: unknown
     try {
       const environment = await apiJson<Environment>(page.request, '/api/environments', {
         method: 'POST',
         data: {
-          name: `${runId} environment`,
-          description: 'Production regression environment created through public AMA APIs.',
+          name: `${config.runId} environment`,
+          description: 'Staging smoke environment created through public AMA APIs.',
           packages: [{ name: '@earendil-works/pi-coding-agent', version: 'prebuilt' }],
           networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
           packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
           resourceLimits: { memoryMb: 1024, timeoutSeconds: 900 },
           runtimeImage: { image: 'ama-pi-runtime' },
-          metadata: { runId },
+          metadata: { runId: config.runId },
         },
       })
       created.environmentId = environment.id
@@ -70,17 +190,17 @@ test.describe('real authenticated production regression', () => {
       const agent = await apiJson<Agent>(page.request, '/api/agents', {
         method: 'POST',
         data: {
-          name: `${runId} agent`,
-          description: 'Production regression agent created through public AMA APIs.',
+          name: `${config.runId} agent`,
+          description: 'Staging smoke agent created through public AMA APIs.',
           instructions:
-            'You are running an AMA production regression. Reply concisely. Use available tools when asked to run a shell command.',
+            'You are running an AMA staging smoke. Reply concisely. Use available tools when asked to run a shell command.',
           systemPrompt:
-            'You are running an AMA production regression. Reply concisely. Use available tools when asked to run a shell command.',
+            'You are running an AMA staging smoke. Reply concisely. Use available tools when asked to run a shell command.',
           provider: process.env.AMA_E2E_PROVIDER ?? 'workers-ai',
           model: process.env.AMA_E2E_MODEL ?? '@cf/moonshotai/kimi-k2.6',
           allowedTools: ['sandbox.exec'],
           sandboxPolicy: { network: 'enabled' },
-          metadata: { runId },
+          metadata: { runId: config.runId },
         },
       })
       created.agentId = agent.id
@@ -90,8 +210,8 @@ test.describe('real authenticated production regression', () => {
         data: {
           agentId: agent.id,
           environmentId: environment.id,
-          title: `${runId} session`,
-          metadata: { runId },
+          title: `${config.runId} session`,
+          metadata: { runId: config.runId },
         },
       })
       created.sessionId = session.id
@@ -105,9 +225,10 @@ test.describe('real authenticated production regression', () => {
         await sendAndExpect(
           page,
           readySession.id,
-          `This is production regression turn ${turn}. Reply exactly with: ama-real-browser-e2e-turn-${turn}`,
+          `This is staging smoke turn ${turn}. Reply exactly with: ama-real-browser-e2e-turn-${turn}`,
           new RegExp(`ama-real-browser-e2e-turn-${turn}`, 'i'),
         )
+        completedTurns = turn
       }
       const whoamiTurn = await sendAndExpect(
         page,
@@ -119,10 +240,14 @@ test.describe('real authenticated production regression', () => {
       await waitForPersistedEvents(
         page.request,
         readySession.id,
-        (events) => events.filter((event) => event.type.includes('tool') || hasToolPayload(event)).length > 0,
+        (events) => {
+          sawToolEvent = events.filter((event) => event.type.includes('tool') || hasToolPayload(event)).length > 0
+          return sawToolEvent
+        },
         whoamiTurn.beforeSequence,
       )
       await expect(page.getByText('Tool').first()).toBeVisible()
+      sawToolUi = true
 
       const errorTurn = await sendAndExpect(
         page,
@@ -137,45 +262,76 @@ test.describe('real authenticated production regression', () => {
           events.filter((event) => event.type === 'error' || eventContains(event, 'ama-visible-error')).length > 0,
         errorTurn.beforeSequence,
       )
+      sawErrorEvent = errorEvents.length > 0
 
       await expect(page.getByText(/ama-visible-error|exit code:\s*7|exit 7/i).first()).toBeVisible()
+      sawErrorUi = true
       await page.getByRole('tab', { name: 'Debug' }).click()
       await expect(page.getByText(/Tool end|Message end|Agent end/i).first()).toBeVisible()
+      sawDebugUi = true
 
       const replayMarker = /ama-real-browser-e2e-turn-20/i
       const transcriptTokenCount = await page.getByText(replayMarker).count()
+      expect(transcriptTokenCount).toBeGreaterThan(0)
       const persistedEventsBeforeReconnect = await persistedEventSignatures(page.request, readySession.id)
       await apiJson<Session>(page.request, `/api/sessions/${readySession.id}/reconnect`)
       await page.reload()
       await expect(page.getByRole('tab', { name: 'Transcript' })).toBeVisible()
       await expect(page.getByText(replayMarker).first()).toBeVisible()
       await assertNoDuplicateReplayAfterReconnect(page, replayMarker, transcriptTokenCount)
+      replayDedupeOk = true
       await assertNoDuplicatePersistedEvents(page.request, readySession.id, persistedEventsBeforeReconnect)
+      persistedDedupeOk = true
 
-      expect(errorEvents.length).toBeGreaterThan(0)
+      assert.ok(created.environmentId, 'Staging smoke should create an environment')
+      assert.ok(created.agentId, 'Staging smoke should create an agent')
+      assert.ok(created.sessionId, 'Staging smoke should create a session')
+      return {
+        authenticated,
+        environmentId: created.environmentId,
+        agentId: created.agentId,
+        sessionId: created.sessionId,
+        completedTurns,
+        sawToolEvent,
+        sawToolUi,
+        sawErrorEvent,
+        sawErrorUi,
+        sawDebugUi,
+        replayDedupeOk,
+        persistedDedupeOk,
+      }
+    } catch (error) {
+      primaryError = error
+      throw error
     } finally {
-      await cleanup(page.request, created)
+      await cleanup(page.request, created, primaryError)
     }
-  })
-})
+  } finally {
+    await context.close()
+    await browser.close()
+  }
+}
 
-async function authenticate(page: Page) {
-  if (sessionCookie) {
-    await addCookie(page.context(), sessionCookie)
+async function authenticate(page: Page, config: StagingSmokeConfig) {
+  if (config.sessionCookie) {
+    await addCookie(page.context(), config.sessionCookie, config.origin)
     return
   }
-  if (effectiveStorageState) {
+  if (config.effectiveStorageState) {
     return
   }
 
   await page.goto('/quickstart')
   await page.getByRole('link', { name: 'Continue with FlareAuth' }).click()
-  await fillLoginField(page, /email|username/i, loginEmail, 'email or username')
-  await fillLoginField(page, /password/i, loginPassword, 'password')
+  await fillLoginField(page, /email|username/i, config.loginEmail, 'email or username')
+  await fillLoginField(page, /password/i, config.loginPassword, 'password')
   await clickLoginSubmit(page)
-  await page.waitForURL((url) => url.origin === new URL(origin).origin && !url.pathname.startsWith('/api/auth'), {
-    timeout: 60_000,
-  })
+  await page.waitForURL(
+    (url) => url.origin === new URL(config.origin).origin && !url.pathname.startsWith('/api/auth'),
+    {
+      timeout: 60_000,
+    },
+  )
 }
 
 async function expectAuthenticated(page: Page) {
@@ -187,7 +343,7 @@ async function expectAuthenticated(page: Page) {
   await expect(page.getByText('Any Managed Agents').first()).toBeVisible()
 }
 
-async function addCookie(context: BrowserContext, rawCookie: string) {
+async function addCookie(context: BrowserContext, rawCookie: string, origin: string) {
   const url = new URL(origin)
   const [firstCookie] = rawCookie.split(';')
   const separator = firstCookie?.indexOf('=') ?? -1
@@ -329,7 +485,7 @@ function objectValue(value: unknown): Record<string, unknown> {
 async function assertNoDuplicateReplayAfterReconnect(page: Page, pattern: RegExp, beforeReloadCount: number) {
   const count = await page.getByText(pattern).count()
   expect(count).toBeGreaterThan(0)
-  expect(count).toBeLessThanOrEqual(beforeReloadCount)
+  expect(count).toEqual(beforeReloadCount)
 }
 
 async function assertNoDuplicatePersistedEvents(
@@ -349,6 +505,7 @@ async function persistedEventSignatures(request: APIRequestContext, sessionId: s
 async function cleanup(
   request: APIRequestContext,
   created: { sessionId?: string; agentId?: string; environmentId?: string },
+  primaryError?: unknown,
 ) {
   const errors: string[] = []
   if (created.sessionId) {
@@ -361,7 +518,11 @@ async function cleanup(
     await archiveCreatedResource(request, `/api/environments/${created.environmentId}`, errors)
   }
   if (errors.length > 0) {
-    throw new Error(`Production e2e cleanup failed:\n${errors.join('\n')}`)
+    const cleanupError = new Error(`Staging smoke cleanup failed:\n${errors.join('\n')}`)
+    if (primaryError) {
+      throw new AggregateError([primaryError, cleanupError], 'Staging smoke failed and cleanup also failed')
+    }
+    throw cleanupError
   }
 }
 

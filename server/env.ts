@@ -30,5 +30,6 @@ export interface Env {
   AMA_COOKIE_SECURE?: string
   AMA_COOKIE_SAME_SITE?: string
   AMA_ALLOWED_ORIGINS?: string
+  AMA_E2E_TEST_AUTH?: string
   [key: string]: unknown
 }

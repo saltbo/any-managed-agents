@@ -102,3 +102,47 @@ class_name = "Sandbox"
 name = "any-managed-agents-staging-sandbox"
 image = "./Dockerfile"
 max_instances = 20
+
+[env.e2e]
+
+[env.e2e.vars]
+AMA_DEFAULT_MODEL = "@cf/moonshotai/kimi-k2.6"
+AMA_PI_BRIDGE_PORT = "8788"
+AMA_WORKERS_AI_ACCOUNT_ID = "94a89d03c0fc785c8dcbd3c674d6742a"
+FLAREAUTH_ISSUER = "https://flareauth.test/api/auth"
+FLAREAUTH_CLIENT_ID = "ama-e2e"
+FLAREAUTH_REDIRECT_URI = "http://localhost:5173/api/auth/callback"
+AMA_COOKIE_SECURE = "true"
+AMA_COOKIE_SAME_SITE = "Lax"
+AMA_ALLOWED_ORIGINS = "http://localhost:5173"
+AMA_SESSION_SECRET = "local-e2e-session-secret"
+AMA_E2E_TEST_AUTH = "true"
+AMA_RUNTIME_MODE = "test"
+AMA_APPROVED_EXTERNAL_VAULT_PREFIXES = "vault://ama/e2e/"
+
+[env.e2e.ai]
+binding = "AI"
+
+[[env.e2e.services]]
+binding = "FLAREAUTH"
+service = "flareauth-tftt"
+
+[[env.e2e.d1_databases]]
+binding = "DB"
+database_name = "any-managed-agents-db-staging"
+database_id = "8a30ad06-ace4-4cf7-a70d-61adc0e3e042"
+migrations_dir = "./migrations"
+
+[[env.e2e.durable_objects.bindings]]
+name = "MANAGED_AGENT"
+class_name = "ManagedAgent"
+
+[[env.e2e.durable_objects.bindings]]
+name = "SANDBOX"
+class_name = "Sandbox"
+
+[[env.e2e.containers]]
+class_name = "Sandbox"
+name = "any-managed-agents-e2e-sandbox"
+image = "./Dockerfile"
+max_instances = 1

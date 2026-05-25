@@ -1,7 +1,8 @@
-@planned @sessions
+@sessions
 Feature: Session stop
   Users can stop running sessions.
 
+  @planned
   Scenario: Stop session
     Given a session is running
     When the user stops the session

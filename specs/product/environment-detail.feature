@@ -1,12 +1,14 @@
-@planned @ui @environments
+@ui @environments
 Feature: Environment detail
   Users inspect reusable sandbox environment configuration.
 
+  @planned
   Scenario: View environment detail
     Given an environment exists
     When the user opens the environment detail page
     Then packages, variables, network policy, versions, and sessions that selected the environment are visible
 
+  @planned
   Scenario: Inspect environment execution policy
     Given an environment has package requirements, variables, secret references, network policy, resource limits, runtime image, metadata, and versions
     When the user opens the environment detail page
@@ -16,6 +18,7 @@ Feature: Environment detail
     And network policy clearly distinguishes unrestricted and limited access
     And related sessions show historical runs that selected the environment
 
+  @planned
   Scenario: Edit an environment from detail
     Given an environment is active
     When the user edits packages, variables, secret references, network policy, resource limits, runtime image, or metadata
@@ -23,6 +26,7 @@ Feature: Environment detail
     And successful save creates a new environment version
     And existing sessions keep their original environment snapshots
 
+  @planned
   Scenario: Archive an environment from detail
     Given an environment is active
     When the user chooses archive and confirms the destructive action

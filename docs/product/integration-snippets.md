@@ -50,10 +50,10 @@ printf '%s\n' '{"agentId":"agent_abc123","environmentId":"env_abc123"}' \
   | restish ama create-session --rsh-output-format json
 ```
 
-The local smoke check exercises actual restish discovery plus create environment, create agent, and create session serialization:
+The local e2e check exercises actual restish discovery plus create environment, create agent, and create session serialization:
 
 ```bash
-npm run smoke:restish
+npm run test:e2e
 ```
 
 Common control-plane workflows map to these OpenAPI operations:

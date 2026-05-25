@@ -8,7 +8,6 @@ This repository publishes the OpenAPI contract for product resources. Language S
 
 ## Core Platform
 
-- `platform-principles.feature` - Cloudflare-native platform boundaries, OpenAPI ownership, and SDK ownership rules
 - `control-plane.feature` - currently implemented control-plane health behavior
 - `auth-tenancy.feature` - authentication, organization, project, and user context
 - `auth.feature`, `auth-flow.feature`, `auth-guard.feature`, `login.feature`, `login-page.feature`, `sso-discovery.feature`, `user-initial-password.feature`, `web-auth-redirect.feature` - authentication and login coverage
@@ -19,8 +18,7 @@ This repository publishes the OpenAPI contract for product resources. Language S
 - `agent-builder.feature` - guided UI for creating and testing agents
 - `agent-detail.feature`, `agents-api.feature`, `agents-ui.feature`, `agents-update.feature` - agent API and UI coverage
 - `sessions-runtime.feature` - session lifecycle and Pi runtime proxy behavior
-- `events-streaming.feature` - transcript, debug, and event streaming behavior
-- `session-detail.feature`, `session-detail-tool-tracing.feature`, `session-stop.feature`, `sessions-api.feature`, `sessions-events.feature`, `sessions-list-bulk-archive.feature`, `sessions-ui.feature` - session coverage
+- `session-detail-tool-tracing.feature`, `session-stop.feature`, `sessions-api.feature`, `sessions-events.feature`, `sessions-list-bulk-archive.feature`, `sessions-ui.feature` - session coverage
 
 ## Execution
 
@@ -41,13 +39,8 @@ This repository publishes the OpenAPI contract for product resources. Language S
 - `governance-api.feature`, `governance-config.feature` - governance coverage
 - `usage-audit.feature` - usage reporting and audit records
 - `audit-auto.feature`, `audit-log-ui.feature`, `usage-summary.feature` - audit and usage coverage
-- `api-contracts.feature` - OpenAPI, external SDK, and error contracts for control-plane automation
-- `openapi.feature`, `web-api-client-consolidation.feature` - API contract coverage
-- `cli.feature`, `cli-client.feature`, `cli-contract.feature`, `cli-smoke-test.feature` - restish-over-OpenAPI control-plane CLI coverage, not runtime protocol coverage
-- `agent-skill-cli.feature` - agent-facing skill guidance for restish CLI workflows and runtime protocol boundaries
+- `api-contracts.feature`, `cli-openapi-contract.feature`, `web-api-client-consolidation.feature` - API and restish OpenAPI contract coverage
 - `web-ui.feature` - web console navigation and resource workflows
-- `ui-ux-standards.feature` - shared console UI/UX standards for all current and future pages
 - `layout.feature`, `list-date-range-filters.feature`, `list-route-pagination.feature` - UI infrastructure coverage
 - `quickstart.feature` - first-run developer path
-- `destructive-ops.feature`, `encryption.feature`, `integration-snippets.feature`, `scenario-tests.feature`, `server-tests.feature`, `ci-cloudflare-smoke.feature`, `storage-cloudflare-d1.feature` - operations, storage, and compatibility coverage
-- `audit-action-alignment-lint.feature`, `event-badges-alignment-lint.feature`, `event-type-alignment-lint.feature`, `schema-handler-alignment-lint.feature`, `schemas-types-event-alignment-lint.feature`, `update-body-field-alignment.feature` - internal spec/schema consistency coverage
+- `destructive-ops.feature`, `encryption.feature`, `integration-snippets.feature`, `storage-cloudflare-d1.feature` - operations, storage, and compatibility coverage

@@ -104,5 +104,5 @@ Before adding or changing a page:
 4. Keep feature mutations in the owning feature module; do not add page operations to shared console context.
 5. Use React Query for server state.
 6. Compose from shadcn primitives and shared AMA product components.
-7. Verify with `npm run bdd`, `npm run test`, `npm run typecheck`, `npm run lint`, and `npm run build`.
+7. Verify with `npm run test:e2e`, `npm run test`, `npm run typecheck`, `npm run lint`, and `npm run build`.
 8. For visible UI changes, verify desktop and 390px mobile screenshots with Playwright.

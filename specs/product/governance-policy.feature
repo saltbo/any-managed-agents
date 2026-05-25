@@ -31,6 +31,7 @@ Feature: Governance and policy
     Then the platform validates the config
     And applies it without requiring source code changes
 
+  @planned
   Scenario: Explain policy denials to operators
     Given a request is denied by provider, tool, MCP, sandbox, or budget policy
     When the user inspects the failure

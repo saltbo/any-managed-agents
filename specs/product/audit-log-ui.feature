@@ -1,7 +1,8 @@
-@planned @ui @audit
+@ui @audit
 Feature: Audit log UI
   Operators inspect project and organization audit history.
 
+  @planned
   Scenario: Filter audit records
     Given audit records exist
     When the operator opens the audit log
@@ -23,6 +24,7 @@ Feature: Audit log UI
     Then the detail shows safe before/after metadata, request origin, correlation id, and related resource links
     And secret values and credential material are redacted
 
+  @planned
   Scenario: Export audit records from the UI
     Given the operator has filtered audit records
     When the operator exports the current view

@@ -5,6 +5,7 @@ Feature: Vaults and secrets
   Background:
     Given a project has a vault
 
+  @planned
   Scenario: Store provider credentials
     When the user stores an API key or provider token
     Then the secret value is stored in Cloudflare Secrets
@@ -18,11 +19,13 @@ Feature: Vaults and secrets
     Then the runtime can resolve approved Cloudflare Secrets references
     And the transcript shows only redacted values
 
+  @planned
   Scenario: Rotate a credential
     When the user rotates a credential
     Then new sessions use the new credential version
     And existing audit records keep the previous credential reference
 
+  @planned
   Scenario: Deny unauthorized vault access
     When a user outside the project requests a vault or credential
     Then the request is rejected

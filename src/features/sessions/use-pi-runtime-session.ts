@@ -24,7 +24,6 @@ export function usePiRuntimeSession({
   const reconnectTimerRef = useRef<number | null>(null)
   const sessionIdRef = useRef<string | null>(null)
   const endpoint = useMemo(() => (session ? runtimeWebSocketUrl(session.runtimeEndpointPath) : null), [session])
-  const rpcEndpoint = session?.runtimeEndpointPath ?? null
 
   useEffect(() => {
     if (sessionIdRef.current !== (session?.id ?? null)) {
@@ -88,30 +87,17 @@ export function usePiRuntimeSession({
     }
   }, [endpoint, onEventsChanged, connectionAttempt])
 
-  const sendCommand = useCallback(
-    async (type: PiRpcCommandType, message?: string) => {
-      if (!rpcEndpoint) {
-        dispatch({ type: 'connection', state: 'error', error: 'Runtime endpoint is not available' })
-        return false
-      }
-      const nextCommand = command(type, message)
-      dispatch({ type: 'command_sent', command: nextCommand, at: new Date().toISOString() })
-      const response = await fetch(rpcEndpoint, {
-        method: 'POST',
-        headers: { accept: 'application/json', 'content-type': 'application/json' },
-        body: JSON.stringify(nextCommand),
-      })
-      if (!response.ok) {
-        const error = `Runtime command returned ${response.status}`
-        dispatch({ type: 'event', event: { type: 'error', message: error }, at: new Date().toISOString() })
-        onEventsChanged()
-        return false
-      }
-      onEventsChanged()
-      return true
-    },
-    [onEventsChanged, rpcEndpoint],
-  )
+  const sendCommand = useCallback((type: PiRpcCommandType, message?: string) => {
+    const socket = socketRef.current
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      dispatch({ type: 'connection', state: 'error', error: 'Runtime WebSocket is not open' })
+      return false
+    }
+    const nextCommand = command(type, message)
+    dispatch({ type: 'command_sent', command: nextCommand, at: new Date().toISOString() })
+    socket.send(JSON.stringify(nextCommand))
+    return true
+  }, [])
 
   return {
     endpoint,

@@ -1,7 +1,8 @@
-@api @events @implemented
+@api @events
 Feature: Events API
   Clients can list and stream session events.
 
+  @planned
   Scenario: Retrieve session events
     Given a session has events
     When the client requests events from the API

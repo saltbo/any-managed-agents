@@ -1,0 +1,32 @@
+name: Staging Smoke
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 12 * * *'
+
+concurrency:
+  group: staging-smoke
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Real Staging Smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:smoke
+        env:
+          AMA_STAGING_ORIGIN: ${{ secrets.AMA_STAGING_ORIGIN }}
+          AMA_E2E_STORAGE_STATE: ${{ secrets.AMA_E2E_STORAGE_STATE }}
+          AMA_E2E_COOKIE: ${{ secrets.AMA_E2E_COOKIE }}
+          AMA_E2E_EMAIL: ${{ secrets.AMA_E2E_EMAIL }}
+          AMA_E2E_PASSWORD: ${{ secrets.AMA_E2E_PASSWORD }}
+          AMA_E2E_PROVIDER: ${{ secrets.AMA_E2E_PROVIDER }}
+          AMA_E2E_MODEL: ${{ secrets.AMA_E2E_MODEL }}

@@ -14,6 +14,7 @@ import { redactSensitiveValue } from './redaction'
 import agents from './routes/agents'
 import audit from './routes/audit'
 import auth from './routes/auth'
+import e2e from './routes/e2e'
 import environments from './routes/environments'
 import governance from './routes/governance'
 import health from './routes/health'
@@ -742,6 +743,7 @@ export function createApp() {
   )
 
   app.route('/api/health', health)
+  app.route('/api/e2e', e2e)
   app.route('/api/auth', auth)
   app.route('/api/agents', agents)
   app.route('/api/environments', environments)

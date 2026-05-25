@@ -38,7 +38,7 @@ async function openApiOperationIds() {
   )
 }
 
-describe('[CF] restish/OpenAPI smoke path', () => {
+describe('[CF] restish/OpenAPI control-plane path', () => {
   beforeEach(async () => {
     await setupFlareAuth()
   })
@@ -71,7 +71,7 @@ describe('[CF] restish/OpenAPI smoke path', () => {
     const environmentRes = await jsonFetch('/api/environments', cookie, {
       method: 'POST',
       body: JSON.stringify({
-        name: 'Restish smoke environment',
+        name: 'Restish e2e environment',
         packages: [{ name: 'tsx', version: 'latest' }],
         networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
       }),
@@ -82,8 +82,8 @@ describe('[CF] restish/OpenAPI smoke path', () => {
     const agentRes = await jsonFetch('/api/agents', cookie, {
       method: 'POST',
       body: JSON.stringify({
-        name: 'Restish smoke agent',
-        instructions: 'Run smoke checks through documented control-plane operations.',
+        name: 'Restish e2e agent',
+        instructions: 'Run e2e checks through documented control-plane operations.',
       }),
     })
     expect(agentRes.status).toBe(201)

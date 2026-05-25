@@ -1,7 +1,8 @@
-@planned @runtime
+@runtime
 Feature: Engine cooperative cancellation
   Running sessions can be stopped without starting additional work.
 
+  @planned
   Scenario: Cancel a running session
     Given a session is running model, tool, or sandbox work
     When the user stops the session

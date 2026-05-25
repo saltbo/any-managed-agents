@@ -1,7 +1,8 @@
-@api @environments @implemented
+@api @environments
 Feature: Environments API
   The control plane manages reusable sandbox environments.
 
+  @implemented
   Scenario: Publish environment CRUD routes in OpenAPI
     Given the Worker app is initialized
     When I request GET "/api/openapi.json"
@@ -15,11 +16,13 @@ Feature: Environments API
     And the OpenAPI path "/api/environments/{environmentId}" should include method "delete"
     And the OpenAPI document should include path "/api/environments/{environmentId}/versions"
 
+  @implemented
   Scenario: Manage project environments through the API
     Then the environments API supports create, read, update, version history, archive, and list
     And the environments API enforces auth and project tenancy
     And environment secret handling stores references and never returns raw secret values
 
+  @implemented
   Scenario: Create an environment with default execution policy
     Given a signed-in user has access to a project
     When the user creates an environment with only a name
@@ -27,6 +30,7 @@ Feature: Environments API
     And package lists, variables, secret references, network policy, resource limits, runtime image, and metadata have stable default values
     And the environment is stored as a reusable definition, not as a running sandbox instance
 
+  @implemented
   Scenario: Create an environment with package, variable, network, and resource policy
     When the user creates an environment with package requirements, variables, secret references, allowed outbound hosts, MCP access rules, package-manager access rules, resource limits, runtime image, and metadata
     Then the response stores normalized policy fields
@@ -34,6 +38,7 @@ Feature: Environments API
     And secret references are returned only as safe names and references
     And invalid package specs, invalid host patterns, and unsupported runtime images return field-level validation details
 
+  @implemented
   Scenario: Version environment changes without changing existing sessions
     Given an environment is used by existing sessions
     When the user changes packages, variables, secret references, network policy, resource limits, runtime image, or metadata
@@ -41,12 +46,14 @@ Feature: Environments API
     And existing sessions keep their original environment snapshot
     And new sessions that reference the environment use the new environment version
 
+  @implemented
   Scenario: Enforce environment availability for new sessions
     Given an environment is archived
     When the user creates an agent or session that references the archived environment
     Then the request is rejected with a conflict error
     And the archived environment remains readable through explicit read and includeArchived list requests
 
+  @implemented
   Scenario: List environments with pagination and filters
     Given a project has active and archived environments created across multiple dates
     When the user lists environments with a page size

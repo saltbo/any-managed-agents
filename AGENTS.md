@@ -23,10 +23,10 @@
 ## Workflow: Executable Specs First
 
 1. Write or update a Gherkin scenario in `specs/product/`.
-2. Add or update step definitions in `test/bdd/`.
+2. Add or update Cucumber step definitions in `test/e2e/`.
 3. Implement the Worker, Agent, D1, or UI behavior.
 4. Run the smallest meaningful check:
-   - `npm run bdd`
+   - `npm run test:e2e`
    - `npm run typecheck`
    - `npm run test`
 
@@ -47,7 +47,7 @@ If implementation discovers a missing product decision or behavior, stop widenin
 - `src/console/` - Reusable AMA product components, form helpers, formatting, defaults, and view models.
 - `src/components/ui/` - shadcn-generated primitives. Prefer these before writing custom primitives.
 - `specs/product/` - Product behavior in Gherkin. `@planned` scenarios are design intent; unplanned implemented scenarios are executable acceptance.
-- `test/bdd/` - Step definitions and BDD helpers.
+- `test/e2e/` - Cucumber step definitions, browser helpers, and local e2e harnesses.
 - `docs/product/` - Product decisions, UI/UX standards, API/SDK boundaries, and implementation notes.
 - `docs/infra/` - Cloudflare deployment and infrastructure notes.
 
@@ -82,15 +82,14 @@ If implementation discovers a missing product decision or behavior, stop widenin
 
 Choose the smallest meaningful check, then broaden when touching shared contracts:
 
-- Product specs: `npm run bdd`
+- Product/e2e specs: `npm run test:e2e`
 - Type safety: `npm run typecheck`
-- Unit/integration tests: `npm run test`
-- Cloudflare runtime tests: `npm run test:cf`
+- Unit/integration/runtime tests: `npm test`
 - Lint/format checks: `npm run lint`
 - Production build: `npm run build`
-- E2E-tagged specs when changing browser flows: `npm run bdd:e2e`
+- Staging smoke after deployment: `npm run test:smoke`
 
-For v1 acceptance or broad changes, run `npm run lint`, `npm run typecheck`, `npm run test`, `npm run bdd`, `npm run test:cf`, and `npm run build`.
+For v1 acceptance or broad changes, run `npm run lint`, `npm run typecheck`, `npm test`, `npm run test:e2e`, and `npm run build`.
 
 ## Local Safety
 

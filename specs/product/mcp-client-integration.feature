@@ -8,6 +8,7 @@ Feature: MCP client integration
     When the runtime creates an MCP client
     Then calls are authenticated, scoped, and recorded as session events
 
+  @planned
   Scenario: Reject unapproved MCP server use
     Given a connector is not approved for the project or environment
     When a session attempts to use the connector

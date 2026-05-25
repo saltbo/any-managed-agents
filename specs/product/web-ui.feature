@@ -2,36 +2,33 @@
 Feature: Web console
   Users operate agents through a Cloudflare-native web console.
 
-  Background:
-    Given a signed-in user has access to a project
-
-  @implemented @e2e
-  Scenario: Complete the v1 create-session-to-chat workflow
-    When the user opens the console
-    Then the v1 console uses URL routes for primary resources
-    And the v1 console is built from the project component library primitives
-    And the v1 console separates routing, forms, views, and shared UI components
-    And the v1 console keeps browsing resources as the primary screen
-    And creation is a deliberate flow instead of always-on side panels
-    And mobile navigation labels remain readable without truncation
-    And the v1 console supports creating environments, agents, and sessions
-    And the v1 console supports sending runtime messages and inspecting session events
-    And a browser verifies the v1 create-session-to-chat UI workflow with mocked API responses on desktop and mobile
-
-  @implemented
+  @planned
   Scenario: Navigate the app shell
+    Given a signed-in user has access to a project
     When the user opens the console
     Then the sidebar shows agents, sessions, providers, vaults, usage, audit, and settings
     And the current organization and project are visible
 
   @planned
   Scenario: Create an agent from the console
+    Given a signed-in user has access to a project
     When the user completes the agent creation flow
     Then the agent appears in the project agent list
     And the user can create a session by selecting the new agent and an active environment
 
   @implemented
-  Scenario: Inspect a session
+  Scenario: Inspect a session with the local real UI
+    Given the local real UI e2e app is running
+    And the browser user creates an environment, an agent, and a session through public APIs
+    When the browser user opens the session detail page
+    Then the session detail header remains fixed above the transcript
+    And the session chat composer remains fixed near the viewport bottom
+    And the transcript controls render without overlap
+    When the browser user sends a message through the session composer
+    Then the transcript renders the runtime response without mocked APIs
+
+  @planned
+  Scenario: Inspect a session transcript
     Given a session has messages, tool calls, and sandbox events
     When the user opens the session detail page
     Then the transcript view shows Pi runtime messages as chat turns

@@ -1,12 +1,14 @@
-@planned @vaults @ui
+@vaults @ui
 Feature: Vaults UI
   Users manage project vaults from the web console.
 
+  @planned
   Scenario: Browse vaults
     Given a project has vaults
     When the user opens the vaults page
     Then vaults and credential metadata are visible with secret values redacted
 
+  @planned
   Scenario: Render vault list controls
     Given a project has active and archived vaults
     When the user opens the vaults page
@@ -14,6 +16,7 @@ Feature: Vaults UI
     And each row shows display name, scope, credential count, status, created time, and updated time
     And archived vaults are visually distinct when shown
 
+  @planned
   Scenario: Create a vault from the vaults page
     When the user starts the create-vault flow
     Then the form captures display name, description, scope, and metadata

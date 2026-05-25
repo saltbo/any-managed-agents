@@ -69,7 +69,7 @@ restish ama read-usage-summary --rsh-output-format json
 restish ama list-audit-records --rsh-output-format json
 ```
 
-Run `npm run smoke:restish` in this repository when you need local evidence that the current OpenAPI document is ingestible by restish and that restish can serialize the core create environment, create agent, and create session workflow.
+Run `npm run test:e2e` in this repository when you need local evidence that the current OpenAPI document is ingestible by restish and that restish can serialize the core create environment, create agent, and create session workflow.
 
 ## Safety Boundaries
 

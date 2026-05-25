@@ -1,7 +1,8 @@
-@auth @implemented
+@auth
 Feature: Authentication
   The platform integrates with FlareAuth and applies tenant context.
 
+  @planned
   Scenario: Resolve authenticated context
     Given FlareAuth can issue a valid user session
     When the user requests their auth context

@@ -79,18 +79,24 @@ Required settings:
 Do not store raw provider credentials in D1, session events, UI state, or logs.
 The database may store metadata and secret references only.
 
-## Remote regression smoke
+## Local E2E And Staging Smoke
 
-After deploying staging or production, run the real browser regression against
-the deployed origin:
+Run browser e2e against the local dev server in local development and CI. This
+path must not consume real model quota or depend on deployed origins:
 
 ```bash
-AMA_ORIGIN=https://ama.tftt.cc \
-AMA_E2E_STORAGE_STATE=.secrets/ama-storage-state.json \
-npm run e2e:production
+npm run test:e2e
 ```
 
-`AMA_ORIGIN` defaults to `https://ama.tftt.cc`. Auth input precedence is
+After deploying staging, run the real runtime smoke against the staging origin:
+
+```bash
+AMA_STAGING_ORIGIN=https://any-managed-agents-staging.saltbo.workers.dev \
+AMA_E2E_STORAGE_STATE=.secrets/ama-storage-state.json \
+npm run test:smoke
+```
+
+`AMA_STAGING_ORIGIN` defaults to the staging Workers host. Auth input precedence is
 explicit: `AMA_E2E_COOKIE` is used first, `AMA_E2E_STORAGE_STATE` second, and
 `AMA_E2E_EMAIL` plus `AMA_E2E_PASSWORD` third. Set only one auth method in CI
 unless intentionally overriding a lower precedence method.
@@ -101,14 +107,14 @@ unless intentionally overriding a lower precedence method.
 - `AMA_E2E_EMAIL` and `AMA_E2E_PASSWORD`: credentials for the browser login
   flow.
 
-The regression never queries or mutates auth databases. It verifies
+The staging smoke never queries or mutates auth databases. It verifies
 `/api/auth/me`, creates an environment, agent, and session through public `/api`
 routes, opens the session detail page, sends multiple runtime messages through
 the UI/WebSocket, checks transcript, tool, debug error, and reload dedupe
 behavior, then archives the smoke resources. Keep the storage state or cookie in
 the CI secret manager, write it only to an ignored runtime path, and avoid
-printing it in logs. Prefer staging for routine runs because session startup may
-consume runtime and model quota.
+printing it in logs. Do not run this as the default e2e path because session
+startup may consume runtime and model quota.
 
 ## Cloudflare build settings
 

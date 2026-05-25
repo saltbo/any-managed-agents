@@ -128,9 +128,7 @@ Run checks:
 npm run lint
 npm run typecheck
 npm test
-npm run bdd
-npm run bdd:e2e
-npm run test:cf
+npm run test:e2e
 npm run build
 ```
 
@@ -159,10 +157,9 @@ If you discover new behavior while implementing, update the spec before continui
 
 ## Testing Strategy
 
-- `npm test` runs ordinary Vitest tests.
-- `npm run bdd` runs executable product specs with Cucumber.
-- `npm run bdd:e2e` runs executable E2E specs with Cucumber step definitions backed by Playwright.
-- `npm run test:cf` runs Cloudflare runtime tests with D1 and Durable Objects.
+- `npm test` runs unit, component, route, and Cloudflare runtime tests.
+- `npm run test:e2e` runs executable product specs with Cucumber; browser flows use the Playwright library inside step definitions.
+- `npm run test:smoke` runs deployed staging smoke only and may consume runtime/model quota.
 - `npm run build` proves the Worker and client can be bundled.
 
 Cloudflare runtime tests use `wrangler.test.toml`. It intentionally omits the Workers AI binding so CI does not need Cloudflare deployment credentials.
@@ -186,9 +183,8 @@ After that bootstrap, Cloudflare Workers Builds can upload versions normally.
 - `npm run lint` passes
 - `npm run typecheck` passes
 - `npm test` passes
-- `npm run bdd` passes
-- `npm run bdd:e2e` passes when E2E specs are implemented or changed
-- `npm run test:cf` passes when Cloudflare runtime behavior changes
+- `npm run test:e2e` passes
+- `npm run test:smoke` passes before promoting staging changes that touch runtime/model integration
 - `npm run build` passes
 
 ## Coding Guidelines

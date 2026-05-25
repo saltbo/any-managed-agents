@@ -1,7 +1,8 @@
-@planned @sessions @ui
+@sessions @ui
 Feature: Sessions list bulk archive
   Users archive multiple sessions from the sessions list.
 
+  @planned
   Scenario: Bulk archive sessions
     Given multiple sessions are selected
     When the user archives them

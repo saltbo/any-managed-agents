@@ -1,12 +1,14 @@
-@planned @ui @agents
+@ui @agents
 Feature: Agent detail
   Users inspect and operate a versioned agent definition.
 
+  @planned
   Scenario: View agent configuration and versions
     Given an agent exists
     When the user opens the agent detail page
     Then the page shows instructions, model, tools, policy, versions, and archive state
 
+  @planned
   Scenario: Inspect normalized agent configuration
     Given an agent exists with tools, MCP connectors, metadata, sandbox policy, and versions
     When the user opens the agent detail page
@@ -14,6 +16,7 @@ Feature: Agent detail
     And the configuration view shows instructions, provider, model, tools, MCP connectors, metadata, and sandbox policy without exposing secrets
     And the versions view shows each immutable version with change time and runtime-relevant fields
 
+  @planned
   Scenario: Edit an agent from detail
     Given an agent is active
     When the user edits runtime configuration and saves
@@ -21,6 +24,7 @@ Feature: Agent detail
     And successful save creates a new version
     And active sessions keep their original snapshots
 
+  @planned
   Scenario: Archive an agent from detail
     Given an agent is active
     When the user chooses archive and confirms the destructive action

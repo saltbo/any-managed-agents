@@ -1,7 +1,8 @@
-@api @agents @implemented
+@api @agents
 Feature: Agents API
   The control plane exposes APIs for project-scoped agent definitions.
 
+  @implemented
   Scenario: Publish agent CRUD routes in OpenAPI
     Given the Worker app is initialized
     When I request GET "/api/openapi.json"
@@ -16,12 +17,14 @@ Feature: Agents API
     And the OpenAPI document should include path "/api/agents/{agentId}/versions"
     And the OpenAPI document should include path "/api/sessions"
 
-  Scenario: Manage project agents through the API
+  @implemented
+  Scenario: Confirm CF route coverage for project agent management
     Then the agents API supports create, read, update, version history, archive, and list
     And the agents API enforces auth, project tenancy, model policy, and tool policy
     And agent sessions keep immutable agent and environment snapshots
 
-  Scenario: Create an agent with the smallest useful configuration
+  @implemented
+  Scenario: Confirm CF route coverage for minimal agent creation
     Given a signed-in user has access to a project
     When the user creates an agent with a name and instructions
     Then the response includes an agent id, current version id, project id, timestamps, and archive state
@@ -29,14 +32,16 @@ Feature: Agents API
     And optional fields use stable empty values instead of disappearing from the response
     And the first agent version stores the instructions, model config, tool policy, sandbox policy, and metadata
 
-  Scenario: Create an agent with full runtime configuration
+  @implemented
+  Scenario: Confirm CF route coverage for full agent runtime configuration
     Given a project has an active model provider
     When the user creates an agent with instructions, provider, model, allowed tools, MCP connectors, sandbox policy, and metadata
     Then the response echoes the normalized runtime configuration
     And blocked tools, unavailable models, and invalid sandbox policies are rejected with field-level validation details
     And secret material is never accepted directly inside agent metadata, tools, or connector configuration
 
-  Scenario: Update an agent with versioned runtime semantics
+  @implemented
+  Scenario: Confirm CF route coverage for versioned agent updates
     Given an agent exists with version 1
     When the user changes instructions, model config, tools, MCP connectors, sandbox policy, or metadata
     Then the platform creates version 2
@@ -44,7 +49,8 @@ Feature: Agents API
     And sessions created before the update keep the version 1 snapshot
     And sessions created after the update use the version 2 snapshot
 
-  Scenario: Partially update an agent without losing omitted fields
+  @implemented
+  Scenario: Confirm CF route coverage for partial agent updates
     Given an agent has instructions, description, model config, tools, sandbox policy, and metadata
     When the user updates only the description
     Then every omitted runtime field remains unchanged
@@ -53,7 +59,8 @@ Feature: Agents API
     When the user sends an empty tools array
     Then the agent version stores an explicit empty tools policy
 
-  Scenario: List agents with pagination and filters
+  @implemented
+  Scenario: Confirm CF route coverage for agent pagination and filters
     Given a project has active and archived agents created across multiple dates
     When the user lists agents with a page size
     Then the response includes data, hasMore, firstId, and lastId
@@ -61,7 +68,8 @@ Feature: Agents API
     And created date filters only return agents in the requested range
     And results are scoped to the signed-in project
 
-  Scenario: Archive an agent safely
+  @implemented
+  Scenario: Confirm CF route coverage for safe agent archive
     Given an agent exists with existing sessions
     When the user archives the agent
     Then the agent is hidden from default lists and creation flows
