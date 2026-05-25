@@ -242,6 +242,7 @@ async function sendAndExpect(page: Page, sessionId: string, message: string, exp
   await page.getByRole('button', { name: 'Send' }).click()
   await waitForAssistantMessage(page.request, sessionId, afterSequence, expected)
   await expect(page.getByText(expected).first()).toBeVisible({ timeout: 120_000 })
+  await expect(page.getByText(/^running$/)).toHaveCount(0, { timeout: 15_000 })
   return { beforeSequence: afterSequence }
 }
 
