@@ -18,7 +18,7 @@ import health from './routes/health'
 import mcp from './routes/mcp'
 import providers from './routes/providers'
 import runtimeAi from './routes/runtime-ai'
-import sessionRoutes from './routes/sessions'
+import sessionRoutes, { recoverSessionRuntime } from './routes/sessions'
 import usage from './routes/usage'
 import vaults from './routes/vaults'
 import { proxyPiRuntime } from './runtime/pi/bridge'
@@ -30,6 +30,7 @@ function newId(prefix: string) {
 const REDACTED_VALUE = '[REDACTED]'
 const SENSITIVE_KEY =
   /api[_-]?key|authorization|credential|password|secret|(^|[_-])token($|[_-])|access[_-]?token|refresh[_-]?token/i
+const RUNTIME_COMMAND_PROXY_TIMEOUT_MS = 30_000
 
 function redactRuntimeValue(value: unknown): unknown {
   if (Array.isArray(value)) {
@@ -269,6 +270,69 @@ async function recordRuntimeProxyFailure(
     outcome: 'failure',
     metadata: { message: safeMessage, status: response.status },
   })
+}
+
+function isRecoverableRuntimeStatus(status: number) {
+  return status === 502 || status === 503 || status === 504
+}
+
+async function runtimeRequestFactory(request: Request) {
+  const body = request.method === 'GET' || request.method === 'HEAD' ? null : await request.clone().arrayBuffer()
+  return () => {
+    const init: RequestInit = {
+      method: request.method,
+      headers: request.headers,
+      redirect: 'manual',
+    }
+    if (body) {
+      init.body = body.slice(0)
+    }
+    return new Request(request.url, init)
+  }
+}
+
+async function proxyPiRuntimeCommand(
+  env: Env,
+  db: ReturnType<typeof drizzle>,
+  auth: AuthContext,
+  session: typeof sessions.$inferSelect,
+  makeRequest: () => Request,
+) {
+  let recovered = false
+  let response: Response
+  try {
+    response = await proxyPiRuntimeCommandAttempt(env, session.sandboxId ?? '', makeRequest())
+  } catch {
+    await recoverSessionRuntime(env, db, auth, session)
+    recovered = true
+    response = await proxyPiRuntimeCommandAttempt(env, session.sandboxId ?? '', makeRequest()).catch(() =>
+      Response.json({ error: { type: 'runtime_error', message: 'Pi runtime command timed out' } }, { status: 504 }),
+    )
+  }
+  if (!recovered && !response.ok && isRecoverableRuntimeStatus(response.status)) {
+    await recoverSessionRuntime(env, db, auth, session)
+    recovered = true
+    response = await proxyPiRuntimeCommandAttempt(env, session.sandboxId ?? '', makeRequest()).catch(() =>
+      Response.json({ error: { type: 'runtime_error', message: 'Pi runtime command timed out' } }, { status: 504 }),
+    )
+  }
+  return { response, recovered }
+}
+
+async function proxyPiRuntimeCommandAttempt(env: Env, sandboxId: string, request: Request) {
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      proxyPiRuntime(env, sandboxId, request),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error('Pi runtime command timed out')), RUNTIME_COMMAND_PROXY_TIMEOUT_MS)
+      }),
+    ])
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout)
+    }
+  }
 }
 
 async function ingestPiRuntimeLine(
@@ -522,11 +586,20 @@ async function handleRuntimeWebSocketMessage(
   if (command.type !== 'get_state') {
     await recordRuntimeMessageSubmission(db, auth, session, command)
   }
-  const response = await proxyPiRuntime(env, session.sandboxId ?? '', proxyRequest)
+  const makeRequest = await runtimeRequestFactory(proxyRequest)
+  const { response, recovered } = await proxyPiRuntimeCommand(env, db, auth, session, makeRequest)
   await recordRuntimeProxyFailure(db, auth, session, response.clone())
   if (!response.ok) {
     socket.close(1011, `Pi runtime returned ${response.status}`)
     return
+  }
+  if (recovered) {
+    const cursor = await runtimeEventCursor(response.clone())
+    await drainPiRuntimeEvents(env, session.sandboxId ?? '', makeRequest(), db, auth, session, cursor, (line) => {
+      if (line.trim()) {
+        socket.send(line.endsWith('\n') ? line : `${line}\n`)
+      }
+    })
   }
 }
 
@@ -713,7 +786,11 @@ export function createApp() {
       }
     }
 
-    const response = await proxyPiRuntime(c.env, session.sandboxId, request)
+    const makeRequest = await runtimeRequestFactory(request)
+    const { response } =
+      path === '/rpc' && request.method === 'POST'
+        ? await proxyPiRuntimeCommand(c.env, db, resolvedAuth, session, makeRequest)
+        : { response: await proxyPiRuntime(c.env, session.sandboxId, makeRequest()) }
     const cursor = path === '/rpc' && request.method === 'POST' ? await runtimeEventCursor(response.clone()) : null
     if (path === '/rpc' && request.method === 'POST') {
       await recordRuntimeProxyFailure(db, resolvedAuth, session, response.clone())

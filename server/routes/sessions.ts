@@ -691,6 +691,68 @@ async function startSessionRuntime(
   }
 }
 
+export async function recoverSessionRuntime(env: Env, db: Db, auth: AuthContext, session: SessionRow) {
+  if (!session.sandboxId) {
+    throw new Error('Session runtime is unavailable')
+  }
+  const agentSnapshot = parseJson<ReturnType<typeof serializeAgentVersion>>(session.agentSnapshot)
+  if (!agentSnapshot) {
+    throw new Error('Session agent snapshot is required')
+  }
+  const environmentSnapshot = parseJson<ReturnType<typeof serializeEnvironmentVersion>>(session.environmentSnapshot)
+  const mcpSnapshot = await resolveMcpSnapshot(db, auth, session.id, agentSnapshot, environmentSnapshot)
+  await stopPiBridge(env, session.sandboxId, session.piRuntimeId).catch(() => undefined)
+  const runtime = await withTimeout(
+    startPiBridge(env, {
+      sessionId: session.id,
+      sandboxId: session.sandboxId,
+      provider: agentSnapshot.provider,
+      model: agentSnapshot.model,
+      agentSnapshot,
+      environmentSnapshot,
+      mcpSnapshot,
+    }),
+    RUNTIME_START_TIMEOUT_MS,
+    'Pi runtime recovery timed out',
+  )
+  const recoveredAt = now()
+  const metadata = {
+    ...(parseJson<Record<string, unknown>>(session.metadata) ?? {}),
+    ...runtime.metadata,
+    runtime: 'pi',
+    protocol: 'pi-rpc-jsonl',
+    recoveredAt,
+    mcpConnectors: mcpConnectorIds(mcpSnapshot),
+  }
+  await db
+    .update(sessions)
+    .set({
+      sandboxId: runtime.sandboxId,
+      piRuntimeId: runtime.piRuntimeId,
+      piProcessId: runtime.piProcessId,
+      runtimeEndpointPath: runtime.runtimeEndpointPath,
+      status: 'running',
+      statusReason: null,
+      metadata: stringify(metadata),
+      updatedAt: recoveredAt,
+    })
+    .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
+  await recordAudit(db, {
+    auth,
+    action: 'session.runtime.recover',
+    resourceType: 'session',
+    resourceId: session.id,
+    outcome: 'success',
+    sessionId: session.id,
+    metadata: {
+      sandboxId: runtime.sandboxId,
+      piRuntimeId: runtime.piRuntimeId,
+      runtimeEndpointPath: runtime.runtimeEndpointPath,
+    },
+  })
+  return runtime
+}
+
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string) {
   let timeout: ReturnType<typeof setTimeout> | undefined
   try {
