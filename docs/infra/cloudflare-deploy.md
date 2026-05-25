@@ -110,6 +110,11 @@ the CI secret manager, write it only to an ignored runtime path, and avoid
 printing it in logs. Prefer staging for routine runs because session startup may
 consume runtime and model quota.
 
+The harness split decision lives in
+`docs/product/e2e-harness-split.md`. Keep `npm run e2e:production` focused on
+deployed auth, API-created setup, runtime assertions, and cleanup. UI-created
+resource journeys and desktop/mobile layout proof belong in browser BDD coverage.
+
 ## Cloudflare build settings
 
 Use these settings when connecting the GitHub repository in Cloudflare:

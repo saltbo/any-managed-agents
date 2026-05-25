@@ -1,5 +1,8 @@
 import { type APIRequestContext, type BrowserContext, expect, type Page, test } from '@playwright/test'
 
+// Ownership: this production smoke authenticates against a deployed origin,
+// creates runtime resources through public APIs, then asserts session UI/runtime
+// behavior. UI-created-resource journeys live in the BDD browser harness.
 const origin = process.env.AMA_ORIGIN ?? 'https://ama.tftt.cc'
 const storageState = process.env.AMA_E2E_STORAGE_STATE
 const sessionCookie = process.env.AMA_E2E_COOKIE

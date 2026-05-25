@@ -93,6 +93,12 @@ and archives created resources during cleanup. In CI, store the storage state or
 cookie in the secret manager and write it to an ignored path at runtime; do not
 commit auth cookies, storage state, screenshots, videos, or traces.
 
+Harness ownership is split in
+[docs/product/e2e-harness-split.md](docs/product/e2e-harness-split.md):
+`npm run e2e:production` owns deployed auth, API-created setup, runtime
+assertions, and cleanup; browser BDD owns UI-created-resource journeys and
+desktop/mobile layout proof.
+
 ## Deployment
 
 The project is configured for Cloudflare Workers. GitHub Actions only runs CI checks; deployment is handled by Cloudflare Workers Builds.

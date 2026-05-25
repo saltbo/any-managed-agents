@@ -800,6 +800,49 @@ Then('the production e2e command documents the required secret environment varia
   assertIncludes('.gitignore', /\.secrets\//)
 })
 
+Then(
+  'the e2e harness split decision documents setup responsibilities, assertions, required secrets, target origins, and cleanup',
+  () => {
+    assertIncludes(
+      'docs/product/e2e-harness-split.md',
+      /Production Regression Harness/,
+      /UI Journey Harness/,
+      /Setup:/,
+      /Assertions:/,
+      /Required secrets:/,
+      /Target origins:/,
+      /Cleanup:/,
+    )
+  },
+)
+
+Then('the production e2e harness remains API-created-resource based', () => {
+  assertIncludes(
+    'docs/product/e2e-harness-split.md',
+    /`npm run e2e:production` remains the API-created-resource production smoke/,
+    /must not seed auth databases/,
+    /become the owner of UI-driven resource creation coverage/,
+  )
+  assertIncludes(
+    'test/e2e/production-regression.spec.ts',
+    /Ownership: this production smoke authenticates against a deployed origin/,
+    /\/api\/environments/,
+    /\/api\/agents/,
+    /\/api\/sessions/,
+  )
+})
+
+Then('UI-created-resource journeys remain in the browser BDD harness', () => {
+  assertIncludes(
+    'docs/product/e2e-harness-split.md',
+    /UI journey coverage belongs in `specs\/product\/web-ui\.feature` and/,
+    /mocked authenticated/,
+    /Future work that needs actual login UI against FlareAuth should add a dedicated/,
+  )
+  assertIncludes('specs/product/web-ui.feature', /a browser verifies the v1 create-session-to-chat UI workflow/)
+  assertIncludes('test/bdd/browser-e2e.steps.ts', /startVite/, /routeWebSocket/, /width: 390, height: 844/)
+})
+
 Then('the production e2e harness authenticates without direct auth database access', () => {
   const content = read('test/e2e/production-regression.spec.ts')
   assert.match(content, /Continue with FlareAuth|AMA_E2E_STORAGE_STATE|AMA_E2E_COOKIE/)
@@ -813,7 +856,7 @@ Then('the production e2e harness creates resources through public AMA APIs', () 
 Then('the production e2e harness verifies runtime chat, tool rendering, debug errors, and replay dedupe', () => {
   assertIncludes(
     'test/e2e/production-regression.spec.ts',
-    /ama-real-browser-e2e-ok/,
+    /ama-real-browser-e2e-turn-\$\{turn\}/,
     /sandbox\.exec/,
     /Debug/,
     /assertNoDuplicateReplayAfterReconnect/,
