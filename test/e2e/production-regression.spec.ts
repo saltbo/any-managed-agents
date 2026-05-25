@@ -138,8 +138,14 @@ test.describe('real authenticated production regression', () => {
         errorTurn.beforeSequence,
       )
 
+      await expect(page.getByText(/ama-visible-error|exit code:\s*7|exit 7/i).first()).toBeVisible()
       await page.getByRole('tab', { name: 'Debug' }).click()
-      await expect(page.getByText(/ama-visible-error|error/i).first()).toBeVisible()
+      const errorDebugEvent = page
+        .locator('details')
+        .filter({ hasText: /ama-visible-error|exit 7/i })
+        .first()
+      await errorDebugEvent.click()
+      await expect(errorDebugEvent.getByText(/ama-visible-error|exit 7/i).first()).toBeVisible()
       await expect(page.getByText(toolEvents[0]?.id ?? /tool/i).first()).toBeVisible()
 
       const replayMarker = /ama-real-browser-e2e-turn-20/i
