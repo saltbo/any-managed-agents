@@ -491,8 +491,10 @@ When('a tool, provider, or sandbox emits sensitive values', () => {
 
 Then('event storage and event streams redact the secret values', () => {
   const app = read('server/app.ts')
-  assert.match(app, /SENSITIVE_KEY/)
-  assert.match(app, /REDACTED/)
+  const redaction = read('server/redaction.ts')
+  assert.match(app, /redactSensitiveValue/)
+  assert.match(redaction, /SENSITIVE_KEY/)
+  assert.match(redaction, /REDACTED/)
 })
 
 Then('audit records keep only safe references', () => {

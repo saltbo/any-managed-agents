@@ -30,6 +30,8 @@ type PolicyDecision = {
   message: string
 }
 
+export type { PolicyDecision }
+
 function parseJson<T>(value: string | null | undefined, fallback: T) {
   return value ? (JSON.parse(value) as T) : fallback
 }
@@ -48,6 +50,35 @@ function stringRecord(value: unknown) {
 
 function includesWildcard(values: string[], candidate: string) {
   return values.includes('*') || values.includes(candidate)
+}
+
+function commandMatches(pattern: string, command: string) {
+  const normalizedPattern = pattern.trim()
+  const normalizedCommand = command.trim()
+  return (
+    normalizedPattern === normalizedCommand ||
+    normalizedCommand === normalizedPattern ||
+    normalizedCommand.startsWith(`${normalizedPattern} `)
+  )
+}
+
+function commandMatchesAny(patterns: string[], command: string) {
+  return patterns.includes('*') || patterns.some((pattern) => commandMatches(pattern, command))
+}
+
+function mergedSandboxPolicy(
+  effectivePolicy: Record<string, unknown>,
+  session: { agentSnapshot: string | null; environmentSnapshot: string | null } | null,
+) {
+  const agentSnapshot = session?.agentSnapshot ? parseJson<{ sandboxPolicy?: unknown }>(session.agentSnapshot, {}) : {}
+  const environmentSnapshot = session?.environmentSnapshot
+    ? parseJson<{ networkPolicy?: unknown }>(session.environmentSnapshot, {})
+    : {}
+  return {
+    governance: effectivePolicy,
+    agent: stringRecord(agentSnapshot.sandboxPolicy),
+    environmentNetwork: stringRecord(environmentSnapshot.networkPolicy),
+  }
 }
 
 function sessionAllowsTool(session: { agentSnapshot: string | null } | null, connectorId: string, toolName: string) {
@@ -460,4 +491,87 @@ export async function evaluateMcpToolPolicy(
   }
 
   return { allowed: true, category: 'mcp', rule: connection.id, message: 'Allowed by effective MCP policy.' }
+}
+
+export async function evaluateSandboxRuntimePolicy(
+  db: PolicyDb,
+  auth: AuthContext,
+  values: {
+    session?: { id: string; agentSnapshot: string | null; environmentSnapshot: string | null } | null
+    operation: 'startup' | 'command' | 'network'
+    command?: string | null
+    host?: string | null
+  },
+): Promise<PolicyDecision> {
+  const effective = await resolveEffectivePolicy(db, auth)
+  const policies = mergedSandboxPolicy(effective.sandboxPolicy, values.session ?? null)
+
+  if (policies.governance.enabled === false || policies.governance.status === 'disabled') {
+    return {
+      allowed: false,
+      category: 'sandbox',
+      rule: 'sandboxPolicy.enabled',
+      message: 'Sandbox runtime is disabled by governance policy.',
+    }
+  }
+
+  if (values.operation === 'network') {
+    const networkPolicies = [policies.governance.network, policies.agent.network, policies.environmentNetwork.mode]
+    if (
+      networkPolicies.some(
+        (network) => network === 'disabled' || network === 'deny' || network === 'offline' || network === false,
+      )
+    ) {
+      return {
+        allowed: false,
+        category: 'sandbox_network',
+        rule: 'sandboxPolicy.network',
+        message: 'Sandbox network access is disabled by policy.',
+      }
+    }
+
+    const allowedHosts = stringArray(policies.governance.allowedHosts).concat(
+      stringArray(policies.environmentNetwork.allowedHosts),
+    )
+    if (allowedHosts.length > 0 && (!values.host || !includesWildcard(allowedHosts, values.host))) {
+      return {
+        allowed: false,
+        category: 'sandbox_network',
+        rule: 'environment.networkPolicy.allowedHosts',
+        message: 'Sandbox network host is not allowed by policy.',
+      }
+    }
+  }
+
+  if (values.operation === 'command') {
+    const blockedCommands = stringArray(policies.governance.blockedCommands)
+    const allowedCommands = stringArray(policies.governance.allowedCommands)
+    if (!values.command && (blockedCommands.length > 0 || allowedCommands.length > 0)) {
+      return {
+        allowed: false,
+        category: 'sandbox_command',
+        rule: allowedCommands.length > 0 ? 'sandboxPolicy.allowedCommands' : 'sandboxPolicy.blockedCommands',
+        message: 'Sandbox command is not allowed by policy.',
+      }
+    }
+    if (values.command && commandMatchesAny(blockedCommands, values.command)) {
+      return {
+        allowed: false,
+        category: 'sandbox_command',
+        rule: 'sandboxPolicy.blockedCommands',
+        message: 'Sandbox command is blocked by policy.',
+      }
+    }
+
+    if (values.command && allowedCommands.length > 0 && !commandMatchesAny(allowedCommands, values.command)) {
+      return {
+        allowed: false,
+        category: 'sandbox_command',
+        rule: 'sandboxPolicy.allowedCommands',
+        message: 'Sandbox command is not allowed by policy.',
+      }
+    }
+  }
+
+  return { allowed: true, category: 'sandbox', rule: null, message: 'Allowed by sandbox policy.' }
 }

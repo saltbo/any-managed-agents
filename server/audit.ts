@@ -3,10 +3,9 @@ import type { Context } from 'hono'
 import type { AuthContext } from './auth/session'
 import { auditRecords } from './db/schema'
 import type { Env } from './env'
+import { redactSensitiveValue } from './redaction'
 
 type AuditDb = ReturnType<typeof drizzle>
-
-const SECRET_KEYS = ['secret', 'credential', 'token', 'apiKey', 'api_key', 'password', 'authorization']
 
 function newId(prefix: string) {
   return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
@@ -17,19 +16,7 @@ function now() {
 }
 
 export function redactSecrets(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map((item) => redactSecrets(item))
-  }
-  if (!value || typeof value !== 'object') {
-    return value
-  }
-
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>).map(([key, entry]) => {
-      const sensitive = SECRET_KEYS.some((secretKey) => key.toLowerCase().includes(secretKey.toLowerCase()))
-      return [key, sensitive ? '[REDACTED]' : redactSecrets(entry)]
-    }),
-  )
+  return redactSensitiveValue(value)
 }
 
 export function requestId(c: Context<{ Bindings: Env }>) {

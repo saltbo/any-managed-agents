@@ -1,4 +1,5 @@
 import type { Env } from '../../env'
+import { redactSensitiveValue } from '../../redaction'
 
 export interface PiBridgeStartInput {
   sessionId: string
@@ -28,8 +29,6 @@ const DEFAULT_BRIDGE_PORT = 8788
 const PI_PROVIDER_NAMES: Record<string, string> = {
   'workers-ai': 'cloudflare-workers-ai',
 }
-const REDACTED_VALUE = '[REDACTED]'
-const SENSITIVE_TEXT = /(bearer\s+|raw-[\w-]*token|secret|token=|api[_-]?key|password=)/i
 
 async function getSandboxBinding() {
   const { getSandbox } = await import('@cloudflare/sandbox')
@@ -79,7 +78,7 @@ export function piModelsConfig(env: Env, provider: string) {
 
 export function safeRuntimeError(error: unknown): SafeRuntimeError {
   const message = error instanceof Error ? error.message : String(error)
-  const safeMessage = SENSITIVE_TEXT.test(message) ? REDACTED_VALUE : message
+  const safeMessage = redactSensitiveValue(message) as string
   if (error instanceof Error) {
     return {
       type: 'runtime_error',
