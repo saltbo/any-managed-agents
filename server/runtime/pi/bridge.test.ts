@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { safeRuntimeError } from './bridge'
+import type { Env } from '../../env'
+import { piModelsConfig, safeRuntimeError } from './bridge'
 
 describe('safeRuntimeError', () => {
   it('redacts sensitive runtime error messages', () => {
@@ -16,5 +17,37 @@ describe('safeRuntimeError', () => {
       message: 'bridge process exited',
       code: 'TypeError',
     })
+  })
+})
+
+describe('piModelsConfig', () => {
+  it('routes Workers AI through the AMA runtime proxy', () => {
+    expect(
+      piModelsConfig(
+        {
+          FLAREAUTH_REDIRECT_URI: 'https://ama.example.com/api/auth/callback',
+          AMA_RUNTIME_AI_PROXY_TOKEN: 'proxy-token',
+        } as Env,
+        'cloudflare-workers-ai',
+      ),
+    ).toMatchObject({
+      providers: {
+        'cloudflare-workers-ai': {
+          baseUrl: 'https://ama.example.com/api/runtime/workers-ai/v1',
+          api: 'openai-completions',
+          apiKey: 'AMA_RUNTIME_AI_PROXY_TOKEN',
+          authHeader: true,
+        },
+      },
+    })
+  })
+
+  it('requires a runtime proxy token for Workers AI', () => {
+    expect(() =>
+      piModelsConfig(
+        { FLAREAUTH_REDIRECT_URI: 'https://ama.example.com/api/auth/callback' } as Env,
+        'cloudflare-workers-ai',
+      ),
+    ).toThrow('AMA_RUNTIME_AI_PROXY_TOKEN')
   })
 })

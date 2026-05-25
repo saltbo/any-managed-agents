@@ -63,14 +63,17 @@ Required Worker bindings and variables:
 v1.0 passes model work from Pi to Cloudflare Workers AI through Pi's
 `cloudflare-workers-ai` provider. AMA stores provider/model policy on agent
 versions and maps the external AMA provider name `workers-ai` to Pi's provider
-name when launching the runtime.
+name when launching the runtime. The sandbox does not call the Cloudflare REST
+API directly. AMA writes a Pi `models.json` override so Pi sends OpenAI-compatible
+chat completion requests to AMA's runtime Workers AI proxy, and the Worker calls
+Workers AI through the `AI` binding.
 
 Required settings:
 
 - `AMA_DEFAULT_MODEL=@cf/moonshotai/kimi-k2.6`
 - `AMA_WORKERS_AI_ACCOUNT_ID=<cloudflare-account-id>`
-- `AMA_WORKERS_AI_API_KEY`: Wrangler secret used by the sandbox process as
-  `CLOUDFLARE_API_KEY`
+- `AMA_RUNTIME_AI_PROXY_TOKEN`: Wrangler secret used only between the sandbox
+  Pi process and AMA's `/api/runtime/workers-ai/v1/chat/completions` proxy.
 - `AMA_AI_GATEWAY_ID`: optional Cloudflare AI Gateway id
 
 Do not store raw provider credentials in D1, session events, UI state, or logs.

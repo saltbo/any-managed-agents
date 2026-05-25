@@ -250,8 +250,17 @@ function mergePersistedEvents(state: PiRuntimeState, events: SessionEvent[]) {
         createdAt: event.createdAt,
       }),
     )
+  const hasTerminalEvent = runtimeEvents.some(({ payload }) => {
+    const type = stringField(payload, 'type')
+    return type === 'agent_end' || type === 'turn_end' || type === 'bridge_exit'
+  })
+  const hasErrorEvent = runtimeEvents.some(({ payload }) => {
+    const type = stringField(payload, 'type')
+    return type === 'error' || type === 'bridge_stderr'
+  })
   return {
     ...state,
+    runState: hasErrorEvent ? 'error' : hasTerminalEvent ? 'idle' : state.runState,
     messages: [
       ...messages,
       ...state.messages.filter(
@@ -354,12 +363,7 @@ function sameRuntimeMessage(left: PiRuntimeMessage, right: PiRuntimeMessage) {
 }
 
 function dedupeRuntimeMessages(messages: PiRuntimeMessage[]) {
-  return messages.reduce<PiRuntimeMessage[]>((next, message) => {
-    if (!next.some((item) => item.id === message.id || sameRuntimeMessage(item, message))) {
-      next.push(message)
-    }
-    return next
-  }, [])
+  return messages.reduce<PiRuntimeMessage[]>((next, message) => upsertMessage(next, message), [])
 }
 
 function normalizeMessageContent(value: string) {

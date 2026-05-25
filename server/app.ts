@@ -17,6 +17,7 @@ import governance from './routes/governance'
 import health from './routes/health'
 import mcp from './routes/mcp'
 import providers from './routes/providers'
+import runtimeAi from './routes/runtime-ai'
 import sessionRoutes from './routes/sessions'
 import usage from './routes/usage'
 import vaults from './routes/vaults'
@@ -536,6 +537,7 @@ export function createApp() {
   app.route('/api/agents', agents)
   app.route('/api/environments', environments)
   app.route('/api/providers', providers)
+  app.route('/api/runtime', runtimeAi)
   app.route('/api/governance', governance)
   app.route('/api/mcp', mcp)
   app.route('/api/usage', usage)

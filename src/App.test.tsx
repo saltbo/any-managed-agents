@@ -523,8 +523,8 @@ function mockConsoleApi(seed?: {
     if (url === '/api/sessions' && method === 'GET') {
       return jsonResponse({ data: state.sessions })
     }
-    if (url.startsWith('/api/sessions/') && url.endsWith('/events') && method === 'GET') {
-      return url === '/api/sessions/session_1/events'
+    if (url.startsWith('/api/sessions/') && url.includes('/events') && method === 'GET') {
+      return url.startsWith('/api/sessions/session_1/events')
         ? jsonResponse({ data: state.events })
         : jsonResponse({ data: [] })
     }

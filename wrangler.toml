@@ -4,6 +4,9 @@ compatibility_date = "2026-05-07"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 preview_urls = true
+routes = [
+  { pattern = "ama.tftt.cc", custom_domain = true },
+]
 
 [assets]
 binding = "ASSETS"
@@ -17,10 +20,10 @@ AMA_PI_BRIDGE_PORT = "8788"
 AMA_WORKERS_AI_ACCOUNT_ID = "94a89d03c0fc785c8dcbd3c674d6742a"
 FLAREAUTH_ISSUER = "https://flareauth.saltbo.workers.dev/api/auth"
 FLAREAUTH_CLIENT_ID = "client_2dbe26ffc4dd4e4c9c4a90a6770b21fe"
-FLAREAUTH_REDIRECT_URI = "https://any-managed-agents.saltbo.workers.dev/api/auth/callback"
+FLAREAUTH_REDIRECT_URI = "https://ama.tftt.cc/api/auth/callback"
 AMA_COOKIE_SECURE = "true"
 AMA_COOKIE_SAME_SITE = "Lax"
-AMA_ALLOWED_ORIGINS = "https://any-managed-agents.saltbo.workers.dev"
+AMA_ALLOWED_ORIGINS = "https://ama.tftt.cc,https://any-managed-agents.saltbo.workers.dev"
 
 [ai]
 binding = "AI"

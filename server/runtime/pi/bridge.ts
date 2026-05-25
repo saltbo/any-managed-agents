@@ -48,6 +48,35 @@ function piProviderName(provider: string) {
   return PI_PROVIDER_NAMES[provider] ?? provider
 }
 
+function runtimeAiProxyBaseUrl(env: Env) {
+  if (env.AMA_RUNTIME_AI_PROXY_BASE_URL) {
+    return env.AMA_RUNTIME_AI_PROXY_BASE_URL
+  }
+  if (!env.FLAREAUTH_REDIRECT_URI) {
+    throw new Error('FLAREAUTH_REDIRECT_URI is required to configure the runtime Workers AI proxy')
+  }
+  return `${new URL(env.FLAREAUTH_REDIRECT_URI).origin}/api/runtime/workers-ai/v1`
+}
+
+export function piModelsConfig(env: Env, provider: string) {
+  if (provider !== 'cloudflare-workers-ai') {
+    return null
+  }
+  if (!env.AMA_RUNTIME_AI_PROXY_TOKEN) {
+    throw new Error('AMA_RUNTIME_AI_PROXY_TOKEN is required for the runtime Workers AI proxy')
+  }
+  return {
+    providers: {
+      'cloudflare-workers-ai': {
+        baseUrl: runtimeAiProxyBaseUrl(env),
+        api: 'openai-completions',
+        apiKey: 'AMA_RUNTIME_AI_PROXY_TOKEN',
+        authHeader: true,
+      },
+    },
+  }
+}
+
 export function safeRuntimeError(error: unknown): SafeRuntimeError {
   const message = error instanceof Error ? error.message : String(error)
   const safeMessage = SENSITIVE_TEXT.test(message) ? REDACTED_VALUE : message
@@ -99,17 +128,21 @@ export async function startPiBridge(env: Env, input: PiBridgeStartInput): Promis
       }),
       { encoding: 'utf-8' },
     )
+    const modelsConfig = piModelsConfig(env, provider)
+    if (modelsConfig) {
+      await sandbox.exec('mkdir -p /workspace/.pi/agent')
+      await sandbox.writeFile('/workspace/.pi/agent/models.json', JSON.stringify(modelsConfig), { encoding: 'utf-8' })
+    }
 
     const process = await sandbox.startProcess(command, {
       cwd: '/workspace',
       env: {
         AMA_SESSION_ID: input.sessionId,
         AMA_SANDBOX_ID: input.sandboxId,
+        AMA_RUNTIME_AI_PROXY_TOKEN: env.AMA_RUNTIME_AI_PROXY_TOKEN,
+        HOME: '/workspace',
         PI_PROVIDER: provider,
         PI_MODEL: input.model,
-        CLOUDFLARE_ACCOUNT_ID: env.AMA_WORKERS_AI_ACCOUNT_ID,
-        CLOUDFLARE_API_KEY: env.AMA_WORKERS_AI_API_KEY ?? env.AMA_WORKERS_AI_API_TOKEN,
-        CLOUDFLARE_AI_GATEWAY_ID: env.AMA_AI_GATEWAY_ID,
       },
       processId: `pi-${input.sessionId}`,
       autoCleanup: false,
