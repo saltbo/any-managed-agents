@@ -51,6 +51,14 @@ export function SessionRuntimePanel({
   const filteredDebugEvents =
     eventType === 'all' ? debugEvents : debugEvents.filter((event) => event.type === eventType)
   const eventExport = stringifyJson([...persistedEvents].sort((a, b) => a.sequence - b.sequence))
+  const transcriptItems = useMemo(
+    () =>
+      [
+        ...runtime.messages.map((message) => ({ type: 'message' as const, at: message.createdAt, message })),
+        ...runtime.tools.map((tool) => ({ type: 'tool' as const, at: tool.createdAt, tool })),
+      ].sort((left, right) => Date.parse(left.at) - Date.parse(right.at)),
+    [runtime.messages, runtime.tools],
+  )
   const sendMessage = () => {
     const trimmed = message.trim()
     if (!trimmed) {
@@ -128,29 +136,31 @@ export function SessionRuntimePanel({
                 <EmptyState title="No messages yet" body="Send a message to start the session transcript." />
               </div>
             ) : null}
-            {runtime.messages.map((item) => (
-              <Message key={item.id} role={item.role}>
-                <MessageContent>
-                  <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                    <span>{formatTime(item.createdAt)}</span>
-                    {item.status === 'streaming' ? <Badge variant="secondary">Streaming</Badge> : null}
-                    {item.status === 'error' ? <Badge variant="destructive">Error</Badge> : null}
-                  </div>
-                  <MessageResponse>{item.content}</MessageResponse>
-                </MessageContent>
-              </Message>
-            ))}
-            {runtime.tools.map((tool) => (
-              <Tool
-                key={tool.id}
-                name={tool.name}
-                status={tool.status}
-                input={tool.input}
-                output={tool.output}
-                error={tool.error}
-                durationMs={tool.durationMs}
-              />
-            ))}
+            {transcriptItems.map((item) =>
+              item.type === 'message' ? (
+                <Message key={`message:${item.message.id}`} role={item.message.role}>
+                  <MessageContent>
+                    <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <span>{formatTime(item.message.createdAt)}</span>
+                      {item.message.status === 'streaming' ? <Badge variant="secondary">Streaming</Badge> : null}
+                      {item.message.status === 'error' ? <Badge variant="destructive">Error</Badge> : null}
+                    </div>
+                    <MessageResponse>{item.message.content}</MessageResponse>
+                  </MessageContent>
+                </Message>
+              ) : (
+                <Tool
+                  key={`tool:${item.tool.id}`}
+                  name={item.tool.name}
+                  status={item.tool.status}
+                  input={item.tool.input}
+                  output={item.tool.output}
+                  error={item.tool.error}
+                  durationMs={item.tool.durationMs}
+                  createdAt={item.tool.createdAt}
+                />
+              ),
+            )}
           </ConversationContent>
         </Conversation>
         <div className="border-t bg-background">

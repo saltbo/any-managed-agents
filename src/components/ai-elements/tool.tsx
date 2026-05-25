@@ -9,6 +9,7 @@ export function Tool({
   output,
   error,
   durationMs,
+  createdAt,
 }: {
   name: string
   status: 'running' | 'success' | 'error'
@@ -16,6 +17,7 @@ export function Tool({
   output?: unknown
   error?: string | null
   durationMs?: number | null
+  createdAt?: string
 }) {
   return (
     <div className="grid grid-cols-[4.75rem_minmax(0,1fr)] gap-4 border-b py-4 last:border-b-0">
@@ -36,6 +38,7 @@ export function Tool({
           <Badge variant="secondary" className="ml-auto capitalize">
             {status}
           </Badge>
+          {createdAt ? <span className="text-xs text-muted-foreground">{formatToolTime(createdAt)}</span> : null}
           {typeof durationMs === 'number' ? (
             <span className="text-xs text-muted-foreground">{Math.round(durationMs)}ms</span>
           ) : null}
@@ -73,4 +76,12 @@ function formatValue(value: unknown) {
     return value
   }
   return JSON.stringify(value, null, 2)
+}
+
+function formatToolTime(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }

@@ -21,13 +21,16 @@ export interface PiRuntimeMessage {
 
 export interface PiRuntimeToolTrace {
   id: string
+  callId: string
   name: string
   status: 'running' | 'success' | 'error'
   input: unknown
   output: unknown
   error: string | null
   durationMs: number | null
+  createdAt: string
   updatedAt: string
+  eventType: string
 }
 
 export interface PiRuntimeDebugEvent {
@@ -240,6 +243,7 @@ function mergePersistedEvents(state: PiRuntimeState, events: SessionEvent[]) {
     )
     .map((event) => toolFromPiEvent(objectValue(event.payload), event.createdAt, event.type))
     .filter((tool): tool is PiRuntimeToolTrace => Boolean(tool))
+    .reduce<PiRuntimeToolTrace[]>((next, tool) => upsertTool(next, tool), [])
   const debugEvents = events
     .filter((event) => event.visibility === 'runtime')
     .map(
@@ -280,6 +284,9 @@ function messageFromPiEvent(event: Record<string, unknown>, at: string, status: 
   const assistantMessageEvent = objectValue(event.assistantMessageEvent)
   const partial = objectValue(assistantMessageEvent.partial)
   const rawRole = stringField(message, 'role') ?? stringField(event, 'role') ?? 'assistant'
+  if (rawRole === 'toolResult') {
+    return null
+  }
   const role: PiRuntimeMessage['role'] =
     rawRole === 'user' || rawRole === 'assistant' || rawRole === 'system' ? rawRole : 'assistant'
   const errorMessage = stringField(message, 'errorMessage') ?? stringField(event, 'errorMessage')
@@ -332,20 +339,25 @@ function messageFromRuntimeError(event: Record<string, unknown>, at: string, fal
 
 function toolFromPiEvent(event: Record<string, unknown>, at: string, eventType: string): PiRuntimeToolTrace | null {
   const toolCall = objectValue(event.toolCall ?? event.call ?? event.toolExecution ?? event)
-  const id = stringField(toolCall, 'id') ?? stringField(toolCall, 'toolCallId') ?? stringField(event, 'id')
-  if (!id) {
+  const callId = stringField(toolCall, 'id') ?? stringField(toolCall, 'toolCallId') ?? stringField(event, 'id')
+  if (!callId) {
     return null
   }
-  const failed = Boolean(toolCall.error ?? event.error)
+  const failed = Boolean(toolCall.error ?? event.error ?? event.isError)
+  const input = toolCall.input ?? toolCall.args ?? event.input
+  const output = toolCall.output ?? toolCall.result ?? toolCall.partialResult ?? event.output
   return {
-    id,
+    id: callId,
+    callId,
     name: stringField(toolCall, 'name') ?? stringField(toolCall, 'toolName') ?? 'tool',
     status: eventType === 'tool_execution_end' ? (failed ? 'error' : 'success') : 'running',
-    input: toolCall.input ?? toolCall.args ?? event.input,
-    output: toolCall.output ?? toolCall.result ?? event.output,
+    input,
+    output: readableToolValue(output),
     error: failed ? readableContent(toolCall.error ?? event.error) : null,
     durationMs: numberField(toolCall, 'durationMs') ?? numberField(event, 'durationMs'),
+    createdAt: at,
     updatedAt: at,
+    eventType,
   } satisfies PiRuntimeToolTrace
 }
 
@@ -370,7 +382,7 @@ function upsertMessage(messages: PiRuntimeMessage[], message: PiRuntimeMessage) 
 function sameRuntimeMessage(left: PiRuntimeMessage, right: PiRuntimeMessage) {
   return (
     left.role === right.role &&
-    left.status === right.status &&
+    Math.abs(Date.parse(left.createdAt) - Date.parse(right.createdAt)) < 5000 &&
     normalizeMessageContent(left.content) === normalizeMessageContent(right.content)
   )
 }
@@ -384,13 +396,41 @@ function normalizeMessageContent(value: string) {
 }
 
 function upsertTool(tools: PiRuntimeToolTrace[], tool: PiRuntimeToolTrace) {
-  const index = tools.findIndex((item) => item.id === tool.id)
+  const runningIndex = findLastToolIndex(tools, (item) => item.callId === tool.callId && item.status === 'running')
+  const index =
+    tool.eventType === 'tool_execution_start'
+      ? runningIndex
+      : runningIndex !== -1
+        ? runningIndex
+        : findLastToolIndex(tools, (item) => item.callId === tool.callId)
   if (index === -1) {
-    return [...tools, tool]
+    return [...tools, { ...tool, id: `${tool.callId}:${tool.createdAt}` }]
   }
   const next = [...tools]
-  next[index] = { ...next[index], ...tool }
+  const existing = next[index]
+  if (!existing) {
+    return [...tools, tool]
+  }
+  next[index] = {
+    ...existing,
+    ...tool,
+    input: tool.input ?? existing.input,
+    output: hasToolValue(tool.output) ? tool.output : existing.output,
+    error: tool.error ?? existing.error,
+    durationMs: tool.durationMs ?? existing.durationMs,
+    createdAt: existing.createdAt,
+  }
   return next
+}
+
+function findLastToolIndex(tools: PiRuntimeToolTrace[], predicate: (tool: PiRuntimeToolTrace) => boolean) {
+  for (let index = tools.length - 1; index >= 0; index -= 1) {
+    const tool = tools[index]
+    if (tool && predicate(tool)) {
+      return index
+    }
+  }
+  return -1
 }
 
 function appendDebugEvent(events: PiRuntimeDebugEvent[], event: PiRuntimeDebugEvent) {
@@ -440,6 +480,39 @@ function readableContent(value: unknown): string {
     return String(value)
   }
   return JSON.stringify(value) ?? ''
+}
+
+function readableToolValue(value: unknown) {
+  if (!value || typeof value !== 'object') {
+    return value
+  }
+  const record = value as Record<string, unknown>
+  if (Array.isArray(record.content)) {
+    const text = record.content
+      .map((item) => {
+        if (!item || typeof item !== 'object') {
+          return ''
+        }
+        const contentItem = item as Record<string, unknown>
+        return contentItem.type === 'text' && typeof contentItem.text === 'string' ? contentItem.text : ''
+      })
+      .join('')
+    return text || value
+  }
+  return value
+}
+
+function hasToolValue(value: unknown) {
+  if (value === undefined || value === null || value === '') {
+    return false
+  }
+  if (Array.isArray(value)) {
+    return value.length > 0
+  }
+  if (typeof value === 'object') {
+    return Object.keys(value).length > 0
+  }
+  return true
 }
 
 function objectValue(value: unknown): Record<string, unknown> {
