@@ -243,8 +243,9 @@ async function sendAndExpect(page: Page, sessionId: string, message: string, exp
 }
 
 async function latestEventSequence(request: APIRequestContext, sessionId: string) {
-  const events = (await apiJson<ListResponse<SessionEvent>>(request, `/api/sessions/${sessionId}/events?limit=1000`))
-    .data
+  const events = (
+    await apiJson<ListResponse<SessionEvent>>(request, `/api/sessions/${sessionId}/events?order=desc&limit=1`)
+  ).data
   return Math.max(0, ...events.map((event) => event.sequence))
 }
 
@@ -272,7 +273,7 @@ async function waitForPersistedEvents(
 ) {
   let events: SessionEvent[] = []
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    events = (await apiJson<ListResponse<SessionEvent>>(request, `/api/sessions/${sessionId}/events?limit=1000`)).data
+    events = (await apiJson<ListResponse<SessionEvent>>(request, `/api/sessions/${sessionId}/events?limit=200`)).data
     if (predicate(events)) {
       return events
     }
