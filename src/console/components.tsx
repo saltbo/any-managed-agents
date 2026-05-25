@@ -16,6 +16,7 @@ import { Badge as UiBadge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table } from '@/components/ui/table'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
 export function FullscreenMessage({ title, body, action }: { title: string; body: string; action?: ReactNode }) {
@@ -76,7 +77,7 @@ export function DisabledNav({ icon, label }: { icon: ReactNode; label: string })
   )
 }
 
-export function StatusBadge({ value }: { value: string }) {
+export function StatusBadge({ value, detail }: { value: string; detail?: string | null }) {
   const variant =
     value === 'error' || value === 'missing' || value === 'blocked'
       ? 'destructive'
@@ -87,7 +88,26 @@ export function StatusBadge({ value }: { value: string }) {
           value === 'disconnected'
         ? 'secondary'
         : 'outline'
-  return <UiBadge variant={variant}>{value}</UiBadge>
+  const badge = <UiBadge variant={variant}>{value}</UiBadge>
+  if (!detail) {
+    return badge
+  }
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            aria-label={`${value}: ${detail}`}
+            className="inline-flex cursor-help border-0 bg-transparent p-0"
+          >
+            {badge}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>{detail}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
 }
 
 export function PageHeader({
@@ -128,8 +148,8 @@ export function TableSurface({
   tableClassName?: string
 }) {
   return (
-    <div className={cn('overflow-hidden rounded-lg border bg-background', className)}>
-      <div className="overflow-x-auto">
+    <div className={cn('max-h-[calc(100dvh-17rem)] overflow-hidden rounded-lg border bg-background', className)}>
+      <div className="max-h-[calc(100dvh-17rem)] overflow-auto">
         <Table className={cn('min-w-[760px] table-fixed', tableClassName)}>{children}</Table>
       </div>
     </div>

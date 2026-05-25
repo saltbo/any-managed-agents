@@ -88,7 +88,7 @@ export function SessionDetailView({
                 {session.title ?? session.id}
               </h1>
               <div className="shrink-0">
-                <StatusBadge value={session.status} />
+                <StatusBadge value={session.status} detail={session.status === 'error' ? session.statusReason : null} />
               </div>
               <div className="hidden min-w-0 shrink items-center gap-2 text-sm text-muted-foreground md:flex">
                 <SessionMeta

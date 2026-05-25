@@ -84,12 +84,7 @@ export function SessionsView({
               </span>
             </TableCell>
             <TableCell className="min-w-0">
-              <StatusBadge value={session.status} />
-              {session.statusReason ? (
-                <span className="mt-1 hidden truncate text-xs text-muted-foreground md:block">
-                  {session.statusReason}
-                </span>
-              ) : null}
+              <StatusBadge value={session.status} detail={session.status === 'error' ? session.statusReason : null} />
             </TableCell>
             <TableCell className="min-w-0">
               <span className="block truncate">{session.agentSnapshot.systemPrompt ?? session.agentId}</span>

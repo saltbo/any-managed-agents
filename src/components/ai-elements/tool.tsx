@@ -20,7 +20,7 @@ export function Tool({
   createdAt?: string
 }) {
   return (
-    <div className="grid grid-cols-[4.75rem_minmax(0,1fr)] gap-4 border-b py-4 last:border-b-0">
+    <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] gap-3 border-b py-3 last:border-b-0">
       <div className="flex justify-end">
         <Badge variant={status === 'error' ? 'destructive' : 'outline'}>Tool</Badge>
       </div>
@@ -43,7 +43,7 @@ export function Tool({
             <span className="text-xs text-muted-foreground">{Math.round(durationMs)}ms</span>
           ) : null}
         </div>
-        <div className="grid gap-3 p-3 text-sm">
+        <div className="grid gap-2 p-3 text-sm">
           <ToolValue label="Input" value={input} />
           <ToolValue label={error ? 'Error' : 'Output'} value={error ?? output} tone={error ? 'error' : 'default'} />
         </div>

@@ -253,15 +253,14 @@ function mergePersistedEvents(state: PiRuntimeState, events: SessionEvent[]) {
     .map(({ stored, payload }) => toolFromPiEvent(payload, stored.createdAt, runtimeEventType(stored, payload)))
     .filter((tool): tool is PiRuntimeToolTrace => Boolean(tool))
     .reduce<PiRuntimeToolTrace[]>((next, tool) => upsertTool(next, tool), [])
-  const debugEvents = runtimeEvents
-    .map(
-      ({ stored, payload }): PiRuntimeDebugEvent => ({
-        id: stored.id,
-        type: runtimeEventType(stored, payload),
-        payload,
-        createdAt: stored.createdAt,
-      }),
-    )
+  const debugEvents = runtimeEvents.map(
+    ({ stored, payload }): PiRuntimeDebugEvent => ({
+      id: stored.id,
+      type: runtimeEventType(stored, payload),
+      payload,
+      createdAt: stored.createdAt,
+    }),
+  )
   const eventKeys = runtimeEvents
     .filter(({ stored, payload }) => !isToolEvent(runtimeEventType(stored, payload)))
     .map(({ stored, payload }) => runtimeEventKey(payload, runtimeEventType(stored, payload)))
@@ -300,10 +299,11 @@ type StoredRuntimeEvent = {
 function uniquePersistedRuntimeEvents(events: SessionEvent[]): StoredRuntimeEvent[] {
   const seen = new Set<string>()
   let turnKey: string | null = null
-  return events
+  const uniqueEvents: StoredRuntimeEvent[] = []
+  events
     .filter((event) => event.visibility === 'runtime')
     .sort((left, right) => left.sequence - right.sequence)
-    .reduce<StoredRuntimeEvent[]>((next, stored) => {
+    .forEach((stored) => {
       const payload = objectValue(stored.payload)
       const type = runtimeEventType(stored, payload)
       const nextTurnKey = runtimeTurnKey(payload, type)
@@ -312,13 +312,14 @@ function uniquePersistedRuntimeEvents(events: SessionEvent[]): StoredRuntimeEven
       }
       const key = runtimeEventKey(payload, type, isToolEvent(type) ? turnKey : null)
       if (key && seen.has(key)) {
-        return next
+        return
       }
       if (key) {
         seen.add(key)
       }
-      return [...next, { stored, payload }]
-    }, [])
+      uniqueEvents.push({ stored, payload })
+    })
+  return uniqueEvents
 }
 
 function runtimeEventType(stored: SessionEvent, payload: Record<string, unknown>) {

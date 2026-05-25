@@ -130,7 +130,7 @@ export function SessionRuntimePanel({
 
       <TabsContent value="transcript" className="mt-0 flex min-h-0 flex-1 flex-col">
         <Conversation className="bg-background">
-          <ConversationContent className="pb-6">
+          <ConversationContent className="pb-4">
             {runtime.messages.length === 0 && runtime.tools.length === 0 ? (
               <div className="pt-8">
                 <EmptyState title="No messages yet" body="Send a message to start the session transcript." />
@@ -138,13 +138,14 @@ export function SessionRuntimePanel({
             ) : null}
             {transcriptItems.map((item) =>
               item.type === 'message' ? (
-                <Message key={`message:${item.message.id}`} role={item.message.role}>
+                <Message
+                  key={`message:${item.message.id}`}
+                  role={item.message.role}
+                  timestamp={formatTime(item.message.createdAt)}
+                  status={item.message.status}
+                  statusDetail={item.message.status === 'error' ? item.message.content : null}
+                >
                   <MessageContent>
-                    <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      <span>{formatTime(item.message.createdAt)}</span>
-                      {item.message.status === 'streaming' ? <Badge variant="secondary">Streaming</Badge> : null}
-                      {item.message.status === 'error' ? <Badge variant="destructive">Error</Badge> : null}
-                    </div>
                     <MessageResponse>{item.message.content}</MessageResponse>
                   </MessageContent>
                 </Message>

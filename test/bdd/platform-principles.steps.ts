@@ -600,8 +600,10 @@ Then(
 Then('failures show a recoverable error message with the session left inspectable', () => {
   const panel = read('src/features/sessions/SessionRuntimePanel.tsx')
   const reducer = read('src/features/sessions/pi-runtime.ts')
+  const message = read('src/components/ai-elements/message.tsx')
   assert.match(reducer, /messageFromRuntimeError/)
-  assert.match(panel, /variant="destructive"/)
+  assert.match(panel, /statusDetail/)
+  assert.match(message, /variant="destructive"/)
   assert.doesNotMatch(panel, /Banner/)
 })
 
@@ -621,7 +623,15 @@ When('the user opens transcript mode', () => {
 Then('user and assistant messages render as chat turns', () => {
   const panel = read('src/features/sessions/SessionRuntimePanel.tsx')
   assert.match(panel, /Message /)
-  assert.match(panel, /item.role/)
+  assert.match(panel, /item\.message\.role/)
+})
+
+Then('transcript rows keep timestamps in compact message metadata instead of separate content rows', () => {
+  const panel = read('src/features/sessions/SessionRuntimePanel.tsx')
+  const message = read('src/components/ai-elements/message.tsx')
+  assert.match(panel, /timestamp=\{formatTime\(item\.message\.createdAt\)\}/)
+  assert.match(message, /timestamp \?/)
+  assert.match(message, /status === 'error'/)
 })
 
 Then('tool executions render as structured tool rows', () => {

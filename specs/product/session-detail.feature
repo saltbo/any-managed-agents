@@ -27,6 +27,7 @@ Feature: Session detail
     Given a session receives Pi agent message, tool execution, lifecycle, and usage events
     When the user opens transcript mode
     Then user and assistant messages render as chat turns
+    And transcript rows keep timestamps in compact message metadata instead of separate content rows
     And tool executions render as structured tool rows
     And runtime progress renders as status rows
     And raw JSON payloads are available only in debug detail panels

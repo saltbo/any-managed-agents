@@ -838,7 +838,8 @@ describe('App', () => {
 
     await screen.findByText('First run workflow')
     fireEvent.click(primaryNav().getByRole('link', { name: 'Sessions' }))
-    expect(await screen.findByText('Runtime crashed')).toBeTruthy()
+    expect(await screen.findByLabelText('error: Runtime crashed')).toBeTruthy()
+    expect(screen.queryByText('Runtime crashed')).toBeNull()
     expect(screen.getAllByText('stopped').length).toBeGreaterThan(0)
     expect(screen.getAllByText('archived').length).toBeGreaterThan(0)
 

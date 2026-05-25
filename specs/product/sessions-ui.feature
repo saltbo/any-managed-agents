@@ -19,6 +19,8 @@ Feature: Sessions UI
     When the user opens the sessions page
     Then each row shows title or id, status, agent, model, environment, started time, last update time, and duration when available
     And status badges distinguish pending, running, idle, stopped, error, and requires-action states
+    And error status badges expose the status reason without adding a second table row
+    And rows stay one line inside an adaptive height table surface
     And archived sessions are hidden unless the archived filter is enabled
     And clicking a row opens the session detail route
 
