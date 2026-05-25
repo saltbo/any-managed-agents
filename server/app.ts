@@ -823,7 +823,7 @@ export function createApp() {
               server.send(line.endsWith('\n') ? line : `${line}\n`)
             }
           },
-          { persist: false, stopOnTerminal: false, signal: streamController.signal },
+          { stopOnTerminal: false, signal: streamController.signal },
         ).catch((error) => {
           if (!streamController.signal.aborted) {
             sendRuntimeJson(server, { type: 'error', message: error instanceof Error ? error.message : String(error) })
