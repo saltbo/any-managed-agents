@@ -79,6 +79,34 @@ Required settings:
 Do not store raw provider credentials in D1, session events, UI state, or logs.
 The database may store metadata and secret references only.
 
+## Remote regression smoke
+
+After deploying staging or production, run the real browser regression against
+the deployed origin:
+
+```bash
+AMA_ORIGIN=https://ama.tftt.cc \
+AMA_E2E_STORAGE_STATE=.secrets/ama-storage-state.json \
+npm run e2e:production
+```
+
+`AMA_ORIGIN` defaults to `https://ama.tftt.cc`. Provide exactly one supported
+auth setup through CI or the local shell:
+
+- `AMA_E2E_STORAGE_STATE`: Playwright storage state from a real FlareAuth login.
+- `AMA_E2E_COOKIE`: a FlareAuth-issued AMA session cookie.
+- `AMA_E2E_EMAIL` and `AMA_E2E_PASSWORD`: credentials for the browser login
+  flow.
+
+The regression never queries or mutates auth databases. It verifies
+`/api/auth/me`, creates an environment, agent, and session through public `/api`
+routes, opens the session detail page, sends multiple runtime messages through
+the UI/WebSocket, checks transcript, tool, debug error, and reload dedupe
+behavior, then archives the smoke resources. Keep the storage state or cookie in
+the CI secret manager, write it only to an ignored runtime path, and avoid
+printing it in logs. Prefer staging for routine runs because session startup may
+consume runtime and model quota.
+
 ## Cloudflare build settings
 
 Use these settings when connecting the GitHub repository in Cloudflare:
