@@ -34,8 +34,6 @@ export function SessionDetailPage() {
     events: context.sessionEvents,
     onEventsChanged: refreshEvents,
   })
-  const sendMessage = runtime.state.runState === 'running' ? runtime.sendFollowUp : runtime.sendPrompt
-
   useEffect(() => {
     if (sessionId) context.setSelectedSessionId(sessionId)
   }, [context, sessionId])
@@ -59,7 +57,7 @@ export function SessionDetailPage() {
         onRefreshEvents={refreshEvents}
         chatMessage={message}
         setChatMessage={setMessage}
-        onSendMessage={sendMessage}
+        onSendMessage={runtime.sendPrompt}
         onAbortRuntime={runtime.abort}
       />
     </div>
