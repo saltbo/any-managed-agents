@@ -26,6 +26,12 @@ const authContext: AuthContext = {
   permissions: ['agents:write'],
 }
 
+const runtimeCommandSinkKey = '__AMA_TEST_RUNTIME_COMMANDS__'
+
+function runtimeCommandSink() {
+  return globalThis as typeof globalThis & { [runtimeCommandSinkKey]?: unknown[] }
+}
+
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -39,6 +45,7 @@ function noContent() {
 
 function installMockRuntimeWebSocket(options: { closeAfterAgentEnd?: boolean } = {}) {
   const sentCommands: unknown[] = []
+  runtimeCommandSink()[runtimeCommandSinkKey] = sentCommands
   class MockRuntimeWebSocket extends EventTarget {
     static CONNECTING = 0
     static OPEN = 1
@@ -432,6 +439,57 @@ function mockConsoleApi(seed?: {
     if (url === '/api/auth/logout') {
       return noContent()
     }
+    if (url.startsWith('/runtime/sessions/') && url.endsWith('/rpc') && method === 'POST') {
+      const command = JSON.parse(String(init?.body ?? '{}')) as { id?: string; type?: string; message?: string }
+      runtimeCommandSink()[runtimeCommandSinkKey]?.push(command)
+      const sessionId = url.split('/')[3] ?? 'session_1'
+      const sequence = state.events.length
+      if (command.type === 'prompt') {
+        const content = `Received: ${command.message}`
+        state.events = [
+          ...state.events,
+          event({
+            id: `${command.id}_response`,
+            sessionId,
+            sequence: sequence + 1,
+            type: 'response',
+            payload: { type: 'response', id: command.id, command: command.type, success: true },
+          }),
+          event({
+            id: `${command.id}_user`,
+            sessionId,
+            sequence: sequence + 2,
+            type: 'message_end',
+            payload: { type: 'message_end', message: { role: 'user', content: command.message ?? '' } },
+          }),
+          event({
+            id: `${command.id}_tool`,
+            sessionId,
+            sequence: sequence + 3,
+            type: 'tool_execution_end',
+            payload: {
+              type: 'tool_execution_end',
+              toolCall: { id: `${command.id}_tool`, name: 'write_file', output: { ok: true }, durationMs: 4 },
+            },
+          }),
+          event({
+            id: `${command.id}_assistant`,
+            sessionId,
+            sequence: sequence + 4,
+            type: 'message_end',
+            payload: { type: 'message_end', message: { role: 'assistant', content } },
+          }),
+          event({
+            id: `${command.id}_agent_end`,
+            sessionId,
+            sequence: sequence + 5,
+            type: 'agent_end',
+            payload: { type: 'agent_end', id: `${command.id}_agent_end`, willRetry: false },
+          }),
+        ]
+      }
+      return jsonResponse({ id: command.id, type: 'response', command: command.type, success: true })
+    }
     if (url.startsWith('/api/providers/') && method === 'GET') {
       const found = state.providers.find((item) => url === `/api/providers/${item.id}`)
       return found ? jsonResponse(found) : jsonResponse({ error: { message: 'Provider not found' } }, 404)
@@ -527,9 +585,8 @@ function mockConsoleApi(seed?: {
       return jsonResponse({ data: state.sessions })
     }
     if (url.startsWith('/api/sessions/') && url.includes('/events') && method === 'GET') {
-      return url.startsWith('/api/sessions/session_1/events')
-        ? jsonResponse({ data: state.events })
-        : jsonResponse({ data: [] })
+      const sessionId = url.split('/')[3]
+      return jsonResponse({ data: state.events.filter((item) => item.sessionId === sessionId) })
     }
     if (url === '/api/sessions/session_1/stop' && method === 'POST') {
       state.sessions = [session({ status: 'stopped', stoppedAt: now })]
@@ -873,8 +930,57 @@ describe('App', () => {
 
   it('renders sessions, runtime events, and sends messages through the runtime endpoint', async () => {
     const { sentCommands } = installMockRuntimeWebSocket()
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    const runtimeEvents: SessionEvent[] = [
+      {
+        id: 'event_1',
+        organizationId: 'org_1',
+        projectId: 'project_1',
+        sessionId: 'session_1',
+        sequence: 1,
+        type: 'lifecycle',
+        visibility: 'debug',
+        role: null,
+        parentEventId: null,
+        correlationId: null,
+        payload: { status: 'idle', reason: 'runtime_ready' },
+        metadata: {},
+        createdAt: '2026-05-23T00:00:00.000Z',
+      },
+    ]
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url = String(input)
+      const method = init?.method ?? 'GET'
+      if (url === '/runtime/sessions/session_1/rpc' && method === 'POST') {
+        const command = JSON.parse(String(init?.body ?? '{}')) as { id?: string; type?: string; message?: string }
+        sentCommands.push(command)
+        runtimeEvents.push(
+          event({
+            id: `${command.id}_tool`,
+            sequence: runtimeEvents.length + 1,
+            type: 'tool_execution_end',
+            payload: {
+              type: 'tool_execution_end',
+              toolCall: { id: `${command.id}_tool`, name: 'write_file', output: { ok: true }, durationMs: 4 },
+            },
+          }),
+          event({
+            id: `${command.id}_assistant`,
+            sequence: runtimeEvents.length + 2,
+            type: 'message_end',
+            payload: {
+              type: 'message_end',
+              message: { role: 'assistant', content: `Received: ${command.message}` },
+            },
+          }),
+          event({
+            id: `${command.id}_agent_end`,
+            sequence: runtimeEvents.length + 3,
+            type: 'agent_end',
+            payload: { type: 'agent_end', id: `${command.id}_agent_end`, willRetry: false },
+          }),
+        )
+        return jsonResponse({ id: command.id, type: 'response', command: command.type, success: true })
+      }
       if (url === '/api/auth/me') {
         return jsonResponse({
           user: { id: 'user_1', email: 'owner@example.com', name: 'Owner', avatarUrl: null },
@@ -920,26 +1026,8 @@ describe('App', () => {
       if (url === '/api/audit-records') {
         return jsonResponse({ data: [] })
       }
-      if (url === '/api/sessions/session_1/events') {
-        return jsonResponse({
-          data: [
-            {
-              id: 'event_1',
-              organizationId: 'org_1',
-              projectId: 'project_1',
-              sessionId: 'session_1',
-              sequence: 1,
-              type: 'lifecycle',
-              visibility: 'debug',
-              role: null,
-              parentEventId: null,
-              correlationId: null,
-              payload: { status: 'idle', reason: 'runtime_ready' },
-              metadata: {},
-              createdAt: '2026-05-23T00:00:00.000Z',
-            },
-          ],
-        })
+      if (url.startsWith('/api/sessions/session_1/events')) {
+        return jsonResponse({ data: runtimeEvents })
       }
       if (url === '/api/sessions/session_1') {
         return jsonResponse(sessionFixture)
