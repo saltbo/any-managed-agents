@@ -104,12 +104,14 @@ test.describe('real authenticated production regression', () => {
       for (let turn = 1; turn <= 20; turn += 1) {
         await sendAndExpect(
           page,
+          readySession.id,
           `This is production regression turn ${turn}. Reply exactly with: ama-real-browser-e2e-turn-${turn}`,
           new RegExp(`ama-real-browser-e2e-turn-${turn}`, 'i'),
         )
       }
       await sendAndExpect(
         page,
+        readySession.id,
         'Use the sandbox.exec tool to run `whoami`, then reply exactly with `ama-whoami:<output>` using the command output.',
         /ama-whoami:/i,
       )
@@ -123,6 +125,7 @@ test.describe('real authenticated production regression', () => {
 
       await sendAndExpect(
         page,
+        readySession.id,
         'Use the sandbox.exec tool to run `sh -c "echo ama-visible-error >&2; exit 7"` and show the error.',
         /ama-visible-error|exit 7|error/i,
       )
@@ -230,11 +233,36 @@ async function waitForSession(request: APIRequestContext, sessionId: string) {
   throw new Error(`Session ${sessionId} did not become usable before timeout`)
 }
 
-async function sendAndExpect(page: Page, message: string, expected: RegExp) {
+async function sendAndExpect(page: Page, sessionId: string, message: string, expected: RegExp) {
+  const afterSequence = await latestEventSequence(page.request, sessionId)
   await page.getByRole('tab', { name: 'Transcript' }).click()
   await page.getByPlaceholder('Send a message to the agent').fill(message)
   await page.getByRole('button', { name: 'Send' }).click()
+  await waitForAssistantMessage(page.request, sessionId, afterSequence, expected)
   await expect(page.getByText(expected).first()).toBeVisible({ timeout: 120_000 })
+}
+
+async function latestEventSequence(request: APIRequestContext, sessionId: string) {
+  const events = (await apiJson<ListResponse<SessionEvent>>(request, `/api/sessions/${sessionId}/events?limit=1000`))
+    .data
+  return Math.max(0, ...events.map((event) => event.sequence))
+}
+
+async function waitForAssistantMessage(
+  request: APIRequestContext,
+  sessionId: string,
+  afterSequence: number,
+  expected: RegExp,
+) {
+  await waitForPersistedEvents(request, sessionId, (events) =>
+    events.some(
+      (event) =>
+        event.sequence > afterSequence &&
+        (event.type === 'message_end' || event.type === 'turn_end') &&
+        eventRole(event) === 'assistant' &&
+        expected.test(eventText(event)),
+    ),
+  )
 }
 
 async function waitForPersistedEvents(
@@ -244,13 +272,42 @@ async function waitForPersistedEvents(
 ) {
   let events: SessionEvent[] = []
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    events = (await apiJson<ListResponse<SessionEvent>>(request, `/api/sessions/${sessionId}/events?limit=200`)).data
+    events = (await apiJson<ListResponse<SessionEvent>>(request, `/api/sessions/${sessionId}/events?limit=1000`)).data
     if (predicate(events)) {
       return events
     }
     await delay(1_000)
   }
   throw new Error(`Session ${sessionId} did not persist the expected runtime events`)
+}
+
+function eventRole(event: SessionEvent) {
+  const message = objectValue(event.payload.message)
+  return typeof message.role === 'string' ? message.role : null
+}
+
+function eventText(event: SessionEvent) {
+  const message = objectValue(event.payload.message)
+  return textFromContent(message.content ?? event.payload.content)
+}
+
+function textFromContent(content: unknown): string {
+  if (typeof content === 'string') {
+    return content
+  }
+  if (!Array.isArray(content)) {
+    return ''
+  }
+  return content
+    .map((item) => {
+      const block = objectValue(item)
+      return typeof block.text === 'string' ? block.text : ''
+    })
+    .join('')
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
 }
 
 async function assertNoDuplicateReplayAfterReconnect(page: Page, pattern: RegExp, beforeReloadCount: number) {
