@@ -146,7 +146,7 @@ export function SessionDetailView({
         onSend={onSendMessage}
         onAbort={onAbortRuntime}
         onRefreshEvents={onRefreshEvents}
-        canSend={session.status === 'idle' || session.status === 'running'}
+        canSend={session.status === 'idle'}
       />
       <Sheet open={activeResource !== null} onOpenChange={(open) => !open && setActiveResource(null)}>
         <SheetContent className="w-full overflow-y-auto sm:max-w-xl">

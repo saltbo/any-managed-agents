@@ -24,7 +24,7 @@ export function PromptInput({
   const formRef = useRef<HTMLFormElement | null>(null)
   const submit = (event?: FormEvent) => {
     event?.preventDefault()
-    if (!value.trim() || disabled) {
+    if (!value.trim() || disabled || busy) {
       return
     }
     onSubmit()
@@ -54,7 +54,7 @@ export function PromptInput({
           className="max-h-32 min-h-9 flex-1 resize-none border-0 bg-transparent px-2 py-1.5 shadow-none focus-visible:ring-0"
           placeholder={placeholder}
           value={value}
-          disabled={disabled}
+          disabled={disabled || busy}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={onKeyDown}
         />
@@ -68,7 +68,7 @@ export function PromptInput({
         >
           <Square />
         </Button>
-        <Button type="submit" disabled={disabled || !value.trim()}>
+        <Button type="submit" disabled={disabled || busy || !value.trim()}>
           Send
           <CornerDownLeft data-icon="inline-end" />
         </Button>

@@ -224,7 +224,7 @@ async function apiJson<T>(
 async function waitForSession(request: APIRequestContext, sessionId: string) {
   for (let attempt = 0; attempt < 180; attempt += 1) {
     const session = await apiJson<Session>(request, `/api/sessions/${sessionId}`)
-    if (session.status === 'idle' || session.status === 'running') {
+    if (session.status === 'idle') {
       return session
     }
     if (session.status === 'error') {
