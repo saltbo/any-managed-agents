@@ -73,12 +73,15 @@ AMA_E2E_STORAGE_STATE=.secrets/ama-storage-state.json \
 npm run e2e:production
 ```
 
-Required auth input is one of:
+Auth input precedence is explicit. The harness uses `AMA_E2E_COOKIE` first,
+`AMA_E2E_STORAGE_STATE` second, and `AMA_E2E_EMAIL` plus `AMA_E2E_PASSWORD`
+third. Set only one auth method in CI unless intentionally overriding a lower
+precedence method.
 
-- `AMA_E2E_STORAGE_STATE`: Playwright storage state produced by a real
-  FlareAuth login.
 - `AMA_E2E_COOKIE`: an AMA session cookie value such as
   `__Host-ama_session=...`.
+- `AMA_E2E_STORAGE_STATE`: Playwright storage state produced by a real
+  FlareAuth login. The documented `.secrets/` directory is ignored by git.
 - `AMA_E2E_EMAIL` and `AMA_E2E_PASSWORD`: credentials for the supported
   FlareAuth browser login flow.
 

@@ -5,6 +5,7 @@ const storageState = process.env.AMA_E2E_STORAGE_STATE
 const sessionCookie = process.env.AMA_E2E_COOKIE
 const loginEmail = process.env.AMA_E2E_EMAIL
 const loginPassword = process.env.AMA_E2E_PASSWORD
+const effectiveStorageState = sessionCookie ? undefined : storageState
 const runId = `real-e2e-${Date.now()}`
 
 interface Environment {
@@ -34,11 +35,11 @@ interface ListResponse<T> {
   data: T[]
 }
 
-test.use(storageState ? { storageState } : {})
+test.use(effectiveStorageState ? { storageState: effectiveStorageState } : {})
 
 test.describe('real authenticated production regression', () => {
   test.skip(
-    !storageState && !sessionCookie && (!loginEmail || !loginPassword),
+    !effectiveStorageState && !sessionCookie && (!loginEmail || !loginPassword),
     'Set AMA_E2E_STORAGE_STATE, AMA_E2E_COOKIE, or AMA_E2E_EMAIL/AMA_E2E_PASSWORD to run the real regression.',
   )
 
@@ -151,7 +152,7 @@ async function authenticate(page: Page) {
     await addCookie(page.context(), sessionCookie)
     return
   }
-  if (storageState) {
+  if (effectiveStorageState) {
     return
   }
 

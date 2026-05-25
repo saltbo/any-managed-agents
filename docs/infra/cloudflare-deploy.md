@@ -90,11 +90,14 @@ AMA_E2E_STORAGE_STATE=.secrets/ama-storage-state.json \
 npm run e2e:production
 ```
 
-`AMA_ORIGIN` defaults to `https://ama.tftt.cc`. Provide exactly one supported
-auth setup through CI or the local shell:
+`AMA_ORIGIN` defaults to `https://ama.tftt.cc`. Auth input precedence is
+explicit: `AMA_E2E_COOKIE` is used first, `AMA_E2E_STORAGE_STATE` second, and
+`AMA_E2E_EMAIL` plus `AMA_E2E_PASSWORD` third. Set only one auth method in CI
+unless intentionally overriding a lower precedence method.
 
-- `AMA_E2E_STORAGE_STATE`: Playwright storage state from a real FlareAuth login.
 - `AMA_E2E_COOKIE`: a FlareAuth-issued AMA session cookie.
+- `AMA_E2E_STORAGE_STATE`: Playwright storage state from a real FlareAuth login.
+  The documented `.secrets/` directory is ignored by git.
 - `AMA_E2E_EMAIL` and `AMA_E2E_PASSWORD`: credentials for the browser login
   flow.
 

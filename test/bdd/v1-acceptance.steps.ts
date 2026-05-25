@@ -737,6 +737,7 @@ Then('the production e2e command documents the required secret environment varia
     /AMA_E2E_EMAIL/,
     /AMA_E2E_PASSWORD/,
     /npm run e2e:production/,
+    /Auth input precedence/,
   )
   assertIncludes(
     'docs/infra/cloudflare-deploy.md',
@@ -746,7 +747,9 @@ Then('the production e2e command documents the required secret environment varia
     /AMA_E2E_COOKIE/,
     /AMA_E2E_EMAIL/,
     /AMA_E2E_PASSWORD/,
+    /Auth input precedence/,
   )
+  assertIncludes('.gitignore', /\.secrets\//)
 })
 
 Then('the production e2e harness authenticates without direct auth database access', () => {
