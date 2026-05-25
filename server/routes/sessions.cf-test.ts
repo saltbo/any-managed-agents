@@ -342,8 +342,12 @@ describe('[CF] /api/sessions', () => {
     const exportRes = await jsonFetch(`/api/sessions/${created.id}/events/export?cursor=2&limit=2`, cookie)
     expect(exportRes.status).toBe(200)
     expect(exportRes.headers.get('content-type')).toContain('application/x-ndjson')
-    const exported = (await exportRes.text()).trim().split('\n').map(JSON.parse) as Array<{ sequence: number }>
+    const exportedText = await exportRes.text()
+    const exported = exportedText.trim().split('\n').map(JSON.parse) as Array<{ sequence: number }>
     expect(exported.map((event) => event.sequence)).toEqual([3, 4])
+    expect(exportedText).toContain('[REDACTED]')
+    expect(exportedText).not.toContain('raw-secret')
+    expect(exportedText).not.toContain('secret-password')
 
     const descendingExportRes = await jsonFetch(
       `/api/sessions/${created.id}/events/export?order=desc&cursor=6&limit=2`,
@@ -360,6 +364,13 @@ describe('[CF] /api/sessions', () => {
     expect(streamRes.headers.get('content-type')).toContain('application/x-ndjson')
     const streamed = (await streamRes.text()).trim().split('\n').map(JSON.parse) as Array<{ sequence: number }>
     expect(streamed.map((event) => event.sequence)).toEqual([5, 6])
+
+    const redactedStreamRes = await jsonFetch(`/api/sessions/${created.id}/events/stream?limit=4`, cookie)
+    expect(redactedStreamRes.status).toBe(200)
+    const streamedText = await redactedStreamRes.text()
+    expect(streamedText).toContain('[REDACTED]')
+    expect(streamedText).not.toContain('raw-github-token')
+    expect(streamedText).not.toContain('secret-password')
 
     const descendingStreamRes = await jsonFetch(`/api/sessions/${created.id}/events/stream?order=desc`, cookie)
     expect(descendingStreamRes.status).toBe(400)
@@ -473,6 +484,276 @@ describe('[CF] /api/sessions', () => {
       sandboxId: created.id.toLowerCase(),
       path: '/rpc',
       proxy: 'pi',
+    })
+  })
+
+  it('blocks disabled sandbox startup before creating a runtime', async () => {
+    const cookie = await signIn()
+    await connectMcp(cookie, 'github')
+    const environment = await createEnvironment(cookie)
+    const agent = await createAgent(cookie)
+
+    const policyRes = await jsonFetch('/api/governance/policy', cookie, {
+      method: 'PUT',
+      body: JSON.stringify({ sandboxPolicy: { enabled: false } }),
+    })
+    expect(policyRes.status).toBe(200)
+
+    const createRes = await jsonFetch('/api/sessions', cookie, {
+      method: 'POST',
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+    })
+    expect(createRes.status).toBe(403)
+    await expect(createRes.json()).resolves.toMatchObject({
+      error: {
+        type: 'policy_denied',
+        message: 'Sandbox runtime is disabled by governance policy.',
+        details: { category: 'sandbox', resourceType: 'sandbox', ruleId: 'sandboxPolicy.enabled' },
+      },
+    })
+
+    const auditRes = await jsonFetch('/api/audit-records?action=session.create', cookie)
+    expect(auditRes.status).toBe(200)
+    const auditRecords = (await auditRes.json()) as { data: Array<Record<string, unknown>> }
+    expect(auditRecords.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: 'session.create',
+          outcome: 'denied',
+          policyCategory: 'sandbox',
+          metadata: expect.objectContaining({
+            decision: expect.objectContaining({ rule: 'sandboxPolicy.enabled' }),
+          }),
+        }),
+      ]),
+    )
+  })
+
+  it('blocks sandbox command policy violations and records redacted policy events', async () => {
+    const cookie = await signIn()
+    await connectMcp(cookie, 'github')
+    const environment = await createEnvironment(cookie)
+    const agent = await createAgent(cookie)
+
+    const policyRes = await jsonFetch('/api/governance/policy', cookie, {
+      method: 'PUT',
+      body: JSON.stringify({ sandboxPolicy: { blockedCommands: ['curl'] } }),
+    })
+    expect(policyRes.status).toBe(200)
+
+    const createRes = await jsonFetch('/api/sessions', cookie, {
+      method: 'POST',
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+    })
+    expect(createRes.status).toBe(201)
+    const session = (await createRes.json()) as { id: string }
+
+    const runtimeRes = await jsonFetch(`/runtime/sessions/${session.id}/rpc`, cookie, {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'prompt',
+        message: 'Fetch data',
+        toolCalls: [
+          {
+            name: 'sandbox.exec',
+            input: { command: '  curl https://example.com?token=raw-secret-token' },
+          },
+        ],
+      }),
+    })
+    expect(runtimeRes.status).toBe(403)
+    const denied = await runtimeRes.json()
+    expect(denied).toMatchObject({
+      error: {
+        type: 'policy_denied',
+        message: 'Sandbox command is blocked by policy.',
+        details: {
+          category: 'sandbox_command',
+          resourceType: 'sandbox_command',
+          ruleId: 'sandboxPolicy.blockedCommands',
+        },
+      },
+    })
+    expect(JSON.stringify(denied)).not.toContain('raw-secret-token')
+
+    const directCommandRes = await jsonFetch(`/runtime/sessions/${session.id}/sandbox/exec`, cookie, {
+      method: 'POST',
+      body: JSON.stringify({ command: 'curl https://example.com?token=raw-secret-token' }),
+    })
+    expect(directCommandRes.status).toBe(403)
+    await expect(directCommandRes.json()).resolves.toMatchObject({
+      error: {
+        type: 'policy_denied',
+        message: 'Sandbox command is blocked by policy.',
+        details: { category: 'sandbox_command', resourceType: 'sandbox_command' },
+      },
+    })
+
+    const malformedCommandRes = await jsonFetch(`/runtime/sessions/${session.id}/sandbox/exec`, cookie, {
+      method: 'POST',
+      body: JSON.stringify({ argv: ['curl', 'https://example.com'] }),
+    })
+    expect(malformedCommandRes.status).toBe(403)
+    await expect(malformedCommandRes.json()).resolves.toMatchObject({
+      error: {
+        type: 'policy_denied',
+        message: 'Sandbox command is not allowed by policy.',
+        details: { category: 'sandbox_command', resourceType: 'sandbox_command' },
+      },
+    })
+
+    const eventsRes = await jsonFetch(`/api/sessions/${session.id}/events`, cookie)
+    const events = (await eventsRes.json()) as { data: Array<{ type: string; payload: Record<string, unknown> }> }
+    expect(events.data).toContainEqual(
+      expect.objectContaining({
+        type: 'policy_denied',
+        payload: expect.objectContaining({
+          type: 'policy_denied',
+          category: 'sandbox_command',
+          ruleId: 'sandboxPolicy.blockedCommands',
+          command: '[REDACTED]',
+        }),
+      }),
+    )
+    expect(JSON.stringify(events)).not.toContain('raw-secret-token')
+  })
+
+  it('blocks sandbox network policy violations and records safe event details', async () => {
+    const cookie = await signIn()
+    await connectMcp(cookie, 'github')
+    const environmentRes = await jsonFetch('/api/environments', cookie, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Restricted workspace',
+        mcpPolicy: { allowedConnectors: ['github'] },
+        networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
+      }),
+    })
+    expect(environmentRes.status).toBe(201)
+    const environment = (await environmentRes.json()) as { id: string }
+    const agentRes = await jsonFetch('/api/agents', cookie, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Offline override agent',
+        allowedTools: ['mcp:github.repo.read'],
+        mcpConnectors: ['github'],
+        sandboxPolicy: { network: 'enabled' },
+      }),
+    })
+    expect(agentRes.status).toBe(201)
+    const agent = (await agentRes.json()) as { id: string }
+
+    const createRes = await jsonFetch('/api/sessions', cookie, {
+      method: 'POST',
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+    })
+    expect(createRes.status).toBe(201)
+    const session = (await createRes.json()) as { id: string }
+
+    const toolCallRes = await jsonFetch(`/runtime/sessions/${session.id}/rpc`, cookie, {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'prompt',
+        message: 'Fetch metadata',
+        toolCalls: [
+          {
+            name: 'sandbox.fetch',
+            input: { url: 'https://metadata.google.internal/latest', apiKey: 'raw-secret-token' },
+          },
+        ],
+      }),
+    })
+    expect(toolCallRes.status).toBe(403)
+    await expect(toolCallRes.json()).resolves.toMatchObject({
+      error: {
+        type: 'policy_denied',
+        message: 'Sandbox network host is not allowed by policy.',
+        details: {
+          category: 'sandbox_network',
+          resourceType: 'sandbox_network',
+          resourceId: 'metadata.google.internal',
+        },
+      },
+    })
+
+    const runtimeRes = await jsonFetch(`/runtime/sessions/${session.id}/sandbox/fetch`, cookie, {
+      method: 'POST',
+      body: JSON.stringify({ url: 'https://metadata.google.internal/latest', token: 'raw-secret-token' }),
+    })
+    expect(runtimeRes.status).toBe(403)
+    await expect(runtimeRes.json()).resolves.toMatchObject({
+      error: {
+        type: 'policy_denied',
+        message: 'Sandbox network host is not allowed by policy.',
+        details: {
+          category: 'sandbox_network',
+          resourceType: 'sandbox_network',
+          resourceId: 'metadata.google.internal',
+          ruleId: 'environment.networkPolicy.allowedHosts',
+        },
+      },
+    })
+
+    const eventsRes = await jsonFetch(`/api/sessions/${session.id}/events`, cookie)
+    const events = (await eventsRes.json()) as { data: Array<Record<string, unknown>> }
+    expect(events.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'policy_denied',
+          payload: expect.objectContaining({
+            type: 'policy_denied',
+            category: 'sandbox_network',
+            host: 'metadata.google.internal',
+          }),
+        }),
+      ]),
+    )
+    expect(JSON.stringify(events)).not.toContain('raw-secret-token')
+  })
+
+  it('blocks offline sandbox network policy before proxying', async () => {
+    const cookie = await signIn()
+    await connectMcp(cookie, 'github')
+    const environmentRes = await jsonFetch('/api/environments', cookie, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Offline workspace',
+        mcpPolicy: { allowedConnectors: ['github'] },
+        networkPolicy: { mode: 'offline' },
+      }),
+    })
+    expect(environmentRes.status).toBe(201)
+    const environment = (await environmentRes.json()) as { id: string }
+    const agentRes = await jsonFetch('/api/agents', cookie, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Offline override agent',
+        allowedTools: ['mcp:github.repo.read'],
+        mcpConnectors: ['github'],
+        sandboxPolicy: { network: 'enabled' },
+      }),
+    })
+    expect(agentRes.status).toBe(201)
+    const agent = (await agentRes.json()) as { id: string }
+
+    const createRes = await jsonFetch('/api/sessions', cookie, {
+      method: 'POST',
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+    })
+    expect(createRes.status).toBe(201)
+    const session = (await createRes.json()) as { id: string }
+
+    const runtimeRes = await jsonFetch(`/runtime/sessions/${session.id}/sandbox/fetch`, cookie, {
+      method: 'POST',
+      body: JSON.stringify({ url: 'https://registry.npmjs.org/package' }),
+    })
+    expect(runtimeRes.status).toBe(403)
+    await expect(runtimeRes.json()).resolves.toMatchObject({
+      error: {
+        type: 'policy_denied',
+        message: 'Sandbox network access is disabled by policy.',
+        details: { category: 'sandbox_network', resourceType: 'sandbox_network' },
+      },
     })
   })
 

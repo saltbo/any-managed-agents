@@ -309,7 +309,22 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
 
     const eventsRes = await jsonFetch(`/api/sessions/${session.id}/events`, cookie)
     expect(eventsRes.status).toBe(200)
-    await expect(eventsRes.json()).resolves.toMatchObject({ data: [] })
+    await expect(eventsRes.json()).resolves.toMatchObject({
+      data: [
+        expect.objectContaining({
+          type: 'policy_denied',
+          payload: expect.objectContaining({
+            type: 'policy_denied',
+            connectorId: 'github',
+            toolName: 'repo.read',
+            category: 'mcp',
+            resourceType: 'mcp_connector',
+            resourceId: 'github',
+          }),
+          metadata: { source: 'policy' },
+        }),
+      ],
+    })
 
     const auditRes = await jsonFetch('/api/audit-records?action=runtime_mcp_tool.call', cookie)
     expect(auditRes.status).toBe(200)

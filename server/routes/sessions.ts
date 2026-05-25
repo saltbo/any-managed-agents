@@ -27,7 +27,8 @@ import {
   paginateSequenceRows,
   parseListCursor,
 } from '../openapi'
-import { evaluateMcpToolPolicy, evaluateProviderPolicy } from '../policy'
+import { evaluateMcpToolPolicy, evaluateProviderPolicy, evaluateSandboxRuntimePolicy } from '../policy'
+import { redactSensitiveValue } from '../redaction'
 import { runtimeEndpointPath, safeRuntimeError, startPiBridge, stopPiBridge } from '../runtime/pi/bridge'
 
 const app = createApiRouter()
@@ -306,8 +307,8 @@ function serializeEvent(row: SessionEventRow) {
     role: row.role,
     parentEventId: row.parentEventId,
     correlationId: row.correlationId,
-    payload: JSON.parse(row.payload) as Record<string, unknown>,
-    metadata: JSON.parse(row.metadata) as Record<string, unknown>,
+    payload: redactSensitiveValue(JSON.parse(row.payload)) as Record<string, unknown>,
+    metadata: redactSensitiveValue(JSON.parse(row.metadata)) as Record<string, unknown>,
     createdAt: row.createdAt,
   }
 }
@@ -553,6 +554,31 @@ export async function createSessionForAgent(
   const sandboxId = id.toLowerCase()
   const agentSnapshot = serializeAgentVersion(agentVersion)
   const environmentSnapshot = environmentVersion ? serializeEnvironmentVersion(environmentVersion) : null
+  const sandboxDecision = await evaluateSandboxRuntimePolicy(db, auth, {
+    session: {
+      id,
+      agentSnapshot: stringify(agentSnapshot),
+      environmentSnapshot: environmentSnapshot ? stringify(environmentSnapshot) : null,
+    },
+    operation: 'startup',
+  })
+  if (!sandboxDecision.allowed) {
+    await recordAudit(db, {
+      auth,
+      action: 'session.create',
+      resourceType: 'session',
+      outcome: 'denied',
+      requestId: requestId(c),
+      policyCategory: sandboxDecision.category,
+      metadata: { agentId, environmentId, decision: sandboxDecision },
+    })
+    return errorResponse(c, 403, 'policy_denied', sandboxDecision.message, {
+      category: sandboxDecision.category,
+      resourceType: 'sandbox',
+      resourceId: sandboxId,
+      ruleId: sandboxDecision.rule,
+    })
+  }
   const pending = {
     id,
     agentId,
@@ -725,6 +751,23 @@ export async function recoverSessionRuntime(env: Env, db: Db, auth: AuthContext,
     throw new Error('Session agent snapshot is required')
   }
   const environmentSnapshot = parseJson<ReturnType<typeof serializeEnvironmentVersion>>(session.environmentSnapshot)
+  const sandboxDecision = await evaluateSandboxRuntimePolicy(db, auth, {
+    session: { id: session.id, agentSnapshot: session.agentSnapshot, environmentSnapshot: session.environmentSnapshot },
+    operation: 'startup',
+  })
+  if (!sandboxDecision.allowed) {
+    await recordAudit(db, {
+      auth,
+      action: 'session.runtime.recover',
+      resourceType: 'session',
+      resourceId: session.id,
+      outcome: 'denied',
+      sessionId: session.id,
+      policyCategory: sandboxDecision.category,
+      metadata: { decision: sandboxDecision },
+    })
+    throw new Error(sandboxDecision.message)
+  }
   const mcpSnapshot = await resolveMcpSnapshot(db, auth, session.id, agentSnapshot, environmentSnapshot)
   await stopPiBridge(env, session.sandboxId, session.piRuntimeId).catch(() => undefined)
   const runtime = await withTimeout(

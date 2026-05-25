@@ -8,7 +8,8 @@ import { sessionEvents, sessions } from './db/schema'
 import type { Env } from './env'
 import { errorResponse } from './errors'
 import { ApiSecuritySchemes, createApiRouter } from './openapi'
-import { evaluateMcpToolPolicy } from './policy'
+import { evaluateMcpToolPolicy, evaluateSandboxRuntimePolicy, type PolicyDecision } from './policy'
+import { redactSensitiveValue } from './redaction'
 import agents from './routes/agents'
 import audit from './routes/audit'
 import auth from './routes/auth'
@@ -27,27 +28,10 @@ function newId(prefix: string) {
   return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
 }
 
-const REDACTED_VALUE = '[REDACTED]'
-const SENSITIVE_KEY =
-  /api[_-]?key|authorization|credential|password|secret|(^|[_-])token($|[_-])|access[_-]?token|refresh[_-]?token/i
 const RUNTIME_COMMAND_PROXY_TIMEOUT_MS = 30_000
 
 function redactRuntimeValue(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map((item) => redactRuntimeValue(item))
-  }
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [
-        key,
-        SENSITIVE_KEY.test(key) ? REDACTED_VALUE : redactRuntimeValue(item),
-      ]),
-    )
-  }
-  if (typeof value === 'string' && /(bearer\s+|raw-[\w-]*token|secret|token=|api[_-]?key)/i.test(value)) {
-    return REDACTED_VALUE
-  }
-  return value
+  return redactSensitiveValue(value)
 }
 
 function piEventType(event: Record<string, unknown>) {
@@ -102,8 +86,18 @@ async function appendRuntimePolicyEvent(
     auth: AuthContext
     sessionId: string
     payload: Record<string, unknown>
+    metadata?: Record<string, unknown>
   },
 ) {
+  await appendPiRuntimeEvent(db, {
+    auth: values.auth,
+    sessionId: values.sessionId,
+    event: {
+      type: 'policy_denied',
+      ...values.payload,
+    },
+    metadata: { source: 'policy', ...(values.metadata ?? {}) },
+  })
   await recordAudit(db, {
     auth: values.auth,
     action: 'runtime.policy',
@@ -147,6 +141,93 @@ function runtimeToolCalls(body: unknown) {
     : []
 }
 
+function hostFromUrl(value: unknown) {
+  if (typeof value !== 'string') {
+    return null
+  }
+  try {
+    return new URL(value).hostname || null
+  } catch {
+    return null
+  }
+}
+
+function firstCommandWord(command: string | null, fallback: string) {
+  return command?.trim().split(/\s+/)[0] ?? fallback
+}
+
+function sandboxOperationFromToolCall(call: Record<string, unknown>) {
+  const name = typeof call.name === 'string' ? call.name : ''
+  const input = call.input && typeof call.input === 'object' ? (call.input as Record<string, unknown>) : {}
+  if (name === 'sandbox.exec' || name === 'shell.exec' || name === 'terminal.exec') {
+    const command = typeof input.command === 'string' ? input.command : null
+    return {
+      operation: 'command' as const,
+      command,
+      resourceType: 'sandbox_command',
+      resourceId: firstCommandWord(command, name),
+    }
+  }
+  if (name === 'sandbox.fetch' || name === 'network.fetch' || name === 'web.fetch') {
+    const host = typeof input.host === 'string' ? input.host : hostFromUrl(input.url)
+    return { operation: 'network' as const, host, resourceType: 'sandbox_network', resourceId: host ?? name }
+  }
+  return null
+}
+
+function sandboxOperationFromRuntimePath(path: string, body: unknown) {
+  const record = body && typeof body === 'object' ? (body as Record<string, unknown>) : {}
+  if (path === '/sandbox/exec' || path === '/sandbox/commands') {
+    const command = typeof record.command === 'string' ? record.command : null
+    return {
+      operation: 'command' as const,
+      command,
+      resourceType: 'sandbox_command',
+      resourceId: firstCommandWord(command, path),
+    }
+  }
+  if (path === '/sandbox/network' || path === '/sandbox/fetch') {
+    const host = typeof record.host === 'string' ? record.host : hostFromUrl(record.url)
+    return { operation: 'network' as const, host, resourceType: 'sandbox_network', resourceId: host ?? path }
+  }
+  return null
+}
+
+async function denyRuntimePolicy(
+  db: ReturnType<typeof drizzle>,
+  auth: AuthContext,
+  values: {
+    sessionId: string
+    decision: PolicyDecision
+    requestId?: string | null
+    action: string
+    resourceType: string
+    resourceId: string | null
+    payload: Record<string, unknown>
+  },
+) {
+  const payload = {
+    category: values.decision.category,
+    ruleId: values.decision.rule,
+    resourceType: values.resourceType,
+    resourceId: values.resourceId,
+    decision: values.decision,
+    ...values.payload,
+  }
+  await appendRuntimePolicyEvent(db, { auth, sessionId: values.sessionId, payload })
+  await recordAudit(db, {
+    auth,
+    action: values.action,
+    resourceType: values.resourceType,
+    resourceId: values.resourceId,
+    outcome: 'denied',
+    requestId: values.requestId ?? null,
+    sessionId: values.sessionId,
+    policyCategory: values.decision.category,
+    metadata: payload,
+  })
+}
+
 async function recordRuntimeMessageSubmission(
   db: ReturnType<typeof drizzle>,
   auth: AuthContext,
@@ -160,6 +241,37 @@ async function recordRuntimeMessageSubmission(
     .set({ status: 'running', statusReason: null, updatedAt: timestamp })
     .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
   return correlationId
+}
+
+async function evaluateRuntimeSandboxOperations(
+  db: ReturnType<typeof drizzle>,
+  auth: AuthContext,
+  session: typeof sessions.$inferSelect,
+  body: unknown,
+) {
+  for (const call of runtimeToolCalls(body)) {
+    const operation = sandboxOperationFromToolCall(call)
+    if (!operation) {
+      continue
+    }
+    const decision = await evaluateSandboxRuntimePolicy(db, auth, {
+      session: {
+        id: session.id,
+        agentSnapshot: session.agentSnapshot,
+        environmentSnapshot: session.environmentSnapshot,
+      },
+      operation: operation.operation,
+      command: 'command' in operation ? operation.command : null,
+      host: 'host' in operation ? operation.host : null,
+    })
+    if (!decision.allowed) {
+      return {
+        decision,
+        operation,
+      }
+    }
+  }
+  return null
 }
 
 async function recordTestRuntimeMessageOutcome(
@@ -736,18 +848,14 @@ export function createApp() {
         },
       })
       if (!decision.allowed) {
-        const payload = { connectorId, toolName, decision }
-        await appendRuntimePolicyEvent(db, { auth: resolvedAuth, sessionId, payload })
-        await recordAudit(db, {
-          auth: resolvedAuth,
+        await denyRuntimePolicy(db, resolvedAuth, {
+          sessionId,
+          decision,
+          requestId: requestId(c),
           action: 'runtime_mcp_tool.call',
           resourceType: decision.category === 'tool' ? 'tool' : 'mcp_connector',
           resourceId: decision.category === 'tool' ? toolName : connectorId,
-          outcome: 'denied',
-          requestId: requestId(c),
-          sessionId,
-          policyCategory: decision.category,
-          metadata: payload,
+          payload: { operation: 'mcp_tool_call', connectorId, toolName },
         })
         return errorResponse(
           c,
@@ -780,9 +888,73 @@ export function createApp() {
               .clone()
               .json()
               .catch(() => ({}))
+      const sandboxPolicyDenial = await evaluateRuntimeSandboxOperations(db, resolvedAuth, session, body)
+      if (sandboxPolicyDenial) {
+        await denyRuntimePolicy(db, resolvedAuth, {
+          sessionId,
+          decision: sandboxPolicyDenial.decision,
+          requestId: requestId(c),
+          action: 'runtime_sandbox.operation',
+          resourceType: sandboxPolicyDenial.operation.resourceType,
+          resourceId: sandboxPolicyDenial.operation.resourceId,
+          payload: {
+            operation: sandboxPolicyDenial.operation.operation,
+            command: 'command' in sandboxPolicyDenial.operation ? sandboxPolicyDenial.operation.command : undefined,
+            host: 'host' in sandboxPolicyDenial.operation ? sandboxPolicyDenial.operation.host : undefined,
+          },
+        })
+        return errorResponse(c, 403, 'policy_denied', sandboxPolicyDenial.decision.message, {
+          category: sandboxPolicyDenial.decision.category,
+          resourceType: sandboxPolicyDenial.operation.resourceType,
+          resourceId: sandboxPolicyDenial.operation.resourceId,
+          ruleId: sandboxPolicyDenial.decision.rule,
+        })
+      }
       const correlationId = await recordRuntimeMessageSubmission(db, resolvedAuth, session, body)
       if (c.env.AMA_RUNTIME_MODE === 'test') {
         await recordTestRuntimeMessageOutcome(db, resolvedAuth, session, body, correlationId)
+      }
+    } else {
+      const body =
+        request.method === 'GET' || request.method === 'HEAD'
+          ? {}
+          : await request
+              .clone()
+              .json()
+              .catch(() => ({}))
+      const operation = sandboxOperationFromRuntimePath(path, body)
+      if (operation) {
+        const decision = await evaluateSandboxRuntimePolicy(db, resolvedAuth, {
+          session: {
+            id: session.id,
+            agentSnapshot: session.agentSnapshot,
+            environmentSnapshot: session.environmentSnapshot,
+          },
+          operation: operation.operation,
+          command: 'command' in operation ? operation.command : null,
+          host: 'host' in operation ? operation.host : null,
+        })
+        if (!decision.allowed) {
+          await denyRuntimePolicy(db, resolvedAuth, {
+            sessionId,
+            decision,
+            requestId: requestId(c),
+            action: 'runtime_sandbox.operation',
+            resourceType: operation.resourceType,
+            resourceId: operation.resourceId,
+            payload: {
+              operation: operation.operation,
+              command: 'command' in operation ? operation.command : undefined,
+              host: 'host' in operation ? operation.host : undefined,
+            },
+          })
+          return errorResponse(c, 403, 'policy_denied', decision.message, {
+            category: decision.category,
+            resourceType: operation.resourceType,
+            resourceId: operation.resourceId,
+            ruleId: decision.rule,
+          })
+        }
       }
     }
 
