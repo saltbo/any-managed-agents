@@ -36,6 +36,8 @@ export const PaginationSchema = z
     hasMore: z.boolean().openapi({ example: false }),
     firstId: z.string().nullable().openapi({ example: 'agent_abc123' }),
     lastId: z.string().nullable().openapi({ example: 'agent_def456' }),
+    firstSequence: z.number().int().nullable().optional().openapi({ example: 1 }),
+    lastSequence: z.number().int().nullable().optional().openapi({ example: 50 }),
   })
   .openapi('ListPagination')
 
@@ -120,27 +122,36 @@ export function listQuerySchema<const T extends readonly [string, ...string[]]>(
 }
 
 export function eventListQuerySchema() {
-  return z.object({
-    afterSequence: z.coerce
-      .number()
-      .int()
-      .min(0)
-      .optional()
-      .openapi({
-        param: { name: 'afterSequence', in: 'query' },
-        example: 0,
-      }),
-    limit: z.coerce
-      .number()
-      .int()
-      .min(1)
-      .max(200)
-      .optional()
-      .openapi({
-        param: { name: 'limit', in: 'query' },
-        example: 100,
-      }),
-  })
+  return z
+    .object({
+      cursor: z.coerce
+        .number()
+        .int()
+        .min(0)
+        .optional()
+        .openapi({
+          param: { name: 'cursor', in: 'query' },
+          example: 42,
+        }),
+      order: z
+        .enum(['asc', 'desc'])
+        .optional()
+        .openapi({
+          param: { name: 'order', in: 'query' },
+          example: 'asc',
+        }),
+      limit: z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(200)
+        .optional()
+        .openapi({
+          param: { name: 'limit', in: 'query' },
+          example: 100,
+        }),
+    })
+    .strict()
 }
 
 export interface ListCursor {
@@ -195,6 +206,8 @@ export function paginateSequenceRows<T extends { sequence: number }>(rows: T[], 
       hasMore: rows.length > limit,
       firstId: first ? String(first.sequence) : null,
       lastId: last ? String(last.sequence) : null,
+      firstSequence: first?.sequence ?? null,
+      lastSequence: last?.sequence ?? null,
     },
   }
 }

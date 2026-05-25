@@ -323,4 +323,45 @@ describe('piRuntimeReducer', () => {
     expect(replayed.messages).toHaveLength(1)
     expect(replayed.messages[0]?.content).toBe('History loaded')
   })
+
+  it('ignores live tool events that were already loaded from history', () => {
+    const startPayload = {
+      type: 'tool_execution_start',
+      id: 'tool_1',
+      toolCall: { id: 'tool_1', name: 'write_file', input: { path: 'todo.md' } },
+    }
+    const endPayload = {
+      type: 'tool_execution_end',
+      id: 'tool_1',
+      toolCall: {
+        id: 'tool_1',
+        name: 'write_file',
+        input: { path: 'todo.md' },
+        output: { ok: true },
+        durationMs: 12,
+      },
+    }
+    const loaded = piRuntimeReducer(initialPiRuntimeState, {
+      type: 'persisted_events',
+      events: [event(1, 'tool_execution_start', startPayload), event(2, 'tool_execution_end', endPayload)],
+    })
+    const replayedStart = piRuntimeReducer(loaded, {
+      type: 'event',
+      event: startPayload,
+      at: new Date(99_000).toISOString(),
+    })
+    const replayedEnd = piRuntimeReducer(replayedStart, {
+      type: 'event',
+      event: endPayload,
+      at: new Date(100_000).toISOString(),
+    })
+
+    expect(replayedEnd.tools).toHaveLength(1)
+    expect(replayedEnd.tools[0]).toMatchObject({
+      callId: 'tool_1',
+      name: 'write_file',
+      status: 'success',
+      output: { ok: true },
+    })
+  })
 })

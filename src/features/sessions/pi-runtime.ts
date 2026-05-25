@@ -262,7 +262,6 @@ function mergePersistedEvents(state: PiRuntimeState, events: SessionEvent[]) {
     }),
   )
   const eventKeys = runtimeEvents
-    .filter(({ stored, payload }) => !isToolEvent(runtimeEventType(stored, payload)))
     .map(({ stored, payload }) => runtimeEventKey(payload, runtimeEventType(stored, payload)))
     .filter((key): key is string => Boolean(key))
   const hasTerminalEvent = runtimeEvents.some(({ payload }) => {
@@ -520,6 +519,10 @@ function runtimeEventKey(event: Record<string, unknown>, eventType: string, turn
     stringField(objectValue(event.toolCall), 'id') ??
     stringField(objectValue(event.toolCall), 'toolCallId')
   if (isToolEvent(eventType)) {
+    const eventId = stringField(event, 'id')
+    if (eventId) {
+      return `${eventType}:id:${eventId}`
+    }
     if (!turnKey) {
       return null
     }
