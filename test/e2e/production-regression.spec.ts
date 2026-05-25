@@ -101,11 +101,17 @@ test.describe('real authenticated production regression', () => {
       await expect(page.getByRole('tab', { name: 'Transcript' })).toBeVisible()
       await expect(page.getByRole('button', { name: 'Refresh events' })).toBeVisible()
 
-      await sendAndExpect(page, 'Reply exactly with: ama-real-browser-e2e-ok', /ama-real-browser-e2e-ok/i)
+      for (let turn = 1; turn <= 20; turn += 1) {
+        await sendAndExpect(
+          page,
+          `This is production regression turn ${turn}. Reply exactly with: ama-real-browser-e2e-turn-${turn}`,
+          new RegExp(`ama-real-browser-e2e-turn-${turn}`, 'i'),
+        )
+      }
       await sendAndExpect(
         page,
-        'Use the sandbox.exec tool to run `printf ama-tool-ok`, then report the output.',
-        /ama-tool-ok|sandbox\.exec|exec/i,
+        'Use the sandbox.exec tool to run `whoami`, then reply exactly with `ama-whoami:<output>` using the command output.',
+        /ama-whoami:/i,
       )
 
       const toolEvents = await waitForPersistedEvents(
@@ -131,13 +137,13 @@ test.describe('real authenticated production regression', () => {
       await expect(page.getByText(/ama-visible-error|error/i).first()).toBeVisible()
       await expect(page.getByText(toolEvents[0]?.id ?? /tool/i).first()).toBeVisible()
 
-      const transcriptTokenCount = await page.getByText(/ama-real-browser-e2e-ok/i).count()
+      const transcriptTokenCount = await page.getByText(/ama-real-browser-e2e-turn-1/i).count()
       const persistedEventsBeforeReconnect = await persistedEventSignatures(page.request, readySession.id)
       await apiJson<Session>(page.request, `/api/sessions/${readySession.id}/reconnect`)
       await page.reload()
       await expect(page.getByRole('tab', { name: 'Transcript' })).toBeVisible()
-      await expect(page.getByText(/ama-real-browser-e2e-ok/i).first()).toBeVisible()
-      await assertNoDuplicateReplayAfterReconnect(page, /ama-real-browser-e2e-ok/i, transcriptTokenCount)
+      await expect(page.getByText(/ama-real-browser-e2e-turn-1/i).first()).toBeVisible()
+      await assertNoDuplicateReplayAfterReconnect(page, /ama-real-browser-e2e-turn-1/i, transcriptTokenCount)
       await assertNoDuplicatePersistedEvents(page.request, readySession.id, persistedEventsBeforeReconnect)
 
       expect(errorEvents.length).toBeGreaterThan(0)
@@ -158,23 +164,9 @@ async function authenticate(page: Page) {
 
   await page.goto('/quickstart')
   await page.getByRole('link', { name: 'Continue with FlareAuth' }).click()
-  await fillFirstVisible(
-    page,
-    ['input[type="email"]', 'input[name="email"]', 'input[name="username"]', 'input[autocomplete="username"]'],
-    loginEmail,
-  )
-  await fillFirstVisible(
-    page,
-    ['input[type="password"]', 'input[name="password"]', 'input[autocomplete="current-password"]'],
-    loginPassword,
-  )
-  await clickFirstVisible(page, [
-    'button[type="submit"]',
-    'input[type="submit"]',
-    'button:has-text("Continue")',
-    'button:has-text("Sign in")',
-    'button:has-text("Log in")',
-  ])
+  await fillLoginField(page, /email|username/i, loginEmail, 'email or username')
+  await fillLoginField(page, /password/i, loginPassword, 'password')
+  await clickLoginSubmit(page)
   await page.waitForURL((url) => url.origin === new URL(origin).origin && !url.pathname.startsWith('/api/auth'), {
     timeout: 60_000,
   })
@@ -225,7 +217,7 @@ async function apiJson<T>(
 }
 
 async function waitForSession(request: APIRequestContext, sessionId: string) {
-  for (let attempt = 0; attempt < 90; attempt += 1) {
+  for (let attempt = 0; attempt < 180; attempt += 1) {
     const session = await apiJson<Session>(request, `/api/sessions/${sessionId}`)
     if (session.status === 'idle' || session.status === 'running') {
       return session
@@ -310,18 +302,29 @@ async function archiveCreatedResource(request: APIRequestContext, path: string, 
   }
 }
 
-async function fillFirstVisible(page: Page, selectors: string[], value: string | undefined) {
+async function fillLoginField(page: Page, name: RegExp, value: string | undefined, label: string) {
   if (!value) {
-    throw new Error('Missing login value')
+    throw new Error(`Missing login ${label}`)
   }
-  for (const selector of selectors) {
-    const locator = page.locator(selector).first()
-    if (await locator.isVisible().catch(() => false)) {
-      await locator.fill(value)
-      return
-    }
+  const byRole = page.getByRole('textbox', { name }).first()
+  await byRole.waitFor({ state: 'visible', timeout: 30_000 }).catch(async () => {
+    const byLabel = page.getByLabel(name).first()
+    await byLabel.waitFor({ state: 'visible', timeout: 30_000 })
+    await byLabel.fill(value)
+  })
+  if (await byRole.isVisible().catch(() => false)) {
+    await byRole.fill(value)
   }
-  throw new Error(`Unable to find visible login input from selectors: ${selectors.join(', ')}`)
+}
+
+async function clickLoginSubmit(page: Page) {
+  await clickFirstVisible(page, [
+    'button[type="submit"]',
+    'input[type="submit"]',
+    'button:has-text("Sign in")',
+    'button:has-text("Continue")',
+    'button:has-text("Log in")',
+  ])
 }
 
 async function clickFirstVisible(page: Page, selectors: string[]) {

@@ -35,7 +35,7 @@ const app = createApiRouter()
 
 const SESSION_STATUSES = ['pending', 'running', 'idle', 'stopped', 'error', 'archived', 'requires-action'] as const
 const EVENT_VISIBILITIES = ['runtime', 'transcript', 'debug', 'audit'] as const
-const RUNTIME_START_TIMEOUT_MS = 120_000
+const RUNTIME_START_TIMEOUT_MS = 300_000
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
 const AgentVersionSchema = z
@@ -905,7 +905,7 @@ async function stopSession(
 }
 
 async function archiveSession(c: Context<{ Bindings: Env }>, db: Db, auth: AuthContext, session: SessionRow) {
-  if (session.status === 'idle' || session.status === 'running') {
+  if (session.sandboxId && session.status !== 'stopped' && session.status !== 'archived') {
     const stoppedResponse = await stopSession(c, db, auth, session)
     if (!stoppedResponse.ok) {
       return stoppedResponse
@@ -931,7 +931,7 @@ async function archiveSession(c: Context<{ Bindings: Env }>, db: Db, auth: AuthC
 }
 
 async function archiveSessionAndRead(c: Context<{ Bindings: Env }>, db: Db, auth: AuthContext, session: SessionRow) {
-  if (session.status === 'idle' || session.status === 'running') {
+  if (session.sandboxId && session.status !== 'stopped' && session.status !== 'archived') {
     const stoppedResponse = await stopSession(c, db, auth, session)
     if (!stoppedResponse.ok) {
       return stoppedResponse
