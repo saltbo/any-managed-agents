@@ -107,7 +107,7 @@ export function useConsoleController() {
 
   const eventsQuery = useQuery({
     queryKey: ['sessions', selectedSession?.id, 'events'],
-    queryFn: () => api.listSessionEvents(selectedSession?.id ?? '', { limit: 200 }),
+    queryFn: () => api.listSessionEvents(selectedSession?.id ?? '', { limit: 200, order: 'desc' }),
     enabled: Boolean(selectedSession?.id),
   })
 

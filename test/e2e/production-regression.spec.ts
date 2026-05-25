@@ -142,13 +142,14 @@ test.describe('real authenticated production regression', () => {
       await expect(page.getByText(/ama-visible-error|error/i).first()).toBeVisible()
       await expect(page.getByText(toolEvents[0]?.id ?? /tool/i).first()).toBeVisible()
 
-      const transcriptTokenCount = await page.getByText(/ama-real-browser-e2e-turn-1/i).count()
+      const replayMarker = /ama-real-browser-e2e-turn-20/i
+      const transcriptTokenCount = await page.getByText(replayMarker).count()
       const persistedEventsBeforeReconnect = await persistedEventSignatures(page.request, readySession.id)
       await apiJson<Session>(page.request, `/api/sessions/${readySession.id}/reconnect`)
       await page.reload()
       await expect(page.getByRole('tab', { name: 'Transcript' })).toBeVisible()
-      await expect(page.getByText(/ama-real-browser-e2e-turn-1/i).first()).toBeVisible()
-      await assertNoDuplicateReplayAfterReconnect(page, /ama-real-browser-e2e-turn-1/i, transcriptTokenCount)
+      await expect(page.getByText(replayMarker).first()).toBeVisible()
+      await assertNoDuplicateReplayAfterReconnect(page, replayMarker, transcriptTokenCount)
       await assertNoDuplicatePersistedEvents(page.request, readySession.id, persistedEventsBeforeReconnect)
 
       expect(errorEvents.length).toBeGreaterThan(0)
