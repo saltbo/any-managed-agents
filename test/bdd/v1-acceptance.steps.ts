@@ -784,6 +784,12 @@ Then('the production e2e command documents the required secret environment varia
     /AMA_E2E_COOKIE/,
     /AMA_E2E_EMAIL/,
     /AMA_E2E_PASSWORD/,
+    /AMA_PRODUCTION_E2E_EMAIL/,
+    /AMA_STAGING_E2E_EMAIL/,
+    /GitHub Actions environment secrets/,
+    /Agent Kanban secret injection/,
+    /dedicated e2e user/,
+    /AMA_E2E_RECORD_ARTIFACTS/,
     /npm run e2e:production/,
     /Auth input precedence/,
   )
@@ -795,6 +801,13 @@ Then('the production e2e command documents the required secret environment varia
     /AMA_E2E_COOKIE/,
     /AMA_E2E_EMAIL/,
     /AMA_E2E_PASSWORD/,
+    /AMA_PRODUCTION_E2E_EMAIL/,
+    /AMA_STAGING_E2E_EMAIL/,
+    /GitHub Actions environment secrets/,
+    /Agent Kanban secret injection/,
+    /Dedicated FlareAuth e2e users/,
+    /Cloudflare Worker secrets.*not the\s+approved browser e2e credential transport/s,
+    /AMA_E2E_RECORD_ARTIFACTS/,
     /Auth input precedence/,
   )
   assertIncludes('.gitignore', /\.secrets\//)
@@ -802,7 +815,14 @@ Then('the production e2e command documents the required secret environment varia
 
 Then('the production e2e harness authenticates without direct auth database access', () => {
   const content = read('test/e2e/production-regression.spec.ts')
-  assert.match(content, /Continue with FlareAuth|AMA_E2E_STORAGE_STATE|AMA_E2E_COOKIE/)
+  assert.match(content, /Continue with FlareAuth|resolveProductionE2EAuth|auth\.sessionCookie/)
+  assertIncludes(
+    'server/test/production-e2e-auth.test.ts',
+    /uses cookie auth first without parsing lower-precedence storage state/,
+    /accepts secret-injected JSON storage state without a local file/,
+    /reports invalid storage-state JSON without echoing the secret value/,
+  )
+  assertIncludes('playwright.production.config.ts', /AMA_E2E_RECORD_ARTIFACTS/, /trace:.*'off'/s, /video:.*'off'/s)
   assert.doesNotMatch(content, /wrangler\s+d1|INSERT INTO|app_sessions|seedLocalAuth/)
 })
 
@@ -813,7 +833,7 @@ Then('the production e2e harness creates resources through public AMA APIs', () 
 Then('the production e2e harness verifies runtime chat, tool rendering, debug errors, and replay dedupe', () => {
   assertIncludes(
     'test/e2e/production-regression.spec.ts',
-    /ama-real-browser-e2e-ok/,
+    /ama-real-browser-e2e-turn-1/,
     /sandbox\.exec/,
     /Debug/,
     /assertNoDuplicateReplayAfterReconnect/,

@@ -1,5 +1,7 @@
 import { defineConfig } from '@playwright/test'
 
+const recordSensitiveArtifacts = process.env.AMA_E2E_RECORD_ARTIFACTS === '1'
+
 export default defineConfig({
   testDir: './test/e2e',
   testMatch: /production-regression\.spec\.ts/,
@@ -9,7 +11,7 @@ export default defineConfig({
   },
   use: {
     baseURL: process.env.AMA_ORIGIN ?? 'https://ama.tftt.cc',
-    trace: 'retain-on-failure',
-    video: 'retain-on-failure',
+    trace: recordSensitiveArtifacts ? 'retain-on-failure' : 'off',
+    video: recordSensitiveArtifacts ? 'retain-on-failure' : 'off',
   },
 })

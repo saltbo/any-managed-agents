@@ -69,7 +69,8 @@ origin:
 
 ```bash
 AMA_ORIGIN=https://ama.tftt.cc \
-AMA_E2E_STORAGE_STATE=.secrets/ama-storage-state.json \
+AMA_E2E_EMAIL="$AMA_E2E_EMAIL" \
+AMA_E2E_PASSWORD="$AMA_E2E_PASSWORD" \
 npm run e2e:production
 ```
 
@@ -78,20 +79,43 @@ Auth input precedence is explicit. The harness uses `AMA_E2E_COOKIE` first,
 third. Set only one auth method in CI unless intentionally overriding a lower
 precedence method.
 
-- `AMA_E2E_COOKIE`: an AMA session cookie value such as
+- `AMA_E2E_COOKIE`: short-lived AMA session cookie value such as
   `__Host-ama_session=...`.
-- `AMA_E2E_STORAGE_STATE`: Playwright storage state produced by a real
-  FlareAuth login. The documented `.secrets/` directory is ignored by git.
-- `AMA_E2E_EMAIL` and `AMA_E2E_PASSWORD`: credentials for the supported
-  FlareAuth browser login flow.
+- `AMA_E2E_STORAGE_STATE`: short-lived Playwright storage state produced by a real
+  FlareAuth login. This may be either the JSON storage state secret value or a
+  path to a storage state file. The documented `.secrets/` directory is ignored
+  by git for operator-only local runs.
+- `AMA_E2E_EMAIL` and `AMA_E2E_PASSWORD`: durable credentials for the supported
+  FlareAuth browser login flow. This is the preferred CI and agent-run path.
+
+Use GitHub Actions environment secrets for CI and Agent Kanban secret injection
+for agent runs. In GitHub Actions, create protected `production` and `staging`
+environments and store the same generic secret names in each environment:
+`AMA_E2E_EMAIL`, `AMA_E2E_PASSWORD`, and optionally `AMA_E2E_COOKIE` or
+`AMA_E2E_STORAGE_STATE` for short-lived override runs. Set `AMA_ORIGIN` to the
+matching deployment origin. If a central secret manager cannot scope secrets by
+environment, use explicit source aliases such as `AMA_PRODUCTION_E2E_EMAIL` or
+`AMA_STAGING_E2E_EMAIL` and map one environment's values into the generic
+runtime variables before running `npm run e2e:production`.
+
+The FlareAuth account behind these secrets must be a dedicated e2e user for the
+matching environment, scoped to the least-privileged smoke-test organization or
+project. It must not have administrator access. Rotate password and cookie or
+storage-state material after any suspected exposure, after membership changes,
+and at least quarterly. Cloudflare Worker secrets are not the approved transport
+for browser e2e credentials because the Playwright runner, not the Worker,
+consumes them.
 
 Optional overrides are `AMA_E2E_PROVIDER` and `AMA_E2E_MODEL`; defaults target
-Workers AI and `@cf/moonshotai/kimi-k2.6`. The harness creates a test-safe
-environment, agent, and session through public `/api` routes, drives chat through
-the session UI/WebSocket, checks tool and error rendering, reloads the session,
-and archives created resources during cleanup. In CI, store the storage state or
-cookie in the secret manager and write it to an ignored path at runtime; do not
-commit auth cookies, storage state, screenshots, videos, or traces.
+Workers AI and `@cf/moonshotai/kimi-k2.6`. Playwright traces and videos are off
+by default for this authenticated production config; set
+`AMA_E2E_RECORD_ARTIFACTS=1` only for restricted local debugging and delete the
+artifacts before sharing logs. The harness creates a test-safe environment,
+agent, and session through public `/api` routes, drives chat through the session
+UI/WebSocket, checks tool and error rendering, reloads the session, and archives
+created resources during cleanup. Do not print, commit, paste into task notes, or
+upload auth cookies, storage state, credentials, screenshots, videos, or traces
+containing authenticated pages.
 
 ## Deployment
 

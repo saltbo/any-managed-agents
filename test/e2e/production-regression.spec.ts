@@ -1,11 +1,13 @@
 import { type APIRequestContext, type BrowserContext, expect, type Page, test } from '@playwright/test'
+import { resolveProductionE2EAuth } from '../../server/test/production-e2e-auth'
 
 const origin = process.env.AMA_ORIGIN ?? 'https://ama.tftt.cc'
-const storageState = process.env.AMA_E2E_STORAGE_STATE
-const sessionCookie = process.env.AMA_E2E_COOKIE
-const loginEmail = process.env.AMA_E2E_EMAIL
-const loginPassword = process.env.AMA_E2E_PASSWORD
-const effectiveStorageState = sessionCookie ? undefined : storageState
+const auth = resolveProductionE2EAuth({
+  sessionCookie: process.env.AMA_E2E_COOKIE,
+  storageState: process.env.AMA_E2E_STORAGE_STATE,
+  loginEmail: process.env.AMA_E2E_EMAIL,
+  loginPassword: process.env.AMA_E2E_PASSWORD,
+})
 const runId = `real-e2e-${Date.now()}`
 
 interface Environment {
@@ -35,11 +37,11 @@ interface ListResponse<T> {
   data: T[]
 }
 
-test.use(effectiveStorageState ? { storageState: effectiveStorageState } : {})
+test.use(auth.storageState ? { storageState: auth.storageState } : {})
 
 test.describe('real authenticated production regression', () => {
   test.skip(
-    !effectiveStorageState && !sessionCookie && (!loginEmail || !loginPassword),
+    !auth.storageState && !auth.sessionCookie && !auth.hasPasswordLogin,
     'Set AMA_E2E_STORAGE_STATE, AMA_E2E_COOKIE, or AMA_E2E_EMAIL/AMA_E2E_PASSWORD to run the real regression.',
   )
 
@@ -154,18 +156,18 @@ test.describe('real authenticated production regression', () => {
 })
 
 async function authenticate(page: Page) {
-  if (sessionCookie) {
-    await addCookie(page.context(), sessionCookie)
+  if (auth.sessionCookie) {
+    await addCookie(page.context(), auth.sessionCookie)
     return
   }
-  if (effectiveStorageState) {
+  if (auth.storageState) {
     return
   }
 
   await page.goto('/quickstart')
   await page.getByRole('link', { name: 'Continue with FlareAuth' }).click()
-  await fillLoginField(page, /email|username/i, loginEmail, 'email or username')
-  await fillLoginField(page, /password/i, loginPassword, 'password')
+  await fillLoginField(page, /email|username/i, auth.loginEmail, 'email or username')
+  await fillLoginField(page, /password/i, auth.loginPassword, 'password')
   await clickLoginSubmit(page)
   await page.waitForURL((url) => url.origin === new URL(origin).origin && !url.pathname.startsWith('/api/auth'), {
     timeout: 60_000,

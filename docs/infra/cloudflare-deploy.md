@@ -86,7 +86,8 @@ the deployed origin:
 
 ```bash
 AMA_ORIGIN=https://ama.tftt.cc \
-AMA_E2E_STORAGE_STATE=.secrets/ama-storage-state.json \
+AMA_E2E_EMAIL="$AMA_E2E_EMAIL" \
+AMA_E2E_PASSWORD="$AMA_E2E_PASSWORD" \
 npm run e2e:production
 ```
 
@@ -95,20 +96,71 @@ explicit: `AMA_E2E_COOKIE` is used first, `AMA_E2E_STORAGE_STATE` second, and
 `AMA_E2E_EMAIL` plus `AMA_E2E_PASSWORD` third. Set only one auth method in CI
 unless intentionally overriding a lower precedence method.
 
-- `AMA_E2E_COOKIE`: a FlareAuth-issued AMA session cookie.
+- `AMA_E2E_COOKIE`: a short-lived FlareAuth-issued AMA session cookie.
 - `AMA_E2E_STORAGE_STATE`: Playwright storage state from a real FlareAuth login.
-  The documented `.secrets/` directory is ignored by git.
-- `AMA_E2E_EMAIL` and `AMA_E2E_PASSWORD`: credentials for the browser login
-  flow.
+  This may be either the JSON storage state secret value or a path to a storage
+  state file. The documented `.secrets/` directory is ignored by git for
+  operator-only local runs.
+- `AMA_E2E_EMAIL` and `AMA_E2E_PASSWORD`: durable credentials for the browser
+  login flow. This is the preferred CI and agent-run path because it survives
+  session expiry.
+
+Approved secret transport:
+
+- CI uses GitHub Actions environment secrets. Configure separate production and
+  staging environments so reviewers approve production runs before secrets are
+  released to the job.
+- Agent runs use Agent Kanban secret injection with the same source secret names.
+- Cloudflare Worker secrets hold Worker runtime secrets only; they are not the
+  approved browser e2e credential transport because Playwright runs outside the
+  Worker.
+- `.secrets/` is only a local operator bootstrap location and must not be
+  required by CI or future agents.
+
+Use GitHub Actions environment secrets as the source of truth. The secret names
+are generic inside each protected GitHub environment, while `AMA_ORIGIN` selects
+the target deployment:
+
+| GitHub environment | Origin | Required secrets | Optional short-lived override secrets |
+| --- | --- | --- | --- |
+| `production` | `https://ama.tftt.cc` | `AMA_E2E_EMAIL`, `AMA_E2E_PASSWORD` | `AMA_E2E_COOKIE`, `AMA_E2E_STORAGE_STATE` |
+| `staging` | `https://<staging-host>` | `AMA_E2E_EMAIL`, `AMA_E2E_PASSWORD` | `AMA_E2E_COOKIE`, `AMA_E2E_STORAGE_STATE` |
+
+Agent Kanban secret injection should provide the same generic names for the
+selected origin. If a central secret manager cannot scope secrets by environment,
+use explicit source aliases such as `AMA_PRODUCTION_E2E_EMAIL`,
+`AMA_PRODUCTION_E2E_PASSWORD`, `AMA_STAGING_E2E_EMAIL`, or
+`AMA_STAGING_E2E_PASSWORD`, then map exactly one environment's values into the
+generic runtime variables before invoking `npm run e2e:production`.
+
+For short-lived override runs, secret-inject `AMA_E2E_COOKIE` or JSON
+`AMA_E2E_STORAGE_STATE` so the job does not need to create an untracked local
+file. If a storage-state file is unavoidable, write it under the runner temp
+directory with shell tracing disabled and delete it before artifact upload.
+
+Dedicated FlareAuth e2e users:
+
+- Create one non-human FlareAuth user per environment, such as production e2e
+  and staging e2e. Do not reuse personal accounts.
+- Grant only the smoke-test organization or project membership needed to create,
+  read, and archive AMA e2e resources. Do not grant administrator access.
+- Keep production and staging users, passwords, cookies, and storage states
+  separate.
+- Rotate password and derived cookie or storage-state material after any
+  suspected exposure, after membership changes, and at least quarterly.
+- Disable or remove the e2e user when the matching environment is retired.
+
+Playwright traces and videos are off by default for this authenticated
+production config. Set `AMA_E2E_RECORD_ARTIFACTS=1` only for restricted local
+debugging, and delete the artifacts before sharing logs or opening task notes.
 
 The regression never queries or mutates auth databases. It verifies
 `/api/auth/me`, creates an environment, agent, and session through public `/api`
 routes, opens the session detail page, sends multiple runtime messages through
 the UI/WebSocket, checks transcript, tool, debug error, and reload dedupe
 behavior, then archives the smoke resources. Keep the storage state or cookie in
-the CI secret manager, write it only to an ignored runtime path, and avoid
-printing it in logs. Prefer staging for routine runs because session startup may
-consume runtime and model quota.
+the approved secret manager and avoid printing it in logs. Prefer staging for
+routine runs because session startup may consume runtime and model quota.
 
 ## Cloudflare build settings
 
