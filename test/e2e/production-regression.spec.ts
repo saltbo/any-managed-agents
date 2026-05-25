@@ -109,7 +109,7 @@ test.describe('real authenticated production regression', () => {
           new RegExp(`ama-real-browser-e2e-turn-${turn}`, 'i'),
         )
       }
-      await sendAndExpect(
+      const whoamiTurn = await sendAndExpect(
         page,
         readySession.id,
         'Use the sandbox.exec tool to run `whoami`, then reply exactly with `ama-whoami:<output>` using the command output.',
@@ -120,10 +120,11 @@ test.describe('real authenticated production regression', () => {
         page.request,
         readySession.id,
         (events) => events.filter((event) => event.type.includes('tool') || hasToolPayload(event)).length > 0,
+        whoamiTurn.beforeSequence,
       )
       await expect(page.getByText('Tool').first()).toBeVisible()
 
-      await sendAndExpect(
+      const errorTurn = await sendAndExpect(
         page,
         readySession.id,
         'Use the sandbox.exec tool to run `sh -c "echo ama-visible-error >&2; exit 7"` and show the error.',
@@ -134,6 +135,7 @@ test.describe('real authenticated production regression', () => {
         readySession.id,
         (events) =>
           events.filter((event) => event.type === 'error' || eventContains(event, 'ama-visible-error')).length > 0,
+        errorTurn.beforeSequence,
       )
 
       await page.getByRole('tab', { name: 'Debug' }).click()
@@ -240,6 +242,7 @@ async function sendAndExpect(page: Page, sessionId: string, message: string, exp
   await page.getByRole('button', { name: 'Send' }).click()
   await waitForAssistantMessage(page.request, sessionId, afterSequence, expected)
   await expect(page.getByText(expected).first()).toBeVisible({ timeout: 120_000 })
+  return { beforeSequence: afterSequence }
 }
 
 async function latestEventSequence(request: APIRequestContext, sessionId: string) {
@@ -255,14 +258,18 @@ async function waitForAssistantMessage(
   afterSequence: number,
   expected: RegExp,
 ) {
-  await waitForPersistedEvents(request, sessionId, (events) =>
-    events.some(
-      (event) =>
-        event.sequence > afterSequence &&
-        (event.type === 'message_end' || event.type === 'turn_end') &&
-        eventRole(event) === 'assistant' &&
-        expected.test(eventText(event)),
-    ),
+  await waitForPersistedEvents(
+    request,
+    sessionId,
+    (events) =>
+      events.some(
+        (event) =>
+          event.sequence > afterSequence &&
+          (event.type === 'message_end' || event.type === 'turn_end') &&
+          eventRole(event) === 'assistant' &&
+          expected.test(eventText(event)),
+      ),
+    afterSequence,
   )
 }
 
@@ -270,10 +277,16 @@ async function waitForPersistedEvents(
   request: APIRequestContext,
   sessionId: string,
   predicate: (events: SessionEvent[]) => boolean,
+  cursor = 0,
 ) {
   let events: SessionEvent[] = []
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    events = (await apiJson<ListResponse<SessionEvent>>(request, `/api/sessions/${sessionId}/events?limit=200`)).data
+    events = (
+      await apiJson<ListResponse<SessionEvent>>(
+        request,
+        `/api/sessions/${sessionId}/events?limit=200${cursor > 0 ? `&cursor=${cursor}` : ''}`,
+      )
+    ).data
     if (predicate(events)) {
       return events
     }
