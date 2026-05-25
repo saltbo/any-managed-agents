@@ -169,11 +169,22 @@ export async function stopPiBridge(env: Env, sandboxId: string, piRuntimeId: str
   const getSandbox = await getSandboxBinding()
   const sandbox = getSandbox(env.SANDBOX, sandboxId, { keepAlive: true, normalizeId: true })
   if (piRuntimeId) {
-    await sandbox.killProcess(piRuntimeId)
+    await sandbox.killProcess(piRuntimeId).catch((error: unknown) => {
+      if (!isProcessNotFoundError(error)) {
+        throw error
+      }
+    })
   } else {
     await sandbox.killAllProcesses()
   }
   await sandbox.destroy()
+}
+
+export function isProcessNotFoundError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false
+  }
+  return error.name === 'ProcessNotFoundError' || error.message.includes('ProcessNotFoundError')
 }
 
 export async function proxyPiRuntime(env: Env, sandboxId: string, request: Request) {

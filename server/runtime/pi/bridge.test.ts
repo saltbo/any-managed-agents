@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Env } from '../../env'
-import { piModelsConfig, safeRuntimeError } from './bridge'
+import { isProcessNotFoundError, piModelsConfig, safeRuntimeError } from './bridge'
 
 describe('safeRuntimeError', () => {
   it('redacts sensitive runtime error messages', () => {
@@ -49,5 +49,15 @@ describe('piModelsConfig', () => {
         'cloudflare-workers-ai',
       ),
     ).toThrow('AMA_RUNTIME_AI_PROXY_TOKEN')
+  })
+})
+
+describe('isProcessNotFoundError', () => {
+  it('identifies Cloudflare sandbox process-not-found stop races', () => {
+    const error = new Error('Process pi-session_x not found')
+    error.name = 'ProcessNotFoundError'
+
+    expect(isProcessNotFoundError(error)).toBe(true)
+    expect(isProcessNotFoundError(new Error('permission denied'))).toBe(false)
   })
 })
