@@ -311,6 +311,25 @@ function serializeEvent(row: SessionEventRow) {
   }
 }
 
+async function markExpiredPendingSessions(db: Db, auth: AuthContext) {
+  const expiredBefore = new Date(Date.now() - RUNTIME_START_TIMEOUT_MS).toISOString()
+  const timestamp = now()
+  await db
+    .update(sessions)
+    .set({
+      status: 'error',
+      statusReason: 'Pi runtime startup timed out',
+      updatedAt: timestamp,
+    })
+    .where(
+      and(
+        eq(sessions.projectId, auth.project.id),
+        eq(sessions.status, 'pending'),
+        lt(sessions.createdAt, expiredBefore),
+      ),
+    )
+}
+
 function mcpConnectorIds(snapshot: Record<string, unknown>) {
   const connectors = Array.isArray(snapshot.connectors) ? snapshot.connectors : []
   return connectors
@@ -1005,6 +1024,7 @@ app.openapi(listSessionsRoute, async (c) => {
   if (auth instanceof Response) {
     return auth
   }
+  await markExpiredPendingSessions(db, auth)
 
   const { includeArchived, status, search, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
   let parsedCursor: ReturnType<typeof parseListCursor> | null = null
@@ -1046,6 +1066,7 @@ app.openapi(readSessionRoute, async (c) => {
   if (auth instanceof Response) {
     return auth
   }
+  await markExpiredPendingSessions(db, auth)
 
   const session = await findSession(db, auth, sessionId)
   if (!session) {

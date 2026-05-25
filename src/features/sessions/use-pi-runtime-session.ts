@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import type { Session, SessionEvent } from '@/lib/api'
 import {
   initialPiRuntimeState,
@@ -18,8 +18,10 @@ export function usePiRuntimeSession({
   onEventsChanged: () => void
 }) {
   const [state, dispatch] = useReducer(piRuntimeReducer, initialPiRuntimeState)
+  const [connectionAttempt, setConnectionAttempt] = useState(0)
   const socketRef = useRef<WebSocket | null>(null)
   const refreshTimerRef = useRef<number | null>(null)
+  const reconnectTimerRef = useRef<number | null>(null)
   const endpoint = useMemo(() => (session ? runtimeWebSocketUrl(session.runtimeEndpointPath) : null), [session])
 
   useEffect(() => {
@@ -27,10 +29,12 @@ export function usePiRuntimeSession({
   }, [events])
 
   useEffect(() => {
+    void connectionAttempt
     if (!endpoint) {
       dispatch({ type: 'connection', state: 'closed' })
       return
     }
+    window.clearTimeout(reconnectTimerRef.current ?? undefined)
     const socket = new WebSocket(endpoint)
     socketRef.current = socket
     dispatch({ type: 'connection', state: 'connecting' })
@@ -38,7 +42,6 @@ export function usePiRuntimeSession({
     socket.addEventListener('open', () => {
       if (socketRef.current !== socket) return
       dispatch({ type: 'connection', state: 'open' })
-      socket.send(JSON.stringify(command('get_state')))
     })
     socket.addEventListener('message', (message) => {
       if (socketRef.current !== socket) return
@@ -59,17 +62,22 @@ export function usePiRuntimeSession({
     })
     socket.addEventListener('close', () => {
       if (socketRef.current !== socket) return
+      socketRef.current = null
       dispatch({ type: 'connection', state: 'closed' })
+      reconnectTimerRef.current = window.setTimeout(() => {
+        setConnectionAttempt((attempt) => attempt + 1)
+      }, 750)
     })
 
     return () => {
       window.clearTimeout(refreshTimerRef.current ?? undefined)
+      window.clearTimeout(reconnectTimerRef.current ?? undefined)
       if (socketRef.current === socket) {
         socketRef.current = null
       }
       socket.close()
     }
-  }, [endpoint, onEventsChanged])
+  }, [endpoint, onEventsChanged, connectionAttempt])
 
   const sendCommand = useCallback((type: PiRpcCommandType, message?: string) => {
     const socket = socketRef.current

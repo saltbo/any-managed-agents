@@ -348,9 +348,21 @@ async function drainPiRuntimeEvents(
   db: ReturnType<typeof drizzle>,
   auth: AuthContext,
   session: typeof sessions.$inferSelect,
+  cursor?: number | 'latest' | null,
   onLine?: (line: string) => void,
+  options: { stopOnTerminal?: boolean; signal?: AbortSignal } = {},
 ) {
-  const streamRequest = new Request(request.url, { method: 'GET', headers: request.headers })
+  const streamUrl = new URL(request.url)
+  if (cursor === 'latest') {
+    streamUrl.searchParams.set('cursor', cursor)
+  } else if (typeof cursor === 'number' && Number.isFinite(cursor)) {
+    streamUrl.searchParams.set('cursor', String(cursor))
+  }
+  const streamRequest = new Request(streamUrl, {
+    method: 'GET',
+    headers: request.headers,
+    ...(options.signal ? { signal: options.signal } : {}),
+  })
   const response = await proxyPiRuntime(env, sandboxId, streamRequest)
   if (!response.body) {
     return
@@ -370,7 +382,7 @@ async function drainPiRuntimeEvents(
       for (const line of lines) {
         onLine?.(line)
         const terminal = await ingestPiRuntimeLine(db, auth, session, line)
-        if (terminal) {
+        if (terminal && options.stopOnTerminal !== false) {
           await reader.cancel().catch(() => undefined)
           return
         }
@@ -379,11 +391,23 @@ async function drainPiRuntimeEvents(
     const final = `${pending}${decoder.decode()}`
     if (final.trim()) {
       onLine?.(final)
-      await ingestPiRuntimeLine(db, auth, session, final)
+      const terminal = await ingestPiRuntimeLine(db, auth, session, final)
+      if (terminal && options.stopOnTerminal !== false) {
+        await reader.cancel().catch(() => undefined)
+      }
     }
   } finally {
     await reader.cancel().catch(() => undefined)
   }
+}
+
+async function runtimeEventCursor(response: Response) {
+  const payload = await response.json().catch((): unknown => null)
+  if (!payload || typeof payload !== 'object') {
+    return null
+  }
+  const cursor = (payload as Record<string, unknown>).eventCursor
+  return typeof cursor === 'number' && Number.isFinite(cursor) ? cursor : null
 }
 
 function createWebSocketPair() {
@@ -504,13 +528,6 @@ async function handleRuntimeWebSocketMessage(
     socket.close(1011, `Pi runtime returned ${response.status}`)
     return
   }
-  if (response.ok) {
-    await drainPiRuntimeEvents(env, session.sandboxId ?? '', proxyRequest, db, auth, session, (line) => {
-      if (line.trim()) {
-        socket.send(line.endsWith('\n') ? line : `${line}\n`)
-      }
-    })
-  }
 }
 
 export function createApp() {
@@ -590,6 +607,35 @@ export function createApp() {
       }
       const { client, server } = createWebSocketPair()
       server.accept()
+      const streamController = new AbortController()
+      const streamUrl = new URL(c.req.url)
+      streamUrl.pathname = `/runtime/sessions/${session.id}/rpc`
+      const streamRequest = new Request(streamUrl, {
+        method: 'GET',
+        headers: c.req.raw.headers,
+        signal: streamController.signal,
+      })
+      c.executionCtx.waitUntil(
+        drainPiRuntimeEvents(
+          c.env,
+          session.sandboxId,
+          streamRequest,
+          db,
+          resolvedAuth,
+          session,
+          'latest',
+          (line) => {
+            if (line.trim()) {
+              server.send(line.endsWith('\n') ? line : `${line}\n`)
+            }
+          },
+          { stopOnTerminal: false, signal: streamController.signal },
+        ).catch((error) => {
+          if (!streamController.signal.aborted) {
+            sendRuntimeJson(server, { type: 'error', message: error instanceof Error ? error.message : String(error) })
+          }
+        }),
+      )
       server.addEventListener('message', (event) => {
         c.executionCtx.waitUntil(
           handleRuntimeWebSocketMessage(server, c.env, db, resolvedAuth, session, c.req.url, event.data).catch(() => {
@@ -598,6 +644,7 @@ export function createApp() {
         )
       })
       server.addEventListener('close', () => {
+        streamController.abort()
         server.close()
       })
       return new Response(null, { status: 101, webSocket: client })
@@ -667,10 +714,13 @@ export function createApp() {
     }
 
     const response = await proxyPiRuntime(c.env, session.sandboxId, request)
+    const cursor = path === '/rpc' && request.method === 'POST' ? await runtimeEventCursor(response.clone()) : null
     if (path === '/rpc' && request.method === 'POST') {
       await recordRuntimeProxyFailure(db, resolvedAuth, session, response.clone())
       if (response.ok && c.env.AMA_RUNTIME_MODE !== 'test') {
-        c.executionCtx.waitUntil(drainPiRuntimeEvents(c.env, session.sandboxId, request, db, resolvedAuth, session))
+        c.executionCtx.waitUntil(
+          drainPiRuntimeEvents(c.env, session.sandboxId, request, db, resolvedAuth, session, cursor),
+        )
       }
     }
     return response

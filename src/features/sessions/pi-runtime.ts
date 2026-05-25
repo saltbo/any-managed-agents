@@ -204,8 +204,8 @@ function mergePersistedEvents(state: PiRuntimeState, events: SessionEvent[]) {
     runtimeEvents
       .map(({ stored, payload }) => {
         const type = stringField(payload, 'type') ?? stored.type
-        if (type === 'message_update' || type === 'message_end') {
-          return messageFromPiEvent(payload, stored.createdAt, type === 'message_update' ? 'streaming' : 'complete')
+        if (type === 'message_end') {
+          return messageFromPiEvent(payload, stored.createdAt, 'complete')
         }
         if (type === 'agent_end') {
           return messageFromPiEvent(payload, stored.createdAt, 'complete')
@@ -278,6 +278,7 @@ function mergePersistedEvents(state: PiRuntimeState, events: SessionEvent[]) {
 function messageFromPiEvent(event: Record<string, unknown>, at: string, status: PiRuntimeMessage['status']) {
   const message = objectValue(event.message)
   const assistantMessageEvent = objectValue(event.assistantMessageEvent)
+  const partial = objectValue(assistantMessageEvent.partial)
   const rawRole = stringField(message, 'role') ?? stringField(event, 'role') ?? 'assistant'
   const role: PiRuntimeMessage['role'] =
     rawRole === 'user' || rawRole === 'assistant' || rawRole === 'system' ? rawRole : 'assistant'
@@ -291,14 +292,26 @@ function messageFromPiEvent(event: Record<string, unknown>, at: string, status: 
       createdAt: at,
     }
   }
-  const content = extractText(
-    event.content ?? message.content ?? assistantMessageEvent.text ?? assistantMessageEvent.delta,
-  )
+  const assistantEventType = stringField(assistantMessageEvent, 'type')
+  if (status === 'streaming' && assistantEventType && assistantEventType !== 'text_delta') {
+    return null
+  }
+  const content =
+    status === 'streaming' && assistantEventType === 'text_delta'
+      ? extractText(assistantMessageEvent.delta)
+      : extractText(event.content ?? message.content ?? assistantMessageEvent.text ?? assistantMessageEvent.delta)
   if (!content) {
     return null
   }
   return {
-    id: stringField(event, 'messageId') ?? stringField(message, 'id') ?? stringField(event, 'id') ?? `${role}_current`,
+    id:
+      stringField(event, 'messageId') ??
+      stringField(message, 'id') ??
+      scalarField(message, 'timestamp') ??
+      scalarField(partial, 'timestamp') ??
+      stringField(assistantMessageEvent, 'responseId') ??
+      stringField(event, 'id') ??
+      `${role}_${at}`,
     role,
     content,
     status,
@@ -400,10 +413,17 @@ function extractText(value: unknown): string {
     return value
   }
   if (Array.isArray(value)) {
-    return value.map((item) => extractText(item)).join('')
+    const textItems = value
+      .filter((item) => item && typeof item === 'object' && (item as Record<string, unknown>).type === 'text')
+      .map((item) => extractText(item))
+      .join('')
+    return textItems || value.map((item) => extractText(item)).join('')
   }
   if (value && typeof value === 'object') {
     const record = value as Record<string, unknown>
+    if (record.type === 'thinking' || record.type === 'toolCall' || record.type === 'toolResult') {
+      return ''
+    }
     return extractText(record.text ?? record.content ?? record.delta ?? '')
   }
   return ''
@@ -428,6 +448,11 @@ function objectValue(value: unknown): Record<string, unknown> {
 
 function stringField(record: Record<string, unknown>, field: string) {
   return typeof record[field] === 'string' ? record[field] : null
+}
+
+function scalarField(record: Record<string, unknown>, field: string) {
+  const value = record[field]
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : null
 }
 
 function numberField(record: Record<string, unknown>, field: string) {

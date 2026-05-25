@@ -57,8 +57,8 @@ new_sqlite_classes = ["Sandbox"]
 [[containers]]
 class_name = "Sandbox"
 name = "any-managed-agents-sandbox"
-image = "registry.cloudflare.com/94a89d03c0fc785c8dcbd3c674d6742a/ama-pi-runtime:0.75.4"
-max_instances = 10
+image = "registry.cloudflare.com/94a89d03c0fc785c8dcbd3c674d6742a/ama-pi-runtime:0.75.4-ama.2"
+max_instances = 20
 
 [observability]
 enabled = true
@@ -101,4 +101,4 @@ class_name = "Sandbox"
 class_name = "Sandbox"
 name = "any-managed-agents-staging-sandbox"
 image = "./Dockerfile"
-max_instances = 10
+max_instances = 20

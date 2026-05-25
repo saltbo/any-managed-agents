@@ -50,13 +50,14 @@ createServer((request, response) => {
   }
 
   if (url.pathname === '/rpc' && request.method === 'POST') {
+    const eventCursor = events.length
     request.on('data', (chunk) => pi.stdin.write(chunk))
     request.on('end', () => {
       if (!pi.stdin.destroyed) {
         pi.stdin.write('\n')
       }
       response.writeHead(202, { 'content-type': 'application/json' })
-      response.end(JSON.stringify({ accepted: true }))
+      response.end(JSON.stringify({ accepted: true, eventCursor }))
     })
     return
   }
@@ -67,7 +68,11 @@ createServer((request, response) => {
       'cache-control': 'no-store',
       connection: 'keep-alive',
     })
-    for (const event of events) {
+    const rawCursor = url.searchParams.get('cursor')
+    const cursor = Number(rawCursor ?? 0)
+    const replayFrom =
+      rawCursor === 'latest' ? events.length : Number.isFinite(cursor) && cursor > 0 ? Math.min(cursor, events.length) : 0
+    for (const event of events.slice(replayFrom)) {
       response.write(event.endsWith('\n') ? event : `${event}\n`)
     }
     clients.add(response)

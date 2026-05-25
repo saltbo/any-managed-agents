@@ -37,7 +37,7 @@ function noContent() {
   return new Response(null, { status: 204 })
 }
 
-function installMockRuntimeWebSocket() {
+function installMockRuntimeWebSocket(options: { closeAfterAgentEnd?: boolean } = {}) {
   const sentCommands: unknown[] = []
   class MockRuntimeWebSocket extends EventTarget {
     static CONNECTING = 0
@@ -79,6 +79,9 @@ function installMockRuntimeWebSocket() {
           message: { role: 'assistant', content },
         })
         this.emit({ type: 'agent_end', id: `${command.id}_end`, willRetry: false })
+        if (options.closeAfterAgentEnd) {
+          queueMicrotask(() => this.close())
+        }
       }
     }
 
@@ -656,6 +659,7 @@ describe('App', () => {
     expect(window.location.pathname).toBe('/sessions/session_1')
     expect(await screen.findByRole('tab', { name: 'Transcript' })).toBeTruthy()
     expect(screen.getByText('No messages yet')).toBeTruthy()
+    expect(sentCommands).toHaveLength(0)
 
     fireEvent.change(screen.getByPlaceholderText('Send a message to the agent'), {
       target: { value: 'Create ama-message.txt with exactly: AMA message completed' },
@@ -786,6 +790,36 @@ describe('App', () => {
 
     expect(await screen.findByText('Session not found')).toBeTruthy()
     expect(screen.queryByRole('tab', { name: 'Transcript' })).toBeNull()
+  })
+
+  it('reconnects the runtime socket so a session can receive multiple messages', async () => {
+    mockConsoleApi({
+      environments: [environment()],
+      agents: [agent()],
+      sessions: [session()],
+      events: [],
+    })
+    const { sentCommands } = installMockRuntimeWebSocket({ closeAfterAgentEnd: true })
+
+    window.history.pushState({}, '', '/sessions/session_1')
+    render(<App />)
+
+    expect(await screen.findByRole('tab', { name: 'Transcript' })).toBeTruthy()
+    expect(sentCommands).toHaveLength(0)
+    fireEvent.change(screen.getByPlaceholderText('Send a message to the agent'), { target: { value: 'First turn' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    expect(await screen.findByText(/Received: First turn/)).toBeTruthy()
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Send a message to the agent').hasAttribute('disabled')).toBe(false)
+    })
+    fireEvent.change(screen.getByPlaceholderText('Send a message to the agent'), { target: { value: 'Second turn' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    expect(await screen.findByText(/Received: Second turn/)).toBeTruthy()
+    expect(sentCommands).toEqual([
+      expect.objectContaining({ type: 'prompt', message: 'First turn' }),
+      expect.objectContaining({ type: 'prompt', message: 'Second turn' }),
+    ])
   })
 
   it('shows error, stopped, and archived session states', async () => {
