@@ -318,6 +318,8 @@ export interface ListPagination {
   hasMore: boolean
   firstId: string | null
   lastId: string | null
+  firstSequence?: number | null
+  lastSequence?: number | null
 }
 
 export interface ListResponse<T> {
@@ -336,7 +338,8 @@ export interface ListOptions {
 }
 
 export interface SessionEventListOptions {
-  afterSequence?: number
+  cursor?: number
+  order?: 'asc' | 'desc'
   limit?: number
   type?: SessionEvent['type']
   visibility?: SessionEvent['visibility']

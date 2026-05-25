@@ -1,4 +1,4 @@
-@planned @sessions @events
+@sessions @events @implemented
 Feature: Session events
   Session events represent runtime history.
 
@@ -6,6 +6,7 @@ Feature: Session events
     When the runtime emits a message, tool, sandbox, policy, usage, or error event
     Then the event is stored with stable ordering and safe metadata
 
+  @planned
   Scenario: Store message lifecycle events
     Given a user sends a runtime message
     When the runtime accepts, starts, streams, completes, or fails the message

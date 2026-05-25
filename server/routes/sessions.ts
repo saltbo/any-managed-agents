@@ -1,5 +1,5 @@
 import { createRoute, z } from '@hono/zod-openapi'
-import { and, desc, eq, gt, gte, like, lt, lte, ne, or } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, gte, like, lt, lte, ne, or } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
 import { recordAudit, requestId } from '../audit'
@@ -191,6 +191,7 @@ type AgentVersionRow = typeof agentDefinitionVersions.$inferSelect
 type EnvironmentVersionRow = typeof environmentVersions.$inferSelect
 type SessionRow = typeof sessions.$inferSelect
 type SessionEventRow = typeof sessionEvents.$inferSelect
+type EventOrder = 'asc' | 'desc'
 
 function newId(prefix: string) {
   return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
@@ -309,6 +310,30 @@ function serializeEvent(row: SessionEventRow) {
     metadata: JSON.parse(row.metadata) as Record<string, unknown>,
     createdAt: row.createdAt,
   }
+}
+
+function eventSequenceFilter(cursor: number, order: EventOrder) {
+  return order === 'asc' ? gt(sessionEvents.sequence, cursor) : lt(sessionEvents.sequence, cursor)
+}
+
+function eventCursor(query: Pick<EventsQuery, 'cursor'>) {
+  return query.cursor
+}
+
+function eventOrder(order?: EventOrder) {
+  return order ?? 'asc'
+}
+
+function eventOrderBy(order: EventOrder) {
+  return order === 'asc' ? asc(sessionEvents.sequence) : desc(sessionEvents.sequence)
+}
+
+function eventCursorFilter(query: Pick<EventsQuery, 'cursor'>, order: EventOrder) {
+  const cursor = eventCursor(query)
+  if (cursor === undefined) {
+    return order === 'asc' ? eventSequenceFilter(0, order) : undefined
+  }
+  return eventSequenceFilter(cursor, order)
 }
 
 async function markExpiredPendingSessions(db: Db, auth: AuthContext) {
@@ -1024,6 +1049,7 @@ const listEventsRoute = createRoute({
       description: 'Session events',
       content: { 'application/json': { schema: SessionEventListResponseSchema } },
     },
+    400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
     404: { description: 'Session not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
   },
@@ -1042,6 +1068,7 @@ const exportEventsRoute = createRoute({
       description: 'Session events export',
       content: { 'application/x-ndjson': { schema: z.string() } },
     },
+    400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
     404: { description: 'Session not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
   },
@@ -1060,6 +1087,7 @@ const streamEventsRoute = createRoute({
       description: 'Session event stream',
       content: { 'application/x-ndjson': { schema: z.string() } },
     },
+    400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
     404: { description: 'Session not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
   },
@@ -1205,7 +1233,9 @@ app.openapi(reconnectSessionRoute, async (c) => {
 
 app.openapi(listEventsRoute, async (c) => {
   const { sessionId } = c.req.valid('param')
-  const { afterSequence, limit = 100, type, visibility, createdFrom, createdTo } = c.req.valid('query')
+  const query = c.req.valid('query')
+  const { limit = 100, type, visibility, createdFrom, createdTo } = query
+  const order = eventOrder(query.order)
   const db = drizzle(c.env.DB)
   const auth = await requireAuth(c, db)
   if (auth instanceof Response) {
@@ -1218,7 +1248,7 @@ app.openapi(listEventsRoute, async (c) => {
   }
   const filters = [
     eq(sessionEvents.sessionId, sessionId),
-    gt(sessionEvents.sequence, afterSequence ?? 0),
+    eventCursorFilter(query, order),
     type ? eq(sessionEvents.type, type) : undefined,
     eq(sessionEvents.visibility, visibility ?? 'runtime'),
     createdFrom ? gte(sessionEvents.createdAt, createdFrom) : undefined,
@@ -1228,7 +1258,7 @@ app.openapi(listEventsRoute, async (c) => {
     .select()
     .from(sessionEvents)
     .where(and(...filters))
-    .orderBy(sessionEvents.sequence)
+    .orderBy(eventOrderBy(order))
     .limit(limit + 1)
   const page = paginateSequenceRows(rows, limit)
   return c.json({ data: page.data.map(serializeEvent), pagination: page.pagination }, 200)
@@ -1237,7 +1267,8 @@ app.openapi(listEventsRoute, async (c) => {
 type EventsQuery = z.infer<typeof EventsQuerySchema>
 
 async function eventsNdjsonResponse(c: Context<{ Bindings: Env }>, sessionId: string, query: EventsQuery) {
-  const { afterSequence, limit = 200, type, visibility, createdFrom, createdTo } = query
+  const { limit = 200, type, visibility, createdFrom, createdTo } = query
+  const order = eventOrder(query.order)
   const db = drizzle(c.env.DB)
   const auth = await requireAuth(c, db)
   if (auth instanceof Response) {
@@ -1250,7 +1281,7 @@ async function eventsNdjsonResponse(c: Context<{ Bindings: Env }>, sessionId: st
   }
   const filters = [
     eq(sessionEvents.sessionId, sessionId),
-    gt(sessionEvents.sequence, afterSequence ?? 0),
+    eventCursorFilter(query, order),
     type ? eq(sessionEvents.type, type) : undefined,
     eq(sessionEvents.visibility, visibility ?? 'runtime'),
     createdFrom ? gte(sessionEvents.createdAt, createdFrom) : undefined,
@@ -1260,7 +1291,7 @@ async function eventsNdjsonResponse(c: Context<{ Bindings: Env }>, sessionId: st
     .select()
     .from(sessionEvents)
     .where(and(...filters))
-    .orderBy(sessionEvents.sequence)
+    .orderBy(eventOrderBy(order))
     .limit(limit)
   const body = rows.map((row) => JSON.stringify(serializeEvent(row))).join('\n')
   return c.text(body ? `${body}\n` : '', 200, {
@@ -1270,7 +1301,13 @@ async function eventsNdjsonResponse(c: Context<{ Bindings: Env }>, sessionId: st
 }
 
 async function streamEventsNdjsonResponse(c: Context<{ Bindings: Env }>, sessionId: string, query: EventsQuery) {
-  const { afterSequence = 0, limit = 200, type, visibility, createdFrom, createdTo } = query
+  const { limit = 200, type, visibility, createdFrom, createdTo } = query
+  const order = eventOrder(query.order)
+  if (order === 'desc') {
+    return errorResponse(c, 400, 'validation_error', 'Descending order is not supported for live event streams', {
+      fields: { order: 'Use order=asc for event streams or /events for finite historical pages.' },
+    })
+  }
   const db = drizzle(c.env.DB)
   const auth = await requireAuth(c, db)
   if (auth instanceof Response) {
@@ -1283,14 +1320,14 @@ async function streamEventsNdjsonResponse(c: Context<{ Bindings: Env }>, session
   }
 
   const encoder = new TextEncoder()
-  let lastSequence = afterSequence
+  let lastSequence = eventCursor(query) ?? 0
   const stream = new ReadableStream({
     async start(controller) {
       const deadline = Date.now() + 1000
       while (Date.now() <= deadline) {
         const filters = [
           eq(sessionEvents.sessionId, sessionId),
-          gt(sessionEvents.sequence, lastSequence),
+          eventSequenceFilter(lastSequence, order),
           type ? eq(sessionEvents.type, type) : undefined,
           eq(sessionEvents.visibility, visibility ?? 'runtime'),
           createdFrom ? gte(sessionEvents.createdAt, createdFrom) : undefined,
@@ -1300,7 +1337,7 @@ async function streamEventsNdjsonResponse(c: Context<{ Bindings: Env }>, session
           .select()
           .from(sessionEvents)
           .where(and(...filters))
-          .orderBy(sessionEvents.sequence)
+          .orderBy(eventOrderBy(order))
           .limit(limit)
         for (const row of rows) {
           lastSequence = row.sequence

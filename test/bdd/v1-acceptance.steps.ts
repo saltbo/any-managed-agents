@@ -106,6 +106,14 @@ Given('a session exists', () => {
   runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
 })
 
+Given('a session has many events', () => {
+  runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
+})
+
+Given('a provider, tool, MCP connector, vault, or sandbox process emits sensitive values', () => {
+  runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
+})
+
 Given('more resources exist than fit on one page', () => {
   runCloudflareRouteTest('server/routes/agents.cf-test.ts')
   runCloudflareRouteTest('server/routes/environments.cf-test.ts')
@@ -155,6 +163,22 @@ When('the user stops the session', () => {
 })
 
 When('the user reconnects to the session', () => {
+  runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
+})
+
+When('the runtime emits a message, tool, sandbox, policy, usage, or error event', () => {
+  runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
+})
+
+When('the client requests events from the API', () => {
+  runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
+})
+
+When('the client lists events with limit, order, type filter, or cursor', () => {
+  runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
+})
+
+When('the event is stored or streamed', () => {
   runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
 })
 
@@ -372,6 +396,30 @@ Then('the agent version stores an explicit empty tools policy', () => {
 Then('the response includes data, hasMore, firstId, and lastId', () => {
   runCloudflareRouteTest('server/routes/agents.cf-test.ts')
   runCloudflareRouteTest('server/routes/environments.cf-test.ts')
+})
+
+Then('the event is stored with stable ordering and safe metadata', () => {
+  runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
+})
+
+Then("events are returned in sequence order and scoped to the caller's project", () => {
+  runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
+})
+
+Then('the response returns a deterministic page', () => {
+  runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
+})
+
+Then('hasMore, firstId, lastId, and sequence boundaries allow stable pagination', () => {
+  runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
+})
+
+Then('secret values are replaced with safe references', () => {
+  runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
+})
+
+Then('audit metadata records the source without exposing the secret', () => {
+  runCloudflareRouteTest('server/routes/sessions.cf-test.ts')
 })
 
 Then('archived agents are hidden unless includeArchived is true', () => {

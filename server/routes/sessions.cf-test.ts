@@ -297,8 +297,41 @@ describe('[CF] /api/sessions', () => {
     expect(pagedEvents.data).toEqual([expect.objectContaining({ sequence: 1, type: 'tool_execution_start' })])
     expect(pagedEvents.pagination).toMatchObject({ hasMore: true, nextCursor: '1' })
 
+    const cursorEventsRes = await jsonFetch(`/api/sessions/${created.id}/events?cursor=1&limit=2`, cookie)
+    const cursorEvents = (await cursorEventsRes.json()) as {
+      data: Array<{ sequence: number; type: string }>
+      pagination: {
+        limit: number
+        hasMore: boolean
+        nextCursor: string | null
+        firstId: string | null
+        lastId: string | null
+      }
+    }
+    expect(cursorEvents.data.map((event) => event.sequence)).toEqual([2, 3])
+    expect(cursorEvents.pagination).toMatchObject({
+      limit: 2,
+      hasMore: true,
+      nextCursor: '3',
+      firstId: '2',
+      lastId: '3',
+      firstSequence: 2,
+      lastSequence: 3,
+    })
+
+    const descendingEventsRes = await jsonFetch(
+      `/api/sessions/${created.id}/events?order=desc&cursor=6&limit=2`,
+      cookie,
+    )
+    const descendingEvents = (await descendingEventsRes.json()) as { data: Array<{ sequence: number; type: string }> }
+    expect(descendingEvents.data.map((event) => event.sequence)).toEqual([5, 4])
+
+    const latestEventsRes = await jsonFetch(`/api/sessions/${created.id}/events?order=desc&limit=2`, cookie)
+    const latestEvents = (await latestEventsRes.json()) as { data: Array<{ sequence: number; type: string }> }
+    expect(latestEvents.data.map((event) => event.sequence)).toEqual([6, 5])
+
     const filteredEventsRes = await jsonFetch(
-      `/api/sessions/${created.id}/events?afterSequence=1&type=tool_execution_end`,
+      `/api/sessions/${created.id}/events?cursor=1&type=tool_execution_end`,
       cookie,
     )
     const filteredEvents = (await filteredEventsRes.json()) as { data: Array<{ sequence: number; type: string }> }
@@ -306,17 +339,30 @@ describe('[CF] /api/sessions', () => {
       expect.arrayContaining([expect.objectContaining({ sequence: 2, type: 'tool_execution_end' })]),
     )
 
-    const exportRes = await jsonFetch(`/api/sessions/${created.id}/events/export?afterSequence=2&limit=2`, cookie)
+    const exportRes = await jsonFetch(`/api/sessions/${created.id}/events/export?cursor=2&limit=2`, cookie)
     expect(exportRes.status).toBe(200)
     expect(exportRes.headers.get('content-type')).toContain('application/x-ndjson')
     const exported = (await exportRes.text()).trim().split('\n').map(JSON.parse) as Array<{ sequence: number }>
     expect(exported.map((event) => event.sequence)).toEqual([3, 4])
 
-    const streamRes = await jsonFetch(`/api/sessions/${created.id}/events/stream?afterSequence=4`, cookie)
+    const descendingExportRes = await jsonFetch(
+      `/api/sessions/${created.id}/events/export?order=desc&cursor=6&limit=2`,
+      cookie,
+    )
+    expect(descendingExportRes.status).toBe(200)
+    const descendingExported = (await descendingExportRes.text()).trim().split('\n').map(JSON.parse) as Array<{
+      sequence: number
+    }>
+    expect(descendingExported.map((event) => event.sequence)).toEqual([5, 4])
+
+    const streamRes = await jsonFetch(`/api/sessions/${created.id}/events/stream?cursor=4`, cookie)
     expect(streamRes.status).toBe(200)
     expect(streamRes.headers.get('content-type')).toContain('application/x-ndjson')
     const streamed = (await streamRes.text()).trim().split('\n').map(JSON.parse) as Array<{ sequence: number }>
     expect(streamed.map((event) => event.sequence)).toEqual([5, 6])
+
+    const descendingStreamRes = await jsonFetch(`/api/sessions/${created.id}/events/stream?order=desc`, cookie)
+    expect(descendingStreamRes.status).toBe(400)
 
     const inactiveRuntimeRes = await jsonFetch(`/runtime/sessions/${created.id}/rpc`, cookie)
     expect(inactiveRuntimeRes.status).toBe(409)
@@ -329,6 +375,15 @@ describe('[CF] /api/sessions', () => {
 
     const archiveRes = await jsonFetch(`/api/sessions/${created.id}`, cookie, { method: 'DELETE' })
     expect(archiveRes.status).toBe(204)
+
+    const archivedRuntimeRes = await jsonFetch(`/runtime/sessions/${created.id}/rpc`, cookie)
+    expect(archivedRuntimeRes.status).toBe(409)
+    await expect(archivedRuntimeRes.json()).resolves.toMatchObject({
+      error: {
+        type: 'conflict',
+        message: 'Session runtime is not active',
+      },
+    })
 
     const archivedListRes = await jsonFetch('/api/sessions?includeArchived=true', cookie)
     expect(archivedListRes.status).toBe(200)
