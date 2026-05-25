@@ -1,15 +1,17 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { PI_EVENT_CATEGORIES, PI_EVENT_TYPES, piEventLabel } from '@shared/pi-events'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { formatTime } from '@/console/format'
 import { useClientPagination } from '@/console/use-client-pagination'
 import type { Session, SessionEvent } from '@/lib/api'
 import type { PiRuntimeState } from './pi-runtime'
-import { SessionRuntimePanel } from './SessionRuntimePanel'
+import { eventFilter, SessionRuntimePanel } from './SessionRuntimePanel'
 import { SessionsView } from './SessionsView'
 
 afterEach(() => {
   cleanup()
+  vi.restoreAllMocks()
 })
 
 function buildSession(overrides: Partial<Session> = {}): Session {
@@ -234,5 +236,259 @@ describe('sessions UI contracts', () => {
     expect(within(article as HTMLElement).getByText(formatTime(runtime.messages[0]?.createdAt ?? null))).toBeTruthy()
     expect(within(article as HTMLElement).getByLabelText('Error: Runtime failed to start')).toBeTruthy()
     expect(screen.queryByText(/"message":/)).toBeNull()
+  })
+
+  it('keeps Pi payload JSON in debug while transcript renders structured message, tool, lifecycle, usage, error, and bridge rows', async () => {
+    const runtime = buildRuntimeState({
+      messages: [
+        {
+          id: 'message_1',
+          role: 'assistant',
+          content: 'Structured answer',
+          status: 'complete',
+          createdAt: '2026-05-23T00:00:00.000Z',
+        },
+      ],
+      tools: [
+        {
+          id: 'tool_1:2026-05-23T00:00:01.000Z',
+          callId: 'tool_1',
+          name: 'read_file',
+          status: 'success',
+          input: { path: 'README.md' },
+          output: 'ok',
+          error: null,
+          durationMs: 12,
+          createdAt: '2026-05-23T00:00:01.000Z',
+          updatedAt: '2026-05-23T00:00:01.000Z',
+          eventType: 'tool_execution_end',
+        },
+      ],
+      debugEvents: [
+        ...PI_EVENT_TYPES.map((type, index) => ({
+          id: `debug_${type}`,
+          type,
+          payload: { type, safe: true, marker: `payload_${type}` },
+          createdAt: new Date((index + 1) * 1000).toISOString(),
+        })),
+        {
+          id: 'debug_future_event',
+          type: 'future_event',
+          payload: { type: 'future_event', marker: 'payload_future_event' },
+          createdAt: new Date(99_000).toISOString(),
+        },
+      ],
+    })
+
+    render(
+      <SessionRuntimePanel
+        runtime={runtime}
+        persistedEvents={[]}
+        message=""
+        setMessage={vi.fn()}
+        onSend={vi.fn()}
+        onAbort={vi.fn()}
+        onRefreshEvents={vi.fn()}
+        canSend
+      />,
+    )
+
+    expect(screen.getByText('Structured answer')).toBeTruthy()
+    expect(screen.getByText('read_file')).toBeTruthy()
+    expect(screen.queryByText(/payload_bridge_exit/)).toBeNull()
+
+    const debugTab = screen.getByRole('tab', { name: 'Debug' })
+    fireEvent.pointerDown(debugTab, { button: 0, ctrlKey: false })
+    fireEvent.mouseDown(debugTab)
+    fireEvent.mouseUp(debugTab)
+    fireEvent.click(debugTab)
+    await waitFor(() => expect(debugTab.getAttribute('aria-selected')).toBe('true'))
+
+    for (const type of PI_EVENT_TYPES) {
+      expect(screen.getByText(piEventLabel(type))).toBeTruthy()
+      expect(screen.getByText(`debug_${type}`)).toBeTruthy()
+    }
+    for (const category of PI_EVENT_CATEGORIES) {
+      expect(screen.getAllByText(category).length).toBeGreaterThan(0)
+    }
+    expect(screen.getByText('future_event')).toBeTruthy()
+    expect(screen.getByText('unknown')).toBeTruthy()
+    expect(screen.getByText(/payload_bridge_exit/)).toBeTruthy()
+    expect(screen.getByText(/payload_future_event/)).toBeTruthy()
+  })
+
+  it('renders transcript and debug empty states', async () => {
+    render(
+      <SessionRuntimePanel
+        runtime={buildRuntimeState({ messages: [], tools: [], debugEvents: [], error: null })}
+        persistedEvents={[]}
+        message=""
+        setMessage={vi.fn()}
+        onSend={vi.fn()}
+        onAbort={vi.fn()}
+        onRefreshEvents={vi.fn()}
+        canSend
+      />,
+    )
+
+    expect(screen.getByText('No messages yet')).toBeTruthy()
+    const debugTab = screen.getByRole('tab', { name: 'Debug' })
+    fireEvent.pointerDown(debugTab, { button: 0, ctrlKey: false })
+    fireEvent.mouseDown(debugTab)
+    fireEvent.mouseUp(debugTab)
+    fireEvent.click(debugTab)
+    await waitFor(() => expect(debugTab.getAttribute('aria-selected')).toBe('true'))
+    expect(screen.getByText('No debug events')).toBeTruthy()
+  })
+
+  it('copies and downloads debug event exports without adding payload JSON to transcript', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    })
+    const createObjectURL = vi.fn(() => 'blob:session-events')
+    const revokeObjectURL = vi.fn()
+    Object.defineProperty(URL, 'createObjectURL', { value: createObjectURL, configurable: true })
+    Object.defineProperty(URL, 'revokeObjectURL', { value: revokeObjectURL, configurable: true })
+    const createElement = document.createElement.bind(document)
+    vi.spyOn(document, 'createElement').mockImplementation((tagName, options) => {
+      const element = createElement(tagName, options)
+      if (tagName === 'a') {
+        element.click = vi.fn()
+      }
+      return element
+    })
+    const persistedEvents = [buildPersistedEvent()]
+
+    render(
+      <SessionRuntimePanel
+        runtime={buildRuntimeState({ debugEvents: [] })}
+        persistedEvents={persistedEvents}
+        message=""
+        setMessage={vi.fn()}
+        onSend={vi.fn()}
+        onAbort={vi.fn()}
+        onRefreshEvents={vi.fn()}
+        canSend
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy events' }))
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"message_end"')))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Download events' }))
+    expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob))
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:session-events')
+    expect(screen.queryByText(/"payload":/)).toBeNull()
+  })
+
+  it('submits trimmed runtime messages and parses debug event filters', () => {
+    const onSend = vi.fn()
+    const setMessage = vi.fn()
+
+    render(
+      <SessionRuntimePanel
+        runtime={buildRuntimeState({
+          messages: [],
+          tools: [],
+          debugEvents: [
+            {
+              id: 'debug_message',
+              type: 'message_end',
+              payload: { type: 'message_end', marker: 'payload_message' },
+              createdAt: '2026-05-23T00:00:00.000Z',
+            },
+            {
+              id: 'debug_future',
+              type: 'future_event',
+              payload: { type: 'future_event', marker: 'payload_future' },
+              createdAt: '2026-05-23T00:00:01.000Z',
+            },
+          ],
+        })}
+        persistedEvents={[]}
+        message="  Ship it  "
+        setMessage={setMessage}
+        onSend={onSend}
+        onAbort={vi.fn()}
+        onRefreshEvents={vi.fn()}
+        canSend
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    expect(onSend).toHaveBeenCalledWith('Ship it')
+    expect(setMessage).toHaveBeenCalledWith('')
+
+    expect(eventFilter('unknown')).toBe('unknown')
+    expect(eventFilter('message')).toBe('message')
+    expect(eventFilter('not-a-filter')).toBe('all')
+  })
+
+  it('filters preserved unknown debug events through the debug category menu', async () => {
+    Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
+      value: vi.fn(() => false),
+      configurable: true,
+    })
+    Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', {
+      value: vi.fn(),
+      configurable: true,
+    })
+    Object.defineProperty(HTMLElement.prototype, 'releasePointerCapture', {
+      value: vi.fn(),
+      configurable: true,
+    })
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      value: vi.fn(),
+      configurable: true,
+    })
+
+    render(
+      <SessionRuntimePanel
+        runtime={buildRuntimeState({
+          messages: [],
+          tools: [],
+          debugEvents: [
+            {
+              id: 'debug_message',
+              type: 'message_end',
+              payload: { type: 'message_end', marker: 'payload_message' },
+              createdAt: '2026-05-23T00:00:00.000Z',
+            },
+            {
+              id: 'debug_future',
+              type: 'future_event',
+              payload: { type: 'future_event', marker: 'payload_future' },
+              createdAt: '2026-05-23T00:00:01.000Z',
+            },
+          ],
+        })}
+        persistedEvents={[]}
+        message=""
+        setMessage={vi.fn()}
+        onSend={vi.fn()}
+        onAbort={vi.fn()}
+        onRefreshEvents={vi.fn()}
+        canSend
+      />,
+    )
+
+    const debugTab = screen.getByRole('tab', { name: 'Debug' })
+    fireEvent.pointerDown(debugTab, { button: 0, ctrlKey: false })
+    fireEvent.mouseDown(debugTab)
+    fireEvent.mouseUp(debugTab)
+    fireEvent.click(debugTab)
+    await waitFor(() => expect(debugTab.getAttribute('aria-selected')).toBe('true'))
+
+    const filter = screen.getByRole('combobox')
+    filter.focus()
+    fireEvent.pointerDown(filter, { button: 0, ctrlKey: false, pointerId: 1, pointerType: 'mouse' })
+    fireEvent.mouseDown(filter)
+    fireEvent.keyDown(filter, { key: 'ArrowDown' })
+    fireEvent.click(await screen.findByRole('option', { name: 'unknown' }))
+
+    expect(screen.getByText('debug_future')).toBeTruthy()
+    expect(screen.queryByText('debug_message')).toBeNull()
   })
 })

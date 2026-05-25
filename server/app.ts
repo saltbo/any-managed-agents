@@ -2,6 +2,7 @@ import { swaggerUI } from '@hono/swagger-ui'
 import { and, eq, max } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import { cors } from 'hono/cors'
+import { piEventTypeFromPayload } from '../shared/pi-events'
 import { recordAudit, requestId } from './audit'
 import { type AuthContext, requireAuth } from './auth/session'
 import { sessionEvents, sessions } from './db/schema'
@@ -35,7 +36,7 @@ function redactRuntimeValue(value: unknown): unknown {
 }
 
 function piEventType(event: Record<string, unknown>) {
-  return typeof event.type === 'string' && event.type ? event.type : 'message'
+  return piEventTypeFromPayload(event)
 }
 
 async function appendPiRuntimeEvent(
@@ -468,7 +469,7 @@ async function ingestPiRuntimeLine(
     sessionId: session.id,
     event: parsed,
   })
-  const type = typeof parsed.type === 'string' ? parsed.type : 'message'
+  const type = piEventType(parsed)
   if (type === 'response') {
     if (parsed.success === false) {
       const message = runtimeErrorMessage(parsed)

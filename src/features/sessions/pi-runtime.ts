@@ -1,3 +1,4 @@
+import { isPiEventType, piEventCategory, piEventTypeFromPayload } from '@shared/pi-events'
 import type { SessionEvent } from '@/lib/api'
 
 export type PiRuntimeConnectionState = 'connecting' | 'open' | 'closed' | 'error'
@@ -98,7 +99,7 @@ export function piRuntimeReducer(state: PiRuntimeState, action: PiRuntimeAction)
     }
   }
 
-  const eventType = stringField(action.event, 'type') ?? 'event'
+  const eventType = piEventTypeFromPayload(action.event)
   const eventKey = runtimeEventKey(action.event, eventType)
   if (eventKey && state.eventKeys.includes(eventKey)) {
     return state
@@ -108,6 +109,14 @@ export function piRuntimeReducer(state: PiRuntimeState, action: PiRuntimeAction)
     type: eventType,
     payload: action.event,
     createdAt: action.at,
+  }
+
+  if (!isPiEventType(eventType)) {
+    return {
+      ...state,
+      debugEvents: appendDebugEvent(state.debugEvents, debugEvent),
+      eventKeys: appendEventKey(state.eventKeys, eventKey),
+    }
   }
 
   if (eventType === 'response') {
@@ -130,7 +139,7 @@ export function piRuntimeReducer(state: PiRuntimeState, action: PiRuntimeAction)
       eventKeys: appendEventKey(state.eventKeys, eventKey),
     }
   }
-  if (eventType === 'message_update' || eventType === 'message_end') {
+  if (eventType === 'message' || eventType === 'message_update' || eventType === 'message_end') {
     const message = messageFromPiEvent(
       action.event,
       action.at,
@@ -321,12 +330,16 @@ function uniquePersistedRuntimeEvents(events: SessionEvent[]): StoredRuntimeEven
   return uniqueEvents
 }
 
-function runtimeEventType(stored: SessionEvent, payload: Record<string, unknown>) {
-  return stringField(payload, 'type') ?? stored.type
+function runtimeEventType(stored: SessionEvent, payload: Record<string, unknown>): string {
+  const payloadType = piEventTypeFromPayload(payload)
+  if (payloadType !== 'message' || payload.type) {
+    return payloadType
+  }
+  return stored.type || 'message'
 }
 
 function runtimeTurnKey(event: Record<string, unknown>, eventType: string) {
-  if (eventType !== 'message_update' && eventType !== 'message_end' && eventType !== 'message_start') {
+  if (piEventCategory(eventType) !== 'message') {
     return null
   }
   const message = objectValue(event.message)
@@ -538,7 +551,12 @@ function runtimeEventKey(event: Record<string, unknown>, eventType: string, turn
       assistantMessageEvent.delta ?? assistantMessageEvent.content ?? message.content,
     )}`
   }
-  if (eventType === 'message_start' || eventType === 'message_end' || eventType === 'turn_end') {
+  if (
+    eventType === 'message' ||
+    eventType === 'message_start' ||
+    eventType === 'message_end' ||
+    eventType === 'turn_end'
+  ) {
     if (!timestamp) {
       return null
     }
@@ -554,13 +572,7 @@ function runtimeEventKey(event: Record<string, unknown>, eventType: string, turn
 }
 
 function isToolEvent(eventType: string) {
-  return (
-    eventType === 'tool_execution_start' ||
-    eventType === 'tool_execution_update' ||
-    eventType === 'tool_execution_end' ||
-    eventType === 'tool_call' ||
-    eventType === 'tool_result'
-  )
+  return piEventCategory(eventType) === 'tool'
 }
 
 function appendEventKey(keys: string[], key: string | null) {

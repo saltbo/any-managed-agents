@@ -1,3 +1,10 @@
+import {
+  isPiEventType,
+  PI_EVENT_CATEGORIES,
+  type PiEventFilterCategory,
+  piEventCategory,
+  piEventLabel,
+} from '@shared/pi-events'
 import { Copy, Download, RefreshCw, Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
@@ -15,7 +22,8 @@ import { formatTime, stringifyJson } from '@/console/format'
 import type { SessionEvent } from '@/lib/api'
 import type { PiRuntimeState } from './pi-runtime'
 
-const EVENT_TYPES = ['message', 'tool', 'sandbox', 'policy', 'usage', 'error', 'lifecycle']
+const EVENT_FILTERS = [...PI_EVENT_CATEGORIES, 'unknown'] as const satisfies readonly PiEventFilterCategory[]
+type EventFilter = 'all' | (typeof EVENT_FILTERS)[number]
 
 export function SessionRuntimePanel({
   runtime,
@@ -36,7 +44,7 @@ export function SessionRuntimePanel({
   onRefreshEvents: () => void
   canSend: boolean
 }) {
-  const [eventType, setEventType] = useState('all')
+  const [eventType, setEventType] = useState<EventFilter>('all')
   const debugEvents = useMemo(() => {
     const persisted = persistedEvents
       .filter((event) => event.visibility !== 'transcript')
@@ -49,7 +57,7 @@ export function SessionRuntimePanel({
     return [...persisted, ...runtime.debugEvents.filter((event) => !persisted.some((item) => item.id === event.id))]
   }, [persistedEvents, runtime.debugEvents])
   const filteredDebugEvents =
-    eventType === 'all' ? debugEvents : debugEvents.filter((event) => event.type === eventType)
+    eventType === 'all' ? debugEvents : debugEvents.filter((event) => piEventCategory(event.type) === eventType)
   const eventExport = stringifyJson([...persistedEvents].sort((a, b) => a.sequence - b.sequence))
   const transcriptItems = useMemo(
     () =>
@@ -91,15 +99,15 @@ export function SessionRuntimePanel({
             <TabsTrigger value="debug">Debug</TabsTrigger>
           </TabsList>
           <Separator orientation="vertical" className="hidden h-8 lg:block" />
-          <Select value={eventType} onValueChange={setEventType}>
+          <Select value={eventType} onValueChange={(value) => setEventType(eventFilter(value))}>
             <SelectTrigger className="h-9 w-40">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All events</SelectItem>
-              {EVENT_TYPES.map((type) => (
-                <SelectItem key={type} value={type}>
-                  {type}
+              {EVENT_FILTERS.map((category) => (
+                <SelectItem key={category} value={category}>
+                  {category}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -186,9 +194,10 @@ export function SessionRuntimePanel({
                 <details key={event.id} className="group p-3">
                   <summary className="flex cursor-pointer list-none flex-wrap items-center gap-3">
                     <StatusBadge
-                      value={event.type}
+                      value={isPiEventType(event.type) ? piEventLabel(event.type) : event.type}
                       detail={event.type === 'error' ? stringifyJson(event.payload) : null}
                     />
+                    <Badge variant="outline">{piEventCategory(event.type)}</Badge>
                     <span className="font-mono text-xs text-muted-foreground">{event.id}</span>
                     <span className="ml-auto text-xs text-muted-foreground">{formatTime(event.createdAt)}</span>
                   </summary>
@@ -203,4 +212,8 @@ export function SessionRuntimePanel({
       </TabsContent>
     </Tabs>
   )
+}
+
+export function eventFilter(value: string): EventFilter {
+  return value === 'all' || EVENT_FILTERS.includes(value as PiEventFilterCategory) ? (value as EventFilter) : 'all'
 }
