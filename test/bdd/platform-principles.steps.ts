@@ -588,14 +588,15 @@ Then('the input shows a pending state while the message is accepted', () => {
 })
 
 Then(
-  'the transcript and debug views receive the same Pi runtime event stream without HTTP polling or a full page reload',
+  'the transcript and debug views receive the same Pi runtime event stream without event polling or a full page reload',
   () => {
     const hook = read('src/features/sessions/use-pi-runtime-session.ts')
     const panel = read('src/features/sessions/SessionRuntimePanel.tsx')
     assert.match(hook, /addEventListener\('message'/)
+    assert.match(hook, /fetch\(rpcEndpoint/)
     assert.match(panel, /runtime.messages/)
     assert.match(panel, /runtime.debugEvents/)
-    assert.doesNotMatch(hook, /fetch\(|setInterval/)
+    assert.doesNotMatch(hook, /setInterval/)
   },
 )
 

@@ -20,7 +20,7 @@ Feature: Session detail
     Then the UI opens a WebSocket session to the AMA Pi runtime endpoint
     And the UI sends the message as a Pi RPC prompt command
     And the input shows a pending state while the message is accepted
-    And the transcript and debug views receive the same Pi runtime event stream without HTTP polling or a full page reload
+    And the transcript and debug views receive the same Pi runtime event stream without event polling or a full page reload
     And failures show a recoverable error message with the session left inspectable
 
   Scenario: Render Pi runtime events as a chat transcript

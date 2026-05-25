@@ -13,6 +13,7 @@ interface ResourceState {
   agents: Record<string, Record<string, unknown>>
   sessions: Record<string, Record<string, unknown>>
   events: Record<string, Array<Record<string, unknown>>>
+  runtimeSockets: Record<string, WebSocketRoute>
 }
 
 Then(
@@ -35,10 +36,10 @@ Then(
 )
 
 async function runBrowserWorkflow(browser: Browser, port: number, viewport: { width: number; height: number }) {
-  const state: ResourceState = { environments: {}, agents: {}, sessions: {}, events: {} }
+  const state: ResourceState = { environments: {}, agents: {}, sessions: {}, events: {}, runtimeSockets: {} }
   const page = await browser.newPage({ viewport })
   try {
-    await page.routeWebSocket(/\/runtime\/sessions\/[^/]+\/ws$/, mockRuntimeWebSocket)
+    await page.routeWebSocket(/\/runtime\/sessions\/[^/]+\/ws$/, (socket) => mockRuntimeWebSocket(socket, state))
     await page.route('**/*', (route) => routeRequest(route, state))
 
     await page.goto(`http://127.0.0.1:${port}/quickstart`)
@@ -76,36 +77,37 @@ async function runBrowserWorkflow(browser: Browser, port: number, viewport: { wi
   }
 }
 
-function mockRuntimeWebSocket(socket: WebSocketRoute) {
-  socket.onMessage((data) => {
-    const command = JSON.parse(String(data)) as { id?: string; type?: string; message?: string }
-    emitRuntimeEvent(socket, { type: 'response', id: command.id, command: command.type, success: true })
-    if (command.type !== 'prompt' && command.type !== 'follow_up') {
-      return
-    }
-    const content = `Received: ${command.message}`
-    emitRuntimeEvent(socket, {
-      type: 'message_update',
-      id: `${command.id}_assistant`,
-      message: { role: 'assistant', content },
-      assistantMessageEvent: { text: content },
-    })
-    emitRuntimeEvent(socket, {
-      type: 'tool_execution_end',
-      id: `${command.id}_tool`,
-      toolCall: { id: `${command.id}_tool`, name: 'write_file', output: { ok: true }, durationMs: 4 },
-    })
-    emitRuntimeEvent(socket, {
-      type: 'message_end',
-      id: `${command.id}_assistant`,
-      message: { role: 'assistant', content },
-    })
-    emitRuntimeEvent(socket, { type: 'agent_end', id: `${command.id}_end`, willRetry: false })
+function mockRuntimeWebSocket(socket: WebSocketRoute, state: ResourceState) {
+  const sessionId = new URL(socket.url()).pathname.split('/')[3]
+  assert.ok(sessionId, `Expected runtime WebSocket URL to include a session id: ${socket.url()}`)
+  state.runtimeSockets[sessionId] = socket
+  socket.onMessage(() => {
+    throw new Error('Runtime commands must be submitted through Pi RPC HTTP POST')
+  })
+  socket.onClose(() => {
+    delete state.runtimeSockets[sessionId]
   })
 }
 
 function emitRuntimeEvent(socket: WebSocketRoute, payload: Record<string, unknown>) {
   socket.send(JSON.stringify(payload))
+}
+
+function emitAndPersistRuntimeEvent(
+  state: ResourceState,
+  sessionId: string,
+  payload: Record<string, unknown>,
+  visibility = 'debug',
+) {
+  const events = state.events[sessionId]
+  assert.ok(events, `Expected events for session ${sessionId}`)
+  const sequence = events.length + 1
+  const type = typeof payload.type === 'string' ? payload.type : 'message'
+  events.push(eventFixture(sessionId, sequence, type, visibility, payload))
+  const socket = state.runtimeSockets[sessionId]
+  if (socket) {
+    emitRuntimeEvent(socket, payload)
+  }
 }
 
 async function routeRequest(route: Route, state: ResourceState) {
@@ -193,6 +195,38 @@ function handleApiRequest(
   if (url.pathname.match(/^\/api\/sessions\/[^/]+\/events$/)) {
     const sessionId = url.pathname.split('/')[3] ?? ''
     return list(state.events[sessionId] ?? [])
+  }
+
+  if (url.pathname.match(/^\/runtime\/sessions\/[^/]+\/rpc$/) && method === 'POST') {
+    const sessionId = url.pathname.split('/')[3] ?? ''
+    const command = body as { id?: string; type?: string; message?: string }
+    emitAndPersistRuntimeEvent(state, sessionId, {
+      type: 'response',
+      id: command.id,
+      command: command.type,
+      success: true,
+    })
+    if (command.type === 'prompt') {
+      const content = `Received: ${command.message}`
+      emitAndPersistRuntimeEvent(state, sessionId, {
+        type: 'message_update',
+        id: `${command.id}_assistant`,
+        message: { role: 'assistant', content },
+        assistantMessageEvent: { text: content },
+      })
+      emitAndPersistRuntimeEvent(state, sessionId, {
+        type: 'tool_execution_end',
+        id: `${command.id}_tool`,
+        toolCall: { id: `${command.id}_tool`, name: 'write_file', output: { ok: true }, durationMs: 4 },
+      })
+      emitAndPersistRuntimeEvent(state, sessionId, {
+        type: 'message_end',
+        id: `${command.id}_assistant`,
+        message: { role: 'assistant', content },
+      })
+      emitAndPersistRuntimeEvent(state, sessionId, { type: 'agent_end', id: `${command.id}_end`, willRetry: false })
+    }
+    return json({ accepted: true, eventCursor: state.events[sessionId]?.length ?? 0 }, 202)
   }
 
   if (url.pathname.match(/^\/api\/sessions\/[^/]+\/stop$/) && method === 'POST') {
