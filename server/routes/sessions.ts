@@ -35,7 +35,7 @@ const app = createApiRouter()
 
 const SESSION_STATUSES = ['pending', 'running', 'idle', 'stopped', 'error', 'archived', 'requires-action'] as const
 const EVENT_VISIBILITIES = ['runtime', 'transcript', 'debug', 'audit'] as const
-const RUNTIME_START_TIMEOUT_MS = 120_000
+const RUNTIME_START_TIMEOUT_MS = 300_000
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
 const AgentVersionSchema = z
