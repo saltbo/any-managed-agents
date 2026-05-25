@@ -775,6 +775,52 @@ Then('mocked browser scenario evidence covers desktop and 390px mobile workflows
   )
 })
 
+Then('the production e2e command documents the required secret environment variables', () => {
+  assertIncludes('package.json', /"e2e:production":\s*"playwright test --config playwright\.production\.config\.ts"/)
+  assertIncludes(
+    'README.md',
+    /AMA_ORIGIN/,
+    /AMA_E2E_STORAGE_STATE/,
+    /AMA_E2E_COOKIE/,
+    /AMA_E2E_EMAIL/,
+    /AMA_E2E_PASSWORD/,
+    /npm run e2e:production/,
+    /Auth input precedence/,
+  )
+  assertIncludes(
+    'docs/infra/cloudflare-deploy.md',
+    /Remote regression smoke/,
+    /AMA_ORIGIN/,
+    /AMA_E2E_STORAGE_STATE/,
+    /AMA_E2E_COOKIE/,
+    /AMA_E2E_EMAIL/,
+    /AMA_E2E_PASSWORD/,
+    /Auth input precedence/,
+  )
+  assertIncludes('.gitignore', /\.secrets\//)
+})
+
+Then('the production e2e harness authenticates without direct auth database access', () => {
+  const content = read('test/e2e/production-regression.spec.ts')
+  assert.match(content, /Continue with FlareAuth|AMA_E2E_STORAGE_STATE|AMA_E2E_COOKIE/)
+  assert.doesNotMatch(content, /wrangler\s+d1|INSERT INTO|app_sessions|seedLocalAuth/)
+})
+
+Then('the production e2e harness creates resources through public AMA APIs', () => {
+  assertIncludes('test/e2e/production-regression.spec.ts', /\/api\/environments/, /\/api\/agents/, /\/api\/sessions/)
+})
+
+Then('the production e2e harness verifies runtime chat, tool rendering, debug errors, and replay dedupe', () => {
+  assertIncludes(
+    'test/e2e/production-regression.spec.ts',
+    /ama-real-browser-e2e-ok/,
+    /sandbox\.exec/,
+    /Debug/,
+    /assertNoDuplicateReplayAfterReconnect/,
+    /assertNoDuplicatePersistedEvents/,
+  )
+})
+
 Then('the OpenAPI document is generated from Hono route schemas for v1 resources', () => {
   assertIncludes('server/app.ts', /app\.doc\('\/api\/openapi\.json'/)
   assertIncludes('server/routes/agents.ts', /createRoute/, /app\.openapi/)

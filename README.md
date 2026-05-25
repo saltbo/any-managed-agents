@@ -61,6 +61,38 @@ npm run test:cf
 npm run build
 ```
 
+## Real Production E2E
+
+The mocked browser e2e remains available for local UI coverage. A separate real
+smoke path runs against `https://ama.tftt.cc` by default, or another deployed AMA
+origin:
+
+```bash
+AMA_ORIGIN=https://ama.tftt.cc \
+AMA_E2E_STORAGE_STATE=.secrets/ama-storage-state.json \
+npm run e2e:production
+```
+
+Auth input precedence is explicit. The harness uses `AMA_E2E_COOKIE` first,
+`AMA_E2E_STORAGE_STATE` second, and `AMA_E2E_EMAIL` plus `AMA_E2E_PASSWORD`
+third. Set only one auth method in CI unless intentionally overriding a lower
+precedence method.
+
+- `AMA_E2E_COOKIE`: an AMA session cookie value such as
+  `__Host-ama_session=...`.
+- `AMA_E2E_STORAGE_STATE`: Playwright storage state produced by a real
+  FlareAuth login. The documented `.secrets/` directory is ignored by git.
+- `AMA_E2E_EMAIL` and `AMA_E2E_PASSWORD`: credentials for the supported
+  FlareAuth browser login flow.
+
+Optional overrides are `AMA_E2E_PROVIDER` and `AMA_E2E_MODEL`; defaults target
+Workers AI and `@cf/moonshotai/kimi-k2.6`. The harness creates a test-safe
+environment, agent, and session through public `/api` routes, drives chat through
+the session UI/WebSocket, checks tool and error rendering, reloads the session,
+and archives created resources during cleanup. In CI, store the storage state or
+cookie in the secret manager and write it to an ignored path at runtime; do not
+commit auth cookies, storage state, screenshots, videos, or traces.
+
 ## Deployment
 
 The project is configured for Cloudflare Workers. GitHub Actions only runs CI checks; deployment is handled by Cloudflare Workers Builds.
