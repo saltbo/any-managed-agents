@@ -7,7 +7,7 @@ describe('shared API client', () => {
   })
 
   it('serializes list options through the shared authenticated client', async () => {
-    const fetchMock = vi.fn(async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
       return new Response(
         JSON.stringify({
           data: [],
@@ -30,15 +30,20 @@ describe('shared API client', () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/agents?includeArchived=true&search=research&status=active&createdFrom=2026-05-01T00%3A00%3A00.000Z&createdTo=2026-05-31T23%3A59%3A59.999Z&limit=25&cursor=cursor_value',
-      {
+      expect.objectContaining({
+        body: undefined,
         credentials: 'include',
-        headers: { accept: 'application/json' },
-      },
+        method: 'GET',
+      }),
     )
+    const headers = fetchMock.mock.calls[0]?.[1]?.headers
+    expect(headers).toBeInstanceOf(Headers)
+    expect((headers as Headers).get('accept')).toBe('application/json')
+    expect((headers as Headers).get('x-ama-client')).toBe('web-rpc')
   })
 
   it('uses explicit list options for archived resources', async () => {
-    const fetchMock = vi.fn(async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
       return new Response(
         JSON.stringify({
           data: [],
@@ -51,9 +56,16 @@ describe('shared API client', () => {
 
     await api.listSessions({ includeArchived: true })
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/sessions?includeArchived=true', {
-      credentials: 'include',
-      headers: { accept: 'application/json' },
-    })
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/sessions?includeArchived=true',
+      expect.objectContaining({
+        body: undefined,
+        credentials: 'include',
+        method: 'GET',
+      }),
+    )
+    const headers = fetchMock.mock.calls[0]?.[1]?.headers
+    expect(headers).toBeInstanceOf(Headers)
+    expect((headers as Headers).get('x-ama-client')).toBe('web-rpc')
   })
 })

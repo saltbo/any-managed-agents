@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { After, Given, Then, When } from '@cucumber/cucumber'
-import { createRestishOpenApiHarness } from '../../scripts/restish-openapi-contract'
 import { createApp } from '../../server/app'
 import type { Env } from '../../server/env'
+import { createRestishOpenApiHarness } from './restish-openapi'
 import type { AmaWorld } from './world'
 
 type OpenApiOperation = {

@@ -1,3 +1,5 @@
+import { hc } from 'hono/client'
+
 export interface AuthContext {
   user: { id: string; email: string; name: string | null; avatarUrl: string | null }
   organization: { id: string; name: string }
@@ -406,17 +408,22 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init: RequestInit = {}) {
-  const response = await fetch(path, {
-    ...init,
-    credentials: 'include',
-    headers: {
-      accept: 'application/json',
-      ...(init.body ? { 'content-type': 'application/json' } : {}),
-      ...init.headers,
-    },
-  })
+type RpcMethod = (args?: unknown) => Promise<RpcResponse>
+type RpcMethodName = '$delete' | '$get' | '$patch' | '$post' | '$put'
+type RpcNode = Record<string, unknown>
 
+const rpc = hc('/', {
+  init: { credentials: 'include' },
+  headers: () => ({
+    accept: 'application/json',
+    'x-ama-client': 'web-rpc',
+  }),
+}) as unknown as { api: RpcNode }
+
+type RpcResponse = Pick<Response, 'headers' | 'json' | 'ok' | 'status' | 'statusText' | 'text'>
+
+async function rpcRequest<T>(responsePromise: Promise<RpcResponse>) {
+  const response = await responsePromise
   if (response.status === 204) {
     return undefined as T
   }
@@ -433,66 +440,112 @@ async function request<T>(path: string, init: RequestInit = {}) {
   return body as T
 }
 
-function queryString(options: object = {}) {
-  const params = new URLSearchParams()
+function queryOptions(options: object = {}) {
+  const query: Record<string, string> = {}
   for (const [key, value] of Object.entries(options as Record<string, string | number | boolean | undefined>)) {
     if (value !== undefined && value !== false) {
-      params.set(key, String(value))
+      query[key] = String(value)
     }
   }
-  const query = params.toString()
-  return query ? `?${query}` : ''
+  return query
+}
+
+function queryArgs(options: object = {}) {
+  const query = queryOptions(options)
+  return Object.keys(query).length > 0 ? { query } : undefined
+}
+
+function rpcRoute(...segments: string[]) {
+  return segments.reduce<unknown>((node, segment) => (node as Record<string, unknown>)[segment], rpc) as RpcNode
+}
+
+function rpcCall(method: RpcMethodName, segments: string[], args?: unknown) {
+  return (rpcRoute(...segments)[method] as RpcMethod satisfies RpcMethod)(args)
+}
+
+function rpcGet<T>(segments: string[], args?: unknown) {
+  return rpcRequest<T>(rpcCall('$get', segments, args))
+}
+
+function rpcPost<T>(segments: string[], args?: unknown) {
+  return rpcRequest<T>(rpcCall('$post', segments, args))
+}
+
+function rpcPatch<T>(segments: string[], args?: unknown) {
+  return rpcRequest<T>(rpcCall('$patch', segments, args))
+}
+
+function rpcPut<T>(segments: string[], args?: unknown) {
+  return rpcRequest<T>(rpcCall('$put', segments, args))
+}
+
+function rpcDelete<T>(segments: string[], args?: unknown) {
+  return rpcRequest<T>(rpcCall('$delete', segments, args))
 }
 
 export const api = {
-  me: () => request<AuthContext>('/api/auth/me'),
-  logout: () => request<void>('/api/auth/logout', { method: 'POST' }),
-  listAgents: (options: ListOptions = {}) => request<ListResponse<Agent>>(`/api/agents${queryString(options)}`),
-  readAgent: (id: string) => request<Agent>(`/api/agents/${id}`),
-  createAgent: (input: AgentInput) => request<Agent>('/api/agents', { method: 'POST', body: JSON.stringify(input) }),
+  me: () => rpcGet<AuthContext>(['api', 'auth', 'me']),
+  logout: () => rpcPost<void>(['api', 'auth', 'logout']),
+  listAgents: (options: ListOptions = {}) => rpcGet<ListResponse<Agent>>(['api', 'agents'], queryArgs(options)),
+  readAgent: (id: string) => rpcGet<Agent>(['api', 'agents', ':agentId'], { param: { agentId: id } }),
+  createAgent: (input: AgentInput) => rpcPost<Agent>(['api', 'agents'], { json: input }),
   updateAgent: (id: string, input: Partial<AgentInput>) =>
-    request<Agent>(`/api/agents/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
-  archiveAgent: (id: string) => request<void>(`/api/agents/${id}`, { method: 'DELETE' }),
-  listAgentVersions: (id: string) => request<ListResponse<AgentVersion>>(`/api/agents/${id}/versions`),
+    rpcPatch<Agent>(['api', 'agents', ':agentId'], { param: { agentId: id }, json: input }),
+  archiveAgent: (id: string) => rpcDelete<void>(['api', 'agents', ':agentId'], { param: { agentId: id } }),
+  listAgentVersions: (id: string) =>
+    rpcGet<ListResponse<AgentVersion>>(['api', 'agents', ':agentId', 'versions'], { param: { agentId: id } }),
   listEnvironments: (options: ListOptions = {}) =>
-    request<ListResponse<Environment>>(`/api/environments${queryString(options)}`),
-  readEnvironment: (id: string) => request<Environment>(`/api/environments/${id}`),
-  createEnvironment: (input: EnvironmentInput) =>
-    request<Environment>('/api/environments', { method: 'POST', body: JSON.stringify(input) }),
+    rpcGet<ListResponse<Environment>>(['api', 'environments'], queryArgs(options)),
+  readEnvironment: (id: string) =>
+    rpcGet<Environment>(['api', 'environments', ':environmentId'], { param: { environmentId: id } }),
+  createEnvironment: (input: EnvironmentInput) => rpcPost<Environment>(['api', 'environments'], { json: input }),
   updateEnvironment: (id: string, input: Partial<EnvironmentInput>) =>
-    request<Environment>(`/api/environments/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
-  archiveEnvironment: (id: string) => request<void>(`/api/environments/${id}`, { method: 'DELETE' }),
+    rpcPatch<Environment>(['api', 'environments', ':environmentId'], { param: { environmentId: id }, json: input }),
+  archiveEnvironment: (id: string) =>
+    rpcDelete<void>(['api', 'environments', ':environmentId'], { param: { environmentId: id } }),
   listEnvironmentVersions: (id: string) =>
-    request<ListResponse<EnvironmentVersion>>(`/api/environments/${id}/versions`),
-  listSessions: (options: ListOptions = {}) => request<ListResponse<Session>>(`/api/sessions${queryString(options)}`),
-  createSession: (input: SessionInput) =>
-    request<Session>('/api/sessions', { method: 'POST', body: JSON.stringify(input) }),
-  readSession: (id: string) => request<Session>(`/api/sessions/${id}`),
-  reconnectSession: (id: string) => request<Session>(`/api/sessions/${id}/reconnect`),
-  stopSession: (id: string) => request<Session>(`/api/sessions/${id}/stop`, { method: 'POST' }),
-  archiveSession: (id: string) => request<void>(`/api/sessions/${id}`, { method: 'DELETE' }),
+    rpcGet<ListResponse<EnvironmentVersion>>(['api', 'environments', ':environmentId', 'versions'], {
+      param: { environmentId: id },
+    }),
+  listSessions: (options: ListOptions = {}) => rpcGet<ListResponse<Session>>(['api', 'sessions'], queryArgs(options)),
+  createSession: (input: SessionInput) => rpcPost<Session>(['api', 'sessions'], { json: input }),
+  readSession: (id: string) => rpcGet<Session>(['api', 'sessions', ':sessionId'], { param: { sessionId: id } }),
+  reconnectSession: (id: string) =>
+    rpcGet<Session>(['api', 'sessions', ':sessionId', 'reconnect'], { param: { sessionId: id } }),
+  stopSession: (id: string) =>
+    rpcPost<Session>(['api', 'sessions', ':sessionId', 'stop'], { param: { sessionId: id } }),
+  archiveSession: (id: string) => rpcDelete<void>(['api', 'sessions', ':sessionId'], { param: { sessionId: id } }),
   listSessionEvents: (id: string, options: SessionEventListOptions = {}) =>
-    request<ListResponse<SessionEvent>>(`/api/sessions/${id}/events${queryString(options)}`),
+    rpcGet<ListResponse<SessionEvent>>(['api', 'sessions', ':sessionId', 'events'], {
+      param: { sessionId: id },
+      ...(queryArgs(options) ?? {}),
+    }),
   listProviders: (options: ListOptions = {}) =>
-    request<ListResponse<Provider>>(`/api/providers${queryString(options)}`),
-  readProvider: (id: string) => request<Provider>(`/api/providers/${id}`),
-  createProvider: (input: ProviderInput) =>
-    request<Provider>('/api/providers', { method: 'POST', body: JSON.stringify(input) }),
-  archiveProvider: (id: string) => request<void>(`/api/providers/${id}`, { method: 'DELETE' }),
-  listProviderModels: (id: string) => request<ListResponse<ProviderModel>>(`/api/providers/${id}/models`),
-  listVaults: (options: ListOptions = {}) => request<ListResponse<Vault>>(`/api/vaults${queryString(options)}`),
-  readVault: (id: string) => request<Vault>(`/api/vaults/${id}`),
-  createVault: (input: VaultInput) => request<Vault>('/api/vaults', { method: 'POST', body: JSON.stringify(input) }),
-  archiveVault: (id: string) => request<void>(`/api/vaults/${id}`, { method: 'DELETE' }),
+    rpcGet<ListResponse<Provider>>(['api', 'providers'], queryArgs(options)),
+  readProvider: (id: string) => rpcGet<Provider>(['api', 'providers', ':providerId'], { param: { providerId: id } }),
+  createProvider: (input: ProviderInput) => rpcPost<Provider>(['api', 'providers'], { json: input }),
+  archiveProvider: (id: string) => rpcDelete<void>(['api', 'providers', ':providerId'], { param: { providerId: id } }),
+  listProviderModels: (id: string) =>
+    rpcGet<ListResponse<ProviderModel>>(['api', 'providers', ':providerId', 'models'], { param: { providerId: id } }),
+  listVaults: (options: ListOptions = {}) => rpcGet<ListResponse<Vault>>(['api', 'vaults'], queryArgs(options)),
+  readVault: (id: string) => rpcGet<Vault>(['api', 'vaults', ':vaultId'], { param: { vaultId: id } }),
+  createVault: (input: VaultInput) => rpcPost<Vault>(['api', 'vaults'], { json: input }),
+  archiveVault: (id: string) => rpcDelete<void>(['api', 'vaults', ':vaultId'], { param: { vaultId: id } }),
   listVaultCredentials: (id: string, options: ListOptions = {}) =>
-    request<ListResponse<VaultCredential>>(`/api/vaults/${id}/credentials${queryString(options)}`),
-  listMcpConnectors: () => request<ListResponse<McpConnector>>('/api/mcp/connectors'),
-  listMcpConnections: () => request<ListResponse<McpConnection>>('/api/mcp/connections'),
+    rpcGet<ListResponse<VaultCredential>>(['api', 'vaults', ':vaultId', 'credentials'], {
+      param: { vaultId: id },
+      ...(queryArgs(options) ?? {}),
+    }),
+  listMcpConnectors: () => rpcGet<ListResponse<McpConnector>>(['api', 'mcp', 'connectors']),
+  listMcpConnections: () => rpcGet<ListResponse<McpConnection>>(['api', 'mcp', 'connections']),
   disconnectMcpConnection: (id: string) =>
-    request<void>(`/api/mcp/connections/${id}?confirm=true`, { method: 'DELETE' }),
-  readGovernancePolicy: () => request<GovernancePolicy>('/api/governance/policy'),
+    rpcDelete<void>(['api', 'mcp', 'connections', ':connectionId'], {
+      param: { connectionId: id },
+      query: { confirm: 'true' },
+    }),
+  readGovernancePolicy: () => rpcGet<GovernancePolicy>(['api', 'governance', 'policy']),
   updateGovernancePolicy: (input: Partial<GovernancePolicy>) =>
-    request<GovernancePolicy>('/api/governance/policy', { method: 'PUT', body: JSON.stringify(input) }),
-  readUsageSummary: () => request<UsageSummary>('/api/usage/summary'),
-  listAuditRecords: () => request<ListResponse<AuditRecord>>('/api/audit-records'),
+    rpcPut<GovernancePolicy>(['api', 'governance', 'policy'], { json: input }),
+  readUsageSummary: () => rpcGet<UsageSummary>(['api', 'usage', 'summary']),
+  listAuditRecords: () => rpcGet<ListResponse<AuditRecord>>(['api', 'audit-records']),
 }

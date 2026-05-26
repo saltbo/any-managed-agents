@@ -33,6 +33,7 @@ interface UiWorkflow {
   agentId: string
   sessionId: string
   message: string
+  controlPlaneRequestHeaders: Record<string, string>[]
 }
 
 type UiWorld = AmaWorld & { uiWorkflow?: UiWorkflow }
@@ -51,6 +52,7 @@ Given('the local real UI e2e app is running', { timeout: 120_000 }, async functi
     agentId: '',
     sessionId: '',
     message: '',
+    controlPlaneRequestHeaders: [],
   }
 })
 
@@ -66,10 +68,47 @@ When(
       agentId: this.uiWorkflow?.agentId ?? '',
       sessionId: this.uiWorkflow?.sessionId ?? '',
       message: this.uiWorkflow?.message ?? '',
+      controlPlaneRequestHeaders: this.uiWorkflow?.controlPlaneRequestHeaders ?? [],
     }
     await page.goto('/agents')
   },
 )
+
+When('web UI calls control-plane routes', async function (this: UiWorld) {
+  const workflow = requireUiWorkflow(this)
+  workflow.controlPlaneRequestHeaders = []
+  workflow.page.on('request', (request) => {
+    const url = new URL(request.url())
+    if (url.pathname === '/api/agents') {
+      workflow.controlPlaneRequestHeaders.push(request.headers())
+    }
+  })
+  await workflow.page.goto('/agents')
+  await expect(workflow.page.getByRole('heading', { name: 'Agents' })).toBeVisible()
+  await expect
+    .poll(() => workflow.controlPlaneRequestHeaders.length, { message: 'Expected web UI to request /api/agents' })
+    .toBeGreaterThan(0)
+})
+
+Then(
+  'requests use the shared Hono RPC client with shared auth, error handling, tenancy headers, and response parsing',
+  function (this: UiWorld) {
+    const workflow = requireUiWorkflow(this)
+    assert.ok(
+      workflow.controlPlaneRequestHeaders.some((headers) => headers['x-ama-client'] === 'web-rpc'),
+      'Expected browser control-plane requests to include the shared Hono RPC client marker',
+    )
+  },
+)
+
+Then('external automation remains described by the OpenAPI document', async function (this: UiWorld) {
+  const workflow = requireUiWorkflow(this)
+  const response = await workflow.page.request.get('/api/openapi.json')
+  assert.equal(response.status(), 200)
+  const document = (await response.json()) as { paths?: Record<string, unknown> }
+  assert.ok(document.paths?.['/api/agents'], 'Expected OpenAPI to describe external agents control-plane path')
+  assert.ok(document.paths?.['/api/sessions'], 'Expected OpenAPI to describe external sessions control-plane path')
+})
 
 Then(
   'the sidebar shows agents, sessions, providers, vaults, usage, audit, and settings',

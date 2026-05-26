@@ -2410,9 +2410,10 @@ async function connectMcp(state: E2EState, data: Json) {
 async function sendRuntimeMessage(state: E2EState, message: string) {
   const sessionId = String(state.latestSession?.id)
   state.runtimeMessage = message
-  await state.page.goto(`/sessions/${sessionId}`)
-  await state.page
-    .evaluate(
+  const runtimePage = await state.page.context().newPage()
+  try {
+    await runtimePage.goto('/')
+    state.runtimeEventTypes = await runtimePage.evaluate(
       async ({ sessionId, message }) => {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
         const socket = new WebSocket(`${protocol}//${window.location.host}/runtime/sessions/${sessionId}/ws`)
@@ -2435,20 +2436,21 @@ async function sendRuntimeMessage(state: E2EState, message: string) {
       },
       { sessionId, message },
     )
-    .then((eventTypes) => {
-      state.runtimeEventTypes = eventTypes
-    })
+  } finally {
+    await runtimePage.close()
+  }
   await waitForRuntimeEvents(state)
 }
 
 async function waitForRuntimeEvents(state: E2EState) {
   for (let attempt = 0; attempt < 30; attempt += 1) {
     const events = await sessionEvents(state)
-    if (events.data.some((event) => String(event.type).includes('message'))) {
-      return
+    if (JSON.stringify(events.data).includes(state.runtimeMessage ?? '')) {
+      return events
     }
     await delay(500)
   }
+  throw new Error(`Session ${state.latestSession?.id} did not persist runtime message events`)
 }
 
 async function sessionEvents(state: E2EState) {

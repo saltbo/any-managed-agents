@@ -1,10 +1,10 @@
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { spawn, spawnSync } from 'node:child_process'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { spawn, spawnSync } from 'node:child_process'
-import { createApp } from '../server/app'
-import type { Env } from '../server/env'
+import { createApp } from '../../server/app'
+import type { Env } from '../../server/env'
 
 export interface RestishDiscoveryResult {
   commands: string[]
@@ -300,7 +300,7 @@ export async function createRestishOpenApiHarness(): Promise<RestishOpenApiHarne
         base: `${origin}/api/openapi.json`,
         profiles: {
           default: {
-        headers: {},
+            headers: {},
           },
         },
       },
@@ -359,22 +359,14 @@ export async function createRestishOpenApiHarness(): Promise<RestishOpenApiHarne
       }
     },
     async createResourceWorkflow() {
-      const environment = await runRestishRaw(
-        home,
-        ['ama', 'create-environment', '--rsh-output-format', 'json'],
-        {
-          name: 'Restish e2e environment',
-          packages: [{ name: 'tsx', version: 'latest' }],
-        },
-      )
-      const agent = await runRestishRaw(
-        home,
-        ['ama', 'create-agent', '--rsh-output-format', 'json'],
-        {
-          name: 'Restish e2e agent',
-          instructions: 'Run e2e checks through documented control-plane operations.',
-        },
-      )
+      const environment = await runRestishRaw(home, ['ama', 'create-environment', '--rsh-output-format', 'json'], {
+        name: 'Restish e2e environment',
+        packages: [{ name: 'tsx', version: 'latest' }],
+      })
+      const agent = await runRestishRaw(home, ['ama', 'create-agent', '--rsh-output-format', 'json'], {
+        name: 'Restish e2e agent',
+        instructions: 'Run e2e checks through documented control-plane operations.',
+      })
       const session = await runRestishRaw(home, ['ama', 'create-session', '--rsh-output-format', 'json'], {
         agentId: 'agent_restish_contract',
         environmentId: 'env_restish_contract',

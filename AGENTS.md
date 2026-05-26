@@ -18,6 +18,7 @@
 - Cloudflare Agents SDK is not the v1.0 runtime contract. It may be added later as an adapter, but v1.0 must not require `/agents/*` compatibility.
 - Command-line automation uses `restish` against the published OpenAPI document. Do not add a bespoke CLI binary unless the product decision changes.
 - Agent-facing skills may document restish workflows, but they must call OpenAPI-described control-plane operations and preserve the Pi runtime boundary.
+- Web UI code is an internal product entrypoint and should call the control plane through the shared Hono RPC client. External operators, generated SDKs, and restish use the published OpenAPI document.
 - Secret values belong in Cloudflare Secrets or an approved external vault. D1 stores metadata, policy, snapshots, and secret references only.
 
 ## Workflow: Executable Specs First
@@ -41,6 +42,7 @@ If implementation discovers a missing product decision or behavior, stop widenin
 - Staging or production verification belongs in `specs/smoke/` and `npm run test:smoke`. Smoke scenarios may use real FlareAuth, Cloudflare, Workers AI, and deployed runtime resources, but they must not replace local product e2e coverage.
 - Unit tests, pure protocol constants, static documentation checks, lint, typecheck, and build checks do not belong in product Gherkin. Put those in `npm test`, `npm run lint`, `npm run typecheck`, or dedicated scripts.
 - OpenAPI/restish coverage may appear in product e2e only when it talks to a locally running AMA harness or local Worker app. Static OpenAPI shape checks are contract tests, not product behavior, unless paired with an actual local request flow.
+- Restish behavior belongs in Cucumber step definitions and `test/e2e` support code. Do not add standalone `scripts/` test runners for product-spec behavior.
 - Every `@implemented` scenario should have meaningful Given/When/Then causality: setup real local state, perform one user/API/browser action, then assert externally observable behavior. Avoid repeated generic steps that execute the same helper without scenario-specific assertions.
 - `@planned` means accepted product intent that is not yet implemented or not yet covered by local e2e. When a feature ships, update the scenario to `@implemented` in the same change that adds the step coverage.
 - Prefer reusable helpers for setup and cleanup, but keep step names product-specific. A reader should be able to tell what behavior is being verified without opening the helper.
@@ -68,6 +70,7 @@ If implementation discovers a missing product decision or behavior, stop widenin
 - `src/App.tsx` should compose providers and `RouterProvider`; primary route definitions belong in `src/app/router.tsx`.
 - Primary resources must be URL-routed and deep-linkable. Do not drive major pages only through local view state.
 - Use React Query for server state. Do not add feature-level `useEffect + useState` API loading loops.
+- Use the shared Hono RPC client for browser control-plane calls. Do not add ad hoc `fetch('/api/...')` clients in feature code.
 - Compose route pages from shadcn primitives and shared AMA components. Do not recreate local button, input, card, panel, or field systems.
 - Forms use shadcn `Field` primitives for labels, descriptions, errors, and validation layout.
 - Date and time display uses the shared dayjs-backed formatter in `src/console/format.ts`.
@@ -80,6 +83,7 @@ If implementation discovers a missing product decision or behavior, stop widenin
 - Keep route handlers, validation schemas, tests, and OpenAPI output aligned in the same change.
 - Stable error envelopes matter; do not replace structured API errors with ad hoc strings.
 - OpenAPI is the contract for direct HTTP, generated SDKs, and restish CLI workflows.
+- OpenAPI is the external contract. It should not become the internal browser client implementation when Hono RPC can provide the project-local API entrypoint.
 
 ## Runtime And Session Rules
 

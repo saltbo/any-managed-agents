@@ -1,11 +1,11 @@
 import { setWorldConstructor, World } from '@cucumber/cucumber'
+import type { createApp } from '../../server/app'
 import type {
   RestishDiscoveryResult,
   RestishJsonOutputResult,
   RestishOpenApiHarness,
   RestishWorkflowResult,
-} from '../../scripts/restish-openapi-contract'
-import type { createApp } from '../../server/app'
+} from './restish-openapi'
 
 export interface StagingSmokeEvidence {
   authenticated: boolean

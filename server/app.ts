@@ -993,3 +993,5 @@ export function createApp() {
 
   return app
 }
+
+export type AppType = ReturnType<typeof createApp>

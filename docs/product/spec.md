@@ -7,6 +7,7 @@ Any Managed Agents is a Cloudflare-native managed agents system. It is inspired 
 - The platform can be deployed on Cloudflare Workers.
 - This repository publishes OpenAPI for product resource management; SDKs are generated and maintained in separate repositories.
 - The control-plane API contract is generated from Hono route schemas.
+- The web console uses the project-local Hono RPC client for internal control-plane calls.
 - Command-line automation uses restish against the published OpenAPI document; this repository does not maintain a bespoke CLI binary.
 - The project provides an agent-facing skill that teaches automation agents how to use restish with the AMA OpenAPI document.
 - The v1.0 agent runtime is Pi coding agent running inside a per-session Cloudflare Sandbox.
@@ -49,11 +50,14 @@ The platform owns the control-plane OpenAPI contract. Product SDKs are generated
 
 Command-line usage is a control-plane concern. Operators use restish with the published OpenAPI document for resource management instead of a project-specific CLI implementation. Agent skills may wrap this workflow as documentation and task guidance, but they must still call the OpenAPI-described control plane and preserve the Pi runtime boundary.
 
+The web console is an internal control-plane entrypoint. It uses Hono RPC for shared auth, error handling, tenancy, and response parsing. External developers and operators use the OpenAPI document through direct HTTP, generated SDKs, or restish.
+
 ## Runtime Shape
 
 ```txt
 Control plane:
-  client / external SDK / restish -> /api/* -> Hono OpenAPI routes -> D1 / governance / metadata
+  web console -> Hono RPC client -> /api/* -> Hono OpenAPI routes -> D1 / governance / metadata
+  client / external SDK / restish -> /api/openapi.json + /api/* -> Hono OpenAPI routes -> D1 / governance / metadata
 
 Runtime proxy:
   client / external SDK helper -> AMA runtime proxy -> Pi RPC / JSON event stream

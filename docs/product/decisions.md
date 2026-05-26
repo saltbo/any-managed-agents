@@ -27,6 +27,7 @@ These decisions define the intended end state for Any Managed Agents.
 - TypeScript, Python, Go, and other SDKs should live in separate repositories.
 - External SDKs must be generated from or mechanically aligned with this repository's OpenAPI document.
 - Runtime helpers in external SDKs must delegate to Pi protocol or transparent AMA Pi proxy endpoints.
+- The web console is an internal entrypoint and uses Hono RPC for control-plane calls. OpenAPI remains the external contract for direct HTTP, generated SDKs, and restish.
 
 ## CLI Ownership
 

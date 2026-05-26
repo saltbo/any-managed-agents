@@ -1,6 +1,6 @@
 # SDK and API Boundary
 
-This repository does not maintain language SDKs or a bespoke CLI binary. It publishes the Any Managed Agents control-plane OpenAPI contract. Product SDKs are generated and maintained in separate repositories. SDKs are generated from or mechanically aligned with the OpenAPI document, and command-line automation uses restish against the same OpenAPI document.
+This repository does not maintain language SDKs or a bespoke CLI binary. It publishes the Any Managed Agents control-plane OpenAPI contract. Product SDKs are generated and maintained in separate repositories. SDKs are generated from or mechanically aligned with the OpenAPI document, and command-line automation uses restish against the same OpenAPI document. The web console is an internal entrypoint and uses the project-local Hono RPC client.
 
 ## SDK Layers
 
@@ -8,6 +8,12 @@ This repository does not maintain language SDKs or a bespoke CLI binary. It publ
 User application
   -> external Any Managed Agents SDK, restish, or direct HTTP
   -> Any Managed Agents OpenAPI control-plane API
+  -> AMA runtime proxy
+  -> Pi coding agent in Cloudflare Sandbox
+
+Web console
+  -> Hono RPC client
+  -> Any Managed Agents control-plane routes
   -> AMA runtime proxy
   -> Pi coding agent in Cloudflare Sandbox
 ```
@@ -44,6 +50,10 @@ This repository includes:
 - [AMA restish CLI skill](../agent-skills/ama-restish-cli/SKILL.md) for automation agents.
 
 The skill is guidance for automation agents, not a separate command surface. It references OpenAPI operations or documented paths rather than inventing project-specific CLI commands.
+
+## Web Console Boundary
+
+The web console should not use OpenAPI as its internal client implementation. It calls the same Hono routes through the shared Hono RPC client. OpenAPI remains the external contract for direct HTTP users, generated SDKs, and restish.
 
 ## Runtime Protocol
 
