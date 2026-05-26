@@ -92,10 +92,24 @@ const agent = await client.agents.create({
   instructions: 'Answer with citations.',
 })
 
-const session = await client.sessions.create({ agentId: agent.id, environmentId: environment.id })
+const session = await client.sessions.create({
+  agentId: agent.id,
+  environmentId: environment.id,
+  resourceRefs: [
+    {
+      type: 'github_repository',
+      owner: 'saltbo',
+      repo: 'any-managed-agents',
+      ref: 'main',
+      mountPath: '/workspace/repos/saltbo/any-managed-agents',
+    },
+  ],
+})
 ```
 
 Runtime task interaction is separate from restish control-plane automation. Use the `runtimeEndpointPath` returned by session reads with AMA runtime helpers. Do not define a new CLI-level runtime protocol.
+
+Cloud-hosted sessions also expose a deterministic `/workspace/.ama/resources.json` manifest inside the sandbox. It declares safe GitHub repository refs and target mount paths for the runtime/tool executor to set up; it does not imply that AMA has already cloned the repositories.
 
 Regenerate repo-local SDK scaffolds from the Hono-generated OpenAPI document before publishing SDK changes:
 

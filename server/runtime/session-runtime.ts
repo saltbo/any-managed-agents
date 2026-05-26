@@ -28,6 +28,7 @@ export type SessionRuntimeStartInput = {
   agentSnapshot: Record<string, unknown>
   environmentSnapshot: Record<string, unknown> | null
   mcpSnapshot?: Record<string, unknown>
+  resourceRefs?: Record<string, unknown>[]
 }
 
 export type SessionRuntimeStartResult = {
@@ -117,6 +118,26 @@ export function runtimeEndpointPath(sessionId: string) {
   return `/runtime/sessions/${sessionId}/rpc`
 }
 
+export function workspaceResourceManifest(resourceRefs: Record<string, unknown>[] = []) {
+  const resources = resourceRefs
+    .filter((resourceRef) => resourceRef.type === 'github_repository')
+    .map((resourceRef) => ({
+      type: 'github_repository',
+      owner: resourceRef.owner,
+      repo: resourceRef.repo,
+      mountPath: resourceRef.mountPath,
+      ...(typeof resourceRef.ref === 'string' ? { ref: resourceRef.ref } : {}),
+      ...(typeof resourceRef.credentialRef === 'string' ? { credentialRef: resourceRef.credentialRef } : {}),
+      status: 'declared',
+    }))
+    .sort((left, right) => String(left.mountPath).localeCompare(String(right.mountPath)))
+  return {
+    version: 1,
+    workspaceRoot: '/workspace',
+    resources,
+  }
+}
+
 export async function startSessionRuntime(
   env: Env,
   input: SessionRuntimeStartInput,
@@ -139,6 +160,13 @@ export async function startSessionRuntime(
       }),
       { encoding: 'utf-8' },
     )
+    await sandbox.writeFile(
+      '/workspace/.ama/resources.json',
+      JSON.stringify(workspaceResourceManifest(input.resourceRefs)),
+      {
+        encoding: 'utf-8',
+      },
+    )
   }
 
   return {
@@ -150,6 +178,7 @@ export async function startSessionRuntime(
       loop: 'cloud-session-runtime',
       executor: 'cloudflare-sandbox',
       piCorePackage: '@earendil-works/pi-agent-core',
+      resourceManifestPath: '/workspace/.ama/resources.json',
     },
   }
 }

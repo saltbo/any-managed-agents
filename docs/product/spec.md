@@ -72,13 +72,28 @@ Tool execution:
 - `Agent` is a long-lived managed definition: instructions, carried skills, tool declarations, model config, metadata, and versions. Agents do not bind environments and do not own sandbox or network policy.
 - `Environment` is a long-lived sandbox and runtime configuration: runtime type, packages, variables, network policy, resource limits, executor image configuration, and metadata. It is not a running sandbox.
 - `Sandbox` is an ephemeral runtime instance created from an environment snapshot for exactly one session.
-- `Session` is a concrete run of an agent in an explicitly selected environment. Each session binds an agent version snapshot, environment snapshot, sandbox id, cloud runtime state, events, and status. Each running session owns exactly one sandbox executor backend.
+- `Session` is a concrete run of an agent in an explicitly selected environment. Each session binds an agent version snapshot, environment snapshot, safe resource references, sandbox id, cloud runtime state, events, and status. Each running session owns exactly one sandbox executor backend.
 
 Environment `runtimeType` is either `cloud-hosted` or `self-hosted`. Cloud-hosted sessions use the Cloudflare Sandbox ToolExecutor. Self-hosted environments are reusable configuration, but sessions remain `pending` with `statusReason: "requires-runner"` until runner APIs are implemented.
 
 Environment `networkPolicy.mode` is exactly `unrestricted`, `restricted`, or `offline`. Restricted policy requires explicit `allowedHosts`; unrestricted and offline policy do not carry host allow-lists. Offline policy denies outbound sandbox network operations.
 
 Sandbox instances follow the session lifecycle, are not reusable across sessions, and must not expose public ports.
+
+Session `resourceRefs` may include GitHub repository declarations:
+
+```json
+{
+  "type": "github_repository",
+  "owner": "saltbo",
+  "repo": "any-managed-agents",
+  "ref": "main",
+  "mountPath": "/workspace/repos/saltbo/any-managed-agents",
+  "credentialRef": "vaultcred_abc123"
+}
+```
+
+AMA stores only safe references. Raw tokens, clone URLs with embedded credentials, path traversal, and mount paths outside `/workspace` are rejected. Cloud-hosted session startup writes `/workspace/.ama/resources.json` with declared GitHub resources sorted by mount path. The manifest is a deterministic setup contract for the runtime/tool executor layer; repositories are not considered cloned or mounted until that layer performs setup using approved credential references.
 
 ## Spec Discipline
 

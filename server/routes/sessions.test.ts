@@ -85,6 +85,7 @@ async function connectMcp(authorization: string, connectorId: string) {
     }),
   })
   expect([200, 201]).toContain(connectRes.status)
+  return credential
 }
 
 describe('[CF] /api/sessions', () => {
@@ -164,6 +165,7 @@ describe('[CF] /api/sessions', () => {
         loop: 'cloud-session-runtime',
         executor: 'cloudflare-sandbox',
         piCorePackage: '@earendil-works/pi-agent-core',
+        resourceManifestPath: '/workspace/.ama/resources.json',
         mcpConnectors: ['github'],
       },
       modelConfig: { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6' },
@@ -477,6 +479,96 @@ describe('[CF] /api/sessions', () => {
         message: 'Session runtime is not active',
       },
     })
+  })
+
+  it('normalizes GitHub repository resource refs and rejects unsafe workspace inputs', async () => {
+    const authorization = await signIn()
+    const credential = await connectMcp(authorization, 'github')
+    const environment = await createEnvironment(authorization)
+    const agent = await createAgent(authorization)
+
+    const createRes = await jsonFetch('/api/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        resourceRefs: [
+          {
+            type: 'github_repository',
+            owner: 'saltbo',
+            repo: 'any-managed-agents',
+            ref: 'feature/session-resources',
+            mountPath: 'repos/ama',
+            credentialRef: credential.activeVersionId,
+          },
+        ],
+      }),
+    })
+    expect(createRes.status).toBe(201)
+    await expect(createRes.json()).resolves.toMatchObject({
+      resourceRefs: [
+        {
+          type: 'github_repository',
+          owner: 'saltbo',
+          repo: 'any-managed-agents',
+          ref: 'feature/session-resources',
+          mountPath: '/workspace/repos/ama',
+          credentialRef: credential.activeVersionId,
+        },
+      ],
+      metadata: { resourceManifestPath: '/workspace/.ama/resources.json' },
+    })
+
+    const unsafePathRes = await jsonFetch('/api/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        resourceRefs: [
+          {
+            type: 'github_repository',
+            owner: 'saltbo',
+            repo: 'any-managed-agents',
+            mountPath: '../escape',
+          },
+        ],
+      }),
+    })
+    expect(unsafePathRes.status).toBe(400)
+    await expect(unsafePathRes.json()).resolves.toMatchObject({
+      error: {
+        type: 'validation_error',
+        details: { fields: { 'resourceRefs.0.mountPath': expect.any(String) } },
+      },
+    })
+
+    const embeddedCredentialUrlRes = await jsonFetch('/api/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        resourceRefs: [
+          {
+            type: 'repository',
+            cloneUrl: 'https://token:secret@github.com/saltbo/any-managed-agents.git',
+          },
+        ],
+      }),
+    })
+    expect(embeddedCredentialUrlRes.status).toBe(400)
+
+    const duplicateMountRes = await jsonFetch('/api/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        resourceRefs: [
+          { type: 'github_repository', owner: 'saltbo', repo: 'one', mountPath: 'repos/shared' },
+          { type: 'github_repository', owner: 'saltbo', repo: 'two', mountPath: '/workspace/repos/shared' },
+        ],
+      }),
+    })
+    expect(duplicateMountRes.status).toBe(400)
   })
 
   it('normalizes legacy session environment snapshots for read contracts', async () => {

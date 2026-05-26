@@ -122,7 +122,7 @@ export interface Session {
   environmentVersionId: string | null
   environmentSnapshot: EnvironmentVersion | null
   title: string | null
-  resourceRefs: Record<string, unknown>[]
+  resourceRefs: SessionResourceRef[]
   vaultRefs: Record<string, unknown>[]
   durableObjectName: string
   sandboxId: string | null
@@ -156,6 +156,17 @@ export interface SessionEvent {
   metadata: Record<string, unknown>
   createdAt: string
 }
+
+export type GitHubRepositoryResourceRef = {
+  type: 'github_repository'
+  owner: string
+  repo: string
+  ref?: string
+  mountPath?: string
+  credentialRef?: string
+}
+
+export type SessionResourceRef = GitHubRepositoryResourceRef | Record<string, unknown>
 
 export interface Provider {
   id: string
@@ -401,7 +412,7 @@ export interface SessionInput {
   environmentId: string
   title?: string
   metadata?: Record<string, unknown>
-  resourceRefs?: Record<string, unknown>[]
+  resourceRefs?: SessionResourceRef[]
   vaultRefs?: Record<string, unknown>[]
 }
 

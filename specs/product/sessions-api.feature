@@ -23,7 +23,7 @@ Feature: Sessions API
     Given a project has an active agent and active environments
     When the user creates a session with an explicit environment, title, metadata, resource references, and vault references
     Then the response stores those values as safe references
-    And file and repository resources are mounted into the sandbox using deterministic mount paths
+    And file and repository resources are declared in the deterministic workspace manifest contract
     And vault references are exposed to the runtime only through approved secret bindings
     And raw credentials are rejected from the request body
 

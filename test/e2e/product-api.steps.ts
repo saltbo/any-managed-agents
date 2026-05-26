@@ -886,7 +886,7 @@ When(
     this.e2e.latestSession = await createSession(this.e2e, {
       title: `${this.e2e.runId} explicit session`,
       metadata: { ticket: 'AMA-E2E' },
-      resourceRefs: [{ type: 'repository', id: 'repo_1' }],
+      resourceRefs: [{ type: 'github_repository', owner: 'saltbo', repo: 'any-managed-agents' }],
       vaultRefs: [{ type: 'credential', id: 'cred_1' }],
     })
   },
@@ -2084,14 +2084,30 @@ Then('the response stores those values as safe references', function (this: Prod
   const session = required(this.e2e?.latestSession, 'session')
   assert.equal(session.title, `${this.e2e?.runId} explicit session`)
   assert.equal(objectValue(session.metadata).ticket, 'AMA-E2E')
-  assert.deepEqual(session.resourceRefs, [{ type: 'repository', id: 'repo_1' }])
+  assert.deepEqual(session.resourceRefs, [
+    {
+      type: 'github_repository',
+      owner: 'saltbo',
+      repo: 'any-managed-agents',
+      mountPath: '/workspace/repos/saltbo/any-managed-agents',
+    },
+  ])
   assert.deepEqual(session.vaultRefs, [{ type: 'credential', id: 'cred_1' }])
 })
 
 Then(
-  'file and repository resources are mounted into the sandbox using deterministic mount paths',
+  'file and repository resources are declared in the deterministic workspace manifest contract',
   function (this: ProductWorld) {
-    assert.deepEqual(this.e2e?.latestSession?.resourceRefs, [{ type: 'repository', id: 'repo_1' }])
+    const session = required(this.e2e?.latestSession, 'session')
+    assert.equal(objectValue(session.metadata).resourceManifestPath, '/workspace/.ama/resources.json')
+    assert.deepEqual(session.resourceRefs, [
+      {
+        type: 'github_repository',
+        owner: 'saltbo',
+        repo: 'any-managed-agents',
+        mountPath: '/workspace/repos/saltbo/any-managed-agents',
+      },
+    ])
   },
 )
 
@@ -2109,7 +2125,7 @@ Then('raw credentials are rejected from the request body', async function (this:
     data: {
       agentId: state.agent?.id,
       environmentId: state.environment?.id,
-      resourceRefs: [{ type: 'repository', apiKey: 'raw-secret' }],
+      resourceRefs: [{ type: 'github_repository', owner: 'saltbo', repo: 'any-managed-agents', apiKey: 'raw-secret' }],
     },
   })
   assert.equal(response.status(), 400)

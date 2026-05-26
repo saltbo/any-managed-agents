@@ -35,6 +35,7 @@ import {
   runtimeToolCalls,
   startSessionRuntime,
   stopSessionRuntime,
+  workspaceResourceManifest,
 } from './session-runtime'
 
 describe('session-runtime', () => {
@@ -129,7 +130,56 @@ describe('session-runtime', () => {
         loop: 'cloud-session-runtime',
         executor: 'cloudflare-sandbox',
         piCorePackage: '@earendil-works/pi-agent-core',
+        resourceManifestPath: '/workspace/.ama/resources.json',
       },
+    })
+  })
+
+  it('builds a deterministic workspace resource manifest', () => {
+    expect(
+      workspaceResourceManifest([
+        {
+          type: 'github_repository',
+          owner: 'saltbo',
+          repo: 'zeta',
+          ref: 'main',
+          mountPath: '/workspace/repos/saltbo/zeta',
+        },
+        {
+          type: 'repository',
+          id: 'legacy_repo',
+        },
+        {
+          type: 'github_repository',
+          owner: 'saltbo',
+          repo: 'alpha',
+          ref: 'release',
+          mountPath: '/workspace/repos/saltbo/alpha',
+          credentialRef: 'vaultcred_123',
+        },
+      ]),
+    ).toEqual({
+      version: 1,
+      workspaceRoot: '/workspace',
+      resources: [
+        {
+          type: 'github_repository',
+          owner: 'saltbo',
+          repo: 'alpha',
+          ref: 'release',
+          mountPath: '/workspace/repos/saltbo/alpha',
+          credentialRef: 'vaultcred_123',
+          status: 'declared',
+        },
+        {
+          type: 'github_repository',
+          owner: 'saltbo',
+          repo: 'zeta',
+          ref: 'main',
+          mountPath: '/workspace/repos/saltbo/zeta',
+          status: 'declared',
+        },
+      ],
     })
   })
 
@@ -318,6 +368,15 @@ describe('session-runtime', () => {
         agentSnapshot: { instructions: 'Test runtime' },
         environmentSnapshot: { runtimeImage: { image: 'ama-tool-executor' } },
         mcpSnapshot: { connectors: ['github'] },
+        resourceRefs: [
+          {
+            type: 'github_repository',
+            owner: 'saltbo',
+            repo: 'any-managed-agents',
+            ref: 'main',
+            mountPath: '/workspace/repos/saltbo/any-managed-agents',
+          },
+        ],
       }),
     ).resolves.toMatchObject({
       sandboxId: 'sandbox_123',
@@ -334,6 +393,24 @@ describe('session-runtime', () => {
     expect(mockSandbox.writeFile).toHaveBeenCalledWith(
       '/workspace/.ama/session.json',
       expect.stringContaining('"runtimeOwner":"ama-cloud"'),
+      { encoding: 'utf-8' },
+    )
+    expect(mockSandbox.writeFile).toHaveBeenCalledWith(
+      '/workspace/.ama/resources.json',
+      JSON.stringify({
+        version: 1,
+        workspaceRoot: '/workspace',
+        resources: [
+          {
+            type: 'github_repository',
+            owner: 'saltbo',
+            repo: 'any-managed-agents',
+            mountPath: '/workspace/repos/saltbo/any-managed-agents',
+            ref: 'main',
+            status: 'declared',
+          },
+        ],
+      }),
       { encoding: 'utf-8' },
     )
   })

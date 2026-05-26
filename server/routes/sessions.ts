@@ -14,6 +14,8 @@ import {
   mcpConnectionTools,
   sessionEvents,
   sessions,
+  vaultCredentials,
+  vaultCredentialVersions,
 } from '../db/schema'
 import type { Env } from '../env'
 import { errorResponse } from '../errors'
@@ -55,6 +57,56 @@ const EVENT_VISIBILITIES = ['runtime', 'transcript', 'debug', 'audit'] as const
 const RUNTIME_START_TIMEOUT_MS = 300_000
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
+const GitHubOwnerSchema = z
+  .string()
+  .min(1)
+  .max(39)
+  .regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/, 'Use a GitHub owner slug.')
+const GitHubRepoSchema = z
+  .string()
+  .min(1)
+  .max(100)
+  .regex(/^[A-Za-z0-9._-]+$/, 'Use a GitHub repository name.')
+  .refine((value) => value !== '.' && value !== '..', 'Use a GitHub repository name.')
+const GitRefSchema = z
+  .string()
+  .min(1)
+  .max(255)
+  .refine(
+    (value) =>
+      !/[\s\p{C}]/u.test(value) &&
+      !value.includes('..') &&
+      !value.includes('@{') &&
+      !value.includes('\\') &&
+      !value.startsWith('-') &&
+      !value.endsWith('/') &&
+      !value.endsWith('.lock'),
+    'Use a safe branch, tag, or commit ref.',
+  )
+const MountPathSchema = z.string().min(1).max(200)
+const CredentialRefSchema = z
+  .string()
+  .min(1)
+  .max(120)
+  .regex(/^vault(?:cred|ver)_[A-Za-z0-9]+$/, 'Use a vault credential or credential version id.')
+const GitHubRepositoryResourceRefSchema = z
+  .object({
+    type: z.literal('github_repository'),
+    owner: GitHubOwnerSchema,
+    repo: GitHubRepoSchema,
+    ref: GitRefSchema.optional(),
+    mountPath: MountPathSchema.optional(),
+    credentialRef: CredentialRefSchema.optional(),
+  })
+  .strict()
+  .openapi('GitHubRepositoryResourceRef')
+const LegacyResourceRefSchema = JsonObjectSchema.refine((value) => value.type !== 'github_repository', {
+  message: 'GitHub repository resources must use the github_repository schema.',
+})
+const ResourceRefSchema = z
+  .union([GitHubRepositoryResourceRefSchema, LegacyResourceRefSchema])
+  .openapi('SessionResourceRef')
+export type GitHubRepositoryResourceRef = z.infer<typeof GitHubRepositoryResourceRefSchema>
 const AgentVersionSchema = z
   .object({
     id: z.string(),
@@ -105,7 +157,9 @@ export const SessionSchema = z
     environmentVersionId: z.string().nullable().openapi({ example: 'envver_abc123' }),
     environmentSnapshot: EnvironmentVersionSchema.nullable(),
     title: z.string().nullable().openapi({ example: 'Implement billing export' }),
-    resourceRefs: z.array(JsonObjectSchema).openapi({ example: [{ type: 'repository', id: 'repo_abc123' }] }),
+    resourceRefs: z
+      .array(ResourceRefSchema)
+      .openapi({ example: [{ type: 'github_repository', owner: 'saltbo', repo: 'any-managed-agents', ref: 'main' }] }),
     vaultRefs: z.array(JsonObjectSchema).openapi({ example: [{ type: 'credential', id: 'cred_abc123' }] }),
     durableObjectName: z.string().openapi({ example: 'org_org123:project_project123:session_session123' }),
     sandboxId: z.string().nullable().openapi({ example: 'session_abc123' }),
@@ -150,10 +204,12 @@ const CreateSessionSchema = z
     title: z.string().min(1).max(160).optional().openapi({ example: 'Implement billing export' }),
     metadata: JsonObjectSchema.optional().openapi({ example: { ticket: 'AMA-123' } }),
     resourceRefs: z
-      .array(JsonObjectSchema)
+      .array(ResourceRefSchema)
       .max(50)
       .optional()
-      .openapi({ example: [{ type: 'repository', id: 'repo_abc123' }] }),
+      .openapi({
+        example: [{ type: 'github_repository', owner: 'saltbo', repo: 'any-managed-agents', ref: 'main' }],
+      }),
     vaultRefs: z
       .array(JsonObjectSchema)
       .max(50)
@@ -246,6 +302,141 @@ function hasSecretMaterial(value: unknown): boolean {
     return value.some(hasSecretMaterial)
   }
   return Object.entries(value).some(([key, child]) => secretKey(key) || hasSecretMaterial(child))
+}
+
+function hasEmbeddedCredentialUrl(value: unknown): boolean {
+  if (typeof value === 'string') {
+    try {
+      const url = new URL(value)
+      return Boolean(url.username || url.password)
+    } catch {
+      return false
+    }
+  }
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+  if (Array.isArray(value)) {
+    return value.some(hasEmbeddedCredentialUrl)
+  }
+  return Object.values(value).some(hasEmbeddedCredentialUrl)
+}
+
+function normalizeMountPath(resource: Pick<GitHubRepositoryResourceRef, 'owner' | 'repo' | 'mountPath'>) {
+  const requested = resource.mountPath?.trim() || `repos/${resource.owner}/${resource.repo}`
+  if (/[\p{C}\\]/u.test(requested)) {
+    throw new Error('Mount path contains invalid characters.')
+  }
+  if (requested.startsWith('/') && !requested.startsWith('/workspace/')) {
+    throw new Error('Mount path must stay under /workspace.')
+  }
+  const relativePath = requested.startsWith('/workspace/') ? requested.slice('/workspace/'.length) : requested
+  const segments = relativePath.split('/')
+  if (
+    segments.length === 0 ||
+    segments.some((segment) => segment.length === 0 || segment === '.' || segment === '..') ||
+    segments[0] === '.ama'
+  ) {
+    throw new Error('Mount path must use clean relative segments outside /workspace/.ama.')
+  }
+  if (!segments.every((segment) => /^[A-Za-z0-9._-]+$/.test(segment))) {
+    throw new Error('Mount path segments may contain only letters, numbers, dots, underscores, and hyphens.')
+  }
+  return `/workspace/${segments.join('/')}`
+}
+
+function normalizeResourceRefs(resourceRefs: Array<z.infer<typeof ResourceRefSchema>>) {
+  const normalized: Array<z.infer<typeof ResourceRefSchema>> = []
+  const mountPaths = new Set<string>()
+  for (const [index, resourceRef] of resourceRefs.entries()) {
+    if (hasEmbeddedCredentialUrl(resourceRef)) {
+      return {
+        fields: { [`resourceRefs.${index}`]: 'URLs with embedded credentials are not allowed.' },
+      }
+    }
+    if (resourceRef.type !== 'github_repository') {
+      normalized.push(resourceRef)
+      continue
+    }
+    const parsed = GitHubRepositoryResourceRefSchema.safeParse(resourceRef)
+    if (!parsed.success) {
+      return {
+        fields: { [`resourceRefs.${index}`]: parsed.error.issues[0]?.message ?? 'Invalid GitHub repository resource.' },
+      }
+    }
+    let mountPath: string
+    try {
+      mountPath = normalizeMountPath(parsed.data)
+    } catch (error) {
+      return {
+        fields: { [`resourceRefs.${index}.mountPath`]: error instanceof Error ? error.message : String(error) },
+      }
+    }
+    if (mountPaths.has(mountPath)) {
+      return {
+        fields: { [`resourceRefs.${index}.mountPath`]: 'Mount path must be unique within a session.' },
+      }
+    }
+    mountPaths.add(mountPath)
+    normalized.push({
+      type: 'github_repository',
+      owner: parsed.data.owner,
+      repo: parsed.data.repo,
+      mountPath,
+      ...(parsed.data.ref ? { ref: parsed.data.ref } : {}),
+      ...(parsed.data.credentialRef ? { credentialRef: parsed.data.credentialRef } : {}),
+    })
+  }
+  return { resourceRefs: normalized }
+}
+
+async function validateResourceCredentialRefs(
+  db: Db,
+  auth: AuthContext,
+  resourceRefs: Array<z.infer<typeof ResourceRefSchema>>,
+) {
+  const credentialRefs = resourceRefs
+    .filter((resourceRef): resourceRef is GitHubRepositoryResourceRef => resourceRef.type === 'github_repository')
+    .map((resourceRef) => resourceRef.credentialRef)
+    .filter((credentialRef): credentialRef is string => typeof credentialRef === 'string')
+  for (const credentialRef of new Set(credentialRefs)) {
+    if (credentialRef.startsWith('vaultver_')) {
+      const version = await db
+        .select({ id: vaultCredentialVersions.id })
+        .from(vaultCredentialVersions)
+        .where(
+          and(
+            eq(vaultCredentialVersions.id, credentialRef),
+            eq(vaultCredentialVersions.organizationId, auth.organization.id),
+            or(eq(vaultCredentialVersions.projectId, auth.project.id), isNull(vaultCredentialVersions.projectId)),
+            eq(vaultCredentialVersions.status, 'active'),
+          ),
+        )
+        .get()
+      if (!version) {
+        return {
+          credentialRef: 'Credential version must exist, be active, and belong to this project or organization.',
+        }
+      }
+      continue
+    }
+    const credential = await db
+      .select({ id: vaultCredentials.id })
+      .from(vaultCredentials)
+      .where(
+        and(
+          eq(vaultCredentials.id, credentialRef),
+          eq(vaultCredentials.organizationId, auth.organization.id),
+          or(eq(vaultCredentials.projectId, auth.project.id), isNull(vaultCredentials.projectId)),
+          eq(vaultCredentials.status, 'active'),
+        ),
+      )
+      .get()
+    if (!credential) {
+      return { credentialRef: 'Credential must exist, be active, and belong to this project or organization.' }
+    }
+  }
+  return null
 }
 
 function serializeAgentVersion(row: AgentVersionRow) {
@@ -341,7 +532,7 @@ function serializeSession(row: SessionRow) {
     environmentVersionId: row.environmentVersionId,
     environmentSnapshot,
     title: row.title,
-    resourceRefs: parseJson<Record<string, unknown>[]>(row.resourceRefs) ?? [],
+    resourceRefs: parseJson<z.infer<typeof ResourceRefSchema>[]>(row.resourceRefs) ?? [],
     vaultRefs: parseJson<Record<string, unknown>[]>(row.vaultRefs) ?? [],
     durableObjectName: row.durableObjectName,
     sandboxId: row.sandboxId,
@@ -527,7 +718,7 @@ export async function createSessionForAgent(
   options: {
     title?: string
     metadata?: Record<string, unknown>
-    resourceRefs?: Record<string, unknown>[]
+    resourceRefs?: Array<z.infer<typeof ResourceRefSchema>>
     vaultRefs?: Record<string, unknown>[]
     initialPrompt?: string
   } = {},
@@ -543,6 +734,12 @@ export async function createSessionForAgent(
         resourceRefs: 'Resource references must not contain secret material.',
         vaultRefs: 'Vault references must not contain raw secret material.',
       },
+    })
+  }
+  const normalizedResources = normalizeResourceRefs(options.resourceRefs ?? [])
+  if ('fields' in normalizedResources) {
+    return errorResponse(c, 400, 'validation_error', 'Invalid session resource references', {
+      fields: normalizedResources.fields,
     })
   }
 
@@ -618,6 +815,12 @@ export async function createSessionForAgent(
   if (!environmentVersion) {
     return errorResponse(c, 409, 'conflict', 'Selected environment is archived or unavailable')
   }
+  const credentialError = await validateResourceCredentialRefs(db, auth, normalizedResources.resourceRefs)
+  if (credentialError) {
+    return errorResponse(c, 400, 'validation_error', 'Invalid session resource credential reference', {
+      fields: credentialError,
+    })
+  }
 
   const timestamp = now()
   const id = newId('session')
@@ -665,7 +868,7 @@ export async function createSessionForAgent(
     environmentVersionId: environmentVersion?.id ?? null,
     environmentSnapshot: environmentSnapshot ? stringify(environmentSnapshot) : null,
     title: options.title ?? null,
-    resourceRefs: stringify(options.resourceRefs ?? []),
+    resourceRefs: stringify(normalizedResources.resourceRefs),
     vaultRefs: stringify(options.vaultRefs ?? []),
     projectId: auth.project.id,
     durableObjectName: `org_${auth.organization.id}:project_${auth.project.id}:session_${id}`,
@@ -709,6 +912,7 @@ export async function createSessionForAgent(
       pending,
       agentSnapshot,
       environmentSnapshot,
+      resourceRefs: normalizedResources.resourceRefs,
       ...(options.initialPrompt !== undefined ? { initialPrompt: options.initialPrompt } : {}),
     })
 
@@ -733,10 +937,11 @@ async function startSessionRuntimeForRow(
     pending: SessionRow
     agentSnapshot: ReturnType<typeof serializeAgentVersion>
     environmentSnapshot: ReturnType<typeof serializeEnvironmentVersion> | null
+    resourceRefs: Array<z.infer<typeof ResourceRefSchema>>
     initialPrompt?: string
   },
 ) {
-  const { pending, agentSnapshot, environmentSnapshot, initialPrompt } = input
+  const { pending, agentSnapshot, environmentSnapshot, resourceRefs, initialPrompt } = input
   const sessionId = pending.id
   const sandboxId = pending.sandboxId ?? sessionId.toLowerCase()
   try {
@@ -750,6 +955,7 @@ async function startSessionRuntimeForRow(
         agentSnapshot,
         environmentSnapshot,
         mcpSnapshot,
+        resourceRefs,
       }),
       RUNTIME_START_TIMEOUT_MS,
       'Session runtime startup timed out',
@@ -1075,6 +1281,16 @@ export async function recoverSessionRuntime(env: Env, db: Db, auth: AuthContext,
     throw new Error('Session agent snapshot is required')
   }
   const environmentSnapshot = parseJson<ReturnType<typeof serializeEnvironmentVersion>>(session.environmentSnapshot)
+  const normalizedResources = normalizeResourceRefs(
+    parseJson<Array<z.infer<typeof ResourceRefSchema>>>(session.resourceRefs) ?? [],
+  )
+  if ('fields' in normalizedResources) {
+    throw new Error('Session resource references are invalid')
+  }
+  const credentialError = await validateResourceCredentialRefs(db, auth, normalizedResources.resourceRefs)
+  if (credentialError) {
+    throw new Error('Session resource credential reference is invalid')
+  }
   const sandboxDecision = await evaluateSandboxRuntimePolicy(db, auth, {
     session: { id: session.id, agentSnapshot: session.agentSnapshot, environmentSnapshot: session.environmentSnapshot },
     operation: 'startup',
@@ -1103,6 +1319,7 @@ export async function recoverSessionRuntime(env: Env, db: Db, auth: AuthContext,
       agentSnapshot,
       environmentSnapshot,
       mcpSnapshot,
+      resourceRefs: normalizedResources.resourceRefs,
     }),
     RUNTIME_START_TIMEOUT_MS,
     'Session runtime recovery timed out',
