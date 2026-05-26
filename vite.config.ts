@@ -11,7 +11,7 @@ export default defineConfig(() => ({
     outDir: 'dist',
     emptyOutDir: true,
   },
-  plugins: [react(), tailwindcss(), cloudflare()],
+  plugins: [react(), tailwindcss(), cloudflare({ remoteBindings: process.env.CLOUDFLARE_ENV !== 'e2e' })],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
