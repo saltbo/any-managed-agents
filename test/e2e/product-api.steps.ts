@@ -594,6 +594,64 @@ When('an agent tries to call it', async function (this: ProductWorld) {
 })
 
 When(
+  'a user changes agents, sessions, providers, vaults, governance, or sandbox policy',
+  async function (this: ProductWorld) {
+    await ensureAgentAndEnvironment(this)
+    await emptyResponse(this.e2e.page.request, `/api/agents/${this.e2e.agent?.id}`, { method: 'DELETE' })
+    await emptyResponse(this.e2e.page.request, `/api/environments/${this.e2e.environment?.id}`, { method: 'DELETE' })
+    await createProvider(this.e2e, {
+      type: 'workers-ai',
+      displayName: `${this.e2e.runId} audit provider`,
+    })
+    this.e2e.vault = await createVault(this.e2e)
+    await apiJson<Json>(this.e2e.page.request, '/api/governance/policy', {
+      method: 'PUT',
+      data: { sandboxPolicy: { network: 'disabled' } },
+    })
+    const activeAgent = await createAgent(this.e2e, { name: `${this.e2e.runId} audit session agent` })
+    const activeEnvironment = await createEnvironment(this.e2e, { name: `${this.e2e.runId} audit session env` })
+    this.e2e.agent = activeAgent
+    this.e2e.environment = activeEnvironment
+    this.e2e.latestSession = await createSession(this.e2e)
+    await emptyResponse(this.e2e.page.request, `/api/sessions/${this.e2e.latestSession.id}/stop`, { method: 'POST' })
+  },
+)
+
+When(
+  'runtime policy blocks a provider call, tool call, MCP connector, sandbox command, network request, or credential resolution',
+  async function (this: ProductWorld) {
+    await ensureAgentAndEnvironment(this)
+    this.e2e.latestSession = await createSession(this.e2e)
+    await apiJson<Json>(this.e2e.page.request, '/api/governance/policy', {
+      method: 'PUT',
+      data: { mcpPolicy: { allowedConnectors: ['linear'] } },
+    })
+    const response = await apiResponse(
+      this.e2e.page.request,
+      `/runtime/sessions/${this.e2e.latestSession.id}/mcp/github/tools/repo.read/calls`,
+      {
+        method: 'POST',
+        data: { input: { repo: 'saltbo/any-managed-agents' } },
+      },
+    )
+    this.e2e.responseStatus = response.status()
+    this.e2e.response = (await response.json()) as Json
+  },
+)
+
+Given('a mutating API request succeeds or fails after validation', async function (this: ProductWorld) {
+  await ensureAgentAndEnvironment(this)
+  this.e2e.latestSession = await createSession(this.e2e)
+  await sendRuntimeMessage(this.e2e, 'audit correlation message')
+  await emptyResponse(this.e2e.page.request, `/api/sessions/${this.e2e.latestSession.id}/stop`, { method: 'POST' })
+})
+
+When('audit logging records the action', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  state.list = await apiJson<ListResponse<Json>>(state.page.request, '/api/audit-records?action=session.stop&limit=10')
+})
+
+When(
   'the user creates an agent with instructions, provider, model, allowed tools, MCP connectors, sandbox policy, and metadata',
   async function (this: ProductWorld) {
     await ensureSignedIn(this)
@@ -1112,6 +1170,80 @@ Then('the runtime denies the call and records a policy event', async function (t
   assert.ok(events.data.some((event) => event.type === 'policy_denied'))
   const audit = await apiJson<ListResponse<Json>>(state.page.request, '/api/audit-records?action=runtime_mcp_tool.call')
   assert.ok(audit.data.some((record) => record.outcome === 'denied'))
+})
+
+Then(
+  'the platform writes an audit event with actor, resource, action, timestamp, and safe metadata',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    const audit = await apiJson<ListResponse<Json>>(state.page.request, '/api/audit-records?limit=100')
+    for (const action of [
+      'agent.archive',
+      'environment.archive',
+      'provider.create',
+      'vault.create',
+      'governance_policy.update',
+      'session.create',
+      'session.stop',
+    ]) {
+      assert.ok(
+        audit.data.some((record) => record.action === action),
+        `expected audit action ${action}`,
+      )
+    }
+    const record = required(audit.data[0], 'audit record')
+    assert.equal(typeof record.actorUserId, 'string')
+    assert.equal(typeof record.resourceType, 'string')
+    assert.equal(typeof record.action, 'string')
+    assert.equal(typeof record.createdAt, 'string')
+    assert.equal(JSON.stringify(audit).includes('raw-secret'), false)
+  },
+)
+
+Then(
+  'the platform writes an audit event with policy category, rule reference, session id, and safe metadata',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    assert.equal(state.responseStatus, 403)
+    const audit = await apiJson<ListResponse<Json>>(
+      state.page.request,
+      '/api/audit-records?action=runtime_mcp_tool.call',
+    )
+    const record = required(
+      audit.data.find((item) => item.outcome === 'denied'),
+      'denied runtime audit record',
+    )
+    assert.equal(record.policyCategory, 'mcp')
+    assert.equal(typeof record.resourceId, 'string')
+    assert.equal(record.sessionId, state.latestSession?.id)
+    assert.equal(JSON.stringify(record).includes('raw-secret'), false)
+  },
+)
+
+Then(
+  'the record includes request id, actor id, organization id, project id, resource id, action, outcome, and timestamp',
+  function (this: ProductWorld) {
+    const record = required(this.e2e?.list?.data[0], 'audit record')
+    assert.equal(typeof record.requestId, 'string')
+    assert.equal(typeof record.actorUserId, 'string')
+    assert.equal(typeof record.organizationId, 'string')
+    assert.equal(typeof record.projectId, 'string')
+    assert.equal(record.resourceId, this.e2e?.latestSession?.id)
+    assert.equal(record.action, 'session.stop')
+    assert.equal(record.outcome, 'success')
+    assert.equal(typeof record.createdAt, 'string')
+  },
+)
+
+Then('the record can be linked to related session events when applicable', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const record = required(state.list?.data[0], 'audit record')
+  assert.equal(record.sessionId, state.latestSession?.id)
+  const events = await apiJson<ListResponse<Json>>(
+    state.page.request,
+    `/api/sessions/${state.latestSession?.id}/events`,
+  )
+  assert.ok(events.data.length > 0)
 })
 
 Then('the response shows platform default providers separately from project overrides', function (this: ProductWorld) {

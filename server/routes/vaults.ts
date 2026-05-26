@@ -1,6 +1,7 @@
 import { createRoute, z } from '@hono/zod-openapi'
 import { and, desc, eq, gte, like, lt, lte, or } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
+import { recordAudit, requestId } from '../audit'
 import { requireAuth } from '../auth/session'
 import { environments, projects, sessions, vaultCredentials, vaultCredentialVersions, vaults } from '../db/schema'
 import type { Env } from '../env'
@@ -780,7 +781,17 @@ app.openapi(createVaultRoute, async (c) => {
     updatedAt: timestamp,
   }
   await db.insert(vaults).values(row)
-  return c.json(serializeVault(row), 201)
+  const serialized = serializeVault(row)
+  await recordAudit(db, {
+    auth,
+    action: 'vault.create',
+    resourceType: 'vault',
+    resourceId: row.id,
+    outcome: 'success',
+    requestId: requestId(c),
+    after: serialized,
+  })
+  return c.json(serialized, 201)
 })
 
 app.openapi(readVaultRoute, async (c) => {
@@ -833,7 +844,18 @@ app.openapi(updateVaultRoute, async (c) => {
     updatedAt: now(),
   }
   await db.update(vaults).set(updated).where(eq(vaults.id, vault.id))
-  return c.json(serializeVault({ ...vault, ...updated }), 200)
+  const serialized = serializeVault({ ...vault, ...updated })
+  await recordAudit(db, {
+    auth,
+    action: 'vault.update',
+    resourceType: 'vault',
+    resourceId: vault.id,
+    outcome: 'success',
+    requestId: requestId(c),
+    before: serializeVault(vault),
+    after: serialized,
+  })
+  return c.json(serialized, 200)
 })
 
 app.openapi(archiveVaultRoute, async (c) => {
@@ -854,6 +876,16 @@ app.openapi(archiveVaultRoute, async (c) => {
     .update(vaults)
     .set({ status: 'archived', archivedAt: timestamp, updatedAt: timestamp })
     .where(eq(vaults.id, vault.id))
+  await recordAudit(db, {
+    auth,
+    action: 'vault.archive',
+    resourceType: 'vault',
+    resourceId: vault.id,
+    outcome: 'success',
+    requestId: requestId(c),
+    before: serializeVault(vault),
+    after: serializeVault({ ...vault, status: 'archived', archivedAt: timestamp, updatedAt: timestamp }),
+  })
   return c.body(null, 204)
 })
 
@@ -971,7 +1003,18 @@ app.openapi(createCredentialRoute, async (c) => {
     db.insert(vaultCredentialVersions).values(version),
     db.update(vaultCredentials).set({ activeVersionId: version.id }).where(eq(vaultCredentials.id, credential.id)),
   ])
-  return c.json(serializeCredential({ ...credential, activeVersionId: version.id }, version), 201)
+  const serialized = serializeCredential({ ...credential, activeVersionId: version.id }, version)
+  await recordAudit(db, {
+    auth,
+    action: 'vault_credential.create',
+    resourceType: 'vault_credential',
+    resourceId: credential.id,
+    outcome: 'success',
+    requestId: requestId(c),
+    metadata: { vaultId: vault.id },
+    after: serialized,
+  })
+  return c.json(serialized, 201)
 })
 
 app.openapi(readCredentialRoute, async (c) => {
@@ -1024,7 +1067,19 @@ app.openapi(updateCredentialRoute, async (c) => {
   }
   const serializedActiveVersion =
     body.status === 'revoked' ? null : await activeVersion(db, { ...credential, ...updated })
-  return c.json(serializeCredential({ ...credential, ...updated }, serializedActiveVersion), 200)
+  const serialized = serializeCredential({ ...credential, ...updated }, serializedActiveVersion)
+  await recordAudit(db, {
+    auth,
+    action: body.status === 'revoked' ? 'vault_credential.revoke' : 'vault_credential.update',
+    resourceType: 'vault_credential',
+    resourceId: credential.id,
+    outcome: 'success',
+    requestId: requestId(c),
+    metadata: { vaultId: vault.id },
+    before: serializeCredential(credential, await activeVersion(db, credential)),
+    after: serialized,
+  })
+  return c.json(serialized, 200)
 })
 
 app.openapi(listVersionsRoute, async (c) => {
@@ -1132,7 +1187,19 @@ app.openapi(rotateCredentialRoute, async (c) => {
       : []),
     db.update(vaultCredentials).set(updated).where(eq(vaultCredentials.id, credential.id)),
   ])
-  return c.json(serializeCredential({ ...credential, ...updated }, version), 201)
+  const serialized = serializeCredential({ ...credential, ...updated }, version)
+  await recordAudit(db, {
+    auth,
+    action: 'vault_credential.rotate',
+    resourceType: 'vault_credential',
+    resourceId: credential.id,
+    outcome: 'success',
+    requestId: requestId(c),
+    metadata: { vaultId: vault.id, versionId: version.id },
+    before: serializeCredential(credential, await activeVersion(db, credential)),
+    after: serialized,
+  })
+  return c.json(serialized, 201)
 })
 
 app.openapi(deleteVersionRoute, async (c) => {
@@ -1185,6 +1252,22 @@ app.openapi(deleteVersionRoute, async (c) => {
       }),
     })
     .where(eq(vaultCredentialVersions.id, version.id))
+  await recordAudit(db, {
+    auth,
+    action: 'vault_credential_version.delete',
+    resourceType: 'vault_credential_version',
+    resourceId: version.id,
+    outcome: 'success',
+    requestId: requestId(c),
+    metadata: { vaultId: vault.id, credentialId: credential.id },
+    before: serializeVersion(version),
+    after: {
+      ...serializeVersion(version),
+      status: 'deleted',
+      deletedAt: timestamp,
+      hasSecret: false,
+    },
+  })
   return c.body(null, 204)
 })
 
