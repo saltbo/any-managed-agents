@@ -38,6 +38,8 @@ interface E2EState {
   accessRule?: Json
   policy?: Json
   budget?: Json
+  mcpConnection?: Json
+  otherPage?: Page
   deletedCredentialVersionId?: string
   response?: Json
   responseStatus?: number
@@ -156,6 +158,44 @@ Given('organization, team, project, and agent policies exist', async function (t
   this.e2e.budget = await apiJson<Json>(this.e2e.page.request, '/api/governance/budgets', {
     method: 'POST',
     data: { scope: 'project', limitType: 'tokens', limitValue: 1, window: 'month' },
+  })
+})
+
+Given('a connector is allowed by project policy', async function (this: ProductWorld) {
+  await ensureSignedIn(this)
+  this.e2e.policy = await apiJson<Json>(this.e2e.page.request, '/api/governance/policy', {
+    method: 'PUT',
+    data: { mcpPolicy: { allowedConnectors: ['github', 'linear'] } },
+  })
+})
+
+Given('a connector is already connected', async function (this: ProductWorld) {
+  await ensureSignedIn(this)
+  this.e2e.credential = await createMcpCredential(this.e2e)
+  this.e2e.mcpConnection = await connectMcp(this.e2e, {
+    connectorId: 'github',
+    credentialId: this.e2e.credential.id,
+    credentialVersionId: this.e2e.credential.activeVersionId,
+  })
+})
+
+Given('organization A has connected a connector', async function (this: ProductWorld) {
+  await ensureSignedIn(this)
+  this.e2e.credential = await createMcpCredential(this.e2e)
+  this.e2e.mcpConnection = await connectMcp(this.e2e, {
+    connectorId: 'github',
+    credentialId: this.e2e.credential.id,
+  })
+  this.e2e.otherPage = await openLocalPage()
+  await authenticateE2EPage(this.e2e.otherPage)
+})
+
+Given('a connector is blocked by policy', async function (this: ProductWorld) {
+  await ensureAgentAndEnvironment(this)
+  this.e2e.latestSession = await createSession(this.e2e)
+  this.e2e.policy = await apiJson<Json>(this.e2e.page.request, '/api/governance/policy', {
+    method: 'PUT',
+    data: { mcpPolicy: { allowedConnectors: ['linear'] } },
   })
 })
 
@@ -472,6 +512,85 @@ When('the admin sets model, token, session, or time-window budgets', async funct
 When('the admin requests effective policy', async function (this: ProductWorld) {
   await ensureSignedIn(this)
   this.e2e.response = await apiJson<Json>(this.e2e.page.request, '/api/governance/effective-policy')
+})
+
+When('a user creates or updates an MCP connection', async function (this: ProductWorld) {
+  await ensureSignedIn(this)
+  this.e2e.credential = await createMcpCredential(this.e2e)
+  const rawCredential = await apiResponse(this.e2e.page.request, '/api/mcp/connections', {
+    method: 'POST',
+    data: { connectorId: 'github', secretValue: 'raw-github-token' },
+  })
+  assert.equal(rawCredential.status(), 400)
+  this.e2e.mcpConnection = await connectMcp(this.e2e, {
+    connectorId: 'github',
+    credentialId: this.e2e.credential.id,
+    credentialVersionId: this.e2e.credential.activeVersionId,
+    approvalMode: 'per_call',
+    metadata: { owner: 'platform' },
+  })
+  this.e2e.mcpConnection = await apiJson<Json>(
+    this.e2e.page.request,
+    `/api/mcp/connections/${this.e2e.mcpConnection.id}`,
+    {
+      method: 'PATCH',
+      data: { endpointUrl: 'https://mcp.example.test/github', approvalMode: 'none', status: 'connected' },
+    },
+  )
+})
+
+When(
+  'the user provides a credential reference or creates a new vault credential for the connector',
+  async function (this: ProductWorld) {
+    await ensureSignedIn(this)
+    this.e2e.credential = await createMcpCredential(this.e2e)
+    this.e2e.mcpConnection = await connectMcp(this.e2e, {
+      connectorId: 'github',
+      credentialId: this.e2e.credential.id,
+      credentialVersionId: this.e2e.credential.activeVersionId,
+    })
+  },
+)
+
+When('the user connects it again with a new credential reference', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const nextCredential = await createMcpCredential(state)
+  this.e2e.credential = nextCredential
+  this.e2e.response = await connectMcp(state, {
+    connectorId: 'github',
+    credentialId: nextCredential.id,
+    credentialVersionId: nextCredential.activeVersionId,
+    approvalMode: 'none',
+  })
+})
+
+When('the user disconnects it and confirms', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  await emptyResponse(state.page.request, `/api/mcp/connections/${state.mcpConnection?.id}?confirm=true`, {
+    method: 'DELETE',
+  })
+})
+
+When('a user from organization B lists, reads, or uses the same connector id', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const otherPage = required(state.otherPage, 'other page')
+  const list = await apiJson<ListResponse<Json>>(otherPage.request, '/api/mcp/connections')
+  const read = await apiResponse(otherPage.request, `/api/mcp/connections/${state.mcpConnection?.id}`)
+  this.e2e.response = { list, readStatus: read.status() }
+})
+
+When('an agent tries to call it', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const response = await apiResponse(
+    state.page.request,
+    `/runtime/sessions/${state.latestSession?.id}/mcp/github/tools/repo.read/calls`,
+    {
+      method: 'POST',
+      data: { input: { repo: 'saltbo/any-managed-agents' } },
+    },
+  )
+  this.e2e.responseStatus = response.status()
+  this.e2e.response = (await response.json()) as Json
 })
 
 When(
@@ -899,6 +1018,101 @@ Then(
     assert.equal(JSON.stringify(model).includes('raw-secret-value'), false)
   },
 )
+
+Then('the platform validates endpoint, credentials, policy, and approval mode', function (this: ProductWorld) {
+  const connection = required(this.e2e?.mcpConnection, 'mcp connection')
+  assert.equal(connection.connectorId, 'github')
+  assert.equal(connection.endpointUrl, 'https://mcp.example.test/github')
+  assert.equal(connection.approvalMode, 'none')
+  assert.equal(connection.status, 'connected')
+  assert.equal(connection.hasCredential, true)
+  assert.equal(JSON.stringify(connection).includes('raw-github-token'), false)
+})
+
+Then('the platform stores only encrypted or secret-referenced credentials', function (this: ProductWorld) {
+  const connection = required(this.e2e?.mcpConnection, 'mcp connection')
+  const credential = required(this.e2e?.credential, 'credential')
+  assert.equal(connection.hasCredential, true)
+  assert.equal(JSON.stringify(connection).includes(String(credential.id)), false)
+  assert.equal(JSON.stringify(connection).includes(String(credential.activeVersionId)), false)
+  assert.equal(JSON.stringify(connection).includes('raw-github-token'), false)
+})
+
+Then(
+  'the connection status becomes connected for the current organization or project scope',
+  function (this: ProductWorld) {
+    const connection = required(this.e2e?.mcpConnection, 'mcp connection')
+    assert.equal(connection.connectorId, 'github')
+    assert.equal(connection.status, 'connected')
+    assert.equal(typeof connection.organizationId, 'string')
+    assert.equal(typeof connection.projectId, 'string')
+  },
+)
+
+Then('connector lists report connected status without exposing credentials', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const list = await apiJson<ListResponse<Json>>(state.page.request, '/api/mcp/connectors?search=GitHub')
+  const github = required(
+    list.data.find((connector) => connector.connectorId === 'github'),
+    'github connector',
+  )
+  assert.equal(github.connectionStatus, 'connected')
+  assert.equal(JSON.stringify(list).includes(String(state.credential?.id)), false)
+  assert.equal(JSON.stringify(list).includes('raw-github-token'), false)
+})
+
+Then('the connection is updated instead of duplicated', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const updated = required(state.response, 'updated connection')
+  assert.equal(updated.id, state.mcpConnection?.id)
+  assert.equal(updated.approvalMode, 'none')
+  const connections = await apiJson<ListResponse<Json>>(state.page.request, '/api/mcp/connections')
+  assert.equal(connections.data.filter((connection) => connection.connectorId === 'github').length, 1)
+})
+
+Then('future sessions cannot use that connector through the old connection', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  await ensureAgentAndEnvironment(this)
+  state.latestSession = await createSession(state)
+  const response = await apiResponse(
+    state.page.request,
+    `/api/mcp/connections/${state.mcpConnection?.id}/tools/repo.read/calls`,
+    {
+      method: 'POST',
+      data: { sessionId: state.latestSession.id, input: { repo: 'saltbo/any-managed-agents' } },
+    },
+  )
+  assert.equal(response.status(), 403)
+})
+
+Then('audit events record connect, update, and disconnect actions', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const audit = await apiJson<ListResponse<Json>>(state.page.request, '/api/audit-records?limit=50')
+  assert.ok(audit.data.some((record) => record.action === 'mcp_connection.connect'))
+  assert.ok(audit.data.some((record) => record.action === 'mcp_connection.update'))
+  assert.ok(audit.data.some((record) => record.action === 'mcp_connection.disconnect'))
+  assert.equal(JSON.stringify(audit).includes('raw-github-token'), false)
+})
+
+Then("organization A's connection and credentials are not visible or usable", function (this: ProductWorld) {
+  const response = required(this.e2e?.response, 'tenant response')
+  const list = response.list as ListResponse<Json>
+  assert.deepEqual(list.data, [])
+  assert.equal(response.readStatus, 404)
+})
+
+Then('the runtime denies the call and records a policy event', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  assert.equal(state.responseStatus, 403)
+  assert.equal(objectValue(state.response?.error).type, 'policy_denied')
+  const events = await apiJson<ListResponse<Json>>(
+    state.page.request,
+    `/api/sessions/${state.latestSession?.id}/events`,
+  )
+  assert.ok(events.data.some((event) => event.type === 'policy_denied'))
+  const audit = await apiJson<ListResponse<Json>>(state.page.request, '/api/audit-records?action=runtime_mcp_tool.call')
+  assert.ok(audit.data.some((record) => record.outcome === 'denied'))
+})
 
 Then('the response shows platform default providers separately from project overrides', function (this: ProductWorld) {
   const list = required(this.e2e?.list, 'providers')
@@ -2037,6 +2251,27 @@ async function createCredential(state: E2EState) {
       metadata: { purpose: 'e2e' },
       secret: { provider: 'external-vault', externalVaultPath: `vault://ama/e2e/${state.runId}/credential` },
     },
+  })
+}
+
+async function createMcpCredential(state: E2EState) {
+  state.vault ??= await createVault(state)
+  return await apiJson<Json>(state.page.request, `/api/vaults/${state.vault.id}/credentials`, {
+    method: 'POST',
+    data: {
+      name: `${state.runId} GitHub token`,
+      type: 'api_key',
+      connectorBinding: { connectorId: 'github', name: 'token' },
+      metadata: { purpose: 'mcp-e2e' },
+      secret: { provider: 'external-vault', externalVaultPath: `vault://ama/e2e/${state.runId}/github` },
+    },
+  })
+}
+
+async function connectMcp(state: E2EState, data: Json) {
+  return await apiJson<Json>(state.page.request, '/api/mcp/connections', {
+    method: 'POST',
+    data,
   })
 }
 
