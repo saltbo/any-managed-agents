@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { queryKeys } from '@/lib/query-keys'
 
 export function useMcpActions() {
   const queryClient = useQueryClient()
@@ -8,7 +9,7 @@ export function useMcpActions() {
     mutationFn: api.disconnectMcpConnection,
     onSuccess: () => {
       toast.success('MCP connection disconnected')
-      void queryClient.invalidateQueries({ queryKey: ['console', 'resources'] })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.mcp.all })
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : String(error)),
   })

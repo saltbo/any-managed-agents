@@ -1,14 +1,18 @@
+import { useQuery } from '@tanstack/react-query'
 import { Outlet } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { FullscreenMessage } from '@/console/components'
-import { ApiError } from '@/lib/api'
+import { ApiError, api } from '@/lib/api'
+import { queryKeys } from '@/lib/query-keys'
 import { ConsoleShell } from './ConsoleShell'
-import { CreateResourceSheet } from './CreateResourceSheet'
 import { ConsoleContextProvider } from './console-context'
-import { useConsoleController } from './use-console-controller'
 
 export function ConsoleLayout() {
-  const { authQuery, contextValue, createSheetProps } = useConsoleController()
+  const authQuery = useQuery({
+    queryKey: queryKeys.auth.me,
+    queryFn: api.me,
+    retry: false,
+  })
 
   if (authQuery.isLoading) {
     return <FullscreenMessage title="Loading console" body="Checking session and project context." />
@@ -29,16 +33,15 @@ export function ConsoleLayout() {
     )
   }
 
-  if (!contextValue) {
+  if (!authQuery.data) {
     return <FullscreenMessage title="Console unavailable" body="Unable to load the current project context." />
   }
 
   return (
-    <ConsoleContextProvider value={contextValue}>
+    <ConsoleContextProvider value={{ auth: authQuery.data }}>
       <ConsoleShell>
         <Outlet />
       </ConsoleShell>
-      <CreateResourceSheet {...createSheetProps} />
     </ConsoleContextProvider>
   )
 }

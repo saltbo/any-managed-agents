@@ -1,23 +1,23 @@
+import { useQuery } from '@tanstack/react-query'
 import { ShieldCheck } from 'lucide-react'
-import { useMemo } from 'react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/console/components'
-import { matchesSearch } from '@/console/format'
 import { useClientPagination } from '@/console/use-client-pagination'
-import { useConsoleContext } from '@/features/console/console-context'
+import { api } from '@/lib/api'
+import { queryKeys } from '@/lib/query-keys'
+import { CreateProviderSheet } from './CreateProviderSheet'
 import { ProvidersView } from './ProvidersView'
 import { useProviderActions } from './use-provider-actions'
 
 export function ProvidersPage() {
-  const context = useConsoleContext()
+  const [creating, setCreating] = useState(false)
   const actions = useProviderActions()
-  const providers = useMemo(
-    () =>
-      context.providers.filter((provider) =>
-        matchesSearch([provider.displayName, provider.type, provider.status], context.query),
-      ),
-    [context.providers, context.query],
-  )
+  const providersQuery = useQuery({
+    queryKey: queryKeys.providers.list(false),
+    queryFn: () => api.listProviders(false),
+  })
+  const providers = providersQuery.data?.data ?? []
   const pagination = useClientPagination(providers)
   return (
     <div className="flex flex-col gap-4">
@@ -25,13 +25,14 @@ export function ProvidersPage() {
         title="Providers"
         description="Manage model provider configuration, default routing, credentials, and catalog readiness."
         actions={
-          <Button type="button" onClick={context.openCreateProvider}>
+          <Button type="button" onClick={() => setCreating(true)}>
             <ShieldCheck data-icon="inline-start" />
             Create provider
           </Button>
         }
       />
       <ProvidersView providers={pagination.items} pagination={pagination} onArchive={actions.archiveProvider} />
+      <CreateProviderSheet open={creating} onOpenChange={setCreating} />
     </div>
   )
 }

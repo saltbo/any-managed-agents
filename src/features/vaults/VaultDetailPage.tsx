@@ -1,19 +1,21 @@
 import { useQuery } from '@tanstack/react-query'
 import { useParams } from 'react-router'
 import { PageHeader } from '@/console/components'
-import { useConsoleContext } from '@/features/console/console-context'
 import { api } from '@/lib/api'
+import { queryKeys } from '@/lib/query-keys'
 import { VaultDetailView } from './VaultDetailView'
 
 export function VaultDetailPage() {
   const { vaultId } = useParams()
-  const context = useConsoleContext()
-  const listVault = context.vaults.find((item) => item.id === vaultId)
   const vaultQuery = useQuery({
-    queryKey: ['vault', vaultId ?? ''],
+    queryKey: queryKeys.vaults.detail(vaultId ?? ''),
     queryFn: () => api.readVault(vaultId as string),
     enabled: Boolean(vaultId),
-    ...(listVault ? { placeholderData: listVault } : {}),
+  })
+  const credentialsQuery = useQuery({
+    queryKey: queryKeys.vaults.credentials(vaultId ?? '', false),
+    queryFn: () => api.listVaultCredentials(vaultId as string, false),
+    enabled: Boolean(vaultId),
   })
   const vault = vaultQuery.data ?? null
   return (
@@ -23,7 +25,7 @@ export function VaultDetailPage() {
         title={vault?.name ?? 'Vault detail'}
         description={vault?.description ?? 'Inspect credential metadata and safe reference state.'}
       />
-      <VaultDetailView vault={vault} credentials={vaultId ? (context.vaultCredentials[vaultId] ?? []) : []} />
+      <VaultDetailView vault={vault} credentials={credentialsQuery.data?.data ?? []} />
     </div>
   )
 }

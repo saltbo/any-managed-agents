@@ -1,23 +1,23 @@
+import { useQuery } from '@tanstack/react-query'
 import { Vault } from 'lucide-react'
-import { useMemo } from 'react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/console/components'
-import { matchesSearch } from '@/console/format'
 import { useClientPagination } from '@/console/use-client-pagination'
-import { useConsoleContext } from '@/features/console/console-context'
+import { api } from '@/lib/api'
+import { queryKeys } from '@/lib/query-keys'
+import { CreateVaultSheet } from './CreateVaultSheet'
 import { useVaultActions } from './use-vault-actions'
 import { VaultsView } from './VaultsView'
 
 export function VaultsPage() {
-  const context = useConsoleContext()
+  const [creating, setCreating] = useState(false)
   const actions = useVaultActions()
-  const vaults = useMemo(
-    () =>
-      context.vaults.filter((vault) =>
-        matchesSearch([vault.name, vault.description, vault.scope, vault.status], context.query),
-      ),
-    [context.vaults, context.query],
-  )
+  const vaultsQuery = useQuery({
+    queryKey: queryKeys.vaults.list(false),
+    queryFn: () => api.listVaults(false),
+  })
+  const vaults = vaultsQuery.data?.data ?? []
   const pagination = useClientPagination(vaults)
   return (
     <div className="flex flex-col gap-4">
@@ -25,13 +25,14 @@ export function VaultsPage() {
         title="Vaults"
         description="Track safe credential-reference metadata for providers, MCP connections, and runtime use."
         actions={
-          <Button type="button" onClick={context.openCreateVault}>
+          <Button type="button" onClick={() => setCreating(true)}>
             <Vault data-icon="inline-start" />
             Create vault
           </Button>
         }
       />
       <VaultsView vaults={pagination.items} pagination={pagination} onArchive={actions.archiveVault} />
+      <CreateVaultSheet open={creating} onOpenChange={setCreating} />
     </div>
   )
 }

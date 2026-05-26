@@ -8,27 +8,30 @@ import { PageHeader, StatusBadge } from '@/console/components'
 import { formatDate, parseJsonObject, parseTools, stringifyJson } from '@/console/format'
 import { AgentForm } from '@/console/forms'
 import type { AgentFormState } from '@/console/types'
-import { useConsoleContext } from '@/features/console/console-context'
+import { CreateSessionSheet } from '@/features/sessions/CreateSessionSheet'
 import { type Agent, api } from '@/lib/api'
+import { queryKeys } from '@/lib/query-keys'
 import { AgentDetailView } from './AgentDetailView'
 
 export function AgentDetailPage() {
   const { agentId } = useParams()
   const queryClient = useQueryClient()
-  const context = useConsoleContext()
   const [editing, setEditing] = useState(false)
+  const [creatingSession, setCreatingSession] = useState(false)
   const [form, setForm] = useState<AgentFormState | null>(null)
-  const listAgent = context.agents.find((item) => item.id === agentId)
   const agentQuery = useQuery({
-    queryKey: ['agent', agentId ?? ''],
+    queryKey: queryKeys.agents.detail(agentId ?? ''),
     queryFn: () => api.readAgent(agentId as string),
     enabled: Boolean(agentId),
-    ...(listAgent ? { placeholderData: listAgent } : {}),
   })
   const versionsQuery = useQuery({
-    queryKey: ['agent', agentId ?? '', 'versions'],
+    queryKey: queryKeys.agents.versions(agentId ?? ''),
     queryFn: () => api.listAgentVersions(agentId as string),
     enabled: Boolean(agentId),
+  })
+  const sessionsQuery = useQuery({
+    queryKey: queryKeys.sessions.list(false),
+    queryFn: () => api.listSessions(false),
   })
   const agent = agentQuery.data ?? null
   const updateAgent = useMutation({
@@ -47,9 +50,9 @@ export function AgentDetailPage() {
       }),
     onSuccess: () => {
       setEditing(false)
-      context.refresh()
-      void queryClient.invalidateQueries({ queryKey: ['agent', agentId ?? ''] })
-      void queryClient.invalidateQueries({ queryKey: ['agent', agentId ?? '', 'versions'] })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.all })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.detail(agentId ?? '') })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.versions(agentId ?? '') })
     },
   })
   const openEdit = () => {
@@ -76,14 +79,23 @@ export function AgentDetailPage() {
                 <Pencil data-icon="inline-start" />
                 Edit agent
               </Button>
-              <Button type="button" onClick={() => context.openCreateSession(agent.id)}>
+              <Button type="button" onClick={() => setCreatingSession(true)}>
                 Create session
               </Button>
             </div>
           ) : null
         }
       />
-      <AgentDetailView agent={agent} versions={versionsQuery.data?.data ?? []} sessions={context.sessions} />
+      <AgentDetailView
+        agent={agent}
+        versions={versionsQuery.data?.data ?? []}
+        sessions={sessionsQuery.data?.data ?? []}
+      />
+      <CreateSessionSheet
+        open={creatingSession}
+        agentId={agent?.id}
+        onOpenChange={(open) => setCreatingSession(open)}
+      />
       <Sheet open={editing} onOpenChange={setEditing}>
         <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
           <SheetHeader>

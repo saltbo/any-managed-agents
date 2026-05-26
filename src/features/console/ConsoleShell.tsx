@@ -73,39 +73,18 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
 }
 
 function DesktopNav() {
-  const context = useConsoleContext()
   return (
     <nav className="mt-8 flex-1 space-y-1">
-      <NavButton
-        icon={<Code2 size={17} />}
-        active={context.view === 'quickstart'}
-        to="/quickstart"
-        label="Quickstart"
-      />
-      <NavButton icon={<Bot size={17} />} active={context.view === 'agents'} to="/agents" label="Agents" />
-      <NavButton
-        icon={<Server size={17} />}
-        active={context.view === 'environments'}
-        to="/environments"
-        label="Environments"
-      />
-      <NavButton
-        icon={<MessageSquare size={17} />}
-        active={context.view === 'sessions'}
-        to="/sessions"
-        label="Sessions"
-      />
-      <NavButton
-        icon={<ShieldCheck size={17} />}
-        active={context.view === 'providers'}
-        to="/providers"
-        label="Providers"
-      />
-      <NavButton icon={<Vault size={17} />} active={context.view === 'vaults'} to="/vaults" label="Vaults" />
-      <NavButton icon={<PlugZap size={17} />} active={context.view === 'mcp'} to="/mcp" label="MCP" />
-      <NavButton icon={<Code2 size={17} />} active={context.view === 'usage'} to="/usage" label="Usage" />
-      <NavButton icon={<DatabaseZap size={17} />} active={context.view === 'audit'} to="/audit" label="Audit" />
-      <NavButton icon={<Settings size={17} />} active={context.view === 'settings'} to="/settings" label="Settings" />
+      <NavButton icon={<Code2 size={17} />} to="/quickstart" label="Quickstart" />
+      <NavButton icon={<Bot size={17} />} to="/agents" label="Agents" />
+      <NavButton icon={<Server size={17} />} to="/environments" label="Environments" />
+      <NavButton icon={<MessageSquare size={17} />} to="/sessions" label="Sessions" />
+      <NavButton icon={<ShieldCheck size={17} />} to="/providers" label="Providers" />
+      <NavButton icon={<Vault size={17} />} to="/vaults" label="Vaults" />
+      <NavButton icon={<PlugZap size={17} />} to="/mcp" label="MCP" />
+      <NavButton icon={<Code2 size={17} />} to="/usage" label="Usage" />
+      <NavButton icon={<DatabaseZap size={17} />} to="/audit" label="Audit" />
+      <NavButton icon={<Settings size={17} />} to="/settings" label="Settings" />
     </nav>
   )
 }
@@ -155,44 +134,18 @@ function UserMenu({ placement }: { placement: 'sidebar' | 'mobile' }) {
 }
 
 function MobileNav() {
-  const context = useConsoleContext()
   return (
     <nav className="flex gap-2 overflow-x-auto pb-1 lg:hidden" aria-label="Primary">
-      <MobileNavButton
-        icon={<Code2 size={16} />}
-        active={context.view === 'quickstart'}
-        to="/quickstart"
-        label="Quickstart"
-      />
-      <MobileNavButton icon={<Bot size={16} />} active={context.view === 'agents'} to="/agents" label="Agents" />
-      <MobileNavButton
-        icon={<Server size={16} />}
-        active={context.view === 'environments'}
-        to="/environments"
-        label="Environments"
-      />
-      <MobileNavButton
-        icon={<MessageSquare size={16} />}
-        active={context.view === 'sessions'}
-        to="/sessions"
-        label="Sessions"
-      />
-      <MobileNavButton
-        icon={<ShieldCheck size={16} />}
-        active={context.view === 'providers'}
-        to="/providers"
-        label="Providers"
-      />
-      <MobileNavButton icon={<Vault size={16} />} active={context.view === 'vaults'} to="/vaults" label="Vaults" />
-      <MobileNavButton icon={<PlugZap size={16} />} active={context.view === 'mcp'} to="/mcp" label="MCP" />
-      <MobileNavButton icon={<Code2 size={16} />} active={context.view === 'usage'} to="/usage" label="Usage" />
-      <MobileNavButton icon={<DatabaseZap size={16} />} active={context.view === 'audit'} to="/audit" label="Audit" />
-      <MobileNavButton
-        icon={<Settings size={16} />}
-        active={context.view === 'settings'}
-        to="/settings"
-        label="Settings"
-      />
+      <MobileNavButton icon={<Code2 size={16} />} to="/quickstart" label="Quickstart" />
+      <MobileNavButton icon={<Bot size={16} />} to="/agents" label="Agents" />
+      <MobileNavButton icon={<Server size={16} />} to="/environments" label="Environments" />
+      <MobileNavButton icon={<MessageSquare size={16} />} to="/sessions" label="Sessions" />
+      <MobileNavButton icon={<ShieldCheck size={16} />} to="/providers" label="Providers" />
+      <MobileNavButton icon={<Vault size={16} />} to="/vaults" label="Vaults" />
+      <MobileNavButton icon={<PlugZap size={16} />} to="/mcp" label="MCP" />
+      <MobileNavButton icon={<Code2 size={16} />} to="/usage" label="Usage" />
+      <MobileNavButton icon={<DatabaseZap size={16} />} to="/audit" label="Audit" />
+      <MobileNavButton icon={<Settings size={16} />} to="/settings" label="Settings" />
     </nav>
   )
 }

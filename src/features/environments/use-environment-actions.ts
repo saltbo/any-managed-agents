@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { queryKeys } from '@/lib/query-keys'
 
 export function useEnvironmentActions() {
   const queryClient = useQueryClient()
@@ -8,7 +9,8 @@ export function useEnvironmentActions() {
     mutationFn: api.archiveEnvironment,
     onSuccess: () => {
       toast.success('Environment archived')
-      void queryClient.invalidateQueries({ queryKey: ['console', 'resources'] })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.environments.all })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all })
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : String(error)),
   })

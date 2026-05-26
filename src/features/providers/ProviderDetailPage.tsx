@@ -1,19 +1,16 @@
 import { useQuery } from '@tanstack/react-query'
 import { useParams } from 'react-router'
 import { PageHeader } from '@/console/components'
-import { useConsoleContext } from '@/features/console/console-context'
 import { api } from '@/lib/api'
+import { queryKeys } from '@/lib/query-keys'
 import { ProviderDetailView } from './ProviderDetailView'
 
 export function ProviderDetailPage() {
   const { providerId } = useParams()
-  const context = useConsoleContext()
-  const listProvider = context.providers.find((item) => item.id === providerId)
   const providerQuery = useQuery({
-    queryKey: ['provider', providerId ?? ''],
+    queryKey: queryKeys.providers.detail(providerId ?? ''),
     queryFn: () => api.readProvider(providerId as string),
     enabled: Boolean(providerId),
-    ...(listProvider ? { placeholderData: listProvider } : {}),
   })
   const provider = providerQuery.data ?? null
   return (

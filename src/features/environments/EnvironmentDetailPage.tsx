@@ -1,21 +1,22 @@
 import { useQuery } from '@tanstack/react-query'
 import { useParams } from 'react-router'
 import { PageHeader } from '@/console/components'
-import { useConsoleContext } from '@/features/console/console-context'
 import { api } from '@/lib/api'
+import { queryKeys } from '@/lib/query-keys'
 import { EnvironmentDetailView } from './EnvironmentDetailView'
 import { useEnvironmentActions } from './use-environment-actions'
 
 export function EnvironmentDetailPage() {
   const { environmentId } = useParams()
-  const context = useConsoleContext()
   const actions = useEnvironmentActions()
-  const listEnvironment = context.environments.find((item) => item.id === environmentId)
   const environmentQuery = useQuery({
-    queryKey: ['environment', environmentId ?? ''],
+    queryKey: queryKeys.environments.detail(environmentId ?? ''),
     queryFn: () => api.readEnvironment(environmentId as string),
     enabled: Boolean(environmentId),
-    ...(listEnvironment ? { placeholderData: listEnvironment } : {}),
+  })
+  const sessionsQuery = useQuery({
+    queryKey: queryKeys.sessions.list(false),
+    queryFn: () => api.listSessions(false),
   })
   const environment = environmentQuery.data ?? null
   return (
@@ -27,7 +28,7 @@ export function EnvironmentDetailPage() {
       />
       <EnvironmentDetailView
         environment={environment}
-        sessions={context.sessions}
+        sessions={sessionsQuery.data?.data ?? []}
         onArchive={actions.archiveEnvironment}
       />
     </div>

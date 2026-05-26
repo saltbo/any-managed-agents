@@ -1,19 +1,16 @@
-import { useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { PageHeader } from '@/console/components'
-import { matchesSearch } from '@/console/format'
 import { useClientPagination } from '@/console/use-client-pagination'
-import { useConsoleContext } from '@/features/console/console-context'
+import { api } from '@/lib/api'
+import { queryKeys } from '@/lib/query-keys'
 import { AuditView } from './AuditView'
 
 export function AuditPage() {
-  const context = useConsoleContext()
-  const records = useMemo(
-    () =>
-      context.auditRecords.filter((record) =>
-        matchesSearch([record.action, record.resourceType, record.resourceId, record.outcome], context.query),
-      ),
-    [context.auditRecords, context.query],
-  )
+  const auditQuery = useQuery({
+    queryKey: queryKeys.audit.records,
+    queryFn: api.listAuditRecords,
+  })
+  const records = auditQuery.data?.data ?? []
   const pagination = useClientPagination(records)
   return (
     <div className="flex flex-col gap-4">

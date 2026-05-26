@@ -1,12 +1,13 @@
+import { useQuery } from '@tanstack/react-query'
 import { Archive, MessageSquare } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ConfirmAction, PageHeader } from '@/console/components'
-import { matchesSearch } from '@/console/format'
+import { ConfirmAction, EmptyState, PageHeader } from '@/console/components'
 import { useClientPagination } from '@/console/use-client-pagination'
-import { useConsoleContext } from '@/features/console/console-context'
-import type { SessionStatus } from '@/lib/api'
+import { api, type SessionStatus } from '@/lib/api'
+import { queryKeys } from '@/lib/query-keys'
+import { CreateSessionSheet } from './CreateSessionSheet'
 import { SessionsView } from './SessionsView'
 import { useSessionActions } from './use-session-actions'
 
@@ -14,28 +15,18 @@ type StatusFilter = 'all' | SessionStatus
 type SortKey = 'updated-desc' | 'updated-asc' | 'started-desc' | 'started-asc'
 
 export function SessionsPage() {
-  const context = useConsoleContext()
   const actions = useSessionActions()
+  const [creating, setCreating] = useState(false)
   const [status, setStatus] = useState<StatusFilter>('all')
   const [sort, setSort] = useState<SortKey>('updated-desc')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const sessionsQuery = useQuery({
+    queryKey: queryKeys.sessions.list(false),
+    queryFn: () => api.listSessions(false),
+    refetchInterval: (query) => (query.state.data?.data.some((session) => session.status === 'pending') ? 2000 : false),
+  })
   const sessions = useMemo(() => {
-    const filtered = context.sessions.filter(
-      (session) =>
-        (status === 'all' || session.status === status) &&
-        matchesSearch(
-          [
-            session.title,
-            session.id,
-            session.agentSnapshot.systemPrompt,
-            session.agentSnapshot.model,
-            session.environmentId,
-            session.status,
-            session.modelProvider,
-          ],
-          context.query,
-        ),
-    )
+    const filtered = (sessionsQuery.data?.data ?? []).filter((session) => status === 'all' || session.status === status)
     return [...filtered].sort((a, b) => {
       const startedA = Date.parse(a.startedAt ?? a.createdAt)
       const startedB = Date.parse(b.startedAt ?? b.createdAt)
@@ -46,11 +37,22 @@ export function SessionsPage() {
       if (sort === 'updated-asc') return updatedA - updatedB
       return updatedB - updatedA
     })
-  }, [context.query, context.sessions, sort, status])
+  }, [sessionsQuery.data?.data, sort, status])
   const pagination = useClientPagination(sessions)
   const archiveSelected = () => {
     for (const id of selectedIds) actions.archiveSession(id)
     setSelectedIds([])
+  }
+  if (sessionsQuery.error) {
+    return (
+      <EmptyState
+        title="Sessions unavailable"
+        body={sessionsQuery.error instanceof Error ? sessionsQuery.error.message : String(sessionsQuery.error)}
+      />
+    )
+  }
+  if (sessionsQuery.isPending) {
+    return <EmptyState title="Loading sessions" body="Reading runtime sessions for this project." />
   }
   return (
     <div className="flex flex-col gap-4">
@@ -58,7 +60,7 @@ export function SessionsPage() {
         title="Sessions"
         description="Inspect runtime sessions and open a session to send messages, review events, or stop active work."
         actions={
-          <Button type="button" onClick={() => context.openCreateSession()}>
+          <Button type="button" onClick={() => setCreating(true)}>
             <MessageSquare data-icon="inline-start" />
             Create session
           </Button>
@@ -109,6 +111,7 @@ export function SessionsPage() {
         setSelectedIds={setSelectedIds}
         onArchive={actions.archiveSession}
       />
+      <CreateSessionSheet open={creating} onOpenChange={setCreating} />
     </div>
   )
 }

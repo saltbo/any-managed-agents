@@ -1,6 +1,6 @@
 import { Bot, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { ReactNode, RefObject } from 'react'
-import { Link } from 'react-router'
+import { Link, useMatch } from 'react-router'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,7 +13,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { Badge as UiBadge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -37,35 +37,31 @@ export function FullscreenMessage({ title, body, action }: { title: string; body
   )
 }
 
-export function NavButton({ icon, active, to, label }: NavProps) {
+export function NavButton({ icon, to, label }: NavProps) {
+  const active = useNavActive(to)
   return (
-    <Button
-      className="w-full justify-start"
-      asChild
-      variant={active ? 'default' : 'ghost'}
+    <Link
+      to={to}
+      className={cn(buttonVariants({ variant: active ? 'default' : 'ghost' }), 'w-full justify-start')}
       aria-current={active ? 'page' : undefined}
     >
-      <Link to={to}>
-        {icon}
-        {label}
-      </Link>
-    </Button>
+      {icon}
+      {label}
+    </Link>
   )
 }
 
-export function MobileNavButton({ icon, active, to, label }: NavProps) {
+export function MobileNavButton({ icon, to, label }: NavProps) {
+  const active = useNavActive(to)
   return (
-    <Button
-      className="shrink-0"
-      asChild
-      variant={active ? 'default' : 'outline'}
+    <Link
+      to={to}
+      className={cn(buttonVariants({ variant: active ? 'default' : 'outline' }), 'shrink-0')}
       aria-current={active ? 'page' : undefined}
     >
-      <Link to={to}>
-        {icon}
-        <span>{label}</span>
-      </Link>
-    </Button>
+      {icon}
+      <span>{label}</span>
+    </Link>
   )
 }
 
@@ -304,7 +300,12 @@ export function ConfirmAction({
 
 interface NavProps {
   icon: ReactNode
-  active: boolean
   to: string
   label: string
+}
+
+function useNavActive(to: string) {
+  const exact = useMatch({ path: to, end: true })
+  const nested = useMatch(`${to}/*`)
+  return Boolean(exact || nested)
 }
