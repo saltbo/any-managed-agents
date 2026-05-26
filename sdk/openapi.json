@@ -3635,67 +3635,10 @@
             }
           },
           "runtimeType": {
-            "type": "string",
-            "enum": [
-              "cloud-hosted",
-              "self-hosted"
-            ]
+            "$ref": "#/components/schemas/EnvironmentRuntimeType"
           },
           "networkPolicy": {
-            "oneOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "mode": {
-                    "type": "string",
-                    "enum": [
-                      "unrestricted"
-                    ]
-                  }
-                },
-                "required": [
-                  "mode"
-                ],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "mode": {
-                    "type": "string",
-                    "enum": [
-                      "restricted"
-                    ]
-                  },
-                  "allowedHosts": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  }
-                },
-                "required": [
-                  "mode",
-                  "allowedHosts"
-                ],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "mode": {
-                    "type": "string",
-                    "enum": [
-                      "offline"
-                    ]
-                  }
-                },
-                "required": [
-                  "mode"
-                ],
-                "additionalProperties": false
-              }
-            ]
+            "$ref": "#/components/schemas/EnvironmentNetworkPolicy"
           },
           "mcpPolicy": {
             "type": "object",

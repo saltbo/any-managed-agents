@@ -13,6 +13,13 @@ import {
   paginateRows,
   parseListCursor,
 } from '../openapi'
+import {
+  EnvironmentNetworkPolicySchema,
+  EnvironmentRuntimeTypeSchema,
+  type EnvironmentNetworkPolicy as NetworkPolicy,
+  normalizeEnvironmentNetworkPolicy,
+  type EnvironmentRuntimeType as RuntimeType,
+} from './environment-contracts'
 
 const app = createApiRouter()
 
@@ -29,39 +36,8 @@ const SecretRefSchema = z.object({
   name: z.string().min(1).max(120),
   ref: z.string().min(1).max(240),
 })
-const RuntimeTypeSchema = z.enum(['cloud-hosted', 'self-hosted']).openapi('EnvironmentRuntimeType')
-const NetworkPolicySchema = z
-  .object({
-    mode: z.enum(['offline', 'restricted', 'unrestricted']),
-    allowedHosts: z
-      .array(
-        z
-          .string()
-          .min(1)
-          .max(253)
-          .regex(/^[a-z0-9.-]+$/, 'Allowed hosts must be lowercase hostnames without ports or protocols.'),
-      )
-      .max(100)
-      .optional(),
-  })
-  .strict()
-  .superRefine((policy, ctx) => {
-    if (policy.mode === 'restricted' && (!policy.allowedHosts || policy.allowedHosts.length === 0)) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['allowedHosts'],
-        message: 'Restricted network policy requires at least one allowed host.',
-      })
-    }
-    if (policy.mode !== 'restricted' && policy.allowedHosts !== undefined) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['allowedHosts'],
-        message: 'Allowed hosts are only valid when network policy is restricted.',
-      })
-    }
-  })
-  .openapi('EnvironmentNetworkPolicy')
+const RuntimeTypeSchema = EnvironmentRuntimeTypeSchema
+const NetworkPolicySchema = EnvironmentNetworkPolicySchema
 const McpPolicySchema = z
   .object({
     allowedConnectors: z.array(z.string().min(1).max(120)).max(100).optional(),
@@ -183,8 +159,6 @@ type EnvironmentVersionRow = typeof environmentVersions.$inferSelect
 type Package = z.infer<typeof PackageSchema>
 type Variable = z.infer<typeof VariableSchema>
 type SecretRef = z.infer<typeof SecretRefSchema>
-type NetworkPolicy = z.infer<typeof NetworkPolicySchema>
-type RuntimeType = z.infer<typeof RuntimeTypeSchema>
 
 function newId(prefix: string) {
   return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
@@ -202,22 +176,7 @@ function stringify(value: unknown) {
   return JSON.stringify(value)
 }
 
-function normalizeNetworkPolicy(value: unknown): NetworkPolicy {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return { mode: 'unrestricted' }
-  }
-  const policy = value as Record<string, unknown>
-  if (policy.mode === 'offline') {
-    return { mode: 'offline' }
-  }
-  const allowedHosts = Array.isArray(policy.allowedHosts)
-    ? policy.allowedHosts.filter((host): host is string => typeof host === 'string' && /^[a-z0-9.-]+$/.test(host))
-    : []
-  if (policy.mode === 'restricted' && allowedHosts.length > 0) {
-    return { mode: 'restricted', allowedHosts }
-  }
-  return { mode: 'unrestricted' }
-}
+const normalizeNetworkPolicy = normalizeEnvironmentNetworkPolicy
 
 function stringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []

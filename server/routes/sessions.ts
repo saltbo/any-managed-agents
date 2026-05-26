@@ -40,6 +40,13 @@ import {
   startSessionRuntime as startCloudSessionRuntime,
   stopSessionRuntime as stopCloudSessionRuntime,
 } from '../runtime/session-runtime'
+import {
+  type EnvironmentNetworkPolicy,
+  EnvironmentNetworkPolicySchema,
+  type EnvironmentRuntimeType,
+  EnvironmentRuntimeTypeSchema,
+  normalizeEnvironmentNetworkPolicy,
+} from './environment-contracts'
 
 const app = createApiRouter()
 
@@ -48,12 +55,6 @@ const EVENT_VISIBILITIES = ['runtime', 'transcript', 'debug', 'audit'] as const
 const RUNTIME_START_TIMEOUT_MS = 300_000
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
-const EnvironmentNetworkPolicySchema = z.discriminatedUnion('mode', [
-  z.object({ mode: z.literal('unrestricted') }).strict(),
-  z.object({ mode: z.literal('restricted'), allowedHosts: z.array(z.string()) }).strict(),
-  z.object({ mode: z.literal('offline') }).strict(),
-])
-type EnvironmentNetworkPolicy = z.infer<typeof EnvironmentNetworkPolicySchema>
 const AgentVersionSchema = z
   .object({
     id: z.string(),
@@ -81,7 +82,7 @@ const EnvironmentVersionSchema = z
     packages: z.array(JsonObjectSchema),
     variables: JsonObjectSchema,
     secretRefs: z.array(JsonObjectSchema),
-    runtimeType: z.enum(['cloud-hosted', 'self-hosted']),
+    runtimeType: EnvironmentRuntimeTypeSchema,
     networkPolicy: EnvironmentNetworkPolicySchema,
     mcpPolicy: JsonObjectSchema,
     packageManagerPolicy: JsonObjectSchema,
@@ -299,7 +300,7 @@ type NormalizedEnvironmentSnapshot = Omit<
   ReturnType<typeof serializeEnvironmentVersion>,
   'runtimeType' | 'networkPolicy'
 > & {
-  runtimeType: 'cloud-hosted' | 'self-hosted'
+  runtimeType: EnvironmentRuntimeType
   networkPolicy: EnvironmentNetworkPolicy
 }
 
@@ -309,25 +310,10 @@ function normalizeEnvironmentSnapshot(
   if (!snapshot) {
     return null
   }
-  const networkPolicy =
-    snapshot.networkPolicy && typeof snapshot.networkPolicy === 'object' && !Array.isArray(snapshot.networkPolicy)
-      ? (snapshot.networkPolicy as Record<string, unknown>)
-      : {}
-  const allowedHosts = Array.isArray(networkPolicy.allowedHosts)
-    ? networkPolicy.allowedHosts.filter(
-        (host): host is string => typeof host === 'string' && /^[a-z0-9.-]+$/.test(host),
-      )
-    : []
-  const normalizedNetworkPolicy: EnvironmentNetworkPolicy =
-    networkPolicy.mode === 'offline'
-      ? { mode: 'offline' }
-      : networkPolicy.mode === 'restricted' && allowedHosts.length > 0
-        ? { mode: 'restricted', allowedHosts }
-        : { mode: 'unrestricted' }
   return {
     ...snapshot,
     runtimeType: snapshot.runtimeType === 'self-hosted' ? 'self-hosted' : 'cloud-hosted',
-    networkPolicy: normalizedNetworkPolicy,
+    networkPolicy: normalizeEnvironmentNetworkPolicy(snapshot.networkPolicy),
   } as NormalizedEnvironmentSnapshot
 }
 

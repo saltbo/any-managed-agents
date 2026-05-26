@@ -281,4 +281,38 @@ describe('[CF] OpenAPI documentation', () => {
     expect(res.headers.get('content-type')).toContain('text/html')
     expect(await res.text()).toContain('/api/openapi.json')
   })
+
+  it('keeps session environment snapshots on the strict environment network policy contract', async () => {
+    const doc = await fetchOpenApi()
+    const schemas = doc.components?.schemas as Record<
+      string,
+      {
+        properties?: Record<string, unknown>
+      }
+    >
+    const environmentNetworkPolicy = schemas.EnvironmentNetworkPolicy as {
+      properties?: {
+        allowedHosts?: {
+          maxItems?: number
+          items?: { minLength?: number; maxLength?: number; pattern?: string }
+        }
+      }
+      required?: string[]
+      additionalProperties?: boolean
+    }
+
+    expect(schemas.SessionEnvironmentSnapshot.properties?.networkPolicy).toEqual({
+      $ref: '#/components/schemas/EnvironmentNetworkPolicy',
+    })
+    expect(environmentNetworkPolicy.required).toContain('mode')
+    expect(environmentNetworkPolicy.additionalProperties).toBe(false)
+    expect(environmentNetworkPolicy.properties?.allowedHosts).toMatchObject({
+      maxItems: 100,
+      items: {
+        minLength: 1,
+        maxLength: 253,
+        pattern: '^[a-z0-9.-]+$',
+      },
+    })
+  })
 })
