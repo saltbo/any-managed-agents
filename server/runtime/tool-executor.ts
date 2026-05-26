@@ -106,12 +106,15 @@ export class CloudflareSandboxToolExecutor implements ToolExecutor {
       await sandbox.writeFile(filePathFromInput(input.input), textFromInput(input.input), { encoding: 'utf-8' })
       return { ok: true }
     }
-    return { accepted: true }
+    throw new Error(`Unsupported sandbox tool: ${input.toolName}`)
   }
 }
 
 export class TestToolExecutor implements ToolExecutor {
   async execute(input: ToolExecutionInput): Promise<ToolExecutionResult> {
+    if (input.toolName !== 'sandbox.exec' && input.toolName !== 'sandbox.read' && input.toolName !== 'sandbox.write') {
+      throw new Error(`Unsupported sandbox tool: ${input.toolName}`)
+    }
     return {
       toolCallId: input.toolCallId,
       toolName: input.toolName,

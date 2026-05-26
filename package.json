@@ -27,6 +27,7 @@
   "dependencies": {
     "@cloudflare/sandbox": "^0.10.1",
     "@earendil-works/pi-agent-core": "^0.75.3",
+    "@earendil-works/pi-ai": "^0.75.3",
     "@fontsource-variable/geist": "^5.2.8",
     "@hono/swagger-ui": "^0.6.1",
     "@hono/zod-openapi": "^1.4.0",

@@ -1,3 +1,22 @@
+import {
+  Agent,
+  type AgentEvent,
+  type AgentMessage,
+  type AgentTool,
+  type AgentToolResult,
+} from '@earendil-works/pi-agent-core'
+import {
+  type AssistantMessage,
+  type AssistantMessageEventStream,
+  type Context,
+  createAssistantMessageEventStream,
+  getModel,
+  type Model,
+  type StreamOptions,
+  type ToolCall,
+  Type,
+  type Usage,
+} from '@earendil-works/pi-ai'
 import type { Env } from '../env'
 import { toolExecutor } from './tool-executor'
 
@@ -34,6 +53,49 @@ export type RuntimeCommandBody = {
   errorMessage?: string
   toolCalls?: RuntimeToolCall[]
 }
+
+export type RuntimeToolPolicyInput = {
+  toolCallId: string
+  toolName: string
+  input: Record<string, unknown>
+}
+
+export type RuntimeToolPolicyDecision = {
+  allowed: boolean
+  reason?: string
+}
+
+export type SessionTurnResult = {
+  status: 'idle' | 'aborted'
+}
+
+export type SessionTurnInput = {
+  sessionId: string
+  sandboxId: string
+  provider: string
+  model: string
+  agentSnapshot: Record<string, unknown>
+  prompt: string
+  onEvent: (event: Record<string, unknown>, metadata?: Record<string, unknown>) => Promise<void>
+  approveToolCall?: (input: RuntimeToolPolicyInput) => Promise<RuntimeToolPolicyDecision>
+}
+
+const ZERO_USAGE: Usage = {
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+  totalTokens: 0,
+  cost: {
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    total: 0,
+  },
+}
+
+const activeRuns = new Map<string, AbortController>()
 
 async function getSandboxBinding() {
   const { getSandbox } = await import('@cloudflare/sandbox')
@@ -82,6 +144,8 @@ export async function startSessionRuntime(
 }
 
 export async function stopSessionRuntime(env: Env, sandboxId: string) {
+  activeRuns.get(sandboxId)?.abort()
+  activeRuns.delete(sandboxId)
   await toolExecutor(env).stop?.(sandboxId)
 }
 
@@ -124,4 +188,491 @@ export async function executeRuntimeToolCalls(
     )
   }
   return results
+}
+
+function runtimeSystemPrompt(snapshot: Record<string, unknown>) {
+  const parts = [snapshot.systemPrompt, snapshot.instructions].filter((value): value is string => {
+    return typeof value === 'string' && value.trim().length > 0
+  })
+  return (
+    parts.join('\n\n') ||
+    'You are an AMA cloud-owned coding agent. Use tools when workspace inspection or edits are needed.'
+  )
+}
+
+function piProviderName(provider: string) {
+  return provider === 'workers-ai' ? 'cloudflare-workers-ai' : provider
+}
+
+function fallbackModel(provider: string, model: string): Model<string> {
+  return {
+    id: model,
+    name: model,
+    api: 'ama-workers-ai',
+    provider,
+    baseUrl: 'cloudflare-ai-binding://AI',
+    reasoning: false,
+    input: ['text'],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 128000,
+    maxTokens: 8192,
+  }
+}
+
+function runtimeModel(provider: string, model: string) {
+  if (provider === 'workers-ai' || provider === 'cloudflare-workers-ai') {
+    return getModel('cloudflare-workers-ai', model as never) ?? fallbackModel('cloudflare-workers-ai', model)
+  }
+  throw new Error(`Unsupported AMA runtime provider: ${provider}`)
+}
+
+function textContent(value: unknown) {
+  if (typeof value === 'string') {
+    return value
+  }
+  if (!Array.isArray(value)) {
+    return ''
+  }
+  return value
+    .map((item) => {
+      if (item && typeof item === 'object' && 'type' in item && item.type === 'text' && 'text' in item) {
+        return String(item.text)
+      }
+      return ''
+    })
+    .join('')
+}
+
+function openAiMessages(context: Context) {
+  const messages: Array<Record<string, unknown>> = []
+  if (context.systemPrompt) {
+    messages.push({ role: 'system', content: context.systemPrompt })
+  }
+  for (const message of context.messages) {
+    if (message.role === 'user') {
+      messages.push({ role: 'user', content: textContent(message.content) })
+      continue
+    }
+    if (message.role === 'assistant') {
+      const text = message.content
+        .filter((block) => block.type === 'text')
+        .map((block) => block.text)
+        .join('')
+      const toolCalls = message.content
+        .filter((block): block is ToolCall => block.type === 'toolCall')
+        .map((block) => ({
+          id: block.id,
+          type: 'function',
+          function: { name: block.name, arguments: JSON.stringify(block.arguments) },
+        }))
+      messages.push({
+        role: 'assistant',
+        content: text,
+        ...(toolCalls.length ? { tool_calls: toolCalls } : {}),
+      })
+      continue
+    }
+    messages.push({
+      role: 'tool',
+      tool_call_id: message.toolCallId,
+      name: message.toolName,
+      content: textContent(message.content),
+    })
+  }
+  return messages
+}
+
+function openAiTools(context: Context) {
+  return (context.tools ?? []).map((tool) => ({
+    type: 'function',
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters,
+    },
+  }))
+}
+
+function usageFromProvider(raw: Record<string, unknown> | null): Usage {
+  const usage = raw?.usage && typeof raw.usage === 'object' ? (raw.usage as Record<string, unknown>) : {}
+  const input = numberValue(usage.prompt_tokens) ?? numberValue(usage.input_tokens) ?? 0
+  const output = numberValue(usage.completion_tokens) ?? numberValue(usage.output_tokens) ?? 0
+  const totalTokens = numberValue(usage.total_tokens) ?? input + output
+  return {
+    input,
+    output,
+    cacheRead: numberValue(usage.cache_read_input_tokens) ?? 0,
+    cacheWrite: numberValue(usage.cache_creation_input_tokens) ?? 0,
+    totalTokens,
+    cost: ZERO_USAGE.cost,
+  }
+}
+
+function numberValue(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function assistantMessage(
+  model: Model<string>,
+  content: AssistantMessage['content'],
+  stopReason: AssistantMessage['stopReason'],
+  usage: Usage,
+  errorMessage?: string,
+): AssistantMessage {
+  return {
+    role: 'assistant',
+    content,
+    api: model.api,
+    provider: model.provider,
+    model: model.id,
+    usage,
+    stopReason,
+    ...(errorMessage ? { errorMessage } : {}),
+    timestamp: Date.now(),
+  }
+}
+
+function emitAssistantMessage(stream: AssistantMessageEventStream, message: AssistantMessage) {
+  stream.push({ type: 'start', partial: { ...message, content: [] } })
+  const partial: AssistantMessage = { ...message, content: [] }
+  for (let index = 0; index < message.content.length; index += 1) {
+    const block = message.content[index]
+    if (!block) {
+      continue
+    }
+    if (block.type === 'text') {
+      partial.content = [...partial.content, { type: 'text', text: '' }]
+      stream.push({ type: 'text_start', contentIndex: index, partial: { ...partial } })
+      ;(partial.content[index] as { type: 'text'; text: string }).text = block.text
+      stream.push({ type: 'text_delta', contentIndex: index, delta: block.text, partial: { ...partial } })
+      stream.push({ type: 'text_end', contentIndex: index, content: block.text, partial: { ...partial } })
+      continue
+    }
+    if (block.type === 'toolCall') {
+      partial.content = [...partial.content, { type: 'toolCall', id: block.id, name: block.name, arguments: {} }]
+      stream.push({ type: 'toolcall_start', contentIndex: index, partial: { ...partial } })
+      ;(partial.content[index] as ToolCall).arguments = block.arguments
+      stream.push({
+        type: 'toolcall_delta',
+        contentIndex: index,
+        delta: JSON.stringify(block.arguments),
+        partial: { ...partial },
+      })
+      stream.push({ type: 'toolcall_end', contentIndex: index, toolCall: block, partial: { ...partial } })
+    }
+  }
+  if (message.stopReason === 'error' || message.stopReason === 'aborted') {
+    stream.push({ type: 'error', reason: message.stopReason, error: message })
+  } else {
+    stream.push({ type: 'done', reason: message.stopReason, message })
+  }
+  stream.end(message)
+}
+
+function parseToolArguments(value: unknown) {
+  if (!value) {
+    return {}
+  }
+  if (typeof value === 'string') {
+    return JSON.parse(value) as Record<string, unknown>
+  }
+  if (typeof value === 'object') {
+    return value as Record<string, unknown>
+  }
+  return {}
+}
+
+function providerAssistantMessage(model: Model<string>, raw: unknown) {
+  const record = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null
+  const choice =
+    Array.isArray(record?.choices) && record.choices[0] && typeof record.choices[0] === 'object'
+      ? (record.choices[0] as Record<string, unknown>)
+      : null
+  const message =
+    choice?.message && typeof choice.message === 'object' ? (choice.message as Record<string, unknown>) : null
+  const content: AssistantMessage['content'] = []
+  const text = textContent(message?.content ?? record?.response ?? record?.text ?? raw)
+  if (text) {
+    content.push({ type: 'text', text })
+  }
+  const toolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls : []
+  for (const [index, toolCall] of toolCalls.entries()) {
+    if (!toolCall || typeof toolCall !== 'object') {
+      continue
+    }
+    const call = toolCall as Record<string, unknown>
+    const fn = call.function && typeof call.function === 'object' ? (call.function as Record<string, unknown>) : {}
+    const name = typeof fn.name === 'string' ? fn.name : typeof call.name === 'string' ? call.name : null
+    if (!name) {
+      continue
+    }
+    content.push({
+      type: 'toolCall',
+      id: typeof call.id === 'string' ? call.id : `tool_${index + 1}`,
+      name,
+      arguments: parseToolArguments(fn.arguments ?? call.arguments),
+    })
+  }
+  return assistantMessage(
+    model,
+    content.length ? content : [{ type: 'text', text: '' }],
+    toolCalls.length ? 'toolUse' : 'stop',
+    usageFromProvider(record),
+  )
+}
+
+function testAssistantMessage(model: Model<string>, context: Context) {
+  const hasToolResult = context.messages.some((message) => message.role === 'toolResult')
+  if (hasToolResult) {
+    const latestToolResult = [...context.messages].reverse().find((message) => message.role === 'toolResult')
+    const resultText =
+      latestToolResult && latestToolResult.role === 'toolResult' ? textContent(latestToolResult.content) : ''
+    return assistantMessage(model, [{ type: 'text', text: `Tool result observed: ${resultText || 'ok'}` }], 'stop', {
+      ...ZERO_USAGE,
+      input: 12,
+      output: 7,
+      totalTokens: 19,
+    })
+  }
+  const latestUser = [...context.messages].reverse().find((message) => message.role === 'user')
+  const prompt = latestUser && latestUser.role === 'user' ? textContent(latestUser.content) : ''
+  if (/status|inspect|whoami|command|sandbox/i.test(prompt)) {
+    return assistantMessage(
+      model,
+      [{ type: 'toolCall', id: 'call_git_status', name: 'sandbox.exec', arguments: { command: 'git status' } }],
+      'toolUse',
+      { ...ZERO_USAGE, input: 10, output: 4, totalTokens: 14 },
+    )
+  }
+  return assistantMessage(model, [{ type: 'text', text: `AMA runtime processed: ${prompt}` }], 'stop', {
+    ...ZERO_USAGE,
+    input: 9,
+    output: 5,
+    totalTokens: 14,
+  })
+}
+
+function createRuntimeStreamFn(env: Env) {
+  return (model: Model<string>, context: Context, options?: StreamOptions) => {
+    const stream = createAssistantMessageEventStream()
+    queueMicrotask(async () => {
+      try {
+        if (options?.signal?.aborted) {
+          const aborted = assistantMessage(model, [], 'aborted', ZERO_USAGE, 'Runtime request aborted')
+          emitAssistantMessage(stream, aborted)
+          return
+        }
+        const message =
+          env.AMA_RUNTIME_MODE === 'test'
+            ? testAssistantMessage(model, context)
+            : providerAssistantMessage(
+                model,
+                await env.AI.run(
+                  model.id,
+                  {
+                    model: model.id,
+                    messages: openAiMessages(context),
+                    tools: openAiTools(context),
+                  },
+                  options?.signal ? { signal: options.signal } : undefined,
+                ),
+              )
+        emitAssistantMessage(stream, message)
+      } catch (error) {
+        const failed = assistantMessage(
+          model,
+          [],
+          options?.signal?.aborted ? 'aborted' : 'error',
+          ZERO_USAGE,
+          error instanceof Error ? error.message : 'Model request failed',
+        )
+        emitAssistantMessage(stream, failed)
+      }
+    })
+    return stream
+  }
+}
+
+function stringifyToolOutput(result: Record<string, unknown>) {
+  if (typeof result.stdout === 'string' || typeof result.stderr === 'string') {
+    return [result.stdout, result.stderr]
+      .filter((value): value is string => typeof value === 'string' && value.length > 0)
+      .join('\n')
+  }
+  if (typeof result.content === 'string') {
+    return result.content
+  }
+  return JSON.stringify(result)
+}
+
+function runtimeTools(
+  env: Env,
+  values: {
+    sessionId: string
+    sandboxId: string
+    agentSnapshot: Record<string, unknown>
+    approveToolCall?: SessionTurnInput['approveToolCall']
+  },
+) {
+  const executor = toolExecutor(env)
+  const tool = (
+    name: 'sandbox.exec' | 'sandbox.read' | 'sandbox.write',
+    label: string,
+    description: string,
+    parameters: AgentTool['parameters'],
+  ): AgentTool =>
+    ({
+      name,
+      label,
+      description,
+      parameters,
+      executionMode: 'sequential',
+      async execute(toolCallId, params, signal): Promise<AgentToolResult<Record<string, unknown>>> {
+        const input = params as Record<string, unknown>
+        const decision = await values.approveToolCall?.({ toolCallId, toolName: name, input })
+        if (decision && !decision.allowed) {
+          throw new Error(decision.reason ?? `Tool call blocked by AMA policy: ${name}`)
+        }
+        const result = await executor.execute(
+          {
+            sessionId: values.sessionId,
+            sandboxId: values.sandboxId,
+            toolCallId,
+            toolName: name,
+            input,
+            cwd: '/workspace',
+          },
+          signal,
+        )
+        if (result.error) {
+          throw new Error(JSON.stringify(result.error))
+        }
+        return {
+          content: [{ type: 'text', text: stringifyToolOutput(result.output) }],
+          details: result.output,
+        }
+      },
+    }) satisfies AgentTool
+
+  const allowedTools = Array.isArray(values.agentSnapshot.allowedTools)
+    ? values.agentSnapshot.allowedTools.filter((tool): tool is string => typeof tool === 'string')
+    : []
+  const allowsTool = (toolName: string) => allowedTools.includes('*') || allowedTools.includes(toolName)
+
+  return [
+    tool(
+      'sandbox.exec',
+      'Run command',
+      'Run a shell command in the session workspace.',
+      Type.Object({ command: Type.String() }),
+    ),
+    tool(
+      'sandbox.read',
+      'Read file',
+      'Read a UTF-8 file from the session workspace.',
+      Type.Object({ path: Type.String() }),
+    ),
+    tool(
+      'sandbox.write',
+      'Write file',
+      'Write a UTF-8 file under the session workspace.',
+      Type.Object({ path: Type.String(), content: Type.String() }),
+    ),
+  ].filter((candidate) => allowsTool(candidate.name))
+}
+
+function usageEvent(message: AgentMessage, provider: string, model: string) {
+  if (message.role !== 'assistant') {
+    return null
+  }
+  return {
+    type: 'usage',
+    provider,
+    model,
+    promptTokens: message.usage.input,
+    completionTokens: message.usage.output,
+    totalTokens: message.usage.totalTokens,
+  }
+}
+
+function turnFailureMessage(event: AgentEvent) {
+  if (event.type === 'message_end' && event.message.role === 'assistant') {
+    if (event.message.stopReason === 'aborted') {
+      return 'Runtime request aborted'
+    }
+    if (event.message.stopReason === 'error') {
+      return event.message.errorMessage ?? 'Runtime model request failed'
+    }
+  }
+  if (event.type === 'tool_execution_end' && event.isError) {
+    const result = event.result as { content?: Array<{ type?: string; text?: string }>; details?: unknown }
+    const text = Array.isArray(result.content)
+      ? result.content.map((item) => (item.type === 'text' && typeof item.text === 'string' ? item.text : '')).join('')
+      : ''
+    return text || 'Runtime tool execution failed'
+  }
+  return null
+}
+
+export async function runSessionTurn(env: Env, input: SessionTurnInput): Promise<SessionTurnResult> {
+  const controller = new AbortController()
+  activeRuns.set(input.sandboxId, controller)
+  const provider = piProviderName(input.provider)
+  const model = runtimeModel(input.provider, input.model)
+  let aborted = false
+  let failureMessage: string | null = null
+  const agent = new Agent({
+    initialState: {
+      systemPrompt: runtimeSystemPrompt(input.agentSnapshot),
+      model,
+      tools: runtimeTools(env, {
+        sessionId: input.sessionId,
+        sandboxId: input.sandboxId,
+        agentSnapshot: input.agentSnapshot,
+        approveToolCall: input.approveToolCall,
+      }),
+      messages: [],
+    },
+    streamFn: createRuntimeStreamFn(env),
+    toolExecution: 'sequential',
+    sessionId: input.sessionId,
+  })
+
+  agent.subscribe(async (event: AgentEvent) => {
+    const eventFailure = turnFailureMessage(event)
+    if (eventFailure) {
+      failureMessage = eventFailure
+      aborted ||= eventFailure === 'Runtime request aborted'
+    }
+    await input.onEvent(event as unknown as Record<string, unknown>, {
+      source: 'ama-cloud-runtime',
+      piCorePackage: '@earendil-works/pi-agent-core',
+    })
+    if (event.type === 'message_end') {
+      const usage = usageEvent(event.message, provider, input.model)
+      if (usage) {
+        await input.onEvent(usage, {
+          source: 'ama-cloud-runtime',
+          piCorePackage: '@earendil-works/pi-agent-core',
+        })
+      }
+    }
+  })
+
+  controller.signal.addEventListener('abort', () => agent.abort(), { once: true })
+  try {
+    await agent.prompt(input.prompt)
+    await agent.waitForIdle()
+    if (aborted) {
+      return { status: 'aborted' }
+    }
+    if (failureMessage) {
+      throw new Error(failureMessage)
+    }
+    return { status: 'idle' }
+  } finally {
+    if (activeRuns.get(input.sandboxId) === controller) {
+      activeRuns.delete(input.sandboxId)
+    }
+  }
 }

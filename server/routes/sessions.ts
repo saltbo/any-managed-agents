@@ -32,7 +32,7 @@ import { evaluateMcpToolPolicy, evaluateProviderPolicy, evaluateSandboxRuntimePo
 import { redactSensitiveValue } from '../redaction'
 import { safeRuntimeError } from '../runtime/runtime-error'
 import {
-  executeRuntimeToolCalls,
+  runSessionTurn,
   runtimeEndpointPath,
   startSessionRuntime as startCloudSessionRuntime,
   stopSessionRuntime as stopCloudSessionRuntime,
@@ -772,16 +772,96 @@ async function startSessionRuntimeForRow(
 }
 
 async function dispatchInitialPrompt(env: Env, db: Db, auth: AuthContext, session: SessionRow, initialPrompt: string) {
-  const command = { type: 'prompt', message: initialPrompt }
   const submittedAt = now()
-  await db
+  const started = await db
     .update(sessions)
     .set({ status: 'running', statusReason: null, updatedAt: submittedAt })
-    .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
+    .where(
+      and(
+        eq(sessions.id, session.id),
+        eq(sessions.projectId, auth.project.id),
+        or(eq(sessions.status, 'idle'), eq(sessions.status, 'running')),
+      ),
+    )
+    .returning({ id: sessions.id })
+    .get()
+  if (!started) {
+    throw new Error('Session runtime is no longer active')
+  }
 
   try {
-    await executeRuntimeToolCalls(env, { sessionId: session.id, sandboxId: session.sandboxId ?? '', body: command })
-    await recordInitialPromptOutcome(db, auth, session, initialPrompt)
+    const agentSnapshot = parseJson<ReturnType<typeof serializeAgentVersion>>(session.agentSnapshot)
+    if (!agentSnapshot) {
+      throw new Error('Session agent snapshot is required')
+    }
+    const modelConfig = parseJson<Record<string, unknown>>(session.modelConfig) ?? {}
+    const result = await runSessionTurn(env, {
+      sessionId: session.id,
+      sandboxId: session.sandboxId ?? '',
+      provider: session.modelProvider ?? agentSnapshot.provider,
+      model: String(modelConfig.model ?? agentSnapshot.model),
+      agentSnapshot,
+      prompt: initialPrompt,
+      onEvent: async (event, metadata) => {
+        await appendPiRuntimeEvent(db, {
+          auth,
+          sessionId: session.id,
+          event,
+          ...(metadata ? { metadata } : {}),
+        })
+      },
+      approveToolCall: async ({ toolName, input }) => {
+        if (toolName === 'sandbox.exec') {
+          const command = typeof input.command === 'string' ? input.command : null
+          const decision = await evaluateSandboxRuntimePolicy(db, auth, {
+            session: {
+              id: session.id,
+              agentSnapshot: session.agentSnapshot,
+              environmentSnapshot: session.environmentSnapshot,
+            },
+            operation: 'command',
+            command,
+          })
+          if (!decision.allowed) {
+            await appendPiRuntimeEvent(db, {
+              auth,
+              sessionId: session.id,
+              event: {
+                type: 'policy_denied',
+                category: decision.category,
+                ruleId: decision.rule,
+                resourceType: 'sandbox_command',
+                resourceId: command?.trim().split(/\s+/)[0] ?? 'sandbox.exec',
+                decision,
+                operation: 'command',
+                command,
+              },
+              metadata: { source: 'policy' },
+            })
+            await recordAudit(db, {
+              auth,
+              action: 'runtime_sandbox.operation',
+              resourceType: 'sandbox_command',
+              resourceId: command?.trim().split(/\s+/)[0] ?? 'sandbox.exec',
+              outcome: 'denied',
+              sessionId: session.id,
+              policyCategory: decision.category,
+              metadata: { operation: 'command', command, decision },
+            })
+          }
+          return { allowed: decision.allowed, reason: decision.message }
+        }
+        return { allowed: true }
+      },
+    })
+    if (result.status === 'idle') {
+      await db
+        .update(sessions)
+        .set({ status: 'idle', updatedAt: now() })
+        .where(
+          and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id), eq(sessions.status, 'running')),
+        )
+    }
 
     await recordAudit(db, {
       auth,
@@ -809,7 +889,7 @@ async function markInitialPromptFailed(
   await db
     .update(sessions)
     .set({ status: 'error', statusReason: message, updatedAt: failedAt })
-    .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
+    .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id), eq(sessions.status, 'running')))
   await recordAudit(db, {
     auth,
     action: 'session.initial_prompt',
@@ -865,33 +945,6 @@ async function appendPiRuntimeEvent(
     }
   }
   throw new Error('Unable to append Pi runtime event')
-}
-
-async function recordInitialPromptOutcome(db: Db, auth: AuthContext, session: SessionRow, initialPrompt: string) {
-  await appendPiRuntimeEvent(db, {
-    auth,
-    sessionId: session.id,
-    event: {
-      type: 'message_end',
-      message: { role: 'assistant', content: `Received: ${initialPrompt}` },
-    },
-  })
-  await appendPiRuntimeEvent(db, {
-    auth,
-    sessionId: session.id,
-    event: {
-      type: 'usage',
-      provider: session.modelProvider,
-      model: session.modelConfig ? (JSON.parse(session.modelConfig) as Record<string, unknown>).model : null,
-      promptTokens: 0,
-      completionTokens: 0,
-      totalTokens: 0,
-    },
-  })
-  await db
-    .update(sessions)
-    .set({ status: 'idle', updatedAt: now() })
-    .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
 }
 
 export function runtimeErrorMessage(payload: Record<string, unknown>) {

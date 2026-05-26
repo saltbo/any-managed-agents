@@ -14,7 +14,7 @@ These decisions define the intended end state for Any Managed Agents.
 ## Runtime Boundary
 
 - v1.0 runs the session loop and runtime state machine in AMA cloud-side code.
-- Pi Core may provide loop, state, transport, and tool-call primitives when it can run in the Worker or Durable Object environment without requiring the full Pi binary in the sandbox.
+- AMA uses `@earendil-works/pi-agent-core` from cloud-side Worker code for the v1 prompt loop, message state, and tool-call event flow. The full Pi/PyAgent binary is not launched inside the sandbox.
 - Cloudflare Sandbox and future self-hosted runners are tool executor backends. They execute approved tool requests in `/workspace` and return structured results/events.
 - OIDC provider owns authentication, users, and organizations. AMA owns OIDC provider-backed tenancy enforcement, projects, agent, environment, and session metadata, OpenAPI CRUD, sandbox lifecycle, runtime proxy, UI, audit metadata, and usage metadata.
 - Runtime traffic uses AMA session endpoints. Browser, SDK, and CLI helpers must not connect directly to sandbox-owned agent processes.

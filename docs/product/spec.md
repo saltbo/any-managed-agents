@@ -41,7 +41,7 @@ The platform owns the control plane:
 - Cloudflare Secrets references
 - governance rules
 
-AMA owns the runtime protocol surface, session state machine, prompt, abort, follow-up, steer semantics, policy gates, and event persistence. Pi Core may provide reusable loop, state, and transport primitives when they run cleanly in the Worker or Durable Object environment.
+AMA owns the runtime protocol surface, session state machine, prompt, abort, follow-up, steer semantics, policy gates, and event persistence. v1 uses `@earendil-works/pi-agent-core` from cloud-side Worker code for the prompt loop, message state, and tool-call event flow.
 
 Cloudflare Sandbox owns filesystem, shell, process isolation, and per-session tool execution. It is an executor backend, not the owner of the agent loop.
 

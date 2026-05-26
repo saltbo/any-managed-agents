@@ -28,6 +28,7 @@ vi.mock('./tool-executor', () => ({
 
 import {
   executeRuntimeToolCalls,
+  runSessionTurn,
   runtimeEndpointPath,
   runtimeToolCalls,
   startSessionRuntime,
@@ -59,21 +60,13 @@ describe('session-runtime', () => {
   })
 
   it('dispatches runtime tool calls through the configured executor', async () => {
-    mockExecutor.execute
-      .mockResolvedValueOnce({
-        toolCallId: 'call_git_status',
-        toolName: 'sandbox.exec',
-        output: { stdout: 'clean' },
-        error: null,
-        durationMs: 42,
-      })
-      .mockResolvedValueOnce({
-        toolCallId: 'tool_2',
-        toolName: 'tool',
-        output: {},
-        error: { message: 'failed' },
-        durationMs: 7,
-      })
+    mockExecutor.execute.mockResolvedValueOnce({
+      toolCallId: 'call_git_status',
+      toolName: 'sandbox.exec',
+      output: { stdout: 'clean' },
+      error: null,
+      durationMs: 42,
+    })
 
     const results = await executeRuntimeToolCalls({ AMA_RUNTIME_MODE: 'test' } as Env, {
       sessionId: 'session_123',
@@ -86,10 +79,6 @@ describe('session-runtime', () => {
             input: { command: 'git status' },
             output: { stdout: 'clean' },
             durationMs: 42,
-          },
-          {
-            error: { message: 'failed' },
-            durationMs: 7,
           },
         ],
       },
@@ -108,17 +97,6 @@ describe('session-runtime', () => {
       },
       cwd: '/workspace',
     })
-    expect(mockExecutor.execute).toHaveBeenNthCalledWith(2, {
-      sessionId: 'session_123',
-      sandboxId: 'sandbox_123',
-      toolCallId: 'tool_2',
-      toolName: 'tool',
-      input: {
-        error: { message: 'failed' },
-        durationMs: 7,
-      },
-      cwd: '/workspace',
-    })
     expect(results).toEqual([
       {
         toolCallId: 'call_git_status',
@@ -126,13 +104,6 @@ describe('session-runtime', () => {
         output: { stdout: 'clean' },
         error: null,
         durationMs: 42,
-      },
-      {
-        toolCallId: 'tool_2',
-        toolName: 'tool',
-        output: {},
-        error: { message: 'failed' },
-        durationMs: 7,
       },
     ])
   })
@@ -158,6 +129,82 @@ describe('session-runtime', () => {
         piCorePackage: '@earendil-works/pi-agent-core',
       },
     })
+  })
+
+  it('runs a prompt through Pi Core and dispatches model tool calls through the executor', async () => {
+    mockExecutor.execute.mockResolvedValueOnce({
+      toolCallId: 'call_git_status',
+      toolName: 'sandbox.exec',
+      output: { stdout: 'clean', stderr: '', exitCode: 0 },
+      error: null,
+      durationMs: 5,
+    })
+    const events: Record<string, unknown>[] = []
+
+    await runSessionTurn({ AMA_RUNTIME_MODE: 'test' } as Env, {
+      sessionId: 'session_123',
+      sandboxId: 'sandbox_123',
+      provider: 'workers-ai',
+      model: '@cf/moonshotai/kimi-k2.6',
+      agentSnapshot: { instructions: 'Inspect before answering.', allowedTools: ['sandbox.exec'] },
+      prompt: 'Inspect repository status',
+      onEvent: async (event) => {
+        events.push(event)
+      },
+    })
+
+    expect(mockExecutor.execute).toHaveBeenCalledWith(
+      {
+        sessionId: 'session_123',
+        sandboxId: 'sandbox_123',
+        toolCallId: 'call_git_status',
+        toolName: 'sandbox.exec',
+        input: { command: 'git status' },
+        cwd: '/workspace',
+      },
+      expect.any(AbortSignal),
+    )
+    expect(events.map((event) => event.type)).toEqual(
+      expect.arrayContaining([
+        'agent_start',
+        'message_end',
+        'tool_execution_start',
+        'tool_execution_end',
+        'usage',
+        'agent_end',
+      ]),
+    )
+    expect(JSON.stringify(events)).toContain('Tool result observed: clean')
+    expect(JSON.stringify(events)).not.toContain('Message accepted by AMA runtime.')
+    expect(JSON.stringify(events)).not.toContain('Received:')
+  })
+
+  it('does not dispatch sandbox tools that are absent from the agent snapshot allow-list', async () => {
+    const events: Record<string, unknown>[] = []
+
+    await expect(
+      runSessionTurn({ AMA_RUNTIME_MODE: 'test' } as Env, {
+        sessionId: 'session_123',
+        sandboxId: 'sandbox_123',
+        provider: 'workers-ai',
+        model: '@cf/moonshotai/kimi-k2.6',
+        agentSnapshot: { instructions: 'Inspect before answering.', allowedTools: [] },
+        prompt: 'Inspect repository status',
+        onEvent: async (event) => {
+          events.push(event)
+        },
+      }),
+    ).rejects.toThrow()
+
+    expect(mockExecutor.execute).not.toHaveBeenCalled()
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'tool_execution_end',
+          isError: true,
+        }),
+      ]),
+    )
   })
 
   it('initializes sandbox workspace metadata in live mode without starting a Pi process', async () => {

@@ -80,6 +80,20 @@ describe('tool-executor', () => {
     })
   })
 
+  it('fails fast for unsupported test-mode tools', async () => {
+    const executor = new TestToolExecutor()
+
+    await expect(
+      executor.execute({
+        sessionId: 'session_123',
+        sandboxId: 'sandbox_123',
+        toolCallId: 'call_1',
+        toolName: 'mcp.github.repo.read',
+        input: {},
+      }),
+    ).rejects.toThrow('Unsupported sandbox tool: mcp.github.repo.read')
+  })
+
   it('executes sandbox commands in /workspace through Cloudflare Sandbox', async () => {
     sandboxMock.exec.mockResolvedValue({ stdout: 'ok', stderr: '', exitCode: 0 })
     const executor = new CloudflareSandboxToolExecutor({ SANDBOX: {} } as Env)
@@ -142,6 +156,20 @@ describe('tool-executor', () => {
       }),
     ).rejects.toThrow('sandbox file paths must stay under /workspace')
     expect(sandboxMock.readFile).not.toHaveBeenCalled()
+  })
+
+  it('fails fast for unsupported Cloudflare Sandbox tools', async () => {
+    const executor = new CloudflareSandboxToolExecutor({ SANDBOX: {} } as Env)
+
+    await expect(
+      executor.execute({
+        sessionId: 'session_123',
+        sandboxId: 'sandbox_123',
+        toolCallId: 'call_1',
+        toolName: 'mcp.github.repo.read',
+        input: {},
+      }),
+    ).rejects.toThrow('Unsupported sandbox tool: mcp.github.repo.read')
   })
 
   it('destroys the sandbox executor backend on stop', async () => {

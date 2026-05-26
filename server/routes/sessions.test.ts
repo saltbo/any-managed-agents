@@ -36,7 +36,7 @@ async function createAgent(authorization: string) {
     body: JSON.stringify({
       name: 'Cloud session agent',
       instructions: 'Work through AMA runtime.',
-      allowedTools: ['mcp:github.repo.read'],
+      allowedTools: ['sandbox.exec', 'mcp:github.repo.read'],
       mcpConnectors: ['github'],
     }),
   })
@@ -175,23 +175,6 @@ describe('[CF] /api/sessions', () => {
       body: JSON.stringify({
         type: 'prompt',
         message: 'Inspect repository status',
-        toolCalls: [
-          {
-            id: 'call_git_status',
-            name: 'sandbox.exec',
-            input: { command: 'git status', token: 'raw-github-token' },
-            output: { stdout: 'clean', apiKey: 'secret-key' },
-            durationMs: 42,
-          },
-          {
-            id: 'call_failed_tool',
-            name: 'mcp.github.repo.read',
-            input: { repository: 'saltbo/any-managed-agents', password: 'secret-password' },
-            error: { type: 'tool_error', message: 'Repository not found', secret: 'raw-secret-token' },
-            approvalState: 'approved',
-            durationMs: 7,
-          },
-        ],
       }),
     })
     expect(taskRes.status).toBe(200)
@@ -226,43 +209,37 @@ describe('[CF] /api/sessions', () => {
     }
     expect(events.data.map((event) => event.sequence)).toEqual(events.data.map((_, index) => index + 1))
     expect(events.pagination).toMatchObject({ limit: 100, hasMore: false, nextCursor: null })
-    expect(events.data.map((event) => event.type)).toEqual([
-      'tool_execution_start',
-      'tool_execution_end',
-      'tool_execution_start',
-      'tool_execution_end',
-      'message_end',
-      'usage',
-    ])
+    expect(events.data.map((event) => event.type)).toEqual(
+      expect.arrayContaining([
+        'agent_start',
+        'turn_start',
+        'message_start',
+        'message_update',
+        'message_end',
+        'tool_execution_start',
+        'tool_execution_end',
+        'usage',
+        'turn_end',
+        'agent_end',
+      ]),
+    )
     expect(events.data.every((event) => event.visibility === 'runtime')).toBe(true)
     expect(events.data).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           type: 'message_end',
-          payload: { type: 'message_end', message: { role: 'assistant', content: 'Message accepted by AMA runtime.' } },
-        }),
-        expect.objectContaining({
-          type: 'tool_execution_end',
           payload: expect.objectContaining({
-            type: 'tool_execution_end',
-            toolCall: expect.objectContaining({
-              id: 'call_git_status',
-              name: 'sandbox.exec',
-              durationMs: 42,
-              output: { stdout: 'clean', apiKey: '[REDACTED]' },
-            }),
+            type: 'message_end',
+            message: expect.objectContaining({ role: 'assistant' }),
           }),
         }),
         expect.objectContaining({
           type: 'tool_execution_end',
           payload: expect.objectContaining({
             type: 'tool_execution_end',
-            toolCall: expect.objectContaining({
-              id: 'call_failed_tool',
-              name: 'mcp.github.repo.read',
-              durationMs: 7,
-              error: { type: 'tool_error', message: 'Repository not found', secret: '[REDACTED]' },
-            }),
+            toolCallId: 'call_git_status',
+            toolName: 'sandbox.exec',
+            isError: false,
           }),
         }),
       ]),
@@ -270,19 +247,19 @@ describe('[CF] /api/sessions', () => {
     const toolCallEvent = events.data.find(
       (event) =>
         event.type === 'tool_execution_start' &&
-        (event.payload.toolCall as { id?: string } | undefined)?.id === 'call_git_status',
+        (event.payload as { toolCallId?: string } | undefined)?.toolCallId === 'call_git_status',
     )
     const toolResultEvent = events.data.find(
       (event) =>
         event.type === 'tool_execution_end' &&
-        (event.payload.toolCall as { id?: string } | undefined)?.id === 'call_git_status',
+        (event.payload as { toolCallId?: string } | undefined)?.toolCallId === 'call_git_status',
     )
     expect(toolCallEvent).toMatchObject({
       correlationId: null,
       parentEventId: null,
       payload: expect.objectContaining({
         type: 'tool_execution_start',
-        toolCall: expect.objectContaining({ input: { command: 'git status', token: '[REDACTED]' } }),
+        args: { command: 'git status' },
       }),
     })
     expect(toolResultEvent).toMatchObject({
@@ -292,6 +269,8 @@ describe('[CF] /api/sessions', () => {
     expect(JSON.stringify(events.data)).not.toContain('raw-secret')
     expect(JSON.stringify(events.data)).not.toContain('raw-github-token')
     expect(JSON.stringify(events.data)).not.toContain('secret-password')
+    expect(JSON.stringify(events.data)).not.toContain('Message accepted by AMA runtime.')
+    expect(JSON.stringify(events.data)).not.toContain('Received:')
     expect(JSON.stringify(events.data)).not.toContain('oidc-access-token')
 
     const pagedEventsRes = await jsonFetch(`/api/sessions/${created.id}/events?limit=1`, authorization)
@@ -299,7 +278,7 @@ describe('[CF] /api/sessions', () => {
       data: Array<{ sequence: number; type: string }>
       pagination: { hasMore: boolean; nextCursor: string | null }
     }
-    expect(pagedEvents.data).toEqual([expect.objectContaining({ sequence: 1, type: 'tool_execution_start' })])
+    expect(pagedEvents.data).toEqual([expect.objectContaining({ sequence: 1, type: 'agent_start' })])
     expect(pagedEvents.pagination).toMatchObject({ hasMore: true, nextCursor: '1' })
 
     const cursorEventsRes = await jsonFetch(`/api/sessions/${created.id}/events?cursor=1&limit=2`, authorization)
@@ -333,7 +312,7 @@ describe('[CF] /api/sessions', () => {
 
     const latestEventsRes = await jsonFetch(`/api/sessions/${created.id}/events?order=desc&limit=2`, authorization)
     const latestEvents = (await latestEventsRes.json()) as { data: Array<{ sequence: number; type: string }> }
-    expect(latestEvents.data.map((event) => event.sequence)).toEqual([6, 5])
+    expect(latestEvents.data.map((event) => event.sequence)).toEqual([events.data.length, events.data.length - 1])
 
     const filteredEventsRes = await jsonFetch(
       `/api/sessions/${created.id}/events?cursor=1&type=tool_execution_end`,
@@ -341,7 +320,7 @@ describe('[CF] /api/sessions', () => {
     )
     const filteredEvents = (await filteredEventsRes.json()) as { data: Array<{ sequence: number; type: string }> }
     expect(filteredEvents.data).toEqual(
-      expect.arrayContaining([expect.objectContaining({ sequence: 2, type: 'tool_execution_end' })]),
+      expect.arrayContaining([expect.objectContaining({ type: 'tool_execution_end' })]),
     )
 
     const exportRes = await jsonFetch(`/api/sessions/${created.id}/events/export?cursor=2&limit=2`, authorization)
@@ -350,7 +329,6 @@ describe('[CF] /api/sessions', () => {
     const exportedText = await exportRes.text()
     const exported = exportedText.trim().split('\n').map(JSON.parse) as Array<{ sequence: number }>
     expect(exported.map((event) => event.sequence)).toEqual([3, 4])
-    expect(exportedText).toContain('[REDACTED]')
     expect(exportedText).not.toContain('raw-secret')
     expect(exportedText).not.toContain('secret-password')
 
@@ -368,12 +346,11 @@ describe('[CF] /api/sessions', () => {
     expect(streamRes.status).toBe(200)
     expect(streamRes.headers.get('content-type')).toContain('application/x-ndjson')
     const streamed = (await streamRes.text()).trim().split('\n').map(JSON.parse) as Array<{ sequence: number }>
-    expect(streamed.map((event) => event.sequence)).toEqual([5, 6])
+    expect(streamed[0]?.sequence).toBe(5)
 
     const redactedStreamRes = await jsonFetch(`/api/sessions/${created.id}/events/stream?limit=4`, authorization)
     expect(redactedStreamRes.status).toBe(200)
     const streamedText = await redactedStreamRes.text()
-    expect(streamedText).toContain('[REDACTED]')
     expect(streamedText).not.toContain('raw-github-token')
     expect(streamedText).not.toContain('secret-password')
 
@@ -454,17 +431,24 @@ describe('[CF] /api/sessions', () => {
       expect.arrayContaining([
         expect.objectContaining({
           type: 'message_end',
-          payload: {
+          payload: expect.objectContaining({
             type: 'message_end',
-            message: { role: 'assistant', content: 'Received: Research current Canadian banking bonus offers.' },
-          },
+            message: expect.objectContaining({ role: 'assistant' }),
+          }),
         }),
         expect.objectContaining({
           type: 'usage',
-          payload: expect.objectContaining({ type: 'usage', provider: 'workers-ai' }),
+          payload: expect.objectContaining({
+            type: 'usage',
+            provider: 'cloudflare-workers-ai',
+            promptTokens: expect.any(Number),
+            completionTokens: expect.any(Number),
+          }),
         }),
       ]),
     )
+    expect(JSON.stringify(events.data)).not.toContain('Received:')
+    expect(JSON.stringify(events.data)).not.toContain('Message accepted by AMA runtime.')
 
     const auditRes = await jsonFetch('/api/audit-records?action=session.initial_prompt', authorization)
     expect(auditRes.status).toBe(200)
@@ -720,6 +704,62 @@ describe('[CF] /api/sessions', () => {
     expect(JSON.stringify(events)).not.toContain('raw-secret-token')
   })
 
+  it('records model-originated sandbox policy denials before executor dispatch', async () => {
+    const authorization = await signIn()
+    await connectMcp(authorization, 'github')
+    const environment = await createEnvironment(authorization)
+    const agent = await createAgent(authorization)
+
+    const policyRes = await jsonFetch('/api/governance/policy', authorization, {
+      method: 'PUT',
+      body: JSON.stringify({ sandboxPolicy: { blockedCommands: ['git'] } }),
+    })
+    expect(policyRes.status).toBe(200)
+
+    const createRes = await jsonFetch('/api/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+    })
+    expect(createRes.status).toBe(201)
+    const session = (await createRes.json()) as { id: string }
+
+    const runtimeRes = await jsonFetch(`/runtime/sessions/${session.id}/rpc`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ type: 'prompt', message: 'Inspect repository status' }),
+    })
+    expect(runtimeRes.status).toBe(500)
+
+    const readRes = await jsonFetch(`/api/sessions/${session.id}`, authorization)
+    await expect(readRes.json()).resolves.toMatchObject({
+      id: session.id,
+      status: 'error',
+      statusReason: 'Sandbox command is blocked by policy.',
+    })
+
+    const eventsRes = await jsonFetch(`/api/sessions/${session.id}/events`, authorization)
+    const events = (await eventsRes.json()) as { data: Array<{ type: string; payload: Record<string, unknown> }> }
+    expect(events.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'policy_denied',
+          payload: expect.objectContaining({
+            type: 'policy_denied',
+            category: 'sandbox_command',
+            ruleId: 'sandboxPolicy.blockedCommands',
+            command: 'git status',
+          }),
+        }),
+        expect.objectContaining({
+          type: 'error',
+          payload: expect.objectContaining({
+            type: 'error',
+            message: 'Sandbox command is blocked by policy.',
+          }),
+        }),
+      ]),
+    )
+  })
+
   it('blocks sandbox network policy violations and records safe event details', async () => {
     const authorization = await signIn()
     await connectMcp(authorization, 'github')
@@ -878,7 +918,13 @@ describe('[CF] /api/sessions', () => {
         errorMessage: 'Provider failed with token=raw-secret-token',
       }),
     })
-    expect(taskRes.status).toBe(200)
+    expect(taskRes.status).toBe(500)
+    await expect(taskRes.json()).resolves.toMatchObject({
+      error: {
+        type: 'internal_error',
+        message: '[REDACTED]',
+      },
+    })
 
     const readRes = await jsonFetch(`/api/sessions/${created.id}`, authorization)
     expect(readRes.status).toBe(200)
