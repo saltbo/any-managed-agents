@@ -5,7 +5,7 @@ Any Managed Agents is a Cloudflare-native managed agents system. It is inspired 
 ## End State
 
 - The platform can be deployed on Cloudflare Workers.
-- This repository publishes OpenAPI for product resource management; SDKs are generated and maintained in separate repositories.
+- This repository publishes OpenAPI for product resource management and keeps generated SDK scaffolds under `sdk/` until SDK release ownership moves out.
 - The control-plane API contract is generated from Hono route schemas.
 - The web console uses the project-local Hono RPC client for internal control-plane calls.
 - Command-line automation uses restish against the published OpenAPI document; this repository does not maintain a bespoke CLI binary.
@@ -47,7 +47,7 @@ Cloudflare Sandbox owns filesystem, shell, process isolation, and per-session to
 
 AMA must not define a custom sandbox SDK. Sandbox access is an internal platform responsibility behind environments, sessions, policy, and tool executor dispatch.
 
-The platform owns the control-plane OpenAPI contract. Product SDKs are generated and maintained outside this repository. Product SDKs manage control-plane resources and may provide thin helpers that connect to AMA runtime endpoints, but they must not define a replacement runtime protocol.
+The platform owns the control-plane OpenAPI contract. Repo-local generated SDK scaffolds live under `sdk/typescript`, `sdk/go`, and `sdk/python` and are regenerated from the Hono-generated OpenAPI document. Product SDKs manage control-plane resources and may provide thin helpers that connect to AMA runtime endpoints, but they must not define a replacement runtime protocol. Hand-authored SDK behavior that drifts from OpenAPI does not belong in this repository.
 
 Command-line usage is a control-plane concern. Operators use restish with the published OpenAPI document for resource management instead of a project-specific CLI implementation. Agent skills may wrap this workflow as documentation and task guidance, but they must still call the OpenAPI-described control plane and preserve the AMA runtime boundary.
 
@@ -58,7 +58,7 @@ The web console is an internal control-plane entrypoint. It uses Hono RPC for sh
 ```txt
 Control plane:
   web console -> Hono RPC client -> /api/* -> Hono OpenAPI routes -> D1 / governance / metadata
-  client / external SDK / restish -> /api/openapi.json + /api/* -> Hono OpenAPI routes -> D1 / governance / metadata
+  client / generated SDK / restish -> /api/openapi.json + /api/* -> Hono OpenAPI routes -> D1 / governance / metadata
 
 Runtime:
   client / external SDK helper -> AMA runtime endpoint -> AMA cloud-owned session loop -> D1 events
@@ -84,7 +84,7 @@ See `specs/product/spec-index.md` for the current product spec map.
 
 See `docs/product/decisions.md` for fixed product decisions.
 
-See `docs/product/sdk.md` for the SDK ownership boundary.
+See `docs/product/sdk.md` for the SDK ownership and generation boundary.
 
 ## v1.0 Acceptance
 

@@ -29,6 +29,9 @@ jobs:
       - run: echo "$HOME/go/bin" >> "$GITHUB_PATH"
       - run: npm run lint
       - run: npm run typecheck
+      - run: npm run openapi:check
+      - run: npm run --workspace sdk/typescript typecheck
+      - run: npm run --workspace sdk/typescript smoke
       - run: npm test
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e

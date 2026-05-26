@@ -71,6 +71,8 @@ restish ama list-audit-records --rsh-output-format json
 
 Run `npm run test:e2e` in this repository when you need local evidence that the current OpenAPI document is ingestible by restish and that restish can serialize the core create environment, create agent, and create session workflow.
 
+If SDK artifacts change, run `npm run openapi:generate` and `npm run openapi:check`. Restish remains the default command-line path; do not replace these workflows with a bespoke AMA CLI.
+
 ## Safety Boundaries
 
 - Confirm ids before `archiveAgent`, `archiveEnvironment`, `archiveVault`, `archiveSession`, `deleteProvider`, or `deleteVaultCredentialVersion`.

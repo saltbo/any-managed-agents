@@ -1,6 +1,6 @@
 # SDK and API Boundary
 
-This repository does not maintain language SDKs or a bespoke CLI binary. It publishes the Any Managed Agents control-plane OpenAPI contract. Product SDKs are generated and maintained in separate repositories. SDKs are generated from or mechanically aligned with the OpenAPI document, and command-line automation uses restish against the same OpenAPI document. The web console is an internal entrypoint and uses the project-local Hono RPC client.
+This repository maintains generated SDK scaffolds under `sdk/`, but it does not maintain a bespoke CLI binary or hand-authored SDK behavior that drifts from OpenAPI. It publishes the Any Managed Agents control-plane OpenAPI contract. SDKs are generated from or mechanically aligned with the Hono-generated OpenAPI document, and command-line automation uses restish against the same OpenAPI document. The web console is an internal entrypoint and uses the project-local Hono RPC client.
 
 ## SDK Layers
 
@@ -21,7 +21,7 @@ Web console
 
 ## External Any Managed Agents SDKs
 
-External SDK repositories use this repository's OpenAPI document as their source of truth. Those SDKs are the developer entry point for product resources:
+Repo-local generated SDK scaffolds use this repository's OpenAPI document as their source of truth. Those SDKs are the developer entry point for product resources:
 
 - create, read, update, archive, and version agents
 - create and manage environments
@@ -29,7 +29,26 @@ External SDK repositories use this repository's OpenAPI document as their source
 - manage provider, vault, policy, usage, and audit resources
 - connect to a running session through AMA runtime endpoints
 
-SDKs should stay thin. They wrap the public control-plane API and provide a small set of ergonomic helpers, such as `sessions.connect(sessionId)`. SDK source, release process, and language-specific packaging do not live in this repository.
+SDKs should stay thin. They wrap the public control-plane API and may provide a small set of ergonomic helpers, such as `sessions.connect(sessionId)`, only when those helpers delegate to AMA runtime endpoints. Release ownership may move to separate repositories later, but this repository currently owns the reproducible generated layout.
+
+## Repo-Local Generated Layout
+
+The generated SDK layout is:
+
+- `sdk/openapi.json` - committed OpenAPI snapshot generated from `createApp()` and Hono route schemas.
+- `sdk/typescript` - npm workspace package `@any-managed-agents/sdk`.
+- `sdk/go` - native Go module, not an npm workspace.
+- `sdk/python` - native Python package, not an npm workspace.
+
+Regenerate and check the SDK artifacts with:
+
+```bash
+npm run openapi:generate
+npm run openapi:check
+npm run --workspace sdk/typescript typecheck
+```
+
+The generator is intentionally repo-local and route-driven. Do not edit generated operation metadata or OpenAPI snapshots by hand.
 
 ## CLI Boundary
 
@@ -49,6 +68,7 @@ This repository includes:
 
 - [Integration snippets](integration-snippets.md) for curl, restish, and generated SDK-shaped examples.
 - [AMA restish CLI skill](../agent-skills/ama-restish-cli/SKILL.md) for automation agents.
+- `scripts/generate-openapi-and-sdks.ts` for reproducible SDK regeneration.
 
 The skill is guidance for automation agents, not a separate command surface. It references OpenAPI operations or documented paths rather than inventing project-specific CLI commands.
 

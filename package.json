@@ -4,6 +4,9 @@
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
+  "workspaces": [
+    "sdk/typescript"
+  ],
   "scripts": {
     "dev": "CLOUDFLARE_ENV=staging vite dev",
     "build": "vite build",
@@ -19,7 +22,9 @@
     "test:smoke": "NODE_OPTIONS='--import tsx' cucumber-js --tags '@implemented and not @planned' --import 'test/e2e/**/*.steps.ts' 'specs/smoke/**/*.feature'",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
-    "format": "biome format --write ."
+    "format": "biome format --write .",
+    "openapi:generate": "tsx scripts/generate-openapi-and-sdks.ts",
+    "openapi:check": "tsx scripts/generate-openapi-and-sdks.ts --check"
   },
   "engines": {
     "node": ">=24"
