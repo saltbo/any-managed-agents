@@ -1,4 +1,4 @@
-import { Archive, ChevronDown, CircleStop, Cloud, GitBranch, Timer } from 'lucide-react'
+import { Archive, Boxes, ChevronDown, CircleStop, Cloud, GitBranch, Timer } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useState } from 'react'
 import { Link } from 'react-router'
@@ -41,7 +41,7 @@ export function SessionDetailView({
   onAbortRuntime: () => void
 }) {
   const [pendingAction, setPendingAction] = useState<'stop' | 'archive' | null>(null)
-  const [activeResource, setActiveResource] = useState<'agent' | 'environment' | null>(null)
+  const [activeResource, setActiveResource] = useState<'agent' | 'environment' | 'resources' | null>(null)
   const shortSessionId = `${session.id.slice(0, 5)}...${session.id.slice(-7)}`
   const duration = formatDuration(session.startedAt, session.stoppedAt)
   const agentName = agentDisplayName || session.agentSnapshot.systemPrompt || session.agentId
@@ -105,6 +105,12 @@ export function SessionDetailView({
                   disabled={!session.environmentSnapshot}
                 />
                 <SessionMeta icon={<Timer className="size-4" />} value={duration} />
+                <SessionMeta
+                  icon={<Boxes className="size-4" />}
+                  value={`${session.resourceRefs.length} resources`}
+                  label="Open session resources"
+                  onClick={() => setActiveResource('resources')}
+                />
                 <Separator orientation="vertical" className="h-4" />
                 <span className="shrink-0">{formatRelativeTime(session.updatedAt)}</span>
               </div>
@@ -124,6 +130,12 @@ export function SessionDetailView({
                 disabled={!session.environmentSnapshot}
               />
               <SessionMeta icon={<Timer className="size-4" />} value={duration} />
+              <SessionMeta
+                icon={<Boxes className="size-4" />}
+                value={`${session.resourceRefs.length} resources`}
+                label="Open session resources"
+                onClick={() => setActiveResource('resources')}
+              />
               <span className="shrink-0">{formatRelativeTime(session.updatedAt)}</span>
             </div>
             <div className="sr-only">
@@ -208,6 +220,23 @@ export function SessionDetailView({
               }}
             />
           ) : null}
+          {activeResource === 'resources' ? (
+            <ResourceSheet
+              title="Session resources"
+              description={`Safe resource references captured for ${session.id}`}
+              meta={
+                <MetaGrid>
+                  <Meta label="Count" value={String(session.resourceRefs.length)} />
+                  <Meta label="GitHub repositories" value={String(githubResources(session).length)} />
+                  <Meta label="Workspace manifest" value="/workspace/.ama/resources.json" />
+                  <Meta label="Setup status" value="Declared for runtime executor setup" />
+                </MetaGrid>
+              }
+              json={{
+                resources: session.resourceRefs.map(safeResourceView),
+              }}
+            />
+          ) : null}
         </SheetContent>
       </Sheet>
       <ConfirmAction
@@ -230,6 +259,24 @@ export function SessionDetailView({
       />
     </div>
   )
+}
+
+function githubResources(session: Session) {
+  return session.resourceRefs.filter((resource) => resource.type === 'github_repository')
+}
+
+function safeResourceView(resource: Record<string, unknown>) {
+  if (resource.type !== 'github_repository') {
+    return resource
+  }
+  return {
+    type: resource.type,
+    owner: resource.owner,
+    repo: resource.repo,
+    ref: resource.ref,
+    mountPath: resource.mountPath,
+    ...(typeof resource.credentialRef === 'string' ? { credentialRef: resource.credentialRef } : {}),
+  }
 }
 
 function SessionMeta({

@@ -238,7 +238,7 @@ export function SessionForm({
         />
         <TextAreaField
           label="Resource refs"
-          description="JSON array of resource reference objects for this run."
+          description='JSON array of safe refs, such as {"type":"github_repository","owner":"org","repo":"repo"}.'
           value={value.resourceRefs}
           onChange={(resourceRefs) => setValue({ ...value, resourceRefs })}
         />
