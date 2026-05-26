@@ -20,12 +20,21 @@ export async function openLocalPage() {
 export async function authenticateE2EPage(page: Page) {
   const runId = `e2e-${Date.now()}-${Math.random().toString(16).slice(2)}`
   const response = await requestWithLocalAppRecovery(page, () =>
-    page.request.post('/api/e2e/auth/session', { data: { runId } }),
+    page.request.post('/api/e2e/auth/token', { data: { runId } }),
   )
   if (!response.ok()) {
-    throw new Error(`POST /api/e2e/auth/session returned ${response.status()}: ${await response.text()}`)
+    throw new Error(`POST /api/e2e/auth/token returned ${response.status()}: ${await response.text()}`)
   }
-  const me = await requestWithLocalAppRecovery(page, () => page.request.get('/api/auth/me'))
+  const { accessToken } = (await response.json()) as { accessToken: string }
+  await page.context().setExtraHTTPHeaders({ authorization: `Bearer ${accessToken}` })
+  await page.addInitScript((token) => window.localStorage.setItem('ama:e2e-access-token', token), accessToken)
+  if (page.url() === 'about:blank') {
+    await page.goto('/')
+  }
+  await page.evaluate((token) => window.localStorage.setItem('ama:e2e-access-token', token), accessToken)
+  const me = await requestWithLocalAppRecovery(page, () =>
+    page.request.get('/api/auth/me', { headers: { authorization: `Bearer ${accessToken}` } }),
+  )
   if (!me.ok()) {
     throw new Error(`GET /api/auth/me returned ${me.status()}: ${await me.text()}`)
   }

@@ -22,7 +22,7 @@ interface OpenApiDocument {
 }
 
 const METHODS = new Set(['get', 'post', 'put', 'patch', 'delete'])
-const PUBLIC_PATHS = new Set(['/api/health', '/api/auth/login', '/api/auth/callback'])
+const PUBLIC_PATHS = new Set(['/api/health', '/api/auth/config'])
 const EXPECTED_RESTISH_OPERATIONS = {
   System: ['getHealth'],
   Agents: ['listAgents', 'createAgent'],
@@ -64,9 +64,7 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.openapi).toBe('3.0.0')
     expect(doc.servers).toEqual([{ url: '/' }])
     expect(doc.paths).toHaveProperty('/api/health')
-    expect(doc.paths).toHaveProperty('/api/auth/login')
-    expect(doc.paths).toHaveProperty('/api/auth/callback')
-    expect(doc.paths).toHaveProperty('/api/auth/logout')
+    expect(doc.paths).toHaveProperty('/api/auth/config')
     expect(doc.paths).toHaveProperty('/api/auth/me')
     expect(doc.paths).toHaveProperty('/api/agents')
     expect(doc.paths).toHaveProperty('/api/agents/{agentId}')
@@ -152,16 +150,16 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths['/api/usage/summary']).toHaveProperty('get')
     expect(doc.paths['/api/audit-records/export']).toHaveProperty('get')
     expect(doc.paths['/api/health'].get.security).toBeUndefined()
-    expect(doc.paths['/api/auth/login'].get.security).toBeUndefined()
-    expect(doc.paths['/api/agents'].get.security).toEqual([{ cookieAuth: [] }])
-    expect(doc.paths['/api/environments'].get.security).toEqual([{ cookieAuth: [] }])
-    expect(doc.paths['/api/sessions'].get.security).toEqual([{ cookieAuth: [] }])
-    expect(doc.paths['/api/vaults'].get.security).toEqual([{ cookieAuth: [] }])
-    expect(doc.paths['/api/providers'].get.security).toEqual([{ cookieAuth: [] }])
-    expect(doc.paths['/api/mcp/connectors'].get.security).toEqual([{ cookieAuth: [] }])
-    expect(doc.paths['/api/governance/policy'].get.security).toEqual([{ cookieAuth: [] }])
-    expect(doc.paths['/api/usage'].get.security).toEqual([{ cookieAuth: [] }])
-    expect(doc.paths['/api/audit-records'].get.security).toEqual([{ cookieAuth: [] }])
+    expect(doc.paths['/api/auth/config'].get.security).toBeUndefined()
+    expect(doc.paths['/api/agents'].get.security).toEqual([{ bearerAuth: [] }])
+    expect(doc.paths['/api/environments'].get.security).toEqual([{ bearerAuth: [] }])
+    expect(doc.paths['/api/sessions'].get.security).toEqual([{ bearerAuth: [] }])
+    expect(doc.paths['/api/vaults'].get.security).toEqual([{ bearerAuth: [] }])
+    expect(doc.paths['/api/providers'].get.security).toEqual([{ bearerAuth: [] }])
+    expect(doc.paths['/api/mcp/connectors'].get.security).toEqual([{ bearerAuth: [] }])
+    expect(doc.paths['/api/governance/policy'].get.security).toEqual([{ bearerAuth: [] }])
+    expect(doc.paths['/api/usage'].get.security).toEqual([{ bearerAuth: [] }])
+    expect(doc.paths['/api/audit-records'].get.security).toEqual([{ bearerAuth: [] }])
     expect(doc.paths['/api/agents'].get.operationId).toBe('listAgents')
     expect(doc.paths['/api/environments'].get.operationId).toBe('listEnvironments')
     expect(doc.paths['/api/sessions'].get.operationId).toBe('listSessions')
@@ -175,7 +173,7 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths['/api/agents'].get.parameters?.map((parameter) => (parameter as { name?: string }).name)).toEqual(
       expect.arrayContaining(['includeArchived', 'status', 'search', 'createdFrom', 'createdTo', 'limit', 'cursor']),
     )
-    expect(doc.components?.securitySchemes).toHaveProperty('cookieAuth')
+    expect(doc.components?.securitySchemes).toHaveProperty('bearerAuth')
     expect(doc.components?.schemas).toHaveProperty('AuthContext')
     expect(doc.components?.schemas).toHaveProperty('ErrorResponse')
     expect(doc.components?.schemas).toHaveProperty('ListPagination')
@@ -248,7 +246,7 @@ describe('[CF] OpenAPI documentation', () => {
       }
 
       if (!PUBLIC_PATHS.has(path)) {
-        expect(operation.security, `${operation.operationId} must declare cookie auth`).toEqual([{ cookieAuth: [] }])
+        expect(operation.security, `${operation.operationId} must declare bearer auth`).toEqual([{ bearerAuth: [] }])
         expectJsonErrorResponse(operation, '401')
       }
       if (operation.requestBody) {

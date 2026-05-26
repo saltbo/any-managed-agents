@@ -1,5 +1,6 @@
 import { hc } from 'hono/client'
 import type { AppType } from '../../server/app'
+import { getAccessToken } from './oidc'
 
 export interface AuthContext {
   user: { id: string; email: string; name: string | null; avatarUrl: string | null }
@@ -413,10 +414,14 @@ export class ApiError extends Error {
 
 const rpc = hc<AppType>('/', {
   init: { credentials: 'include' },
-  headers: () => ({
-    accept: 'application/json',
-    'x-ama-client': 'web-rpc',
-  }),
+  headers: async () => {
+    const token = await getAccessToken()
+    return {
+      accept: 'application/json',
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      'x-ama-client': 'web-rpc',
+    }
+  },
 })
 
 type RpcResponse = Pick<Response, 'headers' | 'json' | 'ok' | 'status' | 'statusText' | 'text'>
@@ -466,7 +471,6 @@ function jsonArg<T>(json: RpcJson<T>) {
 
 export const api = {
   me: () => rpcRequest<AuthContext>(rpc.api.auth.me.$get()),
-  logout: () => rpcRequest<void>(rpc.api.auth.logout.$post()),
   listAgents: (options: ListOptions = {}) =>
     rpcRequest<ListResponse<Agent>>(rpc.api.agents.$get(queryArg<typeof rpc.api.agents.$get>(options))),
   readAgent: (id: string) => rpcRequest<Agent>(rpc.api.agents[':agentId'].$get({ param: { agentId: id } })),

@@ -1,18 +1,17 @@
 import { OpenAPIHono, z } from '@hono/zod-openapi'
-import { SESSION_COOKIE_NAME } from './auth/session'
 import type { Env } from './env'
 
 export const ApiSecuritySchemes = {
-  cookieAuth: {
-    type: 'apiKey',
-    in: 'cookie',
-    name: SESSION_COOKIE_NAME,
-    description: 'AMA browser session cookie issued after FlareAuth OIDC sign-in.',
+  bearerAuth: {
+    type: 'http',
+    scheme: 'bearer',
+    bearerFormat: 'OIDC access token',
+    description: 'FlareAuth OIDC access token.',
   },
 } as const
 
 export const AuthenticatedOperation = {
-  security: [{ cookieAuth: [] }],
+  security: [{ bearerAuth: [] }],
 }
 
 export const ErrorResponseSchema = z

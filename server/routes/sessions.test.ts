@@ -2,19 +2,19 @@ import { SELF } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultClaims, setupFlareAuth, signIn } from '../test/auth'
 
-async function jsonFetch(path: string, cookie: string, init: RequestInit = {}) {
+async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
     ...init,
     headers: {
       'content-type': 'application/json',
-      cookie,
+      authorization,
       ...init.headers,
     },
   })
 }
 
-async function createEnvironment(cookie: string) {
-  const res = await jsonFetch('/api/environments', cookie, {
+async function createEnvironment(authorization: string) {
+  const res = await jsonFetch('/api/environments', authorization, {
     method: 'POST',
     body: JSON.stringify({
       name: 'Pi workspace',
@@ -29,8 +29,8 @@ async function createEnvironment(cookie: string) {
   return (await res.json()) as { id: string }
 }
 
-async function createAgent(cookie: string) {
-  const res = await jsonFetch('/api/agents', cookie, {
+async function createAgent(authorization: string) {
+  const res = await jsonFetch('/api/agents', authorization, {
     method: 'POST',
     body: JSON.stringify({
       name: 'Pi session agent',
@@ -43,14 +43,14 @@ async function createAgent(cookie: string) {
   return (await res.json()) as { id: string; currentVersionId: string }
 }
 
-async function connectMcp(cookie: string, connectorId: string) {
-  const vaultRes = await jsonFetch('/api/vaults', cookie, {
+async function connectMcp(authorization: string, connectorId: string) {
+  const vaultRes = await jsonFetch('/api/vaults', authorization, {
     method: 'POST',
     body: JSON.stringify({ name: `${connectorId} credentials` }),
   })
   expect(vaultRes.status).toBe(201)
   const vault = (await vaultRes.json()) as { id: string }
-  const credentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, cookie, {
+  const credentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, authorization, {
     method: 'POST',
     body: JSON.stringify({
       name: `${connectorId} token`,
@@ -61,7 +61,7 @@ async function connectMcp(cookie: string, connectorId: string) {
   })
   expect(credentialRes.status).toBe(201)
   const credential = (await credentialRes.json()) as { id: string; activeVersionId: string }
-  const connectRes = await jsonFetch('/api/mcp/connections', cookie, {
+  const connectRes = await jsonFetch('/api/mcp/connections', authorization, {
     method: 'POST',
     body: JSON.stringify({
       connectorId,
@@ -82,13 +82,13 @@ describe('[CF] /api/sessions', () => {
   })
 
   it('creates, reads, lists, reconnects, stops, archives, and records events for a Pi-backed session', async () => {
-    const cookie = await signIn()
-    await connectMcp(cookie, 'github')
-    await connectMcp(cookie, 'linear')
-    const environment = await createEnvironment(cookie)
-    const agent = await createAgent(cookie)
+    const authorization = await signIn()
+    await connectMcp(authorization, 'github')
+    await connectMcp(authorization, 'linear')
+    const environment = await createEnvironment(authorization)
+    const agent = await createAgent(authorization)
 
-    const createRes = await jsonFetch('/api/sessions', cookie, {
+    const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({
         agentId: agent.id,
@@ -149,24 +149,24 @@ describe('[CF] /api/sessions', () => {
     expect(created.environmentVersionId).toMatch(/^envver_/)
     expect(created.startedAt).toEqual(expect.any(String))
 
-    const listRes = await jsonFetch('/api/sessions', cookie)
+    const listRes = await jsonFetch('/api/sessions', authorization)
     expect(listRes.status).toBe(200)
     const list = (await listRes.json()) as { data: Array<{ id: string }>; pagination: { hasMore: boolean } }
     expect(list.data).toContainEqual(expect.objectContaining({ id: created.id }))
     expect(list.pagination.hasMore).toBe(false)
 
-    const readRes = await jsonFetch(`/api/sessions/${created.id}`, cookie)
+    const readRes = await jsonFetch(`/api/sessions/${created.id}`, authorization)
     expect(readRes.status).toBe(200)
     await expect(readRes.json()).resolves.toMatchObject({ id: created.id, status: 'idle' })
 
-    const reconnectRes = await jsonFetch(`/api/sessions/${created.id}/reconnect`, cookie)
+    const reconnectRes = await jsonFetch(`/api/sessions/${created.id}/reconnect`, authorization)
     expect(reconnectRes.status).toBe(200)
     await expect(reconnectRes.json()).resolves.toMatchObject({
       id: created.id,
       runtimeEndpointPath: `/runtime/sessions/${created.id}/rpc`,
     })
 
-    const taskRes = await jsonFetch(`/runtime/sessions/${created.id}/rpc`, cookie, {
+    const taskRes = await jsonFetch(`/runtime/sessions/${created.id}/rpc`, authorization, {
       method: 'POST',
       body: JSON.stringify({
         type: 'prompt',
@@ -196,16 +196,16 @@ describe('[CF] /api/sessions', () => {
       path: '/rpc',
       proxy: 'pi',
     })
-    const afterTaskRes = await jsonFetch(`/api/sessions/${created.id}`, cookie)
+    const afterTaskRes = await jsonFetch(`/api/sessions/${created.id}`, authorization)
     await expect(afterTaskRes.json()).resolves.toMatchObject({ id: created.id, status: 'idle' })
 
-    const stopRes = await jsonFetch(`/api/sessions/${created.id}/stop`, cookie, { method: 'POST' })
+    const stopRes = await jsonFetch(`/api/sessions/${created.id}/stop`, authorization, { method: 'POST' })
     expect(stopRes.status).toBe(200)
     const stopped = (await stopRes.json()) as { status: string; stoppedAt: string }
     expect(stopped.status).toBe('stopped')
     expect(stopped.stoppedAt).toEqual(expect.any(String))
 
-    const eventsRes = await jsonFetch(`/api/sessions/${created.id}/events`, cookie)
+    const eventsRes = await jsonFetch(`/api/sessions/${created.id}/events`, authorization)
     expect(eventsRes.status).toBe(200)
     const events = (await eventsRes.json()) as {
       data: Array<{
@@ -289,7 +289,7 @@ describe('[CF] /api/sessions', () => {
     expect(JSON.stringify(events.data)).not.toContain('secret-password')
     expect(JSON.stringify(events.data)).not.toContain('flareauth-access-token')
 
-    const pagedEventsRes = await jsonFetch(`/api/sessions/${created.id}/events?limit=1`, cookie)
+    const pagedEventsRes = await jsonFetch(`/api/sessions/${created.id}/events?limit=1`, authorization)
     const pagedEvents = (await pagedEventsRes.json()) as {
       data: Array<{ sequence: number; type: string }>
       pagination: { hasMore: boolean; nextCursor: string | null }
@@ -297,7 +297,7 @@ describe('[CF] /api/sessions', () => {
     expect(pagedEvents.data).toEqual([expect.objectContaining({ sequence: 1, type: 'tool_execution_start' })])
     expect(pagedEvents.pagination).toMatchObject({ hasMore: true, nextCursor: '1' })
 
-    const cursorEventsRes = await jsonFetch(`/api/sessions/${created.id}/events?cursor=1&limit=2`, cookie)
+    const cursorEventsRes = await jsonFetch(`/api/sessions/${created.id}/events?cursor=1&limit=2`, authorization)
     const cursorEvents = (await cursorEventsRes.json()) as {
       data: Array<{ sequence: number; type: string }>
       pagination: {
@@ -321,25 +321,25 @@ describe('[CF] /api/sessions', () => {
 
     const descendingEventsRes = await jsonFetch(
       `/api/sessions/${created.id}/events?order=desc&cursor=6&limit=2`,
-      cookie,
+      authorization,
     )
     const descendingEvents = (await descendingEventsRes.json()) as { data: Array<{ sequence: number; type: string }> }
     expect(descendingEvents.data.map((event) => event.sequence)).toEqual([5, 4])
 
-    const latestEventsRes = await jsonFetch(`/api/sessions/${created.id}/events?order=desc&limit=2`, cookie)
+    const latestEventsRes = await jsonFetch(`/api/sessions/${created.id}/events?order=desc&limit=2`, authorization)
     const latestEvents = (await latestEventsRes.json()) as { data: Array<{ sequence: number; type: string }> }
     expect(latestEvents.data.map((event) => event.sequence)).toEqual([6, 5])
 
     const filteredEventsRes = await jsonFetch(
       `/api/sessions/${created.id}/events?cursor=1&type=tool_execution_end`,
-      cookie,
+      authorization,
     )
     const filteredEvents = (await filteredEventsRes.json()) as { data: Array<{ sequence: number; type: string }> }
     expect(filteredEvents.data).toEqual(
       expect.arrayContaining([expect.objectContaining({ sequence: 2, type: 'tool_execution_end' })]),
     )
 
-    const exportRes = await jsonFetch(`/api/sessions/${created.id}/events/export?cursor=2&limit=2`, cookie)
+    const exportRes = await jsonFetch(`/api/sessions/${created.id}/events/export?cursor=2&limit=2`, authorization)
     expect(exportRes.status).toBe(200)
     expect(exportRes.headers.get('content-type')).toContain('application/x-ndjson')
     const exportedText = await exportRes.text()
@@ -351,7 +351,7 @@ describe('[CF] /api/sessions', () => {
 
     const descendingExportRes = await jsonFetch(
       `/api/sessions/${created.id}/events/export?order=desc&cursor=6&limit=2`,
-      cookie,
+      authorization,
     )
     expect(descendingExportRes.status).toBe(200)
     const descendingExported = (await descendingExportRes.text()).trim().split('\n').map(JSON.parse) as Array<{
@@ -359,23 +359,23 @@ describe('[CF] /api/sessions', () => {
     }>
     expect(descendingExported.map((event) => event.sequence)).toEqual([5, 4])
 
-    const streamRes = await jsonFetch(`/api/sessions/${created.id}/events/stream?cursor=4`, cookie)
+    const streamRes = await jsonFetch(`/api/sessions/${created.id}/events/stream?cursor=4`, authorization)
     expect(streamRes.status).toBe(200)
     expect(streamRes.headers.get('content-type')).toContain('application/x-ndjson')
     const streamed = (await streamRes.text()).trim().split('\n').map(JSON.parse) as Array<{ sequence: number }>
     expect(streamed.map((event) => event.sequence)).toEqual([5, 6])
 
-    const redactedStreamRes = await jsonFetch(`/api/sessions/${created.id}/events/stream?limit=4`, cookie)
+    const redactedStreamRes = await jsonFetch(`/api/sessions/${created.id}/events/stream?limit=4`, authorization)
     expect(redactedStreamRes.status).toBe(200)
     const streamedText = await redactedStreamRes.text()
     expect(streamedText).toContain('[REDACTED]')
     expect(streamedText).not.toContain('raw-github-token')
     expect(streamedText).not.toContain('secret-password')
 
-    const descendingStreamRes = await jsonFetch(`/api/sessions/${created.id}/events/stream?order=desc`, cookie)
+    const descendingStreamRes = await jsonFetch(`/api/sessions/${created.id}/events/stream?order=desc`, authorization)
     expect(descendingStreamRes.status).toBe(400)
 
-    const inactiveRuntimeRes = await jsonFetch(`/runtime/sessions/${created.id}/rpc`, cookie)
+    const inactiveRuntimeRes = await jsonFetch(`/runtime/sessions/${created.id}/rpc`, authorization)
     expect(inactiveRuntimeRes.status).toBe(409)
     await expect(inactiveRuntimeRes.json()).resolves.toMatchObject({
       error: {
@@ -384,10 +384,10 @@ describe('[CF] /api/sessions', () => {
       },
     })
 
-    const archiveRes = await jsonFetch(`/api/sessions/${created.id}`, cookie, { method: 'DELETE' })
+    const archiveRes = await jsonFetch(`/api/sessions/${created.id}`, authorization, { method: 'DELETE' })
     expect(archiveRes.status).toBe(204)
 
-    const archivedRuntimeRes = await jsonFetch(`/runtime/sessions/${created.id}/rpc`, cookie)
+    const archivedRuntimeRes = await jsonFetch(`/runtime/sessions/${created.id}/rpc`, authorization)
     expect(archivedRuntimeRes.status).toBe(409)
     await expect(archivedRuntimeRes.json()).resolves.toMatchObject({
       error: {
@@ -396,30 +396,30 @@ describe('[CF] /api/sessions', () => {
       },
     })
 
-    const archivedListRes = await jsonFetch('/api/sessions?includeArchived=true', cookie)
+    const archivedListRes = await jsonFetch('/api/sessions?includeArchived=true', authorization)
     expect(archivedListRes.status).toBe(200)
     const archivedList = (await archivedListRes.json()) as { data: Array<{ id: string; status: string }> }
     expect(archivedList.data).toContainEqual(expect.objectContaining({ id: created.id, status: 'archived' }))
   })
 
   it('lists sessions with pagination, status, search, and date filters', async () => {
-    const cookie = await signIn()
-    await connectMcp(cookie, 'github')
-    const environment = await createEnvironment(cookie)
-    const agent = await createAgent(cookie)
+    const authorization = await signIn()
+    await connectMcp(authorization, 'github')
+    const environment = await createEnvironment(authorization)
+    const agent = await createAgent(authorization)
 
-    const firstRes = await jsonFetch('/api/sessions', cookie, {
+    const firstRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
     })
     const first = (await firstRes.json()) as { id: string; agentId: string; createdAt: string }
-    const secondRes = await jsonFetch('/api/sessions', cookie, {
+    const secondRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
     })
     const second = (await secondRes.json()) as { id: string; agentId: string; createdAt: string }
 
-    const pagedRes = await jsonFetch('/api/sessions?limit=1', cookie)
+    const pagedRes = await jsonFetch('/api/sessions?limit=1', authorization)
     const paged = (await pagedRes.json()) as {
       data: Array<{ id: string }>
       pagination: { hasMore: boolean; nextCursor: string | null }
@@ -427,21 +427,21 @@ describe('[CF] /api/sessions', () => {
     expect(paged.data).toHaveLength(1)
     expect(paged.pagination.hasMore).toBe(true)
 
-    const nextPageRes = await jsonFetch(`/api/sessions?limit=1&cursor=${paged.pagination.nextCursor}`, cookie)
+    const nextPageRes = await jsonFetch(`/api/sessions?limit=1&cursor=${paged.pagination.nextCursor}`, authorization)
     const nextPage = (await nextPageRes.json()) as { data: Array<{ id: string }> }
     expect(nextPage.data.map((session) => session.id)).not.toEqual(paged.data.map((session) => session.id))
 
-    const statusRes = await jsonFetch('/api/sessions?status=idle', cookie)
+    const statusRes = await jsonFetch('/api/sessions?status=idle', authorization)
     const statusList = (await statusRes.json()) as { data: Array<{ id: string; status: string }> }
     expect(statusList.data.map((session) => session.status)).toEqual(['idle', 'idle'])
 
-    const searchRes = await jsonFetch(`/api/sessions?search=${agent.id}`, cookie)
+    const searchRes = await jsonFetch(`/api/sessions?search=${agent.id}`, authorization)
     const searchList = (await searchRes.json()) as { data: Array<{ id: string }> }
     expect(searchList.data.map((session) => session.id)).toEqual(expect.arrayContaining([first.id, second.id]))
 
     const dateRes = await jsonFetch(
       `/api/sessions?createdFrom=${encodeURIComponent(first.createdAt)}&createdTo=${encodeURIComponent(second.createdAt)}`,
-      cookie,
+      authorization,
     )
     const dateList = (await dateRes.json()) as { data: Array<{ id: string }> }
     expect(dateList.data.map((session) => session.id)).toEqual(expect.arrayContaining([first.id, second.id]))
@@ -451,11 +451,11 @@ describe('[CF] /api/sessions', () => {
     const unauthenticatedRes = await SELF.fetch('https://example.com/api/sessions')
     expect(unauthenticatedRes.status).toBe(401)
 
-    const cookie = await signIn()
-    await connectMcp(cookie, 'github')
-    const environment = await createEnvironment(cookie)
-    const agent = await createAgent(cookie)
-    const createRes = await jsonFetch('/api/sessions', cookie, {
+    const authorization = await signIn()
+    await connectMcp(authorization, 'github')
+    const environment = await createEnvironment(authorization)
+    const agent = await createAgent(authorization)
+    const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
     })
@@ -478,7 +478,7 @@ describe('[CF] /api/sessions', () => {
     ])
     expect(crossProjectReads.map((response) => response.status)).toEqual([404, 404, 404, 404, 404, 404])
 
-    const runtimeRes = await jsonFetch(`/runtime/sessions/${created.id}/rpc`, cookie)
+    const runtimeRes = await jsonFetch(`/runtime/sessions/${created.id}/rpc`, authorization)
     expect(runtimeRes.status).toBe(200)
     await expect(runtimeRes.json()).resolves.toMatchObject({
       sandboxId: created.id.toLowerCase(),
@@ -488,18 +488,18 @@ describe('[CF] /api/sessions', () => {
   })
 
   it('blocks disabled sandbox startup before creating a runtime', async () => {
-    const cookie = await signIn()
-    await connectMcp(cookie, 'github')
-    const environment = await createEnvironment(cookie)
-    const agent = await createAgent(cookie)
+    const authorization = await signIn()
+    await connectMcp(authorization, 'github')
+    const environment = await createEnvironment(authorization)
+    const agent = await createAgent(authorization)
 
-    const policyRes = await jsonFetch('/api/governance/policy', cookie, {
+    const policyRes = await jsonFetch('/api/governance/policy', authorization, {
       method: 'PUT',
       body: JSON.stringify({ sandboxPolicy: { enabled: false } }),
     })
     expect(policyRes.status).toBe(200)
 
-    const createRes = await jsonFetch('/api/sessions', cookie, {
+    const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
     })
@@ -512,7 +512,7 @@ describe('[CF] /api/sessions', () => {
       },
     })
 
-    const auditRes = await jsonFetch('/api/audit-records?action=session.create', cookie)
+    const auditRes = await jsonFetch('/api/audit-records?action=session.create', authorization)
     expect(auditRes.status).toBe(200)
     const auditRecords = (await auditRes.json()) as { data: Array<Record<string, unknown>> }
     expect(auditRecords.data).toEqual(
@@ -530,25 +530,25 @@ describe('[CF] /api/sessions', () => {
   })
 
   it('blocks sandbox command policy violations and records redacted policy events', async () => {
-    const cookie = await signIn()
-    await connectMcp(cookie, 'github')
-    const environment = await createEnvironment(cookie)
-    const agent = await createAgent(cookie)
+    const authorization = await signIn()
+    await connectMcp(authorization, 'github')
+    const environment = await createEnvironment(authorization)
+    const agent = await createAgent(authorization)
 
-    const policyRes = await jsonFetch('/api/governance/policy', cookie, {
+    const policyRes = await jsonFetch('/api/governance/policy', authorization, {
       method: 'PUT',
       body: JSON.stringify({ sandboxPolicy: { blockedCommands: ['curl'] } }),
     })
     expect(policyRes.status).toBe(200)
 
-    const createRes = await jsonFetch('/api/sessions', cookie, {
+    const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
     })
     expect(createRes.status).toBe(201)
     const session = (await createRes.json()) as { id: string }
 
-    const runtimeRes = await jsonFetch(`/runtime/sessions/${session.id}/rpc`, cookie, {
+    const runtimeRes = await jsonFetch(`/runtime/sessions/${session.id}/rpc`, authorization, {
       method: 'POST',
       body: JSON.stringify({
         type: 'prompt',
@@ -576,7 +576,7 @@ describe('[CF] /api/sessions', () => {
     })
     expect(JSON.stringify(denied)).not.toContain('raw-secret-token')
 
-    const directCommandRes = await jsonFetch(`/runtime/sessions/${session.id}/sandbox/exec`, cookie, {
+    const directCommandRes = await jsonFetch(`/runtime/sessions/${session.id}/sandbox/exec`, authorization, {
       method: 'POST',
       body: JSON.stringify({ command: 'curl https://example.com?token=raw-secret-token' }),
     })
@@ -589,7 +589,7 @@ describe('[CF] /api/sessions', () => {
       },
     })
 
-    const malformedCommandRes = await jsonFetch(`/runtime/sessions/${session.id}/sandbox/exec`, cookie, {
+    const malformedCommandRes = await jsonFetch(`/runtime/sessions/${session.id}/sandbox/exec`, authorization, {
       method: 'POST',
       body: JSON.stringify({ argv: ['curl', 'https://example.com'] }),
     })
@@ -602,7 +602,7 @@ describe('[CF] /api/sessions', () => {
       },
     })
 
-    const eventsRes = await jsonFetch(`/api/sessions/${session.id}/events`, cookie)
+    const eventsRes = await jsonFetch(`/api/sessions/${session.id}/events`, authorization)
     const events = (await eventsRes.json()) as { data: Array<{ type: string; payload: Record<string, unknown> }> }
     expect(events.data).toContainEqual(
       expect.objectContaining({
@@ -619,9 +619,9 @@ describe('[CF] /api/sessions', () => {
   })
 
   it('blocks sandbox network policy violations and records safe event details', async () => {
-    const cookie = await signIn()
-    await connectMcp(cookie, 'github')
-    const environmentRes = await jsonFetch('/api/environments', cookie, {
+    const authorization = await signIn()
+    await connectMcp(authorization, 'github')
+    const environmentRes = await jsonFetch('/api/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Restricted workspace',
@@ -631,7 +631,7 @@ describe('[CF] /api/sessions', () => {
     })
     expect(environmentRes.status).toBe(201)
     const environment = (await environmentRes.json()) as { id: string }
-    const agentRes = await jsonFetch('/api/agents', cookie, {
+    const agentRes = await jsonFetch('/api/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Offline override agent',
@@ -643,14 +643,14 @@ describe('[CF] /api/sessions', () => {
     expect(agentRes.status).toBe(201)
     const agent = (await agentRes.json()) as { id: string }
 
-    const createRes = await jsonFetch('/api/sessions', cookie, {
+    const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
     })
     expect(createRes.status).toBe(201)
     const session = (await createRes.json()) as { id: string }
 
-    const toolCallRes = await jsonFetch(`/runtime/sessions/${session.id}/rpc`, cookie, {
+    const toolCallRes = await jsonFetch(`/runtime/sessions/${session.id}/rpc`, authorization, {
       method: 'POST',
       body: JSON.stringify({
         type: 'prompt',
@@ -676,7 +676,7 @@ describe('[CF] /api/sessions', () => {
       },
     })
 
-    const runtimeRes = await jsonFetch(`/runtime/sessions/${session.id}/sandbox/fetch`, cookie, {
+    const runtimeRes = await jsonFetch(`/runtime/sessions/${session.id}/sandbox/fetch`, authorization, {
       method: 'POST',
       body: JSON.stringify({ url: 'https://metadata.google.internal/latest', token: 'raw-secret-token' }),
     })
@@ -694,7 +694,7 @@ describe('[CF] /api/sessions', () => {
       },
     })
 
-    const eventsRes = await jsonFetch(`/api/sessions/${session.id}/events`, cookie)
+    const eventsRes = await jsonFetch(`/api/sessions/${session.id}/events`, authorization)
     const events = (await eventsRes.json()) as { data: Array<Record<string, unknown>> }
     expect(events.data).toEqual(
       expect.arrayContaining([
@@ -712,9 +712,9 @@ describe('[CF] /api/sessions', () => {
   })
 
   it('blocks offline sandbox network policy before proxying', async () => {
-    const cookie = await signIn()
-    await connectMcp(cookie, 'github')
-    const environmentRes = await jsonFetch('/api/environments', cookie, {
+    const authorization = await signIn()
+    await connectMcp(authorization, 'github')
+    const environmentRes = await jsonFetch('/api/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Offline workspace',
@@ -724,7 +724,7 @@ describe('[CF] /api/sessions', () => {
     })
     expect(environmentRes.status).toBe(201)
     const environment = (await environmentRes.json()) as { id: string }
-    const agentRes = await jsonFetch('/api/agents', cookie, {
+    const agentRes = await jsonFetch('/api/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Offline override agent',
@@ -736,14 +736,14 @@ describe('[CF] /api/sessions', () => {
     expect(agentRes.status).toBe(201)
     const agent = (await agentRes.json()) as { id: string }
 
-    const createRes = await jsonFetch('/api/sessions', cookie, {
+    const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
     })
     expect(createRes.status).toBe(201)
     const session = (await createRes.json()) as { id: string }
 
-    const runtimeRes = await jsonFetch(`/runtime/sessions/${session.id}/sandbox/fetch`, cookie, {
+    const runtimeRes = await jsonFetch(`/runtime/sessions/${session.id}/sandbox/fetch`, authorization, {
       method: 'POST',
       body: JSON.stringify({ url: 'https://registry.npmjs.org/package' }),
     })
@@ -758,17 +758,17 @@ describe('[CF] /api/sessions', () => {
   })
 
   it('records safe runtime errors without leaking secrets', async () => {
-    const cookie = await signIn()
-    await connectMcp(cookie, 'github')
-    const environment = await createEnvironment(cookie)
-    const agent = await createAgent(cookie)
-    const createRes = await jsonFetch('/api/sessions', cookie, {
+    const authorization = await signIn()
+    await connectMcp(authorization, 'github')
+    const environment = await createEnvironment(authorization)
+    const agent = await createAgent(authorization)
+    const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
     })
     const created = (await createRes.json()) as { id: string }
 
-    const taskRes = await jsonFetch(`/runtime/sessions/${created.id}/rpc`, cookie, {
+    const taskRes = await jsonFetch(`/runtime/sessions/${created.id}/rpc`, authorization, {
       method: 'POST',
       body: JSON.stringify({
         message: 'Trigger failure',
@@ -778,7 +778,7 @@ describe('[CF] /api/sessions', () => {
     })
     expect(taskRes.status).toBe(200)
 
-    const readRes = await jsonFetch(`/api/sessions/${created.id}`, cookie)
+    const readRes = await jsonFetch(`/api/sessions/${created.id}`, authorization)
     expect(readRes.status).toBe(200)
     await expect(readRes.json()).resolves.toMatchObject({
       id: created.id,
@@ -786,7 +786,7 @@ describe('[CF] /api/sessions', () => {
       statusReason: '[REDACTED]',
     })
 
-    const eventsRes = await jsonFetch(`/api/sessions/${created.id}/events?type=error`, cookie)
+    const eventsRes = await jsonFetch(`/api/sessions/${created.id}/events?type=error`, authorization)
     expect(eventsRes.status).toBe(200)
     const events = (await eventsRes.json()) as { data: Array<{ payload: Record<string, unknown> }> }
     expect(events.data).toHaveLength(1)
@@ -795,12 +795,12 @@ describe('[CF] /api/sessions', () => {
   })
 
   it('rereads stored snapshots after agent and environment updates', async () => {
-    const cookie = await signIn()
-    await connectMcp(cookie, 'github')
-    const environment = await createEnvironment(cookie)
-    const agent = await createAgent(cookie)
+    const authorization = await signIn()
+    await connectMcp(authorization, 'github')
+    const environment = await createEnvironment(authorization)
+    const agent = await createAgent(authorization)
 
-    const createRes = await jsonFetch('/api/sessions', cookie, {
+    const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
     })
@@ -814,16 +814,16 @@ describe('[CF] /api/sessions', () => {
       }
     }
 
-    await jsonFetch(`/api/environments/${environment.id}`, cookie, {
+    await jsonFetch(`/api/environments/${environment.id}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ packages: [{ name: 'vite' }] }),
     })
-    await jsonFetch(`/api/agents/${agent.id}`, cookie, {
+    await jsonFetch(`/api/agents/${agent.id}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ instructions: 'Updated instructions.' }),
     })
 
-    const rereadRes = await jsonFetch(`/api/sessions/${created.id}`, cookie)
+    const rereadRes = await jsonFetch(`/api/sessions/${created.id}`, authorization)
     expect(rereadRes.status).toBe(200)
     await expect(rereadRes.json()).resolves.toMatchObject({
       id: created.id,

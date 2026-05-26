@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { Given, Then, When } from '@cucumber/cucumber'
-import { type APIRequestContext, type BrowserContext, chromium, expect, type Page } from '@playwright/test'
+import { type APIRequestContext, chromium, expect, type Page } from '@playwright/test'
 import type { AmaWorld, StagingSmokeConfig, StagingSmokeEvidence } from './world'
 
 interface Environment {
@@ -45,11 +45,11 @@ function readPackageScripts() {
 
 function stagingConfig() {
   const origin = process.env.AMA_STAGING_ORIGIN
-  const sessionCookie = process.env.AMA_E2E_COOKIE
+  const accessToken = process.env.AMA_E2E_ACCESS_TOKEN
   const storageState = process.env.AMA_E2E_STORAGE_STATE
   const loginEmail = process.env.AMA_E2E_EMAIL
   const loginPassword = process.env.AMA_E2E_PASSWORD
-  const effectiveStorageState = sessionCookie ? undefined : storageState
+  const effectiveStorageState = accessToken ? undefined : storageState
 
   if (!origin) {
     throw new Error('Set AMA_STAGING_ORIGIN to run the staging smoke against an explicit deployment origin.')
@@ -57,18 +57,18 @@ function stagingConfig() {
   return {
     origin,
     runId: `staging-smoke-${Date.now()}`,
+    ...(accessToken ? { accessToken } : {}),
     ...(effectiveStorageState ? { effectiveStorageState } : {}),
     ...(loginEmail ? { loginEmail } : {}),
     ...(loginPassword ? { loginPassword } : {}),
-    ...(sessionCookie ? { sessionCookie } : {}),
   }
 }
 
 Given('staging smoke credentials are configured', function (this: AmaWorld) {
   const config = stagingConfig()
-  if (!config.effectiveStorageState && !config.sessionCookie && (!config.loginEmail || !config.loginPassword)) {
+  if (!config.effectiveStorageState && !config.accessToken && (!config.loginEmail || !config.loginPassword)) {
     throw new Error(
-      'Set AMA_E2E_STORAGE_STATE, AMA_E2E_COOKIE, or AMA_E2E_EMAIL/AMA_E2E_PASSWORD to run the staging smoke.',
+      'Set AMA_E2E_STORAGE_STATE, AMA_E2E_ACCESS_TOKEN, or AMA_E2E_EMAIL/AMA_E2E_PASSWORD to run the staging smoke.',
     )
   }
   this.stagingSmokeConfig = config
@@ -86,7 +86,7 @@ Then('the staging smoke command documents the required secret environment variab
     /npm run test:smoke/,
     /AMA_STAGING_ORIGIN/,
     /AMA_E2E_STORAGE_STATE/,
-    /AMA_E2E_COOKIE/,
+    /AMA_E2E_ACCESS_TOKEN/,
     /AMA_E2E_EMAIL/,
     /AMA_E2E_PASSWORD/,
   )
@@ -95,7 +95,7 @@ Then('the staging smoke command documents the required secret environment variab
     /npm run test:e2e/,
     /AMA_STAGING_ORIGIN/,
     /AMA_E2E_STORAGE_STATE/,
-    /AMA_E2E_COOKIE/,
+    /AMA_E2E_ACCESS_TOKEN/,
     /AMA_E2E_EMAIL/,
     /AMA_E2E_PASSWORD/,
     /npm run test:smoke/,
@@ -107,7 +107,7 @@ Then('the staging smoke command documents the required secret environment variab
     /npm run test:e2e/,
     /AMA_STAGING_ORIGIN/,
     /AMA_E2E_STORAGE_STATE/,
-    /AMA_E2E_COOKIE/,
+    /AMA_E2E_ACCESS_TOKEN/,
     /AMA_E2E_EMAIL/,
     /AMA_E2E_PASSWORD/,
     /Auth input precedence/,
@@ -153,6 +153,12 @@ async function runStagingSmoke(config: StagingSmokeConfig): Promise<StagingSmoke
     baseURL: config.origin,
     ...(config.effectiveStorageState ? { storageState: config.effectiveStorageState } : {}),
   })
+  if (config.accessToken) {
+    await context.setExtraHTTPHeaders({ authorization: `Bearer ${config.accessToken}` })
+    await context.addInitScript((token) => {
+      window.localStorage.setItem('ama:e2e-access-token', token)
+    }, config.accessToken)
+  }
   const page = await context.newPage()
   try {
     const created: { sessionId?: string; agentId?: string; environmentId?: string } = {}
@@ -307,8 +313,8 @@ async function runStagingSmoke(config: StagingSmokeConfig): Promise<StagingSmoke
 }
 
 async function authenticate(page: Page, config: StagingSmokeConfig) {
-  if (config.sessionCookie) {
-    await addCookie(page.context(), config.sessionCookie, config.origin)
+  if (config.accessToken) {
+    await page.goto('/quickstart')
     return
   }
   if (config.effectiveStorageState) {
@@ -316,7 +322,7 @@ async function authenticate(page: Page, config: StagingSmokeConfig) {
   }
 
   await page.goto('/quickstart')
-  await page.getByRole('link', { name: 'Continue with FlareAuth' }).click()
+  await page.getByRole('button', { name: 'Continue with FlareAuth' }).click()
   await fillLoginField(page, /email|username/i, config.loginEmail, 'email or username')
   await fillLoginField(page, /password/i, config.loginPassword, 'password')
   await clickLoginSubmit(page)
@@ -335,25 +341,6 @@ async function expectAuthenticated(page: Page) {
   }
   await page.goto('/quickstart')
   await expect(page.getByText('Any Managed Agents').first()).toBeVisible()
-}
-
-async function addCookie(context: BrowserContext, rawCookie: string, origin: string) {
-  const url = new URL(origin)
-  const [firstCookie] = rawCookie.split(';')
-  const separator = firstCookie?.indexOf('=') ?? -1
-  if (!firstCookie || separator === -1) {
-    throw new Error('AMA_E2E_COOKIE must look like "__Host-ama_session=<value>"')
-  }
-  await context.addCookies([
-    {
-      name: firstCookie.slice(0, separator).trim(),
-      value: firstCookie.slice(separator + 1).trim(),
-      url: url.origin,
-      httpOnly: true,
-      secure: url.protocol === 'https:',
-      sameSite: 'Lax',
-    },
-  ])
 }
 
 async function apiJson<T>(

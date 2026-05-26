@@ -3,12 +3,12 @@ import { env } from 'cloudflare:workers'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cloudflareSecretRequests, defaultClaims, setupFlareAuth, signIn } from '../test/auth'
 
-async function jsonFetch(path: string, cookie: string, init: RequestInit = {}) {
+async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
     ...init,
     headers: {
       'content-type': 'application/json',
-      cookie,
+      authorization,
       ...init.headers,
     },
   })
@@ -40,8 +40,8 @@ describe('[CF] /api/vaults', () => {
   })
 
   it('creates, lists, reads, updates, and archives project-scoped vaults', async () => {
-    const cookie = await signIn()
-    const createRes = await jsonFetch('/api/vaults', cookie, {
+    const authorization = await signIn()
+    const createRes = await jsonFetch('/api/vaults', authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Provider credentials',
@@ -54,29 +54,29 @@ describe('[CF] /api/vaults', () => {
     const created = (await createRes.json()) as { id: string; scope: string; status: string; metadata: unknown }
     expect(created).toMatchObject({ scope: 'project', status: 'active', metadata: { owner: 'platform' } })
 
-    const readRes = await jsonFetch(`/api/vaults/${created.id}`, cookie)
+    const readRes = await jsonFetch(`/api/vaults/${created.id}`, authorization)
     expect(readRes.status).toBe(200)
     await expect(readRes.json()).resolves.toMatchObject({ id: created.id, name: 'Provider credentials' })
 
-    const updateRes = await jsonFetch(`/api/vaults/${created.id}`, cookie, {
+    const updateRes = await jsonFetch(`/api/vaults/${created.id}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ name: 'Updated credentials' }),
     })
     expect(updateRes.status).toBe(200)
     await expect(updateRes.json()).resolves.toMatchObject({ id: created.id, name: 'Updated credentials' })
 
-    const archiveRes = await jsonFetch(`/api/vaults/${created.id}`, cookie, { method: 'DELETE' })
+    const archiveRes = await jsonFetch(`/api/vaults/${created.id}`, authorization, { method: 'DELETE' })
     expect(archiveRes.status).toBe(204)
 
-    const defaultListRes = await jsonFetch('/api/vaults', cookie)
+    const defaultListRes = await jsonFetch('/api/vaults', authorization)
     const defaultList = (await defaultListRes.json()) as { data: Array<{ id: string }> }
     expect(defaultList.data).not.toContainEqual(expect.objectContaining({ id: created.id }))
 
-    const archivedListRes = await jsonFetch('/api/vaults?includeArchived=true&status=archived', cookie)
+    const archivedListRes = await jsonFetch('/api/vaults?includeArchived=true&status=archived', authorization)
     const archivedList = (await archivedListRes.json()) as { data: Array<{ id: string; status: string }> }
     expect(archivedList.data).toContainEqual(expect.objectContaining({ id: created.id, status: 'archived' }))
 
-    const createCredentialRes = await jsonFetch(`/api/vaults/${created.id}/credentials`, cookie, {
+    const createCredentialRes = await jsonFetch(`/api/vaults/${created.id}/credentials`, authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Archived vault token',
@@ -94,14 +94,14 @@ describe('[CF] /api/vaults', () => {
     const rawSecret = 'raw-secret-material'
     const rotatedSecret = 'rotated-secret-material'
     const thirdSecret = 'third-secret-material'
-    const cookie = await signIn()
-    const vaultRes = await jsonFetch('/api/vaults', cookie, {
+    const authorization = await signIn()
+    const vaultRes = await jsonFetch('/api/vaults', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Provider credentials' }),
     })
     const vault = (await vaultRes.json()) as { id: string }
 
-    const createCredentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, cookie, {
+    const createCredentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Workers AI token',
@@ -122,15 +122,15 @@ describe('[CF] /api/vaults', () => {
     expect(cloudflareSecretRequests().writes).toHaveLength(1)
     expect(JSON.stringify(cloudflareSecretRequests().writes[0])).toContain(rawSecret)
 
-    const readCredentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials/${credential.id}`, cookie)
+    const readCredentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials/${credential.id}`, authorization)
     expect(readCredentialRes.status).toBe(200)
     expect(JSON.stringify(await readCredentialRes.clone().json())).not.toContain(rawSecret)
 
-    const listCredentialsRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, cookie)
+    const listCredentialsRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, authorization)
     expect(listCredentialsRes.status).toBe(200)
     expect(JSON.stringify(await listCredentialsRes.clone().json())).not.toContain(rawSecret)
 
-    const scopeChangeRes = await jsonFetch(`/api/vaults/${vault.id}`, cookie, {
+    const scopeChangeRes = await jsonFetch(`/api/vaults/${vault.id}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ scope: 'organization' }),
     })
@@ -144,7 +144,7 @@ describe('[CF] /api/vaults', () => {
     ).all()
     expect(JSON.stringify(dbRows.results)).not.toContain(rawSecret)
 
-    const invalidCredentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, cookie, {
+    const invalidCredentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Invalid token',
@@ -158,7 +158,7 @@ describe('[CF] /api/vaults', () => {
       .first<{ count: number }>()
     expect(credentialCount?.count).toBe(1)
 
-    const mixedProviderRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, cookie, {
+    const mixedProviderRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Mixed token',
@@ -172,7 +172,7 @@ describe('[CF] /api/vaults', () => {
     })
     expect(mixedProviderRes.status).toBe(400)
 
-    const rotateRes = await jsonFetch(`/api/vaults/${vault.id}/credentials/${credential.id}/versions`, cookie, {
+    const rotateRes = await jsonFetch(`/api/vaults/${vault.id}/credentials/${credential.id}/versions`, authorization, {
       method: 'POST',
       body: JSON.stringify({ provider: 'cloudflare-secrets', secretValue: rotatedSecret }),
     })
@@ -188,7 +188,7 @@ describe('[CF] /api/vaults', () => {
 
     const versionsAfterRotateRes = await jsonFetch(
       `/api/vaults/${vault.id}/credentials/${credential.id}/versions?includeArchived=true`,
-      cookie,
+      authorization,
     )
     const versionsAfterRotate = (await versionsAfterRotateRes.json()) as {
       data: Array<{ id: string; status: string; supersededAt: string | null }>
@@ -201,7 +201,7 @@ describe('[CF] /api/vaults', () => {
       }),
     )
 
-    const environmentRes = await jsonFetch('/api/environments', cookie, {
+    const environmentRes = await jsonFetch('/api/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Runtime with old credential',
@@ -212,7 +212,7 @@ describe('[CF] /api/vaults', () => {
 
     const deleteReferencedRes = await jsonFetch(
       `/api/vaults/${vault.id}/credentials/${credential.id}/versions/${credential.activeVersion.id}?confirm=true`,
-      cookie,
+      authorization,
       { method: 'DELETE' },
     )
     expect(deleteReferencedRes.status).toBe(409)
@@ -221,17 +221,21 @@ describe('[CF] /api/vaults', () => {
     })
 
     const secondVersionId = rotated.activeVersion.id
-    const thirdRotateRes = await jsonFetch(`/api/vaults/${vault.id}/credentials/${credential.id}/versions`, cookie, {
-      method: 'POST',
-      body: JSON.stringify({ provider: 'cloudflare-secrets', secretValue: thirdSecret }),
-    })
+    const thirdRotateRes = await jsonFetch(
+      `/api/vaults/${vault.id}/credentials/${credential.id}/versions`,
+      authorization,
+      {
+        method: 'POST',
+        body: JSON.stringify({ provider: 'cloudflare-secrets', secretValue: thirdSecret }),
+      },
+    )
     expect(thirdRotateRes.status).toBe(201)
     const thirdRotated = (await thirdRotateRes.json()) as { activeVersion: { id: string } }
     expect(JSON.stringify(thirdRotated)).not.toContain(thirdSecret)
 
     const deleteActiveRes = await jsonFetch(
       `/api/vaults/${vault.id}/credentials/${credential.id}/versions/${thirdRotated.activeVersion.id}?confirm=true`,
-      cookie,
+      authorization,
       { method: 'DELETE' },
     )
     expect(deleteActiveRes.status).toBe(409)
@@ -241,7 +245,7 @@ describe('[CF] /api/vaults', () => {
 
     const deleteUnusedRes = await jsonFetch(
       `/api/vaults/${vault.id}/credentials/${credential.id}/versions/${secondVersionId}?confirm=true`,
-      cookie,
+      authorization,
       { method: 'DELETE' },
     )
     expect(deleteUnusedRes.status).toBe(204)
@@ -253,7 +257,7 @@ describe('[CF] /api/vaults', () => {
     expect(versionsRes.status).toBe(401)
     const authenticatedVersionsRes = await jsonFetch(
       `/api/vaults/${vault.id}/credentials/${credential.id}/versions?includeArchived=true`,
-      cookie,
+      authorization,
     )
     const versions = (await authenticatedVersionsRes.json()) as {
       data: Array<{ id: string; status: string; metadata: Record<string, unknown> }>
@@ -279,7 +283,7 @@ describe('[CF] /api/vaults', () => {
     expect(JSON.stringify(rotatedDbRows.results)).not.toContain(rotatedSecret)
     expect(JSON.stringify(rotatedDbRows.results)).not.toContain(thirdSecret)
 
-    const revokeRes = await jsonFetch(`/api/vaults/${vault.id}/credentials/${credential.id}`, cookie, {
+    const revokeRes = await jsonFetch(`/api/vaults/${vault.id}/credentials/${credential.id}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ status: 'revoked', revokeReason: 'Replaced by provider binding' }),
     })
@@ -293,7 +297,7 @@ describe('[CF] /api/vaults', () => {
     })
     const versionsAfterRevokeRes = await jsonFetch(
       `/api/vaults/${vault.id}/credentials/${credential.id}/versions?includeArchived=true`,
-      cookie,
+      authorization,
     )
     const versionsAfterRevoke = (await versionsAfterRevokeRes.json()) as {
       data: Array<{ id: string; status: string; revokedAt: string | null }>
@@ -304,13 +308,13 @@ describe('[CF] /api/vaults', () => {
   })
 
   it('supports approved external vault paths without exposing cross-project metadata', async () => {
-    const cookie = await signIn()
-    const vaultRes = await jsonFetch('/api/vaults', cookie, {
+    const authorization = await signIn()
+    const vaultRes = await jsonFetch('/api/vaults', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'External vault' }),
     })
     const vault = (await vaultRes.json()) as { id: string }
-    const credentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, cookie, {
+    const credentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'GitHub token',
@@ -343,13 +347,13 @@ describe('[CF] /api/vaults', () => {
   })
 
   it('isolates project vaults inside the same organization and shares organization-scoped vaults', async () => {
-    const cookie = await signIn()
-    const projectVaultRes = await jsonFetch('/api/vaults', cookie, {
+    const authorization = await signIn()
+    const projectVaultRes = await jsonFetch('/api/vaults', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Project vault', scope: 'project' }),
     })
     const projectVault = (await projectVaultRes.json()) as { id: string; organizationId: string }
-    const orgVaultRes = await jsonFetch('/api/vaults', cookie, {
+    const orgVaultRes = await jsonFetch('/api/vaults', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Organization vault', scope: 'organization' }),
     })
@@ -367,12 +371,14 @@ describe('[CF] /api/vaults', () => {
         new Date().toISOString(),
       )
       .run()
-    await env.DB.prepare('UPDATE app_sessions SET project_id = ?').bind(alternateProjectId).run()
-
-    const projectReadRes = await jsonFetch(`/api/vaults/${projectVault.id}`, cookie)
+    const projectReadRes = await jsonFetch(`/api/vaults/${projectVault.id}`, authorization, {
+      headers: { 'x-ama-project-id': alternateProjectId },
+    })
     expect(projectReadRes.status).toBe(404)
 
-    const orgReadRes = await jsonFetch(`/api/vaults/${orgVault.id}`, cookie)
+    const orgReadRes = await jsonFetch(`/api/vaults/${orgVault.id}`, authorization, {
+      headers: { 'x-ama-project-id': alternateProjectId },
+    })
     expect(orgReadRes.status).toBe(200)
     await expect(orgReadRes.json()).resolves.toMatchObject({ id: orgVault.id, scope: 'organization' })
   })

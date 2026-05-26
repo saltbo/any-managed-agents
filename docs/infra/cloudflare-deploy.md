@@ -20,21 +20,17 @@ Required settings:
 - Issuer: `FLAREAUTH_ISSUER`
 - Client id: `FLAREAUTH_CLIENT_ID`
 - Client secret: store as Wrangler secret `FLAREAUTH_CLIENT_SECRET`
-- Redirect URI: `FLAREAUTH_REDIRECT_URI`, set to
-  `https://<worker-host>/api/auth/callback`
+- Redirect URI: configure in FlareAuth as `https://<worker-host>/auth/callback`
 - Scopes: `openid email profile`
 - Flow: authorization code with PKCE
 
-The Worker uses the community `openid-client` library for discovery, PKCE,
-callback exchange, and userinfo retrieval. Do not implement OIDC parsing or
-token validation by hand.
+The browser uses the community `oidc-client-ts` library for authorization-code
+PKCE redirect handling. The Worker uses the community `openid-client` library for
+discovery and userinfo retrieval from FlareAuth bearer tokens. Do not implement
+OIDC parsing or token validation by hand.
 
-Session settings:
+Control-plane settings:
 
-- `AMA_SESSION_SECRET`: 32 bytes or stronger random secret, stored with Wrangler
-  secrets.
-- `AMA_COOKIE_SECURE=true` for deployed environments.
-- `AMA_COOKIE_SAME_SITE=Lax` unless the deployment requires cross-site embedding.
 - `AMA_ALLOWED_ORIGINS`: comma-separated browser origins allowed for credentialed
   CORS requests.
 
@@ -91,16 +87,16 @@ After deploying staging, run the real runtime smoke against the staging origin:
 
 ```bash
 AMA_STAGING_ORIGIN=https://any-managed-agents-staging.saltbo.workers.dev \
-AMA_E2E_STORAGE_STATE=.secrets/ama-storage-state.json \
+AMA_E2E_ACCESS_TOKEN="$FLAREAUTH_ACCESS_TOKEN" \
 npm run test:smoke
 ```
 
 `AMA_STAGING_ORIGIN` defaults to the staging Workers host. Auth input precedence is
-explicit: `AMA_E2E_COOKIE` is used first, `AMA_E2E_STORAGE_STATE` second, and
+explicit: `AMA_E2E_ACCESS_TOKEN` is used first, `AMA_E2E_STORAGE_STATE` second, and
 `AMA_E2E_EMAIL` plus `AMA_E2E_PASSWORD` third. Set only one auth method in CI
 unless intentionally overriding a lower precedence method.
 
-- `AMA_E2E_COOKIE`: a FlareAuth-issued AMA session cookie.
+- `AMA_E2E_ACCESS_TOKEN`: a FlareAuth-issued OIDC access token.
 - `AMA_E2E_STORAGE_STATE`: Playwright storage state from a real FlareAuth login.
   The documented `.secrets/` directory is ignored by git.
 - `AMA_E2E_EMAIL` and `AMA_E2E_PASSWORD`: credentials for the browser login
@@ -110,7 +106,7 @@ The staging smoke never queries or mutates auth databases. It verifies
 `/api/auth/me`, creates an environment, agent, and session through public `/api`
 routes, opens the session detail page, sends multiple runtime messages through
 the UI/WebSocket, checks transcript, tool, debug error, and reload dedupe
-behavior, then archives the smoke resources. Keep the storage state or cookie in
+behavior, then archives the smoke resources. Keep the access token or storage state in
 the CI secret manager, write it only to an ignored runtime path, and avoid
 printing it in logs. Do not run this as the default e2e path because session
 startup may consume runtime and model quota.

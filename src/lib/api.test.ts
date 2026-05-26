@@ -1,8 +1,23 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from './api'
 
 describe('shared API client', () => {
+  beforeEach(() => {
+    window.localStorage.setItem('ama:e2e-access-token', 'e2e:api-test')
+  })
+
+  function headerValue(headers: HeadersInit | undefined, name: string) {
+    if (headers instanceof Headers) {
+      return headers.get(name)
+    }
+    if (Array.isArray(headers)) {
+      return new Headers(headers).get(name)
+    }
+    return headers?.[name]
+  }
+
   afterEach(() => {
+    window.localStorage.clear()
     vi.unstubAllGlobals()
   })
 
@@ -37,9 +52,9 @@ describe('shared API client', () => {
       }),
     )
     const headers = fetchMock.mock.calls[0]?.[1]?.headers
-    expect(headers).toBeInstanceOf(Headers)
-    expect((headers as Headers).get('accept')).toBe('application/json')
-    expect((headers as Headers).get('x-ama-client')).toBe('web-rpc')
+    expect(headerValue(headers, 'accept')).toBe('application/json')
+    expect(headerValue(headers, 'authorization')).toBe('Bearer e2e:api-test')
+    expect(headerValue(headers, 'x-ama-client')).toBe('web-rpc')
   })
 
   it('uses explicit list options for archived resources', async () => {
@@ -65,7 +80,7 @@ describe('shared API client', () => {
       }),
     )
     const headers = fetchMock.mock.calls[0]?.[1]?.headers
-    expect(headers).toBeInstanceOf(Headers)
-    expect((headers as Headers).get('x-ama-client')).toBe('web-rpc')
+    expect(headerValue(headers, 'authorization')).toBe('Bearer e2e:api-test')
+    expect(headerValue(headers, 'x-ama-client')).toBe('web-rpc')
   })
 })

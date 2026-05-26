@@ -698,6 +698,7 @@ async function handleRuntimeWebSocketMessage(
   }
   const rpcUrl = new URL(requestUrl)
   rpcUrl.pathname = `/runtime/sessions/${session.id}/rpc`
+  rpcUrl.searchParams.delete('access_token')
   const proxyRequest = new Request(rpcUrl, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -757,7 +758,7 @@ export function createApp() {
     .route('/api/sessions', sessionRoutes)
     .route('/api/vaults', vaults)
 
-  routes.openAPIRegistry.registerComponent('securitySchemes', 'cookieAuth', ApiSecuritySchemes.cookieAuth)
+  routes.openAPIRegistry.registerComponent('securitySchemes', 'bearerAuth', ApiSecuritySchemes.bearerAuth)
 
   routes.doc('/api/openapi.json', {
     openapi: '3.0.0',
@@ -805,6 +806,7 @@ export function createApp() {
       const streamController = new AbortController()
       const streamUrl = new URL(c.req.url)
       streamUrl.pathname = `/runtime/sessions/${session.id}/rpc`
+      streamUrl.searchParams.delete('access_token')
       const streamRequest = new Request(streamUrl, {
         method: 'GET',
         headers: c.req.raw.headers,

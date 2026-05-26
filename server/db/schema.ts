@@ -1,62 +1,11 @@
 import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
-export const users = sqliteTable('users', {
-  id: text('id').primaryKey(),
-  flareauthSubject: text('flareauth_subject').notNull().unique(),
-  email: text('email').notNull(),
-  name: text('name'),
-  avatarUrl: text('avatar_url'),
-  createdAt: text('created_at').notNull(),
-  updatedAt: text('updated_at').notNull(),
-})
-
-export const organizations = sqliteTable('organizations', {
-  id: text('id').primaryKey(),
-  flareauthOrganizationId: text('flareauth_organization_id').notNull().unique(),
-  name: text('name').notNull(),
-  createdAt: text('created_at').notNull(),
-  updatedAt: text('updated_at').notNull(),
-})
-
 export const projects = sqliteTable('projects', {
   id: text('id').primaryKey(),
-  organizationId: text('organization_id')
-    .notNull()
-    .references(() => organizations.id),
+  organizationId: text('organization_id').notNull(),
   name: text('name').notNull(),
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
-})
-
-export const memberships = sqliteTable('memberships', {
-  id: text('id').primaryKey(),
-  userId: text('user_id')
-    .notNull()
-    .references(() => users.id),
-  organizationId: text('organization_id')
-    .notNull()
-    .references(() => organizations.id),
-  roles: text('roles').notNull(),
-  permissions: text('permissions').notNull(),
-  createdAt: text('created_at').notNull(),
-  updatedAt: text('updated_at').notNull(),
-})
-
-export const appSessions = sqliteTable('app_sessions', {
-  id: text('id').primaryKey(),
-  tokenHash: text('token_hash').notNull().unique(),
-  userId: text('user_id')
-    .notNull()
-    .references(() => users.id),
-  organizationId: text('organization_id')
-    .notNull()
-    .references(() => organizations.id),
-  projectId: text('project_id')
-    .notNull()
-    .references(() => projects.id),
-  expiresAt: text('expires_at').notNull(),
-  revokedAt: text('revoked_at'),
-  createdAt: text('created_at').notNull(),
 })
 
 export const agentDefinitions = sqliteTable(
@@ -145,9 +94,7 @@ export const vaults = sqliteTable(
   'vaults',
   {
     id: text('id').primaryKey(),
-    organizationId: text('organization_id')
-      .notNull()
-      .references(() => organizations.id),
+    organizationId: text('organization_id').notNull(),
     projectId: text('project_id').references(() => projects.id),
     name: text('name').notNull(),
     description: text('description'),
@@ -171,9 +118,7 @@ export const vaultCredentials = sqliteTable(
     vaultId: text('vault_id')
       .notNull()
       .references(() => vaults.id),
-    organizationId: text('organization_id')
-      .notNull()
-      .references(() => organizations.id),
+    organizationId: text('organization_id').notNull(),
     projectId: text('project_id').references(() => projects.id),
     name: text('name').notNull(),
     type: text('type').notNull(),
@@ -182,7 +127,7 @@ export const vaultCredentials = sqliteTable(
     status: text('status').notNull().default('active'),
     activeVersionId: text('active_version_id'),
     revokedAt: text('revoked_at'),
-    revokedByUserId: text('revoked_by_user_id').references(() => users.id),
+    revokedByUserId: text('revoked_by_user_id'),
     revokeReason: text('revoke_reason'),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
@@ -203,9 +148,7 @@ export const vaultCredentialVersions = sqliteTable(
     vaultId: text('vault_id')
       .notNull()
       .references(() => vaults.id),
-    organizationId: text('organization_id')
-      .notNull()
-      .references(() => organizations.id),
+    organizationId: text('organization_id').notNull(),
     projectId: text('project_id').references(() => projects.id),
     version: integer('version').notNull(),
     provider: text('provider').notNull(),
@@ -267,8 +210,8 @@ export const sessions = sqliteTable(
     agentId: text('agent_id')
       .notNull()
       .references(() => agentDefinitions.id),
-    organizationId: text('organization_id').references(() => organizations.id),
-    createdByUserId: text('created_by_user_id').references(() => users.id),
+    organizationId: text('organization_id'),
+    createdByUserId: text('created_by_user_id'),
     agentVersionId: text('agent_version_id').references(() => agentDefinitionVersions.id),
     agentSnapshot: text('agent_snapshot'),
     environmentId: text('environment_id').references(() => environments.id),
@@ -303,9 +246,7 @@ export const sessionEvents = sqliteTable(
   'session_events',
   {
     id: text('id').primaryKey(),
-    organizationId: text('organization_id')
-      .notNull()
-      .references(() => organizations.id),
+    organizationId: text('organization_id').notNull(),
     projectId: text('project_id')
       .notNull()
       .references(() => projects.id),
@@ -338,9 +279,7 @@ export const providerConfigs = sqliteTable(
   'provider_configs',
   {
     id: text('id').primaryKey(),
-    organizationId: text('organization_id')
-      .notNull()
-      .references(() => organizations.id),
+    organizationId: text('organization_id').notNull(),
     projectId: text('project_id')
       .notNull()
       .references(() => projects.id),
@@ -368,9 +307,7 @@ export const providerModels = sqliteTable(
   'provider_models',
   {
     id: text('id').primaryKey(),
-    organizationId: text('organization_id')
-      .notNull()
-      .references(() => organizations.id),
+    organizationId: text('organization_id').notNull(),
     projectId: text('project_id')
       .notNull()
       .references(() => projects.id),
@@ -397,9 +334,7 @@ export const providerAccessRules = sqliteTable(
   'provider_access_rules',
   {
     id: text('id').primaryKey(),
-    organizationId: text('organization_id')
-      .notNull()
-      .references(() => organizations.id),
+    organizationId: text('organization_id').notNull(),
     projectId: text('project_id')
       .notNull()
       .references(() => projects.id),
@@ -419,9 +354,7 @@ export const governancePolicies = sqliteTable(
   'governance_policies',
   {
     id: text('id').primaryKey(),
-    organizationId: text('organization_id')
-      .notNull()
-      .references(() => organizations.id),
+    organizationId: text('organization_id').notNull(),
     projectId: text('project_id')
       .notNull()
       .references(() => projects.id),
@@ -443,9 +376,7 @@ export const budgets = sqliteTable(
   'budgets',
   {
     id: text('id').primaryKey(),
-    organizationId: text('organization_id')
-      .notNull()
-      .references(() => organizations.id),
+    organizationId: text('organization_id').notNull(),
     projectId: text('project_id')
       .notNull()
       .references(() => projects.id),
@@ -467,9 +398,7 @@ export const usageRecords = sqliteTable(
   'usage_records',
   {
     id: text('id').primaryKey(),
-    organizationId: text('organization_id')
-      .notNull()
-      .references(() => organizations.id),
+    organizationId: text('organization_id').notNull(),
     projectId: text('project_id')
       .notNull()
       .references(() => projects.id),
@@ -502,9 +431,7 @@ export const auditRecords = sqliteTable(
   'audit_records',
   {
     id: text('id').primaryKey(),
-    organizationId: text('organization_id')
-      .notNull()
-      .references(() => organizations.id),
+    organizationId: text('organization_id').notNull(),
     projectId: text('project_id'),
     actorUserId: text('actor_user_id'),
     actorType: text('actor_type').notNull().default('user'),
@@ -556,9 +483,7 @@ export const mcpConnections = sqliteTable(
   'mcp_connections',
   {
     id: text('id').primaryKey(),
-    organizationId: text('organization_id')
-      .notNull()
-      .references(() => organizations.id),
+    organizationId: text('organization_id').notNull(),
     projectId: text('project_id')
       .notNull()
       .references(() => projects.id),
@@ -589,9 +514,7 @@ export const mcpConnectionTools = sqliteTable(
     connectionId: text('connection_id')
       .notNull()
       .references(() => mcpConnections.id),
-    organizationId: text('organization_id')
-      .notNull()
-      .references(() => organizations.id),
+    organizationId: text('organization_id').notNull(),
     projectId: text('project_id')
       .notNull()
       .references(() => projects.id),

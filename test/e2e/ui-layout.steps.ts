@@ -105,10 +105,9 @@ When('the user opens the login page', async function (this: UiWorld) {
 
 Then('the page offers FlareAuth sign-in and preserves the requested return path', async function (this: UiWorld) {
   const page = requireUiWorkflow(this).page
-  await expect(page.getByRole('link', { name: 'Continue with FlareAuth' })).toBeVisible()
-  const href = await page.getByRole('link', { name: 'Continue with FlareAuth' }).getAttribute('href')
-  assert.ok(href?.includes('/api/auth/login'), 'Expected FlareAuth login route')
-  assert.ok(href?.includes('returnTo=%2Fsessions%3Fstatus%3Didle'), 'Expected login return path to be preserved')
+  const action = page.getByRole('button', { name: 'Continue with FlareAuth' })
+  await expect(action).toBeVisible()
+  assert.equal(await action.getAttribute('href'), null, 'AMA must not expose a local login URL')
 })
 
 Given('the developer is signed in for the first time', { timeout: 120_000 }, async function (this: UiWorld) {

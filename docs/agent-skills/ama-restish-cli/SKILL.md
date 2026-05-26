@@ -15,7 +15,7 @@ Use this skill when an agent needs terminal automation for Any Managed Agents re
    export AMA_ORIGIN="https://ama.example.com"
    ```
 
-2. Authenticate through the documented AMA auth flow. The current implemented OpenAPI security scheme is the FlareAuth-issued AMA session cookie, declared as `cookieAuth` in `/api/openapi.json`.
+2. Authenticate through FlareAuth and provide a FlareAuth-issued OIDC access token. The current implemented OpenAPI security scheme is `bearerAuth` in `/api/openapi.json`.
 
 3. Configure restish from the published OpenAPI document:
 
@@ -74,6 +74,6 @@ Run `npm run test:e2e` in this repository when you need local evidence that the 
 ## Safety Boundaries
 
 - Confirm ids before `archiveAgent`, `archiveEnvironment`, `archiveVault`, `archiveSession`, `deleteProvider`, or `deleteVaultCredentialVersion`.
-- Treat vault values and auth cookies as secrets. Never paste raw secret values into notes, commits, or screenshots.
+- Treat vault values and auth tokens as secrets. Never paste raw secret values into notes, commits, or screenshots.
 - Runtime interaction remains Pi-compatible. Discover a session's `runtimeEndpointPath` with `readSession`, then use AMA runtime endpoints or Pi-compatible helpers for task traffic.
 - Do not add a `bin`, shell wrapper, npm global command, or project-specific command surface for AMA control-plane work.

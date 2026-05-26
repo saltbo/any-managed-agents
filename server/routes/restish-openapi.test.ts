@@ -13,12 +13,12 @@ interface OpenApiDocument {
 
 const METHODS = new Set(['get', 'post', 'put', 'patch', 'delete'])
 
-async function jsonFetch(path: string, cookie: string, init: RequestInit = {}) {
+async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
     ...init,
     headers: {
       'content-type': 'application/json',
-      cookie,
+      authorization,
       ...init.headers,
     },
   })
@@ -66,9 +66,9 @@ describe('[CF] restish/OpenAPI control-plane path', () => {
   })
 
   it('exercises the core restish resource workflow over documented /api paths', async () => {
-    const cookie = await signIn()
+    const authorization = await signIn()
 
-    const environmentRes = await jsonFetch('/api/environments', cookie, {
+    const environmentRes = await jsonFetch('/api/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Restish e2e environment',
@@ -79,7 +79,7 @@ describe('[CF] restish/OpenAPI control-plane path', () => {
     expect(environmentRes.status).toBe(201)
     const environment = (await environmentRes.json()) as { id: string; currentVersionId: string }
 
-    const agentRes = await jsonFetch('/api/agents', cookie, {
+    const agentRes = await jsonFetch('/api/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Restish e2e agent',
@@ -89,7 +89,7 @@ describe('[CF] restish/OpenAPI control-plane path', () => {
     expect(agentRes.status).toBe(201)
     const agent = (await agentRes.json()) as { id: string; currentVersionId: string }
 
-    const sessionRes = await jsonFetch('/api/sessions', cookie, {
+    const sessionRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
     })

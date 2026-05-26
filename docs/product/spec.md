@@ -17,6 +17,7 @@ Any Managed Agents is a Cloudflare-native managed agents system. It is inspired 
 - Workers AI is a first-class provider, and the model layer supports all configured providers through provider adapters.
 - Anthropic is optional, not required.
 - Authentication is delegated to FlareAuth.
+- FlareAuth owns users and organizations; AMA stores project and product-resource metadata only.
 - Secret values are stored in Cloudflare Secrets; D1 stores metadata and references only.
 - BDD specs are the agent-facing acceptance contract for development and verification.
 - E2E specs use Cucumber with Playwright.
@@ -25,7 +26,7 @@ Any Managed Agents is a Cloudflare-native managed agents system. It is inspired 
 
 The platform owns the control plane:
 
-- organizations, projects, and users
+- FlareAuth-backed tenancy and AMA projects
 - agent definitions
 - provider configuration for all supported providers
 - model policy

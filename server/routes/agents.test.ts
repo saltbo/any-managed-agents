@@ -2,19 +2,19 @@ import { SELF } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultClaims, setupFlareAuth, signIn } from '../test/auth'
 
-async function jsonFetch(path: string, cookie: string, init: RequestInit = {}) {
+async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
     ...init,
     headers: {
       'content-type': 'application/json',
-      cookie,
+      authorization,
       ...init.headers,
     },
   })
 }
 
-async function createEnvironment(cookie: string) {
-  const res = await jsonFetch('/api/environments', cookie, {
+async function createEnvironment(authorization: string) {
+  const res = await jsonFetch('/api/environments', authorization, {
     method: 'POST',
     body: JSON.stringify({
       name: 'Node workspace',
@@ -27,14 +27,14 @@ async function createEnvironment(cookie: string) {
   return (await res.json()) as { id: string; currentVersionId: string; version: number }
 }
 
-async function connectMcp(cookie: string) {
-  const vaultRes = await jsonFetch('/api/vaults', cookie, {
+async function connectMcp(authorization: string) {
+  const vaultRes = await jsonFetch('/api/vaults', authorization, {
     method: 'POST',
     body: JSON.stringify({ name: 'Agent MCP credentials' }),
   })
   expect(vaultRes.status).toBe(201)
   const vault = (await vaultRes.json()) as { id: string }
-  const credentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, cookie, {
+  const credentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, authorization, {
     method: 'POST',
     body: JSON.stringify({
       name: 'GitHub token',
@@ -45,7 +45,7 @@ async function connectMcp(cookie: string) {
   })
   expect(credentialRes.status).toBe(201)
   const credential = (await credentialRes.json()) as { id: string; activeVersionId: string }
-  const connectRes = await jsonFetch('/api/mcp/connections', cookie, {
+  const connectRes = await jsonFetch('/api/mcp/connections', authorization, {
     method: 'POST',
     body: JSON.stringify({
       connectorId: 'github',
@@ -102,10 +102,10 @@ describe('[CF] /api/agents', () => {
   })
 
   it('creates, reads, updates, versions, and archives project-scoped agents', async () => {
-    const cookie = await signIn()
-    await connectMcp(cookie)
+    const authorization = await signIn()
+    await connectMcp(authorization)
 
-    const createRes = await jsonFetch('/api/agents', cookie, {
+    const createRes = await jsonFetch('/api/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Research assistant',
@@ -122,7 +122,7 @@ describe('[CF] /api/agents', () => {
     const created = (await createRes.json()) as { id: string; currentVersionId: string; version: number }
     expect(created.version).toBe(1)
 
-    const readRes = await jsonFetch(`/api/agents/${created.id}`, cookie)
+    const readRes = await jsonFetch(`/api/agents/${created.id}`, authorization)
     expect(readRes.status).toBe(200)
     await expect(readRes.json()).resolves.toMatchObject({
       id: created.id,
@@ -131,7 +131,7 @@ describe('[CF] /api/agents', () => {
       mcpConnectors: ['github'],
     })
 
-    const updateRes = await jsonFetch(`/api/agents/${created.id}`, cookie, {
+    const updateRes = await jsonFetch(`/api/agents/${created.id}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ description: 'Updated description', metadata: { owner: 'runtime', remove: null } }),
     })
@@ -152,7 +152,7 @@ describe('[CF] /api/agents', () => {
     })
     expect(updated.metadata).not.toHaveProperty('remove')
 
-    const clearToolsRes = await jsonFetch(`/api/agents/${created.id}`, cookie, {
+    const clearToolsRes = await jsonFetch(`/api/agents/${created.id}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ allowedTools: [] }),
     })
@@ -160,37 +160,37 @@ describe('[CF] /api/agents', () => {
     const clearedTools = (await clearToolsRes.json()) as { version: number; allowedTools: string[] }
     expect(clearedTools).toMatchObject({ version: 3, allowedTools: [] })
 
-    const versionsRes = await jsonFetch(`/api/agents/${created.id}/versions`, cookie)
+    const versionsRes = await jsonFetch(`/api/agents/${created.id}/versions`, authorization)
     expect(versionsRes.status).toBe(200)
     const versions = (await versionsRes.json()) as { data: Array<{ version: number; instructions: string }> }
     expect(versions.data.map((version) => version.version)).toEqual([3, 2, 1])
     expect(versions.data.find((version) => version.version === 1)?.instructions).toBe('Answer with citations.')
 
-    const archiveRes = await jsonFetch(`/api/agents/${created.id}`, cookie, { method: 'DELETE' })
+    const archiveRes = await jsonFetch(`/api/agents/${created.id}`, authorization, { method: 'DELETE' })
     expect(archiveRes.status).toBe(204)
 
-    const listRes = await jsonFetch('/api/agents', cookie)
+    const listRes = await jsonFetch('/api/agents', authorization)
     expect(listRes.status).toBe(200)
     const list = (await listRes.json()) as { data: Array<{ id: string }>; pagination: { hasMore: boolean } }
     expect(list.data).not.toContainEqual(expect.objectContaining({ id: created.id }))
     expect(list.pagination.hasMore).toBe(false)
 
-    const archivedListRes = await jsonFetch('/api/agents?includeArchived=true', cookie)
+    const archivedListRes = await jsonFetch('/api/agents?includeArchived=true', authorization)
     expect(archivedListRes.status).toBe(200)
     const archivedList = (await archivedListRes.json()) as { data: Array<{ id: string; status: string }> }
     expect(archivedList.data).toContainEqual(expect.objectContaining({ id: created.id, status: 'archived' }))
 
-    const archivedReadRes = await jsonFetch(`/api/agents/${created.id}`, cookie)
+    const archivedReadRes = await jsonFetch(`/api/agents/${created.id}`, authorization)
     expect(archivedReadRes.status).toBe(200)
     await expect(archivedReadRes.json()).resolves.toMatchObject({ archivedAt: expect.any(String) })
 
-    const auditRes = await jsonFetch('/api/audit-records?action=agent.archive', cookie)
+    const auditRes = await jsonFetch('/api/audit-records?action=agent.archive', authorization)
     expect(auditRes.status).toBe(200)
     await expect(auditRes.json()).resolves.toMatchObject({
       data: [expect.objectContaining({ resourceId: created.id, outcome: 'success' })],
     })
 
-    const archivedUpdateRes = await jsonFetch(`/api/agents/${created.id}`, cookie, {
+    const archivedUpdateRes = await jsonFetch(`/api/agents/${created.id}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ description: 'Cannot update archived agents' }),
     })
@@ -198,20 +198,20 @@ describe('[CF] /api/agents', () => {
   })
 
   it('lists agents with pagination, search, status, and date filters within the project', async () => {
-    const cookie = await signIn()
-    const createAlphaRes = await jsonFetch('/api/agents', cookie, {
+    const authorization = await signIn()
+    const createAlphaRes = await jsonFetch('/api/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Alpha research' }),
     })
     const alpha = (await createAlphaRes.json()) as { id: string; createdAt: string }
-    const createBetaRes = await jsonFetch('/api/agents', cookie, {
+    const createBetaRes = await jsonFetch('/api/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Beta support' }),
     })
     const beta = (await createBetaRes.json()) as { id: string; createdAt: string }
-    await jsonFetch(`/api/agents/${alpha.id}`, cookie, { method: 'DELETE' })
+    await jsonFetch(`/api/agents/${alpha.id}`, authorization, { method: 'DELETE' })
 
-    const defaultListRes = await jsonFetch('/api/agents?limit=1', cookie)
+    const defaultListRes = await jsonFetch('/api/agents?limit=1', authorization)
     expect(defaultListRes.status).toBe(200)
     const defaultList = (await defaultListRes.json()) as {
       data: Array<{ id: string; status: string }>
@@ -226,7 +226,7 @@ describe('[CF] /api/agents', () => {
     expect(defaultList.data).toEqual([expect.objectContaining({ id: beta.id, status: 'active' })])
     expect(defaultList.pagination).toMatchObject({ limit: 1, hasMore: false, firstId: beta.id, lastId: beta.id })
 
-    const archivedListRes = await jsonFetch('/api/agents?includeArchived=true&limit=1', cookie)
+    const archivedListRes = await jsonFetch('/api/agents?includeArchived=true&limit=1', authorization)
     const archivedList = (await archivedListRes.json()) as {
       data: Array<{ id: string }>
       pagination: { hasMore: boolean; nextCursor: string | null }
@@ -237,28 +237,28 @@ describe('[CF] /api/agents', () => {
 
     const nextPageRes = await jsonFetch(
       `/api/agents?includeArchived=true&limit=1&cursor=${archivedList.pagination.nextCursor}`,
-      cookie,
+      authorization,
     )
     const nextPage = (await nextPageRes.json()) as { data: Array<{ id: string }> }
     expect(nextPage.data.map((agent) => agent.id)).not.toEqual(archivedList.data.map((agent) => agent.id))
 
-    const searchRes = await jsonFetch('/api/agents?includeArchived=true&search=Alpha', cookie)
+    const searchRes = await jsonFetch('/api/agents?includeArchived=true&search=Alpha', authorization)
     const searchList = (await searchRes.json()) as { data: Array<{ id: string }> }
     expect(searchList.data).toEqual([expect.objectContaining({ id: alpha.id })])
 
-    const statusRes = await jsonFetch('/api/agents?includeArchived=true&status=archived', cookie)
+    const statusRes = await jsonFetch('/api/agents?includeArchived=true&status=archived', authorization)
     const statusList = (await statusRes.json()) as { data: Array<{ id: string; status: string }> }
     expect(statusList.data).toContainEqual(expect.objectContaining({ id: alpha.id, status: 'archived' }))
     expect(statusList.data.every((agent) => agent.status === 'archived')).toBe(true)
 
     const dateRes = await jsonFetch(
       `/api/agents?includeArchived=true&createdFrom=${encodeURIComponent(alpha.createdAt)}&createdTo=${encodeURIComponent(beta.createdAt)}`,
-      cookie,
+      authorization,
     )
     const dateList = (await dateRes.json()) as { data: Array<{ id: string }> }
     expect(dateList.data.map((agent) => agent.id)).toEqual(expect.arrayContaining([alpha.id, beta.id]))
 
-    const invalidCursorRes = await jsonFetch('/api/agents?cursor=not-a-cursor', cookie)
+    const invalidCursorRes = await jsonFetch('/api/agents?cursor=not-a-cursor', authorization)
     expect(invalidCursorRes.status).toBe(400)
     await expect(invalidCursorRes.json()).resolves.toMatchObject({
       error: { type: 'validation_error', details: { fields: { cursor: expect.any(String) } } },
@@ -266,9 +266,9 @@ describe('[CF] /api/agents', () => {
   })
 
   it('keeps session snapshots stable after agent and environment updates', async () => {
-    const cookie = await signIn()
-    const environment = await createEnvironment(cookie)
-    const agentRes = await jsonFetch('/api/agents', cookie, {
+    const authorization = await signIn()
+    const environment = await createEnvironment(authorization)
+    const agentRes = await jsonFetch('/api/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Snapshot agent',
@@ -277,7 +277,7 @@ describe('[CF] /api/agents', () => {
     })
     const agent = (await agentRes.json()) as { id: string }
 
-    const sessionRes = await jsonFetch('/api/sessions', cookie, {
+    const sessionRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
     })
@@ -291,11 +291,11 @@ describe('[CF] /api/agents', () => {
     expect(session.agentSnapshot).toMatchObject({ version: 1, instructions: 'Original instructions.' })
     expect(session.environmentSnapshot.version).toBe(1)
 
-    await jsonFetch(`/api/environments/${environment.id}`, cookie, {
+    await jsonFetch(`/api/environments/${environment.id}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ packages: [{ name: 'vite' }] }),
     })
-    await jsonFetch(`/api/agents/${agent.id}`, cookie, {
+    await jsonFetch(`/api/agents/${agent.id}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ instructions: 'New instructions.' }),
     })
@@ -305,16 +305,16 @@ describe('[CF] /api/agents', () => {
   })
 
   it('rejects new sessions for archived agents and archived environments', async () => {
-    const cookie = await signIn()
-    const environment = await createEnvironment(cookie)
-    const agentRes = await jsonFetch('/api/agents', cookie, {
+    const authorization = await signIn()
+    const environment = await createEnvironment(authorization)
+    const agentRes = await jsonFetch('/api/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Archived session agent' }),
     })
     const agent = (await agentRes.json()) as { id: string }
 
-    await jsonFetch(`/api/environments/${environment.id}`, cookie, { method: 'DELETE' })
-    const archivedEnvironmentSessionRes = await jsonFetch('/api/sessions', cookie, {
+    await jsonFetch(`/api/environments/${environment.id}`, authorization, { method: 'DELETE' })
+    const archivedEnvironmentSessionRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
     })
@@ -323,14 +323,14 @@ describe('[CF] /api/agents', () => {
       error: { type: 'conflict', message: 'Selected environment is archived or unavailable' },
     })
 
-    const noEnvironmentAgentRes = await jsonFetch('/api/agents', cookie, {
+    const noEnvironmentAgentRes = await jsonFetch('/api/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Archived agent' }),
     })
     const noEnvironmentAgent = (await noEnvironmentAgentRes.json()) as { id: string }
-    await jsonFetch(`/api/agents/${noEnvironmentAgent.id}`, cookie, { method: 'DELETE' })
+    await jsonFetch(`/api/agents/${noEnvironmentAgent.id}`, authorization, { method: 'DELETE' })
 
-    const archivedAgentSessionRes = await jsonFetch('/api/sessions', cookie, {
+    const archivedAgentSessionRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: noEnvironmentAgent.id, environmentId: environment.id }),
     })
@@ -341,8 +341,8 @@ describe('[CF] /api/agents', () => {
   })
 
   it('rejects invalid model, blocked tools, invalid sandbox policy, and cross-project reads', async () => {
-    const cookie = await signIn()
-    const invalidModelRes = await jsonFetch('/api/agents', cookie, {
+    const authorization = await signIn()
+    const invalidModelRes = await jsonFetch('/api/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Invalid model', model: 'blocked-model' }),
     })
@@ -351,7 +351,7 @@ describe('[CF] /api/agents', () => {
       error: { details: { fields: { model: expect.any(String) } } },
     })
 
-    const blockedToolRes = await jsonFetch('/api/agents', cookie, {
+    const blockedToolRes = await jsonFetch('/api/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Blocked tool', allowedTools: ['secrets.read'] }),
     })
@@ -360,13 +360,13 @@ describe('[CF] /api/agents', () => {
       error: { details: { fields: { allowedTools: expect.any(String) } } },
     })
 
-    const invalidPolicyRes = await jsonFetch('/api/agents', cookie, {
+    const invalidPolicyRes = await jsonFetch('/api/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Invalid policy', sandboxPolicy: { network: 'maybe' } }),
     })
     expect(invalidPolicyRes.status).toBe(400)
 
-    const invalidMcpRes = await jsonFetch('/api/agents', cookie, {
+    const invalidMcpRes = await jsonFetch('/api/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Invalid MCP agent', mcpConnectors: ['linear'] }),
     })
@@ -375,7 +375,7 @@ describe('[CF] /api/agents', () => {
       error: { details: { fields: { mcpConnectors: expect.any(String) } } },
     })
 
-    const rawSecretMetadataRes = await jsonFetch('/api/agents', cookie, {
+    const rawSecretMetadataRes = await jsonFetch('/api/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Raw secret agent', metadata: { secretValue: 'raw-secret' } }),
     })
@@ -384,7 +384,7 @@ describe('[CF] /api/agents', () => {
       error: { details: { fields: { metadata: expect.any(String) } } },
     })
 
-    const rawTokenMetadataRes = await jsonFetch('/api/agents', cookie, {
+    const rawTokenMetadataRes = await jsonFetch('/api/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Raw token agent', metadata: { access_token: 'raw-secret' } }),
     })
@@ -393,13 +393,13 @@ describe('[CF] /api/agents', () => {
       error: { details: { fields: { metadata: expect.any(String) } } },
     })
 
-    const validAgentRes = await jsonFetch('/api/agents', cookie, {
+    const validAgentRes = await jsonFetch('/api/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Valid agent' }),
     })
     expect(validAgentRes.status).toBe(201)
 
-    const createRes = await jsonFetch('/api/agents', cookie, {
+    const createRes = await jsonFetch('/api/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Tenant agent' }),
     })

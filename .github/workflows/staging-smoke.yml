@@ -24,8 +24,8 @@ jobs:
       - run: npm run test:smoke
         env:
           AMA_STAGING_ORIGIN: ${{ secrets.AMA_STAGING_ORIGIN }}
+          AMA_E2E_ACCESS_TOKEN: ${{ secrets.AMA_E2E_ACCESS_TOKEN }}
           AMA_E2E_STORAGE_STATE: ${{ secrets.AMA_E2E_STORAGE_STATE }}
-          AMA_E2E_COOKIE: ${{ secrets.AMA_E2E_COOKIE }}
           AMA_E2E_EMAIL: ${{ secrets.AMA_E2E_EMAIL }}
           AMA_E2E_PASSWORD: ${{ secrets.AMA_E2E_PASSWORD }}
           AMA_E2E_PROVIDER: ${{ secrets.AMA_E2E_PROVIDER }}

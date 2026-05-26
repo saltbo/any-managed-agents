@@ -2416,7 +2416,12 @@ async function sendRuntimeMessage(state: E2EState, message: string) {
     state.runtimeEventTypes = await runtimePage.evaluate(
       async ({ sessionId, message }) => {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-        const socket = new WebSocket(`${protocol}//${window.location.host}/runtime/sessions/${sessionId}/ws`)
+        const token = window.localStorage.getItem('ama:e2e-access-token')
+        const url = new URL(`${protocol}//${window.location.host}/runtime/sessions/${sessionId}/ws`)
+        if (token) {
+          url.searchParams.set('access_token', token)
+        }
+        const socket = new WebSocket(url)
         await new Promise<void>((resolve, reject) => {
           socket.addEventListener('open', () => resolve(), { once: true })
           socket.addEventListener('error', () => reject(new Error('runtime websocket failed')), { once: true })

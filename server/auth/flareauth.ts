@@ -1,17 +1,10 @@
 import { and, eq } from 'drizzle-orm'
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
 import * as client from 'openid-client'
-import { memberships, organizations, projects, users } from '../db/schema'
+import { projects } from '../db/schema'
 import type { Env } from '../env'
 
-export interface OidcLoginAttempt {
-  authorizationUrl: string
-  state: string
-  nonce: string
-  verifier: string
-}
-
-interface UserInfoClaims {
+export interface UserInfoClaims {
   sub: string
   email?: string
   name?: string
@@ -20,14 +13,6 @@ interface UserInfoClaims {
   organization_id?: string
   org_name?: string
   organization_name?: string
-  roles?: unknown
-  permissions?: unknown
-}
-
-export interface LocalAuthPrincipal {
-  userId: string
-  organizationId: string
-  projectId: string
   roles: string[]
   permissions: string[]
 }
@@ -40,22 +25,31 @@ export class OidcError extends Error {
 }
 
 export function requireOidcConfig(env: Env) {
-  if (!env.FLAREAUTH_ISSUER || !env.FLAREAUTH_CLIENT_ID || !env.FLAREAUTH_REDIRECT_URI) {
-    throw new Error('FLAREAUTH_ISSUER, FLAREAUTH_CLIENT_ID, and FLAREAUTH_REDIRECT_URI are required')
+  if (!env.FLAREAUTH_ISSUER || !env.FLAREAUTH_CLIENT_ID) {
+    throw new Error('FLAREAUTH_ISSUER and FLAREAUTH_CLIENT_ID are required')
   }
 
   return {
     issuer: env.FLAREAUTH_ISSUER.replace(/\/$/, ''),
     clientId: env.FLAREAUTH_CLIENT_ID,
     clientSecret: env.FLAREAUTH_CLIENT_SECRET,
-    redirectUri: env.FLAREAUTH_REDIRECT_URI,
+  }
+}
+
+export function publicOidcConfig(env: Env, origin: string) {
+  const config = requireOidcConfig(env)
+  return {
+    authority: config.issuer,
+    clientId: config.clientId,
+    redirectUri: `${origin}/auth/callback`,
+    postLogoutRedirectUri: `${origin}/`,
+    scope: 'openid email profile',
   }
 }
 
 async function createOidcClient(env: Env) {
   const config = requireOidcConfig(env)
   const clientMetadata: Partial<client.ClientMetadata> = {
-    redirect_uris: [config.redirectUri],
     response_types: ['code'],
     token_endpoint_auth_method: config.clientSecret ? 'client_secret_post' : 'none',
   }
@@ -73,8 +67,9 @@ async function createOidcClient(env: Env) {
         [client.customFetch]: async (input, init) => {
           const request = new Request(input, init as RequestInit)
           const requestUrl = new URL(request.url)
+          const issuerUrl = new URL(config.issuer)
           if (
-            requestUrl.origin === new URL(config.issuer).origin &&
+            requestUrl.origin === issuerUrl.origin &&
             (requestUrl.pathname === '/api/auth/.well-known/openid-configuration' ||
               requestUrl.pathname === '/.well-known/openid-configuration/api/auth')
           ) {
@@ -87,7 +82,7 @@ async function createOidcClient(env: Env) {
               end_session_endpoint: `${config.issuer}/oauth2/end-session`,
               response_types_supported: ['code'],
               grant_types_supported: ['authorization_code', 'refresh_token'],
-              token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'],
+              token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post', 'none'],
               code_challenge_methods_supported: ['S256'],
               scopes_supported: ['openid', 'profile', 'email', 'offline_access'],
               subject_types_supported: ['public'],
@@ -104,11 +99,9 @@ async function createOidcClient(env: Env) {
             requestInit.body = (init?.body as BodyInit | undefined) ?? (await request.clone().arrayBuffer())
           }
           const useServiceBinding = env.FLAREAUTH_USE_SERVICE_BINDING !== 'false'
-          const response =
-            useServiceBinding && requestUrl.origin === new URL(config.issuer).origin && env.FLAREAUTH
-              ? await env.FLAREAUTH.fetch(request.url, requestInit)
-              : await fetch(request.url, requestInit)
-          return response
+          return useServiceBinding && requestUrl.origin === issuerUrl.origin && env.FLAREAUTH
+            ? await env.FLAREAUTH.fetch(request.url, requestInit)
+            : await fetch(request.url, requestInit)
         },
       },
     )
@@ -117,55 +110,79 @@ async function createOidcClient(env: Env) {
   }
 }
 
-export async function createLoginAttempt(env: Env): Promise<OidcLoginAttempt> {
-  const config = requireOidcConfig(env)
-  const oidcClient = await createOidcClient(env)
-  const verifier = client.randomPKCECodeVerifier()
-  const state = client.randomState()
-  const nonce = client.randomNonce()
-  const url = client.buildAuthorizationUrl(oidcClient, {
-    redirect_uri: config.redirectUri,
-    scope: 'openid email profile',
-    state,
-    nonce,
-    code_challenge: await client.calculatePKCECodeChallenge(verifier),
-    code_challenge_method: 'S256',
-  })
+export async function getBearerClaims(env: Env, accessToken: string): Promise<UserInfoClaims> {
+  if (env.AMA_E2E_TEST_AUTH === 'true' && accessToken.startsWith('e2e:')) {
+    return e2eClaims(accessToken.slice('e2e:'.length))
+  }
 
+  const oidcClient = await createOidcClient(env)
+  const claims = await runOidc(() => client.fetchUserInfo(oidcClient, accessToken, client.skipSubjectCheck))
+  if (!claims.sub) {
+    throw new OidcError('FlareAuth userinfo did not include required subject')
+  }
+  return normalizeClaims(claims as Record<string, unknown> & { sub: string })
+}
+
+export async function upsertProjectForClaims(
+  db: DrizzleD1Database,
+  claims: UserInfoClaims,
+  timestamp: string,
+  requestedProjectId?: string,
+) {
+  const organizationId = claims.org_id ?? claims.organization_id ?? `user:${claims.sub}`
+  const projectName = 'Default project'
+  let project = await db.select().from(projects).where(eq(projects.organizationId, organizationId)).get()
+  if (!project) {
+    project = {
+      id: newId('project'),
+      organizationId,
+      name: projectName,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }
+    await db.insert(projects).values(project)
+  }
+  if (requestedProjectId) {
+    const requestedProject = await db
+      .select()
+      .from(projects)
+      .where(and(eq(projects.id, requestedProjectId), eq(projects.organizationId, organizationId)))
+      .get()
+    if (requestedProject) {
+      return { id: requestedProject.id, name: requestedProject.name }
+    }
+  }
+  return { id: project.id, name: project.name }
+}
+
+function normalizeClaims(claims: Record<string, unknown> & { sub: string }): UserInfoClaims {
+  const roles = stringArray(claims.roles)
+  const permissions = stringArray(claims.permissions)
   return {
-    authorizationUrl: url.toString(),
-    state,
-    nonce,
-    verifier,
+    sub: claims.sub,
+    ...optionalClaim('email', claims.email),
+    ...optionalClaim('name', claims.name),
+    ...optionalClaim('picture', claims.picture),
+    ...optionalClaim('org_id', claims.org_id),
+    ...optionalClaim('organization_id', claims.organization_id),
+    ...optionalClaim('org_name', claims.org_name),
+    ...optionalClaim('organization_name', claims.organization_name),
+    roles: roles.length ? roles : ['owner'],
+    permissions: permissions.length ? permissions : ['*'],
   }
 }
 
-export async function exchangeCallbackForUserInfo(
-  env: Env,
-  callbackUrl: URL,
-  verifier: string,
-  expectedState: string,
-  expectedNonce: string,
-) {
-  const oidcClient = await createOidcClient(env)
-  const tokenResponse = await runOidc(() =>
-    client.authorizationCodeGrant(oidcClient, callbackUrl, {
-      expectedNonce,
-      expectedState,
-      pkceCodeVerifier: verifier,
-    }),
-  )
-  const idTokenClaims = tokenResponse.claims()
-  if (!idTokenClaims?.sub) {
-    throw new OidcError('FlareAuth token response did not include validated ID token claims')
+function e2eClaims(runId: string): UserInfoClaims {
+  const safeRunId = runId.replaceAll(/[^A-Za-z0-9_-]/g, '_') || newId('run')
+  return {
+    sub: `user_e2e_${safeRunId}`,
+    email: `${safeRunId}@e2e.example.com`,
+    name: `E2E User ${safeRunId}`,
+    org_id: `org_e2e_${safeRunId}`,
+    org_name: `E2E Organization ${safeRunId}`,
+    roles: ['owner'],
+    permissions: ['*'],
   }
-
-  const claims = await runOidc(() => client.fetchUserInfo(oidcClient, tokenResponse.access_token, idTokenClaims.sub))
-  if (!claims.email) {
-    throw new OidcError('FlareAuth userinfo did not include required user claims')
-  }
-
-  return claims as UserInfoClaims
 }
 
 async function runOidc<T>(operation: () => Promise<T>) {
@@ -190,109 +207,15 @@ function newId(prefix: string) {
   return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
 }
 
-function asStringArray(value: unknown) {
-  if (!Array.isArray(value)) {
-    return []
-  }
-  return value.filter((item): item is string => typeof item === 'string' && item.length > 0)
+function stringClaim(value: unknown) {
+  return typeof value === 'string' && value.length > 0 ? value : undefined
 }
 
-export async function upsertLocalPrincipal(
-  db: DrizzleD1Database,
-  claims: UserInfoClaims,
-  timestamp: string,
-): Promise<LocalAuthPrincipal> {
-  const flareauthOrganizationId = claims.org_id ?? claims.organization_id ?? `user:${claims.sub}`
-  const organizationName = claims.org_name ?? claims.organization_name ?? 'Personal workspace'
-  const roles = asStringArray(claims.roles)
-  const permissions = asStringArray(claims.permissions)
-  const normalizedRoles = roles.length > 0 ? roles : ['owner']
-  const normalizedPermissions = permissions.length > 0 ? permissions : ['*']
+function optionalClaim<Key extends keyof UserInfoClaims>(key: Key, value: unknown) {
+  const claim = stringClaim(value)
+  return claim ? ({ [key]: claim } as Pick<UserInfoClaims, Key>) : {}
+}
 
-  let user = await db.select().from(users).where(eq(users.flareauthSubject, claims.sub)).get()
-  if (!user) {
-    user = {
-      id: newId('user'),
-      flareauthSubject: claims.sub,
-      email: claims.email ?? '',
-      name: claims.name ?? null,
-      avatarUrl: claims.picture ?? null,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    }
-    await db.insert(users).values(user)
-  } else {
-    await db
-      .update(users)
-      .set({
-        email: claims.email ?? user.email,
-        name: claims.name ?? user.name,
-        avatarUrl: claims.picture ?? user.avatarUrl,
-        updatedAt: timestamp,
-      })
-      .where(eq(users.id, user.id))
-  }
-
-  let organization = await db
-    .select()
-    .from(organizations)
-    .where(eq(organizations.flareauthOrganizationId, flareauthOrganizationId))
-    .get()
-  if (!organization) {
-    organization = {
-      id: newId('org'),
-      flareauthOrganizationId,
-      name: organizationName,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    }
-    await db.insert(organizations).values(organization)
-  } else {
-    await db
-      .update(organizations)
-      .set({ name: organizationName, updatedAt: timestamp })
-      .where(eq(organizations.id, organization.id))
-  }
-
-  let project = await db.select().from(projects).where(eq(projects.organizationId, organization.id)).get()
-  if (!project) {
-    project = {
-      id: newId('project'),
-      organizationId: organization.id,
-      name: 'Default project',
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    }
-    await db.insert(projects).values(project)
-  }
-
-  const membership = await db
-    .select()
-    .from(memberships)
-    .where(and(eq(memberships.userId, user.id), eq(memberships.organizationId, organization.id)))
-    .get()
-  const membershipValues = {
-    roles: JSON.stringify(normalizedRoles),
-    permissions: JSON.stringify(normalizedPermissions),
-    updatedAt: timestamp,
-  }
-  if (!membership) {
-    await db.insert(memberships).values({
-      id: newId('membership'),
-      userId: user.id,
-      organizationId: organization.id,
-      ...membershipValues,
-      createdAt: timestamp,
-    })
-  } else {
-    await db.update(memberships).set(membershipValues).where(eq(memberships.id, membership.id))
-  }
-
-  return {
-    userId: user.id,
-    organizationId: organization.id,
-    projectId: project.id,
-    roles: normalizedRoles,
-    permissions: normalizedPermissions,
-  }
+function stringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.length > 0) : []
 }

@@ -40,6 +40,7 @@
     "jose": "^6.2.3",
     "lucide-react": "^0.577.0",
     "nanoid": "^5.1.11",
+    "oidc-client-ts": "^3.5.0",
     "openid-client": "^6.8.4",
     "radix-ui": "^1.4.3",
     "react": "^19.2.5",

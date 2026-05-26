@@ -2,26 +2,26 @@ import { SELF } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultClaims, setupFlareAuth, signIn } from '../test/auth'
 
-async function jsonFetch(path: string, cookie: string, init: RequestInit = {}) {
+async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
     ...init,
     headers: {
       'content-type': 'application/json',
-      cookie,
+      authorization,
       ...init.headers,
     },
   })
 }
 
-async function createCredential(cookie: string) {
-  const vaultRes = await jsonFetch('/api/vaults', cookie, {
+async function createCredential(authorization: string) {
+  const vaultRes = await jsonFetch('/api/vaults', authorization, {
     method: 'POST',
     body: JSON.stringify({ name: 'MCP credentials' }),
   })
   expect(vaultRes.status).toBe(201)
   const vault = (await vaultRes.json()) as { id: string }
 
-  const credentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, cookie, {
+  const credentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, authorization, {
     method: 'POST',
     body: JSON.stringify({
       name: 'GitHub token',
@@ -38,15 +38,15 @@ async function createCredential(cookie: string) {
   }
 }
 
-async function createOrganizationCredential(cookie: string) {
-  const vaultRes = await jsonFetch('/api/vaults', cookie, {
+async function createOrganizationCredential(authorization: string) {
+  const vaultRes = await jsonFetch('/api/vaults', authorization, {
     method: 'POST',
     body: JSON.stringify({ name: 'Organization MCP credentials', scope: 'organization' }),
   })
   expect(vaultRes.status).toBe(201)
   const vault = (await vaultRes.json()) as { id: string }
 
-  const credentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, cookie, {
+  const credentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, authorization, {
     method: 'POST',
     body: JSON.stringify({
       name: 'Organization GitHub token',
@@ -59,21 +59,21 @@ async function createOrganizationCredential(cookie: string) {
   return (await credentialRes.json()) as { id: string }
 }
 
-async function createSession(cookie: string, allowedTools = ['mcp:github.repo.read']) {
-  const environmentRes = await jsonFetch('/api/environments', cookie, {
+async function createSession(authorization: string, allowedTools = ['mcp:github.repo.read']) {
+  const environmentRes = await jsonFetch('/api/environments', authorization, {
     method: 'POST',
     body: JSON.stringify({ name: 'MCP session environment' }),
   })
   expect(environmentRes.status).toBe(201)
   const environment = (await environmentRes.json()) as { id: string }
 
-  const agentRes = await jsonFetch('/api/agents', cookie, {
+  const agentRes = await jsonFetch('/api/agents', authorization, {
     method: 'POST',
     body: JSON.stringify({ name: 'MCP agent', allowedTools }),
   })
   expect(agentRes.status).toBe(201)
   const agent = (await agentRes.json()) as { id: string }
-  const sessionRes = await jsonFetch('/api/sessions', cookie, {
+  const sessionRes = await jsonFetch('/api/sessions', authorization, {
     method: 'POST',
     body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
   })
@@ -101,11 +101,11 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
   })
 
   it('lists, filters, and reads connector catalog metadata without requiring credentials', async () => {
-    const cookie = await signInUser('catalog')
+    const authorization = await signInUser('catalog')
 
     const listRes = await jsonFetch(
       '/api/mcp/connectors?search=GitHub&category=development&capability=repositories',
-      cookie,
+      authorization,
     )
     expect(listRes.status).toBe(200)
     const list = (await listRes.json()) as {
@@ -121,42 +121,42 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
     )
     expect(JSON.stringify(list)).not.toContain('raw-github-token')
 
-    const detailRes = await jsonFetch('/api/mcp/connectors/github', cookie)
+    const detailRes = await jsonFetch('/api/mcp/connectors/github', authorization)
     expect(detailRes.status).toBe(200)
     await expect(detailRes.json()).resolves.toMatchObject({
       connectorId: 'github',
       tools: [expect.objectContaining({ name: 'repo.read' })],
     })
 
-    const missingRes = await jsonFetch('/api/mcp/connectors/unknown', cookie)
+    const missingRes = await jsonFetch('/api/mcp/connectors/unknown', authorization)
     expect(missingRes.status).toBe(404)
 
-    const invalidCursorRes = await jsonFetch('/api/mcp/connectors?cursor=not-a-valid-cursor', cookie)
+    const invalidCursorRes = await jsonFetch('/api/mcp/connectors?cursor=not-a-valid-cursor', authorization)
     expect(invalidCursorRes.status).toBe(400)
   })
 
   it('marks allow-list excluded connectors blocked and rejects connecting them', async () => {
-    const cookie = await signInUser('catalog_allow_list')
+    const authorization = await signInUser('catalog_allow_list')
 
-    const policyRes = await jsonFetch('/api/governance/policy', cookie, {
+    const policyRes = await jsonFetch('/api/governance/policy', authorization, {
       method: 'PUT',
       body: JSON.stringify({ mcpPolicy: { allowedConnectors: ['linear'] } }),
     })
     expect(policyRes.status).toBe(200)
 
-    const listRes = await jsonFetch('/api/mcp/connectors?search=GitHub', cookie)
+    const listRes = await jsonFetch('/api/mcp/connectors?search=GitHub', authorization)
     expect(listRes.status).toBe(200)
     const list = (await listRes.json()) as { data: Array<{ connectorId: string; policyStatus: string }> }
     expect(list.data).toContainEqual(expect.objectContaining({ connectorId: 'github', policyStatus: 'blocked' }))
 
-    const detailRes = await jsonFetch('/api/mcp/connectors/github', cookie)
+    const detailRes = await jsonFetch('/api/mcp/connectors/github', authorization)
     expect(detailRes.status).toBe(200)
     await expect(detailRes.json()).resolves.toMatchObject({
       connectorId: 'github',
       policyStatus: 'blocked',
     })
 
-    const connectRes = await jsonFetch('/api/mcp/connections', cookie, {
+    const connectRes = await jsonFetch('/api/mcp/connections', authorization, {
       method: 'POST',
       body: JSON.stringify({ connectorId: 'github' }),
     })
@@ -171,16 +171,16 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
   })
 
   it('connects, upserts, lists tools, disconnects, audits, and never accepts raw credential values', async () => {
-    const cookie = await signInUser('connections')
-    const credential = await createCredential(cookie)
+    const authorization = await signInUser('connections')
+    const credential = await createCredential(authorization)
 
-    const rawCredentialRes = await jsonFetch('/api/mcp/connections', cookie, {
+    const rawCredentialRes = await jsonFetch('/api/mcp/connections', authorization, {
       method: 'POST',
       body: JSON.stringify({ connectorId: 'github', secretValue: 'raw-github-token' }),
     })
     expect(rawCredentialRes.status).toBe(400)
 
-    const connectRes = await jsonFetch('/api/mcp/connections', cookie, {
+    const connectRes = await jsonFetch('/api/mcp/connections', authorization, {
       method: 'POST',
       body: JSON.stringify({
         connectorId: 'github',
@@ -206,33 +206,33 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
     expect(JSON.stringify(connection)).not.toContain(credential.activeVersion.secretRef)
     expect(JSON.stringify(connection)).not.toContain('raw-github-token')
 
-    const upsertRes = await jsonFetch('/api/mcp/connections', cookie, {
+    const upsertRes = await jsonFetch('/api/mcp/connections', authorization, {
       method: 'POST',
       body: JSON.stringify({ connectorId: 'github', approvalMode: 'none' }),
     })
     expect(upsertRes.status).toBe(200)
     await expect(upsertRes.json()).resolves.toMatchObject({ id: connection.id, approvalMode: 'none' })
 
-    const toolsRes = await jsonFetch(`/api/mcp/connections/${connection.id}/tools`, cookie)
+    const toolsRes = await jsonFetch(`/api/mcp/connections/${connection.id}/tools`, authorization)
     expect(toolsRes.status).toBe(200)
     await expect(toolsRes.json()).resolves.toMatchObject({
       data: [expect.objectContaining({ connectorId: 'github', name: 'repo.read' })],
     })
 
-    const readRes = await jsonFetch(`/api/mcp/connections/${connection.id}`, cookie)
+    const readRes = await jsonFetch(`/api/mcp/connections/${connection.id}`, authorization)
     expect(readRes.status).toBe(200)
     const readConnection = await readRes.json()
     expect(readConnection).toMatchObject({ id: connection.id, hasCredential: true })
     expect(JSON.stringify(readConnection)).not.toContain(credential.id)
     expect(JSON.stringify(readConnection)).not.toContain(credential.activeVersionId)
 
-    const clearCredentialRes = await jsonFetch(`/api/mcp/connections/${connection.id}`, cookie, {
+    const clearCredentialRes = await jsonFetch(`/api/mcp/connections/${connection.id}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ credentialId: null, credentialVersionId: null }),
     })
     expect(clearCredentialRes.status).toBe(400)
 
-    const patchRes = await jsonFetch(`/api/mcp/connections/${connection.id}`, cookie, {
+    const patchRes = await jsonFetch(`/api/mcp/connections/${connection.id}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ endpointUrl: 'https://mcp.example.test/github', status: 'disabled' }),
     })
@@ -245,21 +245,21 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
     })
     expect(JSON.stringify(patchedConnection)).not.toContain(credential.id)
 
-    const invalidCursorRes = await jsonFetch('/api/mcp/connections?cursor=not-a-valid-cursor', cookie)
+    const invalidCursorRes = await jsonFetch('/api/mcp/connections?cursor=not-a-valid-cursor', authorization)
     expect(invalidCursorRes.status).toBe(400)
 
-    const reconnectRes = await jsonFetch('/api/mcp/connections', cookie, {
+    const reconnectRes = await jsonFetch('/api/mcp/connections', authorization, {
       method: 'POST',
       body: JSON.stringify({ connectorId: 'github' }),
     })
     expect(reconnectRes.status).toBe(200)
 
-    const disconnectRes = await jsonFetch(`/api/mcp/connections/${connection.id}?confirm=true`, cookie, {
+    const disconnectRes = await jsonFetch(`/api/mcp/connections/${connection.id}?confirm=true`, authorization, {
       method: 'DELETE',
     })
     expect(disconnectRes.status).toBe(204)
 
-    const auditRes = await jsonFetch('/api/audit-records?action=mcp_connection.disconnect', cookie)
+    const auditRes = await jsonFetch('/api/audit-records?action=mcp_connection.disconnect', authorization)
     expect(auditRes.status).toBe(200)
     const audit = await auditRes.json()
     expect(JSON.stringify(audit)).not.toContain('raw-github-token')
@@ -270,9 +270,9 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
   })
 
   it('enforces tenant scoping for project connections', async () => {
-    const cookie = await signInUser('tenant')
-    const credential = await createCredential(cookie)
-    const connectRes = await jsonFetch('/api/mcp/connections', cookie, {
+    const authorization = await signInUser('tenant')
+    const credential = await createCredential(authorization)
+    const connectRes = await jsonFetch('/api/mcp/connections', authorization, {
       method: 'POST',
       body: JSON.stringify({ connectorId: 'github', credentialId: credential.id }),
     })
@@ -295,19 +295,23 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
   })
 
   it('blocks unapproved runtime MCP calls and records policy events', async () => {
-    const cookie = await signInUser('runtime_block')
-    const session = await createSession(cookie)
+    const authorization = await signInUser('runtime_block')
+    const session = await createSession(authorization)
 
-    const runtimeRes = await jsonFetch(`/runtime/sessions/${session.id}/mcp/github/tools/repo.read/calls`, cookie, {
-      method: 'POST',
-      body: JSON.stringify({ input: { repo: 'saltbo/any-managed-agents' } }),
-    })
+    const runtimeRes = await jsonFetch(
+      `/runtime/sessions/${session.id}/mcp/github/tools/repo.read/calls`,
+      authorization,
+      {
+        method: 'POST',
+        body: JSON.stringify({ input: { repo: 'saltbo/any-managed-agents' } }),
+      },
+    )
     expect(runtimeRes.status).toBe(403)
     await expect(runtimeRes.json()).resolves.toMatchObject({
       error: { type: 'policy_denied', details: { category: 'mcp', resourceId: 'github' } },
     })
 
-    const eventsRes = await jsonFetch(`/api/sessions/${session.id}/events`, cookie)
+    const eventsRes = await jsonFetch(`/api/sessions/${session.id}/events`, authorization)
     expect(eventsRes.status).toBe(200)
     await expect(eventsRes.json()).resolves.toMatchObject({
       data: [
@@ -326,7 +330,7 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
       ],
     })
 
-    const auditRes = await jsonFetch('/api/audit-records?action=runtime_mcp_tool.call', cookie)
+    const auditRes = await jsonFetch('/api/audit-records?action=runtime_mcp_tool.call', authorization)
     expect(auditRes.status).toBe(200)
     await expect(auditRes.json()).resolves.toMatchObject({
       data: [
@@ -340,19 +344,23 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
   })
 
   it('proxies approved runtime MCP calls after policy evaluation', async () => {
-    const cookie = await signInUser('runtime_allow_proxy')
-    const credential = await createCredential(cookie)
-    const connectRes = await jsonFetch('/api/mcp/connections', cookie, {
+    const authorization = await signInUser('runtime_allow_proxy')
+    const credential = await createCredential(authorization)
+    const connectRes = await jsonFetch('/api/mcp/connections', authorization, {
       method: 'POST',
       body: JSON.stringify({ connectorId: 'github', credentialId: credential.id }),
     })
     expect(connectRes.status).toBe(201)
-    const session = await createSession(cookie)
+    const session = await createSession(authorization)
 
-    const runtimeRes = await jsonFetch(`/runtime/sessions/${session.id}/mcp/github/tools/repo.read/calls`, cookie, {
-      method: 'POST',
-      body: JSON.stringify({ input: { repo: 'saltbo/any-managed-agents' } }),
-    })
+    const runtimeRes = await jsonFetch(
+      `/runtime/sessions/${session.id}/mcp/github/tools/repo.read/calls`,
+      authorization,
+      {
+        method: 'POST',
+        body: JSON.stringify({ input: { repo: 'saltbo/any-managed-agents' } }),
+      },
+    )
     expect(runtimeRes.status).toBe(200)
     await expect(runtimeRes.json()).resolves.toMatchObject({
       path: '/mcp/github/tools/repo.read/calls',
@@ -361,19 +369,23 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
   })
 
   it('blocks runtime MCP calls for unknown tools even when the connector is allowed', async () => {
-    const cookie = await signInUser('runtime_unknown_tool')
-    const credential = await createCredential(cookie)
-    const connectRes = await jsonFetch('/api/mcp/connections', cookie, {
+    const authorization = await signInUser('runtime_unknown_tool')
+    const credential = await createCredential(authorization)
+    const connectRes = await jsonFetch('/api/mcp/connections', authorization, {
       method: 'POST',
       body: JSON.stringify({ connectorId: 'github', credentialId: credential.id }),
     })
     expect(connectRes.status).toBe(201)
-    const session = await createSession(cookie, ['mcp:github'])
+    const session = await createSession(authorization, ['mcp:github'])
 
-    const runtimeRes = await jsonFetch(`/runtime/sessions/${session.id}/mcp/github/tools/repo.delete/calls`, cookie, {
-      method: 'POST',
-      body: JSON.stringify({ input: { repo: 'saltbo/any-managed-agents' } }),
-    })
+    const runtimeRes = await jsonFetch(
+      `/runtime/sessions/${session.id}/mcp/github/tools/repo.delete/calls`,
+      authorization,
+      {
+        method: 'POST',
+        body: JSON.stringify({ input: { repo: 'saltbo/any-managed-agents' } }),
+      },
+    )
     expect(runtimeRes.status).toBe(403)
     await expect(runtimeRes.json()).resolves.toMatchObject({
       error: {
@@ -385,23 +397,23 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
   })
 
   it('returns approval-required without executing MCP tool calls', async () => {
-    const cookie = await signInUser('approval_required')
-    const credential = await createCredential(cookie)
-    const connectRes = await jsonFetch('/api/mcp/connections', cookie, {
+    const authorization = await signInUser('approval_required')
+    const credential = await createCredential(authorization)
+    const connectRes = await jsonFetch('/api/mcp/connections', authorization, {
       method: 'POST',
       body: JSON.stringify({ connectorId: 'github', credentialId: credential.id }),
     })
     expect(connectRes.status).toBe(201)
     const connection = (await connectRes.json()) as { id: string }
-    const session = await createSession(cookie)
+    const session = await createSession(authorization)
 
-    const policyRes = await jsonFetch('/api/governance/policy', cookie, {
+    const policyRes = await jsonFetch('/api/governance/policy', authorization, {
       method: 'PUT',
       body: JSON.stringify({ mcpPolicy: { requireApprovalConnectors: ['github'] } }),
     })
     expect(policyRes.status).toBe(200)
 
-    const callRes = await jsonFetch(`/api/mcp/connections/${connection.id}/tools/repo.read/calls`, cookie, {
+    const callRes = await jsonFetch(`/api/mcp/connections/${connection.id}/tools/repo.read/calls`, authorization, {
       method: 'POST',
       body: JSON.stringify({ sessionId: session.id, input: { repo: 'saltbo/any-managed-agents' } }),
     })
@@ -416,17 +428,17 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
   })
 
   it('allows approved tool calls, respects rotated and revoked credentials, and normalizes MCP errors', async () => {
-    const cookie = await signInUser('runtime_allow')
-    const credential = await createCredential(cookie)
-    const connectRes = await jsonFetch('/api/mcp/connections', cookie, {
+    const authorization = await signInUser('runtime_allow')
+    const credential = await createCredential(authorization)
+    const connectRes = await jsonFetch('/api/mcp/connections', authorization, {
       method: 'POST',
       body: JSON.stringify({ connectorId: 'github', credentialId: credential.id }),
     })
     expect(connectRes.status).toBe(201)
     const connection = (await connectRes.json()) as { id: string }
-    const session = await createSession(cookie)
+    const session = await createSession(authorization)
 
-    const callRes = await jsonFetch(`/api/mcp/connections/${connection.id}/tools/repo.read/calls`, cookie, {
+    const callRes = await jsonFetch(`/api/mcp/connections/${connection.id}/tools/repo.read/calls`, authorization, {
       method: 'POST',
       body: JSON.stringify({ sessionId: session.id, input: { repo: 'saltbo/any-managed-agents' } }),
     })
@@ -437,23 +449,27 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
       toolName: 'repo.read',
     })
 
-    const vaultIdRes = await jsonFetch('/api/vaults', cookie)
+    const vaultIdRes = await jsonFetch('/api/vaults', authorization)
     const vaultList = (await vaultIdRes.json()) as { data: Array<{ id: string }> }
     const vaultId = vaultList.data[0]?.id
     expect(vaultId).toBeTruthy()
-    const rotateRes = await jsonFetch(`/api/vaults/${vaultId}/credentials/${credential.id}/versions`, cookie, {
+    const rotateRes = await jsonFetch(`/api/vaults/${vaultId}/credentials/${credential.id}/versions`, authorization, {
       method: 'POST',
       body: JSON.stringify({ provider: 'cloudflare-secrets', secretValue: 'rotated-github-token' }),
     })
     expect(rotateRes.status).toBe(201)
 
-    const rotatedCallRes = await jsonFetch(`/api/mcp/connections/${connection.id}/tools/repo.read/calls`, cookie, {
-      method: 'POST',
-      body: JSON.stringify({ sessionId: session.id, input: { repo: 'saltbo/any-managed-agents' } }),
-    })
+    const rotatedCallRes = await jsonFetch(
+      `/api/mcp/connections/${connection.id}/tools/repo.read/calls`,
+      authorization,
+      {
+        method: 'POST',
+        body: JSON.stringify({ sessionId: session.id, input: { repo: 'saltbo/any-managed-agents' } }),
+      },
+    )
     expect(rotatedCallRes.status).toBe(200)
 
-    const errorRes = await jsonFetch(`/api/mcp/connections/${connection.id}/tools/repo.read/calls`, cookie, {
+    const errorRes = await jsonFetch(`/api/mcp/connections/${connection.id}/tools/repo.read/calls`, authorization, {
       method: 'POST',
       body: JSON.stringify({
         sessionId: session.id,
@@ -465,16 +481,20 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
     expect(normalized).toMatchObject({ error: { type: 'mcp_error', details: { mcpError: { type: 'mcp_timeout' } } } })
     expect(JSON.stringify(normalized)).not.toContain('raw-token')
 
-    const revokeRes = await jsonFetch(`/api/vaults/${vaultId}/credentials/${credential.id}`, cookie, {
+    const revokeRes = await jsonFetch(`/api/vaults/${vaultId}/credentials/${credential.id}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ status: 'revoked', revokeReason: 'No longer approved.' }),
     })
     expect(revokeRes.status).toBe(200)
 
-    const revokedCallRes = await jsonFetch(`/api/mcp/connections/${connection.id}/tools/repo.read/calls`, cookie, {
-      method: 'POST',
-      body: JSON.stringify({ sessionId: session.id, input: { repo: 'saltbo/any-managed-agents' } }),
-    })
+    const revokedCallRes = await jsonFetch(
+      `/api/mcp/connections/${connection.id}/tools/repo.read/calls`,
+      authorization,
+      {
+        method: 'POST',
+        body: JSON.stringify({ sessionId: session.id, input: { repo: 'saltbo/any-managed-agents' } }),
+      },
+    )
     expect(revokedCallRes.status).toBe(403)
     await expect(revokedCallRes.json()).resolves.toMatchObject({
       error: { type: 'policy_denied', message: 'MCP connector credential is revoked or unavailable.' },
@@ -482,21 +502,21 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
   })
 
   it('applies environment MCP connector restrictions during tool calls', async () => {
-    const cookie = await signInUser('environment')
-    const credential = await createCredential(cookie)
-    const connectRes = await jsonFetch('/api/mcp/connections', cookie, {
+    const authorization = await signInUser('environment')
+    const credential = await createCredential(authorization)
+    const connectRes = await jsonFetch('/api/mcp/connections', authorization, {
       method: 'POST',
       body: JSON.stringify({ connectorId: 'github', credentialId: credential.id }),
     })
     expect(connectRes.status).toBe(201)
     const connection = (await connectRes.json()) as { id: string }
-    const linearConnectRes = await jsonFetch('/api/mcp/connections', cookie, {
+    const linearConnectRes = await jsonFetch('/api/mcp/connections', authorization, {
       method: 'POST',
       body: JSON.stringify({ connectorId: 'linear', credentialId: credential.id }),
     })
     expect(linearConnectRes.status).toBe(201)
 
-    const environmentRes = await jsonFetch('/api/environments', cookie, {
+    const environmentRes = await jsonFetch('/api/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Linear-only workspace',
@@ -506,7 +526,7 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
     expect(environmentRes.status).toBe(201)
     const environment = (await environmentRes.json()) as { id: string }
 
-    const agentRes = await jsonFetch('/api/agents', cookie, {
+    const agentRes = await jsonFetch('/api/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Environment MCP agent',
@@ -515,14 +535,14 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
     })
     expect(agentRes.status).toBe(201)
     const agent = (await agentRes.json()) as { id: string }
-    const sessionRes = await jsonFetch('/api/sessions', cookie, {
+    const sessionRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
     })
     expect(sessionRes.status).toBe(201)
     const session = (await sessionRes.json()) as { id: string }
 
-    const callRes = await jsonFetch(`/api/mcp/connections/${connection.id}/tools/repo.read/calls`, cookie, {
+    const callRes = await jsonFetch(`/api/mcp/connections/${connection.id}/tools/repo.read/calls`, authorization, {
       method: 'POST',
       body: JSON.stringify({ sessionId: session.id, input: { repo: 'saltbo/any-managed-agents' } }),
     })
@@ -533,9 +553,9 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
   })
 
   it('allows organization-scoped vault credentials for project MCP calls', async () => {
-    const cookie = await signInUser('org_credential')
-    const credential = await createOrganizationCredential(cookie)
-    const connectRes = await jsonFetch('/api/mcp/connections', cookie, {
+    const authorization = await signInUser('org_credential')
+    const credential = await createOrganizationCredential(authorization)
+    const connectRes = await jsonFetch('/api/mcp/connections', authorization, {
       method: 'POST',
       body: JSON.stringify({ connectorId: 'github', credentialId: credential.id }),
     })
@@ -543,8 +563,8 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
     const connection = (await connectRes.json()) as { id: string; hasCredential: boolean }
     expect(connection.hasCredential).toBe(true)
 
-    const session = await createSession(cookie)
-    const callRes = await jsonFetch(`/api/mcp/connections/${connection.id}/tools/repo.read/calls`, cookie, {
+    const session = await createSession(authorization)
+    const callRes = await jsonFetch(`/api/mcp/connections/${connection.id}/tools/repo.read/calls`, authorization, {
       method: 'POST',
       body: JSON.stringify({ sessionId: session.id, input: { repo: 'saltbo/any-managed-agents' } }),
     })

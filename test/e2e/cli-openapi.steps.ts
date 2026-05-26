@@ -171,8 +171,8 @@ function assertControlPlaneOperationsHaveMetadata(world: AmaWorld) {
     )
     if (!path.includes('/auth/') && path !== '/api/health' && path !== '/api/openapi.json') {
       assert.ok(
-        op.security?.some((scheme) => 'cookieAuth' in scheme),
-        `Expected cookieAuth on ${method.toUpperCase()} ${path}`,
+        op.security?.some((scheme) => 'bearerAuth' in scheme),
+        `Expected bearerAuth on ${method.toUpperCase()} ${path}`,
       )
     }
   }

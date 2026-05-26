@@ -5,19 +5,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { usageRecords } from '../db/schema'
 import { defaultClaims, setupFlareAuth, signIn } from '../test/auth'
 
-async function jsonFetch(path: string, cookie: string, init: RequestInit = {}) {
+async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
     ...init,
     headers: {
       'content-type': 'application/json',
-      cookie,
+      authorization,
       ...init.headers,
     },
   })
 }
 
-async function authContext(cookie: string) {
-  const res = await jsonFetch('/api/auth/me', cookie)
+async function authContext(authorization: string) {
+  const res = await jsonFetch('/api/auth/me', authorization)
   expect(res.status).toBe(200)
   return (await res.json()) as {
     user: { id: string }
@@ -40,9 +40,9 @@ describe('[CF] providers, governance, usage, and audit', () => {
   })
 
   it('lists default Workers AI and manages configured providers without exposing credentials', async () => {
-    const cookie = await signIn()
+    const authorization = await signIn()
 
-    const defaultListRes = await jsonFetch('/api/providers', cookie)
+    const defaultListRes = await jsonFetch('/api/providers', authorization)
     expect(defaultListRes.status).toBe(200)
     const defaultList = (await defaultListRes.json()) as {
       data: Array<{ id: string; type: string; credentialSecretRef?: string }>
@@ -50,7 +50,7 @@ describe('[CF] providers, governance, usage, and audit', () => {
     expect(defaultList.data).toContainEqual(expect.objectContaining({ id: 'workers-ai', type: 'workers-ai' }))
     expect(JSON.stringify(defaultList)).not.toContain('credentialSecretRef')
 
-    const workersRes = await jsonFetch('/api/providers', cookie, {
+    const workersRes = await jsonFetch('/api/providers', authorization, {
       method: 'POST',
       body: JSON.stringify({ type: 'workers-ai', displayName: 'Workers AI', isDefault: true }),
     })
@@ -59,14 +59,14 @@ describe('[CF] providers, governance, usage, and audit', () => {
     expect(workers).toMatchObject({ type: 'workers-ai' })
     expect(workers.id).not.toBe('workers-ai')
 
-    const defaultWorkersAgentRes = await jsonFetch('/api/agents', cookie, {
+    const defaultWorkersAgentRes = await jsonFetch('/api/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Default Workers AI agent' }),
     })
     expect(defaultWorkersAgentRes.status).toBe(201)
     await expect(defaultWorkersAgentRes.json()).resolves.toMatchObject({ provider: 'workers-ai' })
 
-    const explicitWorkersAgentRes = await jsonFetch('/api/agents', cookie, {
+    const explicitWorkersAgentRes = await jsonFetch('/api/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Explicit Workers AI agent', provider: workers.id }),
     })
@@ -86,7 +86,7 @@ describe('[CF] providers, governance, usage, and audit', () => {
     })
     expect(otherWorkersRes.status).toBe(201)
 
-    const externalRes = await jsonFetch('/api/providers', cookie, {
+    const externalRes = await jsonFetch('/api/providers', authorization, {
       method: 'POST',
       body: JSON.stringify({
         type: 'openai-compatible',
@@ -102,26 +102,26 @@ describe('[CF] providers, governance, usage, and audit', () => {
     expect(external).toMatchObject({ hasCredential: true, isDefault: true })
     expect(JSON.stringify(external)).not.toContain('raw-secret-value')
 
-    const modelRes = await jsonFetch(`/api/providers/${external.id}/models`, cookie, {
+    const modelRes = await jsonFetch(`/api/providers/${external.id}/models`, authorization, {
       method: 'POST',
       body: JSON.stringify({ modelId: 'gateway-model', displayName: 'Gateway Model', capabilities: ['text'] }),
     })
     expect(modelRes.status).toBe(201)
     const model = (await modelRes.json()) as { id: string; displayName: string }
-    const updateModelRes = await jsonFetch(`/api/providers/${external.id}/models`, cookie, {
+    const updateModelRes = await jsonFetch(`/api/providers/${external.id}/models`, authorization, {
       method: 'POST',
       body: JSON.stringify({ modelId: 'gateway-model', displayName: 'Gateway Model v2', capabilities: ['text'] }),
     })
     expect(updateModelRes.status).toBe(201)
     await expect(updateModelRes.json()).resolves.toMatchObject({ id: model.id, displayName: 'Gateway Model v2' })
 
-    const disableRes = await jsonFetch(`/api/providers/${external.id}`, cookie, {
+    const disableRes = await jsonFetch(`/api/providers/${external.id}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ status: 'disabled' }),
     })
     expect(disableRes.status).toBe(200)
 
-    const agentRes = await jsonFetch('/api/agents', cookie, {
+    const agentRes = await jsonFetch('/api/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Gateway agent', provider: external.id, model: 'gateway-model' }),
     })
@@ -132,9 +132,9 @@ describe('[CF] providers, governance, usage, and audit', () => {
   })
 
   it('returns policy_denied for governance denials and writes safe audit records', async () => {
-    const cookie = await signIn()
+    const authorization = await signIn()
 
-    const policyRes = await jsonFetch('/api/governance/policy', cookie, {
+    const policyRes = await jsonFetch('/api/governance/policy', authorization, {
       method: 'PUT',
       body: JSON.stringify({
         providerRules: [{ providerId: 'workers-ai', effect: 'deny', reason: 'Budget review required.' }],
@@ -143,13 +143,13 @@ describe('[CF] providers, governance, usage, and audit', () => {
     })
     expect(policyRes.status).toBe(200)
 
-    const effectiveRes = await jsonFetch('/api/governance/effective-policy', cookie)
+    const effectiveRes = await jsonFetch('/api/governance/effective-policy', authorization)
     expect(effectiveRes.status).toBe(200)
     await expect(effectiveRes.json()).resolves.toMatchObject({
       providerRules: [expect.objectContaining({ providerId: 'workers-ai', effect: 'deny' })],
     })
 
-    const evaluationRes = await jsonFetch('/api/governance/evaluations', cookie, {
+    const evaluationRes = await jsonFetch('/api/governance/evaluations', authorization, {
       method: 'POST',
       body: JSON.stringify({ providerId: 'workers-ai', modelId: '@cf/moonshotai/kimi-k2.6' }),
     })
@@ -161,7 +161,7 @@ describe('[CF] providers, governance, usage, and audit', () => {
       },
     })
 
-    const auditRes = await jsonFetch('/api/audit-records?action=policy.evaluate', cookie)
+    const auditRes = await jsonFetch('/api/audit-records?action=policy.evaluate', authorization)
     expect(auditRes.status).toBe(200)
     const audit = (await auditRes.json()) as { data: Array<{ action: string; outcome: string; metadata: unknown }> }
     expect(audit.data).toContainEqual(expect.objectContaining({ action: 'policy.evaluate', outcome: 'denied' }))
@@ -169,27 +169,27 @@ describe('[CF] providers, governance, usage, and audit', () => {
   })
 
   it('enforces disabled project Workers AI overrides during policy evaluation', async () => {
-    const cookie = await signIn({
+    const authorization = await signIn({
       ...defaultClaims(),
       sub: 'user_disabled_workers',
       email: 'workers-disabled@example.com',
       org_id: 'org_flare_disabled_workers',
       org_name: 'Disabled Workers Org',
     })
-    const workersRes = await jsonFetch('/api/providers', cookie, {
+    const workersRes = await jsonFetch('/api/providers', authorization, {
       method: 'POST',
       body: JSON.stringify({ type: 'workers-ai', displayName: 'Workers AI override' }),
     })
     expect(workersRes.status).toBe(201)
     const workers = (await workersRes.json()) as { id: string }
 
-    const disableRes = await jsonFetch(`/api/providers/${workers.id}`, cookie, {
+    const disableRes = await jsonFetch(`/api/providers/${workers.id}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ status: 'disabled' }),
     })
     expect(disableRes.status).toBe(200)
 
-    const evaluationRes = await jsonFetch('/api/governance/evaluations', cookie, {
+    const evaluationRes = await jsonFetch('/api/governance/evaluations', authorization, {
       method: 'POST',
       body: JSON.stringify({ providerId: 'workers-ai', modelId: '@cf/moonshotai/kimi-k2.6' }),
     })
@@ -204,7 +204,7 @@ describe('[CF] providers, governance, usage, and audit', () => {
   })
 
   it('applies wildcard provider access rules created with omitted provider and model scopes', async () => {
-    const cookie = await signIn({
+    const authorization = await signIn({
       ...defaultClaims(),
       sub: 'user_wildcard_access_rule',
       email: 'wildcard-access@example.com',
@@ -212,7 +212,7 @@ describe('[CF] providers, governance, usage, and audit', () => {
       org_name: 'Wildcard Access Org',
     })
 
-    const accessRuleRes = await jsonFetch('/api/governance/provider-access-rules', cookie, {
+    const accessRuleRes = await jsonFetch('/api/governance/provider-access-rules', authorization, {
       method: 'POST',
       body: JSON.stringify({ effect: 'deny', reason: 'Project-wide model access is paused.' }),
     })
@@ -225,7 +225,7 @@ describe('[CF] providers, governance, usage, and audit', () => {
     }
     expect(accessRule).toMatchObject({ providerId: '*', modelId: '*', effect: 'deny' })
 
-    const evaluationRes = await jsonFetch('/api/governance/evaluations', cookie, {
+    const evaluationRes = await jsonFetch('/api/governance/evaluations', authorization, {
       method: 'POST',
       body: JSON.stringify({ providerId: 'workers-ai', modelId: '@cf/moonshotai/kimi-k2.6' }),
     })
@@ -240,8 +240,8 @@ describe('[CF] providers, governance, usage, and audit', () => {
   })
 
   it('summarizes usage deterministically for seeded D1 records', async () => {
-    const cookie = await signIn()
-    const context = await authContext(cookie)
+    const authorization = await signIn()
+    const context = await authContext(authorization)
     const db = drizzle(env.DB)
     const createdAt = '2026-05-01T00:00:00.000Z'
     await db.insert(usageRecords).values([
@@ -295,7 +295,7 @@ describe('[CF] providers, governance, usage, and audit', () => {
 
     const summaryRes = await jsonFetch(
       '/api/usage/summary?createdFrom=2026-05-01T00%3A00%3A00.000Z&createdTo=2026-05-31T23%3A59%3A59.999Z&provider=workers-ai&groupBy=provider,model,status',
-      cookie,
+      authorization,
     )
     expect(summaryRes.status).toBe(200)
     const summary = (await summaryRes.json()) as {
@@ -310,8 +310,8 @@ describe('[CF] providers, governance, usage, and audit', () => {
   })
 
   it('exports audit records with secret-like values redacted', async () => {
-    const cookie = await signIn()
-    const createRes = await jsonFetch('/api/providers', cookie, {
+    const authorization = await signIn()
+    const createRes = await jsonFetch('/api/providers', authorization, {
       method: 'POST',
       body: JSON.stringify({
         type: 'openai',
@@ -322,7 +322,7 @@ describe('[CF] providers, governance, usage, and audit', () => {
     })
     expect(createRes.status).toBe(201)
 
-    const exportRes = await jsonFetch('/api/audit-records/export?action=provider.create', cookie)
+    const exportRes = await jsonFetch('/api/audit-records/export?action=provider.create', authorization)
     expect(exportRes.status).toBe(200)
     const exported = await exportRes.json()
     expect(JSON.stringify(exported)).not.toContain('top-secret')

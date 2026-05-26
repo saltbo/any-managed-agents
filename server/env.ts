@@ -22,11 +22,7 @@ export interface Env {
   FLAREAUTH_ISSUER?: string
   FLAREAUTH_CLIENT_ID?: string
   FLAREAUTH_CLIENT_SECRET?: string
-  FLAREAUTH_REDIRECT_URI?: string
   FLAREAUTH_USE_SERVICE_BINDING?: string
-  AMA_SESSION_SECRET?: string
-  AMA_COOKIE_SECURE?: string
-  AMA_COOKIE_SAME_SITE?: string
   AMA_ALLOWED_ORIGINS?: string
   AMA_E2E_TEST_AUTH?: string
   [key: string]: unknown

@@ -2,25 +2,25 @@ import { SELF } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultClaims, setupFlareAuth, signIn } from '../test/auth'
 
-async function jsonFetch(path: string, cookie: string, init: RequestInit = {}) {
+async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
     ...init,
     headers: {
       'content-type': 'application/json',
-      cookie,
+      authorization,
       ...init.headers,
     },
   })
 }
 
-async function createCredentialVersion(cookie: string) {
-  const vaultRes = await jsonFetch('/api/vaults', cookie, {
+async function createCredentialVersion(authorization: string) {
+  const vaultRes = await jsonFetch('/api/vaults', authorization, {
     method: 'POST',
     body: JSON.stringify({ name: 'Environment credentials' }),
   })
   expect(vaultRes.status).toBe(201)
   const vault = (await vaultRes.json()) as { id: string }
-  const credentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, cookie, {
+  const credentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, authorization, {
     method: 'POST',
     body: JSON.stringify({
       name: 'NPM token',
@@ -32,14 +32,14 @@ async function createCredentialVersion(cookie: string) {
   return (await credentialRes.json()) as { activeVersionId: string }
 }
 
-async function connectMcp(cookie: string) {
-  const vaultRes = await jsonFetch('/api/vaults', cookie, {
+async function connectMcp(authorization: string) {
+  const vaultRes = await jsonFetch('/api/vaults', authorization, {
     method: 'POST',
     body: JSON.stringify({ name: 'MCP credentials' }),
   })
   expect(vaultRes.status).toBe(201)
   const vault = (await vaultRes.json()) as { id: string }
-  const credentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, cookie, {
+  const credentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, authorization, {
     method: 'POST',
     body: JSON.stringify({
       name: 'GitHub token',
@@ -50,7 +50,7 @@ async function connectMcp(cookie: string) {
   })
   expect(credentialRes.status).toBe(201)
   const mcpCredential = (await credentialRes.json()) as { id: string; activeVersionId: string }
-  const res = await jsonFetch('/api/mcp/connections', cookie, {
+  const res = await jsonFetch('/api/mcp/connections', authorization, {
     method: 'POST',
     body: JSON.stringify({
       connectorId: 'github',
@@ -88,10 +88,10 @@ describe('[CF] /api/environments', () => {
   })
 
   it('creates, reads, updates, versions, and archives project-scoped environments without raw secrets', async () => {
-    const cookie = await signIn()
-    const credential = await createCredentialVersion(cookie)
-    await connectMcp(cookie)
-    const createRes = await jsonFetch('/api/environments', cookie, {
+    const authorization = await signIn()
+    const credential = await createCredentialVersion(authorization)
+    await connectMcp(authorization)
+    const createRes = await jsonFetch('/api/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Node workspace',
@@ -115,7 +115,7 @@ describe('[CF] /api/environments', () => {
     expect(created.version).toBe(1)
     expect(JSON.stringify(created)).not.toContain('raw-secret')
 
-    const readRes = await jsonFetch(`/api/environments/${created.id}`, cookie)
+    const readRes = await jsonFetch(`/api/environments/${created.id}`, authorization)
     expect(readRes.status).toBe(200)
     await expect(readRes.json()).resolves.toMatchObject({
       id: created.id,
@@ -125,7 +125,7 @@ describe('[CF] /api/environments', () => {
       packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
     })
 
-    const updateRes = await jsonFetch(`/api/environments/${created.id}`, cookie, {
+    const updateRes = await jsonFetch(`/api/environments/${created.id}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ metadata: { owner: 'runtime' } }),
     })
@@ -134,7 +134,7 @@ describe('[CF] /api/environments', () => {
     expect(updated.version).toBe(2)
     expect(updated.currentVersionId).not.toBe(created.currentVersionId)
 
-    const versionsRes = await jsonFetch(`/api/environments/${created.id}/versions`, cookie)
+    const versionsRes = await jsonFetch(`/api/environments/${created.id}/versions`, authorization)
     expect(versionsRes.status).toBe(200)
     const versions = (await versionsRes.json()) as {
       data: Array<{ version: number; packages: Array<{ name: string }> }>
@@ -144,29 +144,29 @@ describe('[CF] /api/environments', () => {
       { name: 'tsx', version: 'latest' },
     ])
 
-    const archiveRes = await jsonFetch(`/api/environments/${created.id}`, cookie, { method: 'DELETE' })
+    const archiveRes = await jsonFetch(`/api/environments/${created.id}`, authorization, { method: 'DELETE' })
     expect(archiveRes.status).toBe(204)
 
-    const listRes = await jsonFetch('/api/environments', cookie)
+    const listRes = await jsonFetch('/api/environments', authorization)
     const list = (await listRes.json()) as { data: Array<{ id: string }>; pagination: { hasMore: boolean } }
     expect(list.data).not.toContainEqual(expect.objectContaining({ id: created.id }))
     expect(list.pagination.hasMore).toBe(false)
 
-    const archivedListRes = await jsonFetch('/api/environments?includeArchived=true', cookie)
+    const archivedListRes = await jsonFetch('/api/environments?includeArchived=true', authorization)
     const archivedList = (await archivedListRes.json()) as { data: Array<{ id: string; status: string }> }
     expect(archivedList.data).toContainEqual(expect.objectContaining({ id: created.id, status: 'archived' }))
 
-    const archivedReadRes = await jsonFetch(`/api/environments/${created.id}`, cookie)
+    const archivedReadRes = await jsonFetch(`/api/environments/${created.id}`, authorization)
     expect(archivedReadRes.status).toBe(200)
     await expect(archivedReadRes.json()).resolves.toMatchObject({ archivedAt: expect.any(String) })
 
-    const auditRes = await jsonFetch('/api/audit-records?action=environment.archive', cookie)
+    const auditRes = await jsonFetch('/api/audit-records?action=environment.archive', authorization)
     expect(auditRes.status).toBe(200)
     await expect(auditRes.json()).resolves.toMatchObject({
       data: [expect.objectContaining({ resourceId: created.id, outcome: 'success' })],
     })
 
-    const archivedUpdateRes = await jsonFetch(`/api/environments/${created.id}`, cookie, {
+    const archivedUpdateRes = await jsonFetch(`/api/environments/${created.id}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ description: 'Cannot update archived environments' }),
     })
@@ -174,8 +174,8 @@ describe('[CF] /api/environments', () => {
   })
 
   it('rejects unavailable secret references and disconnected MCP policy connectors', async () => {
-    const cookie = await signIn()
-    const invalidSecretRes = await jsonFetch('/api/environments', cookie, {
+    const authorization = await signIn()
+    const invalidSecretRes = await jsonFetch('/api/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Invalid secret workspace',
@@ -189,7 +189,7 @@ describe('[CF] /api/environments', () => {
     })
     expect(JSON.stringify(invalidSecretBody)).not.toContain('vaultver_missing')
 
-    const rawSecretRefRes = await jsonFetch('/api/environments', cookie, {
+    const rawSecretRefRes = await jsonFetch('/api/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Raw secret workspace',
@@ -203,7 +203,7 @@ describe('[CF] /api/environments', () => {
     })
     expect(JSON.stringify(rawSecretRefBody)).not.toContain('raw-npm-token')
 
-    const rawMetadataRes = await jsonFetch('/api/environments', cookie, {
+    const rawMetadataRes = await jsonFetch('/api/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Raw metadata workspace', metadata: { secretValue: 'raw-secret' } }),
     })
@@ -212,7 +212,7 @@ describe('[CF] /api/environments', () => {
       error: { details: { fields: { metadata: expect.any(String) } } },
     })
 
-    const rawMetadataApiKeyRes = await jsonFetch('/api/environments', cookie, {
+    const rawMetadataApiKeyRes = await jsonFetch('/api/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Raw API key workspace', metadata: { api_key: 'raw-secret' } }),
     })
@@ -221,7 +221,7 @@ describe('[CF] /api/environments', () => {
       error: { details: { fields: { metadata: expect.any(String) } } },
     })
 
-    const rawMcpPolicyRes = await jsonFetch('/api/environments', cookie, {
+    const rawMcpPolicyRes = await jsonFetch('/api/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Raw MCP policy workspace', mcpPolicy: { access_token: 'raw-secret' } }),
     })
@@ -232,7 +232,7 @@ describe('[CF] /api/environments', () => {
     })
     expect(JSON.stringify(rawMcpPolicyBody)).not.toContain('raw-secret')
 
-    const rawPolicyRes = await jsonFetch('/api/environments', cookie, {
+    const rawPolicyRes = await jsonFetch('/api/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Raw policy workspace', packageManagerPolicy: { npmToken: 'raw-secret' } }),
     })
@@ -241,7 +241,7 @@ describe('[CF] /api/environments', () => {
       error: { details: { fields: { packageManagerPolicy: expect.any(String) } } },
     })
 
-    const invalidMcpRes = await jsonFetch('/api/environments', cookie, {
+    const invalidMcpRes = await jsonFetch('/api/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Invalid MCP workspace', mcpPolicy: { allowedConnectors: ['linear'] } }),
     })
@@ -250,13 +250,13 @@ describe('[CF] /api/environments', () => {
       error: { details: { fields: { mcpPolicy: expect.any(String) } } },
     })
 
-    const environmentRes = await jsonFetch('/api/environments', cookie, {
+    const environmentRes = await jsonFetch('/api/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Update boundary workspace' }),
     })
     expect(environmentRes.status).toBe(201)
     const environment = (await environmentRes.json()) as { id: string }
-    const rawUpdatePolicyRes = await jsonFetch(`/api/environments/${environment.id}`, cookie, {
+    const rawUpdatePolicyRes = await jsonFetch(`/api/environments/${environment.id}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ mcpPolicy: { token: 'raw-secret' } }),
     })
@@ -269,20 +269,20 @@ describe('[CF] /api/environments', () => {
   })
 
   it('lists environments with pagination, search, status, and date filters', async () => {
-    const cookie = await signIn()
-    const alphaRes = await jsonFetch('/api/environments', cookie, {
+    const authorization = await signIn()
+    const alphaRes = await jsonFetch('/api/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Alpha workspace' }),
     })
     const alpha = (await alphaRes.json()) as { id: string; createdAt: string }
-    const betaRes = await jsonFetch('/api/environments', cookie, {
+    const betaRes = await jsonFetch('/api/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Beta workspace' }),
     })
     const beta = (await betaRes.json()) as { id: string; createdAt: string }
-    await jsonFetch(`/api/environments/${alpha.id}`, cookie, { method: 'DELETE' })
+    await jsonFetch(`/api/environments/${alpha.id}`, authorization, { method: 'DELETE' })
 
-    const pagedRes = await jsonFetch('/api/environments?includeArchived=true&limit=1', cookie)
+    const pagedRes = await jsonFetch('/api/environments?includeArchived=true&limit=1', authorization)
     const paged = (await pagedRes.json()) as {
       data: Array<{ id: string }>
       pagination: { hasMore: boolean; nextCursor: string | null }
@@ -293,33 +293,33 @@ describe('[CF] /api/environments', () => {
 
     const nextPageRes = await jsonFetch(
       `/api/environments?includeArchived=true&limit=1&cursor=${paged.pagination.nextCursor}`,
-      cookie,
+      authorization,
     )
     const nextPage = (await nextPageRes.json()) as { data: Array<{ id: string }> }
     expect(nextPage.data.map((environment) => environment.id)).not.toEqual(
       paged.data.map((environment) => environment.id),
     )
 
-    const searchRes = await jsonFetch('/api/environments?includeArchived=true&search=Alpha', cookie)
+    const searchRes = await jsonFetch('/api/environments?includeArchived=true&search=Alpha', authorization)
     const search = (await searchRes.json()) as { data: Array<{ id: string }> }
     expect(search.data).toEqual([expect.objectContaining({ id: alpha.id })])
 
-    const statusRes = await jsonFetch('/api/environments?includeArchived=true&status=archived', cookie)
+    const statusRes = await jsonFetch('/api/environments?includeArchived=true&status=archived', authorization)
     const status = (await statusRes.json()) as { data: Array<{ id: string; status: string }> }
     expect(status.data).toContainEqual(expect.objectContaining({ id: alpha.id, status: 'archived' }))
     expect(status.data.every((environment) => environment.status === 'archived')).toBe(true)
 
     const dateRes = await jsonFetch(
       `/api/environments?includeArchived=true&createdFrom=${encodeURIComponent(alpha.createdAt)}&createdTo=${encodeURIComponent(beta.createdAt)}`,
-      cookie,
+      authorization,
     )
     const date = (await dateRes.json()) as { data: Array<{ id: string }> }
     expect(date.data.map((environment) => environment.id)).toEqual(expect.arrayContaining([alpha.id, beta.id]))
   })
 
   it('returns 404 for cross-project environment access', async () => {
-    const cookie = await signIn()
-    const createRes = await jsonFetch('/api/environments', cookie, {
+    const authorization = await signIn()
+    const createRes = await jsonFetch('/api/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Tenant environment' }),
     })

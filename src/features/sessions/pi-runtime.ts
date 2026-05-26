@@ -1,5 +1,6 @@
 import { isPiEventType, piEventCategory, piEventTypeFromPayload } from '@shared/pi-events'
 import type { SessionEvent } from '@/lib/api'
+import { getStoredAccessToken } from '@/lib/oidc'
 
 export type PiRuntimeConnectionState = 'connecting' | 'open' | 'closed' | 'error'
 export type PiRuntimeRunState = 'idle' | 'running' | 'error'
@@ -224,6 +225,10 @@ export function runtimeWebSocketUrl(runtimeEndpointPath: string) {
     : `${runtimeEndpointPath.replace(/\/$/, '')}/ws`
   const url = new URL(runtimePath, window.location.href)
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+  const accessToken = getStoredAccessToken()
+  if (accessToken) {
+    url.searchParams.set('access_token', accessToken)
+  }
   return url.toString()
 }
 

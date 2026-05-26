@@ -23,7 +23,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { MobileNavButton, NavButton } from '@/console/components'
-import { api } from '@/lib/api'
+import { signOut } from '@/lib/oidc'
 import { useConsoleContext } from './console-context'
 
 export function ConsoleShell({ children }: { children: ReactNode }) {
@@ -123,7 +123,7 @@ function UserMenu({ placement }: { placement: 'sidebar' | 'mobile' }) {
             <span className="block truncate font-normal">{context.auth.user.email}</span>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => void api.logout().then(() => window.location.assign('/agents'))}>
+          <DropdownMenuItem onSelect={() => void signOut()}>
             <LogOut size={16} />
             Log out
           </DropdownMenuItem>

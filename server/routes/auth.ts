@@ -1,18 +1,7 @@
 import { createRoute, z } from '@hono/zod-openapi'
-import { eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
-import { createLoginAttempt, exchangeCallbackForUserInfo, OidcError, upsertLocalPrincipal } from '../auth/flareauth'
-import {
-  clearLoginStateCookie,
-  clearSessionCookie,
-  createSession,
-  readLoginState,
-  requireAuth,
-  safeReturnTo,
-  setLoginStateCookie,
-} from '../auth/session'
-import { appSessions } from '../db/schema'
-import { errorResponse } from '../errors'
+import { publicOidcConfig } from '../auth/flareauth'
+import { requireAuth } from '../auth/session'
 import { AuthenticatedOperation, createApiRouter, ErrorResponseSchema } from '../openapi'
 
 const app = createApiRouter()
@@ -21,7 +10,7 @@ const AuthContextSchema = z
   .object({
     user: z.object({
       id: z.string(),
-      email: z.string().email(),
+      email: z.string(),
       name: z.string().nullable(),
       avatarUrl: z.string().nullable(),
     }),
@@ -38,54 +27,26 @@ const AuthContextSchema = z
   })
   .openapi('AuthContext')
 
-const loginRoute = createRoute({
-  method: 'get',
-  path: '/login',
-  operationId: 'startLogin',
-  tags: ['Auth'],
-  summary: 'Start FlareAuth OIDC login',
-  responses: {
-    302: {
-      description: 'Redirect to FlareAuth authorization endpoint',
-    },
-    500: {
-      description: 'OIDC configuration error',
-      content: { 'application/json': { schema: ErrorResponseSchema } },
-    },
-  },
-})
+const OidcClientConfigSchema = z
+  .object({
+    authority: z.string().url(),
+    clientId: z.string(),
+    redirectUri: z.string().url(),
+    postLogoutRedirectUri: z.string().url(),
+    scope: z.string(),
+  })
+  .openapi('OidcClientConfig')
 
-const callbackRoute = createRoute({
+const configRoute = createRoute({
   method: 'get',
-  path: '/callback',
-  operationId: 'completeLogin',
+  path: '/config',
+  operationId: 'getOidcClientConfig',
   tags: ['Auth'],
-  summary: 'Complete FlareAuth OIDC login',
+  summary: 'Return the FlareAuth OIDC client configuration for the browser',
   responses: {
-    302: {
-      description: 'Session created and browser redirected',
-    },
-    400: {
-      description: 'Invalid OIDC callback',
-      content: { 'application/json': { schema: ErrorResponseSchema } },
-    },
-  },
-})
-
-const logoutRoute = createRoute({
-  method: 'post',
-  path: '/logout',
-  operationId: 'logout',
-  tags: ['Auth'],
-  summary: 'Clear the AMA session',
-  ...AuthenticatedOperation,
-  responses: {
-    204: {
-      description: 'Logged out',
-    },
-    401: {
-      description: 'Authentication required',
-      content: { 'application/json': { schema: ErrorResponseSchema } },
+    200: {
+      description: 'OIDC client configuration',
+      content: { 'application/json': { schema: OidcClientConfigSchema } },
     },
   },
 })
@@ -95,7 +56,7 @@ const meRoute = createRoute({
   path: '/me',
   operationId: 'getAuthContext',
   tags: ['Auth'],
-  summary: 'Return the current AMA auth context',
+  summary: 'Return the current FlareAuth-backed AMA auth context',
   ...AuthenticatedOperation,
   responses: {
     200: {
@@ -109,70 +70,8 @@ const meRoute = createRoute({
   },
 })
 
-function newId(prefix: string) {
-  return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
-}
-
 const routes = app
-  .openapi(loginRoute, async (c) => {
-    const returnTo = safeReturnTo(c.req.query('returnTo') ?? null)
-    const attempt = await createLoginAttempt(c.env)
-    await setLoginStateCookie(c, {
-      state: attempt.state,
-      nonce: attempt.nonce,
-      verifier: attempt.verifier,
-      returnTo,
-      expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-    })
-    return c.redirect(attempt.authorizationUrl)
-  })
-  .openapi(callbackRoute, async (c) => {
-    const loginState = await readLoginState(c)
-    clearLoginStateCookie(c)
-
-    if (!loginState) {
-      return errorResponse(c, 400, 'oidc_error', 'Invalid OIDC callback', { reason: 'missing_login_state' })
-    }
-
-    try {
-      const timestamp = new Date().toISOString()
-      const db = drizzle(c.env.DB)
-      const claims = await exchangeCallbackForUserInfo(
-        c.env,
-        new URL(c.req.url),
-        loginState.verifier,
-        loginState.state,
-        loginState.nonce,
-      )
-      const principal = await upsertLocalPrincipal(db, claims, timestamp)
-      await createSession(c, db, {
-        id: newId('auth_session'),
-        userId: principal.userId,
-        organizationId: principal.organizationId,
-        projectId: principal.projectId,
-        now: timestamp,
-      })
-    } catch (err) {
-      if (err instanceof OidcError) {
-        return errorResponse(c, 400, 'oidc_error', 'Invalid OIDC callback', { reason: err.message })
-      }
-      throw err
-    }
-
-    return c.redirect(loginState.returnTo)
-  })
-  .openapi(logoutRoute, async (c) => {
-    const db = drizzle(c.env.DB)
-    const auth = await requireAuth(c, db)
-    if (!(auth instanceof Response)) {
-      await db
-        .update(appSessions)
-        .set({ revokedAt: new Date().toISOString() })
-        .where(eq(appSessions.id, auth.sessionId))
-    }
-    await clearSessionCookie(c)
-    return c.body(null, 204)
-  })
+  .openapi(configRoute, (c) => c.json(publicOidcConfig(c.env, new URL(c.req.url).origin), 200))
   .openapi(meRoute, async (c) => {
     const auth = await requireAuth(c, drizzle(c.env.DB))
     if (auth instanceof Response) {

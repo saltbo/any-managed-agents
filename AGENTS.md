@@ -11,9 +11,9 @@
 
 - Any Managed Agents is Cloudflare-native: Workers, D1, Durable Objects, Cloudflare Sandbox, Workers AI, and Cloudflare Secrets are the default platform assumptions.
 - Prefer mature community libraries for established protocols and hard problems instead of reimplementing them locally. This applies to auth protocols, OpenAPI tooling, validation, crypto, date/time handling, UI primitives, routing, data fetching, and runtime integrations.
-- FlareAuth owns authentication. OIDC must use a mature community library such as `openid-client`; do not hand-roll token parsing, token validation, callback validation, or discovery logic.
+- FlareAuth owns authentication, users, and organizations. OIDC must use mature community libraries such as `openid-client` and `oidc-client-ts`; do not hand-roll token parsing, token validation, callback validation, or discovery logic.
 - Pi coding agent is the v1.0 runtime inside one Cloudflare Sandbox per running session.
-- AMA owns the control plane: auth integration, tenancy, users, organizations, projects, agents, environments, sessions, providers, vaults, governance, usage, audit, OpenAPI, UI, sandbox lifecycle, and runtime proxy metadata.
+- AMA owns the control plane: auth integration, FlareAuth-backed tenancy enforcement, projects, agents, environments, sessions, providers, vaults, governance, usage, audit, OpenAPI, UI, sandbox lifecycle, and runtime proxy metadata. AMA must not maintain local user or organization tables.
 - AMA must not invent a competing runtime protocol, sandbox SDK, or agent loop. Runtime traffic uses Pi protocol directly or a transparent AMA proxy.
 - Cloudflare Agents SDK is not the v1.0 runtime contract. It may be added later as an adapter, but v1.0 must not require `/agents/*` compatibility.
 - Command-line automation uses `restish` against the published OpenAPI document. Do not add a bespoke CLI binary unless the product decision changes.

@@ -23,12 +23,12 @@ export interface StagingSmokeEvidence {
 }
 
 export interface StagingSmokeConfig {
+  accessToken?: string
   effectiveStorageState?: string
   loginEmail?: string
   loginPassword?: string
   origin: string
   runId: string
-  sessionCookie?: string
 }
 
 export class AmaWorld extends World {

@@ -25,7 +25,7 @@ describe('piModelsConfig', () => {
     expect(
       piModelsConfig(
         {
-          FLAREAUTH_REDIRECT_URI: 'https://ama.example.com/api/auth/callback',
+          AMA_ALLOWED_ORIGINS: 'https://ama.example.com',
           AMA_RUNTIME_AI_PROXY_TOKEN: 'proxy-token',
         } as Env,
         'cloudflare-workers-ai',
@@ -44,10 +44,7 @@ describe('piModelsConfig', () => {
 
   it('requires a runtime proxy token for Workers AI', () => {
     expect(() =>
-      piModelsConfig(
-        { FLAREAUTH_REDIRECT_URI: 'https://ama.example.com/api/auth/callback' } as Env,
-        'cloudflare-workers-ai',
-      ),
+      piModelsConfig({ AMA_ALLOWED_ORIGINS: 'https://ama.example.com' } as Env, 'cloudflare-workers-ai'),
     ).toThrow('AMA_RUNTIME_AI_PROXY_TOKEN')
   })
 })

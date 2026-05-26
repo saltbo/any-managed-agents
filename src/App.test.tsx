@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 import type {
   Agent,
@@ -440,9 +440,6 @@ function mockConsoleApi(seed?: {
     if (url === '/api/auth/me') {
       return jsonResponse(authContext)
     }
-    if (url === '/api/auth/logout') {
-      return noContent()
-    }
     if (url.startsWith('/runtime/sessions/') && url.endsWith('/rpc') && method === 'POST') {
       const command = JSON.parse(String(init?.body ?? '{}')) as { id?: string; type?: string; message?: string }
       runtimeCommandSink()[runtimeCommandSinkKey]?.push(command)
@@ -633,10 +630,15 @@ function expectToast(element: HTMLElement) {
   expect(element.closest('[data-sonner-toast]')).toBeTruthy()
 }
 
+beforeEach(() => {
+  window.localStorage.setItem('ama:e2e-access-token', 'e2e:app-test')
+})
+
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
+  window.localStorage.clear()
   window.history.pushState({}, '', '/')
 })
 
@@ -651,10 +653,7 @@ describe('App', () => {
 
     expect(await screen.findByText('Continue with FlareAuth')).toBeTruthy()
     expect(screen.getByText('Sign in through FlareAuth to open the control plane.')).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Continue with FlareAuth' })).toHaveProperty(
-      'href',
-      'http://localhost:3000/api/auth/login?returnTo=%2Fsessions%3Fstatus%3Didle',
-    )
+    expect(screen.getByRole('button', { name: 'Continue with FlareAuth' })).toBeTruthy()
   })
 
   it('drives the v1 console from resource creation through runtime events', async () => {

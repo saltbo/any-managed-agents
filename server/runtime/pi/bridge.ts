@@ -51,10 +51,11 @@ function runtimeAiProxyBaseUrl(env: Env) {
   if (env.AMA_RUNTIME_AI_PROXY_BASE_URL) {
     return env.AMA_RUNTIME_AI_PROXY_BASE_URL
   }
-  if (!env.FLAREAUTH_REDIRECT_URI) {
-    throw new Error('FLAREAUTH_REDIRECT_URI is required to configure the runtime Workers AI proxy')
+  const origin = env.AMA_ALLOWED_ORIGINS?.split(',')[0]?.trim()
+  if (!origin) {
+    throw new Error('AMA_ALLOWED_ORIGINS is required to configure the runtime Workers AI proxy')
   }
-  return `${new URL(env.FLAREAUTH_REDIRECT_URI).origin}/api/runtime/workers-ai/v1`
+  return `${new URL(origin).origin}/api/runtime/workers-ai/v1`
 }
 
 export function piModelsConfig(env: Env, provider: string) {

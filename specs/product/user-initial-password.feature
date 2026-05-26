@@ -1,9 +1,9 @@
 @auth
-Feature: User initial password
-  Initial admin credentials are handled safely.
+Feature: Delegated identity bootstrap
+  Initial users and administrator credentials are handled by FlareAuth.
 
   @planned
-  Scenario: Bootstrap first admin
-    When the platform starts without users
-    Then an initial admin can be created through a secure bootstrap flow and must rotate default credentials
-
+  Scenario: Delegate first admin bootstrap
+    When AMA starts without local users or organizations
+    Then FlareAuth remains responsible for first admin bootstrap and credential rotation
+    And AMA accepts only FlareAuth OIDC identity claims for product access

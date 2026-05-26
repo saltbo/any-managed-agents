@@ -57,7 +57,7 @@ Then(
 )
 
 When(
-  'the platform stores organizations, projects, agents, sessions, providers, policies, vault metadata, usage, or audit records',
+  'the platform stores projects, agents, sessions, providers, policies, vault metadata, usage, or audit records',
   async function (this: AmaWorld) {
     this.app = createApp()
     this.response = await this.app.fetch(new Request('https://example.test/api/openapi.json'), {} as Env)
