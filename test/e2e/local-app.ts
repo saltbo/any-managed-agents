@@ -39,8 +39,11 @@ export async function authenticateE2EPage(page: Page) {
   }
   await page.evaluate((token) => window.localStorage.setItem('ama:e2e-access-token', token), accessToken)
   await page.evaluate((id) => window.localStorage.setItem('ama:selected-project-id', id), projectId)
+  const tokenRunId = accessToken.startsWith('e2e:')
+    ? accessToken.slice('e2e:'.length)
+    : userId.replace(/^user_e2e_/, '')
   return {
-    user: { id: userId, email: `${userId}@e2e.example.com`, name: userId, avatarUrl: null },
+    user: { id: userId, email: `${tokenRunId}@e2e.example.com`, name: `E2E User ${tokenRunId}`, avatarUrl: null },
     organization: { id: organizationId, name: organizationId },
     project: { id: projectId, name: 'Default project' },
     roles: ['owner'],
