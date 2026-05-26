@@ -141,9 +141,9 @@ function agent(overrides: Partial<Agent> = {}): Agent {
     provider: 'workers-ai',
     model: '@cf/moonshotai/kimi-k2.6',
     systemPrompt: 'Do the work',
+    skills: ['ama@coding-agent'],
     allowedTools: ['read', 'write'],
     mcpConnectors: [],
-    sandboxPolicy: { network: 'enabled' },
     metadata: {},
     status: 'active',
     archivedAt: null,
@@ -171,9 +171,9 @@ function session(overrides: Partial<Session> = {}): Session {
       provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
       systemPrompt: 'Do the work',
+      skills: ['ama@coding-agent'],
       allowedTools: ['read', 'write'],
       mcpConnectors: [],
-      sandboxPolicy: { network: 'enabled' },
       metadata: {},
       createdAt: now,
     },
@@ -767,6 +767,8 @@ describe('App', () => {
 
     expect(await screen.findByRole('heading', { name: 'Coding agent' })).toBeTruthy()
     expect(await screen.findByText('Runtime configuration')).toBeTruthy()
+    expect(await screen.findByText('ama@coding-agent')).toBeTruthy()
+    expect(screen.queryByText('Sandbox policy')).toBeNull()
     fireEvent.click(screen.getByRole('tab', { name: 'Sessions' }))
     expect(screen.getAllByText('Sessions').length).toBeGreaterThan(1)
 
@@ -844,6 +846,9 @@ describe('App', () => {
     expect(screen.getByText('All events')).toBeTruthy()
     expect(await screen.findByText(/hello/)).toBeTruthy()
     expect(screen.getByRole('tab', { name: 'Debug' })).toBeTruthy()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Open agent details' })[0] as HTMLElement)
+    expect(await screen.findByText('ama@coding-agent')).toBeTruthy()
+    expect(screen.queryByText('Sandbox policy')).toBeNull()
 
     sessionRoute.unmount()
     window.history.pushState({}, '', '/sessions/session_stale')
@@ -1115,9 +1120,9 @@ const agentFixture = {
   provider: 'workers-ai',
   model: '@cf/moonshotai/kimi-k2.6',
   systemPrompt: 'Do the work',
+  skills: ['ama@coding-agent'],
   allowedTools: ['read', 'write'],
   mcpConnectors: [],
-  sandboxPolicy: { network: 'enabled' },
   metadata: {},
   status: 'active',
   archivedAt: null,
@@ -1142,9 +1147,9 @@ const sessionFixture = {
     provider: 'workers-ai',
     model: '@cf/moonshotai/kimi-k2.6',
     systemPrompt: 'Do the work',
+    skills: ['ama@coding-agent'],
     allowedTools: ['read', 'write'],
     mcpConnectors: [],
-    sandboxPolicy: { network: 'enabled' },
     metadata: {},
     createdAt: '2026-05-23T00:00:00.000Z',
   },

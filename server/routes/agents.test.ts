@@ -112,21 +112,28 @@ describe('[CF] /api/agents', () => {
         instructions: 'Answer with citations.',
         provider: 'workers-ai',
         model: '@cf/moonshotai/kimi-k2.6',
+        skills: ['ama@research'],
         allowedTools: ['web.search'],
         mcpConnectors: ['github'],
-        sandboxPolicy: { network: 'enabled', filesystem: 'workspace' },
         metadata: { owner: 'platform', remove: 'stale' },
       }),
     })
     expect(createRes.status).toBe(201)
-    const created = (await createRes.json()) as { id: string; currentVersionId: string; version: number }
+    const created = (await createRes.json()) as {
+      id: string
+      currentVersionId: string
+      version: number
+      sandboxPolicy?: unknown
+    }
     expect(created.version).toBe(1)
+    expect(created.sandboxPolicy).toBeUndefined()
 
     const readRes = await jsonFetch(`/api/agents/${created.id}`, authorization)
     expect(readRes.status).toBe(200)
     await expect(readRes.json()).resolves.toMatchObject({
       id: created.id,
       version: 1,
+      skills: ['ama@research'],
       allowedTools: ['web.search'],
       mcpConnectors: ['github'],
     })
@@ -141,6 +148,7 @@ describe('[CF] /api/agents', () => {
       currentVersionId: string
       description: string
       metadata: Record<string, unknown>
+      skills: string[]
       allowedTools: string[]
     }
     expect(updated.version).toBe(2)
@@ -148,6 +156,7 @@ describe('[CF] /api/agents', () => {
     expect(updated).toMatchObject({
       description: 'Updated description',
       metadata: { owner: 'runtime' },
+      skills: ['ama@research'],
       allowedTools: ['web.search'],
     })
     expect(updated.metadata).not.toHaveProperty('remove')
@@ -340,7 +349,7 @@ describe('[CF] /api/agents', () => {
     })
   })
 
-  it('rejects invalid model, blocked tools, invalid sandbox policy, and cross-project reads', async () => {
+  it('rejects invalid model, blocked tools, invalid skills, agent sandbox policy, and cross-project reads', async () => {
     const authorization = await signIn()
     const invalidModelRes = await jsonFetch('/api/agents', authorization, {
       method: 'POST',
@@ -360,11 +369,29 @@ describe('[CF] /api/agents', () => {
       error: { details: { fields: { allowedTools: expect.any(String) } } },
     })
 
-    const invalidPolicyRes = await jsonFetch('/api/agents', authorization, {
+    const rawSecretToolRes = await jsonFetch('/api/agents', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Raw secret tool', allowedTools: ['raw-secret-token'] }),
+    })
+    expect(rawSecretToolRes.status).toBe(400)
+    await expect(rawSecretToolRes.json()).resolves.toMatchObject({
+      error: { details: { fields: { allowedTools: expect.any(String) } } },
+    })
+
+    const invalidSkillRes = await jsonFetch('/api/agents', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Invalid skill', skills: ['missing-style'] }),
+    })
+    expect(invalidSkillRes.status).toBe(400)
+    await expect(invalidSkillRes.json()).resolves.toMatchObject({
+      error: { details: { fields: { skills: expect.any(String) } } },
+    })
+
+    const sandboxPolicyRes = await jsonFetch('/api/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Invalid policy', sandboxPolicy: { network: 'maybe' } }),
     })
-    expect(invalidPolicyRes.status).toBe(400)
+    expect(sandboxPolicyRes.status).toBe(400)
 
     const invalidMcpRes = await jsonFetch('/api/agents', authorization, {
       method: 'POST',
@@ -391,6 +418,15 @@ describe('[CF] /api/agents', () => {
     expect(rawTokenMetadataRes.status).toBe(400)
     await expect(rawTokenMetadataRes.json()).resolves.toMatchObject({
       error: { details: { fields: { metadata: expect.any(String) } } },
+    })
+
+    const rawSecretSkillRes = await jsonFetch('/api/agents', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Raw secret skill agent', skills: ['ama@raw-secret-token'] }),
+    })
+    expect(rawSecretSkillRes.status).toBe(400)
+    await expect(rawSecretSkillRes.json()).resolves.toMatchObject({
+      error: { details: { fields: { skills: expect.any(String) } } },
     })
 
     const validAgentRes = await jsonFetch('/api/agents', authorization, {

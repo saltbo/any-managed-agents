@@ -69,7 +69,7 @@ Tool execution:
 
 ## Product Model
 
-- `Agent` is a long-lived managed definition: instructions, tools, model policy, governance rules, and versions. Agents do not bind environments.
+- `Agent` is a long-lived managed definition: instructions, carried skills, tool declarations, model config, metadata, and versions. Agents do not bind environments and do not own sandbox or network policy.
 - `Environment` is a long-lived sandbox and runtime configuration: packages, variables, network policy, resource limits, executor image configuration, and metadata. It is not a running sandbox.
 - `Sandbox` is an ephemeral runtime instance created from an environment snapshot for exactly one session.
 - `Session` is a concrete run of an agent in an explicitly selected environment. Each session binds an agent version snapshot, environment snapshot, sandbox id, cloud runtime state, events, and status. Each running session owns exactly one sandbox executor backend.

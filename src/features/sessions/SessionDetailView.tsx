@@ -160,6 +160,7 @@ export function SessionDetailView({
                   <Meta label="Version" value={`v${session.agentSnapshot.version}`} />
                   <Meta label="Provider" value={session.agentSnapshot.provider} />
                   <Meta label="Model" value={session.agentSnapshot.model} />
+                  <Meta label="Skills" value={session.agentSnapshot.skills.join(', ') || 'None'} />
                   <Meta label="Tools" value={session.agentSnapshot.allowedTools.join(', ') || 'None'} />
                   <Meta label="MCP connectors" value={session.agentSnapshot.mcpConnectors.join(', ') || 'None'} />
                 </MetaGrid>
@@ -167,7 +168,6 @@ export function SessionDetailView({
               json={{
                 instructions: session.agentSnapshot.instructions,
                 systemPrompt: session.agentSnapshot.systemPrompt,
-                sandboxPolicy: session.agentSnapshot.sandboxPolicy,
                 metadata: session.agentSnapshot.metadata,
               }}
             />

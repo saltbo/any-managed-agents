@@ -217,7 +217,7 @@ Given('an agent exists with version 1', async function (this: ProductWorld) {
 })
 
 Given(
-  'an agent has instructions, description, model config, tools, sandbox policy, and metadata',
+  'an agent has instructions, description, model config, skills, tools, and metadata',
   async function (this: ProductWorld) {
     await ensureSignedIn(this)
     this.e2e.agent = await createAgent(this.e2e, {
@@ -225,8 +225,8 @@ Given(
       description: 'Initial description',
       instructions: 'Initial instructions',
       systemPrompt: 'Initial prompt',
+      skills: ['ama@initial-skill'],
       allowedTools: ['sandbox.exec'],
-      sandboxPolicy: { network: 'enabled' },
       metadata: { keep: 'yes', remove: 'soon' },
     })
   },
@@ -652,7 +652,7 @@ When('audit logging records the action', async function (this: ProductWorld) {
 })
 
 When(
-  'the user creates an agent with instructions, provider, model, allowed tools, MCP connectors, sandbox policy, and metadata',
+  'the user creates an agent with instructions, provider, model, skills, allowed tools, MCP connectors, and metadata',
   async function (this: ProductWorld) {
     await ensureSignedIn(this)
     this.e2e.agent = await createAgent(this.e2e, {
@@ -660,16 +660,16 @@ When(
       instructions: 'Use tools when needed.',
       provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
+      skills: ['ama@code-review'],
       allowedTools: ['sandbox.exec'],
       mcpConnectors: [],
-      sandboxPolicy: { network: 'enabled' },
       metadata: { purpose: 'e2e' },
     })
   },
 )
 
 When(
-  'the user changes instructions, model config, tools, MCP connectors, sandbox policy, or metadata',
+  'the user changes instructions, model config, skills, tools, MCP connectors, or metadata',
   async function (this: ProductWorld) {
     const state = await ensureAgentAndEnvironment(this)
     state.previousSession = await createSession(state)
@@ -677,8 +677,8 @@ When(
       method: 'PATCH',
       data: {
         instructions: 'Updated instructions',
+        skills: ['ama@updated-skill'],
         allowedTools: [],
-        sandboxPolicy: { network: 'disabled' },
         metadata: { updated: true },
       },
     })
@@ -686,15 +686,15 @@ When(
   },
 )
 
-When('the user changes instructions, model, tools, or sandbox policy', async function (this: ProductWorld) {
+When('the user changes instructions, model, skills, or tools', async function (this: ProductWorld) {
   const state = await ensureAgentAndEnvironment(this)
   state.previousSession = await createSession(state)
   state.updatedAgent = await apiJson<Json>(state.page.request, `/api/agents/${state.agent?.id}`, {
     method: 'PATCH',
     data: {
       instructions: 'Updated instructions',
+      skills: ['ama@updated-skill'],
       allowedTools: [],
-      sandboxPolicy: { network: 'disabled' },
     },
   })
   state.latestSession = await createSession(state)
@@ -739,7 +739,7 @@ When('the user lists agents with a page size', async function (this: ProductWorl
 })
 
 When(
-  'an agent is saved with an unavailable provider, blocked tool, or invalid sandbox policy',
+  'an agent is saved with an unavailable provider, blocked tool, invalid skill, or sandbox policy',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
     const response = await apiResponse(state.page.request, '/api/agents', {
@@ -747,6 +747,7 @@ When(
       data: {
         name: `${state.runId} invalid agent`,
         model: 'missing-model',
+        skills: ['invalid-skill'],
         allowedTools: ['secrets.read'],
         sandboxPolicy: { network: 'invalid' },
       },
@@ -1491,7 +1492,10 @@ Then(
 Then('agent sessions keep immutable agent and environment snapshots', async function (this: ProductWorld) {
   const state = await ensureAgentAndEnvironment(this)
   const session = await createSession(state)
-  assert.equal(objectValue(session.agentSnapshot).version, objectValue(state.agent).version)
+  const agentSnapshot = objectValue(session.agentSnapshot)
+  assert.equal(agentSnapshot.version, objectValue(state.agent).version)
+  assert.deepEqual(agentSnapshot.skills, objectValue(state.agent).skills)
+  assert.equal('sandboxPolicy' in agentSnapshot, false)
   assert.equal(objectValue(session.environmentSnapshot).version, objectValue(state.environment).version)
 })
 
@@ -1533,31 +1537,39 @@ Then(
   'optional fields use stable empty values instead of disappearing from the response',
   function (this: ProductWorld) {
     const agent = required(this.e2e?.agent, 'agent')
+    assert.ok(Array.isArray(agent.skills))
     assert.ok(Array.isArray(agent.allowedTools))
     assert.ok(Array.isArray(agent.mcpConnectors))
-    assert.equal(typeof agent.sandboxPolicy, 'object')
     assert.equal(typeof agent.metadata, 'object')
+    assert.equal('sandboxPolicy' in agent, false)
   },
 )
 
 Then(
-  'the first agent version stores the instructions, model config, tool policy, sandbox policy, and metadata',
+  'the first agent version stores the instructions, model config, skills, tool policy, MCP connectors, and metadata',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
     const versions = await apiJson<ListResponse<Json>>(state.page.request, `/api/agents/${state.agent?.id}/versions`)
     assert.equal(versions.data[0]?.version, 1)
+    assert.ok(Array.isArray(versions.data[0]?.skills))
+    assert.equal('sandboxPolicy' in required(versions.data[0], 'agent version'), false)
   },
 )
 
+Then('normal agent responses do not expose sandbox policy', function (this: ProductWorld) {
+  const agent = required(this.e2e?.agent, 'agent')
+  assert.equal('sandboxPolicy' in agent, false)
+})
+
 Then('the response echoes the normalized runtime configuration', function (this: ProductWorld) {
   const agent = required(this.e2e?.agent, 'agent')
+  assert.deepEqual(agent.skills, ['ama@code-review'])
   assert.deepEqual(agent.allowedTools, ['sandbox.exec'])
-  assert.deepEqual(agent.sandboxPolicy, { network: 'enabled' })
   assert.deepEqual(agent.metadata, { purpose: 'e2e' })
 })
 
 Then(
-  'blocked tools, unavailable models, and invalid sandbox policies are rejected with field-level validation details',
+  'blocked tools, unavailable models, invalid skills, and agent sandbox policies are rejected with field-level validation details',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
     const invalid = await apiResponse(state.page.request, '/api/agents', {
@@ -1567,6 +1579,18 @@ Then(
     const body = (await invalid.json()) as { error?: { details?: Json } }
     assert.equal(invalid.status(), 400)
     assert.equal(typeof body.error?.details, 'object')
+
+    const invalidSkill = await apiResponse(state.page.request, '/api/agents', {
+      method: 'POST',
+      data: { name: `${state.runId} invalid skill`, skills: ['invalid-skill'] },
+    })
+    assert.equal(invalidSkill.status(), 400)
+
+    const agentSandboxPolicy = await apiResponse(state.page.request, '/api/agents', {
+      method: 'POST',
+      data: { name: `${state.runId} agent sandbox policy`, sandboxPolicy: { network: 'enabled' } },
+    })
+    assert.equal(agentSandboxPolicy.status(), 400)
   },
 )
 
@@ -1574,11 +1598,23 @@ Then(
   'secret material is never accepted directly inside agent metadata, tools, or connector configuration',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    const invalid = await apiResponse(state.page.request, '/api/agents', {
+    const invalidMetadata = await apiResponse(state.page.request, '/api/agents', {
       method: 'POST',
       data: { name: `${state.runId} secret`, metadata: { apiKey: 'raw-secret' } },
     })
-    assert.equal(invalid.status(), 400)
+    assert.equal(invalidMetadata.status(), 400)
+
+    const invalidSkill = await apiResponse(state.page.request, '/api/agents', {
+      method: 'POST',
+      data: { name: `${state.runId} secret skill`, skills: ['ama@raw-secret-token'] },
+    })
+    assert.equal(invalidSkill.status(), 400)
+
+    const invalidTool = await apiResponse(state.page.request, '/api/agents', {
+      method: 'POST',
+      data: { name: `${state.runId} secret tool`, allowedTools: ['raw-secret-token'] },
+    })
+    assert.equal(invalidTool.status(), 400)
   },
 )
 
@@ -1596,15 +1632,23 @@ Then('the current agent points at version 2', function (this: ProductWorld) {
 })
 
 Then('sessions created before the update keep the version 1 snapshot', function (this: ProductWorld) {
-  assert.equal(objectValue(this.e2e?.previousSession?.agentSnapshot).version, 1)
+  const snapshot = objectValue(this.e2e?.previousSession?.agentSnapshot)
+  assert.equal(snapshot.version, 1)
+  assert.deepEqual(snapshot.skills, [])
+  assert.equal('sandboxPolicy' in snapshot, false)
 })
 
 Then('existing sessions continue using their original agent snapshot', function (this: ProductWorld) {
-  assert.equal(objectValue(this.e2e?.previousSession?.agentSnapshot).version, 1)
+  const snapshot = objectValue(this.e2e?.previousSession?.agentSnapshot)
+  assert.equal(snapshot.version, 1)
+  assert.equal('sandboxPolicy' in snapshot, false)
 })
 
 Then('sessions created after the update use the version 2 snapshot', function (this: ProductWorld) {
-  assert.equal(objectValue(this.e2e?.latestSession?.agentSnapshot).version, 2)
+  const snapshot = objectValue(this.e2e?.latestSession?.agentSnapshot)
+  assert.equal(snapshot.version, 2)
+  assert.deepEqual(snapshot.skills, ['ama@updated-skill'])
+  assert.equal('sandboxPolicy' in snapshot, false)
 })
 
 Then(

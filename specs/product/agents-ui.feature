@@ -28,5 +28,5 @@ Feature: Agents UI
     Given a model provider is available
     When the user starts the create-agent flow
     Then the form uses the shared form components and validation states
-    And the user can choose a model provider, model, tools, and sandbox policy
+    And the user can choose a model provider, model, skills, tools, and MCP connectors
     And saving creates the agent and returns to the browsable agents list with the new row visible

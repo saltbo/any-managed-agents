@@ -43,9 +43,9 @@ export function AgentDetailPage() {
         systemPrompt: input.instructions,
         provider: input.provider,
         model: input.model,
+        skills: parseTools(input.skills),
         allowedTools: parseTools(input.allowedTools),
         mcpConnectors: parseTools(input.mcpConnectors),
-        sandboxPolicy: parseJsonObject(input.sandboxPolicy, 'Sandbox policy'),
         metadata: parseJsonObject(input.metadata, 'Metadata'),
       }),
     onSuccess: () => {
@@ -131,9 +131,9 @@ function agentToForm(agent: Agent): AgentFormState {
     instructions: agent.instructions ?? '',
     provider: agent.provider,
     model: agent.model,
+    skills: agent.skills.join('\n'),
     allowedTools: agent.allowedTools.join('\n'),
     mcpConnectors: agent.mcpConnectors.join('\n'),
-    sandboxPolicy: stringifyJson(agent.sandboxPolicy),
     metadata: stringifyJson(agent.metadata),
   }
 }

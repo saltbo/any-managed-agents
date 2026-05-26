@@ -22,9 +22,9 @@ export function CreateAgentSheet({ open, onOpenChange }: { open: boolean; onOpen
         systemPrompt: form.instructions,
         provider: form.provider,
         model: form.model,
+        skills: parseTools(form.skills),
         allowedTools: parseTools(form.allowedTools),
         mcpConnectors: parseTools(form.mcpConnectors),
-        sandboxPolicy: parseJsonObject(form.sandboxPolicy, 'Sandbox policy'),
         metadata: parseJsonObject(form.metadata, 'Metadata'),
       }),
     onSuccess: () => {

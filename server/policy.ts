@@ -70,13 +70,11 @@ function mergedSandboxPolicy(
   effectivePolicy: Record<string, unknown>,
   session: { agentSnapshot: string | null; environmentSnapshot: string | null } | null,
 ) {
-  const agentSnapshot = session?.agentSnapshot ? parseJson<{ sandboxPolicy?: unknown }>(session.agentSnapshot, {}) : {}
   const environmentSnapshot = session?.environmentSnapshot
     ? parseJson<{ networkPolicy?: unknown }>(session.environmentSnapshot, {})
     : {}
   return {
     governance: effectivePolicy,
-    agent: stringRecord(agentSnapshot.sandboxPolicy),
     environmentNetwork: stringRecord(environmentSnapshot.networkPolicy),
   }
 }
@@ -514,7 +512,7 @@ export async function evaluateSandboxRuntimePolicy(
   }
 
   if (values.operation === 'network') {
-    const networkPolicies = [policies.governance.network, policies.agent.network, policies.environmentNetwork.mode]
+    const networkPolicies = [policies.governance.network, policies.environmentNetwork.mode]
     if (
       networkPolicies.some(
         (network) => network === 'disabled' || network === 'deny' || network === 'offline' || network === false,

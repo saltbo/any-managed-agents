@@ -48,12 +48,13 @@ async function createAgent(authorization: string) {
     body: JSON.stringify({
       name: 'Cloud session agent',
       instructions: 'Work through AMA runtime.',
+      skills: ['ama@cloud-session'],
       allowedTools: ['sandbox.exec', 'mcp:github.repo.read'],
       mcpConnectors: ['github'],
     }),
   })
   expect(res.status).toBe(201)
-  return (await res.json()) as { id: string; currentVersionId: string }
+  return (await res.json()) as { id: string; currentVersionId: string; skills: string[] }
 }
 
 async function connectMcp(authorization: string, connectorId: string) {
@@ -117,7 +118,7 @@ describe('[CF] /api/sessions', () => {
       id: string
       status: string
       agentVersionId: string
-      agentSnapshot: { instructions: string; mcpConnectors: string[] }
+      agentSnapshot: { instructions: string; skills: string[]; mcpConnectors: string[]; sandboxPolicy?: unknown }
       environmentVersionId: string
       environmentSnapshot: {
         mcpPolicy: Record<string, unknown>
@@ -138,7 +139,11 @@ describe('[CF] /api/sessions', () => {
       title: 'Ship the first task',
       status: 'idle',
       agentVersionId: agent.currentVersionId,
-      agentSnapshot: { instructions: 'Work through AMA runtime.', mcpConnectors: ['github'] },
+      agentSnapshot: {
+        instructions: 'Work through AMA runtime.',
+        skills: ['ama@cloud-session'],
+        mcpConnectors: ['github'],
+      },
       environmentSnapshot: {
         mcpPolicy: { allowedConnectors: ['github'] },
         packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
@@ -162,6 +167,7 @@ describe('[CF] /api/sessions', () => {
       },
       modelConfig: { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6' },
     })
+    expect(created.agentSnapshot.sandboxPolicy).toBeUndefined()
     expect(created.environmentVersionId).toMatch(/^envver_/)
     expect(created.startedAt).toEqual(expect.any(String))
 
@@ -856,9 +862,9 @@ describe('[CF] /api/sessions', () => {
       method: 'POST',
       body: JSON.stringify({
         name: 'Offline override agent',
+        skills: ['ama@runtime-network'],
         allowedTools: ['mcp:github.repo.read'],
         mcpConnectors: ['github'],
-        sandboxPolicy: { network: 'enabled' },
       }),
     })
     expect(agentRes.status).toBe(201)
@@ -949,9 +955,9 @@ describe('[CF] /api/sessions', () => {
       method: 'POST',
       body: JSON.stringify({
         name: 'Offline override agent',
+        skills: ['ama@runtime-network'],
         allowedTools: ['mcp:github.repo.read'],
         mcpConnectors: ['github'],
-        sandboxPolicy: { network: 'enabled' },
       }),
     })
     expect(agentRes.status).toBe(201)
@@ -1033,7 +1039,13 @@ describe('[CF] /api/sessions', () => {
     })
     const created = (await createRes.json()) as {
       id: string
-      agentSnapshot: { instructions: string; version: number; mcpConnectors: string[] }
+      agentSnapshot: {
+        instructions: string
+        version: number
+        skills: string[]
+        mcpConnectors: string[]
+        sandboxPolicy?: unknown
+      }
       environmentSnapshot: {
         packages: Array<{ name: string; version?: string }>
         mcpPolicy: Record<string, unknown>
@@ -1052,14 +1064,23 @@ describe('[CF] /api/sessions', () => {
 
     const rereadRes = await jsonFetch(`/api/sessions/${created.id}`, authorization)
     expect(rereadRes.status).toBe(200)
-    await expect(rereadRes.json()).resolves.toMatchObject({
+    const reread = (await rereadRes.json()) as {
+      agentSnapshot: { sandboxPolicy?: unknown }
+    }
+    expect(reread).toMatchObject({
       id: created.id,
-      agentSnapshot: { instructions: 'Work through AMA runtime.', version: 1, mcpConnectors: ['github'] },
+      agentSnapshot: {
+        instructions: 'Work through AMA runtime.',
+        version: 1,
+        skills: ['ama@cloud-session'],
+        mcpConnectors: ['github'],
+      },
       environmentSnapshot: {
         packages: [{ name: '@earendil-works/pi-agent-core', version: 'prebuilt' }],
         mcpPolicy: { allowedConnectors: ['github'] },
         packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
       },
     })
+    expect(reread.agentSnapshot.sandboxPolicy).toBeUndefined()
   })
 })

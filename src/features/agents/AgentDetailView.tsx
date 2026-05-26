@@ -48,9 +48,9 @@ function AgentDetailContent({
         provider: agent.provider,
         model: agent.model,
         systemPrompt: agent.systemPrompt,
+        skills: agent.skills,
         allowedTools: agent.allowedTools,
         mcpConnectors: agent.mcpConnectors,
-        sandboxPolicy: agent.sandboxPolicy,
         metadata: agent.metadata,
         createdAt: agent.updatedAt,
       },
@@ -89,9 +89,9 @@ function AgentDetailContent({
                 <Meta label="Version" value={`v${currentVersion.version}`} />
                 <Meta label="Created" value={formatDate(currentVersion.createdAt)} />
                 <Meta label="Model" value={`${currentVersion.provider} / ${currentVersion.model}`} />
+                <Meta label="Skills" value={currentVersion.skills.join(', ') || 'None'} />
                 <Meta label="Allowed tools" value={currentVersion.allowedTools.join(', ') || 'None'} />
                 <Meta label="MCP connectors" value={currentVersion.mcpConnectors.join(', ') || 'None'} />
-                <Meta label="Sandbox policy" value={stringifyJson(currentVersion.sandboxPolicy)} />
                 <Meta label="Metadata" value={stringifyJson(currentVersion.metadata)} />
               </MetaGrid>
               <JsonBlock

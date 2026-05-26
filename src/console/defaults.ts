@@ -14,9 +14,9 @@ export const emptyAgent: AgentFormState = {
   instructions: 'You are a focused coding agent. Make changes, run checks, and report the result.',
   provider: 'workers-ai',
   model: '@cf/moonshotai/kimi-k2.6',
+  skills: 'ama@coding-agent',
   allowedTools: 'read\nwrite\nshell',
   mcpConnectors: '',
-  sandboxPolicy: '{\n  "network": "enabled",\n  "filesystem": "workspace"\n}',
   metadata: '{}',
 }
 

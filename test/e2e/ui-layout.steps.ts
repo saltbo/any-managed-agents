@@ -221,6 +221,8 @@ Then('clicking a row opens the agent detail route', async function (this: UiWorl
     .click()
   await expect(workflow.page).toHaveURL(/\/agents\/agent_/)
   await expect(workflow.page.getByText('Runtime configuration')).toBeVisible()
+  await expect(workflow.page.getByText('ama@local-ui')).toBeVisible()
+  await expect(workflow.page.getByText('Sandbox policy')).toHaveCount(0)
 })
 
 Then('row actions do not trigger accidental navigation', async function (this: UiWorld) {
@@ -243,12 +245,13 @@ Then('the form uses the shared form components and validation states', async fun
   await expect(dialog.getByLabel('Name')).toBeVisible()
 })
 
-Then('the user can choose a model provider, model, tools, and sandbox policy', async function (this: UiWorld) {
+Then('the user can choose a model provider, model, skills, tools, and MCP connectors', async function (this: UiWorld) {
   const dialog = requireUiWorkflow(this).page.getByRole('dialog')
   await expect(dialog.getByLabel('Provider')).toBeVisible()
   await expect(dialog.getByLabel('Model')).toBeVisible()
+  await expect(dialog.getByLabel('Skills')).toBeVisible()
   await expect(dialog.getByLabel('Allowed Pi tools')).toBeVisible()
-  await expect(dialog.getByLabel('Sandbox policy')).toBeVisible()
+  await expect(dialog.getByLabel('MCP connectors')).toBeVisible()
 })
 
 Then(
@@ -590,8 +593,8 @@ Given(
         systemPrompt: 'Reply concisely through the local deterministic Pi runtime.',
         provider: 'workers-ai',
         model: '@cf/moonshotai/kimi-k2.6',
+        skills: ['ama@local-ui'],
         allowedTools: ['sandbox.exec'],
-        sandboxPolicy: { network: 'enabled' },
         metadata: { runId },
       },
     })
@@ -747,8 +750,8 @@ async function createUiAgent(workflow: UiWorkflow) {
       systemPrompt: 'Reply concisely through the deterministic test runtime.',
       provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
+      skills: ['ama@local-ui'],
       allowedTools: ['sandbox.exec'],
-      sandboxPolicy: { network: 'enabled' },
       metadata: { runId: workflow.runId },
     },
   })

@@ -58,9 +58,9 @@ const AgentVersionSchema = z
     provider: z.string(),
     model: z.string(),
     systemPrompt: z.string().nullable(),
+    skills: z.array(z.string()),
     allowedTools: z.array(z.string()),
     mcpConnectors: z.array(z.string()),
-    sandboxPolicy: JsonObjectSchema,
     metadata: JsonObjectSchema,
     createdAt: z.string().datetime(),
   })
@@ -250,9 +250,9 @@ function serializeAgentVersion(row: AgentVersionRow) {
     provider: row.provider,
     model: row.model,
     systemPrompt: row.systemPrompt,
+    skills: JSON.parse(row.skills) as string[],
     allowedTools: JSON.parse(row.allowedTools) as string[],
     mcpConnectors: JSON.parse(row.mcpConnectors) as string[],
-    sandboxPolicy: JSON.parse(row.sandboxPolicy) as Record<string, unknown>,
     metadata: JSON.parse(row.metadata) as Record<string, unknown>,
     createdAt: row.createdAt,
   }
@@ -274,9 +274,16 @@ function serializeEnvironmentVersion(row: EnvironmentVersionRow) {
 }
 
 function serializeSession(row: SessionRow) {
-  const agentSnapshot = parseJson<ReturnType<typeof serializeAgentVersion>>(row.agentSnapshot)
-  if (!agentSnapshot) {
+  const parsedAgentSnapshot = parseJson<ReturnType<typeof serializeAgentVersion> & { sandboxPolicy?: unknown }>(
+    row.agentSnapshot,
+  )
+  if (!parsedAgentSnapshot) {
     throw new Error('Session agent snapshot is required')
+  }
+  const { sandboxPolicy: _sandboxPolicy, ...agentSnapshotWithoutSandboxPolicy } = parsedAgentSnapshot
+  const agentSnapshot = {
+    ...agentSnapshotWithoutSandboxPolicy,
+    skills: Array.isArray(parsedAgentSnapshot.skills) ? parsedAgentSnapshot.skills : [],
   }
 
   return {

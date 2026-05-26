@@ -91,6 +91,12 @@ export function AgentForm({
         <TextField label="Provider" value={value.provider} onChange={(provider) => setValue({ ...value, provider })} />
         <TextField label="Model" value={value.model} onChange={(model) => setValue({ ...value, model })} />
         <TextAreaField
+          label="Skills"
+          description="One stable skill reference per line, such as source@skill."
+          value={value.skills}
+          onChange={(skills) => setValue({ ...value, skills })}
+        />
+        <TextAreaField
           label="Allowed Pi tools"
           description="One Pi tool name per line. These names are passed to the runtime policy."
           value={value.allowedTools}
@@ -101,12 +107,6 @@ export function AgentForm({
           description="One connector id per line. Connectors must already be approved for the project."
           value={value.mcpConnectors}
           onChange={(mcpConnectors) => setValue({ ...value, mcpConnectors })}
-        />
-        <TextAreaField
-          label="Sandbox policy"
-          description="JSON object stored on the immutable agent version."
-          value={value.sandboxPolicy}
-          onChange={(sandboxPolicy) => setValue({ ...value, sandboxPolicy })}
         />
         <TextAreaField
           label="Metadata"

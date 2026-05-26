@@ -256,6 +256,15 @@
             "nullable": true,
             "example": "Answer with citations."
           },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "ama@code-review"
+            ]
+          },
           "allowedTools": {
             "type": "array",
             "items": {
@@ -273,16 +282,6 @@
             "example": [
               "github"
             ]
-          },
-          "sandboxPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "network": "enabled",
-              "filesystem": "workspace"
-            }
           },
           "metadata": {
             "type": "object",
@@ -336,9 +335,9 @@
           "provider",
           "model",
           "systemPrompt",
+          "skills",
           "allowedTools",
           "mcpConnectors",
-          "sandboxPolicy",
           "metadata",
           "status",
           "archivedAt",
@@ -382,6 +381,18 @@
             "maxLength": 8000,
             "example": "Answer with citations."
           },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "maxItems": 100,
+            "example": [
+              "ama@code-review"
+            ]
+          },
           "allowedTools": {
             "type": "array",
             "items": {
@@ -404,29 +415,6 @@
             "example": [
               "github"
             ]
-          },
-          "sandboxPolicy": {
-            "type": "object",
-            "properties": {
-              "network": {
-                "type": "string",
-                "enum": [
-                  "enabled",
-                  "disabled"
-                ]
-              },
-              "filesystem": {
-                "type": "string",
-                "enum": [
-                  "workspace",
-                  "read-only"
-                ]
-              }
-            },
-            "additionalProperties": false,
-            "example": {
-              "network": "enabled"
-            }
           },
           "metadata": {
             "type": "object",
@@ -477,6 +465,18 @@
             "maxLength": 8000,
             "example": "Answer with citations."
           },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "maxItems": 100,
+            "example": [
+              "ama@code-review"
+            ]
+          },
           "allowedTools": {
             "type": "array",
             "items": {
@@ -499,29 +499,6 @@
             "example": [
               "github"
             ]
-          },
-          "sandboxPolicy": {
-            "type": "object",
-            "properties": {
-              "network": {
-                "type": "string",
-                "enum": [
-                  "enabled",
-                  "disabled"
-                ]
-              },
-              "filesystem": {
-                "type": "string",
-                "enum": [
-                  "workspace",
-                  "read-only"
-                ]
-              }
-            },
-            "additionalProperties": false,
-            "example": {
-              "network": "enabled"
-            }
           },
           "metadata": {
             "type": "object",
@@ -590,6 +567,15 @@
             "nullable": true,
             "example": "Answer with citations."
           },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "ama@code-review"
+            ]
+          },
           "allowedTools": {
             "type": "array",
             "items": {
@@ -607,15 +593,6 @@
             "example": [
               "github"
             ]
-          },
-          "sandboxPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "network": "enabled"
-            }
           },
           "metadata": {
             "type": "object",
@@ -641,9 +618,9 @@
           "provider",
           "model",
           "systemPrompt",
+          "skills",
           "allowedTools",
           "mcpConnectors",
-          "sandboxPolicy",
           "metadata",
           "createdAt"
         ]
@@ -3577,6 +3554,12 @@
             "type": "string",
             "nullable": true
           },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "allowedTools": {
             "type": "array",
             "items": {
@@ -3587,12 +3570,6 @@
             "type": "array",
             "items": {
               "type": "string"
-            }
-          },
-          "sandboxPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
             }
           },
           "metadata": {
@@ -3615,9 +3592,9 @@
           "provider",
           "model",
           "systemPrompt",
+          "skills",
           "allowedTools",
           "mcpConnectors",
-          "sandboxPolicy",
           "metadata",
           "createdAt"
         ]

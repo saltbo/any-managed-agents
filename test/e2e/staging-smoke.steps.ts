@@ -204,8 +204,8 @@ async function runStagingSmoke(config: StagingSmokeConfig): Promise<StagingSmoke
             'You are running an AMA staging smoke. Reply concisely. Use available tools when asked to run a shell command.',
           provider: process.env.AMA_E2E_PROVIDER ?? 'workers-ai',
           model: process.env.AMA_E2E_MODEL ?? '@cf/moonshotai/kimi-k2.6',
+          skills: ['ama@staging-smoke'],
           allowedTools: ['sandbox.exec'],
-          sandboxPolicy: { network: 'enabled' },
           metadata: { runId: config.runId },
         },
       })
