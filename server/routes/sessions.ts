@@ -32,8 +32,11 @@ import { evaluateMcpToolPolicy, evaluateProviderPolicy, evaluateSandboxRuntimePo
 import { redactSensitiveValue } from '../redaction'
 import { safeRuntimeError } from '../runtime/runtime-error'
 import {
+  isRuntimeTurnCancelled,
+  RuntimeTurnCancelledError,
   runSessionTurn,
   runtimeEndpointPath,
+  runtimeMessagesFromEvents,
   startSessionRuntime as startCloudSessionRuntime,
   stopSessionRuntime as stopCloudSessionRuntime,
 } from '../runtime/session-runtime'
@@ -795,6 +798,10 @@ async function dispatchInitialPrompt(env: Env, db: Db, auth: AuthContext, sessio
       throw new Error('Session agent snapshot is required')
     }
     const modelConfig = parseJson<Record<string, unknown>>(session.modelConfig) ?? {}
+    const messages = await loadRuntimeMessages(db, session.id)
+    const ensureActive = async () => {
+      await assertRuntimeSessionRunning(db, auth, session.id)
+    }
     const result = await runSessionTurn(env, {
       sessionId: session.id,
       sandboxId: session.sandboxId ?? '',
@@ -802,7 +809,10 @@ async function dispatchInitialPrompt(env: Env, db: Db, auth: AuthContext, sessio
       model: String(modelConfig.model ?? agentSnapshot.model),
       agentSnapshot,
       prompt: initialPrompt,
+      messages,
+      ensureActive,
       onEvent: async (event, metadata) => {
+        await ensureActive()
         await appendPiRuntimeEvent(db, {
           auth,
           sessionId: session.id,
@@ -811,6 +821,7 @@ async function dispatchInitialPrompt(env: Env, db: Db, auth: AuthContext, sessio
         })
       },
       approveToolCall: async ({ toolName, input }) => {
+        await ensureActive()
         if (toolName === 'sandbox.exec') {
           const command = typeof input.command === 'string' ? input.command : null
           const decision = await evaluateSandboxRuntimePolicy(db, auth, {
@@ -823,6 +834,7 @@ async function dispatchInitialPrompt(env: Env, db: Db, auth: AuthContext, sessio
             command,
           })
           if (!decision.allowed) {
+            await ensureActive()
             await appendPiRuntimeEvent(db, {
               auth,
               sessionId: session.id,
@@ -849,6 +861,7 @@ async function dispatchInitialPrompt(env: Env, db: Db, auth: AuthContext, sessio
               metadata: { operation: 'command', command, decision },
             })
           }
+          await ensureActive()
           return { allowed: decision.allowed, reason: decision.message }
         }
         return { allowed: true }
@@ -873,9 +886,33 @@ async function dispatchInitialPrompt(env: Env, db: Db, auth: AuthContext, sessio
       metadata: { source: 'api', promptDispatched: true },
     })
   } catch (error) {
+    if (isRuntimeTurnCancelled(error)) {
+      return
+    }
     const safeError = safeRuntimeError(error)
     await markInitialPromptFailed(db, auth, session, safeError.message)
   }
+}
+
+async function assertRuntimeSessionRunning(db: Db, auth: AuthContext, sessionId: string) {
+  const active = await db
+    .select({ status: sessions.status })
+    .from(sessions)
+    .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, auth.project.id)))
+    .get()
+  if (active?.status !== 'running') {
+    throw new RuntimeTurnCancelledError()
+  }
+}
+
+async function loadRuntimeMessages(db: Db, sessionId: string) {
+  const rows = await db
+    .select({ payload: sessionEvents.payload })
+    .from(sessionEvents)
+    .where(eq(sessionEvents.sessionId, sessionId))
+    .orderBy(asc(sessionEvents.sequence))
+    .all()
+  return runtimeMessagesFromEvents(rows)
 }
 
 async function markInitialPromptFailed(

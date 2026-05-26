@@ -14,6 +14,18 @@ async function jsonFetch(path: string, authorization: string, init: RequestInit 
   })
 }
 
+async function waitForSessionStatus(sessionId: string, authorization: string, status: string) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const res = await jsonFetch(`/api/sessions/${sessionId}`, authorization)
+    const session = (await res.json()) as { status: string }
+    if (session.status === status) {
+      return session
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  }
+  throw new Error(`Session ${sessionId} did not reach ${status}`)
+}
+
 async function createEnvironment(authorization: string) {
   const res = await jsonFetch('/api/environments', authorization, {
     method: 'POST',
@@ -187,6 +199,21 @@ describe('[CF] /api/sessions', () => {
     const afterTaskRes = await jsonFetch(`/api/sessions/${created.id}`, authorization)
     await expect(afterTaskRes.json()).resolves.toMatchObject({ id: created.id, status: 'idle' })
 
+    const historyTaskRes = await jsonFetch(`/runtime/sessions/${created.id}/rpc`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'prompt',
+        message: 'What was my previous prompt?',
+      }),
+    })
+    expect(historyTaskRes.status).toBe(200)
+    await expect(historyTaskRes.json()).resolves.toMatchObject({
+      runtime: 'ama-cloud',
+      accepted: true,
+      sandboxId: created.id.toLowerCase(),
+      path: '/rpc',
+    })
+
     const stopRes = await jsonFetch(`/api/sessions/${created.id}/stop`, authorization, { method: 'POST' })
     expect(stopRes.status).toBe(200)
     const stopped = (await stopRes.json()) as { status: string; stoppedAt: string }
@@ -267,6 +294,7 @@ describe('[CF] /api/sessions', () => {
       parentEventId: null,
     })
     expect(JSON.stringify(events.data)).not.toContain('raw-secret')
+    expect(JSON.stringify(events.data)).toContain('Previous user prompt: Inspect repository status')
     expect(JSON.stringify(events.data)).not.toContain('raw-github-token')
     expect(JSON.stringify(events.data)).not.toContain('secret-password')
     expect(JSON.stringify(events.data)).not.toContain('Message accepted by AMA runtime.')
@@ -382,6 +410,57 @@ describe('[CF] /api/sessions', () => {
     expect(archivedListRes.status).toBe(200)
     const archivedList = (await archivedListRes.json()) as { data: Array<{ id: string; status: string }> }
     expect(archivedList.data).toContainEqual(expect.objectContaining({ id: created.id, status: 'archived' }))
+  })
+
+  it('keeps a stopped session from writing successful completion events after cancellation', async () => {
+    const authorization = await signIn()
+    await connectMcp(authorization, 'github')
+    const environment = await createEnvironment(authorization)
+    const agent = await createAgent(authorization)
+
+    const createRes = await jsonFetch('/api/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        title: 'Cancellation boundary',
+      }),
+    })
+    expect(createRes.status).toBe(201)
+    const created = (await createRes.json()) as { id: string; status: string }
+    expect(created.status).toBe('idle')
+
+    const runtimeRequest = jsonFetch(`/runtime/sessions/${created.id}/rpc`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'prompt',
+        message: 'Wait for cancellation before completing',
+      }),
+    })
+    await waitForSessionStatus(created.id, authorization, 'running')
+
+    const stopRes = await jsonFetch(`/api/sessions/${created.id}/stop`, authorization, { method: 'POST' })
+    const stopBody = await stopRes.clone().json()
+    expect(stopRes.status, JSON.stringify(stopBody)).toBe(200)
+    expect(stopBody).toMatchObject({ id: created.id, status: 'stopped' })
+
+    const runtimeRes = await runtimeRequest
+    expect([200, 409]).toContain(runtimeRes.status)
+
+    const readRes = await jsonFetch(`/api/sessions/${created.id}`, authorization)
+    await expect(readRes.json()).resolves.toMatchObject({ id: created.id, status: 'stopped' })
+
+    const eventsRes = await jsonFetch(`/api/sessions/${created.id}/events`, authorization)
+    expect(eventsRes.status).toBe(200)
+    const events = (await eventsRes.json()) as {
+      data: Array<{ type: string; payload: Record<string, unknown> }>
+    }
+    const successfulAssistantCompletions = events.data.filter((event) => {
+      const message = (event.payload as { message?: { role?: string; stopReason?: string } }).message
+      return event.type === 'message_end' && message?.role === 'assistant' && message.stopReason === 'stop'
+    })
+    expect(successfulAssistantCompletions).toEqual([])
+    expect(JSON.stringify(events.data)).not.toContain('AMA runtime processed: Wait for cancellation before completing')
   })
 
   it('creates a session and dispatches an initial prompt through the API', async () => {

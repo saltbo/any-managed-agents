@@ -1,5 +1,5 @@
 import { swaggerUI } from '@hono/swagger-ui'
-import { and, eq, max, or } from 'drizzle-orm'
+import { and, asc, eq, max, or } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import { cors } from 'hono/cors'
 import { piEventTypeFromPayload } from '../shared/pi-events'
@@ -25,7 +25,13 @@ import sessionRoutes from './routes/sessions'
 import usage from './routes/usage'
 import vaults from './routes/vaults'
 import { safeRuntimeError } from './runtime/runtime-error'
-import { executeRuntimeToolCalls, runSessionTurn } from './runtime/session-runtime'
+import {
+  executeRuntimeToolCalls,
+  isRuntimeTurnCancelled,
+  RuntimeTurnCancelledError,
+  runSessionTurn,
+  runtimeMessagesFromEvents,
+} from './runtime/session-runtime'
 
 function newId(prefix: string) {
   return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
@@ -79,6 +85,27 @@ async function appendPiRuntimeEvent(
     }
   }
   throw new Error('Unable to append Pi runtime event')
+}
+
+async function assertRuntimeSessionRunning(db: ReturnType<typeof drizzle>, auth: AuthContext, sessionId: string) {
+  const active = await db
+    .select({ status: sessions.status })
+    .from(sessions)
+    .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, auth.project.id)))
+    .get()
+  if (active?.status !== 'running') {
+    throw new RuntimeTurnCancelledError()
+  }
+}
+
+async function loadRuntimeMessages(db: ReturnType<typeof drizzle>, sessionId: string) {
+  const rows = await db
+    .select({ payload: sessionEvents.payload })
+    .from(sessionEvents)
+    .where(eq(sessionEvents.sessionId, sessionId))
+    .orderBy(asc(sessionEvents.sequence))
+    .all()
+  return runtimeMessagesFromEvents(rows)
 }
 
 async function appendRuntimePolicyEvent(
@@ -324,6 +351,10 @@ async function recordRuntimeMessageOutcome(
   }
   const agentSnapshot = session.agentSnapshot ? (JSON.parse(session.agentSnapshot) as Record<string, unknown>) : {}
   const modelConfig = session.modelConfig ? (JSON.parse(session.modelConfig) as Record<string, unknown>) : {}
+  const messages = await loadRuntimeMessages(db, session.id)
+  const ensureActive = async () => {
+    await assertRuntimeSessionRunning(db, auth, session.id)
+  }
   const result = await runSessionTurn(env, {
     sessionId: session.id,
     sandboxId: session.sandboxId ?? '',
@@ -331,7 +362,10 @@ async function recordRuntimeMessageOutcome(
     model: String(modelConfig.model ?? '@cf/moonshotai/kimi-k2.6'),
     agentSnapshot,
     prompt,
+    messages,
+    ensureActive,
     onEvent: async (event, metadata) => {
+      await ensureActive()
       await appendPiRuntimeEvent(db, {
         auth,
         sessionId: session.id,
@@ -340,6 +374,7 @@ async function recordRuntimeMessageOutcome(
       })
     },
     approveToolCall: async ({ toolName, input }) => {
+      await ensureActive()
       if (toolName === 'sandbox.exec') {
         const command = typeof input.command === 'string' ? input.command : null
         const decision = await evaluateSandboxRuntimePolicy(db, auth, {
@@ -352,6 +387,7 @@ async function recordRuntimeMessageOutcome(
           command,
         })
         if (!decision.allowed) {
+          await ensureActive()
           await denyRuntimePolicy(db, auth, {
             sessionId: session.id,
             decision,
@@ -361,6 +397,7 @@ async function recordRuntimeMessageOutcome(
             payload: { operation: 'command', command },
           })
         }
+        await ensureActive()
         return { allowed: decision.allowed, reason: decision.message }
       }
       return { allowed: true }
@@ -380,6 +417,9 @@ async function markRuntimeExecutionFailed(
   session: typeof sessions.$inferSelect,
   error: unknown,
 ) {
+  if (isRuntimeTurnCancelled(error)) {
+    return safeRuntimeError(error)
+  }
   const runtimeError = safeRuntimeError(error)
   await appendPiRuntimeEvent(db, {
     auth,
@@ -715,6 +755,9 @@ export function createApp() {
           executeTools: c.env.AMA_RUNTIME_MODE === 'test',
         })
       } catch (error) {
+        if (isRuntimeTurnCancelled(error)) {
+          return errorResponse(c, 409, 'conflict', 'Session runtime is no longer active')
+        }
         const runtimeError = await markRuntimeExecutionFailed(db, resolvedAuth, session, error)
         return errorResponse(c, 500, 'internal_error', runtimeError.message, { runtime: runtimeError })
       }

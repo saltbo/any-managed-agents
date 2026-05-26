@@ -76,8 +76,21 @@ export type SessionTurnInput = {
   model: string
   agentSnapshot: Record<string, unknown>
   prompt: string
+  messages?: AgentMessage[]
+  ensureActive?: () => Promise<void>
   onEvent: (event: Record<string, unknown>, metadata?: Record<string, unknown>) => Promise<void>
   approveToolCall?: (input: RuntimeToolPolicyInput) => Promise<RuntimeToolPolicyDecision>
+}
+
+export class RuntimeTurnCancelledError extends Error {
+  constructor(message = 'Session runtime is no longer active') {
+    super(message)
+    this.name = 'RuntimeTurnCancelledError'
+  }
+}
+
+export function isRuntimeTurnCancelled(error: unknown) {
+  return error instanceof RuntimeTurnCancelledError
 }
 
 const ZERO_USAGE: Usage = {
@@ -94,8 +107,6 @@ const ZERO_USAGE: Usage = {
     total: 0,
   },
 }
-
-const activeRuns = new Map<string, AbortController>()
 
 async function getSandboxBinding() {
   const { getSandbox } = await import('@cloudflare/sandbox')
@@ -144,8 +155,6 @@ export async function startSessionRuntime(
 }
 
 export async function stopSessionRuntime(env: Env, sandboxId: string) {
-  activeRuns.get(sandboxId)?.abort()
-  activeRuns.delete(sandboxId)
   await toolExecutor(env).stop?.(sandboxId)
 }
 
@@ -422,11 +431,9 @@ function providerAssistantMessage(model: Model<string>, raw: unknown) {
 }
 
 function testAssistantMessage(model: Model<string>, context: Context) {
-  const hasToolResult = context.messages.some((message) => message.role === 'toolResult')
-  if (hasToolResult) {
-    const latestToolResult = [...context.messages].reverse().find((message) => message.role === 'toolResult')
-    const resultText =
-      latestToolResult && latestToolResult.role === 'toolResult' ? textContent(latestToolResult.content) : ''
+  const latestMessage = context.messages.at(-1)
+  if (latestMessage?.role === 'toolResult') {
+    const resultText = textContent(latestMessage.content)
     return assistantMessage(model, [{ type: 'text', text: `Tool result observed: ${resultText || 'ok'}` }], 'stop', {
       ...ZERO_USAGE,
       input: 12,
@@ -436,6 +443,24 @@ function testAssistantMessage(model: Model<string>, context: Context) {
   }
   const latestUser = [...context.messages].reverse().find((message) => message.role === 'user')
   const prompt = latestUser && latestUser.role === 'user' ? textContent(latestUser.content) : ''
+  if (/previous prompt|prior prompt|history/i.test(prompt)) {
+    const previousUser = [...context.messages]
+      .reverse()
+      .filter((message) => message.role === 'user')
+      .at(1)
+    const previousPrompt = previousUser && previousUser.role === 'user' ? textContent(previousUser.content) : ''
+    return assistantMessage(
+      model,
+      [{ type: 'text', text: `Previous user prompt: ${previousPrompt || 'none'}` }],
+      'stop',
+      {
+        ...ZERO_USAGE,
+        input: 11,
+        output: 6,
+        totalTokens: 17,
+      },
+    )
+  }
   if (/status|inspect|whoami|command|sandbox/i.test(prompt)) {
     return assistantMessage(
       model,
@@ -452,7 +477,23 @@ function testAssistantMessage(model: Model<string>, context: Context) {
   })
 }
 
-function createRuntimeStreamFn(env: Env) {
+async function ensureTurnActive(signal: AbortSignal, ensureActive?: () => Promise<void>) {
+  if (signal.aborted) {
+    throw new RuntimeTurnCancelledError('Runtime request aborted')
+  }
+  await ensureActive?.()
+  if (signal.aborted) {
+    throw new RuntimeTurnCancelledError('Runtime request aborted')
+  }
+}
+
+function createRuntimeStreamFn(
+  env: Env,
+  values: {
+    ensureActive?: () => Promise<void>
+    markCancelled: () => void
+  },
+) {
   return (model: Model<string>, context: Context, options?: StreamOptions) => {
     const stream = createAssistantMessageEventStream()
     queueMicrotask(async () => {
@@ -461,6 +502,12 @@ function createRuntimeStreamFn(env: Env) {
           const aborted = assistantMessage(model, [], 'aborted', ZERO_USAGE, 'Runtime request aborted')
           emitAssistantMessage(stream, aborted)
           return
+        }
+        await ensureTurnActive(options?.signal ?? new AbortController().signal, values.ensureActive)
+        const latestUser = [...context.messages].reverse().find((message) => message.role === 'user')
+        const prompt = latestUser && latestUser.role === 'user' ? textContent(latestUser.content) : ''
+        if (env.AMA_RUNTIME_MODE === 'test' && /wait for cancellation/i.test(prompt)) {
+          await new Promise((resolve) => setTimeout(resolve, 100))
         }
         const message =
           env.AMA_RUNTIME_MODE === 'test'
@@ -477,12 +524,16 @@ function createRuntimeStreamFn(env: Env) {
                   options?.signal ? { signal: options.signal } : undefined,
                 ),
               )
+        await ensureTurnActive(options?.signal ?? new AbortController().signal, values.ensureActive)
         emitAssistantMessage(stream, message)
       } catch (error) {
+        if (isRuntimeTurnCancelled(error)) {
+          values.markCancelled()
+        }
         const failed = assistantMessage(
           model,
           [],
-          options?.signal?.aborted ? 'aborted' : 'error',
+          options?.signal?.aborted || isRuntimeTurnCancelled(error) ? 'aborted' : 'error',
           ZERO_USAGE,
           error instanceof Error ? error.message : 'Model request failed',
         )
@@ -511,6 +562,7 @@ function runtimeTools(
     sessionId: string
     sandboxId: string
     agentSnapshot: Record<string, unknown>
+    ensureActive?: () => Promise<void>
     approveToolCall?: SessionTurnInput['approveToolCall']
   },
 ) {
@@ -529,10 +581,12 @@ function runtimeTools(
       executionMode: 'sequential',
       async execute(toolCallId, params, signal): Promise<AgentToolResult<Record<string, unknown>>> {
         const input = params as Record<string, unknown>
+        await ensureTurnActive(signal ?? new AbortController().signal, values.ensureActive)
         const decision = await values.approveToolCall?.({ toolCallId, toolName: name, input })
         if (decision && !decision.allowed) {
           throw new Error(decision.reason ?? `Tool call blocked by AMA policy: ${name}`)
         }
+        await ensureTurnActive(signal ?? new AbortController().signal, values.ensureActive)
         const result = await executor.execute(
           {
             sessionId: values.sessionId,
@@ -544,6 +598,7 @@ function runtimeTools(
           },
           signal,
         )
+        await ensureTurnActive(signal ?? new AbortController().signal, values.ensureActive)
         if (result.error) {
           throw new Error(JSON.stringify(result.error))
         }
@@ -614,12 +669,44 @@ function turnFailureMessage(event: AgentEvent) {
   return null
 }
 
+function isPersistedMessage(value: unknown): value is AgentMessage {
+  if (!value || typeof value !== 'object' || !('role' in value)) {
+    return false
+  }
+  const role = (value as { role?: unknown }).role
+  return role === 'user' || role === 'assistant' || role === 'toolResult'
+}
+
+export function runtimeMessagesFromEvents(events: Array<{ payload: string | Record<string, unknown> }>) {
+  let latestAgentEndMessages: AgentMessage[] | null = null
+  const messageEndMessages: AgentMessage[] = []
+  for (const event of events) {
+    const payload = typeof event.payload === 'string' ? JSON.parse(event.payload) : event.payload
+    if (!payload || typeof payload !== 'object') {
+      continue
+    }
+    const record = payload as Record<string, unknown>
+    if (record.type === 'agent_end' && Array.isArray(record.messages)) {
+      const messages = record.messages.filter(isPersistedMessage)
+      if (messages.length > 0) {
+        latestAgentEndMessages = messages
+      }
+      continue
+    }
+    if (record.type !== 'message_end' || !isPersistedMessage(record.message)) {
+      continue
+    }
+    messageEndMessages.push(record.message)
+  }
+  return latestAgentEndMessages ?? messageEndMessages
+}
+
 export async function runSessionTurn(env: Env, input: SessionTurnInput): Promise<SessionTurnResult> {
   const controller = new AbortController()
-  activeRuns.set(input.sandboxId, controller)
   const provider = piProviderName(input.provider)
   const model = runtimeModel(input.provider, input.model)
   let aborted = false
+  let cancelled = false
   let failureMessage: string | null = null
   const agent = new Agent({
     initialState: {
@@ -630,15 +717,32 @@ export async function runSessionTurn(env: Env, input: SessionTurnInput): Promise
         sandboxId: input.sandboxId,
         agentSnapshot: input.agentSnapshot,
         approveToolCall: input.approveToolCall,
+        ...(input.ensureActive ? { ensureActive: input.ensureActive } : {}),
       }),
-      messages: [],
+      messages: input.messages ?? [],
     },
-    streamFn: createRuntimeStreamFn(env),
+    streamFn: createRuntimeStreamFn(env, {
+      markCancelled: () => {
+        cancelled = true
+      },
+      ...(input.ensureActive ? { ensureActive: input.ensureActive } : {}),
+    }),
     toolExecution: 'sequential',
     sessionId: input.sessionId,
   })
 
   agent.subscribe(async (event: AgentEvent) => {
+    try {
+      await ensureTurnActive(controller.signal, input.ensureActive)
+    } catch (error) {
+      if (isRuntimeTurnCancelled(error)) {
+        cancelled = true
+        aborted = true
+        agent.abort()
+        return
+      }
+      throw error
+    }
     const eventFailure = turnFailureMessage(event)
     if (eventFailure) {
       failureMessage = eventFailure
@@ -661,18 +765,22 @@ export async function runSessionTurn(env: Env, input: SessionTurnInput): Promise
 
   controller.signal.addEventListener('abort', () => agent.abort(), { once: true })
   try {
+    await ensureTurnActive(controller.signal, input.ensureActive)
     await agent.prompt(input.prompt)
     await agent.waitForIdle()
-    if (aborted) {
+    if (aborted || cancelled) {
       return { status: 'aborted' }
     }
     if (failureMessage) {
       throw new Error(failureMessage)
     }
     return { status: 'idle' }
-  } finally {
-    if (activeRuns.get(input.sandboxId) === controller) {
-      activeRuns.delete(input.sandboxId)
+  } catch (error) {
+    if (isRuntimeTurnCancelled(error)) {
+      return { status: 'aborted' }
     }
+    throw error
+  } finally {
+    agent.abort()
   }
 }

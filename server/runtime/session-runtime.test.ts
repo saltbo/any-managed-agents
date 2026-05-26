@@ -28,8 +28,10 @@ vi.mock('./tool-executor', () => ({
 
 import {
   executeRuntimeToolCalls,
+  RuntimeTurnCancelledError,
   runSessionTurn,
   runtimeEndpointPath,
+  runtimeMessagesFromEvents,
   runtimeToolCalls,
   startSessionRuntime,
   stopSessionRuntime,
@@ -177,6 +179,105 @@ describe('session-runtime', () => {
     expect(JSON.stringify(events)).toContain('Tool result observed: clean')
     expect(JSON.stringify(events)).not.toContain('Message accepted by AMA runtime.')
     expect(JSON.stringify(events)).not.toContain('Received:')
+  })
+
+  it('reconstructs the next turn context from persisted Pi Core events', async () => {
+    const firstTurnEvents: Record<string, unknown>[] = []
+    await runSessionTurn({ AMA_RUNTIME_MODE: 'test' } as Env, {
+      sessionId: 'session_123',
+      sandboxId: 'sandbox_123',
+      provider: 'workers-ai',
+      model: '@cf/moonshotai/kimi-k2.6',
+      agentSnapshot: { instructions: 'Remember prior turns.', allowedTools: ['sandbox.exec'] },
+      prompt: 'Alpha durable prompt',
+      onEvent: async (event) => {
+        firstTurnEvents.push(event)
+      },
+    })
+
+    const secondTurnEvents: Record<string, unknown>[] = []
+    await runSessionTurn({ AMA_RUNTIME_MODE: 'test' } as Env, {
+      sessionId: 'session_123',
+      sandboxId: 'sandbox_123',
+      provider: 'workers-ai',
+      model: '@cf/moonshotai/kimi-k2.6',
+      agentSnapshot: { instructions: 'Remember prior turns.', allowedTools: ['sandbox.exec'] },
+      prompt: 'What was my previous prompt?',
+      messages: runtimeMessagesFromEvents(firstTurnEvents.map((event) => ({ payload: event }))),
+      onEvent: async (event) => {
+        secondTurnEvents.push(event)
+      },
+    })
+
+    expect(JSON.stringify(secondTurnEvents)).toContain('Previous user prompt: Alpha durable prompt')
+  })
+
+  it('uses latest agent_end messages as canonical persisted context', () => {
+    const messages = runtimeMessagesFromEvents([
+      {
+        payload: {
+          type: 'message_end',
+          message: { role: 'user', content: 'stale fallback', timestamp: 1 },
+        },
+      },
+      {
+        payload: {
+          type: 'agent_end',
+          messages: [
+            { role: 'user', content: 'canonical user', timestamp: 2 },
+            {
+              role: 'assistant',
+              content: [{ type: 'text', text: 'canonical assistant' }],
+              api: 'ama-workers-ai',
+              provider: 'cloudflare-workers-ai',
+              model: '@cf/moonshotai/kimi-k2.6',
+              usage: {
+                input: 0,
+                output: 0,
+                cacheRead: 0,
+                cacheWrite: 0,
+                totalTokens: 0,
+                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+              },
+              stopReason: 'stop',
+              timestamp: 3,
+            },
+          ],
+        },
+      },
+    ])
+
+    expect(messages).toHaveLength(2)
+    expect(messages[0]).toMatchObject({ role: 'user', content: 'canonical user' })
+  })
+
+  it('stops before model completion events are persisted when the DB cancellation gate trips', async () => {
+    const events: Record<string, unknown>[] = []
+    let active = true
+
+    const result = await runSessionTurn({ AMA_RUNTIME_MODE: 'test' } as Env, {
+      sessionId: 'session_123',
+      sandboxId: 'sandbox_123',
+      provider: 'workers-ai',
+      model: '@cf/moonshotai/kimi-k2.6',
+      agentSnapshot: { instructions: 'Stop cleanly.', allowedTools: ['sandbox.exec'] },
+      prompt: 'Alpha durable prompt',
+      ensureActive: async () => {
+        if (!active) {
+          throw new RuntimeTurnCancelledError()
+        }
+      },
+      onEvent: async (event) => {
+        if (event.type === 'turn_start') {
+          active = false
+        }
+        events.push(event)
+      },
+    })
+
+    expect(result).toEqual({ status: 'aborted' })
+    expect(events.map((event) => event.type)).not.toContain('message_end')
+    expect(JSON.stringify(events)).not.toContain('AMA runtime processed: Alpha durable prompt')
   })
 
   it('does not dispatch sandbox tools that are absent from the agent snapshot allow-list', async () => {
