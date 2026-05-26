@@ -27,12 +27,6 @@ const DEFAULT_MODEL = '@cf/moonshotai/kimi-k2.6'
 const BLOCKED_TOOLS = new Set(['secrets.read', 'filesystem.host', 'network.raw'])
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
-const SandboxPolicySchema = z
-  .object({
-    network: z.enum(['enabled', 'disabled']).optional(),
-    filesystem: z.enum(['workspace', 'read-only']).optional(),
-  })
-  .strict()
 
 const AgentSchema = z
   .object({
@@ -44,9 +38,9 @@ const AgentSchema = z
     provider: z.string().openapi({ example: DEFAULT_PROVIDER }),
     model: z.string().openapi({ example: DEFAULT_MODEL }),
     systemPrompt: z.string().nullable().openapi({ example: 'Answer with citations.' }),
+    skills: z.array(z.string()).openapi({ example: ['ama@code-review'] }),
     allowedTools: z.array(z.string()).openapi({ example: ['web.search'] }),
     mcpConnectors: z.array(z.string()).openapi({ example: ['github'] }),
-    sandboxPolicy: JsonObjectSchema.openapi({ example: { network: 'enabled', filesystem: 'workspace' } }),
     metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
     status: z.enum(['active', 'archived']).openapi({ example: 'active' }),
     archivedAt: z.string().datetime().nullable().openapi({ example: null }),
@@ -67,9 +61,9 @@ const AgentVersionSchema = z
     provider: z.string().openapi({ example: DEFAULT_PROVIDER }),
     model: z.string().openapi({ example: DEFAULT_MODEL }),
     systemPrompt: z.string().nullable().openapi({ example: 'Answer with citations.' }),
+    skills: z.array(z.string()).openapi({ example: ['ama@code-review'] }),
     allowedTools: z.array(z.string()).openapi({ example: ['web.search'] }),
     mcpConnectors: z.array(z.string()).openapi({ example: ['github'] }),
-    sandboxPolicy: JsonObjectSchema.openapi({ example: { network: 'enabled' } }),
     metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
     createdAt: z.string().datetime().openapi({ example: '2026-05-22T00:00:00.000Z' }),
   })
@@ -83,6 +77,11 @@ const AgentPayloadSchema = z
     provider: z.string().min(1).optional().openapi({ example: DEFAULT_PROVIDER }),
     model: z.string().min(1).optional().openapi({ example: DEFAULT_MODEL }),
     systemPrompt: z.string().max(8000).optional().openapi({ example: 'Answer with citations.' }),
+    skills: z
+      .array(z.string().min(1).max(256))
+      .max(100)
+      .optional()
+      .openapi({ example: ['ama@code-review'] }),
     allowedTools: z
       .array(z.string().min(1))
       .max(100)
@@ -93,7 +92,6 @@ const AgentPayloadSchema = z
       .max(50)
       .optional()
       .openapi({ example: ['github'] }),
-    sandboxPolicy: SandboxPolicySchema.optional().openapi({ example: { network: 'enabled' } }),
     metadata: JsonObjectSchema.optional().openapi({ example: { owner: 'platform' } }),
   })
   .strict()
@@ -225,7 +223,11 @@ async function validateConfiguredProviderModel(
 
 function validateAllowedTools(allowedTools: string[]) {
   const blocked = allowedTools.find((tool) => BLOCKED_TOOLS.has(tool))
-  return blocked ? { allowedTools: `Tool is blocked by policy: ${blocked}` } : null
+  if (blocked) {
+    return { allowedTools: `Tool is blocked by policy: ${blocked}` }
+  }
+  const secret = allowedTools.find(secretString)
+  return secret ? { allowedTools: 'Secret material must be stored in a vault.' } : null
 }
 
 function secretKey(key: string) {
@@ -239,7 +241,19 @@ function secretKey(key: string) {
   )
 }
 
+function secretString(value: string) {
+  return (
+    /-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(value) ||
+    /\b(?:sk|ghp|github_pat|glpat|xox[baprs])_[A-Za-z0-9_-]{16,}\b/.test(value) ||
+    /\b[A-Za-z0-9_-]{32,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\b/.test(value) ||
+    value.toLowerCase().includes('raw-secret')
+  )
+}
+
 function hasSecretMaterial(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return secretString(value)
+  }
   if (!value || typeof value !== 'object') {
     return false
   }
@@ -249,6 +263,21 @@ function hasSecretMaterial(value: unknown): boolean {
   return Object.entries(value).some(([key, child]) => {
     return secretKey(key) || hasSecretMaterial(child)
   })
+}
+
+function validateSkills(skills: string[]) {
+  for (const skill of skills) {
+    if (
+      !/^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}@[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$/.test(skill) ||
+      /[\s?#{}"'\\]/.test(skill)
+    ) {
+      return { skills: `Skill must be a stable <source>@<skill> reference: ${skill}` }
+    }
+    if (secretString(skill)) {
+      return { skills: 'Secret material must be stored in a vault.' }
+    }
+  }
+  return null
 }
 
 function mergeMetadata(current: Record<string, unknown>, update: Record<string, unknown> | undefined) {
@@ -288,9 +317,9 @@ function serializeAgent(row: AgentRow, version: AgentVersionRow | null) {
     provider: row.provider,
     model: row.model,
     systemPrompt: row.systemPrompt,
+    skills: parseJson<string[]>(row.skills),
     allowedTools: parseJson<string[]>(row.allowedTools),
     mcpConnectors: parseJson<string[]>(row.mcpConnectors),
-    sandboxPolicy: parseJson<Record<string, unknown>>(row.sandboxPolicy),
     metadata: parseJson<Record<string, unknown>>(row.metadata),
     status: row.status as 'active' | 'archived',
     archivedAt: row.archivedAt,
@@ -311,9 +340,9 @@ function serializeAgentVersion(row: AgentVersionRow) {
     provider: row.provider,
     model: row.model,
     systemPrompt: row.systemPrompt,
+    skills: parseJson<string[]>(row.skills),
     allowedTools: parseJson<string[]>(row.allowedTools),
     mcpConnectors: parseJson<string[]>(row.mcpConnectors),
-    sandboxPolicy: parseJson<Record<string, unknown>>(row.sandboxPolicy),
     metadata: parseJson<Record<string, unknown>>(row.metadata),
     createdAt: row.createdAt,
   }
@@ -327,9 +356,9 @@ async function createAgentVersion(
     provider: string
     model: string
     systemPrompt: string | null
+    skills: string[]
     allowedTools: string[]
     mcpConnectors: string[]
-    sandboxPolicy: Record<string, unknown>
     metadata: Record<string, unknown>
     createdAt: string
   },
@@ -354,9 +383,9 @@ async function createAgentVersion(
     provider: values.provider,
     model: values.model,
     systemPrompt: values.systemPrompt,
+    skills: stringify(values.skills),
     allowedTools: stringify(values.allowedTools),
     mcpConnectors: stringify(values.mcpConnectors),
-    sandboxPolicy: stringify(values.sandboxPolicy),
     metadata: stringify(values.metadata),
     createdAt: values.createdAt,
   }
@@ -541,12 +570,13 @@ const routes = app
       body.provider ?? (await defaultProvider(db, auth.project.id)),
     )
     const model = body.model ?? c.env.AMA_DEFAULT_MODEL ?? DEFAULT_MODEL
+    const skills = body.skills ?? []
     const allowedTools = body.allowedTools ?? []
     const mcpConnectors = body.mcpConnectors ?? []
-    const sandboxPolicy = body.sandboxPolicy ?? {}
     const metadata = body.metadata ?? {}
     const validation =
       (await validateConfiguredProviderModel(db, auth.project.id, provider, model, c.env.AMA_DEFAULT_MODEL)) ??
+      validateSkills(skills) ??
       validateAllowedTools(allowedTools) ??
       (await validateMcpConnectors(db, auth.project.id, mcpConnectors)) ??
       (hasSecretMaterial(metadata) ? { metadata: 'Secret material must be stored in a vault.' } : null)
@@ -564,9 +594,9 @@ const routes = app
       provider,
       model,
       systemPrompt: body.systemPrompt ?? body.instructions ?? null,
+      skills: stringify(skills),
       allowedTools: stringify(allowedTools),
       mcpConnectors: stringify(mcpConnectors),
-      sandboxPolicy: stringify(sandboxPolicy),
       metadata: stringify(metadata),
       status: 'active',
       archivedAt: null,
@@ -577,9 +607,9 @@ const routes = app
     await db.insert(agentDefinitions).values(row)
     const version = await createAgentVersion(db, row, {
       ...row,
+      skills,
       allowedTools,
       mcpConnectors,
-      sandboxPolicy,
       metadata,
       createdAt: timestamp,
     })
@@ -625,9 +655,9 @@ const routes = app
       provider: await normalizeRequestedProvider(db, auth.project.id, body.provider ?? agent.provider),
       model: body.model ?? agent.model,
       systemPrompt: body.systemPrompt ?? agent.systemPrompt,
+      skills: body.skills ?? parseJson<string[]>(agent.skills),
       allowedTools: body.allowedTools ?? parseJson<string[]>(agent.allowedTools),
       mcpConnectors: body.mcpConnectors ?? parseJson<string[]>(agent.mcpConnectors),
-      sandboxPolicy: body.sandboxPolicy ?? parseJson<Record<string, unknown>>(agent.sandboxPolicy),
       metadata: mergeMetadata(parseJson<Record<string, unknown>>(agent.metadata), body.metadata),
     }
     const validation =
@@ -638,6 +668,7 @@ const routes = app
         next.model,
         c.env.AMA_DEFAULT_MODEL,
       )) ??
+      validateSkills(next.skills) ??
       validateAllowedTools(next.allowedTools) ??
       (await validateMcpConnectors(db, auth.project.id, next.mcpConnectors)) ??
       (hasSecretMaterial(next.metadata) ? { metadata: 'Secret material must be stored in a vault.' } : null)
@@ -651,18 +682,18 @@ const routes = app
       body.provider !== undefined ||
       body.model !== undefined ||
       body.systemPrompt !== undefined ||
+      body.skills !== undefined ||
       body.allowedTools !== undefined ||
       body.mcpConnectors !== undefined ||
-      body.sandboxPolicy !== undefined ||
       body.metadata !== undefined
     const version = runtimeChanged
       ? await createAgentVersion(db, agent, { ...next, createdAt: timestamp })
       : await currentAgentVersion(db, agent)
     const updated = {
       ...next,
+      skills: stringify(next.skills),
       allowedTools: stringify(next.allowedTools),
       mcpConnectors: stringify(next.mcpConnectors),
-      sandboxPolicy: stringify(next.sandboxPolicy),
       metadata: stringify(next.metadata),
       currentVersionId: version?.id ?? agent.currentVersionId,
       updatedAt: timestamp,

@@ -30,20 +30,21 @@ Feature: Agents API
     Then the response includes an agent id, current version id, project id, timestamps, and archive state
     And the agent defaults to the project default model provider and model
     And optional fields use stable empty values instead of disappearing from the response
-    And the first agent version stores the instructions, model config, tool policy, sandbox policy, and metadata
+    And the first agent version stores the instructions, model config, skills, tool policy, MCP connectors, and metadata
+    And normal agent responses do not expose sandbox policy
 
   @implemented
   Scenario: Confirm CF route coverage for full agent runtime configuration
     Given a project has an active model provider
-    When the user creates an agent with instructions, provider, model, allowed tools, MCP connectors, sandbox policy, and metadata
+    When the user creates an agent with instructions, provider, model, skills, allowed tools, MCP connectors, and metadata
     Then the response echoes the normalized runtime configuration
-    And blocked tools, unavailable models, and invalid sandbox policies are rejected with field-level validation details
+    And blocked tools, unavailable models, invalid skills, and agent sandbox policies are rejected with field-level validation details
     And secret material is never accepted directly inside agent metadata, tools, or connector configuration
 
   @implemented
   Scenario: Confirm CF route coverage for versioned agent updates
     Given an agent exists with version 1
-    When the user changes instructions, model config, tools, MCP connectors, sandbox policy, or metadata
+    When the user changes instructions, model config, skills, tools, MCP connectors, or metadata
     Then the platform creates version 2
     And the current agent points at version 2
     And sessions created before the update keep the version 1 snapshot
@@ -51,7 +52,7 @@ Feature: Agents API
 
   @implemented
   Scenario: Confirm CF route coverage for partial agent updates
-    Given an agent has instructions, description, model config, tools, sandbox policy, and metadata
+    Given an agent has instructions, description, model config, skills, tools, and metadata
     When the user updates only the description
     Then every omitted runtime field remains unchanged
     When the user sets a metadata key to null

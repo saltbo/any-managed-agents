@@ -10,10 +10,10 @@ Feature: Agent detail
 
   @planned
   Scenario: Inspect normalized agent configuration
-    Given an agent exists with tools, MCP connectors, metadata, sandbox policy, and versions
+    Given an agent exists with skills, tools, MCP connectors, metadata, and versions
     When the user opens the agent detail page
     Then the header shows name, status, and timestamps
-    And the configuration view shows instructions, provider, model, tools, MCP connectors, metadata, and sandbox policy without exposing secrets
+    And the configuration view shows instructions, provider, model, skills, tools, MCP connectors, and metadata without exposing secrets or sandbox policy
     And the versions view shows each immutable version with change time and runtime-relevant fields
 
   @planned

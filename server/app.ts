@@ -45,6 +45,15 @@ function piEventType(event: Record<string, unknown>) {
   return piEventTypeFromPayload(event)
 }
 
+function parseRuntimeAgentSnapshot(value: string | null) {
+  const snapshot = value ? (JSON.parse(value) as Record<string, unknown>) : {}
+  const { sandboxPolicy: _sandboxPolicy, ...runtimeSnapshot } = snapshot
+  return {
+    ...runtimeSnapshot,
+    skills: Array.isArray(snapshot.skills) ? snapshot.skills : [],
+  }
+}
+
 async function appendPiRuntimeEvent(
   db: ReturnType<typeof drizzle>,
   values: {
@@ -349,7 +358,7 @@ async function recordRuntimeMessageOutcome(
   if (!prompt) {
     throw new Error('Runtime prompt message is required')
   }
-  const agentSnapshot = session.agentSnapshot ? (JSON.parse(session.agentSnapshot) as Record<string, unknown>) : {}
+  const agentSnapshot = parseRuntimeAgentSnapshot(session.agentSnapshot)
   const modelConfig = session.modelConfig ? (JSON.parse(session.modelConfig) as Record<string, unknown>) : {}
   const messages = await loadRuntimeMessages(db, session.id)
   const ensureActive = async () => {

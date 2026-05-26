@@ -28,6 +28,7 @@ export function AgentsView({
           <TableHead>Agent</TableHead>
           <TableHead>Status</TableHead>
           <TableHead>Model</TableHead>
+          <TableHead>Skills</TableHead>
           <TableHead>Tools</TableHead>
           <TableHead>Updated</TableHead>
           <TableHead className="text-right">Actions</TableHead>
@@ -51,6 +52,7 @@ export function AgentsView({
               </div>
             </TableCell>
             <TableCell className="max-w-64 truncate">{`${agent.provider} / ${agent.model}`}</TableCell>
+            <TableCell className="max-w-48 truncate">{agent.skills.join(', ') || 'None'}</TableCell>
             <TableCell className="max-w-48 truncate">{agent.allowedTools.join(', ') || 'None'}</TableCell>
             <TableCell>{formatDate(agent.updatedAt)}</TableCell>
             <TableCell>

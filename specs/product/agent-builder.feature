@@ -20,7 +20,7 @@ Feature: Agent builder
   @planned
   Scenario: Configure sandbox access
     When the user enables sandbox execution
-    Then the builder captures sandbox policy
+    Then the builder captures carried skills
     And the resulting agent version can request Cloudflare Sandbox execution
 
   @planned

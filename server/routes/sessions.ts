@@ -58,9 +58,9 @@ const AgentVersionSchema = z
     provider: z.string(),
     model: z.string(),
     systemPrompt: z.string().nullable(),
+    skills: z.array(z.string()),
     allowedTools: z.array(z.string()),
     mcpConnectors: z.array(z.string()),
-    sandboxPolicy: JsonObjectSchema,
     metadata: JsonObjectSchema,
     createdAt: z.string().datetime(),
   })
@@ -250,12 +250,26 @@ function serializeAgentVersion(row: AgentVersionRow) {
     provider: row.provider,
     model: row.model,
     systemPrompt: row.systemPrompt,
+    skills: JSON.parse(row.skills) as string[],
     allowedTools: JSON.parse(row.allowedTools) as string[],
     mcpConnectors: JSON.parse(row.mcpConnectors) as string[],
-    sandboxPolicy: JSON.parse(row.sandboxPolicy) as Record<string, unknown>,
     metadata: JSON.parse(row.metadata) as Record<string, unknown>,
     createdAt: row.createdAt,
   }
+}
+
+type SerializedAgentVersion = ReturnType<typeof serializeAgentVersion>
+
+function parseAgentSnapshot(value: string | null) {
+  const parsed = parseJson<SerializedAgentVersion & { sandboxPolicy?: unknown }>(value)
+  if (!parsed) {
+    return null
+  }
+  const { sandboxPolicy: _sandboxPolicy, ...snapshot } = parsed
+  return {
+    ...snapshot,
+    skills: Array.isArray(parsed.skills) ? parsed.skills : [],
+  } satisfies SerializedAgentVersion
 }
 
 function serializeEnvironmentVersion(row: EnvironmentVersionRow) {
@@ -274,7 +288,7 @@ function serializeEnvironmentVersion(row: EnvironmentVersionRow) {
 }
 
 function serializeSession(row: SessionRow) {
-  const agentSnapshot = parseJson<ReturnType<typeof serializeAgentVersion>>(row.agentSnapshot)
+  const agentSnapshot = parseAgentSnapshot(row.agentSnapshot)
   if (!agentSnapshot) {
     throw new Error('Session agent snapshot is required')
   }
@@ -793,7 +807,7 @@ async function dispatchInitialPrompt(env: Env, db: Db, auth: AuthContext, sessio
   }
 
   try {
-    const agentSnapshot = parseJson<ReturnType<typeof serializeAgentVersion>>(session.agentSnapshot)
+    const agentSnapshot = parseAgentSnapshot(session.agentSnapshot)
     if (!agentSnapshot) {
       throw new Error('Session agent snapshot is required')
     }
@@ -1003,7 +1017,7 @@ export async function recoverSessionRuntime(env: Env, db: Db, auth: AuthContext,
   if (!session.sandboxId) {
     throw new Error('Session runtime is unavailable')
   }
-  const agentSnapshot = parseJson<ReturnType<typeof serializeAgentVersion>>(session.agentSnapshot)
+  const agentSnapshot = parseAgentSnapshot(session.agentSnapshot)
   if (!agentSnapshot) {
     throw new Error('Session agent snapshot is required')
   }

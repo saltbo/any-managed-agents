@@ -14,9 +14,9 @@ export interface AgentFormState {
   instructions: string
   provider: string
   model: string
+  skills: string
   allowedTools: string
   mcpConnectors: string
-  sandboxPolicy: string
   metadata: string
 }
 

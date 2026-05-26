@@ -65,9 +65,9 @@ export interface Agent {
   provider: string
   model: string
   systemPrompt: string | null
+  skills: string[]
   allowedTools: string[]
   mcpConnectors: string[]
-  sandboxPolicy: Record<string, unknown>
   metadata: Record<string, unknown>
   status: 'active' | 'archived'
   archivedAt: string | null
@@ -86,9 +86,9 @@ export interface AgentVersion {
   provider: string
   model: string
   systemPrompt: string | null
+  skills: string[]
   allowedTools: string[]
   mcpConnectors: string[]
-  sandboxPolicy: Record<string, unknown>
   metadata: Record<string, unknown>
   createdAt: string
 }
@@ -382,9 +382,9 @@ export interface AgentInput {
   provider?: string
   model?: string
   systemPrompt?: string
+  skills?: string[]
   allowedTools?: string[]
   mcpConnectors?: string[]
-  sandboxPolicy?: Record<string, unknown>
   metadata?: Record<string, unknown>
 }
 
