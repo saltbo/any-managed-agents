@@ -48,6 +48,6 @@ Feature: Sandbox execution
   @planned
   Scenario: Wait for a self-hosted runner
     Given a session uses a self-hosted environment
-    When runner APIs are not implemented
-    Then AMA keeps the session pending with a requires-runner reason
+    When no runner has leased the session work
+    Then AMA keeps the session pending with a waiting-for-runner reason
     And AMA does not create a Cloudflare Sandbox for that session

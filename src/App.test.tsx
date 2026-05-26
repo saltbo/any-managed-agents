@@ -822,7 +822,7 @@ describe('App', () => {
         session({
           id: 'session_self_hosted',
           status: 'pending',
-          statusReason: 'requires-runner',
+          statusReason: 'waiting-for-runner',
           sandboxId: null,
           runtimeEndpointPath: null,
           environmentSnapshot: {
@@ -830,7 +830,7 @@ describe('App', () => {
             environmentId: 'env_1',
             version: 1,
           },
-          metadata: { runtimeType: 'self-hosted', runnerState: 'requires-runner' },
+          metadata: { runtimeType: 'self-hosted', runnerState: 'queued' },
         }),
       ],
       events: [

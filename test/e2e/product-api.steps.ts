@@ -43,6 +43,8 @@ interface E2EState {
   duplicateScheduledDispatch?: Json
   inactiveScheduledTriggers?: Json[]
   mcpConnection?: Json
+  runner?: Json
+  lease?: Json
   otherPage?: Page
   deletedCredentialVersionId?: string
   response?: Json
@@ -2021,16 +2023,172 @@ Then('the session keeps the self-hosted environment snapshot', function (this: P
   assert.equal(objectValue(session.environmentSnapshot).runtimeType, 'self-hosted')
 })
 
-Then('the session remains pending with a requires-runner reason', function (this: ProductWorld) {
+Then('the session remains pending with a waiting-for-runner reason', function (this: ProductWorld) {
   const session = required(this.e2e?.latestSession, 'session')
   assert.equal(session.status, 'pending')
-  assert.equal(session.statusReason, 'requires-runner')
+  assert.equal(session.statusReason, 'waiting-for-runner')
 })
 
-Then('no Cloudflare Sandbox id is assigned before runner support exists', function (this: ProductWorld) {
+Then('no Cloudflare Sandbox id is assigned before runner lease', function (this: ProductWorld) {
   const session = required(this.e2e?.latestSession, 'session')
   assert.equal(session.sandboxId, null)
   assert.equal(session.runtimeEndpointPath, null)
+})
+
+Given('a self-hosted environment has an active runner', async function (this: ProductWorld) {
+  const state = await ensureSignedIn(this)
+  state.environment = await createEnvironment(state, {
+    name: `${state.runId} runner env`,
+    runtimeType: 'self-hosted',
+    networkPolicy: { mode: 'unrestricted' },
+  })
+  state.agent = await createAgent(state, { name: `${state.runId} runner agent` })
+  state.runner = await apiJson<Json>(state.page.request, '/api/runners', {
+    method: 'POST',
+    data: {
+      name: `${state.runId} runner`,
+      environmentId: state.environment.id,
+      capabilities: ['node', 'git', 'sandbox.exec'],
+      credentialSecretRef: `cloudflare-secret:${state.runId}-runner-token`,
+    },
+  })
+  state.runner = await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/heartbeats`, {
+    method: 'POST',
+    data: {
+      status: 'active',
+      currentLoad: 0,
+      capabilities: ['node', 'git', 'sandbox.exec'],
+    },
+  })
+})
+
+When('the user creates a session in that environment', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  state.latestSession = await apiJson<Json>(state.page.request, '/api/sessions', {
+    method: 'POST',
+    data: {
+      agentId: state.agent?.id,
+      environmentId: state.environment?.id,
+      title: `${state.runId} runner-backed session`,
+      initialPrompt: 'Execute this self-hosted runner task.',
+    },
+  })
+})
+
+Then('AMA queues session work without creating a Cloudflare Sandbox', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const session = required(state.latestSession, 'session')
+  assert.equal(session.status, 'pending')
+  assert.equal(session.statusReason, 'waiting-for-runner')
+  assert.equal(session.sandboxId, null)
+  state.list = await apiJson<ListResponse<Json>>(state.page.request, `/api/runners/work-items?sessionId=${session.id}`)
+  assert.equal(state.list.data.length, 1)
+  assert.equal(state.list.data[0]?.status, 'available')
+  assert.equal(objectValue(state.list.data[0]?.payload).runtimeOwner, 'ama-cloud')
+})
+
+Then('the runner can claim a lease for the queued work', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const runner = required(state.runner, 'runner')
+  state.lease = await apiJson<Json>(state.page.request, `/api/runners/${runner.id}/leases`, {
+    method: 'POST',
+    data: { leaseDurationSeconds: 90 },
+  })
+  assert.equal(state.lease.status, 'active')
+  assert.equal(objectValue(state.lease.workItem).status, 'leased')
+  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
+  assert.equal(session.status, 'running')
+})
+
+Then('the runner can upload structured events and complete the lease', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const runner = required(state.runner, 'runner')
+  const lease = required(state.lease, 'lease')
+  const events = await apiJson<Json>(state.page.request, `/api/runners/${runner.id}/leases/${lease.id}/events`, {
+    method: 'POST',
+    data: {
+      events: [
+        {
+          type: 'tool_execution_start',
+          payload: { type: 'tool_execution_start', toolName: 'sandbox.exec', input: { command: 'npm test' } },
+          metadata: { runnerId: runner.id },
+        },
+      ],
+    },
+  })
+  assert.equal(events.accepted, 1)
+  const completed = await apiJson<Json>(state.page.request, `/api/runners/${runner.id}/leases/${lease.id}`, {
+    method: 'PATCH',
+    data: { status: 'completed', result: { ok: true } },
+  })
+  assert.equal(completed.status, 'completed')
+  assert.equal(objectValue(completed.workItem).status, 'succeeded')
+  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
+  assert.equal(session.status, 'idle')
+})
+
+Given('a runner has leased self-hosted session work', async function (this: ProductWorld) {
+  const state = await ensureSignedIn(this)
+  state.environment = await createEnvironment(state, {
+    name: `${state.runId} expiring runner env`,
+    runtimeType: 'self-hosted',
+    networkPolicy: { mode: 'unrestricted' },
+  })
+  state.agent = await createAgent(state, { name: `${state.runId} expiring runner agent` })
+  state.runner = await apiJson<Json>(state.page.request, '/api/runners', {
+    method: 'POST',
+    data: {
+      name: `${state.runId} expiring runner`,
+      environmentId: state.environment.id,
+      capabilities: ['node', 'git', 'sandbox.exec'],
+    },
+  })
+  state.runner = await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/heartbeats`, {
+    method: 'POST',
+    data: { status: 'active', currentLoad: 0 },
+  })
+  state.latestSession = await apiJson<Json>(state.page.request, '/api/sessions', {
+    method: 'POST',
+    data: {
+      agentId: state.agent.id,
+      environmentId: state.environment.id,
+      title: `${state.runId} expiring runner session`,
+    },
+  })
+  state.lease = await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/leases`, {
+    method: 'POST',
+    data: { leaseDurationSeconds: 90 },
+  })
+  assert.equal(state.lease.status, 'active')
+})
+
+When('the lease expires before renewal', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const runner = required(state.runner, 'runner')
+  const lease = required(state.lease, 'lease')
+  await apiJson<Json>(state.page.request, `/api/runners/${runner.id}/leases/${lease.id}`, {
+    method: 'PATCH',
+    data: { status: 'active', leaseDurationSeconds: 15 },
+  })
+  await delay(16_000)
+  state.list = await apiJson<ListResponse<Json>>(
+    state.page.request,
+    `/api/runners/work-items?sessionId=${state.latestSession?.id}`,
+  )
+})
+
+Then('AMA returns retryable work to the available queue', function (this: ProductWorld) {
+  const list = required(this.e2e?.list, 'work item list')
+  assert.equal(list.data.length, 1)
+  assert.equal(list.data[0]?.status, 'available')
+  assert.equal(list.data[0]?.leaseId, null)
+})
+
+Then('the session exposes a safe waiting status', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
+  assert.equal(session.status, 'pending')
+  assert.equal(session.statusReason, 'waiting-for-runner')
 })
 
 Then('the platform rejects the request with field-level validation details', function (this: ProductWorld) {

@@ -29,6 +29,7 @@ const EXPECTED_RESTISH_OPERATIONS = {
   Environments: ['listEnvironments', 'createEnvironment'],
   Sessions: ['listSessions', 'createSession'],
   'Scheduled agent triggers': ['listScheduledAgentTriggers', 'createScheduledAgentTrigger'],
+  Runners: ['listRunners', 'createRunner'],
   Providers: ['listProviders', 'createProvider'],
   Vaults: ['listVaults', 'createVault'],
   Governance: ['readEffectiveGovernancePolicy', 'readGovernancePolicy'],
@@ -102,6 +103,13 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths).toHaveProperty('/api/sessions/{sessionId}/events')
     expect(doc.paths).toHaveProperty('/api/sessions/{sessionId}/events/export')
     expect(doc.paths).toHaveProperty('/api/sessions/{sessionId}/events/stream')
+    expect(doc.paths).toHaveProperty('/api/runners')
+    expect(doc.paths).toHaveProperty('/api/runners/{runnerId}')
+    expect(doc.paths).toHaveProperty('/api/runners/{runnerId}/heartbeats')
+    expect(doc.paths).toHaveProperty('/api/runners/{runnerId}/leases')
+    expect(doc.paths).toHaveProperty('/api/runners/{runnerId}/leases/{leaseId}')
+    expect(doc.paths).toHaveProperty('/api/runners/{runnerId}/leases/{leaseId}/events')
+    expect(doc.paths).toHaveProperty('/api/runners/work-items')
     expect(doc.paths).toHaveProperty('/api/vaults')
     expect(doc.paths).toHaveProperty('/api/vaults/{vaultId}')
     expect(doc.paths).toHaveProperty('/api/vaults/{vaultId}/credentials')
@@ -124,6 +132,15 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths['/api/sessions/{sessionId}/events/stream'].get.responses?.[200]?.content).toHaveProperty(
       'application/x-ndjson',
     )
+    expect(doc.paths['/api/runners']).toHaveProperty('get')
+    expect(doc.paths['/api/runners']).toHaveProperty('post')
+    expect(doc.paths['/api/runners/{runnerId}']).toHaveProperty('get')
+    expect(doc.paths['/api/runners/{runnerId}']).toHaveProperty('patch')
+    expect(doc.paths['/api/runners/{runnerId}/heartbeats']).toHaveProperty('post')
+    expect(doc.paths['/api/runners/{runnerId}/leases']).toHaveProperty('post')
+    expect(doc.paths['/api/runners/{runnerId}/leases/{leaseId}']).toHaveProperty('patch')
+    expect(doc.paths['/api/runners/{runnerId}/leases/{leaseId}/events']).toHaveProperty('post')
+    expect(doc.paths['/api/runners/work-items']).toHaveProperty('get')
     expect(doc.paths['/api/sessions/{sessionId}/stop'].post.parameters?.map((parameter) => parameter.name)).toContain(
       'reason',
     )
@@ -165,6 +182,7 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths['/api/environments'].get.security).toEqual([{ bearerAuth: [] }])
     expect(doc.paths['/api/sessions'].get.security).toEqual([{ bearerAuth: [] }])
     expect(doc.paths['/api/vaults'].get.security).toEqual([{ bearerAuth: [] }])
+    expect(doc.paths['/api/runners'].get.security).toEqual([{ bearerAuth: [] }])
     expect(doc.paths['/api/providers'].get.security).toEqual([{ bearerAuth: [] }])
     expect(doc.paths['/api/mcp/connectors'].get.security).toEqual([{ bearerAuth: [] }])
     expect(doc.paths['/api/governance/policy'].get.security).toEqual([{ bearerAuth: [] }])
@@ -174,6 +192,7 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths['/api/agents'].get.operationId).toBe('listAgents')
     expect(doc.paths['/api/environments'].get.operationId).toBe('listEnvironments')
     expect(doc.paths['/api/sessions'].get.operationId).toBe('listSessions')
+    expect(doc.paths['/api/runners'].get.operationId).toBe('listRunners')
     expect(doc.paths['/api/vaults'].get.operationId).toBe('listVaults')
     expect(doc.paths['/api/providers'].get.operationId).toBe('listProviders')
     expect(doc.paths['/api/mcp/connectors'].get.operationId).toBe('listMcpConnectors')
@@ -220,6 +239,12 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.components?.schemas).toHaveProperty('AgentListResponse')
     expect(doc.components?.schemas).toHaveProperty('EnvironmentListResponse')
     expect(doc.components?.schemas).toHaveProperty('SessionListResponse')
+    expect(doc.components?.schemas).toHaveProperty('Runner')
+    expect(doc.components?.schemas).toHaveProperty('RunnerListResponse')
+    expect(doc.components?.schemas).toHaveProperty('RunnerWorkItem')
+    expect(doc.components?.schemas).toHaveProperty('RunnerWorkLease')
+    expect(doc.components?.schemas).toHaveProperty('CreateRunnerRequest')
+    expect(doc.components?.schemas).toHaveProperty('RunnerWorkItemListResponse')
     expect(doc.components?.schemas).toHaveProperty('VaultListResponse')
     expect(doc.components?.schemas).toHaveProperty('VaultCredentialListResponse')
     expect(doc.components?.schemas).toHaveProperty('VaultCredentialVersionListResponse')
