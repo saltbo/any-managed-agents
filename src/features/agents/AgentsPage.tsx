@@ -17,7 +17,7 @@ export function AgentsPage() {
   const actions = useAgentActions()
   const agentsQuery = useQuery({
     queryKey: queryKeys.agents.list(false),
-    queryFn: () => api.listAgents(false),
+    queryFn: () => api.listAgents(),
   })
   const agents = agentsQuery.data?.data ?? []
   const pagination = useClientPagination(agents)

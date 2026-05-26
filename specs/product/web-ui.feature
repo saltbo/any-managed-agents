@@ -2,7 +2,7 @@
 Feature: Web console
   Users operate agents through a Cloudflare-native web console.
 
-  @planned
+  @implemented
   Scenario: Navigate the app shell
     Given a signed-in user has access to a project
     When the user opens the console

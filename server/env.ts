@@ -1,12 +1,10 @@
 import type { Sandbox } from '@cloudflare/sandbox'
-import type { ManagedAgent } from './agents/managed-agent'
 
 export interface Env {
   DB: D1Database
   AI: Ai
   ASSETS: Fetcher
   FLAREAUTH?: Fetcher
-  MANAGED_AGENT: DurableObjectNamespace<ManagedAgent>
   SANDBOX: DurableObjectNamespace<Sandbox>
   AMA_DEFAULT_MODEL?: string
   AMA_RUNTIME_MODE?: string

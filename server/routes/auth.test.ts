@@ -319,12 +319,17 @@ describe('[CF] auth and tenancy', () => {
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
     })
     expect(sessionRes.status).toBe(201)
-    const session = (await sessionRes.json()) as { durableObjectName: string; agentUrl: string; projectId: string }
+    const session = (await sessionRes.json()) as {
+      durableObjectName: string
+      runtimeEndpointPath: string
+      projectId: string
+    }
     expect(session.projectId).toBe(agent.projectId)
     expect(session.durableObjectName).toContain(`project_${agent.projectId}:session_`)
-    expect(session.agentUrl).toBe(`/agents/managed-agent/${session.durableObjectName}`)
+    expect(session.runtimeEndpointPath).toMatch(/^\/runtime\/sessions\/session_[^/]+\/rpc$/)
 
-    const runtimeRes = await SELF.fetch(`https://example.com${session.agentUrl}/state`, {
+    const runtimeRes = await SELF.fetch(`https://example.com${session.runtimeEndpointPath}`, {
+      method: 'POST',
       headers: { cookie },
     })
     expect(runtimeRes.status).toBe(200)
@@ -353,7 +358,7 @@ describe('[CF] auth and tenancy', () => {
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
     })
     expect(sessionRes.status).toBe(201)
-    const session = (await sessionRes.json()) as { agentUrl: string }
+    const session = (await sessionRes.json()) as { id: string; runtimeEndpointPath: string }
 
     const tenantBCookie = await signIn({
       ...defaultClaims(),
@@ -362,7 +367,8 @@ describe('[CF] auth and tenancy', () => {
       org_id: 'org_flare_456',
       org_name: 'Other Org',
     })
-    const runtimeRes = await SELF.fetch(`https://example.com${session.agentUrl}/state`, {
+    const runtimeRes = await SELF.fetch(`https://example.com${session.runtimeEndpointPath}`, {
+      method: 'POST',
       headers: { cookie: tenantBCookie },
     })
 

@@ -5,6 +5,7 @@ let devServer: ChildProcessWithoutNullStreams | undefined
 let devServerOutput = ''
 let browser: Browser | undefined
 let baseURL: string | undefined
+let ownsDevServer = false
 
 export async function openLocalPage() {
   const origin = await ensureLocalApp()
@@ -18,11 +19,13 @@ export async function openLocalPage() {
 
 export async function authenticateE2EPage(page: Page) {
   const runId = `e2e-${Date.now()}-${Math.random().toString(16).slice(2)}`
-  const response = await page.request.post('/api/e2e/auth/session', { data: { runId } })
+  const response = await requestWithLocalAppRecovery(page, () =>
+    page.request.post('/api/e2e/auth/session', { data: { runId } }),
+  )
   if (!response.ok()) {
     throw new Error(`POST /api/e2e/auth/session returned ${response.status()}: ${await response.text()}`)
   }
-  const me = await page.request.get('/api/auth/me')
+  const me = await requestWithLocalAppRecovery(page, () => page.request.get('/api/auth/me'))
   if (!me.ok()) {
     throw new Error(`GET /api/auth/me returned ${me.status()}: ${await me.text()}`)
   }
@@ -30,12 +33,16 @@ export async function authenticateE2EPage(page: Page) {
 }
 
 export async function ensureLocalApp() {
-  if (baseURL) {
+  if (baseURL && (await isE2EReady(baseURL))) {
     return baseURL
   }
   if (process.env.E2E_BASE_URL) {
     baseURL = process.env.E2E_BASE_URL
     return baseURL
+  }
+  if (baseURL) {
+    baseURL = undefined
+    await stopDevServer()
   }
 
   process.env.CLOUDFLARE_ENV = process.env.CLOUDFLARE_ENV ?? 'e2e'
@@ -48,6 +55,7 @@ export async function ensureLocalApp() {
   if (await isHttpReady(origin)) {
     if (await isE2EReady(origin)) {
       baseURL = origin
+      ownsDevServer = false
       return baseURL
     }
     throw new Error(`Port ${port} is already in use by a server that is not configured for local e2e auth.`)
@@ -68,6 +76,7 @@ export async function ensureLocalApp() {
     detached: true,
     stdio: 'pipe',
   })
+  ownsDevServer = true
   devServer.stdout.on('data', (chunk) => {
     devServerOutput += String(chunk)
   })
@@ -137,10 +146,12 @@ export async function waitForSession(
 
 async function stopDevServer() {
   if (!devServer) {
+    ownsDevServer = false
     return
   }
   const server = devServer
   devServer = undefined
+  ownsDevServer = false
   const exited = new Promise<void>((resolve) => {
     server.once('exit', () => resolve())
   })
@@ -162,6 +173,26 @@ async function stopDevServer() {
     }
     await Promise.race([exited, delay(5_000)])
   }
+}
+
+async function requestWithLocalAppRecovery<T>(page: Page, request: () => Promise<T>) {
+  try {
+    return await request()
+  } catch (error) {
+    if (!ownsDevServer || !(await isLocalConnectionFailure(error))) {
+      throw error
+    }
+    await stopDevServer()
+    baseURL = undefined
+    const origin = await ensureLocalApp()
+    await page.goto(origin)
+    return await request()
+  }
+}
+
+async function isLocalConnectionFailure(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  return /ECONNRESET|ECONNREFUSED|socket hang up|Target page, context or browser has been closed/i.test(message)
 }
 
 async function closeBrowser() {

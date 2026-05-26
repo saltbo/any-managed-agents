@@ -27,12 +27,12 @@ export function CreateSessionSheet({
   const [form, setForm] = useState<SessionFormState>(emptySession)
   const agentsQuery = useQuery({
     queryKey: queryKeys.agents.list(false),
-    queryFn: () => api.listAgents(false),
+    queryFn: () => api.listAgents(),
     enabled: open,
   })
   const environmentsQuery = useQuery({
     queryKey: queryKeys.environments.list(false),
-    queryFn: () => api.listEnvironments(false),
+    queryFn: () => api.listEnvironments(),
     enabled: open,
   })
   const agents = agentsQuery.data?.data ?? EMPTY_RESOURCES

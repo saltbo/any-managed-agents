@@ -15,7 +15,7 @@ export function VaultsPage() {
   const actions = useVaultActions()
   const vaultsQuery = useQuery({
     queryKey: queryKeys.vaults.list(false),
-    queryFn: () => api.listVaults(false),
+    queryFn: () => api.listVaults(),
   })
   const vaults = vaultsQuery.data?.data ?? []
   const pagination = useClientPagination(vaults)

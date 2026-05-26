@@ -6,7 +6,6 @@ GitHub Actions is intentionally limited to CI checks. Production and staging dep
 
 - Workers project: `any-managed-agents`
 - Workers AI binding: `AI`
-- Durable Object binding: `MANAGED_AGENT`
 - Cloudflare Sandbox container binding: `SANDBOX`
 - Production D1 database: `any-managed-agents-db`
 - Staging D1 database: `any-managed-agents-db-staging`

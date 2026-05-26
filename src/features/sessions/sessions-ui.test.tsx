@@ -62,7 +62,6 @@ function buildSession(overrides: Partial<Session> = {}): Session {
     piRuntimeId: 'pi_1',
     piProcessId: 'process_1',
     runtimeEndpointPath: '/runtime/sessions/session_1/rpc',
-    agentUrl: '/runtime/sessions/session_1/rpc',
     modelProvider: 'workers-ai',
     modelConfig: { model: '@cf/moonshotai/kimi-k2.6' },
     status: 'idle',

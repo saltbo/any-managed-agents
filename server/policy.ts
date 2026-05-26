@@ -104,16 +104,14 @@ function environmentAllowsConnector(session: { environmentSnapshot: string | nul
     return true
   }
 
-  const snapshot = parseJson<{ metadata?: unknown; mcpPolicy?: unknown }>(session.environmentSnapshot, {})
-  const metadata = stringRecord(snapshot.metadata)
-  const legacyMcp = stringRecord(metadata.mcp)
+  const snapshot = parseJson<{ mcpPolicy?: unknown }>(session.environmentSnapshot, {})
   const mcpPolicy = stringRecord(snapshot.mcpPolicy)
   const blockedConnectors = stringArray(mcpPolicy.blockedConnectors)
   if (includesWildcard(blockedConnectors, connectorId)) {
     return false
   }
 
-  const allowedConnectors = stringArray(mcpPolicy.allowedConnectors).concat(stringArray(legacyMcp.allowedConnectors))
+  const allowedConnectors = stringArray(mcpPolicy.allowedConnectors)
   if (allowedConnectors.length === 0) {
     return mcpPolicy.defaultEffect !== 'deny'
   }

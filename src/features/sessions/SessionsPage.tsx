@@ -22,7 +22,7 @@ export function SessionsPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const sessionsQuery = useQuery({
     queryKey: queryKeys.sessions.list(false),
-    queryFn: () => api.listSessions(false),
+    queryFn: () => api.listSessions(),
     refetchInterval: (query) => (query.state.data?.data.some((session) => session.status === 'pending') ? 2000 : false),
   })
   const sessions = useMemo(() => {

@@ -16,7 +16,7 @@ export function EnvironmentDetailPage() {
   })
   const sessionsQuery = useQuery({
     queryKey: queryKeys.sessions.list(false),
-    queryFn: () => api.listSessions(false),
+    queryFn: () => api.listSessions(),
   })
   const environment = environmentQuery.data ?? null
   return (

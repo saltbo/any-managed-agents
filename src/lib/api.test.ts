@@ -37,7 +37,7 @@ describe('shared API client', () => {
     )
   })
 
-  it('keeps legacy boolean list calls on the shared query builder', async () => {
+  it('uses explicit list options for archived resources', async () => {
     const fetchMock = vi.fn(async () => {
       return new Response(
         JSON.stringify({
@@ -49,7 +49,7 @@ describe('shared API client', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    await api.listSessions(true)
+    await api.listSessions({ includeArchived: true })
 
     expect(fetchMock).toHaveBeenCalledWith('/api/sessions?includeArchived=true', {
       credentials: 'include',

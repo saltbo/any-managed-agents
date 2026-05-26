@@ -31,7 +31,7 @@ export function AgentDetailPage() {
   })
   const sessionsQuery = useQuery({
     queryKey: queryKeys.sessions.list(false),
-    queryFn: () => api.listSessions(false),
+    queryFn: () => api.listSessions(),
   })
   const agent = agentQuery.data ?? null
   const updateAgent = useMutation({

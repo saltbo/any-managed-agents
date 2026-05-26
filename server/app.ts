@@ -984,32 +984,6 @@ export function createApp() {
     return response
   })
 
-  app.all('/agents/*', async (c) => {
-    const db = drizzle(c.env.DB)
-    const resolvedAuth = await requireAuth(c, db)
-    if (resolvedAuth instanceof Response) {
-      return resolvedAuth
-    }
-
-    const durableObjectName = c.req.path.split('/').slice(3, 4)[0]
-    if (!durableObjectName) {
-      return errorResponse(c, 404, 'not_found', 'Agent session not found')
-    }
-
-    const session = await db
-      .select({ id: sessions.id })
-      .from(sessions)
-      .where(and(eq(sessions.durableObjectName, durableObjectName), eq(sessions.projectId, resolvedAuth.project.id)))
-      .get()
-    if (!session) {
-      return errorResponse(c, 404, 'not_found', 'Agent session not found')
-    }
-
-    const { routeAgentRequest } = await import('agents')
-    const response = await routeAgentRequest(c.req.raw, c.env)
-    return response ?? c.text('Agent not found', 404)
-  })
-
   app.notFound((c) => c.json({ error: { type: 'not_found', message: 'Not found' } }, 404))
 
   app.onError((err, c) => {

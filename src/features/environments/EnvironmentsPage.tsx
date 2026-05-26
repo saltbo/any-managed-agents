@@ -15,7 +15,7 @@ export function EnvironmentsPage() {
   const actions = useEnvironmentActions()
   const environmentsQuery = useQuery({
     queryKey: queryKeys.environments.list(false),
-    queryFn: () => api.listEnvironments(false),
+    queryFn: () => api.listEnvironments(),
   })
   const environments = environmentsQuery.data?.data ?? []
   const pagination = useClientPagination(environments)

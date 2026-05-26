@@ -7,15 +7,15 @@ import { QuickstartView } from './QuickstartView'
 export function QuickstartPage() {
   const agentsQuery = useQuery({
     queryKey: queryKeys.agents.list(false),
-    queryFn: () => api.listAgents(false),
+    queryFn: () => api.listAgents(),
   })
   const environmentsQuery = useQuery({
     queryKey: queryKeys.environments.list(false),
-    queryFn: () => api.listEnvironments(false),
+    queryFn: () => api.listEnvironments(),
   })
   const sessionsQuery = useQuery({
     queryKey: queryKeys.sessions.list(false),
-    queryFn: () => api.listSessions(false),
+    queryFn: () => api.listSessions(),
   })
   const error = agentsQuery.error ?? environmentsQuery.error ?? sessionsQuery.error
   if (error) {

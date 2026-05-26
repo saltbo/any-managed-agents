@@ -192,7 +192,6 @@ function session(overrides: Partial<Session> = {}): Session {
     piRuntimeId: 'pi_1',
     piProcessId: 'process_1',
     runtimeEndpointPath: '/runtime/sessions/session_1/rpc',
-    agentUrl: '/runtime/sessions/session_1/rpc',
     modelProvider: 'workers-ai',
     modelConfig: { model: '@cf/moonshotai/kimi-k2.6' },
     status: 'idle',
@@ -727,7 +726,7 @@ describe('App', () => {
     expect(sentCommands).toContainEqual(expect.objectContaining({ type: 'prompt' }))
   })
 
-  it('renders planned resource and detail routes', async () => {
+  it('renders routed resource and detail pages', async () => {
     mockConsoleApi({
       environments: [environment()],
       agents: [agent()],
@@ -1134,7 +1133,6 @@ const sessionFixture = {
   piRuntimeId: 'pi_session_1',
   piProcessId: 'proc_session_1',
   runtimeEndpointPath: '/runtime/sessions/session_1/rpc',
-  agentUrl: '/agents/managed-agent/session_1',
   modelProvider: 'workers-ai',
   modelConfig: { model: '@cf/moonshotai/kimi-k2.6' },
   status: 'idle',

@@ -15,7 +15,7 @@ export function ProvidersPage() {
   const actions = useProviderActions()
   const providersQuery = useQuery({
     queryKey: queryKeys.providers.list(false),
-    queryFn: () => api.listProviders(false),
+    queryFn: () => api.listProviders(),
   })
   const providers = providersQuery.data?.data ?? []
   const pagination = useClientPagination(providers)

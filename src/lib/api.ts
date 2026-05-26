@@ -109,7 +109,6 @@ export interface Session {
   piRuntimeId: string | null
   piProcessId: string | null
   runtimeEndpointPath: string
-  agentUrl: string
   modelProvider: string
   modelConfig: Record<string, unknown>
   status: SessionStatus
@@ -445,23 +444,18 @@ function queryString(options: object = {}) {
   return query ? `?${query}` : ''
 }
 
-function listOptions(options: ListOptions | boolean = {}) {
-  return typeof options === 'boolean' ? { includeArchived: options } : options
-}
-
 export const api = {
   me: () => request<AuthContext>('/api/auth/me'),
   logout: () => request<void>('/api/auth/logout', { method: 'POST' }),
-  listAgents: (options: ListOptions | boolean = {}) =>
-    request<ListResponse<Agent>>(`/api/agents${queryString(listOptions(options))}`),
+  listAgents: (options: ListOptions = {}) => request<ListResponse<Agent>>(`/api/agents${queryString(options)}`),
   readAgent: (id: string) => request<Agent>(`/api/agents/${id}`),
   createAgent: (input: AgentInput) => request<Agent>('/api/agents', { method: 'POST', body: JSON.stringify(input) }),
   updateAgent: (id: string, input: Partial<AgentInput>) =>
     request<Agent>(`/api/agents/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
   archiveAgent: (id: string) => request<void>(`/api/agents/${id}`, { method: 'DELETE' }),
   listAgentVersions: (id: string) => request<ListResponse<AgentVersion>>(`/api/agents/${id}/versions`),
-  listEnvironments: (options: ListOptions | boolean = {}) =>
-    request<ListResponse<Environment>>(`/api/environments${queryString(listOptions(options))}`),
+  listEnvironments: (options: ListOptions = {}) =>
+    request<ListResponse<Environment>>(`/api/environments${queryString(options)}`),
   readEnvironment: (id: string) => request<Environment>(`/api/environments/${id}`),
   createEnvironment: (input: EnvironmentInput) =>
     request<Environment>('/api/environments', { method: 'POST', body: JSON.stringify(input) }),
@@ -470,8 +464,7 @@ export const api = {
   archiveEnvironment: (id: string) => request<void>(`/api/environments/${id}`, { method: 'DELETE' }),
   listEnvironmentVersions: (id: string) =>
     request<ListResponse<EnvironmentVersion>>(`/api/environments/${id}/versions`),
-  listSessions: (options: ListOptions | boolean = {}) =>
-    request<ListResponse<Session>>(`/api/sessions${queryString(listOptions(options))}`),
+  listSessions: (options: ListOptions = {}) => request<ListResponse<Session>>(`/api/sessions${queryString(options)}`),
   createSession: (input: SessionInput) =>
     request<Session>('/api/sessions', { method: 'POST', body: JSON.stringify(input) }),
   readSession: (id: string) => request<Session>(`/api/sessions/${id}`),
@@ -480,20 +473,19 @@ export const api = {
   archiveSession: (id: string) => request<void>(`/api/sessions/${id}`, { method: 'DELETE' }),
   listSessionEvents: (id: string, options: SessionEventListOptions = {}) =>
     request<ListResponse<SessionEvent>>(`/api/sessions/${id}/events${queryString(options)}`),
-  listProviders: (options: ListOptions | boolean = {}) =>
-    request<ListResponse<Provider>>(`/api/providers${queryString(listOptions(options))}`),
+  listProviders: (options: ListOptions = {}) =>
+    request<ListResponse<Provider>>(`/api/providers${queryString(options)}`),
   readProvider: (id: string) => request<Provider>(`/api/providers/${id}`),
   createProvider: (input: ProviderInput) =>
     request<Provider>('/api/providers', { method: 'POST', body: JSON.stringify(input) }),
   archiveProvider: (id: string) => request<void>(`/api/providers/${id}`, { method: 'DELETE' }),
   listProviderModels: (id: string) => request<ListResponse<ProviderModel>>(`/api/providers/${id}/models`),
-  listVaults: (options: ListOptions | boolean = {}) =>
-    request<ListResponse<Vault>>(`/api/vaults${queryString(listOptions(options))}`),
+  listVaults: (options: ListOptions = {}) => request<ListResponse<Vault>>(`/api/vaults${queryString(options)}`),
   readVault: (id: string) => request<Vault>(`/api/vaults/${id}`),
   createVault: (input: VaultInput) => request<Vault>('/api/vaults', { method: 'POST', body: JSON.stringify(input) }),
   archiveVault: (id: string) => request<void>(`/api/vaults/${id}`, { method: 'DELETE' }),
-  listVaultCredentials: (id: string, options: ListOptions | boolean = {}) =>
-    request<ListResponse<VaultCredential>>(`/api/vaults/${id}/credentials${queryString(listOptions(options))}`),
+  listVaultCredentials: (id: string, options: ListOptions = {}) =>
+    request<ListResponse<VaultCredential>>(`/api/vaults/${id}/credentials${queryString(options)}`),
   listMcpConnectors: () => request<ListResponse<McpConnector>>('/api/mcp/connectors'),
   listMcpConnections: () => request<ListResponse<McpConnection>>('/api/mcp/connections'),
   disconnectMcpConnection: (id: string) =>
