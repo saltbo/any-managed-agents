@@ -315,7 +315,7 @@ function eventSequenceFilter(cursor: number, order: EventOrder) {
   return order === 'asc' ? gt(sessionEvents.sequence, cursor) : lt(sessionEvents.sequence, cursor)
 }
 
-function eventCursor(query: Pick<EventsQuery, 'cursor'>) {
+function eventCursor(query: { cursor?: number | undefined }) {
   return query.cursor
 }
 
@@ -327,7 +327,7 @@ function eventOrderBy(order: EventOrder) {
   return order === 'asc' ? asc(sessionEvents.sequence) : desc(sessionEvents.sequence)
 }
 
-function eventCursorFilter(query: Pick<EventsQuery, 'cursor'>, order: EventOrder) {
+function eventCursorFilter(query: { cursor?: number | undefined }, order: EventOrder) {
   const cursor = eventCursor(query)
   if (cursor === undefined) {
     return order === 'asc' ? eventSequenceFilter(0, order) : undefined
@@ -1134,177 +1134,6 @@ const streamEventsRoute = createRoute({
   },
 })
 
-app.openapi(createSessionRoute, async (c) => {
-  const { agentId, environmentId, title, metadata, resourceRefs, vaultRefs } = c.req.valid('json')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
-  return await createSessionForAgent(c, db, auth, agentId, environmentId, {
-    ...(title !== undefined ? { title } : {}),
-    ...(metadata !== undefined ? { metadata } : {}),
-    ...(resourceRefs !== undefined ? { resourceRefs } : {}),
-    ...(vaultRefs !== undefined ? { vaultRefs } : {}),
-  })
-})
-
-app.openapi(listSessionsRoute, async (c) => {
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
-  await markExpiredPendingSessions(db, auth)
-
-  const { includeArchived, status, search, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
-  let parsedCursor: ReturnType<typeof parseListCursor> | null = null
-  try {
-    parsedCursor = cursor ? parseListCursor(cursor) : null
-  } catch {
-    return errorResponse(c, 400, 'validation_error', 'Invalid list cursor', {
-      fields: { cursor: 'Cursor is invalid.' },
-    })
-  }
-  const filters = [
-    eq(sessions.projectId, auth.project.id),
-    status ? eq(sessions.status, status) : includeArchived === 'true' ? undefined : ne(sessions.status, 'archived'),
-    search ? like(sessions.agentId, `%${search}%`) : undefined,
-    createdFrom ? gte(sessions.createdAt, createdFrom) : undefined,
-    createdTo ? lte(sessions.createdAt, createdTo) : undefined,
-    parsedCursor
-      ? or(
-          lt(sessions.createdAt, parsedCursor.createdAt),
-          and(eq(sessions.createdAt, parsedCursor.createdAt), lt(sessions.id, parsedCursor.id)),
-        )
-      : undefined,
-  ].filter((filter) => filter !== undefined)
-  const rows = await db
-    .select()
-    .from(sessions)
-    .where(and(...filters))
-    .orderBy(desc(sessions.createdAt), desc(sessions.id))
-    .limit(limit + 1)
-  const page = paginateRows(rows, limit)
-  const data = page.data.map((row) => serializeSession(row))
-  return c.json({ data, pagination: page.pagination }, 200)
-})
-
-app.openapi(readSessionRoute, async (c) => {
-  const { sessionId } = c.req.valid('param')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
-  await markExpiredPendingSessions(db, auth)
-
-  const session = await findSession(db, auth, sessionId)
-  if (!session) {
-    return errorResponse(c, 404, 'not_found', 'Session not found')
-  }
-  return c.json(serializeSession(session), 200)
-})
-
-app.openapi(updateSessionRoute, async (c) => {
-  const { sessionId } = c.req.valid('param')
-  const { status } = c.req.valid('json')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
-
-  const session = await findSession(db, auth, sessionId)
-  if (!session) {
-    return errorResponse(c, 404, 'not_found', 'Session not found')
-  }
-  if (status === 'stopped') {
-    return await stopSession(c, db, auth, session)
-  }
-
-  return await archiveSessionAndRead(c, db, auth, session)
-})
-
-app.openapi(stopSessionRoute, async (c) => {
-  const { sessionId } = c.req.valid('param')
-  const { reason = 'user_requested' } = c.req.valid('query')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
-
-  const session = await findSession(db, auth, sessionId)
-  if (!session) {
-    return errorResponse(c, 404, 'not_found', 'Session not found')
-  }
-  return await stopSession(c, db, auth, session, reason)
-})
-
-app.openapi(archiveSessionRoute, async (c) => {
-  const { sessionId } = c.req.valid('param')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
-
-  const session = await findSession(db, auth, sessionId)
-  if (!session) {
-    return errorResponse(c, 404, 'not_found', 'Session not found')
-  }
-  return await archiveSession(c, db, auth, session)
-})
-
-app.openapi(reconnectSessionRoute, async (c) => {
-  const { sessionId } = c.req.valid('param')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
-
-  const session = await findSession(db, auth, sessionId)
-  if (!session) {
-    return errorResponse(c, 404, 'not_found', 'Session not found')
-  }
-  return c.json(serializeSession(session), 200)
-})
-
-app.openapi(listEventsRoute, async (c) => {
-  const { sessionId } = c.req.valid('param')
-  const query = c.req.valid('query')
-  const { limit = 100, type, visibility, createdFrom, createdTo } = query
-  const order = eventOrder(query.order)
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
-
-  const session = await findSession(db, auth, sessionId)
-  if (!session) {
-    return errorResponse(c, 404, 'not_found', 'Session not found')
-  }
-  const filters = [
-    eq(sessionEvents.sessionId, sessionId),
-    eventCursorFilter(query, order),
-    type ? eq(sessionEvents.type, type) : undefined,
-    eq(sessionEvents.visibility, visibility ?? 'runtime'),
-    createdFrom ? gte(sessionEvents.createdAt, createdFrom) : undefined,
-    createdTo ? lte(sessionEvents.createdAt, createdTo) : undefined,
-  ].filter((filter) => filter !== undefined)
-  const rows = await db
-    .select()
-    .from(sessionEvents)
-    .where(and(...filters))
-    .orderBy(eventOrderBy(order))
-    .limit(limit + 1)
-  const page = paginateSequenceRows(rows, limit)
-  return c.json({ data: page.data.map(serializeEvent), pagination: page.pagination }, 200)
-})
-
 type EventsQuery = z.infer<typeof EventsQuerySchema>
 
 async function eventsNdjsonResponse(c: Context<{ Bindings: Env }>, sessionId: string, query: EventsQuery) {
@@ -1399,14 +1228,177 @@ async function streamEventsNdjsonResponse(c: Context<{ Bindings: Env }>, session
   })
 }
 
-app.openapi(exportEventsRoute, async (c) => {
-  const { sessionId } = c.req.valid('param')
-  return (await eventsNdjsonResponse(c, sessionId, c.req.valid('query'))) as never
-})
+const routes = app
+  .openapi(createSessionRoute, async (c) => {
+    const { agentId, environmentId, title, metadata, resourceRefs, vaultRefs } = c.req.valid('json')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+    return await createSessionForAgent(c, db, auth, agentId, environmentId, {
+      ...(title !== undefined ? { title } : {}),
+      ...(metadata !== undefined ? { metadata } : {}),
+      ...(resourceRefs !== undefined ? { resourceRefs } : {}),
+      ...(vaultRefs !== undefined ? { vaultRefs } : {}),
+    })
+  })
+  .openapi(listSessionsRoute, async (c) => {
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+    await markExpiredPendingSessions(db, auth)
 
-app.openapi(streamEventsRoute, async (c) => {
-  const { sessionId } = c.req.valid('param')
-  return (await streamEventsNdjsonResponse(c, sessionId, c.req.valid('query'))) as never
-})
+    const { includeArchived, status, search, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
+    let parsedCursor: ReturnType<typeof parseListCursor> | null = null
+    try {
+      parsedCursor = cursor ? parseListCursor(cursor) : null
+    } catch {
+      return errorResponse(c, 400, 'validation_error', 'Invalid list cursor', {
+        fields: { cursor: 'Cursor is invalid.' },
+      })
+    }
+    const filters = [
+      eq(sessions.projectId, auth.project.id),
+      status ? eq(sessions.status, status) : includeArchived === 'true' ? undefined : ne(sessions.status, 'archived'),
+      search ? like(sessions.agentId, `%${search}%`) : undefined,
+      createdFrom ? gte(sessions.createdAt, createdFrom) : undefined,
+      createdTo ? lte(sessions.createdAt, createdTo) : undefined,
+      parsedCursor
+        ? or(
+            lt(sessions.createdAt, parsedCursor.createdAt),
+            and(eq(sessions.createdAt, parsedCursor.createdAt), lt(sessions.id, parsedCursor.id)),
+          )
+        : undefined,
+    ].filter((filter) => filter !== undefined)
+    const rows = await db
+      .select()
+      .from(sessions)
+      .where(and(...filters))
+      .orderBy(desc(sessions.createdAt), desc(sessions.id))
+      .limit(limit + 1)
+    const page = paginateRows(rows, limit)
+    const data = page.data.map((row) => serializeSession(row))
+    return c.json({ data, pagination: page.pagination }, 200)
+  })
+  .openapi(readSessionRoute, async (c) => {
+    const { sessionId } = c.req.valid('param')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+    await markExpiredPendingSessions(db, auth)
 
-export default app
+    const session = await findSession(db, auth, sessionId)
+    if (!session) {
+      return errorResponse(c, 404, 'not_found', 'Session not found')
+    }
+    return c.json(serializeSession(session), 200)
+  })
+  .openapi(updateSessionRoute, async (c) => {
+    const { sessionId } = c.req.valid('param')
+    const { status } = c.req.valid('json')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+
+    const session = await findSession(db, auth, sessionId)
+    if (!session) {
+      return errorResponse(c, 404, 'not_found', 'Session not found')
+    }
+    if (status === 'stopped') {
+      return await stopSession(c, db, auth, session)
+    }
+
+    return await archiveSessionAndRead(c, db, auth, session)
+  })
+  .openapi(stopSessionRoute, async (c) => {
+    const { sessionId } = c.req.valid('param')
+    const { reason = 'user_requested' } = c.req.valid('query')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+
+    const session = await findSession(db, auth, sessionId)
+    if (!session) {
+      return errorResponse(c, 404, 'not_found', 'Session not found')
+    }
+    return await stopSession(c, db, auth, session, reason)
+  })
+  .openapi(archiveSessionRoute, async (c) => {
+    const { sessionId } = c.req.valid('param')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+
+    const session = await findSession(db, auth, sessionId)
+    if (!session) {
+      return errorResponse(c, 404, 'not_found', 'Session not found')
+    }
+    return await archiveSession(c, db, auth, session)
+  })
+  .openapi(reconnectSessionRoute, async (c) => {
+    const { sessionId } = c.req.valid('param')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+
+    const session = await findSession(db, auth, sessionId)
+    if (!session) {
+      return errorResponse(c, 404, 'not_found', 'Session not found')
+    }
+    return c.json(serializeSession(session), 200)
+  })
+  .openapi(listEventsRoute, async (c) => {
+    const { sessionId } = c.req.valid('param')
+    const query = c.req.valid('query')
+    const { limit = 100, type, visibility, createdFrom, createdTo } = query
+    const order = eventOrder(query.order)
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+
+    const session = await findSession(db, auth, sessionId)
+    if (!session) {
+      return errorResponse(c, 404, 'not_found', 'Session not found')
+    }
+    const filters = [
+      eq(sessionEvents.sessionId, sessionId),
+      eventCursorFilter(query, order),
+      type ? eq(sessionEvents.type, type) : undefined,
+      eq(sessionEvents.visibility, visibility ?? 'runtime'),
+      createdFrom ? gte(sessionEvents.createdAt, createdFrom) : undefined,
+      createdTo ? lte(sessionEvents.createdAt, createdTo) : undefined,
+    ].filter((filter) => filter !== undefined)
+    const rows = await db
+      .select()
+      .from(sessionEvents)
+      .where(and(...filters))
+      .orderBy(eventOrderBy(order))
+      .limit(limit + 1)
+    const page = paginateSequenceRows(rows, limit)
+    return c.json({ data: page.data.map(serializeEvent), pagination: page.pagination }, 200)
+  })
+  .openapi(exportEventsRoute, async (c) => {
+    const { sessionId } = c.req.valid('param')
+    return (await eventsNdjsonResponse(c, sessionId, c.req.valid('query'))) as never
+  })
+  .openapi(streamEventsRoute, async (c) => {
+    const { sessionId } = c.req.valid('param')
+    return (await streamEventsNdjsonResponse(c, sessionId, c.req.valid('query'))) as never
+  })
+
+export default routes

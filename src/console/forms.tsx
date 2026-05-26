@@ -5,8 +5,17 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import type { Agent, Environment } from '@/lib/api'
+import type { Agent, Environment, ProviderInputType } from '@/lib/api'
 import type { AgentFormState, EnvironmentFormState, ProviderFormState, SessionFormState, VaultFormState } from './types'
+
+const PROVIDER_TYPES: ProviderInputType[] = [
+  'workers-ai',
+  'anthropic',
+  'openai',
+  'openai-compatible',
+  'ollama',
+  'other',
+]
 
 export function EnvironmentForm({
   value,
@@ -213,12 +222,12 @@ export function ProviderForm({
       <FieldGroup>
         <Field>
           <FieldLabel>Provider type</FieldLabel>
-          <Select value={value.type} onValueChange={(type) => setValue({ ...value, type })}>
+          <Select value={value.type} onValueChange={(type) => setValue({ ...value, type: type as ProviderInputType })}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {['workers-ai', 'anthropic', 'openai', 'openai-compatible', 'ollama', 'other'].map((type) => (
+              {PROVIDER_TYPES.map((type) => (
                 <SelectItem key={type} value={type}>
                   {type}
                 </SelectItem>

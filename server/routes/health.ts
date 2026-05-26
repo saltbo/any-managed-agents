@@ -30,7 +30,7 @@ const healthRoute = createRoute({
   },
 })
 
-app.openapi(healthRoute, (c) =>
+const routes = app.openapi(healthRoute, (c) =>
   c.json({
     status: 'ok',
     name: 'Any Managed Agents',
@@ -39,4 +39,4 @@ app.openapi(healthRoute, (c) =>
   }),
 )
 
-export default app
+export default routes

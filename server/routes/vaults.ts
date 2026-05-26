@@ -718,557 +718,554 @@ const deleteVersionRoute = createRoute({
   },
 })
 
-app.openapi(listRoute, async (c) => {
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
-
-  const { includeArchived, status, search, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
-  let parsedCursor: ReturnType<typeof parseListCursor> | null = null
-  try {
-    parsedCursor = cursor ? parseListCursor(cursor) : null
-  } catch {
-    return c.json(domainValidation('Invalid list cursor', { cursor: 'Cursor is invalid.' }), 400)
-  }
-
-  const statusFilter = status ?? (includeArchived === 'true' ? undefined : 'active')
-  const filters = [
-    vaultVisibilityFilter(auth),
-    statusFilter ? eq(vaults.status, statusFilter) : undefined,
-    search ? like(vaults.name, `%${search}%`) : undefined,
-    createdFrom ? gte(vaults.createdAt, createdFrom) : undefined,
-    createdTo ? lte(vaults.createdAt, createdTo) : undefined,
-    parsedCursor
-      ? or(
-          lt(vaults.createdAt, parsedCursor.createdAt),
-          and(eq(vaults.createdAt, parsedCursor.createdAt), lt(vaults.id, parsedCursor.id)),
-        )
-      : undefined,
-  ].filter((filter) => filter !== undefined)
-  const rows = await db
-    .select()
-    .from(vaults)
-    .where(and(...filters))
-    .orderBy(desc(vaults.createdAt), desc(vaults.id))
-    .limit(limit + 1)
-  const page = paginateRows(rows, limit)
-  return c.json({ data: page.data.map(serializeVault), pagination: page.pagination }, 200)
-})
-
-app.openapi(createVaultRoute, async (c) => {
-  const body = c.req.valid('json')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
-
-  const timestamp = now()
-  const scope = body.scope ?? 'project'
-  const row = {
-    id: newId('vault'),
-    organizationId: auth.organization.id,
-    projectId: scope === 'project' ? auth.project.id : null,
-    name: body.name,
-    description: body.description ?? null,
-    scope,
-    metadata: stringify(body.metadata ?? {}),
-    status: 'active',
-    archivedAt: null,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  }
-  await db.insert(vaults).values(row)
-  const serialized = serializeVault(row)
-  await recordAudit(db, {
-    auth,
-    action: 'vault.create',
-    resourceType: 'vault',
-    resourceId: row.id,
-    outcome: 'success',
-    requestId: requestId(c),
-    after: serialized,
-  })
-  return c.json(serialized, 201)
-})
-
-app.openapi(readVaultRoute, async (c) => {
-  const { vaultId } = c.req.valid('param')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
-
-  const vault = await findVault(db, vaultId, auth)
-  if (!vault) {
-    return c.json({ error: { type: 'not_found', message: 'Vault not found' } }, 404)
-  }
-  return c.json(serializeVault(vault), 200)
-})
-
-app.openapi(updateVaultRoute, async (c) => {
-  const { vaultId } = c.req.valid('param')
-  const body = c.req.valid('json')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
-
-  const vault = await findVault(db, vaultId, auth)
-  if (!vault) {
-    return c.json({ error: { type: 'not_found', message: 'Vault not found' } }, 404)
-  }
-
-  const scope = body.scope ?? (vault.scope as 'project' | 'organization')
-  if (scope !== vault.scope) {
-    const credential = await db
-      .select({ id: vaultCredentials.id })
-      .from(vaultCredentials)
-      .where(eq(vaultCredentials.vaultId, vault.id))
-      .limit(1)
-      .get()
-    if (credential) {
-      return c.json({ error: { type: 'conflict', message: 'Vault scope cannot change after credentials exist' } }, 409)
+const routes = app
+  .openapi(listRoute, async (c) => {
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
     }
-  }
-  const updated = {
-    name: body.name ?? vault.name,
-    description: body.description ?? vault.description,
-    scope,
-    projectId: scope === 'project' ? auth.project.id : null,
-    metadata: stringify(body.metadata ?? parseJson<Record<string, unknown>>(vault.metadata)),
-    updatedAt: now(),
-  }
-  await db.update(vaults).set(updated).where(eq(vaults.id, vault.id))
-  const serialized = serializeVault({ ...vault, ...updated })
-  await recordAudit(db, {
-    auth,
-    action: 'vault.update',
-    resourceType: 'vault',
-    resourceId: vault.id,
-    outcome: 'success',
-    requestId: requestId(c),
-    before: serializeVault(vault),
-    after: serialized,
+
+    const { includeArchived, status, search, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
+    let parsedCursor: ReturnType<typeof parseListCursor> | null = null
+    try {
+      parsedCursor = cursor ? parseListCursor(cursor) : null
+    } catch {
+      return c.json(domainValidation('Invalid list cursor', { cursor: 'Cursor is invalid.' }), 400)
+    }
+
+    const statusFilter = status ?? (includeArchived === 'true' ? undefined : 'active')
+    const filters = [
+      vaultVisibilityFilter(auth),
+      statusFilter ? eq(vaults.status, statusFilter) : undefined,
+      search ? like(vaults.name, `%${search}%`) : undefined,
+      createdFrom ? gte(vaults.createdAt, createdFrom) : undefined,
+      createdTo ? lte(vaults.createdAt, createdTo) : undefined,
+      parsedCursor
+        ? or(
+            lt(vaults.createdAt, parsedCursor.createdAt),
+            and(eq(vaults.createdAt, parsedCursor.createdAt), lt(vaults.id, parsedCursor.id)),
+          )
+        : undefined,
+    ].filter((filter) => filter !== undefined)
+    const rows = await db
+      .select()
+      .from(vaults)
+      .where(and(...filters))
+      .orderBy(desc(vaults.createdAt), desc(vaults.id))
+      .limit(limit + 1)
+    const page = paginateRows(rows, limit)
+    return c.json({ data: page.data.map(serializeVault), pagination: page.pagination }, 200)
   })
-  return c.json(serialized, 200)
-})
+  .openapi(createVaultRoute, async (c) => {
+    const body = c.req.valid('json')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
 
-app.openapi(archiveVaultRoute, async (c) => {
-  const { vaultId } = c.req.valid('param')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
-
-  const vault = await findVault(db, vaultId, auth)
-  if (!vault) {
-    return c.json({ error: { type: 'not_found', message: 'Vault not found' } }, 404)
-  }
-
-  const timestamp = now()
-  await db
-    .update(vaults)
-    .set({ status: 'archived', archivedAt: timestamp, updatedAt: timestamp })
-    .where(eq(vaults.id, vault.id))
-  await recordAudit(db, {
-    auth,
-    action: 'vault.archive',
-    resourceType: 'vault',
-    resourceId: vault.id,
-    outcome: 'success',
-    requestId: requestId(c),
-    before: serializeVault(vault),
-    after: serializeVault({ ...vault, status: 'archived', archivedAt: timestamp, updatedAt: timestamp }),
+    const timestamp = now()
+    const scope = body.scope ?? 'project'
+    const row = {
+      id: newId('vault'),
+      organizationId: auth.organization.id,
+      projectId: scope === 'project' ? auth.project.id : null,
+      name: body.name,
+      description: body.description ?? null,
+      scope,
+      metadata: stringify(body.metadata ?? {}),
+      status: 'active',
+      archivedAt: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }
+    await db.insert(vaults).values(row)
+    const serialized = serializeVault(row)
+    await recordAudit(db, {
+      auth,
+      action: 'vault.create',
+      resourceType: 'vault',
+      resourceId: row.id,
+      outcome: 'success',
+      requestId: requestId(c),
+      after: serialized,
+    })
+    return c.json(serialized, 201)
   })
-  return c.body(null, 204)
-})
+  .openapi(readVaultRoute, async (c) => {
+    const { vaultId } = c.req.valid('param')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
 
-app.openapi(listCredentialsRoute, async (c) => {
-  const { vaultId } = c.req.valid('param')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
+    const vault = await findVault(db, vaultId, auth)
+    if (!vault) {
+      return c.json({ error: { type: 'not_found', message: 'Vault not found' } }, 404)
+    }
+    return c.json(serializeVault(vault), 200)
+  })
+  .openapi(updateVaultRoute, async (c) => {
+    const { vaultId } = c.req.valid('param')
+    const body = c.req.valid('json')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
 
-  const vault = await findVault(db, vaultId, auth)
-  if (!vault) {
-    return c.json({ error: { type: 'not_found', message: 'Vault not found' } }, 404)
-  }
+    const vault = await findVault(db, vaultId, auth)
+    if (!vault) {
+      return c.json({ error: { type: 'not_found', message: 'Vault not found' } }, 404)
+    }
 
-  const { includeArchived, status, search, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
-  let parsedCursor: ReturnType<typeof parseListCursor> | null = null
-  try {
-    parsedCursor = cursor ? parseListCursor(cursor) : null
-  } catch {
-    return c.json(domainValidation('Invalid list cursor', { cursor: 'Cursor is invalid.' }), 400)
-  }
-
-  const statusFilter = status ?? (includeArchived === 'true' ? undefined : 'active')
-  const filters = [
-    eq(vaultCredentials.vaultId, vault.id),
-    statusFilter ? eq(vaultCredentials.status, statusFilter) : undefined,
-    search ? like(vaultCredentials.name, `%${search}%`) : undefined,
-    createdFrom ? gte(vaultCredentials.createdAt, createdFrom) : undefined,
-    createdTo ? lte(vaultCredentials.createdAt, createdTo) : undefined,
-    parsedCursor
-      ? or(
-          lt(vaultCredentials.createdAt, parsedCursor.createdAt),
-          and(eq(vaultCredentials.createdAt, parsedCursor.createdAt), lt(vaultCredentials.id, parsedCursor.id)),
+    const scope = body.scope ?? (vault.scope as 'project' | 'organization')
+    if (scope !== vault.scope) {
+      const credential = await db
+        .select({ id: vaultCredentials.id })
+        .from(vaultCredentials)
+        .where(eq(vaultCredentials.vaultId, vault.id))
+        .limit(1)
+        .get()
+      if (credential) {
+        return c.json(
+          { error: { type: 'conflict', message: 'Vault scope cannot change after credentials exist' } },
+          409,
         )
-      : undefined,
-  ].filter((filter) => filter !== undefined)
-  const rows = await db
-    .select()
-    .from(vaultCredentials)
-    .where(and(...filters))
-    .orderBy(desc(vaultCredentials.createdAt), desc(vaultCredentials.id))
-    .limit(limit + 1)
-  const page = paginateRows(rows, limit)
-  const data = await Promise.all(page.data.map(async (row) => serializeCredential(row, await activeVersion(db, row))))
-  return c.json({ data, pagination: page.pagination }, 200)
-})
-
-app.openapi(createCredentialRoute, async (c) => {
-  const { vaultId } = c.req.valid('param')
-  const body = c.req.valid('json')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
-
-  const vault = await findVault(db, vaultId, auth)
-  if (!vault) {
-    return c.json({ error: { type: 'not_found', message: 'Vault not found' } }, 404)
-  }
-  if (vault.status !== 'active') {
-    return c.json({ error: { type: 'conflict', message: 'Vault is archived' } }, 409)
-  }
-
-  const timestamp = now()
-  const credentialId = newId('vaultcred')
-  let firstSecretRef: ReturnType<typeof secretReference>
-  try {
-    firstSecretRef = secretReference(credentialId, 1, body.secret)
-  } catch (error) {
-    return routeValidationError(c, error)
-  }
-  const credential = {
-    id: credentialId,
-    vaultId: vault.id,
-    organizationId: vault.organizationId,
-    projectId: vault.projectId,
-    name: body.name,
-    type: body.type,
-    connectorBinding: stringify(body.connectorBinding ?? {}),
-    metadata: stringify(body.metadata ?? {}),
-    status: 'active',
-    activeVersionId: null,
-    revokedAt: null,
-    revokedByUserId: null,
-    revokeReason: null,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  }
-  let storedSecretMetadata: Record<string, unknown> | undefined
-  try {
-    storedSecretMetadata = await storeSecretMaterial(c.env, firstSecretRef, body.secret)
-  } catch (error) {
-    return routeValidationError(c, error)
-  }
-  const version = {
-    id: newId('vaultver'),
-    credentialId: credential.id,
-    vaultId: credential.vaultId,
-    organizationId: credential.organizationId,
-    projectId: credential.projectId,
-    version: 1,
-    ...firstSecretRef,
-    metadata: versionMetadata(firstSecretRef, storedSecretMetadata),
-    status: 'active',
-    createdAt: timestamp,
-    supersededAt: null,
-    revokedAt: null,
-    deletedAt: null,
-  }
-  await db.batch([
-    db.insert(vaultCredentials).values(credential),
-    db.insert(vaultCredentialVersions).values(version),
-    db.update(vaultCredentials).set({ activeVersionId: version.id }).where(eq(vaultCredentials.id, credential.id)),
-  ])
-  const serialized = serializeCredential({ ...credential, activeVersionId: version.id }, version)
-  await recordAudit(db, {
-    auth,
-    action: 'vault_credential.create',
-    resourceType: 'vault_credential',
-    resourceId: credential.id,
-    outcome: 'success',
-    requestId: requestId(c),
-    metadata: { vaultId: vault.id },
-    after: serialized,
+      }
+    }
+    const updated = {
+      name: body.name ?? vault.name,
+      description: body.description ?? vault.description,
+      scope,
+      projectId: scope === 'project' ? auth.project.id : null,
+      metadata: stringify(body.metadata ?? parseJson<Record<string, unknown>>(vault.metadata)),
+      updatedAt: now(),
+    }
+    await db.update(vaults).set(updated).where(eq(vaults.id, vault.id))
+    const serialized = serializeVault({ ...vault, ...updated })
+    await recordAudit(db, {
+      auth,
+      action: 'vault.update',
+      resourceType: 'vault',
+      resourceId: vault.id,
+      outcome: 'success',
+      requestId: requestId(c),
+      before: serializeVault(vault),
+      after: serialized,
+    })
+    return c.json(serialized, 200)
   })
-  return c.json(serialized, 201)
-})
+  .openapi(archiveVaultRoute, async (c) => {
+    const { vaultId } = c.req.valid('param')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
 
-app.openapi(readCredentialRoute, async (c) => {
-  const { vaultId, credentialId } = c.req.valid('param')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
+    const vault = await findVault(db, vaultId, auth)
+    if (!vault) {
+      return c.json({ error: { type: 'not_found', message: 'Vault not found' } }, 404)
+    }
 
-  const vault = await findVault(db, vaultId, auth)
-  const credential = vault ? await findCredential(db, vault, credentialId) : null
-  if (!vault || !credential) {
-    return c.json({ error: { type: 'not_found', message: 'Credential not found' } }, 404)
-  }
-  return c.json(serializeCredential(credential, await activeVersion(db, credential)), 200)
-})
-
-app.openapi(updateCredentialRoute, async (c) => {
-  const { vaultId, credentialId } = c.req.valid('param')
-  const body = c.req.valid('json')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
-
-  const vault = await findVault(db, vaultId, auth)
-  const credential = vault ? await findCredential(db, vault, credentialId) : null
-  if (!vault || !credential) {
-    return c.json({ error: { type: 'not_found', message: 'Credential not found' } }, 404)
-  }
-
-  const timestamp = now()
-  const updated = {
-    metadata: stringify(body.metadata ?? parseJson<Record<string, unknown>>(credential.metadata)),
-    status: body.status ?? (credential.status as 'active' | 'revoked'),
-    activeVersionId: body.status === 'revoked' ? null : credential.activeVersionId,
-    revokedAt: body.status === 'revoked' ? timestamp : credential.revokedAt,
-    revokedByUserId: body.status === 'revoked' ? auth.user.id : credential.revokedByUserId,
-    revokeReason: body.status === 'revoked' ? (body.revokeReason ?? null) : credential.revokeReason,
-    updatedAt: timestamp,
-  }
-  await db.update(vaultCredentials).set(updated).where(eq(vaultCredentials.id, credential.id))
-  if (body.status === 'revoked') {
+    const timestamp = now()
     await db
-      .update(vaultCredentialVersions)
-      .set({ status: 'revoked', revokedAt: timestamp })
-      .where(and(eq(vaultCredentialVersions.credentialId, credential.id), eq(vaultCredentialVersions.status, 'active')))
-  }
-  const serializedActiveVersion =
-    body.status === 'revoked' ? null : await activeVersion(db, { ...credential, ...updated })
-  const serialized = serializeCredential({ ...credential, ...updated }, serializedActiveVersion)
-  await recordAudit(db, {
-    auth,
-    action: body.status === 'revoked' ? 'vault_credential.revoke' : 'vault_credential.update',
-    resourceType: 'vault_credential',
-    resourceId: credential.id,
-    outcome: 'success',
-    requestId: requestId(c),
-    metadata: { vaultId: vault.id },
-    before: serializeCredential(credential, await activeVersion(db, credential)),
-    after: serialized,
+      .update(vaults)
+      .set({ status: 'archived', archivedAt: timestamp, updatedAt: timestamp })
+      .where(eq(vaults.id, vault.id))
+    await recordAudit(db, {
+      auth,
+      action: 'vault.archive',
+      resourceType: 'vault',
+      resourceId: vault.id,
+      outcome: 'success',
+      requestId: requestId(c),
+      before: serializeVault(vault),
+      after: serializeVault({ ...vault, status: 'archived', archivedAt: timestamp, updatedAt: timestamp }),
+    })
+    return c.body(null, 204)
   })
-  return c.json(serialized, 200)
-})
+  .openapi(listCredentialsRoute, async (c) => {
+    const { vaultId } = c.req.valid('param')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
 
-app.openapi(listVersionsRoute, async (c) => {
-  const { vaultId, credentialId } = c.req.valid('param')
-  const { includeArchived, status, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
+    const vault = await findVault(db, vaultId, auth)
+    if (!vault) {
+      return c.json({ error: { type: 'not_found', message: 'Vault not found' } }, 404)
+    }
 
-  const vault = await findVault(db, vaultId, auth)
-  const credential = vault ? await findCredential(db, vault, credentialId) : null
-  if (!vault || !credential) {
-    return c.json({ error: { type: 'not_found', message: 'Credential not found' } }, 404)
-  }
+    const { includeArchived, status, search, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
+    let parsedCursor: ReturnType<typeof parseListCursor> | null = null
+    try {
+      parsedCursor = cursor ? parseListCursor(cursor) : null
+    } catch {
+      return c.json(domainValidation('Invalid list cursor', { cursor: 'Cursor is invalid.' }), 400)
+    }
 
-  let parsedCursor: ReturnType<typeof parseListCursor> | null = null
-  try {
-    parsedCursor = cursor ? parseListCursor(cursor) : null
-  } catch {
-    return c.json(domainValidation('Invalid list cursor', { cursor: 'Cursor is invalid.' }), 400)
-  }
+    const statusFilter = status ?? (includeArchived === 'true' ? undefined : 'active')
+    const filters = [
+      eq(vaultCredentials.vaultId, vault.id),
+      statusFilter ? eq(vaultCredentials.status, statusFilter) : undefined,
+      search ? like(vaultCredentials.name, `%${search}%`) : undefined,
+      createdFrom ? gte(vaultCredentials.createdAt, createdFrom) : undefined,
+      createdTo ? lte(vaultCredentials.createdAt, createdTo) : undefined,
+      parsedCursor
+        ? or(
+            lt(vaultCredentials.createdAt, parsedCursor.createdAt),
+            and(eq(vaultCredentials.createdAt, parsedCursor.createdAt), lt(vaultCredentials.id, parsedCursor.id)),
+          )
+        : undefined,
+    ].filter((filter) => filter !== undefined)
+    const rows = await db
+      .select()
+      .from(vaultCredentials)
+      .where(and(...filters))
+      .orderBy(desc(vaultCredentials.createdAt), desc(vaultCredentials.id))
+      .limit(limit + 1)
+    const page = paginateRows(rows, limit)
+    const data = await Promise.all(page.data.map(async (row) => serializeCredential(row, await activeVersion(db, row))))
+    return c.json({ data, pagination: page.pagination }, 200)
+  })
+  .openapi(createCredentialRoute, async (c) => {
+    const { vaultId } = c.req.valid('param')
+    const body = c.req.valid('json')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
 
-  const statusFilter = status ?? (includeArchived === 'true' ? undefined : 'active')
-  const filters = [
-    eq(vaultCredentialVersions.credentialId, credential.id),
-    statusFilter ? eq(vaultCredentialVersions.status, statusFilter) : undefined,
-    createdFrom ? gte(vaultCredentialVersions.createdAt, createdFrom) : undefined,
-    createdTo ? lte(vaultCredentialVersions.createdAt, createdTo) : undefined,
-    parsedCursor
-      ? or(
-          lt(vaultCredentialVersions.createdAt, parsedCursor.createdAt),
-          and(
-            eq(vaultCredentialVersions.createdAt, parsedCursor.createdAt),
-            lt(vaultCredentialVersions.id, parsedCursor.id),
-          ),
-        )
-      : undefined,
-  ].filter((filter) => filter !== undefined)
-  const rows = await db
-    .select()
-    .from(vaultCredentialVersions)
-    .where(and(...filters))
-    .orderBy(desc(vaultCredentialVersions.createdAt), desc(vaultCredentialVersions.id))
-    .limit(limit + 1)
-  const page = paginateRows(rows, limit)
-  return c.json({ data: page.data.map(serializeVersion), pagination: page.pagination }, 200)
-})
+    const vault = await findVault(db, vaultId, auth)
+    if (!vault) {
+      return c.json({ error: { type: 'not_found', message: 'Vault not found' } }, 404)
+    }
+    if (vault.status !== 'active') {
+      return c.json({ error: { type: 'conflict', message: 'Vault is archived' } }, 409)
+    }
 
-app.openapi(rotateCredentialRoute, async (c) => {
-  const { vaultId, credentialId } = c.req.valid('param')
-  const body = c.req.valid('json')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
-
-  const vault = await findVault(db, vaultId, auth)
-  const credential = vault ? await findCredential(db, vault, credentialId) : null
-  if (!vault || !credential) {
-    return c.json({ error: { type: 'not_found', message: 'Credential not found' } }, 404)
-  }
-  if (vault.status !== 'active' || credential.status !== 'active') {
-    return c.json({ error: { type: 'conflict', message: 'Credential is not active' } }, 409)
-  }
-
-  const timestamp = now()
-  let version: CredentialVersionRow
-  let reference: ReturnType<typeof secretReference>
-  let storedSecretMetadata: Record<string, unknown> | undefined
-  try {
-    const nextVersion = (await latestVersionNumber(db, credential.id)) + 1
-    reference = secretReference(credential.id, nextVersion, body)
-    storedSecretMetadata = await storeSecretMaterial(c.env, reference, body)
-    version = {
+    const timestamp = now()
+    const credentialId = newId('vaultcred')
+    let firstSecretRef: ReturnType<typeof secretReference>
+    try {
+      firstSecretRef = secretReference(credentialId, 1, body.secret)
+    } catch (error) {
+      return routeValidationError(c, error)
+    }
+    const credential = {
+      id: credentialId,
+      vaultId: vault.id,
+      organizationId: vault.organizationId,
+      projectId: vault.projectId,
+      name: body.name,
+      type: body.type,
+      connectorBinding: stringify(body.connectorBinding ?? {}),
+      metadata: stringify(body.metadata ?? {}),
+      status: 'active',
+      activeVersionId: null,
+      revokedAt: null,
+      revokedByUserId: null,
+      revokeReason: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }
+    let storedSecretMetadata: Record<string, unknown> | undefined
+    try {
+      storedSecretMetadata = await storeSecretMaterial(c.env, firstSecretRef, body.secret)
+    } catch (error) {
+      return routeValidationError(c, error)
+    }
+    const version = {
       id: newId('vaultver'),
       credentialId: credential.id,
       vaultId: credential.vaultId,
       organizationId: credential.organizationId,
       projectId: credential.projectId,
-      version: nextVersion,
-      ...reference,
-      metadata: versionMetadata(reference, storedSecretMetadata),
+      version: 1,
+      ...firstSecretRef,
+      metadata: versionMetadata(firstSecretRef, storedSecretMetadata),
       status: 'active',
       createdAt: timestamp,
       supersededAt: null,
       revokedAt: null,
       deletedAt: null,
     }
-  } catch (error) {
-    return routeValidationError(c, error)
-  }
-  const updated = { activeVersionId: version.id, updatedAt: timestamp }
-  await db.batch([
-    db.insert(vaultCredentialVersions).values(version),
-    ...(credential.activeVersionId
-      ? [
-          db
-            .update(vaultCredentialVersions)
-            .set({ status: 'superseded', supersededAt: timestamp })
-            .where(eq(vaultCredentialVersions.id, credential.activeVersionId)),
-        ]
-      : []),
-    db.update(vaultCredentials).set(updated).where(eq(vaultCredentials.id, credential.id)),
-  ])
-  const serialized = serializeCredential({ ...credential, ...updated }, version)
-  await recordAudit(db, {
-    auth,
-    action: 'vault_credential.rotate',
-    resourceType: 'vault_credential',
-    resourceId: credential.id,
-    outcome: 'success',
-    requestId: requestId(c),
-    metadata: { vaultId: vault.id, versionId: version.id },
-    before: serializeCredential(credential, await activeVersion(db, credential)),
-    after: serialized,
-  })
-  return c.json(serialized, 201)
-})
-
-app.openapi(deleteVersionRoute, async (c) => {
-  const { vaultId, credentialId, versionId } = c.req.valid('param')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
-
-  const vault = await findVault(db, vaultId, auth)
-  const credential = vault ? await findCredential(db, vault, credentialId) : null
-  const version = credential
-    ? await db
-        .select()
-        .from(vaultCredentialVersions)
-        .where(and(eq(vaultCredentialVersions.id, versionId), eq(vaultCredentialVersions.credentialId, credential.id)))
-        .get()
-    : null
-  if (!vault || !credential || !version) {
-    return c.json({ error: { type: 'not_found', message: 'Credential version not found' } }, 404)
-  }
-  if (credential.activeVersionId === version.id) {
-    return c.json({ error: { type: 'conflict', message: 'Active credential version cannot be deleted' } }, 409)
-  }
-  if (await versionHasActiveReferences(db, version)) {
-    return c.json(
-      { error: { type: 'conflict', message: 'Credential version is referenced by active runtime metadata' } },
-      409,
-    )
-  }
-
-  const timestamp = now()
-  try {
-    await deleteCloudflareSecret(c.env, version)
-  } catch (error) {
-    return routeValidationError(c, error)
-  }
-
-  await db
-    .update(vaultCredentialVersions)
-    .set({
-      status: 'deleted',
-      deletedAt: timestamp,
-      hasSecret: false,
-      metadata: stringify({
-        ...parseJson<Record<string, unknown>>(version.metadata),
-        deletedByUserId: auth.user.id,
-        deleteConfirmedAt: timestamp,
-      }),
+    await db.batch([
+      db.insert(vaultCredentials).values(credential),
+      db.insert(vaultCredentialVersions).values(version),
+      db.update(vaultCredentials).set({ activeVersionId: version.id }).where(eq(vaultCredentials.id, credential.id)),
+    ])
+    const serialized = serializeCredential({ ...credential, activeVersionId: version.id }, version)
+    await recordAudit(db, {
+      auth,
+      action: 'vault_credential.create',
+      resourceType: 'vault_credential',
+      resourceId: credential.id,
+      outcome: 'success',
+      requestId: requestId(c),
+      metadata: { vaultId: vault.id },
+      after: serialized,
     })
-    .where(eq(vaultCredentialVersions.id, version.id))
-  await recordAudit(db, {
-    auth,
-    action: 'vault_credential_version.delete',
-    resourceType: 'vault_credential_version',
-    resourceId: version.id,
-    outcome: 'success',
-    requestId: requestId(c),
-    metadata: { vaultId: vault.id, credentialId: credential.id },
-    before: serializeVersion(version),
-    after: {
-      ...serializeVersion(version),
-      status: 'deleted',
-      deletedAt: timestamp,
-      hasSecret: false,
-    },
+    return c.json(serialized, 201)
   })
-  return c.body(null, 204)
-})
+  .openapi(readCredentialRoute, async (c) => {
+    const { vaultId, credentialId } = c.req.valid('param')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
 
-export default app
+    const vault = await findVault(db, vaultId, auth)
+    const credential = vault ? await findCredential(db, vault, credentialId) : null
+    if (!vault || !credential) {
+      return c.json({ error: { type: 'not_found', message: 'Credential not found' } }, 404)
+    }
+    return c.json(serializeCredential(credential, await activeVersion(db, credential)), 200)
+  })
+  .openapi(updateCredentialRoute, async (c) => {
+    const { vaultId, credentialId } = c.req.valid('param')
+    const body = c.req.valid('json')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+
+    const vault = await findVault(db, vaultId, auth)
+    const credential = vault ? await findCredential(db, vault, credentialId) : null
+    if (!vault || !credential) {
+      return c.json({ error: { type: 'not_found', message: 'Credential not found' } }, 404)
+    }
+
+    const timestamp = now()
+    const updated = {
+      metadata: stringify(body.metadata ?? parseJson<Record<string, unknown>>(credential.metadata)),
+      status: body.status ?? (credential.status as 'active' | 'revoked'),
+      activeVersionId: body.status === 'revoked' ? null : credential.activeVersionId,
+      revokedAt: body.status === 'revoked' ? timestamp : credential.revokedAt,
+      revokedByUserId: body.status === 'revoked' ? auth.user.id : credential.revokedByUserId,
+      revokeReason: body.status === 'revoked' ? (body.revokeReason ?? null) : credential.revokeReason,
+      updatedAt: timestamp,
+    }
+    await db.update(vaultCredentials).set(updated).where(eq(vaultCredentials.id, credential.id))
+    if (body.status === 'revoked') {
+      await db
+        .update(vaultCredentialVersions)
+        .set({ status: 'revoked', revokedAt: timestamp })
+        .where(
+          and(eq(vaultCredentialVersions.credentialId, credential.id), eq(vaultCredentialVersions.status, 'active')),
+        )
+    }
+    const serializedActiveVersion =
+      body.status === 'revoked' ? null : await activeVersion(db, { ...credential, ...updated })
+    const serialized = serializeCredential({ ...credential, ...updated }, serializedActiveVersion)
+    await recordAudit(db, {
+      auth,
+      action: body.status === 'revoked' ? 'vault_credential.revoke' : 'vault_credential.update',
+      resourceType: 'vault_credential',
+      resourceId: credential.id,
+      outcome: 'success',
+      requestId: requestId(c),
+      metadata: { vaultId: vault.id },
+      before: serializeCredential(credential, await activeVersion(db, credential)),
+      after: serialized,
+    })
+    return c.json(serialized, 200)
+  })
+  .openapi(listVersionsRoute, async (c) => {
+    const { vaultId, credentialId } = c.req.valid('param')
+    const { includeArchived, status, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+
+    const vault = await findVault(db, vaultId, auth)
+    const credential = vault ? await findCredential(db, vault, credentialId) : null
+    if (!vault || !credential) {
+      return c.json({ error: { type: 'not_found', message: 'Credential not found' } }, 404)
+    }
+
+    let parsedCursor: ReturnType<typeof parseListCursor> | null = null
+    try {
+      parsedCursor = cursor ? parseListCursor(cursor) : null
+    } catch {
+      return c.json(domainValidation('Invalid list cursor', { cursor: 'Cursor is invalid.' }), 400)
+    }
+
+    const statusFilter = status ?? (includeArchived === 'true' ? undefined : 'active')
+    const filters = [
+      eq(vaultCredentialVersions.credentialId, credential.id),
+      statusFilter ? eq(vaultCredentialVersions.status, statusFilter) : undefined,
+      createdFrom ? gte(vaultCredentialVersions.createdAt, createdFrom) : undefined,
+      createdTo ? lte(vaultCredentialVersions.createdAt, createdTo) : undefined,
+      parsedCursor
+        ? or(
+            lt(vaultCredentialVersions.createdAt, parsedCursor.createdAt),
+            and(
+              eq(vaultCredentialVersions.createdAt, parsedCursor.createdAt),
+              lt(vaultCredentialVersions.id, parsedCursor.id),
+            ),
+          )
+        : undefined,
+    ].filter((filter) => filter !== undefined)
+    const rows = await db
+      .select()
+      .from(vaultCredentialVersions)
+      .where(and(...filters))
+      .orderBy(desc(vaultCredentialVersions.createdAt), desc(vaultCredentialVersions.id))
+      .limit(limit + 1)
+    const page = paginateRows(rows, limit)
+    return c.json({ data: page.data.map(serializeVersion), pagination: page.pagination }, 200)
+  })
+  .openapi(rotateCredentialRoute, async (c) => {
+    const { vaultId, credentialId } = c.req.valid('param')
+    const body = c.req.valid('json')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+
+    const vault = await findVault(db, vaultId, auth)
+    const credential = vault ? await findCredential(db, vault, credentialId) : null
+    if (!vault || !credential) {
+      return c.json({ error: { type: 'not_found', message: 'Credential not found' } }, 404)
+    }
+    if (vault.status !== 'active' || credential.status !== 'active') {
+      return c.json({ error: { type: 'conflict', message: 'Credential is not active' } }, 409)
+    }
+
+    const timestamp = now()
+    let version: CredentialVersionRow
+    let reference: ReturnType<typeof secretReference>
+    let storedSecretMetadata: Record<string, unknown> | undefined
+    try {
+      const nextVersion = (await latestVersionNumber(db, credential.id)) + 1
+      reference = secretReference(credential.id, nextVersion, body)
+      storedSecretMetadata = await storeSecretMaterial(c.env, reference, body)
+      version = {
+        id: newId('vaultver'),
+        credentialId: credential.id,
+        vaultId: credential.vaultId,
+        organizationId: credential.organizationId,
+        projectId: credential.projectId,
+        version: nextVersion,
+        ...reference,
+        metadata: versionMetadata(reference, storedSecretMetadata),
+        status: 'active',
+        createdAt: timestamp,
+        supersededAt: null,
+        revokedAt: null,
+        deletedAt: null,
+      }
+    } catch (error) {
+      return routeValidationError(c, error)
+    }
+    const updated = { activeVersionId: version.id, updatedAt: timestamp }
+    await db.batch([
+      db.insert(vaultCredentialVersions).values(version),
+      ...(credential.activeVersionId
+        ? [
+            db
+              .update(vaultCredentialVersions)
+              .set({ status: 'superseded', supersededAt: timestamp })
+              .where(eq(vaultCredentialVersions.id, credential.activeVersionId)),
+          ]
+        : []),
+      db.update(vaultCredentials).set(updated).where(eq(vaultCredentials.id, credential.id)),
+    ])
+    const serialized = serializeCredential({ ...credential, ...updated }, version)
+    await recordAudit(db, {
+      auth,
+      action: 'vault_credential.rotate',
+      resourceType: 'vault_credential',
+      resourceId: credential.id,
+      outcome: 'success',
+      requestId: requestId(c),
+      metadata: { vaultId: vault.id, versionId: version.id },
+      before: serializeCredential(credential, await activeVersion(db, credential)),
+      after: serialized,
+    })
+    return c.json(serialized, 201)
+  })
+  .openapi(deleteVersionRoute, async (c) => {
+    const { vaultId, credentialId, versionId } = c.req.valid('param')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+
+    const vault = await findVault(db, vaultId, auth)
+    const credential = vault ? await findCredential(db, vault, credentialId) : null
+    const version = credential
+      ? await db
+          .select()
+          .from(vaultCredentialVersions)
+          .where(
+            and(eq(vaultCredentialVersions.id, versionId), eq(vaultCredentialVersions.credentialId, credential.id)),
+          )
+          .get()
+      : null
+    if (!vault || !credential || !version) {
+      return c.json({ error: { type: 'not_found', message: 'Credential version not found' } }, 404)
+    }
+    if (credential.activeVersionId === version.id) {
+      return c.json({ error: { type: 'conflict', message: 'Active credential version cannot be deleted' } }, 409)
+    }
+    if (await versionHasActiveReferences(db, version)) {
+      return c.json(
+        { error: { type: 'conflict', message: 'Credential version is referenced by active runtime metadata' } },
+        409,
+      )
+    }
+
+    const timestamp = now()
+    try {
+      await deleteCloudflareSecret(c.env, version)
+    } catch (error) {
+      return routeValidationError(c, error)
+    }
+
+    await db
+      .update(vaultCredentialVersions)
+      .set({
+        status: 'deleted',
+        deletedAt: timestamp,
+        hasSecret: false,
+        metadata: stringify({
+          ...parseJson<Record<string, unknown>>(version.metadata),
+          deletedByUserId: auth.user.id,
+          deleteConfirmedAt: timestamp,
+        }),
+      })
+      .where(eq(vaultCredentialVersions.id, version.id))
+    await recordAudit(db, {
+      auth,
+      action: 'vault_credential_version.delete',
+      resourceType: 'vault_credential_version',
+      resourceId: version.id,
+      outcome: 'success',
+      requestId: requestId(c),
+      metadata: { vaultId: vault.id, credentialId: credential.id },
+      before: serializeVersion(version),
+      after: {
+        ...serializeVersion(version),
+        status: 'deleted',
+        deletedAt: timestamp,
+        hasSecret: false,
+      },
+    })
+    return c.body(null, 204)
+  })
+
+export default routes

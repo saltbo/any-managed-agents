@@ -742,23 +742,24 @@ export function createApp() {
     }),
   )
 
-  app.route('/api/health', health)
-  app.route('/api/e2e', e2e)
-  app.route('/api/auth', auth)
-  app.route('/api/agents', agents)
-  app.route('/api/environments', environments)
-  app.route('/api/providers', providers)
-  app.route('/api/runtime', runtimeAi)
-  app.route('/api/governance', governance)
-  app.route('/api/mcp', mcp)
-  app.route('/api/usage', usage)
-  app.route('/api/audit-records', audit)
-  app.route('/api/sessions', sessionRoutes)
-  app.route('/api/vaults', vaults)
+  const routes = app
+    .route('/api/health', health)
+    .route('/api/e2e', e2e)
+    .route('/api/auth', auth)
+    .route('/api/agents', agents)
+    .route('/api/environments', environments)
+    .route('/api/providers', providers)
+    .route('/api/runtime', runtimeAi)
+    .route('/api/governance', governance)
+    .route('/api/mcp', mcp)
+    .route('/api/usage', usage)
+    .route('/api/audit-records', audit)
+    .route('/api/sessions', sessionRoutes)
+    .route('/api/vaults', vaults)
 
-  app.openAPIRegistry.registerComponent('securitySchemes', 'cookieAuth', ApiSecuritySchemes.cookieAuth)
+  routes.openAPIRegistry.registerComponent('securitySchemes', 'cookieAuth', ApiSecuritySchemes.cookieAuth)
 
-  app.doc('/api/openapi.json', {
+  routes.doc('/api/openapi.json', {
     openapi: '3.0.0',
     info: {
       title: 'Any Managed Agents API',
@@ -769,9 +770,9 @@ export function createApp() {
     servers: [{ url: '/' }],
   })
 
-  app.get('/api/docs', swaggerUI({ url: '/api/openapi.json' }))
+  routes.get('/api/docs', swaggerUI({ url: '/api/openapi.json' }))
 
-  app.all('/runtime/sessions/:sessionId/*', async (c) => {
+  routes.all('/runtime/sessions/:sessionId/*', async (c) => {
     const db = drizzle(c.env.DB)
     const resolvedAuth = await requireAuth(c, db)
     if (resolvedAuth instanceof Response) {
@@ -984,14 +985,14 @@ export function createApp() {
     return response
   })
 
-  app.notFound((c) => c.json({ error: { type: 'not_found', message: 'Not found' } }, 404))
+  routes.notFound((c) => c.json({ error: { type: 'not_found', message: 'Not found' } }, 404))
 
-  app.onError((err, c) => {
+  routes.onError((err, c) => {
     console.error(err)
     return c.json({ error: { type: 'internal_error', message: 'Internal server error' } }, 500)
   })
 
-  return app
+  return routes
 }
 
 export type AppType = ReturnType<typeof createApp>

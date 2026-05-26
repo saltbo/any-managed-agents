@@ -15,7 +15,7 @@
       "@/*": ["src/*"],
       "@shared/*": ["shared/*"]
     },
-    "types": ["vite/client"]
+    "types": ["vite/client", "@cloudflare/workers-types"]
   },
   "include": ["src", "shared", "vite.config.ts"]
 }

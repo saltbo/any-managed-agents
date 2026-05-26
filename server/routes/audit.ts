@@ -188,19 +188,19 @@ async function readRows(c: Parameters<Parameters<typeof app.openapi>[1]>[0], que
     .limit((query.limit ?? 50) + 1)
 }
 
-app.openapi(listRoute, async (c) => {
-  const query = c.req.valid('query')
-  const rows = await readRows(c, query)
-  if (rows instanceof Response) return rows
-  const page = paginateRows(rows, query.limit ?? 50)
-  return c.json({ data: page.data.map(serializeAudit), pagination: page.pagination }, 200)
-})
+const routes = app
+  .openapi(listRoute, async (c) => {
+    const query = c.req.valid('query')
+    const rows = await readRows(c, query)
+    if (rows instanceof Response) return rows
+    const page = paginateRows(rows, query.limit ?? 50)
+    return c.json({ data: page.data.map(serializeAudit), pagination: page.pagination }, 200)
+  })
+  .openapi(exportRoute, async (c) => {
+    const query = c.req.valid('query')
+    const rows = await readRows(c, { ...query, limit: 100 })
+    if (rows instanceof Response) return rows
+    return c.json(rows.slice(0, query.limit ?? 100).map(serializeAudit), 200)
+  })
 
-app.openapi(exportRoute, async (c) => {
-  const query = c.req.valid('query')
-  const rows = await readRows(c, { ...query, limit: 100 })
-  if (rows instanceof Response) return rows
-  return c.json(rows.slice(0, query.limit ?? 100).map(serializeAudit), 200)
-})
-
-export default app
+export default routes

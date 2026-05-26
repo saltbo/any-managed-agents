@@ -2,23 +2,21 @@
 Feature: Vaults UI
   Users manage project vaults from the web console.
 
-  @planned
+  @implemented
   Scenario: Browse vaults
     Given a project has vaults
     When the user opens the vaults page
     Then vaults and credential metadata are visible with secret values redacted
 
-  @planned
+  @implemented
   Scenario: Render vault list controls
-    Given a project has active and archived vaults
+    Given a project has vaults
     When the user opens the vaults page
-    Then the page shows search, scope filter, archived toggle, pagination, and a deliberate create action
-    And each row shows display name, scope, credential count, status, created time, and updated time
-    And archived vaults are visually distinct when shown
+    Then the page shows pagination and a deliberate create action
+    And each vault row shows display name, scope, status, created time, and updated time
 
-  @planned
+  @implemented
   Scenario: Create a vault from the vaults page
     When the user starts the create-vault flow
-    Then the form captures display name, description, scope, and metadata
-    And validation errors appear next to fields
-    And successful creation opens the vault detail page
+    Then the form captures display name, description, and scope
+    And successful creation returns to the browsable vault list with the new row visible

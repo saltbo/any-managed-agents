@@ -8,7 +8,7 @@ Feature: Quickstart
     When the developer opens the console for the first time
     Then the platform guides them to create a project, select a provider, create an environment, create an agent, and create a session
 
-  @planned
+  @implemented
   Scenario: Display the first-run quickstart structure
     Given the developer is signed in for the first time
     When the developer opens quickstart
@@ -60,7 +60,7 @@ Feature: Quickstart
     Then the agent can run an approved command in an isolated sandbox
     And command output is visible in the session debug view
 
-  @planned
+  @implemented
   Scenario: Verify deployment health
     When the developer checks deployment health
     Then the control plane health endpoint responds successfully

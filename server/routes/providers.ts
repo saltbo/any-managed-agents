@@ -314,271 +314,266 @@ const upsertModelRoute = createRoute({
   },
 })
 
-app.openapi(listRoute, async (c) => {
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) return auth
+const routes = app
+  .openapi(listRoute, async (c) => {
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) return auth
 
-  const { includeArchived, status, search, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
-  let parsedCursor: ReturnType<typeof parseListCursor> | null = null
-  try {
-    parsedCursor = cursor ? parseListCursor(cursor) : null
-  } catch {
-    return errorResponse(c, 400, 'validation_error', 'Invalid list cursor', {
-      fields: { cursor: 'Cursor is invalid.' },
+    const { includeArchived, status, search, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
+    let parsedCursor: ReturnType<typeof parseListCursor> | null = null
+    try {
+      parsedCursor = cursor ? parseListCursor(cursor) : null
+    } catch {
+      return errorResponse(c, 400, 'validation_error', 'Invalid list cursor', {
+        fields: { cursor: 'Cursor is invalid.' },
+      })
+    }
+    const statusFilter = status ?? (includeArchived === 'true' ? undefined : 'active')
+    const filters = [
+      eq(providerConfigs.projectId, auth.project.id),
+      statusFilter ? eq(providerConfigs.status, statusFilter) : undefined,
+      search ? like(providerConfigs.displayName, `%${search}%`) : undefined,
+      createdFrom ? gte(providerConfigs.createdAt, createdFrom) : undefined,
+      createdTo ? lte(providerConfigs.createdAt, createdTo) : undefined,
+      parsedCursor
+        ? or(
+            lt(providerConfigs.createdAt, parsedCursor.createdAt),
+            and(eq(providerConfigs.createdAt, parsedCursor.createdAt), lt(providerConfigs.id, parsedCursor.id)),
+          )
+        : undefined,
+    ].filter((filter) => filter !== undefined)
+    const configuredRows = await db
+      .select()
+      .from(providerConfigs)
+      .where(and(...filters))
+      .orderBy(desc(providerConfigs.createdAt), desc(providerConfigs.id))
+      .limit(limit + 1)
+    const rows =
+      configuredRows.length === 0 && !status && !search && !createdFrom && !createdTo && !cursor
+        ? [await defaultProviderRows(auth.project.id, now())]
+        : configuredRows
+    const page = paginateRows(rows, limit)
+    return c.json({ data: page.data.map(serializeProvider), pagination: page.pagination }, 200)
+  })
+  .openapi(createProviderRoute, async (c) => {
+    const body = c.req.valid('json')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) return auth
+    if (body.type === 'openai-compatible' && !body.baseUrl) {
+      return errorResponse(c, 400, 'validation_error', 'Invalid provider configuration', {
+        fields: { baseUrl: 'OpenAI-compatible providers require a base URL.' },
+      })
+    }
+
+    const timestamp = now()
+    if (body.isDefault) {
+      await db
+        .update(providerConfigs)
+        .set({ isDefault: false, updatedAt: timestamp })
+        .where(and(eq(providerConfigs.projectId, auth.project.id), eq(providerConfigs.isDefault, true)))
+    }
+    const row = {
+      id: newId('provider'),
+      organizationId: auth.organization.id,
+      projectId: auth.project.id,
+      type: body.type,
+      displayName: body.displayName,
+      baseUrl: body.baseUrl ?? null,
+      isDefault: body.isDefault ?? false,
+      status: 'active',
+      credentialSecretRef: body.credentialSecretRef ?? null,
+      metadata: stringify(redactSecrets(body.metadata ?? {})),
+      rateLimits: stringify(body.rateLimits ?? {}),
+      budgetPolicy: stringify(body.budgetPolicy ?? {}),
+      modelCatalogStatus: 'ready',
+      lastError: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }
+    await db.insert(providerConfigs).values(row)
+    await recordAudit(db, {
+      auth,
+      action: 'provider.create',
+      resourceType: 'provider',
+      resourceId: row.id,
+      outcome: 'success',
+      requestId: requestId(c),
+      after: serializeProvider(row),
     })
-  }
-  const statusFilter = status ?? (includeArchived === 'true' ? undefined : 'active')
-  const filters = [
-    eq(providerConfigs.projectId, auth.project.id),
-    statusFilter ? eq(providerConfigs.status, statusFilter) : undefined,
-    search ? like(providerConfigs.displayName, `%${search}%`) : undefined,
-    createdFrom ? gte(providerConfigs.createdAt, createdFrom) : undefined,
-    createdTo ? lte(providerConfigs.createdAt, createdTo) : undefined,
-    parsedCursor
-      ? or(
-          lt(providerConfigs.createdAt, parsedCursor.createdAt),
-          and(eq(providerConfigs.createdAt, parsedCursor.createdAt), lt(providerConfigs.id, parsedCursor.id)),
-        )
-      : undefined,
-  ].filter((filter) => filter !== undefined)
-  const configuredRows = await db
-    .select()
-    .from(providerConfigs)
-    .where(and(...filters))
-    .orderBy(desc(providerConfigs.createdAt), desc(providerConfigs.id))
-    .limit(limit + 1)
-  const rows =
-    configuredRows.length === 0 && !status && !search && !createdFrom && !createdTo && !cursor
-      ? [await defaultProviderRows(auth.project.id, now())]
-      : configuredRows
-  const page = paginateRows(rows, limit)
-  return c.json({ data: page.data.map(serializeProvider), pagination: page.pagination }, 200)
-})
-
-app.openapi(createProviderRoute, async (c) => {
-  const body = c.req.valid('json')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) return auth
-  if (body.type === 'openai-compatible' && !body.baseUrl) {
-    return errorResponse(c, 400, 'validation_error', 'Invalid provider configuration', {
-      fields: { baseUrl: 'OpenAI-compatible providers require a base URL.' },
-    })
-  }
-
-  const timestamp = now()
-  if (body.isDefault) {
+    return c.json(serializeProvider(row), 201)
+  })
+  .openapi(readRoute, async (c) => {
+    const { providerId } = c.req.valid('param')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) return auth
+    const provider = await findProvider(db, auth.project.id, providerId)
+    if (!provider && providerId !== 'workers-ai') return errorResponse(c, 404, 'not_found', 'Provider not found')
+    return c.json(serializeProvider(provider ?? (await defaultProviderRows(auth.project.id, now()))), 200)
+  })
+  .openapi(updateRoute, async (c) => {
+    const { providerId } = c.req.valid('param')
+    const body = c.req.valid('json')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) return auth
+    const provider = await findProvider(db, auth.project.id, providerId)
+    if (!provider) return errorResponse(c, 404, 'not_found', 'Provider not found')
+    const timestamp = now()
+    if (body.isDefault) {
+      await db
+        .update(providerConfigs)
+        .set({ isDefault: false, updatedAt: timestamp })
+        .where(and(eq(providerConfigs.projectId, auth.project.id), eq(providerConfigs.isDefault, true)))
+    }
+    const updated = {
+      type: body.type ?? provider.type,
+      displayName: body.displayName ?? provider.displayName,
+      baseUrl: body.baseUrl ?? provider.baseUrl,
+      isDefault: body.isDefault ?? provider.isDefault,
+      status: body.status ?? provider.status,
+      credentialSecretRef: body.credentialSecretRef ?? provider.credentialSecretRef,
+      metadata: stringify(redactSecrets(body.metadata ?? parseJson<Record<string, unknown>>(provider.metadata, {}))),
+      rateLimits: stringify(body.rateLimits ?? parseJson<Record<string, unknown>>(provider.rateLimits, {})),
+      budgetPolicy: stringify(body.budgetPolicy ?? parseJson<Record<string, unknown>>(provider.budgetPolicy, {})),
+      modelCatalogStatus: body.modelCatalogStatus ?? provider.modelCatalogStatus,
+      lastError: body.lastError === undefined ? provider.lastError : stringify(body.lastError),
+      updatedAt: timestamp,
+    }
     await db
       .update(providerConfigs)
-      .set({ isDefault: false, updatedAt: timestamp })
-      .where(and(eq(providerConfigs.projectId, auth.project.id), eq(providerConfigs.isDefault, true)))
-  }
-  const row = {
-    id: newId('provider'),
-    organizationId: auth.organization.id,
-    projectId: auth.project.id,
-    type: body.type,
-    displayName: body.displayName,
-    baseUrl: body.baseUrl ?? null,
-    isDefault: body.isDefault ?? false,
-    status: 'active',
-    credentialSecretRef: body.credentialSecretRef ?? null,
-    metadata: stringify(redactSecrets(body.metadata ?? {})),
-    rateLimits: stringify(body.rateLimits ?? {}),
-    budgetPolicy: stringify(body.budgetPolicy ?? {}),
-    modelCatalogStatus: 'ready',
-    lastError: null,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  }
-  await db.insert(providerConfigs).values(row)
-  await recordAudit(db, {
-    auth,
-    action: 'provider.create',
-    resourceType: 'provider',
-    resourceId: row.id,
-    outcome: 'success',
-    requestId: requestId(c),
-    after: serializeProvider(row),
+      .set(updated)
+      .where(and(eq(providerConfigs.id, providerId), eq(providerConfigs.projectId, auth.project.id)))
+    const row = { ...provider, ...updated }
+    await recordAudit(db, {
+      auth,
+      action: 'provider.update',
+      resourceType: 'provider',
+      resourceId: providerId,
+      outcome: 'success',
+      requestId: requestId(c),
+      before: serializeProvider(provider),
+      after: serializeProvider(row),
+    })
+    return c.json(serializeProvider(row), 200)
   })
-  return c.json(serializeProvider(row), 201)
-})
-
-app.openapi(readRoute, async (c) => {
-  const { providerId } = c.req.valid('param')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) return auth
-  const provider = await findProvider(db, auth.project.id, providerId)
-  if (!provider && providerId !== 'workers-ai') return errorResponse(c, 404, 'not_found', 'Provider not found')
-  return c.json(serializeProvider(provider ?? (await defaultProviderRows(auth.project.id, now()))), 200)
-})
-
-app.openapi(updateRoute, async (c) => {
-  const { providerId } = c.req.valid('param')
-  const body = c.req.valid('json')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) return auth
-  const provider = await findProvider(db, auth.project.id, providerId)
-  if (!provider) return errorResponse(c, 404, 'not_found', 'Provider not found')
-  const timestamp = now()
-  if (body.isDefault) {
+  .openapi(deleteRoute, async (c) => {
+    const { providerId } = c.req.valid('param')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) return auth
+    const provider = await findProvider(db, auth.project.id, providerId)
+    if (!provider) return errorResponse(c, 404, 'not_found', 'Provider not found')
     await db
       .update(providerConfigs)
-      .set({ isDefault: false, updatedAt: timestamp })
-      .where(and(eq(providerConfigs.projectId, auth.project.id), eq(providerConfigs.isDefault, true)))
-  }
-  const updated = {
-    type: body.type ?? provider.type,
-    displayName: body.displayName ?? provider.displayName,
-    baseUrl: body.baseUrl ?? provider.baseUrl,
-    isDefault: body.isDefault ?? provider.isDefault,
-    status: body.status ?? provider.status,
-    credentialSecretRef: body.credentialSecretRef ?? provider.credentialSecretRef,
-    metadata: stringify(redactSecrets(body.metadata ?? parseJson<Record<string, unknown>>(provider.metadata, {}))),
-    rateLimits: stringify(body.rateLimits ?? parseJson<Record<string, unknown>>(provider.rateLimits, {})),
-    budgetPolicy: stringify(body.budgetPolicy ?? parseJson<Record<string, unknown>>(provider.budgetPolicy, {})),
-    modelCatalogStatus: body.modelCatalogStatus ?? provider.modelCatalogStatus,
-    lastError: body.lastError === undefined ? provider.lastError : stringify(body.lastError),
-    updatedAt: timestamp,
-  }
-  await db
-    .update(providerConfigs)
-    .set(updated)
-    .where(and(eq(providerConfigs.id, providerId), eq(providerConfigs.projectId, auth.project.id)))
-  const row = { ...provider, ...updated }
-  await recordAudit(db, {
-    auth,
-    action: 'provider.update',
-    resourceType: 'provider',
-    resourceId: providerId,
-    outcome: 'success',
-    requestId: requestId(c),
-    before: serializeProvider(provider),
-    after: serializeProvider(row),
+      .set({ status: 'deleted', isDefault: false, updatedAt: now() })
+      .where(and(eq(providerConfigs.id, providerId), eq(providerConfigs.projectId, auth.project.id)))
+    await recordAudit(db, {
+      auth,
+      action: 'provider.delete',
+      resourceType: 'provider',
+      resourceId: providerId,
+      outcome: 'success',
+      requestId: requestId(c),
+      before: serializeProvider(provider),
+    })
+    return c.body(null, 204)
   })
-  return c.json(serializeProvider(row), 200)
-})
-
-app.openapi(deleteRoute, async (c) => {
-  const { providerId } = c.req.valid('param')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) return auth
-  const provider = await findProvider(db, auth.project.id, providerId)
-  if (!provider) return errorResponse(c, 404, 'not_found', 'Provider not found')
-  await db
-    .update(providerConfigs)
-    .set({ status: 'deleted', isDefault: false, updatedAt: now() })
-    .where(and(eq(providerConfigs.id, providerId), eq(providerConfigs.projectId, auth.project.id)))
-  await recordAudit(db, {
-    auth,
-    action: 'provider.delete',
-    resourceType: 'provider',
-    resourceId: providerId,
-    outcome: 'success',
-    requestId: requestId(c),
-    before: serializeProvider(provider),
+  .openapi(listModelsRoute, async (c) => {
+    const { providerId } = c.req.valid('param')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) return auth
+    const provider = await findProvider(db, auth.project.id, providerId)
+    if (!provider && providerId !== 'workers-ai') return errorResponse(c, 404, 'not_found', 'Provider not found')
+    const rows = await db
+      .select()
+      .from(providerModels)
+      .where(and(eq(providerModels.projectId, auth.project.id), eq(providerModels.providerId, providerId)))
+      .orderBy(providerModels.modelId)
+    const data =
+      rows.length === 0 && providerId === 'workers-ai'
+        ? [
+            {
+              id: 'model_workers_ai_default',
+              organizationId: auth.organization.id,
+              projectId: auth.project.id,
+              providerId: 'workers-ai',
+              modelId: c.env.AMA_DEFAULT_MODEL ?? '@cf/moonshotai/kimi-k2.6',
+              displayName: 'Workers AI default model',
+              capabilities: stringify(['text']),
+              contextWindow: null,
+              pricing: stringify({}),
+              availability: 'available',
+              metadata: stringify({ platformDefault: true }),
+              createdAt: now(),
+              updatedAt: now(),
+            } satisfies ProviderModelRow,
+          ]
+        : rows
+    const page = paginateRows(data, data.length || 1)
+    return c.json({ data: page.data.map(serializeModel), pagination: page.pagination }, 200)
   })
-  return c.body(null, 204)
-})
-
-app.openapi(listModelsRoute, async (c) => {
-  const { providerId } = c.req.valid('param')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) return auth
-  const provider = await findProvider(db, auth.project.id, providerId)
-  if (!provider && providerId !== 'workers-ai') return errorResponse(c, 404, 'not_found', 'Provider not found')
-  const rows = await db
-    .select()
-    .from(providerModels)
-    .where(and(eq(providerModels.projectId, auth.project.id), eq(providerModels.providerId, providerId)))
-    .orderBy(providerModels.modelId)
-  const data =
-    rows.length === 0 && providerId === 'workers-ai'
-      ? [
-          {
-            id: 'model_workers_ai_default',
-            organizationId: auth.organization.id,
-            projectId: auth.project.id,
-            providerId: 'workers-ai',
-            modelId: c.env.AMA_DEFAULT_MODEL ?? '@cf/moonshotai/kimi-k2.6',
-            displayName: 'Workers AI default model',
-            capabilities: stringify(['text']),
-            contextWindow: null,
-            pricing: stringify({}),
-            availability: 'available',
-            metadata: stringify({ platformDefault: true }),
-            createdAt: now(),
-            updatedAt: now(),
-          } satisfies ProviderModelRow,
-        ]
-      : rows
-  const page = paginateRows(data, data.length || 1)
-  return c.json({ data: page.data.map(serializeModel), pagination: page.pagination }, 200)
-})
-
-app.openapi(upsertModelRoute, async (c) => {
-  const { providerId } = c.req.valid('param')
-  const body = c.req.valid('json')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) return auth
-  const provider = await findProvider(db, auth.project.id, providerId)
-  if (!provider) return errorResponse(c, 404, 'not_found', 'Provider not found')
-  const timestamp = now()
-  const existing = await db
-    .select()
-    .from(providerModels)
-    .where(
-      and(
-        eq(providerModels.projectId, auth.project.id),
-        eq(providerModels.providerId, providerId),
-        eq(providerModels.modelId, body.modelId),
-      ),
-    )
-    .get()
-  const values = {
-    organizationId: auth.organization.id,
-    projectId: auth.project.id,
-    providerId,
-    modelId: body.modelId,
-    displayName: body.displayName,
-    capabilities: stringify(body.capabilities ?? []),
-    contextWindow: body.contextWindow ?? null,
-    pricing: stringify(body.pricing ?? {}),
-    availability: body.availability ?? 'available',
-    metadata: stringify(body.metadata ?? {}),
-    updatedAt: timestamp,
-  }
-  const row = existing
-    ? { ...existing, ...values }
-    : {
-        id: newId('model'),
-        ...values,
-        createdAt: timestamp,
-      }
-  if (existing) {
-    await db
-      .update(providerModels)
-      .set(values)
-      .where(and(eq(providerModels.id, existing.id), eq(providerModels.projectId, auth.project.id)))
-  } else {
-    await db.insert(providerModels).values(row)
-  }
-  await recordAudit(db, {
-    auth,
-    action: 'provider_model.upsert',
-    resourceType: 'provider_model',
-    resourceId: row.id,
-    outcome: 'success',
-    requestId: requestId(c),
-    after: serializeModel(row),
+  .openapi(upsertModelRoute, async (c) => {
+    const { providerId } = c.req.valid('param')
+    const body = c.req.valid('json')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) return auth
+    const provider = await findProvider(db, auth.project.id, providerId)
+    if (!provider) return errorResponse(c, 404, 'not_found', 'Provider not found')
+    const timestamp = now()
+    const existing = await db
+      .select()
+      .from(providerModels)
+      .where(
+        and(
+          eq(providerModels.projectId, auth.project.id),
+          eq(providerModels.providerId, providerId),
+          eq(providerModels.modelId, body.modelId),
+        ),
+      )
+      .get()
+    const values = {
+      organizationId: auth.organization.id,
+      projectId: auth.project.id,
+      providerId,
+      modelId: body.modelId,
+      displayName: body.displayName,
+      capabilities: stringify(body.capabilities ?? []),
+      contextWindow: body.contextWindow ?? null,
+      pricing: stringify(body.pricing ?? {}),
+      availability: body.availability ?? 'available',
+      metadata: stringify(body.metadata ?? {}),
+      updatedAt: timestamp,
+    }
+    const row = existing
+      ? { ...existing, ...values }
+      : {
+          id: newId('model'),
+          ...values,
+          createdAt: timestamp,
+        }
+    if (existing) {
+      await db
+        .update(providerModels)
+        .set(values)
+        .where(and(eq(providerModels.id, existing.id), eq(providerModels.projectId, auth.project.id)))
+    } else {
+      await db.insert(providerModels).values(row)
+    }
+    await recordAudit(db, {
+      auth,
+      action: 'provider_model.upsert',
+      resourceType: 'provider_model',
+      resourceId: row.id,
+      outcome: 'success',
+      requestId: requestId(c),
+      after: serializeModel(row),
+    })
+    return c.json(serializeModel(row), 201)
   })
-  return c.json(serializeModel(row), 201)
-})
 
-export default app
+export default routes

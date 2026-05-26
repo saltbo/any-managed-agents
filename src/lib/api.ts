@@ -1,4 +1,5 @@
 import { hc } from 'hono/client'
+import type { AppType } from '../../server/app'
 
 export interface AuthContext {
   user: { id: string; email: string; name: string | null; avatarUrl: string | null }
@@ -338,6 +339,8 @@ export interface ListOptions {
   cursor?: string
 }
 
+export type ProviderInputType = 'workers-ai' | 'anthropic' | 'openai' | 'openai-compatible' | 'ollama' | 'other'
+
 export interface SessionEventListOptions {
   cursor?: number
   order?: 'asc' | 'desc'
@@ -385,7 +388,7 @@ export interface SessionInput {
 }
 
 export interface ProviderInput {
-  type: string
+  type: ProviderInputType
   displayName: string
   baseUrl?: string
   isDefault?: boolean
@@ -408,19 +411,18 @@ export class ApiError extends Error {
   }
 }
 
-type RpcMethod = (args?: unknown) => Promise<RpcResponse>
-type RpcMethodName = '$delete' | '$get' | '$patch' | '$post' | '$put'
-type RpcNode = Record<string, unknown>
-
-const rpc = hc('/', {
+const rpc = hc<AppType>('/', {
   init: { credentials: 'include' },
   headers: () => ({
     accept: 'application/json',
     'x-ama-client': 'web-rpc',
   }),
-}) as unknown as { api: RpcNode }
+})
 
 type RpcResponse = Pick<Response, 'headers' | 'json' | 'ok' | 'status' | 'statusText' | 'text'>
+type RpcArg<T> = T extends (args: infer A, ...rest: never[]) => unknown ? A : never
+type RpcJson<T> = RpcArg<T> extends { json: infer J } ? J : never
+type RpcQuery<T> = RpcArg<T> extends { query: infer Q } ? Q : never
 
 async function rpcRequest<T>(responsePromise: Promise<RpcResponse>) {
   const response = await responsePromise
@@ -450,102 +452,108 @@ function queryOptions(options: object = {}) {
   return query
 }
 
-function queryArgs(options: object = {}) {
-  const query = queryOptions(options)
-  return Object.keys(query).length > 0 ? { query } : undefined
+function queryArg<T>(options: object = {}) {
+  return { query: queryOptions(options) as RpcQuery<T> } as RpcArg<T>
 }
 
-function rpcRoute(...segments: string[]) {
-  return segments.reduce<unknown>((node, segment) => (node as Record<string, unknown>)[segment], rpc) as RpcNode
+function paramQueryArg<T>(param: RpcArg<T> extends { param: infer P } ? P : never, options: object = {}) {
+  return { param, query: queryOptions(options) as RpcQuery<T> } as RpcArg<T>
 }
 
-function rpcCall(method: RpcMethodName, segments: string[], args?: unknown) {
-  return (rpcRoute(...segments)[method] as RpcMethod satisfies RpcMethod)(args)
-}
-
-function rpcGet<T>(segments: string[], args?: unknown) {
-  return rpcRequest<T>(rpcCall('$get', segments, args))
-}
-
-function rpcPost<T>(segments: string[], args?: unknown) {
-  return rpcRequest<T>(rpcCall('$post', segments, args))
-}
-
-function rpcPatch<T>(segments: string[], args?: unknown) {
-  return rpcRequest<T>(rpcCall('$patch', segments, args))
-}
-
-function rpcPut<T>(segments: string[], args?: unknown) {
-  return rpcRequest<T>(rpcCall('$put', segments, args))
-}
-
-function rpcDelete<T>(segments: string[], args?: unknown) {
-  return rpcRequest<T>(rpcCall('$delete', segments, args))
+function jsonArg<T>(json: RpcJson<T>) {
+  return { json } as RpcArg<T>
 }
 
 export const api = {
-  me: () => rpcGet<AuthContext>(['api', 'auth', 'me']),
-  logout: () => rpcPost<void>(['api', 'auth', 'logout']),
-  listAgents: (options: ListOptions = {}) => rpcGet<ListResponse<Agent>>(['api', 'agents'], queryArgs(options)),
-  readAgent: (id: string) => rpcGet<Agent>(['api', 'agents', ':agentId'], { param: { agentId: id } }),
-  createAgent: (input: AgentInput) => rpcPost<Agent>(['api', 'agents'], { json: input }),
+  me: () => rpcRequest<AuthContext>(rpc.api.auth.me.$get()),
+  logout: () => rpcRequest<void>(rpc.api.auth.logout.$post()),
+  listAgents: (options: ListOptions = {}) =>
+    rpcRequest<ListResponse<Agent>>(rpc.api.agents.$get(queryArg<typeof rpc.api.agents.$get>(options))),
+  readAgent: (id: string) => rpcRequest<Agent>(rpc.api.agents[':agentId'].$get({ param: { agentId: id } })),
+  createAgent: (input: AgentInput) =>
+    rpcRequest<Agent>(rpc.api.agents.$post(jsonArg<typeof rpc.api.agents.$post>(input))),
   updateAgent: (id: string, input: Partial<AgentInput>) =>
-    rpcPatch<Agent>(['api', 'agents', ':agentId'], { param: { agentId: id }, json: input }),
-  archiveAgent: (id: string) => rpcDelete<void>(['api', 'agents', ':agentId'], { param: { agentId: id } }),
+    rpcRequest<Agent>(
+      rpc.api.agents[':agentId'].$patch({
+        param: { agentId: id },
+        json: input as RpcJson<(typeof rpc.api.agents)[':agentId']['$patch']>,
+      }),
+    ),
+  archiveAgent: (id: string) => rpcRequest<void>(rpc.api.agents[':agentId'].$delete({ param: { agentId: id } })),
   listAgentVersions: (id: string) =>
-    rpcGet<ListResponse<AgentVersion>>(['api', 'agents', ':agentId', 'versions'], { param: { agentId: id } }),
+    rpcRequest<ListResponse<AgentVersion>>(rpc.api.agents[':agentId'].versions.$get({ param: { agentId: id } })),
   listEnvironments: (options: ListOptions = {}) =>
-    rpcGet<ListResponse<Environment>>(['api', 'environments'], queryArgs(options)),
+    rpcRequest<ListResponse<Environment>>(
+      rpc.api.environments.$get(queryArg<typeof rpc.api.environments.$get>(options)),
+    ),
   readEnvironment: (id: string) =>
-    rpcGet<Environment>(['api', 'environments', ':environmentId'], { param: { environmentId: id } }),
-  createEnvironment: (input: EnvironmentInput) => rpcPost<Environment>(['api', 'environments'], { json: input }),
+    rpcRequest<Environment>(rpc.api.environments[':environmentId'].$get({ param: { environmentId: id } })),
+  createEnvironment: (input: EnvironmentInput) => rpcRequest<Environment>(rpc.api.environments.$post({ json: input })),
   updateEnvironment: (id: string, input: Partial<EnvironmentInput>) =>
-    rpcPatch<Environment>(['api', 'environments', ':environmentId'], { param: { environmentId: id }, json: input }),
+    rpcRequest<Environment>(
+      rpc.api.environments[':environmentId'].$patch({ param: { environmentId: id }, json: input }),
+    ),
   archiveEnvironment: (id: string) =>
-    rpcDelete<void>(['api', 'environments', ':environmentId'], { param: { environmentId: id } }),
+    rpcRequest<void>(rpc.api.environments[':environmentId'].$delete({ param: { environmentId: id } })),
   listEnvironmentVersions: (id: string) =>
-    rpcGet<ListResponse<EnvironmentVersion>>(['api', 'environments', ':environmentId', 'versions'], {
-      param: { environmentId: id },
-    }),
-  listSessions: (options: ListOptions = {}) => rpcGet<ListResponse<Session>>(['api', 'sessions'], queryArgs(options)),
-  createSession: (input: SessionInput) => rpcPost<Session>(['api', 'sessions'], { json: input }),
-  readSession: (id: string) => rpcGet<Session>(['api', 'sessions', ':sessionId'], { param: { sessionId: id } }),
+    rpcRequest<ListResponse<EnvironmentVersion>>(
+      rpc.api.environments[':environmentId'].versions.$get({
+        param: { environmentId: id },
+      }),
+    ),
+  listSessions: (options: ListOptions = {}) =>
+    rpcRequest<ListResponse<Session>>(rpc.api.sessions.$get(queryArg<typeof rpc.api.sessions.$get>(options))),
+  createSession: (input: SessionInput) => rpcRequest<Session>(rpc.api.sessions.$post({ json: input })),
+  readSession: (id: string) => rpcRequest<Session>(rpc.api.sessions[':sessionId'].$get({ param: { sessionId: id } })),
   reconnectSession: (id: string) =>
-    rpcGet<Session>(['api', 'sessions', ':sessionId', 'reconnect'], { param: { sessionId: id } }),
+    rpcRequest<Session>(rpc.api.sessions[':sessionId'].reconnect.$get({ param: { sessionId: id } })),
   stopSession: (id: string) =>
-    rpcPost<Session>(['api', 'sessions', ':sessionId', 'stop'], { param: { sessionId: id } }),
-  archiveSession: (id: string) => rpcDelete<void>(['api', 'sessions', ':sessionId'], { param: { sessionId: id } }),
+    rpcRequest<Session>(rpc.api.sessions[':sessionId'].stop.$post({ param: { sessionId: id }, query: {} })),
+  archiveSession: (id: string) =>
+    rpcRequest<void>(rpc.api.sessions[':sessionId'].$delete({ param: { sessionId: id } })),
   listSessionEvents: (id: string, options: SessionEventListOptions = {}) =>
-    rpcGet<ListResponse<SessionEvent>>(['api', 'sessions', ':sessionId', 'events'], {
-      param: { sessionId: id },
-      ...(queryArgs(options) ?? {}),
-    }),
+    rpcRequest<ListResponse<SessionEvent>>(
+      rpc.api.sessions[':sessionId'].events.$get(
+        paramQueryArg<(typeof rpc.api.sessions)[':sessionId']['events']['$get']>({ sessionId: id }, options),
+      ),
+    ),
   listProviders: (options: ListOptions = {}) =>
-    rpcGet<ListResponse<Provider>>(['api', 'providers'], queryArgs(options)),
-  readProvider: (id: string) => rpcGet<Provider>(['api', 'providers', ':providerId'], { param: { providerId: id } }),
-  createProvider: (input: ProviderInput) => rpcPost<Provider>(['api', 'providers'], { json: input }),
-  archiveProvider: (id: string) => rpcDelete<void>(['api', 'providers', ':providerId'], { param: { providerId: id } }),
+    rpcRequest<ListResponse<Provider>>(rpc.api.providers.$get(queryArg<typeof rpc.api.providers.$get>(options))),
+  readProvider: (id: string) =>
+    rpcRequest<Provider>(rpc.api.providers[':providerId'].$get({ param: { providerId: id } })),
+  createProvider: (input: ProviderInput) =>
+    rpcRequest<Provider>(rpc.api.providers.$post(jsonArg<typeof rpc.api.providers.$post>(input))),
+  archiveProvider: (id: string) =>
+    rpcRequest<void>(rpc.api.providers[':providerId'].$delete({ param: { providerId: id } })),
   listProviderModels: (id: string) =>
-    rpcGet<ListResponse<ProviderModel>>(['api', 'providers', ':providerId', 'models'], { param: { providerId: id } }),
-  listVaults: (options: ListOptions = {}) => rpcGet<ListResponse<Vault>>(['api', 'vaults'], queryArgs(options)),
-  readVault: (id: string) => rpcGet<Vault>(['api', 'vaults', ':vaultId'], { param: { vaultId: id } }),
-  createVault: (input: VaultInput) => rpcPost<Vault>(['api', 'vaults'], { json: input }),
-  archiveVault: (id: string) => rpcDelete<void>(['api', 'vaults', ':vaultId'], { param: { vaultId: id } }),
+    rpcRequest<ListResponse<ProviderModel>>(
+      rpc.api.providers[':providerId'].models.$get({ param: { providerId: id } }),
+    ),
+  listVaults: (options: ListOptions = {}) =>
+    rpcRequest<ListResponse<Vault>>(rpc.api.vaults.$get(queryArg<typeof rpc.api.vaults.$get>(options))),
+  readVault: (id: string) => rpcRequest<Vault>(rpc.api.vaults[':vaultId'].$get({ param: { vaultId: id } })),
+  createVault: (input: VaultInput) => rpcRequest<Vault>(rpc.api.vaults.$post({ json: input })),
+  archiveVault: (id: string) => rpcRequest<void>(rpc.api.vaults[':vaultId'].$delete({ param: { vaultId: id } })),
   listVaultCredentials: (id: string, options: ListOptions = {}) =>
-    rpcGet<ListResponse<VaultCredential>>(['api', 'vaults', ':vaultId', 'credentials'], {
-      param: { vaultId: id },
-      ...(queryArgs(options) ?? {}),
-    }),
-  listMcpConnectors: () => rpcGet<ListResponse<McpConnector>>(['api', 'mcp', 'connectors']),
-  listMcpConnections: () => rpcGet<ListResponse<McpConnection>>(['api', 'mcp', 'connections']),
+    rpcRequest<ListResponse<VaultCredential>>(
+      rpc.api.vaults[':vaultId'].credentials.$get(
+        paramQueryArg<(typeof rpc.api.vaults)[':vaultId']['credentials']['$get']>({ vaultId: id }, options),
+      ),
+    ),
+  listMcpConnectors: () => rpcRequest<ListResponse<McpConnector>>(rpc.api.mcp.connectors.$get({ query: {} })),
+  listMcpConnections: () => rpcRequest<ListResponse<McpConnection>>(rpc.api.mcp.connections.$get({ query: {} })),
   disconnectMcpConnection: (id: string) =>
-    rpcDelete<void>(['api', 'mcp', 'connections', ':connectionId'], {
-      param: { connectionId: id },
-      query: { confirm: 'true' },
-    }),
-  readGovernancePolicy: () => rpcGet<GovernancePolicy>(['api', 'governance', 'policy']),
+    rpcRequest<void>(
+      rpc.api.mcp.connections[':connectionId'].$delete({
+        param: { connectionId: id },
+        query: { confirm: 'true' },
+      }),
+    ),
+  readGovernancePolicy: () => rpcRequest<GovernancePolicy>(rpc.api.governance.policy.$get()),
   updateGovernancePolicy: (input: Partial<GovernancePolicy>) =>
-    rpcPut<GovernancePolicy>(['api', 'governance', 'policy'], { json: input }),
-  readUsageSummary: () => rpcGet<UsageSummary>(['api', 'usage', 'summary']),
-  listAuditRecords: () => rpcGet<ListResponse<AuditRecord>>(['api', 'audit-records']),
+    rpcRequest<GovernancePolicy>(
+      rpc.api.governance.policy.$put({ json: input as RpcJson<typeof rpc.api.governance.policy.$put> }),
+    ),
+  readUsageSummary: () => rpcRequest<UsageSummary>(rpc.api.usage.summary.$get({ query: {} })),
+  listAuditRecords: () => rpcRequest<ListResponse<AuditRecord>>(rpc.api['audit-records'].$get({ query: {} })),
 }

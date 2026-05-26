@@ -6,14 +6,22 @@ import type { AmaWorld } from './world'
 
 interface Environment {
   id: string
+  name?: string
 }
 
 interface Agent {
   id: string
+  name?: string
 }
 
 interface Session {
   id: string
+  title?: string | null
+}
+
+interface Vault {
+  id: string
+  name?: string
 }
 
 interface SessionEvent {
@@ -32,7 +40,9 @@ interface UiWorkflow {
   environmentId: string
   agentId: string
   sessionId: string
+  vaultId: string
   message: string
+  runId: string
   controlPlaneRequestHeaders: Record<string, string>[]
 }
 
@@ -51,7 +61,9 @@ Given('the local real UI e2e app is running', { timeout: 120_000 }, async functi
     environmentId: '',
     agentId: '',
     sessionId: '',
+    vaultId: '',
     message: '',
+    runId: `ui-e2e-${Date.now()}`,
     controlPlaneRequestHeaders: [],
   }
 })
@@ -67,10 +79,432 @@ When(
       environmentId: this.uiWorkflow?.environmentId ?? '',
       agentId: this.uiWorkflow?.agentId ?? '',
       sessionId: this.uiWorkflow?.sessionId ?? '',
+      vaultId: this.uiWorkflow?.vaultId ?? '',
       message: this.uiWorkflow?.message ?? '',
+      runId: this.uiWorkflow?.runId ?? `ui-e2e-${Date.now()}`,
       controlPlaneRequestHeaders: this.uiWorkflow?.controlPlaneRequestHeaders ?? [],
     }
     await page.goto('/agents')
+  },
+)
+
+When('the user opens the login page', async function (this: UiWorld) {
+  const page = await openLocalPage()
+  await page.goto('/sessions?status=idle')
+  this.uiWorkflow = {
+    page,
+    environmentId: '',
+    agentId: '',
+    sessionId: '',
+    vaultId: '',
+    message: '',
+    runId: `ui-e2e-${Date.now()}`,
+    controlPlaneRequestHeaders: [],
+  }
+})
+
+Then('the page offers FlareAuth sign-in and preserves the requested return path', async function (this: UiWorld) {
+  const page = requireUiWorkflow(this).page
+  await expect(page.getByRole('link', { name: 'Continue with FlareAuth' })).toBeVisible()
+  const href = await page.getByRole('link', { name: 'Continue with FlareAuth' }).getAttribute('href')
+  assert.ok(href?.includes('/api/auth/login'), 'Expected FlareAuth login route')
+  assert.ok(href?.includes('returnTo=%2Fsessions%3Fstatus%3Didle'), 'Expected login return path to be preserved')
+})
+
+Given('the developer is signed in for the first time', { timeout: 120_000 }, async function (this: UiWorld) {
+  await ensureUiWorkflow(this)
+})
+
+When('the developer opens quickstart', async function (this: UiWorld) {
+  const workflow = await ensureUiWorkflow(this)
+  await workflow.page.goto('/quickstart')
+})
+
+Then(
+  'the page shows a stepper for provider, agent, environment, session, and integration',
+  async function (this: UiWorld) {
+    const page = requireUiWorkflow(this).page
+    await expect(page.getByText('1. Provider')).toBeVisible()
+    await expect(page.getByText('2. Environment')).toBeVisible()
+    await expect(page.getByText('3. Agent')).toBeVisible()
+    await expect(page.getByText('4. Session')).toBeVisible()
+    await expect(page.getByText('5. Integration')).toBeVisible()
+  },
+)
+
+Then('the page starts on a usable workflow rather than a marketing page', async function (this: UiWorld) {
+  const page = requireUiWorkflow(this).page
+  await expect(page.getByText('First run workflow')).toBeVisible()
+  await expect(page.getByRole('link', { name: /Open/ }).first()).toBeVisible()
+})
+
+Then(
+  'each completed step shows the API call that was made against the current platform origin',
+  async function (this: UiWorld) {
+    const page = requireUiWorkflow(this).page
+    await expect(page.getByText('GET /api/providers')).toBeVisible()
+    await expect(page.getByText('POST /api/environments')).toBeVisible()
+    await expect(page.getByText('POST /api/agents')).toBeVisible()
+    await expect(page.getByText('POST /api/sessions')).toBeVisible()
+    await expect(page.getByText('GET /api/openapi.json')).toBeVisible()
+  },
+)
+
+Then('incomplete prerequisites are visible before the user starts a runtime session', async function (this: UiWorld) {
+  const page = requireUiWorkflow(this).page
+  await expect(page.getByText('pending').first()).toBeVisible()
+})
+
+When('the developer checks deployment health', async function (this: UiWorld) {
+  const workflow = await ensureUiWorkflow(this)
+  const response = await workflow.page.request.get('/api/health')
+  this.response = response as unknown as Response
+  this.openApiDocument = (await response.json()) as Record<string, unknown>
+})
+
+Then('the control plane health endpoint responds successfully', function (this: UiWorld) {
+  assert.equal((this.response as unknown as { status: () => number }).status(), 200)
+  assert.equal((this.openApiDocument as { status?: string }).status, 'ok')
+})
+
+Then('Cloudflare runtime tests can validate D1 and Durable Object bindings', async function (this: UiWorld) {
+  const workflow = requireUiWorkflow(this)
+  const response = await workflow.page.request.get('/api/e2e/ready')
+  assert.equal(response.status(), 200)
+})
+
+Given('the project has no agents', { timeout: 120_000 }, async function (this: UiWorld) {
+  await ensureUiWorkflow(this)
+})
+
+Given('a project has agents', { timeout: 120_000 }, async function (this: UiWorld) {
+  const workflow = await ensureUiWorkflow(this)
+  const agent = await createUiAgent(workflow)
+  workflow.agentId = agent.id
+})
+
+Given('a model provider is available', { timeout: 120_000 }, async function (this: UiWorld) {
+  await ensureUiWorkflow(this)
+})
+
+When('the user opens the agents page', async function (this: UiWorld) {
+  const workflow = await ensureUiWorkflow(this)
+  await workflow.page.goto('/agents')
+  await expect(workflow.page.getByRole('heading', { name: 'Agents' })).toBeVisible()
+})
+
+Then('the page shows the Agents heading and a deliberate create action', async function (this: UiWorld) {
+  const page = requireUiWorkflow(this).page
+  await expect(page.getByRole('heading', { name: 'Agents' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Create agent' })).toBeVisible()
+})
+
+Then(
+  'the empty state explains that agents are reusable definitions for future sessions',
+  async function (this: UiWorld) {
+    await expect(requireUiWorkflow(this).page.getByText('No agents')).toBeVisible()
+  },
+)
+
+Then('each agent row shows name, model, tools, status, version, and updated time', async function (this: UiWorld) {
+  const page = requireUiWorkflow(this).page
+  await expect(page.getByRole('cell', { name: /workers-ai/ }).first()).toBeVisible()
+  await expect(page.getByText('active').first()).toBeVisible()
+  await expect(page.getByText('v1').first()).toBeVisible()
+  await expect(page.getByText('sandbox.exec').first()).toBeVisible()
+})
+
+Then('clicking a row opens the agent detail route', async function (this: UiWorld) {
+  const workflow = requireUiWorkflow(this)
+  await workflow.page
+    .getByRole('link', { name: new RegExp(workflow.runId) })
+    .first()
+    .click()
+  await expect(workflow.page).toHaveURL(/\/agents\/agent_/)
+  await expect(workflow.page.getByText('Runtime configuration')).toBeVisible()
+})
+
+Then('row actions do not trigger accidental navigation', async function (this: UiWorld) {
+  const workflow = requireUiWorkflow(this)
+  await workflow.page.goto('/agents')
+  await workflow.page.getByRole('button', { name: 'Archive agent' }).first().click()
+  await expect(workflow.page.getByRole('alertdialog')).toBeVisible()
+  await expect(workflow.page).toHaveURL(/\/agents$/)
+})
+
+When('the user starts the create-agent flow', async function (this: UiWorld) {
+  const workflow = await ensureUiWorkflow(this)
+  await workflow.page.goto('/agents')
+  await workflow.page.getByRole('button', { name: 'Create agent' }).click()
+})
+
+Then('the form uses the shared form components and validation states', async function (this: UiWorld) {
+  const dialog = requireUiWorkflow(this).page.getByRole('dialog')
+  await expect(dialog.getByRole('heading', { name: 'Create Agent' })).toBeVisible()
+  await expect(dialog.getByLabel('Name')).toBeVisible()
+})
+
+Then('the user can choose a model provider, model, tools, and sandbox policy', async function (this: UiWorld) {
+  const dialog = requireUiWorkflow(this).page.getByRole('dialog')
+  await expect(dialog.getByLabel('Provider')).toBeVisible()
+  await expect(dialog.getByLabel('Model')).toBeVisible()
+  await expect(dialog.getByLabel('Allowed Pi tools')).toBeVisible()
+  await expect(dialog.getByLabel('Sandbox policy')).toBeVisible()
+})
+
+Then(
+  'saving creates the agent and returns to the browsable agents list with the new row visible',
+  async function (this: UiWorld) {
+    const workflow = requireUiWorkflow(this)
+    const name = `${workflow.runId} created agent`
+    const dialog = workflow.page.getByRole('dialog')
+    await dialog.getByLabel('Name').fill(name)
+    await dialog.getByRole('button', { name: 'Save agent' }).click()
+    await expect(workflow.page.getByText('Agent created')).toBeVisible()
+    await expect(workflow.page.getByRole('link', { name })).toBeVisible()
+  },
+)
+
+Given('the project has no environments', { timeout: 120_000 }, async function (this: UiWorld) {
+  await ensureUiWorkflow(this)
+})
+
+Given('a project has environments', { timeout: 120_000 }, async function (this: UiWorld) {
+  const workflow = await ensureUiWorkflow(this)
+  const environment = await createUiEnvironment(workflow)
+  workflow.environmentId = environment.id
+})
+
+When('the user opens the environments page', async function (this: UiWorld) {
+  const workflow = await ensureUiWorkflow(this)
+  await workflow.page.goto('/environments')
+  await expect(workflow.page.getByRole('heading', { name: 'Environments' })).toBeVisible()
+})
+
+Then('the page shows the Environments heading and a deliberate create action', async function (this: UiWorld) {
+  const page = requireUiWorkflow(this).page
+  await expect(page.getByRole('heading', { name: 'Environments' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Create environment' })).toBeVisible()
+})
+
+Then(
+  'the empty state explains that environments are reusable sandbox templates, not running containers',
+  async function (this: UiWorld) {
+    await expect(requireUiWorkflow(this).page.getByText('No environments')).toBeVisible()
+  },
+)
+
+Then(
+  'each environment row shows name, status, runtime image, packages, network policy, and updated time',
+  async function (this: UiWorld) {
+    const page = requireUiWorkflow(this).page
+    await expect(page.getByText('active').first()).toBeVisible()
+    await expect(page.getByText('ama-pi-runtime').first()).toBeVisible()
+    await expect(page.getByText(/tsx/).first()).toBeVisible()
+    await expect(page.getByText(/restricted/).first()).toBeVisible()
+  },
+)
+
+Then('clicking a row opens the environment detail route', async function (this: UiWorld) {
+  const workflow = requireUiWorkflow(this)
+  await workflow.page
+    .getByRole('link', { name: new RegExp(workflow.runId) })
+    .first()
+    .click()
+  await expect(workflow.page).toHaveURL(/\/environments\/env_/)
+  await expect(workflow.page.getByText('Environment profile')).toBeVisible()
+})
+
+When('the user starts the create-environment flow', async function (this: UiWorld) {
+  const workflow = await ensureUiWorkflow(this)
+  await workflow.page.goto('/environments')
+  await workflow.page.getByRole('button', { name: 'Create environment' }).click()
+})
+
+Then('the form captures name, package requirements, variables, and runtime image', async function (this: UiWorld) {
+  const dialog = requireUiWorkflow(this).page.getByRole('dialog')
+  await expect(dialog.getByLabel('Name')).toBeVisible()
+  await expect(dialog.getByLabel('Packages')).toBeVisible()
+  await expect(dialog.getByLabel('Variables')).toBeVisible()
+  await expect(dialog.getByLabel('Runtime image')).toBeVisible()
+})
+
+Then(
+  'successful save creates an environment version and returns to the browsable environments list',
+  async function (this: UiWorld) {
+    const workflow = requireUiWorkflow(this)
+    const name = `${workflow.runId} created environment`
+    const dialog = workflow.page.getByRole('dialog')
+    await dialog.getByLabel('Name').fill(name)
+    await dialog.getByRole('button', { name: 'Save environment' }).click()
+    await expect(workflow.page.getByText('Environment created')).toBeVisible()
+    await expect(workflow.page.getByRole('link', { name })).toBeVisible()
+  },
+)
+
+Given('the project has no sessions', { timeout: 120_000 }, async function (this: UiWorld) {
+  await ensureUiWorkflow(this)
+})
+
+Given('a project has sessions', { timeout: 120_000 }, async function (this: UiWorld) {
+  const workflow = await ensureUiWorkflow(this)
+  await createUiSessionGraph(workflow)
+})
+
+Given('active agents exist', { timeout: 120_000 }, async function (this: UiWorld) {
+  const workflow = await ensureUiWorkflow(this)
+  await createUiEnvironment(workflow)
+  await createUiAgent(workflow)
+})
+
+When('the user opens the sessions page', async function (this: UiWorld) {
+  const workflow = await ensureUiWorkflow(this)
+  await workflow.page.goto('/sessions')
+  await expect(workflow.page.getByRole('heading', { name: 'Sessions' })).toBeVisible()
+})
+
+Then('the page shows the Sessions heading and a deliberate create action', async function (this: UiWorld) {
+  const page = requireUiWorkflow(this).page
+  await expect(page.getByRole('heading', { name: 'Sessions' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Create session' })).toBeVisible()
+})
+
+Then('the empty state explains that sessions are task runs of versioned agents', async function (this: UiWorld) {
+  await expect(requireUiWorkflow(this).page.getByText('No sessions')).toBeVisible()
+})
+
+Then(
+  'each session row shows title or id, status, agent, model, environment, started time, last update time, and duration when available',
+  async function (this: UiWorld) {
+    const page = requireUiWorkflow(this).page
+    await expect(page.getByText('idle').first()).toBeVisible()
+    await expect(page.getByText(/workers-ai/).first()).toBeVisible()
+    await expect(page.getByText(/ama-pi-runtime/).first()).toBeVisible()
+  },
+)
+
+Then('rows stay one line inside an adaptive height table surface', async function (this: UiWorld) {
+  const row = requireUiWorkflow(this).page.getByRole('row').nth(1)
+  const box = await row.boundingBox()
+  assert.ok(box && box.height < 72, `Expected compact one-line row, got ${JSON.stringify(box)}`)
+})
+
+Then('clicking a row opens the session detail route', async function (this: UiWorld) {
+  const workflow = requireUiWorkflow(this)
+  await workflow.page
+    .getByRole('link', { name: new RegExp(workflow.runId) })
+    .first()
+    .click()
+  await expect(workflow.page).toHaveURL(/\/sessions\/session_/)
+  await expect(workflow.page.getByRole('tab', { name: 'Transcript' })).toBeVisible()
+})
+
+When('the user starts the create-session flow', async function (this: UiWorld) {
+  const workflow = await ensureUiWorkflow(this)
+  await workflow.page.goto('/sessions')
+  await workflow.page.getByRole('button', { name: 'Create session' }).click()
+  await expect(workflow.page.getByRole('dialog')).toBeVisible()
+})
+
+Then(
+  'the form captures agent, environment, title, metadata, resources, and vault references',
+  async function (this: UiWorld) {
+    const dialog = requireUiWorkflow(this).page.getByRole('dialog')
+    await expect(dialog.getByText('Agent', { exact: true })).toBeVisible()
+    await expect(dialog.getByText('Environment', { exact: true })).toBeVisible()
+    await expect(dialog.getByLabel('Title')).toBeVisible()
+    await expect(dialog.getByLabel('Metadata')).toBeVisible()
+    await expect(dialog.getByLabel('Resource refs')).toBeVisible()
+    await expect(dialog.getByLabel('Vault refs')).toBeVisible()
+  },
+)
+
+Then(
+  'successful save opens the session detail page with the runtime message composer ready',
+  async function (this: UiWorld) {
+    const workflow = requireUiWorkflow(this)
+    const dialog = workflow.page.getByRole('dialog')
+    await dialog.getByLabel('Title').fill(`${workflow.runId} created session`)
+    await dialog.getByRole('button', { name: 'Create session' }).click()
+    await expect(workflow.page).toHaveURL(/\/sessions\/session_/)
+    await expect(workflow.page.getByPlaceholder('Send a message to the agent')).toBeVisible()
+  },
+)
+
+Given('a project has vaults', { timeout: 120_000 }, async function (this: UiWorld) {
+  const workflow = await ensureUiWorkflow(this)
+  const vault = await createUiVault(workflow)
+  workflow.vaultId = vault.id
+})
+
+When('the user opens the vaults page', async function (this: UiWorld) {
+  const workflow = await ensureUiWorkflow(this)
+  await workflow.page.goto('/vaults')
+  await expect(workflow.page.getByRole('heading', { name: 'Vaults' })).toBeVisible()
+})
+
+Then('vaults and credential metadata are visible with secret values redacted', async function (this: UiWorld) {
+  const workflow = requireUiWorkflow(this)
+  await expect(workflow.page.getByRole('link', { name: new RegExp(workflow.runId) })).toBeVisible()
+  await expect(workflow.page.getByText(/raw-secret/)).toHaveCount(0)
+})
+
+Then('the page shows pagination and a deliberate create action', async function (this: UiWorld) {
+  const page = requireUiWorkflow(this).page
+  await expect(page.getByRole('button', { name: 'Create vault' })).toBeVisible()
+  await expect(page.getByText(/1 \/ 1/)).toBeVisible()
+})
+
+Then(
+  'each vault row shows display name, scope, status, created time, and updated time',
+  async function (this: UiWorld) {
+    const page = requireUiWorkflow(this).page
+    await expect(page.getByText('project').first()).toBeVisible()
+    await expect(page.getByText('active').first()).toBeVisible()
+  },
+)
+
+When('the user starts the create-vault flow', async function (this: UiWorld) {
+  const workflow = await ensureUiWorkflow(this)
+  await workflow.page.goto('/vaults')
+  await workflow.page.getByRole('button', { name: 'Create vault' }).click()
+})
+
+Then('the form captures display name, description, and scope', async function (this: UiWorld) {
+  const dialog = requireUiWorkflow(this).page.getByRole('dialog')
+  await expect(dialog.getByLabel('Name')).toBeVisible()
+  await expect(dialog.getByLabel('Description')).toBeVisible()
+  await expect(dialog.getByText('Scope')).toBeVisible()
+})
+
+Then(
+  'successful creation returns to the browsable vault list with the new row visible',
+  async function (this: UiWorld) {
+    const workflow = requireUiWorkflow(this)
+    const name = `${workflow.runId} created vault`
+    const dialog = workflow.page.getByRole('dialog')
+    await dialog.getByLabel('Name').fill(name)
+    await dialog.getByRole('button', { name: 'Save vault' }).click()
+    await expect(workflow.page.getByText('Vault created')).toBeVisible()
+    await expect(workflow.page.getByRole('link', { name })).toBeVisible()
+  },
+)
+
+Then(
+  'sidebar navigation, project context, organization context, and account controls are visible',
+  async function (this: UiWorld) {
+    const workflow = await ensureUiWorkflow(this)
+    const page = workflow.page
+    for (const label of ['Quickstart', 'Agents', 'Environments', 'Sessions', 'Providers', 'Vaults', 'MCP']) {
+      await expect(page.getByRole('link', { name: label }).first()).toBeVisible()
+    }
+    assert.ok(workflow.auth?.project?.name)
+    assert.ok(workflow.auth?.organization?.name)
+    await expect(page.getByText(workflow.auth.project.name).first()).toBeVisible()
+    await expect(page.getByText(workflow.auth.organization.name).first()).toBeVisible()
+    const userName = workflow.auth.user?.name || workflow.auth.user?.email
+    assert.ok(userName)
+    await expect(page.getByRole('button', { name: new RegExp(userName) }).first()).toBeVisible()
   },
 )
 
@@ -257,6 +691,103 @@ async function waitForPersistedEvents(
     await delay(1_000)
   }
   throw new Error(`Session ${sessionId} did not persist the expected runtime events`)
+}
+
+async function ensureUiWorkflow(world: UiWorld) {
+  if (world.uiWorkflow) {
+    return world.uiWorkflow
+  }
+  const page = await openLocalPage()
+  const auth = await authenticateE2EPage(page)
+  world.uiWorkflow = {
+    page,
+    auth,
+    environmentId: '',
+    agentId: '',
+    sessionId: '',
+    vaultId: '',
+    message: '',
+    runId: `ui-e2e-${Date.now()}`,
+    controlPlaneRequestHeaders: [],
+  }
+  return world.uiWorkflow
+}
+
+async function createUiEnvironment(workflow: UiWorkflow) {
+  if (workflow.environmentId) {
+    return { id: workflow.environmentId, name: `${workflow.runId} environment` }
+  }
+  const environment = await apiJson<Environment>(workflow.page.request, '/api/environments', {
+    method: 'POST',
+    data: {
+      name: `${workflow.runId} environment`,
+      description: 'BDD UI environment',
+      packages: [{ name: 'tsx', version: 'latest' }],
+      variables: { NODE_ENV: { description: 'mode', required: false } },
+      networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
+      packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
+      resourceLimits: { memoryMb: 1024, timeoutSeconds: 900 },
+      runtimeImage: { image: 'ama-pi-runtime' },
+      metadata: { runId: workflow.runId },
+    },
+  })
+  workflow.environmentId = environment.id
+  return environment
+}
+
+async function createUiAgent(workflow: UiWorkflow) {
+  if (workflow.agentId) {
+    return { id: workflow.agentId, name: `${workflow.runId} agent` }
+  }
+  const agent = await apiJson<Agent>(workflow.page.request, '/api/agents', {
+    method: 'POST',
+    data: {
+      name: `${workflow.runId} agent`,
+      description: 'BDD UI agent',
+      instructions: 'Reply concisely through the deterministic test runtime.',
+      systemPrompt: 'Reply concisely through the deterministic test runtime.',
+      provider: 'workers-ai',
+      model: '@cf/moonshotai/kimi-k2.6',
+      allowedTools: ['sandbox.exec'],
+      sandboxPolicy: { network: 'enabled' },
+      metadata: { runId: workflow.runId },
+    },
+  })
+  workflow.agentId = agent.id
+  return agent
+}
+
+async function createUiSessionGraph(workflow: UiWorkflow) {
+  const environment = await createUiEnvironment(workflow)
+  const agent = await createUiAgent(workflow)
+  const session = await apiJson<Session>(workflow.page.request, '/api/sessions', {
+    method: 'POST',
+    data: {
+      agentId: agent.id,
+      environmentId: environment.id,
+      title: `${workflow.runId} session`,
+      metadata: { runId: workflow.runId },
+    },
+  })
+  const readySession = (await waitForSession(workflow.page.request, session.id)) as Session
+  workflow.sessionId = readySession.id
+  return readySession
+}
+
+async function createUiVault(workflow: UiWorkflow) {
+  if (workflow.vaultId) {
+    return { id: workflow.vaultId, name: `${workflow.runId} vault` }
+  }
+  const vault = await apiJson<Vault>(workflow.page.request, '/api/vaults', {
+    method: 'POST',
+    data: {
+      name: `${workflow.runId} vault`,
+      description: 'BDD UI vault',
+      scope: 'project',
+    },
+  })
+  workflow.vaultId = vault.id
+  return vault
 }
 
 async function assertComposerNearBottom(page: Page) {

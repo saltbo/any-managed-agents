@@ -9,7 +9,7 @@ function bearerToken(header: string | null) {
   return match?.[1] ?? null
 }
 
-app.post('/workers-ai/v1/chat/completions', async (c) => {
+const routes = app.post('/workers-ai/v1/chat/completions', async (c) => {
   const expectedToken = c.env.AMA_RUNTIME_AI_PROXY_TOKEN
   if (!expectedToken) {
     return errorResponse(c, 500, 'internal_error', 'Runtime Workers AI proxy token is not configured')
@@ -34,4 +34,4 @@ app.post('/workers-ai/v1/chat/completions', async (c) => {
   })
 })
 
-export default app
+export default routes

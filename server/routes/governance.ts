@@ -327,224 +327,222 @@ const createBudgetRoute = createRoute({
   },
 })
 
-app.openapi(readPolicyRoute, async (c) => {
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) return auth
-  const policy = await currentPolicy(db, auth.project.id)
-  if (policy) return c.json(serializePolicy(policy), 200)
-  const timestamp = now()
-  return c.json(
-    serializePolicy({
-      id: 'governance_default',
+const routes = app
+  .openapi(readPolicyRoute, async (c) => {
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) return auth
+    const policy = await currentPolicy(db, auth.project.id)
+    if (policy) return c.json(serializePolicy(policy), 200)
+    const timestamp = now()
+    return c.json(
+      serializePolicy({
+        id: 'governance_default',
+        organizationId: auth.organization.id,
+        projectId: auth.project.id,
+        scope: 'project',
+        providerRules: '[]',
+        modelRules: '[]',
+        toolPolicy: '{}',
+        mcpPolicy: '{}',
+        sandboxPolicy: '{}',
+        budgetPolicy: '{}',
+        metadata: '{"platformDefault":true}',
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }),
+      200,
+    )
+  })
+  .openapi(updatePolicyRoute, async (c) => {
+    const body = c.req.valid('json')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) return auth
+    const existing = await currentPolicy(db, auth.project.id)
+    const timestamp = now()
+    const row = {
+      id: existing?.id ?? newId('gov'),
       organizationId: auth.organization.id,
       projectId: auth.project.id,
       scope: 'project',
-      providerRules: '[]',
-      modelRules: '[]',
-      toolPolicy: '{}',
-      mcpPolicy: '{}',
-      sandboxPolicy: '{}',
-      budgetPolicy: '{}',
-      metadata: '{"platformDefault":true}',
-      createdAt: timestamp,
+      providerRules: stringify(body.providerRules ?? (existing ? parseJson(existing.providerRules, []) : [])),
+      modelRules: stringify(body.modelRules ?? (existing ? parseJson(existing.modelRules, []) : [])),
+      toolPolicy: stringify(body.toolPolicy ?? (existing ? parseJson(existing.toolPolicy, {}) : {})),
+      mcpPolicy: stringify(body.mcpPolicy ?? (existing ? parseJson(existing.mcpPolicy, {}) : {})),
+      sandboxPolicy: stringify(body.sandboxPolicy ?? (existing ? parseJson(existing.sandboxPolicy, {}) : {})),
+      budgetPolicy: stringify(body.budgetPolicy ?? (existing ? parseJson(existing.budgetPolicy, {}) : {})),
+      metadata: stringify(body.metadata ?? (existing ? parseJson(existing.metadata, {}) : {})),
+      createdAt: existing?.createdAt ?? timestamp,
       updatedAt: timestamp,
-    }),
-    200,
-  )
-})
-
-app.openapi(updatePolicyRoute, async (c) => {
-  const body = c.req.valid('json')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) return auth
-  const existing = await currentPolicy(db, auth.project.id)
-  const timestamp = now()
-  const row = {
-    id: existing?.id ?? newId('gov'),
-    organizationId: auth.organization.id,
-    projectId: auth.project.id,
-    scope: 'project',
-    providerRules: stringify(body.providerRules ?? (existing ? parseJson(existing.providerRules, []) : [])),
-    modelRules: stringify(body.modelRules ?? (existing ? parseJson(existing.modelRules, []) : [])),
-    toolPolicy: stringify(body.toolPolicy ?? (existing ? parseJson(existing.toolPolicy, {}) : {})),
-    mcpPolicy: stringify(body.mcpPolicy ?? (existing ? parseJson(existing.mcpPolicy, {}) : {})),
-    sandboxPolicy: stringify(body.sandboxPolicy ?? (existing ? parseJson(existing.sandboxPolicy, {}) : {})),
-    budgetPolicy: stringify(body.budgetPolicy ?? (existing ? parseJson(existing.budgetPolicy, {}) : {})),
-    metadata: stringify(body.metadata ?? (existing ? parseJson(existing.metadata, {}) : {})),
-    createdAt: existing?.createdAt ?? timestamp,
-    updatedAt: timestamp,
-  }
-  if (existing) {
-    await db.update(governancePolicies).set(row).where(eq(governancePolicies.id, existing.id))
-  } else {
-    await db.insert(governancePolicies).values(row)
-  }
-  await recordAudit(db, {
-    auth,
-    action: 'governance_policy.update',
-    resourceType: 'governance_policy',
-    resourceId: row.id,
-    outcome: 'success',
-    requestId: requestId(c),
-    before: existing ? serializePolicy(existing) : null,
-    after: serializePolicy(row),
+    }
+    if (existing) {
+      await db.update(governancePolicies).set(row).where(eq(governancePolicies.id, existing.id))
+    } else {
+      await db.insert(governancePolicies).values(row)
+    }
+    await recordAudit(db, {
+      auth,
+      action: 'governance_policy.update',
+      resourceType: 'governance_policy',
+      resourceId: row.id,
+      outcome: 'success',
+      requestId: requestId(c),
+      before: existing ? serializePolicy(existing) : null,
+      after: serializePolicy(row),
+    })
+    return c.json(serializePolicy(row), 200)
   })
-  return c.json(serializePolicy(row), 200)
-})
-
-app.openapi(effectivePolicyRoute, async (c) => {
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) return auth
-  return c.json(await resolveEffectivePolicy(db, auth), 200)
-})
-
-app.openapi(evaluateRoute, async (c) => {
-  const body = c.req.valid('json')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) return auth
-  const decision = await evaluateProviderPolicy(db, auth, body)
-  if (!decision.allowed) {
+  .openapi(effectivePolicyRoute, async (c) => {
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) return auth
+    return c.json(await resolveEffectivePolicy(db, auth), 200)
+  })
+  .openapi(evaluateRoute, async (c) => {
+    const body = c.req.valid('json')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) return auth
+    const decision = await evaluateProviderPolicy(db, auth, body)
+    if (!decision.allowed) {
+      await recordAudit(db, {
+        auth,
+        action: 'policy.evaluate',
+        resourceType: 'policy',
+        resourceId: decision.rule,
+        outcome: 'denied',
+        requestId: requestId(c),
+        sessionId: body.sessionId ?? null,
+        policyCategory: decision.category,
+        metadata: { providerId: body.providerId, modelId: body.modelId, decision },
+      })
+      return errorResponse(c, 403, 'policy_denied', decision.message, {
+        category: decision.category,
+        resourceType: decision.category === 'budget' ? 'budget' : decision.category === 'model' ? 'model' : 'provider',
+        resourceId:
+          decision.category === 'budget'
+            ? decision.rule
+            : decision.category === 'model'
+              ? body.modelId
+              : body.providerId,
+        ruleId: decision.rule,
+      })
+    }
     await recordAudit(db, {
       auth,
       action: 'policy.evaluate',
       resourceType: 'policy',
       resourceId: decision.rule,
-      outcome: 'denied',
+      outcome: 'success',
       requestId: requestId(c),
       sessionId: body.sessionId ?? null,
       policyCategory: decision.category,
-      metadata: { providerId: body.providerId, modelId: body.modelId, decision },
+      metadata: { providerId: body.providerId, modelId: body.modelId },
     })
-    return errorResponse(c, 403, 'policy_denied', decision.message, {
-      category: decision.category,
-      resourceType: decision.category === 'budget' ? 'budget' : decision.category === 'model' ? 'model' : 'provider',
-      resourceId:
-        decision.category === 'budget' ? decision.rule : decision.category === 'model' ? body.modelId : body.providerId,
-      ruleId: decision.rule,
+    return c.json(decision, 200)
+  })
+  .openapi(listAccessRulesRoute, async (c) => {
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) return auth
+    const rows = await db.select().from(providerAccessRules).where(eq(providerAccessRules.projectId, auth.project.id))
+    return c.json(
+      {
+        data: rows.map(serializeAccessRule),
+        pagination: {
+          limit: rows.length,
+          nextCursor: null,
+          hasMore: false,
+          firstId: rows[0]?.id ?? null,
+          lastId: rows.at(-1)?.id ?? null,
+        },
+      },
+      200,
+    )
+  })
+  .openapi(createAccessRuleRoute, async (c) => {
+    const body = c.req.valid('json')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) return auth
+    const timestamp = now()
+    const row = {
+      id: newId('access'),
+      organizationId: auth.organization.id,
+      projectId: auth.project.id,
+      providerId: body.providerId ?? '*',
+      modelId: body.modelId ?? '*',
+      teamId: body.teamId ?? null,
+      effect: body.effect,
+      reason: body.reason ?? null,
+      metadata: stringify(body.metadata ?? {}),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }
+    await db.insert(providerAccessRules).values(row)
+    await recordAudit(db, {
+      auth,
+      action: 'provider_access_rule.create',
+      resourceType: 'provider_access_rule',
+      resourceId: row.id,
+      outcome: 'success',
+      requestId: requestId(c),
+      after: serializeAccessRule(row),
     })
-  }
-  await recordAudit(db, {
-    auth,
-    action: 'policy.evaluate',
-    resourceType: 'policy',
-    resourceId: decision.rule,
-    outcome: 'success',
-    requestId: requestId(c),
-    sessionId: body.sessionId ?? null,
-    policyCategory: decision.category,
-    metadata: { providerId: body.providerId, modelId: body.modelId },
+    return c.json(serializeAccessRule(row), 201)
   })
-  return c.json(decision, 200)
-})
-
-app.openapi(listAccessRulesRoute, async (c) => {
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) return auth
-  const rows = await db.select().from(providerAccessRules).where(eq(providerAccessRules.projectId, auth.project.id))
-  return c.json(
-    {
-      data: rows.map(serializeAccessRule),
-      pagination: {
-        limit: rows.length,
-        nextCursor: null,
-        hasMore: false,
-        firstId: rows[0]?.id ?? null,
-        lastId: rows.at(-1)?.id ?? null,
+  .openapi(listBudgetsRoute, async (c) => {
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) return auth
+    const rows = await db.select().from(budgets).where(eq(budgets.projectId, auth.project.id))
+    return c.json(
+      {
+        data: rows.map(serializeBudget),
+        pagination: {
+          limit: rows.length,
+          nextCursor: null,
+          hasMore: false,
+          firstId: rows[0]?.id ?? null,
+          lastId: rows.at(-1)?.id ?? null,
+        },
       },
-    },
-    200,
-  )
-})
-
-app.openapi(createAccessRuleRoute, async (c) => {
-  const body = c.req.valid('json')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) return auth
-  const timestamp = now()
-  const row = {
-    id: newId('access'),
-    organizationId: auth.organization.id,
-    projectId: auth.project.id,
-    providerId: body.providerId ?? '*',
-    modelId: body.modelId ?? '*',
-    teamId: body.teamId ?? null,
-    effect: body.effect,
-    reason: body.reason ?? null,
-    metadata: stringify(body.metadata ?? {}),
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  }
-  await db.insert(providerAccessRules).values(row)
-  await recordAudit(db, {
-    auth,
-    action: 'provider_access_rule.create',
-    resourceType: 'provider_access_rule',
-    resourceId: row.id,
-    outcome: 'success',
-    requestId: requestId(c),
-    after: serializeAccessRule(row),
+      200,
+    )
   })
-  return c.json(serializeAccessRule(row), 201)
-})
-
-app.openapi(listBudgetsRoute, async (c) => {
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) return auth
-  const rows = await db.select().from(budgets).where(eq(budgets.projectId, auth.project.id))
-  return c.json(
-    {
-      data: rows.map(serializeBudget),
-      pagination: {
-        limit: rows.length,
-        nextCursor: null,
-        hasMore: false,
-        firstId: rows[0]?.id ?? null,
-        lastId: rows.at(-1)?.id ?? null,
-      },
-    },
-    200,
-  )
-})
-
-app.openapi(createBudgetRoute, async (c) => {
-  const body = c.req.valid('json')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) return auth
-  const timestamp = now()
-  const row = {
-    id: newId('budget'),
-    organizationId: auth.organization.id,
-    projectId: auth.project.id,
-    scope: body.scope,
-    providerId: body.providerId ?? null,
-    modelId: body.modelId ?? null,
-    limitType: body.limitType,
-    limitValue: body.limitValue,
-    window: body.window,
-    status: body.status ?? 'active',
-    metadata: stringify(body.metadata ?? {}),
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  }
-  await db.insert(budgets).values(row)
-  await recordAudit(db, {
-    auth,
-    action: 'budget.create',
-    resourceType: 'budget',
-    resourceId: row.id,
-    outcome: 'success',
-    requestId: requestId(c),
-    after: serializeBudget(row),
+  .openapi(createBudgetRoute, async (c) => {
+    const body = c.req.valid('json')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) return auth
+    const timestamp = now()
+    const row = {
+      id: newId('budget'),
+      organizationId: auth.organization.id,
+      projectId: auth.project.id,
+      scope: body.scope,
+      providerId: body.providerId ?? null,
+      modelId: body.modelId ?? null,
+      limitType: body.limitType,
+      limitValue: body.limitValue,
+      window: body.window,
+      status: body.status ?? 'active',
+      metadata: stringify(body.metadata ?? {}),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }
+    await db.insert(budgets).values(row)
+    await recordAudit(db, {
+      auth,
+      action: 'budget.create',
+      resourceType: 'budget',
+      resourceId: row.id,
+      outcome: 'success',
+      requestId: requestId(c),
+      after: serializeBudget(row),
+    })
+    return c.json(serializeBudget(row), 201)
   })
-  return c.json(serializeBudget(row), 201)
-})
 
-export default app
+export default routes

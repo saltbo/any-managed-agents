@@ -1,3 +1,5 @@
+import type { ProviderInputType } from '@/lib/api'
+
 export interface EnvironmentFormState {
   name: string
   description: string
@@ -28,7 +30,7 @@ export interface SessionFormState {
 }
 
 export interface ProviderFormState {
-  type: string
+  type: ProviderInputType
   displayName: string
   baseUrl: string
   credentialSecretRef: string

@@ -664,107 +664,6 @@ const callToolRoute = createRoute({
   },
 })
 
-app.openapi(listConnectorsRoute, async (c) => {
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) return auth
-  await seedCatalog(db)
-
-  const { search, category, trustLevel, capability, status, limit = 50, cursor } = c.req.valid('query')
-  let parsedCursor: ReturnType<typeof parseListCursor> | null = null
-  try {
-    parsedCursor = cursor ? parseListCursor(cursor) : null
-  } catch {
-    return c.json(validation('Invalid list cursor', { cursor: 'Cursor is invalid.' }), 400)
-  }
-  const filters = [
-    status ? eq(mcpCatalogEntries.status, status) : undefined,
-    category ? eq(mcpCatalogEntries.category, category) : undefined,
-    trustLevel ? eq(mcpCatalogEntries.trustLevel, trustLevel) : undefined,
-    search
-      ? or(like(mcpCatalogEntries.name, `%${search}%`), like(mcpCatalogEntries.description, `%${search}%`))
-      : undefined,
-    capability ? like(mcpCatalogEntries.capabilities, `%${capability}%`) : undefined,
-    parsedCursor
-      ? or(
-          lt(mcpCatalogEntries.createdAt, parsedCursor.createdAt),
-          and(eq(mcpCatalogEntries.createdAt, parsedCursor.createdAt), lt(mcpCatalogEntries.id, parsedCursor.id)),
-        )
-      : undefined,
-  ].filter((filter) => filter !== undefined)
-  const rows = await db
-    .select()
-    .from(mcpCatalogEntries)
-    .where(filters.length ? and(...filters) : undefined)
-    .orderBy(desc(mcpCatalogEntries.createdAt), desc(mcpCatalogEntries.id))
-    .limit(limit + 1)
-  const connections = await db.select().from(mcpConnections).where(eq(mcpConnections.projectId, auth.project.id))
-  const connectionByConnector = new Map(connections.map((connection) => [connection.connectorId, connection]))
-  const effective = await resolveEffectivePolicy(db, auth)
-  const page = paginateRows(rows, limit)
-  return c.json(
-    {
-      data: page.data.map((row) =>
-        serializeConnector(row, effective.mcpPolicy, connectionByConnector.get(row.connectorId)),
-      ),
-      pagination: page.pagination,
-    },
-    200,
-  )
-})
-
-app.openapi(readConnectorRoute, async (c) => {
-  const { connectorId } = c.req.valid('param')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) return auth
-  await seedCatalog(db)
-  const connector = await db
-    .select()
-    .from(mcpCatalogEntries)
-    .where(eq(mcpCatalogEntries.connectorId, connectorId))
-    .get()
-  if (!connector) return errorResponse(c, 404, 'not_found', 'MCP connector not found')
-  const connection = await db
-    .select()
-    .from(mcpConnections)
-    .where(and(eq(mcpConnections.projectId, auth.project.id), eq(mcpConnections.connectorId, connectorId)))
-    .get()
-  const effective = await resolveEffectivePolicy(db, auth)
-  return c.json(serializeConnector(connector, effective.mcpPolicy, connection), 200)
-})
-
-app.openapi(listConnectionsRoute, async (c) => {
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) return auth
-  const { status, limit = 50, cursor } = c.req.valid('query')
-  let parsedCursor: ReturnType<typeof parseListCursor> | null = null
-  try {
-    parsedCursor = cursor ? parseListCursor(cursor) : null
-  } catch {
-    return c.json(validation('Invalid list cursor', { cursor: 'Cursor is invalid.' }), 400)
-  }
-  const filters = [
-    eq(mcpConnections.projectId, auth.project.id),
-    status ? eq(mcpConnections.status, status) : undefined,
-    parsedCursor
-      ? or(
-          lt(mcpConnections.createdAt, parsedCursor.createdAt),
-          and(eq(mcpConnections.createdAt, parsedCursor.createdAt), lt(mcpConnections.id, parsedCursor.id)),
-        )
-      : undefined,
-  ].filter((filter) => filter !== undefined)
-  const rows = await db
-    .select()
-    .from(mcpConnections)
-    .where(and(...filters))
-    .orderBy(desc(mcpConnections.createdAt), desc(mcpConnections.id))
-    .limit(limit + 1)
-  const page = paginateRows(rows, limit)
-  return c.json({ data: page.data.map(serializeConnection), pagination: page.pagination }, 200)
-})
-
 async function upsertConnection(c: Context<{ Bindings: Env }>, body: z.infer<typeof ConnectMcpSchema>) {
   const db = drizzle(c.env.DB)
   const auth = await requireAuth(c, db)
@@ -867,218 +766,312 @@ async function upsertConnection(c: Context<{ Bindings: Env }>, body: z.infer<typ
   return c.json(serializeConnection(row), 201)
 }
 
-app.openapi(connectRoute, async (c) => upsertConnection(c, c.req.valid('json')))
+const routes = app
+  .openapi(listConnectorsRoute, async (c) => {
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) return auth
+    await seedCatalog(db)
 
-app.openapi(readConnectionRoute, async (c) => {
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) return auth
-  const connection = await findConnection(db, auth, c.req.valid('param').connectionId)
-  if (!connection) return errorResponse(c, 404, 'not_found', 'MCP connection not found')
-  return c.json(serializeConnection(connection), 200)
-})
-
-app.openapi(updateConnectionRoute, async (c) => {
-  const body = c.req.valid('json')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) return auth
-  const connection = await findConnection(db, auth, c.req.valid('param').connectionId)
-  if (!connection) return errorResponse(c, 404, 'not_found', 'MCP connection not found')
-  const catalog = await db
-    .select()
-    .from(mcpCatalogEntries)
-    .where(eq(mcpCatalogEntries.connectorId, connection.connectorId))
-    .get()
-  if (!catalog) return errorResponse(c, 404, 'not_found', 'MCP connector not found')
-  let credential = {
-    credentialId: connection.credentialId,
-    credentialVersionId: connection.credentialVersionId,
-    secretRef: connection.credentialSecretRef,
-  }
-  if (body.credentialId !== undefined || body.credentialVersionId !== undefined) {
+    const { search, category, trustLevel, capability, status, limit = 50, cursor } = c.req.valid('query')
+    let parsedCursor: ReturnType<typeof parseListCursor> | null = null
     try {
-      credential = await resolveCredential(db, auth, body.credentialId, body.credentialVersionId)
-    } catch (error) {
+      parsedCursor = cursor ? parseListCursor(cursor) : null
+    } catch {
+      return c.json(validation('Invalid list cursor', { cursor: 'Cursor is invalid.' }), 400)
+    }
+    const filters = [
+      status ? eq(mcpCatalogEntries.status, status) : undefined,
+      category ? eq(mcpCatalogEntries.category, category) : undefined,
+      trustLevel ? eq(mcpCatalogEntries.trustLevel, trustLevel) : undefined,
+      search
+        ? or(like(mcpCatalogEntries.name, `%${search}%`), like(mcpCatalogEntries.description, `%${search}%`))
+        : undefined,
+      capability ? like(mcpCatalogEntries.capabilities, `%${capability}%`) : undefined,
+      parsedCursor
+        ? or(
+            lt(mcpCatalogEntries.createdAt, parsedCursor.createdAt),
+            and(eq(mcpCatalogEntries.createdAt, parsedCursor.createdAt), lt(mcpCatalogEntries.id, parsedCursor.id)),
+          )
+        : undefined,
+    ].filter((filter) => filter !== undefined)
+    const rows = await db
+      .select()
+      .from(mcpCatalogEntries)
+      .where(filters.length ? and(...filters) : undefined)
+      .orderBy(desc(mcpCatalogEntries.createdAt), desc(mcpCatalogEntries.id))
+      .limit(limit + 1)
+    const connections = await db.select().from(mcpConnections).where(eq(mcpConnections.projectId, auth.project.id))
+    const connectionByConnector = new Map(connections.map((connection) => [connection.connectorId, connection]))
+    const effective = await resolveEffectivePolicy(db, auth)
+    const page = paginateRows(rows, limit)
+    return c.json(
+      {
+        data: page.data.map((row) =>
+          serializeConnector(row, effective.mcpPolicy, connectionByConnector.get(row.connectorId)),
+        ),
+        pagination: page.pagination,
+      },
+      200,
+    )
+  })
+  .openapi(readConnectorRoute, async (c) => {
+    const { connectorId } = c.req.valid('param')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) return auth
+    await seedCatalog(db)
+    const connector = await db
+      .select()
+      .from(mcpCatalogEntries)
+      .where(eq(mcpCatalogEntries.connectorId, connectorId))
+      .get()
+    if (!connector) return errorResponse(c, 404, 'not_found', 'MCP connector not found')
+    const connection = await db
+      .select()
+      .from(mcpConnections)
+      .where(and(eq(mcpConnections.projectId, auth.project.id), eq(mcpConnections.connectorId, connectorId)))
+      .get()
+    const effective = await resolveEffectivePolicy(db, auth)
+    return c.json(serializeConnector(connector, effective.mcpPolicy, connection), 200)
+  })
+  .openapi(listConnectionsRoute, async (c) => {
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) return auth
+    const { status, limit = 50, cursor } = c.req.valid('query')
+    let parsedCursor: ReturnType<typeof parseListCursor> | null = null
+    try {
+      parsedCursor = cursor ? parseListCursor(cursor) : null
+    } catch {
+      return c.json(validation('Invalid list cursor', { cursor: 'Cursor is invalid.' }), 400)
+    }
+    const filters = [
+      eq(mcpConnections.projectId, auth.project.id),
+      status ? eq(mcpConnections.status, status) : undefined,
+      parsedCursor
+        ? or(
+            lt(mcpConnections.createdAt, parsedCursor.createdAt),
+            and(eq(mcpConnections.createdAt, parsedCursor.createdAt), lt(mcpConnections.id, parsedCursor.id)),
+          )
+        : undefined,
+    ].filter((filter) => filter !== undefined)
+    const rows = await db
+      .select()
+      .from(mcpConnections)
+      .where(and(...filters))
+      .orderBy(desc(mcpConnections.createdAt), desc(mcpConnections.id))
+      .limit(limit + 1)
+    const page = paginateRows(rows, limit)
+    return c.json({ data: page.data.map(serializeConnection), pagination: page.pagination }, 200)
+  })
+  .openapi(connectRoute, async (c) => upsertConnection(c, c.req.valid('json')))
+  .openapi(readConnectionRoute, async (c) => {
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) return auth
+    const connection = await findConnection(db, auth, c.req.valid('param').connectionId)
+    if (!connection) return errorResponse(c, 404, 'not_found', 'MCP connection not found')
+    return c.json(serializeConnection(connection), 200)
+  })
+  .openapi(updateConnectionRoute, async (c) => {
+    const body = c.req.valid('json')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) return auth
+    const connection = await findConnection(db, auth, c.req.valid('param').connectionId)
+    if (!connection) return errorResponse(c, 404, 'not_found', 'MCP connection not found')
+    const catalog = await db
+      .select()
+      .from(mcpCatalogEntries)
+      .where(eq(mcpCatalogEntries.connectorId, connection.connectorId))
+      .get()
+    if (!catalog) return errorResponse(c, 404, 'not_found', 'MCP connector not found')
+    let credential = {
+      credentialId: connection.credentialId,
+      credentialVersionId: connection.credentialVersionId,
+      secretRef: connection.credentialSecretRef,
+    }
+    if (body.credentialId !== undefined || body.credentialVersionId !== undefined) {
+      try {
+        credential = await resolveCredential(db, auth, body.credentialId, body.credentialVersionId)
+      } catch (error) {
+        return c.json(
+          validation(error instanceof Error ? error.message : 'Credential is unavailable.', {
+            credential: 'Credential is unavailable.',
+          }),
+          409,
+        )
+      }
+    }
+    if (requiresVaultCredential(catalog) && !credential.credentialVersionId) {
       return c.json(
-        validation(error instanceof Error ? error.message : 'Credential is unavailable.', {
-          credential: 'Credential is unavailable.',
+        validation('MCP connector requires a vault credential reference.', {
+          credentialId: 'Credential is required for this connector.',
         }),
-        409,
+        400,
       )
     }
-  }
-  if (requiresVaultCredential(catalog) && !credential.credentialVersionId) {
+    const timestamp = now()
+    const row = {
+      ...connection,
+      credentialId: credential.credentialId,
+      credentialVersionId: credential.credentialVersionId,
+      credentialSecretRef: credential.secretRef,
+      endpointUrl: body.endpointUrl === undefined ? connection.endpointUrl : body.endpointUrl,
+      approvalMode: body.approvalMode ?? connection.approvalMode,
+      status: body.status ?? connection.status,
+      metadata: stringify(body.metadata ?? parseJson(connection.metadata, {})),
+      updatedAt: timestamp,
+    }
+    await db.update(mcpConnections).set(row).where(eq(mcpConnections.id, connection.id))
+    await recordAudit(db, {
+      auth,
+      action: 'mcp_connection.update',
+      resourceType: 'mcp_connection',
+      resourceId: row.id,
+      outcome: 'success',
+      requestId: requestId(c),
+      before: serializeConnection(connection),
+      after: serializeConnection(row),
+    })
+    return c.json(serializeConnection(row), 200)
+  })
+  .openapi(disconnectRoute, async (c) => {
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) return auth
+    const connection = await findConnection(db, auth, c.req.valid('param').connectionId)
+    if (!connection) return errorResponse(c, 404, 'not_found', 'MCP connection not found')
+    const timestamp = now()
+    await db
+      .update(mcpConnections)
+      .set({ status: 'disconnected', disconnectedAt: timestamp, updatedAt: timestamp })
+      .where(eq(mcpConnections.id, connection.id))
+    await recordAudit(db, {
+      auth,
+      action: 'mcp_connection.disconnect',
+      resourceType: 'mcp_connection',
+      resourceId: connection.id,
+      outcome: 'success',
+      requestId: requestId(c),
+      before: serializeConnection(connection),
+    })
+    return c.body(null, 204)
+  })
+  .openapi(listToolsRoute, async (c) => {
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) return auth
+    const connection = await findConnection(db, auth, c.req.valid('param').connectionId)
+    if (!connection) return errorResponse(c, 404, 'not_found', 'MCP connection not found')
+    if (connection.status !== 'connected') return errorResponse(c, 409, 'conflict', 'MCP connection is not connected')
+    const rows = await db
+      .select()
+      .from(mcpConnectionTools)
+      .where(and(eq(mcpConnectionTools.connectionId, connection.id), eq(mcpConnectionTools.status, 'available')))
+      .orderBy(desc(mcpConnectionTools.createdAt), desc(mcpConnectionTools.id))
     return c.json(
-      validation('MCP connector requires a vault credential reference.', {
-        credentialId: 'Credential is required for this connector.',
-      }),
-      400,
-    )
-  }
-  const timestamp = now()
-  const row = {
-    ...connection,
-    credentialId: credential.credentialId,
-    credentialVersionId: credential.credentialVersionId,
-    credentialSecretRef: credential.secretRef,
-    endpointUrl: body.endpointUrl === undefined ? connection.endpointUrl : body.endpointUrl,
-    approvalMode: body.approvalMode ?? connection.approvalMode,
-    status: body.status ?? connection.status,
-    metadata: stringify(body.metadata ?? parseJson(connection.metadata, {})),
-    updatedAt: timestamp,
-  }
-  await db.update(mcpConnections).set(row).where(eq(mcpConnections.id, connection.id))
-  await recordAudit(db, {
-    auth,
-    action: 'mcp_connection.update',
-    resourceType: 'mcp_connection',
-    resourceId: row.id,
-    outcome: 'success',
-    requestId: requestId(c),
-    before: serializeConnection(connection),
-    after: serializeConnection(row),
-  })
-  return c.json(serializeConnection(row), 200)
-})
-
-app.openapi(disconnectRoute, async (c) => {
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) return auth
-  const connection = await findConnection(db, auth, c.req.valid('param').connectionId)
-  if (!connection) return errorResponse(c, 404, 'not_found', 'MCP connection not found')
-  const timestamp = now()
-  await db
-    .update(mcpConnections)
-    .set({ status: 'disconnected', disconnectedAt: timestamp, updatedAt: timestamp })
-    .where(eq(mcpConnections.id, connection.id))
-  await recordAudit(db, {
-    auth,
-    action: 'mcp_connection.disconnect',
-    resourceType: 'mcp_connection',
-    resourceId: connection.id,
-    outcome: 'success',
-    requestId: requestId(c),
-    before: serializeConnection(connection),
-  })
-  return c.body(null, 204)
-})
-
-app.openapi(listToolsRoute, async (c) => {
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) return auth
-  const connection = await findConnection(db, auth, c.req.valid('param').connectionId)
-  if (!connection) return errorResponse(c, 404, 'not_found', 'MCP connection not found')
-  if (connection.status !== 'connected') return errorResponse(c, 409, 'conflict', 'MCP connection is not connected')
-  const rows = await db
-    .select()
-    .from(mcpConnectionTools)
-    .where(and(eq(mcpConnectionTools.connectionId, connection.id), eq(mcpConnectionTools.status, 'available')))
-    .orderBy(desc(mcpConnectionTools.createdAt), desc(mcpConnectionTools.id))
-  return c.json(
-    {
-      data: rows.map(serializeTool),
-      pagination: {
-        limit: rows.length,
-        nextCursor: null,
-        hasMore: false,
-        firstId: rows[0]?.id ?? null,
-        lastId: rows.at(-1)?.id ?? null,
+      {
+        data: rows.map(serializeTool),
+        pagination: {
+          limit: rows.length,
+          nextCursor: null,
+          hasMore: false,
+          firstId: rows[0]?.id ?? null,
+          lastId: rows.at(-1)?.id ?? null,
+        },
       },
-    },
-    200,
-  )
-})
-
-app.openapi(callToolRoute, async (c) => {
-  const started = Date.now()
-  const body = c.req.valid('json')
-  const { connectionId, toolName } = c.req.valid('param')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) return auth
-  const connection = await findConnection(db, auth, connectionId)
-  if (!connection) return errorResponse(c, 404, 'not_found', 'MCP connection not found')
-  const session = await db
-    .select({
-      id: sessions.id,
-      agentSnapshot: sessions.agentSnapshot,
-      environmentSnapshot: sessions.environmentSnapshot,
-    })
-    .from(sessions)
-    .where(and(eq(sessions.id, body.sessionId), eq(sessions.projectId, auth.project.id)))
-    .get()
-  if (!session) return errorResponse(c, 404, 'not_found', 'Session not found')
-  const tool = await db
-    .select()
-    .from(mcpConnectionTools)
-    .where(and(eq(mcpConnectionTools.connectionId, connection.id), eq(mcpConnectionTools.name, toolName)))
-    .get()
-  if (!tool || tool.status !== 'available') return errorResponse(c, 404, 'not_found', 'MCP tool not found')
-
-  const decision = await evaluateMcpToolPolicy(db, auth, {
-    connectorId: connection.connectorId,
-    toolName,
-    session,
+      200,
+    )
   })
-  if (!decision.allowed) {
+  .openapi(callToolRoute, async (c) => {
+    const started = Date.now()
+    const body = c.req.valid('json')
+    const { connectionId, toolName } = c.req.valid('param')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) return auth
+    const connection = await findConnection(db, auth, connectionId)
+    if (!connection) return errorResponse(c, 404, 'not_found', 'MCP connection not found')
+    const session = await db
+      .select({
+        id: sessions.id,
+        agentSnapshot: sessions.agentSnapshot,
+        environmentSnapshot: sessions.environmentSnapshot,
+      })
+      .from(sessions)
+      .where(and(eq(sessions.id, body.sessionId), eq(sessions.projectId, auth.project.id)))
+      .get()
+    if (!session) return errorResponse(c, 404, 'not_found', 'Session not found')
+    const tool = await db
+      .select()
+      .from(mcpConnectionTools)
+      .where(and(eq(mcpConnectionTools.connectionId, connection.id), eq(mcpConnectionTools.name, toolName)))
+      .get()
+    if (!tool || tool.status !== 'available') return errorResponse(c, 404, 'not_found', 'MCP tool not found')
+
+    const decision = await evaluateMcpToolPolicy(db, auth, {
+      connectorId: connection.connectorId,
+      toolName,
+      session,
+    })
+    if (!decision.allowed) {
+      await recordAudit(db, {
+        auth,
+        action: 'mcp_tool.call',
+        resourceType: 'mcp_tool',
+        resourceId: tool.id,
+        outcome: 'denied',
+        requestId: requestId(c),
+        sessionId: session.id,
+        policyCategory: decision.category,
+        metadata: { connectorId: connection.connectorId, toolName, decision },
+      })
+      const status = decision.category === 'approval' ? 409 : 403
+      return errorResponse(c, status, status === 409 ? 'conflict' : 'policy_denied', decision.message, {
+        category: decision.category,
+        resourceType: decision.category === 'tool' ? 'tool' : 'mcp_connector',
+        resourceId: decision.category === 'tool' ? toolName : connection.connectorId,
+        ruleId: decision.rule,
+      })
+    }
+
+    const simulatedError = body.input?.simulateError
+    if (simulatedError) {
+      const error = normalizedMcpError(simulatedError)
+      await recordAudit(db, {
+        auth,
+        action: 'mcp_tool.call',
+        resourceType: 'mcp_tool',
+        resourceId: tool.id,
+        outcome: 'failure',
+        requestId: requestId(c),
+        sessionId: session.id,
+        metadata: { connectorId: connection.connectorId, toolName, error },
+      })
+      return errorResponse(c, 502, 'mcp_error', error.message, { mcpError: error })
+    }
+
+    const output = { ok: true, connectorId: connection.connectorId, toolName }
+    const result = {
+      connectorId: connection.connectorId,
+      toolName,
+      status: 'success' as const,
+      output,
+      durationMs: Date.now() - started,
+    }
     await recordAudit(db, {
       auth,
       action: 'mcp_tool.call',
       resourceType: 'mcp_tool',
       resourceId: tool.id,
-      outcome: 'denied',
+      outcome: 'success',
       requestId: requestId(c),
       sessionId: session.id,
-      policyCategory: decision.category,
-      metadata: { connectorId: connection.connectorId, toolName, decision },
+      metadata: { ...result, inputSummary: Object.keys(body.input ?? {}) },
     })
-    const status = decision.category === 'approval' ? 409 : 403
-    return errorResponse(c, status, status === 409 ? 'conflict' : 'policy_denied', decision.message, {
-      category: decision.category,
-      resourceType: decision.category === 'tool' ? 'tool' : 'mcp_connector',
-      resourceId: decision.category === 'tool' ? toolName : connection.connectorId,
-      ruleId: decision.rule,
-    })
-  }
-
-  const simulatedError = body.input?.simulateError
-  if (simulatedError) {
-    const error = normalizedMcpError(simulatedError)
-    await recordAudit(db, {
-      auth,
-      action: 'mcp_tool.call',
-      resourceType: 'mcp_tool',
-      resourceId: tool.id,
-      outcome: 'failure',
-      requestId: requestId(c),
-      sessionId: session.id,
-      metadata: { connectorId: connection.connectorId, toolName, error },
-    })
-    return errorResponse(c, 502, 'mcp_error', error.message, { mcpError: error })
-  }
-
-  const output = { ok: true, connectorId: connection.connectorId, toolName }
-  const result = {
-    connectorId: connection.connectorId,
-    toolName,
-    status: 'success' as const,
-    output,
-    durationMs: Date.now() - started,
-  }
-  await recordAudit(db, {
-    auth,
-    action: 'mcp_tool.call',
-    resourceType: 'mcp_tool',
-    resourceId: tool.id,
-    outcome: 'success',
-    requestId: requestId(c),
-    sessionId: session.id,
-    metadata: { ...result, inputSummary: Object.keys(body.input ?? {}) },
+    return c.json(result, 200)
   })
-  return c.json(result, 200)
-})
 
-export default app
+export default routes

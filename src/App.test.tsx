@@ -405,6 +405,11 @@ function auditRecord(overrides: Partial<AuditRecord> = {}): AuditRecord {
   }
 }
 
+function normalizeMockUrl(input: RequestInfo | URL) {
+  const url = String(input)
+  return url.endsWith('?') ? url.slice(0, -1) : url
+}
+
 function mockConsoleApi(seed?: {
   environments?: Environment[]
   agents?: Agent[]
@@ -429,7 +434,7 @@ function mockConsoleApi(seed?: {
   }
 
   const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
-    const url = String(input)
+    const url = normalizeMockUrl(input)
     const method = init?.method ?? 'GET'
 
     if (url === '/api/auth/me') {
@@ -914,7 +919,7 @@ describe('App', () => {
 
   it('surfaces load failures after the loading state', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
-      const url = String(input)
+      const url = normalizeMockUrl(input)
       if (url === '/api/auth/me') {
         return jsonResponse(authContext)
       }
@@ -947,7 +952,7 @@ describe('App', () => {
       },
     ]
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
-      const url = String(input)
+      const url = normalizeMockUrl(input)
       const method = init?.method ?? 'GET'
       if (url === '/runtime/sessions/session_1/rpc' && method === 'POST') {
         const command = JSON.parse(String(init?.body ?? '{}')) as { id?: string; type?: string; message?: string }

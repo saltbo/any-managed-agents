@@ -113,81 +113,82 @@ function newId(prefix: string) {
   return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
 }
 
-app.openapi(loginRoute, async (c) => {
-  const returnTo = safeReturnTo(c.req.query('returnTo') ?? null)
-  const attempt = await createLoginAttempt(c.env)
-  await setLoginStateCookie(c, {
-    state: attempt.state,
-    nonce: attempt.nonce,
-    verifier: attempt.verifier,
-    returnTo,
-    expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
-  })
-  return c.redirect(attempt.authorizationUrl)
-})
-
-app.openapi(callbackRoute, async (c) => {
-  const loginState = await readLoginState(c)
-  clearLoginStateCookie(c)
-
-  if (!loginState) {
-    return errorResponse(c, 400, 'oidc_error', 'Invalid OIDC callback', { reason: 'missing_login_state' })
-  }
-
-  try {
-    const timestamp = new Date().toISOString()
-    const db = drizzle(c.env.DB)
-    const claims = await exchangeCallbackForUserInfo(
-      c.env,
-      new URL(c.req.url),
-      loginState.verifier,
-      loginState.state,
-      loginState.nonce,
-    )
-    const principal = await upsertLocalPrincipal(db, claims, timestamp)
-    await createSession(c, db, {
-      id: newId('auth_session'),
-      userId: principal.userId,
-      organizationId: principal.organizationId,
-      projectId: principal.projectId,
-      now: timestamp,
+const routes = app
+  .openapi(loginRoute, async (c) => {
+    const returnTo = safeReturnTo(c.req.query('returnTo') ?? null)
+    const attempt = await createLoginAttempt(c.env)
+    await setLoginStateCookie(c, {
+      state: attempt.state,
+      nonce: attempt.nonce,
+      verifier: attempt.verifier,
+      returnTo,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
     })
-  } catch (err) {
-    if (err instanceof OidcError) {
-      return errorResponse(c, 400, 'oidc_error', 'Invalid OIDC callback', { reason: err.message })
+    return c.redirect(attempt.authorizationUrl)
+  })
+  .openapi(callbackRoute, async (c) => {
+    const loginState = await readLoginState(c)
+    clearLoginStateCookie(c)
+
+    if (!loginState) {
+      return errorResponse(c, 400, 'oidc_error', 'Invalid OIDC callback', { reason: 'missing_login_state' })
     }
-    throw err
-  }
 
-  return c.redirect(loginState.returnTo)
-})
+    try {
+      const timestamp = new Date().toISOString()
+      const db = drizzle(c.env.DB)
+      const claims = await exchangeCallbackForUserInfo(
+        c.env,
+        new URL(c.req.url),
+        loginState.verifier,
+        loginState.state,
+        loginState.nonce,
+      )
+      const principal = await upsertLocalPrincipal(db, claims, timestamp)
+      await createSession(c, db, {
+        id: newId('auth_session'),
+        userId: principal.userId,
+        organizationId: principal.organizationId,
+        projectId: principal.projectId,
+        now: timestamp,
+      })
+    } catch (err) {
+      if (err instanceof OidcError) {
+        return errorResponse(c, 400, 'oidc_error', 'Invalid OIDC callback', { reason: err.message })
+      }
+      throw err
+    }
 
-app.openapi(logoutRoute, async (c) => {
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (!(auth instanceof Response)) {
-    await db.update(appSessions).set({ revokedAt: new Date().toISOString() }).where(eq(appSessions.id, auth.sessionId))
-  }
-  await clearSessionCookie(c)
-  return c.body(null, 204)
-})
+    return c.redirect(loginState.returnTo)
+  })
+  .openapi(logoutRoute, async (c) => {
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (!(auth instanceof Response)) {
+      await db
+        .update(appSessions)
+        .set({ revokedAt: new Date().toISOString() })
+        .where(eq(appSessions.id, auth.sessionId))
+    }
+    await clearSessionCookie(c)
+    return c.body(null, 204)
+  })
+  .openapi(meRoute, async (c) => {
+    const auth = await requireAuth(c, drizzle(c.env.DB))
+    if (auth instanceof Response) {
+      return auth
+    }
 
-app.openapi(meRoute, async (c) => {
-  const auth = await requireAuth(c, drizzle(c.env.DB))
-  if (auth instanceof Response) {
-    return auth
-  }
+    return c.json(
+      {
+        user: auth.user,
+        organization: auth.organization,
+        project: auth.project,
+        roles: auth.roles,
+        permissions: auth.permissions,
+      },
+      200,
+    )
+  })
 
-  return c.json(
-    {
-      user: auth.user,
-      organization: auth.organization,
-      project: auth.project,
-      roles: auth.roles,
-      permissions: auth.permissions,
-    },
-    200,
-  )
-})
-
-export default app
+export default routes

@@ -195,108 +195,111 @@ const summaryRoute = createRoute({
   },
 })
 
-app.openapi(listRoute, async (c) => {
-  const query = c.req.valid('query')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) return auth
-  let where: ReturnType<typeof and>
-  try {
-    where = and(...filters(query, auth.project.id))
-  } catch {
-    return errorResponse(c, 400, 'validation_error', 'Invalid list cursor', {
-      fields: { cursor: 'Cursor is invalid.' },
-    })
-  }
-  const rows = await db
-    .select()
-    .from(usageRecords)
-    .where(where)
-    .orderBy(desc(usageRecords.createdAt), desc(usageRecords.id))
-    .limit((query.limit ?? 50) + 1)
-  const page = paginateRows(rows, query.limit ?? 50)
-  return c.json({ data: page.data.map(serializeUsage), pagination: page.pagination }, 200)
-})
-
-app.openapi(summaryRoute, async (c) => {
-  const query = c.req.valid('query')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) return auth
-  let where: ReturnType<typeof and>
-  try {
-    where = and(...filters(query, auth.project.id))
-  } catch {
-    return errorResponse(c, 400, 'validation_error', 'Invalid list cursor', {
-      fields: { cursor: 'Cursor is invalid.' },
-    })
-  }
-  const rows = await db.select().from(usageRecords).where(where)
-  const groupedFields = (query.groupBy ?? 'organization,project,provider,model,agent,session')
-    .split(',')
-    .map((field) => field.trim())
-    .filter(Boolean)
-  const groups = new Map<string, z.infer<typeof UsageSummaryGroupSchema>>()
-  const totals: z.infer<typeof UsageSummaryGroupSchema> = {
-    key: {},
-    records: 0,
-    promptTokens: 0,
-    completionTokens: 0,
-    totalTokens: 0,
-    durationMs: 0,
-    costMicros: 0,
-    currency: 'USD',
-  }
-  for (const row of rows) {
-    const item = serializeUsage(row)
-    const key = Object.fromEntries(
-      groupedFields.map((field) => [
-        field,
-        field === 'organization'
-          ? item.organizationId
-          : field === 'project'
-            ? item.projectId
-            : field === 'provider'
-              ? item.providerType
-              : field === 'model'
-                ? item.modelId
-                : field === 'agent'
-                  ? item.agentId
-                  : field === 'session'
-                    ? item.sessionId
-                    : field === 'status'
-                      ? item.status
-                      : null,
-      ]),
-    )
-    const keyString = JSON.stringify(key)
-    const group =
-      groups.get(keyString) ??
-      ({
-        key,
-        records: 0,
-        promptTokens: 0,
-        completionTokens: 0,
-        totalTokens: 0,
-        durationMs: 0,
-        costMicros: 0,
-        currency: item.currency,
-      } satisfies z.infer<typeof UsageSummaryGroupSchema>)
-    for (const target of [group, totals]) {
-      target.records += 1
-      target.promptTokens += item.promptTokens
-      target.completionTokens += item.completionTokens
-      target.totalTokens += item.totalTokens
-      target.durationMs += item.durationMs
-      target.costMicros += item.costMicros
-      target.currency = item.currency
+const routes = app
+  .openapi(listRoute, async (c) => {
+    const query = c.req.valid('query')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) return auth
+    let where: ReturnType<typeof and>
+    try {
+      where = and(...filters(query, auth.project.id))
+    } catch {
+      return errorResponse(c, 400, 'validation_error', 'Invalid list cursor', {
+        fields: { cursor: 'Cursor is invalid.' },
+      })
     }
-    groups.set(keyString, group)
-  }
-  return c.json(
-    { totals, groups: [...groups.values()].sort((a, b) => JSON.stringify(a.key).localeCompare(JSON.stringify(b.key))) },
-    200,
-  )
-})
+    const rows = await db
+      .select()
+      .from(usageRecords)
+      .where(where)
+      .orderBy(desc(usageRecords.createdAt), desc(usageRecords.id))
+      .limit((query.limit ?? 50) + 1)
+    const page = paginateRows(rows, query.limit ?? 50)
+    return c.json({ data: page.data.map(serializeUsage), pagination: page.pagination }, 200)
+  })
+  .openapi(summaryRoute, async (c) => {
+    const query = c.req.valid('query')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) return auth
+    let where: ReturnType<typeof and>
+    try {
+      where = and(...filters(query, auth.project.id))
+    } catch {
+      return errorResponse(c, 400, 'validation_error', 'Invalid list cursor', {
+        fields: { cursor: 'Cursor is invalid.' },
+      })
+    }
+    const rows = await db.select().from(usageRecords).where(where)
+    const groupedFields = (query.groupBy ?? 'organization,project,provider,model,agent,session')
+      .split(',')
+      .map((field) => field.trim())
+      .filter(Boolean)
+    const groups = new Map<string, z.infer<typeof UsageSummaryGroupSchema>>()
+    const totals: z.infer<typeof UsageSummaryGroupSchema> = {
+      key: {},
+      records: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      durationMs: 0,
+      costMicros: 0,
+      currency: 'USD',
+    }
+    for (const row of rows) {
+      const item = serializeUsage(row)
+      const key = Object.fromEntries(
+        groupedFields.map((field) => [
+          field,
+          field === 'organization'
+            ? item.organizationId
+            : field === 'project'
+              ? item.projectId
+              : field === 'provider'
+                ? item.providerType
+                : field === 'model'
+                  ? item.modelId
+                  : field === 'agent'
+                    ? item.agentId
+                    : field === 'session'
+                      ? item.sessionId
+                      : field === 'status'
+                        ? item.status
+                        : null,
+        ]),
+      )
+      const keyString = JSON.stringify(key)
+      const group =
+        groups.get(keyString) ??
+        ({
+          key,
+          records: 0,
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+          durationMs: 0,
+          costMicros: 0,
+          currency: item.currency,
+        } satisfies z.infer<typeof UsageSummaryGroupSchema>)
+      for (const target of [group, totals]) {
+        target.records += 1
+        target.promptTokens += item.promptTokens
+        target.completionTokens += item.completionTokens
+        target.totalTokens += item.totalTokens
+        target.durationMs += item.durationMs
+        target.costMicros += item.costMicros
+        target.currency = item.currency
+      }
+      groups.set(keyString, group)
+    }
+    return c.json(
+      {
+        totals,
+        groups: [...groups.values()].sort((a, b) => JSON.stringify(a.key).localeCompare(JSON.stringify(b.key))),
+      },
+      200,
+    )
+  })
 
-export default app
+export default routes

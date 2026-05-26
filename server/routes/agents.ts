@@ -486,251 +486,255 @@ const listAgentVersionsRoute = createRoute({
   },
 })
 
-app.openapi(listAgentsRoute, async (c) => {
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
+const routes = app
+  .openapi(listAgentsRoute, async (c) => {
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
 
-  const { includeArchived, status, search, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
-  let parsedCursor: ReturnType<typeof parseListCursor> | null = null
-  try {
-    parsedCursor = cursor ? parseListCursor(cursor) : null
-  } catch {
-    return c.json(domainValidation('Invalid list cursor', { cursor: 'Cursor is invalid.' }), 400)
-  }
-  const statusFilter = status ?? (includeArchived === 'true' ? undefined : 'active')
-  const filters = [
-    eq(agentDefinitions.projectId, auth.project.id),
-    statusFilter ? eq(agentDefinitions.status, statusFilter) : undefined,
-    search ? like(agentDefinitions.name, `%${search}%`) : undefined,
-    createdFrom ? gte(agentDefinitions.createdAt, createdFrom) : undefined,
-    createdTo ? lte(agentDefinitions.createdAt, createdTo) : undefined,
-    parsedCursor
-      ? or(
-          lt(agentDefinitions.createdAt, parsedCursor.createdAt),
-          and(eq(agentDefinitions.createdAt, parsedCursor.createdAt), lt(agentDefinitions.id, parsedCursor.id)),
-        )
-      : undefined,
-  ].filter((filter) => filter !== undefined)
-  const rows = await db
-    .select()
-    .from(agentDefinitions)
-    .where(and(...filters))
-    .orderBy(desc(agentDefinitions.createdAt), desc(agentDefinitions.id))
-    .limit(limit + 1)
-  const page = paginateRows(rows, limit)
-  const data = await Promise.all(page.data.map(async (row) => serializeAgent(row, await currentAgentVersion(db, row))))
-  return c.json({ data, pagination: page.pagination }, 200)
-})
-
-app.openapi(createAgentRoute, async (c) => {
-  const body = c.req.valid('json')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
-
-  const provider = await normalizeRequestedProvider(
-    db,
-    auth.project.id,
-    body.provider ?? (await defaultProvider(db, auth.project.id)),
-  )
-  const model = body.model ?? c.env.AMA_DEFAULT_MODEL ?? DEFAULT_MODEL
-  const allowedTools = body.allowedTools ?? []
-  const mcpConnectors = body.mcpConnectors ?? []
-  const sandboxPolicy = body.sandboxPolicy ?? {}
-  const metadata = body.metadata ?? {}
-  const validation =
-    (await validateConfiguredProviderModel(db, auth.project.id, provider, model, c.env.AMA_DEFAULT_MODEL)) ??
-    validateAllowedTools(allowedTools) ??
-    (await validateMcpConnectors(db, auth.project.id, mcpConnectors)) ??
-    (hasSecretMaterial(metadata) ? { metadata: 'Secret material must be stored in a vault.' } : null)
-  if (validation) {
-    return c.json(domainValidation('Invalid agent configuration', validation), 400)
-  }
-
-  const timestamp = now()
-  const row = {
-    id: newId('agent'),
-    projectId: auth.project.id,
-    name: body.name,
-    description: body.description ?? null,
-    instructions: body.instructions ?? body.systemPrompt ?? null,
-    provider,
-    model,
-    systemPrompt: body.systemPrompt ?? body.instructions ?? null,
-    allowedTools: stringify(allowedTools),
-    mcpConnectors: stringify(mcpConnectors),
-    sandboxPolicy: stringify(sandboxPolicy),
-    metadata: stringify(metadata),
-    status: 'active',
-    archivedAt: null,
-    currentVersionId: null,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  }
-  await db.insert(agentDefinitions).values(row)
-  const version = await createAgentVersion(db, row, {
-    ...row,
-    allowedTools,
-    mcpConnectors,
-    sandboxPolicy,
-    metadata,
-    createdAt: timestamp,
+    const { includeArchived, status, search, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
+    let parsedCursor: ReturnType<typeof parseListCursor> | null = null
+    try {
+      parsedCursor = cursor ? parseListCursor(cursor) : null
+    } catch {
+      return c.json(domainValidation('Invalid list cursor', { cursor: 'Cursor is invalid.' }), 400)
+    }
+    const statusFilter = status ?? (includeArchived === 'true' ? undefined : 'active')
+    const filters = [
+      eq(agentDefinitions.projectId, auth.project.id),
+      statusFilter ? eq(agentDefinitions.status, statusFilter) : undefined,
+      search ? like(agentDefinitions.name, `%${search}%`) : undefined,
+      createdFrom ? gte(agentDefinitions.createdAt, createdFrom) : undefined,
+      createdTo ? lte(agentDefinitions.createdAt, createdTo) : undefined,
+      parsedCursor
+        ? or(
+            lt(agentDefinitions.createdAt, parsedCursor.createdAt),
+            and(eq(agentDefinitions.createdAt, parsedCursor.createdAt), lt(agentDefinitions.id, parsedCursor.id)),
+          )
+        : undefined,
+    ].filter((filter) => filter !== undefined)
+    const rows = await db
+      .select()
+      .from(agentDefinitions)
+      .where(and(...filters))
+      .orderBy(desc(agentDefinitions.createdAt), desc(agentDefinitions.id))
+      .limit(limit + 1)
+    const page = paginateRows(rows, limit)
+    const data = await Promise.all(
+      page.data.map(async (row) => serializeAgent(row, await currentAgentVersion(db, row))),
+    )
+    return c.json({ data, pagination: page.pagination }, 200)
   })
-  await db.update(agentDefinitions).set({ currentVersionId: version.id }).where(eq(agentDefinitions.id, row.id))
+  .openapi(createAgentRoute, async (c) => {
+    const body = c.req.valid('json')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
 
-  return c.json(serializeAgent({ ...row, currentVersionId: version.id }, version), 201)
-})
+    const provider = await normalizeRequestedProvider(
+      db,
+      auth.project.id,
+      body.provider ?? (await defaultProvider(db, auth.project.id)),
+    )
+    const model = body.model ?? c.env.AMA_DEFAULT_MODEL ?? DEFAULT_MODEL
+    const allowedTools = body.allowedTools ?? []
+    const mcpConnectors = body.mcpConnectors ?? []
+    const sandboxPolicy = body.sandboxPolicy ?? {}
+    const metadata = body.metadata ?? {}
+    const validation =
+      (await validateConfiguredProviderModel(db, auth.project.id, provider, model, c.env.AMA_DEFAULT_MODEL)) ??
+      validateAllowedTools(allowedTools) ??
+      (await validateMcpConnectors(db, auth.project.id, mcpConnectors)) ??
+      (hasSecretMaterial(metadata) ? { metadata: 'Secret material must be stored in a vault.' } : null)
+    if (validation) {
+      return c.json(domainValidation('Invalid agent configuration', validation), 400)
+    }
 
-app.openapi(readAgentRoute, async (c) => {
-  const { agentId } = c.req.valid('param')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
+    const timestamp = now()
+    const row = {
+      id: newId('agent'),
+      projectId: auth.project.id,
+      name: body.name,
+      description: body.description ?? null,
+      instructions: body.instructions ?? body.systemPrompt ?? null,
+      provider,
+      model,
+      systemPrompt: body.systemPrompt ?? body.instructions ?? null,
+      allowedTools: stringify(allowedTools),
+      mcpConnectors: stringify(mcpConnectors),
+      sandboxPolicy: stringify(sandboxPolicy),
+      metadata: stringify(metadata),
+      status: 'active',
+      archivedAt: null,
+      currentVersionId: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }
+    await db.insert(agentDefinitions).values(row)
+    const version = await createAgentVersion(db, row, {
+      ...row,
+      allowedTools,
+      mcpConnectors,
+      sandboxPolicy,
+      metadata,
+      createdAt: timestamp,
+    })
+    await db.update(agentDefinitions).set({ currentVersionId: version.id }).where(eq(agentDefinitions.id, row.id))
 
-  const agent = await findAgent(db, agentId, auth.project.id)
-  if (!agent) {
-    return c.json({ error: { type: 'not_found', message: 'Agent not found' } }, 404)
-  }
-  return c.json(serializeAgent(agent, await currentAgentVersion(db, agent)), 200)
-})
-
-app.openapi(updateAgentRoute, async (c) => {
-  const { agentId } = c.req.valid('param')
-  const body = c.req.valid('json')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
-
-  const agent = await findAgent(db, agentId, auth.project.id)
-  if (!agent) {
-    return c.json({ error: { type: 'not_found', message: 'Agent not found' } }, 404)
-  }
-  if (agent.status === 'archived') {
-    return c.json({ error: { type: 'conflict', message: 'Archived agents cannot be updated' } }, 409)
-  }
-
-  const next = {
-    name: body.name ?? agent.name,
-    description: body.description ?? agent.description,
-    instructions: body.instructions ?? agent.instructions,
-    provider: await normalizeRequestedProvider(db, auth.project.id, body.provider ?? agent.provider),
-    model: body.model ?? agent.model,
-    systemPrompt: body.systemPrompt ?? agent.systemPrompt,
-    allowedTools: body.allowedTools ?? parseJson<string[]>(agent.allowedTools),
-    mcpConnectors: body.mcpConnectors ?? parseJson<string[]>(agent.mcpConnectors),
-    sandboxPolicy: body.sandboxPolicy ?? parseJson<Record<string, unknown>>(agent.sandboxPolicy),
-    metadata: mergeMetadata(parseJson<Record<string, unknown>>(agent.metadata), body.metadata),
-  }
-  const validation =
-    (await validateConfiguredProviderModel(db, auth.project.id, next.provider, next.model, c.env.AMA_DEFAULT_MODEL)) ??
-    validateAllowedTools(next.allowedTools) ??
-    (await validateMcpConnectors(db, auth.project.id, next.mcpConnectors)) ??
-    (hasSecretMaterial(next.metadata) ? { metadata: 'Secret material must be stored in a vault.' } : null)
-  if (validation) {
-    return c.json(domainValidation('Invalid agent configuration', validation), 400)
-  }
-
-  const timestamp = now()
-  const runtimeChanged =
-    body.instructions !== undefined ||
-    body.provider !== undefined ||
-    body.model !== undefined ||
-    body.systemPrompt !== undefined ||
-    body.allowedTools !== undefined ||
-    body.mcpConnectors !== undefined ||
-    body.sandboxPolicy !== undefined ||
-    body.metadata !== undefined
-  const version = runtimeChanged
-    ? await createAgentVersion(db, agent, { ...next, createdAt: timestamp })
-    : await currentAgentVersion(db, agent)
-  const updated = {
-    ...next,
-    allowedTools: stringify(next.allowedTools),
-    mcpConnectors: stringify(next.mcpConnectors),
-    sandboxPolicy: stringify(next.sandboxPolicy),
-    metadata: stringify(next.metadata),
-    currentVersionId: version?.id ?? agent.currentVersionId,
-    updatedAt: timestamp,
-  }
-  await db
-    .update(agentDefinitions)
-    .set(updated)
-    .where(and(eq(agentDefinitions.id, agentId), eq(agentDefinitions.projectId, auth.project.id)))
-
-  return c.json(serializeAgent({ ...agent, ...updated }, version), 200)
-})
-
-app.openapi(archiveAgentRoute, async (c) => {
-  const { agentId } = c.req.valid('param')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
-
-  const agent = await findAgent(db, agentId, auth.project.id)
-  if (!agent) {
-    return c.json({ error: { type: 'not_found', message: 'Agent not found' } }, 404)
-  }
-
-  const timestamp = now()
-  await db
-    .update(agentDefinitions)
-    .set({ status: 'archived', archivedAt: timestamp, updatedAt: timestamp })
-    .where(and(eq(agentDefinitions.id, agentId), eq(agentDefinitions.projectId, auth.project.id)))
-  await recordAudit(db, {
-    auth,
-    action: 'agent.archive',
-    resourceType: 'agent',
-    resourceId: agentId,
-    outcome: 'success',
-    requestId: requestId(c),
-    before: serializeAgent(agent, await currentAgentVersion(db, agent)),
-    after: { status: 'archived', archivedAt: timestamp },
+    return c.json(serializeAgent({ ...row, currentVersionId: version.id }, version), 201)
   })
-  return c.body(null, 204)
-})
+  .openapi(readAgentRoute, async (c) => {
+    const { agentId } = c.req.valid('param')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
 
-app.openapi(listAgentVersionsRoute, async (c) => {
-  const { agentId } = c.req.valid('param')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
+    const agent = await findAgent(db, agentId, auth.project.id)
+    if (!agent) {
+      return c.json({ error: { type: 'not_found', message: 'Agent not found' } }, 404)
+    }
+    return c.json(serializeAgent(agent, await currentAgentVersion(db, agent)), 200)
+  })
+  .openapi(updateAgentRoute, async (c) => {
+    const { agentId } = c.req.valid('param')
+    const body = c.req.valid('json')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
 
-  const agent = await findAgent(db, agentId, auth.project.id)
-  if (!agent) {
-    return c.json({ error: { type: 'not_found', message: 'Agent not found' } }, 404)
-  }
+    const agent = await findAgent(db, agentId, auth.project.id)
+    if (!agent) {
+      return c.json({ error: { type: 'not_found', message: 'Agent not found' } }, 404)
+    }
+    if (agent.status === 'archived') {
+      return c.json({ error: { type: 'conflict', message: 'Archived agents cannot be updated' } }, 409)
+    }
 
-  const rows = await db
-    .select()
-    .from(agentDefinitionVersions)
-    .where(and(eq(agentDefinitionVersions.agentId, agentId), eq(agentDefinitionVersions.projectId, auth.project.id)))
-    .orderBy(desc(agentDefinitionVersions.version))
-  return c.json(
-    {
-      data: rows.map(serializeAgentVersion),
-      pagination: {
-        limit: rows.length,
-        nextCursor: null,
-        hasMore: false,
-        firstId: rows[0]?.id ?? null,
-        lastId: rows.at(-1)?.id ?? null,
+    const next = {
+      name: body.name ?? agent.name,
+      description: body.description ?? agent.description,
+      instructions: body.instructions ?? agent.instructions,
+      provider: await normalizeRequestedProvider(db, auth.project.id, body.provider ?? agent.provider),
+      model: body.model ?? agent.model,
+      systemPrompt: body.systemPrompt ?? agent.systemPrompt,
+      allowedTools: body.allowedTools ?? parseJson<string[]>(agent.allowedTools),
+      mcpConnectors: body.mcpConnectors ?? parseJson<string[]>(agent.mcpConnectors),
+      sandboxPolicy: body.sandboxPolicy ?? parseJson<Record<string, unknown>>(agent.sandboxPolicy),
+      metadata: mergeMetadata(parseJson<Record<string, unknown>>(agent.metadata), body.metadata),
+    }
+    const validation =
+      (await validateConfiguredProviderModel(
+        db,
+        auth.project.id,
+        next.provider,
+        next.model,
+        c.env.AMA_DEFAULT_MODEL,
+      )) ??
+      validateAllowedTools(next.allowedTools) ??
+      (await validateMcpConnectors(db, auth.project.id, next.mcpConnectors)) ??
+      (hasSecretMaterial(next.metadata) ? { metadata: 'Secret material must be stored in a vault.' } : null)
+    if (validation) {
+      return c.json(domainValidation('Invalid agent configuration', validation), 400)
+    }
+
+    const timestamp = now()
+    const runtimeChanged =
+      body.instructions !== undefined ||
+      body.provider !== undefined ||
+      body.model !== undefined ||
+      body.systemPrompt !== undefined ||
+      body.allowedTools !== undefined ||
+      body.mcpConnectors !== undefined ||
+      body.sandboxPolicy !== undefined ||
+      body.metadata !== undefined
+    const version = runtimeChanged
+      ? await createAgentVersion(db, agent, { ...next, createdAt: timestamp })
+      : await currentAgentVersion(db, agent)
+    const updated = {
+      ...next,
+      allowedTools: stringify(next.allowedTools),
+      mcpConnectors: stringify(next.mcpConnectors),
+      sandboxPolicy: stringify(next.sandboxPolicy),
+      metadata: stringify(next.metadata),
+      currentVersionId: version?.id ?? agent.currentVersionId,
+      updatedAt: timestamp,
+    }
+    await db
+      .update(agentDefinitions)
+      .set(updated)
+      .where(and(eq(agentDefinitions.id, agentId), eq(agentDefinitions.projectId, auth.project.id)))
+
+    return c.json(serializeAgent({ ...agent, ...updated }, version), 200)
+  })
+  .openapi(archiveAgentRoute, async (c) => {
+    const { agentId } = c.req.valid('param')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+
+    const agent = await findAgent(db, agentId, auth.project.id)
+    if (!agent) {
+      return c.json({ error: { type: 'not_found', message: 'Agent not found' } }, 404)
+    }
+
+    const timestamp = now()
+    await db
+      .update(agentDefinitions)
+      .set({ status: 'archived', archivedAt: timestamp, updatedAt: timestamp })
+      .where(and(eq(agentDefinitions.id, agentId), eq(agentDefinitions.projectId, auth.project.id)))
+    await recordAudit(db, {
+      auth,
+      action: 'agent.archive',
+      resourceType: 'agent',
+      resourceId: agentId,
+      outcome: 'success',
+      requestId: requestId(c),
+      before: serializeAgent(agent, await currentAgentVersion(db, agent)),
+      after: { status: 'archived', archivedAt: timestamp },
+    })
+    return c.body(null, 204)
+  })
+  .openapi(listAgentVersionsRoute, async (c) => {
+    const { agentId } = c.req.valid('param')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+
+    const agent = await findAgent(db, agentId, auth.project.id)
+    if (!agent) {
+      return c.json({ error: { type: 'not_found', message: 'Agent not found' } }, 404)
+    }
+
+    const rows = await db
+      .select()
+      .from(agentDefinitionVersions)
+      .where(and(eq(agentDefinitionVersions.agentId, agentId), eq(agentDefinitionVersions.projectId, auth.project.id)))
+      .orderBy(desc(agentDefinitionVersions.version))
+    return c.json(
+      {
+        data: rows.map(serializeAgentVersion),
+        pagination: {
+          limit: rows.length,
+          nextCursor: null,
+          hasMore: false,
+          firstId: rows[0]?.id ?? null,
+          lastId: rows.at(-1)?.id ?? null,
+        },
       },
-    },
-    200,
-  )
-})
+      200,
+    )
+  })
 
-export default app
+export default routes

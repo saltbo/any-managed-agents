@@ -512,259 +512,257 @@ const versionsRoute = createRoute({
   },
 })
 
-app.openapi(listRoute, async (c) => {
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
+const routes = app
+  .openapi(listRoute, async (c) => {
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
 
-  const { includeArchived, status, search, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
-  let parsedCursor: ReturnType<typeof parseListCursor> | null = null
-  try {
-    parsedCursor = cursor ? parseListCursor(cursor) : null
-  } catch {
+    const { includeArchived, status, search, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
+    let parsedCursor: ReturnType<typeof parseListCursor> | null = null
+    try {
+      parsedCursor = cursor ? parseListCursor(cursor) : null
+    } catch {
+      return c.json(
+        {
+          error: {
+            type: 'validation_error',
+            message: 'Invalid list cursor',
+            details: { fields: { cursor: 'Cursor is invalid.' } },
+          },
+        },
+        400,
+      )
+    }
+    const statusFilter = status ?? (includeArchived === 'true' ? undefined : 'active')
+    const filters = [
+      eq(environments.projectId, auth.project.id),
+      statusFilter ? eq(environments.status, statusFilter) : undefined,
+      search ? like(environments.name, `%${search}%`) : undefined,
+      createdFrom ? gte(environments.createdAt, createdFrom) : undefined,
+      createdTo ? lte(environments.createdAt, createdTo) : undefined,
+      parsedCursor
+        ? or(
+            lt(environments.createdAt, parsedCursor.createdAt),
+            and(eq(environments.createdAt, parsedCursor.createdAt), lt(environments.id, parsedCursor.id)),
+          )
+        : undefined,
+    ].filter((filter) => filter !== undefined)
+    const rows = await db
+      .select()
+      .from(environments)
+      .where(and(...filters))
+      .orderBy(desc(environments.createdAt), desc(environments.id))
+      .limit(limit + 1)
+    const page = paginateRows(rows, limit)
+    const data = await Promise.all(
+      page.data.map(async (row) => serializeEnvironment(row, await currentVersion(db, row))),
+    )
+    return c.json({ data, pagination: page.pagination }, 200)
+  })
+  .openapi(createRouteConfig, async (c) => {
+    const body = c.req.valid('json')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+
+    const timestamp = now()
+    const values = {
+      packages: body.packages ?? [],
+      variables: body.variables ?? {},
+      secretRefs: body.secretRefs ?? [],
+      networkPolicy: body.networkPolicy ?? {},
+      mcpPolicy: body.mcpPolicy ?? {},
+      packageManagerPolicy: body.packageManagerPolicy ?? {},
+      resourceLimits: body.resourceLimits ?? {},
+      runtimeImage: body.runtimeImage ?? {},
+      metadata: body.metadata ?? {},
+    }
+    const validation =
+      (await validateSecretRefs(db, auth.organization.id, auth.project.id, values.secretRefs)) ??
+      (await validateMcpPolicy(db, auth.project.id, values.mcpPolicy)) ??
+      validateSecretFreeObjects(values)
+    if (validation) {
+      return c.json(domainValidation('Invalid environment configuration', validation), 400)
+    }
+    const row = {
+      id: newId('env'),
+      projectId: auth.project.id,
+      name: body.name,
+      description: body.description ?? null,
+      packages: stringify(values.packages),
+      variables: stringify(values.variables),
+      secretRefs: stringify(values.secretRefs),
+      networkPolicy: stringify(values.networkPolicy),
+      mcpPolicy: stringify(values.mcpPolicy),
+      packageManagerPolicy: stringify(values.packageManagerPolicy),
+      resourceLimits: stringify(values.resourceLimits),
+      runtimeImage: stringify(values.runtimeImage),
+      metadata: stringify(values.metadata),
+      status: 'active',
+      archivedAt: null,
+      currentVersionId: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }
+    await db.insert(environments).values(row)
+    const version = await createVersion(db, row, { ...values, createdAt: timestamp })
+    await db.update(environments).set({ currentVersionId: version.id }).where(eq(environments.id, row.id))
+    return c.json(serializeEnvironment({ ...row, currentVersionId: version.id }, version), 201)
+  })
+  .openapi(readRoute, async (c) => {
+    const { environmentId } = c.req.valid('param')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+
+    const environment = await findEnvironment(db, environmentId, auth.project.id)
+    if (!environment) {
+      return c.json({ error: { type: 'not_found', message: 'Environment not found' } }, 404)
+    }
+    return c.json(serializeEnvironment(environment, await currentVersion(db, environment)), 200)
+  })
+  .openapi(updateRoute, async (c) => {
+    const { environmentId } = c.req.valid('param')
+    const body = c.req.valid('json')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+
+    const environment = await findEnvironment(db, environmentId, auth.project.id)
+    if (!environment) {
+      return c.json({ error: { type: 'not_found', message: 'Environment not found' } }, 404)
+    }
+    if (environment.status === 'archived') {
+      return c.json({ error: { type: 'conflict', message: 'Archived environments cannot be updated' } }, 409)
+    }
+
+    const next = {
+      name: body.name ?? environment.name,
+      description: body.description ?? environment.description,
+      packages: body.packages ?? parseJson<Package[]>(environment.packages),
+      variables: body.variables ?? parseJson<Record<string, Variable>>(environment.variables),
+      secretRefs: body.secretRefs ?? parseJson<SecretRef[]>(environment.secretRefs),
+      networkPolicy: body.networkPolicy ?? parseJson<Record<string, unknown>>(environment.networkPolicy),
+      mcpPolicy: body.mcpPolicy ?? parseJson<Record<string, unknown>>(environment.mcpPolicy),
+      packageManagerPolicy:
+        body.packageManagerPolicy ?? parseJson<Record<string, unknown>>(environment.packageManagerPolicy),
+      resourceLimits: body.resourceLimits ?? parseJson<Record<string, unknown>>(environment.resourceLimits),
+      runtimeImage: body.runtimeImage ?? parseJson<Record<string, unknown>>(environment.runtimeImage),
+      metadata: body.metadata ?? parseJson<Record<string, unknown>>(environment.metadata),
+    }
+    const validation =
+      (await validateSecretRefs(db, auth.organization.id, auth.project.id, next.secretRefs)) ??
+      (await validateMcpPolicy(db, auth.project.id, next.mcpPolicy)) ??
+      validateSecretFreeObjects(next)
+    if (validation) {
+      return c.json(domainValidation('Invalid environment configuration', validation), 400)
+    }
+    const timestamp = now()
+    const runtimeChanged =
+      body.packages !== undefined ||
+      body.variables !== undefined ||
+      body.secretRefs !== undefined ||
+      body.networkPolicy !== undefined ||
+      body.mcpPolicy !== undefined ||
+      body.packageManagerPolicy !== undefined ||
+      body.resourceLimits !== undefined ||
+      body.runtimeImage !== undefined ||
+      body.metadata !== undefined
+    const version = runtimeChanged
+      ? await createVersion(db, environment, { ...next, createdAt: timestamp })
+      : await currentVersion(db, environment)
+    const updated = {
+      ...next,
+      packages: stringify(next.packages),
+      variables: stringify(next.variables),
+      secretRefs: stringify(next.secretRefs),
+      networkPolicy: stringify(next.networkPolicy),
+      mcpPolicy: stringify(next.mcpPolicy),
+      packageManagerPolicy: stringify(next.packageManagerPolicy),
+      resourceLimits: stringify(next.resourceLimits),
+      runtimeImage: stringify(next.runtimeImage),
+      metadata: stringify(next.metadata),
+      currentVersionId: version?.id ?? environment.currentVersionId,
+      updatedAt: timestamp,
+    }
+    await db
+      .update(environments)
+      .set(updated)
+      .where(and(eq(environments.id, environmentId), eq(environments.projectId, auth.project.id)))
+    return c.json(serializeEnvironment({ ...environment, ...updated }, version), 200)
+  })
+  .openapi(archiveRoute, async (c) => {
+    const { environmentId } = c.req.valid('param')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+
+    const environment = await findEnvironment(db, environmentId, auth.project.id)
+    if (!environment) {
+      return c.json({ error: { type: 'not_found', message: 'Environment not found' } }, 404)
+    }
+
+    const timestamp = now()
+    await db
+      .update(environments)
+      .set({ status: 'archived', archivedAt: timestamp, updatedAt: timestamp })
+      .where(and(eq(environments.id, environmentId), eq(environments.projectId, auth.project.id)))
+    await recordAudit(db, {
+      auth,
+      action: 'environment.archive',
+      resourceType: 'environment',
+      resourceId: environmentId,
+      outcome: 'success',
+      requestId: requestId(c),
+      before: serializeEnvironment(environment, await currentVersion(db, environment)),
+      after: { status: 'archived', archivedAt: timestamp },
+    })
+    return c.body(null, 204)
+  })
+  .openapi(versionsRoute, async (c) => {
+    const { environmentId } = c.req.valid('param')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+
+    const environment = await findEnvironment(db, environmentId, auth.project.id)
+    if (!environment) {
+      return c.json({ error: { type: 'not_found', message: 'Environment not found' } }, 404)
+    }
+
+    const rows = await db
+      .select()
+      .from(environmentVersions)
+      .where(
+        and(eq(environmentVersions.environmentId, environmentId), eq(environmentVersions.projectId, auth.project.id)),
+      )
+      .orderBy(desc(environmentVersions.version))
     return c.json(
       {
-        error: {
-          type: 'validation_error',
-          message: 'Invalid list cursor',
-          details: { fields: { cursor: 'Cursor is invalid.' } },
+        data: rows.map(serializeVersion),
+        pagination: {
+          limit: rows.length,
+          nextCursor: null,
+          hasMore: false,
+          firstId: rows[0]?.id ?? null,
+          lastId: rows.at(-1)?.id ?? null,
         },
       },
-      400,
+      200,
     )
-  }
-  const statusFilter = status ?? (includeArchived === 'true' ? undefined : 'active')
-  const filters = [
-    eq(environments.projectId, auth.project.id),
-    statusFilter ? eq(environments.status, statusFilter) : undefined,
-    search ? like(environments.name, `%${search}%`) : undefined,
-    createdFrom ? gte(environments.createdAt, createdFrom) : undefined,
-    createdTo ? lte(environments.createdAt, createdTo) : undefined,
-    parsedCursor
-      ? or(
-          lt(environments.createdAt, parsedCursor.createdAt),
-          and(eq(environments.createdAt, parsedCursor.createdAt), lt(environments.id, parsedCursor.id)),
-        )
-      : undefined,
-  ].filter((filter) => filter !== undefined)
-  const rows = await db
-    .select()
-    .from(environments)
-    .where(and(...filters))
-    .orderBy(desc(environments.createdAt), desc(environments.id))
-    .limit(limit + 1)
-  const page = paginateRows(rows, limit)
-  const data = await Promise.all(page.data.map(async (row) => serializeEnvironment(row, await currentVersion(db, row))))
-  return c.json({ data, pagination: page.pagination }, 200)
-})
-
-app.openapi(createRouteConfig, async (c) => {
-  const body = c.req.valid('json')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
-
-  const timestamp = now()
-  const values = {
-    packages: body.packages ?? [],
-    variables: body.variables ?? {},
-    secretRefs: body.secretRefs ?? [],
-    networkPolicy: body.networkPolicy ?? {},
-    mcpPolicy: body.mcpPolicy ?? {},
-    packageManagerPolicy: body.packageManagerPolicy ?? {},
-    resourceLimits: body.resourceLimits ?? {},
-    runtimeImage: body.runtimeImage ?? {},
-    metadata: body.metadata ?? {},
-  }
-  const validation =
-    (await validateSecretRefs(db, auth.organization.id, auth.project.id, values.secretRefs)) ??
-    (await validateMcpPolicy(db, auth.project.id, values.mcpPolicy)) ??
-    validateSecretFreeObjects(values)
-  if (validation) {
-    return c.json(domainValidation('Invalid environment configuration', validation), 400)
-  }
-  const row = {
-    id: newId('env'),
-    projectId: auth.project.id,
-    name: body.name,
-    description: body.description ?? null,
-    packages: stringify(values.packages),
-    variables: stringify(values.variables),
-    secretRefs: stringify(values.secretRefs),
-    networkPolicy: stringify(values.networkPolicy),
-    mcpPolicy: stringify(values.mcpPolicy),
-    packageManagerPolicy: stringify(values.packageManagerPolicy),
-    resourceLimits: stringify(values.resourceLimits),
-    runtimeImage: stringify(values.runtimeImage),
-    metadata: stringify(values.metadata),
-    status: 'active',
-    archivedAt: null,
-    currentVersionId: null,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  }
-  await db.insert(environments).values(row)
-  const version = await createVersion(db, row, { ...values, createdAt: timestamp })
-  await db.update(environments).set({ currentVersionId: version.id }).where(eq(environments.id, row.id))
-  return c.json(serializeEnvironment({ ...row, currentVersionId: version.id }, version), 201)
-})
-
-app.openapi(readRoute, async (c) => {
-  const { environmentId } = c.req.valid('param')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
-
-  const environment = await findEnvironment(db, environmentId, auth.project.id)
-  if (!environment) {
-    return c.json({ error: { type: 'not_found', message: 'Environment not found' } }, 404)
-  }
-  return c.json(serializeEnvironment(environment, await currentVersion(db, environment)), 200)
-})
-
-app.openapi(updateRoute, async (c) => {
-  const { environmentId } = c.req.valid('param')
-  const body = c.req.valid('json')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
-
-  const environment = await findEnvironment(db, environmentId, auth.project.id)
-  if (!environment) {
-    return c.json({ error: { type: 'not_found', message: 'Environment not found' } }, 404)
-  }
-  if (environment.status === 'archived') {
-    return c.json({ error: { type: 'conflict', message: 'Archived environments cannot be updated' } }, 409)
-  }
-
-  const next = {
-    name: body.name ?? environment.name,
-    description: body.description ?? environment.description,
-    packages: body.packages ?? parseJson<Package[]>(environment.packages),
-    variables: body.variables ?? parseJson<Record<string, Variable>>(environment.variables),
-    secretRefs: body.secretRefs ?? parseJson<SecretRef[]>(environment.secretRefs),
-    networkPolicy: body.networkPolicy ?? parseJson<Record<string, unknown>>(environment.networkPolicy),
-    mcpPolicy: body.mcpPolicy ?? parseJson<Record<string, unknown>>(environment.mcpPolicy),
-    packageManagerPolicy:
-      body.packageManagerPolicy ?? parseJson<Record<string, unknown>>(environment.packageManagerPolicy),
-    resourceLimits: body.resourceLimits ?? parseJson<Record<string, unknown>>(environment.resourceLimits),
-    runtimeImage: body.runtimeImage ?? parseJson<Record<string, unknown>>(environment.runtimeImage),
-    metadata: body.metadata ?? parseJson<Record<string, unknown>>(environment.metadata),
-  }
-  const validation =
-    (await validateSecretRefs(db, auth.organization.id, auth.project.id, next.secretRefs)) ??
-    (await validateMcpPolicy(db, auth.project.id, next.mcpPolicy)) ??
-    validateSecretFreeObjects(next)
-  if (validation) {
-    return c.json(domainValidation('Invalid environment configuration', validation), 400)
-  }
-  const timestamp = now()
-  const runtimeChanged =
-    body.packages !== undefined ||
-    body.variables !== undefined ||
-    body.secretRefs !== undefined ||
-    body.networkPolicy !== undefined ||
-    body.mcpPolicy !== undefined ||
-    body.packageManagerPolicy !== undefined ||
-    body.resourceLimits !== undefined ||
-    body.runtimeImage !== undefined ||
-    body.metadata !== undefined
-  const version = runtimeChanged
-    ? await createVersion(db, environment, { ...next, createdAt: timestamp })
-    : await currentVersion(db, environment)
-  const updated = {
-    ...next,
-    packages: stringify(next.packages),
-    variables: stringify(next.variables),
-    secretRefs: stringify(next.secretRefs),
-    networkPolicy: stringify(next.networkPolicy),
-    mcpPolicy: stringify(next.mcpPolicy),
-    packageManagerPolicy: stringify(next.packageManagerPolicy),
-    resourceLimits: stringify(next.resourceLimits),
-    runtimeImage: stringify(next.runtimeImage),
-    metadata: stringify(next.metadata),
-    currentVersionId: version?.id ?? environment.currentVersionId,
-    updatedAt: timestamp,
-  }
-  await db
-    .update(environments)
-    .set(updated)
-    .where(and(eq(environments.id, environmentId), eq(environments.projectId, auth.project.id)))
-  return c.json(serializeEnvironment({ ...environment, ...updated }, version), 200)
-})
-
-app.openapi(archiveRoute, async (c) => {
-  const { environmentId } = c.req.valid('param')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
-
-  const environment = await findEnvironment(db, environmentId, auth.project.id)
-  if (!environment) {
-    return c.json({ error: { type: 'not_found', message: 'Environment not found' } }, 404)
-  }
-
-  const timestamp = now()
-  await db
-    .update(environments)
-    .set({ status: 'archived', archivedAt: timestamp, updatedAt: timestamp })
-    .where(and(eq(environments.id, environmentId), eq(environments.projectId, auth.project.id)))
-  await recordAudit(db, {
-    auth,
-    action: 'environment.archive',
-    resourceType: 'environment',
-    resourceId: environmentId,
-    outcome: 'success',
-    requestId: requestId(c),
-    before: serializeEnvironment(environment, await currentVersion(db, environment)),
-    after: { status: 'archived', archivedAt: timestamp },
   })
-  return c.body(null, 204)
-})
 
-app.openapi(versionsRoute, async (c) => {
-  const { environmentId } = c.req.valid('param')
-  const db = drizzle(c.env.DB)
-  const auth = await requireAuth(c, db)
-  if (auth instanceof Response) {
-    return auth
-  }
-
-  const environment = await findEnvironment(db, environmentId, auth.project.id)
-  if (!environment) {
-    return c.json({ error: { type: 'not_found', message: 'Environment not found' } }, 404)
-  }
-
-  const rows = await db
-    .select()
-    .from(environmentVersions)
-    .where(
-      and(eq(environmentVersions.environmentId, environmentId), eq(environmentVersions.projectId, auth.project.id)),
-    )
-    .orderBy(desc(environmentVersions.version))
-  return c.json(
-    {
-      data: rows.map(serializeVersion),
-      pagination: {
-        limit: rows.length,
-        nextCursor: null,
-        hasMore: false,
-        firstId: rows[0]?.id ?? null,
-        lastId: rows.at(-1)?.id ?? null,
-      },
-    },
-    200,
-  )
-})
-
-export default app
+export default routes
