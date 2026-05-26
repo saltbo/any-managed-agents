@@ -17,7 +17,8 @@ export async function openLocalPage() {
 }
 
 export async function authenticateE2EPage(page: Page) {
-  const response = await page.request.post('/api/e2e/auth/session')
+  const runId = `e2e-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  const response = await page.request.post('/api/e2e/auth/session', { data: { runId } })
   if (!response.ok()) {
     throw new Error(`POST /api/e2e/auth/session returned ${response.status()}: ${await response.text()}`)
   }

@@ -32,6 +32,12 @@ interface E2EState {
   updatedEnvironment?: Json
   vault?: Json
   credential?: Json
+  provider?: Json
+  otherProvider?: Json
+  providerModel?: Json
+  accessRule?: Json
+  policy?: Json
+  budget?: Json
   deletedCredentialVersionId?: string
   response?: Json
   responseStatus?: number
@@ -57,6 +63,100 @@ Given('a signed-in user has access to a project', { timeout: 120_000 }, async fu
 
 Given('a project has an active model provider', async function (this: ProductWorld) {
   await ensureSignedIn(this)
+})
+
+Given('no project-specific providers are configured', async function (this: ProductWorld) {
+  await ensureSignedIn(this)
+})
+
+Given('a project has multiple providers', async function (this: ProductWorld) {
+  await ensureSignedIn(this)
+  this.e2e.provider = await createProvider(this.e2e, {
+    type: 'workers-ai',
+    displayName: `${this.e2e.runId} Workers AI`,
+    isDefault: true,
+  })
+  this.e2e.otherProvider = await createProvider(this.e2e, {
+    type: 'openai-compatible',
+    displayName: `${this.e2e.runId} Gateway`,
+    baseUrl: 'https://models.example.test/v1',
+    credentialSecretRef: `secret://providers/${this.e2e.runId}/gateway`,
+  })
+  await createProviderModel(this.e2e, this.e2e.otherProvider, {
+    modelId: '@cf/moonshotai/kimi-k2.6',
+    displayName: 'Gateway Kimi',
+    capabilities: ['text'],
+  })
+})
+
+Given('a provider is configured', async function (this: ProductWorld) {
+  await ensureSignedIn(this)
+  this.e2e.provider = await createProvider(this.e2e, {
+    type: 'openai-compatible',
+    displayName: `${this.e2e.runId} Gateway`,
+    baseUrl: 'https://models.example.test/v1',
+    credentialSecretRef: `secret://providers/${this.e2e.runId}/gateway`,
+  })
+})
+
+Given('agents or sessions reference a provider', async function (this: ProductWorld) {
+  await ensureSignedIn(this)
+  this.e2e.provider = await createProvider(this.e2e, {
+    type: 'openai-compatible',
+    displayName: `${this.e2e.runId} Gateway`,
+    baseUrl: 'https://models.example.test/v1',
+    credentialSecretRef: `secret://providers/${this.e2e.runId}/gateway`,
+  })
+  await createProviderModel(this.e2e, this.e2e.provider, {
+    modelId: '@cf/moonshotai/kimi-k2.6',
+    displayName: 'Gateway Kimi',
+    capabilities: ['text'],
+  })
+  this.e2e.agent = await createAgent(this.e2e, {
+    name: `${this.e2e.runId} provider agent`,
+    provider: this.e2e.provider.id,
+    model: '@cf/moonshotai/kimi-k2.6',
+  })
+  this.e2e.environment = await createEnvironment(this.e2e)
+  this.e2e.latestSession = await createSession(this.e2e)
+})
+
+Given('an organization admin is authenticated', async function (this: ProductWorld) {
+  await ensureSignedIn(this)
+})
+
+Given('project budgets are enabled', async function (this: ProductWorld) {
+  await ensureSignedIn(this)
+})
+
+Given('organization, team, project, and agent policies exist', async function (this: ProductWorld) {
+  await ensureSignedIn(this)
+  this.e2e.policy = await apiJson<Json>(this.e2e.page.request, '/api/governance/policy', {
+    method: 'PUT',
+    data: {
+      providerRules: [{ providerId: 'workers-ai', effect: 'deny', reason: 'Workers AI paused.' }],
+      modelRules: [{ providerId: 'workers-ai', modelId: '@cf/moonshotai/kimi-k2.6', effect: 'deny' }],
+      toolPolicy: { deniedTools: ['secrets.read'] },
+      mcpPolicy: { deniedConnectors: ['github'] },
+      sandboxPolicy: { network: 'disabled' },
+      budgetPolicy: { monthlyTokens: 0 },
+      metadata: { source: 'e2e' },
+    },
+  })
+  this.e2e.accessRule = await apiJson<Json>(this.e2e.page.request, '/api/governance/provider-access-rules', {
+    method: 'POST',
+    data: {
+      providerId: 'workers-ai',
+      modelId: '@cf/moonshotai/kimi-k2.6',
+      teamId: 'team_e2e',
+      effect: 'deny',
+      reason: 'Team rule.',
+    },
+  })
+  this.e2e.budget = await apiJson<Json>(this.e2e.page.request, '/api/governance/budgets', {
+    method: 'POST',
+    data: { scope: 'project', limitType: 'tokens', limitValue: 1, window: 'month' },
+  })
 })
 
 Given('a project has an active agent definition', async function (this: ProductWorld) {
@@ -203,6 +303,175 @@ When('the user creates an agent with a name and instructions', async function (t
     name: `${this.e2e.runId} minimal agent`,
     instructions: 'Answer briefly.',
   })
+})
+
+When('an operator adds a provider', async function (this: ProductWorld) {
+  await ensureSignedIn(this)
+  this.e2e.provider = await createProvider(this.e2e, {
+    type: 'openai-compatible',
+    displayName: `${this.e2e.runId} Gateway`,
+    baseUrl: 'https://models.example.test/v1',
+    isDefault: true,
+    credentialSecretRef: `secret://providers/${this.e2e.runId}/gateway`,
+    metadata: { owner: 'platform', apiKey: 'raw-secret-value' },
+    rateLimits: { requestsPerMinute: 120 },
+    budgetPolicy: { monthlyCostMicros: 1000000 },
+  })
+  this.e2e.providerModel = await createProviderModel(this.e2e, this.e2e.provider, {
+    modelId: 'gateway-model',
+    displayName: 'Gateway Model',
+    capabilities: ['text'],
+    contextWindow: 128000,
+    pricing: { inputMicrosPerToken: 1 },
+  })
+})
+
+When('an operator lists providers', async function (this: ProductWorld) {
+  await ensureSignedIn(this)
+  this.e2e.list = await apiJson<ListResponse<Json>>(this.e2e.page.request, '/api/providers')
+})
+
+When('an operator enables Workers AI for a project', async function (this: ProductWorld) {
+  await ensureSignedIn(this)
+  this.e2e.provider = await createProvider(this.e2e, {
+    type: 'workers-ai',
+    displayName: `${this.e2e.runId} Workers AI`,
+    isDefault: true,
+    metadata: { accountId: 'cf-account-ref' },
+  })
+})
+
+When(
+  'an operator adds Anthropic, OpenAI, OpenAI-compatible, Ollama, or another supported provider',
+  async function (this: ProductWorld) {
+    await ensureSignedIn(this)
+    const invalidCompatible = await apiResponse(this.e2e.page.request, '/api/providers', {
+      method: 'POST',
+      data: { type: 'openai-compatible', displayName: `${this.e2e.runId} invalid gateway` },
+    })
+    assert.equal(invalidCompatible.status(), 400)
+    this.e2e.provider = await createProvider(this.e2e, {
+      type: 'openai-compatible',
+      displayName: `${this.e2e.runId} Gateway`,
+      baseUrl: 'https://models.example.test/v1',
+      isDefault: true,
+      credentialSecretRef: `secret://providers/${this.e2e.runId}/gateway`,
+      rateLimits: { requestsPerMinute: 60 },
+      budgetPolicy: { monthlyTokens: 1000 },
+    })
+    await createProvider(this.e2e, {
+      type: 'openai',
+      displayName: `${this.e2e.runId} OpenAI`,
+      credentialSecretRef: `secret://providers/${this.e2e.runId}/openai`,
+    })
+    await createProvider(this.e2e, {
+      type: 'anthropic',
+      displayName: `${this.e2e.runId} Anthropic`,
+      credentialSecretRef: `secret://providers/${this.e2e.runId}/anthropic`,
+    })
+    await createProvider(this.e2e, { type: 'ollama', displayName: `${this.e2e.runId} Ollama` })
+  },
+)
+
+When('an operator marks one provider as default', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  this.e2e.otherProvider = await apiJson<Json>(state.page.request, `/api/providers/${state.otherProvider?.id}`, {
+    method: 'PATCH',
+    data: { isDefault: true },
+  })
+})
+
+When('model discovery succeeds', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  this.e2e.providerModel = await createProviderModel(state, state.provider, {
+    modelId: 'gateway-model',
+    displayName: 'Gateway Model',
+    capabilities: ['text'],
+    contextWindow: 128000,
+    pricing: { inputMicrosPerToken: 1 },
+  })
+})
+
+When('model discovery fails or the provider is unreachable', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  this.e2e.provider = await apiJson<Json>(state.page.request, `/api/providers/${state.provider?.id}`, {
+    method: 'PATCH',
+    data: { modelCatalogStatus: 'error', lastError: { type: 'network_error', credential: 'raw-secret-value' } },
+  })
+})
+
+When('an operator disables the provider', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  this.e2e.provider = await apiJson<Json>(state.page.request, `/api/providers/${state.provider?.id}`, {
+    method: 'PATCH',
+    data: { status: 'disabled' },
+  })
+})
+
+When('an operator deletes an unused provider', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const unused = await createProvider(state, {
+    type: 'openai',
+    displayName: `${state.runId} unused provider`,
+    credentialSecretRef: `secret://providers/${state.runId}/unused`,
+  })
+  await emptyResponse(state.page.request, `/api/providers/${unused.id}`, { method: 'DELETE' })
+  this.e2e.otherProvider = unused
+})
+
+When('an operator saves provider, model, tool, sandbox, or budget policy', async function (this: ProductWorld) {
+  await ensureSignedIn(this)
+  this.e2e.policy = await apiJson<Json>(this.e2e.page.request, '/api/governance/policy', {
+    method: 'PUT',
+    data: {
+      providerRules: [{ providerId: 'workers-ai', effect: 'deny', reason: 'Budget review required.' }],
+      modelRules: [{ providerId: 'workers-ai', modelId: '@cf/moonshotai/kimi-k2.6', effect: 'deny' }],
+      toolPolicy: { deniedTools: ['secrets.read'] },
+      sandboxPolicy: { network: 'disabled' },
+      budgetPolicy: { monthlyTokens: 0 },
+    },
+  })
+})
+
+When(
+  'the admin creates or updates provider and model access rules for teams and projects',
+  async function (this: ProductWorld) {
+    await ensureSignedIn(this)
+    this.e2e.accessRule = await apiJson<Json>(this.e2e.page.request, '/api/governance/provider-access-rules', {
+      method: 'POST',
+      data: {
+        providerId: 'workers-ai',
+        modelId: '@cf/moonshotai/kimi-k2.6',
+        teamId: 'team_e2e',
+        effect: 'deny',
+        reason: 'Project-wide model access is paused.',
+        metadata: { source: 'e2e' },
+      },
+    })
+  },
+)
+
+When('the admin sets model, token, session, or time-window budgets', async function (this: ProductWorld) {
+  await ensureSignedIn(this)
+  this.e2e.policy = await apiJson<Json>(this.e2e.page.request, '/api/governance/policy', {
+    method: 'PUT',
+    data: { budgetPolicy: { monthlyTokens: 0 } },
+  })
+  this.e2e.budget = await apiJson<Json>(this.e2e.page.request, '/api/governance/budgets', {
+    method: 'POST',
+    data: {
+      scope: 'project',
+      limitType: 'tokens',
+      limitValue: 1,
+      window: 'month',
+      metadata: { source: 'e2e' },
+    },
+  })
+})
+
+When('the admin requests effective policy', async function (this: ProductWorld) {
+  await ensureSignedIn(this)
+  this.e2e.response = await apiJson<Json>(this.e2e.page.request, '/api/governance/effective-policy')
 })
 
 When(
@@ -611,6 +880,229 @@ Then(
     assert.equal(updated.version, 2)
     assert.ok(versions.data.length >= 2)
     assert.ok(list.data.some((row) => row.id === agent.id))
+  },
+)
+
+Then(
+  'metadata, credentials, model catalog, rate limits, and budget policy are stored safely',
+  function (this: ProductWorld) {
+    const provider = required(this.e2e?.provider, 'provider')
+    const model = required(this.e2e?.providerModel, 'provider model')
+    assert.equal(provider.type, 'openai-compatible')
+    assert.equal(provider.hasCredential, true)
+    assert.equal(provider.credentialStatus, 'configured')
+    assert.equal(provider.modelCatalogStatus, 'ready')
+    assert.equal(objectValue(provider.rateLimits).requestsPerMinute, 120)
+    assert.equal(objectValue(provider.budgetPolicy).monthlyCostMicros, 1000000)
+    assert.equal(objectValue(model.pricing).inputMicrosPerToken, 1)
+    assert.equal(JSON.stringify(provider).includes('raw-secret-value'), false)
+    assert.equal(JSON.stringify(model).includes('raw-secret-value'), false)
+  },
+)
+
+Then('the response shows platform default providers separately from project overrides', function (this: ProductWorld) {
+  const list = required(this.e2e?.list, 'providers')
+  assert.equal(list.data.length, 1)
+  assert.equal(list.data[0]?.id, 'workers-ai')
+  assert.equal(objectValue(list.data[0]?.metadata).platformDefault, true)
+})
+
+Then(
+  'each provider reports id, type, display name, default status, credential status, model catalog status, and timestamps',
+  function (this: ProductWorld) {
+    const list = required(this.e2e?.list, 'providers')
+    for (const provider of list.data) {
+      assert.equal(typeof provider.id, 'string')
+      assert.equal(typeof provider.type, 'string')
+      assert.equal(typeof provider.displayName, 'string')
+      assert.equal(typeof provider.isDefault, 'boolean')
+      assert.equal(typeof provider.credentialStatus, 'string')
+      assert.equal(typeof provider.modelCatalogStatus, 'string')
+      assert.equal(typeof provider.createdAt, 'string')
+      assert.equal(typeof provider.updatedAt, 'string')
+    }
+  },
+)
+
+Then('secret values are never returned', function (this: ProductWorld) {
+  const payload = JSON.stringify(this.e2e?.list ?? this.e2e?.provider ?? this.e2e?.response ?? {})
+  assert.equal(payload.includes('secret://'), false)
+  assert.equal(payload.includes('raw-secret-value'), false)
+})
+
+Then('the provider stores Cloudflare account metadata and safe credential references', function (this: ProductWorld) {
+  const provider = required(this.e2e?.provider, 'provider')
+  assert.equal(provider.type, 'workers-ai')
+  assert.equal(objectValue(provider.metadata).accountId, 'cf-account-ref')
+  assert.equal(provider.credentialStatus, 'not_required')
+  assert.equal(JSON.stringify(provider).includes('secret://'), false)
+})
+
+Then('it can be marked as the only default provider', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const list = await apiJson<ListResponse<Json>>(state.page.request, '/api/providers')
+  const defaults = list.data.filter((provider) => provider.isDefault === true)
+  assert.equal(defaults.length, 1)
+  assert.equal(defaults[0]?.id, state.provider?.id)
+})
+
+Then('model discovery includes Workers AI model ids allowed by governance', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const models = await apiJson<ListResponse<Json>>(state.page.request, '/api/providers/workers-ai/models')
+  assert.ok(models.data.some((model) => model.modelId === '@cf/moonshotai/kimi-k2.6'))
+  const evaluation = await apiJson<Json>(state.page.request, '/api/governance/evaluations', {
+    method: 'POST',
+    data: { providerId: 'workers-ai', modelId: '@cf/moonshotai/kimi-k2.6' },
+  })
+  assert.equal(evaluation.allowed, true)
+})
+
+Then(
+  'provider type, base URL when required, display name, default flag, rate limits, and budget policy are validated',
+  function (this: ProductWorld) {
+    const provider = required(this.e2e?.provider, 'provider')
+    assert.equal(provider.type, 'openai-compatible')
+    assert.equal(provider.baseUrl, 'https://models.example.test/v1')
+    assert.equal(provider.isDefault, true)
+    assert.equal(objectValue(provider.rateLimits).requestsPerMinute, 60)
+    assert.equal(objectValue(provider.budgetPolicy).monthlyTokens, 1000)
+  },
+)
+
+Then('credentials are stored through approved secret references', function (this: ProductWorld) {
+  const provider = required(this.e2e?.provider, 'provider')
+  assert.equal(provider.hasCredential, true)
+  assert.equal(provider.credentialStatus, 'configured')
+})
+
+Then('the response includes hasCredential without returning the credential value', function (this: ProductWorld) {
+  const provider = required(this.e2e?.provider, 'provider')
+  assert.equal(provider.hasCredential, true)
+  assert.equal(JSON.stringify(provider).includes('secret://'), false)
+})
+
+Then('every other provider in the same project is no longer default', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const list = await apiJson<ListResponse<Json>>(state.page.request, '/api/providers')
+  const defaults = list.data.filter((provider) => provider.isDefault === true)
+  assert.deepEqual(
+    defaults.map((provider) => provider.id),
+    [state.otherProvider?.id],
+  )
+})
+
+Then('future agents without explicit provider selection use the new default', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const agent = await createAgent(state, { name: `${state.runId} default provider agent` })
+  assert.equal(agent.provider, state.otherProvider?.id)
+})
+
+Then('new sessions using that provider are rejected before runtime startup', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const response = await apiResponse(state.page.request, '/api/sessions', {
+    method: 'POST',
+    data: {
+      agentId: state.agent?.id,
+      environmentId: state.environment?.id,
+      title: `${state.runId} denied provider session`,
+    },
+  })
+  assert.equal(response.status(), 403)
+  const body = await response.json()
+  assert.equal(body.error.type, 'policy_denied')
+})
+
+Then('historical sessions remain readable', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
+  assert.equal(session.id, state.latestSession?.id)
+})
+
+Then('it no longer appears in provider lists', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const list = await apiJson<ListResponse<Json>>(state.page.request, '/api/providers')
+  assert.equal(
+    list.data.some((provider) => provider.id === state.otherProvider?.id),
+    false,
+  )
+})
+
+Then('the platform validates and applies the policy to later sessions', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const policy = required(state.policy, 'policy')
+  assert.equal(objectValue(policy.budgetPolicy).monthlyTokens, 0)
+  const response = await apiResponse(state.page.request, '/api/governance/evaluations', {
+    method: 'POST',
+    data: { providerId: 'workers-ai', modelId: '@cf/moonshotai/kimi-k2.6' },
+  })
+  assert.equal(response.status(), 403)
+})
+
+Then('the response includes normalized allow and deny rules', function (this: ProductWorld) {
+  const rule = required(this.e2e?.accessRule, 'access rule')
+  assert.equal(rule.providerId, 'workers-ai')
+  assert.equal(rule.modelId, '@cf/moonshotai/kimi-k2.6')
+  assert.equal(rule.teamId, 'team_e2e')
+  assert.equal(rule.effect, 'deny')
+})
+
+Then(
+  'future agent and session creation enforce those rules before runtime startup',
+  async function (this: ProductWorld) {
+    const state = await ensureAgentAndEnvironment(this)
+    const response = await apiResponse(state.page.request, '/api/sessions', {
+      method: 'POST',
+      data: { agentId: state.agent?.id, environmentId: state.environment?.id, title: `${state.runId} access denied` },
+    })
+    assert.equal(response.status(), 403)
+    const body = await response.json()
+    assert.equal(body.error.type, 'policy_denied')
+    assert.equal(body.error.details.ruleId, state.accessRule?.id)
+  },
+)
+
+Then('policy changes are audited with actor, resource, and safe diff metadata', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const audit = await apiJson<ListResponse<Json>>(state.page.request, '/api/audit-records?limit=50')
+  assert.ok(audit.data.some((record) => record.action === 'provider_access_rule.create'))
+  assert.equal(JSON.stringify(audit).includes('secret://'), false)
+})
+
+Then('session startup and provider calls check remaining budget before execution', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const budget = required(state.budget, 'budget')
+  assert.equal(budget.limitType, 'tokens')
+  const response = await apiResponse(state.page.request, '/api/governance/evaluations', {
+    method: 'POST',
+    data: { providerId: 'workers-ai', modelId: '@cf/moonshotai/kimi-k2.6' },
+  })
+  assert.equal(response.status(), 403)
+  const body = await response.json()
+  assert.equal(body.error.details.category, 'budget')
+})
+
+Then('budget denials are visible in usage and audit records', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  await apiResponse(state.page.request, '/api/governance/evaluations', {
+    method: 'POST',
+    data: { providerId: 'workers-ai', modelId: '@cf/moonshotai/kimi-k2.6' },
+  })
+  const audit = await apiJson<ListResponse<Json>>(state.page.request, '/api/audit-records?action=policy.evaluate')
+  assert.ok(audit.data.some((record) => record.outcome === 'denied' && record.policyCategory === 'budget'))
+})
+
+Then(
+  'the response explains the resolved rule source for provider, model, tool, MCP, sandbox, and budget decisions',
+  function (this: ProductWorld) {
+    const effective = required(this.e2e?.response, 'effective policy')
+    assert.equal(objectValue(effective.source).type, 'project')
+    assert.ok(Array.isArray(effective.providerRules))
+    assert.ok(Array.isArray(effective.modelRules))
+    assert.ok(Array.isArray(effective.accessRules))
+    assert.equal(objectValue(effective.toolPolicy).deniedTools?.[0], 'secrets.read')
+    assert.equal(objectValue(effective.mcpPolicy).deniedConnectors?.[0], 'github')
+    assert.equal(objectValue(effective.sandboxPolicy).network, 'disabled')
+    assert.equal(objectValue(effective.budgetPolicy).monthlyTokens, 0)
   },
 )
 
@@ -1482,6 +1974,20 @@ async function createAgent(state: E2EState, data: Json = {}) {
       instructions: 'E2E agent',
       ...data,
     },
+  })
+}
+
+async function createProvider(state: E2EState, data: Json = {}) {
+  return await apiJson<Json>(state.page.request, '/api/providers', {
+    method: 'POST',
+    data,
+  })
+}
+
+async function createProviderModel(state: E2EState, provider: Json | undefined, data: Json = {}) {
+  return await apiJson<Json>(state.page.request, `/api/providers/${provider?.id}/models`, {
+    method: 'POST',
+    data,
   })
 }
 

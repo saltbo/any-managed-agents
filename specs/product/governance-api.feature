@@ -2,12 +2,12 @@
 Feature: Governance API
   Operators manage governance policy through the control plane.
 
-  @planned
+  @implemented
   Scenario: Update governance policy
     When an operator saves provider, model, tool, sandbox, or budget policy
     Then the platform validates and applies the policy to later sessions
 
-  @planned
+  @implemented
   Scenario: Manage provider and model access policy
     Given an organization admin is authenticated
     When the admin creates or updates provider and model access rules for teams and projects
@@ -22,14 +22,14 @@ Feature: Governance API
     Then future sessions enforce the most restrictive applicable rule
     And blocked runtime actions emit policy events with safe details
 
-  @planned
+  @implemented
   Scenario: Manage budgets through the API
     Given project budgets are enabled
     When the admin sets model, token, session, or time-window budgets
     Then session startup and provider calls check remaining budget before execution
     And budget denials are visible in usage and audit records
 
-  @planned
+  @implemented
   Scenario: Read effective policy for a project
     Given organization, team, project, and agent policies exist
     When the admin requests effective policy

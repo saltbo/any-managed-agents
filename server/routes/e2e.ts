@@ -16,40 +16,43 @@ app.post('/auth/session', async (c) => {
     return errorResponse(c, 404, 'not_found', 'Not found')
   }
 
+  const body: { runId?: string } = await c.req.json<{ runId?: string }>().catch(() => ({}))
+  const runId = body.runId?.replaceAll(/[^A-Za-z0-9_-]/g, '_') || newId('run')
   const db = drizzle(c.env.DB)
   const now = new Date().toISOString()
-  const userId = 'user_e2e'
-  const organizationId = 'org_e2e'
-  const projectId = 'project_e2e'
+  const userId = `user_e2e_${runId}`
+  const organizationId = `org_e2e_${runId}`
+  const projectId = `project_e2e_${runId}`
+  const membershipId = `membership_e2e_${runId}`
 
   await db
     .insert(users)
     .values({
       id: userId,
-      flareauthSubject: 'e2e-user',
-      email: 'e2e@example.com',
-      name: 'E2E User',
+      flareauthSubject: `e2e-user-${runId}`,
+      email: `${runId}@e2e.example.com`,
+      name: `E2E User ${runId}`,
       avatarUrl: null,
       createdAt: now,
       updatedAt: now,
     })
     .onConflictDoUpdate({
       target: users.id,
-      set: { email: 'e2e@example.com', name: 'E2E User', updatedAt: now },
+      set: { email: `${runId}@e2e.example.com`, name: `E2E User ${runId}`, updatedAt: now },
     })
 
   await db
     .insert(organizations)
     .values({
       id: organizationId,
-      flareauthOrganizationId: 'flareauth-org-e2e',
-      name: 'E2E Organization',
+      flareauthOrganizationId: `flareauth-org-e2e-${runId}`,
+      name: `E2E Organization ${runId}`,
       createdAt: now,
       updatedAt: now,
     })
     .onConflictDoUpdate({
       target: organizations.id,
-      set: { name: 'E2E Organization', updatedAt: now },
+      set: { name: `E2E Organization ${runId}`, updatedAt: now },
     })
 
   await db
@@ -57,19 +60,19 @@ app.post('/auth/session', async (c) => {
     .values({
       id: projectId,
       organizationId,
-      name: 'E2E Project',
+      name: `E2E Project ${runId}`,
       createdAt: now,
       updatedAt: now,
     })
     .onConflictDoUpdate({
       target: projects.id,
-      set: { name: 'E2E Project', updatedAt: now },
+      set: { name: `E2E Project ${runId}`, updatedAt: now },
     })
 
   await db
     .insert(memberships)
     .values({
-      id: 'membership_e2e',
+      id: membershipId,
       userId,
       organizationId,
       roles: JSON.stringify(['owner']),
