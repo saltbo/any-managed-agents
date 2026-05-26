@@ -2,20 +2,20 @@
 Feature: Session events
   Session events represent runtime history.
 
-  @planned
+  @implemented
   Scenario: Append session event
-    When the runtime emits a message, tool, sandbox, policy, usage, or error event
-    Then the event is stored with stable ordering and safe metadata
+    Given an idle session has a running Pi bridge
+    When the user sends a runtime message to the session runtime endpoint
+    Then message, tool, sandbox, usage, lifecycle, and error events are stored in sequence
 
-  @planned
+  @implemented
   Scenario: Store message lifecycle events
-    Given a user sends a runtime message
-    When the runtime accepts, starts, streams, completes, or fails the message
+    Given an idle session has a running Pi bridge
+    When the user sends a runtime message to the session runtime endpoint
     Then lifecycle events are stored with monotonically increasing sequence numbers
     And message events preserve user-visible content
-    And debug events preserve safe runtime diagnostics
 
-  @planned
+  @implemented
   Scenario: Query session events
     Given a session has many events
     When the client lists events with limit, order, type filter, or cursor

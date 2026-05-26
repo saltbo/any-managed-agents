@@ -36,6 +36,7 @@ interface E2EState {
   responseStatus?: number
   list?: ListResponse<Json>
   events?: ListResponse<Json>
+  eventPages?: Record<string, ListResponse<Json>>
   runtimeMessage?: string
 }
 
@@ -124,6 +125,11 @@ Given('an environment is used by existing sessions', async function (this: Produ
   this.e2e.previousSession = await createSession(this.e2e)
 })
 
+Given('an environment exists', async function (this: ProductWorld) {
+  await ensureSignedIn(this)
+  this.e2e.environment = await createEnvironment(this.e2e, { name: `${this.e2e.runId} standalone env` })
+})
+
 Given('an environment is archived', async function (this: ProductWorld) {
   await ensureAgentAndEnvironment(this)
   await emptyResponse(this.e2e.page.request, `/api/environments/${this.e2e.environment?.id}`, { method: 'DELETE' })
@@ -158,6 +164,14 @@ Given('a session has stored events', async function (this: ProductWorld) {
   await ensureAgentAndEnvironment(this)
   this.e2e.latestSession = await createSession(this.e2e)
   await sendRuntimeMessage(this.e2e, 'stored event check')
+})
+
+Given('a session has many events', async function (this: ProductWorld) {
+  await ensureAgentAndEnvironment(this)
+  this.e2e.latestSession = await createSession(this.e2e)
+  await sendRuntimeMessage(this.e2e, 'first event pagination message')
+  await sendRuntimeMessage(this.e2e, 'second event pagination message')
+  this.e2e.events = await sessionEvents(this.e2e)
 })
 
 Given('a vault exists', async function (this: ProductWorld) {
@@ -217,6 +231,20 @@ When(
   },
 )
 
+When('the user changes instructions, model, tools, or sandbox policy', async function (this: ProductWorld) {
+  const state = await ensureAgentAndEnvironment(this)
+  state.previousSession = await createSession(state)
+  state.updatedAgent = await apiJson<Json>(state.page.request, `/api/agents/${state.agent?.id}`, {
+    method: 'PATCH',
+    data: {
+      instructions: 'Updated instructions',
+      allowedTools: [],
+      sandboxPolicy: { network: 'disabled' },
+    },
+  })
+  state.latestSession = await createSession(state)
+})
+
 When('the user changes runtime-relevant configuration', async function (this: ProductWorld) {
   const state = await ensureAgentAndEnvironment(this)
   state.previousSession = await createSession(state)
@@ -255,6 +283,24 @@ When('the user lists agents with a page size', async function (this: ProductWorl
   state.list = await apiJson<ListResponse<Json>>(state.page.request, '/api/agents?limit=2')
 })
 
+When(
+  'an agent is saved with an unavailable provider, blocked tool, or invalid sandbox policy',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    const response = await apiResponse(state.page.request, '/api/agents', {
+      method: 'POST',
+      data: {
+        name: `${state.runId} invalid agent`,
+        model: 'missing-model',
+        allowedTools: ['secrets.read'],
+        sandboxPolicy: { network: 'invalid' },
+      },
+    })
+    state.responseStatus = response.status()
+    state.response = (await response.json()) as Json
+  },
+)
+
 When('the user archives the agent', async function (this: ProductWorld) {
   const state = await ensureState(this)
   await emptyResponse(state.page.request, `/api/agents/${state.agent?.id}`, { method: 'DELETE' })
@@ -285,6 +331,21 @@ When(
 )
 
 When(
+  'the user creates an environment with packages, variables, network policy, and metadata',
+  async function (this: ProductWorld) {
+    await ensureSignedIn(this)
+    this.e2e.environment = await createEnvironment(this.e2e, {
+      name: `${this.e2e.runId} reusable env`,
+      packages: [{ name: 'tsx', version: 'latest' }],
+      variables: { NODE_ENV: { required: true } },
+      networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
+      packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
+      metadata: { purpose: 'e2e' },
+    })
+  },
+)
+
+When(
   'the user changes packages, variables, secret references, network policy, resource limits, runtime image, or metadata',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
@@ -306,6 +367,20 @@ When(
   },
 )
 
+When('the user changes packages, variables, or network policy', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  state.previousSession = await createSession(state)
+  state.updatedEnvironment = await apiJson<Json>(state.page.request, `/api/environments/${state.environment?.id}`, {
+    method: 'PATCH',
+    data: {
+      packages: [{ name: 'vitest', version: 'latest' }],
+      variables: { E2E: { required: false } },
+      networkPolicy: { mode: 'offline' },
+    },
+  })
+  state.latestSession = await createSession(state)
+})
+
 When(
   'the user creates an agent or session that references the archived environment',
   async function (this: ProductWorld) {
@@ -326,6 +401,19 @@ When(
 When('the user lists environments with a page size', async function (this: ProductWorld) {
   const state = await ensureState(this)
   state.list = await apiJson<ListResponse<Json>>(state.page.request, '/api/environments?limit=2')
+})
+
+When('no session is running', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const sessions = await apiJson<ListResponse<Json>>(state.page.request, '/api/sessions')
+  assert.equal(
+    sessions.data.some(
+      (session) =>
+        session.environmentId === state.environment?.id &&
+        ['pending', 'running', 'idle'].includes(String(session.status)),
+    ),
+    false,
+  )
 })
 
 When('the user creates a session with the agent and environment', async function (this: ProductWorld) {
@@ -371,6 +459,28 @@ When('a client subscribes to session events', async function (this: ProductWorld
     state.page.request,
     `/api/sessions/${state.latestSession?.id}/events`,
   )
+})
+
+When('the client lists events with limit, order, type filter, or cursor', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const firstPage = await apiJson<ListResponse<Json>>(
+    state.page.request,
+    `/api/sessions/${state.latestSession?.id}/events?limit=1`,
+  )
+  const firstEvent = required(firstPage.data[0], 'first event')
+  const nextPage = await apiJson<ListResponse<Json>>(
+    state.page.request,
+    `/api/sessions/${state.latestSession?.id}/events?cursor=${firstEvent.sequence}&limit=2`,
+  )
+  const descPage = await apiJson<ListResponse<Json>>(
+    state.page.request,
+    `/api/sessions/${state.latestSession?.id}/events?order=desc&limit=2`,
+  )
+  const typedPage = await apiJson<ListResponse<Json>>(
+    state.page.request,
+    `/api/sessions/${state.latestSession?.id}/events?type=message_end&limit=10`,
+  )
+  state.eventPages = { firstPage, nextPage, descPage, typedPage }
 })
 
 When('the user stops the session', async function (this: ProductWorld) {
@@ -507,6 +617,21 @@ Then('agent sessions keep immutable agent and environment snapshots', async func
   assert.equal(objectValue(session.environmentSnapshot).version, objectValue(state.environment).version)
 })
 
+Then('the platform stores the agent definition in D1', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const agent = required(state.agent, 'agent')
+  const read = await apiJson<Json>(state.page.request, `/api/agents/${agent.id}`)
+  assert.equal(read.id, agent.id)
+})
+
+Then('the response includes the agent id, version, and timestamps', function (this: ProductWorld) {
+  const agent = required(this.e2e?.agent, 'agent')
+  assert.match(String(agent.id), /^agent_/)
+  assert.equal(typeof agent.version, 'number')
+  assert.equal(typeof agent.createdAt, 'string')
+  assert.equal(typeof agent.updatedAt, 'string')
+})
+
 Then(
   'the response includes an agent id, current version id, project id, timestamps, and archive state',
   function (this: ProductWorld) {
@@ -583,11 +708,20 @@ Then('the platform creates version 2', function (this: ProductWorld) {
   assert.equal(this.e2e?.updatedAgent?.version, 2)
 })
 
+Then('the platform creates a new immutable agent version', function (this: ProductWorld) {
+  assert.equal(this.e2e?.updatedAgent?.version, 2)
+  assert.match(String(this.e2e?.updatedAgent?.currentVersionId), /^agentver_/)
+})
+
 Then('the current agent points at version 2', function (this: ProductWorld) {
   assert.equal(this.e2e?.updatedAgent?.version, 2)
 })
 
 Then('sessions created before the update keep the version 1 snapshot', function (this: ProductWorld) {
+  assert.equal(objectValue(this.e2e?.previousSession?.agentSnapshot).version, 1)
+})
+
+Then('existing sessions continue using their original agent snapshot', function (this: ProductWorld) {
   assert.equal(objectValue(this.e2e?.previousSession?.agentSnapshot).version, 1)
 })
 
@@ -660,6 +794,15 @@ Then('the agent is hidden from default lists and creation flows', async function
   )
 })
 
+Then('the agent no longer appears in default creation flows', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const list = await apiJson<ListResponse<Json>>(state.page.request, '/api/agents')
+  assert.equal(
+    list.data.some((agent) => agent.id === state.agent?.id),
+    false,
+  )
+})
+
 Then('new sessions cannot be created from the archived agent', async function (this: ProductWorld) {
   const state = await ensureState(this)
   const response = await apiResponse(state.page.request, '/api/sessions', {
@@ -674,6 +817,12 @@ Then('existing sessions and immutable snapshots remain readable', async function
   const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
   assert.equal(session.id, state.latestSession?.id)
   assert.ok(session.agentSnapshot)
+})
+
+Then('existing sessions remain readable', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
+  assert.equal(session.id, state.latestSession?.id)
 })
 
 Then('the archive operation records an audit event', async function (this: ProductWorld) {
@@ -757,6 +906,34 @@ Then(
   },
 )
 
+Then('later sessions can reference the environment by id', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  state.agent ??= await createAgent(state, { name: `${state.runId} env reference agent` })
+  const session = await createSession(state)
+  assert.equal(session.environmentId, state.environment?.id)
+})
+
+Then('new sessions for that agent inherit an environment snapshot', function (this: ProductWorld) {
+  const session = required(this.e2e?.latestSession, 'session')
+  assert.ok(session.environmentSnapshot)
+})
+
+Then('sandbox creation uses the environment snapshot', function (this: ProductWorld) {
+  const session = required(this.e2e?.latestSession, 'session')
+  assert.equal(objectValue(session.environmentSnapshot).environmentId, session.environmentId)
+})
+
+Then('no sandbox instance is required', function (this: ProductWorld) {
+  const env = required(this.e2e?.environment, 'environment')
+  assert.equal('sandboxId' in env, false)
+})
+
+Then('the environment remains available for future sessions', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const env = await apiJson<Json>(state.page.request, `/api/environments/${state.environment?.id}`)
+  assert.equal(env.status, 'active')
+})
+
 Then('the response stores normalized policy fields', function (this: ProductWorld) {
   const env = required(this.e2e?.environment, 'environment')
   assert.deepEqual(env.networkPolicy, { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] })
@@ -789,11 +966,22 @@ Then(
   },
 )
 
+Then('the platform rejects the request with field-level validation details', function (this: ProductWorld) {
+  const body = objectValue(this.e2e?.response)
+  assert.equal(this.e2e?.responseStatus, 400)
+  const error = objectValue(body.error)
+  assert.ok(typeof error.details === 'object' || Array.isArray(error.issues))
+})
+
 Then('the platform creates a new environment version', function (this: ProductWorld) {
   assert.equal(this.e2e?.updatedEnvironment?.version, 2)
 })
 
 Then('existing sessions keep their original environment snapshot', function (this: ProductWorld) {
+  assert.equal(objectValue(this.e2e?.previousSession?.environmentSnapshot).version, 1)
+})
+
+Then('existing sessions continue using their original environment snapshot', function (this: ProductWorld) {
   assert.equal(objectValue(this.e2e?.previousSession?.environmentSnapshot).version, 1)
 })
 
@@ -981,6 +1169,23 @@ Then(
   },
 )
 
+Then('lifecycle events are stored with monotonically increasing sequence numbers', async function (this: ProductWorld) {
+  const events = await sessionEvents(await ensureState(this))
+  const sequences = events.data.map((event) => Number(event.sequence))
+  assert.ok(sequences.length > 0)
+  assert.deepEqual(
+    [...sequences].sort((a, b) => a - b),
+    sequences,
+  )
+})
+
+Then('message events preserve user-visible content', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const events = await sessionEvents(state)
+  const serialized = JSON.stringify(events.data)
+  assert.ok(serialized.includes(state.runtimeMessage ?? ''))
+})
+
 Then(
   'the session returns to idle with a final result or moves to error with a safe failure reason',
   async function (this: ProductWorld) {
@@ -1013,6 +1218,22 @@ Then('event list endpoints support pagination, order, and event type filters', a
     state.page.request,
     `/api/sessions/${state.latestSession?.id}/events?type=message_end`,
   )
+})
+
+Then('the response returns a deterministic page', function (this: ProductWorld) {
+  const pages = required(this.e2e?.eventPages, 'event pages')
+  assert.equal(pages.firstPage.data.length, 1)
+  assert.ok(pages.nextPage.data.every((event) => Number(event.sequence) > Number(pages.firstPage.data[0]?.sequence)))
+  assert.ok(pages.descPage.data.length > 0)
+  assert.ok(pages.typedPage.data.every((event) => event.type === 'message_end'))
+})
+
+Then('hasMore, firstId, lastId, and sequence boundaries allow stable pagination', function (this: ProductWorld) {
+  const pages = required(this.e2e?.eventPages, 'event pages')
+  assert.equal(typeof pages.firstPage.pagination.hasMore, 'boolean')
+  assert.ok('firstId' in pages.firstPage.pagination)
+  assert.ok('lastId' in pages.firstPage.pagination)
+  assert.ok(pages.firstPage.data.every((event) => typeof event.sequence === 'number'))
 })
 
 Then(

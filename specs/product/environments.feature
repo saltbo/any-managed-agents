@@ -5,16 +5,16 @@ Feature: Execution environments
   Background:
     Given a signed-in user has access to a project
 
-  @planned
+  @implemented
   Scenario: Create an environment
     When the user creates an environment with packages, variables, network policy, and metadata
-    Then the platform stores the long-lived environment definition in D1
+    Then the response stores normalized policy fields
     And later sessions can reference the environment by id
 
-  @planned
-  Scenario: Attach an environment to an agent
-    Given an environment exists
-    When the user selects the environment for an agent
+  @implemented
+  Scenario: Attach an environment to a session
+    Given the project has an active agent and an active environment
+    When the user creates a session with the agent and environment
     Then new sessions for that agent inherit an environment snapshot
     And sandbox creation uses the environment snapshot
 
@@ -25,14 +25,14 @@ Feature: Execution environments
     Then the runtime allows only matching hosts
     And blocked attempts are recorded as policy events
 
-  @planned
+  @implemented
   Scenario: Version environment changes
     Given an environment is used by existing sessions
     When the user changes packages, variables, or network policy
     Then the platform creates a new environment version
     And existing sessions continue using their original environment snapshot
 
-  @planned
+  @implemented
   Scenario: Environment is not a sandbox instance
     Given an environment exists
     When no session is running

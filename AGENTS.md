@@ -34,6 +34,17 @@ Scenarios should describe business behavior. Selectors, fixtures, and platform d
 
 If implementation discovers a missing product decision or behavior, stop widening the code change and update the relevant spec or product doc first.
 
+## BDD And Step Definition Rules
+
+- Product specs in `specs/product/` are local end-to-end acceptance tests. `@implemented` product scenarios must run through the local app, local Worker routes, local D1/test bindings, public HTTP APIs, or a real browser page. Do not satisfy a product scenario with only constants, static file reads, schema existence checks, or `assert.ok(true)`.
+- `npm run test:e2e` is the only product-spec runner. It runs `@implemented and not @planned` scenarios against local resources. Do not make product e2e depend on production, staging, real model quota, real user credentials, or direct database access.
+- Staging or production verification belongs in `specs/smoke/` and `npm run test:smoke`. Smoke scenarios may use real FlareAuth, Cloudflare, Workers AI, and deployed runtime resources, but they must not replace local product e2e coverage.
+- Unit tests, pure protocol constants, static documentation checks, lint, typecheck, and build checks do not belong in product Gherkin. Put those in `npm test`, `npm run lint`, `npm run typecheck`, or dedicated scripts.
+- OpenAPI/restish coverage may appear in product e2e only when it talks to a locally running AMA harness or local Worker app. Static OpenAPI shape checks are contract tests, not product behavior, unless paired with an actual local request flow.
+- Every `@implemented` scenario should have meaningful Given/When/Then causality: setup real local state, perform one user/API/browser action, then assert externally observable behavior. Avoid repeated generic steps that execute the same helper without scenario-specific assertions.
+- `@planned` means accepted product intent that is not yet implemented or not yet covered by local e2e. When a feature ships, update the scenario to `@implemented` in the same change that adds the step coverage.
+- Prefer reusable helpers for setup and cleanup, but keep step names product-specific. A reader should be able to tell what behavior is being verified without opening the helper.
+
 ## Architecture Map
 
 - `server/` - Cloudflare Worker backend, Hono routes, auth, D1 access, runtime orchestration, and Pi bridge code.
