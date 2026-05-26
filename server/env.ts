@@ -4,7 +4,7 @@ export interface Env {
   DB: D1Database
   AI: Ai
   ASSETS: Fetcher
-  FLAREAUTH?: Fetcher
+  OIDC_PROVIDER?: Fetcher
   SANDBOX: DurableObjectNamespace<Sandbox>
   AMA_DEFAULT_MODEL?: string
   AMA_RUNTIME_MODE?: string
@@ -19,10 +19,10 @@ export interface Env {
   AMA_CLOUDFLARE_SECRETS_STORE_ID?: string
   AMA_APPROVED_EXTERNAL_VAULT_PREFIXES?: string
   AMA_AI_GATEWAY_ID?: string
-  FLAREAUTH_ISSUER?: string
-  FLAREAUTH_CLIENT_ID?: string
-  FLAREAUTH_CLIENT_SECRET?: string
-  FLAREAUTH_USE_SERVICE_BINDING?: string
+  OIDC_ISSUER?: string
+  OIDC_CLIENT_ID?: string
+  OIDC_CLIENT_SECRET?: string
+  OIDC_USE_SERVICE_BINDING?: string
   AMA_ALLOWED_ORIGINS?: string
   AMA_E2E_TEST_AUTH?: string
   [key: string]: unknown

@@ -7,8 +7,8 @@ Feature: Authentication and tenancy
 
   @planned
   Scenario: Sign in to the control plane
-    When the user signs in through FlareAuth
-    Then the platform accepts the FlareAuth session
+    When the user signs in through OIDC provider
+    Then the platform accepts the OIDC session
     And subsequent control-plane requests resolve the user, organization, and project
 
   @planned

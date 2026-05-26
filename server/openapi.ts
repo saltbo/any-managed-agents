@@ -6,7 +6,7 @@ export const ApiSecuritySchemes = {
     type: 'http',
     scheme: 'bearer',
     bearerFormat: 'OIDC access token',
-    description: 'FlareAuth OIDC access token.',
+    description: 'OIDC access token.',
   },
 } as const
 

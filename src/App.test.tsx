@@ -437,8 +437,25 @@ function mockConsoleApi(seed?: {
     const url = normalizeMockUrl(input)
     const method = init?.method ?? 'GET'
 
-    if (url === '/api/auth/me') {
-      return jsonResponse(authContext)
+    if (url === '/api/projects') {
+      return jsonResponse({
+        data: [
+          {
+            id: authContext.project.id,
+            organizationId: authContext.organization.id,
+            name: authContext.project.name,
+            createdAt: now,
+            updatedAt: now,
+          },
+        ],
+        pagination: {
+          limit: 1,
+          nextCursor: null,
+          hasMore: false,
+          firstId: authContext.project.id,
+          lastId: authContext.project.id,
+        },
+      })
     }
     if (url.startsWith('/runtime/sessions/') && url.endsWith('/rpc') && method === 'POST') {
       const command = JSON.parse(String(init?.body ?? '{}')) as { id?: string; type?: string; message?: string }
@@ -643,7 +660,7 @@ afterEach(() => {
 })
 
 describe('App', () => {
-  it('shows the FlareAuth login action when the session is missing', async () => {
+  it('shows the OIDC provider login action when the session is missing', async () => {
     window.history.pushState({}, '', '/sessions?status=idle')
     vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
       jsonResponse({ error: { message: 'Authentication required' } }, 401),
@@ -651,9 +668,9 @@ describe('App', () => {
 
     render(<App />)
 
-    expect(await screen.findByText('Continue with FlareAuth')).toBeTruthy()
-    expect(screen.getByText('Sign in through FlareAuth to open the control plane.')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Continue with FlareAuth' })).toBeTruthy()
+    expect(await screen.findByText('Continue with OIDC provider')).toBeTruthy()
+    expect(screen.getByText('Sign in through OIDC provider to open the control plane.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Continue with OIDC provider' })).toBeTruthy()
   })
 
   it('drives the v1 console from resource creation through runtime events', async () => {
@@ -919,8 +936,8 @@ describe('App', () => {
   it('surfaces load failures after the loading state', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = normalizeMockUrl(input)
-      if (url === '/api/auth/me') {
-        return jsonResponse(authContext)
+      if (url === '/api/projects') {
+        return jsonResponse({ error: { message: 'Control plane unavailable' } }, 503)
       }
       return jsonResponse({ error: { message: 'Control plane unavailable' } }, 503)
     })
@@ -984,13 +1001,18 @@ describe('App', () => {
         )
         return jsonResponse({ id: command.id, type: 'response', command: command.type, success: true })
       }
-      if (url === '/api/auth/me') {
+      if (url === '/api/projects') {
         return jsonResponse({
-          user: { id: 'user_1', email: 'owner@example.com', name: 'Owner', avatarUrl: null },
-          organization: { id: 'org_1', name: 'Acme' },
-          project: { id: 'project_1', name: 'Control Plane' },
-          roles: ['owner'],
-          permissions: ['agents:write'],
+          data: [
+            {
+              id: 'project_1',
+              organizationId: 'org_1',
+              name: 'Control Plane',
+              createdAt: now,
+              updatedAt: now,
+            },
+          ],
+          pagination: { limit: 1, nextCursor: null, hasMore: false, firstId: 'project_1', lastId: 'project_1' },
         })
       }
       if (url === '/api/agents') {

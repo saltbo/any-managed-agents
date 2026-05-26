@@ -13,24 +13,24 @@ The document contains `/api` paths for agents, environments, sessions, providers
 
 ## curl
 
-Use a FlareAuth-issued OIDC access token. The token is local to the operator session and must not be committed or shared.
+Use a OIDC provider-issued OIDC access token. The token is local to the operator session and must not be committed or shared.
 
 ```bash
 curl -fsS "$AMA_ORIGIN/api/health"
 
 curl -fsS "$AMA_ORIGIN/api/environments" \
   -H "content-type: application/json" \
-  -H "authorization: Bearer $FLAREAUTH_ACCESS_TOKEN" \
+  -H "authorization: Bearer $OIDC_ACCESS_TOKEN" \
   -d '{"name":"Node workspace","packages":[{"name":"tsx","version":"latest"}]}'
 
 curl -fsS "$AMA_ORIGIN/api/agents" \
   -H "content-type: application/json" \
-  -H "authorization: Bearer $FLAREAUTH_ACCESS_TOKEN" \
+  -H "authorization: Bearer $OIDC_ACCESS_TOKEN" \
   -d '{"name":"Research assistant","instructions":"Answer with citations."}'
 
 curl -fsS "$AMA_ORIGIN/api/sessions" \
   -H "content-type: application/json" \
-  -H "authorization: Bearer $FLAREAUTH_ACCESS_TOKEN" \
+  -H "authorization: Bearer $OIDC_ACCESS_TOKEN" \
   -d '{"agentId":"agent_abc123","environmentId":"env_abc123"}'
 ```
 

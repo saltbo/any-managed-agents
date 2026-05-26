@@ -1,6 +1,6 @@
 import { SELF } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { defaultClaims, setupFlareAuth, signIn } from '../test/auth'
+import { defaultClaims, setupOidcProvider, signIn } from '../test/auth'
 import { runtimeErrorMessage } from './sessions'
 
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
@@ -75,7 +75,7 @@ async function connectMcp(authorization: string, connectorId: string) {
 
 describe('[CF] /api/sessions', () => {
   beforeEach(async () => {
-    await setupFlareAuth()
+    await setupOidcProvider()
   })
 
   afterEach(() => {
@@ -288,7 +288,7 @@ describe('[CF] /api/sessions', () => {
     expect(JSON.stringify(events.data)).not.toContain('raw-secret')
     expect(JSON.stringify(events.data)).not.toContain('raw-github-token')
     expect(JSON.stringify(events.data)).not.toContain('secret-password')
-    expect(JSON.stringify(events.data)).not.toContain('flareauth-access-token')
+    expect(JSON.stringify(events.data)).not.toContain('oidc-access-token')
 
     const pagedEventsRes = await jsonFetch(`/api/sessions/${created.id}/events?limit=1`, authorization)
     const pagedEvents = (await pagedEventsRes.json()) as {

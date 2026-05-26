@@ -15,7 +15,7 @@ Use this skill when an agent needs terminal automation for Any Managed Agents re
    export AMA_ORIGIN="https://ama.example.com"
    ```
 
-2. Authenticate through FlareAuth and provide a FlareAuth-issued OIDC access token. The current implemented OpenAPI security scheme is `bearerAuth` in `/api/openapi.json`.
+2. Authenticate through OIDC provider and provide a OIDC provider-issued OIDC access token. The current implemented OpenAPI security scheme is `bearerAuth` in `/api/openapi.json`.
 
 3. Configure restish from the published OpenAPI document:
 

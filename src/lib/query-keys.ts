@@ -1,6 +1,10 @@
 export const queryKeys = {
   auth: {
-    me: ['auth', 'me'] as const,
+    user: ['auth', 'user'] as const,
+  },
+  projects: {
+    all: ['projects'] as const,
+    list: ['projects', 'list'] as const,
   },
   agents: {
     all: ['agents'] as const,

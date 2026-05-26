@@ -16,8 +16,8 @@ Any Managed Agents is a Cloudflare-native managed agents system. It is inspired 
 - The platform does not maintain a competing runtime SDK or incompatible runtime protocol.
 - Workers AI is a first-class provider, and the model layer supports all configured providers through provider adapters.
 - Anthropic is optional, not required.
-- Authentication is delegated to FlareAuth.
-- FlareAuth owns users and organizations; AMA stores project and product-resource metadata only.
+- Authentication is delegated to OIDC provider.
+- OIDC provider owns users and organizations; AMA stores project and product-resource metadata only.
 - Secret values are stored in Cloudflare Secrets; D1 stores metadata and references only.
 - BDD specs are the agent-facing acceptance contract for development and verification.
 - E2E specs use Cucumber with Playwright.
@@ -26,7 +26,7 @@ Any Managed Agents is a Cloudflare-native managed agents system. It is inspired 
 
 The platform owns the control plane:
 
-- FlareAuth-backed tenancy and AMA projects
+- OIDC provider-backed tenancy and AMA projects
 - agent definitions
 - provider configuration for all supported providers
 - model policy
@@ -94,7 +94,7 @@ runtime proxy, inspect persisted session events, and stop the session.
 
 Release verification must include:
 
-- FlareAuth OIDC login through `openid-client`, with no hand-written OIDC token
+- OIDC login through `openid-client`, with no hand-written OIDC token
   parsing or validation.
 - Agent, environment, and session CRUD covered by Cloudflare integration tests.
 - OpenAPI generated from Hono route schemas for auth, agents, environments, and

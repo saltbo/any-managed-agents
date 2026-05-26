@@ -4,6 +4,6 @@ Feature: Authentication flow
 
   @planned
   Scenario: Complete sign in
-    When a user completes the FlareAuth OIDC callback
+    When a user completes the OIDC callback
     Then the platform creates an httpOnly session and resolves user, organization, and project context
-    And invalid FlareAuth callbacks return the standard OIDC error envelope
+    And invalid OIDC provider callbacks return the standard OIDC error envelope

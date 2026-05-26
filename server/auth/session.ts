@@ -2,7 +2,7 @@ import type { DrizzleD1Database } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
 import type { Env } from '../env'
 import { errorResponse } from '../errors'
-import { getBearerClaims, OidcError, upsertProjectForClaims } from './flareauth'
+import { getBearerClaims, OidcError, organizationIdForClaims, upsertProjectForClaims } from './oidc'
 
 export interface AuthContext {
   user: {
@@ -19,6 +19,13 @@ export interface AuthContext {
     id: string
     name: string
   }
+  roles: string[]
+  permissions: string[]
+}
+
+export interface AuthIdentity {
+  user: AuthContext['user']
+  organization: AuthContext['organization']
   roles: string[]
   permissions: string[]
 }
@@ -43,8 +50,26 @@ export async function resolveAuthContext(
   }
 
   const claims = await getBearerClaims(c.env, token)
+  const identity = authIdentityFromClaims(claims)
   const requestedProjectId = c.req.raw.headers.get('x-ama-project-id') ?? undefined
   const project = await upsertProjectForClaims(db, claims, new Date().toISOString(), requestedProjectId)
+  return {
+    ...identity,
+    project,
+  }
+}
+
+export async function resolveAuthIdentity(c: Context<{ Bindings: Env }>): Promise<AuthIdentity | null> {
+  const token = bearerToken(c.req.raw.headers, c.req.url)
+  if (!token) {
+    return null
+  }
+
+  const claims = await getBearerClaims(c.env, token)
+  return authIdentityFromClaims(claims)
+}
+
+function authIdentityFromClaims(claims: Awaited<ReturnType<typeof getBearerClaims>>): AuthIdentity {
   return {
     user: {
       id: claims.sub,
@@ -53,13 +78,32 @@ export async function resolveAuthContext(
       avatarUrl: claims.picture ?? null,
     },
     organization: {
-      id: claims.org_id ?? claims.organization_id ?? `user:${claims.sub}`,
+      id: organizationIdForClaims(claims),
       name: claims.org_name ?? claims.organization_name ?? 'Personal workspace',
     },
-    project,
     roles: claims.roles,
     permissions: claims.permissions,
   }
+}
+
+export async function requireAuthIdentity(c: Context<{ Bindings: Env }>) {
+  let auth: AuthIdentity | null
+  try {
+    auth = await resolveAuthIdentity(c)
+  } catch (err) {
+    if (err instanceof OidcError) {
+      return errorResponse(c, 401, 'authentication_required', 'Authentication required', {
+        reason: 'missing_or_invalid_bearer_token',
+      })
+    }
+    throw err
+  }
+  if (!auth) {
+    return errorResponse(c, 401, 'authentication_required', 'Authentication required', {
+      reason: 'missing_or_invalid_bearer_token',
+    })
+  }
+  return auth
 }
 
 export async function requireAuth(c: Context<{ Bindings: Env }>, db: DrizzleD1Database) {

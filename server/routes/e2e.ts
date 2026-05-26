@@ -1,6 +1,6 @@
 import { drizzle } from 'drizzle-orm/d1'
 import { Hono } from 'hono'
-import { getBearerClaims, upsertProjectForClaims } from '../auth/flareauth'
+import { getBearerClaims, upsertProjectForClaims } from '../auth/oidc'
 import type { Env } from '../env'
 import { errorResponse } from '../errors'
 

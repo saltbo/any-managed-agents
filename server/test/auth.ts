@@ -26,7 +26,7 @@ export function defaultClaims(): TestClaims {
   }
 }
 
-export async function setupFlareAuth() {
+export async function setupOidcProvider() {
   cloudflareSecretWrites.length = 0
   cloudflareSecretDeletes.length = 0
 

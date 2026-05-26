@@ -1,6 +1,7 @@
 import { hc } from 'hono/client'
 import type { AppType } from '../../server/app'
 import { getAccessToken } from './oidc'
+import { getSelectedProjectId } from './project-selection'
 
 export interface AuthContext {
   user: { id: string; email: string; name: string | null; avatarUrl: string | null }
@@ -8,6 +9,14 @@ export interface AuthContext {
   project: { id: string; name: string }
   roles: string[]
   permissions: string[]
+}
+
+export interface Project {
+  id: string
+  organizationId: string
+  name: string
+  createdAt: string
+  updatedAt: string
 }
 
 export interface EnvironmentPackage {
@@ -416,9 +425,11 @@ const rpc = hc<AppType>('/', {
   init: { credentials: 'include' },
   headers: async () => {
     const token = await getAccessToken()
+    const projectId = getSelectedProjectId()
     return {
       accept: 'application/json',
       ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...(projectId ? { 'x-ama-project-id': projectId } : {}),
       'x-ama-client': 'web-rpc',
     }
   },
@@ -470,7 +481,8 @@ function jsonArg<T>(json: RpcJson<T>) {
 }
 
 export const api = {
-  me: () => rpcRequest<AuthContext>(rpc.api.auth.me.$get()),
+  listProjects: () => rpcRequest<ListResponse<Project>>(rpc.api.projects.$get()),
+  createProject: (input: { name: string }) => rpcRequest<Project>(rpc.api.projects.$post({ json: input })),
   listAgents: (options: ListOptions = {}) =>
     rpcRequest<ListResponse<Agent>>(rpc.api.agents.$get(queryArg<typeof rpc.api.agents.$get>(options))),
   readAgent: (id: string) => rpcRequest<Agent>(rpc.api.agents[':agentId'].$get({ param: { agentId: id } })),

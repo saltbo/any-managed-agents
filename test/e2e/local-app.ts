@@ -25,20 +25,27 @@ export async function authenticateE2EPage(page: Page) {
   if (!response.ok()) {
     throw new Error(`POST /api/e2e/auth/token returned ${response.status()}: ${await response.text()}`)
   }
-  const { accessToken } = (await response.json()) as { accessToken: string }
+  const { accessToken, userId, organizationId, projectId } = (await response.json()) as {
+    accessToken: string
+    userId: string
+    organizationId: string
+    projectId: string
+  }
   await page.context().setExtraHTTPHeaders({ authorization: `Bearer ${accessToken}` })
   await page.addInitScript((token) => window.localStorage.setItem('ama:e2e-access-token', token), accessToken)
+  await page.addInitScript((id) => window.localStorage.setItem('ama:selected-project-id', id), projectId)
   if (page.url() === 'about:blank') {
     await page.goto('/')
   }
   await page.evaluate((token) => window.localStorage.setItem('ama:e2e-access-token', token), accessToken)
-  const me = await requestWithLocalAppRecovery(page, () =>
-    page.request.get('/api/auth/me', { headers: { authorization: `Bearer ${accessToken}` } }),
-  )
-  if (!me.ok()) {
-    throw new Error(`GET /api/auth/me returned ${me.status()}: ${await me.text()}`)
+  await page.evaluate((id) => window.localStorage.setItem('ama:selected-project-id', id), projectId)
+  return {
+    user: { id: userId, email: `${userId}@e2e.example.com`, name: userId, avatarUrl: null },
+    organization: { id: organizationId, name: organizationId },
+    project: { id: projectId, name: 'Default project' },
+    roles: ['owner'],
+    permissions: ['*'],
   }
-  return await me.json()
 }
 
 export async function ensureLocalApp() {

@@ -3,24 +3,28 @@ import { type User, UserManager, WebStorageStateStore } from 'oidc-client-ts'
 interface OidcConfigResponse {
   authority: string
   clientId: string
-  redirectUri: string
-  postLogoutRedirectUri: string
   scope: string
 }
+
+declare const __AMA_OIDC_CONFIG__: OidcConfigResponse
 
 let managerPromise: Promise<UserManager> | undefined
 let userPromise: Promise<User | null> | undefined
 
-async function loadConfig() {
-  const response = await fetch('/api/auth/config', { headers: { accept: 'application/json' } })
-  if (!response.ok) {
-    throw new Error('Unable to load FlareAuth OIDC configuration')
+function oidcConfig() {
+  if (!__AMA_OIDC_CONFIG__.authority || !__AMA_OIDC_CONFIG__.clientId) {
+    throw new Error('OIDC browser configuration is missing')
   }
-  return (await response.json()) as OidcConfigResponse
+  const origin = window.location.origin
+  return {
+    ...__AMA_OIDC_CONFIG__,
+    redirectUri: `${origin}/auth/callback`,
+    postLogoutRedirectUri: `${origin}/`,
+  }
 }
 
 export async function getOidcManager() {
-  managerPromise ??= loadConfig().then(
+  managerPromise ??= Promise.resolve(oidcConfig()).then(
     (config) =>
       new UserManager({
         authority: config.authority,
@@ -49,6 +53,33 @@ export async function getAccessToken() {
     return null
   }
   return user.access_token
+}
+
+export async function getCurrentUser() {
+  if (window.localStorage.getItem('ama:e2e-access-token')) {
+    return {
+      expired: false,
+      access_token: window.localStorage.getItem('ama:e2e-access-token') ?? '',
+      token_type: 'Bearer',
+      scope: 'openid email profile',
+      session_state: null,
+      state: undefined,
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+      toStorageString: () => '',
+      profile: {
+        sub: 'user_e2e',
+        email: 'owner@example.com',
+        name: 'Owner',
+        org_id: 'org_e2e',
+        org_name: 'E2E Organization',
+      },
+    } as unknown as User
+  }
+
+  const manager = await getOidcManager()
+  userPromise ??= manager.getUser()
+  const user = await userPromise
+  return user && !user.expired ? user : null
 }
 
 export function getStoredAccessToken() {

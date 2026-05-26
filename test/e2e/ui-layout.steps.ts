@@ -103,9 +103,9 @@ When('the user opens the login page', async function (this: UiWorld) {
   }
 })
 
-Then('the page offers FlareAuth sign-in and preserves the requested return path', async function (this: UiWorld) {
+Then('the page offers OIDC provider sign-in and preserves the requested return path', async function (this: UiWorld) {
   const page = requireUiWorkflow(this).page
-  const action = page.getByRole('button', { name: 'Continue with FlareAuth' })
+  const action = page.getByRole('button', { name: 'Continue with OIDC provider' })
   await expect(action).toBeVisible()
   assert.equal(await action.getAttribute('href'), null, 'AMA must not expose a local login URL')
 })

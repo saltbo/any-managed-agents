@@ -244,8 +244,8 @@ export async function createRestishOpenApiHarness(): Promise<RestishOpenApiHarne
     AMA_DEFAULT_MODEL: '@cf/moonshotai/kimi-k2.6',
     AMA_RUNTIME_MODE: 'test',
     AMA_ALLOWED_ORIGINS: 'http://127.0.0.1',
-    FLAREAUTH_ISSUER: 'https://flareauth.example.test/api/auth',
-    FLAREAUTH_CLIENT_ID: 'ama-restish-e2e',
+    OIDC_ISSUER: 'https://oidc.example.test/api/auth',
+    OIDC_CLIENT_ID: 'ama-restish-e2e',
   } as Env
 
   const server = createServer(async (request, response) => {

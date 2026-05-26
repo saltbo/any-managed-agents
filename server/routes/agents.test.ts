@@ -1,6 +1,6 @@
 import { SELF } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { defaultClaims, setupFlareAuth, signIn } from '../test/auth'
+import { defaultClaims, setupOidcProvider, signIn } from '../test/auth'
 
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
@@ -58,7 +58,7 @@ async function connectMcp(authorization: string) {
 
 describe('[CF] /api/agents', () => {
   beforeEach(async () => {
-    await setupFlareAuth()
+    await setupOidcProvider()
   })
 
   afterEach(() => {

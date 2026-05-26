@@ -22,7 +22,7 @@ interface OpenApiDocument {
 }
 
 const METHODS = new Set(['get', 'post', 'put', 'patch', 'delete'])
-const PUBLIC_PATHS = new Set(['/api/health', '/api/auth/config'])
+const PUBLIC_PATHS = new Set(['/api/health'])
 const EXPECTED_RESTISH_OPERATIONS = {
   System: ['getHealth'],
   Agents: ['listAgents', 'createAgent'],
@@ -64,8 +64,8 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.openapi).toBe('3.0.0')
     expect(doc.servers).toEqual([{ url: '/' }])
     expect(doc.paths).toHaveProperty('/api/health')
-    expect(doc.paths).toHaveProperty('/api/auth/config')
-    expect(doc.paths).toHaveProperty('/api/auth/me')
+    expect(doc.paths).toHaveProperty('/api/projects')
+    expect(Object.keys(doc.paths).filter((path) => path.startsWith('/api/auth'))).toEqual([])
     expect(doc.paths).toHaveProperty('/api/agents')
     expect(doc.paths).toHaveProperty('/api/agents/{agentId}')
     expect(doc.paths).toHaveProperty('/api/agents/{agentId}/versions')
@@ -150,7 +150,7 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths['/api/usage/summary']).toHaveProperty('get')
     expect(doc.paths['/api/audit-records/export']).toHaveProperty('get')
     expect(doc.paths['/api/health'].get.security).toBeUndefined()
-    expect(doc.paths['/api/auth/config'].get.security).toBeUndefined()
+    expect(doc.paths['/api/health'].get.security).toBeUndefined()
     expect(doc.paths['/api/agents'].get.security).toEqual([{ bearerAuth: [] }])
     expect(doc.paths['/api/environments'].get.security).toEqual([{ bearerAuth: [] }])
     expect(doc.paths['/api/sessions'].get.security).toEqual([{ bearerAuth: [] }])
@@ -174,7 +174,7 @@ describe('[CF] OpenAPI documentation', () => {
       expect.arrayContaining(['includeArchived', 'status', 'search', 'createdFrom', 'createdTo', 'limit', 'cursor']),
     )
     expect(doc.components?.securitySchemes).toHaveProperty('bearerAuth')
-    expect(doc.components?.schemas).toHaveProperty('AuthContext')
+    expect(doc.components?.schemas).toHaveProperty('Project')
     expect(doc.components?.schemas).toHaveProperty('ErrorResponse')
     expect(doc.components?.schemas).toHaveProperty('ListPagination')
     expect(doc.components?.schemas).toHaveProperty('AgentListResponse')

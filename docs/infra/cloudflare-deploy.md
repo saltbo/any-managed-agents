@@ -11,22 +11,22 @@ GitHub Actions is intentionally limited to CI checks. Production and staging dep
 - Staging D1 database: `any-managed-agents-db-staging`
 - Container image built from this repository's `Dockerfile`
 
-## FlareAuth OIDC
+## OIDC Provider
 
-Create one FlareAuth OIDC application for each deployed Worker host.
+Create one OIDC application for each deployed Worker host.
 
 Required settings:
 
-- Issuer: `FLAREAUTH_ISSUER`
-- Client id: `FLAREAUTH_CLIENT_ID`
-- Client secret: store as Wrangler secret `FLAREAUTH_CLIENT_SECRET`
-- Redirect URI: configure in FlareAuth as `https://<worker-host>/auth/callback`
+- Issuer: `OIDC_ISSUER`
+- Client id: `OIDC_CLIENT_ID`
+- Client secret: store as Wrangler secret `OIDC_CLIENT_SECRET`
+- Redirect URI: configure in the OIDC provider as `https://<worker-host>/auth/callback`
 - Scopes: `openid email profile`
 - Flow: authorization code with PKCE
 
 The browser uses the community `oidc-client-ts` library for authorization-code
 PKCE redirect handling. The Worker uses the community `openid-client` library for
-discovery and userinfo retrieval from FlareAuth bearer tokens. Do not implement
+discovery and userinfo retrieval from OIDC bearer tokens. Do not implement
 OIDC parsing or token validation by hand.
 
 Control-plane settings:
@@ -87,7 +87,7 @@ After deploying staging, run the real runtime smoke against the staging origin:
 
 ```bash
 AMA_STAGING_ORIGIN=https://any-managed-agents-staging.saltbo.workers.dev \
-AMA_E2E_ACCESS_TOKEN="$FLAREAUTH_ACCESS_TOKEN" \
+AMA_E2E_ACCESS_TOKEN="$OIDC_ACCESS_TOKEN" \
 npm run test:smoke
 ```
 
@@ -96,14 +96,14 @@ explicit: `AMA_E2E_ACCESS_TOKEN` is used first, `AMA_E2E_STORAGE_STATE` second, 
 `AMA_E2E_EMAIL` plus `AMA_E2E_PASSWORD` third. Set only one auth method in CI
 unless intentionally overriding a lower precedence method.
 
-- `AMA_E2E_ACCESS_TOKEN`: a FlareAuth-issued OIDC access token.
-- `AMA_E2E_STORAGE_STATE`: Playwright storage state from a real FlareAuth login.
+- `AMA_E2E_ACCESS_TOKEN`: a OIDC provider-issued OIDC access token.
+- `AMA_E2E_STORAGE_STATE`: Playwright storage state from a real OIDC provider login.
   The documented `.secrets/` directory is ignored by git.
 - `AMA_E2E_EMAIL` and `AMA_E2E_PASSWORD`: credentials for the browser login
   flow.
 
 The staging smoke never queries or mutates auth databases. It verifies
-`/api/auth/me`, creates an environment, agent, and session through public `/api`
+`/api/projects`, creates an environment, agent, and session through public `/api`
 routes, opens the session detail page, sends multiple runtime messages through
 the UI/WebSocket, checks transcript, tool, debug error, and reload dedupe
 behavior, then archives the smoke resources. Keep the access token or storage state in

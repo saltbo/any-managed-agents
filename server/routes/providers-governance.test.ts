@@ -3,7 +3,7 @@ import { env } from 'cloudflare:workers'
 import { drizzle } from 'drizzle-orm/d1'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { usageRecords } from '../db/schema'
-import { defaultClaims, setupFlareAuth, signIn } from '../test/auth'
+import { defaultClaims, setupOidcProvider, signIn } from '../test/auth'
 
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
@@ -17,12 +17,16 @@ async function jsonFetch(path: string, authorization: string, init: RequestInit 
 }
 
 async function authContext(authorization: string) {
-  const res = await jsonFetch('/api/auth/me', authorization)
+  const res = await jsonFetch('/api/projects', authorization)
   expect(res.status).toBe(200)
-  return (await res.json()) as {
-    user: { id: string }
-    organization: { id: string }
-    project: { id: string }
+  const projects = (await res.json()) as {
+    data: Array<{ id: string; organizationId: string }>
+  }
+  const claims = defaultClaims()
+  return {
+    user: { id: claims.sub },
+    organization: { id: projects.data[0]?.organizationId ?? claims.org_id },
+    project: { id: projects.data[0]?.id ?? 'project_missing' },
   }
 }
 
@@ -32,7 +36,7 @@ function newId(prefix: string) {
 
 describe('[CF] providers, governance, usage, and audit', () => {
   beforeEach(async () => {
-    await setupFlareAuth()
+    await setupOidcProvider()
   })
 
   afterEach(() => {

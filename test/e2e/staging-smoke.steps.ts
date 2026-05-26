@@ -322,7 +322,7 @@ async function authenticate(page: Page, config: StagingSmokeConfig) {
   }
 
   await page.goto('/quickstart')
-  await page.getByRole('button', { name: 'Continue with FlareAuth' }).click()
+  await page.getByRole('button', { name: 'Continue with OIDC provider' }).click()
   await fillLoginField(page, /email|username/i, config.loginEmail, 'email or username')
   await fillLoginField(page, /password/i, config.loginPassword, 'password')
   await clickLoginSubmit(page)
@@ -335,9 +335,9 @@ async function authenticate(page: Page, config: StagingSmokeConfig) {
 }
 
 async function expectAuthenticated(page: Page) {
-  const response = await page.request.get('/api/auth/me')
+  const response = await page.request.get('/api/projects')
   if (!response.ok()) {
-    throw new Error(`GET /api/auth/me returned ${response.status()}: ${await response.text()}`)
+    throw new Error(`GET /api/projects returned ${response.status()}: ${await response.text()}`)
   }
   await page.goto('/quickstart')
   await expect(page.getByText('Any Managed Agents').first()).toBeVisible()

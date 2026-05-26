@@ -15,7 +15,7 @@ These decisions define the intended end state for Any Managed Agents.
 
 - v1.0 runs Pi coding agent inside one Cloudflare Sandbox per session.
 - Pi coding agent owns the runtime protocol, agent loop, built-in coding tools, session events, and prompt, abort, follow-up, and steer semantics.
-- FlareAuth owns authentication, users, and organizations. AMA owns FlareAuth-backed tenancy enforcement, projects, agent, environment, and session metadata, OpenAPI CRUD, sandbox lifecycle, runtime proxy, UI, audit metadata, and usage metadata.
+- OIDC provider owns authentication, users, and organizations. AMA owns OIDC provider-backed tenancy enforcement, projects, agent, environment, and session metadata, OpenAPI CRUD, sandbox lifecycle, runtime proxy, UI, audit metadata, and usage metadata.
 - Runtime traffic uses Pi protocol directly or a transparent AMA proxy around Pi RPC and JSON event streams.
 - AMA must not define a new incompatible runtime SDK or runtime protocol.
 - Cloudflare Agents SDK is not the v1.0 runtime contract and v1.0 must not require `/agents/*` compatibility. It may become a future adapter.
@@ -38,9 +38,9 @@ These decisions define the intended end state for Any Managed Agents.
 
 ## Authentication
 
-- Authentication integrates with FlareAuth.
+- Authentication integrates with OIDC provider.
 - This project must not reimplement a parallel authentication system.
-- Control-plane and runtime requests resolve tenant context from FlareAuth sessions or credentials.
+- Control-plane and runtime requests resolve tenant context from OIDC sessions or credentials.
 
 ## Providers
 

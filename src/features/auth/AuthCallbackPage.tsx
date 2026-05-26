@@ -15,5 +15,5 @@ export function AuthCallbackPage() {
     return <FullscreenMessage title="Sign-in failed" body={error.message} />
   }
 
-  return <FullscreenMessage title="Completing sign-in" body="Returning from FlareAuth." />
+  return <FullscreenMessage title="Completing sign-in" body="Returning from OIDC provider." />
 }

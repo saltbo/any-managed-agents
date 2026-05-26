@@ -1,45 +1,123 @@
 import { useQuery } from '@tanstack/react-query'
+import { useEffect, useMemo, useState } from 'react'
 import { Outlet } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { FullscreenMessage } from '@/console/components'
 import { ApiError, api } from '@/lib/api'
-import { signIn } from '@/lib/oidc'
+import { getCurrentUser, signIn } from '@/lib/oidc'
+import { getSelectedProjectId, setSelectedProjectId } from '@/lib/project-selection'
 import { queryKeys } from '@/lib/query-keys'
 import { ConsoleShell } from './ConsoleShell'
 import { ConsoleContextProvider } from './console-context'
 
 export function ConsoleLayout() {
-  const authQuery = useQuery({
-    queryKey: queryKeys.auth.me,
-    queryFn: api.me,
+  const [selectedProjectId, setSelectedProjectState] = useState(() => getSelectedProjectId())
+  const userQuery = useQuery({
+    queryKey: queryKeys.auth.user,
+    queryFn: getCurrentUser,
+    retry: false,
+  })
+  const projectsQuery = useQuery({
+    queryKey: queryKeys.projects.list,
+    queryFn: api.listProjects,
+    enabled: Boolean(userQuery.data),
     retry: false,
   })
 
-  if (authQuery.isLoading) {
-    return <FullscreenMessage title="Loading console" body="Checking session and project context." />
+  useEffect(() => {
+    function handleProjectChange() {
+      setSelectedProjectState(getSelectedProjectId())
+    }
+    window.addEventListener('ama:selected-project-changed', handleProjectChange)
+    return () => window.removeEventListener('ama:selected-project-changed', handleProjectChange)
+  }, [])
+
+  const projects = projectsQuery.data?.data ?? []
+  const selectedProject = useMemo(() => {
+    return projects.find((project) => project.id === selectedProjectId) ?? projects[0] ?? null
+  }, [projects, selectedProjectId])
+
+  useEffect(() => {
+    if (selectedProject && selectedProject.id !== selectedProjectId) {
+      setSelectedProjectId(selectedProject.id)
+    }
+  }, [selectedProject, selectedProjectId])
+
+  if (userQuery.isLoading || (userQuery.data && projectsQuery.isLoading)) {
+    return <FullscreenMessage title="Loading console" body="Checking session and project list." />
   }
 
-  if (authQuery.error instanceof ApiError && authQuery.error.status === 401) {
+  if (
+    !userQuery.data ||
+    userQuery.error ||
+    (projectsQuery.error instanceof ApiError && projectsQuery.error.status === 401)
+  ) {
     const returnTo = `${window.location.pathname}${window.location.search}`
     return (
       <FullscreenMessage
         title="Any Managed Agents"
-        body="Sign in through FlareAuth to open the control plane."
+        body="Sign in through OIDC provider to open the control plane."
         action={
           <Button size="lg" onClick={() => void signIn(returnTo)}>
-            Continue with FlareAuth
+            Continue with OIDC provider
           </Button>
         }
       />
     )
   }
 
-  if (!authQuery.data) {
-    return <FullscreenMessage title="Console unavailable" body="Unable to load the current project context." />
+  if (projectsQuery.error) {
+    const message =
+      projectsQuery.error instanceof ApiError ? projectsQuery.error.message : 'Unable to load the project list.'
+    return <FullscreenMessage title="Console unavailable" body={message} />
+  }
+
+  if (!selectedProject) {
+    return <FullscreenMessage title="Console unavailable" body="Unable to create or load a project." />
+  }
+
+  const profile = userQuery.data.profile
+  const email = typeof profile.email === 'string' ? profile.email : ''
+  const name = typeof profile.name === 'string' ? profile.name : null
+  const organizationId =
+    typeof profile.org_id === 'string'
+      ? profile.org_id
+      : typeof profile.organization_id === 'string'
+        ? profile.organization_id
+        : `user:${profile.sub}`
+  const organizationName =
+    typeof profile.org_name === 'string'
+      ? profile.org_name
+      : typeof profile.organization_name === 'string'
+        ? profile.organization_name
+        : 'Personal workspace'
+  const auth = {
+    user: {
+      id: profile.sub,
+      email,
+      name,
+      avatarUrl: typeof profile.picture === 'string' ? profile.picture : null,
+    },
+    organization: {
+      id: organizationId,
+      name: organizationName,
+    },
+    project: {
+      id: selectedProject.id,
+      name: selectedProject.name,
+    },
+    roles: [],
+    permissions: [],
   }
 
   return (
-    <ConsoleContextProvider value={{ auth: authQuery.data }}>
+    <ConsoleContextProvider
+      value={{
+        auth,
+        projects,
+        selectProject: (projectId) => setSelectedProjectId(projectId),
+      }}
+    >
       <ConsoleShell>
         <Outlet />
       </ConsoleShell>

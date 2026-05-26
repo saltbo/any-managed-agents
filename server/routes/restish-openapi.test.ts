@@ -1,6 +1,6 @@
 import { SELF } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { setupFlareAuth, signIn } from '../test/auth'
+import { setupOidcProvider, signIn } from '../test/auth'
 
 interface OpenApiOperation {
   operationId?: string
@@ -40,7 +40,7 @@ async function openApiOperationIds() {
 
 describe('[CF] restish/OpenAPI control-plane path', () => {
   beforeEach(async () => {
-    await setupFlareAuth()
+    await setupOidcProvider()
   })
 
   afterEach(() => {

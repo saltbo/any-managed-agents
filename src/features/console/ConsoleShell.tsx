@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query'
 import {
   ArrowRight,
   Bot,
@@ -22,14 +23,20 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { MobileNavButton, NavButton } from '@/console/components'
 import { signOut } from '@/lib/oidc'
 import { useConsoleContext } from './console-context'
 
 export function ConsoleShell({ children }: { children: ReactNode }) {
   const context = useConsoleContext()
+  const queryClient = useQueryClient()
   const location = useLocation()
   const fullBleed = /^\/sessions\/[^/]+/.test(location.pathname)
+  function selectProject(projectId: string) {
+    context.selectProject(projectId)
+    void queryClient.invalidateQueries()
+  }
   return (
     <main className="min-h-screen bg-muted/40 text-foreground">
       <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col border-r bg-background px-4 py-5 lg:flex">
@@ -39,7 +46,21 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-medium">Any Managed Agents</p>
-            <p className="truncate text-xs text-muted-foreground">{context.auth.project.name}</p>
+            <Select value={context.auth.project.id} onValueChange={selectProject}>
+              <SelectTrigger
+                size="sm"
+                className="mt-1 max-w-44 border-0 px-0 text-xs text-muted-foreground shadow-none"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {context.projects.map((project) => (
+                  <SelectItem key={project.id} value={project.id}>
+                    {project.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
         <DesktopNav />

@@ -25,25 +25,14 @@ export class OidcError extends Error {
 }
 
 export function requireOidcConfig(env: Env) {
-  if (!env.FLAREAUTH_ISSUER || !env.FLAREAUTH_CLIENT_ID) {
-    throw new Error('FLAREAUTH_ISSUER and FLAREAUTH_CLIENT_ID are required')
+  if (!env.OIDC_ISSUER || !env.OIDC_CLIENT_ID) {
+    throw new Error('OIDC_ISSUER and OIDC_CLIENT_ID are required')
   }
 
   return {
-    issuer: env.FLAREAUTH_ISSUER.replace(/\/$/, ''),
-    clientId: env.FLAREAUTH_CLIENT_ID,
-    clientSecret: env.FLAREAUTH_CLIENT_SECRET,
-  }
-}
-
-export function publicOidcConfig(env: Env, origin: string) {
-  const config = requireOidcConfig(env)
-  return {
-    authority: config.issuer,
-    clientId: config.clientId,
-    redirectUri: `${origin}/auth/callback`,
-    postLogoutRedirectUri: `${origin}/`,
-    scope: 'openid email profile',
+    issuer: env.OIDC_ISSUER.replace(/\/$/, ''),
+    clientId: env.OIDC_CLIENT_ID,
+    clientSecret: env.OIDC_CLIENT_SECRET,
   }
 }
 
@@ -98,9 +87,9 @@ async function createOidcClient(env: Env) {
           if (request.method !== 'GET' && request.method !== 'HEAD') {
             requestInit.body = (init?.body as BodyInit | undefined) ?? (await request.clone().arrayBuffer())
           }
-          const useServiceBinding = env.FLAREAUTH_USE_SERVICE_BINDING !== 'false'
-          return useServiceBinding && requestUrl.origin === issuerUrl.origin && env.FLAREAUTH
-            ? await env.FLAREAUTH.fetch(request.url, requestInit)
+          const useServiceBinding = env.OIDC_USE_SERVICE_BINDING !== 'false'
+          return useServiceBinding && requestUrl.origin === issuerUrl.origin && env.OIDC_PROVIDER
+            ? await env.OIDC_PROVIDER.fetch(request.url, requestInit)
             : await fetch(request.url, requestInit)
         },
       },
@@ -118,7 +107,7 @@ export async function getBearerClaims(env: Env, accessToken: string): Promise<Us
   const oidcClient = await createOidcClient(env)
   const claims = await runOidc(() => client.fetchUserInfo(oidcClient, accessToken, client.skipSubjectCheck))
   if (!claims.sub) {
-    throw new OidcError('FlareAuth userinfo did not include required subject')
+    throw new OidcError('OIDC provider userinfo did not include required subject')
   }
   return normalizeClaims(claims as Record<string, unknown> & { sub: string })
 }
@@ -129,7 +118,7 @@ export async function upsertProjectForClaims(
   timestamp: string,
   requestedProjectId?: string,
 ) {
-  const organizationId = claims.org_id ?? claims.organization_id ?? `user:${claims.sub}`
+  const organizationId = organizationIdForClaims(claims)
   const projectName = 'Default project'
   let project = await db.select().from(projects).where(eq(projects.organizationId, organizationId)).get()
   if (!project) {
@@ -153,6 +142,10 @@ export async function upsertProjectForClaims(
     }
   }
   return { id: project.id, name: project.name }
+}
+
+export function organizationIdForClaims(claims: UserInfoClaims) {
+  return claims.org_id ?? claims.organization_id ?? `user:${claims.sub}`
 }
 
 function normalizeClaims(claims: Record<string, unknown> & { sub: string }): UserInfoClaims {
@@ -200,7 +193,7 @@ function toOidcError(err: unknown) {
   if (err instanceof Error) {
     return new OidcError(err.message)
   }
-  return new OidcError('FlareAuth OIDC operation failed')
+  return new OidcError('OIDC operation failed')
 }
 
 function newId(prefix: string) {

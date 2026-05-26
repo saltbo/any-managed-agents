@@ -1,8 +1,10 @@
 import { createContext, useContext } from 'react'
-import type { AuthContext } from '@/lib/api'
+import type { AuthContext, Project } from '@/lib/api'
 
 export interface ConsoleContextValue {
   auth: AuthContext
+  projects: Project[]
+  selectProject: (projectId: string) => void
 }
 
 const ConsoleContext = createContext<ConsoleContextValue | null>(null)

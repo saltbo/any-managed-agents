@@ -1,45 +1,38 @@
 import { SELF } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { setupFlareAuth, signIn } from '../test/auth'
+import { setupOidcProvider, signIn } from '../test/auth'
 
 describe('[CF] auth and tenancy', () => {
   beforeEach(async () => {
-    await setupFlareAuth()
+    await setupOidcProvider()
   })
 
   afterEach(() => {
     vi.unstubAllGlobals()
   })
 
-  it('returns browser OIDC configuration without creating an AMA session', async () => {
+  it('does not expose AMA auth helper routes', async () => {
     const res = await SELF.fetch('https://example.com/api/auth/config')
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(404)
     await expect(res.json()).resolves.toMatchObject({
-      authority: 'https://flareauth.test',
-      clientId: 'ama-test',
-      redirectUri: 'https://example.com/auth/callback',
-      postLogoutRedirectUri: 'https://example.com/',
-      scope: 'openid email profile',
+      error: {
+        type: 'not_found',
+        message: 'Not found',
+      },
     })
-    expect(res.headers.get('set-cookie')).toBeNull()
   })
 
-  it('returns FlareAuth-backed user/org/project context from a bearer token', async () => {
+  it('lists organization projects from a bearer token without an auth context endpoint', async () => {
     const authorization = await signIn()
-    const meRes = await SELF.fetch('https://example.com/api/auth/me', { headers: { authorization } })
-    expect(meRes.status).toBe(200)
-    await expect(meRes.json()).resolves.toMatchObject({
-      user: {
-        email: expect.stringMatching(/@example\.com|@e2e\.example\.com/),
-      },
-      organization: {
-        id: expect.stringMatching(/^org_/),
-      },
-      project: {
-        name: 'Default project',
-      },
-      roles: ['owner'],
-      permissions: ['*'],
+    const projectsRes = await SELF.fetch('https://example.com/api/projects', { headers: { authorization } })
+    expect(projectsRes.status).toBe(200)
+    await expect(projectsRes.json()).resolves.toMatchObject({
+      data: [
+        {
+          organizationId: expect.stringMatching(/^org_/),
+          name: 'Default project',
+        },
+      ],
     })
   })
 
@@ -55,8 +48,8 @@ describe('[CF] auth and tenancy', () => {
     })
   })
 
-  it('treats rejected FlareAuth bearer tokens as authentication failures', async () => {
-    const res = await SELF.fetch('https://example.com/api/auth/me', {
+  it('treats rejected OIDC provider bearer tokens as authentication failures', async () => {
+    const res = await SELF.fetch('https://example.com/api/projects', {
       headers: { authorization: 'Bearer invalid-token' },
     })
 
@@ -70,7 +63,7 @@ describe('[CF] auth and tenancy', () => {
     })
   })
 
-  it('scopes agent resources and runtime sessions to the FlareAuth organization project', async () => {
+  it('scopes agent resources and runtime sessions to the OIDC provider organization project', async () => {
     const authorization = await signIn()
     const createRes = await SELF.fetch('https://example.com/api/agents', {
       method: 'POST',

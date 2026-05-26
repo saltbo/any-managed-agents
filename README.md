@@ -34,7 +34,7 @@ Requirements:
 - Node.js 24+
 - npm
 - Cloudflare account and Wrangler login for deployment
-- FlareAuth OIDC application for login
+- OIDC application for login
 - Cloudflare Sandbox/Containers access for Pi runtime sessions
 
 ```bash
@@ -45,7 +45,7 @@ cp .env.example .env
 npm run dev
 ```
 
-For local API checks, configure the FlareAuth issuer/client values, a random
+For local API checks, configure the OIDC provider issuer/client values, a random
 `AMA_SESSION_SECRET`, and Workers AI account settings. The v1 runtime uses Pi in
 a Cloudflare Sandbox container and the Pi Cloudflare provider name
 `cloudflare-workers-ai`; the default model is `@cf/moonshotai/kimi-k2.6`.
@@ -92,9 +92,9 @@ precedence method.
 - `AMA_E2E_COOKIE`: an AMA session cookie value such as
   `__Host-ama_session=...`.
 - `AMA_E2E_STORAGE_STATE`: Playwright storage state produced by a real
-  FlareAuth login. The documented `.secrets/` directory is ignored by git.
+  OIDC provider login. The documented `.secrets/` directory is ignored by git.
 - `AMA_E2E_EMAIL` and `AMA_E2E_PASSWORD`: credentials for the supported
-  FlareAuth browser login flow.
+  OIDC provider browser login flow.
 
 Optional staging-smoke overrides are `AMA_E2E_PROVIDER` and `AMA_E2E_MODEL`;
 defaults target Workers AI and `@cf/moonshotai/kimi-k2.6`. The harness creates a test-safe
@@ -108,8 +108,8 @@ commit auth cookies, storage state, screenshots, videos, or traces.
 
 The project is configured for Cloudflare Workers. GitHub Actions only runs CI checks; deployment is handled by Cloudflare Workers Builds.
 
-Before deploying v1.0, create the D1 databases, configure FlareAuth with
-`/api/auth/callback`, set Wrangler secrets for `FLAREAUTH_CLIENT_SECRET`,
+Before deploying v1.0, create the D1 databases, configure OIDC provider with
+`/api/auth/callback`, set Wrangler secrets for `OIDC_CLIENT_SECRET`,
 `AMA_SESSION_SECRET`, and `AMA_WORKERS_AI_API_KEY`, and build the Pi runtime
 image from this repository's `Dockerfile`. Runtime dependencies must be baked
 into that image; request-time npm installation is not part of the session path.

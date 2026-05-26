@@ -13,12 +13,12 @@ import { evaluateMcpToolPolicy, evaluateSandboxRuntimePolicy, type PolicyDecisio
 import { redactSensitiveValue } from './redaction'
 import agents from './routes/agents'
 import audit from './routes/audit'
-import auth from './routes/auth'
 import e2e from './routes/e2e'
 import environments from './routes/environments'
 import governance from './routes/governance'
 import health from './routes/health'
 import mcp from './routes/mcp'
+import projects from './routes/projects'
 import providers from './routes/providers'
 import runtimeAi from './routes/runtime-ai'
 import sessionRoutes, { recoverSessionRuntime } from './routes/sessions'
@@ -738,7 +738,7 @@ export function createApp() {
         return allowedOrigins.split(',').includes(origin) ? origin : null
       },
       allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowHeaders: ['Content-Type', 'Authorization'],
+      allowHeaders: ['Content-Type', 'Authorization', 'X-AMA-Project-ID'],
       credentials: true,
     }),
   )
@@ -746,7 +746,7 @@ export function createApp() {
   const routes = app
     .route('/api/health', health)
     .route('/api/e2e', e2e)
-    .route('/api/auth', auth)
+    .route('/api/projects', projects)
     .route('/api/agents', agents)
     .route('/api/environments', environments)
     .route('/api/providers', providers)

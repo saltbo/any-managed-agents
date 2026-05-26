@@ -4,6 +4,7 @@ import { api } from './api'
 describe('shared API client', () => {
   beforeEach(() => {
     window.localStorage.setItem('ama:e2e-access-token', 'e2e:api-test')
+    window.localStorage.setItem('ama:selected-project-id', 'project_test')
   })
 
   function headerValue(headers: HeadersInit | undefined, name: string) {
@@ -54,6 +55,7 @@ describe('shared API client', () => {
     const headers = fetchMock.mock.calls[0]?.[1]?.headers
     expect(headerValue(headers, 'accept')).toBe('application/json')
     expect(headerValue(headers, 'authorization')).toBe('Bearer e2e:api-test')
+    expect(headerValue(headers, 'x-ama-project-id')).toBe('project_test')
     expect(headerValue(headers, 'x-ama-client')).toBe('web-rpc')
   })
 
