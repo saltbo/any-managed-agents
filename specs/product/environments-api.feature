@@ -75,5 +75,5 @@ Feature: Environments API
     Given a signed-in user has access to a project
     When the user creates a self-hosted environment and starts a session with it
     Then the session keeps the self-hosted environment snapshot
-    And the session remains pending with a requires-runner reason
-    And no Cloudflare Sandbox id is assigned before runner support exists
+    And the session remains pending with a waiting-for-runner reason
+    And no Cloudflare Sandbox id is assigned before runner lease

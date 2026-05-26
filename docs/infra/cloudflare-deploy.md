@@ -71,6 +71,21 @@ Required settings:
 Do not store raw provider credentials in D1, session events, UI state, or logs.
 The database may store metadata and secret references only.
 
+## Self-hosted runners
+
+Self-hosted runners service environments with `runtimeType: "self-hosted"`.
+They are executor backends, not AMA runtime hosts. AMA cloud-side code owns the
+session loop, policy gates, session state, OpenAPI surface, and event
+persistence. Runners claim queued work from `/api/runners/{runnerId}/leases`,
+renew the lease while executing, upload structured events, and complete, fail,
+or cancel the lease.
+
+Runner authentication material must live in Cloudflare Secrets or an approved
+external vault. D1 stores runner metadata, capabilities, heartbeat/load state,
+work item payloads, lease state, safe result/error metadata, and secret
+references only. Do not expose runner host ports, runner-local preview URLs, or
+runner-local filesystem paths as product endpoints.
+
 ## Local E2E And Staging Smoke
 
 Run browser e2e against the local dev server in local development and CI. This

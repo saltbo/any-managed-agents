@@ -34,6 +34,7 @@ The platform owns the control plane:
 - session metadata
 - environment metadata
 - sandbox lifecycle
+- self-hosted runner metadata and work leases
 - runtime endpoint and event transport
 - UI surfaces
 - usage and cost records
@@ -65,6 +66,7 @@ Runtime:
 
 Tool execution:
   AMA session loop -> environment snapshot policy gates -> ToolExecutor -> Cloudflare Sandbox /workspace
+  AMA session loop -> runner work queue -> self-hosted runner lease -> structured events/results -> D1 events
 ```
 
 ## Product Model
@@ -73,8 +75,11 @@ Tool execution:
 - `Environment` is a long-lived sandbox and runtime configuration: runtime type, packages, variables, network policy, resource limits, executor image configuration, and metadata. It is not a running sandbox.
 - `Sandbox` is an ephemeral runtime instance created from an environment snapshot for exactly one session.
 - `Session` is a concrete run of an agent in an explicitly selected environment. Each session binds an agent version snapshot, environment snapshot, safe resource references, sandbox id, cloud runtime state, events, and status. Each running session owns exactly one sandbox executor backend.
+- `Runner` is a registered self-hosted tool executor backend. Runners heartbeat capability, load, and safe metadata to AMA, claim leases for queued work, upload structured events/results, and never own the Pi runtime loop.
 
-Environment `runtimeType` is either `cloud-hosted` or `self-hosted`. Cloud-hosted sessions use the Cloudflare Sandbox ToolExecutor. Self-hosted environments are reusable configuration, but sessions remain `pending` with `statusReason: "requires-runner"` until runner APIs are implemented.
+Environment `runtimeType` is either `cloud-hosted` or `self-hosted`. Cloud-hosted sessions use the Cloudflare Sandbox ToolExecutor. Self-hosted environments enqueue runner work and keep sessions pending with `statusReason: "waiting-for-runner"` until an eligible runner claims a lease. Self-hosted session creation must not create a Cloudflare Sandbox or expose runner-local endpoints.
+
+Runner credentials are stored outside D1. D1 may store runner ids, names, capabilities, environment binding metadata, heartbeat/load state, work item payloads, lease state, result/error metadata, and secret references only. Raw runner tokens, provider secrets, or vault secret values must not appear in D1, OpenAPI responses, events, logs, or UI state.
 
 Environment `networkPolicy.mode` is exactly `unrestricted`, `restricted`, or `offline`. Restricted policy requires explicit `allowedHosts`; unrestricted and offline policy do not carry host allow-lists. Offline policy denies outbound sandbox network operations.
 
