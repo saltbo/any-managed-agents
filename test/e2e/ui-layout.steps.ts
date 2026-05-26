@@ -43,8 +43,8 @@ let devServerOutput = ''
 let browser: Browser | undefined
 let baseURL: string | undefined
 
-AfterAll(async () => {
-  await browser?.close()
+AfterAll({ timeout: 30_000 }, async () => {
+  await closeBrowser()
   browser = undefined
   await stopDevServer()
   baseURL = undefined
@@ -267,8 +267,15 @@ async function stopDevServer() {
     } catch {
       server.kill('SIGKILL')
     }
-    await exited
+    await Promise.race([exited, delay(5_000)])
   }
+}
+
+async function closeBrowser() {
+  if (!browser) {
+    return
+  }
+  await Promise.race([browser.close(), delay(5_000)])
 }
 
 async function waitForDevServer(origin: string) {

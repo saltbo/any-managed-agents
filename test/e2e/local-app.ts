@@ -80,7 +80,7 @@ export async function ensureLocalApp() {
 }
 
 export async function closeLocalApp() {
-  await browser?.close()
+  await closeBrowser()
   browser = undefined
   await stopDevServer()
   baseURL = undefined
@@ -160,8 +160,15 @@ async function stopDevServer() {
     } catch {
       server.kill('SIGKILL')
     }
-    await exited
+    await Promise.race([exited, delay(5_000)])
   }
+}
+
+async function closeBrowser() {
+  if (!browser) {
+    return
+  }
+  await Promise.race([browser.close(), delay(5_000)])
 }
 
 async function waitForDevServer(origin: string) {
