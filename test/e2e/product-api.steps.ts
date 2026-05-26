@@ -295,7 +295,7 @@ Given('a session is idle', async function (this: ProductWorld) {
   this.e2e.latestSession = await createSession(this.e2e)
 })
 
-Given('an idle session has a running Pi bridge', async function (this: ProductWorld) {
+Given('an idle session has cloud-owned runtime state and a sandbox executor', async function (this: ProductWorld) {
   await ensureAgentAndEnvironment(this)
   this.e2e.latestSession = await createSession(this.e2e)
   assert.equal(this.e2e.latestSession.status, 'idle')
@@ -1951,11 +1951,14 @@ Then('the session stores immutable agent and environment snapshots', function (t
   assert.ok(session.environmentSnapshot)
 })
 
-Then('the session starts the Pi bridge inside a Cloudflare Sandbox', function (this: ProductWorld) {
-  const session = required(this.e2e?.latestSession, 'session')
-  assert.equal(typeof session.sandboxId, 'string')
-  assert.equal(objectValue(session.metadata).runtime, 'pi')
-})
+Then(
+  'AMA creates cloud-owned runtime state and initializes a Cloudflare Sandbox executor',
+  function (this: ProductWorld) {
+    const session = required(this.e2e?.latestSession, 'session')
+    assert.equal(typeof session.sandboxId, 'string')
+    assert.equal(objectValue(session.metadata).runtime, 'ama-cloud')
+  },
+)
 
 Then('lifecycle and sandbox events record session creation and runtime startup', async function (this: ProductWorld) {
   const state = await ensureState(this)
@@ -2009,7 +2012,7 @@ Then('the response includes the session id and run correlation metadata', functi
 })
 
 Then(
-  'the initial prompt is dispatched to the Pi runtime without a browser WebSocket',
+  'the initial prompt is dispatched to the AMA-owned runtime without a browser WebSocket',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
     const events = await sessionEvents(state)
@@ -2060,12 +2063,15 @@ Then('the session status becomes running while work is in progress', async funct
   assert.ok(['idle', 'running'].includes(String(session.status)))
 })
 
-Then('the Pi runtime can call approved tools inside the Cloudflare Sandbox', async function (this: ProductWorld) {
-  const state = await ensureState(this)
-  const events = await sessionEvents(state)
-  assert.ok(events.data.length > 0)
-  assert.ok((state.runtimeEventTypes ?? []).filter(Boolean).some((type) => String(type).includes('tool')))
-})
+Then(
+  'the AMA runtime can dispatch approved tools through the Cloudflare Sandbox executor',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    const events = await sessionEvents(state)
+    assert.ok(events.data.length > 0)
+    assert.ok((state.runtimeEventTypes ?? []).filter(Boolean).some((type) => String(type).includes('tool')))
+  },
+)
 
 Then(
   'message, tool, sandbox, usage, lifecycle, and error events are stored in sequence',
@@ -2154,7 +2160,7 @@ Then(
   },
 )
 
-Then('AMA requests the Pi bridge to stop', function (this: ProductWorld) {
+Then('AMA cancels cloud-owned runtime work and stops the executor backend', function (this: ProductWorld) {
   assert.ok(this.e2e?.latestSession)
 })
 
@@ -2162,7 +2168,7 @@ Then('the session status becomes stopped', function (this: ProductWorld) {
   assert.equal(this.e2e?.latestSession?.status, 'stopped')
 })
 
-Then('AMA asks the Pi bridge to stop work', function (this: ProductWorld) {
+Then('AMA cancels cloud-owned runtime work and stops the sandbox executor', function (this: ProductWorld) {
   assert.equal(this.e2e?.latestSession?.status, 'stopped')
 })
 
@@ -2187,7 +2193,7 @@ Then('lifecycle events record the stop', async function (this: ProductWorld) {
 })
 
 Then(
-  'session metadata, sandbox state references, runtime endpoint, and status are available',
+  'session metadata, sandbox executor references, runtime endpoint, and status are available',
   function (this: ProductWorld) {
     const session = required(this.e2e?.latestSession, 'session')
     assert.ok(session.metadata)

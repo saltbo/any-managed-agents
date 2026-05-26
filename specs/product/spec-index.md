@@ -2,9 +2,9 @@
 
 The product specs describe the intended end state for Any Managed Agents. Files tagged `@planned` are accepted target behavior and are excluded from the default executable BDD run until implementation begins.
 
-This directory covers managed-agents capability areas as clean-room Any Managed Agents specs. Coverage is by product capability, not by copying another project's file layout. Cloudflare Workers, Pi coding agent, Cloudflare Sandbox, D1, Durable Objects, and Workers AI are architectural constraints.
+This directory covers managed-agents capability areas as clean-room Any Managed Agents specs. Coverage is by product capability, not by copying another project's file layout. Cloudflare Workers, AMA cloud-owned runtime state, Cloudflare Sandbox executors, D1, Durable Objects, and Workers AI are architectural constraints.
 
-This repository publishes the OpenAPI contract for product resources. Language SDKs are generated and maintained in separate repositories. Pi protocol is the v1.0 runtime protocol, and Cloudflare Sandbox remains the sandbox execution foundation.
+This repository publishes the OpenAPI contract for product resources. Language SDKs are generated and maintained in separate repositories. AMA runtime endpoints are the v1.0 runtime protocol surface, and Cloudflare Sandbox remains the sandbox execution foundation.
 
 ## Core Platform
 
@@ -17,7 +17,7 @@ This repository publishes the OpenAPI contract for product resources. Language S
 - `agents-control-plane.feature` - agent definitions, versions, validation, and archive behavior
 - `agent-builder.feature` - guided UI for creating and testing agents
 - `agent-detail.feature`, `agents-api.feature`, `agents-ui.feature`, `agents-update.feature` - agent API and UI coverage
-- `sessions-runtime.feature` - session lifecycle and Pi runtime proxy behavior
+- `sessions-runtime.feature` - session lifecycle and AMA runtime endpoint behavior
 - `session-detail-tool-tracing.feature`, `session-stop.feature`, `sessions-api.feature`, `sessions-events.feature`, `sessions-list-bulk-archive.feature`, `sessions-ui.feature` - session coverage
 
 ## Execution

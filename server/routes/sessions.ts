@@ -30,20 +30,19 @@ import {
 } from '../openapi'
 import { evaluateMcpToolPolicy, evaluateProviderPolicy, evaluateSandboxRuntimePolicy } from '../policy'
 import { redactSensitiveValue } from '../redaction'
+import { safeRuntimeError } from '../runtime/runtime-error'
 import {
-  proxyPiRuntime,
+  executeRuntimeToolCalls,
   runtimeEndpointPath,
-  safeRuntimeError,
-  startPiBridge,
-  stopPiBridge,
-} from '../runtime/pi/bridge'
+  startSessionRuntime as startCloudSessionRuntime,
+  stopSessionRuntime as stopCloudSessionRuntime,
+} from '../runtime/session-runtime'
 
 const app = createApiRouter()
 
 const SESSION_STATUSES = ['pending', 'running', 'idle', 'stopped', 'error', 'archived', 'requires-action'] as const
 const EVENT_VISIBILITIES = ['runtime', 'transcript', 'debug', 'audit'] as const
 const RUNTIME_START_TIMEOUT_MS = 300_000
-const RUNTIME_COMMAND_PROXY_TIMEOUT_MS = 30_000
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
 const AgentVersionSchema = z
@@ -636,7 +635,7 @@ export async function createSessionForAgent(
   })
 
   const startRuntime = () =>
-    startSessionRuntime(c.env, db, auth, {
+    startSessionRuntimeForRow(c.env, db, auth, {
       pending,
       agentSnapshot,
       environmentSnapshot,
@@ -656,7 +655,7 @@ export async function createSessionForAgent(
   return c.json(serializeSession(started), 201)
 }
 
-async function startSessionRuntime(
+async function startSessionRuntimeForRow(
   env: Env,
   db: Db,
   auth: AuthContext,
@@ -673,7 +672,7 @@ async function startSessionRuntime(
   try {
     const mcpSnapshot = await resolveMcpSnapshot(db, auth, sessionId, agentSnapshot, environmentSnapshot)
     const runtime = await withTimeout(
-      startPiBridge(env, {
+      startCloudSessionRuntime(env, {
         sessionId,
         sandboxId,
         provider: agentSnapshot.provider,
@@ -683,12 +682,12 @@ async function startSessionRuntime(
         mcpSnapshot,
       }),
       RUNTIME_START_TIMEOUT_MS,
-      'Pi runtime startup timed out',
+      'Session runtime startup timed out',
     )
     const current = await findSession(db, auth, sessionId)
     if (!current || current.status !== 'pending') {
       if (current?.status !== 'idle') {
-        await stopPiBridge(env, sandboxId, runtime.piRuntimeId).catch(() => undefined)
+        await stopCloudSessionRuntime(env, sandboxId).catch(() => undefined)
       }
       return
     }
@@ -697,14 +696,14 @@ async function startSessionRuntime(
     const metadata = {
       ...existingMetadata,
       ...runtime.metadata,
-      runtime: 'pi',
-      protocol: 'pi-rpc-jsonl',
+      runtime: 'ama-cloud',
+      protocol: 'ama-runtime-rpc',
       mcpConnectors: mcpConnectorIds(mcpSnapshot),
     }
     const started = {
       sandboxId,
-      piRuntimeId: runtime.piRuntimeId,
-      piProcessId: runtime.piProcessId,
+      piRuntimeId: null,
+      piProcessId: null,
       runtimeEndpointPath: runtime.runtimeEndpointPath,
       status: 'idle',
       metadata: stringify(metadata),
@@ -724,7 +723,6 @@ async function startSessionRuntime(
       sessionId,
       metadata: {
         sandboxId: runtime.sandboxId,
-        piRuntimeId: runtime.piRuntimeId,
         runtimeEndpointPath: runtime.runtimeEndpointPath,
       },
     })
@@ -751,7 +749,7 @@ async function startSessionRuntime(
       statusReason: safeError.message,
       metadata: stringify({
         ...(parseJson<Record<string, unknown>>(pending.metadata) ?? {}),
-        runtime: 'pi',
+        runtime: 'ama-cloud',
         error: safeError,
       }),
       updatedAt: failedAt,
@@ -769,7 +767,7 @@ async function startSessionRuntime(
       sessionId,
       metadata: { ...safeError },
     })
-    await stopPiBridge(env, sandboxId, null).catch(() => undefined)
+    await stopCloudSessionRuntime(env, sandboxId).catch(() => undefined)
   }
 }
 
@@ -781,27 +779,9 @@ async function dispatchInitialPrompt(env: Env, db: Db, auth: AuthContext, sessio
     .set({ status: 'running', statusReason: null, updatedAt: submittedAt })
     .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
 
-  const request = new Request(`https://ama.internal${runtimeEndpointPath(session.id)}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: stringify(command),
-  })
-
   try {
-    const makeRequest = await runtimeRequestFactory(request)
-    const response = await proxyPiRuntimeCommand(env, session.sandboxId ?? '', makeRequest)
-    if (!response.ok) {
-      const message = `Pi runtime returned ${response.status}`
-      await markInitialPromptFailed(db, auth, session, message, response.status)
-      return
-    }
-
-    if (env.AMA_RUNTIME_MODE === 'test') {
-      await recordTestInitialPromptOutcome(db, auth, session, initialPrompt)
-    } else {
-      const cursor = await runtimeEventCursor(response.clone())
-      await drainPiRuntimeEvents(env, session.sandboxId ?? '', request, db, auth, session, cursor)
-    }
+    await executeRuntimeToolCalls(env, { sessionId: session.id, sandboxId: session.sandboxId ?? '', body: command })
+    await recordInitialPromptOutcome(db, auth, session, initialPrompt)
 
     await recordAudit(db, {
       auth,
@@ -887,7 +867,7 @@ async function appendPiRuntimeEvent(
   throw new Error('Unable to append Pi runtime event')
 }
 
-async function recordTestInitialPromptOutcome(db: Db, auth: AuthContext, session: SessionRow, initialPrompt: string) {
+async function recordInitialPromptOutcome(db: Db, auth: AuthContext, session: SessionRow, initialPrompt: string) {
   await appendPiRuntimeEvent(db, {
     auth,
     sessionId: session.id,
@@ -912,135 +892,6 @@ async function recordTestInitialPromptOutcome(db: Db, auth: AuthContext, session
     .update(sessions)
     .set({ status: 'idle', updatedAt: now() })
     .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
-}
-
-async function proxyPiRuntimeCommand(env: Env, sandboxId: string, makeRequest: () => Request) {
-  return await withTimeout(
-    proxyPiRuntime(env, sandboxId, makeRequest()),
-    RUNTIME_COMMAND_PROXY_TIMEOUT_MS,
-    'Pi runtime command timed out',
-  )
-}
-
-async function runtimeRequestFactory(request: Request) {
-  const requestBody = request.method === 'GET' || request.method === 'HEAD' ? null : await request.clone().arrayBuffer()
-  return () => {
-    const init: RequestInit = {
-      method: request.method,
-      headers: request.headers,
-      redirect: 'manual',
-    }
-    if (requestBody) {
-      init.body = requestBody.slice(0)
-    }
-    return new Request(request.url, init)
-  }
-}
-
-async function runtimeEventCursor(response: Response) {
-  const payload = await response.json().catch((): unknown => null)
-  if (!payload || typeof payload !== 'object') {
-    return null
-  }
-  const cursor = (payload as Record<string, unknown>).eventCursor
-  return typeof cursor === 'number' && Number.isFinite(cursor) ? cursor : null
-}
-
-async function drainPiRuntimeEvents(
-  env: Env,
-  sandboxId: string,
-  request: Request,
-  db: Db,
-  auth: AuthContext,
-  session: SessionRow,
-  cursor?: number | null,
-) {
-  const streamUrl = new URL(request.url)
-  if (typeof cursor === 'number' && Number.isFinite(cursor)) {
-    streamUrl.searchParams.set('cursor', String(cursor))
-  }
-  const response = await proxyPiRuntime(
-    env,
-    sandboxId,
-    new Request(streamUrl, { method: 'GET', headers: request.headers }),
-  )
-  const responseStream = response.body
-  if (!responseStream) {
-    return
-  }
-  const reader = responseStream.getReader()
-  const decoder = new TextDecoder()
-  let pending = ''
-  try {
-    for (;;) {
-      const result = await reader.read()
-      if (result.done) {
-        break
-      }
-      pending += decoder.decode(result.value, { stream: true })
-      const lines = pending.split('\n')
-      pending = lines.pop() ?? ''
-      for (const line of lines) {
-        const terminal = await ingestPiRuntimeLine(db, auth, session, line)
-        if (terminal) {
-          await reader.cancel().catch(() => undefined)
-          return
-        }
-      }
-    }
-    const final = `${pending}${decoder.decode()}`
-    if (final.trim()) {
-      await ingestPiRuntimeLine(db, auth, session, final)
-    }
-  } finally {
-    await reader.cancel().catch(() => undefined)
-  }
-}
-
-async function ingestPiRuntimeLine(db: Db, auth: AuthContext, session: SessionRow, line: string) {
-  if (!line.trim()) {
-    return false
-  }
-  let parsed: Record<string, unknown>
-  try {
-    const value = JSON.parse(line) as unknown
-    parsed = value && typeof value === 'object' ? (value as Record<string, unknown>) : { content: line }
-  } catch {
-    parsed = { content: line }
-  }
-  await appendPiRuntimeEvent(db, { auth, sessionId: session.id, event: parsed })
-  const type = piEventType(parsed)
-  if (type === 'response') {
-    if (parsed.success === false) {
-      const message = runtimeErrorMessage(parsed)
-      await db
-        .update(sessions)
-        .set({ status: 'error', statusReason: message, updatedAt: now() })
-        .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
-      return true
-    }
-    return false
-  }
-  if (type === 'agent_end') {
-    await db
-      .update(sessions)
-      .set({ status: 'idle', statusReason: null, updatedAt: now() })
-      .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
-    return true
-  }
-  if (type === 'bridge_exit') {
-    const failed = parsed.code !== 0 && parsed.code !== null
-    await db
-      .update(sessions)
-      .set({
-        status: failed ? 'error' : 'idle',
-        statusReason: failed ? 'Pi runtime exited with an error' : null,
-        updatedAt: now(),
-      })
-      .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
-    return true
-  }
-  return false
 }
 
 export function runtimeErrorMessage(payload: Record<string, unknown>) {
@@ -1085,9 +936,9 @@ export async function recoverSessionRuntime(env: Env, db: Db, auth: AuthContext,
     throw new Error(sandboxDecision.message)
   }
   const mcpSnapshot = await resolveMcpSnapshot(db, auth, session.id, agentSnapshot, environmentSnapshot)
-  await stopPiBridge(env, session.sandboxId, session.piRuntimeId).catch(() => undefined)
+  await stopCloudSessionRuntime(env, session.sandboxId).catch(() => undefined)
   const runtime = await withTimeout(
-    startPiBridge(env, {
+    startCloudSessionRuntime(env, {
       sessionId: session.id,
       sandboxId: session.sandboxId,
       provider: agentSnapshot.provider,
@@ -1097,14 +948,14 @@ export async function recoverSessionRuntime(env: Env, db: Db, auth: AuthContext,
       mcpSnapshot,
     }),
     RUNTIME_START_TIMEOUT_MS,
-    'Pi runtime recovery timed out',
+    'Session runtime recovery timed out',
   )
   const recoveredAt = now()
   const metadata = {
     ...(parseJson<Record<string, unknown>>(session.metadata) ?? {}),
     ...runtime.metadata,
-    runtime: 'pi',
-    protocol: 'pi-rpc-jsonl',
+    runtime: 'ama-cloud',
+    protocol: 'ama-runtime-rpc',
     recoveredAt,
     mcpConnectors: mcpConnectorIds(mcpSnapshot),
   }
@@ -1112,8 +963,8 @@ export async function recoverSessionRuntime(env: Env, db: Db, auth: AuthContext,
     .update(sessions)
     .set({
       sandboxId: runtime.sandboxId,
-      piRuntimeId: runtime.piRuntimeId,
-      piProcessId: runtime.piProcessId,
+      piRuntimeId: null,
+      piProcessId: null,
       runtimeEndpointPath: runtime.runtimeEndpointPath,
       status: 'running',
       statusReason: null,
@@ -1130,7 +981,6 @@ export async function recoverSessionRuntime(env: Env, db: Db, auth: AuthContext,
     sessionId: session.id,
     metadata: {
       sandboxId: runtime.sandboxId,
-      piRuntimeId: runtime.piRuntimeId,
       runtimeEndpointPath: runtime.runtimeEndpointPath,
     },
   })
@@ -1177,7 +1027,7 @@ async function stopSession(
     .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
 
   try {
-    await stopPiBridge(c.env, session.sandboxId, session.piRuntimeId)
+    await stopCloudSessionRuntime(c.env, session.sandboxId)
   } catch (error) {
     const safeError = safeRuntimeError(error)
     const failedAt = now()

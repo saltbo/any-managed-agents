@@ -1,5 +1,13 @@
 import type { Env } from '../../env'
-import { redactSensitiveValue } from '../../redaction'
+import { type SafeRuntimeError, safeRuntimeError } from '../runtime-error'
+
+/**
+ * Legacy Pi bridge compatibility helpers.
+ *
+ * The normal v1 runtime path is AMA cloud-owned orchestration through
+ * `server/runtime/session-runtime.ts` and `ToolExecutor` backends. This module
+ * remains only for explicit compatibility tests and migration reference.
+ */
 
 export interface PiBridgeStartInput {
   sessionId: string
@@ -17,12 +25,6 @@ export interface PiBridgeStartResult {
   piProcessId: string
   runtimeEndpointPath: string
   metadata: Record<string, unknown>
-}
-
-export interface SafeRuntimeError {
-  type: 'runtime_error'
-  message: string
-  code?: string
 }
 
 const DEFAULT_BRIDGE_PORT = 8788
@@ -77,18 +79,7 @@ export function piModelsConfig(env: Env, provider: string) {
   }
 }
 
-export function safeRuntimeError(error: unknown): SafeRuntimeError {
-  const message = error instanceof Error ? error.message : String(error)
-  const safeMessage = redactSensitiveValue(message) as string
-  if (error instanceof Error) {
-    return {
-      type: 'runtime_error',
-      message: safeMessage,
-      ...(error.name ? { code: error.name } : {}),
-    }
-  }
-  return { type: 'runtime_error', message: safeMessage }
-}
+export { type SafeRuntimeError, safeRuntimeError }
 
 export async function startPiBridge(env: Env, input: PiBridgeStartInput): Promise<PiBridgeStartResult> {
   if (env.AMA_RUNTIME_MODE === 'test') {

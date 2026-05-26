@@ -13,10 +13,11 @@ These decisions define the intended end state for Any Managed Agents.
 
 ## Runtime Boundary
 
-- v1.0 runs Pi coding agent inside one Cloudflare Sandbox per session.
-- Pi coding agent owns the runtime protocol, agent loop, built-in coding tools, session events, and prompt, abort, follow-up, and steer semantics.
+- v1.0 runs the session loop and runtime state machine in AMA cloud-side code.
+- Pi Core may provide loop, state, transport, and tool-call primitives when it can run in the Worker or Durable Object environment without requiring the full Pi binary in the sandbox.
+- Cloudflare Sandbox and future self-hosted runners are tool executor backends. They execute approved tool requests in `/workspace` and return structured results/events.
 - OIDC provider owns authentication, users, and organizations. AMA owns OIDC provider-backed tenancy enforcement, projects, agent, environment, and session metadata, OpenAPI CRUD, sandbox lifecycle, runtime proxy, UI, audit metadata, and usage metadata.
-- Runtime traffic uses Pi protocol directly or a transparent AMA proxy around Pi RPC and JSON event streams.
+- Runtime traffic uses AMA session endpoints. Browser, SDK, and CLI helpers must not connect directly to sandbox-owned agent processes.
 - AMA must not define a new incompatible runtime SDK or runtime protocol.
 - Cloudflare Agents SDK is not the v1.0 runtime contract and v1.0 must not require `/agents/*` compatibility. It may become a future adapter.
 
@@ -26,7 +27,7 @@ These decisions define the intended end state for Any Managed Agents.
 - This repository publishes the control-plane OpenAPI document.
 - TypeScript, Python, Go, and other SDKs should live in separate repositories.
 - External SDKs must be generated from or mechanically aligned with this repository's OpenAPI document.
-- Runtime helpers in external SDKs must delegate to Pi protocol or transparent AMA Pi proxy endpoints.
+- Runtime helpers in external SDKs must delegate to AMA runtime endpoints.
 - The web console is an internal entrypoint and uses Hono RPC for control-plane calls. OpenAPI remains the external contract for direct HTTP, generated SDKs, and restish.
 
 ## CLI Ownership

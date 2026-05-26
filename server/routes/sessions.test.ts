@@ -18,12 +18,12 @@ async function createEnvironment(authorization: string) {
   const res = await jsonFetch('/api/environments', authorization, {
     method: 'POST',
     body: JSON.stringify({
-      name: `Pi workspace ${crypto.randomUUID()}`,
-      packages: [{ name: '@earendil-works/pi-coding-agent', version: 'prebuilt' }],
+      name: `AMA workspace ${crypto.randomUUID()}`,
+      packages: [{ name: '@earendil-works/pi-agent-core', version: 'prebuilt' }],
       secretRefs: [{ name: 'CLOUDFLARE_API_KEY', ref: 'wrangler_secret:AMA_WORKERS_AI_API_KEY' }],
       mcpPolicy: { allowedConnectors: ['github'] },
       packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
-      runtimeImage: { image: 'ama-pi-runtime' },
+      runtimeImage: { image: 'ama-tool-executor' },
     }),
   })
   expect(res.status).toBe(201)
@@ -34,8 +34,8 @@ async function createAgent(authorization: string) {
   const res = await jsonFetch('/api/agents', authorization, {
     method: 'POST',
     body: JSON.stringify({
-      name: 'Pi session agent',
-      instructions: 'Work through Pi.',
+      name: 'Cloud session agent',
+      instructions: 'Work through AMA runtime.',
       allowedTools: ['mcp:github.repo.read'],
       mcpConnectors: ['github'],
     }),
@@ -82,7 +82,7 @@ describe('[CF] /api/sessions', () => {
     vi.unstubAllGlobals()
   })
 
-  it('creates, reads, lists, reconnects, stops, archives, and records events for a Pi-backed session', async () => {
+  it('creates, reads, lists, reconnects, stops, archives, and records events for a cloud-owned runtime session', async () => {
     const authorization = await signIn()
     await connectMcp(authorization, 'github')
     await connectMcp(authorization, 'linear')
@@ -112,8 +112,8 @@ describe('[CF] /api/sessions', () => {
         packageManagerPolicy: Record<string, unknown>
       }
       sandboxId: string
-      piRuntimeId: string
-      piProcessId: string
+      piRuntimeId: string | null
+      piProcessId: string | null
       runtimeEndpointPath: string
       startedAt: string
       title: string
@@ -126,23 +126,26 @@ describe('[CF] /api/sessions', () => {
       title: 'Ship the first task',
       status: 'idle',
       agentVersionId: agent.currentVersionId,
-      agentSnapshot: { instructions: 'Work through Pi.', mcpConnectors: ['github'] },
+      agentSnapshot: { instructions: 'Work through AMA runtime.', mcpConnectors: ['github'] },
       environmentSnapshot: {
         mcpPolicy: { allowedConnectors: ['github'] },
         packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
       },
       sandboxId: created.id.toLowerCase(),
-      piRuntimeId: `pi_${created.id}`,
-      piProcessId: `proc_${created.id}`,
+      piRuntimeId: null,
+      piProcessId: null,
       runtimeEndpointPath: `/runtime/sessions/${created.id}/rpc`,
       resourceRefs: [{ type: 'repository', id: 'repo_1' }],
       vaultRefs: [{ type: 'credential', id: 'cred_1' }],
       metadata: {
         ticket: 'AMA-1',
-        runtime: 'pi',
-        protocol: 'pi-rpc-jsonl',
+        runtime: 'ama-cloud',
+        protocol: 'ama-runtime-rpc',
         runtimeMode: 'test',
-        bridge: 'fake',
+        runtimeOwner: 'ama-cloud',
+        loop: 'cloud-session-runtime',
+        executor: 'cloudflare-sandbox',
+        piCorePackage: '@earendil-works/pi-agent-core',
         mcpConnectors: ['github'],
       },
       modelConfig: { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6' },
@@ -193,9 +196,10 @@ describe('[CF] /api/sessions', () => {
     })
     expect(taskRes.status).toBe(200)
     await expect(taskRes.json()).resolves.toMatchObject({
+      runtime: 'ama-cloud',
+      accepted: true,
       sandboxId: created.id.toLowerCase(),
       path: '/rpc',
-      proxy: 'pi',
     })
     const afterTaskRes = await jsonFetch(`/api/sessions/${created.id}`, authorization)
     await expect(afterTaskRes.json()).resolves.toMatchObject({ id: created.id, status: 'idle' })
@@ -235,7 +239,7 @@ describe('[CF] /api/sessions', () => {
       expect.arrayContaining([
         expect.objectContaining({
           type: 'message_end',
-          payload: { type: 'message_end', message: { role: 'assistant', content: 'Message accepted by Pi runtime.' } },
+          payload: { type: 'message_end', message: { role: 'assistant', content: 'Message accepted by AMA runtime.' } },
         }),
         expect.objectContaining({
           type: 'tool_execution_end',
@@ -434,8 +438,8 @@ describe('[CF] /api/sessions', () => {
       metadata: expect.objectContaining({
         externalRunId: 'tftt-banking-bonus-2026-05-26',
         source: 'tftt-cron',
-        runtime: 'pi',
-        protocol: 'pi-rpc-jsonl',
+        runtime: 'ama-cloud',
+        protocol: 'ama-runtime-rpc',
       }),
       runtimeEndpointPath: `/runtime/sessions/${created.id}/rpc`,
     })
@@ -579,9 +583,9 @@ describe('[CF] /api/sessions', () => {
     const runtimeRes = await jsonFetch(`/runtime/sessions/${created.id}/rpc`, authorization)
     expect(runtimeRes.status).toBe(200)
     await expect(runtimeRes.json()).resolves.toMatchObject({
-      sandboxId: created.id.toLowerCase(),
+      runtime: 'ama-cloud',
+      sessionId: created.id,
       path: '/rpc',
-      proxy: 'pi',
     })
   })
 
@@ -809,7 +813,7 @@ describe('[CF] /api/sessions', () => {
     expect(JSON.stringify(events)).not.toContain('raw-secret-token')
   })
 
-  it('blocks offline sandbox network policy before proxying', async () => {
+  it('blocks offline sandbox network policy before executor dispatch', async () => {
     const authorization = await signIn()
     await connectMcp(authorization, 'github')
     const environmentRes = await jsonFetch('/api/environments', authorization, {
@@ -925,9 +929,9 @@ describe('[CF] /api/sessions', () => {
     expect(rereadRes.status).toBe(200)
     await expect(rereadRes.json()).resolves.toMatchObject({
       id: created.id,
-      agentSnapshot: { instructions: 'Work through Pi.', version: 1, mcpConnectors: ['github'] },
+      agentSnapshot: { instructions: 'Work through AMA runtime.', version: 1, mcpConnectors: ['github'] },
       environmentSnapshot: {
-        packages: [{ name: '@earendil-works/pi-coding-agent', version: 'prebuilt' }],
+        packages: [{ name: '@earendil-works/pi-agent-core', version: 'prebuilt' }],
         mcpPolicy: { allowedConnectors: ['github'] },
         packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
       },
