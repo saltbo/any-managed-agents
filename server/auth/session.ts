@@ -2,7 +2,7 @@ import type { DrizzleD1Database } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
 import type { Env } from '../env'
 import { errorResponse } from '../errors'
-import { getBearerClaims, upsertProjectForClaims } from './flareauth'
+import { getBearerClaims, OidcError, upsertProjectForClaims } from './flareauth'
 
 export interface AuthContext {
   user: {
@@ -63,7 +63,17 @@ export async function resolveAuthContext(
 }
 
 export async function requireAuth(c: Context<{ Bindings: Env }>, db: DrizzleD1Database) {
-  const auth = await resolveAuthContext(c, db)
+  let auth: AuthContext | null
+  try {
+    auth = await resolveAuthContext(c, db)
+  } catch (err) {
+    if (err instanceof OidcError) {
+      return errorResponse(c, 401, 'authentication_required', 'Authentication required', {
+        reason: 'missing_or_invalid_bearer_token',
+      })
+    }
+    throw err
+  }
   if (!auth) {
     return errorResponse(c, 401, 'authentication_required', 'Authentication required', {
       reason: 'missing_or_invalid_bearer_token',

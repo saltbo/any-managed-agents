@@ -55,6 +55,21 @@ describe('[CF] auth and tenancy', () => {
     })
   })
 
+  it('treats rejected FlareAuth bearer tokens as authentication failures', async () => {
+    const res = await SELF.fetch('https://example.com/api/auth/me', {
+      headers: { authorization: 'Bearer invalid-token' },
+    })
+
+    expect(res.status).toBe(401)
+    expect(await res.json()).toMatchObject({
+      error: {
+        type: 'authentication_required',
+        message: 'Authentication required',
+        details: { reason: 'missing_or_invalid_bearer_token' },
+      },
+    })
+  })
+
   it('scopes agent resources and runtime sessions to the FlareAuth organization project', async () => {
     const authorization = await signIn()
     const createRes = await SELF.fetch('https://example.com/api/agents', {
