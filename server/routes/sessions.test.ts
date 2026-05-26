@@ -1,6 +1,7 @@
 import { SELF } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultClaims, setupFlareAuth, signIn } from '../test/auth'
+import { runtimeErrorMessage } from './sessions'
 
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
@@ -17,7 +18,7 @@ async function createEnvironment(authorization: string) {
   const res = await jsonFetch('/api/environments', authorization, {
     method: 'POST',
     body: JSON.stringify({
-      name: 'Pi workspace',
+      name: `Pi workspace ${crypto.randomUUID()}`,
       packages: [{ name: '@earendil-works/pi-coding-agent', version: 'prebuilt' }],
       secretRefs: [{ name: 'CLOUDFLARE_API_KEY', ref: 'wrangler_secret:AMA_WORKERS_AI_API_KEY' }],
       mcpPolicy: { allowedConnectors: ['github'] },
@@ -400,6 +401,103 @@ describe('[CF] /api/sessions', () => {
     expect(archivedListRes.status).toBe(200)
     const archivedList = (await archivedListRes.json()) as { data: Array<{ id: string; status: string }> }
     expect(archivedList.data).toContainEqual(expect.objectContaining({ id: created.id, status: 'archived' }))
+  })
+
+  it('creates a session and dispatches an initial prompt through the API', async () => {
+    const authorization = await signIn()
+    await connectMcp(authorization, 'github')
+    const environment = await createEnvironment(authorization)
+    const agent = await createAgent(authorization)
+
+    const createRes = await jsonFetch('/api/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        title: 'Scheduled banking bonus research',
+        metadata: {
+          externalRunId: 'tftt-banking-bonus-2026-05-26',
+          source: 'tftt-cron',
+        },
+        initialPrompt: 'Research current Canadian banking bonus offers.',
+      }),
+    })
+    expect(createRes.status).toBe(201)
+    const created = (await createRes.json()) as {
+      id: string
+      status: string
+      metadata: Record<string, unknown>
+      runtimeEndpointPath: string
+    }
+    expect(created).toMatchObject({
+      status: 'idle',
+      metadata: expect.objectContaining({
+        externalRunId: 'tftt-banking-bonus-2026-05-26',
+        source: 'tftt-cron',
+        runtime: 'pi',
+        protocol: 'pi-rpc-jsonl',
+      }),
+      runtimeEndpointPath: `/runtime/sessions/${created.id}/rpc`,
+    })
+
+    const eventsRes = await jsonFetch(`/api/sessions/${created.id}/events`, authorization)
+    expect(eventsRes.status).toBe(200)
+    const events = (await eventsRes.json()) as {
+      data: Array<{ sequence: number; type: string; payload: Record<string, unknown> }>
+    }
+    expect(events.data.map((event) => event.sequence)).toEqual(events.data.map((_, index) => index + 1))
+    expect(events.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'message_end',
+          payload: {
+            type: 'message_end',
+            message: { role: 'assistant', content: 'Received: Research current Canadian banking bonus offers.' },
+          },
+        }),
+        expect.objectContaining({
+          type: 'usage',
+          payload: expect.objectContaining({ type: 'usage', provider: 'workers-ai' }),
+        }),
+      ]),
+    )
+
+    const auditRes = await jsonFetch('/api/audit-records?action=session.initial_prompt', authorization)
+    expect(auditRes.status).toBe(200)
+    const audit = (await auditRes.json()) as { data: Array<Record<string, unknown>> }
+    expect(audit.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: 'session.initial_prompt',
+          outcome: 'success',
+          sessionId: created.id,
+        }),
+      ]),
+    )
+  })
+
+  it('validates initial prompt input and redacts runtime failure status reasons', async () => {
+    const authorization = await signIn()
+    await connectMcp(authorization, 'github')
+    const environment = await createEnvironment(authorization)
+    const agent = await createAgent(authorization)
+
+    const invalidRes = await jsonFetch('/api/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        initialPrompt: '',
+      }),
+    })
+    expect(invalidRes.status).toBe(400)
+    await expect(invalidRes.json()).resolves.toMatchObject({
+      error: { type: 'validation_error' },
+    })
+
+    expect(
+      runtimeErrorMessage({ type: 'response', success: false, error: { message: 'token=raw-secret-token' } }),
+    ).toBe('[REDACTED]')
   })
 
   it('lists sessions with pagination, status, search, and date filters', async () => {

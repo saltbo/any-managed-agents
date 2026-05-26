@@ -890,6 +890,30 @@ When(
 )
 
 When(
+  'an external scheduler creates a session with an initial prompt and run correlation metadata',
+  async function (this: ProductWorld) {
+    await ensureAgentAndEnvironment(this)
+    const state = await ensureState(this)
+    state.runtimeMessage = 'Research current Canadian banking bonus offers.'
+    const session = await apiJson<Json>(state.page.request, '/api/sessions', {
+      method: 'POST',
+      data: {
+        agentId: state.agent?.id,
+        environmentId: state.environment?.id,
+        title: `${state.runId} scheduled banking bonus research`,
+        metadata: {
+          externalRunId: `${state.runId}-banking-bonus`,
+          source: 'tftt-cron',
+        },
+        initialPrompt: state.runtimeMessage,
+      },
+    })
+    state.response = session
+    state.latestSession = await waitForSession(state.page.request, String(session.id))
+  },
+)
+
+When(
   'the agent is archived, the environment is archived, the model provider is unavailable, or the sandbox policy is blocked',
   async function (this: ProductWorld) {
     await ensureAgentAndEnvironment(this)
@@ -1976,6 +2000,38 @@ Then('raw credentials are rejected from the request body', async function (this:
   })
   assert.equal(response.status(), 400)
 })
+
+Then('the response includes the session id and run correlation metadata', function (this: ProductWorld) {
+  const session = required(this.e2e?.response, 'session response')
+  assert.match(String(session.id), /^session_/)
+  assert.equal(objectValue(session.metadata).externalRunId, `${this.e2e?.runId}-banking-bonus`)
+  assert.equal(objectValue(session.metadata).source, 'tftt-cron')
+})
+
+Then(
+  'the initial prompt is dispatched to the Pi runtime without a browser WebSocket',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    const events = await sessionEvents(state)
+    assert.equal(state.runtimeEventTypes, undefined)
+    assert.ok(JSON.stringify(events.data).includes(state.runtimeMessage ?? ''))
+  },
+)
+
+Then(
+  'session events can be queried for launch diagnostics and transcript progress',
+  async function (this: ProductWorld) {
+    const events = await sessionEvents(await ensureState(this))
+    const state = await ensureState(this)
+    const audit = await apiJson<ListResponse<Json>>(
+      state.page.request,
+      '/api/audit-records?action=session.initial_prompt',
+    )
+    assert.ok(events.data.length > 0)
+    assert.ok(events.data.some((event) => event.type === 'message_end'))
+    assert.ok(audit.data.some((record) => record.sessionId === state.latestSession?.id && record.outcome === 'success'))
+  },
+)
 
 Then('the request fails before starting a sandbox', function (this: ProductWorld) {
   assert.equal(this.e2e?.responseStatus, 409)

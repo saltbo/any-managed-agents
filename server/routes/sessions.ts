@@ -1,7 +1,8 @@
 import { createRoute, z } from '@hono/zod-openapi'
-import { and, asc, desc, eq, gt, gte, like, lt, lte, ne, or } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, gte, like, lt, lte, max, ne, or } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
+import { piEventTypeFromPayload } from '../../shared/pi-events'
 import { recordAudit, requestId } from '../audit'
 import { type AuthContext, requireAuth } from '../auth/session'
 import {
@@ -29,13 +30,20 @@ import {
 } from '../openapi'
 import { evaluateMcpToolPolicy, evaluateProviderPolicy, evaluateSandboxRuntimePolicy } from '../policy'
 import { redactSensitiveValue } from '../redaction'
-import { runtimeEndpointPath, safeRuntimeError, startPiBridge, stopPiBridge } from '../runtime/pi/bridge'
+import {
+  proxyPiRuntime,
+  runtimeEndpointPath,
+  safeRuntimeError,
+  startPiBridge,
+  stopPiBridge,
+} from '../runtime/pi/bridge'
 
 const app = createApiRouter()
 
 const SESSION_STATUSES = ['pending', 'running', 'idle', 'stopped', 'error', 'archived', 'requires-action'] as const
 const EVENT_VISIBILITIES = ['runtime', 'transcript', 'debug', 'audit'] as const
 const RUNTIME_START_TIMEOUT_MS = 300_000
+const RUNTIME_COMMAND_PROXY_TIMEOUT_MS = 30_000
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
 const AgentVersionSchema = z
@@ -141,6 +149,13 @@ const CreateSessionSchema = z
       .max(50)
       .optional()
       .openapi({ example: [{ type: 'credential', id: 'cred_abc123' }] }),
+    initialPrompt: z
+      .string()
+      .trim()
+      .min(1)
+      .max(16000)
+      .optional()
+      .openapi({ example: 'Research Canadian banking bonus offers and summarize current opportunities.' }),
   })
   .strict()
   .openapi('CreateSessionRequest')
@@ -458,6 +473,7 @@ export async function createSessionForAgent(
     metadata?: Record<string, unknown>
     resourceRefs?: Record<string, unknown>[]
     vaultRefs?: Record<string, unknown>[]
+    initialPrompt?: string
   } = {},
 ) {
   if (
@@ -624,6 +640,7 @@ export async function createSessionForAgent(
       pending,
       agentSnapshot,
       environmentSnapshot,
+      ...(options.initialPrompt !== undefined ? { initialPrompt: options.initialPrompt } : {}),
     })
 
   if (c.env.AMA_RUNTIME_MODE !== 'test') {
@@ -647,9 +664,10 @@ async function startSessionRuntime(
     pending: SessionRow
     agentSnapshot: ReturnType<typeof serializeAgentVersion>
     environmentSnapshot: ReturnType<typeof serializeEnvironmentVersion> | null
+    initialPrompt?: string
   },
 ) {
-  const { pending, agentSnapshot, environmentSnapshot } = input
+  const { pending, agentSnapshot, environmentSnapshot, initialPrompt } = input
   const sessionId = pending.id
   const sandboxId = pending.sandboxId ?? sessionId.toLowerCase()
   try {
@@ -710,6 +728,21 @@ async function startSessionRuntime(
         runtimeEndpointPath: runtime.runtimeEndpointPath,
       },
     })
+    if (initialPrompt) {
+      await dispatchInitialPrompt(
+        env,
+        db,
+        auth,
+        {
+          ...pending,
+          ...started,
+          statusReason: null,
+          stoppedAt: null,
+          archivedAt: null,
+        },
+        initialPrompt,
+      )
+    }
   } catch (error) {
     const safeError = safeRuntimeError(error)
     const failedAt = now()
@@ -738,6 +771,291 @@ async function startSessionRuntime(
     })
     await stopPiBridge(env, sandboxId, null).catch(() => undefined)
   }
+}
+
+async function dispatchInitialPrompt(env: Env, db: Db, auth: AuthContext, session: SessionRow, initialPrompt: string) {
+  const command = { type: 'prompt', message: initialPrompt }
+  const submittedAt = now()
+  await db
+    .update(sessions)
+    .set({ status: 'running', statusReason: null, updatedAt: submittedAt })
+    .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
+
+  const request = new Request(`https://ama.internal${runtimeEndpointPath(session.id)}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: stringify(command),
+  })
+
+  try {
+    const makeRequest = await runtimeRequestFactory(request)
+    const response = await proxyPiRuntimeCommand(env, session.sandboxId ?? '', makeRequest)
+    if (!response.ok) {
+      const message = `Pi runtime returned ${response.status}`
+      await markInitialPromptFailed(db, auth, session, message, response.status)
+      return
+    }
+
+    if (env.AMA_RUNTIME_MODE === 'test') {
+      await recordTestInitialPromptOutcome(db, auth, session, initialPrompt)
+    } else {
+      const cursor = await runtimeEventCursor(response.clone())
+      await drainPiRuntimeEvents(env, session.sandboxId ?? '', request, db, auth, session, cursor)
+    }
+
+    await recordAudit(db, {
+      auth,
+      action: 'session.initial_prompt',
+      resourceType: 'session',
+      resourceId: session.id,
+      outcome: 'success',
+      sessionId: session.id,
+      metadata: { source: 'api', promptDispatched: true },
+    })
+  } catch (error) {
+    const safeError = safeRuntimeError(error)
+    await markInitialPromptFailed(db, auth, session, safeError.message)
+  }
+}
+
+async function markInitialPromptFailed(
+  db: Db,
+  auth: AuthContext,
+  session: SessionRow,
+  message: string,
+  status?: number,
+) {
+  const failedAt = now()
+  await db
+    .update(sessions)
+    .set({ status: 'error', statusReason: message, updatedAt: failedAt })
+    .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
+  await recordAudit(db, {
+    auth,
+    action: 'session.initial_prompt',
+    resourceType: 'session',
+    resourceId: session.id,
+    outcome: 'failure',
+    sessionId: session.id,
+    metadata: { message, ...(status ? { status } : {}) },
+  })
+}
+
+function piEventType(event: Record<string, unknown>) {
+  return piEventTypeFromPayload(event)
+}
+
+async function appendPiRuntimeEvent(
+  db: Db,
+  values: {
+    auth: AuthContext
+    sessionId: string
+    event: Record<string, unknown>
+    metadata?: Record<string, unknown>
+  },
+) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const eventId = newId('event')
+    const latest = await db
+      .select({ sequence: max(sessionEvents.sequence) })
+      .from(sessionEvents)
+      .where(eq(sessionEvents.sessionId, values.sessionId))
+      .get()
+    try {
+      await db.insert(sessionEvents).values({
+        id: eventId,
+        organizationId: values.auth.organization.id,
+        projectId: values.auth.project.id,
+        sessionId: values.sessionId,
+        sequence: (latest?.sequence ?? 0) + 1,
+        type: piEventType(values.event),
+        visibility: 'runtime',
+        role: null,
+        parentEventId: null,
+        correlationId: null,
+        payload: stringify(redactSensitiveValue(values.event)),
+        metadata: stringify(redactSensitiveValue(values.metadata ?? { source: 'pi' })),
+        createdAt: now(),
+      })
+      return eventId
+    } catch (error) {
+      if (attempt === 4 || !String(error).includes('UNIQUE')) {
+        throw error
+      }
+    }
+  }
+  throw new Error('Unable to append Pi runtime event')
+}
+
+async function recordTestInitialPromptOutcome(db: Db, auth: AuthContext, session: SessionRow, initialPrompt: string) {
+  await appendPiRuntimeEvent(db, {
+    auth,
+    sessionId: session.id,
+    event: {
+      type: 'message_end',
+      message: { role: 'assistant', content: `Received: ${initialPrompt}` },
+    },
+  })
+  await appendPiRuntimeEvent(db, {
+    auth,
+    sessionId: session.id,
+    event: {
+      type: 'usage',
+      provider: session.modelProvider,
+      model: session.modelConfig ? (JSON.parse(session.modelConfig) as Record<string, unknown>).model : null,
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+    },
+  })
+  await db
+    .update(sessions)
+    .set({ status: 'idle', updatedAt: now() })
+    .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
+}
+
+async function proxyPiRuntimeCommand(env: Env, sandboxId: string, makeRequest: () => Request) {
+  return await withTimeout(
+    proxyPiRuntime(env, sandboxId, makeRequest()),
+    RUNTIME_COMMAND_PROXY_TIMEOUT_MS,
+    'Pi runtime command timed out',
+  )
+}
+
+async function runtimeRequestFactory(request: Request) {
+  const requestBody = request.method === 'GET' || request.method === 'HEAD' ? null : await request.clone().arrayBuffer()
+  return () => {
+    const init: RequestInit = {
+      method: request.method,
+      headers: request.headers,
+      redirect: 'manual',
+    }
+    if (requestBody) {
+      init.body = requestBody.slice(0)
+    }
+    return new Request(request.url, init)
+  }
+}
+
+async function runtimeEventCursor(response: Response) {
+  const payload = await response.json().catch((): unknown => null)
+  if (!payload || typeof payload !== 'object') {
+    return null
+  }
+  const cursor = (payload as Record<string, unknown>).eventCursor
+  return typeof cursor === 'number' && Number.isFinite(cursor) ? cursor : null
+}
+
+async function drainPiRuntimeEvents(
+  env: Env,
+  sandboxId: string,
+  request: Request,
+  db: Db,
+  auth: AuthContext,
+  session: SessionRow,
+  cursor?: number | null,
+) {
+  const streamUrl = new URL(request.url)
+  if (typeof cursor === 'number' && Number.isFinite(cursor)) {
+    streamUrl.searchParams.set('cursor', String(cursor))
+  }
+  const response = await proxyPiRuntime(
+    env,
+    sandboxId,
+    new Request(streamUrl, { method: 'GET', headers: request.headers }),
+  )
+  const responseStream = response.body
+  if (!responseStream) {
+    return
+  }
+  const reader = responseStream.getReader()
+  const decoder = new TextDecoder()
+  let pending = ''
+  try {
+    for (;;) {
+      const result = await reader.read()
+      if (result.done) {
+        break
+      }
+      pending += decoder.decode(result.value, { stream: true })
+      const lines = pending.split('\n')
+      pending = lines.pop() ?? ''
+      for (const line of lines) {
+        const terminal = await ingestPiRuntimeLine(db, auth, session, line)
+        if (terminal) {
+          await reader.cancel().catch(() => undefined)
+          return
+        }
+      }
+    }
+    const final = `${pending}${decoder.decode()}`
+    if (final.trim()) {
+      await ingestPiRuntimeLine(db, auth, session, final)
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined)
+  }
+}
+
+async function ingestPiRuntimeLine(db: Db, auth: AuthContext, session: SessionRow, line: string) {
+  if (!line.trim()) {
+    return false
+  }
+  let parsed: Record<string, unknown>
+  try {
+    const value = JSON.parse(line) as unknown
+    parsed = value && typeof value === 'object' ? (value as Record<string, unknown>) : { content: line }
+  } catch {
+    parsed = { content: line }
+  }
+  await appendPiRuntimeEvent(db, { auth, sessionId: session.id, event: parsed })
+  const type = piEventType(parsed)
+  if (type === 'response') {
+    if (parsed.success === false) {
+      const message = runtimeErrorMessage(parsed)
+      await db
+        .update(sessions)
+        .set({ status: 'error', statusReason: message, updatedAt: now() })
+        .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
+      return true
+    }
+    return false
+  }
+  if (type === 'agent_end') {
+    await db
+      .update(sessions)
+      .set({ status: 'idle', statusReason: null, updatedAt: now() })
+      .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
+    return true
+  }
+  if (type === 'bridge_exit') {
+    const failed = parsed.code !== 0 && parsed.code !== null
+    await db
+      .update(sessions)
+      .set({
+        status: failed ? 'error' : 'idle',
+        statusReason: failed ? 'Pi runtime exited with an error' : null,
+        updatedAt: now(),
+      })
+      .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
+    return true
+  }
+  return false
+}
+
+export function runtimeErrorMessage(payload: Record<string, unknown>) {
+  const error = payload.error
+  let message: string
+  if (typeof error === 'string') {
+    message = error
+  } else if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
+    message = error.message
+  } else if (typeof payload.message === 'string') {
+    message = payload.message
+  } else {
+    message = 'Runtime command failed'
+  }
+  return redactSensitiveValue(message) as string
 }
 
 export async function recoverSessionRuntime(env: Env, db: Db, auth: AuthContext, session: SessionRow) {
@@ -1230,7 +1548,7 @@ async function streamEventsNdjsonResponse(c: Context<{ Bindings: Env }>, session
 
 const routes = app
   .openapi(createSessionRoute, async (c) => {
-    const { agentId, environmentId, title, metadata, resourceRefs, vaultRefs } = c.req.valid('json')
+    const { agentId, environmentId, title, metadata, resourceRefs, vaultRefs, initialPrompt } = c.req.valid('json')
     const db = drizzle(c.env.DB)
     const auth = await requireAuth(c, db)
     if (auth instanceof Response) {
@@ -1241,6 +1559,7 @@ const routes = app
       ...(metadata !== undefined ? { metadata } : {}),
       ...(resourceRefs !== undefined ? { resourceRefs } : {}),
       ...(vaultRefs !== undefined ? { vaultRefs } : {}),
+      ...(initialPrompt !== undefined ? { initialPrompt } : {}),
     })
   })
   .openapi(listSessionsRoute, async (c) => {

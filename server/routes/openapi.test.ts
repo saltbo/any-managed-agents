@@ -210,6 +210,17 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.components?.schemas).toHaveProperty('UsageRecord')
     expect(doc.components?.schemas).toHaveProperty('UsageSummary')
     expect(doc.components?.schemas).toHaveProperty('AuditRecord')
+    const createSessionProperties = (
+      doc.components?.schemas?.CreateSessionRequest as {
+        properties?: Record<string, { maxLength?: number; minLength?: number; type?: string }>
+      }
+    )?.properties
+    expect(createSessionProperties).toHaveProperty('initialPrompt')
+    expect(createSessionProperties?.initialPrompt).toMatchObject({
+      type: 'string',
+      minLength: 1,
+      maxLength: 16000,
+    })
   })
 
   it('is discoverable as a restish control-plane contract', async () => {

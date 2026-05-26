@@ -60,6 +60,7 @@ describe('route schema and handler alignment', () => {
     expect([...new Set(bodyFields(routeSources.sessions))]).toEqual([
       'agentId',
       'environmentId',
+      'initialPrompt',
       'metadata',
       'resourceRefs',
       'status',
@@ -69,6 +70,7 @@ describe('route schema and handler alignment', () => {
     expect(schemaFields(doc, 'CreateSessionRequest')).toEqual([
       'agentId',
       'environmentId',
+      'initialPrompt',
       'metadata',
       'resourceRefs',
       'title',
