@@ -4,13 +4,13 @@ Feature: Session events
 
   @implemented
   Scenario: Append session event
-    Given an idle session has a running Pi bridge
+    Given an idle session has cloud-owned runtime state and a sandbox executor
     When the user sends a runtime message to the session runtime endpoint
     Then message, tool, sandbox, usage, lifecycle, and error events are stored in sequence
 
   @implemented
   Scenario: Store message lifecycle events
-    Given an idle session has a running Pi bridge
+    Given an idle session has cloud-owned runtime state and a sandbox executor
     When the user sends a runtime message to the session runtime endpoint
     Then lifecycle events are stored with monotonically increasing sequence numbers
     And message events preserve user-visible content

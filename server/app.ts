@@ -1,5 +1,5 @@
 import { swaggerUI } from '@hono/swagger-ui'
-import { and, eq, max } from 'drizzle-orm'
+import { and, asc, eq, max, or } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import { cors } from 'hono/cors'
 import { piEventTypeFromPayload } from '../shared/pi-events'
@@ -21,16 +21,21 @@ import mcp from './routes/mcp'
 import projects from './routes/projects'
 import providers from './routes/providers'
 import runtimeAi from './routes/runtime-ai'
-import sessionRoutes, { recoverSessionRuntime } from './routes/sessions'
+import sessionRoutes from './routes/sessions'
 import usage from './routes/usage'
 import vaults from './routes/vaults'
-import { proxyPiRuntime } from './runtime/pi/bridge'
+import { safeRuntimeError } from './runtime/runtime-error'
+import {
+  executeRuntimeToolCalls,
+  isRuntimeTurnCancelled,
+  RuntimeTurnCancelledError,
+  runSessionTurn,
+  runtimeMessagesFromEvents,
+} from './runtime/session-runtime'
 
 function newId(prefix: string) {
   return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
 }
-
-const RUNTIME_COMMAND_PROXY_TIMEOUT_MS = 30_000
 
 function redactRuntimeValue(value: unknown): unknown {
   return redactSensitiveValue(value)
@@ -80,6 +85,27 @@ async function appendPiRuntimeEvent(
     }
   }
   throw new Error('Unable to append Pi runtime event')
+}
+
+async function assertRuntimeSessionRunning(db: ReturnType<typeof drizzle>, auth: AuthContext, sessionId: string) {
+  const active = await db
+    .select({ status: sessions.status })
+    .from(sessions)
+    .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, auth.project.id)))
+    .get()
+  if (active?.status !== 'running') {
+    throw new RuntimeTurnCancelledError()
+  }
+}
+
+async function loadRuntimeMessages(db: ReturnType<typeof drizzle>, sessionId: string) {
+  const rows = await db
+    .select({ payload: sessionEvents.payload })
+    .from(sessionEvents)
+    .where(eq(sessionEvents.sessionId, sessionId))
+    .orderBy(asc(sessionEvents.sequence))
+    .all()
+  return runtimeMessagesFromEvents(rows)
 }
 
 async function appendRuntimePolicyEvent(
@@ -141,6 +167,21 @@ function runtimeToolCalls(body: unknown) {
   return Array.isArray(calls)
     ? calls.filter((call): call is Record<string, unknown> => !!call && typeof call === 'object')
     : []
+}
+
+export function runtimeRequestHasTestOnlyFields(body: unknown) {
+  if (!body || typeof body !== 'object') {
+    return false
+  }
+  const record = body as Record<string, unknown>
+  return (
+    'toolCalls' in record ||
+    'response' in record ||
+    'simulateError' in record ||
+    'errorMessage' in record ||
+    'output' in record ||
+    'error' in record
+  )
 }
 
 function hostFromUrl(value: unknown) {
@@ -238,10 +279,21 @@ async function recordRuntimeMessageSubmission(
 ) {
   const timestamp = new Date().toISOString()
   const correlationId = newId('message')
-  await db
+  const updated = await db
     .update(sessions)
     .set({ status: 'running', statusReason: null, updatedAt: timestamp })
-    .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
+    .where(
+      and(
+        eq(sessions.id, session.id),
+        eq(sessions.projectId, auth.project.id),
+        or(eq(sessions.status, 'idle'), eq(sessions.status, 'running')),
+      ),
+    )
+    .returning({ id: sessions.id })
+    .get()
+  if (!updated) {
+    throw new Error('Session runtime is no longer active')
+  }
   return correlationId
 }
 
@@ -276,322 +328,110 @@ async function evaluateRuntimeSandboxOperations(
   return null
 }
 
-async function recordTestRuntimeMessageOutcome(
+async function recordRuntimeMessageOutcome(
   db: ReturnType<typeof drizzle>,
+  env: Env,
   auth: AuthContext,
   session: typeof sessions.$inferSelect,
   body: unknown,
   _correlationId: string,
+  _options: { executeTools: boolean },
 ) {
-  for (const [index, call] of runtimeToolCalls(body).entries()) {
-    const toolCallId = typeof call.id === 'string' ? call.id : `tool_${index + 1}`
-    const toolName = typeof call.name === 'string' ? call.name : 'tool'
-    const durationMs = typeof call.durationMs === 'number' ? call.durationMs : 0
-    await appendPiRuntimeEvent(db, {
-      auth,
-      sessionId: session.id,
-      event: {
-        type: 'tool_execution_start',
-        id: toolCallId,
-        toolCall: {
-          id: toolCallId,
-          name: toolName,
-          input: call.input ?? {},
-        },
-      },
-    })
-    await appendPiRuntimeEvent(db, {
-      auth,
-      sessionId: session.id,
-      event: {
-        type: 'tool_execution_end',
-        id: toolCallId,
-        toolCall: {
-          id: toolCallId,
-          name: toolName,
-          output: call.output ?? {},
-          error: call.error ?? null,
-          durationMs,
-        },
-      },
-    })
-  }
-
   const record = body && typeof body === 'object' ? (body as Record<string, unknown>) : {}
-  if (record.simulateError) {
-    const rawMessage = typeof record.errorMessage === 'string' ? record.errorMessage : 'Runtime message failed'
-    const safeMessage = redactRuntimeValue(rawMessage) as string
-    await appendPiRuntimeEvent(db, {
-      auth,
-      sessionId: session.id,
-      event: { type: 'error', message: safeMessage },
-    })
-    await db
-      .update(sessions)
-      .set({ status: 'error', statusReason: safeMessage, updatedAt: new Date().toISOString() })
-      .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
-    return
+  if (env.AMA_RUNTIME_MODE !== 'test' && runtimeRequestHasTestOnlyFields(body)) {
+    throw new Error('Runtime clients cannot submit tool calls, tool results, or simulated runtime outcomes')
+  }
+  if (env.AMA_RUNTIME_MODE === 'test' && record.simulateError) {
+    throw new Error(typeof record.errorMessage === 'string' ? record.errorMessage : 'Runtime message failed')
   }
 
-  await appendPiRuntimeEvent(db, {
-    auth,
+  const prompt = typeof record.message === 'string' ? record.message.trim() : ''
+  if (!prompt) {
+    throw new Error('Runtime prompt message is required')
+  }
+  const agentSnapshot = session.agentSnapshot ? (JSON.parse(session.agentSnapshot) as Record<string, unknown>) : {}
+  const modelConfig = session.modelConfig ? (JSON.parse(session.modelConfig) as Record<string, unknown>) : {}
+  const messages = await loadRuntimeMessages(db, session.id)
+  const ensureActive = async () => {
+    await assertRuntimeSessionRunning(db, auth, session.id)
+  }
+  const result = await runSessionTurn(env, {
     sessionId: session.id,
-    event: {
-      type: 'message_end',
-      message: {
-        role: 'assistant',
-        content: typeof record.response === 'string' ? record.response : 'Message accepted by Pi runtime.',
-      },
-    },
-  })
-  await appendPiRuntimeEvent(db, {
-    auth,
-    sessionId: session.id,
-    event: {
-      type: 'usage',
-      provider: session.modelProvider,
-      model: session.modelConfig ? (JSON.parse(session.modelConfig) as Record<string, unknown>).model : null,
-      promptTokens: 0,
-      completionTokens: 0,
-      totalTokens: 0,
-    },
-  })
-  await db
-    .update(sessions)
-    .set({ status: 'idle', updatedAt: new Date().toISOString() })
-    .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
-}
-
-async function recordRuntimeProxyFailure(
-  db: ReturnType<typeof drizzle>,
-  auth: AuthContext,
-  session: typeof sessions.$inferSelect,
-  response: Response,
-) {
-  if (response.ok) {
-    return
-  }
-  const safeMessage = `Pi runtime returned ${response.status}`
-  await db
-    .update(sessions)
-    .set({ status: 'error', statusReason: safeMessage, updatedAt: new Date().toISOString() })
-    .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
-  await recordAudit(db, {
-    auth,
-    action: 'runtime.proxy',
-    resourceType: 'session',
-    resourceId: session.id,
-    outcome: 'failure',
-    metadata: { message: safeMessage, status: response.status },
-  })
-}
-
-function isRecoverableRuntimeStatus(status: number) {
-  return status === 500 || status === 502 || status === 503 || status === 504
-}
-
-async function runtimeRequestFactory(request: Request) {
-  const body = request.method === 'GET' || request.method === 'HEAD' ? null : await request.clone().arrayBuffer()
-  return () => {
-    const init: RequestInit = {
-      method: request.method,
-      headers: request.headers,
-      redirect: 'manual',
-    }
-    if (body) {
-      init.body = body.slice(0)
-    }
-    return new Request(request.url, init)
-  }
-}
-
-async function proxyPiRuntimeCommand(
-  env: Env,
-  db: ReturnType<typeof drizzle>,
-  auth: AuthContext,
-  session: typeof sessions.$inferSelect,
-  makeRequest: () => Request,
-) {
-  let recovered = false
-  let response: Response
-  try {
-    response = await proxyPiRuntimeCommandAttempt(env, session.sandboxId ?? '', makeRequest())
-  } catch {
-    await recoverSessionRuntime(env, db, auth, session)
-    recovered = true
-    response = await proxyPiRuntimeCommandAttempt(env, session.sandboxId ?? '', makeRequest()).catch(() =>
-      Response.json({ error: { type: 'runtime_error', message: 'Pi runtime command timed out' } }, { status: 504 }),
-    )
-  }
-  if (!recovered && !response.ok && isRecoverableRuntimeStatus(response.status)) {
-    await recoverSessionRuntime(env, db, auth, session)
-    recovered = true
-    response = await proxyPiRuntimeCommandAttempt(env, session.sandboxId ?? '', makeRequest()).catch(() =>
-      Response.json({ error: { type: 'runtime_error', message: 'Pi runtime command timed out' } }, { status: 504 }),
-    )
-  }
-  return { response, recovered }
-}
-
-async function proxyPiRuntimeCommandAttempt(env: Env, sandboxId: string, request: Request) {
-  let timeout: ReturnType<typeof setTimeout> | undefined
-  try {
-    return await Promise.race([
-      proxyPiRuntime(env, sandboxId, request),
-      new Promise<never>((_, reject) => {
-        timeout = setTimeout(() => reject(new Error('Pi runtime command timed out')), RUNTIME_COMMAND_PROXY_TIMEOUT_MS)
-      }),
-    ])
-  } finally {
-    if (timeout) {
-      clearTimeout(timeout)
-    }
-  }
-}
-
-async function ingestPiRuntimeLine(
-  db: ReturnType<typeof drizzle>,
-  auth: AuthContext,
-  session: typeof sessions.$inferSelect,
-  line: string,
-) {
-  if (!line.trim()) {
-    return false
-  }
-  let parsed: Record<string, unknown>
-  try {
-    const value = JSON.parse(line) as unknown
-    parsed = value && typeof value === 'object' ? (value as Record<string, unknown>) : { content: line }
-  } catch {
-    parsed = { content: line }
-  }
-  await appendPiRuntimeEvent(db, {
-    auth,
-    sessionId: session.id,
-    event: parsed,
-  })
-  const type = piEventType(parsed)
-  if (type === 'response') {
-    if (parsed.success === false) {
-      const message = runtimeErrorMessage(parsed)
-      await db
-        .update(sessions)
-        .set({ status: 'error', statusReason: message, updatedAt: new Date().toISOString() })
-        .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
-      return true
-    }
-    return false
-  }
-  if (type === 'agent_end') {
-    await db
-      .update(sessions)
-      .set({ status: 'idle', statusReason: null, updatedAt: new Date().toISOString() })
-      .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
-    return true
-  }
-  if (type === 'bridge_exit') {
-    const failed = parsed.code !== 0 && parsed.code !== null
-    const status = failed ? 'error' : 'idle'
-    await db
-      .update(sessions)
-      .set({
-        status,
-        statusReason: failed ? 'Pi runtime exited with an error' : null,
-        updatedAt: new Date().toISOString(),
+    sandboxId: session.sandboxId ?? '',
+    provider: session.modelProvider ?? 'workers-ai',
+    model: String(modelConfig.model ?? '@cf/moonshotai/kimi-k2.6'),
+    agentSnapshot,
+    prompt,
+    messages,
+    ensureActive,
+    onEvent: async (event, metadata) => {
+      await ensureActive()
+      await appendPiRuntimeEvent(db, {
+        auth,
+        sessionId: session.id,
+        event,
+        ...(metadata ? { metadata } : {}),
       })
-      .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
-    return true
+    },
+    approveToolCall: async ({ toolName, input }) => {
+      await ensureActive()
+      if (toolName === 'sandbox.exec') {
+        const command = typeof input.command === 'string' ? input.command : null
+        const decision = await evaluateSandboxRuntimePolicy(db, auth, {
+          session: {
+            id: session.id,
+            agentSnapshot: session.agentSnapshot,
+            environmentSnapshot: session.environmentSnapshot,
+          },
+          operation: 'command',
+          command,
+        })
+        if (!decision.allowed) {
+          await ensureActive()
+          await denyRuntimePolicy(db, auth, {
+            sessionId: session.id,
+            decision,
+            action: 'runtime_sandbox.operation',
+            resourceType: 'sandbox_command',
+            resourceId: command?.trim().split(/\s+/)[0] ?? 'sandbox.exec',
+            payload: { operation: 'command', command },
+          })
+        }
+        await ensureActive()
+        return { allowed: decision.allowed, reason: decision.message }
+      }
+      return { allowed: true }
+    },
+  })
+  if (result.status === 'idle') {
+    await db
+      .update(sessions)
+      .set({ status: 'idle', updatedAt: new Date().toISOString() })
+      .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id), eq(sessions.status, 'running')))
   }
-  return false
 }
 
-function runtimeErrorMessage(payload: Record<string, unknown>) {
-  const error = payload.error
-  if (typeof error === 'string') {
-    return error
-  }
-  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
-    return error.message
-  }
-  if (typeof payload.message === 'string') {
-    return payload.message
-  }
-  return 'Runtime command failed'
-}
-
-async function drainPiRuntimeEvents(
-  env: Env,
-  sandboxId: string,
-  request: Request,
+async function markRuntimeExecutionFailed(
   db: ReturnType<typeof drizzle>,
   auth: AuthContext,
   session: typeof sessions.$inferSelect,
-  cursor?: number | 'latest' | null,
-  onLine?: (line: string) => void,
-  options: { persist?: boolean; stopOnTerminal?: boolean; signal?: AbortSignal } = {},
+  error: unknown,
 ) {
-  const streamUrl = new URL(request.url)
-  if (cursor === 'latest') {
-    streamUrl.searchParams.set('cursor', cursor)
-  } else if (typeof cursor === 'number' && Number.isFinite(cursor)) {
-    streamUrl.searchParams.set('cursor', String(cursor))
+  if (isRuntimeTurnCancelled(error)) {
+    return safeRuntimeError(error)
   }
-  const streamRequest = new Request(streamUrl, {
-    method: 'GET',
-    headers: request.headers,
-    ...(options.signal ? { signal: options.signal } : {}),
+  const runtimeError = safeRuntimeError(error)
+  await appendPiRuntimeEvent(db, {
+    auth,
+    sessionId: session.id,
+    event: { type: 'error', message: runtimeError.message, code: runtimeError.code },
+    metadata: { source: 'ama-cloud-runtime' },
   })
-  const response = await proxyPiRuntime(env, sandboxId, streamRequest)
-  if (!response.body) {
-    return
-  }
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let pending = ''
-  try {
-    for (;;) {
-      const result = await reader.read()
-      if (result.done) {
-        break
-      }
-      pending += decoder.decode(result.value, { stream: true })
-      const lines = pending.split('\n')
-      pending = lines.pop() ?? ''
-      for (const line of lines) {
-        onLine?.(line)
-        if (options.persist === false) {
-          continue
-        }
-        const terminal = await ingestPiRuntimeLine(db, auth, session, line)
-        if (terminal && options.stopOnTerminal !== false) {
-          await reader.cancel().catch(() => undefined)
-          return
-        }
-      }
-    }
-    const final = `${pending}${decoder.decode()}`
-    if (final.trim()) {
-      onLine?.(final)
-      if (options.persist === false) {
-        return
-      }
-      const terminal = await ingestPiRuntimeLine(db, auth, session, final)
-      if (terminal && options.stopOnTerminal !== false) {
-        await reader.cancel().catch(() => undefined)
-      }
-    }
-  } finally {
-    await reader.cancel().catch(() => undefined)
-  }
-}
-
-async function runtimeEventCursor(response: Response) {
-  const payload = await response.json().catch((): unknown => null)
-  if (!payload || typeof payload !== 'object') {
-    return null
-  }
-  const cursor = (payload as Record<string, unknown>).eventCursor
-  return typeof cursor === 'number' && Number.isFinite(cursor) ? cursor : null
+  await db
+    .update(sessions)
+    .set({ status: 'error', statusReason: runtimeError.message, updatedAt: new Date().toISOString() })
+    .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id), eq(sessions.status, 'running')))
+  return runtimeError
 }
 
 function createWebSocketPair() {
@@ -630,7 +470,7 @@ async function handleTestRuntimeWebSocket(
   }
 
   const correlationId = await recordRuntimeMessageSubmission(db, auth, session, command)
-  const response = `Received: ${command.message}`
+  const response = `AMA runtime processed: ${command.message}`
   const events = [
     { type: 'agent_start', sessionId: session.id },
     { type: 'turn_start', sessionId: session.id },
@@ -668,7 +508,19 @@ async function handleTestRuntimeWebSocket(
   for (const event of events) {
     sendRuntimeJson(socket, event)
   }
-  await recordTestRuntimeMessageOutcome(db, auth, session, { ...command, response, toolCalls: [] }, correlationId)
+  await recordRuntimeMessageOutcome(
+    db,
+    { AMA_RUNTIME_MODE: 'test' } as Env,
+    auth,
+    session,
+    {
+      ...command,
+      response,
+      toolCalls: [],
+    },
+    correlationId,
+    { executeTools: true },
+  )
 }
 
 async function handleRuntimeWebSocketMessage(
@@ -677,7 +529,6 @@ async function handleRuntimeWebSocketMessage(
   db: ReturnType<typeof drizzle>,
   auth: AuthContext,
   session: typeof sessions.$inferSelect,
-  requestUrl: string,
   data: unknown,
 ) {
   let parsed: unknown
@@ -696,32 +547,22 @@ async function handleRuntimeWebSocketMessage(
     await handleTestRuntimeWebSocket(socket, db, auth, session, command)
     return
   }
-  const rpcUrl = new URL(requestUrl)
-  rpcUrl.pathname = `/runtime/sessions/${session.id}/rpc`
-  rpcUrl.searchParams.delete('access_token')
-  const proxyRequest = new Request(rpcUrl, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(command),
-  })
   if (command.type !== 'get_state') {
-    await recordRuntimeMessageSubmission(db, auth, session, command)
+    const correlationId = await recordRuntimeMessageSubmission(db, auth, session, command)
+    try {
+      await recordRuntimeMessageOutcome(db, env, auth, session, command, correlationId, { executeTools: false })
+    } catch (error) {
+      await markRuntimeExecutionFailed(db, auth, session, error)
+      socket.close(1011, 'Runtime processing failed')
+      return
+    }
   }
-  const makeRequest = await runtimeRequestFactory(proxyRequest)
-  const { response, recovered } = await proxyPiRuntimeCommand(env, db, auth, session, makeRequest)
-  await recordRuntimeProxyFailure(db, auth, session, response.clone())
-  if (!response.ok) {
-    socket.close(1011, `Pi runtime returned ${response.status}`)
-    return
-  }
-  if (recovered) {
-    const cursor = await runtimeEventCursor(response.clone())
-    await drainPiRuntimeEvents(env, session.sandboxId ?? '', makeRequest(), db, auth, session, cursor, (line) => {
-      if (line.trim()) {
-        socket.send(line.endsWith('\n') ? line : `${line}\n`)
-      }
-    })
-  }
+  sendRuntimeJson(socket, {
+    type: command.type === 'get_state' ? 'session_info_changed' : 'agent_end',
+    sessionId: session.id,
+    status: command.type === 'get_state' ? session.status : 'idle',
+    willRetry: false,
+  })
 }
 
 export function createApp() {
@@ -803,45 +644,14 @@ export function createApp() {
       }
       const { client, server } = createWebSocketPair()
       server.accept()
-      const streamController = new AbortController()
-      const streamUrl = new URL(c.req.url)
-      streamUrl.pathname = `/runtime/sessions/${session.id}/rpc`
-      streamUrl.searchParams.delete('access_token')
-      const streamRequest = new Request(streamUrl, {
-        method: 'GET',
-        headers: c.req.raw.headers,
-        signal: streamController.signal,
-      })
-      c.executionCtx.waitUntil(
-        drainPiRuntimeEvents(
-          c.env,
-          session.sandboxId,
-          streamRequest,
-          db,
-          resolvedAuth,
-          session,
-          'latest',
-          (line) => {
-            if (line.trim()) {
-              server.send(line.endsWith('\n') ? line : `${line}\n`)
-            }
-          },
-          { stopOnTerminal: false, signal: streamController.signal },
-        ).catch((error) => {
-          if (!streamController.signal.aborted) {
-            sendRuntimeJson(server, { type: 'error', message: error instanceof Error ? error.message : String(error) })
-          }
-        }),
-      )
       server.addEventListener('message', (event) => {
         c.executionCtx.waitUntil(
-          handleRuntimeWebSocketMessage(server, c.env, db, resolvedAuth, session, c.req.url, event.data).catch(() => {
+          handleRuntimeWebSocketMessage(server, c.env, db, resolvedAuth, session, event.data).catch(() => {
             server.close(1011, 'Runtime processing failed')
           }),
         )
       })
       server.addEventListener('close', () => {
-        streamController.abort()
         server.close()
       })
       return new Response(null, { status: 101, webSocket: client })
@@ -900,6 +710,14 @@ export function createApp() {
               .clone()
               .json()
               .catch(() => ({}))
+      if (c.env.AMA_RUNTIME_MODE !== 'test' && runtimeRequestHasTestOnlyFields(body)) {
+        return errorResponse(
+          c,
+          400,
+          'validation_error',
+          'Runtime clients cannot submit tool calls, tool results, or simulated runtime outcomes',
+        )
+      }
       const sandboxPolicyDenial = await evaluateRuntimeSandboxOperations(db, resolvedAuth, session, body)
       if (sandboxPolicyDenial) {
         await denyRuntimePolicy(db, resolvedAuth, {
@@ -922,10 +740,33 @@ export function createApp() {
           ruleId: sandboxPolicyDenial.decision.rule,
         })
       }
-      const correlationId = await recordRuntimeMessageSubmission(db, resolvedAuth, session, body)
-      if (c.env.AMA_RUNTIME_MODE === 'test') {
-        await recordTestRuntimeMessageOutcome(db, resolvedAuth, session, body, correlationId)
+      const record = body && typeof body === 'object' ? (body as Record<string, unknown>) : {}
+      if (typeof record.message !== 'string' || !record.message.trim()) {
+        return Response.json({
+          runtime: 'ama-cloud',
+          accepted: true,
+          sandboxId: session.sandboxId,
+          path,
+        })
       }
+      const correlationId = await recordRuntimeMessageSubmission(db, resolvedAuth, session, body)
+      try {
+        await recordRuntimeMessageOutcome(db, c.env, resolvedAuth, session, body, correlationId, {
+          executeTools: c.env.AMA_RUNTIME_MODE === 'test',
+        })
+      } catch (error) {
+        if (isRuntimeTurnCancelled(error)) {
+          return errorResponse(c, 409, 'conflict', 'Session runtime is no longer active')
+        }
+        const runtimeError = await markRuntimeExecutionFailed(db, resolvedAuth, session, error)
+        return errorResponse(c, 500, 'internal_error', runtimeError.message, { runtime: runtimeError })
+      }
+      return Response.json({
+        runtime: 'ama-cloud',
+        accepted: true,
+        sandboxId: session.sandboxId,
+        path,
+      })
     } else {
       const body =
         request.method === 'GET' || request.method === 'HEAD'
@@ -968,23 +809,30 @@ export function createApp() {
           })
         }
       }
-    }
-
-    const makeRequest = await runtimeRequestFactory(request)
-    const { response } =
-      path === '/rpc' && request.method === 'POST'
-        ? await proxyPiRuntimeCommand(c.env, db, resolvedAuth, session, makeRequest)
-        : { response: await proxyPiRuntime(c.env, session.sandboxId, makeRequest()) }
-    const cursor = path === '/rpc' && request.method === 'POST' ? await runtimeEventCursor(response.clone()) : null
-    if (path === '/rpc' && request.method === 'POST') {
-      await recordRuntimeProxyFailure(db, resolvedAuth, session, response.clone())
-      if (response.ok && c.env.AMA_RUNTIME_MODE !== 'test') {
-        c.executionCtx.waitUntil(
-          drainPiRuntimeEvents(c.env, session.sandboxId, request, db, resolvedAuth, session, cursor),
-        )
+      if (operation?.operation === 'command' && request.method === 'POST' && c.env.AMA_RUNTIME_MODE === 'test') {
+        let result: Awaited<ReturnType<typeof executeRuntimeToolCalls>>
+        try {
+          result = await executeRuntimeToolCalls(c.env, {
+            sessionId: session.id,
+            sandboxId: session.sandboxId,
+            body: {
+              toolCalls: [
+                {
+                  id: newId('tool'),
+                  name: 'sandbox.exec',
+                  input: { command: operation.command },
+                },
+              ],
+            },
+          })
+        } catch (error) {
+          const runtimeError = await markRuntimeExecutionFailed(db, resolvedAuth, session, error)
+          return errorResponse(c, 500, 'internal_error', runtimeError.message, { runtime: runtimeError })
+        }
+        return Response.json({ runtime: 'ama-cloud', result: result[0] ?? null })
       }
     }
-    return response
+    return Response.json({ runtime: 'ama-cloud', sessionId: session.id, path })
   })
 
   routes.notFound((c) => c.json({ error: { type: 'not_found', message: 'Not found' } }, 404))

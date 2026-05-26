@@ -343,7 +343,7 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
     })
   })
 
-  it('proxies approved runtime MCP calls after policy evaluation', async () => {
+  it('accepts approved runtime MCP calls after policy evaluation', async () => {
     const authorization = await signInUser('runtime_allow_proxy')
     const credential = await createCredential(authorization)
     const connectRes = await jsonFetch('/api/mcp/connections', authorization, {
@@ -363,8 +363,8 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
     )
     expect(runtimeRes.status).toBe(200)
     await expect(runtimeRes.json()).resolves.toMatchObject({
+      runtime: 'ama-cloud',
       path: '/mcp/github/tools/repo.read/calls',
-      proxy: 'pi',
     })
   })
 

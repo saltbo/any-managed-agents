@@ -668,9 +668,9 @@ Then(
   async function (this: UiWorld) {
     const workflow = requireUiWorkflow(this)
     await waitForPersistedEvents(workflow.page.request, workflow.sessionId, (events) =>
-      events.some((event) => eventText(event).includes(`Received: ${workflow.message}`)),
+      events.some((event) => eventText(event).includes(`AMA runtime processed: ${workflow.message}`)),
     )
-    await expect(workflow.page.getByText(`Received: ${workflow.message}`).first()).toBeVisible()
+    await expect(workflow.page.getByText(`AMA runtime processed: ${workflow.message}`).first()).toBeVisible()
     await expect(workflow.page.getByText('Tool').first()).toBeVisible()
     await assertComposerNearBottom(workflow.page)
   },

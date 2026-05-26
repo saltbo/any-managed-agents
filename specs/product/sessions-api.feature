@@ -15,7 +15,7 @@ Feature: Sessions API
     When the user creates a session with the agent and environment
     Then the response includes a session id, project id, organization id, status, timestamps, durable object name, sandbox id, runtime endpoint, and model config
     And the session stores immutable agent and environment snapshots
-    And the session starts the Pi bridge inside a Cloudflare Sandbox
+    And AMA creates cloud-owned runtime state and initializes a Cloudflare Sandbox executor
     And lifecycle and sandbox events record session creation and runtime startup
 
   @implemented
@@ -32,7 +32,7 @@ Feature: Sessions API
     Given a project has an active agent and active environments
     When an external scheduler creates a session with an initial prompt and run correlation metadata
     Then the response includes the session id and run correlation metadata
-    And the initial prompt is dispatched to the Pi runtime without a browser WebSocket
+    And the initial prompt is dispatched to the AMA-owned runtime without a browser WebSocket
     And session events can be queried for launch diagnostics and transcript progress
 
   @implemented
@@ -45,11 +45,11 @@ Feature: Sessions API
 
   @implemented
   Scenario: Run a message through the session runtime endpoint
-    Given an idle session has a running Pi bridge
+    Given an idle session has cloud-owned runtime state and a sandbox executor
     When the user sends a runtime message to the session runtime endpoint
     Then the runtime accepts the message
     And the session status becomes running while work is in progress
-    And the Pi runtime can call approved tools inside the Cloudflare Sandbox
+    And the AMA runtime can dispatch approved tools through the Cloudflare Sandbox executor
     And message, tool, sandbox, usage, lifecycle, and error events are stored in sequence
     And the session returns to idle with a final result or moves to error with a safe failure reason
 
@@ -75,7 +75,7 @@ Feature: Sessions API
   Scenario: Stop a running session cooperatively
     Given a session is running
     When the user stops the session
-    Then AMA asks the Pi bridge to stop work
+    Then AMA cancels cloud-owned runtime work and stops the sandbox executor
     And no new model or tool work starts after the next cancellation boundary
     And the session status becomes stopped
     And stop lifecycle events and audit records include the user-requested reason

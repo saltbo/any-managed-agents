@@ -30,7 +30,7 @@ Feature: API contracts and automation
   Scenario: Keep automation separate from runtime protocol
     When an operator automates agent, session, provider, vault, governance, usage, or audit management
     Then automation uses an external Any Managed Agents SDK or the control-plane API
-    And runtime session interaction still uses Pi protocol or transparent AMA Pi proxy endpoints
+    And runtime session interaction still uses AMA runtime endpoints
 
   @planned
   Scenario: Support restish as the default CLI path
@@ -44,4 +44,4 @@ Feature: API contracts and automation
     When an automation agent needs to operate AMA from a terminal
     Then the project provides a skill that teaches the agent how to configure and use restish with the AMA OpenAPI document
     And the skill covers common workflows for agents, environments, sessions, providers, vaults, governance, usage, and audit
-    And the skill instructs runtime message interaction to use AMA runtime endpoints or Pi-compatible helpers rather than inventing a separate CLI protocol
+    And the skill instructs runtime message interaction to use AMA runtime endpoints rather than inventing a separate CLI protocol

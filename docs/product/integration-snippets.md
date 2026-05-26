@@ -95,4 +95,4 @@ const agent = await client.agents.create({
 const session = await client.sessions.create({ agentId: agent.id, environmentId: environment.id })
 ```
 
-Runtime task interaction is separate from restish control-plane automation. Use the `runtimeEndpointPath` returned by session reads with Pi-compatible helpers or the transparent AMA runtime proxy. Do not define a new CLI-level runtime protocol.
+Runtime task interaction is separate from restish control-plane automation. Use the `runtimeEndpointPath` returned by session reads with AMA runtime helpers. Do not define a new CLI-level runtime protocol.

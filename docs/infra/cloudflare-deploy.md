@@ -34,41 +34,38 @@ Control-plane settings:
 - `AMA_ALLOWED_ORIGINS`: comma-separated browser origins allowed for credentialed
   CORS requests.
 
-## Sandbox and Pi runtime
+## Sandbox tool executor
 
-Each AMA session starts one Cloudflare Sandbox instance and launches
-`server/runtime/pi/pi-bridge.mjs` inside that container. The bridge starts Pi in
-RPC mode and exposes `/health` and `/rpc` on `AMA_PI_BRIDGE_PORT`.
+Each AMA session owns one Cloudflare Sandbox instance as a tool executor backend.
+AMA cloud-side code owns the session loop and dispatches concrete tool execution
+requests to the sandbox. The sandbox runs commands and file operations in
+`/workspace`; it does not run the primary Pi/PyAgent process for the session.
 
 The container image must be built from this repository's `Dockerfile`. Runtime
-packages, including `@earendil-works/pi-coding-agent`, must be baked into the container image. The runtime must not install npm packages during session start; session
-startup should only create workspace metadata and launch the already-installed
-Pi bridge.
+packages required for tool execution must be baked into the container image. The
+runtime must not install npm packages during session start; session startup
+should only create workspace metadata and initialize the executor backend.
 
 Required Worker bindings and variables:
 
 - `SANDBOX`: Cloudflare Sandbox/Containers binding.
-- `AMA_PI_BRIDGE_PORT`: bridge port, default `8788`.
 - `AMA_RUNTIME_MODE=live` for deployed environments. Tests use
   `AMA_RUNTIME_MODE=test`.
-- `AMA_PI_BRIDGE_COMMAND`: optional override for the bridge command.
+- `AMA_PI_BRIDGE_PORT` and `AMA_PI_BRIDGE_COMMAND`: legacy bridge-only settings.
+  They are not used by the normal v1 cloud-owned runtime path.
 
 ## Workers AI model configuration
 
-v1.0 passes model work from Pi to Cloudflare Workers AI through Pi's
-`cloudflare-workers-ai` provider. AMA stores provider/model policy on agent
-versions and maps the external AMA provider name `workers-ai` to Pi's provider
-name when launching the runtime. The sandbox does not call the Cloudflare REST
-API directly. AMA writes a Pi `models.json` override so Pi sends OpenAI-compatible
-chat completion requests to AMA's runtime Workers AI proxy, and the Worker calls
-Workers AI through the `AI` binding.
+v1.0 keeps model and provider policy in AMA before runtime work starts. The
+cloud-owned runtime calls provider adapters from the Worker side. The sandbox
+does not call the Cloudflare REST API directly for model work.
 
 Required settings:
 
 - `AMA_DEFAULT_MODEL=@cf/moonshotai/kimi-k2.6`
 - `AMA_WORKERS_AI_ACCOUNT_ID=<cloudflare-account-id>`
-- `AMA_RUNTIME_AI_PROXY_TOKEN`: Wrangler secret used only between the sandbox
-  Pi process and AMA's `/api/runtime/workers-ai/v1/chat/completions` proxy.
+- `AMA_RUNTIME_AI_PROXY_TOKEN`: legacy bridge-only secret. It is not required by
+  the normal cloud-owned runtime path.
 - `AMA_AI_GATEWAY_ID`: optional Cloudflare AI Gateway id
 
 Do not store raw provider credentials in D1, session events, UI state, or logs.
