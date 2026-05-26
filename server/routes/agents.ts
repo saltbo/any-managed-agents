@@ -386,7 +386,6 @@ async function createAgentVersion(
     skills: stringify(values.skills),
     allowedTools: stringify(values.allowedTools),
     mcpConnectors: stringify(values.mcpConnectors),
-    sandboxPolicy: '{}',
     metadata: stringify(values.metadata),
     createdAt: values.createdAt,
   }
@@ -598,7 +597,6 @@ const routes = app
       skills: stringify(skills),
       allowedTools: stringify(allowedTools),
       mcpConnectors: stringify(mcpConnectors),
-      sandboxPolicy: '{}',
       metadata: stringify(metadata),
       status: 'active',
       archivedAt: null,

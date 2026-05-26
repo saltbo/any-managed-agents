@@ -258,6 +258,20 @@ function serializeAgentVersion(row: AgentVersionRow) {
   }
 }
 
+type SerializedAgentVersion = ReturnType<typeof serializeAgentVersion>
+
+function parseAgentSnapshot(value: string | null) {
+  const parsed = parseJson<SerializedAgentVersion & { sandboxPolicy?: unknown }>(value)
+  if (!parsed) {
+    return null
+  }
+  const { sandboxPolicy: _sandboxPolicy, ...snapshot } = parsed
+  return {
+    ...snapshot,
+    skills: Array.isArray(parsed.skills) ? parsed.skills : [],
+  } satisfies SerializedAgentVersion
+}
+
 function serializeEnvironmentVersion(row: EnvironmentVersionRow) {
   return {
     ...row,
@@ -274,16 +288,9 @@ function serializeEnvironmentVersion(row: EnvironmentVersionRow) {
 }
 
 function serializeSession(row: SessionRow) {
-  const parsedAgentSnapshot = parseJson<ReturnType<typeof serializeAgentVersion> & { sandboxPolicy?: unknown }>(
-    row.agentSnapshot,
-  )
-  if (!parsedAgentSnapshot) {
+  const agentSnapshot = parseAgentSnapshot(row.agentSnapshot)
+  if (!agentSnapshot) {
     throw new Error('Session agent snapshot is required')
-  }
-  const { sandboxPolicy: _sandboxPolicy, ...agentSnapshotWithoutSandboxPolicy } = parsedAgentSnapshot
-  const agentSnapshot = {
-    ...agentSnapshotWithoutSandboxPolicy,
-    skills: Array.isArray(parsedAgentSnapshot.skills) ? parsedAgentSnapshot.skills : [],
   }
 
   return {
@@ -800,7 +807,7 @@ async function dispatchInitialPrompt(env: Env, db: Db, auth: AuthContext, sessio
   }
 
   try {
-    const agentSnapshot = parseJson<ReturnType<typeof serializeAgentVersion>>(session.agentSnapshot)
+    const agentSnapshot = parseAgentSnapshot(session.agentSnapshot)
     if (!agentSnapshot) {
       throw new Error('Session agent snapshot is required')
     }
@@ -1010,7 +1017,7 @@ export async function recoverSessionRuntime(env: Env, db: Db, auth: AuthContext,
   if (!session.sandboxId) {
     throw new Error('Session runtime is unavailable')
   }
-  const agentSnapshot = parseJson<ReturnType<typeof serializeAgentVersion>>(session.agentSnapshot)
+  const agentSnapshot = parseAgentSnapshot(session.agentSnapshot)
   if (!agentSnapshot) {
     throw new Error('Session agent snapshot is required')
   }
