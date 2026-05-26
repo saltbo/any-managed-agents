@@ -21,6 +21,15 @@ export const operations = [
   },
   {
     "method": "DELETE",
+    "path": "/api/scheduled-agent-triggers/{triggerId}",
+    "operationId": "archiveScheduledAgentTrigger",
+    "summary": "Archive a scheduled agent trigger",
+    "tags": [
+      "Scheduled agent triggers"
+    ]
+  },
+  {
+    "method": "DELETE",
     "path": "/api/sessions/{sessionId}",
     "operationId": "archiveSession",
     "summary": "Archive a session",
@@ -107,6 +116,15 @@ export const operations = [
     "summary": "Create provider access rule",
     "tags": [
       "Governance"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/scheduled-agent-triggers",
+    "operationId": "createScheduledAgentTrigger",
+    "summary": "Create a scheduled agent trigger",
+    "tags": [
+      "Scheduled agent triggers"
     ]
   },
   {
@@ -318,6 +336,24 @@ export const operations = [
   },
   {
     "method": "GET",
+    "path": "/api/scheduled-agent-triggers",
+    "operationId": "listScheduledAgentTriggers",
+    "summary": "List scheduled agent triggers",
+    "tags": [
+      "Scheduled agent triggers"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/scheduled-agent-triggers/{triggerId}/runs",
+    "operationId": "listScheduledTriggerRuns",
+    "summary": "List scheduled trigger runs",
+    "tags": [
+      "Scheduled agent triggers"
+    ]
+  },
+  {
+    "method": "GET",
     "path": "/api/sessions/{sessionId}/events",
     "operationId": "listSessionEvents",
     "summary": "List session events",
@@ -435,6 +471,15 @@ export const operations = [
   },
   {
     "method": "GET",
+    "path": "/api/scheduled-agent-triggers/{triggerId}",
+    "operationId": "readScheduledAgentTrigger",
+    "summary": "Read a scheduled agent trigger",
+    "tags": [
+      "Scheduled agent triggers"
+    ]
+  },
+  {
+    "method": "GET",
     "path": "/api/sessions/{sessionId}",
     "operationId": "readSession",
     "summary": "Read a session",
@@ -548,6 +593,15 @@ export const operations = [
     "summary": "Update a provider",
     "tags": [
       "Providers"
+    ]
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/scheduled-agent-triggers/{triggerId}",
+    "operationId": "updateScheduledAgentTrigger",
+    "summary": "Update a scheduled agent trigger",
+    "tags": [
+      "Scheduled agent triggers"
     ]
   },
   {

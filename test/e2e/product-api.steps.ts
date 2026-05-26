@@ -38,6 +38,10 @@ interface E2EState {
   accessRule?: Json
   policy?: Json
   budget?: Json
+  scheduledTrigger?: Json
+  scheduledDispatch?: Json
+  duplicateScheduledDispatch?: Json
+  inactiveScheduledTriggers?: Json[]
   mcpConnection?: Json
   otherPage?: Page
   deletedCredentialVersionId?: string
@@ -915,6 +919,80 @@ When(
     state.latestSession = await waitForSession(state.page.request, String(session.id))
   },
 )
+
+When('the user creates a due scheduled agent trigger', async function (this: ProductWorld) {
+  await ensureAgentAndEnvironment(this)
+  const state = await ensureState(this)
+  state.runtimeMessage = 'Research current Canadian banking bonus offers.'
+  state.scheduledTrigger = await apiJson<Json>(state.page.request, '/api/scheduled-agent-triggers', {
+    method: 'POST',
+    data: {
+      agentId: state.agent?.id,
+      environmentId: state.environment?.id,
+      name: `${state.runId} banking bonus heartbeat`,
+      promptTemplate: state.runtimeMessage,
+      schedule: { type: 'interval', intervalSeconds: 3600 },
+      nextDueAt: '2026-05-26T12:00:00.000Z',
+      metadata: { externalRunGroup: `${state.runId}-banking-bonus` },
+    },
+  })
+})
+
+When('the local heartbeat dispatcher runs twice for the same occurrence', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  state.scheduledDispatch = await apiJson<Json>(state.page.request, '/api/e2e/scheduled-agent-triggers/dispatch', {
+    method: 'POST',
+    data: { heartbeatAt: '2026-05-26T12:01:00.000Z' },
+  })
+  state.duplicateScheduledDispatch = await apiJson<Json>(
+    state.page.request,
+    '/api/e2e/scheduled-agent-triggers/dispatch',
+    {
+      method: 'POST',
+      data: { heartbeatAt: '2026-05-26T12:01:00.000Z' },
+    },
+  )
+  const run = required(arrayValue(state.scheduledDispatch.runs)[0], 'scheduled run')
+  state.latestSession = await waitForSession(state.page.request, String(run.sessionId))
+})
+
+When('the user creates paused and archived scheduled agent triggers', async function (this: ProductWorld) {
+  await ensureAgentAndEnvironment(this)
+  const state = await ensureState(this)
+  const paused = await apiJson<Json>(state.page.request, '/api/scheduled-agent-triggers', {
+    method: 'POST',
+    data: {
+      agentId: state.agent?.id,
+      environmentId: state.environment?.id,
+      name: `${state.runId} paused heartbeat`,
+      promptTemplate: 'Do not dispatch paused trigger.',
+      schedule: { intervalSeconds: 3600 },
+      status: 'paused',
+      nextDueAt: '2026-05-26T12:00:00.000Z',
+    },
+  })
+  const archived = await apiJson<Json>(state.page.request, '/api/scheduled-agent-triggers', {
+    method: 'POST',
+    data: {
+      agentId: state.agent?.id,
+      environmentId: state.environment?.id,
+      name: `${state.runId} archived heartbeat`,
+      promptTemplate: 'Do not dispatch archived trigger.',
+      schedule: { intervalSeconds: 3600 },
+      nextDueAt: '2026-05-26T12:00:00.000Z',
+    },
+  })
+  await emptyResponse(state.page.request, `/api/scheduled-agent-triggers/${archived.id}`, { method: 'DELETE' })
+  state.inactiveScheduledTriggers = [paused, archived]
+})
+
+When('the local heartbeat dispatcher runs', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  state.scheduledDispatch = await apiJson<Json>(state.page.request, '/api/e2e/scheduled-agent-triggers/dispatch', {
+    method: 'POST',
+    data: { heartbeatAt: '2026-05-26T12:01:00.000Z' },
+  })
+})
 
 When(
   'the agent is archived, the environment is archived, the model provider is unavailable, or the sandbox policy is blocked',
@@ -2133,6 +2211,85 @@ Then(
 )
 
 Then(
+  'one scheduled run creates a session with the initial prompt and correlation metadata',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    const dispatch = required(state.scheduledDispatch, 'scheduled dispatch')
+    const runs = arrayValue(dispatch.runs)
+    assert.equal(dispatch.claimed, 1)
+    assert.equal(dispatch.sessionCreated, 1)
+    assert.equal(runs.length, 1)
+    const run = objectValue(required(runs[0], 'scheduled run'))
+    assert.equal(run.status, 'session_created')
+    assert.equal(run.scheduledFor, '2026-05-26T12:00:00.000Z')
+    const session = required(state.latestSession, 'scheduled session')
+    assert.equal(session.id, run.sessionId)
+    assert.equal(objectValue(session.metadata).source, 'scheduled-agent-trigger')
+    assert.equal(objectValue(session.metadata).scheduledTriggerId, state.scheduledTrigger?.id)
+    assert.equal(objectValue(session.metadata).scheduledRunId, run.runId)
+    assert.equal(objectValue(session.metadata).scheduledFor, '2026-05-26T12:00:00.000Z')
+    assert.equal(
+      objectValue(session.metadata).correlationId,
+      `schedule:${state.scheduledTrigger?.id}:2026-05-26T12:00:00.000Z`,
+    )
+    const runHistory = await apiJson<ListResponse<Json>>(
+      state.page.request,
+      `/api/scheduled-agent-triggers/${state.scheduledTrigger?.id}/runs`,
+    )
+    const persistedRun = objectValue(required(runHistory.data[0], 'persisted scheduled run'))
+    assert.equal(persistedRun.correlationId, objectValue(session.metadata).correlationId)
+    assert.equal(persistedRun.idempotencyKey, `${state.scheduledTrigger?.id}:2026-05-26T12:00:00.000Z`)
+    const events = await sessionEvents(state)
+    assert.ok(JSON.stringify(events.data).includes(state.runtimeMessage ?? ''))
+  },
+)
+
+Then(
+  'duplicate heartbeat dispatch does not create another session for the same occurrence',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    const duplicate = required(state.duplicateScheduledDispatch, 'duplicate scheduled dispatch')
+    assert.equal(duplicate.claimed, 0)
+    assert.equal(duplicate.sessionCreated, 0)
+    assert.deepEqual(arrayValue(duplicate.runs), [])
+    const runs = await apiJson<ListResponse<Json>>(
+      state.page.request,
+      `/api/scheduled-agent-triggers/${state.scheduledTrigger?.id}/runs`,
+    )
+    assert.equal(runs.data.length, 1)
+  },
+)
+
+Then('scheduled trigger dispatch is recorded in audit history', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const audit = await apiJson<ListResponse<Json>>(
+    state.page.request,
+    '/api/audit-records?action=scheduled_trigger.dispatch',
+  )
+  assert.ok(
+    audit.data.some(
+      (record) =>
+        record.actorType === 'system' &&
+        record.actorUserId === null &&
+        record.sessionId === state.latestSession?.id &&
+        record.outcome === 'success',
+    ),
+  )
+})
+
+Then('inactive scheduled triggers have no run history', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  assert.equal(state.scheduledDispatch?.claimed, 0)
+  for (const trigger of state.inactiveScheduledTriggers ?? []) {
+    const runs = await apiJson<ListResponse<Json>>(
+      state.page.request,
+      `/api/scheduled-agent-triggers/${trigger.id}/runs`,
+    )
+    assert.deepEqual(runs.data, [])
+  }
+})
+
+Then(
   'session events can be queried for launch diagnostics and transcript progress',
   async function (this: ProductWorld) {
     const events = await sessionEvents(await ensureState(this))
@@ -2651,6 +2808,10 @@ async function emptyResponse(
 
 function objectValue(value: unknown) {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Json) : {}
+}
+
+function arrayValue(value: unknown) {
+  return Array.isArray(value) ? value : []
 }
 
 function required<T>(value: T | undefined | null, label: string) {

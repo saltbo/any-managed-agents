@@ -3335,6 +3335,430 @@
           "createdAt"
         ]
       },
+      "ScheduledAgentTrigger": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "sched_abc123"
+          },
+          "organizationId": {
+            "type": "string",
+            "example": "org_abc123"
+          },
+          "projectId": {
+            "type": "string",
+            "example": "project_abc123"
+          },
+          "agentId": {
+            "type": "string",
+            "example": "agent_abc123"
+          },
+          "environmentId": {
+            "type": "string",
+            "example": "env_abc123"
+          },
+          "name": {
+            "type": "string",
+            "example": "Daily research heartbeat"
+          },
+          "promptTemplate": {
+            "type": "string",
+            "example": "Research current Canadian banking bonus offers."
+          },
+          "schedule": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "interval"
+                ]
+              },
+              "intervalSeconds": {
+                "type": "integer",
+                "example": 86400
+              },
+              "windowSeconds": {
+                "type": "integer",
+                "example": 0
+              }
+            },
+            "required": [
+              "type",
+              "intervalSeconds",
+              "windowSeconds"
+            ],
+            "example": {
+              "type": "interval",
+              "intervalSeconds": 86400,
+              "windowSeconds": 0
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "paused",
+              "archived"
+            ],
+            "example": "active"
+          },
+          "nextDueAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-05-26T12:00:00.000Z"
+          },
+          "lastDispatchedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": null
+          },
+          "lastRunId": {
+            "type": "string",
+            "nullable": true,
+            "example": "schedrun_abc123"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "owner": "growth"
+            }
+          },
+          "createdByUserId": {
+            "type": "string",
+            "nullable": true,
+            "example": "user_abc123"
+          },
+          "archivedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": null
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "organizationId",
+          "projectId",
+          "agentId",
+          "environmentId",
+          "name",
+          "promptTemplate",
+          "schedule",
+          "status",
+          "nextDueAt",
+          "lastDispatchedAt",
+          "lastRunId",
+          "metadata",
+          "createdByUserId",
+          "archivedAt",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateScheduledAgentTriggerRequest": {
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "string",
+            "minLength": 1,
+            "example": "agent_abc123"
+          },
+          "environmentId": {
+            "type": "string",
+            "minLength": 1,
+            "example": "env_abc123"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "example": "Daily research heartbeat"
+          },
+          "promptTemplate": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16000,
+            "example": "Research current Canadian banking bonus offers."
+          },
+          "schedule": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "interval"
+                ],
+                "example": "interval"
+              },
+              "intervalSeconds": {
+                "type": "integer",
+                "minimum": 60,
+                "maximum": 31536000,
+                "example": 86400
+              },
+              "windowSeconds": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 86400,
+                "example": 0
+              }
+            },
+            "required": [
+              "intervalSeconds"
+            ],
+            "additionalProperties": false
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "paused"
+            ],
+            "example": "active"
+          },
+          "nextDueAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-05-26T12:00:00.000Z"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "owner": "growth"
+            }
+          }
+        },
+        "required": [
+          "agentId",
+          "environmentId",
+          "name",
+          "promptTemplate",
+          "schedule"
+        ],
+        "additionalProperties": false
+      },
+      "ScheduledAgentTriggerListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScheduledAgentTrigger"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/ListPagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ]
+      },
+      "UpdateScheduledAgentTriggerRequest": {
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "string",
+            "minLength": 1,
+            "example": "agent_abc123"
+          },
+          "environmentId": {
+            "type": "string",
+            "minLength": 1,
+            "example": "env_abc123"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "example": "Daily research heartbeat"
+          },
+          "promptTemplate": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16000,
+            "example": "Research current Canadian banking bonus offers."
+          },
+          "schedule": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "interval"
+                ],
+                "example": "interval"
+              },
+              "intervalSeconds": {
+                "type": "integer",
+                "minimum": 60,
+                "maximum": 31536000,
+                "example": 86400
+              },
+              "windowSeconds": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 86400,
+                "example": 0
+              }
+            },
+            "required": [
+              "intervalSeconds"
+            ],
+            "additionalProperties": false
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "paused"
+            ],
+            "example": "paused"
+          },
+          "nextDueAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-05-27T12:00:00.000Z"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "owner": "growth"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ScheduledTriggerRunListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScheduledTriggerRun"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/ListPagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ]
+      },
+      "ScheduledTriggerRun": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "schedrun_abc123"
+          },
+          "organizationId": {
+            "type": "string",
+            "example": "org_abc123"
+          },
+          "projectId": {
+            "type": "string",
+            "example": "project_abc123"
+          },
+          "triggerId": {
+            "type": "string",
+            "example": "sched_abc123"
+          },
+          "scheduledFor": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-05-26T12:00:00.000Z"
+          },
+          "heartbeatAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-05-26T12:01:00.000Z"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "claimed",
+              "session_created",
+              "failed"
+            ],
+            "example": "session_created"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "example": "sched_abc123:2026-05-26T12:00:00.000Z"
+          },
+          "sessionId": {
+            "type": "string",
+            "nullable": true,
+            "example": "session_abc123"
+          },
+          "correlationId": {
+            "type": "string",
+            "example": "schedule:sched_abc123:2026-05-26T12:00:00.000Z"
+          },
+          "errorMessage": {
+            "type": "string",
+            "nullable": true,
+            "example": null
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "source": "scheduled-agent-trigger"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "organizationId",
+          "projectId",
+          "triggerId",
+          "scheduledFor",
+          "heartbeatAt",
+          "status",
+          "idempotencyKey",
+          "sessionId",
+          "correlationId",
+          "errorMessage",
+          "metadata",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
       "Session": {
         "type": "object",
         "properties": {
@@ -7548,6 +7972,545 @@
           },
           "401": {
             "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scheduled-agent-triggers": {
+      "post": {
+        "operationId": "createScheduledAgentTrigger",
+        "tags": [
+          "Scheduled agent triggers"
+        ],
+        "summary": "Create a scheduled agent trigger",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateScheduledAgentTriggerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created scheduled agent trigger",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledAgentTrigger"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "listScheduledAgentTriggers",
+        "tags": [
+          "Scheduled agent triggers"
+        ],
+        "summary": "List scheduled agent triggers",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ],
+              "example": "false"
+            },
+            "required": false,
+            "name": "includeArchived",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "active",
+                "paused",
+                "archived"
+              ],
+              "example": "active"
+            },
+            "required": false,
+            "name": "status",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120,
+              "example": "research"
+            },
+            "required": false,
+            "name": "search",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "example": "2026-05-01T00:00:00.000Z"
+            },
+            "required": false,
+            "name": "createdFrom",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "example": "2026-05-31T23:59:59.999Z"
+            },
+            "required": false,
+            "name": "createdTo",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "example": 50
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512,
+              "example": "eyJjcmVhdGVkQXQiOiIyMDI2LTA1LTIyVDAwOjAwOjAwLjAwMFoiLCJpZCI6ImFnZW50X2FiYzEyMyJ9"
+            },
+            "required": false,
+            "name": "cursor",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Scheduled agent triggers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledAgentTriggerListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scheduled-agent-triggers/{triggerId}": {
+      "get": {
+        "operationId": "readScheduledAgentTrigger",
+        "tags": [
+          "Scheduled agent triggers"
+        ],
+        "summary": "Read a scheduled agent trigger",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "sched_abc123"
+            },
+            "required": true,
+            "name": "triggerId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Scheduled agent trigger",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledAgentTrigger"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Scheduled agent trigger not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateScheduledAgentTrigger",
+        "tags": [
+          "Scheduled agent triggers"
+        ],
+        "summary": "Update a scheduled agent trigger",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "sched_abc123"
+            },
+            "required": true,
+            "name": "triggerId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateScheduledAgentTriggerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated scheduled agent trigger",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledAgentTrigger"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Scheduled agent trigger not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "archiveScheduledAgentTrigger",
+        "tags": [
+          "Scheduled agent triggers"
+        ],
+        "summary": "Archive a scheduled agent trigger",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "sched_abc123"
+            },
+            "required": true,
+            "name": "triggerId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Scheduled agent trigger archived"
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Scheduled agent trigger not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scheduled-agent-triggers/{triggerId}/runs": {
+      "get": {
+        "operationId": "listScheduledTriggerRuns",
+        "tags": [
+          "Scheduled agent triggers"
+        ],
+        "summary": "List scheduled trigger runs",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "sched_abc123"
+            },
+            "required": true,
+            "name": "triggerId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ],
+              "example": "false"
+            },
+            "required": false,
+            "name": "includeArchived",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "claimed",
+                "session_created",
+                "failed"
+              ],
+              "example": "claimed"
+            },
+            "required": false,
+            "name": "status",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120,
+              "example": "research"
+            },
+            "required": false,
+            "name": "search",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "example": "2026-05-01T00:00:00.000Z"
+            },
+            "required": false,
+            "name": "createdFrom",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "example": "2026-05-31T23:59:59.999Z"
+            },
+            "required": false,
+            "name": "createdTo",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "example": 50
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512,
+              "example": "eyJjcmVhdGVkQXQiOiIyMDI2LTA1LTIyVDAwOjAwOjAwLjAwMFoiLCJpZCI6ImFnZW50X2FiYzEyMyJ9"
+            },
+            "required": false,
+            "name": "cursor",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Scheduled trigger runs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledTriggerRunListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Scheduled agent trigger not found",
             "content": {
               "application/json": {
                 "schema": {

@@ -277,6 +277,75 @@ export const sessionEvents = sqliteTable(
   ],
 )
 
+export const scheduledAgentTriggers = sqliteTable(
+  'scheduled_agent_triggers',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id').notNull(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id),
+    agentId: text('agent_id')
+      .notNull()
+      .references(() => agentDefinitions.id),
+    environmentId: text('environment_id')
+      .notNull()
+      .references(() => environments.id),
+    name: text('name').notNull(),
+    promptTemplate: text('prompt_template').notNull(),
+    intervalSeconds: integer('interval_seconds').notNull(),
+    windowSeconds: integer('window_seconds').notNull().default(0),
+    status: text('status').notNull().default('active'),
+    nextDueAt: text('next_due_at').notNull(),
+    lastDispatchedAt: text('last_dispatched_at'),
+    lastRunId: text('last_run_id'),
+    metadata: text('metadata').notNull().default('{}'),
+    createdByUserId: text('created_by_user_id'),
+    archivedAt: text('archived_at'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    index('idx_scheduled_agent_triggers_project_status_next').on(
+      table.projectId,
+      table.status,
+      table.nextDueAt,
+      table.id,
+    ),
+    index('idx_scheduled_agent_triggers_due').on(table.status, table.nextDueAt, table.id),
+  ],
+)
+
+export const scheduledTriggerRuns = sqliteTable(
+  'scheduled_trigger_runs',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id').notNull(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id),
+    triggerId: text('trigger_id')
+      .notNull()
+      .references(() => scheduledAgentTriggers.id),
+    scheduledFor: text('scheduled_for').notNull(),
+    heartbeatAt: text('heartbeat_at').notNull(),
+    status: text('status').notNull(),
+    idempotencyKey: text('idempotency_key').notNull(),
+    sessionId: text('session_id').references(() => sessions.id),
+    correlationId: text('correlation_id').notNull(),
+    errorMessage: text('error_message'),
+    metadata: text('metadata').notNull().default('{}'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('idx_scheduled_trigger_runs_unique_occurrence').on(table.triggerId, table.scheduledFor),
+    uniqueIndex('idx_scheduled_trigger_runs_idempotency_key').on(table.idempotencyKey),
+    index('idx_scheduled_trigger_runs_trigger_created').on(table.triggerId, table.createdAt, table.id),
+    index('idx_scheduled_trigger_runs_project_created').on(table.projectId, table.createdAt, table.id),
+  ],
+)
+
 export const providerConfigs = sqliteTable(
   'provider_configs',
   {

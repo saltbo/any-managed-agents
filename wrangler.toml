@@ -22,6 +22,9 @@ OIDC_ISSUER = "https://id.tftt.cc/api/auth"
 OIDC_CLIENT_ID = "client_bb3a932954974ebea6da443dd4a3905c"
 AMA_ALLOWED_ORIGINS = "https://ama.tftt.cc,https://any-managed-agents.saltbo.workers.dev"
 
+[triggers]
+crons = ["*/5 * * * *"]
+
 [ai]
 binding = "AI"
 
@@ -66,6 +69,9 @@ OIDC_ISSUER = "https://id.tftt.cc/api/auth"
 OIDC_CLIENT_ID = "client_bb3a932954974ebea6da443dd4a3905c"
 AMA_ALLOWED_ORIGINS = "https://replace-with-staging-app-host"
 
+[env.staging.triggers]
+crons = ["*/5 * * * *"]
+
 [env.staging.ai]
 binding = "AI"
 
@@ -101,6 +107,9 @@ AMA_ALLOWED_ORIGINS = "http://localhost:5173"
 AMA_E2E_TEST_AUTH = "true"
 AMA_RUNTIME_MODE = "test"
 AMA_APPROVED_EXTERNAL_VAULT_PREFIXES = "vault://ama/e2e/"
+
+[env.e2e.triggers]
+crons = []
 
 [env.e2e.ai]
 binding = "AI"

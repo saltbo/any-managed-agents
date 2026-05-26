@@ -28,6 +28,7 @@ const EXPECTED_RESTISH_OPERATIONS = {
   Agents: ['listAgents', 'createAgent'],
   Environments: ['listEnvironments', 'createEnvironment'],
   Sessions: ['listSessions', 'createSession'],
+  'Scheduled agent triggers': ['listScheduledAgentTriggers', 'createScheduledAgentTrigger'],
   Providers: ['listProviders', 'createProvider'],
   Vaults: ['listVaults', 'createVault'],
   Governance: ['readEffectiveGovernancePolicy', 'readGovernancePolicy'],
@@ -91,6 +92,9 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths).toHaveProperty('/api/usage/summary')
     expect(doc.paths).toHaveProperty('/api/audit-records')
     expect(doc.paths).toHaveProperty('/api/audit-records/export')
+    expect(doc.paths).toHaveProperty('/api/scheduled-agent-triggers')
+    expect(doc.paths).toHaveProperty('/api/scheduled-agent-triggers/{triggerId}')
+    expect(doc.paths).toHaveProperty('/api/scheduled-agent-triggers/{triggerId}/runs')
     expect(doc.paths).toHaveProperty('/api/sessions')
     expect(doc.paths).toHaveProperty('/api/sessions/{sessionId}')
     expect(doc.paths).toHaveProperty('/api/sessions/{sessionId}/stop')
@@ -149,6 +153,12 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths['/api/governance/policy']).toHaveProperty('put')
     expect(doc.paths['/api/usage/summary']).toHaveProperty('get')
     expect(doc.paths['/api/audit-records/export']).toHaveProperty('get')
+    expect(doc.paths['/api/scheduled-agent-triggers']).toHaveProperty('get')
+    expect(doc.paths['/api/scheduled-agent-triggers']).toHaveProperty('post')
+    expect(doc.paths['/api/scheduled-agent-triggers/{triggerId}']).toHaveProperty('get')
+    expect(doc.paths['/api/scheduled-agent-triggers/{triggerId}']).toHaveProperty('patch')
+    expect(doc.paths['/api/scheduled-agent-triggers/{triggerId}']).toHaveProperty('delete')
+    expect(doc.paths['/api/scheduled-agent-triggers/{triggerId}/runs']).toHaveProperty('get')
     expect(doc.paths['/api/health'].get.security).toBeUndefined()
     expect(doc.paths['/api/health'].get.security).toBeUndefined()
     expect(doc.paths['/api/agents'].get.security).toEqual([{ bearerAuth: [] }])
@@ -160,6 +170,7 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths['/api/governance/policy'].get.security).toEqual([{ bearerAuth: [] }])
     expect(doc.paths['/api/usage'].get.security).toEqual([{ bearerAuth: [] }])
     expect(doc.paths['/api/audit-records'].get.security).toEqual([{ bearerAuth: [] }])
+    expect(doc.paths['/api/scheduled-agent-triggers'].get.security).toEqual([{ bearerAuth: [] }])
     expect(doc.paths['/api/agents'].get.operationId).toBe('listAgents')
     expect(doc.paths['/api/environments'].get.operationId).toBe('listEnvironments')
     expect(doc.paths['/api/sessions'].get.operationId).toBe('listSessions')
@@ -170,6 +181,35 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths['/api/governance/effective-policy'].get.operationId).toBe('readEffectiveGovernancePolicy')
     expect(doc.paths['/api/usage/summary'].get.operationId).toBe('readUsageSummary')
     expect(doc.paths['/api/audit-records'].get.operationId).toBe('listAuditRecords')
+    expect(doc.paths['/api/scheduled-agent-triggers'].get.operationId).toBe('listScheduledAgentTriggers')
+    expect(doc.paths['/api/scheduled-agent-triggers'].post.operationId).toBe('createScheduledAgentTrigger')
+    expect(doc.paths['/api/scheduled-agent-triggers/{triggerId}'].get.operationId).toBe('readScheduledAgentTrigger')
+    expect(doc.paths['/api/scheduled-agent-triggers/{triggerId}'].patch.operationId).toBe('updateScheduledAgentTrigger')
+    expect(doc.paths['/api/scheduled-agent-triggers/{triggerId}'].delete.operationId).toBe(
+      'archiveScheduledAgentTrigger',
+    )
+    expect(doc.paths['/api/scheduled-agent-triggers/{triggerId}/runs'].get.operationId).toBe('listScheduledTriggerRuns')
+    expect(
+      doc.paths['/api/scheduled-agent-triggers/{triggerId}'].get.parameters?.map(
+        (parameter) => (parameter as { name?: string }).name,
+      ),
+    ).toContain('triggerId')
+    expect(
+      doc.paths['/api/scheduled-agent-triggers/{triggerId}/runs'].get.parameters?.map(
+        (parameter) => (parameter as { name?: string }).name,
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        'triggerId',
+        'includeArchived',
+        'status',
+        'search',
+        'createdFrom',
+        'createdTo',
+        'limit',
+        'cursor',
+      ]),
+    )
     expect(doc.paths['/api/agents'].get.parameters?.map((parameter) => (parameter as { name?: string }).name)).toEqual(
       expect.arrayContaining(['includeArchived', 'status', 'search', 'createdFrom', 'createdTo', 'limit', 'cursor']),
     )
@@ -210,6 +250,12 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.components?.schemas).toHaveProperty('UsageRecord')
     expect(doc.components?.schemas).toHaveProperty('UsageSummary')
     expect(doc.components?.schemas).toHaveProperty('AuditRecord')
+    expect(doc.components?.schemas).toHaveProperty('ScheduledAgentTrigger')
+    expect(doc.components?.schemas).toHaveProperty('ScheduledTriggerRun')
+    expect(doc.components?.schemas).toHaveProperty('ScheduledAgentTriggerListResponse')
+    expect(doc.components?.schemas).toHaveProperty('ScheduledTriggerRunListResponse')
+    expect(doc.components?.schemas).toHaveProperty('CreateScheduledAgentTriggerRequest')
+    expect(doc.components?.schemas).toHaveProperty('UpdateScheduledAgentTriggerRequest')
     const createSessionProperties = (
       doc.components?.schemas?.CreateSessionRequest as {
         properties?: Record<string, { maxLength?: number; minLength?: number; type?: string }>
@@ -220,6 +266,34 @@ describe('[CF] OpenAPI documentation', () => {
       type: 'string',
       minLength: 1,
       maxLength: 16000,
+    })
+    const createTriggerProperties = (
+      doc.components?.schemas?.CreateScheduledAgentTriggerRequest as {
+        properties?: Record<string, { type?: string; minLength?: number; maxLength?: number; properties?: unknown }>
+        required?: string[]
+      }
+    )?.properties
+    expect(createTriggerProperties).toMatchObject({
+      agentId: { type: 'string', minLength: 1 },
+      environmentId: { type: 'string', minLength: 1 },
+      name: { type: 'string', minLength: 1, maxLength: 160 },
+      promptTemplate: { type: 'string', minLength: 1, maxLength: 16000 },
+      schedule: { type: 'object' },
+      nextDueAt: { type: 'string' },
+      metadata: { type: 'object' },
+    })
+    const triggerRunProperties = (
+      doc.components?.schemas?.ScheduledTriggerRun as {
+        properties?: Record<string, { type?: string; nullable?: boolean }>
+      }
+    )?.properties
+    expect(triggerRunProperties).toMatchObject({
+      scheduledFor: { type: 'string' },
+      heartbeatAt: { type: 'string' },
+      status: { type: 'string' },
+      idempotencyKey: { type: 'string' },
+      sessionId: { type: 'string', nullable: true },
+      correlationId: { type: 'string' },
     })
   })
 
