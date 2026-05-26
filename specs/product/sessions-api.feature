@@ -28,6 +28,14 @@ Feature: Sessions API
     And raw credentials are rejected from the request body
 
   @implemented
+  Scenario: Launch a session with an initial prompt through the API
+    Given a project has an active agent and active environments
+    When an external scheduler creates a session with an initial prompt and run correlation metadata
+    Then the response includes the session id and run correlation metadata
+    And the initial prompt is dispatched to the Pi runtime without a browser WebSocket
+    And session events can be queried for launch diagnostics and transcript progress
+
+  @implemented
   Scenario: Reject unavailable session dependencies
     Given a user attempts to create a session
     When the agent is archived, the environment is archived, the model provider is unavailable, or the sandbox policy is blocked
