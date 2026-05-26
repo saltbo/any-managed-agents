@@ -1,128 +1,142 @@
-# Contributing
+# Contributing to Any Managed Agents
 
-Thanks for helping build Any Managed Agents. This document explains the project stack, architecture, and development workflow.
+Thanks for helping improve Any Managed Agents. This guide covers local development, verification, and contribution expectations. Product positioning and user-facing project overview belong in [README.md](README.md); implementation details belong here or in `docs/`.
 
-## Project Goal
+## Project Boundaries
 
-Any Managed Agents is a Cloudflare-native managed agents platform. It can be deployed on Cloudflare Workers, publishes an OpenAPI control-plane contract, and runs Pi coding agent inside a per-session Cloudflare Sandbox for v1.0 runtime execution.
+Any Managed Agents is a Cloudflare-native Managed Agent control plane.
 
-The platform provides the control plane. Language SDKs are generated and maintained in separate repositories. This repository does not define a competing custom runtime SDK or incompatible runtime protocol.
+- AMA owns the control plane: projects, agents, environments, sessions, providers, vault references, governance, usage, audit, OpenAPI, UI, sandbox lifecycle, and runtime proxy metadata.
+- OIDC owns authentication, users, and organization identity. AMA must not maintain local user or organization tables.
+- Pi coding agent is the v1 runtime inside one Cloudflare Sandbox per running session.
+- Cloudflare Sandbox owns filesystem, process isolation, and per-session execution.
+- Runtime traffic uses Pi protocol directly or through a transparent AMA proxy.
+- OpenAPI is the external contract for direct HTTP clients, restish, and generated SDKs.
+- The web console uses the shared Hono RPC client for internal control-plane calls.
+- Secret values belong in Cloudflare Secrets or an approved external vault. D1 stores metadata, policy, snapshots, and secret references only.
 
-## Technology Stack
+This is a clean-room implementation. Do not copy source, specs, UI text, database schemas, or implementation details from AGPL projects.
 
-- TypeScript
-- Vite 7
-- React 19
-- Hono
-- Cloudflare Workers
-- Pi coding agent
-- Cloudflare Sandbox
-- Cloudflare Workers AI
-- Cloudflare D1
-- Cloudflare Durable Objects
-- Cloudflare Secrets
-- Drizzle ORM
-- Tailwind CSS v4
-- Biome
-- Vitest
-- Cloudflare Vitest pool
-- Gherkin + Cucumber.js + Playwright
+## Requirements
 
-The project is a single npm package. Do not introduce pnpm workspaces or a monorepo layout.
+- Node.js 24+
+- npm
+- Wrangler
+- Cloudflare account for deployed runtime work
+- OIDC application for login flows
+- Cloudflare Sandbox/Containers access for live Pi runtime sessions
 
-## Architecture
-
-```txt
-Client
-  -> external SDK or direct HTTP
-  -> /api/*
-     -> Hono control-plane routes
-     -> D1 metadata and governance state
-
-Client
-  -> external SDK runtime helper or direct runtime client
-  -> AMA runtime proxy
-  -> Pi RPC / JSON event stream
-
-AMA session lifecycle
-  -> Cloudflare Sandbox per-session sandbox
-  -> Pi coding agent process
-```
-
-### Control Plane
-
-The control plane owns product resources:
-
-- organizations, projects, and users
-- agent definitions
-- provider configuration for all supported providers
-- model policy
-- sandbox policy
-- session metadata
-- environment metadata
-- sandbox lifecycle
-- runtime proxy
-- UI surfaces
-- usage and cost records
-- audit records
-- Cloudflare Secrets references
-- governance rules
-
-Control-plane routes live under `server/routes/` and are mounted under `/api/*`.
-
-All control-plane APIs must be implemented with `@hono/zod-openapi`:
-
-- define request and response schemas with `z` from `@hono/zod-openapi`
-- define routes with `createRoute`
-- register handlers with `app.openapi`
-- expose the generated contract through `/api/openapi.json`
-- expose interactive docs through `/api/docs`
-
-Do not add new control-plane routes with plain `app.get`, `app.post`, or manual OpenAPI JSON. The route implementation, validation schema, response schema, OpenAPI contract, and tests should change together.
-
-### SDK Repositories
-
-This repository does not maintain SDK source code. It publishes `/api/openapi.json`; separate SDK repositories generate language clients from that contract.
-
-OpenAPI changes must be treated as SDK contract changes. Keep route schemas stable and version breaking changes intentionally.
-
-External SDKs may provide small runtime helpers, such as connecting to a session, but those helpers must delegate to Pi protocol or transparent AMA Pi proxy endpoints instead of defining a separate runtime protocol.
-
-### Runtime Plane
-
-v1.0 runtime traffic uses Pi protocol directly or through a transparent AMA proxy around Pi RPC and JSON event streams. AMA owns authentication, tenancy, session lookup, sandbox lifecycle, audit metadata, usage metadata, and proxying. Pi coding agent owns the runtime protocol, agent loop, built-in coding tools, session events, and prompt, abort, follow-up, and steer semantics.
-
-Cloudflare Agents SDK is not the v1.0 runtime contract. It may become a future adapter, but v1.0 work must not require `/agents/*` compatibility.
-
-### Environment and Sandbox
-
-`Environment` is a long-lived sandbox and runtime configuration stored by the control plane. It defines packages, variables, network policy, resource limits, Pi runtime configuration, and metadata. It is not a running sandbox.
-
-`Sandbox` is a runtime instance created from an environment snapshot. It is owned 1:1 by a session, follows the session lifecycle, provides filesystem, shell, process isolation, and per-session execution, and must not expose public ports.
-
-### Storage
-
-- D1 stores control-plane metadata.
-- Durable Objects may own control-plane coordination state when needed, but Pi in Cloudflare Sandbox owns v1.0 live runtime behavior.
-- Cloudflare Secrets stores provider credentials and other secret values.
-- D1 migrations live in `migrations/`.
-- Drizzle schema lives in `server/db/schema.ts`.
-
-## Development
-
-Install dependencies:
+## Local Setup
 
 ```bash
+git clone https://github.com/saltbo/any-managed-agents.git
+cd any-managed-agents
 npm install
-```
-
-Start local development:
-
-```bash
+cp .env.example .env
 npm run dev
 ```
 
-Run checks:
+For local API and browser checks, configure OIDC issuer/client values, `AMA_SESSION_SECRET`, and Workers AI settings. Live runtime sessions require the Cloudflare Sandbox container image built from this repository's `Dockerfile`.
+
+## Common Commands
+
+```bash
+npm run dev
+npm run lint
+npm run typecheck
+npm test
+npm run test:e2e
+npm run build
+```
+
+Script responsibilities:
+
+- `npm run lint`: Biome checks for formatting and linting.
+- `npm run typecheck`: server and web TypeScript projects.
+- `npm test`: unit, component, route, and runtime tests.
+- `npm run test:e2e`: local Cucumber product specs backed by local resources.
+- `npm run test:smoke`: deployed staging smoke that may use real Cloudflare, OIDC, runtime, and model quota.
+- `npm run build`: production Vite/Worker build.
+
+Choose the smallest meaningful check for a narrow change. For broad control-plane, runtime, or release work, run lint, typecheck, unit tests, e2e, and build.
+
+## Executable Specs First
+
+Product behavior starts in Gherkin:
+
+1. Write or update a scenario in `specs/product/`.
+2. Add or update Cucumber step definitions in `test/e2e/`.
+3. Implement Worker, runtime, D1, or UI behavior.
+4. Run the smallest meaningful verification command.
+
+`@implemented` product scenarios must exercise real local behavior through local Worker routes, local D1/test bindings, browser pages, or local app harnesses. Static shape checks and pure assertions belong in unit or contract tests, not product e2e specs.
+
+## Architecture Map
+
+```txt
+server/            Cloudflare Worker backend, routes, auth, D1, runtime orchestration
+server/routes/     API routes and OpenAPI-backed control-plane surfaces
+server/auth/       OIDC and session integration
+server/db/         D1 schema and persistence helpers
+server/runtime/    Cloudflare Sandbox and Pi runtime integration
+src/app/           React providers and router setup
+src/features/      Route-level console features
+src/console/       Shared AMA console components and view models
+src/components/ui/ shadcn-generated primitives
+specs/product/     Product behavior in Gherkin
+test/e2e/          Cucumber steps, browser helpers, and local harnesses
+docs/product/      Product decisions, API boundaries, and implementation notes
+docs/infra/        Cloudflare deployment and infrastructure notes
+```
+
+## API and OpenAPI
+
+Control-plane API behavior must stay aligned across route handlers, validation schemas, tests, and generated OpenAPI output. Stable error envelopes matter. Do not replace structured API errors with ad hoc strings.
+
+OpenAPI is the public contract for operators, generated SDKs, and restish workflows. The browser console should use the shared Hono RPC client instead of ad hoc `fetch('/api/...')` calls.
+
+## Authentication
+
+Use mature OIDC libraries:
+
+- `oidc-client-ts` in the browser for authorization-code PKCE redirect handling.
+- `openid-client` in the Worker for provider discovery and token-backed userinfo.
+
+Do not hand-roll token parsing, token validation, callback validation, or OIDC discovery logic.
+
+Expected configuration names use generic OIDC terminology, for example:
+
+- `OIDC_ISSUER`
+- `OIDC_CLIENT_ID`
+- `OIDC_CLIENT_SECRET`
+- `AMA_SESSION_SECRET`
+
+## UI Contributions
+
+Follow `docs/product/ui-ux-standards.md` for visible console work.
+
+- Compose route pages from shadcn primitives and shared AMA components.
+- Use React Query for server state.
+- Keep primary resources URL-routed and deep-linkable.
+- Use shared formatting and confirmation-dialog helpers.
+- Check desktop and 390px mobile behavior for visible UI changes.
+
+## Deployment Notes
+
+GitHub Actions runs CI checks. Production and staging deploys should run through Cloudflare Workers Builds unless the deployment policy changes.
+
+For full deployment setup, including D1, OIDC redirect URIs, Cloudflare Sandbox, Workers AI, and Durable Object migration bootstrap, see [docs/infra/cloudflare-deploy.md](docs/infra/cloudflare-deploy.md).
+
+## Pull Request Expectations
+
+- Keep changes focused.
+- Update specs or docs when behavior changes.
+- Keep route schemas, OpenAPI output, and tests aligned.
+- Do not commit `.env`, `.dev.vars`, secrets, local Playwright artifacts, Wrangler state, screenshots, videos, traces, or generated runtime artifacts.
+- Prefer failing fast over swallowing errors.
+- Delete dead code instead of polishing it.
+
+Before opening a PR, run the smallest verification command that proves the change. For broad changes, run:
 
 ```bash
 npm run lint
@@ -131,69 +145,3 @@ npm test
 npm run test:e2e
 npm run build
 ```
-
-Useful scripts:
-
-```bash
-npm run db:generate
-npm run db:migrate:d1
-npm run db:migrate:d1:staging
-npm run db:migrate:d1:prod
-```
-
-## BDD-First Workflow
-
-Product behavior is described in Gherkin specs under `specs/product/`.
-
-Use this workflow for feature work:
-
-1. Discover the desired behavior.
-2. Update or add BDD specs.
-3. Implement the smallest code change that satisfies the specs.
-4. Add focused tests when the behavior crosses module or runtime boundaries.
-5. Run the verification commands.
-
-If you discover new behavior while implementing, update the spec before continuing the implementation.
-
-## Testing Strategy
-
-- `npm test` runs unit, component, route, and Cloudflare runtime tests.
-- `npm run test:e2e` runs executable product specs with Cucumber; browser flows use the Playwright library inside step definitions.
-- `npm run test:smoke` runs deployed staging smoke only and may consume runtime/model quota.
-- `npm run build` proves the Worker and client can be bundled.
-
-Cloudflare runtime tests use `wrangler.test.toml`. It intentionally omits the Workers AI binding so CI does not need Cloudflare deployment credentials.
-
-## Cloudflare Deployment
-
-GitHub Actions does not deploy. It only runs CI checks.
-
-Deployment is handled by Cloudflare Workers Builds. For a brand-new Worker with Durable Object migrations, run one non-versioned bootstrap deployment first:
-
-```bash
-npm run build
-npx wrangler deploy
-```
-
-After that bootstrap, Cloudflare Workers Builds can upload versions normally.
-
-## Pull Request Checklist
-
-- BDD specs updated when product behavior changes
-- `npm run lint` passes
-- `npm run typecheck` passes
-- `npm test` passes
-- `npm run test:e2e` passes
-- `npm run test:smoke` passes before promoting staging changes that touch runtime/model integration
-- `npm run build` passes
-
-## Coding Guidelines
-
-- Keep changes small and scoped.
-- Prefer existing project patterns.
-- Do not add a dependency unless it removes real complexity.
-- Do not introduce a custom runtime SDK or incompatible runtime protocol.
-- Do not add SDK source code to this repository.
-- Do not require Cloudflare Agents SDK or `/agents/*` compatibility for v1.0 runtime traffic.
-- Do not store raw secret values in D1.
-- Do not introduce workspace tooling.
