@@ -1,5 +1,5 @@
 import { createRoute, z } from '@hono/zod-openapi'
-import { and, asc, desc, eq, gt, gte, like, lt, lte, max, ne, or } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, gte, isNull, like, lt, lte, max, ne, or } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
 import { piEventTypeFromPayload } from '../../shared/pi-events'
@@ -48,6 +48,12 @@ const EVENT_VISIBILITIES = ['runtime', 'transcript', 'debug', 'audit'] as const
 const RUNTIME_START_TIMEOUT_MS = 300_000
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
+const EnvironmentNetworkPolicySchema = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('unrestricted') }).strict(),
+  z.object({ mode: z.literal('restricted'), allowedHosts: z.array(z.string()) }).strict(),
+  z.object({ mode: z.literal('offline') }).strict(),
+])
+type EnvironmentNetworkPolicy = z.infer<typeof EnvironmentNetworkPolicySchema>
 const AgentVersionSchema = z
   .object({
     id: z.string(),
@@ -75,7 +81,8 @@ const EnvironmentVersionSchema = z
     packages: z.array(JsonObjectSchema),
     variables: JsonObjectSchema,
     secretRefs: z.array(JsonObjectSchema),
-    networkPolicy: JsonObjectSchema,
+    runtimeType: z.enum(['cloud-hosted', 'self-hosted']),
+    networkPolicy: EnvironmentNetworkPolicySchema,
     mcpPolicy: JsonObjectSchema,
     packageManagerPolicy: JsonObjectSchema,
     resourceLimits: JsonObjectSchema,
@@ -103,7 +110,7 @@ export const SessionSchema = z
     sandboxId: z.string().nullable().openapi({ example: 'session_abc123' }),
     piRuntimeId: z.string().nullable().openapi({ example: 'pi_session_abc123' }),
     piProcessId: z.string().nullable().openapi({ example: '1234' }),
-    runtimeEndpointPath: z.string().openapi({ example: '/runtime/sessions/session_abc123/rpc' }),
+    runtimeEndpointPath: z.string().nullable().openapi({ example: '/runtime/sessions/session_abc123/rpc' }),
     modelProvider: z.string().openapi({ example: 'workers-ai' }),
     modelConfig: JsonObjectSchema,
     status: z.enum(SESSION_STATUSES).openapi({ example: 'idle' }),
@@ -278,6 +285,7 @@ function serializeEnvironmentVersion(row: EnvironmentVersionRow) {
     packages: JSON.parse(row.packages) as Record<string, unknown>[],
     variables: JSON.parse(row.variables) as Record<string, unknown>,
     secretRefs: JSON.parse(row.secretRefs) as Record<string, unknown>[],
+    runtimeType: row.runtimeType as 'cloud-hosted' | 'self-hosted',
     networkPolicy: JSON.parse(row.networkPolicy) as Record<string, unknown>,
     mcpPolicy: JSON.parse(row.mcpPolicy) as Record<string, unknown>,
     packageManagerPolicy: JSON.parse(row.packageManagerPolicy) as Record<string, unknown>,
@@ -287,11 +295,54 @@ function serializeEnvironmentVersion(row: EnvironmentVersionRow) {
   }
 }
 
+type NormalizedEnvironmentSnapshot = Omit<
+  ReturnType<typeof serializeEnvironmentVersion>,
+  'runtimeType' | 'networkPolicy'
+> & {
+  runtimeType: 'cloud-hosted' | 'self-hosted'
+  networkPolicy: EnvironmentNetworkPolicy
+}
+
+function normalizeEnvironmentSnapshot(
+  snapshot: ReturnType<typeof serializeEnvironmentVersion> | Record<string, unknown> | null,
+): NormalizedEnvironmentSnapshot | null {
+  if (!snapshot) {
+    return null
+  }
+  const networkPolicy =
+    snapshot.networkPolicy && typeof snapshot.networkPolicy === 'object' && !Array.isArray(snapshot.networkPolicy)
+      ? (snapshot.networkPolicy as Record<string, unknown>)
+      : {}
+  const allowedHosts = Array.isArray(networkPolicy.allowedHosts)
+    ? networkPolicy.allowedHosts.filter(
+        (host): host is string => typeof host === 'string' && /^[a-z0-9.-]+$/.test(host),
+      )
+    : []
+  const normalizedNetworkPolicy: EnvironmentNetworkPolicy =
+    networkPolicy.mode === 'offline'
+      ? { mode: 'offline' }
+      : networkPolicy.mode === 'restricted' && allowedHosts.length > 0
+        ? { mode: 'restricted', allowedHosts }
+        : { mode: 'unrestricted' }
+  return {
+    ...snapshot,
+    runtimeType: snapshot.runtimeType === 'self-hosted' ? 'self-hosted' : 'cloud-hosted',
+    networkPolicy: normalizedNetworkPolicy,
+  } as NormalizedEnvironmentSnapshot
+}
+
+function environmentRuntimeType(snapshot: NormalizedEnvironmentSnapshot | null) {
+  return snapshot?.runtimeType === 'self-hosted' ? 'self-hosted' : 'cloud-hosted'
+}
+
 function serializeSession(row: SessionRow) {
   const agentSnapshot = parseAgentSnapshot(row.agentSnapshot)
   if (!agentSnapshot) {
     throw new Error('Session agent snapshot is required')
   }
+  const environmentSnapshot = normalizeEnvironmentSnapshot(
+    parseJson<ReturnType<typeof serializeEnvironmentVersion>>(row.environmentSnapshot),
+  )
 
   return {
     id: row.id,
@@ -302,7 +353,7 @@ function serializeSession(row: SessionRow) {
     agentSnapshot,
     environmentId: row.environmentId,
     environmentVersionId: row.environmentVersionId,
-    environmentSnapshot: parseJson<ReturnType<typeof serializeEnvironmentVersion>>(row.environmentSnapshot),
+    environmentSnapshot,
     title: row.title,
     resourceRefs: parseJson<Record<string, unknown>[]>(row.resourceRefs) ?? [],
     vaultRefs: parseJson<Record<string, unknown>[]>(row.vaultRefs) ?? [],
@@ -310,7 +361,9 @@ function serializeSession(row: SessionRow) {
     sandboxId: row.sandboxId,
     piRuntimeId: row.piRuntimeId,
     piProcessId: row.piProcessId,
-    runtimeEndpointPath: row.runtimeEndpointPath ?? runtimeEndpointPath(row.id),
+    runtimeEndpointPath:
+      row.runtimeEndpointPath ??
+      (environmentRuntimeType(environmentSnapshot) === 'cloud-hosted' ? runtimeEndpointPath(row.id) : null),
     modelProvider: row.modelProvider ?? agentSnapshot.provider,
     modelConfig: parseJson<Record<string, unknown>>(row.modelConfig) ?? { model: agentSnapshot.model },
     status: row.status as (typeof SESSION_STATUSES)[number],
@@ -380,6 +433,7 @@ async function markExpiredPendingSessions(db: Db, auth: AuthContext) {
       and(
         eq(sessions.projectId, auth.project.id),
         eq(sessions.status, 'pending'),
+        or(isNull(sessions.statusReason), ne(sessions.statusReason, 'requires-runner')),
         lt(sessions.createdAt, expiredBefore),
       ),
     )
@@ -581,33 +635,38 @@ export async function createSessionForAgent(
 
   const timestamp = now()
   const id = newId('session')
-  const sandboxId = id.toLowerCase()
   const agentSnapshot = serializeAgentVersion(agentVersion)
-  const environmentSnapshot = environmentVersion ? serializeEnvironmentVersion(environmentVersion) : null
-  const sandboxDecision = await evaluateSandboxRuntimePolicy(db, auth, {
-    session: {
-      id,
-      agentSnapshot: stringify(agentSnapshot),
-      environmentSnapshot: environmentSnapshot ? stringify(environmentSnapshot) : null,
-    },
-    operation: 'startup',
-  })
-  if (!sandboxDecision.allowed) {
-    await recordAudit(db, {
-      auth,
-      action: 'session.create',
-      resourceType: 'session',
-      outcome: 'denied',
-      requestId: requestId(c),
-      policyCategory: sandboxDecision.category,
-      metadata: { agentId, environmentId, decision: sandboxDecision },
+  const environmentSnapshot = environmentVersion
+    ? normalizeEnvironmentSnapshot(serializeEnvironmentVersion(environmentVersion))
+    : null
+  const runtimeType = environmentRuntimeType(environmentSnapshot)
+  const sandboxId = runtimeType === 'cloud-hosted' ? id.toLowerCase() : null
+  if (runtimeType === 'cloud-hosted') {
+    const sandboxDecision = await evaluateSandboxRuntimePolicy(db, auth, {
+      session: {
+        id,
+        agentSnapshot: stringify(agentSnapshot),
+        environmentSnapshot: environmentSnapshot ? stringify(environmentSnapshot) : null,
+      },
+      operation: 'startup',
     })
-    return errorResponse(c, 403, 'policy_denied', sandboxDecision.message, {
-      category: sandboxDecision.category,
-      resourceType: 'sandbox',
-      resourceId: sandboxId,
-      ruleId: sandboxDecision.rule,
-    })
+    if (!sandboxDecision.allowed) {
+      await recordAudit(db, {
+        auth,
+        action: 'session.create',
+        resourceType: 'session',
+        outcome: 'denied',
+        requestId: requestId(c),
+        policyCategory: sandboxDecision.category,
+        metadata: { agentId, environmentId, decision: sandboxDecision },
+      })
+      return errorResponse(c, 403, 'policy_denied', sandboxDecision.message, {
+        category: sandboxDecision.category,
+        resourceType: 'sandbox',
+        resourceId: sandboxId ?? id,
+        ruleId: sandboxDecision.rule,
+      })
+    }
   }
   const pending = {
     id,
@@ -627,12 +686,16 @@ export async function createSessionForAgent(
     sandboxId,
     piRuntimeId: null,
     piProcessId: null,
-    runtimeEndpointPath: runtimeEndpointPath(id),
+    runtimeEndpointPath: runtimeType === 'cloud-hosted' ? runtimeEndpointPath(id) : null,
     modelProvider: agentSnapshot.provider,
     modelConfig: stringify({ provider: agentSnapshot.provider, model: agentSnapshot.model }),
     status: 'pending',
-    statusReason: null,
-    metadata: stringify(options.metadata ?? {}),
+    statusReason: runtimeType === 'self-hosted' ? 'requires-runner' : null,
+    metadata: stringify({
+      ...(options.metadata ?? {}),
+      runtimeType,
+      ...(runtimeType === 'self-hosted' ? { runnerState: 'requires-runner' } : {}),
+    }),
     startedAt: null,
     stoppedAt: null,
     archivedAt: null,
@@ -648,8 +711,12 @@ export async function createSessionForAgent(
     outcome: 'success',
     requestId: requestId(c),
     sessionId: id,
-    metadata: { status: 'pending' },
+    metadata: { status: pending.status, runtimeType },
   })
+
+  if (runtimeType === 'self-hosted') {
+    return c.json(serializeSession(pending), 201)
+  }
 
   const startRuntime = () =>
     startSessionRuntimeForRow(c.env, db, auth, {

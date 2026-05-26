@@ -34,6 +34,12 @@ export interface SecretRef {
   ref: string
 }
 
+export type EnvironmentRuntimeType = 'cloud-hosted' | 'self-hosted'
+export type EnvironmentNetworkPolicy =
+  | { mode: 'unrestricted' }
+  | { mode: 'restricted'; allowedHosts: string[] }
+  | { mode: 'offline' }
+
 export interface Environment {
   id: string
   projectId: string
@@ -42,7 +48,8 @@ export interface Environment {
   packages: EnvironmentPackage[]
   variables: Record<string, EnvironmentVariable>
   secretRefs: SecretRef[]
-  networkPolicy: Record<string, unknown>
+  runtimeType: EnvironmentRuntimeType
+  networkPolicy: EnvironmentNetworkPolicy
   mcpPolicy: Record<string, unknown>
   packageManagerPolicy: Record<string, unknown>
   resourceLimits: Record<string, unknown>
@@ -121,7 +128,7 @@ export interface Session {
   sandboxId: string | null
   piRuntimeId: string | null
   piProcessId: string | null
-  runtimeEndpointPath: string
+  runtimeEndpointPath: string | null
   modelProvider: string
   modelConfig: Record<string, unknown>
   status: SessionStatus
@@ -367,7 +374,8 @@ export interface EnvironmentInput {
   packages?: EnvironmentPackage[]
   variables?: Record<string, EnvironmentVariable>
   secretRefs?: SecretRef[]
-  networkPolicy?: Record<string, unknown>
+  runtimeType?: EnvironmentRuntimeType
+  networkPolicy?: EnvironmentNetworkPolicy
   mcpPolicy?: Record<string, unknown>
   packageManagerPolicy?: Record<string, unknown>
   resourceLimits?: Record<string, unknown>

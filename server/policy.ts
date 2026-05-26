@@ -79,6 +79,27 @@ function mergedSandboxPolicy(
   }
 }
 
+function environmentNetworkMode(networkPolicy: Record<string, unknown>) {
+  return networkPolicy.mode === 'restricted' || networkPolicy.mode === 'offline' ? networkPolicy.mode : 'unrestricted'
+}
+
+function normalizeHost(value: string) {
+  const trimmed = value.trim().toLowerCase()
+  try {
+    return new URL(trimmed).hostname
+  } catch {
+    return trimmed.split(':')[0] ?? trimmed
+  }
+}
+
+function hostAllowed(allowedHosts: string[], host: string | null | undefined) {
+  if (!host) {
+    return false
+  }
+  const normalizedHost = normalizeHost(host)
+  return allowedHosts.map(normalizeHost).some((allowedHost) => allowedHost === '*' || allowedHost === normalizedHost)
+}
+
 function sessionAllowsTool(session: { agentSnapshot: string | null } | null, connectorId: string, toolName: string) {
   if (!session?.agentSnapshot) {
     return true
@@ -512,7 +533,8 @@ export async function evaluateSandboxRuntimePolicy(
   }
 
   if (values.operation === 'network') {
-    const networkPolicies = [policies.governance.network, policies.environmentNetwork.mode]
+    const environmentMode = environmentNetworkMode(policies.environmentNetwork)
+    const networkPolicies = [policies.governance.network, environmentMode]
     if (
       networkPolicies.some(
         (network) => network === 'disabled' || network === 'deny' || network === 'offline' || network === false,
@@ -526,10 +548,18 @@ export async function evaluateSandboxRuntimePolicy(
       }
     }
 
-    const allowedHosts = stringArray(policies.governance.allowedHosts).concat(
-      stringArray(policies.environmentNetwork.allowedHosts),
-    )
-    if (allowedHosts.length > 0 && (!values.host || !includesWildcard(allowedHosts, values.host))) {
+    const governanceAllowedHosts = stringArray(policies.governance.allowedHosts)
+    if (governanceAllowedHosts.length > 0 && !hostAllowed(governanceAllowedHosts, values.host)) {
+      return {
+        allowed: false,
+        category: 'sandbox_network',
+        rule: 'sandboxPolicy.allowedHosts',
+        message: 'Sandbox network host is not allowed by policy.',
+      }
+    }
+
+    const environmentAllowedHosts = stringArray(policies.environmentNetwork.allowedHosts)
+    if (environmentMode === 'restricted' && !hostAllowed(environmentAllowedHosts, values.host)) {
       return {
         allowed: false,
         category: 'sandbox_network',

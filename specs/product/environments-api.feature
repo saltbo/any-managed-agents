@@ -27,21 +27,21 @@ Feature: Environments API
     Given a signed-in user has access to a project
     When the user creates an environment with only a name
     Then the response includes an environment id, current version id, project id, timestamps, and archive state
-    And package lists, variables, secret references, network policy, resource limits, runtime image, and metadata have stable default values
+    And package lists, variables, secret references, runtime type, network policy, resource limits, runtime image, and metadata have stable default values
     And the environment is stored as a reusable definition, not as a running sandbox instance
 
   @implemented
-  Scenario: Create an environment with package, variable, network, and resource policy
-    When the user creates an environment with package requirements, variables, secret references, allowed outbound hosts, MCP access rules, package-manager access rules, resource limits, runtime image, and metadata
+  Scenario: Create an environment with package, variable, runtime, network, and resource policy
+    When the user creates an environment with package requirements, variables, secret references, runtime type, allowed outbound hosts, MCP access rules, package-manager access rules, resource limits, runtime image, and metadata
     Then the response stores normalized policy fields
     And raw secret values are rejected
     And secret references are returned only as safe names and references
-    And invalid package specs, invalid host patterns, and unsupported runtime images return field-level validation details
+    And restricted network policy without allowed hosts, invalid package specs, and invalid host patterns return field-level validation details
 
   @implemented
   Scenario: Version environment changes without changing existing sessions
     Given an environment is used by existing sessions
-    When the user changes packages, variables, secret references, network policy, resource limits, runtime image, or metadata
+    When the user changes packages, variables, secret references, runtime type, network policy, resource limits, runtime image, or metadata
     Then the platform creates a new environment version
     And existing sessions keep their original environment snapshot
     And new sessions that reference the environment use the new environment version
@@ -69,3 +69,11 @@ Feature: Environments API
     Then allowed hosts are reachable
     And blocked hosts fail with a policy event recorded on the session
     And policy event payloads do not include secrets
+
+  @implemented
+  Scenario: Accept self-hosted environments without starting cloud sandbox execution
+    Given a signed-in user has access to a project
+    When the user creates a self-hosted environment and starts a session with it
+    Then the session keeps the self-hosted environment snapshot
+    And the session remains pending with a requires-runner reason
+    And no Cloudflare Sandbox id is assigned before runner support exists

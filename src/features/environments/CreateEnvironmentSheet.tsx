@@ -7,8 +7,23 @@ import { emptyEnvironment } from '@/console/defaults'
 import { parsePackages, parseVariables } from '@/console/format'
 import { EnvironmentForm } from '@/console/forms'
 import type { EnvironmentFormState } from '@/console/types'
+import type { EnvironmentNetworkPolicy } from '@/lib/api'
 import { api } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
+
+function parseAllowedHosts(value: string) {
+  return value
+    .split(/\r?\n/)
+    .map((host) => host.trim())
+    .filter(Boolean)
+}
+
+function networkPolicy(form: EnvironmentFormState): EnvironmentNetworkPolicy {
+  if (form.networkMode === 'restricted') {
+    return { mode: 'restricted', allowedHosts: parseAllowedHosts(form.allowedHosts) }
+  }
+  return { mode: form.networkMode }
+}
 
 export function CreateEnvironmentSheet({
   open,
@@ -24,9 +39,10 @@ export function CreateEnvironmentSheet({
       api.createEnvironment({
         name: form.name,
         description: form.description,
+        runtimeType: form.runtimeType,
         packages: parsePackages(form.packages),
         variables: parseVariables(form.variables),
-        networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
+        networkPolicy: networkPolicy(form),
         resourceLimits: { memoryMb: 1024, timeoutSeconds: 900 },
         runtimeImage: { image: form.runtimeImage },
       }),

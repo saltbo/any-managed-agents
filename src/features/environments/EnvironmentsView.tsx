@@ -3,9 +3,16 @@ import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ConfirmAction, EmptyState, StatusBadge, TablePagination, TableSurface } from '@/console/components'
-import { formatDate, stringifyJson } from '@/console/format'
+import { formatDate } from '@/console/format'
 import type { ClientPagination } from '@/console/use-client-pagination'
 import type { Environment } from '@/lib/api'
+
+function networkSummary(environment: Environment) {
+  if (environment.networkPolicy.mode === 'restricted') {
+    return `Restricted: ${environment.networkPolicy.allowedHosts.join(', ')}`
+  }
+  return environment.networkPolicy.mode
+}
 
 export function EnvironmentsView({
   environments,
@@ -25,6 +32,7 @@ export function EnvironmentsView({
         <TableRow>
           <TableHead>Environment</TableHead>
           <TableHead>Status</TableHead>
+          <TableHead>Runtime</TableHead>
           <TableHead>Runtime image</TableHead>
           <TableHead>Packages</TableHead>
           <TableHead>Network</TableHead>
@@ -51,12 +59,13 @@ export function EnvironmentsView({
                 <StatusBadge value={`v${environment.version}`} />
               </div>
             </TableCell>
+            <TableCell>{environment.runtimeType}</TableCell>
             <TableCell className="max-w-48 truncate">{String(environment.runtimeImage.image ?? 'Default')}</TableCell>
             <TableCell className="max-w-56 truncate">
               {environment.packages.map((item) => `${item.name}${item.version ? `@${item.version}` : ''}`).join(', ') ||
                 'None'}
             </TableCell>
-            <TableCell className="max-w-48 truncate">{stringifyJson(environment.networkPolicy)}</TableCell>
+            <TableCell className="max-w-48 truncate">{networkSummary(environment)}</TableCell>
             <TableCell>{formatDate(environment.updatedAt)}</TableCell>
             <TableCell>
               <div className="flex justify-end">

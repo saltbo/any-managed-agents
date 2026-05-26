@@ -3,6 +3,9 @@ import type { ProviderInputType } from '@/lib/api'
 export interface EnvironmentFormState {
   name: string
   description: string
+  runtimeType: 'cloud-hosted' | 'self-hosted'
+  networkMode: 'unrestricted' | 'restricted' | 'offline'
+  allowedHosts: string
   packages: string
   variables: string
   runtimeImage: string
