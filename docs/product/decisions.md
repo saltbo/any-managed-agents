@@ -23,10 +23,11 @@ These decisions define the intended end state for Any Managed Agents.
 
 ## SDK Ownership
 
-- This repository does not maintain SDK source code.
+- This repository maintains repo-local generated SDK scaffolds under `sdk/typescript`, `sdk/go`, and `sdk/python` until the SDK release process moves out.
 - This repository publishes the control-plane OpenAPI document.
-- TypeScript, Python, Go, and other SDKs should live in separate repositories.
-- External SDKs must be generated from or mechanically aligned with this repository's OpenAPI document.
+- The TypeScript SDK is the only SDK npm workspace. Go and Python use language-native module or package metadata and are not npm workspaces.
+- External SDK behavior must be generated from or mechanically aligned with this repository's Hono-generated OpenAPI document.
+- This repository must not accumulate hand-authored bespoke SDK behavior that drifts from OpenAPI.
 - Runtime helpers in external SDKs must delegate to AMA runtime endpoints.
 - The web console is an internal entrypoint and uses Hono RPC for control-plane calls. OpenAPI remains the external contract for direct HTTP, generated SDKs, and restish.
 

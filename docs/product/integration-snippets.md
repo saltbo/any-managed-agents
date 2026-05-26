@@ -74,7 +74,7 @@ Archive operations are destructive from the active resource view. Confirm the ta
 
 ## Generated SDK Shape
 
-External SDKs are generated from or mechanically aligned with `/api/openapi.json`. They should keep control-plane calls thin:
+Generated SDKs are generated from or mechanically aligned with `/api/openapi.json`. They should keep control-plane calls thin:
 
 ```ts
 const client = createAmaClient({
@@ -96,3 +96,10 @@ const session = await client.sessions.create({ agentId: agent.id, environmentId:
 ```
 
 Runtime task interaction is separate from restish control-plane automation. Use the `runtimeEndpointPath` returned by session reads with AMA runtime helpers. Do not define a new CLI-level runtime protocol.
+
+Regenerate repo-local SDK scaffolds from the Hono-generated OpenAPI document before publishing SDK changes:
+
+```bash
+npm run openapi:generate
+npm run openapi:check
+```
