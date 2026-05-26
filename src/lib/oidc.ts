@@ -56,10 +56,13 @@ export async function getAccessToken() {
 }
 
 export async function getCurrentUser() {
-  if (window.localStorage.getItem('ama:e2e-access-token')) {
+  const e2eToken = window.localStorage.getItem('ama:e2e-access-token')
+  if (e2eToken) {
+    const runId = e2eToken.startsWith('e2e:') ? e2eToken.slice('e2e:'.length) : 'run'
+    const safeRunId = runId.replaceAll(/[^A-Za-z0-9_-]/g, '_') || 'run'
     return {
       expired: false,
-      access_token: window.localStorage.getItem('ama:e2e-access-token') ?? '',
+      access_token: e2eToken,
       token_type: 'Bearer',
       scope: 'openid email profile',
       session_state: null,
@@ -67,11 +70,11 @@ export async function getCurrentUser() {
       expires_at: Math.floor(Date.now() / 1000) + 3600,
       toStorageString: () => '',
       profile: {
-        sub: 'user_e2e',
-        email: 'owner@example.com',
-        name: 'Owner',
-        org_id: 'org_e2e',
-        org_name: 'E2E Organization',
+        sub: `user_e2e_${safeRunId}`,
+        email: `${safeRunId}@e2e.example.com`,
+        name: `E2E User ${safeRunId}`,
+        org_id: `org_e2e_${safeRunId}`,
+        org_name: `org_e2e_${safeRunId}`,
       },
     } as unknown as User
   }
