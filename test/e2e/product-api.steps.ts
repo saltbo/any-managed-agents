@@ -768,7 +768,7 @@ When('the user creates an environment with only a name', async function (this: P
 })
 
 When(
-  'the user creates an environment with package requirements, variables, secret references, allowed outbound hosts, MCP access rules, package-manager access rules, resource limits, runtime image, and metadata',
+  'the user creates an environment with package requirements, variables, secret references, runtime type, allowed outbound hosts, MCP access rules, package-manager access rules, resource limits, runtime image, and metadata',
   async function (this: ProductWorld) {
     await ensureSignedIn(this)
     this.e2e.environment = await createEnvironment(this.e2e, {
@@ -776,6 +776,7 @@ When(
       packages: [{ name: 'tsx', version: 'latest' }],
       variables: { NODE_ENV: { required: true } },
       secretRefs: [{ name: 'TOKEN', ref: 'wrangler_secret:AMA_TOKEN' }],
+      runtimeType: 'cloud-hosted',
       networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
       mcpPolicy: { allowedConnectors: [] },
       packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
@@ -802,7 +803,7 @@ When(
 )
 
 When(
-  'the user changes packages, variables, secret references, network policy, resource limits, runtime image, or metadata',
+  'the user changes packages, variables, secret references, runtime type, network policy, resource limits, runtime image, or metadata',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
     state.updatedEnvironment = await apiJson<Json>(state.page.request, `/api/environments/${state.environment?.id}`, {
@@ -813,6 +814,7 @@ When(
           { name: 'vitest', version: 'latest' },
         ],
         variables: { E2E: { required: false } },
+        runtimeType: 'cloud-hosted',
         networkPolicy: { mode: 'offline' },
         resourceLimits: { memoryMb: 768 },
         runtimeImage: { image: 'ama-pi-runtime' },
@@ -1804,13 +1806,14 @@ Then(
 )
 
 Then(
-  'package lists, variables, secret references, network policy, resource limits, runtime image, and metadata have stable default values',
+  'package lists, variables, secret references, runtime type, network policy, resource limits, runtime image, and metadata have stable default values',
   function (this: ProductWorld) {
     const env = required(this.e2e?.environment, 'environment')
     for (const key of [
       'packages',
       'variables',
       'secretRefs',
+      'runtimeType',
       'networkPolicy',
       'resourceLimits',
       'runtimeImage',
@@ -1818,6 +1821,8 @@ Then(
     ]) {
       assert.ok(key in env)
     }
+    assert.equal(env.runtimeType, 'cloud-hosted')
+    assert.deepEqual(env.networkPolicy, { mode: 'unrestricted' })
   },
 )
 
@@ -1858,6 +1863,7 @@ Then('the environment remains available for future sessions', async function (th
 
 Then('the response stores normalized policy fields', function (this: ProductWorld) {
   const env = required(this.e2e?.environment, 'environment')
+  assert.equal(env.runtimeType, 'cloud-hosted')
   assert.deepEqual(env.networkPolicy, { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] })
   assert.deepEqual(env.packageManagerPolicy, { allowedRegistries: ['registry.npmjs.org'] })
 })
@@ -1877,7 +1883,7 @@ Then('secret references are returned only as safe names and references', functio
 })
 
 Then(
-  'invalid package specs, invalid host patterns, and unsupported runtime images return field-level validation details',
+  'restricted network policy without allowed hosts, invalid package specs, and invalid host patterns return field-level validation details',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
     const invalid = await apiResponse(state.page.request, '/api/environments', {
@@ -1885,8 +1891,69 @@ Then(
       data: { name: `${state.runId} invalid`, packages: [{ name: '' }] },
     })
     assert.equal(invalid.status(), 400)
+
+    const missingHosts = await apiResponse(state.page.request, '/api/environments', {
+      method: 'POST',
+      data: { name: `${state.runId} restricted invalid`, networkPolicy: { mode: 'restricted' } },
+    })
+    assert.equal(missingHosts.status(), 400)
+    const missingHostsBody = (await missingHosts.json()) as Json
+    assert.deepEqual(objectValue(required(missingHostsBody.error, 'missing hosts error')).issues?.[0]?.path, [
+      'networkPolicy',
+      'allowedHosts',
+    ])
+
+    const invalidHost = await apiResponse(state.page.request, '/api/environments', {
+      method: 'POST',
+      data: {
+        name: `${state.runId} host invalid`,
+        networkPolicy: { mode: 'restricted', allowedHosts: ['https://registry.npmjs.org'] },
+      },
+    })
+    assert.equal(invalidHost.status(), 400)
+    const invalidHostBody = (await invalidHost.json()) as Json
+    assert.deepEqual(objectValue(required(invalidHostBody.error, 'invalid host error')).issues?.[0]?.path, [
+      'networkPolicy',
+      'allowedHosts',
+      0,
+    ])
   },
 )
+
+When('the user creates a self-hosted environment and starts a session with it', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  state.environment = await createEnvironment(state, {
+    name: `${state.runId} self-hosted env`,
+    runtimeType: 'self-hosted',
+    networkPolicy: { mode: 'unrestricted' },
+  })
+  state.agent = await createAgent(state, { name: `${state.runId} self-hosted agent` })
+  state.latestSession = await apiJson<Json>(state.page.request, '/api/sessions', {
+    method: 'POST',
+    data: {
+      agentId: state.agent.id,
+      environmentId: state.environment.id,
+      title: `${state.runId} self-hosted session`,
+    },
+  })
+})
+
+Then('the session keeps the self-hosted environment snapshot', function (this: ProductWorld) {
+  const session = required(this.e2e?.latestSession, 'session')
+  assert.equal(objectValue(session.environmentSnapshot).runtimeType, 'self-hosted')
+})
+
+Then('the session remains pending with a requires-runner reason', function (this: ProductWorld) {
+  const session = required(this.e2e?.latestSession, 'session')
+  assert.equal(session.status, 'pending')
+  assert.equal(session.statusReason, 'requires-runner')
+})
+
+Then('no Cloudflare Sandbox id is assigned before runner support exists', function (this: ProductWorld) {
+  const session = required(this.e2e?.latestSession, 'session')
+  assert.equal(session.sandboxId, null)
+  assert.equal(session.runtimeEndpointPath, null)
+})
 
 Then('the platform rejects the request with field-level validation details', function (this: ProductWorld) {
   const body = objectValue(this.e2e?.response)

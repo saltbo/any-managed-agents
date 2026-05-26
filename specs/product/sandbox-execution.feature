@@ -1,6 +1,6 @@
 @sandbox @runtime
 Feature: Sandbox execution
-  AMA executes approved tool work inside Cloudflare Sandbox executor backends.
+  AMA executes approved cloud-hosted tool work inside Cloudflare Sandbox executor backends.
 
   Background:
     Given a session has sandbox access enabled by policy
@@ -8,7 +8,7 @@ Feature: Sandbox execution
   @planned
   Scenario: Create a sandbox for a session
     When the agent needs isolated execution
-    Then AMA creates a Cloudflare Sandbox for the session
+    Then AMA creates a Cloudflare Sandbox for a cloud-hosted session
     And the sandbox is associated with the organization, project, and session
     And the sandbox is created from the session environment snapshot
     And the sandbox is owned by exactly one session
@@ -44,3 +44,10 @@ Feature: Sandbox execution
     When the agent attempts a blocked sandbox operation
     Then the platform denies the operation
     And records a policy event
+
+  @planned
+  Scenario: Wait for a self-hosted runner
+    Given a session uses a self-hosted environment
+    When runner APIs are not implemented
+    Then AMA keeps the session pending with a requires-runner reason
+    And AMA does not create a Cloudflare Sandbox for that session

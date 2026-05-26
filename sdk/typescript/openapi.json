@@ -738,17 +738,11 @@
               }
             ]
           },
+          "runtimeType": {
+            "$ref": "#/components/schemas/EnvironmentRuntimeType"
+          },
           "networkPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "mode": "restricted",
-              "allowedHosts": [
-                "registry.npmjs.org"
-              ]
-            }
+            "$ref": "#/components/schemas/EnvironmentNetworkPolicy"
           },
           "mcpPolicy": {
             "$ref": "#/components/schemas/EnvironmentMcpPolicy"
@@ -833,6 +827,7 @@
           "packages",
           "variables",
           "secretRefs",
+          "runtimeType",
           "networkPolicy",
           "mcpPolicy",
           "packageManagerPolicy",
@@ -846,6 +841,47 @@
           "createdAt",
           "updatedAt"
         ]
+      },
+      "EnvironmentRuntimeType": {
+        "type": "string",
+        "enum": [
+          "cloud-hosted",
+          "self-hosted"
+        ],
+        "example": "cloud-hosted"
+      },
+      "EnvironmentNetworkPolicy": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "offline",
+              "restricted",
+              "unrestricted"
+            ]
+          },
+          "allowedHosts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 253,
+              "pattern": "^[a-z0-9.-]+$"
+            },
+            "maxItems": 100
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "additionalProperties": false,
+        "example": {
+          "mode": "restricted",
+          "allowedHosts": [
+            "registry.npmjs.org"
+          ]
+        }
       },
       "EnvironmentMcpPolicy": {
         "type": "object",
@@ -1002,31 +1038,11 @@
               }
             ]
           },
+          "runtimeType": {
+            "$ref": "#/components/schemas/EnvironmentRuntimeType"
+          },
           "networkPolicy": {
-            "type": "object",
-            "properties": {
-              "mode": {
-                "type": "string",
-                "enum": [
-                  "offline",
-                  "restricted",
-                  "open"
-                ]
-              },
-              "allowedHosts": {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 253
-                },
-                "maxItems": 100
-              }
-            },
-            "additionalProperties": false,
-            "example": {
-              "mode": "restricted"
-            }
+            "$ref": "#/components/schemas/EnvironmentNetworkPolicy"
           },
           "mcpPolicy": {
             "$ref": "#/components/schemas/EnvironmentMcpPolicy"
@@ -1185,31 +1201,11 @@
               }
             ]
           },
+          "runtimeType": {
+            "$ref": "#/components/schemas/EnvironmentRuntimeType"
+          },
           "networkPolicy": {
-            "type": "object",
-            "properties": {
-              "mode": {
-                "type": "string",
-                "enum": [
-                  "offline",
-                  "restricted",
-                  "open"
-                ]
-              },
-              "allowedHosts": {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 253
-                },
-                "maxItems": 100
-              }
-            },
-            "additionalProperties": false,
-            "example": {
-              "mode": "restricted"
-            }
+            "$ref": "#/components/schemas/EnvironmentNetworkPolicy"
           },
           "mcpPolicy": {
             "$ref": "#/components/schemas/EnvironmentMcpPolicy"
@@ -1385,14 +1381,11 @@
               }
             ]
           },
+          "runtimeType": {
+            "$ref": "#/components/schemas/EnvironmentRuntimeType"
+          },
           "networkPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "mode": "restricted"
-            }
+            "$ref": "#/components/schemas/EnvironmentNetworkPolicy"
           },
           "mcpPolicy": {
             "$ref": "#/components/schemas/EnvironmentMcpPolicy"
@@ -1449,6 +1442,7 @@
           "packages",
           "variables",
           "secretRefs",
+          "runtimeType",
           "networkPolicy",
           "mcpPolicy",
           "packageManagerPolicy",
@@ -3436,6 +3430,7 @@
           },
           "runtimeEndpointPath": {
             "type": "string",
+            "nullable": true,
             "example": "/runtime/sessions/session_abc123/rpc"
           },
           "modelProvider": {
@@ -3639,11 +3634,11 @@
               }
             }
           },
+          "runtimeType": {
+            "$ref": "#/components/schemas/EnvironmentRuntimeType"
+          },
           "networkPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
+            "$ref": "#/components/schemas/EnvironmentNetworkPolicy"
           },
           "mcpPolicy": {
             "type": "object",
@@ -3688,6 +3683,7 @@
           "packages",
           "variables",
           "secretRefs",
+          "runtimeType",
           "networkPolicy",
           "mcpPolicy",
           "packageManagerPolicy",

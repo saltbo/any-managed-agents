@@ -1,4 +1,5 @@
 import { SELF } from 'cloudflare:test'
+import { env } from 'cloudflare:workers'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultClaims, setupOidcProvider, signIn } from '../test/auth'
 
@@ -111,14 +112,19 @@ describe('[CF] /api/environments', () => {
       currentVersionId: string
       version: number
       secretRefs: unknown[]
+      runtimeType: string
+      networkPolicy: Record<string, unknown>
     }
     expect(created.version).toBe(1)
+    expect(created.runtimeType).toBe('cloud-hosted')
+    expect(created.networkPolicy).toEqual({ mode: 'restricted', allowedHosts: ['registry.npmjs.org'] })
     expect(JSON.stringify(created)).not.toContain('raw-secret')
 
     const readRes = await jsonFetch(`/api/environments/${created.id}`, authorization)
     expect(readRes.status).toBe(200)
     await expect(readRes.json()).resolves.toMatchObject({
       id: created.id,
+      runtimeType: 'cloud-hosted',
       packages: [{ name: 'tsx', version: 'latest' }],
       secretRefs: [{ name: 'NPM_TOKEN', ref: credential.activeVersionId }],
       mcpPolicy: { allowedConnectors: ['github'] },
@@ -137,9 +143,10 @@ describe('[CF] /api/environments', () => {
     const versionsRes = await jsonFetch(`/api/environments/${created.id}/versions`, authorization)
     expect(versionsRes.status).toBe(200)
     const versions = (await versionsRes.json()) as {
-      data: Array<{ version: number; packages: Array<{ name: string }> }>
+      data: Array<{ version: number; runtimeType: string; packages: Array<{ name: string }> }>
     }
     expect(versions.data.map((version) => version.version)).toEqual([2, 1])
+    expect(versions.data.map((version) => version.runtimeType)).toEqual(['cloud-hosted', 'cloud-hosted'])
     expect(versions.data.find((version) => version.version === 1)?.packages).toEqual([
       { name: 'tsx', version: 'latest' },
     ])
@@ -171,6 +178,94 @@ describe('[CF] /api/environments', () => {
       body: JSON.stringify({ description: 'Cannot update archived environments' }),
     })
     expect(archivedUpdateRes.status).toBe(409)
+  })
+
+  it('validates strict network policy modes with field-level paths', async () => {
+    const authorization = await signIn()
+    const missingHostsRes = await jsonFetch('/api/environments', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Restricted without hosts',
+        networkPolicy: { mode: 'restricted' },
+      }),
+    })
+    expect(missingHostsRes.status).toBe(400)
+    await expect(missingHostsRes.json()).resolves.toMatchObject({
+      error: {
+        type: 'validation_error',
+        issues: [expect.objectContaining({ path: ['networkPolicy', 'allowedHosts'] })],
+      },
+    })
+
+    const unrestrictedHostsRes = await jsonFetch('/api/environments', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Unrestricted with hosts',
+        networkPolicy: { mode: 'unrestricted', allowedHosts: ['registry.npmjs.org'] },
+      }),
+    })
+    expect(unrestrictedHostsRes.status).toBe(400)
+    await expect(unrestrictedHostsRes.json()).resolves.toMatchObject({
+      error: {
+        type: 'validation_error',
+        issues: [expect.objectContaining({ path: ['networkPolicy', 'allowedHosts'] })],
+      },
+    })
+
+    const invalidHostRes = await jsonFetch('/api/environments', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Invalid host workspace',
+        networkPolicy: { mode: 'restricted', allowedHosts: ['https://registry.npmjs.org'] },
+      }),
+    })
+    expect(invalidHostRes.status).toBe(400)
+    await expect(invalidHostRes.json()).resolves.toMatchObject({
+      error: {
+        type: 'validation_error',
+        issues: [expect.objectContaining({ path: ['networkPolicy', 'allowedHosts', 0] })],
+      },
+    })
+
+    const openModeRes = await jsonFetch('/api/environments', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Legacy open workspace',
+        networkPolicy: { mode: 'open' },
+      }),
+    })
+    expect(openModeRes.status).toBe(400)
+  })
+
+  it('normalizes legacy restricted network policy rows without host lists', async () => {
+    const authorization = await signIn()
+    const createRes = await jsonFetch('/api/environments', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Legacy restricted workspace' }),
+    })
+    expect(createRes.status).toBe(201)
+    const created = (await createRes.json()) as { id: string; currentVersionId: string }
+    await env.DB.prepare('UPDATE environments SET network_policy = ? WHERE id = ?')
+      .bind(JSON.stringify({ mode: 'restricted', allowedHosts: ['https://registry.npmjs.org'] }), created.id)
+      .run()
+    await env.DB.prepare('UPDATE environment_versions SET network_policy = ? WHERE id = ?')
+      .bind(
+        JSON.stringify({ mode: 'restricted', allowedHosts: ['https://registry.npmjs.org'] }),
+        created.currentVersionId,
+      )
+      .run()
+
+    const readRes = await jsonFetch(`/api/environments/${created.id}`, authorization)
+    expect(readRes.status).toBe(200)
+    await expect(readRes.json()).resolves.toMatchObject({
+      networkPolicy: { mode: 'unrestricted' },
+    })
+
+    const versionsRes = await jsonFetch(`/api/environments/${created.id}/versions`, authorization)
+    expect(versionsRes.status).toBe(200)
+    await expect(versionsRes.json()).resolves.toMatchObject({
+      data: [expect.objectContaining({ networkPolicy: { mode: 'unrestricted' } })],
+    })
   })
 
   it('rejects unavailable secret references and disconnected MCP policy connectors', async () => {

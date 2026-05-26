@@ -10,6 +10,8 @@ These decisions define the intended end state for Any Managed Agents.
 - Sandbox instances follow the session lifecycle and are not reused across sessions.
 - Cloudflare Sandbox owns filesystem, shell, process isolation, and the per-session execution environment.
 - Sandbox instances are execution environments only and must not expose public ports or preview URLs.
+- Environments declare `runtimeType` as `cloud-hosted` or `self-hosted`. Cloud-hosted sessions start a Cloudflare Sandbox ToolExecutor; self-hosted sessions are accepted as reusable configuration and wait in pending/requires-runner until runner APIs exist.
+- Environments own network policy. `unrestricted` permits outbound network subject to governance policy, `restricted` requires explicit allowed hosts, and `offline` denies outbound sandbox network operations.
 
 ## Runtime Boundary
 

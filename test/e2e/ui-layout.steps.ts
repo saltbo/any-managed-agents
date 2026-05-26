@@ -297,13 +297,14 @@ Then(
 )
 
 Then(
-  'each environment row shows name, status, runtime image, packages, network policy, and updated time',
+  'each environment row shows name, status, runtime type, runtime image, packages, network policy, and updated time',
   async function (this: UiWorld) {
     const page = requireUiWorkflow(this).page
     await expect(page.getByText('active').first()).toBeVisible()
+    await expect(page.getByText('cloud-hosted').first()).toBeVisible()
     await expect(page.getByText('ama-pi-runtime').first()).toBeVisible()
     await expect(page.getByText(/tsx/).first()).toBeVisible()
-    await expect(page.getByText(/restricted/).first()).toBeVisible()
+    await expect(page.getByText(/restricted/i).first()).toBeVisible()
   },
 )
 
@@ -323,13 +324,19 @@ When('the user starts the create-environment flow', async function (this: UiWorl
   await workflow.page.getByRole('button', { name: 'Create environment' }).click()
 })
 
-Then('the form captures name, package requirements, variables, and runtime image', async function (this: UiWorld) {
-  const dialog = requireUiWorkflow(this).page.getByRole('dialog')
-  await expect(dialog.getByLabel('Name')).toBeVisible()
-  await expect(dialog.getByLabel('Packages')).toBeVisible()
-  await expect(dialog.getByLabel('Variables')).toBeVisible()
-  await expect(dialog.getByLabel('Runtime image')).toBeVisible()
-})
+Then(
+  'the form captures name, runtime type, network mode, allowed hosts, package requirements, variables, and runtime image',
+  async function (this: UiWorld) {
+    const dialog = requireUiWorkflow(this).page.getByRole('dialog')
+    await expect(dialog.getByLabel('Name')).toBeVisible()
+    await expect(dialog.getByText('Runtime type')).toBeVisible()
+    await expect(dialog.getByText('Network mode')).toBeVisible()
+    await expect(dialog.getByLabel('Allowed hosts')).toBeVisible()
+    await expect(dialog.getByLabel('Packages')).toBeVisible()
+    await expect(dialog.getByLabel('Variables')).toBeVisible()
+    await expect(dialog.getByLabel('Runtime image')).toBeVisible()
+  },
+)
 
 Then(
   'successful save creates an environment version and returns to the browsable environments list',

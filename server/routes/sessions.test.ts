@@ -1,4 +1,5 @@
 import { SELF } from 'cloudflare:test'
+import { env } from 'cloudflare:workers'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultClaims, setupOidcProvider, signIn } from '../test/auth'
 import { runtimeErrorMessage } from './sessions'
@@ -416,6 +417,139 @@ describe('[CF] /api/sessions', () => {
     expect(archivedListRes.status).toBe(200)
     const archivedList = (await archivedListRes.json()) as { data: Array<{ id: string; status: string }> }
     expect(archivedList.data).toContainEqual(expect.objectContaining({ id: created.id, status: 'archived' }))
+  })
+
+  it('keeps self-hosted sessions pending until runner support exists', async () => {
+    const authorization = await signIn()
+    const environmentRes = await jsonFetch('/api/environments', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Self-hosted workspace',
+        runtimeType: 'self-hosted',
+        networkPolicy: { mode: 'unrestricted' },
+      }),
+    })
+    expect(environmentRes.status).toBe(201)
+    const environment = (await environmentRes.json()) as { id: string; runtimeType: string }
+    expect(environment.runtimeType).toBe('self-hosted')
+    const agentRes = await jsonFetch('/api/agents', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Self-hosted session agent',
+        instructions: 'Wait for a self-hosted runner.',
+        allowedTools: ['sandbox.exec'],
+      }),
+    })
+    expect(agentRes.status).toBe(201)
+    const agent = (await agentRes.json()) as { id: string }
+
+    const createRes = await jsonFetch('/api/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+    })
+    expect(createRes.status).toBe(201)
+    const created = (await createRes.json()) as {
+      id: string
+      status: string
+      statusReason: string | null
+      sandboxId: string | null
+      runtimeEndpointPath: string | null
+      environmentSnapshot: { runtimeType: string }
+      metadata: Record<string, unknown>
+    }
+    expect(created).toMatchObject({
+      status: 'pending',
+      statusReason: 'requires-runner',
+      sandboxId: null,
+      runtimeEndpointPath: null,
+      environmentSnapshot: { runtimeType: 'self-hosted' },
+      metadata: { runtimeType: 'self-hosted', runnerState: 'requires-runner' },
+    })
+
+    const runtimeRes = await jsonFetch(`/runtime/sessions/${created.id}/rpc`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ type: 'prompt', message: 'Should wait for runner' }),
+    })
+    expect(runtimeRes.status).toBe(409)
+    await expect(runtimeRes.json()).resolves.toMatchObject({
+      error: {
+        type: 'conflict',
+        message: 'Session runtime is not active',
+      },
+    })
+  })
+
+  it('normalizes legacy session environment snapshots for read contracts', async () => {
+    const authorization = await signIn()
+    await connectMcp(authorization, 'github')
+    const environment = await createEnvironment(authorization)
+    const agent = await createAgent(authorization)
+    const createRes = await jsonFetch('/api/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+    })
+    expect(createRes.status).toBe(201)
+    const created = (await createRes.json()) as { id: string; environmentSnapshot: Record<string, unknown> }
+    const { runtimeType: _runtimeType, ...legacySnapshot } = created.environmentSnapshot
+    await env.DB.prepare('UPDATE sessions SET environment_snapshot = ? WHERE id = ?')
+      .bind(
+        JSON.stringify({
+          ...legacySnapshot,
+          networkPolicy: { mode: 'restricted', allowedHosts: ['https://registry.npmjs.org'] },
+        }),
+        created.id,
+      )
+      .run()
+
+    const readRes = await jsonFetch(`/api/sessions/${created.id}`, authorization)
+    expect(readRes.status).toBe(200)
+    await expect(readRes.json()).resolves.toMatchObject({
+      environmentSnapshot: {
+        runtimeType: 'cloud-hosted',
+        networkPolicy: { mode: 'unrestricted' },
+      },
+    })
+  })
+
+  it('accepts self-hosted sessions when cloud sandbox startup is disabled', async () => {
+    const authorization = await signIn()
+    const environmentRes = await jsonFetch('/api/environments', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Self-hosted no sandbox workspace',
+        runtimeType: 'self-hosted',
+        networkPolicy: { mode: 'unrestricted' },
+      }),
+    })
+    expect(environmentRes.status).toBe(201)
+    const environment = (await environmentRes.json()) as { id: string }
+    const agentRes = await jsonFetch('/api/agents', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Self-hosted no sandbox agent',
+        instructions: 'Wait for runner attachment.',
+        allowedTools: ['sandbox.exec'],
+      }),
+    })
+    expect(agentRes.status).toBe(201)
+    const agent = (await agentRes.json()) as { id: string }
+    const policyRes = await jsonFetch('/api/governance/policy', authorization, {
+      method: 'PUT',
+      body: JSON.stringify({ sandboxPolicy: { enabled: false } }),
+    })
+    expect(policyRes.status).toBe(200)
+
+    const createRes = await jsonFetch('/api/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+    })
+    expect(createRes.status).toBe(201)
+    await expect(createRes.json()).resolves.toMatchObject({
+      status: 'pending',
+      statusReason: 'requires-runner',
+      sandboxId: null,
+      environmentSnapshot: { runtimeType: 'self-hosted' },
+    })
   })
 
   it('keeps a stopped session from writing successful completion events after cancellation', async () => {
@@ -936,6 +1070,50 @@ describe('[CF] /api/sessions', () => {
       ]),
     )
     expect(JSON.stringify(events)).not.toContain('raw-secret-token')
+  })
+
+  it('enforces sandbox network policy from the immutable environment snapshot', async () => {
+    const authorization = await signIn()
+    await connectMcp(authorization, 'github')
+    const environmentRes = await jsonFetch('/api/environments', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Snapshot network workspace',
+        mcpPolicy: { allowedConnectors: ['github'] },
+        networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
+      }),
+    })
+    expect(environmentRes.status).toBe(201)
+    const environment = (await environmentRes.json()) as { id: string }
+    const agent = await createAgent(authorization)
+    const createRes = await jsonFetch('/api/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+    })
+    expect(createRes.status).toBe(201)
+    const session = (await createRes.json()) as { id: string }
+
+    const updateRes = await jsonFetch(`/api/environments/${environment.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ networkPolicy: { mode: 'unrestricted' } }),
+    })
+    expect(updateRes.status).toBe(200)
+
+    const runtimeRes = await jsonFetch(`/runtime/sessions/${session.id}/sandbox/fetch`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ url: 'https://metadata.google.internal/latest' }),
+    })
+    expect(runtimeRes.status).toBe(403)
+    await expect(runtimeRes.json()).resolves.toMatchObject({
+      error: {
+        type: 'policy_denied',
+        details: {
+          category: 'sandbox_network',
+          resourceId: 'metadata.google.internal',
+          ruleId: 'environment.networkPolicy.allowedHosts',
+        },
+      },
+    })
   })
 
   it('blocks offline sandbox network policy before executor dispatch', async () => {

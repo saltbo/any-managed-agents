@@ -64,15 +64,19 @@ Runtime:
   client / external SDK helper -> AMA runtime endpoint -> AMA cloud-owned session loop -> D1 events
 
 Tool execution:
-  AMA session loop -> policy gates -> ToolExecutor -> Cloudflare Sandbox /workspace
+  AMA session loop -> environment snapshot policy gates -> ToolExecutor -> Cloudflare Sandbox /workspace
 ```
 
 ## Product Model
 
 - `Agent` is a long-lived managed definition: instructions, carried skills, tool declarations, model config, metadata, and versions. Agents do not bind environments and do not own sandbox or network policy.
-- `Environment` is a long-lived sandbox and runtime configuration: packages, variables, network policy, resource limits, executor image configuration, and metadata. It is not a running sandbox.
+- `Environment` is a long-lived sandbox and runtime configuration: runtime type, packages, variables, network policy, resource limits, executor image configuration, and metadata. It is not a running sandbox.
 - `Sandbox` is an ephemeral runtime instance created from an environment snapshot for exactly one session.
 - `Session` is a concrete run of an agent in an explicitly selected environment. Each session binds an agent version snapshot, environment snapshot, sandbox id, cloud runtime state, events, and status. Each running session owns exactly one sandbox executor backend.
+
+Environment `runtimeType` is either `cloud-hosted` or `self-hosted`. Cloud-hosted sessions use the Cloudflare Sandbox ToolExecutor. Self-hosted environments are reusable configuration, but sessions remain `pending` with `statusReason: "requires-runner"` until runner APIs are implemented.
+
+Environment `networkPolicy.mode` is exactly `unrestricted`, `restricted`, or `offline`. Restricted policy requires explicit `allowedHosts`; unrestricted and offline policy do not carry host allow-lists. Offline policy denies outbound sandbox network operations.
 
 Sandbox instances follow the session lifecycle, are not reusable across sessions, and must not expose public ports.
 

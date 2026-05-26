@@ -35,6 +35,55 @@ export function EnvironmentForm({
           value={value.description}
           onChange={(description) => setValue({ ...value, description })}
         />
+        <Field>
+          <FieldLabel>Runtime type</FieldLabel>
+          <Select
+            value={value.runtimeType}
+            onValueChange={(runtimeType) =>
+              setValue({ ...value, runtimeType: runtimeType as EnvironmentFormState['runtimeType'] })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="cloud-hosted">Cloud-hosted</SelectItem>
+              <SelectItem value="self-hosted">Self-hosted</SelectItem>
+            </SelectContent>
+          </Select>
+          <FieldDescription>
+            Cloud-hosted sessions start in Cloudflare Sandbox. Self-hosted sessions wait for a runner.
+          </FieldDescription>
+        </Field>
+        <Field>
+          <FieldLabel>Network mode</FieldLabel>
+          <Select
+            value={value.networkMode}
+            onValueChange={(networkMode) =>
+              setValue({ ...value, networkMode: networkMode as EnvironmentFormState['networkMode'] })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="restricted">Restricted</SelectItem>
+              <SelectItem value="unrestricted">Unrestricted</SelectItem>
+              <SelectItem value="offline">Offline</SelectItem>
+            </SelectContent>
+          </Select>
+          <FieldDescription>
+            Restricted mode allows only the hosts listed below. Offline mode blocks outbound requests.
+          </FieldDescription>
+        </Field>
+        {value.networkMode === 'restricted' ? (
+          <TextAreaField
+            label="Allowed hosts"
+            description="One lowercase hostname per line. Do not include protocols, paths, or ports."
+            value={value.allowedHosts}
+            onChange={(allowedHosts) => setValue({ ...value, allowedHosts })}
+          />
+        ) : null}
         <TextAreaField
           label="Packages"
           description="One package per line. Use name@version when a version is required."

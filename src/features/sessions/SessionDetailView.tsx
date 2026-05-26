@@ -180,6 +180,7 @@ export function SessionDetailView({
                 <MetaGrid>
                   <Meta label="Environment id" value={session.environmentId ?? 'None'} />
                   <Meta label="Version" value={`v${session.environmentSnapshot.version}`} />
+                  <Meta label="Runtime type" value={session.environmentSnapshot.runtimeType} />
                   <Meta
                     label="Runtime image"
                     value={String(session.environmentSnapshot.runtimeImage.image ?? 'Default')}

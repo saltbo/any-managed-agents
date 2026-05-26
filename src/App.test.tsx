@@ -45,6 +45,7 @@ function noContent() {
 
 function installMockRuntimeWebSocket(options: { closeAfterAgentEnd?: boolean } = {}) {
   const sentCommands: unknown[] = []
+  const socketUrls: string[] = []
   runtimeCommandSink()[runtimeCommandSinkKey] = sentCommands
   class MockRuntimeWebSocket extends EventTarget {
     static CONNECTING = 0
@@ -57,6 +58,7 @@ function installMockRuntimeWebSocket(options: { closeAfterAgentEnd?: boolean } =
     constructor(url: string) {
       super()
       this.url = url
+      socketUrls.push(url)
       queueMicrotask(() => {
         this.readyState = MockRuntimeWebSocket.OPEN
         this.dispatchEvent(new Event('open'))
@@ -103,7 +105,7 @@ function installMockRuntimeWebSocket(options: { closeAfterAgentEnd?: boolean } =
   }
 
   vi.stubGlobal('WebSocket', MockRuntimeWebSocket)
-  return { sentCommands }
+  return { sentCommands, socketUrls }
 }
 
 function environment(overrides: Partial<Environment> = {}): Environment {
@@ -115,7 +117,8 @@ function environment(overrides: Partial<Environment> = {}): Environment {
     packages: [{ name: 'tsx', version: 'latest' }],
     variables: { NODE_ENV: { description: 'mode', required: false } },
     secretRefs: [{ name: 'npm_token', ref: 'secret:npm' }],
-    networkPolicy: { mode: 'restricted' },
+    runtimeType: 'cloud-hosted',
+    networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
     mcpPolicy: {},
     packageManagerPolicy: {},
     resourceLimits: { memoryMb: 1024 },
@@ -816,6 +819,19 @@ describe('App', () => {
           status: 'archived',
           runtimeEndpointPath: '/runtime/sessions/session_archived/rpc',
         }),
+        session({
+          id: 'session_self_hosted',
+          status: 'pending',
+          statusReason: 'requires-runner',
+          sandboxId: null,
+          runtimeEndpointPath: null,
+          environmentSnapshot: {
+            ...environment({ runtimeType: 'self-hosted', networkPolicy: { mode: 'unrestricted' } }),
+            environmentId: 'env_1',
+            version: 1,
+          },
+          metadata: { runtimeType: 'self-hosted', runnerState: 'requires-runner' },
+        }),
       ],
       events: [
         event({ payload: { type: 'message_end', message: { role: 'assistant', content: 'hello' } } }),
@@ -826,7 +842,7 @@ describe('App', () => {
         }),
       ],
     })
-    const { sentCommands } = installMockRuntimeWebSocket()
+    const { sentCommands, socketUrls } = installMockRuntimeWebSocket()
 
     window.history.pushState({}, '', '/environments/env_1')
     const { unmount } = render(<App />)
@@ -870,6 +886,15 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(true)
 
     archivedRoute.unmount()
+    const socketsBeforeSelfHosted = socketUrls.length
+    window.history.pushState({}, '', '/sessions/session_self_hosted')
+    const selfHostedRoute = render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'session_self_hosted' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(true)
+    expect(socketUrls).toHaveLength(socketsBeforeSelfHosted)
+
+    selfHostedRoute.unmount()
     window.history.pushState({}, '', '/sessions/missing')
     render(<App />)
 
@@ -1097,7 +1122,8 @@ const environmentFixture = {
   packages: [{ name: 'tsx', version: 'latest' }],
   variables: { NODE_ENV: { description: 'mode', required: false } },
   secretRefs: [],
-  networkPolicy: { mode: 'restricted' },
+  runtimeType: 'cloud-hosted',
+  networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
   mcpPolicy: {},
   packageManagerPolicy: {},
   resourceLimits: { memoryMb: 1024 },

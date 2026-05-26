@@ -5,6 +5,13 @@ import { stringifyJson } from '@/console/format'
 import { RelatedResourcesTable } from '@/features/console/related-resources-table'
 import type { Environment, Session } from '@/lib/api'
 
+function networkSummary(environment: Environment) {
+  if (environment.networkPolicy.mode === 'restricted') {
+    return `Restricted: ${environment.networkPolicy.allowedHosts.join(', ')}`
+  }
+  return environment.networkPolicy.mode
+}
+
 export function EnvironmentDetailView({
   environment,
   sessions,
@@ -46,8 +53,9 @@ export function EnvironmentDetailView({
           <Meta label="Packages" value={environment.packages.map((item) => item.name).join(', ') || 'None'} />
           <Meta label="Variables" value={Object.keys(environment.variables).join(', ') || 'None'} />
           <Meta label="Secret refs" value={environment.secretRefs.map((item) => item.name).join(', ') || 'None'} />
+          <Meta label="Runtime type" value={environment.runtimeType} />
           <Meta label="Runtime image" value={String(environment.runtimeImage.image ?? 'Default')} />
-          <Meta label="Network policy" value={stringifyJson(environment.networkPolicy)} />
+          <Meta label="Network policy" value={networkSummary(environment)} />
           <Meta label="MCP policy" value={stringifyJson(environment.mcpPolicy)} />
           <Meta label="Package manager policy" value={stringifyJson(environment.packageManagerPolicy)} />
           <Meta label="Resource limits" value={stringifyJson(environment.resourceLimits)} />
