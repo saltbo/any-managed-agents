@@ -23,6 +23,13 @@ export function requestId(c: Context<{ Bindings: Env }>) {
   return c.req.header('x-request-id') ?? c.req.header('cf-ray') ?? newId('req')
 }
 
+function defaultActor(auth: AuthContext) {
+  if (auth.user.id === 'system:scheduler') {
+    return { actorType: 'system' as const, actorUserId: null }
+  }
+  return { actorType: 'user' as const, actorUserId: auth.user.id }
+}
+
 export async function recordAudit(
   db: AuditDb,
   values: {
@@ -38,14 +45,17 @@ export async function recordAudit(
     metadata?: Record<string, unknown>
     before?: Record<string, unknown> | null
     after?: Record<string, unknown> | null
+    actorType?: 'user' | 'system'
+    actorUserId?: string | null
   },
 ) {
+  const actor = defaultActor(values.auth)
   await db.insert(auditRecords).values({
     id: newId('audit'),
     organizationId: values.auth.organization.id,
     projectId: values.auth.project.id,
-    actorUserId: values.auth.user.id,
-    actorType: 'user',
+    actorUserId: values.actorUserId === undefined ? actor.actorUserId : values.actorUserId,
+    actorType: values.actorType ?? actor.actorType,
     action: values.action,
     resourceType: values.resourceType,
     resourceId: values.resourceId ?? null,

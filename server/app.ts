@@ -21,6 +21,7 @@ import mcp from './routes/mcp'
 import projects from './routes/projects'
 import providers from './routes/providers'
 import runtimeAi from './routes/runtime-ai'
+import schedules from './routes/schedules'
 import sessionRoutes from './routes/sessions'
 import usage from './routes/usage'
 import vaults from './routes/vaults'
@@ -605,6 +606,7 @@ export function createApp() {
     .route('/api/mcp', mcp)
     .route('/api/usage', usage)
     .route('/api/audit-records', audit)
+    .route('/api/scheduled-agent-triggers', schedules)
     .route('/api/sessions', sessionRoutes)
     .route('/api/vaults', vaults)
 
