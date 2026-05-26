@@ -30,11 +30,13 @@ Feature: Vaults API
     Then the response includes names, types, versions, connector bindings, usage references, and timestamps
     And the response exposes only hasSecret or safe reference fields instead of secret values
 
-  @planned
+  @implemented
   Scenario: Archive vaults and delete credential versions safely
     Given a vault exists
+    And a vault has credentials
+    And a session references the vault credential
+    When the user deletes an unused credential version
+    Then the operation requires explicit confirmation and audit metadata
     When the user archives the vault
     Then the vault is hidden from default lists and cannot be selected for new sessions
     And existing session references remain auditable
-    When the user deletes an unused credential version
-    Then the operation requires explicit confirmation and audit metadata

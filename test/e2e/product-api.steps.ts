@@ -32,6 +32,7 @@ interface E2EState {
   updatedEnvironment?: Json
   vault?: Json
   credential?: Json
+  deletedCredentialVersionId?: string
   response?: Json
   responseStatus?: number
   list?: ListResponse<Json>
@@ -181,6 +182,14 @@ Given('a vault exists', async function (this: ProductWorld) {
 
 Given('a vault has credentials', async function (this: ProductWorld) {
   await ensureVaultCredential(this)
+})
+
+Given('a session references the vault credential', async function (this: ProductWorld) {
+  await ensureVaultCredential(this)
+  await ensureAgentAndEnvironment(this)
+  this.e2e.latestSession = await createSession(this.e2e, {
+    vaultRefs: [{ type: 'credential', id: this.e2e.credential?.id }],
+  })
 })
 
 Given('a project has a vault', async function (this: ProductWorld) {
@@ -571,11 +580,18 @@ When('the user deletes an unused credential version', async function (this: Prod
   )
   const previousVersionId = this.e2e.credential?.activeVersionId as string
   this.e2e.credential = rotated
+  const missingConfirmation = await apiResponse(
+    this.e2e.page.request,
+    `/api/vaults/${this.e2e.vault?.id}/credentials/${this.e2e.credential?.id}/versions/${previousVersionId}`,
+    { method: 'DELETE' },
+  )
+  assert.equal(missingConfirmation.status(), 400)
   await emptyResponse(
     this.e2e.page.request,
     `/api/vaults/${this.e2e.vault?.id}/credentials/${this.e2e.credential?.id}/versions/${previousVersionId}?confirm=true`,
     { method: 'DELETE' },
   )
+  this.e2e.deletedCredentialVersionId = previousVersionId
 })
 
 Then(
@@ -1386,8 +1402,43 @@ Then(
       list.data.some((vault) => vault.id === state.vault?.id),
       false,
     )
+    const createCredential = await apiResponse(state.page.request, `/api/vaults/${state.vault?.id}/credentials`, {
+      method: 'POST',
+      data: {
+        name: `${state.runId} archived vault credential`,
+        type: 'api_key',
+        secret: { provider: 'external-vault', externalVaultPath: `vault://ama/e2e/${state.runId}/archived` },
+      },
+    })
+    assert.equal(createCredential.status(), 409)
   },
 )
+
+Then('existing session references remain auditable', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
+  assert.deepEqual(session.vaultRefs, [{ type: 'credential', id: state.credential?.id }])
+  const archivedList = await apiJson<ListResponse<Json>>(
+    state.page.request,
+    '/api/vaults?includeArchived=true&status=archived',
+  )
+  const archivedVault = archivedList.data.find((vault) => vault.id === state.vault?.id)
+  assert.equal(archivedVault?.status, 'archived')
+  assert.equal(typeof archivedVault?.archivedAt, 'string')
+})
+
+Then('the operation requires explicit confirmation and audit metadata', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const versions = await apiJson<ListResponse<Json>>(
+    state.page.request,
+    `/api/vaults/${state.vault?.id}/credentials/${state.credential?.id}/versions?includeArchived=true`,
+  )
+  const deleted = versions.data.find((version) => version.id === state.deletedCredentialVersionId)
+  assert.equal(deleted?.status, 'deleted')
+  assert.equal(deleted?.hasSecret, false)
+  assert.equal(typeof objectValue(deleted?.metadata).deletedByUserId, 'string')
+  assert.equal(typeof objectValue(deleted?.metadata).deleteConfirmedAt, 'string')
+})
 
 async function ensureSignedIn(world: ProductWorld) {
   if (world.e2e) {
