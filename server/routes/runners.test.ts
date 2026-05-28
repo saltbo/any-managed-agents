@@ -210,6 +210,58 @@ describe('[CF] /api/runners', () => {
     ])
   })
 
+  it('rejects runner credential secret references that are not safe references', async () => {
+    const authorization = await signIn()
+    const environment = await createSelfHostedEnvironment(authorization)
+
+    const rawSecretRes = await jsonFetch('/api/runners', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Raw credential runner',
+        environmentId: environment.id,
+        credentialSecretRef: 'raw-runner-token',
+      }),
+    })
+    expect(rawSecretRes.status).toBe(400)
+    const rawSecretBody = await rawSecretRes.json()
+    expect(rawSecretBody).toMatchObject({
+      error: { type: 'validation_error' },
+    })
+    expect(JSON.stringify(rawSecretBody)).not.toContain('raw-runner-token')
+    const rejectedCount = await env.DB.prepare('SELECT COUNT(*) AS count FROM runners WHERE name = ?')
+      .bind('Raw credential runner')
+      .first<{ count: number }>()
+    expect(rejectedCount?.count).toBe(0)
+
+    const paddedRefRes = await jsonFetch('/api/runners', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Padded credential runner',
+        environmentId: environment.id,
+        credentialSecretRef: ' cloudflare-secret:runner-token ',
+      }),
+    })
+    expect(paddedRefRes.status).toBe(400)
+
+    const safeRefRes = await jsonFetch('/api/runners', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Safe credential runner',
+        environmentId: environment.id,
+        credentialSecretRef: 'cloudflare-secret:runner-token',
+      }),
+    })
+    expect(safeRefRes.status).toBe(201)
+    const runner = (await safeRefRes.json()) as { id: string; credentialSecretRef?: string }
+    expect(runner.credentialSecretRef).toBeUndefined()
+    const persisted = await env.DB.prepare(
+      'SELECT credential_secret_ref AS credentialSecretRef FROM runners WHERE id = ?',
+    )
+      .bind(runner.id)
+      .first<{ credentialSecretRef: string | null }>()
+    expect(persisted?.credentialSecretRef).toBe('cloudflare-secret:runner-token')
+  })
+
   it('returns expired runner leases to available work predictably', async () => {
     const authorization = await signIn()
     const environment = await createSelfHostedEnvironment(authorization)
@@ -245,11 +297,19 @@ describe('[CF] /api/runners', () => {
         leaseId: null,
       }),
     ])
+    const releasedRunnerRes = await jsonFetch(`/api/runners/${runner.id}`, authorization)
+    await expect(releasedRunnerRes.json()).resolves.toMatchObject({ currentLoad: 0 })
+
+    const reclaimRes = await jsonFetch(`/api/runners/${runner.id}/leases`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+    expect(reclaimRes.status).toBe(201)
     const readSessionRes = await jsonFetch(`/api/sessions/${session.id}`, authorization)
     await expect(readSessionRes.json()).resolves.toMatchObject({
       id: session.id,
-      status: 'pending',
-      statusReason: 'waiting-for-runner',
+      status: 'running',
+      statusReason: null,
     })
   })
 

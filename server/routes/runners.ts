@@ -12,6 +12,7 @@ import {
   runnerWorkLeases,
   sessionEvents,
   sessions,
+  vaultCredentialVersions,
 } from '../db/schema'
 import type { Env } from '../env'
 import { errorResponse } from '../errors'
@@ -36,6 +37,14 @@ const MAX_EVENT_BATCH = 100
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
 const CapabilitySchema = z.string().min(1).max(120)
+const RunnerCredentialSecretRefSchema = z
+  .string()
+  .min(1)
+  .max(240)
+  .refine((ref) => isRunnerCredentialSecretRef(ref), {
+    message: 'Runner credential secret reference must use an approved reference format.',
+  })
+  .openapi({ example: 'cloudflare-secret:runner-token' })
 
 const RunnerSchema = z
   .object({
@@ -107,7 +116,7 @@ const CreateRunnerSchema = z
       .optional()
       .openapi({ example: ['node', 'git'] }),
     environmentId: z.string().min(1).optional().openapi({ example: 'env_abc123' }),
-    credentialSecretRef: z.string().min(1).max(240).optional().openapi({ example: 'cloudflare-secret:runner-token' }),
+    credentialSecretRef: RunnerCredentialSecretRefSchema.optional(),
     authMode: z.enum(['bearer', 'mtls', 'oidc']).optional().openapi({ example: 'bearer' }),
     maxConcurrent: z.number().int().min(1).max(100).optional().openapi({ example: 2 }),
     metadata: JsonObjectSchema.optional().openapi({ example: { pool: 'default' } }),
@@ -233,6 +242,19 @@ function hasSecretMaterial(value: unknown): boolean {
   return Object.entries(value).some(([key, child]) => secretKey(key) || hasSecretMaterial(child))
 }
 
+function isRunnerCredentialSecretRef(ref: string) {
+  if (ref !== ref.trim()) {
+    return false
+  }
+  return (
+    /^cloudflare-secret:[A-Za-z0-9_.-]+$/.test(ref) ||
+    /^wrangler_secret:[A-Za-z0-9_.-]+$/.test(ref) ||
+    /^vaultver_[A-Za-z0-9_]+$/.test(ref) ||
+    /^vault:\/\/[A-Za-z0-9][A-Za-z0-9._~:/-]*$/.test(ref) ||
+    /^secret:\/\/[A-Za-z0-9][A-Za-z0-9._~:/-]*$/.test(ref)
+  )
+}
+
 function serializeRunner(row: RunnerRow) {
   return {
     id: row.id,
@@ -322,6 +344,34 @@ async function validateEnvironment(db: Db, auth: AuthContext, environmentId: str
   return Boolean(environment)
 }
 
+async function validateRunnerCredentialSecretRef(db: Db, auth: AuthContext, credentialSecretRef: string | undefined) {
+  if (!credentialSecretRef?.startsWith('vaultver_')) {
+    return null
+  }
+  const version = await db
+    .select({ id: vaultCredentialVersions.id })
+    .from(vaultCredentialVersions)
+    .where(
+      and(
+        eq(vaultCredentialVersions.id, credentialSecretRef),
+        eq(vaultCredentialVersions.organizationId, auth.organization.id),
+        or(eq(vaultCredentialVersions.projectId, auth.project.id), isNull(vaultCredentialVersions.projectId)),
+        eq(vaultCredentialVersions.status, 'active'),
+      ),
+    )
+    .get()
+  return version
+    ? null
+    : { credentialSecretRef: 'Runner credential secret reference is not an active credential version.' }
+}
+
+async function releaseRunnerLoad(db: Db, projectId: string, runnerId: string, timestamp: string) {
+  await db
+    .update(runners)
+    .set({ currentLoad: sql`max(0, ${runners.currentLoad} - 1)`, updatedAt: timestamp })
+    .where(and(eq(runners.id, runnerId), eq(runners.projectId, projectId)))
+}
+
 async function expireStaleLeases(db: Db, auth: AuthContext) {
   const timestamp = now()
   const staleLeases = await db
@@ -342,17 +392,28 @@ async function expireStaleLeases(db: Db, auth: AuthContext) {
       .where(and(eq(runnerWorkItems.id, lease.workItemId), eq(runnerWorkItems.projectId, auth.project.id)))
       .get()
     if (!workItem || workItem.status !== 'leased' || workItem.leaseId !== lease.id) {
-      await db
+      const expired = await db
         .update(runnerWorkLeases)
         .set({ status: 'expired', updatedAt: timestamp })
-        .where(eq(runnerWorkLeases.id, lease.id))
+        .where(and(eq(runnerWorkLeases.id, lease.id), eq(runnerWorkLeases.status, 'active')))
+        .returning({ id: runnerWorkLeases.id })
+        .get()
+      if (expired) {
+        await releaseRunnerLoad(db, auth.project.id, lease.runnerId, timestamp)
+      }
       continue
     }
     const shouldRetry = workItem.attempts < workItem.maxAttempts
-    await db
+    const expired = await db
       .update(runnerWorkLeases)
       .set({ status: 'expired', updatedAt: timestamp })
-      .where(eq(runnerWorkLeases.id, lease.id))
+      .where(and(eq(runnerWorkLeases.id, lease.id), eq(runnerWorkLeases.status, 'active')))
+      .returning({ id: runnerWorkLeases.id })
+      .get()
+    if (!expired) {
+      continue
+    }
+    await releaseRunnerLoad(db, auth.project.id, lease.runnerId, timestamp)
     await db
       .update(runnerWorkItems)
       .set({
@@ -652,6 +713,12 @@ const routes = app
     if (!(await validateEnvironment(db, auth, body.environmentId))) {
       return errorResponse(c, 409, 'conflict', 'Runner environment is unavailable')
     }
+    const credentialFields = await validateRunnerCredentialSecretRef(db, auth, body.credentialSecretRef)
+    if (credentialFields) {
+      return errorResponse(c, 400, 'validation_error', 'Runner credential secret reference is invalid', {
+        fields: credentialFields,
+      })
+    }
     const timestamp = now()
     const runner = {
       id: newId('runner'),
@@ -883,10 +950,7 @@ const routes = app
       .orderBy(desc(runnerWorkItems.priority), asc(runnerWorkItems.createdAt), asc(runnerWorkItems.id))
       .get()
     if (!workItem) {
-      await db
-        .update(runners)
-        .set({ currentLoad: sql`max(0, ${runners.currentLoad} - 1)`, updatedAt: timestamp })
-        .where(eq(runners.id, runnerId))
+      await releaseRunnerLoad(db, auth.project.id, runnerId, timestamp)
       return c.body(null, 204)
     }
     const leaseDurationSeconds = body.leaseDurationSeconds ?? DEFAULT_LEASE_DURATION_SECONDS
@@ -918,10 +982,7 @@ const routes = app
       .returning({ id: runnerWorkItems.id })
       .get()
     if (!claimed) {
-      await db
-        .update(runners)
-        .set({ currentLoad: sql`max(0, ${runners.currentLoad} - 1)`, updatedAt: timestamp })
-        .where(eq(runners.id, runnerId))
+      await releaseRunnerLoad(db, auth.project.id, runnerId, timestamp)
       return c.body(null, 204)
     }
     await db.insert(runnerWorkLeases).values(lease)
@@ -1039,10 +1100,7 @@ const routes = app
         .where(and(eq(runnerWorkLeases.id, leaseId), eq(runnerWorkLeases.status, 'active')))
       const runner = await findRunner(db, auth, runnerId)
       if (runner) {
-        await db
-          .update(runners)
-          .set({ currentLoad: Math.max(0, runner.currentLoad - 1), updatedAt: timestamp })
-          .where(eq(runners.id, runnerId))
+        await releaseRunnerLoad(db, auth.project.id, runnerId, timestamp)
       }
       if (workItem.sessionId) {
         const sessionUpdate =
