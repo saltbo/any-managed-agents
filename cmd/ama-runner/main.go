@@ -1,0 +1,45 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	ama "github.com/saltbo/any-managed-agents/sdk/go/ama"
+)
+
+func main() {
+	if err := run(os.Args[1:]); err != nil && !errors.Is(err, context.Canceled) {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func run(args []string) error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return runWithContext(ctx, args, os.Getenv)
+}
+
+func runWithContext(ctx context.Context, args []string, getenv func(string) string) error {
+	config, err := LoadConfig(args, getenv)
+	if err != nil {
+		return err
+	}
+	client := &ama.Client{
+		Origin:      config.Origin,
+		AccessToken: config.Token,
+		HTTPClient:  &http.Client{Timeout: 30 * time.Second},
+	}
+	daemon := RunnerDaemon{
+		Config:  config,
+		Client:  client,
+		Adapter: ProcessAdapter{CommandTimeout: config.CommandTimeout, ShutdownGraceInterval: config.ShutdownGraceInterval},
+	}
+	return daemon.Start(ctx)
+}
