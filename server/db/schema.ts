@@ -346,6 +346,123 @@ export const scheduledTriggerRuns = sqliteTable(
   ],
 )
 
+export const runners = sqliteTable(
+  'runners',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id').notNull(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id),
+    name: text('name').notNull(),
+    capabilities: text('capabilities').notNull().default('[]'),
+    environmentId: text('environment_id').references(() => environments.id),
+    credentialSecretRef: text('credential_secret_ref'),
+    authMode: text('auth_mode').notNull().default('bearer'),
+    status: text('status').notNull().default('offline'),
+    currentLoad: integer('current_load').notNull().default(0),
+    maxConcurrent: integer('max_concurrent').notNull().default(1),
+    metadata: text('metadata').notNull().default('{}'),
+    lastHeartbeatAt: text('last_heartbeat_at'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    index('idx_runners_project_status_updated').on(table.projectId, table.status, table.updatedAt, table.id),
+    index('idx_runners_project_environment').on(table.projectId, table.environmentId, table.status),
+  ],
+)
+
+export const runnerHeartbeats = sqliteTable(
+  'runner_heartbeats',
+  {
+    id: text('id').primaryKey(),
+    runnerId: text('runner_id')
+      .notNull()
+      .references(() => runners.id),
+    organizationId: text('organization_id').notNull(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id),
+    status: text('status').notNull(),
+    capabilities: text('capabilities').notNull().default('[]'),
+    currentLoad: integer('current_load').notNull().default(0),
+    metadata: text('metadata').notNull().default('{}'),
+    createdAt: text('created_at').notNull(),
+  },
+  (table) => [
+    index('idx_runner_heartbeats_runner_created').on(table.runnerId, table.createdAt),
+    index('idx_runner_heartbeats_project_created').on(table.projectId, table.createdAt),
+  ],
+)
+
+export const runnerWorkItems = sqliteTable(
+  'runner_work_items',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id').notNull(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id),
+    sessionId: text('session_id').references(() => sessions.id),
+    environmentId: text('environment_id').references(() => environments.id),
+    runnerId: text('runner_id').references(() => runners.id),
+    leaseId: text('lease_id'),
+    type: text('type').notNull(),
+    status: text('status').notNull().default('available'),
+    priority: integer('priority').notNull().default(0),
+    attempts: integer('attempts').notNull().default(0),
+    maxAttempts: integer('max_attempts').notNull().default(3),
+    payload: text('payload').notNull(),
+    result: text('result'),
+    error: text('error'),
+    availableAt: text('available_at').notNull(),
+    leaseExpiresAt: text('lease_expires_at'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    index('idx_runner_work_items_project_status_available').on(
+      table.projectId,
+      table.status,
+      table.availableAt,
+      table.priority,
+      table.createdAt,
+    ),
+    index('idx_runner_work_items_session').on(table.sessionId),
+    index('idx_runner_work_items_runner_status').on(table.runnerId, table.status),
+  ],
+)
+
+export const runnerWorkLeases = sqliteTable(
+  'runner_work_leases',
+  {
+    id: text('id').primaryKey(),
+    workItemId: text('work_item_id')
+      .notNull()
+      .references(() => runnerWorkItems.id),
+    runnerId: text('runner_id')
+      .notNull()
+      .references(() => runners.id),
+    organizationId: text('organization_id').notNull(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id),
+    status: text('status').notNull().default('active'),
+    expiresAt: text('expires_at').notNull(),
+    renewedAt: text('renewed_at'),
+    result: text('result'),
+    error: text('error'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    index('idx_runner_work_leases_project_status_expires').on(table.projectId, table.status, table.expiresAt),
+    index('idx_runner_work_leases_runner_status').on(table.runnerId, table.status),
+    index('idx_runner_work_leases_work_item').on(table.workItemId),
+  ],
+)
+
 export const providerConfigs = sqliteTable(
   'provider_configs',
   {

@@ -421,7 +421,7 @@ describe('[CF] /api/sessions', () => {
     expect(archivedList.data).toContainEqual(expect.objectContaining({ id: created.id, status: 'archived' }))
   })
 
-  it('keeps self-hosted sessions pending until runner support exists', async () => {
+  it('queues self-hosted sessions for runner lease support', async () => {
     const authorization = await signIn()
     const environmentRes = await jsonFetch('/api/environments', authorization, {
       method: 'POST',
@@ -461,11 +461,29 @@ describe('[CF] /api/sessions', () => {
     }
     expect(created).toMatchObject({
       status: 'pending',
-      statusReason: 'requires-runner',
+      statusReason: 'waiting-for-runner',
       sandboxId: null,
       runtimeEndpointPath: null,
       environmentSnapshot: { runtimeType: 'self-hosted' },
-      metadata: { runtimeType: 'self-hosted', runnerState: 'requires-runner' },
+      metadata: {
+        runtimeType: 'self-hosted',
+        runnerState: 'queued',
+        runtime: 'ama-cloud',
+        protocol: 'ama-runner-work',
+      },
+    })
+
+    const workItemsRes = await jsonFetch(`/api/runners/work-items?sessionId=${created.id}`, authorization)
+    expect(workItemsRes.status).toBe(200)
+    await expect(workItemsRes.json()).resolves.toMatchObject({
+      data: [
+        {
+          sessionId: created.id,
+          environmentId: environment.id,
+          type: 'session.start',
+          status: 'available',
+        },
+      ],
     })
 
     const runtimeRes = await jsonFetch(`/runtime/sessions/${created.id}/rpc`, authorization, {
@@ -638,7 +656,7 @@ describe('[CF] /api/sessions', () => {
     expect(createRes.status).toBe(201)
     await expect(createRes.json()).resolves.toMatchObject({
       status: 'pending',
-      statusReason: 'requires-runner',
+      statusReason: 'waiting-for-runner',
       sandboxId: null,
       environmentSnapshot: { runtimeType: 'self-hosted' },
     })

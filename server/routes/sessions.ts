@@ -12,6 +12,7 @@ import {
   environmentVersions,
   mcpConnections,
   mcpConnectionTools,
+  runnerWorkItems,
   sessionEvents,
   sessions,
   vaultCredentials,
@@ -610,10 +611,56 @@ async function markExpiredPendingSessions(db: Db, auth: AuthContext) {
       and(
         eq(sessions.projectId, auth.project.id),
         eq(sessions.status, 'pending'),
-        or(isNull(sessions.statusReason), ne(sessions.statusReason, 'requires-runner')),
+        or(
+          isNull(sessions.statusReason),
+          and(ne(sessions.statusReason, 'requires-runner'), ne(sessions.statusReason, 'waiting-for-runner')),
+        ),
         lt(sessions.createdAt, expiredBefore),
       ),
     )
+}
+
+async function enqueueSelfHostedSessionWork(
+  db: Db,
+  auth: AuthContext,
+  values: {
+    session: SessionRow
+    agentSnapshot: ReturnType<typeof serializeAgentVersion>
+    environmentSnapshot: NormalizedEnvironmentSnapshot | null
+    initialPrompt?: string
+  },
+) {
+  const timestamp = now()
+  const payload = {
+    protocol: 'ama-runner-work',
+    type: 'session.start',
+    sessionId: values.session.id,
+    agentSnapshot: values.agentSnapshot,
+    environmentSnapshot: values.environmentSnapshot,
+    initialPrompt: values.initialPrompt ?? null,
+    runtimeOwner: 'ama-cloud',
+  }
+  await db.insert(runnerWorkItems).values({
+    id: newId('work'),
+    organizationId: auth.organization.id,
+    projectId: auth.project.id,
+    sessionId: values.session.id,
+    environmentId: values.session.environmentId,
+    runnerId: null,
+    leaseId: null,
+    type: 'session.start',
+    status: 'available',
+    priority: 0,
+    attempts: 0,
+    maxAttempts: 3,
+    payload: stringify(payload),
+    result: null,
+    error: null,
+    availableAt: timestamp,
+    leaseExpiresAt: null,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  })
 }
 
 function mcpConnectorIds(snapshot: Record<string, unknown>) {
@@ -879,11 +926,13 @@ export async function createSessionForAgent(
     modelProvider: agentSnapshot.provider,
     modelConfig: stringify({ provider: agentSnapshot.provider, model: agentSnapshot.model }),
     status: 'pending',
-    statusReason: runtimeType === 'self-hosted' ? 'requires-runner' : null,
+    statusReason: runtimeType === 'self-hosted' ? 'waiting-for-runner' : null,
     metadata: stringify({
       ...(options.metadata ?? {}),
       runtimeType,
-      ...(runtimeType === 'self-hosted' ? { runnerState: 'requires-runner' } : {}),
+      ...(runtimeType === 'self-hosted'
+        ? { runnerState: 'queued', runtime: 'ama-cloud', protocol: 'ama-runner-work' }
+        : {}),
     }),
     startedAt: null,
     stoppedAt: null,
@@ -904,6 +953,12 @@ export async function createSessionForAgent(
   })
 
   if (runtimeType === 'self-hosted') {
+    await enqueueSelfHostedSessionWork(db, auth, {
+      session: pending,
+      agentSnapshot,
+      environmentSnapshot,
+      ...(options.initialPrompt !== undefined ? { initialPrompt: options.initialPrompt } : {}),
+    })
     return c.json(serializeSession(pending), 201)
   }
 

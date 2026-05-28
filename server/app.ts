@@ -20,6 +20,7 @@ import health from './routes/health'
 import mcp from './routes/mcp'
 import projects from './routes/projects'
 import providers from './routes/providers'
+import runners from './routes/runners'
 import runtimeAi from './routes/runtime-ai'
 import schedules from './routes/schedules'
 import sessionRoutes from './routes/sessions'
@@ -602,6 +603,7 @@ export function createApp() {
     .route('/api/environments', environments)
     .route('/api/providers', providers)
     .route('/api/runtime', runtimeAi)
+    .route('/api/runners', runners)
     .route('/api/governance', governance)
     .route('/api/mcp', mcp)
     .route('/api/usage', usage)

@@ -120,6 +120,42 @@ OPERATIONS = [
   },
   {
     "method": "POST",
+    "path": "/api/runners",
+    "operationId": "createRunner",
+    "summary": "Register a self-hosted runner",
+    "tags": [
+      "Runners"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/runners/{runnerId}/heartbeats",
+    "operationId": "createRunnerHeartbeat",
+    "summary": "Record a runner heartbeat",
+    "tags": [
+      "Runners"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/runners/{runnerId}/leases",
+    "operationId": "createRunnerLease",
+    "summary": "Claim queued self-hosted runner work",
+    "tags": [
+      "Runner leases"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/runners/{runnerId}/leases/{leaseId}/events",
+    "operationId": "createRunnerLeaseEvents",
+    "summary": "Upload structured runner lease events",
+    "tags": [
+      "Runner leases"
+    ]
+  },
+  {
+    "method": "POST",
     "path": "/api/scheduled-agent-triggers",
     "operationId": "createScheduledAgentTrigger",
     "summary": "Create a scheduled agent trigger",
@@ -336,6 +372,24 @@ OPERATIONS = [
   },
   {
     "method": "GET",
+    "path": "/api/runners",
+    "operationId": "listRunners",
+    "summary": "List self-hosted runners",
+    "tags": [
+      "Runners"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/runners/work-items",
+    "operationId": "listRunnerWorkItems",
+    "summary": "List self-hosted runner work items",
+    "tags": [
+      "Runner work"
+    ]
+  },
+  {
+    "method": "GET",
     "path": "/api/scheduled-agent-triggers",
     "operationId": "listScheduledAgentTriggers",
     "summary": "List scheduled agent triggers",
@@ -471,6 +525,15 @@ OPERATIONS = [
   },
   {
     "method": "GET",
+    "path": "/api/runners/{runnerId}",
+    "operationId": "readRunner",
+    "summary": "Read a self-hosted runner",
+    "tags": [
+      "Runners"
+    ]
+  },
+  {
+    "method": "GET",
     "path": "/api/scheduled-agent-triggers/{triggerId}",
     "operationId": "readScheduledAgentTrigger",
     "summary": "Read a scheduled agent trigger",
@@ -593,6 +656,24 @@ OPERATIONS = [
     "summary": "Update a provider",
     "tags": [
       "Providers"
+    ]
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/runners/{runnerId}",
+    "operationId": "updateRunner",
+    "summary": "Update a self-hosted runner",
+    "tags": [
+      "Runners"
+    ]
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/runners/{runnerId}/leases/{leaseId}",
+    "operationId": "updateRunnerLease",
+    "summary": "Renew or finish a runner lease",
+    "tags": [
+      "Runner leases"
     ]
   },
   {

@@ -10,7 +10,7 @@ These decisions define the intended end state for Any Managed Agents.
 - Sandbox instances follow the session lifecycle and are not reused across sessions.
 - Cloudflare Sandbox owns filesystem, shell, process isolation, and the per-session execution environment.
 - Sandbox instances are execution environments only and must not expose public ports or preview URLs.
-- Environments declare `runtimeType` as `cloud-hosted` or `self-hosted`. Cloud-hosted sessions start a Cloudflare Sandbox ToolExecutor; self-hosted sessions are accepted as reusable configuration and wait in pending/requires-runner until runner APIs exist.
+- Environments declare `runtimeType` as `cloud-hosted` or `self-hosted`. Cloud-hosted sessions start a Cloudflare Sandbox ToolExecutor; self-hosted sessions enqueue AMA-owned runner work, remain pending with a safe waiting status until leased, and must not create a Cloudflare Sandbox.
 - Environments own network policy. `unrestricted` permits outbound network subject to governance policy, `restricted` requires explicit allowed hosts, and `offline` denies outbound sandbox network operations.
 
 ## Runtime Boundary
@@ -18,6 +18,7 @@ These decisions define the intended end state for Any Managed Agents.
 - v1.0 runs the session loop and runtime state machine in AMA cloud-side code.
 - AMA uses `@earendil-works/pi-agent-core` from cloud-side Worker code for the v1 prompt loop, message state, and tool-call event flow. The full Pi/PyAgent binary is not launched inside the sandbox.
 - Cloudflare Sandbox and future self-hosted runners are tool executor backends. They execute approved tool requests in `/workspace` and return structured results/events.
+- Self-hosted runners are registered executor backends, not Pi runtime hosts. They heartbeat safe capability/load metadata, lease queued work, renew or finish leases, and upload structured events/results through AMA APIs.
 - OIDC provider owns authentication, users, and organizations. AMA owns OIDC provider-backed tenancy enforcement, projects, agent, environment, and session metadata, OpenAPI CRUD, sandbox lifecycle, runtime proxy, UI, audit metadata, and usage metadata.
 - Runtime traffic uses AMA session endpoints. Browser, SDK, and CLI helpers must not connect directly to sandbox-owned agent processes.
 - AMA must not define a new incompatible runtime SDK or runtime protocol.
