@@ -590,48 +590,40 @@ describe('[CF] /api/sessions', () => {
     expect(duplicateMountRes.status).toBe(400)
   })
 
-  it('normalizes legacy session environment snapshots for read contracts', async () => {
+  it('preserves canonical session environment snapshots for read contracts', async () => {
     const authorization = await signIn()
     await connectMcp(authorization, 'github')
-    const environment = await createEnvironment(authorization)
+    const environmentRes = await jsonFetch('/api/environments', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: `Canonical snapshot workspace ${crypto.randomUUID()}`,
+        hostingMode: 'cloud',
+        runtime: 'ama',
+        runtimeConfig: { image: 'ama-runtime', timeoutSeconds: 120 },
+        networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
+      }),
+    })
+    expect(environmentRes.status).toBe(201)
+    const environment = (await environmentRes.json()) as { id: string }
     const agent = await createAgent(authorization)
     const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
     })
     expect(createRes.status).toBe(201)
-    const created = (await createRes.json()) as { id: string; environmentSnapshot: Record<string, unknown> }
-    const {
-      hostingMode: _hostingMode,
-      runtime: _runtime,
-      runtimeConfig: _runtimeConfig,
-      ...legacySnapshot
-    } = created.environmentSnapshot
-    await env.DB.prepare('UPDATE sessions SET environment_snapshot = ? WHERE id = ?')
-      .bind(
-        JSON.stringify({
-          ...legacySnapshot,
-          runtimeType: 'self-hosted',
-          runtimeImage: { image: 'legacy-runner' },
-          networkPolicy: { mode: 'restricted', allowedHosts: ['https://registry.npmjs.org'] },
-        }),
-        created.id,
-      )
-      .run()
+    const created = (await createRes.json()) as { id: string }
 
     const readRes = await jsonFetch(`/api/sessions/${created.id}`, authorization)
     expect(readRes.status).toBe(200)
     const body = await readRes.json()
     expect(body).toMatchObject({
       environmentSnapshot: {
-        hostingMode: 'self_hosted',
+        hostingMode: 'cloud',
         runtime: 'ama',
-        runtimeConfig: { image: 'legacy-runner' },
-        networkPolicy: { mode: 'unrestricted' },
+        runtimeConfig: { image: 'ama-runtime', timeoutSeconds: 120 },
+        networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
       },
     })
-    expect(JSON.stringify(body.environmentSnapshot)).not.toContain('runtimeType')
-    expect(JSON.stringify(body.environmentSnapshot)).not.toContain('runtimeImage')
   })
 
   it('serializes legacy runtime event rows as canonical AMA session events', async () => {

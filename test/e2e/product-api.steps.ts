@@ -53,7 +53,7 @@ interface E2EState {
   events?: ListResponse<Json>
   eventPages?: Record<string, ListResponse<Json>>
   runtimeMessage?: string
-  runtimeEventTypes?: string[]
+  observedEventTypes?: string[]
 }
 
 type ProductWorld = AmaWorld & { e2e?: E2EState }
@@ -2506,7 +2506,7 @@ Then(
   async function (this: ProductWorld) {
     const state = await ensureState(this)
     const events = await sessionEvents(state)
-    assert.equal(state.runtimeEventTypes, undefined)
+    assert.equal(state.observedEventTypes, undefined)
     assert.ok(JSON.stringify(events.data).includes(state.runtimeMessage ?? ''))
   },
 )
@@ -2638,7 +2638,7 @@ Then(
     const state = await ensureState(this)
     const events = await sessionEvents(state)
     assert.ok(events.data.length > 0)
-    assert.ok((state.runtimeEventTypes ?? []).filter(Boolean).some((type) => String(type).includes('tool')))
+    assert.ok((state.observedEventTypes ?? []).filter(Boolean).some((type) => String(type).includes('tool')))
   },
 )
 
@@ -2700,11 +2700,11 @@ Then('AMA stores the activity as canonical session events', async function (this
 Then('UI, API, and session-state views read only canonical session events', async function (this: ProductWorld) {
   const state = await ensureState(this)
   const events = state.events ?? (await sessionEvents(state))
-  for (const type of state.runtimeEventTypes ?? []) {
+  for (const type of state.observedEventTypes ?? []) {
     assert.match(String(type), /^[a-z]+(?:_[a-z]+)?\.[a-z]+(?:\.[a-z]+)?$/)
   }
-  assert.ok((state.runtimeEventTypes ?? []).includes('transcript.message'))
-  assert.ok((state.runtimeEventTypes ?? []).includes('tool_call.started'))
+  assert.ok((state.observedEventTypes ?? []).includes('transcript.message'))
+  assert.ok((state.observedEventTypes ?? []).includes('tool_call.started'))
   for (const event of events.data) {
     assert.match(String(event.type), /^[a-z]+(?:_[a-z]+)?\.[a-z]+(?:\.[a-z]+)?$/)
   }
@@ -2721,7 +2721,7 @@ Then('UI, API, and session-state views read only canonical session events', asyn
 Then('runtime-specific details appear only as safe metadata', async function (this: ProductWorld) {
   const state = await ensureState(this)
   const events = state.events ?? (await sessionEvents(state))
-  assert.ok(events.data.some((event) => objectValue(event.metadata).runtimeEventType))
+  assert.ok(events.data.some((event) => objectValue(event.metadata).sourceEventType))
   for (const event of events.data) {
     assert.equal(JSON.stringify(event.payload).includes('tool_execution_'), false)
     assert.equal(JSON.stringify(event.payload).includes('message_update'), false)
@@ -3101,7 +3101,7 @@ async function sendRuntimeMessage(state: E2EState, message: string) {
   const runtimePage = await state.page.context().newPage()
   try {
     await runtimePage.goto('/')
-    state.runtimeEventTypes = await runtimePage.evaluate(
+    state.observedEventTypes = await runtimePage.evaluate(
       async ({ sessionId, message }) => {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
         const token = window.localStorage.getItem('ama:e2e-access-token')

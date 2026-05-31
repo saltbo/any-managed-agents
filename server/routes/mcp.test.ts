@@ -325,7 +325,7 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
             ruleId: 'github',
             operation: 'mcp_tool_call',
           }),
-          metadata: expect.objectContaining({ source: 'policy', runtimeEventType: 'policy_denied' }),
+          metadata: expect.objectContaining({ source: 'policy', sourceEventType: 'policy_denied' }),
         }),
       ],
     })

@@ -16,7 +16,7 @@ describe('canonicalAmaSessionEventFromRuntimeEvent', () => {
       payload: {
         message: { id: 'msg_1', role: 'assistant', content: 'hello' },
       },
-      metadata: { runtimeEventType: 'message_update' },
+      metadata: { sourceEventType: 'message_update' },
     })
   })
 
@@ -129,7 +129,7 @@ describe('canonicalAmaSessionEventFromRuntimeEvent', () => {
     ).toMatchObject({
       type: 'tool_call.started',
       payload: { toolCall: { id: 'call_1', name: 'sandbox.exec' } },
-      metadata: { runtimeEventType: 'tool_call.started' },
+      metadata: { sourceEventType: 'tool_call.started' },
     })
   })
 })

@@ -201,7 +201,7 @@ function mergePersistedEvents(state: SessionRuntimeState, events: SessionEvent[]
   const messages = dedupeRuntimeMessages(
     runtimeEvents
       .map(({ stored, payload }) => {
-        const type = runtimeEventType(stored, payload)
+        const type = sessionEventType(stored, payload)
         if (type === 'transcript.message') {
           return messageFromSessionEvent(payload, stored.createdAt, 'complete')
         }
@@ -214,20 +214,20 @@ function mergePersistedEvents(state: SessionRuntimeState, events: SessionEvent[]
       .sort((left, right) => Date.parse(left.createdAt) - Date.parse(right.createdAt)),
   )
   const tools = runtimeEvents
-    .filter(({ stored, payload }) => isToolEvent(runtimeEventType(stored, payload)))
-    .map(({ stored, payload }) => toolFromSessionEvent(payload, stored.createdAt, runtimeEventType(stored, payload)))
+    .filter(({ stored, payload }) => isToolEvent(sessionEventType(stored, payload)))
+    .map(({ stored, payload }) => toolFromSessionEvent(payload, stored.createdAt, sessionEventType(stored, payload)))
     .filter((tool): tool is SessionRuntimeToolTrace => Boolean(tool))
     .reduce<SessionRuntimeToolTrace[]>((next, tool) => upsertTool(next, tool), [])
   const debugEvents = runtimeEvents.map(
     ({ stored, payload }): SessionRuntimeDebugEvent => ({
       id: stored.id,
-      type: runtimeEventType(stored, payload),
+      type: sessionEventType(stored, payload),
       payload,
       createdAt: stored.createdAt,
     }),
   )
   const eventKeys = runtimeEvents
-    .map(({ stored, payload }) => runtimeEventKey(payload, runtimeEventType(stored, payload)))
+    .map(({ stored, payload }) => runtimeEventKey(payload, sessionEventType(stored, payload)))
     .filter((key): key is string => Boolean(key))
   const hasTerminalEvent = runtimeEvents.some(({ payload }) => {
     const stage = stringField(payload, 'stage')
@@ -268,7 +268,7 @@ function uniquePersistedRuntimeEvents(events: SessionEvent[]): StoredRuntimeEven
     .sort((left, right) => left.sequence - right.sequence)
     .forEach((stored) => {
       const payload = objectValue(stored.payload)
-      const type = runtimeEventType(stored, payload)
+      const type = sessionEventType(stored, payload)
       const nextTurnKey = runtimeTurnKey(payload, type)
       if (nextTurnKey) {
         turnKey = nextTurnKey
@@ -285,7 +285,7 @@ function uniquePersistedRuntimeEvents(events: SessionEvent[]): StoredRuntimeEven
   return uniqueEvents
 }
 
-function runtimeEventType(stored: SessionEvent, payload: Record<string, unknown>): string {
+function sessionEventType(stored: SessionEvent, payload: Record<string, unknown>): string {
   return stored.type || amaSessionEventTypeFromPayload(payload)
 }
 

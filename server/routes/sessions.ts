@@ -512,13 +512,8 @@ function objectValue(value: unknown) {
 }
 
 function snapshotHostingMode(snapshot: Record<string, unknown>): EnvironmentHostingMode {
-  if (snapshot.hostingMode === 'self_hosted') {
-    return 'self_hosted'
-  }
-  if (snapshot.runtimeType === 'self-hosted') {
-    return 'self_hosted'
-  }
-  return 'cloud'
+  const parsed = EnvironmentHostingModeSchema.safeParse(snapshot.hostingMode)
+  return parsed.success ? parsed.data : 'cloud'
 }
 
 function snapshotRuntime(snapshot: Record<string, unknown>): EnvironmentRuntime {
@@ -533,16 +528,12 @@ function normalizeEnvironmentSnapshot(
     return null
   }
   const snapshotRecord = snapshot as Record<string, unknown>
-  const { runtimeType: _runtimeType, runtimeImage: _runtimeImage, ...canonical } = snapshotRecord
   return {
-    ...canonical,
+    ...snapshotRecord,
     hostingMode: snapshotHostingMode(snapshotRecord),
     runtime: snapshotRuntime(snapshotRecord),
     networkPolicy: normalizeEnvironmentNetworkPolicy(snapshotRecord.networkPolicy),
-    runtimeConfig:
-      Object.keys(objectValue(snapshotRecord.runtimeConfig)).length > 0
-        ? objectValue(snapshotRecord.runtimeConfig)
-        : objectValue(snapshotRecord.runtimeImage),
+    runtimeConfig: objectValue(snapshotRecord.runtimeConfig),
   } as NormalizedEnvironmentSnapshot
 }
 

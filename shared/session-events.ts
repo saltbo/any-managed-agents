@@ -58,49 +58,49 @@ export function canonicalAmaSessionEventFromRuntimeEvent(
   event: Record<string, unknown>,
   metadata: Record<string, unknown> = {},
 ): CanonicalAmaSessionEvent {
-  const runtimeType = runtimeEventType(event)
-  const type = canonicalType(runtimeType, event)
+  const sourceEventType = sourceEventTypeFromRuntimeEvent(event)
+  const type = canonicalType(sourceEventType, event)
   return {
     type,
-    payload: canonicalPayload(type, runtimeType, event),
+    payload: canonicalPayload(type, sourceEventType, event),
     visibility: 'runtime',
     role: canonicalRole(type, event),
     metadata: {
       ...metadata,
-      runtimeEventType: runtimeType,
+      sourceEventType,
       runtimeSource: metadata.runtimeSource ?? metadata.source ?? 'runtime',
     },
   }
 }
 
-function runtimeEventType(event: Record<string, unknown>) {
+function sourceEventTypeFromRuntimeEvent(event: Record<string, unknown>) {
   return typeof event.type === 'string' && event.type ? event.type : 'message'
 }
 
-function canonicalType(runtimeType: string, event: Record<string, unknown>): AmaSessionEventType {
-  if (isAmaSessionEventType(runtimeType)) return runtimeType
-  if (runtimeType === 'message') return 'transcript.message'
-  if (runtimeType === 'message_update') return 'transcript.message.delta'
-  if (runtimeType === 'message_end') return 'transcript.message'
-  if (runtimeType === 'tool_execution_start') return 'tool_call.started'
-  if (runtimeType === 'tool_execution_update') return 'tool_call.updated'
-  if (runtimeType === 'tool_execution_end') return 'tool_call.completed'
-  if (runtimeType === 'usage') return 'usage.recorded'
-  if (runtimeType === 'policy_denied') return 'policy.decision'
-  if (runtimeType === 'error') return 'runtime.error'
-  if (runtimeType === 'bridge_stderr') return 'runtime.output'
-  if (runtimeType === 'bridge_exit') {
+function canonicalType(sourceEventType: string, event: Record<string, unknown>): AmaSessionEventType {
+  if (isAmaSessionEventType(sourceEventType)) return sourceEventType
+  if (sourceEventType === 'message') return 'transcript.message'
+  if (sourceEventType === 'message_update') return 'transcript.message.delta'
+  if (sourceEventType === 'message_end') return 'transcript.message'
+  if (sourceEventType === 'tool_execution_start') return 'tool_call.started'
+  if (sourceEventType === 'tool_execution_update') return 'tool_call.updated'
+  if (sourceEventType === 'tool_execution_end') return 'tool_call.completed'
+  if (sourceEventType === 'usage') return 'usage.recorded'
+  if (sourceEventType === 'policy_denied') return 'policy.decision'
+  if (sourceEventType === 'error') return 'runtime.error'
+  if (sourceEventType === 'bridge_stderr') return 'runtime.output'
+  if (sourceEventType === 'bridge_exit') {
     const code = event.code
     return code === 0 || code === null ? 'session.lifecycle' : 'runtime.error'
   }
-  if (runtimeType === 'queue_update' || runtimeType === 'session_info_changed') return 'runtime.metadata'
-  if (runtimeType === 'runner_heartbeat' || runtimeType === 'runner_status') return 'runner.metadata'
+  if (sourceEventType === 'queue_update' || sourceEventType === 'session_info_changed') return 'runtime.metadata'
+  if (sourceEventType === 'runner_heartbeat' || sourceEventType === 'runner_status') return 'runner.metadata'
   return 'session.lifecycle'
 }
 
 function canonicalPayload(
   type: AmaSessionEventType,
-  runtimeType: string,
+  sourceEventType: string,
   event: Record<string, unknown>,
 ): Record<string, unknown> {
   if (type === 'transcript.message' || type === 'transcript.message.delta') {
@@ -158,7 +158,7 @@ function canonicalPayload(
 
   if (type === 'runtime.error') {
     return {
-      message: runtimeErrorMessage(event, runtimeType),
+      message: runtimeErrorMessage(event, sourceEventType),
       code: event.code,
       signal: event.signal,
     }
@@ -166,7 +166,7 @@ function canonicalPayload(
 
   if (type === 'runtime.output') {
     return {
-      stream: runtimeType === 'bridge_stderr' ? 'stderr' : 'runtime',
+      stream: sourceEventType === 'bridge_stderr' ? 'stderr' : 'runtime',
       content: event.data ?? event.message ?? '',
     }
   }
@@ -177,7 +177,7 @@ function canonicalPayload(
   }
 
   return {
-    stage: lifecycleStage(runtimeType),
+    stage: lifecycleStage(sourceEventType),
     status: event.status,
     reason: event.reason,
     sessionId: event.sessionId,
@@ -185,15 +185,15 @@ function canonicalPayload(
   }
 }
 
-function lifecycleStage(runtimeType: string) {
-  if (runtimeType === 'agent_start') return 'agent_started'
-  if (runtimeType === 'turn_start') return 'turn_started'
-  if (runtimeType === 'message_start') return 'message_started'
-  if (runtimeType === 'agent_end') return 'agent_completed'
-  if (runtimeType === 'turn_end') return 'turn_completed'
-  if (runtimeType === 'bridge_exit') return 'runtime_exited'
-  if (runtimeType === 'response') return 'command_completed'
-  return runtimeType
+function lifecycleStage(sourceEventType: string) {
+  if (sourceEventType === 'agent_start') return 'agent_started'
+  if (sourceEventType === 'turn_start') return 'turn_started'
+  if (sourceEventType === 'message_start') return 'message_started'
+  if (sourceEventType === 'agent_end') return 'agent_completed'
+  if (sourceEventType === 'turn_end') return 'turn_completed'
+  if (sourceEventType === 'bridge_exit') return 'runtime_exited'
+  if (sourceEventType === 'response') return 'command_completed'
+  return sourceEventType
 }
 
 function canonicalRole(type: AmaSessionEventType, event: Record<string, unknown>) {
@@ -204,8 +204,8 @@ function canonicalRole(type: AmaSessionEventType, event: Record<string, unknown>
   return stringField(message, 'role') ?? stringField(event, 'role') ?? 'assistant'
 }
 
-function runtimeErrorMessage(event: Record<string, unknown>, runtimeType: string) {
-  if (runtimeType === 'bridge_exit') {
+function runtimeErrorMessage(event: Record<string, unknown>, sourceEventType: string) {
+  if (sourceEventType === 'bridge_exit') {
     return 'Runtime process exited with an error'
   }
   if (typeof event.error === 'string') {
