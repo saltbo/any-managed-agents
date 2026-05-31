@@ -110,6 +110,23 @@ func TestRunOnceSendsHeartbeatAndCompletesApprovedToolWork(t *testing.T) {
 	}
 }
 
+func TestRunOnceRegistersRunnerWhenIDIsMissing(t *testing.T) {
+	client := &fakeControlPlane{lease: approvedLease()}
+	adapter := &fakeAdapter{result: ToolResult{Output: map[string]any{"stdout": "ok", "stderr": "", "exitCode": 0}}}
+	daemon := testDaemon(client, adapter)
+	daemon.Config.RunnerID = ""
+	daemon.Config.RunnerName = "new-runner"
+	if err := daemon.RunOnce(context.Background()); err != nil {
+		t.Fatalf("expected run once success, got %v", err)
+	}
+	if daemon.RunnerID != "runner_registered" {
+		t.Fatalf("expected registered runner id, got %q", daemon.RunnerID)
+	}
+	if len(client.updates) != 1 || client.updates[0].Status != "completed" {
+		t.Fatalf("expected completed update, got %#v", client.updates)
+	}
+}
+
 func TestRunOnceCompletesSessionStartWorkWithoutRunningLocalRuntime(t *testing.T) {
 	client := &fakeControlPlane{lease: sessionStartLease()}
 	adapter := &fakeAdapter{err: errors.New("adapter should not run")}
@@ -196,6 +213,16 @@ func TestStartFailsFastOnControlPlaneSetupErrors(t *testing.T) {
 				t.Fatalf("expected %q, got %v", tc.want, err)
 			}
 		})
+	}
+}
+
+func TestStartReturnsLeasePollingErrors(t *testing.T) {
+	client := &fakeControlPlane{claimErr: errors.New("claim failed")}
+	daemon := testDaemon(client, &fakeAdapter{})
+	daemon.Config.PollInterval = time.Hour
+	err := daemon.Start(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "claim failed") {
+		t.Fatalf("expected claim error, got %v", err)
 	}
 }
 

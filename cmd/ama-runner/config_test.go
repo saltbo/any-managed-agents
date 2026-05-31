@@ -298,3 +298,10 @@ func TestDurationJSONRejectsInvalidString(t *testing.T) {
 		t.Fatal("expected invalid duration string error")
 	}
 }
+
+func TestEnvOrUsesFallbackForMissingValue(t *testing.T) {
+	value := envOr(func(string) string { return "" }, "AMA_RUNNER_WORKDIR", ".ama-runner-work")
+	if value != ".ama-runner-work" {
+		t.Fatalf("expected fallback value, got %q", value)
+	}
+}

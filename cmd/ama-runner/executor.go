@@ -58,8 +58,13 @@ func (a ProcessAdapter) exec(ctx context.Context, request ToolRequest) (ToolResu
 	commandCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
+	env, err := processCommandEnvironment(request.WorkDir)
+	if err != nil {
+		return ToolResult{}, err
+	}
 	cmd := exec.CommandContext(commandCtx, "sh", "-lc", command)
 	cmd.Dir = request.WorkDir
+	cmd.Env = env
 	if runtime.GOOS != "windows" {
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	}
@@ -74,18 +79,18 @@ func (a ProcessAdapter) exec(ctx context.Context, request ToolRequest) (ToolResu
 	go func() {
 		done <- cmd.Wait()
 	}()
-	var err error
+	var waitErr error
 	select {
-	case err = <-done:
+	case waitErr = <-done:
 	case <-commandCtx.Done():
 		a.stopProcess(cmd)
-		err = <-done
+		waitErr = <-done
 	}
 	exitCode := 0
-	if err != nil {
+	if waitErr != nil {
 		exitCode = 1
 		var exitError *exec.ExitError
-		if asExitError(err, &exitError) {
+		if asExitError(waitErr, &exitError) {
 			exitCode = exitError.ExitCode()
 		}
 	}
@@ -97,7 +102,7 @@ func (a ProcessAdapter) exec(ctx context.Context, request ToolRequest) (ToolResu
 	if commandCtx.Err() != nil {
 		return ToolResult{Output: output}, commandCtx.Err()
 	}
-	if err != nil {
+	if waitErr != nil {
 		return ToolResult{Output: output}, fmt.Errorf("command exited with code %d", exitCode)
 	}
 	return ToolResult{Output: output}, nil
@@ -154,6 +159,65 @@ func (a ProcessAdapter) stopProcess(cmd *exec.Cmd) {
 func stringInput(input map[string]any, key string) (string, bool) {
 	value, ok := input[key].(string)
 	return value, ok
+}
+
+func processCommandEnvironment(workDir string) ([]string, error) {
+	root, err := filepath.Abs(workDir)
+	if err != nil {
+		return nil, err
+	}
+	root, err = filepath.EvalSymlinks(root)
+	if err != nil {
+		return nil, err
+	}
+	homeDir, err := prepareProcessEnvironmentDir(root, ".home")
+	if err != nil {
+		return nil, err
+	}
+	tempDir, err := prepareProcessEnvironmentDir(root, ".tmp")
+	if err != nil {
+		return nil, err
+	}
+
+	env := []string{
+		"HOME=" + homeDir,
+		"TMPDIR=" + tempDir,
+		"TEMP=" + tempDir,
+		"TMP=" + tempDir,
+	}
+	for _, key := range []string{"PATH", "SystemRoot", "ComSpec"} {
+		if value, ok := os.LookupEnv(key); ok {
+			env = append(env, key+"="+value)
+		}
+	}
+	return env, nil
+}
+
+func prepareProcessEnvironmentDir(root string, name string) (string, error) {
+	dir := filepath.Join(root, name)
+	info, err := os.Lstat(dir)
+	if os.IsNotExist(err) {
+		if err := os.Mkdir(dir, 0o700); err != nil {
+			return "", err
+		}
+	} else if err != nil {
+		return "", err
+	} else {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return "", fmt.Errorf("process environment directories must not be symlinks")
+		}
+		if !info.IsDir() {
+			return "", fmt.Errorf("process environment path must be a directory")
+		}
+	}
+	resolved, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return "", err
+	}
+	if err := ensureUnderWorkspace(root, resolved); err != nil {
+		return "", err
+	}
+	return resolved, nil
 }
 
 func resolveReadPath(workDir string, path string) (string, error) {
