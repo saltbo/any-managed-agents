@@ -39,12 +39,13 @@ export function CreateEnvironmentSheet({
       api.createEnvironment({
         name: form.name,
         description: form.description,
-        runtimeType: form.runtimeType,
+        hostingMode: form.hostingMode,
+        runtime: form.runtime,
         packages: parsePackages(form.packages),
         variables: parseVariables(form.variables),
         networkPolicy: networkPolicy(form),
         resourceLimits: { memoryMb: 1024, timeoutSeconds: 900 },
-        runtimeImage: { image: form.runtimeImage },
+        runtimeConfig: JSON.parse(form.runtimeConfig) as Record<string, unknown>,
       }),
     onSuccess: () => {
       onOpenChange(false)

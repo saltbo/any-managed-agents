@@ -14,11 +14,13 @@ import {
   parseListCursor,
 } from '../openapi'
 import {
+  type EnvironmentHostingMode,
+  EnvironmentHostingModeSchema,
   EnvironmentNetworkPolicySchema,
-  EnvironmentRuntimeTypeSchema,
+  type EnvironmentRuntime,
+  EnvironmentRuntimeSchema,
   type EnvironmentNetworkPolicy as NetworkPolicy,
   normalizeEnvironmentNetworkPolicy,
-  type EnvironmentRuntimeType as RuntimeType,
 } from './environment-contracts'
 
 const app = createApiRouter()
@@ -36,7 +38,8 @@ const SecretRefSchema = z.object({
   name: z.string().min(1).max(120),
   ref: z.string().min(1).max(240),
 })
-const RuntimeTypeSchema = EnvironmentRuntimeTypeSchema
+const HostingModeSchema = EnvironmentHostingModeSchema
+const RuntimeSchema = EnvironmentRuntimeSchema
 const NetworkPolicySchema = EnvironmentNetworkPolicySchema
 const McpPolicySchema = z
   .object({
@@ -56,12 +59,6 @@ const ResourceLimitsSchema = z
     timeoutSeconds: z.number().int().positive().optional(),
   })
   .strict()
-const RuntimeImageSchema = z
-  .object({
-    image: z.string().min(1).max(240).optional(),
-  })
-  .strict()
-
 const EnvironmentSchema = z
   .object({
     id: z.string().openapi({ example: 'env_abc123' }),
@@ -71,14 +68,15 @@ const EnvironmentSchema = z
     packages: z.array(PackageSchema).openapi({ example: [{ name: 'tsx', version: 'latest' }] }),
     variables: z.record(z.string(), VariableSchema).openapi({ example: { NODE_ENV: { description: 'Runtime mode' } } }),
     secretRefs: z.array(SecretRefSchema).openapi({ example: [{ name: 'NPM_TOKEN', ref: 'vault_secret_123' }] }),
-    runtimeType: RuntimeTypeSchema.openapi({ example: 'cloud-hosted' }),
+    hostingMode: HostingModeSchema.openapi({ example: 'cloud' }),
+    runtime: RuntimeSchema.openapi({ example: 'ama' }),
     networkPolicy: NetworkPolicySchema.openapi({
       example: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
     }),
     mcpPolicy: McpPolicySchema.openapi({ example: { allowedConnectors: ['github'] } }),
     packageManagerPolicy: JsonObjectSchema.openapi({ example: { allowedRegistries: ['registry.npmjs.org'] } }),
     resourceLimits: JsonObjectSchema.openapi({ example: { memoryMb: 512 } }),
-    runtimeImage: JsonObjectSchema.openapi({ example: { image: 'node:24' } }),
+    runtimeConfig: JsonObjectSchema.openapi({ example: { image: 'node:24' } }),
     metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
     status: z.enum(['active', 'archived']).openapi({ example: 'active' }),
     archivedAt: z.string().datetime().nullable().openapi({ example: null }),
@@ -98,46 +96,52 @@ const EnvironmentVersionSchema = z
     packages: z.array(PackageSchema).openapi({ example: [{ name: 'tsx' }] }),
     variables: z.record(z.string(), VariableSchema).openapi({ example: { NODE_ENV: { required: true } } }),
     secretRefs: z.array(SecretRefSchema).openapi({ example: [{ name: 'NPM_TOKEN', ref: 'vault_secret_123' }] }),
-    runtimeType: RuntimeTypeSchema.openapi({ example: 'cloud-hosted' }),
+    hostingMode: HostingModeSchema.openapi({ example: 'cloud' }),
+    runtime: RuntimeSchema.openapi({ example: 'ama' }),
     networkPolicy: NetworkPolicySchema.openapi({
       example: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
     }),
     mcpPolicy: McpPolicySchema.openapi({ example: { allowedConnectors: ['github'] } }),
     packageManagerPolicy: JsonObjectSchema.openapi({ example: { allowedRegistries: ['registry.npmjs.org'] } }),
     resourceLimits: JsonObjectSchema.openapi({ example: { memoryMb: 512 } }),
-    runtimeImage: JsonObjectSchema.openapi({ example: { image: 'node:24' } }),
+    runtimeConfig: JsonObjectSchema.openapi({ example: { image: 'node:24' } }),
     metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
     createdAt: z.string().datetime().openapi({ example: '2026-05-22T00:00:00.000Z' }),
   })
   .openapi('EnvironmentVersion')
 
-const EnvironmentPayloadSchema = z.object({
-  name: z.string().min(1).max(120).openapi({ example: 'Node workspace' }),
-  description: z.string().max(1000).optional().openapi({ example: 'Default Node.js environment.' }),
-  packages: z
-    .array(PackageSchema)
-    .max(200)
-    .optional()
-    .openapi({ example: [{ name: 'tsx', version: 'latest' }] }),
-  variables: z
-    .record(z.string(), VariableSchema)
-    .optional()
-    .openapi({ example: { NODE_ENV: { required: true } } }),
-  secretRefs: z
-    .array(SecretRefSchema)
-    .max(100)
-    .optional()
-    .openapi({ example: [{ name: 'NPM_TOKEN', ref: 'vault_secret_123' }] }),
-  runtimeType: RuntimeTypeSchema.optional().openapi({ example: 'cloud-hosted' }),
-  networkPolicy: NetworkPolicySchema.optional().openapi({
-    example: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
-  }),
-  mcpPolicy: McpPolicySchema.optional().openapi({ example: { allowedConnectors: ['github'] } }),
-  packageManagerPolicy: JsonObjectSchema.optional().openapi({ example: { allowedRegistries: ['registry.npmjs.org'] } }),
-  resourceLimits: ResourceLimitsSchema.optional().openapi({ example: { memoryMb: 512 } }),
-  runtimeImage: RuntimeImageSchema.optional().openapi({ example: { image: 'node:24' } }),
-  metadata: JsonObjectSchema.optional().openapi({ example: { owner: 'platform' } }),
-})
+const EnvironmentPayloadSchema = z
+  .object({
+    name: z.string().min(1).max(120).openapi({ example: 'Node workspace' }),
+    description: z.string().max(1000).optional().openapi({ example: 'Default Node.js environment.' }),
+    packages: z
+      .array(PackageSchema)
+      .max(200)
+      .optional()
+      .openapi({ example: [{ name: 'tsx', version: 'latest' }] }),
+    variables: z
+      .record(z.string(), VariableSchema)
+      .optional()
+      .openapi({ example: { NODE_ENV: { required: true } } }),
+    secretRefs: z
+      .array(SecretRefSchema)
+      .max(100)
+      .optional()
+      .openapi({ example: [{ name: 'NPM_TOKEN', ref: 'vault_secret_123' }] }),
+    hostingMode: HostingModeSchema.optional().openapi({ example: 'cloud' }),
+    runtime: RuntimeSchema.optional().openapi({ example: 'ama' }),
+    networkPolicy: NetworkPolicySchema.optional().openapi({
+      example: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
+    }),
+    mcpPolicy: McpPolicySchema.optional().openapi({ example: { allowedConnectors: ['github'] } }),
+    packageManagerPolicy: JsonObjectSchema.optional().openapi({
+      example: { allowedRegistries: ['registry.npmjs.org'] },
+    }),
+    resourceLimits: ResourceLimitsSchema.optional().openapi({ example: { memoryMb: 512 } }),
+    runtimeConfig: JsonObjectSchema.optional().openapi({ example: { image: 'node:24' } }),
+    metadata: JsonObjectSchema.optional().openapi({ example: { owner: 'platform' } }),
+  })
+  .strict()
 const CreateEnvironmentSchema = EnvironmentPayloadSchema.openapi('CreateEnvironmentRequest')
 const UpdateEnvironmentSchema = EnvironmentPayloadSchema.partial().openapi('UpdateEnvironmentRequest')
 
@@ -174,6 +178,26 @@ function parseJson<T>(value: string) {
 
 function stringify(value: unknown) {
   return JSON.stringify(value)
+}
+
+function hostingModeFromStorage(value: string): EnvironmentHostingMode {
+  return value === 'self_hosted' ? 'self_hosted' : 'cloud'
+}
+
+function runtimeStorage(value: string) {
+  const parsed = parseJson<Record<string, unknown>>(value)
+  const runtime = RuntimeSchema.safeParse(parsed.runtime).success ? (parsed.runtime as EnvironmentRuntime) : 'ama'
+  const runtimeConfig =
+    parsed.runtimeConfig && typeof parsed.runtimeConfig === 'object' && !Array.isArray(parsed.runtimeConfig)
+      ? (parsed.runtimeConfig as Record<string, unknown>)
+      : parsed.runtime
+        ? {}
+        : parsed
+  return { runtime, runtimeConfig }
+}
+
+function runtimeStorageJson(runtime: EnvironmentRuntime, runtimeConfig: Record<string, unknown>) {
+  return stringify({ runtime, runtimeConfig })
 }
 
 const normalizeNetworkPolicy = normalizeEnvironmentNetworkPolicy
@@ -314,6 +338,7 @@ function validateSecretFreeObjects(values: {
 }
 
 function serializeVersion(row: EnvironmentVersionRow) {
+  const { runtime, runtimeConfig } = runtimeStorage(row.runtimeImage)
   return {
     id: row.id,
     environmentId: row.environmentId,
@@ -322,18 +347,20 @@ function serializeVersion(row: EnvironmentVersionRow) {
     packages: parseJson<Package[]>(row.packages),
     variables: parseJson<Record<string, Variable>>(row.variables),
     secretRefs: parseJson<SecretRef[]>(row.secretRefs),
-    runtimeType: row.runtimeType as RuntimeType,
+    hostingMode: hostingModeFromStorage(row.runtimeType),
+    runtime,
     networkPolicy: normalizeNetworkPolicy(parseJson<unknown>(row.networkPolicy)),
     mcpPolicy: parseJson<Record<string, unknown>>(row.mcpPolicy),
     packageManagerPolicy: parseJson<Record<string, unknown>>(row.packageManagerPolicy),
     resourceLimits: parseJson<Record<string, unknown>>(row.resourceLimits),
-    runtimeImage: parseJson<Record<string, unknown>>(row.runtimeImage),
+    runtimeConfig,
     metadata: parseJson<Record<string, unknown>>(row.metadata),
     createdAt: row.createdAt,
   }
 }
 
 function serializeEnvironment(row: EnvironmentRow, version: EnvironmentVersionRow | null) {
+  const { runtime, runtimeConfig } = runtimeStorage(row.runtimeImage)
   return {
     id: row.id,
     projectId: row.projectId,
@@ -342,12 +369,13 @@ function serializeEnvironment(row: EnvironmentRow, version: EnvironmentVersionRo
     packages: parseJson<Package[]>(row.packages),
     variables: parseJson<Record<string, Variable>>(row.variables),
     secretRefs: parseJson<SecretRef[]>(row.secretRefs),
-    runtimeType: row.runtimeType as RuntimeType,
+    hostingMode: hostingModeFromStorage(row.runtimeType),
+    runtime,
     networkPolicy: normalizeNetworkPolicy(parseJson<unknown>(row.networkPolicy)),
     mcpPolicy: parseJson<Record<string, unknown>>(row.mcpPolicy),
     packageManagerPolicy: parseJson<Record<string, unknown>>(row.packageManagerPolicy),
     resourceLimits: parseJson<Record<string, unknown>>(row.resourceLimits),
-    runtimeImage: parseJson<Record<string, unknown>>(row.runtimeImage),
+    runtimeConfig,
     metadata: parseJson<Record<string, unknown>>(row.metadata),
     status: row.status as 'active' | 'archived',
     archivedAt: row.archivedAt,
@@ -391,12 +419,13 @@ async function createVersion(
     packages: Package[]
     variables: Record<string, Variable>
     secretRefs: SecretRef[]
-    runtimeType: RuntimeType
+    hostingMode: EnvironmentHostingMode
+    runtime: EnvironmentRuntime
     networkPolicy: NetworkPolicy
     mcpPolicy: Record<string, unknown>
     packageManagerPolicy: Record<string, unknown>
     resourceLimits: Record<string, unknown>
-    runtimeImage: Record<string, unknown>
+    runtimeConfig: Record<string, unknown>
     metadata: Record<string, unknown>
     createdAt: string
   },
@@ -416,12 +445,12 @@ async function createVersion(
     packages: stringify(values.packages),
     variables: stringify(values.variables),
     secretRefs: stringify(values.secretRefs),
-    runtimeType: values.runtimeType,
+    runtimeType: values.hostingMode,
     networkPolicy: stringify(values.networkPolicy),
     mcpPolicy: stringify(values.mcpPolicy),
     packageManagerPolicy: stringify(values.packageManagerPolicy),
     resourceLimits: stringify(values.resourceLimits),
-    runtimeImage: stringify(values.runtimeImage),
+    runtimeImage: runtimeStorageJson(values.runtime, values.runtimeConfig),
     metadata: stringify(values.metadata),
     createdAt: values.createdAt,
   }
@@ -593,12 +622,13 @@ const routes = app
       packages: body.packages ?? [],
       variables: body.variables ?? {},
       secretRefs: body.secretRefs ?? [],
-      runtimeType: body.runtimeType ?? 'cloud-hosted',
+      hostingMode: body.hostingMode ?? 'cloud',
+      runtime: body.runtime ?? 'ama',
       networkPolicy: body.networkPolicy ?? { mode: 'unrestricted' },
       mcpPolicy: body.mcpPolicy ?? {},
       packageManagerPolicy: body.packageManagerPolicy ?? {},
       resourceLimits: body.resourceLimits ?? {},
-      runtimeImage: body.runtimeImage ?? {},
+      runtimeConfig: body.runtimeConfig ?? {},
       metadata: body.metadata ?? {},
     }
     const validation =
@@ -616,12 +646,12 @@ const routes = app
       packages: stringify(values.packages),
       variables: stringify(values.variables),
       secretRefs: stringify(values.secretRefs),
-      runtimeType: values.runtimeType,
+      runtimeType: values.hostingMode,
       networkPolicy: stringify(values.networkPolicy),
       mcpPolicy: stringify(values.mcpPolicy),
       packageManagerPolicy: stringify(values.packageManagerPolicy),
       resourceLimits: stringify(values.resourceLimits),
-      runtimeImage: stringify(values.runtimeImage),
+      runtimeImage: runtimeStorageJson(values.runtime, values.runtimeConfig),
       metadata: stringify(values.metadata),
       status: 'active',
       archivedAt: null,
@@ -671,13 +701,14 @@ const routes = app
       packages: body.packages ?? parseJson<Package[]>(environment.packages),
       variables: body.variables ?? parseJson<Record<string, Variable>>(environment.variables),
       secretRefs: body.secretRefs ?? parseJson<SecretRef[]>(environment.secretRefs),
-      runtimeType: body.runtimeType ?? (environment.runtimeType as RuntimeType),
+      hostingMode: body.hostingMode ?? hostingModeFromStorage(environment.runtimeType),
+      runtime: body.runtime ?? runtimeStorage(environment.runtimeImage).runtime,
       networkPolicy: body.networkPolicy ?? normalizeNetworkPolicy(parseJson<unknown>(environment.networkPolicy)),
       mcpPolicy: body.mcpPolicy ?? parseJson<Record<string, unknown>>(environment.mcpPolicy),
       packageManagerPolicy:
         body.packageManagerPolicy ?? parseJson<Record<string, unknown>>(environment.packageManagerPolicy),
       resourceLimits: body.resourceLimits ?? parseJson<Record<string, unknown>>(environment.resourceLimits),
-      runtimeImage: body.runtimeImage ?? parseJson<Record<string, unknown>>(environment.runtimeImage),
+      runtimeConfig: body.runtimeConfig ?? runtimeStorage(environment.runtimeImage).runtimeConfig,
       metadata: body.metadata ?? parseJson<Record<string, unknown>>(environment.metadata),
     }
     const validation =
@@ -692,12 +723,13 @@ const routes = app
       body.packages !== undefined ||
       body.variables !== undefined ||
       body.secretRefs !== undefined ||
-      body.runtimeType !== undefined ||
+      body.hostingMode !== undefined ||
+      body.runtime !== undefined ||
       body.networkPolicy !== undefined ||
       body.mcpPolicy !== undefined ||
       body.packageManagerPolicy !== undefined ||
       body.resourceLimits !== undefined ||
-      body.runtimeImage !== undefined ||
+      body.runtimeConfig !== undefined ||
       body.metadata !== undefined
     const version = runtimeChanged
       ? await createVersion(db, environment, { ...next, createdAt: timestamp })
@@ -707,12 +739,12 @@ const routes = app
       packages: stringify(next.packages),
       variables: stringify(next.variables),
       secretRefs: stringify(next.secretRefs),
-      runtimeType: next.runtimeType,
+      runtimeType: next.hostingMode,
       networkPolicy: stringify(next.networkPolicy),
       mcpPolicy: stringify(next.mcpPolicy),
       packageManagerPolicy: stringify(next.packageManagerPolicy),
       resourceLimits: stringify(next.resourceLimits),
-      runtimeImage: stringify(next.runtimeImage),
+      runtimeImage: runtimeStorageJson(next.runtime, next.runtimeConfig),
       metadata: stringify(next.metadata),
       currentVersionId: version?.id ?? environment.currentVersionId,
       updatedAt: timestamp,

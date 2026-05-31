@@ -36,24 +36,41 @@ export function EnvironmentForm({
           onChange={(description) => setValue({ ...value, description })}
         />
         <Field>
-          <FieldLabel>Runtime type</FieldLabel>
+          <FieldLabel>Hosting mode</FieldLabel>
           <Select
-            value={value.runtimeType}
-            onValueChange={(runtimeType) =>
-              setValue({ ...value, runtimeType: runtimeType as EnvironmentFormState['runtimeType'] })
+            value={value.hostingMode}
+            onValueChange={(hostingMode) =>
+              setValue({ ...value, hostingMode: hostingMode as EnvironmentFormState['hostingMode'] })
             }
           >
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="cloud-hosted">Cloud-hosted</SelectItem>
-              <SelectItem value="self-hosted">Self-hosted</SelectItem>
+              <SelectItem value="cloud">Cloud</SelectItem>
+              <SelectItem value="self_hosted">Self hosted</SelectItem>
             </SelectContent>
           </Select>
           <FieldDescription>
-            Cloud-hosted sessions start in Cloudflare Sandbox. Self-hosted sessions wait for a runner.
+            Cloud sessions use managed infrastructure. Self hosted sessions wait for a runner.
           </FieldDescription>
+        </Field>
+        <Field>
+          <FieldLabel>Runtime</FieldLabel>
+          <Select
+            value={value.runtime}
+            onValueChange={(runtime) => setValue({ ...value, runtime: runtime as EnvironmentFormState['runtime'] })}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ama">AMA</SelectItem>
+              <SelectItem value="claude-code">Claude Code</SelectItem>
+              <SelectItem value="codex">Codex</SelectItem>
+              <SelectItem value="copilot">Copilot</SelectItem>
+            </SelectContent>
+          </Select>
         </Field>
         <Field>
           <FieldLabel>Network mode</FieldLabel>
@@ -97,10 +114,10 @@ export function EnvironmentForm({
           onChange={(variables) => setValue({ ...value, variables })}
         />
         <TextField
-          label="Runtime image"
-          description="Container image baked with runtime dependencies. Leave the default unless the image is ready."
-          value={value.runtimeImage}
-          onChange={(runtimeImage) => setValue({ ...value, runtimeImage })}
+          label="Runtime config"
+          description="JSON configuration passed to the selected environment runtime."
+          value={value.runtimeConfig}
+          onChange={(runtimeConfig) => setValue({ ...value, runtimeConfig })}
         />
       </FieldGroup>
       <Button type="submit">

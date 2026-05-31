@@ -27,12 +27,12 @@ Feature: Environments API
     Given a signed-in user has access to a project
     When the user creates an environment with only a name
     Then the response includes an environment id, current version id, project id, timestamps, and archive state
-    And package lists, variables, secret references, current runtimeType field, network policy, resource limits, runtime image, and metadata have stable default values
+    And package lists, variables, secret references, network policy, resource limits, and metadata have stable default values
     And the environment is stored as a reusable definition, not as a running sandbox instance
 
   @implemented
-  Scenario: Create an environment with package, variable, current runtimeType, network, and resource policy
-    When the user creates an environment with package requirements, variables, secret references, current runtimeType field, allowed outbound hosts, MCP access rules, package-manager access rules, resource limits, runtime image, and metadata
+  Scenario: Create an environment with package, variable, network, and resource policy
+    When the user creates an environment with package requirements, variables, secret references, allowed outbound hosts, MCP access rules, package-manager access rules, resource limits, and metadata
     Then the response stores normalized policy fields
     And raw secret values are rejected
     And secret references are returned only as safe names and references
@@ -41,7 +41,7 @@ Feature: Environments API
   @implemented
   Scenario: Version environment changes without changing existing sessions
     Given an environment is used by existing sessions
-    When the user changes packages, variables, secret references, current runtimeType field, network policy, resource limits, runtime image, or metadata
+    When the user changes packages, variables, secret references, network policy, resource limits, or metadata
     Then the platform creates a new environment version
     And existing sessions keep their original environment snapshot
     And new sessions that reference the environment use the new environment version
@@ -71,14 +71,14 @@ Feature: Environments API
     And policy event payloads do not include secrets
 
   @implemented
-  Scenario: Accept self-hosted environments without starting cloud sandbox execution
+  Scenario: Accept self_hosted environments without starting cloud sandbox execution
     Given a signed-in user has access to a project
-    When the user creates a self-hosted environment and starts a session with it
-    Then the session keeps the self-hosted environment snapshot
+    When the user creates a self_hosted codex environment and starts a session with it
+    Then the session keeps the self_hosted environment snapshot
     And the session remains pending with a waiting-for-runner reason
     And no Cloudflare Sandbox id is assigned before runner lease
 
-  @planned
+  @implemented
   Scenario: Publish canonical environment runtime fields
     Given a signed-in user has access to a project
     When the user creates an environment with hostingMode and runtime
@@ -87,7 +87,7 @@ Feature: Environments API
     And invalid hostingMode or runtime values return field-level validation details
     And the API does not infer runtime ownership from the selected agent
 
-  @planned
+  @implemented
   Scenario: Store environment-owned runtime configuration
     Given a signed-in user has access to a project
     When the user creates an environment with workspace, secret references, network policy, resource limits, and runtime config

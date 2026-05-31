@@ -126,7 +126,7 @@ describe('session-runtime', () => {
       runtimeEndpointPath: '/runtime/sessions/session_123/rpc',
       metadata: {
         runtimeMode: 'test',
-        runtimeOwner: 'ama-cloud',
+        hostingMode: 'cloud',
         loop: 'cloud-session-runtime',
         executor: 'cloudflare-sandbox',
         piCorePackage: '@earendil-works/pi-agent-core',
@@ -383,7 +383,7 @@ describe('session-runtime', () => {
       runtimeEndpointPath: '/runtime/sessions/session_123/rpc',
       metadata: expect.objectContaining({
         runtimeMode: 'live',
-        runtimeOwner: 'ama-cloud',
+        hostingMode: 'cloud',
         loop: 'cloud-session-runtime',
       }),
     })
@@ -392,7 +392,7 @@ describe('session-runtime', () => {
     expect(mockSandbox.exec).toHaveBeenCalledWith('mkdir -p /workspace/.ama')
     expect(mockSandbox.writeFile).toHaveBeenCalledWith(
       '/workspace/.ama/session.json',
-      expect.stringContaining('"runtimeOwner":"ama-cloud"'),
+      expect.stringContaining('"hostingMode":"cloud"'),
       { encoding: 'utf-8' },
     )
     expect(mockSandbox.writeFile).toHaveBeenCalledWith(

@@ -56,6 +56,14 @@ function parseRuntimeAgentSnapshot(value: string | null) {
   }
 }
 
+function selectedSessionRuntime(value: string | null) {
+  if (!value) {
+    return 'ama'
+  }
+  const snapshot = JSON.parse(value) as Record<string, unknown>
+  return typeof snapshot.runtime === 'string' ? snapshot.runtime : 'ama'
+}
+
 async function appendPiRuntimeEvent(
   db: ReturnType<typeof drizzle>,
   values: {
@@ -436,7 +444,7 @@ async function markRuntimeExecutionFailed(
     auth,
     sessionId: session.id,
     event: { type: 'error', message: runtimeError.message, code: runtimeError.code },
-    metadata: { source: 'ama-cloud-runtime' },
+    metadata: { source: 'ama-runtime' },
   })
   await db
     .update(sessions)
@@ -651,6 +659,7 @@ export function createApp() {
     }
 
     const path = c.req.path.replace(`/runtime/sessions/${sessionId}`, '')
+    const runtime = selectedSessionRuntime(session.environmentSnapshot)
     if (path === '/ws') {
       if (c.req.header('upgrade')?.toLowerCase() !== 'websocket') {
         return errorResponse(c, 426, 'conflict', 'Runtime endpoint requires a WebSocket upgrade')
@@ -756,7 +765,7 @@ export function createApp() {
       const record = body && typeof body === 'object' ? (body as Record<string, unknown>) : {}
       if (typeof record.message !== 'string' || !record.message.trim()) {
         return Response.json({
-          runtime: 'ama-cloud',
+          runtime,
           accepted: true,
           sandboxId: session.sandboxId,
           path,
@@ -775,7 +784,7 @@ export function createApp() {
         return errorResponse(c, 500, 'internal_error', runtimeError.message, { runtime: runtimeError })
       }
       return Response.json({
-        runtime: 'ama-cloud',
+        runtime,
         accepted: true,
         sandboxId: session.sandboxId,
         path,
@@ -842,10 +851,10 @@ export function createApp() {
           const runtimeError = await markRuntimeExecutionFailed(db, resolvedAuth, session, error)
           return errorResponse(c, 500, 'internal_error', runtimeError.message, { runtime: runtimeError })
         }
-        return Response.json({ runtime: 'ama-cloud', result: result[0] ?? null })
+        return Response.json({ runtime, result: result[0] ?? null })
       }
     }
-    return Response.json({ runtime: 'ama-cloud', sessionId: session.id, path })
+    return Response.json({ runtime, sessionId: session.id, path })
   })
 
   routes.notFound((c) => c.json({ error: { type: 'not_found', message: 'Not found' } }, 404))

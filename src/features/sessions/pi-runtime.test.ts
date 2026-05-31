@@ -72,7 +72,7 @@ describe('piRuntimeReducer', () => {
     expect(state.messages.some((message) => message.content === 'Hello')).toBe(true)
     expect(state.messages.some((message) => message.content === 'Runtime failed')).toBe(true)
     expect(state.messages.some((message) => message.content === 'Bridge failed')).toBe(true)
-    expect(state.messages.some((message) => message.content === 'Pi runtime exited with an error')).toBe(true)
+    expect(state.messages.some((message) => message.content === 'Runtime exited with an error')).toBe(true)
     expect(state.tools).toHaveLength(1)
     expect(new Set(PI_EVENT_TYPES.map((type) => piEventCategory(type)))).toEqual(
       new Set(['message', 'tool', 'lifecycle', 'usage', 'error', 'bridge']),
@@ -434,7 +434,7 @@ describe('piRuntimeReducer', () => {
     expect(state.debugEvents.filter((item) => item.type === 'tool_execution_start')).toHaveLength(1)
   })
 
-  it('keeps repeated persisted commands when Pi runtime timestamps are new', () => {
+  it('keeps repeated persisted commands when runtime timestamps are new', () => {
     const firstTurn = [
       event(1, 'message_end', {
         type: 'message_end',

@@ -167,8 +167,8 @@ Then(
   },
 )
 
-Then('the staging smoke verifies self-hosted runner queue and lease execution', function (this: AmaWorld) {
-  assert.ok(this.stagingSmokeEvidence, 'Staging smoke must run before asserting self-hosted runner behavior')
+Then('the staging smoke verifies self_hosted runner queue and lease execution', function (this: AmaWorld) {
+  assert.ok(this.stagingSmokeEvidence, 'Staging smoke must run before asserting self_hosted runner behavior')
   assert.equal(this.stagingSmokeEvidence.selfHostedRunnerOk, true)
 })
 
@@ -213,7 +213,6 @@ async function runStagingSmoke(config: StagingSmokeConfig): Promise<StagingSmoke
           networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
           packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
           resourceLimits: { memoryMb: 1024, timeoutSeconds: 900 },
-          runtimeImage: { image: 'ama-pi-runtime' },
           metadata: { runId: config.runId },
         },
       })
@@ -347,12 +346,14 @@ async function exerciseSelfHostedRunnerMode(request: APIRequestContext, config: 
     const environment = await apiJson<Environment>(request, '/api/environments', {
       method: 'POST',
       data: {
-        name: `${config.runId} self-hosted environment`,
-        description: 'Staging smoke self-hosted environment created through public AMA APIs.',
-        runtimeType: 'self-hosted',
+        name: `${config.runId} self_hosted environment`,
+        description: 'Staging smoke self_hosted environment created through public AMA APIs.',
+        hostingMode: 'self_hosted',
+        runtime: 'codex',
+        runtimeConfig: {},
         networkPolicy: { mode: 'unrestricted' },
         packages: [],
-        metadata: { runId: config.runId, smokeMode: 'self-hosted-runner' },
+        metadata: { runId: config.runId, smokeMode: 'self_hosted-runner' },
       },
     })
     created.environmentId = environment.id
@@ -360,15 +361,15 @@ async function exerciseSelfHostedRunnerMode(request: APIRequestContext, config: 
     const agent = await apiJson<Agent>(request, '/api/agents', {
       method: 'POST',
       data: {
-        name: `${config.runId} self-hosted agent`,
-        description: 'Staging smoke self-hosted agent created through public AMA APIs.',
-        instructions: 'Execute queued self-hosted runner work.',
-        systemPrompt: 'Execute queued self-hosted runner work.',
+        name: `${config.runId} self_hosted agent`,
+        description: 'Staging smoke self_hosted agent created through public AMA APIs.',
+        instructions: 'Execute queued self_hosted runner work.',
+        systemPrompt: 'Execute queued self_hosted runner work.',
         provider: process.env.AMA_E2E_PROVIDER ?? 'workers-ai',
         model: process.env.AMA_E2E_MODEL ?? '@cf/moonshotai/kimi-k2.6',
-        skills: ['ama@staging-smoke', 'ama@self-hosted-runner'],
+        skills: ['ama@staging-smoke', 'ama@self_hosted-runner'],
         allowedTools: ['sandbox.exec'],
-        metadata: { runId: config.runId, smokeMode: 'self-hosted-runner' },
+        metadata: { runId: config.runId, smokeMode: 'self_hosted-runner' },
       },
     })
     created.agentId = agent.id
@@ -377,11 +378,11 @@ async function exerciseSelfHostedRunnerMode(request: APIRequestContext, config: 
     const runner = await apiJson<Runner>(request, '/api/runners', {
       method: 'POST',
       data: {
-        name: `${config.runId} self-hosted runner`,
+        name: `${config.runId} self_hosted runner`,
         environmentId: environment.id,
         capabilities,
         credentialSecretRef: `cloudflare-secret:${config.runId}-runner-token`,
-        metadata: { runId: config.runId, smokeMode: 'self-hosted-runner' },
+        metadata: { runId: config.runId, smokeMode: 'self_hosted-runner' },
       },
     })
     created.runnerId = runner.id
@@ -392,7 +393,7 @@ async function exerciseSelfHostedRunnerMode(request: APIRequestContext, config: 
         status: 'active',
         currentLoad: 0,
         capabilities,
-        metadata: { runId: config.runId, smokeMode: 'self-hosted-runner' },
+        metadata: { runId: config.runId, smokeMode: 'self_hosted-runner' },
       },
     })
     assert.equal(activeRunner.status, 'active')
@@ -402,9 +403,9 @@ async function exerciseSelfHostedRunnerMode(request: APIRequestContext, config: 
       data: {
         agentId: agent.id,
         environmentId: environment.id,
-        title: `${config.runId} self-hosted session`,
-        initialPrompt: 'Execute this self-hosted runner smoke task.',
-        metadata: { runId: config.runId, smokeMode: 'self-hosted-runner' },
+        title: `${config.runId} self_hosted session`,
+        initialPrompt: 'Execute this self_hosted runner smoke task.',
+        metadata: { runId: config.runId, smokeMode: 'self_hosted-runner' },
       },
     })
     created.sessionId = session.id
@@ -419,7 +420,8 @@ async function exerciseSelfHostedRunnerMode(request: APIRequestContext, config: 
     )
     assert.equal(workItems.data.length, 1)
     assert.equal(workItems.data[0]?.status, 'available')
-    assert.equal(objectValue(workItems.data[0]?.payload).runtimeOwner, 'ama-cloud')
+    assert.equal(objectValue(workItems.data[0]?.payload).runtime, 'codex')
+    assert.equal('runtimeOwner' in objectValue(workItems.data[0]?.payload), false)
 
     const lease = await apiJson<RunnerWorkLease>(request, `/api/runners/${runner.id}/leases`, {
       method: 'POST',
@@ -440,7 +442,7 @@ async function exerciseSelfHostedRunnerMode(request: APIRequestContext, config: 
             payload: {
               type: 'tool_execution_start',
               toolName: 'sandbox.exec',
-              input: { command: 'printf self-hosted-runner-smoke' },
+              input: { command: 'printf self_hosted-runner-smoke' },
             },
             metadata: { runnerId: runner.id, runId: config.runId },
           },
@@ -451,7 +453,7 @@ async function exerciseSelfHostedRunnerMode(request: APIRequestContext, config: 
 
     const completed = await apiJson<RunnerWorkLease>(request, `/api/runners/${runner.id}/leases/${lease.id}`, {
       method: 'PATCH',
-      data: { status: 'completed', result: { ok: true, smokeMode: 'self-hosted-runner' } },
+      data: { status: 'completed', result: { ok: true, smokeMode: 'self_hosted-runner' } },
     })
     assert.equal(completed.status, 'completed')
     assert.equal(completed.workItem.status, 'succeeded')

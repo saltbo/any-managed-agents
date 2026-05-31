@@ -103,7 +103,7 @@ describe('[CF] /api/environments', () => {
         mcpPolicy: { allowedConnectors: ['github'] },
         packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
         resourceLimits: { memoryMb: 512 },
-        runtimeImage: { image: 'node:24' },
+        runtimeConfig: { image: 'node:24' },
       }),
     })
     expect(createRes.status).toBe(201)
@@ -112,19 +112,27 @@ describe('[CF] /api/environments', () => {
       currentVersionId: string
       version: number
       secretRefs: unknown[]
-      runtimeType: string
+      hostingMode: string
+      runtime: string
+      runtimeConfig: Record<string, unknown>
       networkPolicy: Record<string, unknown>
     }
     expect(created.version).toBe(1)
-    expect(created.runtimeType).toBe('cloud-hosted')
+    expect(created.hostingMode).toBe('cloud')
+    expect(created.runtime).toBe('ama')
+    expect(created.runtimeConfig).toEqual({ image: 'node:24' })
     expect(created.networkPolicy).toEqual({ mode: 'restricted', allowedHosts: ['registry.npmjs.org'] })
+    expect(created).not.toHaveProperty('runtimeType')
+    expect(created).not.toHaveProperty('runtimeImage')
     expect(JSON.stringify(created)).not.toContain('raw-secret')
 
     const readRes = await jsonFetch(`/api/environments/${created.id}`, authorization)
     expect(readRes.status).toBe(200)
     await expect(readRes.json()).resolves.toMatchObject({
       id: created.id,
-      runtimeType: 'cloud-hosted',
+      hostingMode: 'cloud',
+      runtime: 'ama',
+      runtimeConfig: { image: 'node:24' },
       packages: [{ name: 'tsx', version: 'latest' }],
       secretRefs: [{ name: 'NPM_TOKEN', ref: credential.activeVersionId }],
       mcpPolicy: { allowedConnectors: ['github'] },
@@ -143,10 +151,18 @@ describe('[CF] /api/environments', () => {
     const versionsRes = await jsonFetch(`/api/environments/${created.id}/versions`, authorization)
     expect(versionsRes.status).toBe(200)
     const versions = (await versionsRes.json()) as {
-      data: Array<{ version: number; runtimeType: string; packages: Array<{ name: string }> }>
+      data: Array<{
+        version: number
+        hostingMode: string
+        runtime: string
+        runtimeConfig: Record<string, unknown>
+        packages: Array<{ name: string }>
+      }>
     }
     expect(versions.data.map((version) => version.version)).toEqual([2, 1])
-    expect(versions.data.map((version) => version.runtimeType)).toEqual(['cloud-hosted', 'cloud-hosted'])
+    expect(versions.data.map((version) => version.hostingMode)).toEqual(['cloud', 'cloud'])
+    expect(versions.data.map((version) => version.runtime)).toEqual(['ama', 'ama'])
+    expect(versions.data.find((version) => version.version === 1)?.runtimeConfig).toEqual({ image: 'node:24' })
     expect(versions.data.find((version) => version.version === 1)?.packages).toEqual([
       { name: 'tsx', version: 'latest' },
     ])
@@ -178,6 +194,41 @@ describe('[CF] /api/environments', () => {
       body: JSON.stringify({ description: 'Cannot update archived environments' }),
     })
     expect(archivedUpdateRes.status).toBe(409)
+  })
+
+  it('publishes canonical runtime fields and rejects legacy environment fields', async () => {
+    const authorization = await signIn()
+    for (const runtime of ['ama', 'claude-code', 'codex', 'copilot']) {
+      const res = await jsonFetch('/api/environments', authorization, {
+        method: 'POST',
+        body: JSON.stringify({
+          name: `${runtime} workspace`,
+          hostingMode: runtime === 'ama' ? 'cloud' : 'self_hosted',
+          runtime,
+          runtimeConfig: { runtime },
+        }),
+      })
+      expect(res.status).toBe(201)
+      await expect(res.json()).resolves.toMatchObject({
+        hostingMode: runtime === 'ama' ? 'cloud' : 'self_hosted',
+        runtime,
+        runtimeConfig: { runtime },
+      })
+    }
+
+    for (const body of [
+      { name: 'legacy runtime type', runtimeType: 'self-hosted' },
+      { name: 'legacy runtime image', runtimeImage: { image: 'node:24' } },
+      { name: 'invalid hosting', hostingMode: 'self-hosted' },
+      { name: 'invalid runtime', runtime: 'pi' },
+    ]) {
+      const res = await jsonFetch('/api/environments', authorization, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      })
+      expect(res.status).toBe(400)
+      await expect(res.json()).resolves.toMatchObject({ error: { type: 'validation_error' } })
+    }
   })
 
   it('validates strict network policy modes with field-level paths', async () => {

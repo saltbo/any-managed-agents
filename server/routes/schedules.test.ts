@@ -18,7 +18,7 @@ async function createEnvironment(authorization: string) {
     method: 'POST',
     body: JSON.stringify({
       name: `Scheduled workspace ${crypto.randomUUID()}`,
-      runtimeImage: { image: 'ama-tool-executor' },
+      runtimeConfig: { image: 'ama-tool-executor' },
     }),
   })
   expect(res.status).toBe(201)

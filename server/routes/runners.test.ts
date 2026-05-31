@@ -3,6 +3,15 @@ import { env } from 'cloudflare:workers'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { setupOidcProvider, signIn } from '../test/auth'
 
+const RUNTIME_CAPABILITIES = [
+  'node',
+  'git',
+  'sandbox.exec',
+  'runtime:codex',
+  'provider:workers-ai',
+  'model:@cf/moonshotai/kimi-k2.6',
+]
+
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
     ...init,
@@ -19,7 +28,9 @@ async function createSelfHostedEnvironment(authorization: string) {
     method: 'POST',
     body: JSON.stringify({
       name: `Self-hosted workspace ${crypto.randomUUID()}`,
-      runtimeType: 'self-hosted',
+      hostingMode: 'self_hosted',
+      runtime: 'codex',
+      runtimeConfig: {},
       networkPolicy: { mode: 'unrestricted' },
     }),
   })
@@ -32,7 +43,7 @@ async function createAgent(authorization: string) {
     method: 'POST',
     body: JSON.stringify({
       name: `Runner-backed agent ${crypto.randomUUID()}`,
-      instructions: 'Use AMA-owned self-hosted runner work.',
+      instructions: 'Use AMA-owned self_hosted runner work.',
       allowedTools: ['sandbox.exec'],
     }),
   })
@@ -46,7 +57,7 @@ async function createSelfHostedSession(authorization: string, agentId: string, e
     body: JSON.stringify({
       agentId,
       environmentId,
-      initialPrompt: 'Run the first queued self-hosted task.',
+      initialPrompt: 'Run the first queued self_hosted task.',
     }),
   })
   expect(res.status).toBe(201)
@@ -58,7 +69,7 @@ describe('[CF] /api/runners', () => {
     await setupOidcProvider()
   })
 
-  it('registers a runner, records heartbeats, leases queued self-hosted work, uploads events, and completes work', async () => {
+  it('registers a runner, records heartbeats, leases queued self_hosted work, uploads events, and completes work', async () => {
     const authorization = await signIn()
     const environment = await createSelfHostedEnvironment(authorization)
     const agent = await createAgent(authorization)
@@ -68,8 +79,8 @@ describe('[CF] /api/runners', () => {
       body: JSON.stringify({
         name: 'Local runner',
         environmentId: environment.id,
-        capabilities: ['node', 'git', 'sandbox.exec'],
-        credentialSecretRef: 'cloudflare-secret:self-hosted-runner-token',
+        capabilities: RUNTIME_CAPABILITIES,
+        credentialSecretRef: 'cloudflare-secret:self_hosted-runner-token',
         maxConcurrent: 2,
         metadata: { pool: 'default' },
       }),
@@ -85,17 +96,17 @@ describe('[CF] /api/runners', () => {
     expect(runner).toMatchObject({
       status: 'offline',
       environmentId: environment.id,
-      capabilities: ['node', 'git', 'sandbox.exec'],
+      capabilities: RUNTIME_CAPABILITIES,
     })
     expect(runner.credentialSecretRef).toBeUndefined()
-    expect(JSON.stringify(runner)).not.toContain('self-hosted-runner-token')
+    expect(JSON.stringify(runner)).not.toContain('self_hosted-runner-token')
 
     const heartbeatRes = await jsonFetch(`/api/runners/${runner.id}/heartbeats`, authorization, {
       method: 'POST',
       body: JSON.stringify({
         status: 'active',
         currentLoad: 0,
-        capabilities: ['node', 'git', 'sandbox.exec', 'workspace'],
+        capabilities: [...RUNTIME_CAPABILITIES, 'workspace'],
       }),
     })
     expect(heartbeatRes.status).toBe(200)
@@ -125,10 +136,29 @@ describe('[CF] /api/runners', () => {
           protocol: 'ama-runner-work',
           type: 'session.start',
           sessionId: session.id,
-          runtimeOwner: 'ama-cloud',
+          runtime: 'codex',
         }),
       }),
     ])
+
+    const mismatchedRunnerRes = await jsonFetch('/api/runners', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Mismatched runner',
+        environmentId: environment.id,
+        capabilities: ['node', 'runtime:claude-code', 'provider:workers-ai', 'model:@cf/moonshotai/kimi-k2.6'],
+      }),
+    })
+    const mismatchedRunner = (await mismatchedRunnerRes.json()) as { id: string }
+    await jsonFetch(`/api/runners/${mismatchedRunner.id}/heartbeats`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ status: 'active', currentLoad: 0 }),
+    })
+    const mismatchedClaimRes = await jsonFetch(`/api/runners/${mismatchedRunner.id}/leases`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ leaseDurationSeconds: 90 }),
+    })
+    expect(mismatchedClaimRes.status).toBe(204)
 
     const claimRes = await jsonFetch(`/api/runners/${runner.id}/leases`, authorization, {
       method: 'POST',
@@ -205,7 +235,7 @@ describe('[CF] /api/runners', () => {
     expect(sessionEvents.data).toEqual([
       expect.objectContaining({
         type: 'tool_execution_start',
-        metadata: expect.objectContaining({ source: 'self-hosted-runner', runnerId: runner.id }),
+        metadata: expect.objectContaining({ source: 'self_hosted-runner', runnerId: runner.id }),
       }),
     ])
   })
@@ -268,7 +298,11 @@ describe('[CF] /api/runners', () => {
     const agent = await createAgent(authorization)
     const runnerRes = await jsonFetch('/api/runners', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Expiry runner', environmentId: environment.id }),
+      body: JSON.stringify({
+        name: 'Expiry runner',
+        environmentId: environment.id,
+        capabilities: RUNTIME_CAPABILITIES,
+      }),
     })
     const runner = (await runnerRes.json()) as { id: string }
     await jsonFetch(`/api/runners/${runner.id}/heartbeats`, authorization, {
@@ -354,7 +388,11 @@ describe('[CF] /api/runners', () => {
     const agent = await createAgent(authorization)
     const runnerRes = await jsonFetch('/api/runners', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Ownership runner', environmentId: environment.id }),
+      body: JSON.stringify({
+        name: 'Ownership runner',
+        environmentId: environment.id,
+        capabilities: RUNTIME_CAPABILITIES,
+      }),
     })
     const runner = (await runnerRes.json()) as { id: string }
     await jsonFetch(`/api/runners/${runner.id}/heartbeats`, authorization, {
@@ -402,7 +440,12 @@ describe('[CF] /api/runners', () => {
     const agent = await createAgent(authorization)
     const runnerRes = await jsonFetch('/api/runners', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Capacity runner', environmentId: environment.id, maxConcurrent: 1 }),
+      body: JSON.stringify({
+        name: 'Capacity runner',
+        environmentId: environment.id,
+        maxConcurrent: 1,
+        capabilities: RUNTIME_CAPABILITIES,
+      }),
     })
     const runner = (await runnerRes.json()) as { id: string }
     await jsonFetch(`/api/runners/${runner.id}/heartbeats`, authorization, {
@@ -439,7 +482,12 @@ describe('[CF] /api/runners', () => {
     const agent = await createAgent(authorization)
     const runnerRes = await jsonFetch('/api/runners', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Two slot capacity runner', environmentId: environment.id, maxConcurrent: 2 }),
+      body: JSON.stringify({
+        name: 'Two slot capacity runner',
+        environmentId: environment.id,
+        maxConcurrent: 2,
+        capabilities: RUNTIME_CAPABILITIES,
+      }),
     })
     const runner = (await runnerRes.json()) as { id: string }
     await jsonFetch(`/api/runners/${runner.id}/heartbeats`, authorization, {

@@ -34,7 +34,8 @@ export interface SecretRef {
   ref: string
 }
 
-export type EnvironmentRuntimeType = 'cloud-hosted' | 'self-hosted'
+export type EnvironmentHostingMode = 'cloud' | 'self_hosted'
+export type EnvironmentRuntime = 'ama' | 'claude-code' | 'codex' | 'copilot'
 export type EnvironmentNetworkPolicy =
   | { mode: 'unrestricted' }
   | { mode: 'restricted'; allowedHosts: string[] }
@@ -48,12 +49,13 @@ export interface Environment {
   packages: EnvironmentPackage[]
   variables: Record<string, EnvironmentVariable>
   secretRefs: SecretRef[]
-  runtimeType: EnvironmentRuntimeType
+  hostingMode: EnvironmentHostingMode
+  runtime: EnvironmentRuntime
   networkPolicy: EnvironmentNetworkPolicy
   mcpPolicy: Record<string, unknown>
   packageManagerPolicy: Record<string, unknown>
   resourceLimits: Record<string, unknown>
-  runtimeImage: Record<string, unknown>
+  runtimeConfig: Record<string, unknown>
   metadata: Record<string, unknown>
   status: 'active' | 'archived'
   archivedAt: string | null
@@ -385,12 +387,13 @@ export interface EnvironmentInput {
   packages?: EnvironmentPackage[]
   variables?: Record<string, EnvironmentVariable>
   secretRefs?: SecretRef[]
-  runtimeType?: EnvironmentRuntimeType
+  hostingMode?: EnvironmentHostingMode
+  runtime?: EnvironmentRuntime
   networkPolicy?: EnvironmentNetworkPolicy
   mcpPolicy?: Record<string, unknown>
   packageManagerPolicy?: Record<string, unknown>
   resourceLimits?: Record<string, unknown>
-  runtimeImage?: Record<string, unknown>
+  runtimeConfig?: Record<string, unknown>
   metadata?: Record<string, unknown>
 }
 

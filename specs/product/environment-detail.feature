@@ -10,9 +10,9 @@ Feature: Environment detail
 
   @planned
   Scenario: Inspect environment execution policy
-    Given an environment has package requirements, variables, secret references, network policy, resource limits, runtime image, metadata, and versions
+    Given an environment has hostingMode, runtime, runtimeConfig, package requirements, variables, secret references, network policy, resource limits, metadata, and versions
     When the user opens the environment detail page
-    Then the header shows name, status, current version, runtime image, and timestamps
+    Then the header shows name, status, current version, hostingMode, runtime, and timestamps
     And package requirements are grouped by ecosystem
     And variables and secret references are displayed without raw secret values
     And network policy clearly distinguishes unrestricted and limited access
@@ -21,7 +21,7 @@ Feature: Environment detail
   @planned
   Scenario: Edit an environment from detail
     Given an environment is active
-    When the user edits packages, variables, secret references, network policy, resource limits, runtime image, or metadata
+    When the user edits hostingMode, runtime, runtimeConfig, packages, variables, secret references, network policy, resource limits, or metadata
     Then validation errors appear next to their fields
     And successful save creates a new environment version
     And existing sessions keep their original environment snapshots

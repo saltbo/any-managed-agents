@@ -34,6 +34,9 @@ const WORK_STATUSES = ['available', 'leased', 'succeeded', 'failed', 'cancelled'
 const LEASE_STATUSES = ['active', 'completed', 'failed', 'cancelled', 'expired'] as const
 const DEFAULT_LEASE_DURATION_SECONDS = 60
 const MAX_EVENT_BATCH = 100
+const RUNTIME_CAPABILITY_PREFIX = 'runtime:'
+const PROVIDER_CAPABILITY_PREFIX = 'provider:'
+const MODEL_CAPABILITY_PREFIX = 'model:'
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
 const CapabilitySchema = z.string().min(1).max(120)
@@ -298,6 +301,32 @@ function serializeWorkItem(row: WorkItemRow) {
   }
 }
 
+function workItemRuntimeRequirement(workItem: WorkItemRow) {
+  const payload = parseJson<Record<string, unknown>>(workItem.payload) ?? {}
+  const environmentSnapshot = payload.environmentSnapshot as Record<string, unknown> | null
+  const agentSnapshot = payload.agentSnapshot as Record<string, unknown> | null
+  const runtime = typeof environmentSnapshot?.runtime === 'string' ? environmentSnapshot.runtime : null
+  const provider = typeof agentSnapshot?.provider === 'string' ? agentSnapshot.provider : null
+  const model = typeof agentSnapshot?.model === 'string' ? agentSnapshot.model : null
+  if (!runtime || !provider || !model) {
+    return null
+  }
+  return { runtime, provider, model }
+}
+
+function runnerSupportsWorkItem(runner: RunnerRow, workItem: WorkItemRow) {
+  const requirement = workItemRuntimeRequirement(workItem)
+  if (!requirement) {
+    return false
+  }
+  const capabilities = new Set(parseJson<string[]>(runner.capabilities) ?? [])
+  return (
+    capabilities.has(`${RUNTIME_CAPABILITY_PREFIX}${requirement.runtime}`) &&
+    capabilities.has(`${PROVIDER_CAPABILITY_PREFIX}${requirement.provider}`) &&
+    capabilities.has(`${MODEL_CAPABILITY_PREFIX}${requirement.model}`)
+  )
+}
+
 function serializeLease(lease: LeaseRow, workItem: WorkItemRow) {
   return {
     id: lease.id,
@@ -463,7 +492,7 @@ async function appendSessionRunnerEvent(
         parentEventId: null,
         correlationId: null,
         payload: stringify(event.payload),
-        metadata: stringify({ source: 'self-hosted-runner', ...(event.metadata ?? {}) }),
+        metadata: stringify({ source: 'self_hosted-runner', ...(event.metadata ?? {}) }),
         createdAt: now(),
       })
       return
@@ -535,7 +564,7 @@ const createRunnerRoute = createRoute({
   path: '/',
   operationId: 'createRunner',
   tags: ['Runners'],
-  summary: 'Register a self-hosted runner',
+  summary: 'Register a self_hosted runner',
   ...AuthenticatedOperation,
   request: { body: { required: true, content: { 'application/json': { schema: CreateRunnerSchema } } } },
   responses: {
@@ -551,7 +580,7 @@ const listRunnersRoute = createRoute({
   path: '/',
   operationId: 'listRunners',
   tags: ['Runners'],
-  summary: 'List self-hosted runners',
+  summary: 'List self_hosted runners',
   ...AuthenticatedOperation,
   request: { query: RunnerListQuerySchema },
   responses: {
@@ -566,7 +595,7 @@ const readRunnerRoute = createRoute({
   path: '/{runnerId}',
   operationId: 'readRunner',
   tags: ['Runners'],
-  summary: 'Read a self-hosted runner',
+  summary: 'Read a self_hosted runner',
   ...AuthenticatedOperation,
   request: { params: ParamsSchema },
   responses: {
@@ -581,7 +610,7 @@ const updateRunnerRoute = createRoute({
   path: '/{runnerId}',
   operationId: 'updateRunner',
   tags: ['Runners'],
-  summary: 'Update a self-hosted runner',
+  summary: 'Update a self_hosted runner',
   ...AuthenticatedOperation,
   request: {
     params: ParamsSchema,
@@ -621,7 +650,7 @@ const claimLeaseRoute = createRoute({
   path: '/{runnerId}/leases',
   operationId: 'createRunnerLease',
   tags: ['Runner leases'],
-  summary: 'Claim queued self-hosted runner work',
+  summary: 'Claim queued self_hosted runner work',
   ...AuthenticatedOperation,
   request: {
     params: ParamsSchema,
@@ -686,7 +715,7 @@ const listWorkItemsRoute = createRoute({
   path: '/work-items',
   operationId: 'listRunnerWorkItems',
   tags: ['Runner work'],
-  summary: 'List self-hosted runner work items',
+  summary: 'List self_hosted runner work items',
   ...AuthenticatedOperation,
   request: { query: WorkListQuerySchema },
   responses: {
@@ -934,7 +963,7 @@ const routes = app
     if (!reserved) {
       return c.body(null, 204)
     }
-    const workItem = await db
+    const availableWorkItems = await db
       .select()
       .from(runnerWorkItems)
       .where(
@@ -948,7 +977,8 @@ const routes = app
         ),
       )
       .orderBy(desc(runnerWorkItems.priority), asc(runnerWorkItems.createdAt), asc(runnerWorkItems.id))
-      .get()
+      .all()
+    const workItem = availableWorkItems.find((item) => runnerSupportsWorkItem(runner, item)) ?? null
     if (!workItem) {
       await releaseRunnerLoad(db, auth.project.id, runnerId, timestamp)
       return c.body(null, 204)

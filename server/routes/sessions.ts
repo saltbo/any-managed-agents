@@ -44,10 +44,12 @@ import {
   stopSessionRuntime as stopCloudSessionRuntime,
 } from '../runtime/session-runtime'
 import {
+  type EnvironmentHostingMode,
+  EnvironmentHostingModeSchema,
   type EnvironmentNetworkPolicy,
   EnvironmentNetworkPolicySchema,
-  type EnvironmentRuntimeType,
-  EnvironmentRuntimeTypeSchema,
+  type EnvironmentRuntime,
+  EnvironmentRuntimeSchema,
   normalizeEnvironmentNetworkPolicy,
 } from './environment-contracts'
 
@@ -56,6 +58,14 @@ const app = createApiRouter()
 const SESSION_STATUSES = ['pending', 'running', 'idle', 'stopped', 'error', 'archived', 'requires-action'] as const
 const EVENT_VISIBILITIES = ['runtime', 'transcript', 'debug', 'audit'] as const
 const RUNTIME_START_TIMEOUT_MS = 300_000
+const DEFAULT_PROVIDER = 'workers-ai'
+const DEFAULT_MODEL = '@cf/moonshotai/kimi-k2.6'
+const RUNTIME_PROVIDER_MODEL_SUPPORT = [
+  { runtime: 'ama', provider: DEFAULT_PROVIDER, model: DEFAULT_MODEL },
+  { runtime: 'codex', provider: DEFAULT_PROVIDER, model: DEFAULT_MODEL },
+  { runtime: 'claude-code', provider: 'anthropic', model: 'claude-sonnet-4.5' },
+  { runtime: 'copilot', provider: 'github-copilot', model: 'gpt-4.1' },
+] as const
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
 const GitHubOwnerSchema = z
@@ -135,12 +145,13 @@ const EnvironmentVersionSchema = z
     packages: z.array(JsonObjectSchema),
     variables: JsonObjectSchema,
     secretRefs: z.array(JsonObjectSchema),
-    runtimeType: EnvironmentRuntimeTypeSchema,
+    hostingMode: EnvironmentHostingModeSchema,
+    runtime: EnvironmentRuntimeSchema,
     networkPolicy: EnvironmentNetworkPolicySchema,
     mcpPolicy: JsonObjectSchema,
     packageManagerPolicy: JsonObjectSchema,
     resourceLimits: JsonObjectSchema,
-    runtimeImage: JsonObjectSchema,
+    runtimeConfig: JsonObjectSchema,
     metadata: JsonObjectSchema,
     createdAt: z.string().datetime(),
   })
@@ -473,26 +484,44 @@ function parseAgentSnapshot(value: string | null) {
 }
 
 function serializeEnvironmentVersion(row: EnvironmentVersionRow) {
+  const runtimeStorage = parseJson<Record<string, unknown>>(row.runtimeImage) ?? {}
+  const runtime = EnvironmentRuntimeSchema.safeParse(runtimeStorage.runtime).success
+    ? (runtimeStorage.runtime as EnvironmentRuntime)
+    : 'ama'
+  const runtimeConfig =
+    runtimeStorage.runtimeConfig &&
+    typeof runtimeStorage.runtimeConfig === 'object' &&
+    !Array.isArray(runtimeStorage.runtimeConfig)
+      ? (runtimeStorage.runtimeConfig as Record<string, unknown>)
+      : runtimeStorage.runtime
+        ? {}
+        : runtimeStorage
   return {
-    ...row,
+    id: row.id,
+    environmentId: row.environmentId,
+    projectId: row.projectId,
+    version: row.version,
     packages: JSON.parse(row.packages) as Record<string, unknown>[],
     variables: JSON.parse(row.variables) as Record<string, unknown>,
     secretRefs: JSON.parse(row.secretRefs) as Record<string, unknown>[],
-    runtimeType: row.runtimeType as 'cloud-hosted' | 'self-hosted',
+    hostingMode: row.runtimeType === 'self_hosted' ? 'self_hosted' : 'cloud',
+    runtime,
     networkPolicy: JSON.parse(row.networkPolicy) as Record<string, unknown>,
     mcpPolicy: JSON.parse(row.mcpPolicy) as Record<string, unknown>,
     packageManagerPolicy: JSON.parse(row.packageManagerPolicy) as Record<string, unknown>,
     resourceLimits: JSON.parse(row.resourceLimits) as Record<string, unknown>,
-    runtimeImage: JSON.parse(row.runtimeImage) as Record<string, unknown>,
+    runtimeConfig,
     metadata: JSON.parse(row.metadata) as Record<string, unknown>,
+    createdAt: row.createdAt,
   }
 }
 
 type NormalizedEnvironmentSnapshot = Omit<
   ReturnType<typeof serializeEnvironmentVersion>,
-  'runtimeType' | 'networkPolicy'
+  'hostingMode' | 'runtime' | 'networkPolicy'
 > & {
-  runtimeType: EnvironmentRuntimeType
+  hostingMode: EnvironmentHostingMode
+  runtime: EnvironmentRuntime
   networkPolicy: EnvironmentNetworkPolicy
 }
 
@@ -502,15 +531,69 @@ function normalizeEnvironmentSnapshot(
   if (!snapshot) {
     return null
   }
+  const rawSnapshot = snapshot as Record<string, unknown>
   return {
-    ...snapshot,
-    runtimeType: snapshot.runtimeType === 'self-hosted' ? 'self-hosted' : 'cloud-hosted',
+    id: String(rawSnapshot.id),
+    environmentId: String(rawSnapshot.environmentId),
+    projectId: String(rawSnapshot.projectId),
+    version: Number(rawSnapshot.version),
+    packages: Array.isArray(rawSnapshot.packages) ? (rawSnapshot.packages as Record<string, unknown>[]) : [],
+    variables:
+      rawSnapshot.variables && typeof rawSnapshot.variables === 'object' && !Array.isArray(rawSnapshot.variables)
+        ? (rawSnapshot.variables as Record<string, unknown>)
+        : {},
+    secretRefs: Array.isArray(rawSnapshot.secretRefs) ? (rawSnapshot.secretRefs as Record<string, unknown>[]) : [],
+    hostingMode: rawSnapshot.hostingMode === 'self_hosted' ? 'self_hosted' : 'cloud',
+    runtime: EnvironmentRuntimeSchema.safeParse(rawSnapshot.runtime).success
+      ? (rawSnapshot.runtime as EnvironmentRuntime)
+      : 'ama',
     networkPolicy: normalizeEnvironmentNetworkPolicy(snapshot.networkPolicy),
+    mcpPolicy:
+      rawSnapshot.mcpPolicy && typeof rawSnapshot.mcpPolicy === 'object' && !Array.isArray(rawSnapshot.mcpPolicy)
+        ? (rawSnapshot.mcpPolicy as Record<string, unknown>)
+        : {},
+    packageManagerPolicy:
+      rawSnapshot.packageManagerPolicy &&
+      typeof rawSnapshot.packageManagerPolicy === 'object' &&
+      !Array.isArray(rawSnapshot.packageManagerPolicy)
+        ? (rawSnapshot.packageManagerPolicy as Record<string, unknown>)
+        : {},
+    resourceLimits:
+      rawSnapshot.resourceLimits &&
+      typeof rawSnapshot.resourceLimits === 'object' &&
+      !Array.isArray(rawSnapshot.resourceLimits)
+        ? (rawSnapshot.resourceLimits as Record<string, unknown>)
+        : {},
+    runtimeConfig:
+      rawSnapshot.runtimeConfig &&
+      typeof rawSnapshot.runtimeConfig === 'object' &&
+      !Array.isArray(rawSnapshot.runtimeConfig)
+        ? (rawSnapshot.runtimeConfig as Record<string, unknown>)
+        : {},
+    metadata:
+      rawSnapshot.metadata && typeof rawSnapshot.metadata === 'object' && !Array.isArray(rawSnapshot.metadata)
+        ? (rawSnapshot.metadata as Record<string, unknown>)
+        : {},
+    createdAt: typeof rawSnapshot.createdAt === 'string' ? rawSnapshot.createdAt : now(),
   } as NormalizedEnvironmentSnapshot
 }
 
-function environmentRuntimeType(snapshot: NormalizedEnvironmentSnapshot | null) {
-  return snapshot?.runtimeType === 'self-hosted' ? 'self-hosted' : 'cloud-hosted'
+function environmentHostingMode(snapshot: NormalizedEnvironmentSnapshot | null) {
+  return snapshot?.hostingMode === 'self_hosted' ? 'self_hosted' : 'cloud'
+}
+
+function runtimeSupportsProviderModel(
+  runtime: EnvironmentRuntime,
+  provider: string,
+  model: string,
+  envDefaultModel: string | undefined,
+) {
+  if (runtime === 'ama' && provider === DEFAULT_PROVIDER && envDefaultModel && model === envDefaultModel) {
+    return true
+  }
+  return RUNTIME_PROVIDER_MODEL_SUPPORT.some(
+    (supported) => supported.runtime === runtime && supported.provider === provider && supported.model === model,
+  )
 }
 
 function serializeSession(row: SessionRow) {
@@ -541,7 +624,7 @@ function serializeSession(row: SessionRow) {
     piProcessId: row.piProcessId,
     runtimeEndpointPath:
       row.runtimeEndpointPath ??
-      (environmentRuntimeType(environmentSnapshot) === 'cloud-hosted' ? runtimeEndpointPath(row.id) : null),
+      (environmentHostingMode(environmentSnapshot) === 'cloud' ? runtimeEndpointPath(row.id) : null),
     modelProvider: row.modelProvider ?? agentSnapshot.provider,
     modelConfig: parseJson<Record<string, unknown>>(row.modelConfig) ?? { model: agentSnapshot.model },
     status: row.status as (typeof SESSION_STATUSES)[number],
@@ -604,7 +687,7 @@ async function markExpiredPendingSessions(db: Db, auth: AuthContext) {
     .update(sessions)
     .set({
       status: 'error',
-      statusReason: 'Pi runtime startup timed out',
+      statusReason: 'Runtime startup timed out',
       updatedAt: timestamp,
     })
     .where(
@@ -638,7 +721,7 @@ async function enqueueSelfHostedSessionWork(
     agentSnapshot: values.agentSnapshot,
     environmentSnapshot: values.environmentSnapshot,
     initialPrompt: values.initialPrompt ?? null,
-    runtimeOwner: 'ama-cloud',
+    runtime: values.environmentSnapshot?.runtime ?? 'ama',
   }
   await db.insert(runnerWorkItems).values({
     id: newId('work'),
@@ -875,9 +958,32 @@ export async function createSessionForAgent(
   const environmentSnapshot = environmentVersion
     ? normalizeEnvironmentSnapshot(serializeEnvironmentVersion(environmentVersion))
     : null
-  const runtimeType = environmentRuntimeType(environmentSnapshot)
-  const sandboxId = runtimeType === 'cloud-hosted' ? id.toLowerCase() : null
-  if (runtimeType === 'cloud-hosted') {
+  const hostingMode = environmentHostingMode(environmentSnapshot)
+  const runtime = environmentSnapshot?.runtime ?? 'ama'
+  if (!runtimeSupportsProviderModel(runtime, agentSnapshot.provider, agentSnapshot.model, c.env.AMA_DEFAULT_MODEL)) {
+    await recordAudit(db, {
+      auth,
+      action: 'session.create',
+      resourceType: 'session',
+      outcome: 'denied',
+      requestId: requestId(c),
+      policyCategory: 'runtime',
+      metadata: {
+        agentId,
+        environmentId,
+        runtime,
+        provider: agentSnapshot.provider,
+        model: agentSnapshot.model,
+      },
+    })
+    return errorResponse(c, 409, 'conflict', 'Environment runtime does not support the selected provider and model.', {
+      runtime,
+      provider: agentSnapshot.provider,
+      model: agentSnapshot.model,
+    })
+  }
+  const sandboxId = hostingMode === 'cloud' ? id.toLowerCase() : null
+  if (hostingMode === 'cloud') {
     const sandboxDecision = await evaluateSandboxRuntimePolicy(db, auth, {
       session: {
         id,
@@ -922,17 +1028,16 @@ export async function createSessionForAgent(
     sandboxId,
     piRuntimeId: null,
     piProcessId: null,
-    runtimeEndpointPath: runtimeType === 'cloud-hosted' ? runtimeEndpointPath(id) : null,
+    runtimeEndpointPath: hostingMode === 'cloud' ? runtimeEndpointPath(id) : null,
     modelProvider: agentSnapshot.provider,
     modelConfig: stringify({ provider: agentSnapshot.provider, model: agentSnapshot.model }),
     status: 'pending',
-    statusReason: runtimeType === 'self-hosted' ? 'waiting-for-runner' : null,
+    statusReason: hostingMode === 'self_hosted' ? 'waiting-for-runner' : null,
     metadata: stringify({
       ...(options.metadata ?? {}),
-      runtimeType,
-      ...(runtimeType === 'self-hosted'
-        ? { runnerState: 'queued', runtime: 'ama-cloud', protocol: 'ama-runner-work' }
-        : {}),
+      hostingMode,
+      runtime,
+      ...(hostingMode === 'self_hosted' ? { runnerState: 'queued', protocol: 'ama-runner-work' } : {}),
     }),
     startedAt: null,
     stoppedAt: null,
@@ -949,10 +1054,10 @@ export async function createSessionForAgent(
     outcome: 'success',
     requestId: requestId(c),
     sessionId: id,
-    metadata: { status: pending.status, runtimeType },
+    metadata: { status: pending.status, hostingMode, runtime },
   })
 
-  if (runtimeType === 'self-hosted') {
+  if (hostingMode === 'self_hosted') {
     await enqueueSelfHostedSessionWork(db, auth, {
       session: pending,
       agentSnapshot,
@@ -1027,7 +1132,7 @@ async function startSessionRuntimeForRow(
     const metadata = {
       ...existingMetadata,
       ...runtime.metadata,
-      runtime: 'ama-cloud',
+      runtime: environmentSnapshot?.runtime ?? 'ama',
       protocol: 'ama-runtime-rpc',
       mcpConnectors: mcpConnectorIds(mcpSnapshot),
     }
@@ -1080,7 +1185,7 @@ async function startSessionRuntimeForRow(
       statusReason: safeError.message,
       metadata: stringify({
         ...(parseJson<Record<string, unknown>>(pending.metadata) ?? {}),
-        runtime: 'ama-cloud',
+        runtime: environmentSnapshot?.runtime ?? 'ama',
         error: safeError,
       }),
       updatedAt: failedAt,
@@ -1309,7 +1414,7 @@ async function appendPiRuntimeEvent(
       }
     }
   }
-  throw new Error('Unable to append Pi runtime event')
+  throw new Error('Unable to append runtime event')
 }
 
 export function runtimeErrorMessage(payload: Record<string, unknown>) {
@@ -1383,7 +1488,7 @@ export async function recoverSessionRuntime(env: Env, db: Db, auth: AuthContext,
   const metadata = {
     ...(parseJson<Record<string, unknown>>(session.metadata) ?? {}),
     ...runtime.metadata,
-    runtime: 'ama-cloud',
+    runtime: environmentSnapshot?.runtime ?? 'ama',
     protocol: 'ama-runtime-rpc',
     recoveredAt,
     mcpConnectors: mcpConnectorIds(mcpSnapshot),

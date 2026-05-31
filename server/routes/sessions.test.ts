@@ -36,7 +36,7 @@ async function createEnvironment(authorization: string) {
       secretRefs: [{ name: 'CLOUDFLARE_API_KEY', ref: 'wrangler_secret:AMA_WORKERS_AI_API_KEY' }],
       mcpPolicy: { allowedConnectors: ['github'] },
       packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
-      runtimeImage: { image: 'ama-tool-executor' },
+      runtimeConfig: { image: 'ama-tool-executor' },
     }),
   })
   expect(res.status).toBe(201)
@@ -158,10 +158,10 @@ describe('[CF] /api/sessions', () => {
       vaultRefs: [{ type: 'credential', id: 'cred_1' }],
       metadata: {
         ticket: 'AMA-1',
-        runtime: 'ama-cloud',
+        runtime: 'ama',
         protocol: 'ama-runtime-rpc',
         runtimeMode: 'test',
-        runtimeOwner: 'ama-cloud',
+        hostingMode: 'cloud',
         loop: 'cloud-session-runtime',
         executor: 'cloudflare-sandbox',
         piCorePackage: '@earendil-works/pi-agent-core',
@@ -200,7 +200,7 @@ describe('[CF] /api/sessions', () => {
     })
     expect(taskRes.status).toBe(200)
     await expect(taskRes.json()).resolves.toMatchObject({
-      runtime: 'ama-cloud',
+      runtime: 'ama',
       accepted: true,
       sandboxId: created.id.toLowerCase(),
       path: '/rpc',
@@ -217,7 +217,7 @@ describe('[CF] /api/sessions', () => {
     })
     expect(historyTaskRes.status).toBe(200)
     await expect(historyTaskRes.json()).resolves.toMatchObject({
-      runtime: 'ama-cloud',
+      runtime: 'ama',
       accepted: true,
       sandboxId: created.id.toLowerCase(),
       path: '/rpc',
@@ -421,24 +421,26 @@ describe('[CF] /api/sessions', () => {
     expect(archivedList.data).toContainEqual(expect.objectContaining({ id: created.id, status: 'archived' }))
   })
 
-  it('queues self-hosted sessions for runner lease support', async () => {
+  it('queues self_hosted sessions for runner lease support', async () => {
     const authorization = await signIn()
     const environmentRes = await jsonFetch('/api/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Self-hosted workspace',
-        runtimeType: 'self-hosted',
+        hostingMode: 'self_hosted',
+        runtime: 'codex',
+        runtimeConfig: {},
         networkPolicy: { mode: 'unrestricted' },
       }),
     })
     expect(environmentRes.status).toBe(201)
-    const environment = (await environmentRes.json()) as { id: string; runtimeType: string }
-    expect(environment.runtimeType).toBe('self-hosted')
+    const environment = (await environmentRes.json()) as { id: string; hostingMode: string }
+    expect(environment.hostingMode).toBe('self_hosted')
     const agentRes = await jsonFetch('/api/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Self-hosted session agent',
-        instructions: 'Wait for a self-hosted runner.',
+        instructions: 'Wait for a self_hosted runner.',
         allowedTools: ['sandbox.exec'],
       }),
     })
@@ -456,19 +458,21 @@ describe('[CF] /api/sessions', () => {
       statusReason: string | null
       sandboxId: string | null
       runtimeEndpointPath: string | null
-      environmentSnapshot: { runtimeType: string }
+      environmentSnapshot: { hostingMode: string; runtime: string; runtimeConfig: Record<string, unknown> }
       metadata: Record<string, unknown>
     }
+    expect(created.environmentSnapshot).not.toHaveProperty('runtimeType')
+    expect(created.environmentSnapshot).not.toHaveProperty('runtimeImage')
     expect(created).toMatchObject({
       status: 'pending',
       statusReason: 'waiting-for-runner',
       sandboxId: null,
       runtimeEndpointPath: null,
-      environmentSnapshot: { runtimeType: 'self-hosted' },
+      environmentSnapshot: { hostingMode: 'self_hosted', runtime: 'codex', runtimeConfig: {} },
       metadata: {
-        runtimeType: 'self-hosted',
+        hostingMode: 'self_hosted',
         runnerState: 'queued',
-        runtime: 'ama-cloud',
+        runtime: 'codex',
         protocol: 'ama-runner-work',
       },
     })
@@ -503,7 +507,16 @@ describe('[CF] /api/sessions', () => {
     const authorization = await signIn()
     const credential = await connectMcp(authorization, 'github')
     const environment = await createEnvironment(authorization)
-    const agent = await createAgent(authorization)
+    const agentRes = await jsonFetch('/api/agents', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Unsupported runtime agent',
+        instructions: 'Use the selected runtime.',
+        allowedTools: ['sandbox.exec'],
+      }),
+    })
+    expect(agentRes.status).toBe(201)
+    const agent = (await agentRes.json()) as { id: string }
 
     const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
@@ -589,7 +602,7 @@ describe('[CF] /api/sessions', () => {
     expect(duplicateMountRes.status).toBe(400)
   })
 
-  it('normalizes legacy session environment snapshots for read contracts', async () => {
+  it('normalizes stored session environment snapshots for read contracts', async () => {
     const authorization = await signIn()
     await connectMcp(authorization, 'github')
     const environment = await createEnvironment(authorization)
@@ -600,11 +613,11 @@ describe('[CF] /api/sessions', () => {
     })
     expect(createRes.status).toBe(201)
     const created = (await createRes.json()) as { id: string; environmentSnapshot: Record<string, unknown> }
-    const { runtimeType: _runtimeType, ...legacySnapshot } = created.environmentSnapshot
+    const { hostingMode: _hostingMode, ...storedSnapshot } = created.environmentSnapshot
     await env.DB.prepare('UPDATE sessions SET environment_snapshot = ? WHERE id = ?')
       .bind(
         JSON.stringify({
-          ...legacySnapshot,
+          ...storedSnapshot,
           networkPolicy: { mode: 'restricted', allowedHosts: ['https://registry.npmjs.org'] },
         }),
         created.id,
@@ -615,19 +628,151 @@ describe('[CF] /api/sessions', () => {
     expect(readRes.status).toBe(200)
     await expect(readRes.json()).resolves.toMatchObject({
       environmentSnapshot: {
-        runtimeType: 'cloud-hosted',
+        hostingMode: 'cloud',
         networkPolicy: { mode: 'unrestricted' },
       },
     })
   })
 
-  it('accepts self-hosted sessions when cloud sandbox startup is disabled', async () => {
+  it('rejects unsupported runtime provider model combinations before session allocation', async () => {
+    const authorization = await signIn()
+    const environmentRes = await jsonFetch('/api/environments', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Unsupported runtime workspace',
+        runtime: 'claude-code',
+      }),
+    })
+    expect(environmentRes.status).toBe(201)
+    const environment = (await environmentRes.json()) as { id: string }
+    const agentRes = await jsonFetch('/api/agents', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Unsupported runtime agent',
+        instructions: 'Use the selected runtime.',
+        allowedTools: ['sandbox.exec'],
+      }),
+    })
+    expect(agentRes.status).toBe(201)
+    const agent = (await agentRes.json()) as { id: string }
+
+    const createRes = await jsonFetch('/api/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        title: 'Unsupported runtime session',
+      }),
+    })
+    expect(createRes.status).toBe(409)
+    await expect(createRes.json()).resolves.toMatchObject({
+      error: {
+        type: 'conflict',
+        details: {
+          runtime: 'claude-code',
+          provider: 'workers-ai',
+          model: '@cf/moonshotai/kimi-k2.6',
+        },
+      },
+    })
+    const listRes = await jsonFetch('/api/sessions?search=Unsupported%20runtime%20session', authorization)
+    expect(listRes.status).toBe(200)
+    await expect(listRes.json()).resolves.toMatchObject({ data: [] })
+  })
+
+  it('requires exact runtime provider model tuples', async () => {
+    const authorization = await signIn()
+
+    const anthropicProviderRes = await jsonFetch('/api/providers', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'anthropic',
+        displayName: 'Anthropic',
+        credentialSecretRef: 'cloudflare-secret:anthropic-token',
+      }),
+    })
+    expect(anthropicProviderRes.status).toBe(201)
+    const anthropicProvider = (await anthropicProviderRes.json()) as { id: string }
+    const anthropicModelRes = await jsonFetch(`/api/providers/${anthropicProvider.id}/models`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ modelId: 'claude-unlisted-test', displayName: 'Unlisted Claude', capabilities: ['text'] }),
+    })
+    expect(anthropicModelRes.status).toBe(201)
+    const claudeEnvironmentRes = await jsonFetch('/api/environments', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Claude runtime workspace', runtime: 'claude-code' }),
+    })
+    expect(claudeEnvironmentRes.status).toBe(201)
+    const claudeEnvironment = (await claudeEnvironmentRes.json()) as { id: string }
+    const claudeAgentRes = await jsonFetch('/api/agents', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Unlisted Claude agent',
+        provider: anthropicProvider.id,
+        model: 'claude-unlisted-test',
+      }),
+    })
+    expect(claudeAgentRes.status).toBe(201)
+    const claudeAgent = (await claudeAgentRes.json()) as { id: string; provider: string; model: string }
+    const claudeSessionRes = await jsonFetch('/api/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ agentId: claudeAgent.id, environmentId: claudeEnvironment.id }),
+    })
+    expect(claudeSessionRes.status).toBe(409)
+    await expect(claudeSessionRes.json()).resolves.toMatchObject({
+      error: { details: { runtime: 'claude-code', provider: anthropicProvider.id, model: 'claude-unlisted-test' } },
+    })
+
+    const copilotProviderRes = await jsonFetch('/api/providers', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'other',
+        displayName: 'GitHub Copilot',
+        credentialSecretRef: 'cloudflare-secret:copilot-token',
+      }),
+    })
+    expect(copilotProviderRes.status).toBe(201)
+    const copilotProvider = (await copilotProviderRes.json()) as { id: string }
+    const copilotModelRes = await jsonFetch(`/api/providers/${copilotProvider.id}/models`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ modelId: 'copilot-arbitrary', displayName: 'Arbitrary Copilot', capabilities: ['text'] }),
+    })
+    expect(copilotModelRes.status).toBe(201)
+    const copilotEnvironmentRes = await jsonFetch('/api/environments', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Copilot runtime workspace', runtime: 'copilot' }),
+    })
+    expect(copilotEnvironmentRes.status).toBe(201)
+    const copilotEnvironment = (await copilotEnvironmentRes.json()) as { id: string }
+    const copilotAgentRes = await jsonFetch('/api/agents', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Arbitrary Copilot agent',
+        provider: copilotProvider.id,
+        model: 'copilot-arbitrary',
+      }),
+    })
+    expect(copilotAgentRes.status).toBe(201)
+    const copilotAgent = (await copilotAgentRes.json()) as { id: string; provider: string; model: string }
+    const copilotSessionRes = await jsonFetch('/api/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ agentId: copilotAgent.id, environmentId: copilotEnvironment.id }),
+    })
+    expect(copilotSessionRes.status).toBe(409)
+    await expect(copilotSessionRes.json()).resolves.toMatchObject({
+      error: { details: { runtime: 'copilot', provider: copilotProvider.id, model: 'copilot-arbitrary' } },
+    })
+  })
+
+  it('accepts self_hosted sessions when cloud sandbox startup is disabled', async () => {
     const authorization = await signIn()
     const environmentRes = await jsonFetch('/api/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Self-hosted no sandbox workspace',
-        runtimeType: 'self-hosted',
+        hostingMode: 'self_hosted',
+        runtime: 'codex',
+        runtimeConfig: {},
         networkPolicy: { mode: 'unrestricted' },
       }),
     })
@@ -658,7 +803,7 @@ describe('[CF] /api/sessions', () => {
       status: 'pending',
       statusReason: 'waiting-for-runner',
       sandboxId: null,
-      environmentSnapshot: { runtimeType: 'self-hosted' },
+      environmentSnapshot: { hostingMode: 'self_hosted' },
     })
   })
 
@@ -744,7 +889,7 @@ describe('[CF] /api/sessions', () => {
       metadata: expect.objectContaining({
         externalRunId: 'tftt-banking-bonus-2026-05-26',
         source: 'tftt-cron',
-        runtime: 'ama-cloud',
+        runtime: 'ama',
         protocol: 'ama-runtime-rpc',
       }),
       runtimeEndpointPath: `/runtime/sessions/${created.id}/rpc`,
@@ -896,7 +1041,7 @@ describe('[CF] /api/sessions', () => {
     const runtimeRes = await jsonFetch(`/runtime/sessions/${created.id}/rpc`, authorization)
     expect(runtimeRes.status).toBe(200)
     await expect(runtimeRes.json()).resolves.toMatchObject({
-      runtime: 'ama-cloud',
+      runtime: 'ama',
       sessionId: created.id,
       path: '/rpc',
     })

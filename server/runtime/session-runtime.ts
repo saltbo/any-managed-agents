@@ -156,7 +156,7 @@ export async function startSessionRuntime(
         agentSnapshot: input.agentSnapshot,
         environmentSnapshot: input.environmentSnapshot,
         mcpSnapshot: input.mcpSnapshot ?? { connectors: [] },
-        runtimeOwner: 'ama-cloud',
+        hostingMode: 'cloud',
       }),
       { encoding: 'utf-8' },
     )
@@ -174,7 +174,7 @@ export async function startSessionRuntime(
     runtimeEndpointPath: runtimeEndpointPath(input.sessionId),
     metadata: {
       runtimeMode: env.AMA_RUNTIME_MODE === 'test' ? 'test' : 'live',
-      runtimeOwner: 'ama-cloud',
+      hostingMode: 'cloud',
       loop: 'cloud-session-runtime',
       executor: 'cloudflare-sandbox',
       piCorePackage: '@earendil-works/pi-agent-core',

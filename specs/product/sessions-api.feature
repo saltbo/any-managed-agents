@@ -32,7 +32,7 @@ Feature: Sessions API
     Given a project has an active agent and active environments
     When an external scheduler creates a session with an initial prompt and run correlation metadata
     Then the response includes the session id and run correlation metadata
-    And the initial prompt is dispatched to the AMA-owned runtime without a browser WebSocket
+    And the initial prompt is dispatched to the selected environment runtime without a browser WebSocket
     And session events can be queried for launch diagnostics and transcript progress
 
   @implemented
@@ -43,11 +43,11 @@ Feature: Sessions API
     And the error envelope identifies the unavailable dependency
     And no session record is left in an active state
 
-  @planned
+  @implemented
   Scenario: Reject unsupported runtime provider and model combinations
     Given a user attempts to create a session
     When the selected environment runtime does not support the selected agent provider and model
-    Then the request fails before workspace allocation, sandbox creation, or self-hosted lease creation
+    Then the request fails before workspace allocation, sandbox creation, or self_hosted lease creation
     And the error envelope identifies the unsupported runtime, provider, and model
     And no session record is left in an active state
 

@@ -1,8 +1,8 @@
 # Self-Hosted AMA Runner
 
-`cmd/ama-runner` is the first self-hosted tool-executor daemon for Any Managed Agents. AMA keeps ownership of the agent loop, work queue, policy decisions, session state, and event storage. The runner leases AMA-owned self-hosted work and reports structured events/results back through the public control-plane API.
+`cmd/ama-runner` is the first self-hosted tool-executor daemon for Any Managed Agents. AMA keeps ownership of the control plane, work queue, policy decisions, session state, and event storage. The runner leases `self_hosted` environment runtime work and reports structured events/results back through the public control-plane API.
 
-The daemon is intentionally not a Pi or PyAgent runtime host. It must not launch local Pi loops, expose runner-local session URLs, or accept unapproved local work.
+The daemon is intentionally not a standalone product control plane. It must not expose runner-local session URLs or accept unapproved local work.
 
 ## Build
 
@@ -31,7 +31,7 @@ Environment variables:
 export AMA_ORIGIN="https://ama.example.com"
 export AMA_TOKEN="..."
 export AMA_RUNNER_NAME="mac-mini-runner-1"
-export AMA_RUNNER_CAPABILITIES="sandbox.exec,sandbox.read,sandbox.write"
+export AMA_RUNNER_CAPABILITIES="runtime:codex,provider:workers-ai,model:@cf/moonshotai/kimi-k2.6,sandbox.exec,sandbox.read,sandbox.write"
 export AMA_RUNNER_SANDBOX_ADAPTER="process-unsafe"
 export AMA_RUNNER_ALLOW_UNSAFE_PROCESS="true"
 export AMA_RUNNER_WORKDIR="/var/lib/ama-runner/workspace"
@@ -44,7 +44,7 @@ ama-runner \
   --origin "$AMA_ORIGIN" \
   --token "$AMA_TOKEN" \
   --runner-name mac-mini-runner-1 \
-  --capabilities sandbox.exec,sandbox.read,sandbox.write \
+  --capabilities runtime:codex,provider:workers-ai,model:@cf/moonshotai/kimi-k2.6,sandbox.exec,sandbox.read,sandbox.write \
   --sandbox-adapter process-unsafe \
   --allow-unsafe-process \
   --workdir /var/lib/ama-runner/workspace
@@ -90,10 +90,10 @@ At startup, the daemon:
 
 `204` lease responses mean no eligible work is available. Authentication failures, unsupported payload protocols, unsupported sandbox backends, and incompatible control planes are fatal.
 
-Current AMA self-hosted session creation queues `session.start` work. The daemon handles that work as a cloud-owned session handoff: it uploads a structured `runner.session.started` event and completes the lease without launching Pi/PyAgent locally. Approved `sandbox.exec`, `sandbox.read`, and `sandbox.write` tool payloads are the only work items that enter the local process adapter.
+Current AMA `self_hosted` session creation queues `session.start` work for runners that advertise the exact runtime, provider, and model combination. The daemon uploads canonical AMA session events and completes the lease. Approved `sandbox.exec`, `sandbox.read`, and `sandbox.write` tool payloads are the only work items that enter the local process adapter.
 
 ## Cancellation Status
 
 The daemon cancels local work and reports `cancelled` when its local process receives cancellation. It also cancels local work if a lease renewal fails, because a `409` means the lease no longer owns the work item.
 
-The current API does not yet expose a control-plane initiated cancellation signal for an already running self-hosted lease. Operators should treat that as a known API gap: AMA can accept runner-sent `cancelled` lease updates, but the runner cannot poll a first-class cancellation resource yet.
+The current API does not yet expose a control-plane initiated cancellation signal for an already running `self_hosted` lease. Operators should treat that as a known API gap: AMA can accept runner-sent `cancelled` lease updates, but the runner cannot poll a first-class cancellation resource yet.

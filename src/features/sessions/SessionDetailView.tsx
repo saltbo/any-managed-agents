@@ -46,7 +46,7 @@ export function SessionDetailView({
   const duration = formatDuration(session.startedAt, session.stoppedAt)
   const agentName = agentDisplayName || session.agentSnapshot.systemPrompt || session.agentId
   const environmentName = String(
-    environmentDisplayName ?? session.environmentSnapshot?.runtimeImage.image ?? session.environmentId ?? 'Environment',
+    environmentDisplayName ?? session.environmentSnapshot?.runtime ?? session.environmentId ?? 'Environment',
   )
   const modelName = String(session.modelConfig.model ?? 'default')
   return (
@@ -192,11 +192,9 @@ export function SessionDetailView({
                 <MetaGrid>
                   <Meta label="Environment id" value={session.environmentId ?? 'None'} />
                   <Meta label="Version" value={`v${session.environmentSnapshot.version}`} />
-                  <Meta label="Runtime type" value={session.environmentSnapshot.runtimeType} />
-                  <Meta
-                    label="Runtime image"
-                    value={String(session.environmentSnapshot.runtimeImage.image ?? 'Default')}
-                  />
+                  <Meta label="Hosting mode" value={session.environmentSnapshot.hostingMode} />
+                  <Meta label="Runtime" value={session.environmentSnapshot.runtime} />
+                  <Meta label="Runtime config" value={stringifyJson(session.environmentSnapshot.runtimeConfig)} />
                   <Meta
                     label="Packages"
                     value={session.environmentSnapshot.packages.map((item) => item.name).join(', ') || 'None'}

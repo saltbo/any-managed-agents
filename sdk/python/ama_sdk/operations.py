@@ -122,7 +122,7 @@ OPERATIONS = [
     "method": "POST",
     "path": "/api/runners",
     "operationId": "createRunner",
-    "summary": "Register a self-hosted runner",
+    "summary": "Register a self_hosted runner",
     "tags": [
       "Runners"
     ]
@@ -140,7 +140,7 @@ OPERATIONS = [
     "method": "POST",
     "path": "/api/runners/{runnerId}/leases",
     "operationId": "createRunnerLease",
-    "summary": "Claim queued self-hosted runner work",
+    "summary": "Claim queued self_hosted runner work",
     "tags": [
       "Runner leases"
     ]
@@ -374,7 +374,7 @@ OPERATIONS = [
     "method": "GET",
     "path": "/api/runners",
     "operationId": "listRunners",
-    "summary": "List self-hosted runners",
+    "summary": "List self_hosted runners",
     "tags": [
       "Runners"
     ]
@@ -383,7 +383,7 @@ OPERATIONS = [
     "method": "GET",
     "path": "/api/runners/work-items",
     "operationId": "listRunnerWorkItems",
-    "summary": "List self-hosted runner work items",
+    "summary": "List self_hosted runner work items",
     "tags": [
       "Runner work"
     ]
@@ -527,7 +527,7 @@ OPERATIONS = [
     "method": "GET",
     "path": "/api/runners/{runnerId}",
     "operationId": "readRunner",
-    "summary": "Read a self-hosted runner",
+    "summary": "Read a self_hosted runner",
     "tags": [
       "Runners"
     ]
@@ -662,7 +662,7 @@ OPERATIONS = [
     "method": "PATCH",
     "path": "/api/runners/{runnerId}",
     "operationId": "updateRunner",
-    "summary": "Update a self-hosted runner",
+    "summary": "Update a self_hosted runner",
     "tags": [
       "Runners"
     ]

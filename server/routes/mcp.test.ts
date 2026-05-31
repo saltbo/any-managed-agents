@@ -363,7 +363,7 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
     )
     expect(runtimeRes.status).toBe(200)
     await expect(runtimeRes.json()).resolves.toMatchObject({
-      runtime: 'ama-cloud',
+      runtime: 'ama',
       path: '/mcp/github/tools/repo.read/calls',
     })
   })

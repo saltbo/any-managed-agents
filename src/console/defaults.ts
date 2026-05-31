@@ -2,13 +2,14 @@ import type { AgentFormState, EnvironmentFormState, ProviderFormState, SessionFo
 
 export const emptyEnvironment: EnvironmentFormState = {
   name: 'Node workspace',
-  description: 'Default workspace for Pi-backed coding sessions.',
-  runtimeType: 'cloud-hosted',
+  description: 'Default workspace for managed coding sessions.',
+  hostingMode: 'cloud',
+  runtime: 'ama',
   networkMode: 'restricted',
   allowedHosts: 'registry.npmjs.org',
   packages: 'tsx@latest\ntypescript@latest',
   variables: 'NODE_ENV=development',
-  runtimeImage: 'node:24',
+  runtimeConfig: '{}',
 }
 
 export const emptyAgent: AgentFormState = {

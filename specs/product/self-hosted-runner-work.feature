@@ -1,6 +1,6 @@
 @api @runners
 Feature: Self-hosted runner work queue
-  Self-hosted environments are serviced by registered runtime runners that lease AMA session work.
+  `self_hosted` environments are serviced by registered runtime runners that lease AMA session work.
 
   @implemented
   Scenario: Publish runner queue routes in OpenAPI
@@ -21,16 +21,16 @@ Feature: Self-hosted runner work queue
     And the OpenAPI path "/api/runners/work-items" should include method "get"
 
   @implemented
-  Scenario: Lease self-hosted session work to an eligible runner
-    Given a self-hosted environment has an active runner
+  Scenario: Lease self_hosted session work to an eligible runner
+    Given a self_hosted environment has an active runner for its runtime, provider, and model
     When the user creates a session in that environment
     Then AMA queues session work without creating a Cloudflare Sandbox
     And the runner can claim a lease for the queued work
     And the runner can upload structured events and complete the lease
 
-  @planned
-  Scenario: Match self-hosted runners by exact runtime provider and model
-    Given a self-hosted environment selects codex runtime
+  @implemented
+  Scenario: Match self_hosted runners by exact runtime provider and model
+    Given a self_hosted environment selects codex runtime
     And the agent selects an exact provider and model
     When the user creates a session in that environment
     Then AMA offers the session work only to runners that advertise the same runtime, provider, and model
@@ -38,8 +38,8 @@ Feature: Self-hosted runner work queue
     And the session remains pending with a waiting-for-runner reason until an eligible runner is available
 
   @implemented
-  Scenario: Expire stale self-hosted runner leases
-    Given a runner has leased self-hosted session work
+  Scenario: Expire stale self_hosted runner leases
+    Given a runner has leased self_hosted session work
     When the lease expires before renewal
     Then AMA returns retryable work to the available queue
     And the session exposes a safe waiting status

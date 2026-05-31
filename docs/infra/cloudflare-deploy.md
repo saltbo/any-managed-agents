@@ -73,9 +73,9 @@ The database may store metadata and secret references only.
 
 ## Self-hosted runners
 
-Self-hosted runners service environments with `runtimeType: "self-hosted"`.
-They are executor backends, not AMA runtime hosts. AMA cloud-side code owns the
-session loop, policy gates, session state, OpenAPI surface, and event
+Self-hosted runners service environments with `hostingMode: "self_hosted"`.
+They are executor backends for the selected environment runtime. AMA owns the
+control plane, policy gates, session state, OpenAPI surface, and event
 persistence. Runners claim queued work from `/api/runners/{runnerId}/leases`,
 renew the lease while executing, upload structured events, and complete, fail,
 or cancel the lease.

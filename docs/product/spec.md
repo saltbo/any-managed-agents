@@ -35,7 +35,7 @@ The platform owns the control plane:
 - session metadata
 - environment hosting, runtime, workspace, network, resource, secret-reference, and runtime-config metadata
 - sandbox lifecycle
-- self-hosted runtime runner metadata and work leases
+- `self_hosted` runtime runner metadata and work leases
 - runtime endpoint and event transport
 - UI surfaces
 - usage and cost records
@@ -69,7 +69,7 @@ Runtime:
 
 Runtime hosting:
   cloud environment -> AMA-managed Cloudflare infrastructure -> selected runtime -> workspace / safe secrets / policy gates
-  self_hosted environment -> runner work queue -> self-hosted runtime lease -> selected runtime -> structured events/results
+  self_hosted environment -> runner work queue -> self_hosted runtime lease -> selected runtime -> structured events/results
 ```
 
 ## Product Model
@@ -78,13 +78,11 @@ Runtime hosting:
 - `Environment` is a long-lived hosting and runtime configuration: hosting mode, runtime, workspace setup, packages, variables, safe secret references, network policy, resource limits, runtime config, and metadata. It is not a running sandbox or runner.
 - `Sandbox` is an ephemeral `cloud` workspace/runtime instance created from an environment snapshot for exactly one cloud session when the selected hosting/runtime combination requires Cloudflare Sandbox.
 - `Session` is a concrete run of an agent in an explicitly selected environment. Each session binds an agent version snapshot, environment snapshot, safe resource references, runtime/provider/model validation result, runtime endpoint, canonical AMA session events, and status.
-- `Runner` is a registered `self_hosted` runtime host. Runners heartbeat capability, supported runtime/provider/model combinations, load, and safe metadata to AMA, claim leases for queued self-hosted session runtime work, and upload canonical AMA session events/results.
+- `Runner` is a registered `self_hosted` runtime host. Runners heartbeat capability, supported runtime/provider/model combinations, load, and safe metadata to AMA, claim leases for queued `self_hosted` session runtime work, and upload canonical AMA session events/results.
 
 Environment `hostingMode` is exactly `cloud` or `self_hosted`. Environment `runtime` is exactly `ama`, `claude-code`, `codex`, or `copilot`.
 
-Existing `runtimeType` API fields describe the current pre-migration implementation only. New runtime model implementation must replace that surface with `hostingMode`, `runtime`, and runtime configuration: `cloud-hosted` becomes `hostingMode: "cloud"`, `self-hosted` becomes `hostingMode: "self_hosted"`, and selected runtime is stored separately.
-
-Session creation validates the selected Agent provider/model against the selected Environment runtime and hosting mode. If the exact runtime/provider/model combination is unsupported, session creation fails before workspace allocation, sandbox creation, or self-hosted lease creation.
+Session creation validates the selected Agent provider/model against the selected Environment runtime and hosting mode. If the exact runtime/provider/model combination is unsupported, session creation fails before workspace allocation, sandbox creation, or `self_hosted` lease creation.
 
 `cloud` sessions use AMA-managed Cloudflare infrastructure for the selected runtime. `self_hosted` environments enqueue runtime work and keep sessions pending with `statusReason: "waiting-for-runner"` until an eligible runner that supports the exact runtime/provider/model combination claims a lease. `self_hosted` session creation must not create a Cloudflare Sandbox or expose runner-local endpoints.
 

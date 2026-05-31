@@ -3,12 +3,13 @@ import type { ProviderInputType } from '@/lib/api'
 export interface EnvironmentFormState {
   name: string
   description: string
-  runtimeType: 'cloud-hosted' | 'self-hosted'
+  hostingMode: 'cloud' | 'self_hosted'
+  runtime: 'ama' | 'claude-code' | 'codex' | 'copilot'
   networkMode: 'unrestricted' | 'restricted' | 'offline'
   allowedHosts: string
   packages: string
   variables: string
-  runtimeImage: string
+  runtimeConfig: string
 }
 
 export interface AgentFormState {

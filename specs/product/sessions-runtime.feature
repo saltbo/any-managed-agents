@@ -19,7 +19,7 @@ Feature: Agent sessions
     And an environment selects a hostingMode and runtime
     When the user creates a session with the agent and environment
     Then the platform validates the exact runtime, provider, and model combination
-    And unsupported combinations fail before workspace allocation, sandbox creation, or self-hosted lease creation
+    And unsupported combinations fail before workspace allocation, sandbox creation, or self_hosted lease creation
     And the error envelope identifies the unsupported runtime, provider, and model
 
   @planned

@@ -179,16 +179,12 @@ export function piRuntimeReducer(state: PiRuntimeState, action: PiRuntimeAction)
   if (eventType === 'bridge_exit') {
     const failed = action.event.code !== 0 && action.event.code !== null
     const message = failed
-      ? messageFromRuntimeError(
-          { ...action.event, message: 'Pi runtime exited with an error' },
-          action.at,
-          debugEvent.id,
-        )
+      ? messageFromRuntimeError({ ...action.event, message: 'Runtime exited with an error' }, action.at, debugEvent.id)
       : null
     return {
       ...state,
       runState: failed ? 'error' : 'idle',
-      error: failed ? 'Pi runtime exited with an error' : null,
+      error: failed ? 'Runtime exited with an error' : null,
       messages: message ? upsertMessage(state.messages, message) : state.messages,
       debugEvents: appendDebugEvent(state.debugEvents, debugEvent),
       eventKeys: appendEventKey(state.eventKeys, eventKey),
@@ -248,7 +244,7 @@ function mergePersistedEvents(state: PiRuntimeState, events: SessionEvent[]) {
           const failed = payload.code !== 0 && payload.code !== null
           return failed
             ? messageFromRuntimeError(
-                { ...payload, message: 'Pi runtime exited with an error' },
+                { ...payload, message: 'Runtime exited with an error' },
                 stored.createdAt,
                 stored.id,
               )
