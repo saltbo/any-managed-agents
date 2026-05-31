@@ -15,6 +15,9 @@ import type { AmaWorld } from './world'
 
 type Json = Record<string, unknown>
 
+const DEFAULT_AMA_RUNNER_CAPABILITY = 'runtime-provider-model:ama:workers-ai:@cf/moonshotai/kimi-k2.6'
+const CODEX_E2E_MODEL = 'gpt-5.3-codex'
+
 interface ListResponse<T> {
   data: T[]
   pagination: { hasMore: boolean; firstId: string | null; lastId: string | null }
@@ -69,6 +72,10 @@ Given('a signed-in user has access to a project', { timeout: 120_000 }, async fu
   this.e2e = { page, auth, runId: `product-e2e-${Date.now()}-${Math.random().toString(16).slice(2)}` }
 })
 
+Given('a project has provider access configured', async function (this: ProductWorld) {
+  await ensureSignedIn(this)
+})
+
 Given('a project has an active model provider', async function (this: ProductWorld) {
   await ensureSignedIn(this)
 })
@@ -110,15 +117,8 @@ Given('a provider is configured', async function (this: ProductWorld) {
 Given('agents or sessions reference a provider', async function (this: ProductWorld) {
   await ensureSignedIn(this)
   this.e2e.provider = await createProvider(this.e2e, {
-    type: 'openai-compatible',
-    displayName: `${this.e2e.runId} Gateway`,
-    baseUrl: 'https://models.example.test/v1',
-    credentialSecretRef: `secret://providers/${this.e2e.runId}/gateway`,
-  })
-  await createProviderModel(this.e2e, this.e2e.provider, {
-    modelId: '@cf/moonshotai/kimi-k2.6',
-    displayName: 'Gateway Kimi',
-    capabilities: ['text'],
+    type: 'workers-ai',
+    displayName: `${this.e2e.runId} Workers AI`,
   })
   this.e2e.agent = await createAgent(this.e2e, {
     name: `${this.e2e.runId} provider agent`,
@@ -289,6 +289,65 @@ Given('a session exists', async function (this: ProductWorld) {
 
 Given('a user attempts to create a session', async function (this: ProductWorld) {
   await ensureAgentAndEnvironment(this)
+})
+
+Given('an agent selects a provider and model', async function (this: ProductWorld) {
+  const state = await ensureSignedIn(this)
+  state.provider = await createProvider(state, {
+    type: 'openai-compatible',
+    displayName: `${state.runId} unsupported runtime provider`,
+    baseUrl: 'https://models.example.test/v1',
+    credentialSecretRef: `secret://providers/${state.runId}/unsupported-runtime`,
+  })
+  state.providerModel = await createProviderModel(state, state.provider, {
+    modelId: 'gpt-5.3-codex',
+    displayName: 'GPT 5.3 Codex',
+    capabilities: ['text'],
+  })
+  state.agent = await createAgent(state, {
+    name: `${state.runId} unsupported runtime agent`,
+    provider: state.provider.id,
+    model: 'gpt-5.3-codex',
+  })
+})
+
+Given('an environment selects a runtime', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  state.environment = await createEnvironment(state, {
+    name: `${state.runId} unsupported runtime env`,
+    hostingMode: 'cloud',
+    runtime: 'ama',
+  })
+})
+
+Given('a self-hosted environment selects codex runtime', async function (this: ProductWorld) {
+  const state = await ensureSignedIn(this)
+  state.environment = await createEnvironment(state, {
+    name: `${state.runId} codex self-hosted env`,
+    hostingMode: 'self_hosted',
+    runtime: 'codex',
+    networkPolicy: { mode: 'unrestricted' },
+  })
+})
+
+Given('the agent selects an exact provider and model', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  state.provider = await createProvider(state, {
+    type: 'openai-compatible',
+    displayName: `${state.runId} codex provider`,
+    baseUrl: 'https://models.example.test/v1',
+    credentialSecretRef: `secret://providers/${state.runId}/codex`,
+  })
+  state.providerModel = await createProviderModel(state, state.provider, {
+    modelId: CODEX_E2E_MODEL,
+    displayName: 'GPT 5.3 Codex',
+    capabilities: ['text'],
+  })
+  state.agent = await createAgent(state, {
+    name: `${state.runId} codex agent`,
+    provider: state.provider.id,
+    model: CODEX_E2E_MODEL,
+  })
 })
 
 Given('a session is running', async function (this: ProductWorld) {
@@ -1039,6 +1098,64 @@ When(
     this.e2e.response = (await response.json()) as Json
   },
 )
+
+When('that runtime does not support the exact provider and model', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const response = await apiResponse(state.page.request, '/api/sessions', {
+    method: 'POST',
+    data: {
+      agentId: state.agent?.id,
+      environmentId: state.environment?.id,
+      title: `${state.runId} unsupported runtime session`,
+    },
+  })
+  state.responseStatus = response.status()
+  state.response = (await response.json()) as Json
+})
+
+When('no runner advertises the exact runtime provider and model', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const wrongCapability = `runtime-provider-model:codex:${state.provider?.id}:${CODEX_E2E_MODEL}-mini`
+  state.otherProvider = await apiJson<Json>(state.page.request, '/api/runners', {
+    method: 'POST',
+    data: {
+      name: `${state.runId} wrong codex runner`,
+      environmentId: state.environment?.id,
+      capabilities: [wrongCapability],
+    },
+  })
+  await apiJson<Json>(state.page.request, `/api/runners/${state.otherProvider.id}/heartbeats`, {
+    method: 'POST',
+    data: { status: 'active', currentLoad: 0, capabilities: [wrongCapability] },
+  })
+  const response = await apiResponse(state.page.request, '/api/sessions', {
+    method: 'POST',
+    data: {
+      agentId: state.agent?.id,
+      environmentId: state.environment?.id,
+      title: `${state.runId} unsupported self-hosted codex session`,
+    },
+  })
+  state.responseStatus = response.status()
+  state.response = (await response.json()) as Json
+})
+
+When('a runner advertises the exact runtime provider and model', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const capability = `runtime-provider-model:codex:${state.provider?.id}:${CODEX_E2E_MODEL}`
+  state.runner = await apiJson<Json>(state.page.request, '/api/runners', {
+    method: 'POST',
+    data: {
+      name: `${state.runId} exact codex runner`,
+      environmentId: state.environment?.id,
+      capabilities: [capability],
+    },
+  })
+  state.runner = await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/heartbeats`, {
+    method: 'POST',
+    data: { status: 'active', currentLoad: 0, capabilities: [capability] },
+  })
+})
 
 When('the user sends a runtime message to the session runtime endpoint', async function (this: ProductWorld) {
   const state = await ensureState(this)
@@ -2132,6 +2249,14 @@ When('the user creates a self-hosted environment and starts a session with it', 
     networkPolicy: { mode: 'unrestricted' },
   })
   state.agent = await createAgent(state, { name: `${state.runId} self-hosted agent` })
+  await apiJson<Json>(state.page.request, '/api/runners', {
+    method: 'POST',
+    data: {
+      name: `${state.runId} self-hosted support runner`,
+      environmentId: state.environment.id,
+      capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY],
+    },
+  })
   state.latestSession = await apiJson<Json>(state.page.request, '/api/sessions', {
     method: 'POST',
     data: {
@@ -2173,7 +2298,7 @@ Given('a self-hosted environment has an active runner', async function (this: Pr
     data: {
       name: `${state.runId} runner`,
       environmentId: state.environment.id,
-      capabilities: ['node', 'git', 'sandbox.exec'],
+      capabilities: ['node', 'git', 'sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
       credentialSecretRef: `cloudflare-secret:${state.runId}-runner-token`,
     },
   })
@@ -2182,7 +2307,7 @@ Given('a self-hosted environment has an active runner', async function (this: Pr
     data: {
       status: 'active',
       currentLoad: 0,
-      capabilities: ['node', 'git', 'sandbox.exec'],
+      capabilities: ['node', 'git', 'sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
     },
   })
 })
@@ -2266,12 +2391,16 @@ Given('a runner has leased self-hosted session work', async function (this: Prod
     data: {
       name: `${state.runId} expiring runner`,
       environmentId: state.environment.id,
-      capabilities: ['node', 'git', 'sandbox.exec'],
+      capabilities: ['node', 'git', 'sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
     },
   })
   state.runner = await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/heartbeats`, {
     method: 'POST',
-    data: { status: 'active', currentLoad: 0 },
+    data: {
+      status: 'active',
+      currentLoad: 0,
+      capabilities: ['node', 'git', 'sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+    },
   })
   state.latestSession = await apiJson<Json>(state.page.request, '/api/sessions', {
     method: 'POST',
@@ -2608,8 +2737,33 @@ Then('the request fails before starting a sandbox', function (this: ProductWorld
   assert.equal(this.e2e?.responseStatus, 409)
 })
 
+Then('session creation fails before any provider call is started', function (this: ProductWorld) {
+  assert.equal(this.e2e?.responseStatus, 409)
+})
+
+Then('session creation fails before runner work is queued', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  assert.equal(state.responseStatus, 409)
+  const workItems = await apiJson<ListResponse<Json>>(state.page.request, '/api/runners/work-items')
+  assert.equal(
+    workItems.data.some((item) => item.environmentId === state.environment?.id),
+    false,
+  )
+})
+
 Then('the error envelope identifies the unavailable dependency', function (this: ProductWorld) {
   assert.equal(objectValue(this.e2e?.response?.error).type, 'conflict')
+})
+
+Then('the error envelope identifies the unsupported runtime, provider, and model', function (this: ProductWorld) {
+  const error = objectValue(this.e2e?.response?.error)
+  const details = objectValue(error.details)
+  assert.equal(error.type, 'conflict')
+  assert.equal(details.resourceType, 'runtime_catalog')
+  assert.equal(details.hostingMode, 'cloud')
+  assert.equal(details.runtime, 'ama')
+  assert.equal(details.provider, this.e2e?.provider?.id)
+  assert.equal(details.model, 'gpt-5.3-codex')
 })
 
 Then('no session record is left in an active state', async function (this: ProductWorld) {
@@ -2620,6 +2774,52 @@ Then('no session record is left in an active state', async function (this: Produ
     false,
   )
 })
+
+Then('no runtime fallback or model substitution occurs', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const sessions = await apiJson<ListResponse<Json>>(state.page.request, '/api/sessions')
+  assert.equal(
+    sessions.data.some((session) => session.title === `${state.runId} unsupported runtime session`),
+    false,
+  )
+})
+
+Then(
+  'AMA offers the session work only to runners that advertise the same runtime, provider, and model',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    const session = required(state.latestSession, 'session')
+    state.list = await apiJson<ListResponse<Json>>(
+      state.page.request,
+      `/api/runners/work-items?sessionId=${session.id}`,
+    )
+    assert.equal(state.list.data.length, 1)
+    assert.equal(
+      objectValue(state.list.data[0]?.payload).requiredRunnerCapability,
+      `runtime-provider-model:codex:${state.provider?.id}:${CODEX_E2E_MODEL}`,
+    )
+  },
+)
+
+Then('runners that lack the exact combination cannot lease the work', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const wrongRunner = required(state.otherProvider, 'wrong runner')
+  const response = await apiResponse(state.page.request, `/api/runners/${wrongRunner.id}/leases`, {
+    method: 'POST',
+    data: { leaseDurationSeconds: 90 },
+  })
+  assert.equal(response.status(), 204)
+})
+
+Then(
+  'the session remains pending with a waiting-for-runner reason until the eligible runner leases it',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
+    assert.equal(session.status, 'pending')
+    assert.equal(session.statusReason, 'waiting-for-runner')
+  },
+)
 
 Then('the runtime accepts the message', function (this: ProductWorld) {
   assert.ok(this.e2e?.runtimeMessage)

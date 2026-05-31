@@ -1,8 +1,11 @@
 import { SELF } from 'cloudflare:test'
 import { env } from 'cloudflare:workers'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { runtimeProviderModelCapability } from '../runtime/catalog'
 import { defaultClaims, setupOidcProvider, signIn } from '../test/auth'
 import { runtimeErrorMessage } from './sessions'
+
+const DEFAULT_AMA_RUNNER_CAPABILITY = runtimeProviderModelCapability('ama', 'workers-ai', '@cf/moonshotai/kimi-k2.6')
 
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
@@ -27,7 +30,7 @@ async function waitForSessionStatus(sessionId: string, authorization: string, st
   throw new Error(`Session ${sessionId} did not reach ${status}`)
 }
 
-async function createEnvironment(authorization: string) {
+async function createEnvironment(authorization: string, data: Record<string, unknown> = {}) {
   const res = await jsonFetch('/api/environments', authorization, {
     method: 'POST',
     body: JSON.stringify({
@@ -37,13 +40,16 @@ async function createEnvironment(authorization: string) {
       mcpPolicy: { allowedConnectors: ['github'] },
       packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
       runtimeConfig: { image: 'ama-tool-executor' },
+      ...data,
     }),
   })
-  expect(res.status).toBe(201)
+  if (res.status !== 201) {
+    throw new Error(`Expected environment creation to return 201, got ${res.status}: ${await res.text()}`)
+  }
   return (await res.json()) as { id: string }
 }
 
-async function createAgent(authorization: string) {
+async function createAgent(authorization: string, data: Record<string, unknown> = {}) {
   const res = await jsonFetch('/api/agents', authorization, {
     method: 'POST',
     body: JSON.stringify({
@@ -52,10 +58,48 @@ async function createAgent(authorization: string) {
       skills: ['ama@cloud-session'],
       allowedTools: ['sandbox.exec', 'mcp:github.repo.read'],
       mcpConnectors: ['github'],
+      ...data,
     }),
   })
   expect(res.status).toBe(201)
   return (await res.json()) as { id: string; currentVersionId: string; skills: string[] }
+}
+
+async function createProviderModel(authorization: string, model: string) {
+  const providerRes = await jsonFetch('/api/providers', authorization, {
+    method: 'POST',
+    body: JSON.stringify({
+      type: 'openai-compatible',
+      displayName: `OpenAI compatible ${crypto.randomUUID()}`,
+      baseUrl: 'https://models.example.test/v1',
+      credentialSecretRef: `secret://providers/${crypto.randomUUID()}`,
+    }),
+  })
+  expect(providerRes.status).toBe(201)
+  const provider = (await providerRes.json()) as { id: string }
+  const modelRes = await jsonFetch(`/api/providers/${provider.id}/models`, authorization, {
+    method: 'POST',
+    body: JSON.stringify({
+      modelId: model,
+      displayName: model,
+      capabilities: ['text'],
+    }),
+  })
+  expect(modelRes.status).toBe(201)
+  return { providerId: provider.id, model }
+}
+
+async function registerSelfHostedRunnerSupport(authorization: string, environmentId: string, capability: string) {
+  const res = await jsonFetch('/api/runners', authorization, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: `Runtime support runner ${crypto.randomUUID()}`,
+      environmentId,
+      capabilities: [capability],
+    }),
+  })
+  expect(res.status).toBe(201)
+  return (await res.json()) as { id: string }
 }
 
 async function connectMcp(authorization: string, connectorId: string) {
@@ -438,6 +482,7 @@ describe('[CF] /api/sessions', () => {
     const environment = (await environmentRes.json()) as { id: string; hostingMode: string; runtime: string }
     expect(environment.hostingMode).toBe('self_hosted')
     expect(environment.runtime).toBe('ama')
+    await registerSelfHostedRunnerSupport(authorization, environment.id, DEFAULT_AMA_RUNNER_CAPABILITY)
     const agentRes = await jsonFetch('/api/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({
@@ -660,6 +705,25 @@ describe('[CF] /api/sessions', () => {
     })
     expect(agentRes.status).toBe(201)
     const agent = (await agentRes.json()) as { id: string }
+
+    const unsupportedRes = await jsonFetch('/api/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+    })
+    expect(unsupportedRes.status).toBe(409)
+    await expect(unsupportedRes.json()).resolves.toMatchObject({
+      error: {
+        type: 'conflict',
+        details: {
+          resourceType: 'runtime_catalog',
+          hostingMode: 'self_hosted',
+          runtime: 'ama',
+          provider: 'workers-ai',
+          model: '@cf/moonshotai/kimi-k2.6',
+        },
+      },
+    })
+    await registerSelfHostedRunnerSupport(authorization, environment.id, DEFAULT_AMA_RUNNER_CAPABILITY)
     const policyRes = await jsonFetch('/api/governance/policy', authorization, {
       method: 'PUT',
       body: JSON.stringify({ sandboxPolicy: { enabled: false } }),
@@ -1389,5 +1453,118 @@ describe('[CF] /api/sessions', () => {
       },
     })
     expect(reread.agentSnapshot.sandboxPolicy).toBeUndefined()
+  })
+
+  it('rejects cloud sessions when the environment runtime cannot run the exact agent provider model', async () => {
+    const authorization = await signIn()
+    const model = 'gpt-5.3-codex'
+    const { providerId } = await createProviderModel(authorization, model)
+    const environment = await createEnvironment(authorization, { mcpPolicy: {} })
+    const agent = await createAgent(authorization, { provider: providerId, model, mcpConnectors: [] })
+
+    const createRes = await jsonFetch('/api/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+    })
+
+    expect(createRes.status).toBe(409)
+    await expect(createRes.json()).resolves.toMatchObject({
+      error: {
+        type: 'conflict',
+        message: 'Unsupported runtime provider/model combination',
+        details: {
+          resourceType: 'runtime_catalog',
+          hostingMode: 'cloud',
+          runtime: 'ama',
+          provider: providerId,
+          model,
+        },
+      },
+    })
+  })
+
+  it('requires self-hosted external runtimes to declare exact provider and model support', async () => {
+    const authorization = await signIn()
+    const model = 'gpt-5.3-codex'
+    const { providerId } = await createProviderModel(authorization, model)
+    const environment = await createEnvironment(authorization, {
+      hostingMode: 'self_hosted',
+      runtime: 'codex',
+      mcpPolicy: {},
+    })
+    const agent = await createAgent(authorization, { provider: providerId, model, mcpConnectors: [] })
+
+    const wrongRunnerRes = await jsonFetch('/api/runners', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Wrong model runner',
+        environmentId: environment.id,
+        capabilities: [runtimeProviderModelCapability('codex', providerId, 'gpt-5.3-codex-mini')],
+      }),
+    })
+    expect(wrongRunnerRes.status).toBe(201)
+
+    const unsupportedRes = await jsonFetch('/api/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+    })
+    expect(unsupportedRes.status).toBe(409)
+    await expect(unsupportedRes.json()).resolves.toMatchObject({
+      error: {
+        type: 'conflict',
+        details: {
+          runtime: 'codex',
+          provider: providerId,
+          model,
+        },
+      },
+    })
+
+    const exactRunnerRes = await jsonFetch('/api/runners', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Exact model runner',
+        environmentId: environment.id,
+        capabilities: [runtimeProviderModelCapability('codex', providerId, model)],
+      }),
+    })
+    expect(exactRunnerRes.status).toBe(201)
+    const exactRunner = (await exactRunnerRes.json()) as { id: string }
+
+    const createRes = await jsonFetch('/api/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+    })
+    expect(createRes.status).toBe(201)
+    const session = (await createRes.json()) as { id: string; status: string; statusReason: string | null }
+    expect(session).toMatchObject({ status: 'pending', statusReason: 'waiting-for-runner' })
+
+    const wrongRunner = (await wrongRunnerRes.json()) as { id: string }
+    const wrongHeartbeatRes = await jsonFetch(`/api/runners/${wrongRunner.id}/heartbeats`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        status: 'active',
+        capabilities: [runtimeProviderModelCapability('codex', providerId, 'gpt-5.3-codex-mini')],
+      }),
+    })
+    expect(wrongHeartbeatRes.status).toBe(200)
+    const wrongLeaseRes = await jsonFetch(`/api/runners/${wrongRunner.id}/leases`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+    expect(wrongLeaseRes.status).toBe(204)
+
+    await jsonFetch(`/api/runners/${exactRunner.id}/heartbeats`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        status: 'active',
+        capabilities: [runtimeProviderModelCapability('codex', providerId, model)],
+      }),
+    })
+    const exactLeaseRes = await jsonFetch(`/api/runners/${exactRunner.id}/leases`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+    expect(exactLeaseRes.status).toBe(201)
   })
 })

@@ -28,14 +28,17 @@ Feature: Self-hosted runner work queue
     And the runner can claim a lease for the queued work
     And the runner can upload structured events and complete the lease
 
-  @planned
+  @implemented
   Scenario: Match self-hosted runners by exact runtime provider and model
     Given a self-hosted environment selects codex runtime
     And the agent selects an exact provider and model
-    When the user creates a session in that environment
+    When no runner advertises the exact runtime provider and model
+    Then session creation fails before runner work is queued
+    When a runner advertises the exact runtime provider and model
+    And the user creates a session in that environment
     Then AMA offers the session work only to runners that advertise the same runtime, provider, and model
     And runners that lack the exact combination cannot lease the work
-    And the session remains pending with a waiting-for-runner reason until an eligible runner is available
+    And the session remains pending with a waiting-for-runner reason until the eligible runner leases it
 
   @implemented
   Scenario: Expire stale self-hosted runner leases

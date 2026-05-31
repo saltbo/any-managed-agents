@@ -4,6 +4,10 @@ import { Given, Then, When } from '@cucumber/cucumber'
 import { type APIRequestContext, chromium, expect, type Page } from '@playwright/test'
 import type { AmaWorld, StagingSmokeConfig, StagingSmokeEvidence } from './world'
 
+const SELF_HOSTED_SMOKE_PROVIDER = process.env.AMA_E2E_PROVIDER ?? 'workers-ai'
+const SELF_HOSTED_SMOKE_MODEL = process.env.AMA_E2E_MODEL ?? '@cf/moonshotai/kimi-k2.6'
+const SELF_HOSTED_SMOKE_CAPABILITY = `runtime-provider-model:ama:${SELF_HOSTED_SMOKE_PROVIDER}:${SELF_HOSTED_SMOKE_MODEL}`
+
 interface Environment {
   id: string
 }
@@ -365,8 +369,8 @@ async function exerciseSelfHostedRunnerMode(request: APIRequestContext, config: 
         description: 'Staging smoke self-hosted agent created through public AMA APIs.',
         instructions: 'Execute queued self-hosted runner work.',
         systemPrompt: 'Execute queued self-hosted runner work.',
-        provider: process.env.AMA_E2E_PROVIDER ?? 'workers-ai',
-        model: process.env.AMA_E2E_MODEL ?? '@cf/moonshotai/kimi-k2.6',
+        provider: SELF_HOSTED_SMOKE_PROVIDER,
+        model: SELF_HOSTED_SMOKE_MODEL,
         skills: ['ama@staging-smoke', 'ama@self-hosted-runner'],
         allowedTools: ['sandbox.exec'],
         metadata: { runId: config.runId, smokeMode: 'self-hosted-runner' },
@@ -374,7 +378,7 @@ async function exerciseSelfHostedRunnerMode(request: APIRequestContext, config: 
     })
     created.agentId = agent.id
 
-    const capabilities = ['node', 'git', 'sandbox.exec']
+    const capabilities = ['node', 'git', 'sandbox.exec', SELF_HOSTED_SMOKE_CAPABILITY]
     const runner = await apiJson<Runner>(request, '/api/runners', {
       method: 'POST',
       data: {
