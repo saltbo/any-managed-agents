@@ -636,33 +636,12 @@ describe('[CF] /api/sessions', () => {
 
   it('serializes legacy runtime event rows as canonical AMA session events', async () => {
     const authorization = await signIn()
-    const environmentRes = await jsonFetch('/api/environments', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: `Legacy event workspace ${crypto.randomUUID()}`,
-        runtimeType: 'self-hosted',
-        networkPolicy: { mode: 'unrestricted' },
-      }),
-    })
-    expect(environmentRes.status).toBe(201)
-    const environment = (await environmentRes.json()) as { id: string }
-    const agentRes = await jsonFetch('/api/agents', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: `Legacy event agent ${crypto.randomUUID()}`,
-        instructions: 'Read legacy event rows.',
-        allowedTools: ['sandbox.exec'],
-      }),
-    })
-    expect(agentRes.status).toBe(201)
-    const agent = (await agentRes.json()) as { id: string }
+    await connectMcp(authorization, 'github')
+    const environment = await createEnvironment(authorization)
+    const agent = await createAgent(authorization)
     const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({
-        agentId: agent.id,
-        environmentId: environment.id,
-        initialPrompt: 'Read legacy runtime event rows.',
-      }),
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
     })
     expect(createRes.status).toBe(201)
     const created = (await createRes.json()) as { id: string; organizationId: string; projectId: string }
