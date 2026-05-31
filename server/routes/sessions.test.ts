@@ -179,6 +179,7 @@ describe('[CF] /api/sessions', () => {
       resourceRefs: Array<Record<string, unknown>>
       vaultRefs: Array<Record<string, unknown>>
       metadata: Record<string, unknown>
+      runtimeMetadata: Record<string, unknown>
       modelConfig: Record<string, unknown>
     }
     expect(created).toMatchObject({
@@ -204,18 +205,29 @@ describe('[CF] /api/sessions', () => {
         ticket: 'AMA-1',
         hostingMode: 'cloud',
         runtime: 'ama',
+        runtimeDriver: 'ama-cloud',
         runtimeBackend: 'ama-cloud',
         runtimeProtocol: 'ama-runtime-rpc',
         runtimeMode: 'test',
-        runtimeOwner: 'ama-cloud',
         loop: 'cloud-session-runtime',
         executor: 'cloudflare-sandbox',
         piCorePackage: '@earendil-works/pi-agent-core',
         resourceManifestPath: '/workspace/.ama/resources.json',
         mcpConnectors: ['github'],
       },
+      runtimeMetadata: {
+        hostingMode: 'cloud',
+        runtime: 'ama',
+        runtimeConfig: { image: 'ama-tool-executor' },
+        provider: 'workers-ai',
+        model: '@cf/moonshotai/kimi-k2.6',
+        driver: 'ama-cloud',
+        backend: 'ama-cloud',
+        protocol: 'ama-runtime-rpc',
+      },
       modelConfig: { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6' },
     })
+    expect(JSON.stringify(created)).not.toContain('runtimeOwner')
     expect(created.agentSnapshot.sandboxPolicy).toBeUndefined()
     expect(created.environmentVersionId).toMatch(/^envver_/)
     expect(created.startedAt).toEqual(expect.any(String))
@@ -504,6 +516,7 @@ describe('[CF] /api/sessions', () => {
       runtimeEndpointPath: string | null
       environmentSnapshot: { hostingMode: string; runtime: string }
       metadata: Record<string, unknown>
+      runtimeMetadata: Record<string, unknown>
     }
     expect(created).toMatchObject({
       status: 'pending',
@@ -514,10 +527,22 @@ describe('[CF] /api/sessions', () => {
       metadata: {
         hostingMode: 'self_hosted',
         runtime: 'ama',
+        runtimeDriver: 'ama-self-hosted',
         runnerState: 'queued',
         runnerProtocol: 'ama-runner-work',
       },
+      runtimeMetadata: {
+        hostingMode: 'self_hosted',
+        runtime: 'ama',
+        runtimeConfig: {},
+        provider: 'workers-ai',
+        model: '@cf/moonshotai/kimi-k2.6',
+        driver: 'ama-self-hosted',
+        backend: null,
+        protocol: 'ama-runner-work',
+      },
     })
+    expect(JSON.stringify(created)).not.toContain('runtimeOwner')
 
     const workItemsRes = await jsonFetch(`/api/runners/work-items?sessionId=${created.id}`, authorization)
     expect(workItemsRes.status).toBe(200)
@@ -1676,6 +1701,32 @@ describe('[CF] /api/sessions', () => {
           runtime: 'ama',
           provider: providerId,
           model,
+        },
+      },
+    })
+  })
+
+  it('rejects cloud sessions for runtimes without a cloud driver before allocating runtime state', async () => {
+    const authorization = await signIn()
+    const environment = await createEnvironment(authorization, { runtime: 'codex', mcpPolicy: {} })
+    const agent = await createAgent(authorization, { mcpConnectors: [] })
+
+    const createRes = await jsonFetch('/api/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+    })
+
+    expect(createRes.status).toBe(409)
+    await expect(createRes.json()).resolves.toMatchObject({
+      error: {
+        type: 'conflict',
+        message: 'Unsupported runtime provider/model combination',
+        details: {
+          resourceType: 'runtime_catalog',
+          hostingMode: 'cloud',
+          runtime: 'codex',
+          provider: 'workers-ai',
+          model: '@cf/moonshotai/kimi-k2.6',
         },
       },
     })

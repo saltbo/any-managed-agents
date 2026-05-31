@@ -43,9 +43,11 @@ Feature: Sessions API
     And the error envelope identifies the unavailable dependency
     And no session record is left in an active state
 
-  @planned
+  @implemented
   Scenario: Reject unsupported runtime provider and model combinations
     Given a user attempts to create a session
+    And an agent selects a provider and model
+    And an environment selects a runtime
     When the selected environment runtime does not support the selected agent provider and model
     Then the request fails before workspace allocation, sandbox creation, or self-hosted lease creation
     And the error envelope identifies the unsupported runtime, provider, and model

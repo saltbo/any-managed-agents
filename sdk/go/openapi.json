@@ -4465,6 +4465,9 @@
             "nullable": true,
             "example": "/runtime/sessions/session_abc123/rpc"
           },
+          "runtimeMetadata": {
+            "$ref": "#/components/schemas/SessionRuntimeMetadata"
+          },
           "modelProvider": {
             "type": "string",
             "example": "workers-ai"
@@ -4540,6 +4543,7 @@
           "piRuntimeId",
           "piProcessId",
           "runtimeEndpointPath",
+          "runtimeMetadata",
           "modelProvider",
           "modelConfig",
           "status",
@@ -4786,6 +4790,56 @@
           "repo"
         ],
         "additionalProperties": false
+      },
+      "SessionRuntimeMetadata": {
+        "type": "object",
+        "properties": {
+          "hostingMode": {
+            "$ref": "#/components/schemas/EnvironmentHostingMode"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/EnvironmentRuntime"
+          },
+          "runtimeConfig": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          },
+          "provider": {
+            "type": "string",
+            "example": "workers-ai"
+          },
+          "model": {
+            "type": "string",
+            "example": "@cf/moonshotai/kimi-k2.6"
+          },
+          "driver": {
+            "type": "string",
+            "nullable": true,
+            "example": "ama-cloud"
+          },
+          "backend": {
+            "type": "string",
+            "nullable": true,
+            "example": "ama-cloud"
+          },
+          "protocol": {
+            "type": "string",
+            "nullable": true,
+            "example": "ama-runtime-rpc"
+          }
+        },
+        "required": [
+          "hostingMode",
+          "runtime",
+          "runtimeConfig",
+          "provider",
+          "model",
+          "driver",
+          "backend",
+          "protocol"
+        ]
       },
       "CreateSessionRequest": {
         "type": "object",

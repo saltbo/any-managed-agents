@@ -23,6 +23,7 @@ import { toolExecutor } from './tool-executor'
 export type SessionRuntimeStartInput = {
   sessionId: string
   sandboxId: string
+  runtime?: string
   provider: string
   model: string
   agentSnapshot: Record<string, unknown>
@@ -153,10 +154,10 @@ export async function startSessionRuntime(
         sandboxId: input.sandboxId,
         provider: input.provider,
         model: input.model,
+        runtime: input.runtime ?? 'ama',
         agentSnapshot: input.agentSnapshot,
         environmentSnapshot: input.environmentSnapshot,
         mcpSnapshot: input.mcpSnapshot ?? { connectors: [] },
-        runtimeOwner: 'ama-cloud',
       }),
       { encoding: 'utf-8' },
     )
@@ -174,7 +175,9 @@ export async function startSessionRuntime(
     runtimeEndpointPath: runtimeEndpointPath(input.sessionId),
     metadata: {
       runtimeMode: env.AMA_RUNTIME_MODE === 'test' ? 'test' : 'live',
-      runtimeOwner: 'ama-cloud',
+      runtimeDriver: 'ama-cloud',
+      runtimeBackend: 'ama-cloud',
+      runtimeProtocol: 'ama-runtime-rpc',
       loop: 'cloud-session-runtime',
       executor: 'cloudflare-sandbox',
       piCorePackage: '@earendil-works/pi-agent-core',
