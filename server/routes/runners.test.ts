@@ -129,10 +129,15 @@ describe('[CF] /api/runners', () => {
           protocol: 'ama-runner-work',
           type: 'session.start',
           sessionId: session.id,
-          runtimeOwner: 'ama-cloud',
+          hostingMode: 'self_hosted',
+          runtime: 'ama',
+          runtimeDriver: 'ama-self-hosted',
+          provider: 'workers-ai',
+          model: '@cf/moonshotai/kimi-k2.6',
         }),
       }),
     ])
+    expect(JSON.stringify(workList.data)).not.toContain('runtimeOwner')
 
     const claimRes = await jsonFetch(`/api/runners/${runner.id}/leases`, authorization, {
       method: 'POST',

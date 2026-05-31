@@ -425,7 +425,8 @@ async function exerciseSelfHostedRunnerMode(request: APIRequestContext, config: 
     )
     assert.equal(workItems.data.length, 1)
     assert.equal(workItems.data[0]?.status, 'available')
-    assert.equal(objectValue(workItems.data[0]?.payload).runtimeOwner, 'ama-cloud')
+    assert.equal(objectValue(workItems.data[0]?.payload).runtimeDriver, 'ama-self-hosted')
+    assert.equal(objectValue(workItems.data[0]?.payload).runtimeOwner, undefined)
 
     const lease = await apiJson<RunnerWorkLease>(request, `/api/runners/${runner.id}/leases`, {
       method: 'POST',

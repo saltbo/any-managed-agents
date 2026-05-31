@@ -39,12 +39,8 @@ import {
 } from '../openapi'
 import { evaluateMcpToolPolicy, evaluateProviderPolicy, evaluateSandboxRuntimePolicy } from '../policy'
 import { redactSensitiveValue } from '../redaction'
-import {
-  runnerSupportsRuntimeProviderModel,
-  runtimeCatalogSupportsProviderModel,
-  runtimeProviderModelCapability,
-  runtimeSupportsHostingMode,
-} from '../runtime/catalog'
+import { runnerSupportsRuntimeProviderModel, runtimeProviderModelCapability } from '../runtime/catalog'
+import { runtimeDriver, runtimeDriverName, runtimeMetadata } from '../runtime/drivers'
 import { safeRuntimeError } from '../runtime/runtime-error'
 import {
   isRuntimeTurnCancelled,
@@ -52,7 +48,6 @@ import {
   runSessionTurn,
   runtimeEndpointPath,
   runtimeMessagesFromEvents,
-  startSessionRuntime as startCloudSessionRuntime,
   stopSessionRuntime as stopCloudSessionRuntime,
 } from '../runtime/session-runtime'
 import {
@@ -161,6 +156,19 @@ const EnvironmentVersionSchema = z
   })
   .openapi('SessionEnvironmentSnapshot')
 
+const SessionRuntimeMetadataSchema = z
+  .object({
+    hostingMode: EnvironmentHostingModeSchema,
+    runtime: EnvironmentRuntimeSchema,
+    runtimeConfig: JsonObjectSchema,
+    provider: z.string().openapi({ example: 'workers-ai' }),
+    model: z.string().openapi({ example: '@cf/moonshotai/kimi-k2.6' }),
+    driver: z.string().nullable().openapi({ example: 'ama-cloud' }),
+    backend: z.string().nullable().openapi({ example: 'ama-cloud' }),
+    protocol: z.string().nullable().openapi({ example: 'ama-runtime-rpc' }),
+  })
+  .openapi('SessionRuntimeMetadata')
+
 export const SessionSchema = z
   .object({
     id: z.string().openapi({ example: 'session_abc123' }),
@@ -182,6 +190,7 @@ export const SessionSchema = z
     piRuntimeId: z.string().nullable().openapi({ example: 'pi_session_abc123' }),
     piProcessId: z.string().nullable().openapi({ example: '1234' }),
     runtimeEndpointPath: z.string().nullable().openapi({ example: '/runtime/sessions/session_abc123/rpc' }),
+    runtimeMetadata: SessionRuntimeMetadataSchema,
     modelProvider: z.string().openapi({ example: 'workers-ai' }),
     modelConfig: JsonObjectSchema,
     status: z.enum(SESSION_STATUSES).openapi({ example: 'idle' }),
@@ -556,6 +565,12 @@ function serializeSession(row: SessionRow) {
   const environmentSnapshot = normalizeEnvironmentSnapshot(
     parseJson<ReturnType<typeof serializeEnvironmentVersion>>(row.environmentSnapshot),
   )
+  const metadata = parseJson<Record<string, unknown>>(row.metadata) ?? {}
+  const modelConfig = parseJson<Record<string, unknown>>(row.modelConfig) ?? { model: agentSnapshot.model }
+  const hostingMode = environmentHostingMode(environmentSnapshot)
+  const runtime = environmentSnapshot?.runtime ?? 'ama'
+  const provider = row.modelProvider ?? agentSnapshot.provider
+  const model = String(modelConfig.model ?? agentSnapshot.model)
 
   return {
     id: row.id,
@@ -577,11 +592,19 @@ function serializeSession(row: SessionRow) {
     runtimeEndpointPath:
       row.runtimeEndpointPath ??
       (environmentHostingMode(environmentSnapshot) === 'cloud' ? runtimeEndpointPath(row.id) : null),
-    modelProvider: row.modelProvider ?? agentSnapshot.provider,
-    modelConfig: parseJson<Record<string, unknown>>(row.modelConfig) ?? { model: agentSnapshot.model },
+    runtimeMetadata: runtimeMetadata({
+      hostingMode,
+      runtime,
+      runtimeConfig: environmentSnapshot?.runtimeConfig ?? {},
+      provider,
+      model,
+      metadata,
+    }),
+    modelProvider: provider,
+    modelConfig,
     status: row.status as (typeof SESSION_STATUSES)[number],
     statusReason: row.statusReason,
-    metadata: parseJson<Record<string, unknown>>(row.metadata) ?? {},
+    metadata,
     startedAt: row.startedAt,
     stoppedAt: row.stoppedAt,
     archivedAt: row.archivedAt,
@@ -753,10 +776,15 @@ async function enqueueSelfHostedSessionWork(
     protocol: 'ama-runner-work',
     type: 'session.start',
     sessionId: values.session.id,
+    hostingMode: values.environmentSnapshot?.hostingMode ?? 'self_hosted',
+    runtime: values.environmentSnapshot?.runtime ?? 'ama',
+    runtimeConfig: values.environmentSnapshot?.runtimeConfig ?? {},
+    provider: values.agentSnapshot.provider,
+    model: values.agentSnapshot.model,
+    runtimeDriver: runtimeDriverName(values.environmentSnapshot?.runtime ?? 'ama', 'self_hosted'),
     agentSnapshot: values.agentSnapshot,
     environmentSnapshot: values.environmentSnapshot,
     initialPrompt: values.initialPrompt ?? null,
-    runtimeOwner: 'ama-cloud',
     requiredRunnerCapability:
       values.environmentSnapshot?.hostingMode === 'self_hosted'
         ? runtimeProviderModelCapability(
@@ -805,7 +833,7 @@ async function resolveMcpSnapshot(
   auth: AuthContext,
   sessionId: string,
   agentSnapshot: ReturnType<typeof serializeAgentVersion>,
-  environmentSnapshot: ReturnType<typeof serializeEnvironmentVersion> | null,
+  environmentSnapshot: ReturnType<typeof serializeEnvironmentVersion> | NormalizedEnvironmentSnapshot | null,
 ) {
   const connections = await db
     .select()
@@ -904,13 +932,14 @@ async function validateRuntimeProviderModel(
   provider: string,
   model: string,
 ) {
-  if (!runtimeSupportsHostingMode(hostingMode, runtime)) {
+  const driver = runtimeDriver(runtime)
+  if (!driver.supportsHostingMode(hostingMode)) {
     return false
   }
   if (hostingMode === 'self_hosted') {
     return await selfHostedRunnerSupportsProviderModel(db, auth, environmentId, runtime, provider, model)
   }
-  return runtimeCatalogSupportsProviderModel(hostingMode, runtime, provider, model)
+  return driver.supportsCloudProviderModel(provider, model)
 }
 
 async function findSession(db: Db, auth: AuthContext, sessionId: string) {
@@ -1118,6 +1147,7 @@ export async function createSessionForAgent(
       ...(options.metadata ?? {}),
       hostingMode,
       runtime,
+      runtimeDriver: runtimeDriverName(runtime, hostingMode),
       ...(hostingMode === 'self_hosted' ? { runnerState: 'queued', runnerProtocol: 'ama-runner-work' } : {}),
     }),
     startedAt: null,
@@ -1177,7 +1207,7 @@ async function startSessionRuntimeForRow(
   input: {
     pending: SessionRow
     agentSnapshot: ReturnType<typeof serializeAgentVersion>
-    environmentSnapshot: ReturnType<typeof serializeEnvironmentVersion> | null
+    environmentSnapshot: NormalizedEnvironmentSnapshot | null
     resourceRefs: Array<z.infer<typeof ResourceRefSchema>>
     initialPrompt?: string
   },
@@ -1185,12 +1215,18 @@ async function startSessionRuntimeForRow(
   const { pending, agentSnapshot, environmentSnapshot, resourceRefs, initialPrompt } = input
   const sessionId = pending.id
   const sandboxId = pending.sandboxId ?? sessionId.toLowerCase()
+  const runtimeName = environmentSnapshot?.runtime ?? 'ama'
+  const driver = runtimeDriver(runtimeName)
+  if (!driver.startCloudSession) {
+    throw new Error(`Runtime ${runtimeName} does not support cloud session startup`)
+  }
   try {
     const mcpSnapshot = await resolveMcpSnapshot(db, auth, sessionId, agentSnapshot, environmentSnapshot)
     const runtime = await withTimeout(
-      startCloudSessionRuntime(env, {
+      driver.startCloudSession(env, {
         sessionId,
         sandboxId,
+        runtime: runtimeName,
         provider: agentSnapshot.provider,
         model: agentSnapshot.model,
         agentSnapshot,
@@ -1213,8 +1249,9 @@ async function startSessionRuntimeForRow(
     const metadata = {
       ...existingMetadata,
       ...runtime.metadata,
-      runtimeBackend: 'ama-cloud',
-      runtimeProtocol: 'ama-runtime-rpc',
+      runtimeDriver: runtimeDriverName(runtimeName, 'cloud'),
+      runtimeBackend: driver.cloudBackend,
+      runtimeProtocol: driver.cloudProtocol,
       mcpConnectors: mcpConnectorIds(mcpSnapshot),
     }
     const started = {
@@ -1266,7 +1303,8 @@ async function startSessionRuntimeForRow(
       statusReason: safeError.message,
       metadata: stringify({
         ...(parseJson<Record<string, unknown>>(pending.metadata) ?? {}),
-        runtimeBackend: 'ama-cloud',
+        runtimeDriver: runtimeDriverName(runtimeName, 'cloud'),
+        runtimeBackend: driver.cloudBackend,
         error: safeError,
       }),
       updatedAt: failedAt,
@@ -1521,7 +1559,14 @@ export async function recoverSessionRuntime(env: Env, db: Db, auth: AuthContext,
   if (!agentSnapshot) {
     throw new Error('Session agent snapshot is required')
   }
-  const environmentSnapshot = parseJson<ReturnType<typeof serializeEnvironmentVersion>>(session.environmentSnapshot)
+  const environmentSnapshot = normalizeEnvironmentSnapshot(
+    parseJson<ReturnType<typeof serializeEnvironmentVersion>>(session.environmentSnapshot),
+  )
+  const runtimeName = environmentSnapshot?.runtime ?? 'ama'
+  const driver = runtimeDriver(runtimeName)
+  if (!driver.startCloudSession) {
+    throw new Error(`Runtime ${runtimeName} does not support cloud session recovery`)
+  }
   const normalizedResources = normalizeResourceRefs(
     parseJson<Array<z.infer<typeof ResourceRefSchema>>>(session.resourceRefs) ?? [],
   )
@@ -1552,9 +1597,10 @@ export async function recoverSessionRuntime(env: Env, db: Db, auth: AuthContext,
   const mcpSnapshot = await resolveMcpSnapshot(db, auth, session.id, agentSnapshot, environmentSnapshot)
   await stopCloudSessionRuntime(env, session.sandboxId).catch(() => undefined)
   const runtime = await withTimeout(
-    startCloudSessionRuntime(env, {
+    driver.startCloudSession(env, {
       sessionId: session.id,
       sandboxId: session.sandboxId,
+      runtime: runtimeName,
       provider: agentSnapshot.provider,
       model: agentSnapshot.model,
       agentSnapshot,
@@ -1569,8 +1615,9 @@ export async function recoverSessionRuntime(env: Env, db: Db, auth: AuthContext,
   const metadata = {
     ...(parseJson<Record<string, unknown>>(session.metadata) ?? {}),
     ...runtime.metadata,
-    runtimeBackend: 'ama-cloud',
-    runtimeProtocol: 'ama-runtime-rpc',
+    runtimeDriver: runtimeDriverName(runtimeName, 'cloud'),
+    runtimeBackend: driver.cloudBackend,
+    runtimeProtocol: driver.cloudProtocol,
     recoveredAt,
     mcpConnectors: mcpConnectorIds(mcpSnapshot),
   }

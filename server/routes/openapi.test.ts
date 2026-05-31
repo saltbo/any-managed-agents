@@ -430,4 +430,29 @@ describe('[CF] OpenAPI documentation', () => {
       },
     })
   })
+
+  it('publishes canonical session runtime metadata without legacy owner fields', async () => {
+    const doc = await fetchOpenApi()
+    const schemas = doc.components?.schemas as Record<
+      string,
+      {
+        required?: string[]
+        properties?: Record<string, unknown>
+      }
+    >
+
+    expect(schemas.Session.required).toContain('runtimeMetadata')
+    expect(schemas.Session.properties).toHaveProperty('runtimeMetadata')
+    expect(schemas.Session.properties).not.toHaveProperty('runtimeOwner')
+    expect(schemas.SessionRuntimeMetadata.required).toEqual(
+      expect.arrayContaining(['hostingMode', 'runtime', 'runtimeConfig', 'provider', 'model', 'driver']),
+    )
+    expect(schemas.SessionRuntimeMetadata.properties).toEqual(
+      expect.objectContaining({
+        hostingMode: { $ref: '#/components/schemas/EnvironmentHostingMode' },
+        runtime: { $ref: '#/components/schemas/EnvironmentRuntime' },
+      }),
+    )
+    expect(schemas.SessionRuntimeMetadata.properties).not.toHaveProperty('runtimeOwner')
+  })
 })

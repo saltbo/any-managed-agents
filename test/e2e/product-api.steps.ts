@@ -1114,6 +1114,23 @@ When('that runtime does not support the exact provider and model', async functio
   state.response = (await response.json()) as Json
 })
 
+When(
+  'the selected environment runtime does not support the selected agent provider and model',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    const response = await apiResponse(state.page.request, '/api/sessions', {
+      method: 'POST',
+      data: {
+        agentId: state.agent?.id,
+        environmentId: state.environment?.id,
+        title: `${state.runId} unsupported runtime session`,
+      },
+    })
+    state.responseStatus = response.status()
+    state.response = (await response.json()) as Json
+  },
+)
+
 When('no runner advertises the exact runtime provider and model', async function (this: ProductWorld) {
   const state = await ensureState(this)
   const wrongCapability = `runtime-provider-model:codex:${state.provider?.id}:${CODEX_E2E_MODEL}-mini`
@@ -2335,7 +2352,11 @@ Then('AMA queues session work without creating a Cloudflare Sandbox', async func
   state.list = await apiJson<ListResponse<Json>>(state.page.request, `/api/runners/work-items?sessionId=${session.id}`)
   assert.equal(state.list.data.length, 1)
   assert.equal(state.list.data[0]?.status, 'available')
-  assert.equal(objectValue(state.list.data[0]?.payload).runtimeOwner, 'ama-cloud')
+  const payload = objectValue(state.list.data[0]?.payload)
+  assert.equal(payload.hostingMode, 'self_hosted')
+  assert.equal(payload.runtime, 'ama')
+  assert.equal(payload.runtimeDriver, 'ama-self-hosted')
+  assert.equal(payload.runtimeOwner, undefined)
 })
 
 Then('the runner can claim a lease for the queued work', async function (this: ProductWorld) {
@@ -2752,6 +2773,24 @@ Then('session creation fails before runner work is queued', async function (this
   )
 })
 
+Then(
+  'the request fails before workspace allocation, sandbox creation, or self-hosted lease creation',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    assert.equal(state.responseStatus, 409)
+    const sessions = await apiJson<ListResponse<Json>>(state.page.request, '/api/sessions')
+    assert.equal(
+      sessions.data.some((session) => session.title === `${state.runId} unsupported runtime session`),
+      false,
+    )
+    const workItems = await apiJson<ListResponse<Json>>(state.page.request, '/api/runners/work-items')
+    assert.equal(
+      workItems.data.some((item) => item.environmentId === state.environment?.id),
+      false,
+    )
+  },
+)
+
 Then('the error envelope identifies the unavailable dependency', function (this: ProductWorld) {
   assert.equal(objectValue(this.e2e?.response?.error).type, 'conflict')
 })
@@ -2771,7 +2810,11 @@ Then('no session record is left in an active state', async function (this: Produ
   const state = await ensureState(this)
   const sessions = await apiJson<ListResponse<Json>>(state.page.request, '/api/sessions')
   assert.equal(
-    sessions.data.some((session) => session.title === `${state.runId} rejected session`),
+    sessions.data.some(
+      (session) =>
+        session.title === `${state.runId} rejected session` ||
+        session.title === `${state.runId} unsupported runtime session`,
+    ),
     false,
   )
 })
