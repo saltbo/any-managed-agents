@@ -20,7 +20,13 @@ export default defineConfig({
           name: 'web',
           environment: 'jsdom',
           globals: true,
-          include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'server/runtime/**/*.test.ts', 'server/test/**/*.test.ts'],
+          include: [
+            'src/**/*.test.ts',
+            'src/**/*.test.tsx',
+            'server/runtime/**/*.test.ts',
+            'server/test/**/*.test.ts',
+            'shared/**/*.test.ts',
+          ],
         },
       },
       {

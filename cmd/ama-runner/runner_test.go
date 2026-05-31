@@ -11,6 +11,8 @@ import (
 	ama "github.com/saltbo/any-managed-agents/sdk/go/ama"
 )
 
+const defaultRuntimeProviderModelCapability = "runtime-provider-model:ama:workers-ai:@cf/moonshotai/kimi-k2.6"
+
 type fakeControlPlane struct {
 	mu           sync.Mutex
 	heartbeats   []ama.RunnerHeartbeatRequest
@@ -139,6 +141,9 @@ func TestRunOnceCompletesSessionStartWorkWithoutRunningLocalRuntime(t *testing.T
 	}
 	if client.updates[0].Result["handled"] != "session.start" {
 		t.Fatalf("unexpected session.start result %#v", client.updates[0].Result)
+	}
+	if client.updates[0].Result["runtime"] != "ama" || client.updates[0].Result["provider"] != "workers-ai" {
+		t.Fatalf("expected runtime provider model result, got %#v", client.updates[0].Result)
 	}
 	if len(client.events) != 1 || client.events[0].Events[0].Type != "runner.session.started" {
 		t.Fatalf("expected session event, got %#v", client.events)
@@ -274,12 +279,7 @@ func TestRunOnceReturnsEventUploadErrors(t *testing.T) {
 func TestRunOnceCompletesSessionStartWithoutLocalPiRuntime(t *testing.T) {
 	lease := approvedLease()
 	lease.WorkItem.Type = "session.start"
-	lease.WorkItem.Payload = ama.JSON{
-		"protocol":     "ama-runner-work",
-		"type":         "session.start",
-		"sessionId":    "session_1",
-		"runtimeOwner": "ama-cloud",
-	}
+	lease.WorkItem.Payload = sessionStartLease().WorkItem.Payload
 	client := &fakeControlPlane{lease: lease}
 	daemon := testDaemon(client, &fakeAdapter{err: errors.New("adapter must not run")})
 	if err := daemon.RunOnce(context.Background()); err != nil {
@@ -290,6 +290,9 @@ func TestRunOnceCompletesSessionStartWithoutLocalPiRuntime(t *testing.T) {
 	}
 	if client.updates[0].Result["handled"] != "session.start" {
 		t.Fatalf("unexpected session.start result %#v", client.updates[0].Result)
+	}
+	if client.updates[0].Result["runtime"] != "ama" || client.updates[0].Result["provider"] != "workers-ai" {
+		t.Fatalf("expected runtime provider model result, got %#v", client.updates[0].Result)
 	}
 }
 
@@ -305,6 +308,23 @@ func TestRunOnceFailsFastOnUnapprovedWorkAfterMarkingLeaseFailed(t *testing.T) {
 	}
 	if len(client.updates) != 1 || client.updates[0].Status != "failed" {
 		t.Fatalf("expected failed lease update, got %#v", client.updates)
+	}
+}
+
+func TestRunOnceFailsLeaseWhenRequiredCapabilityDoesNotMatch(t *testing.T) {
+	lease := sessionStartLease()
+	lease.WorkItem.Payload["requiredRunnerCapability"] = "runtime-provider-model:codex:provider:gpt-5.3-codex"
+	client := &fakeControlPlane{lease: lease}
+	daemon := testDaemon(client, &fakeAdapter{})
+	if err := daemon.RunOnce(context.Background()); err != nil {
+		t.Fatalf("expected failed lease update to succeed, got %v", err)
+	}
+	if len(client.updates) != 1 || client.updates[0].Status != "failed" {
+		t.Fatalf("expected failed lease update, got %#v", client.updates)
+	}
+	message, _ := client.updates[0].Error["message"].(string)
+	if !strings.Contains(message, "required capability") {
+		t.Fatalf("expected capability error, got %#v", client.updates[0].Error)
 	}
 }
 
@@ -378,7 +398,7 @@ func TestParseWorkPayloadRejectsProtocolAndMissingFields(t *testing.T) {
 	tests := []ama.JSON{
 		{"protocol": "other"},
 		{"protocol": "ama-runner-work", "type": "session.start"},
-		{"protocol": "ama-runner-work", "type": "session.start", "sessionId": "session_1", "runtimeOwner": "local"},
+		{"protocol": "ama-runner-work", "type": "session.start", "sessionId": "session_1", "hostingMode": "cloud"},
 		{"protocol": "ama-runner-work", "approved": true, "toolName": "sandbox.exec", "input": map[string]any{}},
 	}
 	for _, payload := range tests {
@@ -392,7 +412,7 @@ func testDaemon(client *fakeControlPlane, adapter SandboxAdapter) RunnerDaemon {
 	return RunnerDaemon{
 		Config: Config{
 			RunnerID:              "runner_1",
-			Capabilities:          []string{"sandbox.exec"},
+			Capabilities:          []string{"sandbox.exec", defaultRuntimeProviderModelCapability},
 			SandboxAdapter:        processUnsafeAdapter,
 			WorkDir:               ".",
 			MaxConcurrent:         1,
@@ -439,10 +459,16 @@ func sessionStartLease() *ama.RunnerWorkLease {
 			Type:   "session.start",
 			Status: "leased",
 			Payload: ama.JSON{
-				"protocol":     "ama-runner-work",
-				"type":         "session.start",
-				"sessionId":    "session_1",
-				"runtimeOwner": "ama-cloud",
+				"protocol":                 "ama-runner-work",
+				"type":                     "session.start",
+				"sessionId":                "session_1",
+				"hostingMode":              "self_hosted",
+				"runtime":                  "ama",
+				"runtimeConfig":            map[string]any{},
+				"provider":                 "workers-ai",
+				"model":                    "@cf/moonshotai/kimi-k2.6",
+				"runtimeDriver":            "ama-self-hosted",
+				"requiredRunnerCapability": defaultRuntimeProviderModelCapability,
 			},
 		},
 	}

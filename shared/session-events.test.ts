@@ -120,6 +120,72 @@ describe('canonicalAmaSessionEventFromRuntimeEvent', () => {
     })
   })
 
+  it('maps runtime-specific runner output into canonical tool, usage, error, and lifecycle records', () => {
+    expect(
+      canonicalAmaSessionEventFromRuntimeEvent({
+        type: 'runner.tool.started',
+        toolCallId: 'call_1',
+        toolName: 'sandbox.exec',
+        input: { command: 'npm test' },
+      }),
+    ).toMatchObject({
+      type: 'tool_call.started',
+      payload: {
+        toolCall: { id: 'call_1', name: 'sandbox.exec', input: { command: 'npm test' } },
+        status: 'running',
+      },
+    })
+
+    expect(
+      canonicalAmaSessionEventFromRuntimeEvent({
+        type: 'codex.tool.failed',
+        toolCallId: 'call_1',
+        toolName: 'sandbox.exec',
+        error: { message: 'Command failed', code: 'exit_1', details: { exitCode: 1 } },
+      }),
+    ).toMatchObject({
+      type: 'tool_call.completed',
+      payload: {
+        toolCall: { id: 'call_1', name: 'sandbox.exec', error: { message: 'Command failed' } },
+        status: 'error',
+      },
+    })
+
+    expect(
+      canonicalAmaSessionEventFromRuntimeEvent({
+        type: 'claude-code.usage',
+        provider: 'anthropic',
+        model: 'claude-sonnet',
+        inputTokens: 3,
+        outputTokens: 5,
+      }),
+    ).toMatchObject({
+      type: 'usage.recorded',
+      payload: { provider: 'anthropic', model: 'claude-sonnet', inputTokens: 3, outputTokens: 5 },
+    })
+
+    expect(
+      canonicalAmaSessionEventFromRuntimeEvent({
+        type: 'copilot.error',
+        error: { message: 'Runtime failed safely', code: 'runtime_exit', details: { exitCode: 2 } },
+      }),
+    ).toMatchObject({
+      type: 'runtime.error',
+      payload: { message: 'Runtime failed safely', code: 'runtime_exit', details: { exitCode: 2 } },
+    })
+
+    expect(
+      canonicalAmaSessionEventFromRuntimeEvent({
+        type: 'runner.session.started',
+        sessionId: 'session_1',
+        runtime: 'codex',
+      }),
+    ).toMatchObject({
+      type: 'session.lifecycle',
+      payload: { stage: 'runner.session.started', sessionId: 'session_1' },
+    })
+  })
+
   it('preserves already canonical event types', () => {
     expect(
       canonicalAmaSessionEventFromRuntimeEvent({
