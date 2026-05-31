@@ -83,7 +83,7 @@ describe('sessionRuntimeReducer', () => {
     expect(amaSessionEventCategory('toString')).toBe('unknown')
   })
 
-  it('preserves unknown events for debug without rendering them as transcript messages', () => {
+  it('ignores noncanonical events instead of rendering them as transcript messages or debug rows', () => {
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
       event: { type: 'future_event', content: 'debug only' },
@@ -96,16 +96,7 @@ describe('sessionRuntimeReducer', () => {
     })
 
     expect(untyped.messages).toHaveLength(0)
-    expect(untyped.debugEvents).toEqual([
-      expect.objectContaining({
-        type: 'future_event',
-        payload: { type: 'future_event', content: 'debug only' },
-      }),
-      expect.objectContaining({
-        type: 'unknown',
-        payload: { content: 'debug only' },
-      }),
-    ])
+    expect(untyped.debugEvents).toHaveLength(0)
   })
 
   it('keeps prior tool output when updates carry empty values', () => {

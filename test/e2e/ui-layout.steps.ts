@@ -220,7 +220,7 @@ Then('clicking a row opens the agent detail route', async function (this: UiWorl
     .first()
     .click()
   await expect(workflow.page).toHaveURL(/\/agents\/agent_/)
-  await expect(workflow.page.getByText('Runtime configuration')).toBeVisible()
+  await expect(workflow.page.getByText('Agent model configuration')).toBeVisible()
   await expect(workflow.page.getByText('ama@local-ui')).toBeVisible()
   await expect(workflow.page.getByText('Sandbox policy')).toHaveCount(0)
 })
@@ -384,12 +384,14 @@ Then('the empty state explains that sessions are task runs of versioned agents',
 })
 
 Then(
-  'each session row shows title or id, status, agent, model, environment, started time, last update time, and duration when available',
+  'each session row shows title or id, status, agent, Agent provider and model, Environment runtime, started time, last update time, and duration when available',
   async function (this: UiWorld) {
     const page = requireUiWorkflow(this).page
+    await expect(page.getByText('Agent provider/model')).toBeVisible()
+    await expect(page.getByText('Environment runtime')).toBeVisible()
     await expect(page.getByText('idle').first()).toBeVisible()
     await expect(page.getByText(/workers-ai/).first()).toBeVisible()
-    await expect(page.getByText(/ama · env_/).first()).toBeVisible()
+    await expect(page.getByText(/Cloud \/ ama · env_/).first()).toBeVisible()
   },
 )
 
@@ -417,11 +419,13 @@ When('the user starts the create-session flow', async function (this: UiWorld) {
 })
 
 Then(
-  'the form captures agent, environment, title, metadata, resources, and vault references',
+  'the form captures agent provider and model, environment runtime, title, metadata, resources, and vault references',
   async function (this: UiWorld) {
     const dialog = requireUiWorkflow(this).page.getByRole('dialog')
     await expect(dialog.getByText('Agent', { exact: true })).toBeVisible()
+    await expect(dialog.getByText(/Agent provider\/model:/)).toBeVisible()
     await expect(dialog.getByText('Environment', { exact: true })).toBeVisible()
+    await expect(dialog.getByText(/Environment runtime:/)).toBeVisible()
     await expect(dialog.getByLabel('Title')).toBeVisible()
     await expect(dialog.getByLabel('Metadata')).toBeVisible()
     await expect(dialog.getByLabel('Resource refs')).toBeVisible()

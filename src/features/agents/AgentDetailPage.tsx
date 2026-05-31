@@ -70,7 +70,7 @@ export function AgentDetailPage() {
         description={
           agent
             ? `${agent.description ?? 'No description'} · Created ${formatDate(agent.createdAt)} · Updated ${formatDate(agent.updatedAt)}`
-            : 'Inspect runtime configuration, version snapshot, and related sessions.'
+            : 'Inspect agent model configuration, version snapshot, and related sessions.'
         }
         actions={
           agent ? (
@@ -100,7 +100,9 @@ export function AgentDetailPage() {
         <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
           <SheetHeader>
             <SheetTitle>Edit Agent</SheetTitle>
-            <SheetDescription>Saving runtime fields creates a new immutable agent version.</SheetDescription>
+            <SheetDescription>
+              Saving provider, model, or policy fields creates a new immutable agent version.
+            </SheetDescription>
           </SheetHeader>
           <div className="px-4 pb-4">
             {form ? (

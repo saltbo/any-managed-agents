@@ -775,7 +775,7 @@ describe('App', () => {
     render(<App />)
 
     expect(await screen.findByRole('heading', { name: 'Coding agent' })).toBeTruthy()
-    expect(await screen.findByText('Runtime configuration')).toBeTruthy()
+    expect(await screen.findByText('Agent model configuration')).toBeTruthy()
     expect(await screen.findByText('ama@coding-agent')).toBeTruthy()
     expect(screen.queryByText('Sandbox policy')).toBeNull()
     fireEvent.click(screen.getByRole('tab', { name: 'Sessions' }))

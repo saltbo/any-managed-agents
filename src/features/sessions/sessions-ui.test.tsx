@@ -3,8 +3,11 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { formatTime } from '@/console/format'
+import { SessionForm } from '@/console/forms'
 import { useClientPagination } from '@/console/use-client-pagination'
-import type { Session, SessionEvent } from '@/lib/api'
+import { type Agent, ApiError, type Environment, type Session, type SessionEvent } from '@/lib/api'
+import { formatCreateSessionError } from './CreateSessionSheet'
+import { SessionDetailView } from './SessionDetailView'
 import { eventFilter, SessionRuntimePanel } from './SessionRuntimePanel'
 import { SessionsView } from './SessionsView'
 import type { SessionRuntimeState } from './session-runtime'
@@ -78,6 +81,57 @@ function buildSession(overrides: Partial<Session> = {}): Session {
   }
 }
 
+function buildAgent(overrides: Partial<Agent> = {}): Agent {
+  return {
+    id: 'agent_1',
+    projectId: 'project_1',
+    name: 'Coding agent',
+    description: null,
+    instructions: 'Do the work',
+    provider: 'workers-ai',
+    model: '@cf/moonshotai/kimi-k2.6',
+    systemPrompt: 'Coding agent',
+    skills: ['ama@coding-agent'],
+    allowedTools: ['read', 'write'],
+    mcpConnectors: [],
+    metadata: {},
+    status: 'active',
+    archivedAt: null,
+    currentVersionId: 'agentver_1',
+    version: 1,
+    createdAt: '2026-05-23T00:00:00.000Z',
+    updatedAt: '2026-05-23T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
+function buildEnvironment(overrides: Partial<Environment> = {}): Environment {
+  return {
+    id: 'env_1',
+    projectId: 'project_1',
+    name: 'Node workspace',
+    description: null,
+    packages: [{ name: 'tsx', version: 'latest' }],
+    variables: {},
+    secretRefs: [],
+    hostingMode: 'cloud',
+    runtime: 'ama',
+    networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
+    mcpPolicy: {},
+    packageManagerPolicy: {},
+    resourceLimits: { memoryMb: 1024 },
+    runtimeConfig: { image: 'node:24' },
+    metadata: {},
+    status: 'active',
+    archivedAt: null,
+    currentVersionId: 'envver_1',
+    version: 1,
+    createdAt: '2026-05-23T00:00:00.000Z',
+    updatedAt: '2026-05-23T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
 function buildPersistedEvent(overrides: Partial<SessionEvent> = {}): SessionEvent {
   return {
     id: 'event_1',
@@ -130,6 +184,48 @@ function buildRuntimeState(overrides: Partial<SessionRuntimeState> = {}): Sessio
 }
 
 describe('sessions UI contracts', () => {
+  it('shows Agent-owned provider/model and Environment-owned runtime in session creation', () => {
+    render(
+      <SessionForm
+        value={{
+          agentId: 'agent_1',
+          environmentId: 'env_1',
+          title: '',
+          metadata: '{}',
+          resourceRefs: '[]',
+          vaultRefs: '[]',
+        }}
+        setValue={vi.fn()}
+        agents={[buildAgent()]}
+        environments={[buildEnvironment({ hostingMode: 'self_hosted', runtime: 'codex' })]}
+        onSubmit={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('Agent provider/model: workers-ai / @cf/moonshotai/kimi-k2.6')).toBeTruthy()
+    expect(screen.getByText('Environment runtime: Self-hosted / codex')).toBeTruthy()
+  })
+
+  it('formats structured runtime capability failures with exact runtime provider and model', () => {
+    const error = new ApiError('Unsupported runtime provider/model combination', 409, {
+      error: {
+        type: 'conflict',
+        message: 'Unsupported runtime provider/model combination',
+        details: {
+          resourceType: 'runtime_catalog',
+          hostingMode: 'cloud',
+          runtime: 'ama',
+          provider: 'workers-ai',
+          model: '@cf/moonshotai/kimi-k2.6',
+        },
+      },
+    })
+
+    expect(formatCreateSessionError(error)).toBe(
+      'Unsupported capability: Cloud environment runtime ama cannot run Agent provider workers-ai with model @cf/moonshotai/kimi-k2.6.',
+    )
+  })
+
   it('keeps error status detail off the table row while preserving pagination and adaptive surface', () => {
     const sessions = Array.from({ length: 11 }, (_, index) =>
       buildSession({
@@ -213,6 +309,91 @@ describe('sessions UI contracts', () => {
     )
   })
 
+  it('renders session rows from Agent provider/model and Environment runtime snapshots', () => {
+    const session = buildSession({
+      modelProvider: 'legacy-provider',
+      modelConfig: { model: 'legacy-model' },
+      environmentSnapshot: {
+        ...buildSession().environmentSnapshot!,
+        hostingMode: 'self_hosted',
+        runtime: 'codex',
+      },
+    })
+    render(
+      <MemoryRouter>
+        <SessionsView
+          sessions={[session]}
+          pagination={{
+            items: [session],
+            page: 1,
+            pageCount: 1,
+            pageSize: 10,
+            total: 1,
+            start: 1,
+            end: 1,
+            canPrevious: false,
+            canNext: false,
+            viewportRef: { current: null },
+            previous: vi.fn(),
+            next: vi.fn(),
+          }}
+          selectedIds={[]}
+          setSelectedIds={vi.fn()}
+          onArchive={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('Agent provider/model')).toBeTruthy()
+    expect(screen.getByText('Environment runtime')).toBeTruthy()
+    expect(screen.getAllByText('workers-ai / @cf/moonshotai/kimi-k2.6').length).toBeGreaterThan(0)
+    expect(screen.getByText('Self-hosted / codex · env_1')).toBeTruthy()
+    expect(screen.queryByText(/legacy-provider|legacy-model/)).toBeNull()
+  })
+
+  it('renders session detail facts from agent and environment snapshots instead of legacy model fields', () => {
+    const session = buildSession({
+      status: 'pending',
+      statusReason: 'waiting-for-runner',
+      modelProvider: 'legacy-provider',
+      modelConfig: { model: 'legacy-model' },
+      environmentSnapshot: {
+        ...buildSession().environmentSnapshot!,
+        hostingMode: 'self_hosted',
+        runtime: 'codex',
+      },
+    })
+
+    render(
+      <MemoryRouter>
+        <SessionDetailView
+          session={session}
+          agentName="Coding agent"
+          environmentName="Node workspace"
+          events={[]}
+          runtime={buildRuntimeState({ messages: [], tools: [], debugEvents: [], error: null })}
+          onStop={vi.fn()}
+          onArchive={vi.fn()}
+          onRefreshEvents={vi.fn()}
+          chatMessage=""
+          setChatMessage={vi.fn()}
+          onSendMessage={vi.fn()}
+          onAbortRuntime={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('Agent provider/model')).toBeTruthy()
+    expect(screen.getByText('workers-ai / @cf/moonshotai/kimi-k2.6')).toBeTruthy()
+    expect(screen.getByText('Environment runtime')).toBeTruthy()
+    expect(screen.getByText('Self-hosted / codex')).toBeTruthy()
+    expect(screen.getByText('Hosting mode')).toBeTruthy()
+    expect(screen.getByText('self_hosted')).toBeTruthy()
+    expect(screen.getByText('Runtime status')).toBeTruthy()
+    expect(screen.getByText('waiting-for-runner')).toBeTruthy()
+    expect(screen.queryByText(/legacy-provider|legacy-model/)).toBeNull()
+  })
+
   it('renders transcript timestamps in message metadata without exposing raw payloads in transcript mode', () => {
     const runtime = buildRuntimeState()
     const persistedEvents = [buildPersistedEvent()]
@@ -270,12 +451,6 @@ describe('sessions UI contracts', () => {
           payload: { type, safe: true, marker: `payload_${type}` },
           createdAt: new Date((index + 1) * 1000).toISOString(),
         })),
-        {
-          id: 'debug_future_event',
-          type: 'future_event',
-          payload: { type: 'future_event', marker: 'payload_future_event' },
-          createdAt: new Date(99_000).toISOString(),
-        },
       ],
     })
 
@@ -310,10 +485,7 @@ describe('sessions UI contracts', () => {
     for (const category of AMA_SESSION_EVENT_CATEGORIES) {
       expect(screen.getAllByText(category).length).toBeGreaterThan(0)
     }
-    expect(screen.getByText('future_event')).toBeTruthy()
-    expect(screen.getByText('unknown')).toBeTruthy()
     expect(screen.getByText(/payload_runtime.error/)).toBeTruthy()
-    expect(screen.getByText(/payload_future_event/)).toBeTruthy()
   })
 
   it('renders transcript and debug empty states', async () => {
@@ -398,12 +570,6 @@ describe('sessions UI contracts', () => {
               payload: { type: 'transcript.message', marker: 'payload_message' },
               createdAt: '2026-05-23T00:00:00.000Z',
             },
-            {
-              id: 'debug_future',
-              type: 'future_event',
-              payload: { type: 'future_event', marker: 'payload_future' },
-              createdAt: '2026-05-23T00:00:01.000Z',
-            },
           ],
         })}
         persistedEvents={[]}
@@ -420,12 +586,12 @@ describe('sessions UI contracts', () => {
     expect(onSend).toHaveBeenCalledWith('Ship it')
     expect(setMessage).toHaveBeenCalledWith('')
 
-    expect(eventFilter('unknown')).toBe('unknown')
+    expect(eventFilter('unknown')).toBe('all')
     expect(eventFilter('transcript')).toBe('transcript')
     expect(eventFilter('not-a-filter')).toBe('all')
   })
 
-  it('filters preserved unknown debug events through the debug category menu', async () => {
+  it('filters canonical debug events through the debug category menu', async () => {
     Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
       value: vi.fn(() => false),
       configurable: true,
@@ -456,9 +622,9 @@ describe('sessions UI contracts', () => {
               createdAt: '2026-05-23T00:00:00.000Z',
             },
             {
-              id: 'debug_future',
-              type: 'future_event',
-              payload: { type: 'future_event', marker: 'payload_future' },
+              id: 'debug_error',
+              type: 'runtime.error',
+              payload: { type: 'runtime.error', marker: 'payload_error' },
               createdAt: '2026-05-23T00:00:01.000Z',
             },
           ],
@@ -485,9 +651,9 @@ describe('sessions UI contracts', () => {
     fireEvent.pointerDown(filter, { button: 0, ctrlKey: false, pointerId: 1, pointerType: 'mouse' })
     fireEvent.mouseDown(filter)
     fireEvent.keyDown(filter, { key: 'ArrowDown' })
-    fireEvent.click(await screen.findByRole('option', { name: 'unknown' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'error' }))
 
-    expect(screen.getByText('debug_future')).toBeTruthy()
+    expect(screen.getByText('debug_error')).toBeTruthy()
     expect(screen.queryByText('debug_message')).toBeNull()
   })
 })

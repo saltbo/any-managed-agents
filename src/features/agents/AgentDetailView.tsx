@@ -65,8 +65,8 @@ function AgentDetailContent({
         </TabsList>
         <TabsContent value="agent" className="mt-4">
           <DetailSection
-            title="Runtime configuration"
-            description="Immutable settings captured by the selected agent version."
+            title="Agent model configuration"
+            description="Immutable provider, model, and tool settings captured by the selected agent version."
             actions={
               versions.length > 0 ? (
                 <Select value={currentVersion.id} onValueChange={setSelectedVersionId}>
@@ -88,7 +88,8 @@ function AgentDetailContent({
               <MetaGrid>
                 <Meta label="Version" value={`v${currentVersion.version}`} />
                 <Meta label="Created" value={formatDate(currentVersion.createdAt)} />
-                <Meta label="Model" value={`${currentVersion.provider} / ${currentVersion.model}`} />
+                <Meta label="Provider" value={currentVersion.provider} />
+                <Meta label="Model" value={currentVersion.model} />
                 <Meta label="Skills" value={currentVersion.skills.join(', ') || 'None'} />
                 <Meta label="Allowed tools" value={currentVersion.allowedTools.join(', ') || 'None'} />
                 <Meta label="MCP connectors" value={currentVersion.mcpConnectors.join(', ') || 'None'} />

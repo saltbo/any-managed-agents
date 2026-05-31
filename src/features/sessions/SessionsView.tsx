@@ -63,8 +63,8 @@ export function SessionsView({
           <TableHead>Session</TableHead>
           <TableHead>Status</TableHead>
           <TableHead>Agent</TableHead>
-          <TableHead>Model</TableHead>
-          <TableHead>Environment</TableHead>
+          <TableHead>Agent provider/model</TableHead>
+          <TableHead>Environment runtime</TableHead>
           <TableHead>Started</TableHead>
           <TableHead>Updated</TableHead>
           <TableHead>Duration</TableHead>
@@ -88,7 +88,7 @@ export function SessionsView({
                   {session.title ?? session.id}
                 </Link>
                 <span className="truncate text-xs text-muted-foreground">
-                  {`${session.id} · ${session.modelProvider} / ${String(session.modelConfig.model ?? 'default')}`}
+                  {`${session.id} · ${session.agentSnapshot.provider} / ${session.agentSnapshot.model}`}
                 </span>
               </div>
             </TableCell>
@@ -99,11 +99,11 @@ export function SessionsView({
               <span className="block truncate">{`${session.agentSnapshot.systemPrompt ?? session.agentId} · ${session.agentId}`}</span>
             </TableCell>
             <TableCell className="min-w-0">
-              <span className="block truncate">{`${session.modelProvider} / ${String(session.modelConfig.model ?? 'default')}`}</span>
+              <span className="block truncate">{`${session.agentSnapshot.provider} / ${session.agentSnapshot.model}`}</span>
             </TableCell>
             <TableCell className="min-w-0">
               <span className="block truncate">
-                {`${session.environmentSnapshot?.runtime ?? 'None'} · ${session.environmentId ?? 'None'}`}
+                {`${environmentRuntimeLabel(session)} · ${session.environmentId ?? 'None'}`}
               </span>
             </TableCell>
             <TableCell className="min-w-0">
@@ -140,4 +140,12 @@ export function SessionsView({
       </TableBody>
     </TableSurface>
   )
+}
+
+function environmentRuntimeLabel(session: Session) {
+  if (!session.environmentSnapshot) {
+    return 'None'
+  }
+  const hostingMode = session.environmentSnapshot.hostingMode === 'self_hosted' ? 'Self-hosted' : 'Cloud'
+  return `${hostingMode} / ${session.environmentSnapshot.runtime}`
 }
