@@ -8,15 +8,16 @@ This repository maintains generated SDK scaffolds under `sdk/`, but it does not 
 User application
   -> external Any Managed Agents SDK, restish, or direct HTTP
   -> Any Managed Agents OpenAPI control-plane API
-  -> AMA runtime endpoint
-  -> AMA cloud-owned session loop
-  -> sandbox or runner tool executor
+  -> AMA session endpoint
+  -> selected environment runtime
+  -> canonical AMA session events
 
 Web console
   -> Hono RPC client
   -> Any Managed Agents control-plane routes
-  -> AMA runtime endpoint
-  -> AMA cloud-owned session loop
+  -> AMA session endpoint
+  -> selected environment runtime
+  -> canonical AMA session events
 ```
 
 ## External Any Managed Agents SDKs
@@ -27,9 +28,9 @@ Repo-local generated SDK scaffolds use this repository's OpenAPI document as the
 - create and manage environments
 - create, start, stop, resume, and inspect sessions
 - manage provider, vault, policy, usage, and audit resources
-- connect to a running session through AMA runtime endpoints
+- connect to a running session through AMA session endpoints
 
-SDKs should stay thin. They wrap the public control-plane API and may provide a small set of ergonomic helpers, such as `sessions.connect(sessionId)`, only when those helpers delegate to AMA runtime endpoints. Release ownership may move to separate repositories later, but this repository currently owns the reproducible generated layout.
+SDKs should stay thin. They wrap the public control-plane API and may provide a small set of ergonomic helpers, such as `sessions.connect(sessionId)`, only when those helpers delegate to AMA session endpoints. Release ownership may move to separate repositories later, but this repository currently owns the reproducible generated layout.
 
 ## Repo-Local Generated Layout
 
@@ -78,11 +79,11 @@ The web console should not use OpenAPI as its internal client implementation. It
 
 ## Runtime Protocol
 
-AMA session endpoints are the v1.0 runtime protocol surface. AMA cloud-side code owns the session loop and may use Pi Core primitives internally.
+AMA session endpoints and canonical AMA session events are the v1.0 UI/API/session-state protocol surface. Agent products run through the runtime selected by the session's environment.
 
 Restish is control-plane only. It manages API resources through OpenAPI-described `/api` operations; it does not replace AMA runtime traffic.
 
-The platform must not create a second client-facing runtime protocol for RPC, session events, prompts, abort, follow-up, steering, or tool calls. Runtime session traffic goes through AMA session endpoints.
+The platform must not create a second client-facing runtime protocol for RPC, session events, prompts, abort, follow-up, steering, or tool calls. Runtime session traffic goes through AMA session endpoints, and observed state comes from canonical AMA session events.
 
 Cloudflare Agents SDK is not the v1.0 runtime contract. It may become a future adapter, but v1.0 must not require `/agents/*` compatibility.
 
@@ -90,13 +91,13 @@ Cloudflare Agents SDK is not the v1.0 runtime contract. It may become a future a
 
 Cloudflare Sandbox remains the sandbox execution foundation.
 
-The platform uses sandbox capabilities internally to provide filesystem, shell, process isolation, and per-session tool execution. SDKs should not expose the raw sandbox as the primary public product surface. Users manage `Environment` resources; the platform maps those environment descriptions to executor backend behavior.
+The platform uses sandbox capabilities internally to provide filesystem, shell, process isolation, and `cloud` workspace execution. SDKs should not expose the raw sandbox as the primary public product surface. Users manage `Environment` resources; the platform maps those environment descriptions to selected runtime behavior.
 
 ## Product Model
 
-- `Agent` is a managed definition: instructions, tools, model policy, sandbox requirements, governance rules, and versions.
-- `Environment` is a long-lived sandbox and runtime configuration, not a running sandbox.
-- `Sandbox` is a per-session runtime instance created from an environment snapshot.
-- `Session` is a concrete run of an agent, binding an agent version snapshot, environment snapshot, sandbox id, cloud runtime state, events, transcript, tool calls, and status.
+- `Agent` is a managed definition: persona, instructions, policy, provider, model, tools, MCP connectors, governance rules, and versions.
+- `Environment` is a long-lived hosting and runtime configuration, not a running sandbox or runner. `hostingMode` is `cloud` or `self_hosted`; `runtime` is `ama`, `claude-code`, `codex`, or `copilot`.
+- `Sandbox` is a per-session cloud workspace instance created from an environment snapshot when the selected hosting/runtime combination requires it.
+- `Session` is a concrete run of an agent, binding an agent version snapshot, environment snapshot, validated runtime/provider/model combination, runtime endpoint, canonical events, transcript, tool calls, and status.
 
 External SDKs should make this model explicit.

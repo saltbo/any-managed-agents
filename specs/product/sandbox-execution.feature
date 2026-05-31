@@ -1,6 +1,6 @@
 @sandbox @runtime
 Feature: Sandbox execution
-  AMA executes approved cloud-hosted tool work inside Cloudflare Sandbox executor backends.
+  Cloud-hosted environment runtimes execute approved workspace work inside Cloudflare Sandbox backends when required.
 
   Background:
     Given a session has sandbox access enabled by policy
@@ -12,17 +12,17 @@ Feature: Sandbox execution
     And the sandbox is associated with the organization, project, and session
     And the sandbox is created from the session environment snapshot
     And the sandbox is owned by exactly one session
-    And no Pi or PyAgent process is required as the primary runtime inside the sandbox
+    And clients do not connect directly to a sandbox-owned runtime process
 
   @planned
   Scenario: Run a command in the sandbox
-    When the AMA runtime dispatches an approved command tool request
+    When the selected environment runtime dispatches an approved command tool request
     Then the command runs inside the sandbox
     And stdout, stderr, exit code, and timing are recorded as session events
 
   @planned
   Scenario: Manage sandbox files
-    When the AMA runtime dispatches approved file tool requests
+    When the selected environment runtime dispatches approved file tool requests
     Then file operations happen inside the Cloudflare Sandbox filesystem
     And file metadata is visible in the session debug view
 

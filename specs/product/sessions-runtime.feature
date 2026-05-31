@@ -1,6 +1,6 @@
 @runtime @sessions
 Feature: Agent sessions
-  A session is a tenant-scoped run of a specific agent version.
+  A session is a tenant-scoped run of a specific agent version in a selected environment runtime.
 
   Background:
     Given a project has an active agent definition
@@ -11,7 +11,16 @@ Feature: Agent sessions
     Then the platform stores a session record in D1
     And the session uses a snapshot of the selected agent version
     And the session uses a snapshot of the selected environment
-    And the session records its sandbox id, cloud runtime state, runtime endpoint, and status
+    And the session records the validated hostingMode, runtime, provider, model, runtime endpoint, and status
+
+  @planned
+  Scenario: Validate runtime provider and model support
+    Given an agent selects a provider and model
+    And an environment selects a hostingMode and runtime
+    When the user creates a session with the agent and environment
+    Then the platform validates the exact runtime, provider, and model combination
+    And unsupported combinations fail before workspace allocation, sandbox creation, or self-hosted lease creation
+    And the error envelope identifies the unsupported runtime, provider, and model
 
   @planned
   Scenario: Connect to a session through AMA runtime endpoints
@@ -19,7 +28,7 @@ Feature: Agent sessions
     When the client connects through an external SDK session helper or direct runtime client
     Then runtime traffic uses AMA session endpoints
     And browser clients use WebSocket for bidirectional runtime commands and events
-    And AMA persists runtime events before exposing them to clients
+    And AMA persists canonical session events before exposing them to clients
     And clients can list or stream persisted session events
     And the helper does not define an incompatible replacement runtime protocol
 
@@ -27,7 +36,7 @@ Feature: Agent sessions
   Scenario: Stop a running session
     Given a session is running
     When the user stops the session
-    Then AMA cancels cloud-owned runtime work and stops the executor backend
+    Then AMA sends the stop request to the selected environment runtime
     And the session status becomes stopped
     And lifecycle events record the stop
 
@@ -35,4 +44,11 @@ Feature: Agent sessions
   Scenario: Resume an idle session
     Given a session is idle
     When the user reconnects to the session
-    Then session metadata, sandbox executor references, runtime endpoint, and status are available
+    Then session metadata, runtime endpoint, environment runtime snapshot, and status are available
+
+  @planned
+  Scenario: Keep runtime process details behind AMA endpoints
+    Given a session is running in any supported runtime
+    When the client sends commands or subscribes to events
+    Then the client uses only AMA session endpoints
+    And sandbox-owned or runner-owned runtime process endpoints are never exposed

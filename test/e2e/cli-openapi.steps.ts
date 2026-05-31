@@ -111,7 +111,7 @@ Then(
   },
 )
 
-Then('it does not describe a custom replacement for Pi runtime traffic', function (this: AmaWorld) {
+Then('it does not describe a custom replacement for AMA session traffic', function (this: AmaWorld) {
   const runtimePaths = Object.keys(openApiDocument(this).paths ?? {}).filter((path) => path.startsWith('/runtime/'))
   assert.deepEqual(runtimePaths, [])
 })

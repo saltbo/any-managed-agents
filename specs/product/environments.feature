@@ -1,6 +1,6 @@
-@environments @sandbox
+@environments @sandbox @runtime
 Feature: Execution environments
-  Projects define reusable environment descriptions for sandboxed agent work.
+  Projects define reusable environment runtime descriptions for agent work.
 
   Background:
     Given a signed-in user has access to a project
@@ -38,3 +38,11 @@ Feature: Execution environments
     When no session is running
     Then no sandbox instance is required
     And the environment remains available for future sessions
+
+  @planned
+  Scenario: Define runtime hosting separately from agent persona
+    When the user creates an environment runtime definition
+    Then the environment captures hostingMode as cloud or self_hosted
+    And the environment captures runtime as ama, claude-code, codex, or copilot
+    And workspace, secrets, network, resource limits, and runtime config belong to the environment
+    And provider, model, persona, instructions, and policy remain on the agent

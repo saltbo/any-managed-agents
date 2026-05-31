@@ -1,6 +1,6 @@
 @api @runners
 Feature: Self-hosted runner work queue
-  Self-hosted environments are serviced by registered runners that lease AMA-owned tool work.
+  Self-hosted environments are serviced by registered runtime runners that lease AMA session work.
 
   @implemented
   Scenario: Publish runner queue routes in OpenAPI
@@ -27,6 +27,15 @@ Feature: Self-hosted runner work queue
     Then AMA queues session work without creating a Cloudflare Sandbox
     And the runner can claim a lease for the queued work
     And the runner can upload structured events and complete the lease
+
+  @planned
+  Scenario: Match self-hosted runners by exact runtime provider and model
+    Given a self-hosted environment selects codex runtime
+    And the agent selects an exact provider and model
+    When the user creates a session in that environment
+    Then AMA offers the session work only to runners that advertise the same runtime, provider, and model
+    And runners that lack the exact combination cannot lease the work
+    And the session remains pending with a waiting-for-runner reason until an eligible runner is available
 
   @implemented
   Scenario: Expire stale self-hosted runner leases

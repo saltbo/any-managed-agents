@@ -10,7 +10,7 @@ Feature: API contracts and automation
     When a developer requests the OpenAPI document
     Then the document describes control-plane resources, request bodies, responses, and error shapes
     And the document is generated from Hono route schemas instead of hand-written OpenAPI JSON
-    And it does not describe a custom replacement for Pi runtime traffic
+    And it does not describe a custom replacement for AMA session traffic
 
   @implemented
   Scenario: Provide consistent API errors
