@@ -1,6 +1,6 @@
 @sandbox @runtime
 Feature: Sandbox execution
-  Cloud-hosted environment runtimes execute approved workspace work inside Cloudflare Sandbox backends when required.
+  Cloud hosting mode environment runtimes execute approved workspace work inside Cloudflare Sandbox backends when required.
 
   Background:
     Given a session has sandbox access enabled by policy
@@ -8,7 +8,7 @@ Feature: Sandbox execution
   @planned
   Scenario: Create a sandbox for a session
     When the agent needs isolated execution
-    Then AMA creates a Cloudflare Sandbox for a cloud-hosted session
+    Then AMA creates a Cloudflare Sandbox for a cloud hosting mode session
     And the sandbox is associated with the organization, project, and session
     And the sandbox is created from the session environment snapshot
     And the sandbox is owned by exactly one session

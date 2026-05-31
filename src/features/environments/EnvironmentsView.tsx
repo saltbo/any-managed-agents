@@ -14,6 +14,10 @@ function networkSummary(environment: Environment) {
   return environment.networkPolicy.mode
 }
 
+function runtimeConfigSummary(environment: Environment) {
+  return String(environment.runtimeConfig.image ?? environment.runtimeConfig.command ?? 'Default')
+}
+
 export function EnvironmentsView({
   environments,
   pagination,
@@ -32,8 +36,9 @@ export function EnvironmentsView({
         <TableRow>
           <TableHead>Environment</TableHead>
           <TableHead>Status</TableHead>
+          <TableHead>Hosting</TableHead>
           <TableHead>Runtime</TableHead>
-          <TableHead>Runtime image</TableHead>
+          <TableHead>Runtime config</TableHead>
           <TableHead>Packages</TableHead>
           <TableHead>Network</TableHead>
           <TableHead>Updated</TableHead>
@@ -59,8 +64,9 @@ export function EnvironmentsView({
                 <StatusBadge value={`v${environment.version}`} />
               </div>
             </TableCell>
-            <TableCell>{environment.runtimeType}</TableCell>
-            <TableCell className="max-w-48 truncate">{String(environment.runtimeImage.image ?? 'Default')}</TableCell>
+            <TableCell>{environment.hostingMode}</TableCell>
+            <TableCell>{environment.runtime}</TableCell>
+            <TableCell className="max-w-48 truncate">{runtimeConfigSummary(environment)}</TableCell>
             <TableCell className="max-w-56 truncate">
               {environment.packages.map((item) => `${item.name}${item.version ? `@${item.version}` : ''}`).join(', ') ||
                 'None'}

@@ -119,7 +119,7 @@ describe('session-runtime', () => {
         provider: 'workers-ai',
         model: '@cf/moonshotai/kimi-k2.6',
         agentSnapshot: { instructions: 'Test runtime' },
-        environmentSnapshot: { runtimeImage: { image: 'ama-tool-executor' } },
+        environmentSnapshot: { runtimeConfig: { image: 'ama-tool-executor' } },
       }),
     ).resolves.toEqual({
       sandboxId: 'sandbox_123',
@@ -366,7 +366,7 @@ describe('session-runtime', () => {
         provider: 'workers-ai',
         model: '@cf/moonshotai/kimi-k2.6',
         agentSnapshot: { instructions: 'Test runtime' },
-        environmentSnapshot: { runtimeImage: { image: 'ama-tool-executor' } },
+        environmentSnapshot: { runtimeConfig: { image: 'ama-tool-executor' } },
         mcpSnapshot: { connectors: ['github'] },
         resourceRefs: [
           {

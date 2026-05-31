@@ -12,6 +12,10 @@ function networkSummary(environment: Environment) {
   return environment.networkPolicy.mode
 }
 
+function runtimeConfigSummary(environment: Environment) {
+  return String(environment.runtimeConfig.image ?? environment.runtimeConfig.command ?? 'Default')
+}
+
 export function EnvironmentDetailView({
   environment,
   sessions,
@@ -53,8 +57,9 @@ export function EnvironmentDetailView({
           <Meta label="Packages" value={environment.packages.map((item) => item.name).join(', ') || 'None'} />
           <Meta label="Variables" value={Object.keys(environment.variables).join(', ') || 'None'} />
           <Meta label="Secret refs" value={environment.secretRefs.map((item) => item.name).join(', ') || 'None'} />
-          <Meta label="Runtime type" value={environment.runtimeType} />
-          <Meta label="Runtime image" value={String(environment.runtimeImage.image ?? 'Default')} />
+          <Meta label="Hosting mode" value={environment.hostingMode} />
+          <Meta label="Runtime" value={environment.runtime} />
+          <Meta label="Runtime config" value={runtimeConfigSummary(environment)} />
           <Meta label="Network policy" value={networkSummary(environment)} />
           <Meta label="MCP policy" value={stringifyJson(environment.mcpPolicy)} />
           <Meta label="Package manager policy" value={stringifyJson(environment.packageManagerPolicy)} />

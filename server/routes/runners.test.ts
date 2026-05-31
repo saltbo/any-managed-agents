@@ -19,7 +19,8 @@ async function createSelfHostedEnvironment(authorization: string) {
     method: 'POST',
     body: JSON.stringify({
       name: `Self-hosted workspace ${crypto.randomUUID()}`,
-      runtimeType: 'self-hosted',
+      hostingMode: 'self_hosted',
+      runtime: 'ama',
       networkPolicy: { mode: 'unrestricted' },
     }),
   })

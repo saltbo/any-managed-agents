@@ -774,7 +774,7 @@ When('the user creates an environment with only a name', async function (this: P
 })
 
 When(
-  'the user creates an environment with package requirements, variables, secret references, current runtimeType field, allowed outbound hosts, MCP access rules, package-manager access rules, resource limits, runtime image, and metadata',
+  'the user creates an environment with package requirements, variables, secret references, hostingMode and runtime fields, allowed outbound hosts, MCP access rules, package-manager access rules, resource limits, runtime config, and metadata',
   async function (this: ProductWorld) {
     await ensureSignedIn(this)
     this.e2e.environment = await createEnvironment(this.e2e, {
@@ -782,12 +782,13 @@ When(
       packages: [{ name: 'tsx', version: 'latest' }],
       variables: { NODE_ENV: { required: true } },
       secretRefs: [{ name: 'TOKEN', ref: 'wrangler_secret:AMA_TOKEN' }],
-      runtimeType: 'cloud-hosted',
+      hostingMode: 'cloud',
+      runtime: 'ama',
       networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
       mcpPolicy: { allowedConnectors: [] },
       packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
       resourceLimits: { memoryMb: 512, timeoutSeconds: 300 },
-      runtimeImage: { image: 'ama-pi-runtime' },
+      runtimeConfig: { image: 'ama-pi-runtime' },
       metadata: { purpose: 'e2e' },
     })
   },
@@ -809,7 +810,7 @@ When(
 )
 
 When(
-  'the user changes packages, variables, secret references, current runtimeType field, network policy, resource limits, runtime image, or metadata',
+  'the user changes packages, variables, secret references, hostingMode and runtime fields, network policy, resource limits, runtime config, or metadata',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
     state.updatedEnvironment = await apiJson<Json>(state.page.request, `/api/environments/${state.environment?.id}`, {
@@ -820,13 +821,42 @@ When(
           { name: 'vitest', version: 'latest' },
         ],
         variables: { E2E: { required: false } },
-        runtimeType: 'cloud-hosted',
+        hostingMode: 'cloud',
+        runtime: 'ama',
         networkPolicy: { mode: 'offline' },
         resourceLimits: { memoryMb: 768 },
-        runtimeImage: { image: 'ama-pi-runtime' },
+        runtimeConfig: { image: 'ama-pi-runtime' },
         metadata: { updated: true },
       },
     })
+    state.latestSession = await createSession(state)
+  },
+)
+
+When('the user creates an environment with hostingMode and runtime', async function (this: ProductWorld) {
+  const state = await ensureSignedIn(this)
+  state.environment = await createEnvironment(state, {
+    name: `${state.runId} canonical runtime env`,
+    hostingMode: 'self_hosted',
+    runtime: 'codex',
+    runtimeConfig: { image: 'ama-pi-runtime' },
+  })
+})
+
+When(
+  'the user creates an environment with workspace, secret references, network policy, resource limits, and runtime config',
+  async function (this: ProductWorld) {
+    const state = await ensureSignedIn(this)
+    state.environment = await createEnvironment(state, {
+      name: `${state.runId} runtime config env`,
+      secretRefs: [{ name: 'TOKEN', ref: 'wrangler_secret:AMA_TOKEN' }],
+      hostingMode: 'cloud',
+      runtime: 'ama',
+      networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
+      resourceLimits: { memoryMb: 512 },
+      runtimeConfig: { image: 'ama-pi-runtime', command: 'ama' },
+    })
+    state.agent = await createAgent(state, { name: `${state.runId} runtime config agent` })
     state.latestSession = await createSession(state)
   },
 )
@@ -1886,22 +1916,24 @@ Then(
 )
 
 Then(
-  'package lists, variables, secret references, current runtimeType field, network policy, resource limits, runtime image, and metadata have stable default values',
+  'package lists, variables, secret references, hostingMode and runtime fields, network policy, resource limits, runtime config, and metadata have stable default values',
   function (this: ProductWorld) {
     const env = required(this.e2e?.environment, 'environment')
     for (const key of [
       'packages',
       'variables',
       'secretRefs',
-      'runtimeType',
+      'hostingMode',
+      'runtime',
       'networkPolicy',
       'resourceLimits',
-      'runtimeImage',
+      'runtimeConfig',
       'metadata',
     ]) {
       assert.ok(key in env)
     }
-    assert.equal(env.runtimeType, 'cloud-hosted')
+    assert.equal(env.hostingMode, 'cloud')
+    assert.equal(env.runtime, 'ama')
     assert.deepEqual(env.networkPolicy, { mode: 'unrestricted' })
   },
 )
@@ -1943,10 +1975,101 @@ Then('the environment remains available for future sessions', async function (th
 
 Then('the response stores normalized policy fields', function (this: ProductWorld) {
   const env = required(this.e2e?.environment, 'environment')
-  assert.equal(env.runtimeType, 'cloud-hosted')
+  assert.equal(env.hostingMode, 'cloud')
+  assert.equal(env.runtime, 'ama')
   assert.deepEqual(env.networkPolicy, { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] })
   assert.deepEqual(env.packageManagerPolicy, { allowedRegistries: ['registry.npmjs.org'] })
 })
+
+Then('hostingMode accepts only cloud or self_hosted', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  assert.equal(state.environment?.hostingMode, 'self_hosted')
+  const cloud = await createEnvironment(state, {
+    name: `${state.runId} cloud runtime env`,
+    hostingMode: 'cloud',
+    runtime: 'ama',
+  })
+  assert.equal(cloud.hostingMode, 'cloud')
+
+  const invalid = await apiResponse(state.page.request, '/api/environments', {
+    method: 'POST',
+    data: { name: `${state.runId} invalid hosting`, hostingMode: 'self-hosted', runtime: 'ama' },
+  })
+  assert.equal(invalid.status(), 400)
+})
+
+Then('runtime accepts only ama, claude-code, codex, or copilot', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  assert.equal(state.environment?.runtime, 'codex')
+  for (const runtime of ['ama', 'claude-code', 'copilot']) {
+    const env = await createEnvironment(state, {
+      name: `${state.runId} ${runtime} runtime env`,
+      hostingMode: 'cloud',
+      runtime,
+    })
+    assert.equal(env.runtime, runtime)
+  }
+
+  const invalid = await apiResponse(state.page.request, '/api/environments', {
+    method: 'POST',
+    data: { name: `${state.runId} invalid runtime`, hostingMode: 'cloud', runtime: 'pi' },
+  })
+  assert.equal(invalid.status(), 400)
+})
+
+Then(
+  'invalid hostingMode or runtime values return field-level validation details',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    const invalid = await apiResponse(state.page.request, '/api/environments', {
+      method: 'POST',
+      data: { name: `${state.runId} invalid canonical runtime`, hostingMode: 'hybrid', runtime: 'pi' },
+    })
+    assert.equal(invalid.status(), 400)
+    const body = (await invalid.json()) as Json
+    const issues = objectValue(required(body.error, 'validation error')).issues as Array<{ path?: string[] }>
+    assert.ok(issues.some((issue) => issue.path?.[0] === 'hostingMode'))
+    assert.ok(issues.some((issue) => issue.path?.[0] === 'runtime'))
+  },
+)
+
+Then('requests using legacy environment runtime fields fail validation', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const invalid = await apiResponse(state.page.request, '/api/environments', {
+    method: 'POST',
+    data: {
+      name: `${state.runId} legacy runtime fields`,
+      runtimeType: 'cloud-hosted',
+      runtimeImage: { image: 'node:24' },
+    },
+  })
+  assert.equal(invalid.status(), 400)
+})
+
+Then('the API does not infer runtime ownership from the selected agent', function (this: ProductWorld) {
+  const env = required(this.e2e?.environment, 'environment')
+  assert.equal(env.hostingMode, 'self_hosted')
+  assert.equal(env.runtime, 'codex')
+})
+
+Then('the environment snapshot stores those runtime fields', function (this: ProductWorld) {
+  const env = required(this.e2e?.environment, 'environment')
+  const session = required(this.e2e?.latestSession, 'session')
+  assert.equal(env.hostingMode, 'cloud')
+  assert.equal(env.runtime, 'ama')
+  assert.deepEqual(env.runtimeConfig, { image: 'ama-pi-runtime', command: 'ama' })
+  assert.deepEqual(objectValue(session.environmentSnapshot).runtimeConfig, env.runtimeConfig)
+})
+
+Then(
+  'agent persona, instructions, policy, provider, and model are not stored on the environment',
+  function (this: ProductWorld) {
+    const env = required(this.e2e?.environment, 'environment')
+    for (const key of ['instructions', 'systemPrompt', 'provider', 'model', 'allowedTools']) {
+      assert.equal(key in env, false)
+    }
+  },
+)
 
 Then('raw secret values are rejected', async function (this: ProductWorld) {
   const state = await ensureState(this)
@@ -2004,7 +2127,8 @@ When('the user creates a self-hosted environment and starts a session with it', 
   const state = await ensureState(this)
   state.environment = await createEnvironment(state, {
     name: `${state.runId} self-hosted env`,
-    runtimeType: 'self-hosted',
+    hostingMode: 'self_hosted',
+    runtime: 'ama',
     networkPolicy: { mode: 'unrestricted' },
   })
   state.agent = await createAgent(state, { name: `${state.runId} self-hosted agent` })
@@ -2020,7 +2144,7 @@ When('the user creates a self-hosted environment and starts a session with it', 
 
 Then('the session keeps the self-hosted environment snapshot', function (this: ProductWorld) {
   const session = required(this.e2e?.latestSession, 'session')
-  assert.equal(objectValue(session.environmentSnapshot).runtimeType, 'self-hosted')
+  assert.equal(objectValue(session.environmentSnapshot).hostingMode, 'self_hosted')
 })
 
 Then('the session remains pending with a waiting-for-runner reason', function (this: ProductWorld) {
@@ -2039,7 +2163,8 @@ Given('a self-hosted environment has an active runner', async function (this: Pr
   const state = await ensureSignedIn(this)
   state.environment = await createEnvironment(state, {
     name: `${state.runId} runner env`,
-    runtimeType: 'self-hosted',
+    hostingMode: 'self_hosted',
+    runtime: 'ama',
     networkPolicy: { mode: 'unrestricted' },
   })
   state.agent = await createAgent(state, { name: `${state.runId} runner agent` })
@@ -2131,7 +2256,8 @@ Given('a runner has leased self-hosted session work', async function (this: Prod
   const state = await ensureSignedIn(this)
   state.environment = await createEnvironment(state, {
     name: `${state.runId} expiring runner env`,
-    runtimeType: 'self-hosted',
+    hostingMode: 'self_hosted',
+    runtime: 'ama',
     networkPolicy: { mode: 'unrestricted' },
   })
   state.agent = await createAgent(state, { name: `${state.runId} expiring runner agent` })
@@ -2303,7 +2429,7 @@ Then(
   function (this: ProductWorld) {
     const session = required(this.e2e?.latestSession, 'session')
     assert.equal(typeof session.sandboxId, 'string')
-    assert.equal(objectValue(session.metadata).runtime, 'ama-cloud')
+    assert.equal(objectValue(session.metadata).runtimeBackend, 'ama-cloud')
   },
 )
 
@@ -2846,7 +2972,7 @@ async function createEnvironment(state: E2EState, data: Json = {}) {
     method: 'POST',
     data: {
       name: `${state.runId} env`,
-      runtimeImage: { image: 'ama-pi-runtime' },
+      runtimeConfig: { image: 'ama-pi-runtime' },
       ...data,
     },
   })

@@ -297,11 +297,11 @@ Then(
 )
 
 Then(
-  'each environment row shows name, status, runtime type, runtime image, packages, network policy, and updated time',
+  'each environment row shows name, status, hosting mode, runtime, runtime config, packages, network policy, and updated time',
   async function (this: UiWorld) {
     const page = requireUiWorkflow(this).page
     await expect(page.getByText('active').first()).toBeVisible()
-    await expect(page.getByText('cloud-hosted').first()).toBeVisible()
+    await expect(page.getByText('cloud').first()).toBeVisible()
     await expect(page.getByText('ama-pi-runtime').first()).toBeVisible()
     await expect(page.getByText(/tsx/).first()).toBeVisible()
     await expect(page.getByText(/restricted/i).first()).toBeVisible()
@@ -325,16 +325,17 @@ When('the user starts the create-environment flow', async function (this: UiWorl
 })
 
 Then(
-  'the form captures name, runtime type, network mode, allowed hosts, package requirements, variables, and runtime image',
+  'the form captures name, hosting mode, runtime, network mode, allowed hosts, package requirements, variables, and runtime config',
   async function (this: UiWorld) {
     const dialog = requireUiWorkflow(this).page.getByRole('dialog')
     await expect(dialog.getByLabel('Name')).toBeVisible()
-    await expect(dialog.getByText('Runtime type')).toBeVisible()
+    await expect(dialog.getByText('Hosting mode')).toBeVisible()
+    await expect(dialog.getByText('Runtime', { exact: true })).toBeVisible()
     await expect(dialog.getByText('Network mode')).toBeVisible()
     await expect(dialog.getByLabel('Allowed hosts')).toBeVisible()
     await expect(dialog.getByLabel('Packages')).toBeVisible()
     await expect(dialog.getByLabel('Variables')).toBeVisible()
-    await expect(dialog.getByLabel('Runtime image')).toBeVisible()
+    await expect(dialog.getByLabel('Runtime config')).toBeVisible()
   },
 )
 
@@ -388,7 +389,7 @@ Then(
     const page = requireUiWorkflow(this).page
     await expect(page.getByText('idle').first()).toBeVisible()
     await expect(page.getByText(/workers-ai/).first()).toBeVisible()
-    await expect(page.getByText(/ama-pi-runtime/).first()).toBeVisible()
+    await expect(page.getByText(/ama · env_/).first()).toBeVisible()
   },
 )
 
@@ -588,7 +589,7 @@ Given(
         networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
         packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
         resourceLimits: { memoryMb: 1024, timeoutSeconds: 900 },
-        runtimeImage: { image: 'ama-pi-runtime' },
+        runtimeConfig: { image: 'ama-pi-runtime' },
         metadata: { runId },
       },
     })
@@ -736,7 +737,7 @@ async function createUiEnvironment(workflow: UiWorkflow) {
       networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
       packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
       resourceLimits: { memoryMb: 1024, timeoutSeconds: 900 },
-      runtimeImage: { image: 'ama-pi-runtime' },
+      runtimeConfig: { image: 'ama-pi-runtime' },
       metadata: { runId: workflow.runId },
     },
   })

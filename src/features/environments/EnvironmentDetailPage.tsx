@@ -24,7 +24,9 @@ export function EnvironmentDetailPage() {
       <PageHeader
         eyebrow="Environment"
         title={environment?.name ?? 'Environment detail'}
-        description={environment?.description ?? 'Inspect runtime image, package policy, network policy, and bindings.'}
+        description={
+          environment?.description ?? 'Inspect runtime config, package policy, network policy, and bindings.'
+        }
       />
       <EnvironmentDetailView
         environment={environment}
