@@ -658,7 +658,11 @@ describe('[CF] /api/sessions', () => {
     const agent = (await agentRes.json()) as { id: string }
     const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        initialPrompt: 'Read legacy runtime event rows.',
+      }),
     })
     expect(createRes.status).toBe(201)
     const created = (await createRes.json()) as { id: string; organizationId: string; projectId: string }
