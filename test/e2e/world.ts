@@ -20,6 +20,7 @@ export interface StagingSmokeEvidence {
   sawDebugUi: boolean
   replayDedupeOk: boolean
   persistedDedupeOk: boolean
+  selfHostedRunnerOk: boolean
 }
 
 export interface StagingSmokeConfig {

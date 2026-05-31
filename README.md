@@ -88,6 +88,28 @@ The project is moving toward a release where a signed-in user can create an envi
 - [SDK and API Boundary](docs/product/sdk.md) - OpenAPI, generated SDKs, and restish usage.
 - [Cloudflare Deployment](docs/infra/cloudflare-deploy.md) - Cloudflare resources, OIDC, runtime, and deployment notes.
 
+## Verification
+
+Local product e2e runs against a local Worker/dev server and must not depend on
+deployed origins or real model quota:
+
+```bash
+npm run test:e2e
+```
+
+Staging smoke runs against an explicit deployed staging origin and real
+secret-backed authentication:
+
+```bash
+AMA_STAGING_ORIGIN=https://any-managed-agents-staging.saltbo.workers.dev \
+AMA_E2E_ACCESS_TOKEN="$OIDC_ACCESS_TOKEN" \
+npm run test:smoke
+```
+
+Auth input precedence for staging smoke is explicit:
+`AMA_E2E_ACCESS_TOKEN` first, `AMA_E2E_STORAGE_STATE` second, and
+`AMA_E2E_EMAIL` plus `AMA_E2E_PASSWORD` third.
+
 ## License
 
 Apache-2.0

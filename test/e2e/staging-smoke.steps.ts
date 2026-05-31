@@ -16,6 +16,9 @@ interface Session {
   id: string
   status: string
   statusReason: string | null
+  sandboxId?: string | null
+  runtimeEndpointPath?: string | null
+  metadata?: Record<string, unknown>
 }
 
 interface SessionEvent {
@@ -29,6 +32,23 @@ interface SessionEvent {
 
 interface ListResponse<T> {
   data: T[]
+}
+
+interface Runner {
+  id: string
+  status: string
+}
+
+interface RunnerWorkItem {
+  id: string
+  status: string
+  payload: Record<string, unknown>
+}
+
+interface RunnerWorkLease {
+  id: string
+  status: string
+  workItem: RunnerWorkItem
 }
 
 function assertIncludes(path: string, ...patterns: RegExp[]) {
@@ -147,6 +167,11 @@ Then(
   },
 )
 
+Then('the staging smoke verifies self-hosted runner queue and lease execution', function (this: AmaWorld) {
+  assert.ok(this.stagingSmokeEvidence, 'Staging smoke must run before asserting self-hosted runner behavior')
+  assert.equal(this.stagingSmokeEvidence.selfHostedRunnerOk, true)
+})
+
 async function runStagingSmoke(config: StagingSmokeConfig): Promise<StagingSmokeEvidence> {
   const browser = await chromium.launch({ headless: true })
   const context = await browser.newContext({
@@ -171,6 +196,7 @@ async function runStagingSmoke(config: StagingSmokeConfig): Promise<StagingSmoke
     let sawDebugUi = false
     let replayDedupeOk = false
     let persistedDedupeOk = false
+    let selfHostedRunnerOk = false
 
     await authenticate(page, config)
     await expectAuthenticated(page)
@@ -282,6 +308,7 @@ async function runStagingSmoke(config: StagingSmokeConfig): Promise<StagingSmoke
       await assertNoDuplicatePersistedEvents(page.request, readySession.id, persistedEventsBeforeReconnect)
       replayDedupeOk = true
       persistedDedupeOk = true
+      selfHostedRunnerOk = await exerciseSelfHostedRunnerMode(page.request, config)
 
       assert.ok(created.environmentId, 'Staging smoke should create an environment')
       assert.ok(created.agentId, 'Staging smoke should create an agent')
@@ -299,6 +326,7 @@ async function runStagingSmoke(config: StagingSmokeConfig): Promise<StagingSmoke
         sawDebugUi,
         replayDedupeOk,
         persistedDedupeOk,
+        selfHostedRunnerOk,
       }
     } catch (error) {
       primaryError = error
@@ -312,12 +340,141 @@ async function runStagingSmoke(config: StagingSmokeConfig): Promise<StagingSmoke
   }
 }
 
+async function exerciseSelfHostedRunnerMode(request: APIRequestContext, config: StagingSmokeConfig) {
+  const created: { sessionId?: string; agentId?: string; environmentId?: string; runnerId?: string } = {}
+  let primaryError: unknown
+  try {
+    const environment = await apiJson<Environment>(request, '/api/environments', {
+      method: 'POST',
+      data: {
+        name: `${config.runId} self-hosted environment`,
+        description: 'Staging smoke self-hosted environment created through public AMA APIs.',
+        runtimeType: 'self-hosted',
+        networkPolicy: { mode: 'unrestricted' },
+        packages: [],
+        metadata: { runId: config.runId, smokeMode: 'self-hosted-runner' },
+      },
+    })
+    created.environmentId = environment.id
+
+    const agent = await apiJson<Agent>(request, '/api/agents', {
+      method: 'POST',
+      data: {
+        name: `${config.runId} self-hosted agent`,
+        description: 'Staging smoke self-hosted agent created through public AMA APIs.',
+        instructions: 'Execute queued self-hosted runner work.',
+        systemPrompt: 'Execute queued self-hosted runner work.',
+        provider: process.env.AMA_E2E_PROVIDER ?? 'workers-ai',
+        model: process.env.AMA_E2E_MODEL ?? '@cf/moonshotai/kimi-k2.6',
+        skills: ['ama@staging-smoke', 'ama@self-hosted-runner'],
+        allowedTools: ['sandbox.exec'],
+        metadata: { runId: config.runId, smokeMode: 'self-hosted-runner' },
+      },
+    })
+    created.agentId = agent.id
+
+    const capabilities = ['node', 'git', 'sandbox.exec']
+    const runner = await apiJson<Runner>(request, '/api/runners', {
+      method: 'POST',
+      data: {
+        name: `${config.runId} self-hosted runner`,
+        environmentId: environment.id,
+        capabilities,
+        credentialSecretRef: `cloudflare-secret:${config.runId}-runner-token`,
+        metadata: { runId: config.runId, smokeMode: 'self-hosted-runner' },
+      },
+    })
+    created.runnerId = runner.id
+
+    const activeRunner = await apiJson<Runner>(request, `/api/runners/${runner.id}/heartbeats`, {
+      method: 'POST',
+      data: {
+        status: 'active',
+        currentLoad: 0,
+        capabilities,
+        metadata: { runId: config.runId, smokeMode: 'self-hosted-runner' },
+      },
+    })
+    assert.equal(activeRunner.status, 'active')
+
+    const session = await apiJson<Session>(request, '/api/sessions', {
+      method: 'POST',
+      data: {
+        agentId: agent.id,
+        environmentId: environment.id,
+        title: `${config.runId} self-hosted session`,
+        initialPrompt: 'Execute this self-hosted runner smoke task.',
+        metadata: { runId: config.runId, smokeMode: 'self-hosted-runner' },
+      },
+    })
+    created.sessionId = session.id
+    assert.equal(session.status, 'pending')
+    assert.equal(session.statusReason, 'waiting-for-runner')
+    assert.equal(session.sandboxId, null)
+    assert.equal(session.runtimeEndpointPath, null)
+
+    const workItems = await apiJson<ListResponse<RunnerWorkItem>>(
+      request,
+      `/api/runners/work-items?sessionId=${session.id}`,
+    )
+    assert.equal(workItems.data.length, 1)
+    assert.equal(workItems.data[0]?.status, 'available')
+    assert.equal(objectValue(workItems.data[0]?.payload).runtimeOwner, 'ama-cloud')
+
+    const lease = await apiJson<RunnerWorkLease>(request, `/api/runners/${runner.id}/leases`, {
+      method: 'POST',
+      data: { leaseDurationSeconds: 90 },
+    })
+    assert.equal(lease.status, 'active')
+    assert.equal(lease.workItem.status, 'leased')
+
+    const running = await apiJson<Session>(request, `/api/sessions/${session.id}`)
+    assert.equal(running.status, 'running')
+
+    const events = await apiJson<{ accepted: number }>(request, `/api/runners/${runner.id}/leases/${lease.id}/events`, {
+      method: 'POST',
+      data: {
+        events: [
+          {
+            type: 'tool_execution_start',
+            payload: {
+              type: 'tool_execution_start',
+              toolName: 'sandbox.exec',
+              input: { command: 'printf self-hosted-runner-smoke' },
+            },
+            metadata: { runnerId: runner.id, runId: config.runId },
+          },
+        ],
+      },
+    })
+    assert.equal(events.accepted, 1)
+
+    const completed = await apiJson<RunnerWorkLease>(request, `/api/runners/${runner.id}/leases/${lease.id}`, {
+      method: 'PATCH',
+      data: { status: 'completed', result: { ok: true, smokeMode: 'self-hosted-runner' } },
+    })
+    assert.equal(completed.status, 'completed')
+    assert.equal(completed.workItem.status, 'succeeded')
+
+    const idle = await apiJson<Session>(request, `/api/sessions/${session.id}`)
+    assert.equal(idle.status, 'idle')
+    return true
+  } catch (error) {
+    primaryError = error
+    throw error
+  } finally {
+    await cleanupSelfHostedRunnerMode(request, created, primaryError)
+  }
+}
+
 async function authenticate(page: Page, config: StagingSmokeConfig) {
   if (config.accessToken) {
     await page.goto('/quickstart')
     return
   }
   if (config.effectiveStorageState) {
+    await page.goto('/quickstart')
+    await installBearerFromBrowserStorage(page)
     return
   }
 
@@ -327,11 +484,15 @@ async function authenticate(page: Page, config: StagingSmokeConfig) {
   await fillLoginField(page, /password/i, config.loginPassword, 'password')
   await clickLoginSubmit(page)
   await page.waitForURL(
-    (url) => url.origin === new URL(config.origin).origin && !url.pathname.startsWith('/api/auth'),
+    (url) =>
+      url.origin === new URL(config.origin).origin &&
+      !url.pathname.startsWith('/api/auth') &&
+      !url.pathname.startsWith('/auth/callback'),
     {
       timeout: 60_000,
     },
   )
+  await installBearerFromBrowserStorage(page)
 }
 
 async function expectAuthenticated(page: Page) {
@@ -341,6 +502,54 @@ async function expectAuthenticated(page: Page) {
   }
   await page.goto('/quickstart')
   await expect(page.getByText('Any Managed Agents').first()).toBeVisible()
+}
+
+async function installBearerFromBrowserStorage(page: Page) {
+  await page.waitForFunction(
+    () => {
+      if (window.localStorage.getItem('ama:e2e-access-token')) {
+        return true
+      }
+      for (let index = 0; index < window.localStorage.length; index += 1) {
+        const key = window.localStorage.key(index)
+        if (!key?.startsWith('oidc.user:')) continue
+        const raw = window.localStorage.getItem(key)
+        if (!raw) continue
+        try {
+          const user = JSON.parse(raw) as { access_token?: string; expires_at?: number }
+          if (user.access_token && (!user.expires_at || user.expires_at * 1000 > Date.now())) {
+            return true
+          }
+        } catch {}
+      }
+      return false
+    },
+    undefined,
+    { timeout: 30_000 },
+  )
+  const accessToken = await page.evaluate(() => {
+    const e2eToken = window.localStorage.getItem('ama:e2e-access-token')
+    if (e2eToken) {
+      return e2eToken
+    }
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index)
+      if (!key?.startsWith('oidc.user:')) continue
+      const raw = window.localStorage.getItem(key)
+      if (!raw) continue
+      try {
+        const user = JSON.parse(raw) as { access_token?: string; expires_at?: number }
+        if (user.access_token && (!user.expires_at || user.expires_at * 1000 > Date.now())) {
+          return user.access_token
+        }
+      } catch {}
+    }
+    return null
+  })
+  if (!accessToken) {
+    throw new Error('OIDC sign-in completed without a usable access token in browser storage')
+  }
+  await page.context().setExtraHTTPHeaders({ authorization: `Bearer ${accessToken}` })
 }
 
 async function apiJson<T>(
@@ -543,6 +752,44 @@ async function cleanup(
     const cleanupError = new Error(`Staging smoke cleanup failed:\n${errors.join('\n')}`)
     if (primaryError) {
       throw new AggregateError([primaryError, cleanupError], 'Staging smoke failed and cleanup also failed')
+    }
+    throw cleanupError
+  }
+}
+
+async function cleanupSelfHostedRunnerMode(
+  request: APIRequestContext,
+  created: { sessionId?: string; agentId?: string; environmentId?: string; runnerId?: string },
+  primaryError?: unknown,
+) {
+  const errors: string[] = []
+  if (created.runnerId) {
+    try {
+      const response = await request.patch(`/api/runners/${created.runnerId}`, {
+        data: { status: 'disabled', metadata: { archivedBy: 'staging-smoke' } },
+      })
+      if (!response.ok()) {
+        errors.push(`PATCH /api/runners/${created.runnerId} returned ${response.status()}: ${await response.text()}`)
+      }
+    } catch (error) {
+      errors.push(
+        `PATCH /api/runners/${created.runnerId} failed: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
+  }
+  if (created.sessionId) {
+    await archiveCreatedResource(request, `/api/sessions/${created.sessionId}`, errors)
+  }
+  if (created.agentId) {
+    await archiveCreatedResource(request, `/api/agents/${created.agentId}`, errors)
+  }
+  if (created.environmentId) {
+    await archiveCreatedResource(request, `/api/environments/${created.environmentId}`, errors)
+  }
+  if (errors.length > 0) {
+    const cleanupError = new Error(`Self-hosted staging smoke cleanup failed:\n${errors.join('\n')}`)
+    if (primaryError) {
+      throw new AggregateError([primaryError, cleanupError], 'Self-hosted staging smoke failed and cleanup also failed')
     }
     throw cleanupError
   }
