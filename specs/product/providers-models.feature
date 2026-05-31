@@ -48,10 +48,11 @@ Feature: Model providers
     Then provider-specific calls happen behind the selected environment runtime adapter boundary
     And clients continue to interact through the AMA session endpoint and canonical event protocol
 
-  @planned
+  @implemented
   Scenario: Reject runtime unsupported provider models
     Given an agent selects a provider and model
     And an environment selects a runtime
     When that runtime does not support the exact provider and model
     Then session creation fails before any provider call is started
     And the error envelope identifies the unsupported runtime, provider, and model
+    And no runtime fallback or model substitution occurs

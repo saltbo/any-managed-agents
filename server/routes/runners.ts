@@ -299,6 +299,15 @@ function serializeWorkItem(row: WorkItemRow) {
   }
 }
 
+function runnerCapabilityEligibility(capabilities: string[]) {
+  return or(
+    sql`json_extract(${runnerWorkItems.payload}, '$.requiredRunnerCapability') IS NULL`,
+    ...capabilities.map(
+      (capability) => sql`json_extract(${runnerWorkItems.payload}, '$.requiredRunnerCapability') = ${capability}`,
+    ),
+  )
+}
+
 function serializeLease(lease: LeaseRow, workItem: WorkItemRow) {
   return {
     id: lease.id,
@@ -939,6 +948,7 @@ const routes = app
     if (!reserved) {
       return c.body(null, 204)
     }
+    const runnerCapabilities = parseJson<string[]>(runner.capabilities) ?? []
     const workItem = await db
       .select()
       .from(runnerWorkItems)
@@ -950,6 +960,7 @@ const routes = app
           runner.environmentId
             ? or(eq(runnerWorkItems.environmentId, runner.environmentId), isNull(runnerWorkItems.environmentId))
             : undefined,
+          runnerCapabilityEligibility(runnerCapabilities),
         ),
       )
       .orderBy(desc(runnerWorkItems.priority), asc(runnerWorkItems.createdAt), asc(runnerWorkItems.id))

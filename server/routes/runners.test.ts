@@ -1,7 +1,10 @@
 import { SELF } from 'cloudflare:test'
 import { env } from 'cloudflare:workers'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { setupOidcProvider, signIn } from '../test/auth'
+import { runtimeProviderModelCapability } from '../runtime/catalog'
+import { defaultClaims, setupOidcProvider, signIn } from '../test/auth'
+
+const DEFAULT_AMA_RUNNER_CAPABILITY = runtimeProviderModelCapability('ama', 'workers-ai', '@cf/moonshotai/kimi-k2.6')
 
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
@@ -69,7 +72,7 @@ describe('[CF] /api/runners', () => {
       body: JSON.stringify({
         name: 'Local runner',
         environmentId: environment.id,
-        capabilities: ['node', 'git', 'sandbox.exec'],
+        capabilities: ['node', 'git', 'sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
         credentialSecretRef: 'cloudflare-secret:self-hosted-runner-token',
         maxConcurrent: 2,
         metadata: { pool: 'default' },
@@ -86,7 +89,7 @@ describe('[CF] /api/runners', () => {
     expect(runner).toMatchObject({
       status: 'offline',
       environmentId: environment.id,
-      capabilities: ['node', 'git', 'sandbox.exec'],
+      capabilities: ['node', 'git', 'sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
     })
     expect(runner.credentialSecretRef).toBeUndefined()
     expect(JSON.stringify(runner)).not.toContain('self-hosted-runner-token')
@@ -96,7 +99,7 @@ describe('[CF] /api/runners', () => {
       body: JSON.stringify({
         status: 'active',
         currentLoad: 0,
-        capabilities: ['node', 'git', 'sandbox.exec', 'workspace'],
+        capabilities: ['node', 'git', 'sandbox.exec', 'workspace', DEFAULT_AMA_RUNNER_CAPABILITY],
       }),
     })
     expect(heartbeatRes.status).toBe(200)
@@ -268,13 +271,103 @@ describe('[CF] /api/runners', () => {
     expect(persisted?.credentialSecretRef).toBe('cloudflare-secret:runner-token')
   })
 
+  it('skips queued work when runner capabilities do not exactly match the required runtime provider model', async () => {
+    const authorization = await signIn()
+    const environment = await createSelfHostedEnvironment(authorization)
+    const exactCapability = runtimeProviderModelCapability('codex', 'provider_codex', 'gpt-5.3-codex')
+    const nearCapability = runtimeProviderModelCapability('codex', 'provider_codex', 'gpt-5.3-codex-mini')
+
+    const wrongRunnerRes = await jsonFetch('/api/runners', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Near-match runner',
+        environmentId: environment.id,
+        capabilities: [nearCapability],
+      }),
+    })
+    expect(wrongRunnerRes.status).toBe(201)
+    const wrongRunner = (await wrongRunnerRes.json()) as { id: string }
+    await jsonFetch(`/api/runners/${wrongRunner.id}/heartbeats`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ status: 'active', capabilities: [nearCapability] }),
+    })
+
+    const exactRunnerRes = await jsonFetch('/api/runners', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Exact-match runner',
+        environmentId: environment.id,
+        capabilities: [exactCapability],
+      }),
+    })
+    expect(exactRunnerRes.status).toBe(201)
+    const exactRunner = (await exactRunnerRes.json()) as { id: string }
+    await jsonFetch(`/api/runners/${exactRunner.id}/heartbeats`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ status: 'active', capabilities: [exactCapability] }),
+    })
+
+    const environmentRow = await env.DB.prepare('SELECT project_id AS projectId FROM environments WHERE id = ?')
+      .bind(environment.id)
+      .first<{ projectId: string }>()
+    expect(environmentRow?.projectId).toEqual(expect.any(String))
+
+    const timestamp = new Date().toISOString()
+    const workId = `work_${crypto.randomUUID().replaceAll('-', '')}`
+    await env.DB.prepare(
+      `INSERT INTO runner_work_items (
+        id, organization_id, project_id, session_id, environment_id, runner_id, lease_id,
+        type, status, priority, attempts, max_attempts, payload, result, error,
+        available_at, lease_expires_at, created_at, updated_at
+      ) VALUES (?, ?, ?, NULL, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, NULL, ?, ?)`,
+    )
+      .bind(
+        workId,
+        defaultClaims().org_id,
+        environmentRow?.projectId,
+        environment.id,
+        'session.start',
+        'available',
+        0,
+        0,
+        3,
+        JSON.stringify({ requiredRunnerCapability: exactCapability }),
+        timestamp,
+        timestamp,
+        timestamp,
+      )
+      .run()
+
+    const wrongLeaseRes = await jsonFetch(`/api/runners/${wrongRunner.id}/leases`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+    expect(wrongLeaseRes.status).toBe(204)
+
+    const exactLeaseRes = await jsonFetch(`/api/runners/${exactRunner.id}/leases`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+    expect(exactLeaseRes.status).toBe(201)
+    await expect(exactLeaseRes.json()).resolves.toMatchObject({
+      workItem: {
+        id: workId,
+        status: 'leased',
+      },
+    })
+  })
+
   it('returns expired runner leases to available work predictably', async () => {
     const authorization = await signIn()
     const environment = await createSelfHostedEnvironment(authorization)
     const agent = await createAgent(authorization)
     const runnerRes = await jsonFetch('/api/runners', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Expiry runner', environmentId: environment.id }),
+      body: JSON.stringify({
+        name: 'Expiry runner',
+        environmentId: environment.id,
+        capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY],
+      }),
     })
     const runner = (await runnerRes.json()) as { id: string }
     await jsonFetch(`/api/runners/${runner.id}/heartbeats`, authorization, {
@@ -325,15 +418,20 @@ describe('[CF] /api/runners', () => {
     const agent = await createAgent(authorization)
     const runnerRes = await jsonFetch('/api/runners', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Disabled runner', environmentId: environment.id }),
+      body: JSON.stringify({
+        name: 'Disabled runner',
+        environmentId: environment.id,
+        capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY],
+      }),
     })
     const runner = (await runnerRes.json()) as { id: string }
+    await createSelfHostedSession(authorization, agent.id, environment.id)
+
     const disableRes = await jsonFetch(`/api/runners/${runner.id}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ status: 'disabled' }),
     })
     expect(disableRes.status).toBe(200)
-    await createSelfHostedSession(authorization, agent.id, environment.id)
 
     const heartbeatRes = await jsonFetch(`/api/runners/${runner.id}/heartbeats`, authorization, {
       method: 'POST',
@@ -360,7 +458,11 @@ describe('[CF] /api/runners', () => {
     const agent = await createAgent(authorization)
     const runnerRes = await jsonFetch('/api/runners', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Ownership runner', environmentId: environment.id }),
+      body: JSON.stringify({
+        name: 'Ownership runner',
+        environmentId: environment.id,
+        capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY],
+      }),
     })
     const runner = (await runnerRes.json()) as { id: string }
     await jsonFetch(`/api/runners/${runner.id}/heartbeats`, authorization, {
@@ -408,7 +510,12 @@ describe('[CF] /api/runners', () => {
     const agent = await createAgent(authorization)
     const runnerRes = await jsonFetch('/api/runners', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Capacity runner', environmentId: environment.id, maxConcurrent: 1 }),
+      body: JSON.stringify({
+        name: 'Capacity runner',
+        environmentId: environment.id,
+        capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY],
+        maxConcurrent: 1,
+      }),
     })
     const runner = (await runnerRes.json()) as { id: string }
     await jsonFetch(`/api/runners/${runner.id}/heartbeats`, authorization, {
@@ -445,7 +552,12 @@ describe('[CF] /api/runners', () => {
     const agent = await createAgent(authorization)
     const runnerRes = await jsonFetch('/api/runners', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Two slot capacity runner', environmentId: environment.id, maxConcurrent: 2 }),
+      body: JSON.stringify({
+        name: 'Two slot capacity runner',
+        environmentId: environment.id,
+        capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY],
+        maxConcurrent: 2,
+      }),
     })
     const runner = (await runnerRes.json()) as { id: string }
     await jsonFetch(`/api/runners/${runner.id}/heartbeats`, authorization, {

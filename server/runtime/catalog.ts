@@ -1,0 +1,63 @@
+export const RUNTIME_PROVIDER_MODEL_CAPABILITY_PREFIX = 'runtime-provider-model'
+
+export type RuntimeHostingMode = 'cloud' | 'self_hosted'
+export type RuntimeName = 'ama' | 'claude-code' | 'codex' | 'copilot'
+
+type RuntimeCatalogEntry = {
+  runtime: RuntimeName
+  hostingModes: RuntimeHostingMode[]
+  providerModels: Array<{ provider: string; model: string }>
+}
+
+export const RUNTIME_CATALOG: readonly RuntimeCatalogEntry[] = [
+  {
+    runtime: 'ama',
+    hostingModes: ['cloud', 'self_hosted'],
+    providerModels: [{ provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6' }],
+  },
+  {
+    runtime: 'claude-code',
+    hostingModes: ['self_hosted'],
+    providerModels: [],
+  },
+  {
+    runtime: 'codex',
+    hostingModes: ['self_hosted'],
+    providerModels: [],
+  },
+  {
+    runtime: 'copilot',
+    hostingModes: ['self_hosted'],
+    providerModels: [],
+  },
+]
+
+export function runtimeProviderModelCapability(runtime: RuntimeName, provider: string, model: string) {
+  return `${RUNTIME_PROVIDER_MODEL_CAPABILITY_PREFIX}:${runtime}:${provider}:${model}`
+}
+
+export function runnerSupportsRuntimeProviderModel(
+  capabilities: string[],
+  runtime: RuntimeName,
+  provider: string,
+  model: string,
+) {
+  return capabilities.includes(runtimeProviderModelCapability(runtime, provider, model))
+}
+
+export function runtimeCatalogSupportsProviderModel(
+  hostingMode: RuntimeHostingMode,
+  runtime: RuntimeName,
+  provider: string,
+  model: string,
+) {
+  const entry = RUNTIME_CATALOG.find((item) => item.runtime === runtime)
+  return Boolean(
+    entry?.hostingModes.includes(hostingMode) &&
+      entry.providerModels.some((capability) => capability.provider === provider && capability.model === model),
+  )
+}
+
+export function runtimeSupportsHostingMode(hostingMode: RuntimeHostingMode, runtime: RuntimeName) {
+  return RUNTIME_CATALOG.some((entry) => entry.runtime === runtime && entry.hostingModes.includes(hostingMode))
+}
