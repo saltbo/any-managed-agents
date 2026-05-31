@@ -21,12 +21,12 @@ curl -fsS "$AMA_ORIGIN/api/health"
 curl -fsS "$AMA_ORIGIN/api/environments" \
   -H "content-type: application/json" \
   -H "authorization: Bearer $OIDC_ACCESS_TOKEN" \
-  -d '{"name":"Node workspace","packages":[{"name":"tsx","version":"latest"}]}'
+  -d '{"name":"Node workspace","hostingMode":"cloud","runtime":"ama","runtimeConfig":{"image":"node:24"},"packages":[{"name":"tsx","version":"latest"}]}'
 
 curl -fsS "$AMA_ORIGIN/api/agents" \
   -H "content-type: application/json" \
   -H "authorization: Bearer $OIDC_ACCESS_TOKEN" \
-  -d '{"name":"Research assistant","instructions":"Answer with citations."}'
+  -d '{"name":"Research assistant","instructions":"Answer with citations.","provider":"workers-ai","model":"@cf/moonshotai/kimi-k2.6"}'
 
 curl -fsS "$AMA_ORIGIN/api/sessions" \
   -H "content-type: application/json" \
@@ -42,9 +42,9 @@ Configure restish from the deployment OpenAPI document and keep JSON output enab
 restish api configure ama "$AMA_ORIGIN/api/openapi.json"
 restish ama get-health
 restish ama list-agents --rsh-output-format json
-printf '%s\n' '{"name":"Node workspace","packages":[{"name":"tsx","version":"latest"}]}' \
+printf '%s\n' '{"name":"Node workspace","hostingMode":"cloud","runtime":"ama","runtimeConfig":{"image":"node:24"},"packages":[{"name":"tsx","version":"latest"}]}' \
   | restish ama create-environment --rsh-output-format json
-printf '%s\n' '{"name":"Research assistant","instructions":"Answer with citations."}' \
+printf '%s\n' '{"name":"Research assistant","instructions":"Answer with citations.","provider":"workers-ai","model":"@cf/moonshotai/kimi-k2.6"}' \
   | restish ama create-agent --rsh-output-format json
 printf '%s\n' '{"agentId":"agent_abc123","environmentId":"env_abc123"}' \
   | restish ama create-session --rsh-output-format json
@@ -84,12 +84,17 @@ const client = createAmaClient({
 
 const environment = await client.environments.create({
   name: 'Node workspace',
+  hostingMode: 'cloud',
+  runtime: 'ama',
+  runtimeConfig: { image: 'node:24' },
   packages: [{ name: 'tsx', version: 'latest' }],
 })
 
 const agent = await client.agents.create({
   name: 'Research assistant',
   instructions: 'Answer with citations.',
+  provider: 'workers-ai',
+  model: '@cf/moonshotai/kimi-k2.6',
 })
 
 const session = await client.sessions.create({

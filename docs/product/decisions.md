@@ -8,7 +8,7 @@ These decisions define the intended end state for Any Managed Agents.
 - `Environment.hostingMode` is exactly `cloud` or `self_hosted`.
 - `Environment.runtime` is exactly `ama`, `claude-code`, `codex`, or `copilot`.
 - Environments own hosting mode, runtime, workspace setup, safe secret references, network policy, resource limits, and runtime configuration.
-- The target Environment API surface is `hostingMode`, `runtime`, and runtime configuration; implementation work removes the old `runtimeType` surface instead of preserving it as a compatibility contract.
+- The Environment API surface is `hostingMode`, `runtime`, and `runtimeConfig`; compatibility aliases for hosting or runtime image fields are not part of the public contract.
 - `Sandbox` is an ephemeral workspace/runtime instance created from an environment snapshot when the selected hosting mode and runtime require Cloudflare Sandbox.
 - Each running `cloud` `Session` that requires Cloudflare Sandbox owns exactly one sandbox.
 - Sandbox instances follow the session lifecycle and are not reused across sessions.

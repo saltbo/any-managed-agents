@@ -17,10 +17,10 @@ Feature: Agent sessions
   Scenario: Validate runtime provider and model support
     Given an agent selects a provider and model
     And an environment selects a hostingMode and runtime
-    When the user creates a session with the agent and environment
-    Then the platform validates the exact runtime, provider, and model combination
-    And unsupported combinations fail before workspace allocation, sandbox creation, or self-hosted lease creation
+    When the selected environment runtime does not support the selected agent provider and model
+    Then the request fails before workspace allocation, sandbox creation, or self-hosted lease creation
     And the error envelope identifies the unsupported runtime, provider, and model
+    And no runtime fallback or model substitution occurs
 
   @planned
   Scenario: Connect to a session through AMA runtime endpoints

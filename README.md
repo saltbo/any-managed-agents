@@ -21,13 +21,13 @@ Claude Managed Agents is purpose-built for Claude. Any Managed Agents is built f
 - **Any model provider**: use Workers AI first, then plug in OpenAI-compatible, Anthropic, local, or custom provider adapters.
 - **Self-hosted control**: deploy the control plane on your own Cloudflare account instead of depending on a single vendor-hosted agent service.
 - **Open API surface**: manage agents, environments, sessions, events, providers, usage, and audit data through an OpenAPI-backed control plane.
-- **Runtime flexibility**: run agent sessions inside Cloudflare Sandbox while keeping the execution layer replaceable.
+- **Runtime flexibility**: run cloud sessions on Cloudflare Sandbox and self-hosted sessions through registered runtime runners.
 - **Product ownership**: integrate managed agents into your own product without inheriting another vendor's console, data plane, or roadmap constraints.
 
 ## What It Does
 
 - Manages agents, environments, sessions, providers, usage records, audit records, and governance metadata.
-- Creates one isolated Cloudflare Sandbox execution environment per running session.
+- Creates one isolated Cloudflare Sandbox execution environment per running cloud session.
 - Publishes a Hono/OpenAPI control-plane API for direct HTTP clients, restish workflows, and generated SDKs.
 - Uses an OIDC provider for authentication and tenancy instead of maintaining local user tables.
 - Stores platform metadata in D1 and secret references in Cloudflare-managed secret storage.
@@ -42,7 +42,7 @@ Claude Managed Agents is purpose-built for Claude. Any Managed Agents is built f
 | Hosting model | Anthropic-hosted managed infrastructure | Self-hosted Cloudflare control plane |
 | Core objects | Agents, environments, sessions, events | Agents, environments, sessions, events, plus provider governance and audit metadata |
 | API surface | Claude Platform API | OpenAPI-backed control-plane API |
-| Runtime ownership | Anthropic-managed runtime | Project-owned execution plane on Cloudflare Sandbox |
+| Runtime ownership | Anthropic-managed runtime | Project-owned execution plane on Cloudflare Sandbox or self-hosted runners |
 | Product fit | Best when you want Claude-hosted agent infrastructure | Best when you want a CMA alternative you can own, extend, and embed |
 
 ## Architecture
@@ -61,7 +61,7 @@ Claude Managed Agents is purpose-built for Claude. Any Managed Agents is built f
                               |
 +-----------------------------v-------------------------------+
 | Execution Plane                                             |
-| One isolated Cloudflare Sandbox per running session,        |
+| Cloudflare Sandbox for cloud sessions, self-hosted runners, |
 | workspace state, tool execution, event streaming, history   |
 +-----------------------------+-------------------------------+
                               |

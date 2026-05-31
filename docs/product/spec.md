@@ -82,7 +82,7 @@ Runtime hosting:
 
 Environment `hostingMode` is exactly `cloud` or `self_hosted`. Environment `runtime` is exactly `ama`, `claude-code`, `codex`, or `copilot`.
 
-Existing `runtimeType` API fields describe the current pre-migration implementation only. New runtime model implementation must replace that surface with `hostingMode`, `runtime`, and runtime configuration: `cloud-hosted` becomes `hostingMode: "cloud"`, `self-hosted` becomes `hostingMode: "self_hosted"`, and selected runtime is stored separately.
+The Environment API surface is `hostingMode`, `runtime`, and `runtimeConfig`. Hosting mode chooses AMA-managed cloud infrastructure or registered self-hosted runners, while `runtime` selects the adapter family and `runtimeConfig` stores runtime-owned configuration such as image, command, or adapter settings.
 
 Session creation validates the selected Agent provider/model against the selected Environment runtime and hosting mode. If the exact runtime/provider/model combination is unsupported, session creation fails before workspace allocation, sandbox creation, or self-hosted lease creation.
 

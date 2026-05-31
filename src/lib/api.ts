@@ -114,6 +114,17 @@ export interface EnvironmentVersion
 
 export type SessionStatus = 'pending' | 'running' | 'idle' | 'stopped' | 'error' | 'archived' | 'requires-action'
 
+export interface SessionRuntimeMetadata {
+  hostingMode: EnvironmentHostingMode
+  runtime: EnvironmentRuntime
+  runtimeConfig: Record<string, unknown>
+  provider: string
+  model: string
+  driver: string | null
+  backend: string | null
+  protocol: string | null
+}
+
 export interface Session {
   id: string
   organizationId: string
@@ -129,11 +140,8 @@ export interface Session {
   vaultRefs: Record<string, unknown>[]
   durableObjectName: string
   sandboxId: string | null
-  piRuntimeId: string | null
-  piProcessId: string | null
   runtimeEndpointPath: string | null
-  modelProvider: string
-  modelConfig: Record<string, unknown>
+  runtimeMetadata: SessionRuntimeMetadata
   status: SessionStatus
   statusReason: string | null
   metadata: Record<string, unknown>

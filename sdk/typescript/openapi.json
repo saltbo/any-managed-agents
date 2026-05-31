@@ -4450,16 +4450,6 @@
             "nullable": true,
             "example": "session_abc123"
           },
-          "piRuntimeId": {
-            "type": "string",
-            "nullable": true,
-            "example": "pi_session_abc123"
-          },
-          "piProcessId": {
-            "type": "string",
-            "nullable": true,
-            "example": "1234"
-          },
           "runtimeEndpointPath": {
             "type": "string",
             "nullable": true,
@@ -4467,16 +4457,6 @@
           },
           "runtimeMetadata": {
             "$ref": "#/components/schemas/SessionRuntimeMetadata"
-          },
-          "modelProvider": {
-            "type": "string",
-            "example": "workers-ai"
-          },
-          "modelConfig": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
           },
           "status": {
             "type": "string",
@@ -4540,12 +4520,8 @@
           "vaultRefs",
           "durableObjectName",
           "sandboxId",
-          "piRuntimeId",
-          "piProcessId",
           "runtimeEndpointPath",
           "runtimeMetadata",
-          "modelProvider",
-          "modelConfig",
           "status",
           "statusReason",
           "metadata",

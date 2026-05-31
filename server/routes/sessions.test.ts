@@ -171,8 +171,6 @@ describe('[CF] /api/sessions', () => {
         packageManagerPolicy: Record<string, unknown>
       }
       sandboxId: string
-      piRuntimeId: string | null
-      piProcessId: string | null
       runtimeEndpointPath: string
       startedAt: string
       title: string
@@ -180,7 +178,6 @@ describe('[CF] /api/sessions', () => {
       vaultRefs: Array<Record<string, unknown>>
       metadata: Record<string, unknown>
       runtimeMetadata: Record<string, unknown>
-      modelConfig: Record<string, unknown>
     }
     expect(created).toMatchObject({
       title: 'Ship the first task',
@@ -196,8 +193,6 @@ describe('[CF] /api/sessions', () => {
         packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
       },
       sandboxId: created.id.toLowerCase(),
-      piRuntimeId: null,
-      piProcessId: null,
       runtimeEndpointPath: `/runtime/sessions/${created.id}/rpc`,
       resourceRefs: [{ type: 'repository', id: 'repo_1' }],
       vaultRefs: [{ type: 'credential', id: 'cred_1' }],
@@ -225,9 +220,12 @@ describe('[CF] /api/sessions', () => {
         backend: 'ama-cloud',
         protocol: 'ama-runtime-rpc',
       },
-      modelConfig: { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6' },
     })
     expect(JSON.stringify(created)).not.toContain('runtimeOwner')
+    expect(JSON.stringify(created)).not.toContain('piRuntimeId')
+    expect(JSON.stringify(created)).not.toContain('piProcessId')
+    expect(JSON.stringify(created)).not.toContain('modelProvider')
+    expect(JSON.stringify(created)).not.toContain('modelConfig')
     expect(created.agentSnapshot.sandboxPolicy).toBeUndefined()
     expect(created.environmentVersionId).toMatch(/^envver_/)
     expect(created.startedAt).toEqual(expect.any(String))

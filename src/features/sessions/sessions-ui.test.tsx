@@ -64,11 +64,17 @@ function buildSession(overrides: Partial<Session> = {}): Session {
     vaultRefs: [],
     durableObjectName: 'session_1',
     sandboxId: 'sandbox_1',
-    piRuntimeId: 'pi_1',
-    piProcessId: 'process_1',
     runtimeEndpointPath: '/runtime/sessions/session_1/rpc',
-    modelProvider: 'workers-ai',
-    modelConfig: { model: '@cf/moonshotai/kimi-k2.6' },
+    runtimeMetadata: {
+      hostingMode: 'cloud',
+      runtime: 'ama',
+      runtimeConfig: { image: 'node:24' },
+      provider: 'workers-ai',
+      model: '@cf/moonshotai/kimi-k2.6',
+      driver: 'ama-cloud',
+      backend: 'ama-cloud',
+      protocol: 'ama-runtime-rpc',
+    },
     status: 'idle',
     statusReason: null,
     metadata: {},
@@ -311,8 +317,6 @@ describe('sessions UI contracts', () => {
 
   it('renders session rows from Agent provider/model and Environment runtime snapshots', () => {
     const session = buildSession({
-      modelProvider: 'legacy-provider',
-      modelConfig: { model: 'legacy-model' },
       environmentSnapshot: {
         ...buildSession().environmentSnapshot!,
         hostingMode: 'self_hosted',
@@ -355,8 +359,6 @@ describe('sessions UI contracts', () => {
     const session = buildSession({
       status: 'pending',
       statusReason: 'waiting-for-runner',
-      modelProvider: 'legacy-provider',
-      modelConfig: { model: 'legacy-model' },
       environmentSnapshot: {
         ...buildSession().environmentSnapshot!,
         hostingMode: 'self_hosted',
