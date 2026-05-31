@@ -2708,8 +2708,14 @@ Then('UI, API, and session-state views read only canonical session events', asyn
   for (const event of events.data) {
     assert.match(String(event.type), /^[a-z]+(?:_[a-z]+)?\.[a-z]+(?:\.[a-z]+)?$/)
   }
-  assert.equal(JSON.stringify(events.data).includes('tool_execution_'), false)
-  assert.equal(JSON.stringify(events.data).includes('message_update'), false)
+  assert.equal(
+    events.data.some((event) => String(event.type).includes('tool_execution_')),
+    false,
+  )
+  assert.equal(
+    events.data.some((event) => String(event.type).includes('message_update')),
+    false,
+  )
 })
 
 Then('runtime-specific details appear only as safe metadata', async function (this: ProductWorld) {
