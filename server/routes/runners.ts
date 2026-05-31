@@ -2,6 +2,7 @@ import { createRoute, z } from '@hono/zod-openapi'
 import { and, asc, desc, eq, gte, inArray, isNull, like, lt, lte, max, or, sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
+import { canonicalAmaSessionEventFromRuntimeEvent } from '../../shared/session-events'
 import { recordAudit, requestId } from '../audit'
 import { type AuthContext, requireAuth } from '../auth/session'
 import {
@@ -444,6 +445,10 @@ async function appendSessionRunnerEvent(
   sessionId: string,
   event: { type: string; payload: Record<string, unknown>; metadata?: Record<string, unknown> },
 ) {
+  const canonicalEvent = canonicalAmaSessionEventFromRuntimeEvent(
+    { type: event.type, ...event.payload },
+    { source: 'self-hosted-runner', ...(event.metadata ?? {}) },
+  )
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const latest = await db
       .select({ sequence: max(sessionEvents.sequence) })
@@ -457,13 +462,13 @@ async function appendSessionRunnerEvent(
         projectId: auth.project.id,
         sessionId,
         sequence: (latest?.sequence ?? 0) + 1,
-        type: event.type,
-        visibility: 'runtime',
-        role: null,
+        type: canonicalEvent.type,
+        visibility: canonicalEvent.visibility,
+        role: canonicalEvent.role,
         parentEventId: null,
         correlationId: null,
-        payload: stringify(event.payload),
-        metadata: stringify({ source: 'self-hosted-runner', ...(event.metadata ?? {}) }),
+        payload: stringify(redactSensitiveValue(canonicalEvent.payload)),
+        metadata: stringify(redactSensitiveValue(canonicalEvent.metadata)),
         createdAt: now(),
       })
       return

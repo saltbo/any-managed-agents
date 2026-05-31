@@ -301,6 +301,25 @@ describe('session-runtime', () => {
     expect(messages[0]).toMatchObject({ role: 'user', content: 'canonical user' })
   })
 
+  it('ignores canonical transcript deltas when rebuilding persisted context', () => {
+    const messages = runtimeMessagesFromEvents([
+      {
+        type: 'transcript.message.delta',
+        payload: {
+          message: { role: 'assistant', content: 'partial assistant text' },
+        },
+      },
+      {
+        type: 'transcript.message',
+        payload: {
+          message: { role: 'assistant', content: 'completed assistant text' },
+        },
+      },
+    ])
+
+    expect(messages).toEqual([{ role: 'assistant', content: 'completed assistant text' }])
+  })
+
   it('stops before model completion events are persisted when the DB cancellation gate trips', async () => {
     const events: Record<string, unknown>[] = []
     let active = true

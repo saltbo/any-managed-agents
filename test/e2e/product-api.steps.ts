@@ -53,6 +53,7 @@ interface E2EState {
   events?: ListResponse<Json>
   eventPages?: Record<string, ListResponse<Json>>
   runtimeMessage?: string
+  observedEventTypes?: string[]
 }
 
 type ProductWorld = AmaWorld & { e2e?: E2EState }
@@ -442,7 +443,7 @@ When('model discovery fails or the provider is unreachable', async function (thi
   const state = await ensureState(this)
   this.e2e.provider = await apiJson<Json>(state.page.request, `/api/providers/${state.provider?.id}`, {
     method: 'PATCH',
-    data: { modelCatalogStatus: 'error', lastError: { type: 'network_error', credential: 'raw-secret-value' } },
+    data: { modelCatalogStatus: 'runtime.error', lastError: { type: 'network_error', credential: 'raw-secret-value' } },
   })
 })
 
@@ -1070,7 +1071,7 @@ When('the client lists events with limit, order, type filter, or cursor', async 
   )
   const typedPage = await apiJson<ListResponse<Json>>(
     state.page.request,
-    `/api/sessions/${state.latestSession?.id}/events?type=message_end&limit=10`,
+    `/api/sessions/${state.latestSession?.id}/events?type=transcript.message&limit=10`,
   )
   state.eventPages = { firstPage, nextPage, descPage, typedPage }
 })
@@ -1304,7 +1305,7 @@ Then('the runtime denies the call and records a policy event', async function (t
     state.page.request,
     `/api/sessions/${state.latestSession?.id}/events`,
   )
-  assert.ok(events.data.some((event) => event.type === 'policy_denied'))
+  assert.ok(events.data.some((event) => event.type === 'policy.decision'))
   const audit = await apiJson<ListResponse<Json>>(state.page.request, '/api/audit-records?action=runtime_mcp_tool.call')
   assert.ok(audit.data.some((record) => record.outcome === 'denied'))
 })
@@ -2234,8 +2235,8 @@ Then('the runner can upload structured events and complete the lease', async fun
     data: {
       events: [
         {
-          type: 'tool_execution_start',
-          payload: { type: 'tool_execution_start', toolName: 'sandbox.exec', input: { command: 'npm test' } },
+          type: 'tool_call.started',
+          payload: { type: 'tool_call.started', toolName: 'sandbox.exec', input: { command: 'npm test' } },
           metadata: { runnerId: runner.id },
         },
       ],
@@ -2505,7 +2506,7 @@ Then(
   async function (this: ProductWorld) {
     const state = await ensureState(this)
     const events = await sessionEvents(state)
-    assert.equal(state.runtimeEventTypes, undefined)
+    assert.equal(state.observedEventTypes, undefined)
     assert.ok(JSON.stringify(events.data).includes(state.runtimeMessage ?? ''))
   },
 )
@@ -2599,7 +2600,7 @@ Then(
       '/api/audit-records?action=session.initial_prompt',
     )
     assert.ok(events.data.length > 0)
-    assert.ok(events.data.some((event) => event.type === 'message_end'))
+    assert.ok(events.data.some((event) => event.type === 'transcript.message'))
     assert.ok(audit.data.some((record) => record.sessionId === state.latestSession?.id && record.outcome === 'success'))
   },
 )
@@ -2637,7 +2638,7 @@ Then(
     const state = await ensureState(this)
     const events = await sessionEvents(state)
     assert.ok(events.data.length > 0)
-    assert.ok((state.runtimeEventTypes ?? []).filter(Boolean).some((type) => String(type).includes('tool')))
+    assert.ok((state.observedEventTypes ?? []).filter(Boolean).some((type) => String(type).includes('tool')))
   },
 )
 
@@ -2670,6 +2671,63 @@ Then('message events preserve user-visible content', async function (this: Produ
   assert.ok(serialized.includes(state.runtimeMessage ?? ''))
 })
 
+Given('a session runs with ama, claude-code, codex, or copilot runtime', async function (this: ProductWorld) {
+  await ensureAgentAndEnvironment(this)
+  this.e2e.latestSession = await createSession(this.e2e)
+})
+
+When('the runtime emits lifecycle, message, tool, and usage activity', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  await sendRuntimeMessage(state, 'inspect canonical event protocol')
+  state.events = await sessionEvents(state)
+})
+
+Then('AMA stores the activity as canonical session events', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const events = state.events ?? (await sessionEvents(state))
+  const types = new Set(events.data.map((event) => String(event.type)))
+  for (const type of [
+    'session.lifecycle',
+    'transcript.message',
+    'tool_call.started',
+    'tool_call.completed',
+    'usage.recorded',
+  ]) {
+    assert.ok(types.has(type), `missing canonical event type ${type}`)
+  }
+})
+
+Then('UI, API, and session-state views read only canonical session events', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const events = state.events ?? (await sessionEvents(state))
+  for (const type of state.observedEventTypes ?? []) {
+    assert.match(String(type), /^[a-z]+(?:_[a-z]+)?\.[a-z]+(?:\.[a-z]+)?$/)
+  }
+  assert.ok((state.observedEventTypes ?? []).includes('transcript.message'))
+  assert.ok((state.observedEventTypes ?? []).includes('tool_call.started'))
+  for (const event of events.data) {
+    assert.match(String(event.type), /^[a-z]+(?:_[a-z]+)?\.[a-z]+(?:\.[a-z]+)?$/)
+  }
+  assert.equal(
+    events.data.some((event) => String(event.type).includes('tool_execution_')),
+    false,
+  )
+  assert.equal(
+    events.data.some((event) => String(event.type).includes('message_update')),
+    false,
+  )
+})
+
+Then('runtime-specific details appear only as safe metadata', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const events = state.events ?? (await sessionEvents(state))
+  assert.ok(events.data.some((event) => objectValue(event.metadata).sourceEventType))
+  for (const event of events.data) {
+    assert.equal(JSON.stringify(event.payload).includes('tool_execution_'), false)
+    assert.equal(JSON.stringify(event.payload).includes('message_update'), false)
+  }
+})
+
 Then(
   'the session returns to idle with a final result or moves to error with a safe failure reason',
   async function (this: ProductWorld) {
@@ -2700,7 +2758,7 @@ Then('event list endpoints support pagination, order, and event type filters', a
   await apiJson<ListResponse<Json>>(state.page.request, `/api/sessions/${state.latestSession?.id}/events?order=desc`)
   await apiJson<ListResponse<Json>>(
     state.page.request,
-    `/api/sessions/${state.latestSession?.id}/events?type=message_end`,
+    `/api/sessions/${state.latestSession?.id}/events?type=transcript.message`,
   )
 })
 
@@ -2709,7 +2767,7 @@ Then('the response returns a deterministic page', function (this: ProductWorld) 
   assert.equal(pages.firstPage.data.length, 1)
   assert.ok(pages.nextPage.data.every((event) => Number(event.sequence) > Number(pages.firstPage.data[0]?.sequence)))
   assert.ok(pages.descPage.data.length > 0)
-  assert.ok(pages.typedPage.data.every((event) => event.type === 'message_end'))
+  assert.ok(pages.typedPage.data.every((event) => event.type === 'transcript.message'))
 })
 
 Then('hasMore, firstId, lastId, and sequence boundaries allow stable pagination', function (this: ProductWorld) {
@@ -3043,7 +3101,7 @@ async function sendRuntimeMessage(state: E2EState, message: string) {
   const runtimePage = await state.page.context().newPage()
   try {
     await runtimePage.goto('/')
-    state.runtimeEventTypes = await runtimePage.evaluate(
+    state.observedEventTypes = await runtimePage.evaluate(
       async ({ sessionId, message }) => {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
         const token = window.localStorage.getItem('ama:e2e-access-token')

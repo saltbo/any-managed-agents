@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import type { Session, SessionEvent } from '@/lib/api'
 import {
-  initialPiRuntimeState,
-  type PiRpcCommand,
-  type PiRpcCommandType,
-  piRuntimeReducer,
+  initialSessionRuntimeState,
+  type RuntimeRpcCommand,
+  type RuntimeRpcCommandType,
   runtimeWebSocketUrl,
-} from './pi-runtime'
+  sessionRuntimeReducer,
+} from './session-runtime'
 
-export function usePiRuntimeSession({
+export function useSessionRuntimeSession({
   session,
   events,
   onEventsChanged,
@@ -17,7 +17,7 @@ export function usePiRuntimeSession({
   events: SessionEvent[]
   onEventsChanged: () => void
 }) {
-  const [state, dispatch] = useReducer(piRuntimeReducer, initialPiRuntimeState)
+  const [state, dispatch] = useReducer(sessionRuntimeReducer, initialSessionRuntimeState)
   const [connectionAttempt, setConnectionAttempt] = useState(0)
   const socketRef = useRef<WebSocket | null>(null)
   const refreshTimerRef = useRef<number | null>(null)
@@ -62,7 +62,11 @@ export function usePiRuntimeSession({
         return
       }
       dispatch({ type: 'event', event: payload, at: new Date().toISOString() })
-      if (payload.type === 'agent_end' || payload.type === 'tool_execution_end' || payload.type === 'bridge_exit') {
+      if (
+        payload.type === 'session.lifecycle' ||
+        payload.type === 'tool_call.completed' ||
+        payload.type === 'runtime.error'
+      ) {
         window.clearTimeout(refreshTimerRef.current ?? undefined)
         refreshTimerRef.current = window.setTimeout(onEventsChanged, 150)
       }
@@ -90,7 +94,7 @@ export function usePiRuntimeSession({
     }
   }, [endpoint, onEventsChanged, connectionAttempt])
 
-  const sendCommand = useCallback((type: PiRpcCommandType, message?: string) => {
+  const sendCommand = useCallback((type: RuntimeRpcCommandType, message?: string) => {
     const socket = socketRef.current
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       dispatch({ type: 'connection', state: 'error', error: 'Runtime WebSocket is not open' })
@@ -112,7 +116,7 @@ export function usePiRuntimeSession({
   }
 }
 
-function command(type: PiRpcCommandType, message?: string): PiRpcCommand {
+function command(type: RuntimeRpcCommandType, message?: string): RuntimeRpcCommand {
   return {
     id: crypto.randomUUID(),
     type,

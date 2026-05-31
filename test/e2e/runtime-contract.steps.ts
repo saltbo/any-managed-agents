@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import { Given, Then } from '@cucumber/cucumber'
-import { PI_EVENT_TYPES } from '../../shared/pi-events'
+import { AMA_SESSION_EVENT_TYPES } from '../../shared/session-events'
 
 Given('a session has events', () => {
-  assert.ok(PI_EVENT_TYPES.length > 0)
+  assert.ok(AMA_SESSION_EVENT_TYPES.length > 0)
 })
 
 Then('browser clients use WebSocket for bidirectional runtime commands and events', () => {
@@ -13,7 +13,7 @@ Then('browser clients use WebSocket for bidirectional runtime commands and event
 })
 
 Then('AMA persists runtime events before exposing them to clients', () => {
-  assert.ok(PI_EVENT_TYPES.includes('message_end'))
+  assert.ok(AMA_SESSION_EVENT_TYPES.includes('transcript.message'))
 })
 
 Then('clients can list or stream persisted session events', () => {

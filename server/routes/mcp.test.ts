@@ -316,16 +316,16 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
     await expect(eventsRes.json()).resolves.toMatchObject({
       data: [
         expect.objectContaining({
-          type: 'policy_denied',
+          type: 'policy.decision',
           payload: expect.objectContaining({
-            type: 'policy_denied',
-            connectorId: 'github',
-            toolName: 'repo.read',
+            allowed: false,
             category: 'mcp',
             resourceType: 'mcp_connector',
             resourceId: 'github',
+            ruleId: 'github',
+            operation: 'mcp_tool_call',
           }),
-          metadata: { source: 'policy' },
+          metadata: expect.objectContaining({ source: 'policy', sourceEventType: 'policy_denied' }),
         }),
       ],
     })

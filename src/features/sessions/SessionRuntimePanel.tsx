@@ -1,10 +1,10 @@
 import {
-  isPiEventType,
-  PI_EVENT_CATEGORIES,
-  type PiEventFilterCategory,
-  piEventCategory,
-  piEventLabel,
-} from '@shared/pi-events'
+  AMA_SESSION_EVENT_CATEGORIES,
+  type AmaSessionEventFilterCategory,
+  amaSessionEventCategory,
+  amaSessionEventLabel,
+  isAmaSessionEventType,
+} from '@shared/session-events'
 import { Copy, Download, RefreshCw, Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
@@ -20,9 +20,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { EmptyState, StatusBadge } from '@/console/components'
 import { formatTime, stringifyJson } from '@/console/format'
 import type { SessionEvent } from '@/lib/api'
-import type { PiRuntimeState } from './pi-runtime'
+import type { SessionRuntimeState } from './session-runtime'
 
-const EVENT_FILTERS = [...PI_EVENT_CATEGORIES, 'unknown'] as const satisfies readonly PiEventFilterCategory[]
+const EVENT_FILTERS = [
+  ...AMA_SESSION_EVENT_CATEGORIES,
+  'unknown',
+] as const satisfies readonly AmaSessionEventFilterCategory[]
 type EventFilter = 'all' | (typeof EVENT_FILTERS)[number]
 
 export function SessionRuntimePanel({
@@ -35,7 +38,7 @@ export function SessionRuntimePanel({
   onRefreshEvents,
   canSend,
 }: {
-  runtime: PiRuntimeState
+  runtime: SessionRuntimeState
   persistedEvents: SessionEvent[]
   message: string
   setMessage: (value: string) => void
@@ -57,7 +60,7 @@ export function SessionRuntimePanel({
     return [...persisted, ...runtime.debugEvents.filter((event) => !persisted.some((item) => item.id === event.id))]
   }, [persistedEvents, runtime.debugEvents])
   const filteredDebugEvents =
-    eventType === 'all' ? debugEvents : debugEvents.filter((event) => piEventCategory(event.type) === eventType)
+    eventType === 'all' ? debugEvents : debugEvents.filter((event) => amaSessionEventCategory(event.type) === eventType)
   const eventExport = stringifyJson([...persistedEvents].sort((a, b) => a.sequence - b.sequence))
   const transcriptItems = useMemo(
     () =>
@@ -194,10 +197,10 @@ export function SessionRuntimePanel({
                 <details key={event.id} className="group p-3">
                   <summary className="flex cursor-pointer list-none flex-wrap items-center gap-3">
                     <StatusBadge
-                      value={isPiEventType(event.type) ? piEventLabel(event.type) : event.type}
-                      detail={event.type === 'error' ? stringifyJson(event.payload) : null}
+                      value={isAmaSessionEventType(event.type) ? amaSessionEventLabel(event.type) : event.type}
+                      detail={event.type === 'runtime.error' ? stringifyJson(event.payload) : null}
                     />
-                    <Badge variant="outline">{piEventCategory(event.type)}</Badge>
+                    <Badge variant="outline">{amaSessionEventCategory(event.type)}</Badge>
                     <span className="font-mono text-xs text-muted-foreground">{event.id}</span>
                     <span className="ml-auto text-xs text-muted-foreground">{formatTime(event.createdAt)}</span>
                   </summary>
@@ -215,5 +218,7 @@ export function SessionRuntimePanel({
 }
 
 export function eventFilter(value: string): EventFilter {
-  return value === 'all' || EVENT_FILTERS.includes(value as PiEventFilterCategory) ? (value as EventFilter) : 'all'
+  return value === 'all' || EVENT_FILTERS.includes(value as AmaSessionEventFilterCategory)
+    ? (value as EventFilter)
+    : 'all'
 }

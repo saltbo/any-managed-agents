@@ -73,12 +73,10 @@ The database may store metadata and secret references only.
 
 ## Self-hosted runners
 
-Self-hosted runners service environments with `runtimeType: "self-hosted"`.
-They are executor backends, not AMA runtime hosts. AMA cloud-side code owns the
-session loop, policy gates, session state, OpenAPI surface, and event
-persistence. Runners claim queued work from `/api/runners/{runnerId}/leases`,
-renew the lease while executing, upload structured events, and complete, fail,
-or cancel the lease.
+Self-hosted runners service environments with `hostingMode: "self_hosted"` and
+an explicit selected `runtime`. They claim queued work from
+`/api/runners/{runnerId}/leases`, renew the lease while executing, upload
+canonical AMA session events, and complete, fail, or cancel the lease.
 
 Runner authentication material must live in Cloudflare Secrets or an approved
 external vault. D1 stores runner metadata, capabilities, heartbeat/load state,

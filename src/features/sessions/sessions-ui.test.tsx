@@ -1,13 +1,13 @@
-import { PI_EVENT_CATEGORIES, PI_EVENT_TYPES, piEventLabel } from '@shared/pi-events'
+import { AMA_SESSION_EVENT_CATEGORIES, AMA_SESSION_EVENT_TYPES, amaSessionEventLabel } from '@shared/session-events'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { formatTime } from '@/console/format'
 import { useClientPagination } from '@/console/use-client-pagination'
 import type { Session, SessionEvent } from '@/lib/api'
-import type { PiRuntimeState } from './pi-runtime'
 import { eventFilter, SessionRuntimePanel } from './SessionRuntimePanel'
 import { SessionsView } from './SessionsView'
+import type { SessionRuntimeState } from './session-runtime'
 
 afterEach(() => {
   cleanup()
@@ -85,13 +85,12 @@ function buildPersistedEvent(overrides: Partial<SessionEvent> = {}): SessionEven
     projectId: 'project_1',
     sessionId: 'session_1',
     sequence: 1,
-    type: 'message_end',
+    type: 'transcript.message',
     visibility: 'runtime',
     role: null,
     parentEventId: null,
     correlationId: null,
     payload: {
-      type: 'message_end',
       message: { role: 'assistant', content: 'Runtime failed to start' },
     },
     metadata: {},
@@ -100,7 +99,7 @@ function buildPersistedEvent(overrides: Partial<SessionEvent> = {}): SessionEven
   }
 }
 
-function buildRuntimeState(overrides: Partial<PiRuntimeState> = {}): PiRuntimeState {
+function buildRuntimeState(overrides: Partial<SessionRuntimeState> = {}): SessionRuntimeState {
   return {
     connection: 'open',
     runState: 'idle',
@@ -117,9 +116,8 @@ function buildRuntimeState(overrides: Partial<PiRuntimeState> = {}): PiRuntimeSt
     debugEvents: [
       {
         id: 'debug_1',
-        type: 'error',
+        type: 'runtime.error',
         payload: {
-          type: 'error',
           message: 'Runtime failed to start',
         },
         createdAt: '2026-05-23T00:00:00.000Z',
@@ -239,7 +237,7 @@ describe('sessions UI contracts', () => {
     expect(screen.queryByText(/"message":/)).toBeNull()
   })
 
-  it('keeps Pi payload JSON in debug while transcript renders structured message, tool, lifecycle, usage, error, and bridge rows', async () => {
+  it('keeps canonical payload JSON in debug while transcript renders structured message, tool, lifecycle, usage, error, and metadata rows', async () => {
     const runtime = buildRuntimeState({
       messages: [
         {
@@ -262,11 +260,11 @@ describe('sessions UI contracts', () => {
           durationMs: 12,
           createdAt: '2026-05-23T00:00:01.000Z',
           updatedAt: '2026-05-23T00:00:01.000Z',
-          eventType: 'tool_execution_end',
+          eventType: 'tool_call.completed',
         },
       ],
       debugEvents: [
-        ...PI_EVENT_TYPES.map((type, index) => ({
+        ...AMA_SESSION_EVENT_TYPES.map((type, index) => ({
           id: `debug_${type}`,
           type,
           payload: { type, safe: true, marker: `payload_${type}` },
@@ -296,7 +294,7 @@ describe('sessions UI contracts', () => {
 
     expect(screen.getByText('Structured answer')).toBeTruthy()
     expect(screen.getByText('read_file')).toBeTruthy()
-    expect(screen.queryByText(/payload_bridge_exit/)).toBeNull()
+    expect(screen.queryByText(/payload_runtime.error/)).toBeNull()
 
     const debugTab = screen.getByRole('tab', { name: 'Debug' })
     fireEvent.pointerDown(debugTab, { button: 0, ctrlKey: false })
@@ -305,16 +303,16 @@ describe('sessions UI contracts', () => {
     fireEvent.click(debugTab)
     await waitFor(() => expect(debugTab.getAttribute('aria-selected')).toBe('true'))
 
-    for (const type of PI_EVENT_TYPES) {
-      expect(screen.getByText(piEventLabel(type))).toBeTruthy()
+    for (const type of AMA_SESSION_EVENT_TYPES) {
+      expect(screen.getByText(amaSessionEventLabel(type))).toBeTruthy()
       expect(screen.getByText(`debug_${type}`)).toBeTruthy()
     }
-    for (const category of PI_EVENT_CATEGORIES) {
+    for (const category of AMA_SESSION_EVENT_CATEGORIES) {
       expect(screen.getAllByText(category).length).toBeGreaterThan(0)
     }
     expect(screen.getByText('future_event')).toBeTruthy()
     expect(screen.getByText('unknown')).toBeTruthy()
-    expect(screen.getByText(/payload_bridge_exit/)).toBeTruthy()
+    expect(screen.getByText(/payload_runtime.error/)).toBeTruthy()
     expect(screen.getByText(/payload_future_event/)).toBeTruthy()
   })
 
@@ -376,7 +374,7 @@ describe('sessions UI contracts', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Copy events' }))
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"message_end"')))
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"transcript.message"')))
 
     fireEvent.click(screen.getByRole('button', { name: 'Download events' }))
     expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob))
@@ -396,8 +394,8 @@ describe('sessions UI contracts', () => {
           debugEvents: [
             {
               id: 'debug_message',
-              type: 'message_end',
-              payload: { type: 'message_end', marker: 'payload_message' },
+              type: 'transcript.message',
+              payload: { type: 'transcript.message', marker: 'payload_message' },
               createdAt: '2026-05-23T00:00:00.000Z',
             },
             {
@@ -423,7 +421,7 @@ describe('sessions UI contracts', () => {
     expect(setMessage).toHaveBeenCalledWith('')
 
     expect(eventFilter('unknown')).toBe('unknown')
-    expect(eventFilter('message')).toBe('message')
+    expect(eventFilter('transcript')).toBe('transcript')
     expect(eventFilter('not-a-filter')).toBe('all')
   })
 
@@ -453,8 +451,8 @@ describe('sessions UI contracts', () => {
           debugEvents: [
             {
               id: 'debug_message',
-              type: 'message_end',
-              payload: { type: 'message_end', marker: 'payload_message' },
+              type: 'transcript.message',
+              payload: { type: 'transcript.message', marker: 'payload_message' },
               createdAt: '2026-05-23T00:00:00.000Z',
             },
             {

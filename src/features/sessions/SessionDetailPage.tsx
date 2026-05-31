@@ -5,8 +5,8 @@ import { EmptyState } from '@/console/components'
 import { api } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 import { SessionDetailView } from './SessionDetailView'
-import { usePiRuntimeSession } from './use-pi-runtime-session'
 import { useSessionActions } from './use-session-actions'
+import { useSessionRuntimeSession } from './use-session-runtime'
 
 const EMPTY_EVENTS: never[] = []
 
@@ -42,7 +42,7 @@ export function SessionDetailPage() {
     void queryClient.invalidateQueries({ queryKey: queryKeys.sessions.detail(sessionId ?? '') })
     void queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all })
   }, [queryClient, sessionId])
-  const runtime = usePiRuntimeSession({
+  const runtime = useSessionRuntimeSession({
     session: session && (session.status === 'idle' || session.status === 'running') ? session : null,
     events: eventsQuery.data?.data ?? EMPTY_EVENTS,
     onEventsChanged: refreshEvents,

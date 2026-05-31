@@ -72,22 +72,22 @@ function installMockRuntimeWebSocket(options: { closeAfterAgentEnd?: boolean } =
       if (command.type === 'prompt' || command.type === 'follow_up') {
         const content = `Received: ${command.message}`
         this.emit({
-          type: 'message_update',
+          type: 'transcript.message.delta',
           id: `${command.id}_assistant`,
           message: { role: 'assistant', content },
           assistantMessageEvent: { text: content },
         })
         this.emit({
-          type: 'tool_execution_end',
+          type: 'tool_call.completed',
           id: `${command.id}_tool`,
           toolCall: { id: `${command.id}_tool`, name: 'write_file', output: { ok: true }, durationMs: 4 },
         })
         this.emit({
-          type: 'message_end',
+          type: 'transcript.message',
           id: `${command.id}_assistant`,
           message: { role: 'assistant', content },
         })
-        this.emit({ type: 'agent_end', id: `${command.id}_end`, willRetry: false })
+        this.emit({ type: 'session.lifecycle', id: `${command.id}_end`, stage: 'agent_completed', willRetry: false })
         if (options.closeAfterAgentEnd) {
           queueMicrotask(() => this.close())
         }
@@ -217,12 +217,12 @@ function event(overrides: Partial<SessionEvent> = {}): SessionEvent {
     projectId: 'project_1',
     sessionId: 'session_1',
     sequence: 1,
-    type: 'message_end',
+    type: 'transcript.message',
     visibility: 'runtime',
     role: null,
     parentEventId: null,
     correlationId: null,
-    payload: { type: 'message_end', message: { role: 'assistant', content: 'AMA message completed' } },
+    payload: { type: 'transcript.message', message: { role: 'assistant', content: 'AMA message completed' } },
     metadata: {},
     createdAt: now,
     ...overrides,
@@ -474,23 +474,23 @@ function mockConsoleApi(seed?: {
             id: `${command.id}_response`,
             sessionId,
             sequence: sequence + 1,
-            type: 'response',
-            payload: { type: 'response', id: command.id, command: command.type, success: true },
+            type: 'session.lifecycle',
+            payload: { type: 'session.lifecycle', stage: 'command_completed', status: 'success' },
           }),
           event({
             id: `${command.id}_user`,
             sessionId,
             sequence: sequence + 2,
-            type: 'message_end',
-            payload: { type: 'message_end', message: { role: 'user', content: command.message ?? '' } },
+            type: 'transcript.message',
+            payload: { type: 'transcript.message', message: { role: 'user', content: command.message ?? '' } },
           }),
           event({
             id: `${command.id}_tool`,
             sessionId,
             sequence: sequence + 3,
-            type: 'tool_execution_end',
+            type: 'tool_call.completed',
             payload: {
-              type: 'tool_execution_end',
+              type: 'tool_call.completed',
               toolCall: { id: `${command.id}_tool`, name: 'write_file', output: { ok: true }, durationMs: 4 },
             },
           }),
@@ -498,15 +498,20 @@ function mockConsoleApi(seed?: {
             id: `${command.id}_assistant`,
             sessionId,
             sequence: sequence + 4,
-            type: 'message_end',
-            payload: { type: 'message_end', message: { role: 'assistant', content } },
+            type: 'transcript.message',
+            payload: { type: 'transcript.message', message: { role: 'assistant', content } },
           }),
           event({
             id: `${command.id}_agent_end`,
             sessionId,
             sequence: sequence + 5,
-            type: 'agent_end',
-            payload: { type: 'agent_end', id: `${command.id}_agent_end`, willRetry: false },
+            type: 'session.lifecycle',
+            payload: {
+              type: 'session.lifecycle',
+              id: `${command.id}_agent_end`,
+              stage: 'agent_completed',
+              willRetry: false,
+            },
           }),
         ]
       }
@@ -757,11 +762,11 @@ describe('App', () => {
       agents: [agent()],
       sessions: [session()],
       events: [
-        event({ payload: { type: 'message_end', message: { role: 'assistant', content: 'hello' } } }),
+        event({ payload: { type: 'transcript.message', message: { role: 'assistant', content: 'hello' } } }),
         event({
           id: 'event_2',
-          type: 'tool_execution_end',
-          payload: { type: 'tool_execution_end', toolCall: { id: 'tool_1', name: 'read' } },
+          type: 'tool_call.completed',
+          payload: { type: 'tool_call.completed', toolCall: { id: 'tool_1', name: 'read' } },
         }),
       ],
     })
@@ -835,11 +840,11 @@ describe('App', () => {
         }),
       ],
       events: [
-        event({ payload: { type: 'message_end', message: { role: 'assistant', content: 'hello' } } }),
+        event({ payload: { type: 'transcript.message', message: { role: 'assistant', content: 'hello' } } }),
         event({
           id: 'event_2',
-          type: 'tool_execution_end',
-          payload: { type: 'tool_execution_end', toolCall: { id: 'tool_1', name: 'read' } },
+          type: 'tool_call.completed',
+          payload: { type: 'tool_call.completed', toolCall: { id: 'tool_1', name: 'read' } },
         }),
       ],
     })
@@ -942,7 +947,7 @@ describe('App', () => {
         session({ id: 'session_stopped', status: 'stopped', stoppedAt: now }),
         session({ id: 'session_archived', status: 'archived', archivedAt: now }),
       ],
-      events: [event({ type: 'error', payload: { message: 'Runtime crashed' } })],
+      events: [event({ type: 'runtime.error', payload: { message: 'Runtime crashed' } })],
     })
 
     render(<App />)
@@ -988,7 +993,7 @@ describe('App', () => {
         projectId: 'project_1',
         sessionId: 'session_1',
         sequence: 1,
-        type: 'lifecycle',
+        type: 'session.lifecycle',
         visibility: 'debug',
         role: null,
         parentEventId: null,
@@ -1008,26 +1013,31 @@ describe('App', () => {
           event({
             id: `${command.id}_tool`,
             sequence: runtimeEvents.length + 1,
-            type: 'tool_execution_end',
+            type: 'tool_call.completed',
             payload: {
-              type: 'tool_execution_end',
+              type: 'tool_call.completed',
               toolCall: { id: `${command.id}_tool`, name: 'write_file', output: { ok: true }, durationMs: 4 },
             },
           }),
           event({
             id: `${command.id}_assistant`,
             sequence: runtimeEvents.length + 2,
-            type: 'message_end',
+            type: 'transcript.message',
             payload: {
-              type: 'message_end',
+              type: 'transcript.message',
               message: { role: 'assistant', content: `Received: ${command.message}` },
             },
           }),
           event({
             id: `${command.id}_agent_end`,
             sequence: runtimeEvents.length + 3,
-            type: 'agent_end',
-            payload: { type: 'agent_end', id: `${command.id}_agent_end`, willRetry: false },
+            type: 'session.lifecycle',
+            payload: {
+              type: 'session.lifecycle',
+              id: `${command.id}_agent_end`,
+              stage: 'agent_completed',
+              willRetry: false,
+            },
           }),
         )
         return jsonResponse({ id: command.id, type: 'response', command: command.type, success: true })

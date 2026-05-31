@@ -1,9 +1,14 @@
-import { PI_EVENT_TYPES, type PiEventType, piEventCategory, piEventTypeFromPayload } from '@shared/pi-events'
+import {
+  AMA_SESSION_EVENT_TYPES,
+  type AmaSessionEventType,
+  amaSessionEventCategory,
+  amaSessionEventTypeFromPayload,
+} from '@shared/session-events'
 import { describe, expect, it } from 'vitest'
 import type { SessionEvent } from '@/lib/api'
-import { initialPiRuntimeState, piRuntimeReducer } from './pi-runtime'
+import { initialSessionRuntimeState, sessionRuntimeReducer } from './session-runtime'
 
-function event(sequence: number, type: string, payload: Record<string, unknown>): SessionEvent {
+function event(sequence: number, type: AmaSessionEventType, payload: Record<string, unknown>): SessionEvent {
   return {
     id: `event_${sequence}`,
     organizationId: 'org_1',
@@ -21,99 +26,101 @@ function event(sequence: number, type: string, payload: Record<string, unknown>)
   }
 }
 
-const piEventPayloads = {
-  message: { type: 'message', content: 'Plain runtime text' },
-  response: { type: 'response', success: true, command: 'prompt' },
-  queue_update: { type: 'queue_update', pending: [] },
-  agent_start: { type: 'agent_start' },
-  turn_start: { type: 'turn_start' },
-  message_start: { type: 'message_start', message: { role: 'assistant', timestamp: 1, content: '' } },
-  message_update: {
-    type: 'message_update',
-    assistantMessageEvent: { type: 'text_delta', responseId: 'response_1', delta: 'Hello' },
+const canonicalEventPayloads = {
+  'session.lifecycle': { type: 'session.lifecycle', stage: 'turn_started' },
+  'transcript.message': { type: 'transcript.message', message: { role: 'assistant', timestamp: 1, content: 'Hello' } },
+  'transcript.message.delta': {
+    type: 'transcript.message.delta',
+    message: { id: 'message_1', role: 'assistant', timestamp: 1, content: 'Hello' },
   },
-  message_end: { type: 'message_end', message: { role: 'assistant', timestamp: 1, content: 'Hello' } },
-  tool_execution_start: {
-    type: 'tool_execution_start',
+  'tool_call.started': {
+    type: 'tool_call.started',
     toolCall: { id: 'tool_1', name: 'read_file', input: { path: 'README.md' } },
   },
-  tool_execution_update: {
-    type: 'tool_execution_update',
+  'tool_call.updated': {
+    type: 'tool_call.updated',
     toolCall: { id: 'tool_1', name: 'read_file', output: { content: [] } },
   },
-  tool_execution_end: {
-    type: 'tool_execution_end',
+  'tool_call.completed': {
+    type: 'tool_call.completed',
     toolCall: { id: 'tool_1', name: 'read_file', output: { content: [{ type: 'text', text: 'ok' }] } },
+    status: 'success',
   },
-  agent_end: { type: 'agent_end' },
-  turn_end: { type: 'turn_end' },
-  usage: { type: 'usage', promptTokens: 1, completionTokens: 2, totalTokens: 3 },
-  error: { type: 'error', message: 'Runtime failed' },
-  bridge_stderr: { type: 'bridge_stderr', message: 'Bridge failed' },
-  bridge_exit: { type: 'bridge_exit', code: 1 },
-} satisfies Record<PiEventType, Record<string, unknown>>
+  'usage.recorded': { type: 'usage.recorded', promptTokens: 1, completionTokens: 2, totalTokens: 3 },
+  'policy.decision': { type: 'policy.decision', allowed: false, category: 'tool' },
+  'runtime.error': { type: 'runtime.error', message: 'Runtime failed' },
+  'runtime.metadata': { type: 'runtime.metadata', data: { status: 'idle' } },
+  'runtime.output': { type: 'runtime.output', stream: 'stderr', content: 'Bridge failed' },
+  'runner.metadata': { type: 'runner.metadata', data: { runnerId: 'runner_1' } },
+} satisfies Record<AmaSessionEventType, Record<string, unknown>>
 
-describe('piRuntimeReducer', () => {
-  it('keeps the accepted Pi event schema aligned with reducer coverage', () => {
-    expect(Object.keys(piEventPayloads)).toEqual(PI_EVENT_TYPES)
+describe('sessionRuntimeReducer', () => {
+  it('keeps the accepted AMA event schema aligned with reducer coverage', () => {
+    expect(Object.keys(canonicalEventPayloads)).toEqual(AMA_SESSION_EVENT_TYPES)
 
-    const state = Object.entries(piEventPayloads).reduce(
+    const state = Object.entries(canonicalEventPayloads).reduce(
       (next, [, payload], index) =>
-        piRuntimeReducer(next, {
+        sessionRuntimeReducer(next, {
           type: 'event',
           event: payload,
           at: new Date((index + 1) * 1000).toISOString(),
         }),
-      initialPiRuntimeState,
+      initialSessionRuntimeState,
     )
 
-    expect(state.debugEvents.map((item) => item.type)).toEqual(PI_EVENT_TYPES)
-    expect(state.messages.some((message) => message.content === 'Plain runtime text')).toBe(true)
-    expect(state.messages.some((message) => message.content === 'Hello')).toBe(true)
+    expect(state.debugEvents.map((item) => item.type)).toEqual(AMA_SESSION_EVENT_TYPES)
+    expect(state.messages.some((message) => message.content.includes('Hello'))).toBe(true)
     expect(state.messages.some((message) => message.content === 'Runtime failed')).toBe(true)
-    expect(state.messages.some((message) => message.content === 'Bridge failed')).toBe(true)
-    expect(state.messages.some((message) => message.content === 'Pi runtime exited with an error')).toBe(true)
     expect(state.tools).toHaveLength(1)
-    expect(new Set(PI_EVENT_TYPES.map((type) => piEventCategory(type)))).toEqual(
-      new Set(['message', 'tool', 'lifecycle', 'usage', 'error', 'bridge']),
+    expect(new Set(AMA_SESSION_EVENT_TYPES.map((type) => amaSessionEventCategory(type)))).toEqual(
+      new Set(['transcript', 'tool', 'lifecycle', 'usage', 'policy', 'error', 'metadata', 'output']),
     )
-    for (const [type, payload] of Object.entries(piEventPayloads)) {
-      expect(piEventTypeFromPayload(payload)).toBe(type)
+    for (const [type, payload] of Object.entries(canonicalEventPayloads)) {
+      expect(amaSessionEventTypeFromPayload(payload)).toBe(type)
     }
-    expect(piEventTypeFromPayload({ content: 'line without a type' })).toBe('message')
-    expect(piEventTypeFromPayload({ type: 'future_event', content: 'debug only' })).toBe('future_event')
-    expect(piEventCategory('toString')).toBe('unknown')
+    expect(amaSessionEventTypeFromPayload({ content: 'line without a type' })).toBe('unknown')
+    expect(amaSessionEventTypeFromPayload({ type: 'future_event', content: 'debug only' })).toBe('future_event')
+    expect(amaSessionEventCategory('toString')).toBe('unknown')
   })
 
-  it('preserves unknown typed events for debug without rendering them as transcript messages', () => {
-    const state = piRuntimeReducer(initialPiRuntimeState, {
+  it('preserves unknown events for debug without rendering them as transcript messages', () => {
+    const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
       event: { type: 'future_event', content: 'debug only' },
       at: new Date(1000).toISOString(),
     })
+    const untyped = sessionRuntimeReducer(state, {
+      type: 'event',
+      event: { content: 'debug only' },
+      at: new Date(2000).toISOString(),
+    })
 
-    expect(state.messages).toHaveLength(0)
-    expect(state.debugEvents).toEqual([
+    expect(untyped.messages).toHaveLength(0)
+    expect(untyped.debugEvents).toEqual([
       expect.objectContaining({
         type: 'future_event',
         payload: { type: 'future_event', content: 'debug only' },
+      }),
+      expect.objectContaining({
+        type: 'unknown',
+        payload: { content: 'debug only' },
       }),
     ])
   })
 
   it('keeps prior tool output when updates carry empty values', () => {
-    const started = piRuntimeReducer(initialPiRuntimeState, {
+    const started = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
       event: {
-        type: 'tool_execution_start',
+        type: 'tool_call.started',
         toolCall: { id: 'tool_empty_values', name: 'inspect', input: { path: 'README.md' } },
       },
       at: new Date(1000).toISOString(),
     })
-    const withText = piRuntimeReducer(started, {
+    const withText = sessionRuntimeReducer(started, {
       type: 'event',
       event: {
-        type: 'tool_execution_update',
+        type: 'tool_call.updated',
         toolCall: {
           id: 'tool_empty_values',
           name: 'inspect',
@@ -122,18 +129,18 @@ describe('piRuntimeReducer', () => {
       },
       at: new Date(2000).toISOString(),
     })
-    const withEmptyString = piRuntimeReducer(withText, {
+    const withEmptyString = sessionRuntimeReducer(withText, {
       type: 'event',
       event: {
-        type: 'tool_execution_update',
+        type: 'tool_call.updated',
         toolCall: { id: 'tool_empty_values', name: 'inspect', output: '' },
       },
       at: new Date(3000).toISOString(),
     })
-    const withEmptyArray = piRuntimeReducer(withEmptyString, {
+    const withEmptyArray = sessionRuntimeReducer(withEmptyString, {
       type: 'event',
       event: {
-        type: 'tool_execution_update',
+        type: 'tool_call.updated',
         toolCall: { id: 'tool_empty_values', name: 'inspect', output: [] },
       },
       at: new Date(4000).toISOString(),
@@ -144,9 +151,9 @@ describe('piRuntimeReducer', () => {
   })
 
   it('renders scalar runtime error diagnostics', () => {
-    const state = piRuntimeReducer(initialPiRuntimeState, {
+    const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
-      event: { type: 'error', data: 500 },
+      event: { type: 'runtime.error', data: 500 },
       at: new Date(1000).toISOString(),
     })
 
@@ -155,14 +162,14 @@ describe('piRuntimeReducer', () => {
   })
 
   it('renders string and object runtime error diagnostics', () => {
-    const stringError = piRuntimeReducer(initialPiRuntimeState, {
+    const stringError = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
-      event: { type: 'error', error: 'direct failure' },
+      event: { type: 'runtime.error', error: 'direct failure' },
       at: new Date(1000).toISOString(),
     })
-    const objectError = piRuntimeReducer(initialPiRuntimeState, {
+    const objectError = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
-      event: { type: 'error', data: { reason: 'structured failure' } },
+      event: { type: 'runtime.error', data: { reason: 'structured failure' } },
       at: new Date(2000).toISOString(),
     })
 
@@ -171,9 +178,9 @@ describe('piRuntimeReducer', () => {
   })
 
   it('replays persisted runtime errors as an error run state', () => {
-    const state = piRuntimeReducer(initialPiRuntimeState, {
+    const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'persisted_events',
-      events: [event(1, 'error', { type: 'error', message: 'persisted failure' })],
+      events: [event(1, 'runtime.error', { type: 'runtime.error', message: 'persisted failure' })],
     })
 
     expect(state.runState).toBe('error')
@@ -181,10 +188,10 @@ describe('piRuntimeReducer', () => {
   })
 
   it('keeps error tool calls inspectable when Pi omits an error body', () => {
-    const state = piRuntimeReducer(initialPiRuntimeState, {
+    const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
       event: {
-        type: 'tool_execution_end',
+        type: 'tool_call.completed',
         isError: true,
         toolCall: { id: 'tool_missing_error', name: 'inspect', output: null },
       },
@@ -199,14 +206,14 @@ describe('piRuntimeReducer', () => {
   })
 
   it('dedupes live debug events by id', () => {
-    const first = piRuntimeReducer(initialPiRuntimeState, {
+    const first = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
-      event: { type: 'usage', id: 'usage_1', totalTokens: 1 },
+      event: { type: 'usage.recorded', id: 'usage_1', totalTokens: 1 },
       at: new Date(1000).toISOString(),
     })
-    const second = piRuntimeReducer(first, {
+    const second = sessionRuntimeReducer(first, {
       type: 'event',
-      event: { type: 'usage', id: 'usage_1', totalTokens: 1 },
+      event: { type: 'usage.recorded', id: 'usage_1', totalTokens: 1 },
       at: new Date(2000).toISOString(),
     })
 
@@ -214,10 +221,10 @@ describe('piRuntimeReducer', () => {
   })
 
   it('omits non-transcript message content blocks', () => {
-    const state = piRuntimeReducer(initialPiRuntimeState, {
+    const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
       event: {
-        type: 'message_end',
+        type: 'transcript.message',
         message: {
           role: 'assistant',
           content: [
@@ -233,18 +240,18 @@ describe('piRuntimeReducer', () => {
   })
 
   it('replays persisted streaming updates into the final completed message', () => {
-    const state = piRuntimeReducer(initialPiRuntimeState, {
+    const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'persisted_events',
       events: [
-        event(1, 'message_update', {
-          type: 'message_update',
+        event(1, 'transcript.message.delta', {
+          type: 'transcript.message.delta',
           message: { role: 'assistant', content: [{ type: 'text', text: 'AMA' }] },
         }),
-        event(2, 'message_end', {
-          type: 'message_end',
+        event(2, 'transcript.message', {
+          type: 'transcript.message',
           message: { role: 'assistant', content: [{ type: 'text', text: 'AMA proxy ok' }] },
         }),
-        event(3, 'agent_end', { type: 'agent_end' }),
+        event(3, 'session.lifecycle', { type: 'session.lifecycle' }),
       ],
     })
 
@@ -258,42 +265,42 @@ describe('piRuntimeReducer', () => {
   })
 
   it('collapses persisted tool updates and keeps tool results out of messages', () => {
-    const state = piRuntimeReducer(initialPiRuntimeState, {
+    const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'persisted_events',
       events: [
-        event(1, 'message_end', {
-          type: 'message_end',
+        event(1, 'transcript.message', {
+          type: 'transcript.message',
           message: { role: 'user', content: [{ type: 'text', text: 'run whoami' }] },
         }),
-        event(2, 'tool_execution_start', {
-          type: 'tool_execution_start',
+        event(2, 'tool_call.started', {
+          type: 'tool_call.started',
           toolCallId: 'functions.bash:0',
           toolName: 'bash',
           args: { command: 'whoami' },
         }),
-        event(3, 'tool_execution_update', {
-          type: 'tool_execution_update',
+        event(3, 'tool_call.updated', {
+          type: 'tool_call.updated',
           toolCallId: 'functions.bash:0',
           toolName: 'bash',
           args: { command: 'whoami' },
           partialResult: { content: [] },
         }),
-        event(4, 'tool_execution_update', {
-          type: 'tool_execution_update',
+        event(4, 'tool_call.updated', {
+          type: 'tool_call.updated',
           toolCallId: 'functions.bash:0',
           toolName: 'bash',
           args: { command: 'whoami' },
           partialResult: { content: [{ type: 'text', text: 'root\n' }] },
         }),
-        event(5, 'tool_execution_end', {
-          type: 'tool_execution_end',
+        event(5, 'tool_call.completed', {
+          type: 'tool_call.completed',
           toolCallId: 'functions.bash:0',
           toolName: 'bash',
           result: { content: [{ type: 'text', text: 'root\n' }] },
           isError: false,
         }),
-        event(6, 'message_end', {
-          type: 'message_end',
+        event(6, 'transcript.message', {
+          type: 'transcript.message',
           message: {
             role: 'toolResult',
             toolCallId: 'functions.bash:0',
@@ -302,11 +309,11 @@ describe('piRuntimeReducer', () => {
             isError: false,
           },
         }),
-        event(7, 'message_end', {
-          type: 'message_end',
+        event(7, 'transcript.message', {
+          type: 'transcript.message',
           message: { role: 'assistant', content: [{ type: 'text', text: 'You are running as `root`.' }] },
         }),
-        event(8, 'agent_end', { type: 'agent_end' }),
+        event(8, 'session.lifecycle', { type: 'session.lifecycle' }),
       ],
     })
 
@@ -324,54 +331,54 @@ describe('piRuntimeReducer', () => {
 
   it('keeps repeated tool call ids in separate turns', () => {
     const firstTurn = [
-      event(1, 'message_end', {
-        type: 'message_end',
+      event(1, 'transcript.message', {
+        type: 'transcript.message',
         message: { role: 'user', content: [{ type: 'text', text: 'run whoami' }] },
       }),
-      event(2, 'tool_execution_start', {
-        type: 'tool_execution_start',
+      event(2, 'tool_call.started', {
+        type: 'tool_call.started',
         toolCallId: 'functions.bash:0',
         toolName: 'bash',
         args: { command: 'whoami' },
       }),
-      event(3, 'tool_execution_end', {
-        type: 'tool_execution_end',
+      event(3, 'tool_call.completed', {
+        type: 'tool_call.completed',
         toolCallId: 'functions.bash:0',
         toolName: 'bash',
         result: { content: [{ type: 'text', text: 'root\n' }] },
         isError: false,
       }),
-      event(4, 'message_end', {
-        type: 'message_end',
+      event(4, 'transcript.message', {
+        type: 'transcript.message',
         message: { role: 'assistant', content: [{ type: 'text', text: 'You are running as `root`.' }] },
       }),
     ]
     const secondTurn = [
-      event(20, 'message_end', {
-        type: 'message_end',
+      event(20, 'transcript.message', {
+        type: 'transcript.message',
         message: { role: 'user', content: [{ type: 'text', text: 'run whoami' }] },
       }),
-      event(21, 'tool_execution_start', {
-        type: 'tool_execution_start',
+      event(21, 'tool_call.started', {
+        type: 'tool_call.started',
         toolCallId: 'functions.bash:0',
         toolName: 'bash',
         args: { command: 'whoami' },
       }),
-      event(22, 'tool_execution_end', {
-        type: 'tool_execution_end',
+      event(22, 'tool_call.completed', {
+        type: 'tool_call.completed',
         toolCallId: 'functions.bash:0',
         toolName: 'bash',
         result: { content: [{ type: 'text', text: 'root\n' }] },
         isError: false,
       }),
-      event(23, 'message_end', {
-        type: 'message_end',
+      event(23, 'transcript.message', {
+        type: 'transcript.message',
         message: { role: 'assistant', content: [{ type: 'text', text: 'You are running as `root`.' }] },
       }),
-      event(24, 'agent_end', { type: 'agent_end' }),
+      event(24, 'session.lifecycle', { type: 'session.lifecycle' }),
     ]
 
-    const state = piRuntimeReducer(initialPiRuntimeState, {
+    const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'persisted_events',
       events: [...firstTurn, ...secondTurn],
     })
@@ -387,29 +394,29 @@ describe('piRuntimeReducer', () => {
 
   it('dedupes replayed persisted Pi events with the same runtime timestamps', () => {
     const turn = [
-      event(1, 'message_end', {
-        type: 'message_end',
+      event(1, 'transcript.message', {
+        type: 'transcript.message',
         message: {
           role: 'user',
           timestamp: 1779675439881,
           content: [{ type: 'text', text: 'run whoami' }],
         },
       }),
-      event(2, 'tool_execution_start', {
-        type: 'tool_execution_start',
+      event(2, 'tool_call.started', {
+        type: 'tool_call.started',
         toolCallId: 'functions.bash:0',
         toolName: 'bash',
         args: { command: 'whoami' },
       }),
-      event(3, 'tool_execution_end', {
-        type: 'tool_execution_end',
+      event(3, 'tool_call.completed', {
+        type: 'tool_call.completed',
         toolCallId: 'functions.bash:0',
         toolName: 'bash',
         result: { content: [{ type: 'text', text: 'root\n' }] },
         isError: false,
       }),
-      event(4, 'message_end', {
-        type: 'message_end',
+      event(4, 'transcript.message', {
+        type: 'transcript.message',
         message: {
           role: 'assistant',
           timestamp: 1779675443748,
@@ -424,41 +431,41 @@ describe('piRuntimeReducer', () => {
       createdAt: new Date((item.sequence + 100) * 1000).toISOString(),
     }))
 
-    const state = piRuntimeReducer(initialPiRuntimeState, {
+    const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'persisted_events',
-      events: [...turn, ...replay, event(200, 'agent_end', { type: 'agent_end' })],
+      events: [...turn, ...replay, event(200, 'session.lifecycle', { type: 'session.lifecycle' })],
     })
 
     expect(state.tools).toHaveLength(1)
     expect(state.messages.map((message) => message.content)).toEqual(['run whoami', 'You are running as `root`.'])
-    expect(state.debugEvents.filter((item) => item.type === 'tool_execution_start')).toHaveLength(1)
+    expect(state.debugEvents.filter((item) => item.type === 'tool_call.started')).toHaveLength(1)
   })
 
-  it('keeps repeated persisted commands when Pi runtime timestamps are new', () => {
+  it('keeps repeated persisted commands when Runtime timestamps are new', () => {
     const firstTurn = [
-      event(1, 'message_end', {
-        type: 'message_end',
+      event(1, 'transcript.message', {
+        type: 'transcript.message',
         message: {
           role: 'user',
           timestamp: 1779675439881,
           content: [{ type: 'text', text: 'run whoami' }],
         },
       }),
-      event(2, 'tool_execution_start', {
-        type: 'tool_execution_start',
+      event(2, 'tool_call.started', {
+        type: 'tool_call.started',
         toolCallId: 'functions.bash:0',
         toolName: 'bash',
         args: { command: 'whoami' },
       }),
-      event(3, 'tool_execution_end', {
-        type: 'tool_execution_end',
+      event(3, 'tool_call.completed', {
+        type: 'tool_call.completed',
         toolCallId: 'functions.bash:0',
         toolName: 'bash',
         result: { content: [{ type: 'text', text: 'root\n' }] },
         isError: false,
       }),
-      event(4, 'message_end', {
-        type: 'message_end',
+      event(4, 'transcript.message', {
+        type: 'transcript.message',
         message: {
           role: 'assistant',
           timestamp: 1779675443748,
@@ -467,29 +474,29 @@ describe('piRuntimeReducer', () => {
       }),
     ]
     const secondTurn = [
-      event(20, 'message_end', {
-        type: 'message_end',
+      event(20, 'transcript.message', {
+        type: 'transcript.message',
         message: {
           role: 'user',
           timestamp: 1779675539881,
           content: [{ type: 'text', text: 'run whoami' }],
         },
       }),
-      event(21, 'tool_execution_start', {
-        type: 'tool_execution_start',
+      event(21, 'tool_call.started', {
+        type: 'tool_call.started',
         toolCallId: 'functions.bash:0',
         toolName: 'bash',
         args: { command: 'whoami' },
       }),
-      event(22, 'tool_execution_end', {
-        type: 'tool_execution_end',
+      event(22, 'tool_call.completed', {
+        type: 'tool_call.completed',
         toolCallId: 'functions.bash:0',
         toolName: 'bash',
         result: { content: [{ type: 'text', text: 'root\n' }] },
         isError: false,
       }),
-      event(23, 'message_end', {
-        type: 'message_end',
+      event(23, 'transcript.message', {
+        type: 'transcript.message',
         message: {
           role: 'assistant',
           timestamp: 1779675543748,
@@ -498,9 +505,9 @@ describe('piRuntimeReducer', () => {
       }),
     ]
 
-    const state = piRuntimeReducer(initialPiRuntimeState, {
+    const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'persisted_events',
-      events: [...firstTurn, ...secondTurn, event(24, 'agent_end', { type: 'agent_end' })],
+      events: [...firstTurn, ...secondTurn, event(24, 'session.lifecycle', { type: 'session.lifecycle' })],
     })
 
     expect(state.tools).toHaveLength(2)
@@ -514,18 +521,21 @@ describe('piRuntimeReducer', () => {
 
   it('ignores live events that were already loaded from history', () => {
     const messagePayload = {
-      type: 'message_end',
+      type: 'transcript.message',
       message: {
         role: 'assistant',
         content: [{ type: 'text', text: 'History loaded' }],
         timestamp: 1779675000000,
       },
     }
-    const loaded = piRuntimeReducer(initialPiRuntimeState, {
+    const loaded = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'persisted_events',
-      events: [event(1, 'message_end', messagePayload), event(2, 'agent_end', { type: 'agent_end' })],
+      events: [
+        event(1, 'transcript.message', messagePayload),
+        event(2, 'session.lifecycle', { type: 'session.lifecycle' }),
+      ],
     })
-    const replayed = piRuntimeReducer(loaded, {
+    const replayed = sessionRuntimeReducer(loaded, {
       type: 'event',
       event: messagePayload,
       at: new Date(99_000).toISOString(),
@@ -537,12 +547,12 @@ describe('piRuntimeReducer', () => {
 
   it('ignores live tool events that were already loaded from history', () => {
     const startPayload = {
-      type: 'tool_execution_start',
+      type: 'tool_call.started',
       id: 'tool_1',
       toolCall: { id: 'tool_1', name: 'write_file', input: { path: 'todo.md' } },
     }
     const endPayload = {
-      type: 'tool_execution_end',
+      type: 'tool_call.completed',
       id: 'tool_1',
       toolCall: {
         id: 'tool_1',
@@ -552,16 +562,16 @@ describe('piRuntimeReducer', () => {
         durationMs: 12,
       },
     }
-    const loaded = piRuntimeReducer(initialPiRuntimeState, {
+    const loaded = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'persisted_events',
-      events: [event(1, 'tool_execution_start', startPayload), event(2, 'tool_execution_end', endPayload)],
+      events: [event(1, 'tool_call.started', startPayload), event(2, 'tool_call.completed', endPayload)],
     })
-    const replayedStart = piRuntimeReducer(loaded, {
+    const replayedStart = sessionRuntimeReducer(loaded, {
       type: 'event',
       event: startPayload,
       at: new Date(99_000).toISOString(),
     })
-    const replayedEnd = piRuntimeReducer(replayedStart, {
+    const replayedEnd = sessionRuntimeReducer(replayedStart, {
       type: 'event',
       event: endPayload,
       at: new Date(100_000).toISOString(),
