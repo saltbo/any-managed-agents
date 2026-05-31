@@ -330,7 +330,7 @@ Then(
     const dialog = requireUiWorkflow(this).page.getByRole('dialog')
     await expect(dialog.getByLabel('Name')).toBeVisible()
     await expect(dialog.getByText('Hosting mode')).toBeVisible()
-    await expect(dialog.getByText('Runtime')).toBeVisible()
+    await expect(dialog.getByText('Runtime', { exact: true })).toBeVisible()
     await expect(dialog.getByText('Network mode')).toBeVisible()
     await expect(dialog.getByLabel('Allowed hosts')).toBeVisible()
     await expect(dialog.getByLabel('Packages')).toBeVisible()
@@ -389,7 +389,7 @@ Then(
     const page = requireUiWorkflow(this).page
     await expect(page.getByText('idle').first()).toBeVisible()
     await expect(page.getByText(/workers-ai/).first()).toBeVisible()
-    await expect(page.getByText(/ama-pi-runtime/).first()).toBeVisible()
+    await expect(page.getByText(/ama · env_/).first()).toBeVisible()
   },
 )
 
