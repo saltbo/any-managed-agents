@@ -774,7 +774,7 @@ When('the user creates an environment with only a name', async function (this: P
 })
 
 When(
-  'the user creates an environment with package requirements, variables, secret references, legacy runtime type, allowed outbound hosts, MCP access rules, package-manager access rules, resource limits, runtime image, and metadata',
+  'the user creates an environment with package requirements, variables, secret references, current runtimeType field, allowed outbound hosts, MCP access rules, package-manager access rules, resource limits, runtime image, and metadata',
   async function (this: ProductWorld) {
     await ensureSignedIn(this)
     this.e2e.environment = await createEnvironment(this.e2e, {
@@ -809,7 +809,7 @@ When(
 )
 
 When(
-  'the user changes packages, variables, secret references, legacy runtime type, network policy, resource limits, runtime image, or metadata',
+  'the user changes packages, variables, secret references, current runtimeType field, network policy, resource limits, runtime image, or metadata',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
     state.updatedEnvironment = await apiJson<Json>(state.page.request, `/api/environments/${state.environment?.id}`, {
@@ -1886,7 +1886,7 @@ Then(
 )
 
 Then(
-  'package lists, variables, secret references, legacy runtime type, network policy, resource limits, runtime image, and metadata have stable default values',
+  'package lists, variables, secret references, current runtimeType field, network policy, resource limits, runtime image, and metadata have stable default values',
   function (this: ProductWorld) {
     const env = required(this.e2e?.environment, 'environment')
     for (const key of [

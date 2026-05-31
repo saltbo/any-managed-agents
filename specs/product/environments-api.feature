@@ -27,12 +27,12 @@ Feature: Environments API
     Given a signed-in user has access to a project
     When the user creates an environment with only a name
     Then the response includes an environment id, current version id, project id, timestamps, and archive state
-    And package lists, variables, secret references, legacy runtime type, network policy, resource limits, runtime image, and metadata have stable default values
+    And package lists, variables, secret references, current runtimeType field, network policy, resource limits, runtime image, and metadata have stable default values
     And the environment is stored as a reusable definition, not as a running sandbox instance
 
   @implemented
-  Scenario: Create an environment with package, variable, legacy runtime, network, and resource policy
-    When the user creates an environment with package requirements, variables, secret references, legacy runtime type, allowed outbound hosts, MCP access rules, package-manager access rules, resource limits, runtime image, and metadata
+  Scenario: Create an environment with package, variable, current runtimeType, network, and resource policy
+    When the user creates an environment with package requirements, variables, secret references, current runtimeType field, allowed outbound hosts, MCP access rules, package-manager access rules, resource limits, runtime image, and metadata
     Then the response stores normalized policy fields
     And raw secret values are rejected
     And secret references are returned only as safe names and references
@@ -41,7 +41,7 @@ Feature: Environments API
   @implemented
   Scenario: Version environment changes without changing existing sessions
     Given an environment is used by existing sessions
-    When the user changes packages, variables, secret references, legacy runtime type, network policy, resource limits, runtime image, or metadata
+    When the user changes packages, variables, secret references, current runtimeType field, network policy, resource limits, runtime image, or metadata
     Then the platform creates a new environment version
     And existing sessions keep their original environment snapshot
     And new sessions that reference the environment use the new environment version
