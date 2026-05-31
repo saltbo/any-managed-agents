@@ -738,8 +738,11 @@
               }
             ]
           },
-          "runtimeType": {
-            "$ref": "#/components/schemas/EnvironmentRuntimeType"
+          "hostingMode": {
+            "$ref": "#/components/schemas/EnvironmentHostingMode"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/EnvironmentRuntime"
           },
           "networkPolicy": {
             "$ref": "#/components/schemas/EnvironmentNetworkPolicy"
@@ -767,7 +770,7 @@
               "memoryMb": 512
             }
           },
-          "runtimeImage": {
+          "runtimeConfig": {
             "type": "object",
             "additionalProperties": {
               "nullable": true
@@ -827,12 +830,13 @@
           "packages",
           "variables",
           "secretRefs",
-          "runtimeType",
+          "hostingMode",
+          "runtime",
           "networkPolicy",
           "mcpPolicy",
           "packageManagerPolicy",
           "resourceLimits",
-          "runtimeImage",
+          "runtimeConfig",
           "metadata",
           "status",
           "archivedAt",
@@ -842,13 +846,23 @@
           "updatedAt"
         ]
       },
-      "EnvironmentRuntimeType": {
+      "EnvironmentHostingMode": {
         "type": "string",
         "enum": [
-          "cloud-hosted",
-          "self-hosted"
+          "cloud",
+          "self_hosted"
         ],
-        "example": "cloud-hosted"
+        "example": "cloud"
+      },
+      "EnvironmentRuntime": {
+        "type": "string",
+        "enum": [
+          "ama",
+          "claude-code",
+          "codex",
+          "copilot"
+        ],
+        "example": "ama"
       },
       "EnvironmentNetworkPolicy": {
         "type": "object",
@@ -1038,8 +1052,11 @@
               }
             ]
           },
-          "runtimeType": {
-            "$ref": "#/components/schemas/EnvironmentRuntimeType"
+          "hostingMode": {
+            "$ref": "#/components/schemas/EnvironmentHostingMode"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/EnvironmentRuntime"
           },
           "networkPolicy": {
             "$ref": "#/components/schemas/EnvironmentNetworkPolicy"
@@ -1082,16 +1099,11 @@
               "memoryMb": 512
             }
           },
-          "runtimeImage": {
+          "runtimeConfig": {
             "type": "object",
-            "properties": {
-              "image": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 240
-              }
+            "additionalProperties": {
+              "nullable": true
             },
-            "additionalProperties": false,
             "example": {
               "image": "node:24"
             }
@@ -1108,7 +1120,8 @@
         },
         "required": [
           "name"
-        ]
+        ],
+        "additionalProperties": false
       },
       "UpdateEnvironmentRequest": {
         "type": "object",
@@ -1201,8 +1214,11 @@
               }
             ]
           },
-          "runtimeType": {
-            "$ref": "#/components/schemas/EnvironmentRuntimeType"
+          "hostingMode": {
+            "$ref": "#/components/schemas/EnvironmentHostingMode"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/EnvironmentRuntime"
           },
           "networkPolicy": {
             "$ref": "#/components/schemas/EnvironmentNetworkPolicy"
@@ -1245,16 +1261,11 @@
               "memoryMb": 512
             }
           },
-          "runtimeImage": {
+          "runtimeConfig": {
             "type": "object",
-            "properties": {
-              "image": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 240
-              }
+            "additionalProperties": {
+              "nullable": true
             },
-            "additionalProperties": false,
             "example": {
               "image": "node:24"
             }
@@ -1268,7 +1279,8 @@
               "owner": "platform"
             }
           }
-        }
+        },
+        "additionalProperties": false
       },
       "EnvironmentVersionListResponse": {
         "type": "object",
@@ -1381,8 +1393,11 @@
               }
             ]
           },
-          "runtimeType": {
-            "$ref": "#/components/schemas/EnvironmentRuntimeType"
+          "hostingMode": {
+            "$ref": "#/components/schemas/EnvironmentHostingMode"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/EnvironmentRuntime"
           },
           "networkPolicy": {
             "$ref": "#/components/schemas/EnvironmentNetworkPolicy"
@@ -1410,7 +1425,7 @@
               "memoryMb": 512
             }
           },
-          "runtimeImage": {
+          "runtimeConfig": {
             "type": "object",
             "additionalProperties": {
               "nullable": true
@@ -1442,12 +1457,13 @@
           "packages",
           "variables",
           "secretRefs",
-          "runtimeType",
+          "hostingMode",
+          "runtime",
           "networkPolicy",
           "mcpPolicy",
           "packageManagerPolicy",
           "resourceLimits",
-          "runtimeImage",
+          "runtimeConfig",
           "metadata",
           "createdAt"
         ]
@@ -4650,8 +4666,11 @@
               }
             }
           },
-          "runtimeType": {
-            "$ref": "#/components/schemas/EnvironmentRuntimeType"
+          "hostingMode": {
+            "$ref": "#/components/schemas/EnvironmentHostingMode"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/EnvironmentRuntime"
           },
           "networkPolicy": {
             "$ref": "#/components/schemas/EnvironmentNetworkPolicy"
@@ -4674,7 +4693,7 @@
               "nullable": true
             }
           },
-          "runtimeImage": {
+          "runtimeConfig": {
             "type": "object",
             "additionalProperties": {
               "nullable": true
@@ -4699,12 +4718,13 @@
           "packages",
           "variables",
           "secretRefs",
-          "runtimeType",
+          "hostingMode",
+          "runtime",
           "networkPolicy",
           "mcpPolicy",
           "packageManagerPolicy",
           "resourceLimits",
-          "runtimeImage",
+          "runtimeConfig",
           "metadata",
           "createdAt"
         ]

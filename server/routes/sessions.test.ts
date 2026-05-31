@@ -36,7 +36,7 @@ async function createEnvironment(authorization: string) {
       secretRefs: [{ name: 'CLOUDFLARE_API_KEY', ref: 'wrangler_secret:AMA_WORKERS_AI_API_KEY' }],
       mcpPolicy: { allowedConnectors: ['github'] },
       packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
-      runtimeImage: { image: 'ama-tool-executor' },
+      runtimeConfig: { image: 'ama-tool-executor' },
     }),
   })
   expect(res.status).toBe(201)
@@ -158,8 +158,10 @@ describe('[CF] /api/sessions', () => {
       vaultRefs: [{ type: 'credential', id: 'cred_1' }],
       metadata: {
         ticket: 'AMA-1',
-        runtime: 'ama-cloud',
-        protocol: 'ama-runtime-rpc',
+        hostingMode: 'cloud',
+        runtime: 'ama',
+        runtimeBackend: 'ama-cloud',
+        runtimeProtocol: 'ama-runtime-rpc',
         runtimeMode: 'test',
         runtimeOwner: 'ama-cloud',
         loop: 'cloud-session-runtime',
@@ -427,13 +429,15 @@ describe('[CF] /api/sessions', () => {
       method: 'POST',
       body: JSON.stringify({
         name: 'Self-hosted workspace',
-        runtimeType: 'self-hosted',
+        hostingMode: 'self_hosted',
+        runtime: 'ama',
         networkPolicy: { mode: 'unrestricted' },
       }),
     })
     expect(environmentRes.status).toBe(201)
-    const environment = (await environmentRes.json()) as { id: string; runtimeType: string }
-    expect(environment.runtimeType).toBe('self-hosted')
+    const environment = (await environmentRes.json()) as { id: string; hostingMode: string; runtime: string }
+    expect(environment.hostingMode).toBe('self_hosted')
+    expect(environment.runtime).toBe('ama')
     const agentRes = await jsonFetch('/api/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({
@@ -456,7 +460,7 @@ describe('[CF] /api/sessions', () => {
       statusReason: string | null
       sandboxId: string | null
       runtimeEndpointPath: string | null
-      environmentSnapshot: { runtimeType: string }
+      environmentSnapshot: { hostingMode: string; runtime: string }
       metadata: Record<string, unknown>
     }
     expect(created).toMatchObject({
@@ -464,12 +468,12 @@ describe('[CF] /api/sessions', () => {
       statusReason: 'waiting-for-runner',
       sandboxId: null,
       runtimeEndpointPath: null,
-      environmentSnapshot: { runtimeType: 'self-hosted' },
+      environmentSnapshot: { hostingMode: 'self_hosted', runtime: 'ama' },
       metadata: {
-        runtimeType: 'self-hosted',
+        hostingMode: 'self_hosted',
+        runtime: 'ama',
         runnerState: 'queued',
-        runtime: 'ama-cloud',
-        protocol: 'ama-runner-work',
+        runnerProtocol: 'ama-runner-work',
       },
     })
 
@@ -600,11 +604,18 @@ describe('[CF] /api/sessions', () => {
     })
     expect(createRes.status).toBe(201)
     const created = (await createRes.json()) as { id: string; environmentSnapshot: Record<string, unknown> }
-    const { runtimeType: _runtimeType, ...legacySnapshot } = created.environmentSnapshot
+    const {
+      hostingMode: _hostingMode,
+      runtime: _runtime,
+      runtimeConfig: _runtimeConfig,
+      ...legacySnapshot
+    } = created.environmentSnapshot
     await env.DB.prepare('UPDATE sessions SET environment_snapshot = ? WHERE id = ?')
       .bind(
         JSON.stringify({
           ...legacySnapshot,
+          runtimeType: 'self-hosted',
+          runtimeImage: { image: 'legacy-runner' },
           networkPolicy: { mode: 'restricted', allowedHosts: ['https://registry.npmjs.org'] },
         }),
         created.id,
@@ -613,12 +624,17 @@ describe('[CF] /api/sessions', () => {
 
     const readRes = await jsonFetch(`/api/sessions/${created.id}`, authorization)
     expect(readRes.status).toBe(200)
-    await expect(readRes.json()).resolves.toMatchObject({
+    const body = await readRes.json()
+    expect(body).toMatchObject({
       environmentSnapshot: {
-        runtimeType: 'cloud-hosted',
+        hostingMode: 'self_hosted',
+        runtime: 'ama',
+        runtimeConfig: { image: 'legacy-runner' },
         networkPolicy: { mode: 'unrestricted' },
       },
     })
+    expect(JSON.stringify(body.environmentSnapshot)).not.toContain('runtimeType')
+    expect(JSON.stringify(body.environmentSnapshot)).not.toContain('runtimeImage')
   })
 
   it('accepts self-hosted sessions when cloud sandbox startup is disabled', async () => {
@@ -627,7 +643,8 @@ describe('[CF] /api/sessions', () => {
       method: 'POST',
       body: JSON.stringify({
         name: 'Self-hosted no sandbox workspace',
-        runtimeType: 'self-hosted',
+        hostingMode: 'self_hosted',
+        runtime: 'ama',
         networkPolicy: { mode: 'unrestricted' },
       }),
     })
@@ -658,7 +675,7 @@ describe('[CF] /api/sessions', () => {
       status: 'pending',
       statusReason: 'waiting-for-runner',
       sandboxId: null,
-      environmentSnapshot: { runtimeType: 'self-hosted' },
+      environmentSnapshot: { hostingMode: 'self_hosted', runtime: 'ama' },
     })
   })
 
@@ -744,8 +761,10 @@ describe('[CF] /api/sessions', () => {
       metadata: expect.objectContaining({
         externalRunId: 'tftt-banking-bonus-2026-05-26',
         source: 'tftt-cron',
-        runtime: 'ama-cloud',
-        protocol: 'ama-runtime-rpc',
+        hostingMode: 'cloud',
+        runtime: 'ama',
+        runtimeBackend: 'ama-cloud',
+        runtimeProtocol: 'ama-runtime-rpc',
       }),
       runtimeEndpointPath: `/runtime/sessions/${created.id}/rpc`,
     })

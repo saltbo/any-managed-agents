@@ -103,7 +103,7 @@ export function SessionsView({
             </TableCell>
             <TableCell className="min-w-0">
               <span className="block truncate">
-                {`${String(session.environmentSnapshot?.runtimeImage.image ?? 'None')} · ${session.environmentId ?? 'None'}`}
+                {`${session.environmentSnapshot?.runtime ?? 'None'} · ${session.environmentId ?? 'None'}`}
               </span>
             </TableCell>
             <TableCell className="min-w-0">

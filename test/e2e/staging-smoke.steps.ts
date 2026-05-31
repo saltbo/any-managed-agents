@@ -213,7 +213,7 @@ async function runStagingSmoke(config: StagingSmokeConfig): Promise<StagingSmoke
           networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
           packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
           resourceLimits: { memoryMb: 1024, timeoutSeconds: 900 },
-          runtimeImage: { image: 'ama-pi-runtime' },
+          runtimeConfig: { image: 'ama-pi-runtime' },
           metadata: { runId: config.runId },
         },
       })
@@ -349,7 +349,8 @@ async function exerciseSelfHostedRunnerMode(request: APIRequestContext, config: 
       data: {
         name: `${config.runId} self-hosted environment`,
         description: 'Staging smoke self-hosted environment created through public AMA APIs.',
-        runtimeType: 'self-hosted',
+        hostingMode: 'self_hosted',
+        runtime: 'ama',
         networkPolicy: { mode: 'unrestricted' },
         packages: [],
         metadata: { runId: config.runId, smokeMode: 'self-hosted-runner' },

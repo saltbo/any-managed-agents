@@ -2,7 +2,8 @@ import { z } from '@hono/zod-openapi'
 
 const ALLOWED_HOST_PATTERN = /^[a-z0-9.-]+$/
 
-export const EnvironmentRuntimeTypeSchema = z.enum(['cloud-hosted', 'self-hosted']).openapi('EnvironmentRuntimeType')
+export const EnvironmentHostingModeSchema = z.enum(['cloud', 'self_hosted']).openapi('EnvironmentHostingMode')
+export const EnvironmentRuntimeSchema = z.enum(['ama', 'claude-code', 'codex', 'copilot']).openapi('EnvironmentRuntime')
 
 export const EnvironmentNetworkPolicySchema = z
   .object({
@@ -37,7 +38,8 @@ export const EnvironmentNetworkPolicySchema = z
   })
   .openapi('EnvironmentNetworkPolicy')
 
-export type EnvironmentRuntimeType = z.infer<typeof EnvironmentRuntimeTypeSchema>
+export type EnvironmentHostingMode = z.infer<typeof EnvironmentHostingModeSchema>
+export type EnvironmentRuntime = z.infer<typeof EnvironmentRuntimeSchema>
 export type EnvironmentNetworkPolicy = z.infer<typeof EnvironmentNetworkPolicySchema>
 
 export function normalizeEnvironmentNetworkPolicy(value: unknown): EnvironmentNetworkPolicy {

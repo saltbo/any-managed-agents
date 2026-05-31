@@ -44,6 +44,10 @@ async function fetchOpenApi() {
   return (await res.json()) as OpenApiDocument
 }
 
+function schemaProperties(doc: OpenApiDocument, name: string) {
+  return Object.keys((doc.components?.schemas?.[name] as { properties?: Record<string, unknown> })?.properties ?? [])
+}
+
 function operations(doc: OpenApiDocument) {
   return Object.entries(doc.paths).flatMap(([path, pathItem]) =>
     Object.entries(pathItem)
@@ -281,6 +285,18 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.components?.schemas).toHaveProperty('ScheduledTriggerRunListResponse')
     expect(doc.components?.schemas).toHaveProperty('CreateScheduledAgentTriggerRequest')
     expect(doc.components?.schemas).toHaveProperty('UpdateScheduledAgentTriggerRequest')
+    for (const schemaName of [
+      'Environment',
+      'EnvironmentVersion',
+      'CreateEnvironmentRequest',
+      'UpdateEnvironmentRequest',
+      'SessionEnvironmentSnapshot',
+    ]) {
+      const properties = schemaProperties(doc, schemaName)
+      expect(properties).toEqual(expect.arrayContaining(['hostingMode', 'runtime', 'runtimeConfig']))
+      expect(properties).not.toContain('runtimeType')
+      expect(properties).not.toContain('runtimeImage')
+    }
     const createSessionProperties = (
       doc.components?.schemas?.CreateSessionRequest as {
         properties?: Record<string, { maxLength?: number; minLength?: number; type?: string }>
