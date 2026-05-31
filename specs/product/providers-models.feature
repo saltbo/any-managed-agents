@@ -45,5 +45,13 @@ Feature: Model providers
   Scenario: Use provider adapters without changing session protocol
     Given an agent uses any supported provider
     When a session sends a runtime message
-    Then provider-specific calls happen behind the Pi/provider adapter boundary
-    And clients continue to interact through the AMA runtime endpoint or Pi-compatible helpers
+    Then provider-specific calls happen behind the selected environment runtime adapter boundary
+    And clients continue to interact through the AMA session endpoint and canonical event protocol
+
+  @planned
+  Scenario: Reject runtime unsupported provider models
+    Given an agent selects a provider and model
+    And an environment selects a runtime
+    When that runtime does not support the exact provider and model
+    Then session creation fails before any provider call is started
+    And the error envelope identifies the unsupported runtime, provider, and model

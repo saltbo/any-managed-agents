@@ -42,7 +42,7 @@ Feature: Quickstart
     And the preview shows transcript and debug modes
     And the message composer is focused with a safe example prompt
     When the developer sends the prompt
-    Then the message is accepted by the Pi runtime
+    Then the message is accepted by the selected environment runtime
     And session events stream into the preview without a page reload
     And final success or failure remains inspectable in the session detail page
 
@@ -50,7 +50,7 @@ Feature: Quickstart
   Scenario: Run the default Workers AI agent
     Given Workers AI is available
     When the developer creates an agent with the default model
-    Then the agent can respond through the Pi runtime in Cloudflare Sandbox
+    Then the agent can respond through an environment runtime in Cloudflare Sandbox
     And no Anthropic credential is required
 
   @planned
@@ -72,5 +72,5 @@ Feature: Quickstart
     When the developer opens the integration step
     Then examples are available for curl, restish, and generated SDKs
     And examples use the current platform origin and /api OpenAPI contract
-    And examples use Pi-compatible runtime helpers for live session traffic
+    And examples use AMA session endpoints for live session traffic
     And examples do not include raw secrets or upstream vendor API URLs

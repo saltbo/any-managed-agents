@@ -31,7 +31,7 @@ Feature: Web console
   Scenario: Inspect a session transcript
     Given a session has messages, tool calls, and sandbox events
     When the user opens the session detail page
-    Then the transcript view shows Pi runtime messages as chat turns
+    Then the transcript view shows selected runtime messages as chat turns
     And tool calls render with structured status, input summary, output summary, and duration
     And the debug view shows runtime events with structured details
     And the composer sends normal chat messages instead of a task form

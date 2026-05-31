@@ -5,22 +5,30 @@ These decisions define the intended end state for Any Managed Agents.
 ## Environment and Sandbox
 
 - `Environment` is a long-lived sandbox and runtime configuration, not a running sandbox.
-- `Sandbox` is a runtime instance created from an environment snapshot.
-- Each running `Session` owns exactly one sandbox.
+- `Environment.hostingMode` is exactly `cloud` or `self_hosted`.
+- `Environment.runtime` is exactly `ama`, `claude-code`, `codex`, or `copilot`.
+- Environments own hosting mode, runtime, workspace setup, safe secret references, network policy, resource limits, and runtime configuration.
+- The target Environment API surface is `hostingMode`, `runtime`, and runtime configuration; implementation work removes the old `runtimeType` surface instead of preserving it as a compatibility contract.
+- `Sandbox` is an ephemeral workspace/runtime instance created from an environment snapshot when the selected hosting mode and runtime require Cloudflare Sandbox.
+- Each running `cloud` `Session` that requires Cloudflare Sandbox owns exactly one sandbox.
 - Sandbox instances follow the session lifecycle and are not reused across sessions.
 - Cloudflare Sandbox owns filesystem, shell, process isolation, and the per-session execution environment.
 - Sandbox instances are execution environments only and must not expose public ports or preview URLs.
-- Environments declare `runtimeType` as `cloud-hosted` or `self-hosted`. Cloud-hosted sessions start a Cloudflare Sandbox ToolExecutor; self-hosted sessions enqueue AMA-owned runner work, remain pending with a safe waiting status until leased, and must not create a Cloudflare Sandbox.
 - Environments own network policy. `unrestricted` permits outbound network subject to governance policy, `restricted` requires explicit allowed hosts, and `offline` denies outbound sandbox network operations.
 
 ## Runtime Boundary
 
-- v1.0 runs the session loop and runtime state machine in AMA cloud-side code.
-- AMA uses `@earendil-works/pi-agent-core` from cloud-side Worker code for the v1 prompt loop, message state, and tool-call event flow. The full Pi/PyAgent binary is not launched inside the sandbox.
-- Cloudflare Sandbox and future self-hosted runners are tool executor backends. They execute approved tool requests in `/workspace` and return structured results/events.
-- Self-hosted runners are registered executor backends, not Pi runtime hosts. They heartbeat safe capability/load metadata, lease queued work, renew or finish leases, and upload structured events/results through AMA APIs.
+- The previous decision that AMA cloud-side Pi loop is the only v1 runtime owner is overturned.
+- All agent products run as Environment-selected runtimes. `ama`, `claude-code`, `codex`, and `copilot` are peer runtime choices behind the same AMA control plane.
+- `Agent` owns persona, instructions, policy, provider, model, skills, tools, and MCP connector configuration.
+- `Environment` owns hosting mode, runtime, workspace, secrets, network, resource limits, and runtime config.
+- `Session` snapshots the selected Agent and Environment and validates the exact runtime, provider, and model combination before any runtime work starts.
+- Session creation must fail before workspace allocation when the selected environment runtime does not support the Agent's exact provider/model.
+- `cloud` environments run the selected runtime through AMA-managed Cloudflare infrastructure. `self_hosted` environments run the selected runtime through registered self-hosted runtime workers.
+- Self-hosted runners are registered runtime hosts for `self_hosted` environments. They heartbeat safe capability/load metadata, lease session runtime work, renew or finish leases, and upload canonical AMA session events/results through AMA APIs.
 - OIDC provider owns authentication, users, and organizations. AMA owns OIDC provider-backed tenancy enforcement, projects, agent, environment, and session metadata, OpenAPI CRUD, sandbox lifecycle, runtime proxy, UI, audit metadata, and usage metadata.
-- Runtime traffic uses AMA session endpoints. Browser, SDK, and CLI helpers must not connect directly to sandbox-owned agent processes.
+- Runtime traffic uses AMA session endpoints. Browser, SDK, and CLI helpers must not connect directly to sandbox-owned or runner-owned agent processes.
+- The canonical AMA session event protocol is the only UI, API, and session-state contract. Every runtime adapter must translate provider, model, tool, workspace, policy, lifecycle, usage, and error activity into that protocol before clients observe state.
 - AMA must not define a new incompatible runtime SDK or runtime protocol.
 - Cloudflare Agents SDK is not the v1.0 runtime contract and v1.0 must not require `/agents/*` compatibility. It may become a future adapter.
 

@@ -10,8 +10,9 @@ Any Managed Agents is a Cloudflare-native managed agents system. It is inspired 
 - The web console uses the project-local Hono RPC client for internal control-plane calls.
 - Command-line automation uses restish against the published OpenAPI document; this repository does not maintain a bespoke CLI binary.
 - The project provides an agent-facing skill that teaches automation agents how to use restish with the AMA OpenAPI document.
-- The v1.0 agent runtime loop and session state machine are owned by AMA cloud-side code.
-- Runtime traffic goes through AMA session endpoints; AMA may use Pi Core loop/state primitives internally, but clients do not connect to a Pi process in the sandbox.
+- Agent products run as Environment-selected runtimes. `ama`, `claude-code`, `codex`, and `copilot` are peer runtime choices.
+- Runtime traffic goes through AMA session endpoints; clients do not connect directly to sandbox-owned or runner-owned agent processes.
+- The canonical AMA session event protocol is the only UI, API, and session-state contract.
 - Cloudflare Agents SDK is not the v1.0 runtime contract. It may be added later as an adapter, but v1.0 must not require `/agents/*` compatibility.
 - The platform does not maintain a competing runtime SDK or incompatible runtime protocol.
 - Workers AI is a first-class provider, and the model layer supports all configured providers through provider adapters.
@@ -27,14 +28,14 @@ Any Managed Agents is a Cloudflare-native managed agents system. It is inspired 
 The platform owns the control plane:
 
 - OIDC provider-backed tenancy and AMA projects
-- agent definitions
+- agent definitions for persona, instructions, policy, provider, model, skills, tools, and MCP connectors
 - provider configuration for all supported providers
 - model policy
-- sandbox policy
+- sandbox and runtime policy
 - session metadata
-- environment metadata
+- environment hosting, runtime, workspace, network, resource, secret-reference, and runtime-config metadata
 - sandbox lifecycle
-- self-hosted runner metadata and work leases
+- self-hosted runtime runner metadata and work leases
 - runtime endpoint and event transport
 - UI surfaces
 - usage and cost records
@@ -42,15 +43,17 @@ The platform owns the control plane:
 - Cloudflare Secrets references
 - governance rules
 
-AMA owns the runtime protocol surface, session state machine, prompt, abort, follow-up, steer semantics, policy gates, and event persistence. v1 uses `@earendil-works/pi-agent-core` from cloud-side Worker code for the prompt loop, message state, and tool-call event flow.
+AMA owns the control-plane surface, tenant enforcement, session record state machine, runtime endpoint, policy gates, and event persistence. Environment runtime adapters own runtime execution for `ama`, `claude-code`, `codex`, and `copilot`.
 
-Cloudflare Sandbox owns filesystem, shell, process isolation, and per-session tool execution. It is an executor backend, not the owner of the agent loop.
+The previous decision that AMA cloud-side Pi loop is the only v1 runtime owner is overturned. The `ama` runtime may use `@earendil-works/pi-agent-core`, but it is one environment runtime option, not the universal session loop for all agent products.
+
+Cloudflare Sandbox owns filesystem, shell, process isolation, and per-session `cloud` workspace execution. Self-hosted runners own `self_hosted` runtime execution after leasing session work. Neither surface may expose raw runtime process endpoints to product clients.
 
 AMA must not define a custom sandbox SDK. Sandbox access is an internal platform responsibility behind environments, sessions, policy, and tool executor dispatch.
 
 The platform owns the control-plane OpenAPI contract. Repo-local generated SDK scaffolds live under `sdk/typescript`, `sdk/go`, and `sdk/python` and are regenerated from the Hono-generated OpenAPI document. Product SDKs manage control-plane resources and may provide thin helpers that connect to AMA runtime endpoints, but they must not define a replacement runtime protocol. Hand-authored SDK behavior that drifts from OpenAPI does not belong in this repository.
 
-Command-line usage is a control-plane concern. Operators use restish with the published OpenAPI document for resource management instead of a project-specific CLI implementation. Agent skills may wrap this workflow as documentation and task guidance, but they must still call the OpenAPI-described control plane and preserve the AMA runtime boundary.
+Command-line usage is a control-plane concern. Operators use restish with the published OpenAPI document for resource management instead of a project-specific CLI implementation. Agent skills may wrap this workflow as documentation and task guidance, but they must still call the OpenAPI-described control plane and preserve the AMA session endpoint boundary.
 
 The web console is an internal control-plane entrypoint. It uses Hono RPC for shared auth, error handling, tenancy, and response parsing. External developers and operators use the OpenAPI document through direct HTTP, generated SDKs, or restish.
 
@@ -62,24 +65,32 @@ Control plane:
   client / generated SDK / restish -> /api/openapi.json + /api/* -> Hono OpenAPI routes -> D1 / governance / metadata
 
 Runtime:
-  client / external SDK helper -> AMA runtime endpoint -> AMA cloud-owned session loop -> D1 events
+  client / external SDK helper -> AMA session endpoint -> selected environment runtime -> canonical AMA session events -> D1 events
 
-Tool execution:
-  AMA session loop -> environment snapshot policy gates -> ToolExecutor -> Cloudflare Sandbox /workspace
-  AMA session loop -> runner work queue -> self-hosted runner lease -> structured events/results -> D1 events
+Runtime hosting:
+  cloud environment -> AMA-managed Cloudflare infrastructure -> selected runtime -> workspace / safe secrets / policy gates
+  self_hosted environment -> runner work queue -> self-hosted runtime lease -> selected runtime -> structured events/results
 ```
 
 ## Product Model
 
-- `Agent` is a long-lived managed definition: instructions, carried skills, tool declarations, model config, metadata, and versions. Agents do not bind environments and do not own sandbox or network policy.
-- `Environment` is a long-lived sandbox and runtime configuration: runtime type, packages, variables, network policy, resource limits, executor image configuration, and metadata. It is not a running sandbox.
-- `Sandbox` is an ephemeral runtime instance created from an environment snapshot for exactly one session.
-- `Session` is a concrete run of an agent in an explicitly selected environment. Each session binds an agent version snapshot, environment snapshot, safe resource references, sandbox id, cloud runtime state, events, and status. Each running session owns exactly one sandbox executor backend.
-- `Runner` is a registered self-hosted tool executor backend. Runners heartbeat capability, load, and safe metadata to AMA, claim leases for queued work, upload structured events/results, and never own the Pi runtime loop.
+- `Agent` is a long-lived managed definition: persona, instructions, policy, provider, model, carried skills, tool declarations, MCP connectors, metadata, and versions. Agents do not bind environments and do not own hosting, workspace, secrets, network, or resource policy.
+- `Environment` is a long-lived hosting and runtime configuration: hosting mode, runtime, workspace setup, packages, variables, safe secret references, network policy, resource limits, runtime config, and metadata. It is not a running sandbox or runner.
+- `Sandbox` is an ephemeral `cloud` workspace/runtime instance created from an environment snapshot for exactly one cloud session when the selected hosting/runtime combination requires Cloudflare Sandbox.
+- `Session` is a concrete run of an agent in an explicitly selected environment. Each session binds an agent version snapshot, environment snapshot, safe resource references, runtime/provider/model validation result, runtime endpoint, canonical AMA session events, and status.
+- `Runner` is a registered `self_hosted` runtime host. Runners heartbeat capability, supported runtime/provider/model combinations, load, and safe metadata to AMA, claim leases for queued self-hosted session runtime work, and upload canonical AMA session events/results.
 
-Environment `runtimeType` is either `cloud-hosted` or `self-hosted`. Cloud-hosted sessions use the Cloudflare Sandbox ToolExecutor. Self-hosted environments enqueue runner work and keep sessions pending with `statusReason: "waiting-for-runner"` until an eligible runner claims a lease. Self-hosted session creation must not create a Cloudflare Sandbox or expose runner-local endpoints.
+Environment `hostingMode` is exactly `cloud` or `self_hosted`. Environment `runtime` is exactly `ama`, `claude-code`, `codex`, or `copilot`.
 
-Runner credentials are stored outside D1. D1 may store runner ids, names, capabilities, environment binding metadata, heartbeat/load state, work item payloads, lease state, result/error metadata, and secret references only. Raw runner tokens, provider secrets, or vault secret values must not appear in D1, OpenAPI responses, events, logs, or UI state.
+Existing `runtimeType` API fields describe the current pre-migration implementation only. New runtime model implementation must replace that surface with `hostingMode`, `runtime`, and runtime configuration: `cloud-hosted` becomes `hostingMode: "cloud"`, `self-hosted` becomes `hostingMode: "self_hosted"`, and selected runtime is stored separately.
+
+Session creation validates the selected Agent provider/model against the selected Environment runtime and hosting mode. If the exact runtime/provider/model combination is unsupported, session creation fails before workspace allocation, sandbox creation, or self-hosted lease creation.
+
+`cloud` sessions use AMA-managed Cloudflare infrastructure for the selected runtime. `self_hosted` environments enqueue runtime work and keep sessions pending with `statusReason: "waiting-for-runner"` until an eligible runner that supports the exact runtime/provider/model combination claims a lease. `self_hosted` session creation must not create a Cloudflare Sandbox or expose runner-local endpoints.
+
+All runtimes emit canonical AMA session events. The protocol covers lifecycle, message, provider call, tool call, workspace, policy, usage, and error events with monotonically increasing sequence numbers, stable ids, redacted payloads, and runtime-specific details confined to safe metadata.
+
+Runner credentials are stored outside D1. D1 may store runner ids, names, capabilities, supported runtime/provider/model combinations, environment binding metadata, heartbeat/load state, work item payloads, lease state, result/error metadata, and secret references only. Raw runner tokens, provider secrets, or vault secret values must not appear in D1, OpenAPI responses, events, logs, or UI state.
 
 Environment `networkPolicy.mode` is exactly `unrestricted`, `restricted`, or `offline`. Restricted policy requires explicit `allowedHosts`; unrestricted and offline policy do not carry host allow-lists. Offline policy denies outbound sandbox network operations.
 
@@ -98,7 +109,7 @@ Session `resourceRefs` may include GitHub repository declarations:
 }
 ```
 
-AMA stores only safe references. Raw tokens, clone URLs with embedded credentials, path traversal, and mount paths outside `/workspace` are rejected. Cloud-hosted session startup writes `/workspace/.ama/resources.json` with declared GitHub resources sorted by mount path. The manifest is a deterministic setup contract for the runtime/tool executor layer; repositories are not considered cloned or mounted until that layer performs setup using approved credential references.
+AMA stores only safe references. Raw tokens, clone URLs with embedded credentials, path traversal, and mount paths outside `/workspace` are rejected. `cloud` session startup writes `/workspace/.ama/resources.json` with declared GitHub resources sorted by mount path. The manifest is a deterministic setup contract for the selected runtime layer; repositories are not considered cloned or mounted until that layer performs setup using approved credential references.
 
 ## Spec Discipline
 

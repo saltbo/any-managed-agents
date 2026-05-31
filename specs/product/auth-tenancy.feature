@@ -22,7 +22,7 @@ Feature: Authentication and tenancy
     Given a session belongs to a project
     When the user connects through the AMA runtime proxy
     Then the AMA runtime proxy resolves the project and user context
-    And AMA rejects access from users outside the project before forwarding to Pi
+    And AMA rejects access from users outside the project before forwarding to the selected environment runtime
 
   @planned
   Scenario: Scope resource identifiers by tenant

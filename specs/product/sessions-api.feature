@@ -43,6 +43,14 @@ Feature: Sessions API
     And the error envelope identifies the unavailable dependency
     And no session record is left in an active state
 
+  @planned
+  Scenario: Reject unsupported runtime provider and model combinations
+    Given a user attempts to create a session
+    When the selected environment runtime does not support the selected agent provider and model
+    Then the request fails before workspace allocation, sandbox creation, or self-hosted lease creation
+    And the error envelope identifies the unsupported runtime, provider, and model
+    And no session record is left in an active state
+
   @implemented
   Scenario: Run a message through the session runtime endpoint
     Given an idle session has cloud-owned runtime state and a sandbox executor
