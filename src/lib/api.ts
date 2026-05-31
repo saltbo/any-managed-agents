@@ -1,3 +1,4 @@
+import type { AmaSessionEventType } from '@shared/session-events'
 import { hc } from 'hono/client'
 import type { AppType } from '../../server/app'
 import { getAccessToken } from './oidc'
@@ -149,7 +150,7 @@ export interface SessionEvent {
   projectId: string
   sessionId: string
   sequence: number
-  type: string
+  type: AmaSessionEventType
   visibility: 'runtime' | 'transcript' | 'debug' | 'audit'
   role: string | null
   parentEventId: string | null

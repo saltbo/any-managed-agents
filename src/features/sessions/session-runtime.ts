@@ -1,19 +1,19 @@
-import { isPiEventType, piEventCategory, piEventTypeFromPayload } from '@shared/pi-events'
+import { amaSessionEventCategory, amaSessionEventTypeFromPayload, isAmaSessionEventType } from '@shared/session-events'
 import type { SessionEvent } from '@/lib/api'
 import { getStoredAccessToken } from '@/lib/oidc'
 
-export type PiRuntimeConnectionState = 'connecting' | 'open' | 'closed' | 'error'
-export type PiRuntimeRunState = 'idle' | 'running' | 'error'
+export type SessionRuntimeConnectionState = 'connecting' | 'open' | 'closed' | 'error'
+export type SessionRuntimeRunState = 'idle' | 'running' | 'error'
 
-export type PiRpcCommandType = 'get_state' | 'prompt' | 'steer' | 'follow_up' | 'abort'
+export type RuntimeRpcCommandType = 'get_state' | 'prompt' | 'steer' | 'follow_up' | 'abort'
 
-export interface PiRpcCommand {
+export interface RuntimeRpcCommand {
   id: string
-  type: PiRpcCommandType
+  type: RuntimeRpcCommandType
   message?: string
 }
 
-export interface PiRuntimeMessage {
+export interface SessionRuntimeMessage {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: string
@@ -21,7 +21,7 @@ export interface PiRuntimeMessage {
   createdAt: string
 }
 
-export interface PiRuntimeToolTrace {
+export interface SessionRuntimeToolTrace {
   id: string
   callId: string
   name: string
@@ -35,31 +35,31 @@ export interface PiRuntimeToolTrace {
   eventType: string
 }
 
-export interface PiRuntimeDebugEvent {
+export interface SessionRuntimeDebugEvent {
   id: string
   type: string
   payload: Record<string, unknown>
   createdAt: string
 }
 
-export interface PiRuntimeState {
-  connection: PiRuntimeConnectionState
-  runState: PiRuntimeRunState
-  messages: PiRuntimeMessage[]
-  tools: PiRuntimeToolTrace[]
-  debugEvents: PiRuntimeDebugEvent[]
+export interface SessionRuntimeState {
+  connection: SessionRuntimeConnectionState
+  runState: SessionRuntimeRunState
+  messages: SessionRuntimeMessage[]
+  tools: SessionRuntimeToolTrace[]
+  debugEvents: SessionRuntimeDebugEvent[]
   eventKeys: string[]
   error: string | null
 }
 
-export type PiRuntimeAction =
+export type SessionRuntimeAction =
   | { type: 'reset' }
-  | { type: 'connection'; state: PiRuntimeConnectionState; error?: string | null }
-  | { type: 'command_sent'; command: PiRpcCommand; at: string }
+  | { type: 'connection'; state: SessionRuntimeConnectionState; error?: string | null }
+  | { type: 'command_sent'; command: RuntimeRpcCommand; at: string }
   | { type: 'event'; event: Record<string, unknown>; at: string }
   | { type: 'persisted_events'; events: SessionEvent[] }
 
-export const initialPiRuntimeState: PiRuntimeState = {
+export const initialSessionRuntimeState: SessionRuntimeState = {
   connection: 'connecting',
   runState: 'idle',
   messages: [],
@@ -69,9 +69,9 @@ export const initialPiRuntimeState: PiRuntimeState = {
   error: null,
 }
 
-export function piRuntimeReducer(state: PiRuntimeState, action: PiRuntimeAction): PiRuntimeState {
+export function sessionRuntimeReducer(state: SessionRuntimeState, action: SessionRuntimeAction): SessionRuntimeState {
   if (action.type === 'reset') {
-    return initialPiRuntimeState
+    return initialSessionRuntimeState
   }
   if (action.type === 'connection') {
     return {
@@ -100,19 +100,19 @@ export function piRuntimeReducer(state: PiRuntimeState, action: PiRuntimeAction)
     }
   }
 
-  const eventType = piEventTypeFromPayload(action.event)
+  const eventType = amaSessionEventTypeFromPayload(action.event)
   const eventKey = runtimeEventKey(action.event, eventType)
   if (eventKey && state.eventKeys.includes(eventKey)) {
     return state
   }
-  const debugEvent: PiRuntimeDebugEvent = {
+  const debugEvent: SessionRuntimeDebugEvent = {
     id: stringField(action.event, 'id') ?? `${eventType}_${action.at}_${state.debugEvents.length + 1}`,
     type: eventType,
     payload: action.event,
     createdAt: action.at,
   }
 
-  if (!isPiEventType(eventType)) {
+  if (!isAmaSessionEventType(eventType)) {
     return {
       ...state,
       debugEvents: appendDebugEvent(state.debugEvents, debugEvent),
@@ -120,31 +120,21 @@ export function piRuntimeReducer(state: PiRuntimeState, action: PiRuntimeAction)
     }
   }
 
-  if (eventType === 'response') {
-    const success = action.event.success !== false
-    const message = success ? null : messageFromRuntimeError(action.event, action.at, debugEvent.id)
+  if (eventType === 'session.lifecycle') {
+    const stage = stringField(action.event, 'stage')
+    const terminal = stage === 'agent_completed' || stage === 'turn_completed' || stage === 'runtime_exited'
     return {
       ...state,
-      runState: success ? state.runState : 'error',
-      error: success ? null : runtimeErrorMessage(action.event),
-      messages: message ? upsertMessage(state.messages, message) : state.messages,
+      runState: terminal ? 'idle' : 'running',
       debugEvents: appendDebugEvent(state.debugEvents, debugEvent),
       eventKeys: appendEventKey(state.eventKeys, eventKey),
     }
   }
-  if (eventType === 'agent_start' || eventType === 'turn_start' || eventType === 'message_start') {
-    return {
-      ...state,
-      runState: 'running',
-      debugEvents: appendDebugEvent(state.debugEvents, debugEvent),
-      eventKeys: appendEventKey(state.eventKeys, eventKey),
-    }
-  }
-  if (eventType === 'message' || eventType === 'message_update' || eventType === 'message_end') {
-    const message = messageFromPiEvent(
+  if (eventType === 'transcript.message' || eventType === 'transcript.message.delta') {
+    const message = messageFromSessionEvent(
       action.event,
       action.at,
-      eventType === 'message_update' ? 'streaming' : 'complete',
+      eventType === 'transcript.message.delta' ? 'streaming' : 'complete',
     )
     return {
       ...state,
@@ -153,12 +143,8 @@ export function piRuntimeReducer(state: PiRuntimeState, action: PiRuntimeAction)
       eventKeys: appendEventKey(state.eventKeys, eventKey),
     }
   }
-  if (
-    eventType === 'tool_execution_start' ||
-    eventType === 'tool_execution_update' ||
-    eventType === 'tool_execution_end'
-  ) {
-    const tool = toolFromPiEvent(action.event, action.at, eventType)
+  if (eventType === 'tool_call.started' || eventType === 'tool_call.updated' || eventType === 'tool_call.completed') {
+    const tool = toolFromSessionEvent(action.event, action.at, eventType)
     return {
       ...state,
       tools: tool ? upsertTool(state.tools, tool) : state.tools,
@@ -166,35 +152,7 @@ export function piRuntimeReducer(state: PiRuntimeState, action: PiRuntimeAction)
       eventKeys: appendEventKey(state.eventKeys, eventKey),
     }
   }
-  if (eventType === 'agent_end' || eventType === 'turn_end') {
-    const message = messageFromPiEvent(action.event, action.at, 'complete')
-    return {
-      ...state,
-      runState: 'idle',
-      messages: message ? upsertMessage(state.messages, message) : state.messages,
-      debugEvents: appendDebugEvent(state.debugEvents, debugEvent),
-      eventKeys: appendEventKey(state.eventKeys, eventKey),
-    }
-  }
-  if (eventType === 'bridge_exit') {
-    const failed = action.event.code !== 0 && action.event.code !== null
-    const message = failed
-      ? messageFromRuntimeError(
-          { ...action.event, message: 'Pi runtime exited with an error' },
-          action.at,
-          debugEvent.id,
-        )
-      : null
-    return {
-      ...state,
-      runState: failed ? 'error' : 'idle',
-      error: failed ? 'Pi runtime exited with an error' : null,
-      messages: message ? upsertMessage(state.messages, message) : state.messages,
-      debugEvents: appendDebugEvent(state.debugEvents, debugEvent),
-      eventKeys: appendEventKey(state.eventKeys, eventKey),
-    }
-  }
-  if (eventType === 'bridge_stderr' || eventType === 'error') {
+  if (eventType === 'runtime.error') {
     const message = messageFromRuntimeError(action.event, action.at, debugEvent.id)
     return {
       ...state,
@@ -205,7 +163,13 @@ export function piRuntimeReducer(state: PiRuntimeState, action: PiRuntimeAction)
       eventKeys: appendEventKey(state.eventKeys, eventKey),
     }
   }
-  if (eventType === 'usage') {
+  if (
+    eventType === 'usage.recorded' ||
+    eventType === 'runtime.output' ||
+    eventType === 'runtime.metadata' ||
+    eventType === 'runner.metadata' ||
+    eventType === 'policy.decision'
+  ) {
     return {
       ...state,
       debugEvents: appendDebugEvent(state.debugEvents, debugEvent),
@@ -232,43 +196,30 @@ export function runtimeWebSocketUrl(runtimeEndpointPath: string) {
   return url.toString()
 }
 
-function mergePersistedEvents(state: PiRuntimeState, events: SessionEvent[]) {
+function mergePersistedEvents(state: SessionRuntimeState, events: SessionEvent[]) {
   const runtimeEvents = uniquePersistedRuntimeEvents(events)
   const messages = dedupeRuntimeMessages(
     runtimeEvents
       .map(({ stored, payload }) => {
         const type = runtimeEventType(stored, payload)
-        if (type === 'message_end') {
-          return messageFromPiEvent(payload, stored.createdAt, 'complete')
+        if (type === 'transcript.message') {
+          return messageFromSessionEvent(payload, stored.createdAt, 'complete')
         }
-        if (type === 'agent_end') {
-          return messageFromPiEvent(payload, stored.createdAt, 'complete')
-        }
-        if (type === 'bridge_exit') {
-          const failed = payload.code !== 0 && payload.code !== null
-          return failed
-            ? messageFromRuntimeError(
-                { ...payload, message: 'Pi runtime exited with an error' },
-                stored.createdAt,
-                stored.id,
-              )
-            : null
-        }
-        if (type === 'bridge_stderr' || type === 'error') {
+        if (type === 'runtime.error') {
           return messageFromRuntimeError(payload, stored.createdAt, stored.id)
         }
         return null
       })
-      .filter((message): message is PiRuntimeMessage => Boolean(message))
+      .filter((message): message is SessionRuntimeMessage => Boolean(message))
       .sort((left, right) => Date.parse(left.createdAt) - Date.parse(right.createdAt)),
   )
   const tools = runtimeEvents
     .filter(({ stored, payload }) => isToolEvent(runtimeEventType(stored, payload)))
-    .map(({ stored, payload }) => toolFromPiEvent(payload, stored.createdAt, runtimeEventType(stored, payload)))
-    .filter((tool): tool is PiRuntimeToolTrace => Boolean(tool))
-    .reduce<PiRuntimeToolTrace[]>((next, tool) => upsertTool(next, tool), [])
+    .map(({ stored, payload }) => toolFromSessionEvent(payload, stored.createdAt, runtimeEventType(stored, payload)))
+    .filter((tool): tool is SessionRuntimeToolTrace => Boolean(tool))
+    .reduce<SessionRuntimeToolTrace[]>((next, tool) => upsertTool(next, tool), [])
   const debugEvents = runtimeEvents.map(
-    ({ stored, payload }): PiRuntimeDebugEvent => ({
+    ({ stored, payload }): SessionRuntimeDebugEvent => ({
       id: stored.id,
       type: runtimeEventType(stored, payload),
       payload,
@@ -279,12 +230,11 @@ function mergePersistedEvents(state: PiRuntimeState, events: SessionEvent[]) {
     .map(({ stored, payload }) => runtimeEventKey(payload, runtimeEventType(stored, payload)))
     .filter((key): key is string => Boolean(key))
   const hasTerminalEvent = runtimeEvents.some(({ payload }) => {
-    const type = stringField(payload, 'type')
-    return type === 'agent_end' || type === 'turn_end' || type === 'bridge_exit'
+    const stage = stringField(payload, 'stage')
+    return stage === 'agent_completed' || stage === 'turn_completed' || stage === 'runtime_exited'
   })
-  const hasErrorEvent = runtimeEvents.some(({ payload }) => {
-    const type = stringField(payload, 'type')
-    return type === 'error' || type === 'bridge_stderr'
+  const hasErrorEvent = runtimeEvents.some(({ stored }) => {
+    return stored.type === 'runtime.error'
   })
   return {
     ...state,
@@ -336,40 +286,32 @@ function uniquePersistedRuntimeEvents(events: SessionEvent[]): StoredRuntimeEven
 }
 
 function runtimeEventType(stored: SessionEvent, payload: Record<string, unknown>): string {
-  const payloadType = piEventTypeFromPayload(payload)
-  if (payloadType !== 'message' || payload.type) {
-    return payloadType
-  }
-  return stored.type || 'message'
+  return stored.type || amaSessionEventTypeFromPayload(payload)
 }
 
 function runtimeTurnKey(event: Record<string, unknown>, eventType: string) {
-  if (piEventCategory(eventType) !== 'message') {
+  if (amaSessionEventCategory(eventType) !== 'transcript') {
     return null
   }
   const message = objectValue(event.message)
-  const assistantMessageEvent = objectValue(event.assistantMessageEvent)
-  const partial = objectValue(assistantMessageEvent.partial)
   const timestamp =
     scalarField(message, 'timestamp') ??
-    scalarField(partial, 'timestamp') ??
     scalarField(event, 'timestamp') ??
-    stringField(assistantMessageEvent, 'responseId')
+    stringField(event, 'responseId') ??
+    stringField(message, 'id')
   if (!timestamp) {
     return null
   }
   return `${stringField(message, 'role') ?? ''}:${timestamp}`
 }
 
-function messageFromPiEvent(event: Record<string, unknown>, at: string, status: PiRuntimeMessage['status']) {
+function messageFromSessionEvent(event: Record<string, unknown>, at: string, status: SessionRuntimeMessage['status']) {
   const message = objectValue(event.message)
-  const assistantMessageEvent = objectValue(event.assistantMessageEvent)
-  const partial = objectValue(assistantMessageEvent.partial)
   const rawRole = stringField(message, 'role') ?? stringField(event, 'role') ?? 'assistant'
   if (rawRole === 'toolResult') {
     return null
   }
-  const role: PiRuntimeMessage['role'] =
+  const role: SessionRuntimeMessage['role'] =
     rawRole === 'user' || rawRole === 'assistant' || rawRole === 'system' ? rawRole : 'assistant'
   const errorMessage = stringField(message, 'errorMessage') ?? stringField(event, 'errorMessage')
   if (errorMessage) {
@@ -381,14 +323,7 @@ function messageFromPiEvent(event: Record<string, unknown>, at: string, status: 
       createdAt: at,
     }
   }
-  const assistantEventType = stringField(assistantMessageEvent, 'type')
-  if (status === 'streaming' && assistantEventType && assistantEventType !== 'text_delta') {
-    return null
-  }
-  const content =
-    status === 'streaming' && assistantEventType === 'text_delta'
-      ? extractText(assistantMessageEvent.delta)
-      : extractText(event.content ?? message.content ?? assistantMessageEvent.text ?? assistantMessageEvent.delta)
+  const content = extractText(message.content ?? event.content ?? event.delta ?? '')
   if (!content) {
     return null
   }
@@ -397,8 +332,7 @@ function messageFromPiEvent(event: Record<string, unknown>, at: string, status: 
       stringField(event, 'messageId') ??
       stringField(message, 'id') ??
       scalarField(message, 'timestamp') ??
-      scalarField(partial, 'timestamp') ??
-      stringField(assistantMessageEvent, 'responseId') ??
+      stringField(event, 'responseId') ??
       stringField(event, 'id') ??
       `${role}_${at}`,
     role,
@@ -408,7 +342,11 @@ function messageFromPiEvent(event: Record<string, unknown>, at: string, status: 
   }
 }
 
-function messageFromRuntimeError(event: Record<string, unknown>, at: string, fallbackId: string): PiRuntimeMessage {
+function messageFromRuntimeError(
+  event: Record<string, unknown>,
+  at: string,
+  fallbackId: string,
+): SessionRuntimeMessage {
   const eventId = stringField(event, 'id')
   return {
     id: eventId ? `${eventId}_error` : fallbackId,
@@ -419,20 +357,25 @@ function messageFromRuntimeError(event: Record<string, unknown>, at: string, fal
   }
 }
 
-function toolFromPiEvent(event: Record<string, unknown>, at: string, eventType: string): PiRuntimeToolTrace | null {
-  const toolCall = objectValue(event.toolCall ?? event.call ?? event.toolExecution ?? event)
+function toolFromSessionEvent(
+  event: Record<string, unknown>,
+  at: string,
+  eventType: string,
+): SessionRuntimeToolTrace | null {
+  const toolCall = objectValue(event.toolCall ?? event)
   const callId = stringField(toolCall, 'id') ?? stringField(toolCall, 'toolCallId') ?? stringField(event, 'id')
   if (!callId) {
     return null
   }
-  const failed = Boolean(toolCall.error ?? event.error ?? event.isError)
-  const input = toolCall.input ?? toolCall.args ?? event.input
-  const output = toolCall.output ?? toolCall.result ?? toolCall.partialResult ?? event.output
+  const status = stringField(event, 'status')
+  const failed = status === 'error' || Boolean(toolCall.error ?? event.error ?? event.isError)
+  const input = toolCall.input ?? toolCall.args ?? event.input ?? event.args
+  const output = toolCall.output ?? toolCall.result ?? toolCall.partialResult ?? event.output ?? event.result
   return {
     id: callId,
     callId,
     name: stringField(toolCall, 'name') ?? stringField(toolCall, 'toolName') ?? 'tool',
-    status: eventType === 'tool_execution_end' ? (failed ? 'error' : 'success') : 'running',
+    status: eventType === 'tool_call.completed' ? (failed ? 'error' : 'success') : 'running',
     input,
     output: readableToolValue(output),
     error: failed ? readableContent(toolCall.error ?? event.error) : null,
@@ -440,10 +383,10 @@ function toolFromPiEvent(event: Record<string, unknown>, at: string, eventType: 
     createdAt: at,
     updatedAt: at,
     eventType,
-  } satisfies PiRuntimeToolTrace
+  } satisfies SessionRuntimeToolTrace
 }
 
-function upsertMessage(messages: PiRuntimeMessage[], message: PiRuntimeMessage) {
+function upsertMessage(messages: SessionRuntimeMessage[], message: SessionRuntimeMessage) {
   const index = messages.findIndex((item) => item.id === message.id || sameRuntimeMessage(item, message))
   if (index === -1) {
     return [...messages, message]
@@ -461,7 +404,7 @@ function upsertMessage(messages: PiRuntimeMessage[], message: PiRuntimeMessage) 
   return next
 }
 
-function sameRuntimeMessage(left: PiRuntimeMessage, right: PiRuntimeMessage) {
+function sameRuntimeMessage(left: SessionRuntimeMessage, right: SessionRuntimeMessage) {
   return (
     left.role === right.role &&
     Math.abs(Date.parse(left.createdAt) - Date.parse(right.createdAt)) < 5000 &&
@@ -469,18 +412,18 @@ function sameRuntimeMessage(left: PiRuntimeMessage, right: PiRuntimeMessage) {
   )
 }
 
-function dedupeRuntimeMessages(messages: PiRuntimeMessage[]) {
-  return messages.reduce<PiRuntimeMessage[]>((next, message) => upsertMessage(next, message), [])
+function dedupeRuntimeMessages(messages: SessionRuntimeMessage[]) {
+  return messages.reduce<SessionRuntimeMessage[]>((next, message) => upsertMessage(next, message), [])
 }
 
 function normalizeMessageContent(value: string) {
   return value.trim().replace(/\s+/g, ' ')
 }
 
-function upsertTool(tools: PiRuntimeToolTrace[], tool: PiRuntimeToolTrace) {
+function upsertTool(tools: SessionRuntimeToolTrace[], tool: SessionRuntimeToolTrace) {
   const runningIndex = findLastToolIndex(tools, (item) => item.callId === tool.callId && item.status === 'running')
   const index =
-    tool.eventType === 'tool_execution_start'
+    tool.eventType === 'tool_call.started'
       ? runningIndex
       : runningIndex !== -1
         ? runningIndex
@@ -505,7 +448,7 @@ function upsertTool(tools: PiRuntimeToolTrace[], tool: PiRuntimeToolTrace) {
   return next
 }
 
-function findLastToolIndex(tools: PiRuntimeToolTrace[], predicate: (tool: PiRuntimeToolTrace) => boolean) {
+function findLastToolIndex(tools: SessionRuntimeToolTrace[], predicate: (tool: SessionRuntimeToolTrace) => boolean) {
   for (let index = tools.length - 1; index >= 0; index -= 1) {
     const tool = tools[index]
     if (tool && predicate(tool)) {
@@ -515,7 +458,7 @@ function findLastToolIndex(tools: PiRuntimeToolTrace[], predicate: (tool: PiRunt
   return -1
 }
 
-function appendDebugEvent(events: PiRuntimeDebugEvent[], event: PiRuntimeDebugEvent) {
+function appendDebugEvent(events: SessionRuntimeDebugEvent[], event: SessionRuntimeDebugEvent) {
   if (events.some((item) => item.id === event.id)) {
     return events
   }
@@ -524,60 +467,40 @@ function appendDebugEvent(events: PiRuntimeDebugEvent[], event: PiRuntimeDebugEv
 
 function runtimeEventKey(event: Record<string, unknown>, eventType: string, turnKey?: string | null) {
   const message = objectValue(event.message)
-  const assistantMessageEvent = objectValue(event.assistantMessageEvent)
-  const partial = objectValue(assistantMessageEvent.partial)
   const timestamp =
     scalarField(message, 'timestamp') ??
-    scalarField(partial, 'timestamp') ??
     scalarField(event, 'timestamp') ??
-    stringField(assistantMessageEvent, 'responseId')
-  const toolCallId =
-    stringField(event, 'toolCallId') ??
-    stringField(message, 'toolCallId') ??
-    stringField(objectValue(event.toolCall), 'id') ??
-    stringField(objectValue(event.toolCall), 'toolCallId')
+    stringField(event, 'responseId') ??
+    stringField(message, 'id')
+  const toolCall = objectValue(event.toolCall)
+  const toolCallId = stringField(toolCall, 'id') ?? stringField(toolCall, 'toolCallId')
   if (isToolEvent(eventType)) {
-    const eventId = stringField(event, 'id')
+    const eventId = stringField(toolCall, 'id') ?? stringField(event, 'id')
     if (eventId) {
       return `${eventType}:id:${eventId}`
     }
     if (!turnKey) {
       return null
     }
-    return `${eventType}:${turnKey}:${toolCallId ?? ''}:${stableStringify(
-      event.args ?? event.result ?? event.partialResult ?? event,
-    )}`
+    return `${eventType}:${turnKey}:${toolCallId ?? ''}:${stableStringify(toolCall)}`
   }
-  if (eventType === 'message_update') {
+  if (eventType === 'transcript.message.delta') {
     if (!timestamp) {
       return null
     }
-    return `${eventType}:${stringField(assistantMessageEvent, 'type') ?? ''}:${timestamp ?? ''}:${stableStringify(
-      assistantMessageEvent.delta ?? assistantMessageEvent.content ?? message.content,
-    )}`
+    return `${eventType}:${timestamp ?? ''}:${stableStringify(message.content ?? event.delta)}`
   }
-  if (
-    eventType === 'message' ||
-    eventType === 'message_start' ||
-    eventType === 'message_end' ||
-    eventType === 'turn_end'
-  ) {
+  if (eventType === 'transcript.message' || eventType === 'session.lifecycle') {
     if (!timestamp) {
       return null
     }
-    return `${eventType}:${stringField(message, 'role') ?? ''}:${timestamp ?? ''}:${stableStringify(message.content)}`
-  }
-  if (eventType === 'response') {
-    return `${eventType}:${stringField(event, 'id') ?? ''}:${stringField(event, 'command') ?? ''}:${timestamp ?? ''}`
-  }
-  if (eventType === 'agent_end') {
-    return `${eventType}:${stableStringify(event.messages)}`
+    return `${eventType}:${stringField(message, 'role') ?? ''}:${timestamp}:${stableStringify(message.content)}`
   }
   return `${eventType}:${stableStringify(event)}`
 }
 
 function isToolEvent(eventType: string) {
-  return piEventCategory(eventType) === 'tool'
+  return amaSessionEventCategory(eventType) === 'tool'
 }
 
 function appendEventKey(keys: string[], key: string | null) {
@@ -613,7 +536,7 @@ function runtimeErrorMessage(event: Record<string, unknown>) {
     return event.error
   }
   const error = objectValue(event.error)
-  return readableContent(error.message ?? event.message ?? event.data ?? 'Runtime error')
+  return readableContent(error.message ?? event.message ?? event.data ?? event.content ?? 'Runtime error')
 }
 
 function extractText(value: unknown): string {

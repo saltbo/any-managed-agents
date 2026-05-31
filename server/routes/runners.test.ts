@@ -159,7 +159,11 @@ describe('[CF] /api/runners', () => {
         events: [
           {
             type: 'tool_execution_start',
-            payload: { type: 'tool_execution_start', toolName: 'sandbox.exec', input: { command: 'npm test' } },
+            payload: {
+              toolCallId: 'call_1',
+              toolName: 'sandbox.exec',
+              input: { command: 'npm test', token: 'raw-secret-value' },
+            },
             metadata: { runnerId: runner.id },
           },
         ],
@@ -205,10 +209,11 @@ describe('[CF] /api/runners', () => {
     }
     expect(sessionEvents.data).toEqual([
       expect.objectContaining({
-        type: 'tool_execution_start',
+        type: 'tool_call.started',
         metadata: expect.objectContaining({ source: 'self-hosted-runner', runnerId: runner.id }),
       }),
     ])
+    expect(JSON.stringify(sessionEvents.data)).not.toContain('raw-secret-value')
   })
 
   it('rejects runner credential secret references that are not safe references', async () => {
@@ -377,7 +382,7 @@ describe('[CF] /api/runners', () => {
     const eventsRes = await jsonFetch(`/api/runners/${runner.id}/leases/${lease.id}/events`, authorization, {
       method: 'POST',
       body: JSON.stringify({
-        events: [{ type: 'tool_execution_start', payload: { type: 'tool_execution_start' } }],
+        events: [{ type: 'tool_call.started', payload: { toolCall: { id: 'call_1', name: 'sandbox.exec' } } }],
       }),
     })
     expect(eventsRes.status).toBe(409)

@@ -1,8 +1,13 @@
 import { createRoute, z } from '@hono/zod-openapi'
-import { and, asc, desc, eq, gt, gte, isNull, like, lt, lte, max, ne, or } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, gte, inArray, isNull, like, lt, lte, max, ne, or, sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
-import { piEventTypeFromPayload } from '../../shared/pi-events'
+import {
+  AMA_SESSION_EVENT_TYPES,
+  type AmaSessionEventType,
+  canonicalAmaSessionEventFromRuntimeEvent,
+  isAmaSessionEventType,
+} from '../../shared/session-events'
 import { recordAudit, requestId } from '../audit'
 import { type AuthContext, requireAuth } from '../auth/session'
 import {
@@ -190,7 +195,7 @@ const SessionEventSchema = z
     projectId: z.string(),
     sessionId: z.string(),
     sequence: z.number().int(),
-    type: z.string(),
+    type: z.enum(AMA_SESSION_EVENT_TYPES),
     visibility: z.enum(EVENT_VISIBILITIES),
     role: z.string().nullable(),
     parentEventId: z.string().nullable(),
@@ -249,9 +254,9 @@ const StopSessionQuerySchema = z.object({
 const ListQuerySchema = listQuerySchema(SESSION_STATUSES)
 const EventsQuerySchema = eventListQuerySchema().extend({
   type: z
-    .string()
+    .enum(AMA_SESSION_EVENT_TYPES)
     .optional()
-    .openapi({ param: { name: 'type', in: 'query' }, example: 'message_update' }),
+    .openapi({ param: { name: 'type', in: 'query' }, example: 'transcript.message' }),
   visibility: z
     .enum(EVENT_VISIBILITIES)
     .optional()
@@ -588,19 +593,39 @@ function serializeSession(row: SessionRow) {
 }
 
 function serializeEvent(row: SessionEventRow) {
+  const rawPayload = JSON.parse(row.payload) as Record<string, unknown>
+  const rawMetadata = JSON.parse(row.metadata) as Record<string, unknown>
+  const event = isAmaSessionEventType(row.type)
+    ? {
+        type: row.type,
+        visibility: row.visibility as (typeof EVENT_VISIBILITIES)[number],
+        role: row.role,
+        payload: rawPayload,
+        metadata: rawMetadata,
+      }
+    : canonicalAmaSessionEventFromRuntimeEvent(
+        { ...rawPayload, type: row.type },
+        { source: 'legacy-session-event', ...rawMetadata },
+      )
+  if (!isAmaSessionEventType(row.type)) {
+    event.metadata = {
+      ...event.metadata,
+      legacySessionEventType: row.type,
+    }
+  }
   return {
     id: row.id,
     organizationId: row.organizationId,
     projectId: row.projectId,
     sessionId: row.sessionId,
     sequence: row.sequence,
-    type: row.type,
-    visibility: row.visibility as (typeof EVENT_VISIBILITIES)[number],
-    role: row.role,
+    type: event.type,
+    visibility: event.visibility,
+    role: event.role,
     parentEventId: row.parentEventId,
     correlationId: row.correlationId,
-    payload: redactSensitiveValue(JSON.parse(row.payload)) as Record<string, unknown>,
-    metadata: redactSensitiveValue(JSON.parse(row.metadata)) as Record<string, unknown>,
+    payload: redactSensitiveValue(event.payload) as Record<string, unknown>,
+    metadata: redactSensitiveValue(event.metadata) as Record<string, unknown>,
     createdAt: row.createdAt,
   }
 }
@@ -611,6 +636,69 @@ function eventSequenceFilter(cursor: number, order: EventOrder) {
 
 function eventCursor(query: { cursor?: number | undefined }) {
   return query.cursor
+}
+
+function eventTypeFilter(type: AmaSessionEventType | undefined) {
+  if (!type) {
+    return undefined
+  }
+  const aliases = LEGACY_EVENT_TYPE_ALIASES[type] ?? [type]
+  const firstAlias = aliases[0]
+  if (!firstAlias) {
+    throw new Error(`Missing event type alias for ${type}`)
+  }
+  const directFilter = aliases.length === 1 ? eq(sessionEvents.type, firstAlias) : inArray(sessionEvents.type, aliases)
+  if (type === 'session.lifecycle') {
+    return or(
+      directFilter,
+      and(
+        eq(sessionEvents.type, 'bridge_exit'),
+        or(
+          sql`json_extract(${sessionEvents.payload}, '$.code') = 0`,
+          sql`json_type(${sessionEvents.payload}, '$.code') = 'null'`,
+        ),
+      ),
+    )
+  }
+  if (type === 'runtime.error') {
+    return or(
+      directFilter,
+      and(
+        eq(sessionEvents.type, 'bridge_exit'),
+        or(
+          sql`json_type(${sessionEvents.payload}, '$.code') IS NULL`,
+          and(
+            sql`json_type(${sessionEvents.payload}, '$.code') != 'null'`,
+            sql`json_extract(${sessionEvents.payload}, '$.code') != 0`,
+          ),
+        ),
+      ),
+    )
+  }
+  return directFilter
+}
+
+const LEGACY_EVENT_TYPE_ALIASES: Record<AmaSessionEventType, string[]> = {
+  'session.lifecycle': [
+    'session.lifecycle',
+    'agent_start',
+    'turn_start',
+    'message_start',
+    'agent_end',
+    'turn_end',
+    'response',
+  ],
+  'transcript.message': ['transcript.message', 'message', 'message_end'],
+  'transcript.message.delta': ['transcript.message.delta', 'message_update'],
+  'tool_call.started': ['tool_call.started', 'tool_execution_start'],
+  'tool_call.updated': ['tool_call.updated', 'tool_execution_update'],
+  'tool_call.completed': ['tool_call.completed', 'tool_execution_end'],
+  'usage.recorded': ['usage.recorded', 'usage'],
+  'policy.decision': ['policy.decision', 'policy_denied'],
+  'runtime.error': ['runtime.error', 'error'],
+  'runtime.metadata': ['runtime.metadata', 'queue_update', 'session_info_changed'],
+  'runtime.output': ['runtime.output', 'bridge_stderr'],
+  'runner.metadata': ['runner.metadata', 'runner_heartbeat', 'runner_status'],
 }
 
 function eventOrder(order?: EventOrder) {
@@ -636,7 +724,7 @@ async function markExpiredPendingSessions(db: Db, auth: AuthContext) {
     .update(sessions)
     .set({
       status: 'error',
-      statusReason: 'Pi runtime startup timed out',
+      statusReason: 'Session runtime startup timed out',
       updatedAt: timestamp,
     })
     .where(
@@ -1173,7 +1261,7 @@ async function dispatchInitialPrompt(env: Env, db: Db, auth: AuthContext, sessio
       ensureActive,
       onEvent: async (event, metadata) => {
         await ensureActive()
-        await appendPiRuntimeEvent(db, {
+        await appendRuntimeEvent(db, {
           auth,
           sessionId: session.id,
           event,
@@ -1195,7 +1283,7 @@ async function dispatchInitialPrompt(env: Env, db: Db, auth: AuthContext, sessio
           })
           if (!decision.allowed) {
             await ensureActive()
-            await appendPiRuntimeEvent(db, {
+            await appendRuntimeEvent(db, {
               auth,
               sessionId: session.id,
               event: {
@@ -1267,7 +1355,7 @@ async function assertRuntimeSessionRunning(db: Db, auth: AuthContext, sessionId:
 
 async function loadRuntimeMessages(db: Db, sessionId: string) {
   const rows = await db
-    .select({ payload: sessionEvents.payload })
+    .select({ type: sessionEvents.type, payload: sessionEvents.payload })
     .from(sessionEvents)
     .where(eq(sessionEvents.sessionId, sessionId))
     .orderBy(asc(sessionEvents.sequence))
@@ -1298,11 +1386,7 @@ async function markInitialPromptFailed(
   })
 }
 
-function piEventType(event: Record<string, unknown>) {
-  return piEventTypeFromPayload(event)
-}
-
-async function appendPiRuntimeEvent(
+async function appendRuntimeEvent(
   db: Db,
   values: {
     auth: AuthContext
@@ -1311,6 +1395,10 @@ async function appendPiRuntimeEvent(
     metadata?: Record<string, unknown>
   },
 ) {
+  const canonicalEvent = canonicalAmaSessionEventFromRuntimeEvent(
+    values.event,
+    values.metadata ?? { source: 'runtime' },
+  )
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const eventId = newId('event')
     const latest = await db
@@ -1325,13 +1413,13 @@ async function appendPiRuntimeEvent(
         projectId: values.auth.project.id,
         sessionId: values.sessionId,
         sequence: (latest?.sequence ?? 0) + 1,
-        type: piEventType(values.event),
-        visibility: 'runtime',
-        role: null,
+        type: canonicalEvent.type,
+        visibility: canonicalEvent.visibility,
+        role: canonicalEvent.role,
         parentEventId: null,
         correlationId: null,
-        payload: stringify(redactSensitiveValue(values.event)),
-        metadata: stringify(redactSensitiveValue(values.metadata ?? { source: 'pi' })),
+        payload: stringify(redactSensitiveValue(canonicalEvent.payload)),
+        metadata: stringify(redactSensitiveValue(canonicalEvent.metadata)),
         createdAt: now(),
       })
       return eventId
@@ -1341,7 +1429,7 @@ async function appendPiRuntimeEvent(
       }
     }
   }
-  throw new Error('Unable to append Pi runtime event')
+  throw new Error('Unable to append runtime event')
 }
 
 export function runtimeErrorMessage(payload: Record<string, unknown>) {
@@ -1781,7 +1869,7 @@ async function eventsNdjsonResponse(c: Context<{ Bindings: Env }>, sessionId: st
   const filters = [
     eq(sessionEvents.sessionId, sessionId),
     eventCursorFilter(query, order),
-    type ? eq(sessionEvents.type, type) : undefined,
+    eventTypeFilter(type),
     eq(sessionEvents.visibility, visibility ?? 'runtime'),
     createdFrom ? gte(sessionEvents.createdAt, createdFrom) : undefined,
     createdTo ? lte(sessionEvents.createdAt, createdTo) : undefined,
@@ -1827,7 +1915,7 @@ async function streamEventsNdjsonResponse(c: Context<{ Bindings: Env }>, session
         const filters = [
           eq(sessionEvents.sessionId, sessionId),
           eventSequenceFilter(lastSequence, order),
-          type ? eq(sessionEvents.type, type) : undefined,
+          eventTypeFilter(type),
           eq(sessionEvents.visibility, visibility ?? 'runtime'),
           createdFrom ? gte(sessionEvents.createdAt, createdFrom) : undefined,
           createdTo ? lte(sessionEvents.createdAt, createdTo) : undefined,
@@ -2008,7 +2096,7 @@ const routes = app
     const filters = [
       eq(sessionEvents.sessionId, sessionId),
       eventCursorFilter(query, order),
-      type ? eq(sessionEvents.type, type) : undefined,
+      eventTypeFilter(type),
       eq(sessionEvents.visibility, visibility ?? 'runtime'),
       createdFrom ? gte(sessionEvents.createdAt, createdFrom) : undefined,
       createdTo ? lte(sessionEvents.createdAt, createdTo) : undefined,

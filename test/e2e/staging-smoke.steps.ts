@@ -290,7 +290,8 @@ async function runStagingSmoke(config: StagingSmokeConfig): Promise<StagingSmoke
         page.request,
         readySession.id,
         (events) =>
-          events.filter((event) => event.type === 'error' || eventContains(event, 'ama-visible-error')).length > 0,
+          events.filter((event) => event.type === 'runtime.error' || eventContains(event, 'ama-visible-error')).length >
+          0,
         errorTurn.beforeSequence,
       )
       sawErrorEvent = errorEvents.length > 0
@@ -437,9 +438,9 @@ async function exerciseSelfHostedRunnerMode(request: APIRequestContext, config: 
       data: {
         events: [
           {
-            type: 'tool_execution_start',
+            type: 'tool_call.started',
             payload: {
-              type: 'tool_execution_start',
+              type: 'tool_call.started',
               toolName: 'sandbox.exec',
               input: { command: 'printf self-hosted-runner-smoke' },
             },
@@ -636,7 +637,7 @@ async function waitForAssistantMessage(
       events.some(
         (event) =>
           event.sequence > afterSequence &&
-          (event.type === 'message_end' || event.type === 'turn_end') &&
+          (event.type === 'transcript.message' || event.type === 'session.lifecycle') &&
           eventRole(event) === 'assistant' &&
           expected.test(eventText(event)),
       ),
@@ -652,7 +653,9 @@ async function waitForAssistantTurn(request: APIRequestContext, sessionId: strin
     (events) => {
       const event = events.find(
         (candidate) =>
-          candidate.sequence > afterSequence && candidate.type === 'turn_end' && eventRole(candidate) === 'assistant',
+          candidate.sequence > afterSequence &&
+          candidate.type === 'session.lifecycle' &&
+          eventRole(candidate) === 'assistant',
       )
       if (!event) {
         return false

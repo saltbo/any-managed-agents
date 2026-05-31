@@ -2,7 +2,7 @@ import { swaggerUI } from '@hono/swagger-ui'
 import { and, asc, eq, max, or } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import { cors } from 'hono/cors'
-import { piEventTypeFromPayload } from '../shared/pi-events'
+import { canonicalAmaSessionEventFromRuntimeEvent } from '../shared/session-events'
 import { recordAudit, requestId } from './audit'
 import { type AuthContext, requireAuth } from './auth/session'
 import { sessionEvents, sessions } from './db/schema'
@@ -43,10 +43,6 @@ function redactRuntimeValue(value: unknown): unknown {
   return redactSensitiveValue(value)
 }
 
-function piEventType(event: Record<string, unknown>) {
-  return piEventTypeFromPayload(event)
-}
-
 function parseRuntimeAgentSnapshot(value: string | null) {
   const snapshot = value ? (JSON.parse(value) as Record<string, unknown>) : {}
   const { sandboxPolicy: _sandboxPolicy, ...runtimeSnapshot } = snapshot
@@ -56,7 +52,7 @@ function parseRuntimeAgentSnapshot(value: string | null) {
   }
 }
 
-async function appendPiRuntimeEvent(
+async function appendRuntimeEvent(
   db: ReturnType<typeof drizzle>,
   values: {
     auth: AuthContext
@@ -65,6 +61,10 @@ async function appendPiRuntimeEvent(
     metadata?: Record<string, unknown>
   },
 ) {
+  const canonicalEvent = canonicalAmaSessionEventFromRuntimeEvent(
+    values.event,
+    values.metadata ?? { source: 'runtime' },
+  )
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const eventId = newId('event')
     const latest = await db
@@ -79,13 +79,13 @@ async function appendPiRuntimeEvent(
         projectId: values.auth.project.id,
         sessionId: values.sessionId,
         sequence: (latest?.sequence ?? 0) + 1,
-        type: piEventType(values.event),
-        visibility: 'runtime',
-        role: null,
+        type: canonicalEvent.type,
+        visibility: canonicalEvent.visibility,
+        role: canonicalEvent.role,
         parentEventId: null,
         correlationId: null,
-        payload: JSON.stringify(redactRuntimeValue(values.event)),
-        metadata: JSON.stringify(redactRuntimeValue(values.metadata ?? { source: 'pi' })),
+        payload: JSON.stringify(redactRuntimeValue(canonicalEvent.payload)),
+        metadata: JSON.stringify(redactRuntimeValue(canonicalEvent.metadata)),
         createdAt: new Date().toISOString(),
       })
       return eventId
@@ -95,7 +95,7 @@ async function appendPiRuntimeEvent(
       }
     }
   }
-  throw new Error('Unable to append Pi runtime event')
+  throw new Error('Unable to append runtime event')
 }
 
 async function assertRuntimeSessionRunning(db: ReturnType<typeof drizzle>, auth: AuthContext, sessionId: string) {
@@ -111,7 +111,7 @@ async function assertRuntimeSessionRunning(db: ReturnType<typeof drizzle>, auth:
 
 async function loadRuntimeMessages(db: ReturnType<typeof drizzle>, sessionId: string) {
   const rows = await db
-    .select({ payload: sessionEvents.payload })
+    .select({ type: sessionEvents.type, payload: sessionEvents.payload })
     .from(sessionEvents)
     .where(eq(sessionEvents.sessionId, sessionId))
     .orderBy(asc(sessionEvents.sequence))
@@ -128,7 +128,7 @@ async function appendRuntimePolicyEvent(
     metadata?: Record<string, unknown>
   },
 ) {
-  await appendPiRuntimeEvent(db, {
+  await appendRuntimeEvent(db, {
     auth: values.auth,
     sessionId: values.sessionId,
     event: {
@@ -377,7 +377,7 @@ async function recordRuntimeMessageOutcome(
     ensureActive,
     onEvent: async (event, metadata) => {
       await ensureActive()
-      await appendPiRuntimeEvent(db, {
+      await appendRuntimeEvent(db, {
         auth,
         sessionId: session.id,
         event,
@@ -432,7 +432,7 @@ async function markRuntimeExecutionFailed(
     return safeRuntimeError(error)
   }
   const runtimeError = safeRuntimeError(error)
-  await appendPiRuntimeEvent(db, {
+  await appendRuntimeEvent(db, {
     auth,
     sessionId: session.id,
     event: { type: 'error', message: runtimeError.message, code: runtimeError.code },
@@ -452,7 +452,14 @@ function createWebSocketPair() {
 }
 
 function sendRuntimeJson(socket: WebSocket, payload: Record<string, unknown>) {
-  socket.send(JSON.stringify(payload))
+  const event = canonicalAmaSessionEventFromRuntimeEvent(payload, { source: 'runtime-websocket' })
+  socket.send(
+    JSON.stringify({
+      type: event.type,
+      ...(redactRuntimeValue(event.payload) as Record<string, unknown>),
+      metadata: redactRuntimeValue(event.metadata),
+    }),
+  )
 }
 
 async function handleTestRuntimeWebSocket(
@@ -504,7 +511,7 @@ async function handleTestRuntimeWebSocket(
         id: `${commandId}_tool`,
         name: 'write_file',
         input: { path: 'ama-message.txt' },
-        output: { ok: true },
+        output: { ok: true, token: 'raw-secret-token' },
         durationMs: 8,
       },
     },
@@ -551,7 +558,7 @@ async function handleRuntimeWebSocketMessage(
   }
   const command = runtimeCommand(parsed)
   if (!command) {
-    socket.close(1003, 'Invalid Pi runtime command')
+    socket.close(1003, 'Invalid runtime command')
     return
   }
   if (env.AMA_RUNTIME_MODE === 'test') {
@@ -620,7 +627,7 @@ export function createApp() {
       title: 'Any Managed Agents API',
       version: '0.1.0',
       description:
-        'Control-plane API for Any Managed Agents. Command-line automation uses restish or direct HTTP against this OpenAPI document; runtime traffic remains Pi-compatible through AMA runtime proxy endpoints.',
+        'Control-plane API for Any Managed Agents. Command-line automation uses restish or direct HTTP against this OpenAPI document; runtime traffic flows through AMA runtime proxy endpoints and canonical session events.',
     },
     servers: [{ url: '/' }],
   })

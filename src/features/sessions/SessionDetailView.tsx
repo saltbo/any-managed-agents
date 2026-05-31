@@ -9,8 +9,8 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import { ConfirmAction, Meta, MetaGrid, StatusBadge } from '@/console/components'
 import { formatDuration, formatRelativeTime, stringifyJson } from '@/console/format'
 import { JsonBlock } from '@/features/console/json-block'
-import type { PiRuntimeState } from '@/features/sessions/pi-runtime'
 import { SessionRuntimePanel } from '@/features/sessions/SessionRuntimePanel'
+import type { SessionRuntimeState } from '@/features/sessions/session-runtime'
 import type { Session, SessionEvent } from '@/lib/api'
 
 export function SessionDetailView({
@@ -31,7 +31,7 @@ export function SessionDetailView({
   agentName: string | undefined
   environmentName: string | undefined
   events: SessionEvent[]
-  runtime: PiRuntimeState
+  runtime: SessionRuntimeState
   onStop: (id: string) => void
   onArchive: (id: string) => void
   onRefreshEvents: () => void
@@ -143,7 +143,7 @@ export function SessionDetailView({
               <span className="truncate font-mono">Model config {modelName}</span>
               <span className="truncate font-mono">Runtime {session.runtimeEndpointPath}</span>
               <span className="truncate font-mono">Sandbox {session.sandboxId ?? 'unassigned'}</span>
-              <span className="truncate font-mono">Pi {session.piRuntimeId ?? 'not started'}</span>
+              <span className="truncate font-mono">Runtime id {session.piRuntimeId ?? 'not started'}</span>
               <span className="truncate font-mono">Process {session.piProcessId ?? 'not started'}</span>
             </div>
           </div>

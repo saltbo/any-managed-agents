@@ -3,7 +3,7 @@
   "info": {
     "title": "Any Managed Agents API",
     "version": "0.1.0",
-    "description": "Control-plane API for Any Managed Agents. Command-line automation uses restish or direct HTTP against this OpenAPI document; runtime traffic remains Pi-compatible through AMA runtime proxy endpoints."
+    "description": "Control-plane API for Any Managed Agents. Command-line automation uses restish or direct HTTP against this OpenAPI document; runtime traffic flows through AMA runtime proxy endpoints and canonical session events."
   },
   "servers": [
     {
@@ -4930,7 +4930,21 @@
             "type": "integer"
           },
           "type": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "session.lifecycle",
+              "transcript.message",
+              "transcript.message.delta",
+              "tool_call.started",
+              "tool_call.updated",
+              "tool_call.completed",
+              "usage.recorded",
+              "policy.decision",
+              "runtime.error",
+              "runtime.metadata",
+              "runtime.output",
+              "runner.metadata"
+            ]
           },
           "visibility": {
             "type": "string",
@@ -10637,7 +10651,21 @@
           {
             "schema": {
               "type": "string",
-              "example": "message_update"
+              "enum": [
+                "session.lifecycle",
+                "transcript.message",
+                "transcript.message.delta",
+                "tool_call.started",
+                "tool_call.updated",
+                "tool_call.completed",
+                "usage.recorded",
+                "policy.decision",
+                "runtime.error",
+                "runtime.metadata",
+                "runtime.output",
+                "runner.metadata"
+              ],
+              "example": "transcript.message"
             },
             "required": false,
             "name": "type",
@@ -10783,7 +10811,21 @@
           {
             "schema": {
               "type": "string",
-              "example": "message_update"
+              "enum": [
+                "session.lifecycle",
+                "transcript.message",
+                "transcript.message.delta",
+                "tool_call.started",
+                "tool_call.updated",
+                "tool_call.completed",
+                "usage.recorded",
+                "policy.decision",
+                "runtime.error",
+                "runtime.metadata",
+                "runtime.output",
+                "runner.metadata"
+              ],
+              "example": "transcript.message"
             },
             "required": false,
             "name": "type",
@@ -10929,7 +10971,21 @@
           {
             "schema": {
               "type": "string",
-              "example": "message_update"
+              "enum": [
+                "session.lifecycle",
+                "transcript.message",
+                "transcript.message.delta",
+                "tool_call.started",
+                "tool_call.updated",
+                "tool_call.completed",
+                "usage.recorded",
+                "policy.decision",
+                "runtime.error",
+                "runtime.metadata",
+                "runtime.output",
+                "runner.metadata"
+              ],
+              "example": "transcript.message"
             },
             "required": false,
             "name": "type",
