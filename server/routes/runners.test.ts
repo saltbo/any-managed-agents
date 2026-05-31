@@ -131,9 +131,11 @@ describe('[CF] /api/runners', () => {
           sessionId: session.id,
           hostingMode: 'self_hosted',
           runtime: 'ama',
+          runtimeConfig: {},
           runtimeDriver: 'ama-self-hosted',
           provider: 'workers-ai',
           model: '@cf/moonshotai/kimi-k2.6',
+          requiredRunnerCapability: DEFAULT_AMA_RUNNER_CAPABILITY,
         }),
       }),
     ])
@@ -166,7 +168,7 @@ describe('[CF] /api/runners', () => {
       body: JSON.stringify({
         events: [
           {
-            type: 'tool_execution_start',
+            type: 'runner.tool.started',
             payload: {
               toolCallId: 'call_1',
               toolName: 'sandbox.exec',
@@ -174,11 +176,26 @@ describe('[CF] /api/runners', () => {
             },
             metadata: { runnerId: runner.id },
           },
+          {
+            type: 'codex.usage',
+            payload: {
+              provider: 'workers-ai',
+              model: '@cf/moonshotai/kimi-k2.6',
+              inputTokens: 10,
+              outputTokens: 4,
+            },
+          },
+          {
+            type: 'copilot.error',
+            payload: {
+              error: { message: 'Runtime failed safely', code: 'runtime_exit', details: { exitCode: 2 } },
+            },
+          },
         ],
       }),
     })
     expect(eventsRes.status).toBe(202)
-    await expect(eventsRes.json()).resolves.toEqual({ accepted: 1 })
+    await expect(eventsRes.json()).resolves.toEqual({ accepted: 3 })
 
     const renewRes = await jsonFetch(`/api/runners/${runner.id}/leases/${lease.id}`, authorization, {
       method: 'PATCH',
@@ -213,12 +230,36 @@ describe('[CF] /api/runners', () => {
     const sessionEventsRes = await jsonFetch(`/api/sessions/${session.id}/events`, authorization)
     expect(sessionEventsRes.status).toBe(200)
     const sessionEvents = (await sessionEventsRes.json()) as {
-      data: Array<{ type: string; metadata: Record<string, unknown> }>
+      data: Array<{ type: string; payload: Record<string, unknown>; metadata: Record<string, unknown> }>
     }
     expect(sessionEvents.data).toEqual([
       expect.objectContaining({
         type: 'tool_call.started',
-        metadata: expect.objectContaining({ source: 'self-hosted-runner', runnerId: runner.id }),
+        metadata: expect.objectContaining({
+          source: 'self-hosted-runner',
+          runnerId: runner.id,
+          leaseId: lease.id,
+          runtime: 'ama',
+          provider: 'workers-ai',
+          model: '@cf/moonshotai/kimi-k2.6',
+        }),
+      }),
+      expect.objectContaining({
+        type: 'usage.recorded',
+        payload: expect.objectContaining({
+          provider: 'workers-ai',
+          model: '@cf/moonshotai/kimi-k2.6',
+          inputTokens: 10,
+          outputTokens: 4,
+        }),
+      }),
+      expect.objectContaining({
+        type: 'runtime.error',
+        payload: expect.objectContaining({
+          message: 'Runtime failed safely',
+          code: 'runtime_exit',
+          details: { exitCode: 2 },
+        }),
       }),
     ])
     expect(JSON.stringify(sessionEvents.data)).not.toContain('raw-secret-value')
@@ -360,6 +401,60 @@ describe('[CF] /api/runners', () => {
         status: 'leased',
       },
     })
+  })
+
+  it('does not treat session start work without an exact runtime provider model capability as wildcard work', async () => {
+    const authorization = await signIn()
+    const environment = await createSelfHostedEnvironment(authorization)
+
+    const runnerRes = await jsonFetch('/api/runners', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Wildcard guard runner',
+        environmentId: environment.id,
+        capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY],
+      }),
+    })
+    expect(runnerRes.status).toBe(201)
+    const runner = (await runnerRes.json()) as { id: string }
+    await jsonFetch(`/api/runners/${runner.id}/heartbeats`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ status: 'active', capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY] }),
+    })
+
+    const environmentRow = await env.DB.prepare('SELECT project_id AS projectId FROM environments WHERE id = ?')
+      .bind(environment.id)
+      .first<{ projectId: string }>()
+    const timestamp = new Date().toISOString()
+    await env.DB.prepare(
+      `INSERT INTO runner_work_items (
+        id, organization_id, project_id, session_id, environment_id, runner_id, lease_id,
+        type, status, priority, attempts, max_attempts, payload, result, error,
+        available_at, lease_expires_at, created_at, updated_at
+      ) VALUES (?, ?, ?, NULL, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, NULL, ?, ?)`,
+    )
+      .bind(
+        `work_${crypto.randomUUID().replaceAll('-', '')}`,
+        defaultClaims().org_id,
+        environmentRow?.projectId,
+        environment.id,
+        'session.start',
+        'available',
+        0,
+        0,
+        3,
+        JSON.stringify({ protocol: 'ama-runner-work', type: 'session.start' }),
+        timestamp,
+        timestamp,
+        timestamp,
+      )
+      .run()
+
+    const claimRes = await jsonFetch(`/api/runners/${runner.id}/leases`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+    expect(claimRes.status).toBe(204)
   })
 
   it('returns expired runner leases to available work predictably', async () => {

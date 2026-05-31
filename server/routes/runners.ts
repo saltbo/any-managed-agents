@@ -300,8 +300,15 @@ function serializeWorkItem(row: WorkItemRow) {
 }
 
 function runnerCapabilityEligibility(capabilities: string[]) {
-  return or(
+  const unscopedNonSessionWork = and(
+    sql`json_extract(${runnerWorkItems.payload}, '$.type') != 'session.start'`,
     sql`json_extract(${runnerWorkItems.payload}, '$.requiredRunnerCapability') IS NULL`,
+  )
+  if (capabilities.length === 0) {
+    return unscopedNonSessionWork
+  }
+  return or(
+    unscopedNonSessionWork,
     ...capabilities.map(
       (capability) => sql`json_extract(${runnerWorkItems.payload}, '$.requiredRunnerCapability') = ${capability}`,
     ),
@@ -486,6 +493,16 @@ async function appendSessionRunnerEvent(
         throw error
       }
     }
+  }
+}
+
+function workItemRuntimeMetadata(workItem: WorkItemRow) {
+  const payload = parseJson<Record<string, unknown>>(workItem.payload) ?? {}
+  return {
+    workItemId: workItem.id,
+    ...(typeof payload.runtime === 'string' ? { runtime: payload.runtime } : {}),
+    ...(typeof payload.provider === 'string' ? { provider: payload.provider } : {}),
+    ...(typeof payload.model === 'string' ? { model: payload.model } : {}),
   }
 }
 
@@ -1184,7 +1201,12 @@ const routes = app
       await appendSessionRunnerEvent(db, auth, workItem.sessionId, {
         type: event.type,
         payload: event.payload,
-        ...(event.metadata ? { metadata: event.metadata } : {}),
+        metadata: {
+          ...(event.metadata ?? {}),
+          ...workItemRuntimeMetadata(workItem),
+          runnerId,
+          leaseId,
+        },
       })
     }
     return c.json({ accepted: events.length }, 202)

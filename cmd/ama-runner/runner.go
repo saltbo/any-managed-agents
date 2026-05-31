@@ -27,15 +27,21 @@ type RunnerDaemon struct {
 }
 
 type WorkPayload struct {
-	Protocol     string         `json:"protocol"`
-	Type         string         `json:"type"`
-	SessionID    string         `json:"sessionId"`
-	Approved     bool           `json:"approved"`
-	ToolCallID   string         `json:"toolCallId"`
-	ToolName     string         `json:"toolName"`
-	Input        map[string]any `json:"input"`
-	ToolCall     *ToolCall      `json:"toolCall"`
-	RuntimeOwner string         `json:"runtimeOwner"`
+	Protocol                 string         `json:"protocol"`
+	Type                     string         `json:"type"`
+	SessionID                string         `json:"sessionId"`
+	HostingMode              string         `json:"hostingMode"`
+	Runtime                  string         `json:"runtime"`
+	RuntimeConfig            map[string]any `json:"runtimeConfig"`
+	Provider                 string         `json:"provider"`
+	Model                    string         `json:"model"`
+	RuntimeDriver            string         `json:"runtimeDriver"`
+	RequiredRunnerCapability string         `json:"requiredRunnerCapability"`
+	Approved                 bool           `json:"approved"`
+	ToolCallID               string         `json:"toolCallId"`
+	ToolName                 string         `json:"toolName"`
+	Input                    map[string]any `json:"input"`
+	ToolCall                 *ToolCall      `json:"toolCall"`
 }
 
 type ToolCall struct {
@@ -155,7 +161,13 @@ func (d *RunnerDaemon) executeLease(ctx context.Context, lease *ama.RunnerWorkLe
 		return err
 	}
 	if payload.Type == "session.start" {
+		if !d.supportsRequiredCapability(payload.RequiredRunnerCapability) {
+			return d.finishFailed(ctx, lease, fmt.Errorf("runner does not advertise required capability %q", payload.RequiredRunnerCapability), nil)
+		}
 		return d.completeSessionStart(ctx, lease, payload)
+	}
+	if !d.supportsRequiredCapability(payload.RequiredRunnerCapability) {
+		return d.finishFailed(ctx, lease, fmt.Errorf("runner does not advertise required capability %q", payload.RequiredRunnerCapability), nil)
 	}
 	if err := d.uploadEvent(ctx, lease, "runner.tool.started", ama.JSON{
 		"toolCallId": payload.ToolCallID,
@@ -220,19 +232,29 @@ func (d *RunnerDaemon) executeLease(ctx context.Context, lease *ama.RunnerWorkLe
 
 func (d *RunnerDaemon) completeSessionStart(ctx context.Context, lease *ama.RunnerWorkLease, payload WorkPayload) error {
 	if err := d.uploadEvent(ctx, lease, "runner.session.started", ama.JSON{
-		"sessionId":    payload.SessionID,
-		"runtimeOwner": payload.RuntimeOwner,
-		"executor":     d.Config.SandboxAdapter,
+		"sessionId":     payload.SessionID,
+		"hostingMode":   payload.HostingMode,
+		"runtime":       payload.Runtime,
+		"runtimeConfig": payload.RuntimeConfig,
+		"provider":      payload.Provider,
+		"model":         payload.Model,
+		"runtimeDriver": payload.RuntimeDriver,
+		"executor":      d.Config.SandboxAdapter,
 	}); err != nil {
 		return err
 	}
 	_, err := d.Client.UpdateRunnerLease(ctx, d.RunnerID, lease.ID, ama.UpdateRunnerLeaseRequest{
 		Status: "completed",
 		Result: ama.JSON{
-			"sessionId":    payload.SessionID,
-			"runtimeOwner": payload.RuntimeOwner,
-			"executor":     d.Config.SandboxAdapter,
-			"handled":      "session.start",
+			"sessionId":     payload.SessionID,
+			"hostingMode":   payload.HostingMode,
+			"runtime":       payload.Runtime,
+			"runtimeConfig": payload.RuntimeConfig,
+			"provider":      payload.Provider,
+			"model":         payload.Model,
+			"runtimeDriver": payload.RuntimeDriver,
+			"executor":      d.Config.SandboxAdapter,
+			"handled":       "session.start",
 		},
 	})
 	return err
@@ -296,8 +318,14 @@ func parseWorkPayload(payload ama.JSON) (WorkPayload, error) {
 		if parsed.SessionID == "" {
 			return WorkPayload{}, fmt.Errorf("session.start work item must include sessionId")
 		}
-		if parsed.RuntimeOwner != "" && parsed.RuntimeOwner != "ama-cloud" {
-			return WorkPayload{}, fmt.Errorf("unsupported session runtime owner %q", parsed.RuntimeOwner)
+		if parsed.HostingMode != "self_hosted" {
+			return WorkPayload{}, fmt.Errorf("session.start work item must target self_hosted hostingMode")
+		}
+		if parsed.Runtime == "" || parsed.Provider == "" || parsed.Model == "" || parsed.RuntimeConfig == nil {
+			return WorkPayload{}, fmt.Errorf("session.start work item must include runtime, runtimeConfig, provider, and model")
+		}
+		if parsed.RequiredRunnerCapability == "" {
+			return WorkPayload{}, fmt.Errorf("session.start work item must include requiredRunnerCapability")
 		}
 		return parsed, nil
 	}
@@ -320,4 +348,16 @@ func parseWorkPayload(payload ama.JSON) (WorkPayload, error) {
 		return WorkPayload{}, fmt.Errorf("unsupported sandbox tool: %s", parsed.ToolName)
 	}
 	return parsed, nil
+}
+
+func (d *RunnerDaemon) supportsRequiredCapability(required string) bool {
+	if required == "" {
+		return true
+	}
+	for _, capability := range d.Config.Capabilities {
+		if capability == required {
+			return true
+		}
+	}
+	return false
 }

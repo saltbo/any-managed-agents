@@ -79,6 +79,26 @@ function sourceEventTypeFromRuntimeEvent(event: Record<string, unknown>) {
 
 function canonicalType(sourceEventType: string, event: Record<string, unknown>): AmaSessionEventType {
   if (isAmaSessionEventType(sourceEventType)) return sourceEventType
+  if (matchesRuntimeEvent(sourceEventType, 'message')) return 'transcript.message'
+  if (matchesRuntimeEvent(sourceEventType, 'message.delta') || matchesRuntimeEvent(sourceEventType, 'message_update')) {
+    return 'transcript.message.delta'
+  }
+  if (matchesRuntimeEvent(sourceEventType, 'tool.started') || matchesRuntimeEvent(sourceEventType, 'tool_execution_start')) {
+    return 'tool_call.started'
+  }
+  if (matchesRuntimeEvent(sourceEventType, 'tool.updated') || matchesRuntimeEvent(sourceEventType, 'tool_execution_update')) {
+    return 'tool_call.updated'
+  }
+  if (
+    matchesRuntimeEvent(sourceEventType, 'tool.completed') ||
+    matchesRuntimeEvent(sourceEventType, 'tool.failed') ||
+    matchesRuntimeEvent(sourceEventType, 'tool_execution_end')
+  ) {
+    return 'tool_call.completed'
+  }
+  if (matchesRuntimeEvent(sourceEventType, 'usage')) return 'usage.recorded'
+  if (matchesRuntimeEvent(sourceEventType, 'error')) return 'runtime.error'
+  if (matchesRuntimeEvent(sourceEventType, 'output')) return 'runtime.output'
   if (sourceEventType === 'message') return 'transcript.message'
   if (sourceEventType === 'message_update') return 'transcript.message.delta'
   if (sourceEventType === 'message_end') return 'transcript.message'
@@ -96,6 +116,16 @@ function canonicalType(sourceEventType: string, event: Record<string, unknown>):
   if (sourceEventType === 'queue_update' || sourceEventType === 'session_info_changed') return 'runtime.metadata'
   if (sourceEventType === 'runner_heartbeat' || sourceEventType === 'runner_status') return 'runner.metadata'
   return 'session.lifecycle'
+}
+
+function matchesRuntimeEvent(sourceEventType: string, suffix: string) {
+  return (
+    sourceEventType === `runner.${suffix}` ||
+    sourceEventType === `ama.${suffix}` ||
+    sourceEventType === `claude-code.${suffix}` ||
+    sourceEventType === `codex.${suffix}` ||
+    sourceEventType === `copilot.${suffix}`
+  )
 }
 
 function canonicalPayload(
@@ -139,6 +169,10 @@ function canonicalPayload(
       promptTokens: event.promptTokens,
       completionTokens: event.completionTokens,
       totalTokens: event.totalTokens,
+      inputTokens: event.inputTokens,
+      outputTokens: event.outputTokens,
+      cachedInputTokens: event.cachedInputTokens,
+      costMicros: event.costMicros,
     }
   }
 
@@ -157,17 +191,19 @@ function canonicalPayload(
   }
 
   if (type === 'runtime.error') {
+    const error = objectValue(event.error)
     return {
       message: runtimeErrorMessage(event, sourceEventType),
-      code: event.code,
+      code: event.code ?? error.code,
       signal: event.signal,
+      details: error.details ?? event.details,
     }
   }
 
   if (type === 'runtime.output') {
     return {
       stream: sourceEventType === 'bridge_stderr' ? 'stderr' : 'runtime',
-      content: event.data ?? event.message ?? '',
+      content: event.data ?? event.message ?? event.output ?? event.content ?? '',
     }
   }
 
