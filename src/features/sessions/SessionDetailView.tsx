@@ -145,9 +145,6 @@ export function SessionDetailView({
               <span className="truncate font-mono">Agent provider/model {agentProviderModel}</span>
               <span className="truncate font-mono">Environment runtime {environmentRuntime}</span>
               <span className="truncate font-mono">Runtime endpoint {session.runtimeEndpointPath}</span>
-              <span className="truncate font-mono">Sandbox {session.sandboxId ?? 'unassigned'}</span>
-              <span className="truncate font-mono">Runtime id {session.piRuntimeId ?? 'not started'}</span>
-              <span className="truncate font-mono">Process {session.piProcessId ?? 'not started'}</span>
             </div>
             <dl className="grid gap-2 pt-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
               <SessionFact label="Agent provider/model" value={agentProviderModel} />

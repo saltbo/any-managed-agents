@@ -321,6 +321,15 @@ Given('an environment selects a runtime', async function (this: ProductWorld) {
   })
 })
 
+Given('an environment selects a hostingMode and runtime', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  state.environment = await createEnvironment(state, {
+    name: `${state.runId} unsupported runtime env`,
+    hostingMode: 'cloud',
+    runtime: 'ama',
+  })
+})
+
 Given('a self-hosted environment selects codex runtime', async function (this: ProductWorld) {
   const state = await ensureSignedIn(this)
   state.environment = await createEnvironment(state, {
@@ -2555,7 +2564,7 @@ Then('inactive session runtime requests use the standard error envelope', async 
 })
 
 Then(
-  'the response includes a session id, project id, organization id, status, timestamps, durable object name, sandbox id, runtime endpoint, and model config',
+  'the response includes a session id, project id, organization id, status, timestamps, durable object name, runtime endpoint, and runtime metadata',
   function (this: ProductWorld) {
     const session = required(this.e2e?.latestSession, 'session')
     assert.match(String(session.id), /^session_/)
@@ -2563,9 +2572,11 @@ Then(
     assert.equal(typeof session.organizationId, 'string')
     assert.equal(session.status, 'idle')
     assert.equal(typeof session.durableObjectName, 'string')
-    assert.equal(typeof session.sandboxId, 'string')
     assert.equal(typeof session.runtimeEndpointPath, 'string')
-    assert.equal(typeof session.modelConfig, 'object')
+    assert.equal(objectValue(session.runtimeMetadata).provider, objectValue(session.agentSnapshot).provider)
+    assert.equal(objectValue(session.runtimeMetadata).model, objectValue(session.agentSnapshot).model)
+    assert.equal(objectValue(session.runtimeMetadata).runtime, objectValue(session.environmentSnapshot).runtime)
+    assert.equal(objectValue(session.runtimeMetadata).hostingMode, objectValue(session.environmentSnapshot).hostingMode)
   },
 )
 

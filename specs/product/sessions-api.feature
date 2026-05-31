@@ -13,7 +13,7 @@ Feature: Sessions API
     Given a signed-in user has access to a project
     And the project has an active agent and an active environment
     When the user creates a session with the agent and environment
-    Then the response includes a session id, project id, organization id, status, timestamps, durable object name, sandbox id, runtime endpoint, and model config
+    Then the response includes a session id, project id, organization id, status, timestamps, durable object name, runtime endpoint, and runtime metadata
     And the session stores immutable agent and environment snapshots
     And AMA creates cloud-owned runtime state and initializes a Cloudflare Sandbox executor
     And lifecycle and sandbox events record session creation and runtime startup

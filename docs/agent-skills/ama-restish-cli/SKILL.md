@@ -77,5 +77,5 @@ If SDK artifacts change, run `npm run openapi:generate` and `npm run openapi:che
 
 - Confirm ids before `archiveAgent`, `archiveEnvironment`, `archiveVault`, `archiveSession`, `deleteProvider`, or `deleteVaultCredentialVersion`.
 - Treat vault values and auth tokens as secrets. Never paste raw secret values into notes, commits, or screenshots.
-- Runtime interaction remains Pi-compatible. Discover a session's `runtimeEndpointPath` with `readSession`, then use AMA runtime endpoints or Pi-compatible helpers for task traffic.
+- Runtime interaction remains behind AMA session endpoints and canonical AMA events. Discover a session's `runtimeEndpointPath` with `readSession`, then use AMA runtime helpers for task traffic.
 - Do not add a `bin`, shell wrapper, npm global command, or project-specific command surface for AMA control-plane work.

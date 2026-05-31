@@ -443,6 +443,10 @@ describe('[CF] OpenAPI documentation', () => {
 
     expect(schemas.Session.required).toContain('runtimeMetadata')
     expect(schemas.Session.properties).toHaveProperty('runtimeMetadata')
+    expect(schemas.Session.properties).not.toHaveProperty('piRuntimeId')
+    expect(schemas.Session.properties).not.toHaveProperty('piProcessId')
+    expect(schemas.Session.properties).not.toHaveProperty('modelProvider')
+    expect(schemas.Session.properties).not.toHaveProperty('modelConfig')
     expect(schemas.Session.properties).not.toHaveProperty('runtimeOwner')
     expect(schemas.SessionRuntimeMetadata.required).toEqual(
       expect.arrayContaining(['hostingMode', 'runtime', 'runtimeConfig', 'provider', 'model', 'driver']),
