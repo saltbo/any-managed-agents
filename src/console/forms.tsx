@@ -150,7 +150,7 @@ export function AgentForm({
         />
         <TextAreaField
           label="Instructions"
-          description="Operational instructions the runtime agent follows for every session."
+          description="Operational instructions the Agent follows for every session."
           value={value.instructions}
           onChange={(instructions) => setValue({ ...value, instructions })}
         />
@@ -204,6 +204,8 @@ export function SessionForm({
 }) {
   const activeAgents = agents.filter((agent) => agent.status === 'active')
   const activeEnvironments = environments.filter((environment) => environment.status === 'active')
+  const selectedAgent = activeAgents.find((agent) => agent.id === value.agentId)
+  const selectedEnvironment = activeEnvironments.find((environment) => environment.id === value.environmentId)
   const canSubmit = Boolean(value.agentId && value.environmentId)
 
   return (
@@ -223,7 +225,11 @@ export function SessionForm({
               ))}
             </SelectContent>
           </Select>
-          <FieldDescription>The session will run the current version of this agent.</FieldDescription>
+          <FieldDescription>
+            {selectedAgent
+              ? `Agent provider/model: ${selectedAgent.provider} / ${selectedAgent.model}`
+              : 'The session will run the current version of this agent.'}
+          </FieldDescription>
         </Field>
         <Field>
           <FieldLabel>Environment</FieldLabel>
@@ -239,7 +245,11 @@ export function SessionForm({
               ))}
             </SelectContent>
           </Select>
-          <FieldDescription>The environment is selected per session, not stored on the agent.</FieldDescription>
+          <FieldDescription>
+            {selectedEnvironment
+              ? `Environment runtime: ${hostingModeLabel(selectedEnvironment.hostingMode)} / ${selectedEnvironment.runtime}`
+              : 'The environment runtime is selected per session, not stored on the agent.'}
+          </FieldDescription>
         </Field>
         <TextField
           label="Title"
@@ -272,6 +282,10 @@ export function SessionForm({
       </Button>
     </form>
   )
+}
+
+function hostingModeLabel(value: Environment['hostingMode']) {
+  return value === 'self_hosted' ? 'Self-hosted' : 'Cloud'
 }
 
 export function ProviderForm({

@@ -8,7 +8,7 @@ import { emptySession } from '@/console/defaults'
 import { parseJsonObject, parseJsonObjectArray } from '@/console/format'
 import { SessionForm } from '@/console/forms'
 import type { SessionFormState } from '@/console/types'
-import { api, type Session } from '@/lib/api'
+import { ApiError, api, type Session } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 
 const EMPTY_RESOURCES: never[] = []
@@ -55,7 +55,7 @@ export function CreateSessionSheet({
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all })
       void navigate(`/sessions/${session.id}`)
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : String(error)),
+    onError: (error) => toast.error(formatCreateSessionError(error)),
   })
 
   useEffect(() => {
@@ -90,8 +90,42 @@ export function CreateSessionSheet({
         </SheetHeader>
         <div className="px-4 pb-4">
           <SessionForm value={form} setValue={setForm} agents={agents} environments={environments} onSubmit={submit} />
+          {createSession.error ? (
+            <p className="mt-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {formatCreateSessionError(createSession.error)}
+            </p>
+          ) : null}
         </div>
       </SheetContent>
     </Sheet>
   )
+}
+
+export function formatCreateSessionError(error: unknown) {
+  if (error instanceof ApiError) {
+    const details = apiErrorDetails(error)
+    if (
+      details?.resourceType === 'runtime_catalog' &&
+      typeof details.hostingMode === 'string' &&
+      typeof details.runtime === 'string' &&
+      typeof details.provider === 'string' &&
+      typeof details.model === 'string'
+    ) {
+      return `Unsupported capability: ${hostingModeLabel(details.hostingMode)} environment runtime ${details.runtime} cannot run Agent provider ${details.provider} with model ${details.model}.`
+    }
+  }
+  return error instanceof Error ? error.message : String(error)
+}
+
+function apiErrorDetails(error: ApiError) {
+  if (!error.details || typeof error.details !== 'object') {
+    return null
+  }
+  const body = error.details as { error?: { details?: unknown } }
+  const details = body.error?.details
+  return details && typeof details === 'object' && !Array.isArray(details) ? (details as Record<string, unknown>) : null
+}
+
+function hostingModeLabel(value: string) {
+  return value === 'self_hosted' ? 'Self-hosted' : 'Cloud'
 }

@@ -1,4 +1,9 @@
-import { amaSessionEventCategory, amaSessionEventTypeFromPayload, isAmaSessionEventType } from '@shared/session-events'
+import {
+  type AmaSessionEventType,
+  amaSessionEventCategory,
+  amaSessionEventTypeFromPayload,
+  isAmaSessionEventType,
+} from '@shared/session-events'
 import type { SessionEvent } from '@/lib/api'
 import { getStoredAccessToken } from '@/lib/oidc'
 
@@ -37,7 +42,7 @@ export interface SessionRuntimeToolTrace {
 
 export interface SessionRuntimeDebugEvent {
   id: string
-  type: string
+  type: AmaSessionEventType
   payload: Record<string, unknown>
   createdAt: string
 }
@@ -101,6 +106,9 @@ export function sessionRuntimeReducer(state: SessionRuntimeState, action: Sessio
   }
 
   const eventType = amaSessionEventTypeFromPayload(action.event)
+  if (!isAmaSessionEventType(eventType)) {
+    return state
+  }
   const eventKey = runtimeEventKey(action.event, eventType)
   if (eventKey && state.eventKeys.includes(eventKey)) {
     return state
@@ -110,14 +118,6 @@ export function sessionRuntimeReducer(state: SessionRuntimeState, action: Sessio
     type: eventType,
     payload: action.event,
     createdAt: action.at,
-  }
-
-  if (!isAmaSessionEventType(eventType)) {
-    return {
-      ...state,
-      debugEvents: appendDebugEvent(state.debugEvents, debugEvent),
-      eventKeys: appendEventKey(state.eventKeys, eventKey),
-    }
   }
 
   if (eventType === 'session.lifecycle') {
@@ -285,8 +285,8 @@ function uniquePersistedRuntimeEvents(events: SessionEvent[]): StoredRuntimeEven
   return uniqueEvents
 }
 
-function sessionEventType(stored: SessionEvent, payload: Record<string, unknown>): string {
-  return stored.type || amaSessionEventTypeFromPayload(payload)
+function sessionEventType(stored: SessionEvent, _payload: Record<string, unknown>): AmaSessionEventType {
+  return stored.type
 }
 
 function runtimeTurnKey(event: Record<string, unknown>, eventType: string) {

@@ -1,10 +1,4 @@
-import {
-  AMA_SESSION_EVENT_CATEGORIES,
-  type AmaSessionEventFilterCategory,
-  amaSessionEventCategory,
-  amaSessionEventLabel,
-  isAmaSessionEventType,
-} from '@shared/session-events'
+import { AMA_SESSION_EVENT_CATEGORIES, amaSessionEventCategory, amaSessionEventLabel } from '@shared/session-events'
 import { Copy, Download, RefreshCw, Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
@@ -22,10 +16,7 @@ import { formatTime, stringifyJson } from '@/console/format'
 import type { SessionEvent } from '@/lib/api'
 import type { SessionRuntimeState } from './session-runtime'
 
-const EVENT_FILTERS = [
-  ...AMA_SESSION_EVENT_CATEGORIES,
-  'unknown',
-] as const satisfies readonly AmaSessionEventFilterCategory[]
+const EVENT_FILTERS = AMA_SESSION_EVENT_CATEGORIES
 type EventFilter = 'all' | (typeof EVENT_FILTERS)[number]
 
 export function SessionRuntimePanel({
@@ -197,7 +188,7 @@ export function SessionRuntimePanel({
                 <details key={event.id} className="group p-3">
                   <summary className="flex cursor-pointer list-none flex-wrap items-center gap-3">
                     <StatusBadge
-                      value={isAmaSessionEventType(event.type) ? amaSessionEventLabel(event.type) : event.type}
+                      value={amaSessionEventLabel(event.type)}
                       detail={event.type === 'runtime.error' ? stringifyJson(event.payload) : null}
                     />
                     <Badge variant="outline">{amaSessionEventCategory(event.type)}</Badge>
@@ -218,7 +209,7 @@ export function SessionRuntimePanel({
 }
 
 export function eventFilter(value: string): EventFilter {
-  return value === 'all' || EVENT_FILTERS.includes(value as AmaSessionEventFilterCategory)
+  return value === 'all' || EVENT_FILTERS.includes(value as (typeof EVENT_FILTERS)[number])
     ? (value as EventFilter)
     : 'all'
 }

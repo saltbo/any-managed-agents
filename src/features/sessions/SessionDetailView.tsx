@@ -48,7 +48,10 @@ export function SessionDetailView({
   const environmentName = String(
     environmentDisplayName ?? session.environmentSnapshot?.runtime ?? session.environmentId ?? 'Environment',
   )
-  const modelName = String(session.modelConfig.model ?? 'default')
+  const agentProviderModel = `${session.agentSnapshot.provider} / ${session.agentSnapshot.model}`
+  const environmentRuntime = session.environmentSnapshot
+    ? `${hostingModeLabel(session.environmentSnapshot.hostingMode)} / ${session.environmentSnapshot.runtime}`
+    : 'No environment snapshot'
   return (
     <div className="flex min-h-[calc(100dvh-5rem)] flex-col bg-background lg:min-h-screen">
       <header className="border-b px-4 py-4 lg:px-6">
@@ -139,13 +142,19 @@ export function SessionDetailView({
               <span className="shrink-0">{formatRelativeTime(session.updatedAt)}</span>
             </div>
             <div className="sr-only">
-              <span className="truncate font-mono">Model provider {session.modelProvider}</span>
-              <span className="truncate font-mono">Model config {modelName}</span>
-              <span className="truncate font-mono">Runtime {session.runtimeEndpointPath}</span>
+              <span className="truncate font-mono">Agent provider/model {agentProviderModel}</span>
+              <span className="truncate font-mono">Environment runtime {environmentRuntime}</span>
+              <span className="truncate font-mono">Runtime endpoint {session.runtimeEndpointPath}</span>
               <span className="truncate font-mono">Sandbox {session.sandboxId ?? 'unassigned'}</span>
               <span className="truncate font-mono">Runtime id {session.piRuntimeId ?? 'not started'}</span>
               <span className="truncate font-mono">Process {session.piProcessId ?? 'not started'}</span>
             </div>
+            <dl className="grid gap-2 pt-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
+              <SessionFact label="Agent provider/model" value={agentProviderModel} />
+              <SessionFact label="Environment runtime" value={environmentRuntime} />
+              <SessionFact label="Hosting mode" value={session.environmentSnapshot?.hostingMode ?? 'None'} />
+              <SessionFact label="Runtime status" value={session.statusReason ?? session.status} />
+            </dl>
           </div>
         </div>
       </header>
@@ -257,6 +266,19 @@ export function SessionDetailView({
       />
     </div>
   )
+}
+
+function SessionFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-md border bg-muted/30 px-3 py-2">
+      <dt className="font-medium text-muted-foreground">{label}</dt>
+      <dd className="mt-1 truncate font-mono text-[11px] text-foreground">{value}</dd>
+    </div>
+  )
+}
+
+function hostingModeLabel(value: string) {
+  return value === 'self_hosted' ? 'Self-hosted' : 'Cloud'
 }
 
 function githubResources(session: Session) {
