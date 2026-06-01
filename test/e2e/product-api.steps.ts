@@ -23,6 +23,7 @@ type Json = Record<string, unknown>
 const DEFAULT_AMA_RUNNER_CAPABILITY = 'runtime-provider-model:ama:workers-ai:@cf/moonshotai/kimi-k2.6'
 const CODEX_E2E_MODEL = 'gpt-5.3-codex'
 const CLAUDE_CODE_E2E_MODEL = 'claude-sonnet-4-6'
+const COPILOT_E2E_MODEL = 'copilot-cli'
 
 interface ListResponse<T> {
   data: T[]
@@ -356,6 +357,17 @@ Given('a self-hosted environment selects codex runtime', async function (this: P
     hostingMode: 'self_hosted',
     runtime: 'codex',
     runtimeConfig: codexShimRuntimeConfig(),
+    networkPolicy: { mode: 'unrestricted' },
+  })
+})
+
+Given('a self-hosted environment selects copilot runtime', async function (this: ProductWorld) {
+  const state = await ensureSignedIn(this)
+  state.environment = await createEnvironment(state, {
+    name: `${state.runId} copilot self-hosted env`,
+    hostingMode: 'self_hosted',
+    runtime: 'copilot',
+    runtimeConfig: copilotShimRuntimeConfig(),
     networkPolicy: { mode: 'unrestricted' },
   })
 })
@@ -2482,7 +2494,11 @@ When('the user creates a session in that environment', async function (this: Pro
 When('the user starts a session with an initial prompt', async function (this: ProductWorld) {
   const state = await ensureState(this)
   const runtime = String(objectValue(state.environment).runtime)
-  state.runtimeMessage = runtime === 'codex' ? `${state.runId} codex prompt` : 'Run the deterministic Claude Code shim.'
+  if (runtime === 'claude-code') {
+    state.runtimeMessage = 'Run the deterministic Claude Code shim.'
+  } else {
+    state.runtimeMessage = `${state.runId} ${runtime} prompt`
+  }
   state.latestSession = await apiJson<Json>(state.page.request, '/api/sessions', {
     method: 'POST',
     data: {
@@ -2621,6 +2637,9 @@ Then('the session reaches idle, stopped, or error with inspectable final events'
   assert.ok(events.data.length > 0)
   if (String(objectValue(state.environment).runtime) === 'codex') {
     assert.equal(JSON.stringify(events.data).includes('codex-shim-completed'), true)
+  }
+  if (String(objectValue(state.environment).runtime) === 'copilot') {
+    assert.equal(JSON.stringify(events.data).includes('copilot-shim-completed'), true)
   }
   const serialized = JSON.stringify(session)
   assert.equal(serialized.includes('localhost'), false)
@@ -3243,6 +3262,42 @@ Given('an active runner supports the selected Codex provider and model', async f
   })
 })
 
+Given('an active runner supports the selected Copilot provider and model', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const agentUsesCopilotModel = objectValue(state.agent).model === COPILOT_E2E_MODEL
+  if (!state.provider || !agentUsesCopilotModel) {
+    state.provider = await createProvider(state, {
+      type: 'openai-compatible',
+      displayName: `${state.runId} copilot provider`,
+      baseUrl: 'https://models.example.test/v1',
+      credentialSecretRef: `secret://providers/${state.runId}/copilot`,
+    })
+    state.providerModel = await createProviderModel(state, state.provider, {
+      modelId: COPILOT_E2E_MODEL,
+      displayName: 'Copilot CLI',
+      capabilities: ['text'],
+    })
+    state.agent = await createAgent(state, {
+      name: `${state.runId} copilot agent`,
+      provider: state.provider.id,
+      model: COPILOT_E2E_MODEL,
+    })
+  }
+  const capability = `runtime-provider-model:copilot:${state.provider?.id}:${COPILOT_E2E_MODEL}`
+  state.runner = await apiJson<Json>(state.page.request, '/api/runners', {
+    method: 'POST',
+    data: {
+      name: `${state.runId} copilot runner`,
+      environmentId: state.environment?.id,
+      capabilities: ['sandbox.exec', capability],
+    },
+  })
+  state.runner = await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/heartbeats`, {
+    method: 'POST',
+    data: { status: 'active', currentLoad: 0, capabilities: ['sandbox.exec', capability] },
+  })
+})
+
 Then('ama-runner launches the configured Codex command for that session', async function (this: ProductWorld) {
   const state = await ensureState(this)
   const events = await waitForSessionEventText(state, 'codex-shim-started')
@@ -3282,6 +3337,76 @@ Then(
         objectValue(event.payload).content === 'codex stderr diagnostic',
     )
     assert.ok(stderrOutput)
+    for (const type of [
+      'session.lifecycle',
+      'transcript.message',
+      'tool_call.started',
+      'tool_call.completed',
+      'usage.recorded',
+      'runtime.output',
+      'runtime.error',
+    ]) {
+      assert.equal(types.has(type), true, `expected canonical event type ${type}`)
+    }
+  },
+)
+
+Then('ama-runner launches the configured Copilot command for that session', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const events = await waitForSessionEventText(state, 'copilot-shim-started')
+  const serialized = JSON.stringify(events.data)
+  assert.equal(
+    events.data.some((event) => event.type === 'session.lifecycle'),
+    true,
+  )
+  assert.equal(serialized.includes(String(state.latestSession?.id)), true)
+})
+
+Then(
+  'Copilot receives the prompt, workspace, runtime config, and safe environment',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    await waitForSessionStatus(state, 'idle')
+    const receipt = copilotShimReceipt(state)
+    assert.equal(receipt.prompt, state.runtimeMessage)
+    assert.equal(receipt.sessionId, state.latestSession?.id)
+    assert.equal(receipt.runtime, 'copilot')
+    assert.equal(receipt.provider, state.provider?.id)
+    assert.equal(receipt.model, COPILOT_E2E_MODEL)
+    assert.equal(objectValue(receipt.runtimeConfig).mode, 'deterministic-shim')
+    assert.equal(receipt.workspace, receipt.amaWorkspace)
+    assert.equal(receipt.workspace, realpathSync(required(state.runnerWorkDir, 'runner workdir')))
+    assert.equal(receipt.hasAmaToken, false)
+    assert.equal(receipt.leakedToken, null)
+    assert.equal(receipt.leakedOperatorSecret, null)
+    assert.equal(String(receipt.home).startsWith(String(receipt.workspace)), true)
+    assert.equal(String(receipt.tmpdir).startsWith(String(receipt.workspace)), true)
+  },
+)
+
+Then(
+  'Copilot output is translated into canonical lifecycle, transcript, tool, usage, output, and error events',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    const events = await waitForSessionEventText(state, 'copilot stderr diagnostic')
+    const types = new Set(events.data.map((event) => event.type))
+    const serialized = JSON.stringify(events.data)
+    const stderrOutput = events.data.find(
+      (event) =>
+        event.type === 'runtime.output' &&
+        objectValue(event.payload).stream === 'stderr' &&
+        objectValue(event.payload).content === 'copilot stderr diagnostic',
+    )
+    const stdoutOutput = events.data.find(
+      (event) =>
+        event.type === 'runtime.output' &&
+        objectValue(event.payload).stream === 'stdout' &&
+        objectValue(event.payload).content === 'copilot stdout diagnostic',
+    )
+    assert.ok(stderrOutput)
+    assert.ok(stdoutOutput)
+    assert.equal(serialized.includes(`received:${state.runtimeMessage}`), true)
+    assert.equal(serialized.includes('copilot shim safe error'), true)
     for (const type of [
       'session.lifecycle',
       'transcript.message',
@@ -4146,6 +4271,9 @@ function runnerCapabilities(state: E2EState) {
   if (runtime === 'codex' && state.provider?.id) {
     return ['sandbox.exec', `runtime-provider-model:codex:${String(state.provider.id)}:${CODEX_E2E_MODEL}`]
   }
+  if (runtime === 'copilot' && state.provider?.id) {
+    return ['sandbox.exec', `runtime-provider-model:copilot:${String(state.provider.id)}:${COPILOT_E2E_MODEL}`]
+  }
   return ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY]
 }
 
@@ -4186,6 +4314,18 @@ process.stdin.on('end', () => {
     ],
     codexShim: true,
   }
+}
+
+function copilotShimRuntimeConfig() {
+  return {
+    command: [process.execPath, join(process.cwd(), 'test/e2e/fixtures/copilot-shim.mjs')],
+    mode: 'deterministic-shim',
+  }
+}
+
+function copilotShimReceipt(state: E2EState) {
+  const receiptPath = join(required(state.runnerWorkDir, 'runner workdir'), 'copilot-shim-receipt.json')
+  return JSON.parse(readFileSync(receiptPath, 'utf8')) as Json
 }
 
 async function stopProductAmaRunner(state?: E2EState) {
