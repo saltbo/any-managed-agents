@@ -3063,7 +3063,10 @@ Then('ama-runner launches the configured Codex command for that session', async 
   const state = await ensureState(this)
   const events = await waitForSessionEventText(state, 'codex-shim-started')
   const serialized = JSON.stringify(events.data)
-  assert.equal(events.data.some((event) => event.type === 'session.lifecycle'), true)
+  assert.equal(
+    events.data.some((event) => event.type === 'session.lifecycle'),
+    true,
+  )
   assert.equal(serialized.includes(String(state.latestSession?.id)), true)
 })
 
