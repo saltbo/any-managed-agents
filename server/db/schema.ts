@@ -361,6 +361,8 @@ export const runners = sqliteTable(
     environmentId: text('environment_id').references(() => environments.id),
     credentialSecretRef: text('credential_secret_ref'),
     authMode: text('auth_mode').notNull().default('bearer'),
+    oidcSubject: text('oidc_subject'),
+    oidcClientId: text('oidc_client_id'),
     status: text('status').notNull().default('offline'),
     currentLoad: integer('current_load').notNull().default(0),
     maxConcurrent: integer('max_concurrent').notNull().default(1),

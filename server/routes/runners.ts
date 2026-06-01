@@ -4,7 +4,7 @@ import { drizzle } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
 import { canonicalAmaSessionEventFromRuntimeEvent } from '../../shared/session-events'
 import { recordAudit, requestId } from '../audit'
-import { type AuthContext, requireAuth } from '../auth/session'
+import { type AuthContext, isRunnerOidcAuth, requireAuth } from '../auth/session'
 import {
   environments,
   runnerHeartbeats,
@@ -56,7 +56,7 @@ const RunnerSchema = z
     name: z.string().openapi({ example: 'mac-mini-build-runner' }),
     capabilities: z.array(CapabilitySchema).openapi({ example: ['node', 'git', 'sandbox.exec'] }),
     environmentId: z.string().nullable().openapi({ example: 'env_abc123' }),
-    authMode: z.string().openapi({ example: 'bearer' }),
+    authMode: z.string().openapi({ example: 'oidc' }),
     status: z.enum(RUNNER_STATUSES).openapi({ example: 'active' }),
     currentLoad: z.number().int().openapi({ example: 0 }),
     maxConcurrent: z.number().int().openapi({ example: 2 }),
@@ -350,6 +350,41 @@ async function findRunner(db: Db, auth: AuthContext, runnerId: string) {
   )
 }
 
+function runnerOperationAuthorized(env: Env, auth: AuthContext, runner: RunnerRow) {
+  if (isRunnerOidcAuth(env, auth)) {
+    return (
+      runner.authMode === 'oidc' &&
+      runner.oidcSubject === auth.oidc.subject &&
+      !!runner.oidcClientId &&
+      runner.oidcClientId === auth.oidc.clientId
+    )
+  }
+  if (runner.authMode !== 'oidc') {
+    return true
+  }
+  if (!runner.oidcSubject || !runner.oidcClientId) {
+    return false
+  }
+  return runner.oidcSubject === auth.oidc.subject && runner.oidcClientId === auth.oidc.clientId
+}
+
+function runnerForbidden(c: Context<{ Bindings: Env }>) {
+  return errorResponse(c, 403, 'forbidden', 'Runner token is not authorized for this runner')
+}
+
+function runnerOidcBindingFields(env: Env, auth: AuthContext, authMode: string) {
+  if (!isRunnerOidcAuth(env, auth)) {
+    return null
+  }
+  if (authMode !== 'oidc') {
+    return { authMode: 'Runner device-login tokens can only register OIDC-authenticated runners.' }
+  }
+  if (!auth.oidc.clientId) {
+    return { authorization: 'Runner OIDC token did not include a bindable client id.' }
+  }
+  return null
+}
+
 async function validateEnvironment(db: Db, auth: AuthContext, environmentId: string | undefined) {
   if (!environmentId) {
     return true
@@ -586,6 +621,13 @@ async function acceptRunnerSessionChannel(c: Context<{ Bindings: Env }>) {
   if (auth instanceof Response) {
     return auth
   }
+  const runner = await findRunner(db, auth, runnerId)
+  if (!runner) {
+    return errorResponse(c, 404, 'not_found', 'Runner not found')
+  }
+  if (!runnerOperationAuthorized(c.env, auth, runner)) {
+    return runnerForbidden(c)
+  }
   await expireStaleLeases(db, auth)
   const ownership = await activeLeaseWorkItem(db, auth, runnerId, leaseId)
   if (!ownership) {
@@ -716,6 +758,9 @@ async function listRunnerWorkItems(c: Context<{ Bindings: Env }>) {
   if (auth instanceof Response) {
     return auth
   }
+  if (isRunnerOidcAuth(c.env, auth)) {
+    return errorResponse(c, 403, 'forbidden', 'Runner token is not authorized for this resource')
+  }
   await expireStaleLeases(db, auth)
   const {
     includeArchived,
@@ -793,6 +838,7 @@ const listRunnersRoute = createRoute({
     200: { description: 'Runner list', content: { 'application/json': { schema: RunnerListResponseSchema } } },
     400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    403: { description: 'Forbidden', content: { 'application/json': { schema: ErrorResponseSchema } } },
   },
 })
 
@@ -807,6 +853,7 @@ const readRunnerRoute = createRoute({
   responses: {
     200: { description: 'Runner', content: { 'application/json': { schema: RunnerSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    403: { description: 'Forbidden', content: { 'application/json': { schema: ErrorResponseSchema } } },
     404: { description: 'Runner not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
   },
 })
@@ -826,6 +873,7 @@ const updateRunnerRoute = createRoute({
     200: { description: 'Updated runner', content: { 'application/json': { schema: RunnerSchema } } },
     400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    403: { description: 'Forbidden', content: { 'application/json': { schema: ErrorResponseSchema } } },
     404: { description: 'Runner not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
     409: { description: 'Conflict', content: { 'application/json': { schema: ErrorResponseSchema } } },
   },
@@ -846,6 +894,7 @@ const heartbeatRoute = createRoute({
     200: { description: 'Updated runner', content: { 'application/json': { schema: RunnerSchema } } },
     400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    403: { description: 'Forbidden', content: { 'application/json': { schema: ErrorResponseSchema } } },
     404: { description: 'Runner not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
     409: { description: 'Conflict', content: { 'application/json': { schema: ErrorResponseSchema } } },
   },
@@ -866,6 +915,7 @@ const claimLeaseRoute = createRoute({
     201: { description: 'Created runner lease', content: { 'application/json': { schema: RunnerWorkLeaseSchema } } },
     204: { description: 'No eligible work is available' },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    403: { description: 'Forbidden', content: { 'application/json': { schema: ErrorResponseSchema } } },
     404: { description: 'Runner not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
     409: { description: 'Conflict', content: { 'application/json': { schema: ErrorResponseSchema } } },
   },
@@ -886,6 +936,7 @@ const updateLeaseRoute = createRoute({
     200: { description: 'Updated runner lease', content: { 'application/json': { schema: RunnerWorkLeaseSchema } } },
     400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    403: { description: 'Forbidden', content: { 'application/json': { schema: ErrorResponseSchema } } },
     404: { description: 'Lease not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
     409: { description: 'Conflict', content: { 'application/json': { schema: ErrorResponseSchema } } },
   },
@@ -911,6 +962,7 @@ const uploadLeaseEventsRoute = createRoute({
     },
     400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    403: { description: 'Forbidden', content: { 'application/json': { schema: ErrorResponseSchema } } },
     404: { description: 'Lease not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
     409: { description: 'Conflict', content: { 'application/json': { schema: ErrorResponseSchema } } },
   },
@@ -932,6 +984,7 @@ const runnerSessionChannelRoute = createRoute({
     },
     400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    403: { description: 'Forbidden', content: { 'application/json': { schema: ErrorResponseSchema } } },
     409: { description: 'Conflict', content: { 'application/json': { schema: ErrorResponseSchema } } },
     426: {
       description: 'WebSocket upgrade required',
@@ -955,6 +1008,7 @@ const listWorkItemsRoute = createRoute({
     },
     400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    403: { description: 'Forbidden', content: { 'application/json': { schema: ErrorResponseSchema } } },
   },
 })
 
@@ -972,6 +1026,13 @@ const routes = app
     if (!(await validateEnvironment(db, auth, body.environmentId))) {
       return errorResponse(c, 409, 'conflict', 'Runner environment is unavailable')
     }
+    const authMode = body.authMode ?? 'oidc'
+    const oidcBindingFields = runnerOidcBindingFields(c.env, auth, authMode)
+    if (oidcBindingFields) {
+      return errorResponse(c, 400, 'validation_error', 'Runner OIDC token is missing required binding claims', {
+        fields: oidcBindingFields,
+      })
+    }
     const credentialFields = await validateRunnerCredentialSecretRef(db, auth, body.credentialSecretRef)
     if (credentialFields) {
       return errorResponse(c, 400, 'validation_error', 'Runner credential secret reference is invalid', {
@@ -987,7 +1048,9 @@ const routes = app
       capabilities: stringify(body.capabilities ?? []),
       environmentId: body.environmentId ?? null,
       credentialSecretRef: body.credentialSecretRef ?? null,
-      authMode: body.authMode ?? 'bearer',
+      authMode,
+      oidcSubject: auth.oidc.subject,
+      oidcClientId: auth.oidc.clientId,
       status: 'offline',
       currentLoad: 0,
       maxConcurrent: body.maxConcurrent ?? 1,
@@ -1024,6 +1087,10 @@ const routes = app
       cursor,
       environmentId,
     } = c.req.valid('query')
+    const runnerToken = isRunnerOidcAuth(c.env, auth)
+    if (runnerToken && !auth.oidc.clientId) {
+      return errorResponse(c, 403, 'forbidden', 'Runner token is not authorized for this resource')
+    }
     let parsedCursor: ReturnType<typeof parseListCursor> | null = null
     try {
       parsedCursor = cursor ? parseListCursor(cursor) : null
@@ -1034,6 +1101,8 @@ const routes = app
     }
     const filters = [
       eq(runners.projectId, auth.project.id),
+      runnerToken ? eq(runners.oidcSubject, auth.oidc.subject) : undefined,
+      runnerToken && auth.oidc.clientId ? eq(runners.oidcClientId, auth.oidc.clientId) : undefined,
       status
         ? eq(runners.status, status)
         : includeArchived === 'true'
@@ -1071,6 +1140,9 @@ const routes = app
     if (!runner) {
       return errorResponse(c, 404, 'not_found', 'Runner not found')
     }
+    if (!runnerOperationAuthorized(c.env, auth, runner)) {
+      return runnerForbidden(c)
+    }
     return c.json(serializeRunner(runner), 200)
   })
   .openapi(updateRunnerRoute, async (c) => {
@@ -1084,6 +1156,9 @@ const routes = app
     const runner = await findRunner(db, auth, runnerId)
     if (!runner) {
       return errorResponse(c, 404, 'not_found', 'Runner not found')
+    }
+    if (!runnerOperationAuthorized(c.env, auth, runner)) {
+      return runnerForbidden(c)
     }
     if (hasSecretMaterial(body.metadata) || hasSecretMaterial(body.capabilities)) {
       return errorResponse(c, 400, 'validation_error', 'Runner metadata must not contain raw secret material')
@@ -1118,6 +1193,9 @@ const routes = app
     const runner = await findRunner(db, auth, runnerId)
     if (!runner) {
       return errorResponse(c, 404, 'not_found', 'Runner not found')
+    }
+    if (!runnerOperationAuthorized(c.env, auth, runner)) {
+      return runnerForbidden(c)
     }
     if (runner.status === 'disabled') {
       return errorResponse(c, 409, 'conflict', 'Disabled runners cannot heartbeat until re-enabled by an operator')
@@ -1169,6 +1247,9 @@ const routes = app
     const runner = await findRunner(db, auth, runnerId)
     if (!runner) {
       return errorResponse(c, 404, 'not_found', 'Runner not found')
+    }
+    if (!runnerOperationAuthorized(c.env, auth, runner)) {
+      return runnerForbidden(c)
     }
     if (runner.status !== 'active') {
       return errorResponse(c, 409, 'conflict', 'Runner is not active')
@@ -1288,6 +1369,13 @@ const routes = app
     if (!lease) {
       return errorResponse(c, 404, 'not_found', 'Runner lease not found')
     }
+    const runner = await findRunner(db, auth, runnerId)
+    if (!runner) {
+      return errorResponse(c, 404, 'not_found', 'Runner not found')
+    }
+    if (!runnerOperationAuthorized(c.env, auth, runner)) {
+      return runnerForbidden(c)
+    }
     const workItem = await db
       .select()
       .from(runnerWorkItems)
@@ -1359,10 +1447,7 @@ const routes = app
         .update(runnerWorkLeases)
         .set({ status: body.status, result, error, updatedAt: timestamp })
         .where(and(eq(runnerWorkLeases.id, leaseId), eq(runnerWorkLeases.status, 'active')))
-      const runner = await findRunner(db, auth, runnerId)
-      if (runner) {
-        await releaseRunnerLoad(db, auth.project.id, runnerId, timestamp)
-      }
+      await releaseRunnerLoad(db, auth.project.id, runnerId, timestamp)
       if (workItem.sessionId) {
         const sessionUpdate =
           body.status === 'cancelled'
@@ -1412,6 +1497,13 @@ const routes = app
       .get()
     if (!lease) {
       return errorResponse(c, 404, 'not_found', 'Active runner lease not found')
+    }
+    const runner = await findRunner(db, auth, runnerId)
+    if (!runner) {
+      return errorResponse(c, 404, 'not_found', 'Runner not found')
+    }
+    if (!runnerOperationAuthorized(c.env, auth, runner)) {
+      return runnerForbidden(c)
     }
     const workItem = await db.select().from(runnerWorkItems).where(eq(runnerWorkItems.id, lease.workItemId)).get()
     if (!workItem?.sessionId) {

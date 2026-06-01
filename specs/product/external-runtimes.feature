@@ -73,7 +73,7 @@ Feature: External agent runtimes on self-hosted runners
     And Copilot output is translated into canonical lifecycle, transcript, tool, usage, output, and error events
     And the session reaches idle, stopped, or error with inspectable final events
 
-  @planned
+  @implemented
   Scenario: Authenticate ama-runner through OIDC device login
     Given FlareAuth exposes OAuth/OIDC device authorization for a runner client
     When the operator runs ama-runner login

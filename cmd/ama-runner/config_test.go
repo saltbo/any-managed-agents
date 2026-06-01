@@ -92,6 +92,45 @@ func TestLoadConfigParsesValidatedRunnerConfig(t *testing.T) {
 	}
 }
 
+func TestLoadConfigUsesSavedDeviceLoginTokenWhenNoExplicitTokenIsProvided(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "runner.json")
+	if err := SaveRunnerConfig(configPath, SavedRunnerConfig{
+		Origin:      "https://ama.example.test",
+		AccessToken: "saved-token",
+		TokenType:   "Bearer",
+		ExpiresAt:   time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	env := map[string]string{
+		"AMA_RUNNER_CONFIG":               configPath,
+		"AMA_RUNNER_NAME":                 "runner",
+		"AMA_RUNNER_CAPABILITIES":         "sandbox.exec",
+		"AMA_RUNNER_ALLOW_UNSAFE_PROCESS": "true",
+		"AMA_RUNNER_HEARTBEAT_INTERVAL":   "20s",
+		"AMA_RUNNER_RENEW_INTERVAL":       "20s",
+		"AMA_RUNNER_LEASE_SECONDS":        "60",
+		"AMA_RUNNER_COMMAND_TIMEOUT":      "1s",
+		"AMA_RUNNER_SHUTDOWN_GRACE":       "1s",
+	}
+	config, err := LoadConfig(nil, func(key string) string { return env[key] })
+	if err != nil {
+		t.Fatalf("expected saved token config to load, got %v", err)
+	}
+	if config.Origin != "https://ama.example.test" || config.Token != "saved-token" {
+		t.Fatalf("unexpected saved token config: %#v", config)
+	}
+
+	env["AMA_TOKEN"] = "override-token"
+	config, err = LoadConfig(nil, func(key string) string { return env[key] })
+	if err != nil {
+		t.Fatalf("expected env token override to load, got %v", err)
+	}
+	if config.Token != "override-token" {
+		t.Fatalf("expected explicit env token to win, got %q", config.Token)
+	}
+}
+
 func TestLoadConfigFlagsOverrideEnvironment(t *testing.T) {
 	env := map[string]string{
 		"AMA_ORIGIN":                      "https://env.example.test",
@@ -200,6 +239,38 @@ func TestLoadConfigReadsJSONConfigFileWithDurationStrings(t *testing.T) {
 	}
 	if config.WorkDir != "/tmp/ama-runner" || config.RenewInterval != 30*time.Second {
 		t.Fatalf("unexpected config file values: %#v", config)
+	}
+}
+
+func TestLoadConfigReadsJSONConfigFileWithSingleHyphenFlag(t *testing.T) {
+	for _, args := range [][]string{{"-config"}, {}} {
+		configPath := filepath.Join(t.TempDir(), "runner.json")
+		if err := os.WriteFile(configPath, []byte(`{
+			"origin": "https://ama.example.test",
+			"token": "token",
+			"runnerName": "runner",
+			"capabilities": ["sandbox.exec"],
+			"sandboxAdapter": "process-unsafe",
+			"allowUnsafeProcess": true,
+			"maxConcurrent": 1,
+			"leaseDurationSeconds": 90,
+			"heartbeatInterval": "25s",
+			"renewInterval": "30s"
+		}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if len(args) == 1 {
+			args = append(args, configPath)
+		} else {
+			args = []string{"-config=" + configPath}
+		}
+		config, err := LoadConfig(args, func(string) string { return "" })
+		if err != nil {
+			t.Fatalf("expected config file to load for args %v, got %v", args, err)
+		}
+		if config.ConfigPath != configPath || config.Origin != "https://ama.example.test" {
+			t.Fatalf("unexpected config for args %v: %#v", args, config)
+		}
 	}
 }
 

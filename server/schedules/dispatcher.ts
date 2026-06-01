@@ -62,6 +62,11 @@ function systemAuth(project: { id: string; name: string }, organizationId: strin
     project,
     roles: ['system'],
     permissions: ['*'],
+    oidc: {
+      subject: 'system:scheduler',
+      clientId: null,
+      scope: null,
+    },
   }
 }
 

@@ -9,6 +9,9 @@ export interface UserInfoClaims {
   email?: string
   name?: string
   picture?: string
+  client_id?: string
+  azp?: string
+  scope?: string
   org_id?: string
   organization_id?: string
   org_name?: string
@@ -101,7 +104,13 @@ async function createOidcClient(env: Env) {
 
 export async function getBearerClaims(env: Env, accessToken: string): Promise<UserInfoClaims> {
   if (env.AMA_E2E_TEST_AUTH === 'true' && accessToken.startsWith('e2e:')) {
-    return e2eClaims(accessToken.slice('e2e:'.length))
+    return e2eClaims(env, accessToken.slice('e2e:'.length), env.OIDC_CLIENT_ID, false)
+  }
+  if (env.AMA_E2E_TEST_AUTH === 'true' && accessToken.startsWith('e2e-runner:')) {
+    if (!env.OIDC_RUNNER_CLIENT_ID) {
+      throw new OidcError('OIDC_RUNNER_CLIENT_ID is required for runner e2e tokens')
+    }
+    return e2eClaims(env, accessToken.slice('e2e-runner:'.length), env.OIDC_RUNNER_CLIENT_ID, true)
   }
 
   const oidcClient = await createOidcClient(env)
@@ -109,7 +118,7 @@ export async function getBearerClaims(env: Env, accessToken: string): Promise<Us
   if (!claims.sub) {
     throw new OidcError('OIDC provider userinfo did not include required subject')
   }
-  return normalizeClaims(claims as Record<string, unknown> & { sub: string })
+  return normalizeClaims(env, claims as Record<string, unknown> & { sub: string })
 }
 
 export async function upsertProjectForClaims(
@@ -148,33 +157,43 @@ export function organizationIdForClaims(claims: UserInfoClaims) {
   return claims.org_id ?? claims.organization_id ?? `user:${claims.sub}`
 }
 
-function normalizeClaims(claims: Record<string, unknown> & { sub: string }): UserInfoClaims {
+function normalizeClaims(env: Env, claims: Record<string, unknown> & { sub: string }): UserInfoClaims {
   const roles = stringArray(claims.roles)
   const permissions = stringArray(claims.permissions)
+  const clientId = stringClaim(claims.client_id) ?? stringClaim(claims.azp)
+  const scope = stringClaim(claims.scope)
+  const runnerScoped = isRunnerTokenClaim(env, clientId, scope)
   return {
     sub: claims.sub,
     ...optionalClaim('email', claims.email),
     ...optionalClaim('name', claims.name),
     ...optionalClaim('picture', claims.picture),
+    ...optionalClaim('client_id', claims.client_id),
+    ...optionalClaim('azp', claims.azp),
+    ...optionalClaim('scope', claims.scope),
     ...optionalClaim('org_id', claims.org_id),
     ...optionalClaim('organization_id', claims.organization_id),
     ...optionalClaim('org_name', claims.org_name),
     ...optionalClaim('organization_name', claims.organization_name),
-    roles: roles.length ? roles : ['owner'],
-    permissions: permissions.length ? permissions : ['*'],
+    roles: roles.length ? roles : runnerScoped ? ['runner'] : ['owner'],
+    permissions: permissions.length ? permissions : runnerScoped ? [] : ['*'],
   }
 }
 
-function e2eClaims(runId: string): UserInfoClaims {
+function e2eClaims(env: Env, runId: string, clientId: string | undefined, runnerScope: boolean): UserInfoClaims {
   const safeRunId = runId.replaceAll(/[^A-Za-z0-9_-]/g, '_') || newId('run')
+  const scope = runnerScope ? 'openid profile email offline_access ama:runner' : 'openid profile email offline_access'
+  const runnerScoped = isRunnerTokenClaim(env, clientId, scope)
   return {
     sub: `user_e2e_${safeRunId}`,
     email: `${safeRunId}@e2e.example.com`,
     name: `E2E User ${safeRunId}`,
+    ...(clientId ? { client_id: clientId, azp: clientId } : {}),
+    scope,
     org_id: `org_e2e_${safeRunId}`,
     org_name: `E2E Organization ${safeRunId}`,
-    roles: ['owner'],
-    permissions: ['*'],
+    roles: runnerScoped ? ['runner'] : ['owner'],
+    permissions: runnerScoped ? [] : ['*'],
   }
 }
 
@@ -211,4 +230,12 @@ function optionalClaim<Key extends keyof UserInfoClaims>(key: Key, value: unknow
 
 function stringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.length > 0) : []
+}
+
+function isRunnerTokenClaim(env: Env, clientId: string | undefined, scope: string | undefined) {
+  return (
+    !!env.OIDC_RUNNER_CLIENT_ID &&
+    clientId === env.OIDC_RUNNER_CLIENT_ID &&
+    scope?.split(/\s+/).includes('ama:runner') === true
+  )
 }

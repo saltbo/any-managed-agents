@@ -90,9 +90,12 @@ type RunnerSessionChannel struct {
 }
 
 type Health struct {
-	Status  string `json:"status"`
-	Name    string `json:"name"`
-	Runtime string `json:"runtime"`
+	Status         string `json:"status"`
+	Name           string `json:"name"`
+	Runtime        string `json:"runtime"`
+	OIDCIssuer     string `json:"oidcIssuer"`
+	RunnerClientID string `json:"runnerClientId"`
+	RunnerScopes   string `json:"runnerScopes"`
 }
 
 type ErrorResponse struct {

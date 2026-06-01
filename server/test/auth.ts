@@ -65,6 +65,12 @@ export async function signIn(claims = defaultClaims()) {
   return `Bearer e2e:${runId}`
 }
 
+export async function signInRunner(claims = defaultClaims()) {
+  counter += 1
+  const runId = `${claims.sub}_${counter}`.replaceAll(/[^A-Za-z0-9_-]/g, '_')
+  return `Bearer e2e-runner:${runId}`
+}
+
 export async function signInUser(suffix: string) {
   return signIn({
     ...defaultClaims(),
