@@ -48,6 +48,7 @@ type WorkPayload struct {
 	Model                    string         `json:"model"`
 	RuntimeDriver            string         `json:"runtimeDriver"`
 	RequiredRunnerCapability string         `json:"requiredRunnerCapability"`
+	InitialPrompt            *string        `json:"initialPrompt"`
 	Approved                 bool           `json:"approved"`
 	ToolCallID               string         `json:"toolCallId"`
 	ToolName                 string         `json:"toolName"`
@@ -302,6 +303,19 @@ func (d *RunnerDaemon) completeSessionStart(ctx context.Context, lease *ama.Runn
 	}); err != nil {
 		if finishErr := d.finishFailed(context.Background(), lease, err, nil); finishErr != nil {
 			return finishErr
+		}
+		return err
+	}
+
+	if payload.Runtime == "codex" {
+		err := d.runCodexSession(leaseCtx, channel, lease, payload)
+		cancel()
+		select {
+		case renewErr := <-renewErrors:
+			if renewErr != nil {
+				return renewErr
+			}
+		default:
 		}
 		return err
 	}
