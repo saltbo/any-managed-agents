@@ -37,9 +37,22 @@ func runWithContext(ctx context.Context, args []string, getenv func(string) stri
 		HTTPClient:  &http.Client{Timeout: 30 * time.Second},
 	}
 	daemon := RunnerDaemon{
-		Config:  config,
-		Client:  client,
-		Adapter: ProcessAdapter{CommandTimeout: config.CommandTimeout, ShutdownGraceInterval: config.ShutdownGraceInterval},
+		Config:   config,
+		Client:   client,
+		Channels: sdkRunnerSessionChannelOpener{client: client},
+		Adapter:  ProcessAdapter{CommandTimeout: config.CommandTimeout, ShutdownGraceInterval: config.ShutdownGraceInterval},
 	}
 	return daemon.Start(ctx)
+}
+
+type sdkRunnerSessionChannelOpener struct {
+	client *ama.Client
+}
+
+func (o sdkRunnerSessionChannelOpener) OpenRunnerSessionChannel(
+	ctx context.Context,
+	runnerID string,
+	leaseID string,
+) (RunnerSessionChannel, error) {
+	return o.client.OpenRunnerSessionChannel(ctx, runnerID, leaseID)
 }

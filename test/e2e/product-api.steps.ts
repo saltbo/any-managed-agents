@@ -1,6 +1,10 @@
 // @ts-nocheck
 import assert from 'node:assert/strict'
-import { AfterAll, Given, setDefaultTimeout, Then, When } from '@cucumber/cucumber'
+import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { After, AfterAll, Given, setDefaultTimeout, Then, When } from '@cucumber/cucumber'
 import type { APIRequestContext, Page } from '@playwright/test'
 import {
   apiJson,
@@ -8,6 +12,7 @@ import {
   authenticateE2EPage,
   closeLocalApp,
   delay,
+  ensureLocalApp,
   openLocalPage,
   waitForSession,
 } from './local-app'
@@ -48,6 +53,8 @@ interface E2EState {
   mcpConnection?: Json
   runner?: Json
   lease?: Json
+  runnerProcess?: AmaRunnerProcess
+  runnerWorkDir?: string
   runnerChannelMessages?: Json[]
   staleRunnerChannelMessages?: Json[]
   channelEventText?: string
@@ -63,8 +70,13 @@ interface E2EState {
 }
 
 type ProductWorld = AmaWorld & { e2e?: E2EState }
+type AmaRunnerProcess = ChildProcessWithoutNullStreams & { runnerOutput: string[] }
 
 setDefaultTimeout(120_000)
+
+After(async function (this: ProductWorld) {
+  await stopProductAmaRunner(this.e2e)
+})
 
 AfterAll(async () => {
   await closeLocalApp()
@@ -2995,25 +3007,27 @@ Then(
 )
 
 Given('a runner has claimed a self-hosted session', async function (this: ProductWorld) {
-  await setupClaimedSelfHostedSession(this)
+  await setupQueuedSelfHostedSession(this)
 })
 
 When('the runner starts the session runtime', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  state.runnerChannelMessages = await openRunnerChannel(state, 'amaRunnerChannel')
+  await startProductAmaRunner(state)
+  await waitForSessionStatus(state, 'running')
 })
 
-Then('the runner opens an outbound WebSocket for that session to AMA', function (this: ProductWorld) {
-  const messages = required(this.e2e?.runnerChannelMessages, 'runner channel messages')
-  assert.ok(messages.some((message) => message.type === 'session.channel.accepted'))
+Then('the runner opens an outbound WebSocket for that session to AMA', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const events = await waitForSessionEventText(state, 'runner.channel.accepted')
+  assert.ok(JSON.stringify(events.data).includes('runner.channel.accepted'))
 })
 
-Then('AMA authenticates the channel as the claimed runner and session', function (this: ProductWorld) {
-  const accepted = required(this.e2e?.runnerChannelMessages, 'runner channel messages').find(
-    (message) => message.type === 'session.channel.accepted',
-  )
-  assert.equal(accepted?.sessionId, this.e2e?.latestSession?.id)
-  assert.ok(String(accepted?.channelId).startsWith('channel_'))
+Then('AMA authenticates the channel as the claimed runner and session', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const events = await waitForSessionEventText(state, String(state.runner?.id))
+  const serialized = JSON.stringify(events.data)
+  assert.equal(serialized.includes(String(state.latestSession?.id)), true)
+  assert.equal(serialized.includes(String(state.runner?.id)), true)
 })
 
 Then('the session becomes active only after the WebSocket is accepted', async function (this: ProductWorld) {
@@ -3034,8 +3048,9 @@ Then('AMA does not expose any runner-local runtime process endpoint to clients',
 })
 
 Given('a self-hosted session has an accepted runner WebSocket', async function (this: ProductWorld) {
-  const state = await setupClaimedSelfHostedSession(this)
-  state.runnerChannelMessages = await openRunnerChannel(state, 'amaRunnerChannel')
+  const state = await setupQueuedSelfHostedSession(this)
+  await startProductAmaRunner(state)
+  await waitForSessionStatus(state, 'running')
 })
 
 When(
@@ -3054,39 +3069,30 @@ When(
         ],
       },
     })
-    state.runnerChannelMessages = await waitForRunnerMessages(state, 'amaRunnerChannel', 2)
   },
 )
 
-Then('the tool call is delivered over the session WebSocket to the owning runner', function (this: ProductWorld) {
-  const messages = required(this.e2e?.runnerChannelMessages, 'runner channel messages')
-  assert.ok(messages.some((message) => message.type === 'session.command'))
+Then('the tool call is delivered over the session WebSocket to the owning runner', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const events = await waitForSessionEventText(state, 'call_e2e_channel')
+  assert.ok(JSON.stringify(events.data).includes('runner.tool.started'))
 })
 
 Then('the runner executes the tool in the configured local execution backend', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  await sendRunnerChannelEvent(state, 'amaRunnerChannel', {
-    type: 'runner.tool.started',
-    payload: { toolCallId: 'call_e2e_channel', toolName: 'sandbox.exec' },
-  })
+  const events = await waitForSessionEventText(state, 'channel-ok')
+  assert.ok(JSON.stringify(events.data).includes('process-unsafe'))
 })
 
 Then(
   'the runner streams stdout, stderr, output, timing, and safe errors over the same WebSocket',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    await sendRunnerChannelEvent(state, 'amaRunnerChannel', {
-      type: 'runner.tool.completed',
-      payload: {
-        toolCallId: 'call_e2e_channel',
-        toolName: 'sandbox.exec',
-        stdout: 'channel-ok',
-        stderr: '',
-        output: { exitCode: 0, stdout: 'channel-ok', stderr: '' },
-        timing: { durationMs: 7 },
-        error: null,
-      },
-    })
+    const events = await waitForSessionEventText(state, 'channel-ok')
+    const serialized = JSON.stringify(events.data)
+    assert.equal(serialized.includes('stdout'), true)
+    assert.equal(serialized.includes('stderr'), true)
+    assert.equal(serialized.includes('durationMs'), true)
   },
 )
 
@@ -3708,6 +3714,36 @@ async function waitForRuntimeEvents(state: E2EState) {
   throw new Error(`Session ${state.latestSession?.id} did not persist runtime message events`)
 }
 
+async function setupQueuedSelfHostedSession(world: ProductWorld) {
+  const state = await ensureSignedIn(world)
+  state.environment = await createEnvironment(state, {
+    name: `${state.runId} actual runner env`,
+    hostingMode: 'self_hosted',
+    runtime: 'ama',
+    networkPolicy: { mode: 'unrestricted' },
+  })
+  state.agent = await createAgent(state, { name: `${state.runId} actual runner agent` })
+  state.runner = await apiJson<Json>(state.page.request, '/api/runners', {
+    method: 'POST',
+    data: {
+      name: `${state.runId} actual runner`,
+      environmentId: state.environment.id,
+      capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+    },
+  })
+  state.latestSession = await apiJson<Json>(state.page.request, '/api/sessions', {
+    method: 'POST',
+    data: {
+      agentId: state.agent.id,
+      environmentId: state.environment.id,
+      title: `${state.runId} actual runner session`,
+    },
+  })
+  assert.equal(state.latestSession.status, 'pending')
+  assert.equal(state.latestSession.statusReason, 'waiting-for-runner')
+  return state
+}
+
 async function setupClaimedSelfHostedSession(world: ProductWorld) {
   const state = await ensureSignedIn(world)
   state.environment = await createEnvironment(state, {
@@ -3749,6 +3785,98 @@ async function setupClaimedSelfHostedSession(world: ProductWorld) {
   return state
 }
 
+async function startProductAmaRunner(state: E2EState) {
+  await stopProductAmaRunner(state)
+  const origin = await ensureLocalApp()
+  const token = await state.page.evaluate(() => window.localStorage.getItem('ama:e2e-access-token'))
+  if (!token) {
+    throw new Error('E2E access token is required to start ama-runner')
+  }
+  const workDir = mkdtempSync(join(tmpdir(), 'ama-product-runner-'))
+  const child = spawn(
+    'go',
+    [
+      'run',
+      '.',
+      '--origin',
+      origin,
+      '--token',
+      token,
+      '--runner-id',
+      String(state.runner?.id),
+      '--capabilities',
+      ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY].join(','),
+      '--allow-unsafe-process',
+      '--workdir',
+      workDir,
+      '--poll-interval',
+      '1s',
+      '--heartbeat-interval',
+      '5s',
+      '--lease-seconds',
+      '30',
+      '--renew-interval',
+      '10s',
+      '--command-timeout',
+      '30s',
+    ],
+    {
+      cwd: 'cmd/ama-runner',
+      env: { PATH: process.env.PATH, HOME: process.env.HOME },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  ) as AmaRunnerProcess
+  child.runnerOutput = []
+  child.stdout.on('data', (chunk) => child.runnerOutput.push(String(chunk)))
+  child.stderr.on('data', (chunk) => child.runnerOutput.push(String(chunk)))
+  state.runnerProcess = child
+  state.runnerWorkDir = workDir
+}
+
+async function stopProductAmaRunner(state?: E2EState) {
+  if (!state) {
+    return
+  }
+  const child = state.runnerProcess
+  state.runnerProcess = undefined
+  if (child && child.exitCode === null) {
+    child.kill('SIGTERM')
+    await new Promise<void>((resolve) => {
+      const timeout = setTimeout(() => {
+        if (child.exitCode === null) {
+          child.kill('SIGKILL')
+        }
+        resolve()
+      }, 5_000)
+      child.once('exit', () => {
+        clearTimeout(timeout)
+        resolve()
+      })
+    })
+  }
+  if (state.runnerWorkDir) {
+    rmSync(state.runnerWorkDir, { recursive: true, force: true })
+    state.runnerWorkDir = undefined
+  }
+}
+
+async function waitForSessionStatus(state: E2EState, status: string) {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
+    if (session.status === status) {
+      state.latestSession = session
+      return session
+    }
+    if (state.runnerProcess?.exitCode !== null && state.runnerProcess?.exitCode !== undefined) {
+      throw new Error(
+        `ama-runner exited before session became ${status}:\n${state.runnerProcess.runnerOutput.join('')}`,
+      )
+    }
+    await delay(1_000)
+  }
+  throw new Error(`Session ${state.latestSession?.id} did not become ${status}`)
+}
+
 async function openRunnerChannel(state: E2EState, key: string) {
   const messages = await state.page.evaluate(
     async ({ key, runnerId, leaseId }) => {
@@ -3779,25 +3907,6 @@ async function openRunnerChannel(state: E2EState, key: string) {
     { key, runnerId: state.runner?.id, leaseId: state.lease?.id },
   )
   return messages as Json[]
-}
-
-async function waitForRunnerMessages(state: E2EState, key: string, count: number) {
-  return (await state.page.evaluate(
-    async ({ key, count }) => {
-      const store = (window as unknown as Record<string, { messages: Json[] }>)[key]
-      if (!store) {
-        throw new Error(`runner channel ${key} is not open`)
-      }
-      for (let attempt = 0; attempt < 40; attempt += 1) {
-        if (store.messages.length >= count) {
-          return store.messages
-        }
-        await new Promise((resolve) => setTimeout(resolve, 50))
-      }
-      return store.messages
-    },
-    { key, count },
-  )) as Json[]
 }
 
 async function sendRunnerChannelEvent(state: E2EState, key: string, event: Json) {
