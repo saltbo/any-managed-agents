@@ -106,10 +106,11 @@ type fakeAdapter struct {
 }
 
 type fakeRunnerSessionChannel struct {
-	mu     sync.Mutex
-	reads  chan any
-	writes []ama.JSON
-	closed bool
+	mu          sync.Mutex
+	reads       chan any
+	writes      []ama.JSON
+	closed      bool
+	eventErrors map[string]string
 }
 
 func newFakeRunnerSessionChannel(reads ...any) *fakeRunnerSessionChannel {
@@ -146,8 +147,22 @@ func (ch *fakeRunnerSessionChannel) WriteJSON(_ context.Context, value any) erro
 		return err
 	}
 	ch.mu.Lock()
-	defer ch.mu.Unlock()
 	ch.writes = append(ch.writes, decoded)
+	ch.mu.Unlock()
+	if decoded["type"] == "runner.event" {
+		if eventID, ok := decoded["eventId"].(string); ok && eventID != "" {
+			event, _ := decoded["event"].(map[string]any)
+			if event == nil {
+				event, _ = decoded["event"].(ama.JSON)
+			}
+			eventType, _ := event["type"].(string)
+			if message := ch.eventErrors[eventType]; message != "" {
+				ch.reads <- ama.JSON{"type": "session.channel.error", "eventId": eventID, "message": message}
+			} else {
+				ch.reads <- ama.JSON{"type": "runner.event.accepted", "eventId": eventID}
+			}
+		}
+	}
 	return nil
 }
 
@@ -176,6 +191,14 @@ func (ch *fakeRunnerSessionChannel) writtenEvents() []string {
 		}
 	}
 	return events
+}
+
+func (ch *fakeRunnerSessionChannel) writtenMessages() []ama.JSON {
+	ch.mu.Lock()
+	defer ch.mu.Unlock()
+	messages := make([]ama.JSON, len(ch.writes))
+	copy(messages, ch.writes)
+	return messages
 }
 
 func (a *fakeAdapter) Execute(ctx context.Context, _ ToolRequest) (ToolResult, error) {
@@ -291,7 +314,6 @@ printf 'diagnostic line\n' >&2
 	lease := codexSessionStartLease(shim, prompt)
 	channel := newFakeRunnerSessionChannel(
 		ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"},
-		io.EOF,
 	)
 	client := &fakeControlPlane{lease: lease, channel: channel}
 	daemon := testDaemon(client, &fakeAdapter{})
@@ -303,7 +325,10 @@ printf 'diagnostic line\n' >&2
 	if len(client.updates) != 1 || client.updates[0].Status != "completed" {
 		t.Fatalf("expected completed lease update, got %#v", client.updates)
 	}
-	gotTypes := append(channel.writtenEvents(), uploadedEventTypes(client.events)...)
+	if len(client.events) != 0 {
+		t.Fatalf("expected codex session to write runtime events on channel without HTTP uploads, got %#v", client.events)
+	}
+	gotTypes := channel.writtenEvents()
 	for _, want := range []string{
 		"runner.session.started",
 		"codex.lifecycle",
@@ -320,7 +345,12 @@ printf 'diagnostic line\n' >&2
 	if got := countString(gotTypes, "codex.lifecycle"); got < 2 {
 		t.Fatalf("expected start and completion lifecycle events, got %v", gotTypes)
 	}
-	serializedEvents := mustJSON(t, client.events)
+	for _, message := range channel.writtenMessages() {
+		if message["type"] != "runner.event" {
+			t.Fatalf("expected codex event to use runner session channel envelope, got %#v", message)
+		}
+	}
+	serializedEvents := mustJSON(t, channel.writtenMessages())
 	if strings.Contains(serializedEvents, "AMA_TOKEN") {
 		t.Fatalf("expected safe codex environment, got %s", serializedEvents)
 	}
@@ -342,7 +372,6 @@ func TestRunOnceFailsCodexLeaseOnCommandFailure(t *testing.T) {
 	lease := codexSessionStartLease(shim, "fail")
 	channel := newFakeRunnerSessionChannel(
 		ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"},
-		io.EOF,
 	)
 	client := &fakeControlPlane{lease: lease, channel: channel}
 	daemon := testDaemon(client, &fakeAdapter{})
@@ -354,9 +383,46 @@ func TestRunOnceFailsCodexLeaseOnCommandFailure(t *testing.T) {
 	if len(client.updates) != 1 || client.updates[0].Status != "failed" {
 		t.Fatalf("expected failed lease update, got %#v", client.updates)
 	}
-	serializedEvents := mustJSON(t, client.events)
+	if len(client.events) != 0 {
+		t.Fatalf("expected failed codex session to write runtime events on channel without HTTP uploads, got %#v", client.events)
+	}
+	serializedEvents := mustJSON(t, channel.writtenMessages())
 	if !strings.Contains(serializedEvents, "codex.error") || !strings.Contains(serializedEvents, "bad failure") {
 		t.Fatalf("expected codex error events, got %s", serializedEvents)
+	}
+}
+
+func TestRunOnceFailsCodexLeaseWhenSessionStartedChannelEventIsRejected(t *testing.T) {
+	workDir := t.TempDir()
+	shim := filepath.Join(workDir, "codex-shim.sh")
+	if err := os.WriteFile(shim, []byte("#!/bin/sh\nprintf '{}'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	lease := codexSessionStartLease(shim, "start")
+	channel := newFakeRunnerSessionChannel(ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"})
+	channel.eventErrors = map[string]string{"runner.session.started": "start rejected"}
+	client := &fakeControlPlane{lease: lease, channel: channel}
+	daemon := testDaemon(client, &fakeAdapter{})
+	daemon.Config.WorkDir = workDir
+	daemon.Config.Capabilities = append(daemon.Config.Capabilities, "runtime-provider-model:codex:provider_codex:gpt-5.3-codex")
+	err := daemon.RunOnce(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "start rejected") {
+		t.Fatalf("expected session started channel rejection, got %v", err)
+	}
+	if len(client.updates) != 1 || client.updates[0].Status != "failed" {
+		t.Fatalf("expected failed lease update, got %#v", client.updates)
+	}
+	if len(channel.writtenEvents()) != 1 || channel.writtenEvents()[0] != "runner.session.started" {
+		t.Fatalf("expected only acknowledged session started write before failure, got %v", channel.writtenEvents())
+	}
+}
+
+func TestAcknowledgedChannelEventFailsOnUnscopedChannelError(t *testing.T) {
+	channel := newFakeRunnerSessionChannel(ama.JSON{"type": "session.channel.error", "message": "previous event rejected"})
+	daemon := testDaemon(&fakeControlPlane{}, &fakeAdapter{})
+	err := daemon.writeAcknowledgedChannelEvent(context.Background(), channel, "codex.lifecycle", ama.JSON{"status": "started"})
+	if err == nil || !strings.Contains(err.Error(), "previous event rejected") {
+		t.Fatalf("expected unscoped channel error, got %v", err)
 	}
 }
 
@@ -768,16 +834,6 @@ func mustJSON(t *testing.T, value any) string {
 		t.Fatal(err)
 	}
 	return string(data)
-}
-
-func uploadedEventTypes(events []ama.UploadRunnerLeaseEventsRequest) []string {
-	types := make([]string, 0)
-	for _, upload := range events {
-		for _, event := range upload.Events {
-			types = append(types, event.Type)
-		}
-	}
-	return types
 }
 
 func containsString(values []string, want string) bool {

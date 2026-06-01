@@ -92,12 +92,14 @@ export class RunnerSessionChannelObject implements DurableObject {
   }
 
   private async handleMessage(state: ChannelState, data: unknown, socket: WebSocket) {
+    let eventId: string | undefined
     try {
       const parsed = typeof data === 'string' ? (JSON.parse(data) as unknown) : JSON.parse(String(data))
       if (!parsed || typeof parsed !== 'object') {
         throw new Error('Runner channel message must be an object')
       }
       const record = parsed as Record<string, unknown>
+      eventId = typeof record.eventId === 'string' ? record.eventId : undefined
       const eventRecord =
         record.type === 'runner.event' && record.event && typeof record.event === 'object'
           ? (record.event as Record<string, unknown>)
@@ -115,9 +117,18 @@ export class RunnerSessionChannelObject implements DurableObject {
           ? { metadata: metadata as Record<string, unknown> }
           : {}),
       })
+      if (eventId && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'runner.event.accepted', eventId }))
+      }
     } catch (error) {
       if (socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type: 'session.channel.error', message: safeChannelError(error) }))
+        socket.send(
+          JSON.stringify({
+            type: 'session.channel.error',
+            eventId,
+            message: safeChannelError(error),
+          }),
+        )
       }
     }
   }

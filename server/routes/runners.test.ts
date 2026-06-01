@@ -470,6 +470,107 @@ describe('[CF] /api/runners', () => {
     channel.close()
   })
 
+  it('acknowledges accepted runner channel events and rejects invalid channel payloads', async () => {
+    const authorization = await signIn()
+    const environment = await createSelfHostedEnvironment(authorization)
+    const agent = await createAgent(authorization)
+    const runnerRes = await jsonFetch('/api/runners', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Ack runner',
+        environmentId: environment.id,
+        capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+      }),
+    })
+    const runner = (await runnerRes.json()) as { id: string }
+    await jsonFetch(`/api/runners/${runner.id}/heartbeats`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        status: 'active',
+        currentLoad: 0,
+        capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+      }),
+    })
+    const session = await createSelfHostedSession(authorization, agent.id, environment.id)
+    const claimRes = await jsonFetch(`/api/runners/${runner.id}/leases`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ leaseDurationSeconds: 90 }),
+    })
+    expect(claimRes.status).toBe(201)
+    const lease = (await claimRes.json()) as { id: string }
+    const channel = await openRunnerSessionChannel(authorization, runner.id, lease.id)
+    const channelMessages = collectMessages(channel)
+    await waitForMessages(channelMessages, 1)
+
+    channel.send(
+      JSON.stringify({
+        type: 'runner.event',
+        eventId: 'runner_event_ack_1',
+        event: {
+          type: 'runner.tool.completed',
+          payload: {
+            toolCallId: 'call_ack_1',
+            toolName: 'sandbox.exec',
+            output: { exitCode: 0, stdout: 'ack-ok', stderr: '' },
+          },
+        },
+      }),
+    )
+    await expect(waitForMessages(channelMessages, 2)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'runner.event.accepted', eventId: 'runner_event_ack_1' }),
+      ]),
+    )
+
+    channel.send(
+      JSON.stringify({
+        type: 'runner.event',
+        eventId: 'runner_event_bad_1',
+        event: {
+          type: 'runner.tool.completed',
+        },
+      }),
+    )
+    await expect(waitForMessages(channelMessages, 3)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'session.channel.error',
+          eventId: 'runner_event_bad_1',
+          message: 'Runner session channel failed',
+        }),
+      ]),
+    )
+
+    const sessionEventsRes = await jsonFetch(`/api/sessions/${session.id}/events`, authorization)
+    expect(sessionEventsRes.status).toBe(200)
+    const sessionEvents = (await sessionEventsRes.json()) as {
+      data: Array<{ type: string; payload: Record<string, unknown>; metadata: Record<string, unknown> }>
+    }
+    expect(sessionEvents.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'tool_call.completed',
+          payload: expect.objectContaining({
+            status: 'success',
+            toolCall: expect.objectContaining({
+              id: 'call_ack_1',
+              name: 'sandbox.exec',
+              output: { exitCode: 0, stdout: 'ack-ok', stderr: '' },
+            }),
+          }),
+          metadata: expect.objectContaining({
+            source: 'self-hosted-runner',
+            runnerId: runner.id,
+            leaseId: lease.id,
+            channelId: expect.stringMatching(/^channel_/),
+          }),
+        }),
+      ]),
+    )
+    expect(JSON.stringify(sessionEvents.data)).not.toContain('runner_event_bad_1')
+    channel.close()
+  })
+
   it('does not dispatch runtime commands to an open channel after lease ownership expires', async () => {
     const authorization = await signIn()
     const environment = await createSelfHostedEnvironment(authorization)

@@ -30,7 +30,7 @@ type codexProcessResult struct {
 
 func (d *RunnerDaemon) runCodexSession(
 	ctx context.Context,
-	_ RunnerSessionChannel,
+	channel RunnerSessionChannel,
 	lease *ama.RunnerWorkLease,
 	payload WorkPayload,
 ) error {
@@ -39,7 +39,7 @@ func (d *RunnerDaemon) runCodexSession(
 	emit := func(eventType string, eventPayload ama.JSON) error {
 		emitMu.Lock()
 		defer emitMu.Unlock()
-		return d.uploadEvent(ctx, lease, eventType, eventPayload)
+		return d.writeAcknowledgedChannelEvent(ctx, channel, eventType, eventPayload)
 	}
 	result, runErr := d.runCodexProcess(ctx, payload, emit)
 	eventPayload := ama.JSON{
@@ -51,11 +51,11 @@ func (d *RunnerDaemon) runCodexSession(
 	if runErr != nil {
 		eventPayload["status"] = "error"
 		eventPayload["error"] = ama.JSON{"message": runErr.Error()}
-		_ = d.uploadEvent(context.Background(), lease, "codex.error", ama.JSON{
+		_ = d.writeAcknowledgedChannelEvent(ctx, channel, "codex.error", ama.JSON{
 			"error": ama.JSON{"message": runErr.Error()},
 			"code":  result.ExitCode,
 		})
-		if err := d.uploadEvent(context.Background(), lease, "codex.lifecycle", eventPayload); err != nil {
+		if err := d.writeAcknowledgedChannelEvent(ctx, channel, "codex.lifecycle", eventPayload); err != nil {
 			return err
 		}
 		return d.finishFailed(context.Background(), lease, runErr, ama.JSON{
@@ -64,7 +64,7 @@ func (d *RunnerDaemon) runCodexSession(
 			"exitCode": result.ExitCode,
 		})
 	}
-	if err := d.uploadEvent(ctx, lease, "codex.lifecycle", eventPayload); err != nil {
+	if err := d.writeAcknowledgedChannelEvent(ctx, channel, "codex.lifecycle", eventPayload); err != nil {
 		return err
 	}
 	_, err := d.Client.UpdateRunnerLease(ctx, d.RunnerID, lease.ID, ama.UpdateRunnerLeaseRequest{
