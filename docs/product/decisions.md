@@ -57,7 +57,7 @@ These decisions define the intended end state for Any Managed Agents.
 - Authentication integrates with OIDC provider.
 - This project must not reimplement a parallel authentication system.
 - Control-plane and runtime requests resolve tenant context from OIDC sessions or credentials.
-- Runner daemon authentication must use FlareAuth/OIDC device login once FlareAuth exposes OAuth/OIDC device authorization for runner clients. AMA must not build a parallel runner credential issuer.
+- Runner daemon authentication uses FlareAuth/OIDC device login. AMA validates provider-issued bearer tokens, binds OIDC runner operation to the runner registration subject/client id, rejects runner-scoped tokens on non-runner control-plane resources, and must not build a parallel runner credential issuer.
 
 ## Providers
 

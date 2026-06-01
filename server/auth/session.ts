@@ -21,6 +21,11 @@ export interface AuthContext {
   }
   roles: string[]
   permissions: string[]
+  oidc: {
+    subject: string
+    clientId: string | null
+    scope: string | null
+  }
 }
 
 export interface AuthIdentity {
@@ -28,6 +33,15 @@ export interface AuthIdentity {
   organization: AuthContext['organization']
   roles: string[]
   permissions: string[]
+  oidc: AuthContext['oidc']
+}
+
+export function isRunnerOidcAuth(env: Env, auth: Pick<AuthContext, 'oidc'>) {
+  return (
+    !!env.OIDC_RUNNER_CLIENT_ID &&
+    auth.oidc.clientId === env.OIDC_RUNNER_CLIENT_ID &&
+    auth.oidc.scope?.split(/\s+/).includes('ama:runner') === true
+  )
 }
 
 function bearerToken(headers: Headers, url: string) {
@@ -83,6 +97,11 @@ function authIdentityFromClaims(claims: Awaited<ReturnType<typeof getBearerClaim
     },
     roles: claims.roles,
     permissions: claims.permissions,
+    oidc: {
+      subject: claims.sub,
+      clientId: claims.client_id ?? claims.azp ?? null,
+      scope: claims.scope ?? null,
+    },
   }
 }
 
@@ -103,6 +122,9 @@ export async function requireAuthIdentity(c: Context<{ Bindings: Env }>) {
       reason: 'missing_or_invalid_bearer_token',
     })
   }
+  if (isRunnerOidcAuth(c.env, auth) && !new URL(c.req.url).pathname.startsWith('/api/runners')) {
+    return errorResponse(c, 403, 'forbidden', 'Runner token is not authorized for this resource') as never
+  }
   return auth
 }
 
@@ -122,6 +144,9 @@ export async function requireAuth(c: Context<{ Bindings: Env }>, db: DrizzleD1Da
     return errorResponse(c, 401, 'authentication_required', 'Authentication required', {
       reason: 'missing_or_invalid_bearer_token',
     })
+  }
+  if (isRunnerOidcAuth(c.env, auth) && !new URL(c.req.url).pathname.startsWith('/api/runners')) {
+    return errorResponse(c, 403, 'forbidden', 'Runner token is not authorized for this resource') as never
   }
   return auth
 }

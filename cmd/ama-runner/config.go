@@ -14,6 +14,7 @@ import (
 const processUnsafeAdapter = "process-unsafe"
 
 type Config struct {
+	ConfigPath            string        `json:"-"`
 	Origin                string        `json:"origin"`
 	Token                 string        `json:"token"`
 	RunnerID              string        `json:"runnerId"`
@@ -69,6 +70,7 @@ func LoadConfig(args []string, getenv func(string) string) (Config, error) {
 		return Config{}, err
 	}
 	config := Config{
+		ConfigPath:            defaultConfigPath(getenv),
 		Origin:                getenv("AMA_ORIGIN"),
 		Token:                 getenv("AMA_TOKEN"),
 		RunnerID:              getenv("AMA_RUNNER_ID"),
@@ -88,7 +90,7 @@ func LoadConfig(args []string, getenv func(string) string) (Config, error) {
 	}
 
 	flags := flag.NewFlagSet("ama-runner", flag.ContinueOnError)
-	configPath := flags.String("config", "", "JSON config file")
+	configPath := flags.String("config", config.ConfigPath, "JSON config file")
 	origin := flags.String("origin", config.Origin, "AMA control-plane origin")
 	token := flags.String("token", config.Token, "AMA bearer token")
 	runnerID := flags.String("runner-id", config.RunnerID, "existing runner id")
@@ -109,11 +111,12 @@ func LoadConfig(args []string, getenv func(string) string) (Config, error) {
 		return Config{}, err
 	}
 
-	if *configPath != "" {
+	if visitedFlag(args, "config") && *configPath != "" {
 		fileConfig, fileAllowUnsafeProcessSet, err := loadConfigFile(*configPath)
 		if err != nil {
 			return Config{}, err
 		}
+		fileConfig.ConfigPath = *configPath
 		config = mergeConfig(config, fileConfig)
 		if fileAllowUnsafeProcessSet {
 			config.AllowUnsafeProcess = fileConfig.AllowUnsafeProcess
@@ -126,6 +129,9 @@ func LoadConfig(args []string, getenv func(string) string) (Config, error) {
 	})
 	if visited["origin"] {
 		config.Origin = *origin
+	}
+	if visited["config"] {
+		config.ConfigPath = *configPath
 	}
 	if visited["token"] {
 		config.Token = *token
@@ -173,10 +179,59 @@ func LoadConfig(args []string, getenv func(string) string) (Config, error) {
 		config.ShutdownGraceInterval = *shutdownGrace
 	}
 
+	if !visited["token"] && (strings.TrimSpace(config.Token) == "" || strings.TrimSpace(config.Origin) == "") {
+		saved, err := LoadSavedRunnerConfig(config.ConfigPath)
+		if err != nil {
+			return Config{}, err
+		}
+		if saved != nil {
+			if strings.TrimSpace(config.Origin) == "" {
+				config.Origin = saved.Origin
+			}
+			if strings.TrimSpace(config.Token) == "" && config.Origin == saved.Origin {
+				config.Token = saved.AccessToken
+			}
+		}
+	}
+
 	if err := config.Validate(); err != nil {
 		return Config{}, err
 	}
 	return config, nil
+}
+
+type LoginCommand struct {
+	Origin     string
+	ConfigPath string
+}
+
+func LoadLoginCommand(args []string, getenv func(string) string) (LoginCommand, error) {
+	if getenv == nil {
+		getenv = os.Getenv
+	}
+	command := LoginCommand{
+		Origin:     getenv("AMA_ORIGIN"),
+		ConfigPath: defaultConfigPath(getenv),
+	}
+	flags := flag.NewFlagSet("ama-runner login", flag.ContinueOnError)
+	origin := flags.String("origin", command.Origin, "AMA control-plane origin")
+	configPath := flags.String("config", command.ConfigPath, "runner config file")
+	if err := flags.Parse(args); err != nil {
+		return LoginCommand{}, err
+	}
+	command.Origin = *origin
+	command.ConfigPath = *configPath
+	if strings.TrimSpace(command.Origin) == "" {
+		return LoginCommand{}, fmt.Errorf("AMA origin is required")
+	}
+	parsed, err := url.Parse(command.Origin)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return LoginCommand{}, fmt.Errorf("AMA origin must be an absolute URL")
+	}
+	if strings.TrimSpace(command.ConfigPath) == "" {
+		return LoginCommand{}, fmt.Errorf("runner config path is required")
+	}
+	return command, nil
 }
 
 func (c Config) Validate() error {
@@ -244,6 +299,30 @@ func loadConfigFile(path string) (Config, bool, error) {
 	return file.Config(), file.AllowUnsafeProcess != nil, nil
 }
 
+func defaultConfigPath(getenv func(string) string) string {
+	if path := getenv("AMA_RUNNER_CONFIG"); strings.TrimSpace(path) != "" {
+		return path
+	}
+	if configHome := getenv("XDG_CONFIG_HOME"); strings.TrimSpace(configHome) != "" {
+		return configHome + string(os.PathSeparator) + "ama-runner" + string(os.PathSeparator) + "config.json"
+	}
+	if home := getenv("HOME"); strings.TrimSpace(home) != "" {
+		return home + string(os.PathSeparator) + ".config" + string(os.PathSeparator) + "ama-runner" + string(os.PathSeparator) + "config.json"
+	}
+	return ""
+}
+
+func visitedFlag(args []string, name string) bool {
+	shortPrefix := "-" + name
+	longPrefix := "--" + name
+	for _, arg := range args {
+		if arg == shortPrefix || arg == longPrefix || strings.HasPrefix(arg, shortPrefix+"=") || strings.HasPrefix(arg, longPrefix+"=") {
+			return true
+		}
+	}
+	return false
+}
+
 type configFile struct {
 	Origin                string       `json:"origin"`
 	Token                 string       `json:"token"`
@@ -305,6 +384,9 @@ func (d *durationJSON) UnmarshalJSON(data []byte) error {
 }
 
 func mergeConfig(base Config, override Config) Config {
+	if override.ConfigPath != "" {
+		base.ConfigPath = override.ConfigPath
+	}
 	if override.Origin != "" {
 		base.Origin = override.Origin
 	}

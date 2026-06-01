@@ -21,15 +21,30 @@ replace github.com/saltbo/any-managed-agents/sdk/go => ../../sdk/go
 
 All control-plane calls go through `sdk/go/ama`. The daemon does not maintain a separate API client outside SDK transport configuration.
 
-## Configuration
+## Login And Configuration
 
-Required configuration can come from environment variables, flags, or a JSON config file.
+Authenticate the runner with FlareAuth/OIDC device login before starting the daemon:
+
+```bash
+ama-runner login --origin "https://ama.example.com"
+```
+
+The command discovers the AMA control plane OIDC metadata from `/api/health`, starts the provider device authorization flow for the registered runner client, prints the verification URL/code, and stores the returned token material in the local runner config file. It never prints access or refresh tokens.
+
+By default, the config file is:
+
+- `$AMA_RUNNER_CONFIG` when set
+- `$XDG_CONFIG_HOME/ama-runner/config.json`
+- `$HOME/.config/ama-runner/config.json`
+
+The config directory is created with `0700` permissions and the token file is written with `0600` permissions where the host filesystem supports POSIX modes. Treat this file as local operator credential material.
+
+Required daemon configuration can come from environment variables, flags, or a JSON config file.
 
 Environment variables:
 
 ```bash
 export AMA_ORIGIN="https://ama.example.com"
-export AMA_TOKEN="..."
 export AMA_RUNNER_NAME="mac-mini-runner-1"
 export AMA_RUNNER_CAPABILITIES="sandbox.exec,sandbox.read,sandbox.write"
 export AMA_RUNNER_SANDBOX_ADAPTER="process-unsafe"
@@ -42,7 +57,6 @@ Useful flags:
 ```bash
 ama-runner \
   --origin "$AMA_ORIGIN" \
-  --token "$AMA_TOKEN" \
   --runner-name mac-mini-runner-1 \
   --capabilities sandbox.exec,sandbox.read,sandbox.write \
   --sandbox-adapter process-unsafe \
@@ -58,7 +72,9 @@ Timing defaults:
 - Poll interval when no work is available: `5s`
 - Max concurrent leases: `1`
 
-The daemon fails fast when origin, token, runner id/name, capabilities, work directory, adapter selection, or timing values are invalid. `--runner-id` can be used for an existing registered runner. Without a runner id, the daemon registers a runner using `--runner-name`.
+The daemon loads the saved device-login access token at startup when `--token` and `AMA_TOKEN` are not provided. `--token` and `AMA_TOKEN` remain available for tests and temporary compatibility, and they take precedence over the saved token. Operators should prefer `ama-runner login` for normal self-hosted runners.
+
+The daemon fails fast when origin, token, runner id/name, capabilities, work directory, adapter selection, or timing values are invalid. `--runner-id` can be used for an existing registered runner. Without a runner id, the daemon registers a runner using `--runner-name`. Runner registration stores only OIDC subject/client binding metadata, safe capabilities, heartbeat/load state, and secret references; raw token material is not stored in D1 or returned by runner APIs. Runner device-login tokens are accepted only for runner registration and runtime runner APIs, not for general control-plane resources such as environments, agents, sessions, providers, or vaults.
 
 ## Local Executor Boundary
 
@@ -81,14 +97,15 @@ Do not use this adapter for untrusted workloads. Docker/OCI isolation should be 
 At startup, the daemon:
 
 1. Checks `/api/health` for an AMA control plane.
-2. Registers a runner when no runner id is configured.
-3. Sends an active heartbeat with capabilities and adapter metadata.
-4. Claims work with `POST /api/runners/{runnerId}/leases`.
-5. Uploads structured lease events.
-6. Renews active leases while local work is running.
-7. Finishes leases as `completed`, `failed`, or `cancelled`.
+2. Loads the saved FlareAuth/OIDC device-login token unless an explicit token override is supplied.
+3. Registers a runner when no runner id is configured.
+4. Sends an active heartbeat with capabilities and adapter metadata.
+5. Claims work with `POST /api/runners/{runnerId}/leases`.
+6. Uploads structured lease events.
+7. Renews active leases while local work is running.
+8. Finishes leases as `completed`, `failed`, or `cancelled`.
 
-`204` lease responses mean no eligible work is available. Authentication failures, unsupported payload protocols, unsupported sandbox backends, and incompatible control planes are fatal.
+`204` lease responses mean no eligible work is available. Authentication failures, runner-token binding failures, unsupported payload protocols, unsupported sandbox backends, and incompatible control planes are fatal.
 
 Current AMA self-hosted session creation queues `session.start` work. The daemon handles that work as a cloud-owned session handoff: it uploads a structured `runner.session.started` event and completes the lease without launching Pi/PyAgent locally. Approved `sandbox.exec`, `sandbox.read`, and `sandbox.write` tool payloads are the only work items that enter the local process adapter.
 

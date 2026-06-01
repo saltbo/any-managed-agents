@@ -329,6 +329,61 @@ func TestRunOnceOpensSessionChannelAndExecutesRuntimeCommand(t *testing.T) {
 	}
 }
 
+func TestRunOnceFailsSessionChannelCommandOwnershipMismatch(t *testing.T) {
+	channel := newFakeRunnerSessionChannel(
+		ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"},
+		ama.JSON{
+			"type":      "session.command",
+			"sessionId": "session_other",
+			"runnerId":  "runner_1",
+			"leaseId":   "lease_1",
+			"command": ama.JSON{
+				"id":   "runnercmd_1",
+				"type": "runtime.rpc",
+				"path": "/rpc",
+			},
+		},
+	)
+	client := &fakeControlPlane{lease: sessionStartLease(), channel: channel}
+	daemon := testDaemon(client, &fakeAdapter{})
+	err := daemon.RunOnce(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "ownership mismatch") {
+		t.Fatalf("expected ownership mismatch error, got %v", err)
+	}
+	if len(client.updates) != 1 || client.updates[0].Status != "failed" {
+		t.Fatalf("expected failed lease update, got %#v", client.updates)
+	}
+	if !channel.closed {
+		t.Fatal("expected mismatched session channel to close")
+	}
+}
+
+func TestRunOnceCancelsSessionChannelWhenContextIsCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	channel := newFakeRunnerSessionChannel(
+		ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"},
+	)
+	client := &fakeControlPlane{lease: sessionStartLease(), channel: channel}
+	daemon := testDaemon(client, &fakeAdapter{})
+	done := make(chan error, 1)
+	go func() {
+		done <- daemon.RunOnce(ctx)
+	}()
+	waitForRunnerWriteCount(t, channel, 1, done)
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("expected cancellation update to succeed, got %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for cancelled session channel")
+	}
+	if len(client.updates) != 1 || client.updates[0].Status != "cancelled" {
+		t.Fatalf("expected cancelled lease update, got %#v", client.updates)
+	}
+}
+
 func TestRunOnceLaunchesCodexCommandAndCompletesSessionLease(t *testing.T) {
 	workDir := t.TempDir()
 	shim := filepath.Join(workDir, "codex-shim.sh")
@@ -631,6 +686,24 @@ func waitForRunnerWriteID(t *testing.T, channel *fakeRunnerSessionChannel, count
 			if eventID := channel.lastWriteEventID(); eventID != "" {
 				return eventID
 			}
+		}
+		select {
+		case err := <-done:
+			t.Fatalf("run finished before write %d: %v", count, err)
+		case <-deadline:
+			t.Fatalf("timed out waiting for write %d", count)
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+}
+
+func waitForRunnerWriteCount(t *testing.T, channel *fakeRunnerSessionChannel, count int, done <-chan error) {
+	t.Helper()
+	deadline := time.After(time.Second)
+	for {
+		if channel.writeCount() >= count {
+			return
 		}
 		select {
 		case err := <-done:

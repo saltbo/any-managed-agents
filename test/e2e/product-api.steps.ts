@@ -1,7 +1,8 @@
 // @ts-nocheck
 import assert from 'node:assert/strict'
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
-import { mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs'
+import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { After, AfterAll, Given, setDefaultTimeout, Then, When } from '@cucumber/cucumber'
@@ -59,9 +60,12 @@ interface E2EState {
   runnerWorkDir?: string
   runnerOrigin?: string
   accessToken?: string
+  runnerAccessToken?: string
   runnerChannelMessages?: Json[]
   staleRunnerChannelMessages?: Json[]
   channelEventText?: string
+  runnerConfigPath?: string
+  deviceLoginOutput?: string
   claudeShimReceipt?: Json
   otherPage?: Page
   deletedCredentialVersionId?: string
@@ -2478,6 +2482,151 @@ Given(
   },
 )
 
+Given(/^FlareAuth exposes OAuth\/OIDC device authorization for a runner client$/, async function (this: ProductWorld) {
+  await ensureSignedIn(this)
+})
+
+When('the operator runs ama-runner login', async function (this: ProductWorld) {
+  const state = await ensureSignedIn(this)
+  const login = await runDeterministicAmaRunnerLogin(state)
+  state.runnerAccessToken = login.accessToken
+  state.runnerConfigPath = login.configPath
+  state.deviceLoginOutput = login.output
+})
+
+Then(
+  'ama-runner starts the OIDC device authorization flow for the registered runner client',
+  function (this: ProductWorld) {
+    const state = required(this.e2e, 'state')
+    const output = required(state.deviceLoginOutput, 'device login output')
+    assert.equal(output.includes('Verification URL:'), true)
+    assert.equal(output.includes('Code:'), true)
+    assert.equal(output.includes(required(state.accessToken, 'runner access token')), false)
+  },
+)
+
+Then('the operator approves the runner in the FlareAuth browser flow', function (this: ProductWorld) {
+  const state = required(this.e2e, 'state')
+  assert.equal(String(state.deviceLoginOutput).includes('E2E-RUNNER'), true)
+})
+
+Then(
+  'ama-runner stores the returned token material only in the local operator environment',
+  function (this: ProductWorld) {
+    const state = required(this.e2e, 'state')
+    const configPath = required(state.runnerConfigPath, 'runner config path')
+    const configText = readFileSync(configPath, 'utf8')
+    const config = JSON.parse(configText) as { accessToken?: string; refreshToken?: string; origin?: string }
+    assert.equal(config.accessToken, state.runnerAccessToken)
+    assert.equal(config.refreshToken, 'refresh-e2e-runner')
+    assert.equal(statSync(configPath).mode & 0o777, 0o600)
+    assert.equal(String(state.deviceLoginOutput).includes(String(config.accessToken)), false)
+    assert.equal(String(state.deviceLoginOutput).includes(String(config.refreshToken)), false)
+  },
+)
+
+Then(
+  'AMA accepts runner registration, claims, and session WebSockets using the FlareAuth-issued token',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    const origin = await ensureLocalApp()
+    await state.page.goto(origin)
+    const operatorToken = required(state.accessToken, 'operator access token')
+    const runnerToken = required(state.runnerAccessToken, 'runner access token')
+    await state.page.evaluate((value) => window.localStorage.setItem('ama:e2e-access-token', value), operatorToken)
+    const operatorHeaders = { authorization: `Bearer ${operatorToken}` }
+    const runnerHeaders = { authorization: `Bearer ${runnerToken}` }
+    const forbiddenEnvironment = await state.page.request.post('/api/environments', {
+      headers: runnerHeaders,
+      data: {
+        name: `${state.runId} forbidden runner env`,
+        hostingMode: 'self_hosted',
+        runtime: 'ama',
+        networkPolicy: { mode: 'unrestricted' },
+      },
+    })
+    assert.equal(forbiddenEnvironment.status(), 403)
+    state.environment = await apiJson<Json>(state.page.request, '/api/environments', {
+      method: 'POST',
+      headers: operatorHeaders,
+      data: {
+        name: `${state.runId} oidc runner env`,
+        hostingMode: 'self_hosted',
+        runtime: 'ama',
+        networkPolicy: { mode: 'unrestricted' },
+      },
+    })
+    state.agent = await apiJson<Json>(state.page.request, '/api/agents', {
+      method: 'POST',
+      headers: operatorHeaders,
+      data: { name: `${state.runId} oidc runner agent` },
+    })
+    state.runner = await apiJson<Json>(state.page.request, '/api/runners', {
+      method: 'POST',
+      headers: runnerHeaders,
+      data: {
+        name: `${state.runId} oidc runner`,
+        capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+        metadata: { source: 'device-login-e2e' },
+      },
+    })
+    assert.equal(state.runner.authMode, 'oidc')
+    state.runner = await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/heartbeats`, {
+      method: 'POST',
+      headers: runnerHeaders,
+      data: {
+        status: 'active',
+        currentLoad: 0,
+        capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+      },
+    })
+    state.latestSession = await apiJson<Json>(state.page.request, '/api/sessions', {
+      method: 'POST',
+      headers: operatorHeaders,
+      data: {
+        agentId: state.agent.id,
+        environmentId: state.environment.id,
+        title: `${state.runId} oidc runner session`,
+      },
+    })
+    state.lease = await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/leases`, {
+      method: 'POST',
+      headers: runnerHeaders,
+      data: { leaseDurationSeconds: 90 },
+    })
+    assert.equal(state.lease.status, 'active')
+    await state.page.evaluate((value) => window.localStorage.setItem('ama:e2e-access-token', value), runnerToken)
+    const messages = await openRunnerChannel(state, 'oidcDeviceLoginRunnerChannel')
+    assert.equal(
+      messages.some((message) => message.type === 'session.channel.accepted'),
+      true,
+    )
+    await closeRunnerChannel(state, 'oidcDeviceLoginRunnerChannel')
+    await state.page.evaluate((value) => window.localStorage.setItem('ama:e2e-access-token', value), operatorToken)
+  },
+)
+
+Then(
+  'AMA does not implement a parallel runner credential issuer or store raw runner tokens in D1 responses, session events, logs, or UI state',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    const token = required(state.runnerAccessToken, 'runner access token')
+    const runnerHeaders = { authorization: `Bearer ${token}` }
+    const operatorHeaders = { authorization: `Bearer ${required(state.accessToken, 'operator access token')}` }
+    const runnerText = JSON.stringify(
+      await apiJson<Json>(state.page.request, `/api/runners/${state.runner?.id}`, { headers: runnerHeaders }),
+    )
+    assert.equal(runnerText.includes(token), false)
+    const events = await apiJson<ListResponse<Json>>(
+      state.page.request,
+      `/api/sessions/${state.latestSession?.id}/events?limit=200`,
+      { headers: operatorHeaders },
+    )
+    assert.equal(JSON.stringify(events.data).includes(token), false)
+    assert.equal(JSON.stringify(state.runner).includes(token), false)
+  },
+)
+
 When('the user creates a session in that environment', async function (this: ProductWorld) {
   const state = await ensureState(this)
   state.latestSession = await apiJson<Json>(state.page.request, '/api/sessions', {
@@ -4446,6 +4595,116 @@ async function waitForSessionEventText(state: E2EState, text: string) {
     `Session ${state.latestSession?.id} did not persist event text ${text}. Event types: ${latestEvents?.data
       .map((event) => `${event.sequence}:${event.type}`)
       .join(', ')}`,
+  )
+}
+
+async function runDeterministicAmaRunnerLogin(state: E2EState) {
+  const browserTokenRunId = state.accessToken?.startsWith('e2e:') ? state.accessToken.slice('e2e:'.length) : state.runId
+  const token = `e2e-runner:${browserTokenRunId}`
+  const configPath = join(mkdtempSync(join(tmpdir(), 'ama-runner-login-')), 'config.json')
+  const server = createServer((request, response) => {
+    const url = new URL(request.url ?? '/', 'http://127.0.0.1')
+    response.setHeader('content-type', 'application/json')
+    if (url.pathname === '/api/health') {
+      response.end(
+        JSON.stringify({
+          status: 'ok',
+          name: 'Any Managed Agents',
+          runtime: 'cloudflare-workers',
+          oidcIssuer: `http://127.0.0.1:${(server.address() as { port: number }).port}/issuer`,
+          runnerClientId: 'ama-runner-e2e',
+          runnerScopes: 'openid profile email offline_access ama:runner',
+        }),
+      )
+      return
+    }
+    if (url.pathname === '/issuer/.well-known/openid-configuration') {
+      const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`
+      response.end(
+        JSON.stringify({
+          issuer: `${origin}/issuer`,
+          device_authorization_endpoint: `${origin}/device`,
+          token_endpoint: `${origin}/token`,
+        }),
+      )
+      return
+    }
+    if (url.pathname === '/device') {
+      response.end(
+        JSON.stringify({
+          device_code: 'device-e2e-runner',
+          user_code: 'E2E-RUNNER',
+          verification_uri: `http://127.0.0.1:${(server.address() as { port: number }).port}/activate`,
+          verification_uri_complete: `http://127.0.0.1:${(server.address() as { port: number }).port}/activate?user_code=E2E-RUNNER`,
+          expires_in: 60,
+          interval: 1,
+        }),
+      )
+      return
+    }
+    if (url.pathname === '/token') {
+      response.end(
+        JSON.stringify({
+          access_token: token,
+          refresh_token: 'refresh-e2e-runner',
+          token_type: 'Bearer',
+          expires_in: 3600,
+          scope: 'openid profile email offline_access ama:runner',
+        }),
+      )
+      return
+    }
+    response.statusCode = 404
+    response.end(JSON.stringify({ error: 'not_found' }))
+  })
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  try {
+    const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`
+    const result = await runLocalCommand('go', ['run', '.', 'login', '--origin', origin, '--config', configPath], {
+      cwd: 'cmd/ama-runner',
+      env: { PATH: process.env.PATH, HOME: process.env.HOME },
+      timeout: 120_000,
+    })
+    if (result.code !== 0) {
+      throw new Error(
+        `ama-runner login failed code=${result.code} signal=${result.signal}:\n${result.stdout}\n${result.stderr}`,
+      )
+    }
+    return { accessToken: token, configPath, output: `${result.stdout}${result.stderr}` }
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+  }
+}
+
+async function runLocalCommand(
+  command: string,
+  args: string[],
+  options: { cwd: string; env: NodeJS.ProcessEnv; timeout: number },
+) {
+  return await new Promise<{ code: number | null; signal: NodeJS.Signals | null; stdout: string; stderr: string }>(
+    (resolve, reject) => {
+      const child = spawn(command, args, { cwd: options.cwd, env: options.env, stdio: ['ignore', 'pipe', 'pipe'] })
+      let stdout = ''
+      let stderr = ''
+      const timeout = setTimeout(() => {
+        child.kill('SIGKILL')
+        reject(new Error(`${command} ${args.join(' ')} timed out after ${options.timeout}ms\n${stdout}\n${stderr}`))
+      }, options.timeout)
+      child.stdout.on('data', (chunk) => {
+        stdout += String(chunk)
+      })
+      child.stderr.on('data', (chunk) => {
+        stderr += String(chunk)
+      })
+      child.on('error', (error) => {
+        clearTimeout(timeout)
+        reject(error)
+      })
+      child.on('exit', (code, signal) => {
+        clearTimeout(timeout)
+        resolve({ code, signal, stdout, stderr })
+      })
+    },
   )
 }
 

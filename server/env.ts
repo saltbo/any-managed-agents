@@ -23,6 +23,8 @@ export interface Env {
   OIDC_ISSUER?: string
   OIDC_CLIENT_ID?: string
   OIDC_CLIENT_SECRET?: string
+  OIDC_RUNNER_CLIENT_ID?: string
+  OIDC_RUNNER_SCOPES?: string
   OIDC_USE_SERVICE_BINDING?: string
   AMA_ALLOWED_ORIGINS?: string
   AMA_E2E_TEST_AUTH?: string

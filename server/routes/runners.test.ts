@@ -2,7 +2,7 @@ import { SELF } from 'cloudflare:test'
 import { env } from 'cloudflare:workers'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { runtimeProviderModelCapability } from '../runtime/catalog'
-import { defaultClaims, setupOidcProvider, signIn } from '../test/auth'
+import { defaultClaims, expectAuthRequired, setupOidcProvider, signIn } from '../test/auth'
 
 const DEFAULT_AMA_RUNNER_CAPABILITY = runtimeProviderModelCapability('ama', 'workers-ai', '@cf/moonshotai/kimi-k2.6')
 
@@ -318,6 +318,157 @@ describe('[CF] /api/runners', () => {
       ]),
     )
     expect(JSON.stringify(sessionEvents.data)).not.toContain('raw-secret-value')
+  })
+
+  it('accepts FlareAuth runner tokens and rejects missing, invalid, or mismatched runner tokens', async () => {
+    const operatorAuthorization = await signIn()
+    const runnerAuthorization = operatorAuthorization.replace('e2e:', 'e2e-runner:')
+    const runnerControlPlaneRes = await jsonFetch('/api/environments', runnerAuthorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Runner token forbidden environment',
+        hostingMode: 'self_hosted',
+        runtime: 'ama',
+        networkPolicy: { mode: 'unrestricted' },
+      }),
+    })
+    expect(runnerControlPlaneRes.status).toBe(403)
+    await expect(runnerControlPlaneRes.json()).resolves.toMatchObject({
+      error: { type: 'forbidden', message: 'Runner token is not authorized for this resource' },
+    })
+
+    const environment = await createSelfHostedEnvironment(operatorAuthorization)
+    const agent = await createAgent(operatorAuthorization)
+    const bearerRunnerRes = await jsonFetch('/api/runners', runnerAuthorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Runner token bearer mode bypass',
+        environmentId: environment.id,
+        capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+        authMode: 'bearer',
+      }),
+    })
+    expect(bearerRunnerRes.status).toBe(400)
+    await expect(bearerRunnerRes.json()).resolves.toMatchObject({
+      error: {
+        type: 'validation_error',
+        details: {
+          fields: { authMode: 'Runner device-login tokens can only register OIDC-authenticated runners.' },
+        },
+      },
+    })
+
+    const runnerRes = await jsonFetch('/api/runners', runnerAuthorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'OIDC device runner',
+        environmentId: environment.id,
+        capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+      }),
+    })
+    expect(runnerRes.status).toBe(201)
+    const runner = (await runnerRes.json()) as { id: string; authMode: string }
+    expect(runner.authMode).toBe('oidc')
+
+    const readWithOperatorRes = await jsonFetch(`/api/runners/${runner.id}`, operatorAuthorization)
+    expect(readWithOperatorRes.status).toBe(403)
+    const updateWithOperatorRes = await jsonFetch(`/api/runners/${runner.id}`, operatorAuthorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'draining' }),
+    })
+    expect(updateWithOperatorRes.status).toBe(403)
+
+    const missingAuthRes = await SELF.fetch(`https://example.com/api/runners/${runner.id}/heartbeats`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'active' }),
+    })
+    expect(missingAuthRes.status).toBe(401)
+    expectAuthRequired(await missingAuthRes.json())
+
+    const invalidAuthRes = await jsonFetch(`/api/runners/${runner.id}/heartbeats`, 'Bearer invalid-token', {
+      method: 'POST',
+      body: JSON.stringify({ status: 'active' }),
+    })
+    expect(invalidAuthRes.status).toBe(401)
+    expectAuthRequired(await invalidAuthRes.json())
+
+    const forbiddenHeartbeat = await jsonFetch(`/api/runners/${runner.id}/heartbeats`, operatorAuthorization, {
+      method: 'POST',
+      body: JSON.stringify({ status: 'active' }),
+    })
+    expect(forbiddenHeartbeat.status).toBe(403)
+    await expect(forbiddenHeartbeat.json()).resolves.toMatchObject({
+      error: { type: 'forbidden', message: 'Runner token is not authorized for this runner' },
+    })
+
+    const heartbeatRes = await jsonFetch(`/api/runners/${runner.id}/heartbeats`, runnerAuthorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        status: 'active',
+        currentLoad: 0,
+        capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+      }),
+    })
+    expect(heartbeatRes.status).toBe(200)
+
+    const session = await createSelfHostedSession(operatorAuthorization, agent.id, environment.id)
+    const claimRes = await jsonFetch(`/api/runners/${runner.id}/leases`, runnerAuthorization, {
+      method: 'POST',
+      body: JSON.stringify({ leaseDurationSeconds: 90 }),
+    })
+    expect(claimRes.status).toBe(201)
+    const lease = (await claimRes.json()) as { id: string }
+
+    const forbiddenEvents = await jsonFetch(
+      `/api/runners/${runner.id}/leases/${lease.id}/events`,
+      operatorAuthorization,
+      {
+        method: 'POST',
+        body: JSON.stringify({ events: [{ type: 'runner.tool.started', payload: { toolCallId: 'call_1' } }] }),
+      },
+    )
+    expect(forbiddenEvents.status).toBe(403)
+
+    const missingChannelAuth = await SELF.fetch(
+      `https://example.com/api/runners/${runner.id}/leases/${lease.id}/channel`,
+      {
+        headers: { upgrade: 'websocket' },
+      },
+    )
+    expect(missingChannelAuth.status).toBe(401)
+    expectAuthRequired(await missingChannelAuth.json())
+
+    const invalidChannelAuth = await SELF.fetch(
+      `https://example.com/api/runners/${runner.id}/leases/${lease.id}/channel`,
+      {
+        headers: { authorization: 'Bearer invalid-token', upgrade: 'websocket' },
+      },
+    )
+    expect(invalidChannelAuth.status).toBe(401)
+    expectAuthRequired(await invalidChannelAuth.json())
+
+    const forbiddenChannelAuth = await SELF.fetch(
+      `https://example.com/api/runners/${runner.id}/leases/${lease.id}/channel`,
+      {
+        headers: { authorization: operatorAuthorization, upgrade: 'websocket' },
+      },
+    )
+    expect(forbiddenChannelAuth.status).toBe(403)
+    await expect(forbiddenChannelAuth.json()).resolves.toMatchObject({
+      error: { type: 'forbidden', message: 'Runner token is not authorized for this runner' },
+    })
+
+    const channelRes = await SELF.fetch(`https://example.com/api/runners/${runner.id}/leases/${lease.id}/channel`, {
+      headers: { authorization: runnerAuthorization, upgrade: 'websocket' },
+    })
+    expect(channelRes.status).toBe(101)
+    const channel = channelRes.webSocket as WebSocket
+    channel.accept()
+    channel.close()
+
+    const sessionEventsRes = await jsonFetch(`/api/sessions/${session.id}/events`, operatorAuthorization)
+    expect(await sessionEventsRes.text()).not.toContain('e2e-runner:')
   })
 
   it('rejects runner credential secret references that are not safe references', async () => {

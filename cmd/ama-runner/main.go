@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -27,6 +28,9 @@ func run(args []string) error {
 }
 
 func runWithContext(ctx context.Context, args []string, getenv func(string) string) error {
+	if len(args) > 0 && args[0] == "login" {
+		return runLogin(ctx, args[1:], getenv, os.Stdout)
+	}
 	config, err := LoadConfig(args, getenv)
 	if err != nil {
 		return err
@@ -43,6 +47,36 @@ func runWithContext(ctx context.Context, args []string, getenv func(string) stri
 		Adapter:  ProcessAdapter{CommandTimeout: config.CommandTimeout, ShutdownGraceInterval: config.ShutdownGraceInterval},
 	}
 	return daemon.Start(ctx)
+}
+
+func runLogin(ctx context.Context, args []string, getenv func(string) string, stdout io.Writer) error {
+	command, err := LoadLoginCommand(args, getenv)
+	if err != nil {
+		return err
+	}
+	client := &ama.Client{
+		Origin:     command.Origin,
+		HTTPClient: &http.Client{Timeout: 30 * time.Second},
+	}
+	health, err := client.CheckHealth(ctx)
+	if err != nil {
+		return err
+	}
+	authClient := DeviceAuthClient{HTTPClient: client.HTTPClient}
+	result, err := LoginWithDeviceAuthorization(ctx, authClient, DeviceLoginOptions{
+		Origin:       command.Origin,
+		Issuer:       health.OIDCIssuer,
+		ClientID:     health.RunnerClientID,
+		Scopes:       health.RunnerScopes,
+		ConfigPath:   command.ConfigPath,
+		Output:       stdout,
+		PollInterval: time.Second,
+	})
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "ama-runner authenticated for %s; token saved to %s\n", result.Origin, result.ConfigPath)
+	return nil
 }
 
 type sdkRunnerSessionChannelOpener struct {
