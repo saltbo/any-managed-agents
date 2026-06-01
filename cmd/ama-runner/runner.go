@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -398,7 +397,11 @@ func (d *RunnerDaemon) runExternalSession(
 ) error {
 	adapter := d.RuntimeAdapter
 	if adapter == nil {
-		adapter = ClaudeCodeRuntimeAdapter{CommandTimeout: d.Config.CommandTimeout, ShutdownGraceInterval: d.Config.ShutdownGraceInterval}
+		adapter = ExternalCommandRuntimeAdapter{
+			Runtime:               payload.Runtime,
+			CommandTimeout:        d.Config.CommandTimeout,
+			ShutdownGraceInterval: d.Config.ShutdownGraceInterval,
+		}
 	}
 	var writeMu sync.Mutex
 	result, runErr := adapter.Run(ctx, RuntimeRequest{
@@ -507,10 +510,10 @@ func (d *RunnerDaemon) executeSessionToolCall(
 }
 
 func (d *RunnerDaemon) writeChannelEvent(ctx context.Context, channel RunnerSessionChannel, eventType string, payload ama.JSON) error {
-	return channel.WriteJSON(ctx, d.channelEventMessage("", eventType, payload))
+	return channel.WriteJSON(ctx, d.channelEventMessage(eventType, payload))
 }
 
-func (d *RunnerDaemon) channelEventMessage(eventID string, eventType string, payload ama.JSON) ama.JSON {
+func (d *RunnerDaemon) channelEventMessage(eventType string, payload ama.JSON) ama.JSON {
 	metadata := ama.JSON{
 		"runnerId": d.RunnerID,
 		"executor": d.Config.SandboxAdapter,
@@ -522,9 +525,6 @@ func (d *RunnerDaemon) channelEventMessage(eventID string, eventType string, pay
 			"payload":  payload,
 			"metadata": metadata,
 		},
-	}
-	if eventID != "" {
-		message["id"] = eventID
 	}
 	return message
 }

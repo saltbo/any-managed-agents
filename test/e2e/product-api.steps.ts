@@ -2481,13 +2481,14 @@ When('the user creates a session in that environment', async function (this: Pro
 
 When('the user starts a session with an initial prompt', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  state.runtimeMessage = 'Run the deterministic Claude Code shim.'
+  const runtime = String(objectValue(state.environment).runtime)
+  state.runtimeMessage = runtime === 'codex' ? `${state.runId} codex prompt` : 'Run the deterministic Claude Code shim.'
   state.latestSession = await apiJson<Json>(state.page.request, '/api/sessions', {
     method: 'POST',
     data: {
       agentId: state.agent?.id,
       environmentId: state.environment?.id,
-      title: `${state.runId} claude-code runner session`,
+      title: `${state.runId} ${runtime} runner session`,
       initialPrompt: state.runtimeMessage,
     },
   })
@@ -2618,6 +2619,9 @@ Then('the session reaches idle, stopped, or error with inspectable final events'
   assert.ok(['idle', 'stopped', 'error'].includes(String(session.status)))
   const events = await sessionEvents(state)
   assert.ok(events.data.length > 0)
+  if (String(objectValue(state.environment).runtime) === 'codex') {
+    assert.equal(JSON.stringify(events.data).includes('codex-shim-completed'), true)
+  }
   const serialized = JSON.stringify(session)
   assert.equal(serialized.includes('localhost'), false)
   assert.equal(serialized.includes('127.0.0.1'), false)
@@ -3239,22 +3243,6 @@ Given('an active runner supports the selected Codex provider and model', async f
   })
 })
 
-When('the user starts a session with an initial prompt', async function (this: ProductWorld) {
-  const state = await ensureState(this)
-  state.runtimeMessage = `${state.runId} codex prompt`
-  state.latestSession = await apiJson<Json>(state.page.request, '/api/sessions', {
-    method: 'POST',
-    data: {
-      agentId: state.agent?.id,
-      environmentId: state.environment?.id,
-      title: `${state.runId} codex runner session`,
-      initialPrompt: state.runtimeMessage,
-    },
-  })
-  await startProductAmaRunner(state)
-  await waitForSessionStatus(state, 'idle')
-})
-
 Then('ama-runner launches the configured Codex command for that session', async function (this: ProductWorld) {
   const state = await ensureState(this)
   const events = await waitForSessionEventText(state, 'codex-shim-started')
@@ -3307,15 +3295,6 @@ Then(
     }
   },
 )
-
-Then('the session reaches idle, stopped, or error with inspectable final events', async function (this: ProductWorld) {
-  const state = await ensureState(this)
-  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
-  assert.ok(['idle', 'stopped', 'error'].includes(String(session.status)))
-  const events = await sessionEvents(state)
-  assert.ok(events.data.length > 0)
-  assert.equal(JSON.stringify(events.data).includes('codex-shim-completed'), true)
-})
 
 Given('a runner has claimed a self-hosted session', async function (this: ProductWorld) {
   await setupQueuedSelfHostedSession(this)
@@ -4113,8 +4092,6 @@ async function startProductAmaRunner(state: E2EState) {
   state.runnerOrigin = origin
   state.accessToken = token
   const workDir = realpathSync(mkdtempSync(join(tmpdir(), 'ama-product-runner-')))
-  const capabilities = arrayValue(state.runner?.capabilities).map(String)
-  const runnerCapabilities = capabilities.length > 0 ? capabilities : ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY]
   const child = spawn(
     'go',
     [

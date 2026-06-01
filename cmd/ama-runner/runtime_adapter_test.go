@@ -95,6 +95,82 @@ func TestClaudeCodeRuntimeAdapterMapsExitFailures(t *testing.T) {
 	}
 }
 
+func TestClaudeCodeRuntimeAdapterStreamsEventsBeforeProcessExit(t *testing.T) {
+	workDir := t.TempDir()
+	adapter := ClaudeCodeRuntimeAdapter{CommandTimeout: time.Second, ShutdownGraceInterval: time.Millisecond}
+	observedMessage := make(chan struct{})
+	observedStdout := make(chan struct{})
+	observedStderr := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		_, err := adapter.Run(context.Background(), RuntimeRequest{
+			SessionID: "session_1",
+			Runtime:   "claude-code",
+			RuntimeConfig: map[string]any{"command": []any{
+				"sh",
+				"-c",
+				"printf '{\"type\":\"claude-code.message\",\"payload\":{\"message\":{\"role\":\"assistant\",\"content\":\"streamed\"}}}\\n'; printf 'plain stdout\\n'; printf 'plain stderr\\n' >&2; while [ ! -f continue ]; do sleep 0.01; done",
+			}},
+			Provider:      "anthropic",
+			Model:         "claude-sonnet-4-6",
+			InitialPrompt: "hello claude",
+			WorkDir:       workDir,
+		}, func(eventType string, payload ama.JSON) error {
+			if eventType == "claude-code.message" {
+				select {
+				case <-observedMessage:
+				default:
+					close(observedMessage)
+				}
+			}
+			if eventType == "claude-code.output" && payload["stream"] == "stdout" && payload["content"] == "plain stdout" {
+				select {
+				case <-observedStdout:
+				default:
+					close(observedStdout)
+				}
+			}
+			if eventType == "claude-code.output" && payload["stream"] == "stderr" && payload["content"] == "plain stderr" {
+				select {
+				case <-observedStderr:
+				default:
+					close(observedStderr)
+				}
+			}
+			return nil
+		})
+		done <- err
+	}()
+
+	for name, observed := range map[string]<-chan struct{}{
+		"structured stdout event": observedMessage,
+		"plain stdout event":      observedStdout,
+		"stderr event":            observedStderr,
+	} {
+		select {
+		case <-observed:
+		case <-time.After(time.Second):
+			t.Fatalf("timed out waiting for %s before process exit", name)
+		}
+	}
+	select {
+	case err := <-done:
+		t.Fatalf("runtime finished before continuation file was created: %v", err)
+	default:
+	}
+	if err := os.WriteFile(filepath.Join(workDir, "continue"), []byte("ok"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("expected runtime success after continuation, got %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for runtime completion")
+	}
+}
+
 func TestClaudeCodeRuntimeAdapterStopsProcessGroupOnTimeout(t *testing.T) {
 	adapter := ClaudeCodeRuntimeAdapter{CommandTimeout: 20 * time.Millisecond, ShutdownGraceInterval: time.Millisecond}
 	result, err := adapter.Run(context.Background(), RuntimeRequest{
@@ -113,15 +189,6 @@ func TestClaudeCodeRuntimeAdapterStopsProcessGroupOnTimeout(t *testing.T) {
 	}
 }
 
-func containsString(values []string, expected string) bool {
-	for _, value := range values {
-		if value == expected {
-			return true
-		}
-	}
-	return false
-}
-
 func TestRuntimeCommandValidatesCommandConfig(t *testing.T) {
 	for _, config := range []map[string]any{
 		{},
@@ -130,7 +197,7 @@ func TestRuntimeCommandValidatesCommandConfig(t *testing.T) {
 		{"command": []any{"sh", 1}},
 		{"command": 123},
 	} {
-		if _, _, err := runtimeCommand(config); err == nil {
+		if _, _, err := runtimeCommand("claude-code", config); err == nil {
 			t.Fatalf("expected command validation error for %#v", config)
 		}
 	}

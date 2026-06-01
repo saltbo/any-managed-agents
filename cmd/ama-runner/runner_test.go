@@ -117,10 +117,11 @@ type fakeRunnerSessionChannel struct {
 	writes      []ama.JSON
 	closed      bool
 	eventErrors map[string]string
+	autoAck     bool
 }
 
 func newFakeRunnerSessionChannel(reads ...any) *fakeRunnerSessionChannel {
-	channel := &fakeRunnerSessionChannel{reads: make(chan any, 16)}
+	channel := &fakeRunnerSessionChannel{reads: make(chan any, 16), autoAck: true}
 	for _, read := range reads {
 		channel.reads <- read
 	}
@@ -164,7 +165,7 @@ func (ch *fakeRunnerSessionChannel) WriteJSON(_ context.Context, value any) erro
 			eventType, _ := event["type"].(string)
 			if message := ch.eventErrors[eventType]; message != "" {
 				ch.reads <- ama.JSON{"type": "session.channel.error", "eventId": eventID, "message": message}
-			} else {
+			} else if ch.autoAck {
 				ch.reads <- ama.JSON{"type": "runner.event.accepted", "eventId": eventID}
 			}
 		}
@@ -181,6 +182,22 @@ func (ch *fakeRunnerSessionChannel) Close(int, string) error {
 
 func (ch *fakeRunnerSessionChannel) push(value any) {
 	ch.reads <- value
+}
+
+func (ch *fakeRunnerSessionChannel) lastWriteEventID() string {
+	ch.mu.Lock()
+	defer ch.mu.Unlock()
+	if len(ch.writes) == 0 {
+		return ""
+	}
+	eventID, _ := ch.writes[len(ch.writes)-1]["eventId"].(string)
+	return eventID
+}
+
+func (ch *fakeRunnerSessionChannel) writeCount() int {
+	ch.mu.Lock()
+	defer ch.mu.Unlock()
+	return len(ch.writes)
 }
 
 func (ch *fakeRunnerSessionChannel) writtenEvents() []string {
@@ -521,6 +538,108 @@ func TestRunOnceLaunchesClaudeCodeRuntimeAndCompletesLease(t *testing.T) {
 	want := []string{"runner.session.started", "claude-code.message"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("expected channel events %v, got %v", want, got)
+	}
+}
+
+func TestRunOnceWaitsForRuntimeEventAcknowledgementBeforeCompletingLease(t *testing.T) {
+	channel := newFakeRunnerSessionChannel(
+		ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"},
+	)
+	channel.autoAck = false
+	client := &fakeControlPlane{lease: claudeCodeSessionStartLease(), channel: channel}
+	runtimeAdapter := &fakeRuntimeAdapter{result: ama.JSON{"exitCode": 0}}
+	daemon := testDaemon(client, &fakeAdapter{})
+	daemon.RuntimeAdapter = runtimeAdapter
+	daemon.Config.Capabilities = append(daemon.Config.Capabilities, "runtime-provider-model:claude-code:anthropic:claude-sonnet-4-6")
+
+	done := make(chan error, 1)
+	go func() {
+		done <- daemon.RunOnce(context.Background())
+	}()
+
+	startEventID := waitForRunnerWriteID(t, channel, 1, done)
+	channel.push(ama.JSON{"type": "runner.event.accepted", "eventId": startEventID})
+	runtimeEventID := waitForRunnerWriteID(t, channel, 2, done)
+
+	client.mu.Lock()
+	updateCount := len(client.updates)
+	client.mu.Unlock()
+	if updateCount != 0 {
+		t.Fatalf("expected lease completion to wait for event acknowledgement, got updates %#v", client.updates)
+	}
+
+	channel.push(ama.JSON{"type": "runner.event.accepted", "eventId": runtimeEventID})
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("expected run success after acknowledgement, got %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for run completion after acknowledgement")
+	}
+	if len(client.updates) != 1 || client.updates[0].Status != "completed" {
+		t.Fatalf("expected completed lease update after acknowledgement, got %#v", client.updates)
+	}
+}
+
+func TestRunOnceFailsLeaseWhenRuntimeEventAcknowledgementRejects(t *testing.T) {
+	channel := newFakeRunnerSessionChannel(
+		ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"},
+	)
+	channel.autoAck = false
+	client := &fakeControlPlane{lease: claudeCodeSessionStartLease(), channel: channel}
+	runtimeAdapter := &fakeRuntimeAdapter{result: ama.JSON{"exitCode": 0}}
+	daemon := testDaemon(client, &fakeAdapter{})
+	daemon.RuntimeAdapter = runtimeAdapter
+	daemon.Config.Capabilities = append(daemon.Config.Capabilities, "runtime-provider-model:claude-code:anthropic:claude-sonnet-4-6")
+
+	done := make(chan error, 1)
+	go func() {
+		done <- daemon.RunOnce(context.Background())
+	}()
+
+	startEventID := waitForRunnerWriteID(t, channel, 1, done)
+	channel.push(ama.JSON{"type": "runner.event.accepted", "eventId": startEventID})
+	runtimeEventID := waitForRunnerWriteID(t, channel, 2, done)
+	channel.push(ama.JSON{"type": "session.channel.error", "eventId": runtimeEventID, "message": "append failed"})
+	errorEventID := waitForRunnerWriteID(t, channel, 3, done)
+	channel.push(ama.JSON{"type": "runner.event.accepted", "eventId": errorEventID})
+
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "runner session channel rejected event") {
+			t.Fatalf("expected rejected runtime event error, got %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for run failure after rejected event")
+	}
+	if len(client.updates) != 1 || client.updates[0].Status != "failed" {
+		t.Fatalf("expected failed lease update after rejected event, got %#v", client.updates)
+	}
+	got := channel.writtenEvents()
+	want := []string{"runner.session.started", "claude-code.message", "claude-code.error"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("expected channel events %v, got %v", want, got)
+	}
+}
+
+func waitForRunnerWriteID(t *testing.T, channel *fakeRunnerSessionChannel, count int, done <-chan error) string {
+	t.Helper()
+	deadline := time.After(time.Second)
+	for {
+		if channel.writeCount() >= count {
+			if eventID := channel.lastWriteEventID(); eventID != "" {
+				return eventID
+			}
+		}
+		select {
+		case err := <-done:
+			t.Fatalf("run finished before write %d: %v", count, err)
+		case <-deadline:
+			t.Fatalf("timed out waiting for write %d", count)
+		default:
+			time.Sleep(time.Millisecond)
+		}
 	}
 }
 
@@ -903,13 +1022,19 @@ func countString(values []string, want string) int {
 }
 
 func claudeCodeSessionStartLease() *ama.RunnerWorkLease {
-	lease := sessionStartLease()
-	lease.WorkItem.Payload["runtime"] = "claude-code"
-	lease.WorkItem.Payload["runtimeConfig"] = map[string]any{"command": "claude"}
-	lease.WorkItem.Payload["provider"] = "anthropic"
-	lease.WorkItem.Payload["model"] = "claude-sonnet-4-6"
-	lease.WorkItem.Payload["runtimeDriver"] = "claude-code-self-hosted"
+	lease := externalRuntimeSessionStartLease("claude-code", "anthropic", "claude-sonnet-4-6", "claude")
 	lease.WorkItem.Payload["initialPrompt"] = "Run Claude Code"
-	lease.WorkItem.Payload["requiredRunnerCapability"] = "runtime-provider-model:claude-code:anthropic:claude-sonnet-4-6"
+	return lease
+}
+
+func externalRuntimeSessionStartLease(runtimeName string, provider string, model string, command any) *ama.RunnerWorkLease {
+	lease := sessionStartLease()
+	lease.WorkItem.Payload["runtime"] = runtimeName
+	lease.WorkItem.Payload["runtimeConfig"] = map[string]any{"command": command}
+	lease.WorkItem.Payload["provider"] = provider
+	lease.WorkItem.Payload["model"] = model
+	lease.WorkItem.Payload["runtimeDriver"] = runtimeName + "-self-hosted"
+	lease.WorkItem.Payload["initialPrompt"] = "Run external runtime"
+	lease.WorkItem.Payload["requiredRunnerCapability"] = "runtime-provider-model:" + runtimeName + ":" + provider + ":" + model
 	return lease
 }

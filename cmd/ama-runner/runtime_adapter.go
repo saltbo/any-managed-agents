@@ -6,10 +6,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -37,15 +40,33 @@ type ClaudeCodeRuntimeAdapter struct {
 	ShutdownGraceInterval time.Duration
 }
 
+type ExternalCommandRuntimeAdapter struct {
+	Runtime               string
+	CommandTimeout        time.Duration
+	ShutdownGraceInterval time.Duration
+}
+
 func (a ClaudeCodeRuntimeAdapter) Run(
 	ctx context.Context,
 	request RuntimeRequest,
 	write RuntimeEventWriter,
 ) (ama.JSON, error) {
-	if request.Runtime != "claude-code" {
+	return ExternalCommandRuntimeAdapter{
+		Runtime:               "claude-code",
+		CommandTimeout:        a.CommandTimeout,
+		ShutdownGraceInterval: a.ShutdownGraceInterval,
+	}.Run(ctx, request, write)
+}
+
+func (a ExternalCommandRuntimeAdapter) Run(
+	ctx context.Context,
+	request RuntimeRequest,
+	write RuntimeEventWriter,
+) (ama.JSON, error) {
+	if request.Runtime != a.Runtime {
 		return nil, fmt.Errorf("unsupported external runtime %q", request.Runtime)
 	}
-	command, args, err := runtimeCommand(request.RuntimeConfig)
+	command, args, err := runtimeCommand(request.Runtime, request.RuntimeConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -72,36 +93,80 @@ func (a ClaudeCodeRuntimeAdapter) Run(
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	}
 	cmd.Stdin = strings.NewReader(request.InitialPrompt)
-	var stdoutText bytes.Buffer
-	var stderrText bytes.Buffer
-	cmd.Stdout = &stdoutText
-	cmd.Stderr = &stderrText
-
-	if err := write("claude-code.lifecycle", ama.JSON{"stage": "runtime_process_started", "status": "running"}); err != nil {
+	stdoutReader, stdoutWriter, err := os.Pipe()
+	if err != nil {
 		return nil, err
 	}
+	defer stdoutReader.Close()
+	stderrReader, stderrWriter, err := os.Pipe()
+	if err != nil {
+		stdoutWriter.Close()
+		return nil, err
+	}
+	defer stderrReader.Close()
+	cmd.Stdout = stdoutWriter
+	cmd.Stderr = stderrWriter
 
 	if err := cmd.Start(); err != nil {
+		stdoutWriter.Close()
+		stderrWriter.Close()
 		return nil, err
 	}
+	stdoutWriter.Close()
+	stderrWriter.Close()
+	if err := write(request.Runtime+".lifecycle", ama.JSON{"stage": "runtime_process_started", "status": "running"}); err != nil {
+		a.stopProcess(cmd)
+		_ = cmd.Wait()
+		return nil, err
+	}
+	var stdoutText bytes.Buffer
+	var stderrText bytes.Buffer
+	var writeMu sync.Mutex
+	writeSerialized := func(eventType string, payload ama.JSON) error {
+		writeMu.Lock()
+		defer writeMu.Unlock()
+		return write(eventType, payload)
+	}
+	streamErrors := make(chan error, 2)
+	go func() {
+		streamErrors <- streamRuntimeOutput(stdoutReader, &stdoutText, request.Runtime, "stdout", writeSerialized)
+	}()
+	go func() {
+		streamErrors <- streamRuntimeOutput(stderrReader, &stderrText, request.Runtime, "stderr", writeSerialized)
+	}()
+
 	done := make(chan error, 1)
 	go func() {
 		done <- cmd.Wait()
 	}()
 	var waitErr error
+	var streamErr error
+	streamsRead := 0
 	select {
 	case waitErr = <-done:
 	case <-commandCtx.Done():
 		a.stopProcess(cmd)
 		waitErr = <-done
+	case streamErr = <-streamErrors:
+		streamsRead = 1
+		if streamErr != nil {
+			a.stopProcess(cmd)
+			waitErr = <-done
+		} else {
+			waitErr = <-done
+		}
+	}
+	for streamsRead < 2 {
+		if err := <-streamErrors; err != nil && streamErr == nil {
+			streamErr = err
+		}
+		streamsRead++
 	}
 
 	result := ama.JSON{"stdout": stdoutText.String(), "stderr": stderrText.String(), "exitCode": exitCode(waitErr)}
-	if err := streamRuntimeOutput(stdoutText.String(), "stdout", write); err != nil {
-		return result, err
-	}
-	if err := streamRuntimeOutput(stderrText.String(), "stderr", write); err != nil {
-		return result, err
+	if streamErr != nil {
+		result["error"] = streamErr.Error()
+		return result, streamErr
 	}
 	if commandCtx.Err() != nil {
 		result["error"] = commandCtx.Err().Error()
@@ -109,24 +174,24 @@ func (a ClaudeCodeRuntimeAdapter) Run(
 	}
 	if waitErr != nil {
 		result["error"] = waitErr.Error()
-		return result, fmt.Errorf("claude-code command exited with code %d", exitCode(waitErr))
+		return result, fmt.Errorf("%s command exited with code %d", request.Runtime, exitCode(waitErr))
 	}
-	if err := write("claude-code.lifecycle", ama.JSON{"stage": "runtime_process_exited", "status": "completed"}); err != nil {
+	if err := write(request.Runtime+".lifecycle", ama.JSON{"stage": "runtime_process_exited", "status": "completed"}); err != nil {
 		return result, err
 	}
 	return result, nil
 }
 
-func runtimeCommand(config map[string]any) (string, []string, error) {
+func runtimeCommand(runtimeName string, config map[string]any) (string, []string, error) {
 	value, ok := config["command"]
 	if !ok {
-		return "", nil, fmt.Errorf("claude-code runtimeConfig.command is required")
+		return "", nil, fmt.Errorf("%s runtimeConfig.command is required", runtimeName)
 	}
 	switch command := value.(type) {
 	case string:
 		fields := strings.Fields(command)
 		if len(fields) == 0 {
-			return "", nil, fmt.Errorf("claude-code runtimeConfig.command is required")
+			return "", nil, fmt.Errorf("%s runtimeConfig.command is required", runtimeName)
 		}
 		return fields[0], fields[1:], nil
 	case []any:
@@ -134,21 +199,21 @@ func runtimeCommand(config map[string]any) (string, []string, error) {
 		for _, part := range command {
 			text, ok := part.(string)
 			if !ok || strings.TrimSpace(text) == "" {
-				return "", nil, fmt.Errorf("claude-code runtimeConfig.command entries must be non-empty strings")
+				return "", nil, fmt.Errorf("%s runtimeConfig.command entries must be non-empty strings", runtimeName)
 			}
 			parts = append(parts, text)
 		}
 		if len(parts) == 0 {
-			return "", nil, fmt.Errorf("claude-code runtimeConfig.command is required")
+			return "", nil, fmt.Errorf("%s runtimeConfig.command is required", runtimeName)
 		}
 		return parts[0], parts[1:], nil
 	case []string:
 		if len(command) == 0 || strings.TrimSpace(command[0]) == "" {
-			return "", nil, fmt.Errorf("claude-code runtimeConfig.command is required")
+			return "", nil, fmt.Errorf("%s runtimeConfig.command is required", runtimeName)
 		}
 		return command[0], command[1:], nil
 	default:
-		return "", nil, fmt.Errorf("claude-code runtimeConfig.command must be a string or string array")
+		return "", nil, fmt.Errorf("%s runtimeConfig.command must be a string or string array", runtimeName)
 	}
 }
 
@@ -180,15 +245,19 @@ func runtimeWorkspace(workDir string) (string, error) {
 }
 
 func streamRuntimeOutput(
-	output string,
+	reader io.Reader,
+	output *bytes.Buffer,
+	runtimeName string,
 	stream string,
 	write RuntimeEventWriter,
 ) error {
-	scanner := bufio.NewScanner(strings.NewReader(output))
+	scanner := bufio.NewScanner(reader)
 	buffer := make([]byte, 0, 64*1024)
 	scanner.Buffer(buffer, 1024*1024)
 	for scanner.Scan() {
 		line := scanner.Text()
+		output.WriteString(line)
+		output.WriteByte('\n')
 		if stream == "stdout" {
 			if eventType, payload, ok := runtimeEventFromLine(line); ok {
 				if err := write(eventType, payload); err != nil {
@@ -197,7 +266,7 @@ func streamRuntimeOutput(
 				continue
 			}
 		}
-		if err := write("claude-code.output", ama.JSON{"stream": stream, "content": line}); err != nil {
+		if err := write(runtimeName+".output", ama.JSON{"stream": stream, "content": line}); err != nil {
 			return err
 		}
 	}
@@ -228,7 +297,7 @@ func runtimeEventFromLine(line string) (string, ama.JSON, bool) {
 	return eventType, payload, true
 }
 
-func (a ClaudeCodeRuntimeAdapter) stopProcess(cmd *exec.Cmd) {
+func (a ExternalCommandRuntimeAdapter) stopProcess(cmd *exec.Cmd) {
 	if cmd.Process == nil {
 		return
 	}
