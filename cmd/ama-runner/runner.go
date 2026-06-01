@@ -48,6 +48,7 @@ type WorkPayload struct {
 	Model                    string         `json:"model"`
 	RuntimeDriver            string         `json:"runtimeDriver"`
 	RequiredRunnerCapability string         `json:"requiredRunnerCapability"`
+	InitialPrompt            *string        `json:"initialPrompt"`
 	Approved                 bool           `json:"approved"`
 	ToolCallID               string         `json:"toolCallId"`
 	ToolName                 string         `json:"toolName"`
@@ -65,6 +66,8 @@ type ToolCall struct {
 
 type RunnerChannelMessage struct {
 	Type       string               `json:"type"`
+	EventID    string               `json:"eventId"`
+	Message    string               `json:"message"`
 	SessionID  string               `json:"sessionId"`
 	RunnerID   string               `json:"runnerId"`
 	LeaseID    string               `json:"leaseId"`
@@ -290,7 +293,7 @@ func (d *RunnerDaemon) completeSessionStart(ctx context.Context, lease *ama.Runn
 	renewErrors := make(chan error, 1)
 	go d.renewLease(leaseCtx, lease, cancel, renewErrors)
 
-	if err := d.writeChannelEvent(leaseCtx, channel, "runner.session.started", ama.JSON{
+	sessionStartedPayload := ama.JSON{
 		"sessionId":     payload.SessionID,
 		"hostingMode":   payload.HostingMode,
 		"runtime":       payload.Runtime,
@@ -299,9 +302,27 @@ func (d *RunnerDaemon) completeSessionStart(ctx context.Context, lease *ama.Runn
 		"model":         payload.Model,
 		"runtimeDriver": payload.RuntimeDriver,
 		"executor":      d.Config.SandboxAdapter,
-	}); err != nil {
+	}
+	writeSessionStarted := d.writeChannelEvent
+	if payload.Runtime == "codex" {
+		writeSessionStarted = d.writeAcknowledgedChannelEvent
+	}
+	if err := writeSessionStarted(leaseCtx, channel, "runner.session.started", sessionStartedPayload); err != nil {
 		if finishErr := d.finishFailed(context.Background(), lease, err, nil); finishErr != nil {
 			return finishErr
+		}
+		return err
+	}
+
+	if payload.Runtime == "codex" {
+		err := d.runCodexSession(leaseCtx, channel, lease, payload)
+		cancel()
+		select {
+		case renewErr := <-renewErrors:
+			if renewErr != nil {
+				return renewErr
+			}
+		default:
 		}
 		return err
 	}
@@ -442,6 +463,39 @@ func (d *RunnerDaemon) writeChannelEvent(ctx context.Context, channel RunnerSess
 			},
 		},
 	})
+}
+
+func (d *RunnerDaemon) writeAcknowledgedChannelEvent(ctx context.Context, channel RunnerSessionChannel, eventType string, payload ama.JSON) error {
+	eventID := fmt.Sprintf("runner_event_%d", time.Now().UnixNano())
+	if err := channel.WriteJSON(ctx, ama.JSON{
+		"type":    "runner.event",
+		"eventId": eventID,
+		"event": ama.JSON{
+			"type":    eventType,
+			"payload": payload,
+			"metadata": ama.JSON{
+				"runnerId": d.RunnerID,
+				"executor": d.Config.SandboxAdapter,
+			},
+		},
+	}); err != nil {
+		return err
+	}
+	for {
+		var message RunnerChannelMessage
+		if err := channel.ReadJSON(ctx, &message); err != nil {
+			return err
+		}
+		if message.Type == "session.channel.error" && (message.EventID == "" || message.EventID == eventID) {
+			return fmt.Errorf("runner session channel rejected event %s: %s", eventID, message.Message)
+		}
+		if message.EventID != eventID {
+			continue
+		}
+		if message.Type == "runner.event.accepted" {
+			return nil
+		}
+	}
 }
 
 func (d *RunnerDaemon) renewLease(ctx context.Context, lease *ama.RunnerWorkLease, cancel context.CancelFunc, errors chan<- error) {

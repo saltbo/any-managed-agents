@@ -43,7 +43,7 @@ Feature: External agent runtimes on self-hosted runners
     And an eligible replacement runner can claim the session after the lease expires
     And duplicate or stale channels cannot submit tool results for the session
 
-  @planned
+  @implemented
   Scenario: Run a Codex session on ama-runner
     Given a self-hosted environment selects codex runtime
     And an active runner supports the selected Codex provider and model

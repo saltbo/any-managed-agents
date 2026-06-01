@@ -99,6 +99,17 @@ describe('canonicalAmaSessionEventFromRuntimeEvent', () => {
       payload: { stream: 'stderr', content: 'warn' },
     })
 
+    expect(
+      canonicalAmaSessionEventFromRuntimeEvent({
+        type: 'codex.output',
+        stream: 'stderr',
+        content: 'codex stderr diagnostic',
+      }),
+    ).toMatchObject({
+      type: 'runtime.output',
+      payload: { stream: 'stderr', content: 'codex stderr diagnostic' },
+    })
+
     expect(canonicalAmaSessionEventFromRuntimeEvent({ type: 'bridge_exit', code: 1 })).toMatchObject({
       type: 'runtime.error',
       payload: { message: 'Runtime process exited with an error', code: 1 },

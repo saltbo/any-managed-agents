@@ -351,6 +351,7 @@ Given('a self-hosted environment selects codex runtime', async function (this: P
     name: `${state.runId} codex self-hosted env`,
     hostingMode: 'self_hosted',
     runtime: 'codex',
+    runtimeConfig: codexShimRuntimeConfig(),
     networkPolicy: { mode: 'unrestricted' },
   })
 })
@@ -3006,6 +3007,120 @@ Then(
   },
 )
 
+Given('an active runner supports the selected Codex provider and model', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const agentUsesCodexModel = objectValue(state.agent).model === CODEX_E2E_MODEL
+  if (!state.provider || !agentUsesCodexModel) {
+    state.provider = await createProvider(state, {
+      type: 'openai-compatible',
+      displayName: `${state.runId} codex provider`,
+      baseUrl: 'https://models.example.test/v1',
+      credentialSecretRef: `secret://providers/${state.runId}/codex`,
+    })
+    state.providerModel = await createProviderModel(state, state.provider, {
+      modelId: CODEX_E2E_MODEL,
+      displayName: 'GPT 5.3 Codex',
+      capabilities: ['text'],
+    })
+    state.agent = await createAgent(state, {
+      name: `${state.runId} codex agent`,
+      provider: state.provider.id,
+      model: CODEX_E2E_MODEL,
+    })
+  }
+  const capability = `runtime-provider-model:codex:${state.provider?.id}:${CODEX_E2E_MODEL}`
+  state.runner = await apiJson<Json>(state.page.request, '/api/runners', {
+    method: 'POST',
+    data: {
+      name: `${state.runId} codex runner`,
+      environmentId: state.environment?.id,
+      capabilities: ['sandbox.exec', capability],
+    },
+  })
+  state.runner = await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/heartbeats`, {
+    method: 'POST',
+    data: { status: 'active', currentLoad: 0, capabilities: ['sandbox.exec', capability] },
+  })
+})
+
+When('the user starts a session with an initial prompt', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  state.runtimeMessage = `${state.runId} codex prompt`
+  state.latestSession = await apiJson<Json>(state.page.request, '/api/sessions', {
+    method: 'POST',
+    data: {
+      agentId: state.agent?.id,
+      environmentId: state.environment?.id,
+      title: `${state.runId} codex runner session`,
+      initialPrompt: state.runtimeMessage,
+    },
+  })
+  await startProductAmaRunner(state)
+  await waitForSessionStatus(state, 'idle')
+})
+
+Then('ama-runner launches the configured Codex command for that session', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const events = await waitForSessionEventText(state, 'codex-shim-started')
+  const serialized = JSON.stringify(events.data)
+  assert.equal(
+    events.data.some((event) => event.type === 'session.lifecycle'),
+    true,
+  )
+  assert.equal(serialized.includes(String(state.latestSession?.id)), true)
+})
+
+Then('Codex receives the prompt, workspace, runtime config, and safe environment', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const events = await waitForSessionEventText(state, 'safe-env-ok')
+  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
+  const serialized = JSON.stringify(events.data)
+  assert.equal(serialized.includes(state.runtimeMessage ?? ''), true)
+  assert.equal(serialized.includes('workspace:'), true)
+  assert.equal(serialized.includes(`/sessions/${String(state.latestSession?.id)}`), true)
+  assert.equal(objectValue(objectValue(session.environmentSnapshot).runtimeConfig).codexShim, true)
+  assert.equal(serialized.includes(String(state.provider?.id)), true)
+  assert.equal(serialized.includes(CODEX_E2E_MODEL), true)
+  assert.equal(serialized.includes('AMA_TOKEN'), false)
+  assert.equal(serialized.includes('secret://providers'), false)
+})
+
+Then(
+  'Codex output is translated into canonical lifecycle, transcript, tool, usage, output, and error events',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    const events = await waitForSessionEventText(state, 'codex stderr diagnostic')
+    const types = new Set(events.data.map((event) => event.type))
+    const stderrOutput = events.data.find(
+      (event) =>
+        event.type === 'runtime.output' &&
+        objectValue(event.payload).stream === 'stderr' &&
+        objectValue(event.payload).content === 'codex stderr diagnostic',
+    )
+    assert.ok(stderrOutput)
+    for (const type of [
+      'session.lifecycle',
+      'transcript.message',
+      'tool_call.started',
+      'tool_call.completed',
+      'usage.recorded',
+      'runtime.output',
+      'runtime.error',
+    ]) {
+      assert.equal(types.has(type), true, `expected canonical event type ${type}`)
+    }
+  },
+)
+
+Then('the session reaches idle, stopped, or error with inspectable final events', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
+  assert.ok(['idle', 'stopped', 'error'].includes(String(session.status)))
+  const events = await sessionEvents(state)
+  assert.ok(events.data.length > 0)
+  assert.equal(JSON.stringify(events.data).includes('codex-shim-completed'), true)
+})
+
 Given('a runner has claimed a self-hosted session', async function (this: ProductWorld) {
   await setupQueuedSelfHostedSession(this)
 })
@@ -3088,7 +3203,7 @@ Then(
   'the runner streams stdout, stderr, output, timing, and safe errors over the same WebSocket',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    const events = await waitForSessionEventText(state, 'channel-ok')
+    const events = await waitForSessionEventText(state, 'durationMs')
     const serialized = JSON.stringify(events.data)
     assert.equal(serialized.includes('stdout'), true)
     assert.equal(serialized.includes('stderr'), true)
@@ -3805,7 +3920,7 @@ async function startProductAmaRunner(state: E2EState) {
       '--runner-id',
       String(state.runner?.id),
       '--capabilities',
-      ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY].join(','),
+      runnerCapabilities(state).join(','),
       '--allow-unsafe-process',
       '--workdir',
       workDir,
@@ -3831,6 +3946,53 @@ async function startProductAmaRunner(state: E2EState) {
   child.stderr.on('data', (chunk) => child.runnerOutput.push(String(chunk)))
   state.runnerProcess = child
   state.runnerWorkDir = workDir
+}
+
+function runnerCapabilities(state: E2EState) {
+  const runtime = objectValue(state.environment).runtime
+  if (runtime === 'codex' && state.provider?.id) {
+    return ['sandbox.exec', `runtime-provider-model:codex:${String(state.provider.id)}:${CODEX_E2E_MODEL}`]
+  }
+  return ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY]
+}
+
+function codexShimRuntimeConfig() {
+  return {
+    command: 'node',
+    args: [
+      '-e',
+      `
+const chunks = []
+process.stdin.on('data', (chunk) => chunks.push(chunk))
+process.stdin.on('end', () => {
+  const prompt = Buffer.concat(chunks).toString()
+  const runtimeConfig = JSON.parse(process.env.AMA_RUNTIME_CONFIG)
+  const safeEnv = Object.keys(process.env).filter((key) => key.startsWith('AMA_')).sort()
+  const base = {
+    sessionId: process.env.AMA_SESSION_ID,
+    runtime: process.env.AMA_RUNTIME,
+    runtimeDriver: process.env.AMA_RUNTIME_DRIVER,
+    provider: process.env.AMA_PROVIDER,
+    model: process.env.AMA_MODEL,
+    workspace: process.env.AMA_WORKSPACE,
+    runtimeConfig: { codexShim: runtimeConfig.codexShim },
+    safeEnv,
+  }
+  console.log(JSON.stringify({ type: 'codex.lifecycle', payload: { ...base, status: 'codex-shim-started' } }))
+  console.log(JSON.stringify({ type: 'codex.message', payload: { message: { role: 'assistant', content: prompt } } }))
+  console.log(JSON.stringify({ type: 'codex.tool.started', payload: { toolCallId: 'codex_tool_1', toolName: 'sandbox.exec', input: { command: 'printf codex-tool-ok' } } }))
+  console.log(JSON.stringify({ type: 'codex.tool.completed', payload: { toolCallId: 'codex_tool_1', toolName: 'sandbox.exec', output: { stdout: 'codex-tool-ok', stderr: '', exitCode: 0 }, durationMs: 4 } }))
+  console.log(JSON.stringify({ type: 'codex.usage', payload: { provider: process.env.AMA_PROVIDER, model: process.env.AMA_MODEL, inputTokens: 4, outputTokens: 6, totalTokens: 10 } }))
+  console.log(JSON.stringify({ type: 'codex.output', payload: { stream: 'stdout', content: 'workspace:' + process.env.AMA_WORKSPACE } }))
+  console.log(JSON.stringify({ type: 'codex.output', payload: { stream: 'stdout', content: 'safe-env-ok' } }))
+  console.log(JSON.stringify({ type: 'codex.error', payload: { error: { message: 'safe-env-ok' }, code: 'shim-diagnostic' } }))
+  console.error('codex stderr diagnostic')
+  console.log(JSON.stringify({ type: 'codex.lifecycle', payload: { ...base, status: 'codex-shim-completed' } }))
+})
+`,
+    ],
+    codexShim: true,
+  }
 }
 
 async function stopProductAmaRunner(state?: E2EState) {

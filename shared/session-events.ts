@@ -202,7 +202,7 @@ function canonicalPayload(
 
   if (type === 'runtime.output') {
     return {
-      stream: sourceEventType === 'bridge_stderr' ? 'stderr' : 'runtime',
+      stream: runtimeOutputStream(event, sourceEventType),
       content: event.data ?? event.message ?? event.output ?? event.content ?? '',
     }
   }
@@ -249,6 +249,17 @@ function runtimeErrorMessage(event: Record<string, unknown>, sourceEventType: st
   }
   const error = objectValue(event.error)
   return stringField(error, 'message') ?? stringField(event, 'message') ?? String(event.data ?? 'Runtime error')
+}
+
+function runtimeOutputStream(event: Record<string, unknown>, sourceEventType: string) {
+  if (sourceEventType === 'bridge_stderr') {
+    return 'stderr'
+  }
+  const stream = event.stream
+  if (stream === 'stdout' || stream === 'stderr') {
+    return stream
+  }
+  return 'runtime'
 }
 
 function objectValue(value: unknown): Record<string, unknown> {
