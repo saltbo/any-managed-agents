@@ -1,0 +1,58 @@
+package main
+
+import (
+	"context"
+	"fmt"
+
+	ama "github.com/saltbo/any-managed-agents/sdk/go/ama"
+)
+
+type sessionRuntimeExecution struct {
+	RequestContext context.Context
+	LeaseContext   context.Context
+	Channel        RunnerSessionChannel
+	Lease          *ama.RunnerWorkLease
+	Payload        WorkPayload
+	CheckRenewal   func() error
+}
+
+type sessionRuntimeHandler struct {
+	acknowledgeSessionStarted bool
+	run                       func(*RunnerDaemon, sessionRuntimeExecution) error
+}
+
+func sessionRuntimeHandlers() map[string]sessionRuntimeHandler {
+	return map[string]sessionRuntimeHandler{
+		"ama": {
+			run: func(d *RunnerDaemon, execution sessionRuntimeExecution) error {
+				return d.runAMASession(execution)
+			},
+		},
+		"codex": {
+			acknowledgeSessionStarted: true,
+			run: func(d *RunnerDaemon, execution sessionRuntimeExecution) error {
+				return d.runCodexSession(execution.LeaseContext, execution.Channel, execution.Lease, execution.Payload)
+			},
+		},
+		"claude-code": {
+			acknowledgeSessionStarted: true,
+			run: func(d *RunnerDaemon, execution sessionRuntimeExecution) error {
+				return d.runExternalSession(execution.LeaseContext, execution.Channel, execution.Lease, execution.Payload)
+			},
+		},
+		"copilot": {
+			acknowledgeSessionStarted: true,
+			run: func(d *RunnerDaemon, execution sessionRuntimeExecution) error {
+				return d.runExternalSession(execution.LeaseContext, execution.Channel, execution.Lease, execution.Payload)
+			},
+		},
+	}
+}
+
+func sessionRuntimeHandlerFor(runtimeName string) (sessionRuntimeHandler, error) {
+	handler, ok := sessionRuntimeHandlers()[runtimeName]
+	if !ok {
+		return sessionRuntimeHandler{}, fmt.Errorf("unsupported session runtime %q", runtimeName)
+	}
+	return handler, nil
+}
