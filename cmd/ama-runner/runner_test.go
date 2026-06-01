@@ -105,6 +105,12 @@ type fakeAdapter struct {
 	cancelled     bool
 }
 
+type fakeRuntimeAdapter struct {
+	request RuntimeRequest
+	result  ama.JSON
+	err     error
+}
+
 type fakeRunnerSessionChannel struct {
 	mu          sync.Mutex
 	reads       chan any
@@ -208,6 +214,16 @@ func (a *fakeAdapter) Execute(ctx context.Context, _ ToolRequest) (ToolResult, e
 	<-ctx.Done()
 	a.cancelled = true
 	return ToolResult{}, ctx.Err()
+}
+
+func (a *fakeRuntimeAdapter) Run(_ context.Context, request RuntimeRequest, write RuntimeEventWriter) (ama.JSON, error) {
+	a.request = request
+	if err := write("claude-code.message", ama.JSON{
+		"message": ama.JSON{"role": "assistant", "content": "runtime ok"},
+	}); err != nil {
+		return nil, err
+	}
+	return a.result, a.err
 }
 
 func TestRunOnceSendsHeartbeatAndCompletesApprovedToolWork(t *testing.T) {
@@ -474,6 +490,37 @@ func TestSessionStartFailsLeaseWhenChannelOpenFails(t *testing.T) {
 	}
 	if len(client.updates) != 1 || client.updates[0].Status != "failed" {
 		t.Fatalf("expected failed session.start lease, got %#v", client.updates)
+	}
+}
+
+func TestRunOnceLaunchesClaudeCodeRuntimeAndCompletesLease(t *testing.T) {
+	channel := newFakeRunnerSessionChannel(
+		ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"},
+	)
+	client := &fakeControlPlane{lease: claudeCodeSessionStartLease(), channel: channel}
+	runtimeAdapter := &fakeRuntimeAdapter{result: ama.JSON{"exitCode": 0}}
+	daemon := testDaemon(client, &fakeAdapter{})
+	daemon.RuntimeAdapter = runtimeAdapter
+	daemon.Config.Capabilities = append(daemon.Config.Capabilities, "runtime-provider-model:claude-code:anthropic:claude-sonnet-4-6")
+	if err := daemon.RunOnce(context.Background()); err != nil {
+		t.Fatalf("expected claude runtime success, got %v", err)
+	}
+	if runtimeAdapter.request.InitialPrompt != "Run Claude Code" {
+		t.Fatalf("expected prompt to reach runtime adapter, got %#v", runtimeAdapter.request)
+	}
+	if runtimeAdapter.request.Provider != "anthropic" || runtimeAdapter.request.Model != "claude-sonnet-4-6" {
+		t.Fatalf("expected provider/model metadata, got %#v", runtimeAdapter.request)
+	}
+	if runtimeAdapter.request.RuntimeConfig["command"] != "claude" {
+		t.Fatalf("expected runtime config to reach adapter, got %#v", runtimeAdapter.request.RuntimeConfig)
+	}
+	if len(client.updates) != 1 || client.updates[0].Status != "completed" {
+		t.Fatalf("expected completed lease update, got %#v", client.updates)
+	}
+	got := channel.writtenEvents()
+	want := []string{"runner.session.started", "claude-code.message"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("expected channel events %v, got %v", want, got)
 	}
 }
 
@@ -853,4 +900,16 @@ func countString(values []string, want string) int {
 		}
 	}
 	return count
+}
+
+func claudeCodeSessionStartLease() *ama.RunnerWorkLease {
+	lease := sessionStartLease()
+	lease.WorkItem.Payload["runtime"] = "claude-code"
+	lease.WorkItem.Payload["runtimeConfig"] = map[string]any{"command": "claude"}
+	lease.WorkItem.Payload["provider"] = "anthropic"
+	lease.WorkItem.Payload["model"] = "claude-sonnet-4-6"
+	lease.WorkItem.Payload["runtimeDriver"] = "claude-code-self-hosted"
+	lease.WorkItem.Payload["initialPrompt"] = "Run Claude Code"
+	lease.WorkItem.Payload["requiredRunnerCapability"] = "runtime-provider-model:claude-code:anthropic:claude-sonnet-4-6"
+	return lease
 }

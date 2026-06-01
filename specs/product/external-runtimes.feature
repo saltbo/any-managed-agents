@@ -53,7 +53,7 @@ Feature: External agent runtimes on self-hosted runners
     And Codex output is translated into canonical lifecycle, transcript, tool, usage, output, and error events
     And the session reaches idle, stopped, or error with inspectable final events
 
-  @planned
+  @implemented
   Scenario: Run a Claude Code session on ama-runner
     Given a self-hosted environment selects claude-code runtime
     And an active runner supports the selected Claude Code provider and model

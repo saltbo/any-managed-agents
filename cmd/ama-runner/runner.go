@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
+	"sync"
 	"time"
 
 	ama "github.com/saltbo/any-managed-agents/sdk/go/ama"
@@ -30,11 +32,12 @@ type RunnerSessionChannel interface {
 }
 
 type RunnerDaemon struct {
-	Config   Config
-	Client   ControlPlane
-	Channels RunnerSessionChannelOpener
-	Adapter  SandboxAdapter
-	RunnerID string
+	Config         Config
+	Client         ControlPlane
+	Channels       RunnerSessionChannelOpener
+	Adapter        SandboxAdapter
+	RuntimeAdapter RuntimeAdapter
+	RunnerID       string
 }
 
 type WorkPayload struct {
@@ -304,7 +307,7 @@ func (d *RunnerDaemon) completeSessionStart(ctx context.Context, lease *ama.Runn
 		"executor":      d.Config.SandboxAdapter,
 	}
 	writeSessionStarted := d.writeChannelEvent
-	if payload.Runtime == "codex" {
+	if payload.Runtime == "codex" || payload.Runtime == "claude-code" {
 		writeSessionStarted = d.writeAcknowledgedChannelEvent
 	}
 	if err := writeSessionStarted(leaseCtx, channel, "runner.session.started", sessionStartedPayload); err != nil {
@@ -316,6 +319,18 @@ func (d *RunnerDaemon) completeSessionStart(ctx context.Context, lease *ama.Runn
 
 	if payload.Runtime == "codex" {
 		err := d.runCodexSession(leaseCtx, channel, lease, payload)
+		cancel()
+		select {
+		case renewErr := <-renewErrors:
+			if renewErr != nil {
+				return renewErr
+			}
+		default:
+		}
+		return err
+	}
+	if payload.Runtime == "claude-code" {
+		err := d.runExternalSession(leaseCtx, channel, lease, payload)
 		cancel()
 		select {
 		case renewErr := <-renewErrors:
@@ -373,6 +388,46 @@ func (d *RunnerDaemon) completeSessionStart(ctx context.Context, lease *ama.Runn
 		default:
 		}
 	}
+}
+
+func (d *RunnerDaemon) runExternalSession(
+	ctx context.Context,
+	channel RunnerSessionChannel,
+	lease *ama.RunnerWorkLease,
+	payload WorkPayload,
+) error {
+	adapter := d.RuntimeAdapter
+	if adapter == nil {
+		adapter = ClaudeCodeRuntimeAdapter{CommandTimeout: d.Config.CommandTimeout, ShutdownGraceInterval: d.Config.ShutdownGraceInterval}
+	}
+	var writeMu sync.Mutex
+	result, runErr := adapter.Run(ctx, RuntimeRequest{
+		SessionID:     payload.SessionID,
+		Runtime:       payload.Runtime,
+		RuntimeConfig: payload.RuntimeConfig,
+		Provider:      payload.Provider,
+		Model:         payload.Model,
+		InitialPrompt: initialPrompt(payload),
+		WorkDir:       d.Config.WorkDir,
+	}, func(eventType string, eventPayload ama.JSON) error {
+		writeMu.Lock()
+		defer writeMu.Unlock()
+		return d.writeAcknowledgedChannelEvent(ctx, channel, eventType, eventPayload)
+	})
+	if runErr != nil {
+		_ = d.writeAcknowledgedChannelEvent(context.Background(), channel, "claude-code.error", ama.JSON{
+			"error": ama.JSON{"message": runErr.Error(), "code": "runtime_failed"},
+		})
+		if finishErr := d.finishFailed(context.Background(), lease, runErr, result); finishErr != nil {
+			return finishErr
+		}
+		return runErr
+	}
+	_, err := d.Client.UpdateRunnerLease(ctx, d.RunnerID, lease.ID, ama.UpdateRunnerLeaseRequest{
+		Status: "completed",
+		Result: result,
+	})
+	return err
 }
 
 func (d *RunnerDaemon) openRunnerSessionChannel(ctx context.Context, leaseID string) (RunnerSessionChannel, error) {
@@ -452,17 +507,26 @@ func (d *RunnerDaemon) executeSessionToolCall(
 }
 
 func (d *RunnerDaemon) writeChannelEvent(ctx context.Context, channel RunnerSessionChannel, eventType string, payload ama.JSON) error {
-	return channel.WriteJSON(ctx, ama.JSON{
+	return channel.WriteJSON(ctx, d.channelEventMessage("", eventType, payload))
+}
+
+func (d *RunnerDaemon) channelEventMessage(eventID string, eventType string, payload ama.JSON) ama.JSON {
+	metadata := ama.JSON{
+		"runnerId": d.RunnerID,
+		"executor": d.Config.SandboxAdapter,
+	}
+	message := ama.JSON{
 		"type": "runner.event",
 		"event": ama.JSON{
-			"type":    eventType,
-			"payload": payload,
-			"metadata": ama.JSON{
-				"runnerId": d.RunnerID,
-				"executor": d.Config.SandboxAdapter,
-			},
+			"type":     eventType,
+			"payload":  payload,
+			"metadata": metadata,
 		},
-	})
+	}
+	if eventID != "" {
+		message["id"] = eventID
+	}
+	return message
 }
 
 func (d *RunnerDaemon) writeAcknowledgedChannelEvent(ctx context.Context, channel RunnerSessionChannel, eventType string, payload ama.JSON) error {

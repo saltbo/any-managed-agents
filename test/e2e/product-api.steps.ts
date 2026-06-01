@@ -1,7 +1,7 @@
 // @ts-nocheck
 import assert from 'node:assert/strict'
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { After, AfterAll, Given, setDefaultTimeout, Then, When } from '@cucumber/cucumber'
@@ -22,6 +22,7 @@ type Json = Record<string, unknown>
 
 const DEFAULT_AMA_RUNNER_CAPABILITY = 'runtime-provider-model:ama:workers-ai:@cf/moonshotai/kimi-k2.6'
 const CODEX_E2E_MODEL = 'gpt-5.3-codex'
+const CLAUDE_CODE_E2E_MODEL = 'claude-sonnet-4-6'
 
 interface ListResponse<T> {
   data: T[]
@@ -55,9 +56,12 @@ interface E2EState {
   lease?: Json
   runnerProcess?: AmaRunnerProcess
   runnerWorkDir?: string
+  runnerOrigin?: string
+  accessToken?: string
   runnerChannelMessages?: Json[]
   staleRunnerChannelMessages?: Json[]
   channelEventText?: string
+  claudeShimReceipt?: Json
   otherPage?: Page
   deletedCredentialVersionId?: string
   response?: Json
@@ -373,6 +377,54 @@ Given('the agent selects an exact provider and model', async function (this: Pro
     name: `${state.runId} codex agent`,
     provider: state.provider.id,
     model: CODEX_E2E_MODEL,
+  })
+})
+
+Given('a self-hosted environment selects claude-code runtime', async function (this: ProductWorld) {
+  const state = await ensureSignedIn(this)
+  const shimPath = join(process.cwd(), 'test/e2e/fixtures/claude-code-shim.mjs')
+  state.environment = await createEnvironment(state, {
+    name: `${state.runId} claude-code self-hosted env`,
+    hostingMode: 'self_hosted',
+    runtime: 'claude-code',
+    runtimeConfig: {
+      command: [process.execPath, shimPath],
+      adapter: 'claude-code-shim',
+      mode: 'deterministic-e2e',
+    },
+    networkPolicy: { mode: 'unrestricted' },
+  })
+})
+
+Given('an active runner supports the selected Claude Code provider and model', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  state.provider = await createProvider(state, {
+    type: 'anthropic',
+    displayName: `${state.runId} Claude provider`,
+    credentialSecretRef: `secret://providers/${state.runId}/claude`,
+  })
+  state.providerModel = await createProviderModel(state, state.provider, {
+    modelId: CLAUDE_CODE_E2E_MODEL,
+    displayName: 'Claude Sonnet 4.6',
+    capabilities: ['text', 'tool-use'],
+  })
+  state.agent = await createAgent(state, {
+    name: `${state.runId} claude-code agent`,
+    provider: state.provider.id,
+    model: CLAUDE_CODE_E2E_MODEL,
+  })
+  const capability = runtimeProviderModelCapability('claude-code', String(state.provider.id), CLAUDE_CODE_E2E_MODEL)
+  state.runner = await apiJson<Json>(state.page.request, '/api/runners', {
+    method: 'POST',
+    data: {
+      name: `${state.runId} claude-code runner`,
+      environmentId: state.environment?.id,
+      capabilities: ['sandbox.exec', capability],
+    },
+  })
+  state.runner = await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/heartbeats`, {
+    method: 'POST',
+    data: { status: 'active', currentLoad: 0, capabilities: ['sandbox.exec', capability] },
   })
 })
 
@@ -2427,6 +2479,150 @@ When('the user creates a session in that environment', async function (this: Pro
   })
 })
 
+When('the user starts a session with an initial prompt', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  state.runtimeMessage = 'Run the deterministic Claude Code shim.'
+  state.latestSession = await apiJson<Json>(state.page.request, '/api/sessions', {
+    method: 'POST',
+    data: {
+      agentId: state.agent?.id,
+      environmentId: state.environment?.id,
+      title: `${state.runId} claude-code runner session`,
+      initialPrompt: state.runtimeMessage,
+    },
+  })
+  assert.equal(state.latestSession.status, 'pending')
+  assert.equal(state.latestSession.statusReason, 'waiting-for-runner')
+  await startProductAmaRunner(state)
+})
+
+Then('ama-runner launches the configured Claude Code command for that session', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  await waitForSessionStatus(state, 'idle')
+  const receipt = JSON.parse(
+    readFileSync(join(required(state.runnerWorkDir, 'runner workdir'), 'claude-code-shim-received.json'), 'utf8'),
+  ) as Json
+  state.claudeShimReceipt = receipt
+  assert.equal(receipt.sessionId, state.latestSession?.id)
+  assert.equal(receipt.runtime, 'claude-code')
+})
+
+Then('Claude Code receives the prompt, workspace, runtime config, and safe environment', function (this: ProductWorld) {
+  const state = required(this.e2e, 'state')
+  const receipt = required(state.claudeShimReceipt, 'claude shim receipt')
+  assert.equal(receipt.prompt, state.runtimeMessage)
+  assert.equal(receipt.workspace, state.runnerWorkDir)
+  assert.equal(receipt.workspaceEnv, state.runnerWorkDir)
+  assert.equal(receipt.provider, state.provider?.id)
+  assert.equal(receipt.model, CLAUDE_CODE_E2E_MODEL)
+  assert.equal(objectValue(receipt.runtimeConfig).adapter, 'claude-code-shim')
+  assert.equal(receipt.leakedToken, null)
+  assert.equal(receipt.leakedOperatorSecret, null)
+  assert.ok(String(receipt.home).startsWith(String(state.runnerWorkDir)))
+  assert.ok(String(receipt.tmpdir).startsWith(String(state.runnerWorkDir)))
+})
+
+Then(
+  'Claude Code output is translated into canonical lifecycle, transcript, tool, usage, output, and error events',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    const events = await waitForSessionEventText(state, 'claude-code-shim-stderr')
+    const eventTypes = new Set(events.data.map((event) => String(event.type)))
+    for (const type of [
+      'session.lifecycle',
+      'transcript.message',
+      'tool_call.started',
+      'tool_call.completed',
+      'usage.recorded',
+      'runtime.output',
+      'runtime.error',
+    ]) {
+      assert.ok(eventTypes.has(type), `Expected canonical event type ${type}`)
+    }
+    const lifecycle = required(
+      events.data.find(
+        (event) =>
+          event.type === 'session.lifecycle' && String(objectValue(event.payload).stage).includes('claude-code'),
+      ),
+      'Claude Code lifecycle event',
+    )
+    assert.ok(String(objectValue(lifecycle.payload).stage).includes('claude-code'))
+    const transcript = required(
+      events.data.find((event) => event.type === 'transcript.message'),
+      'transcript event',
+    )
+    const transcriptMessage = objectValue(objectValue(transcript.payload).message)
+    assert.equal(transcriptMessage.role, 'assistant')
+    assert.equal(transcriptMessage.content, 'Claude shim received: Run the deterministic Claude Code shim.')
+    const toolStarted = required(
+      events.data.find((event) => event.type === 'tool_call.started'),
+      'tool started event',
+    )
+    const startedCall = objectValue(objectValue(toolStarted.payload).toolCall)
+    assert.equal(startedCall.id, 'claude_shim_tool')
+    assert.equal(startedCall.name, 'sandbox.exec')
+    assert.equal(objectValue(startedCall.input).command, 'printf claude-tool-ok')
+    const toolCompleted = required(
+      events.data.find((event) => event.type === 'tool_call.completed'),
+      'tool completed event',
+    )
+    const completedCall = objectValue(objectValue(toolCompleted.payload).toolCall)
+    assert.equal(completedCall.id, 'claude_shim_tool')
+    assert.equal(objectValue(completedCall.output).stdout, 'claude-tool-ok')
+    assert.equal(completedCall.durationMs, 1)
+    const usage = required(
+      events.data.find((event) => event.type === 'usage.recorded'),
+      'usage event',
+    )
+    assert.equal(objectValue(usage.payload).provider, state.provider?.id)
+    assert.equal(objectValue(usage.payload).model, CLAUDE_CODE_E2E_MODEL)
+    assert.equal(objectValue(usage.payload).inputTokens, 11)
+    assert.equal(objectValue(usage.payload).outputTokens, 7)
+    const runtimeError = required(
+      events.data.find((event) => event.type === 'runtime.error'),
+      'runtime error event',
+    )
+    assert.equal(objectValue(runtimeError.payload).message, 'Claude shim safe diagnostic')
+    assert.equal(objectValue(runtimeError.payload).code, 'shim_diagnostic')
+    const stdoutOutput = required(
+      events.data.find(
+        (event) =>
+          event.type === 'runtime.output' &&
+          objectValue(event.payload).stream === 'stdout' &&
+          objectValue(event.payload).content === 'claude-code-shim-output',
+      ),
+      'stdout runtime output event',
+    )
+    const stderrOutput = required(
+      events.data.find(
+        (event) =>
+          event.type === 'runtime.output' &&
+          objectValue(event.payload).stream === 'stderr' &&
+          objectValue(event.payload).content === 'claude-code-shim-stderr',
+      ),
+      'stderr runtime output event',
+    )
+    assert.equal(objectValue(stdoutOutput.payload).stream, 'stdout')
+    assert.equal(objectValue(stderrOutput.payload).stream, 'stderr')
+    const serialized = JSON.stringify(events.data)
+    assert.equal(serialized.includes('Claude shim received: Run the deterministic Claude Code shim.'), true)
+    assert.equal(serialized.includes('claude-code-shim-output'), true)
+    assert.equal(serialized.includes('claude-code-shim-stderr'), true)
+    assert.equal(serialized.includes('raw-secret-value'), false)
+  },
+)
+
+Then('the session reaches idle, stopped, or error with inspectable final events', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
+  assert.ok(['idle', 'stopped', 'error'].includes(String(session.status)))
+  const events = await sessionEvents(state)
+  assert.ok(events.data.length > 0)
+  const serialized = JSON.stringify(session)
+  assert.equal(serialized.includes('localhost'), false)
+  assert.equal(serialized.includes('127.0.0.1'), false)
+})
+
 Then('AMA queues session work without creating a Cloudflare Sandbox', async function (this: ProductWorld) {
   const state = await ensureState(this)
   const session = required(state.latestSession, 'session')
@@ -3655,7 +3851,14 @@ async function ensureSignedIn(world: ProductWorld) {
   }
   const page = await openLocalPage()
   const auth = (await authenticateE2EPage(page)) as Json
-  world.e2e = { page, auth, runId: `product-e2e-${Date.now()}-${Math.random().toString(16).slice(2)}` }
+  const accessToken = await page.evaluate(() => window.localStorage.getItem('ama:e2e-access-token') ?? undefined)
+  world.e2e = {
+    page,
+    auth,
+    runId: `product-e2e-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    runnerOrigin: new URL(page.url()).origin,
+    accessToken,
+  }
   return world.e2e
 }
 
@@ -3907,7 +4110,11 @@ async function startProductAmaRunner(state: E2EState) {
   if (!token) {
     throw new Error('E2E access token is required to start ama-runner')
   }
-  const workDir = mkdtempSync(join(tmpdir(), 'ama-product-runner-'))
+  state.runnerOrigin = origin
+  state.accessToken = token
+  const workDir = realpathSync(mkdtempSync(join(tmpdir(), 'ama-product-runner-')))
+  const capabilities = arrayValue(state.runner?.capabilities).map(String)
+  const runnerCapabilities = capabilities.length > 0 ? capabilities : ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY]
   const child = spawn(
     'go',
     [
@@ -3937,7 +4144,12 @@ async function startProductAmaRunner(state: E2EState) {
     ],
     {
       cwd: 'cmd/ama-runner',
-      env: { PATH: process.env.PATH, HOME: process.env.HOME },
+      env: {
+        PATH: process.env.PATH,
+        HOME: process.env.HOME,
+        AMA_TOKEN: 'raw-secret-value',
+        AMA_RUNNER_OPERATOR_SECRET: 'raw-secret-value',
+      },
       stdio: ['ignore', 'pipe', 'pipe'],
     },
   ) as AmaRunnerProcess
@@ -3949,6 +4161,10 @@ async function startProductAmaRunner(state: E2EState) {
 }
 
 function runnerCapabilities(state: E2EState) {
+  const capabilities = arrayValue(state.runner?.capabilities).map(String)
+  if (capabilities.length > 0) {
+    return capabilities
+  }
   const runtime = objectValue(state.environment).runtime
   if (runtime === 'codex' && state.provider?.id) {
     return ['sandbox.exec', `runtime-provider-model:codex:${String(state.provider.id)}:${CODEX_E2E_MODEL}`]
@@ -4100,14 +4316,20 @@ async function closeRunnerChannel(state: E2EState, key: string) {
 }
 
 async function waitForSessionEventText(state: E2EState, text: string) {
+  let latestEvents: ListResponse<Json> | null = null
   for (let attempt = 0; attempt < 30; attempt += 1) {
-    const events = await sessionEvents(state)
+    const events = await sessionEventsViaFetch(state)
+    latestEvents = events
     if (JSON.stringify(events.data).includes(text)) {
       return events
     }
     await delay(500)
   }
-  throw new Error(`Session ${state.latestSession?.id} did not persist event text ${text}`)
+  throw new Error(
+    `Session ${state.latestSession?.id} did not persist event text ${text}. Event types: ${latestEvents?.data
+      .map((event) => `${event.sequence}:${event.type}`)
+      .join(', ')}`,
+  )
 }
 
 async function sessionEvents(state: E2EState) {
@@ -4115,6 +4337,19 @@ async function sessionEvents(state: E2EState) {
     state.page.request,
     `/api/sessions/${state.latestSession?.id}/events?limit=200`,
   )
+}
+
+async function sessionEventsViaFetch(state: E2EState) {
+  const origin = required(state.runnerOrigin, 'runner origin')
+  const token = required(state.accessToken, 'e2e access token')
+  const response = await fetch(`${origin}/api/sessions/${state.latestSession?.id}/events?limit=200`, {
+    headers: { accept: 'application/json', authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(10_000),
+  })
+  if (!response.ok) {
+    throw new Error(`GET session events returned ${response.status}: ${await response.text()}`)
+  }
+  return (await response.json()) as ListResponse<Json>
 }
 
 async function emptyResponse(
@@ -4134,6 +4369,10 @@ function objectValue(value: unknown) {
 
 function arrayValue(value: unknown) {
   return Array.isArray(value) ? value : []
+}
+
+function runtimeProviderModelCapability(runtime: string, provider: string, model: string) {
+  return `runtime-provider-model:${runtime}:${provider}:${model}`
 }
 
 function required<T>(value: T | undefined | null, label: string) {
