@@ -295,11 +295,15 @@ function openAiMessages(context: Context) {
       continue
     }
     if (message.role === 'assistant') {
-      const text = message.content
-        .filter((block) => block.type === 'text')
-        .map((block) => block.text)
-        .join('')
-      const toolCalls = message.content
+      const content = Array.isArray(message.content) ? message.content : []
+      const text =
+        typeof message.content === 'string'
+          ? message.content
+          : content
+              .filter((block) => block.type === 'text')
+              .map((block) => block.text)
+              .join('')
+      const toolCalls = content
         .filter((block): block is ToolCall => block.type === 'toolCall')
         .map((block) => ({
           id: block.id,

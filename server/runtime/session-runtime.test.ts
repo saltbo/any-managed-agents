@@ -322,6 +322,35 @@ describe('session-runtime', () => {
     expect(messages).toEqual([{ role: 'assistant', content: 'completed assistant text' }])
   })
 
+  it('sends canonical string assistant history to the live provider', async () => {
+    const aiRun = vi.fn().mockResolvedValue({ response: 'continued' })
+    const events: Record<string, unknown>[] = []
+
+    await runSessionTurn({ AMA_RUNTIME_MODE: 'live', AI: { run: aiRun } } as unknown as Env, {
+      sessionId: 'session_123',
+      sandboxId: 'sandbox_123',
+      provider: 'workers-ai',
+      model: '@cf/moonshotai/kimi-k2.6',
+      agentSnapshot: { instructions: 'Continue from history.', allowedTools: [] },
+      messages: runtimeMessagesFromEvents([
+        { type: 'transcript.message', payload: { message: { role: 'assistant', content: 'Acknowledged.' } } },
+      ]),
+      prompt: 'Continue',
+      onEvent: async (event) => {
+        events.push(event)
+      },
+    })
+
+    expect(aiRun).toHaveBeenCalledWith(
+      '@cf/moonshotai/kimi-k2.6',
+      expect.objectContaining({
+        messages: expect.arrayContaining([{ role: 'assistant', content: 'Acknowledged.' }]),
+      }),
+      expect.any(Object),
+    )
+    expect(JSON.stringify(events)).toContain('continued')
+  })
+
   it('stops before model completion events are persisted when the DB cancellation gate trips', async () => {
     const events: Record<string, unknown>[] = []
     let active = true

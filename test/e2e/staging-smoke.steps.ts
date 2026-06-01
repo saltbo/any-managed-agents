@@ -303,7 +303,7 @@ async function runStagingSmoke(config: StagingSmokeConfig): Promise<StagingSmoke
       await expect(page.getByText(/ama-visible-error|exit code:\s*7|exit 7/i).first()).toBeVisible()
       sawErrorUi = true
       await page.getByRole('tab', { name: 'Debug' }).click()
-      await expect(page.getByText(/Tool end|Message end|Agent end/i).first()).toBeVisible()
+      await expect(page.getByText(/Tool completed|Transcript message|Session lifecycle/i).first()).toBeVisible()
       sawDebugUi = true
 
       const persistedEventsBeforeReconnect = await persistedEventSignatures(page.request, readySession.id)
@@ -659,7 +659,7 @@ async function waitForAssistantTurn(request: APIRequestContext, sessionId: strin
       const event = events.find(
         (candidate) =>
           candidate.sequence > afterSequence &&
-          candidate.type === 'session.lifecycle' &&
+          (candidate.type === 'transcript.message' || candidate.type === 'transcript.message.delta') &&
           eventRole(candidate) === 'assistant',
       )
       if (!event) {
