@@ -42,6 +42,10 @@ migrations_dir = "./migrations"
 name = "SANDBOX"
 class_name = "Sandbox"
 
+[[durable_objects.bindings]]
+name = "RUNNER_SESSION_CHANNEL"
+class_name = "RunnerSessionChannelObject"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["ManagedAgent"]
@@ -49,6 +53,10 @@ new_sqlite_classes = ["ManagedAgent"]
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = ["Sandbox"]
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["RunnerSessionChannelObject"]
 
 [[containers]]
 class_name = "Sandbox"
@@ -89,6 +97,10 @@ migrations_dir = "./migrations"
 name = "SANDBOX"
 class_name = "Sandbox"
 
+[[env.staging.durable_objects.bindings]]
+name = "RUNNER_SESSION_CHANNEL"
+class_name = "RunnerSessionChannelObject"
+
 [[env.staging.containers]]
 class_name = "Sandbox"
 name = "any-managed-agents-staging-sandbox"
@@ -127,6 +139,10 @@ migrations_dir = "./migrations"
 [[env.e2e.durable_objects.bindings]]
 name = "SANDBOX"
 class_name = "Sandbox"
+
+[[env.e2e.durable_objects.bindings]]
+name = "RUNNER_SESSION_CHANNEL"
+class_name = "RunnerSessionChannelObject"
 
 [[env.e2e.containers]]
 class_name = "Sandbox"

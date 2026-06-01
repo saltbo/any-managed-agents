@@ -8,6 +8,7 @@ import { type AuthContext, requireAuth } from '../auth/session'
 import {
   environments,
   runnerHeartbeats,
+  runnerSessionChannels,
   runners,
   runnerWorkItems,
   runnerWorkLeases,
@@ -107,6 +108,12 @@ const RunnerWorkLeaseSchema = z
     updatedAt: z.string().datetime(),
   })
   .openapi('RunnerWorkLease')
+
+const RunnerSessionChannelMetadataSchema = z
+  .object({
+    upgrade: z.literal('websocket').openapi({ example: 'websocket' }),
+  })
+  .openapi('RunnerSessionChannelMetadata')
 
 const CreateRunnerSchema = z
   .object({
@@ -408,7 +415,7 @@ async function expireStaleLeases(db: Db, auth: AuthContext) {
       .from(runnerWorkItems)
       .where(and(eq(runnerWorkItems.id, lease.workItemId), eq(runnerWorkItems.projectId, auth.project.id)))
       .get()
-    if (!workItem || workItem.status !== 'leased' || workItem.leaseId !== lease.id) {
+    if (workItem?.status !== 'leased' || workItem.leaseId !== lease.id) {
       const expired = await db
         .update(runnerWorkLeases)
         .set({ status: 'expired', updatedAt: timestamp })
@@ -504,6 +511,203 @@ function workItemRuntimeMetadata(workItem: WorkItemRow) {
     ...(typeof payload.provider === 'string' ? { provider: payload.provider } : {}),
     ...(typeof payload.model === 'string' ? { model: payload.model } : {}),
   }
+}
+
+export async function hasAcceptedRunnerSessionChannel(env: Env, sessionId: string) {
+  const id = env.RUNNER_SESSION_CHANNEL.idFromName(sessionId)
+  const stub = env.RUNNER_SESSION_CHANNEL.get(id)
+  const response = await stub.fetch('https://runner-session-channel/status')
+  if (!response.ok) {
+    return false
+  }
+  const body = (await response.json()) as { active?: boolean }
+  return body.active === true
+}
+
+export async function dispatchRunnerSessionCommand(env: Env, sessionId: string, command: Record<string, unknown>) {
+  const id = env.RUNNER_SESSION_CHANNEL.idFromName(sessionId)
+  const stub = env.RUNNER_SESSION_CHANNEL.get(id)
+  const response = await stub.fetch('https://runner-session-channel/dispatch', {
+    method: 'POST',
+    body: JSON.stringify(command),
+  })
+  return response.status === 202
+}
+
+async function activeLeaseWorkItem(
+  db: Db,
+  auth: AuthContext,
+  runnerId: string,
+  leaseId: string,
+): Promise<{ lease: LeaseRow; workItem: WorkItemRow } | null> {
+  const lease = await db
+    .select()
+    .from(runnerWorkLeases)
+    .where(
+      and(
+        eq(runnerWorkLeases.id, leaseId),
+        eq(runnerWorkLeases.runnerId, runnerId),
+        eq(runnerWorkLeases.projectId, auth.project.id),
+        eq(runnerWorkLeases.status, 'active'),
+      ),
+    )
+    .get()
+  if (!lease) {
+    return null
+  }
+  const workItem = await db
+    .select()
+    .from(runnerWorkItems)
+    .where(and(eq(runnerWorkItems.id, lease.workItemId), eq(runnerWorkItems.projectId, auth.project.id)))
+    .get()
+  if (
+    !workItem?.sessionId ||
+    lease.expiresAt <= now() ||
+    workItem.status !== 'leased' ||
+    workItem.leaseId !== lease.id ||
+    workItem.runnerId !== runnerId
+  ) {
+    return null
+  }
+  return { lease, workItem }
+}
+
+async function acceptRunnerSessionChannel(c: Context<{ Bindings: Env }>) {
+  if (c.req.header('upgrade')?.toLowerCase() !== 'websocket') {
+    return errorResponse(c, 426, 'conflict', 'Runner session channel requires a WebSocket upgrade')
+  }
+  const runnerId = c.req.param('runnerId')
+  const leaseId = c.req.param('leaseId')
+  if (!runnerId || !leaseId) {
+    return errorResponse(c, 400, 'validation_error', 'Runner id and lease id are required')
+  }
+  const db = drizzle(c.env.DB)
+  const auth = await requireAuth(c, db)
+  if (auth instanceof Response) {
+    return auth
+  }
+  await expireStaleLeases(db, auth)
+  const ownership = await activeLeaseWorkItem(db, auth, runnerId, leaseId)
+  if (!ownership) {
+    return errorResponse(c, 409, 'conflict', 'Runner lease no longer owns a self-hosted session')
+  }
+  const { workItem } = ownership
+  if (!workItem.sessionId) {
+    return errorResponse(c, 409, 'conflict', 'Runner work item is not attached to a session')
+  }
+  const waitingSession = await db
+    .select({ id: sessions.id, status: sessions.status, statusReason: sessions.statusReason })
+    .from(sessions)
+    .where(and(eq(sessions.id, workItem.sessionId), eq(sessions.projectId, auth.project.id)))
+    .get()
+  if (
+    !(
+      (waitingSession?.status === 'pending' &&
+        (waitingSession.statusReason === 'waiting-for-runner' ||
+          waitingSession.statusReason === 'waiting-for-runner-recovery')) ||
+      (waitingSession?.status === 'running' && waitingSession.statusReason === null)
+    )
+  ) {
+    return errorResponse(c, 409, 'conflict', 'Session is not waiting for a runner channel')
+  }
+
+  const timestamp = now()
+  await db
+    .update(runnerSessionChannels)
+    .set({ status: 'stale', closedAt: timestamp, closeReason: 'superseded', updatedAt: timestamp })
+    .where(
+      and(
+        eq(runnerSessionChannels.projectId, auth.project.id),
+        eq(runnerSessionChannels.status, 'active'),
+        or(eq(runnerSessionChannels.sessionId, workItem.sessionId), eq(runnerSessionChannels.leaseId, leaseId)),
+      ),
+    )
+
+  const channel = {
+    id: newId('channel'),
+    sessionId: workItem.sessionId,
+    workItemId: workItem.id,
+    leaseId,
+    runnerId,
+    organizationId: auth.organization.id,
+    projectId: auth.project.id,
+    status: 'active',
+    acceptedAt: timestamp,
+    lastSeenAt: timestamp,
+    closedAt: null,
+    closeReason: null,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  }
+  const acceptedSession = await db
+    .update(sessions)
+    .set({
+      status: 'running',
+      statusReason: null,
+      runtimeEndpointPath: `/runtime/sessions/${workItem.sessionId}/rpc`,
+      startedAt: timestamp,
+      updatedAt: timestamp,
+    })
+    .where(
+      and(
+        eq(sessions.id, workItem.sessionId),
+        eq(sessions.projectId, auth.project.id),
+        or(
+          and(
+            eq(sessions.status, 'pending'),
+            or(
+              eq(sessions.statusReason, 'waiting-for-runner'),
+              eq(sessions.statusReason, 'waiting-for-runner-recovery'),
+            ),
+          ),
+          and(eq(sessions.status, 'running'), isNull(sessions.statusReason)),
+        ),
+      ),
+    )
+    .returning({ id: sessions.id })
+    .get()
+  if (!acceptedSession) {
+    return errorResponse(c, 409, 'conflict', 'Session is not waiting for a runner channel')
+  }
+  await db.insert(runnerSessionChannels).values(channel)
+  await appendSessionRunnerEvent(db, auth, workItem.sessionId, {
+    type: 'runner.channel.accepted',
+    payload: { runnerId, leaseId, workItemId: workItem.id },
+    metadata: {
+      source: 'self-hosted-runner-channel',
+      ...workItemRuntimeMetadata(workItem),
+      channelId: channel.id,
+      runnerId,
+      leaseId,
+      workItemId: workItem.id,
+    },
+  })
+
+  const id = c.env.RUNNER_SESSION_CHANNEL.idFromName(workItem.sessionId)
+  const stub = c.env.RUNNER_SESSION_CHANNEL.get(id)
+  const url = new URL('https://runner-session-channel/connect')
+  url.searchParams.set('channelId', channel.id)
+  url.searchParams.set('sessionId', workItem.sessionId)
+  url.searchParams.set('workItemId', workItem.id)
+  url.searchParams.set('leaseId', leaseId)
+  url.searchParams.set('runnerId', runnerId)
+  url.searchParams.set('organizationId', auth.organization.id)
+  url.searchParams.set('projectId', auth.project.id)
+  const response = await stub.fetch(new Request(url, c.req.raw))
+  if (response.status === 101) {
+    return response
+  }
+  await db
+    .update(runnerSessionChannels)
+    .set({ status: 'closed', closedAt: timestamp, closeReason: 'channel-upgrade-failed', updatedAt: timestamp })
+    .where(eq(runnerSessionChannels.id, channel.id))
+  await db
+    .update(sessions)
+    .set({ status: 'pending', statusReason: 'waiting-for-runner-recovery', updatedAt: timestamp })
+    .where(
+      and(eq(sessions.id, workItem.sessionId), eq(sessions.projectId, auth.project.id), eq(sessions.status, 'running')),
+    )
+  return response
 }
 
 async function listRunnerWorkItems(c: Context<{ Bindings: Env }>) {
@@ -709,6 +913,30 @@ const uploadLeaseEventsRoute = createRoute({
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
     404: { description: 'Lease not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
     409: { description: 'Conflict', content: { 'application/json': { schema: ErrorResponseSchema } } },
+  },
+})
+
+const runnerSessionChannelRoute = createRoute({
+  method: 'get',
+  path: '/{runnerId}/leases/{leaseId}/channel',
+  operationId: 'connectRunnerSessionChannel',
+  tags: ['Runner leases'],
+  summary: 'Open a claimed runner session WebSocket channel',
+  ...AuthenticatedOperation,
+  request: { params: LeaseParamsSchema },
+  responses: {
+    101: { description: 'Runner session channel accepted as a WebSocket upgrade' },
+    200: {
+      description: 'Runner session channel metadata for OpenAPI clients',
+      content: { 'application/json': { schema: RunnerSessionChannelMetadataSchema } },
+    },
+    400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    409: { description: 'Conflict', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    426: {
+      description: 'WebSocket upgrade required',
+      content: { 'application/json': { schema: ErrorResponseSchema } },
+    },
   },
 })
 
@@ -1022,7 +1250,7 @@ const routes = app
     if (workItem.sessionId) {
       await db
         .update(sessions)
-        .set({ status: 'running', statusReason: null, updatedAt: timestamp })
+        .set({ status: 'pending', statusReason: 'waiting-for-runner', updatedAt: timestamp })
         .where(
           and(
             eq(sessions.id, workItem.sessionId),
@@ -1211,5 +1439,6 @@ const routes = app
     }
     return c.json({ accepted: events.length }, 202)
   })
+  .openapi(runnerSessionChannelRoute, acceptRunnerSessionChannel)
 
 export default routes

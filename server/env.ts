@@ -6,6 +6,7 @@ export interface Env {
   ASSETS: Fetcher
   OIDC_PROVIDER?: Fetcher
   SANDBOX: DurableObjectNamespace<Sandbox>
+  RUNNER_SESSION_CHANNEL: DurableObjectNamespace
   AMA_DEFAULT_MODEL?: string
   AMA_RUNTIME_MODE?: string
   AMA_PI_BRIDGE_COMMAND?: string

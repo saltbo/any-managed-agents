@@ -465,6 +465,41 @@ export const runnerWorkLeases = sqliteTable(
   ],
 )
 
+export const runnerSessionChannels = sqliteTable(
+  'runner_session_channels',
+  {
+    id: text('id').primaryKey(),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => sessions.id),
+    workItemId: text('work_item_id')
+      .notNull()
+      .references(() => runnerWorkItems.id),
+    leaseId: text('lease_id')
+      .notNull()
+      .references(() => runnerWorkLeases.id),
+    runnerId: text('runner_id')
+      .notNull()
+      .references(() => runners.id),
+    organizationId: text('organization_id').notNull(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id),
+    status: text('status').notNull().default('active'),
+    acceptedAt: text('accepted_at').notNull(),
+    lastSeenAt: text('last_seen_at').notNull(),
+    closedAt: text('closed_at'),
+    closeReason: text('close_reason'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    index('idx_runner_session_channels_session_status').on(table.sessionId, table.status),
+    index('idx_runner_session_channels_lease_status').on(table.leaseId, table.status),
+    index('idx_runner_session_channels_runner_status').on(table.runnerId, table.status),
+  ],
+)
+
 export const providerConfigs = sqliteTable(
   'provider_configs',
   {

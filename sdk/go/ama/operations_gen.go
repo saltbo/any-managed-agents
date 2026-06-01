@@ -18,6 +18,7 @@ var Operations = []Operation{
 	{Method: "DELETE", Path: "/api/vaults/{vaultId}", OperationID: "archiveVault", Summary: "Archive a vault", Tags: []string{"Vaults"}},
 	{Method: "POST", Path: "/api/mcp/connections/{connectionId}/tools/{toolName}/calls", OperationID: "callMcpTool", Summary: "Call MCP tool through AMA policy boundary", Tags: []string{"MCP"}},
 	{Method: "POST", Path: "/api/mcp/connections", OperationID: "connectMcpConnector", Summary: "Connect or upsert an MCP connector", Tags: []string{"MCP"}},
+	{Method: "GET", Path: "/api/runners/{runnerId}/leases/{leaseId}/channel", OperationID: "connectRunnerSessionChannel", Summary: "Open a claimed runner session WebSocket channel", Tags: []string{"Runner leases"}},
 	{Method: "POST", Path: "/api/agents", OperationID: "createAgent", Summary: "Create an agent", Tags: []string{"Agents"}},
 	{Method: "POST", Path: "/api/governance/budgets", OperationID: "createBudget", Summary: "Create budget", Tags: []string{"Governance"}},
 	{Method: "POST", Path: "/api/environments", OperationID: "createEnvironment", Summary: "Create an environment", Tags: []string{"Environments"}},

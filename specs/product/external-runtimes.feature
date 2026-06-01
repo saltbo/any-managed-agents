@@ -6,7 +6,7 @@ Feature: External agent runtimes on self-hosted runners
   Background:
     Given a project has an active agent definition
 
-  @planned
+  @implemented
   Scenario: Dispatch a self-hosted session to an eligible runner
     Given a self-hosted environment selects an external runtime
     And an active runner advertises the exact runtime, provider, and model capability
@@ -16,7 +16,7 @@ Feature: External agent runtimes on self-hosted runners
     And runners that do not advertise the exact runtime, provider, and model cannot claim the session
     And the session remains pending with a waiting-for-runner reason until a runner claims it
 
-  @planned
+  @implemented
   Scenario: Establish a per-session runner WebSocket after claim
     Given a runner has claimed a self-hosted session
     When the runner starts the session runtime
@@ -25,7 +25,7 @@ Feature: External agent runtimes on self-hosted runners
     And the session becomes active only after the WebSocket is accepted
     And AMA does not expose any runner-local runtime process endpoint to clients
 
-  @planned
+  @implemented
   Scenario: Execute tool calls over the claimed session channel
     Given a self-hosted session has an accepted runner WebSocket
     When the cloud-side AMA control plane sends an approved tool call for the session
@@ -34,7 +34,7 @@ Feature: External agent runtimes on self-hosted runners
     And the runner streams stdout, stderr, output, timing, and safe errors over the same WebSocket
     And AMA stores the tool result as canonical session events before continuing the session
 
-  @planned
+  @implemented
   Scenario: Recover from a broken runner session channel
     Given a self-hosted session is owned by a runner
     When the session WebSocket disconnects before the session is idle or complete

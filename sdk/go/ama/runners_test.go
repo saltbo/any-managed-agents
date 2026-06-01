@@ -53,6 +53,17 @@ func TestRunnerClientReturnsNilLeaseOnNoContent(t *testing.T) {
 	}
 }
 
+func TestRunnerClientBuildsSessionChannelURL(t *testing.T) {
+	client := Client{Origin: "https://ama.example.test/base", AccessToken: "token"}
+	endpoint, err := client.RunnerSessionChannelURL("runner/1", "lease/2")
+	if err != nil {
+		t.Fatalf("expected channel URL, got %v", err)
+	}
+	if endpoint != "wss://ama.example.test/api/runners/runner%2F1/leases/lease%2F2/channel" {
+		t.Fatalf("unexpected channel URL %s", endpoint)
+	}
+}
+
 func TestRunnerClientSurfacesAPIErrorEnvelope(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)

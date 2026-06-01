@@ -2514,6 +2514,21 @@
         ],
         "additionalProperties": false
       },
+      "RunnerSessionChannelMetadata": {
+        "type": "object",
+        "properties": {
+          "upgrade": {
+            "type": "string",
+            "enum": [
+              "websocket"
+            ],
+            "example": "websocket"
+          }
+        },
+        "required": [
+          "upgrade"
+        ]
+      },
       "GovernancePolicy": {
         "type": "object",
         "properties": {
@@ -7919,6 +7934,95 @@
           },
           "409": {
             "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runners/{runnerId}/leases/{leaseId}/channel": {
+      "get": {
+        "operationId": "connectRunnerSessionChannel",
+        "tags": [
+          "Runner leases"
+        ],
+        "summary": "Open a claimed runner session WebSocket channel",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "runner_abc123"
+            },
+            "required": true,
+            "name": "runnerId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "example": "lease_abc123"
+            },
+            "required": true,
+            "name": "leaseId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "101": {
+            "description": "Runner session channel accepted as a WebSocket upgrade"
+          },
+          "200": {
+            "description": "Runner session channel metadata for OpenAPI clients",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerSessionChannelMetadata"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "WebSocket upgrade required",
             "content": {
               "application/json": {
                 "schema": {

@@ -6,6 +6,12 @@ import { defaultClaims, setupOidcProvider, signIn } from '../test/auth'
 
 const DEFAULT_AMA_RUNNER_CAPABILITY = runtimeProviderModelCapability('ama', 'workers-ai', '@cf/moonshotai/kimi-k2.6')
 
+function objectValue(value: unknown) {
+  expect(value).toBeTruthy()
+  expect(typeof value).toBe('object')
+  return value as Record<string, unknown>
+}
+
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
     ...init,
@@ -55,6 +61,35 @@ async function createSelfHostedSession(authorization: string, agentId: string, e
   })
   expect(res.status).toBe(201)
   return (await res.json()) as { id: string; status: string; statusReason: string; sandboxId: string | null }
+}
+
+async function openRunnerSessionChannel(authorization: string, runnerId: string, leaseId: string) {
+  const res = await SELF.fetch(`https://example.com/api/runners/${runnerId}/leases/${leaseId}/channel`, {
+    headers: { authorization, upgrade: 'websocket' },
+  })
+  expect(res.status).toBe(101)
+  expect(res.webSocket).toBeTruthy()
+  const socket = res.webSocket as WebSocket
+  socket.accept()
+  return socket
+}
+
+function collectMessages(socket: WebSocket) {
+  const messages: Array<Record<string, unknown>> = []
+  socket.addEventListener('message', (event) => {
+    messages.push(JSON.parse(String(event.data)) as Record<string, unknown>)
+  })
+  return messages
+}
+
+async function waitForMessages(messages: Array<Record<string, unknown>>, count: number) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (messages.length >= count) {
+      return messages
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25))
+  }
+  return messages
 }
 
 describe('[CF] /api/runners', () => {
@@ -160,8 +195,25 @@ describe('[CF] /api/runners', () => {
       },
     })
 
+    const claimedSessionRes = await jsonFetch(`/api/sessions/${session.id}`, authorization)
+    await expect(claimedSessionRes.json()).resolves.toMatchObject({
+      id: session.id,
+      status: 'pending',
+      statusReason: 'waiting-for-runner',
+    })
+
+    const channel = await openRunnerSessionChannel(authorization, runner.id, lease.id)
+    const channelMessages = collectMessages(channel)
+    await expect(waitForMessages(channelMessages, 1)).resolves.toEqual([
+      expect.objectContaining({ type: 'session.channel.accepted', sessionId: session.id }),
+    ])
+
     const runningSessionRes = await jsonFetch(`/api/sessions/${session.id}`, authorization)
-    await expect(runningSessionRes.json()).resolves.toMatchObject({ id: session.id, status: 'running' })
+    await expect(runningSessionRes.json()).resolves.toMatchObject({
+      id: session.id,
+      status: 'running',
+      statusReason: null,
+    })
 
     const eventsRes = await jsonFetch(`/api/runners/${runner.id}/leases/${lease.id}/events`, authorization, {
       method: 'POST',
@@ -226,42 +278,45 @@ describe('[CF] /api/runners', () => {
       status: 'idle',
       statusReason: null,
     })
+    channel.close()
 
     const sessionEventsRes = await jsonFetch(`/api/sessions/${session.id}/events`, authorization)
     expect(sessionEventsRes.status).toBe(200)
     const sessionEvents = (await sessionEventsRes.json()) as {
       data: Array<{ type: string; payload: Record<string, unknown>; metadata: Record<string, unknown> }>
     }
-    expect(sessionEvents.data).toEqual([
-      expect.objectContaining({
-        type: 'tool_call.started',
-        metadata: expect.objectContaining({
-          source: 'self-hosted-runner',
-          runnerId: runner.id,
-          leaseId: lease.id,
-          runtime: 'ama',
-          provider: 'workers-ai',
-          model: '@cf/moonshotai/kimi-k2.6',
+    expect(sessionEvents.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'tool_call.started',
+          metadata: expect.objectContaining({
+            source: 'self-hosted-runner',
+            runnerId: runner.id,
+            leaseId: lease.id,
+            runtime: 'ama',
+            provider: 'workers-ai',
+            model: '@cf/moonshotai/kimi-k2.6',
+          }),
         }),
-      }),
-      expect.objectContaining({
-        type: 'usage.recorded',
-        payload: expect.objectContaining({
-          provider: 'workers-ai',
-          model: '@cf/moonshotai/kimi-k2.6',
-          inputTokens: 10,
-          outputTokens: 4,
+        expect.objectContaining({
+          type: 'usage.recorded',
+          payload: expect.objectContaining({
+            provider: 'workers-ai',
+            model: '@cf/moonshotai/kimi-k2.6',
+            inputTokens: 10,
+            outputTokens: 4,
+          }),
         }),
-      }),
-      expect.objectContaining({
-        type: 'runtime.error',
-        payload: expect.objectContaining({
-          message: 'Runtime failed safely',
-          code: 'runtime_exit',
-          details: { exitCode: 2 },
+        expect.objectContaining({
+          type: 'runtime.error',
+          payload: expect.objectContaining({
+            message: 'Runtime failed safely',
+            code: 'runtime_exit',
+            details: { exitCode: 2 },
+          }),
         }),
-      }),
-    ])
+      ]),
+    )
     expect(JSON.stringify(sessionEvents.data)).not.toContain('raw-secret-value')
   })
 
@@ -315,6 +370,291 @@ describe('[CF] /api/runners', () => {
       .bind(runner.id)
       .first<{ credentialSecretRef: string | null }>()
     expect(persisted?.credentialSecretRef).toBe('cloudflare-secret:runner-token')
+  })
+
+  it('dispatches runtime tool calls over the accepted runner session channel', async () => {
+    const authorization = await signIn()
+    const environment = await createSelfHostedEnvironment(authorization)
+    const agent = await createAgent(authorization)
+    const runnerRes = await jsonFetch('/api/runners', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Channel runner',
+        environmentId: environment.id,
+        capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+      }),
+    })
+    const runner = (await runnerRes.json()) as { id: string }
+    await jsonFetch(`/api/runners/${runner.id}/heartbeats`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        status: 'active',
+        currentLoad: 0,
+        capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+      }),
+    })
+    const session = await createSelfHostedSession(authorization, agent.id, environment.id)
+    const claimRes = await jsonFetch(`/api/runners/${runner.id}/leases`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ leaseDurationSeconds: 90 }),
+    })
+    expect(claimRes.status).toBe(201)
+    const lease = (await claimRes.json()) as { id: string }
+    const channel = await openRunnerSessionChannel(authorization, runner.id, lease.id)
+    const channelMessages = collectMessages(channel)
+    await waitForMessages(channelMessages, 1)
+
+    const rpcRes = await jsonFetch(`/runtime/sessions/${session.id}/rpc`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        toolCalls: [
+          {
+            id: 'call_channel_1',
+            name: 'sandbox.exec',
+            input: { command: 'printf ok' },
+          },
+        ],
+      }),
+    })
+    expect(rpcRes.status).toBe(200)
+    await expect(rpcRes.json()).resolves.toMatchObject({ runtime: 'self-hosted-runner', accepted: true })
+    await expect(waitForMessages(channelMessages, 2)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'session.command',
+          sessionId: session.id,
+          leaseId: lease.id,
+        }),
+      ]),
+    )
+
+    const command = channelMessages.find((message) => message.type === 'session.command')
+    const commandId = String(objectValue(command?.command).id)
+    channel.send(
+      JSON.stringify({
+        type: 'runner.event',
+        event: {
+          type: 'runner.tool.completed',
+          payload: {
+            toolCallId: 'call_channel_1',
+            toolName: 'sandbox.exec',
+            stdout: 'ok',
+            stderr: '',
+            output: { exitCode: 0, stdout: 'ok', stderr: '' },
+            timing: { durationMs: 12 },
+            commandId,
+          },
+        },
+      }),
+    )
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    const sessionEventsRes = await jsonFetch(`/api/sessions/${session.id}/events`, authorization)
+    const sessionEvents = (await sessionEventsRes.json()) as {
+      data: Array<{ type: string; payload: Record<string, unknown>; metadata: Record<string, unknown> }>
+    }
+    expect(sessionEvents.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'tool_call.completed',
+          metadata: expect.objectContaining({
+            source: 'self-hosted-runner',
+            runnerId: runner.id,
+            leaseId: lease.id,
+            channelId: expect.stringMatching(/^channel_/),
+          }),
+        }),
+      ]),
+    )
+    expect(JSON.stringify(sessionEvents.data)).toContain('ok')
+    channel.close()
+  })
+
+  it('does not dispatch runtime commands to an open channel after lease ownership expires', async () => {
+    const authorization = await signIn()
+    const environment = await createSelfHostedEnvironment(authorization)
+    const agent = await createAgent(authorization)
+    const runnerRes = await jsonFetch('/api/runners', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Expired ownership runner',
+        environmentId: environment.id,
+        capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+      }),
+    })
+    const runner = (await runnerRes.json()) as { id: string }
+    await jsonFetch(`/api/runners/${runner.id}/heartbeats`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        status: 'active',
+        currentLoad: 0,
+        capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+      }),
+    })
+    const session = await createSelfHostedSession(authorization, agent.id, environment.id)
+    const claimRes = await jsonFetch(`/api/runners/${runner.id}/leases`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ leaseDurationSeconds: 90 }),
+    })
+    expect(claimRes.status).toBe(201)
+    const lease = (await claimRes.json()) as { id: string }
+    const channel = await openRunnerSessionChannel(authorization, runner.id, lease.id)
+    const channelMessages = collectMessages(channel)
+    await waitForMessages(channelMessages, 1)
+
+    await env.DB.prepare('UPDATE runner_work_leases SET expires_at = ? WHERE id = ?')
+      .bind('2000-01-01T00:00:00.000Z', lease.id)
+      .run()
+
+    const rpcRes = await jsonFetch(`/runtime/sessions/${session.id}/rpc`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        toolCalls: [{ id: 'call_expired_ownership', name: 'sandbox.exec', input: { command: 'printf stale' } }],
+      }),
+    })
+    expect(rpcRes.status).toBe(409)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(channelMessages).toEqual([
+      expect.objectContaining({ type: 'session.channel.accepted', sessionId: session.id }),
+    ])
+
+    const channelRow = await env.DB.prepare(
+      'SELECT status, close_reason AS closeReason FROM runner_session_channels WHERE lease_id = ?',
+    )
+      .bind(lease.id)
+      .first<{ status: string; closeReason: string }>()
+    expect(channelRow).toMatchObject({ status: 'stale', closeReason: 'stale-ownership' })
+    const sessionRes = await jsonFetch(`/api/sessions/${session.id}`, authorization)
+    await expect(sessionRes.json()).resolves.toMatchObject({
+      id: session.id,
+      status: 'pending',
+      statusReason: 'waiting-for-runner-recovery',
+    })
+  })
+
+  it('marks broken channels for recovery and rejects stale channel results', async () => {
+    const authorization = await signIn()
+    const environment = await createSelfHostedEnvironment(authorization)
+    const agent = await createAgent(authorization)
+    const runnerRes = await jsonFetch('/api/runners', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Reconnect runner',
+        environmentId: environment.id,
+        capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY],
+      }),
+    })
+    const runner = (await runnerRes.json()) as { id: string }
+    await jsonFetch(`/api/runners/${runner.id}/heartbeats`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ status: 'active', currentLoad: 0, capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY] }),
+    })
+    const session = await createSelfHostedSession(authorization, agent.id, environment.id)
+    const claimRes = await jsonFetch(`/api/runners/${runner.id}/leases`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ leaseDurationSeconds: 90 }),
+    })
+    const lease = (await claimRes.json()) as { id: string }
+    const firstChannel = await openRunnerSessionChannel(authorization, runner.id, lease.id)
+    const firstMessages = collectMessages(firstChannel)
+    await waitForMessages(firstMessages, 1)
+    firstChannel.close()
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    const recoverySessionRes = await jsonFetch(`/api/sessions/${session.id}`, authorization)
+    await expect(recoverySessionRes.json()).resolves.toMatchObject({
+      status: 'pending',
+      statusReason: 'waiting-for-runner-recovery',
+    })
+
+    const secondChannel = await openRunnerSessionChannel(authorization, runner.id, lease.id)
+    const secondMessages = collectMessages(secondChannel)
+    await waitForMessages(secondMessages, 1)
+    const reconnectedSessionRes = await jsonFetch(`/api/sessions/${session.id}`, authorization)
+    await expect(reconnectedSessionRes.json()).resolves.toMatchObject({ status: 'running', statusReason: null })
+
+    await env.DB.prepare('UPDATE runner_work_leases SET expires_at = ? WHERE id = ?')
+      .bind('2000-01-01T00:00:00.000Z', lease.id)
+      .run()
+    secondChannel.send(
+      JSON.stringify({
+        type: 'runner.event',
+        event: {
+          type: 'runner.tool.completed',
+          payload: { toolCallId: 'stale_call', toolName: 'sandbox.exec', output: { stdout: 'stale' } },
+        },
+      }),
+    )
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    const replacementRunnerRes = await jsonFetch('/api/runners', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Replacement runner',
+        environmentId: environment.id,
+        capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY],
+      }),
+    })
+    const replacementRunner = (await replacementRunnerRes.json()) as { id: string }
+    await jsonFetch(`/api/runners/${replacementRunner.id}/heartbeats`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ status: 'active', currentLoad: 0, capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY] }),
+    })
+    const replacementClaimRes = await jsonFetch(`/api/runners/${replacementRunner.id}/leases`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ leaseDurationSeconds: 90 }),
+    })
+    const replacementLease = (await replacementClaimRes.json()) as { id: string }
+    const replacementChannel = await openRunnerSessionChannel(authorization, replacementRunner.id, replacementLease.id)
+    replacementChannel.send(
+      JSON.stringify({
+        type: 'runner.event',
+        event: {
+          type: 'runner.tool.completed',
+          payload: { toolCallId: 'fresh_call', toolName: 'sandbox.exec', output: { stdout: 'fresh' } },
+        },
+      }),
+    )
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    const sessionEventsRes = await jsonFetch(`/api/sessions/${session.id}/events`, authorization)
+    const body = await sessionEventsRes.text()
+    expect(body).toContain('fresh')
+    expect(body).not.toContain('stale_call')
+    secondChannel.close()
+    replacementChannel.close()
+  })
+
+  it('does not accept a runner channel for a session that is no longer waiting', async () => {
+    const authorization = await signIn()
+    const environment = await createSelfHostedEnvironment(authorization)
+    const agent = await createAgent(authorization)
+    const runnerRes = await jsonFetch('/api/runners', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Archived session runner',
+        environmentId: environment.id,
+        capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY],
+      }),
+    })
+    const runner = (await runnerRes.json()) as { id: string }
+    await jsonFetch(`/api/runners/${runner.id}/heartbeats`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ status: 'active', currentLoad: 0, capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY] }),
+    })
+    const session = await createSelfHostedSession(authorization, agent.id, environment.id)
+    const claimRes = await jsonFetch(`/api/runners/${runner.id}/leases`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ leaseDurationSeconds: 90 }),
+    })
+    const lease = (await claimRes.json()) as { id: string }
+    await env.DB.prepare('UPDATE sessions SET status = ?, archived_at = ?, updated_at = ? WHERE id = ?')
+      .bind('stopped', new Date().toISOString(), new Date().toISOString(), session.id)
+      .run()
+
+    const channelRes = await SELF.fetch(`https://example.com/api/runners/${runner.id}/leases/${lease.id}/channel`, {
+      headers: { authorization, upgrade: 'websocket' },
+    })
+    expect(channelRes.status).toBe(409)
+    const archivedSessionRes = await jsonFetch(`/api/sessions/${session.id}`, authorization)
+    await expect(archivedSessionRes.json()).resolves.toMatchObject({ status: 'stopped' })
   })
 
   it('skips queued work when runner capabilities do not exactly match the required runtime provider model', async () => {
@@ -507,8 +847,8 @@ describe('[CF] /api/runners', () => {
     const readSessionRes = await jsonFetch(`/api/sessions/${session.id}`, authorization)
     await expect(readSessionRes.json()).resolves.toMatchObject({
       id: session.id,
-      status: 'running',
-      statusReason: null,
+      status: 'pending',
+      statusReason: 'waiting-for-runner',
     })
   })
 

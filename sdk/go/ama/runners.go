@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/coder/websocket"
 )
 
 type JSON = map[string]any
@@ -83,6 +85,10 @@ type RunnerWorkLease struct {
 	WorkItem   RunnerWorkItem `json:"workItem"`
 }
 
+type RunnerSessionChannel struct {
+	Conn *websocket.Conn
+}
+
 type Health struct {
 	Status  string `json:"status"`
 	Name    string `json:"name"`
@@ -148,6 +154,65 @@ func (c *Client) CreateRunnerLeaseEvents(ctx context.Context, runnerID string, l
 		Accepted int `json:"accepted"`
 	}
 	return c.do(ctx, http.MethodPost, "/api/runners/"+url.PathEscape(runnerID)+"/leases/"+url.PathEscape(leaseID)+"/events", body, &response)
+}
+
+func (c *Client) RunnerSessionChannelURL(runnerID string, leaseID string) (string, error) {
+	if strings.TrimSpace(c.Origin) == "" {
+		return "", fmt.Errorf("AMA origin is required")
+	}
+	origin, err := url.Parse(strings.TrimRight(c.Origin, "/"))
+	if err != nil {
+		return "", err
+	}
+	switch origin.Scheme {
+	case "https":
+		origin.Scheme = "wss"
+	case "http":
+		origin.Scheme = "ws"
+	default:
+		return "", fmt.Errorf("AMA origin must use http or https")
+	}
+	origin.Path = "/"
+	origin.RawPath = ""
+	origin.RawQuery = ""
+	origin.Fragment = ""
+	return strings.TrimRight(origin.String(), "/") + "/api/runners/" + url.PathEscape(runnerID) + "/leases/" + url.PathEscape(leaseID) + "/channel", nil
+}
+
+func (c *Client) OpenRunnerSessionChannel(ctx context.Context, runnerID string, leaseID string) (*RunnerSessionChannel, error) {
+	endpoint, err := c.RunnerSessionChannelURL(runnerID, leaseID)
+	if err != nil {
+		return nil, err
+	}
+	headers := http.Header{}
+	if c.AccessToken != "" {
+		headers.Set("authorization", "Bearer "+c.AccessToken)
+	}
+	conn, _, err := websocket.Dial(ctx, endpoint, &websocket.DialOptions{HTTPHeader: headers})
+	if err != nil {
+		return nil, err
+	}
+	return &RunnerSessionChannel{Conn: conn}, nil
+}
+
+func (ch *RunnerSessionChannel) ReadJSON(ctx context.Context, out any) error {
+	_, data, err := ch.Conn.Read(ctx)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, out)
+}
+
+func (ch *RunnerSessionChannel) WriteJSON(ctx context.Context, value any) error {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	return ch.Conn.Write(ctx, websocket.MessageText, data)
+}
+
+func (ch *RunnerSessionChannel) Close(statusCode int, reason string) error {
+	return ch.Conn.Close(websocket.StatusCode(statusCode), reason)
 }
 
 func (c *Client) do(ctx context.Context, method string, path string, body any, out any) error {

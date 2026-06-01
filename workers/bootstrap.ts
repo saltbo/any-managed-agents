@@ -4,6 +4,7 @@ import { dispatchDueScheduledTriggers } from '../server/schedules/dispatcher'
 
 export { Sandbox } from '@cloudflare/sandbox'
 export { ManagedAgent } from '../server/agents/managed-agent'
+export { RunnerSessionChannelObject } from '../server/runtime/runner-session-channel'
 
 const app = createApp()
 

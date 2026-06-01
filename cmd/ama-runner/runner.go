@@ -19,9 +19,20 @@ type ControlPlane interface {
 	CreateRunnerLeaseEvents(ctx context.Context, runnerID string, leaseID string, body ama.UploadRunnerLeaseEventsRequest) error
 }
 
+type RunnerSessionChannelOpener interface {
+	OpenRunnerSessionChannel(ctx context.Context, runnerID string, leaseID string) (RunnerSessionChannel, error)
+}
+
+type RunnerSessionChannel interface {
+	ReadJSON(ctx context.Context, out any) error
+	WriteJSON(ctx context.Context, value any) error
+	Close(statusCode int, reason string) error
+}
+
 type RunnerDaemon struct {
 	Config   Config
 	Client   ControlPlane
+	Channels RunnerSessionChannelOpener
 	Adapter  SandboxAdapter
 	RunnerID string
 }
@@ -50,6 +61,33 @@ type ToolCall struct {
 	Arguments map[string]any `json:"arguments"`
 	Input     map[string]any `json:"input"`
 	Approved  bool           `json:"approved"`
+}
+
+type RunnerChannelMessage struct {
+	Type       string               `json:"type"`
+	SessionID  string               `json:"sessionId"`
+	RunnerID   string               `json:"runnerId"`
+	LeaseID    string               `json:"leaseId"`
+	WorkItemID string               `json:"workItemId"`
+	Command    RunnerSessionCommand `json:"command"`
+}
+
+type RunnerSessionCommand struct {
+	ID   string               `json:"id"`
+	Type string               `json:"type"`
+	Path string               `json:"path"`
+	Body RunnerRuntimeRequest `json:"body"`
+}
+
+type RunnerRuntimeRequest struct {
+	ToolCalls []RunnerRuntimeToolCall `json:"toolCalls"`
+}
+
+type RunnerRuntimeToolCall struct {
+	ID        string         `json:"id"`
+	Name      string         `json:"name"`
+	Input     map[string]any `json:"input"`
+	Arguments map[string]any `json:"arguments"`
 }
 
 func (d *RunnerDaemon) Start(ctx context.Context) error {
@@ -231,7 +269,28 @@ func (d *RunnerDaemon) executeLease(ctx context.Context, lease *ama.RunnerWorkLe
 }
 
 func (d *RunnerDaemon) completeSessionStart(ctx context.Context, lease *ama.RunnerWorkLease, payload WorkPayload) error {
-	if err := d.uploadEvent(ctx, lease, "runner.session.started", ama.JSON{
+	channel, err := d.openRunnerSessionChannel(ctx, lease.ID)
+	if err != nil {
+		if finishErr := d.finishFailed(ctx, lease, err, nil); finishErr != nil {
+			return finishErr
+		}
+		return err
+	}
+	defer channel.Close(1000, "runner session complete")
+
+	if err := d.waitForChannelAccepted(ctx, channel, payload.SessionID); err != nil {
+		if finishErr := d.finishFailed(ctx, lease, err, nil); finishErr != nil {
+			return finishErr
+		}
+		return err
+	}
+
+	leaseCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	renewErrors := make(chan error, 1)
+	go d.renewLease(leaseCtx, lease, cancel, renewErrors)
+
+	if err := d.writeChannelEvent(leaseCtx, channel, "runner.session.started", ama.JSON{
 		"sessionId":     payload.SessionID,
 		"hostingMode":   payload.HostingMode,
 		"runtime":       payload.Runtime,
@@ -241,23 +300,148 @@ func (d *RunnerDaemon) completeSessionStart(ctx context.Context, lease *ama.Runn
 		"runtimeDriver": payload.RuntimeDriver,
 		"executor":      d.Config.SandboxAdapter,
 	}); err != nil {
+		if finishErr := d.finishFailed(context.Background(), lease, err, nil); finishErr != nil {
+			return finishErr
+		}
 		return err
 	}
-	_, err := d.Client.UpdateRunnerLease(ctx, d.RunnerID, lease.ID, ama.UpdateRunnerLeaseRequest{
-		Status: "completed",
-		Result: ama.JSON{
-			"sessionId":     payload.SessionID,
-			"hostingMode":   payload.HostingMode,
-			"runtime":       payload.Runtime,
-			"runtimeConfig": payload.RuntimeConfig,
-			"provider":      payload.Provider,
-			"model":         payload.Model,
-			"runtimeDriver": payload.RuntimeDriver,
-			"executor":      d.Config.SandboxAdapter,
-			"handled":       "session.start",
+
+	for {
+		var message RunnerChannelMessage
+		if err := channel.ReadJSON(leaseCtx, &message); err != nil {
+			cancel()
+			select {
+			case renewErr := <-renewErrors:
+				if renewErr != nil {
+					return renewErr
+				}
+			default:
+			}
+			if ctx.Err() != nil {
+				_, updateErr := d.Client.UpdateRunnerLease(context.Background(), d.RunnerID, lease.ID, ama.UpdateRunnerLeaseRequest{
+					Status: "cancelled",
+					Error:  ama.JSON{"message": ctx.Err().Error()},
+				})
+				return updateErr
+			}
+			return nil
+		}
+		if message.Type != "session.command" {
+			continue
+		}
+		if message.SessionID != payload.SessionID || message.LeaseID != lease.ID || message.RunnerID != d.RunnerID {
+			err := fmt.Errorf("runner session command ownership mismatch")
+			cancel()
+			if finishErr := d.finishFailed(context.Background(), lease, err, nil); finishErr != nil {
+				return finishErr
+			}
+			return err
+		}
+		if err := d.handleSessionCommand(leaseCtx, channel, message.Command); err != nil {
+			cancel()
+			if finishErr := d.finishFailed(context.Background(), lease, err, nil); finishErr != nil {
+				return finishErr
+			}
+			return err
+		}
+		select {
+		case renewErr := <-renewErrors:
+			if renewErr != nil {
+				return renewErr
+			}
+		default:
+		}
+	}
+}
+
+func (d *RunnerDaemon) openRunnerSessionChannel(ctx context.Context, leaseID string) (RunnerSessionChannel, error) {
+	if d.Channels == nil {
+		return nil, fmt.Errorf("runner session channel client is not configured")
+	}
+	return d.Channels.OpenRunnerSessionChannel(ctx, d.RunnerID, leaseID)
+}
+
+func (d *RunnerDaemon) waitForChannelAccepted(ctx context.Context, channel RunnerSessionChannel, sessionID string) error {
+	for {
+		var message RunnerChannelMessage
+		if err := channel.ReadJSON(ctx, &message); err != nil {
+			return err
+		}
+		if message.Type != "session.channel.accepted" {
+			continue
+		}
+		if message.SessionID != sessionID {
+			return fmt.Errorf("runner session channel accepted mismatched session %q", message.SessionID)
+		}
+		return nil
+	}
+}
+
+func (d *RunnerDaemon) handleSessionCommand(ctx context.Context, channel RunnerSessionChannel, command RunnerSessionCommand) error {
+	for _, toolCall := range command.Body.ToolCalls {
+		input := toolCall.Input
+		if input == nil {
+			input = toolCall.Arguments
+		}
+		if toolCall.ID == "" || toolCall.Name == "" || input == nil {
+			return fmt.Errorf("runner session command includes an invalid tool call")
+		}
+		if toolCall.Name != "sandbox.exec" && toolCall.Name != "sandbox.read" && toolCall.Name != "sandbox.write" {
+			return fmt.Errorf("unsupported sandbox tool: %s", toolCall.Name)
+		}
+		if err := d.executeSessionToolCall(ctx, channel, toolCall.ID, toolCall.Name, input); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (d *RunnerDaemon) executeSessionToolCall(
+	ctx context.Context,
+	channel RunnerSessionChannel,
+	toolCallID string,
+	toolName string,
+	input map[string]any,
+) error {
+	if err := d.writeChannelEvent(ctx, channel, "runner.tool.started", ama.JSON{
+		"toolCallId": toolCallID,
+		"toolName":   toolName,
+		"input":      input,
+	}); err != nil {
+		return err
+	}
+	startedAt := time.Now()
+	result, execErr := d.Adapter.Execute(ctx, ToolRequest{
+		ToolCallID: toolCallID,
+		ToolName:   toolName,
+		Input:      input,
+		WorkDir:    d.Config.WorkDir,
+	})
+	payload := ama.JSON{
+		"toolCallId": toolCallID,
+		"toolName":   toolName,
+		"output":     result.Output,
+		"durationMs": time.Since(startedAt).Milliseconds(),
+	}
+	if execErr != nil {
+		payload["error"] = ama.JSON{"message": execErr.Error()}
+		return d.writeChannelEvent(context.Background(), channel, "runner.tool.failed", payload)
+	}
+	return d.writeChannelEvent(ctx, channel, "runner.tool.completed", payload)
+}
+
+func (d *RunnerDaemon) writeChannelEvent(ctx context.Context, channel RunnerSessionChannel, eventType string, payload ama.JSON) error {
+	return channel.WriteJSON(ctx, ama.JSON{
+		"type": "runner.event",
+		"event": ama.JSON{
+			"type":    eventType,
+			"payload": payload,
+			"metadata": ama.JSON{
+				"runnerId": d.RunnerID,
+				"executor": d.Config.SandboxAdapter,
+			},
 		},
 	})
-	return err
 }
 
 func (d *RunnerDaemon) renewLease(ctx context.Context, lease *ama.RunnerWorkLease, cancel context.CancelFunc, errors chan<- error) {

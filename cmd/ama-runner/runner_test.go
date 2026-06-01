@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 	"strings"
 	"sync"
 	"testing"
@@ -25,6 +27,9 @@ type fakeControlPlane struct {
 	claimErr     error
 	eventErr     error
 	updateErr    error
+	channel      *fakeRunnerSessionChannel
+	channelErr   error
+	opens        int
 }
 
 func (f *fakeControlPlane) CheckHealth(context.Context) (*ama.Health, error) {
@@ -78,11 +83,97 @@ func (f *fakeControlPlane) CreateRunnerLeaseEvents(_ context.Context, _ string, 
 	return nil
 }
 
+func (f *fakeControlPlane) OpenRunnerSessionChannel(context.Context, string, string) (RunnerSessionChannel, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.opens += 1
+	if f.channelErr != nil {
+		return nil, f.channelErr
+	}
+	if f.channel == nil {
+		f.channel = newFakeRunnerSessionChannel()
+	}
+	return f.channel, nil
+}
+
 type fakeAdapter struct {
 	waitForCancel bool
 	result        ToolResult
 	err           error
 	cancelled     bool
+}
+
+type fakeRunnerSessionChannel struct {
+	mu     sync.Mutex
+	reads  chan any
+	writes []ama.JSON
+	closed bool
+}
+
+func newFakeRunnerSessionChannel(reads ...any) *fakeRunnerSessionChannel {
+	channel := &fakeRunnerSessionChannel{reads: make(chan any, 16)}
+	for _, read := range reads {
+		channel.reads <- read
+	}
+	return channel
+}
+
+func (ch *fakeRunnerSessionChannel) ReadJSON(ctx context.Context, out any) error {
+	select {
+	case value := <-ch.reads:
+		if err, ok := value.(error); ok {
+			return err
+		}
+		data, err := json.Marshal(value)
+		if err != nil {
+			return err
+		}
+		return json.Unmarshal(data, out)
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (ch *fakeRunnerSessionChannel) WriteJSON(_ context.Context, value any) error {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	var decoded ama.JSON
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	ch.mu.Lock()
+	defer ch.mu.Unlock()
+	ch.writes = append(ch.writes, decoded)
+	return nil
+}
+
+func (ch *fakeRunnerSessionChannel) Close(int, string) error {
+	ch.mu.Lock()
+	defer ch.mu.Unlock()
+	ch.closed = true
+	return nil
+}
+
+func (ch *fakeRunnerSessionChannel) push(value any) {
+	ch.reads <- value
+}
+
+func (ch *fakeRunnerSessionChannel) writtenEvents() []string {
+	ch.mu.Lock()
+	defer ch.mu.Unlock()
+	events := make([]string, 0, len(ch.writes))
+	for _, write := range ch.writes {
+		event, _ := write["event"].(map[string]any)
+		if event == nil {
+			event, _ = write["event"].(ama.JSON)
+		}
+		if event != nil {
+			events = append(events, event["type"].(string))
+		}
+	}
+	return events
 }
 
 func (a *fakeAdapter) Execute(ctx context.Context, _ ToolRequest) (ToolResult, error) {
@@ -129,33 +220,66 @@ func TestRunOnceRegistersRunnerWhenIDIsMissing(t *testing.T) {
 	}
 }
 
-func TestRunOnceCompletesSessionStartWorkWithoutRunningLocalRuntime(t *testing.T) {
-	client := &fakeControlPlane{lease: sessionStartLease()}
-	adapter := &fakeAdapter{err: errors.New("adapter should not run")}
+func TestRunOnceOpensSessionChannelAndExecutesRuntimeCommand(t *testing.T) {
+	channel := newFakeRunnerSessionChannel(
+		ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"},
+		ama.JSON{
+			"type":      "session.command",
+			"sessionId": "session_1",
+			"runnerId":  "runner_1",
+			"leaseId":   "lease_1",
+			"command": ama.JSON{
+				"id":   "runnercmd_1",
+				"type": "runtime.rpc",
+				"path": "/rpc",
+				"body": ama.JSON{
+					"toolCalls": []ama.JSON{
+						{"id": "call_1", "name": "sandbox.exec", "input": ama.JSON{"command": "printf ok"}},
+					},
+				},
+			},
+		},
+		io.EOF,
+	)
+	client := &fakeControlPlane{lease: sessionStartLease(), channel: channel}
+	adapter := &fakeAdapter{result: ToolResult{Output: map[string]any{"stdout": "ok", "stderr": "", "exitCode": 0}}}
 	daemon := testDaemon(client, adapter)
 	if err := daemon.RunOnce(context.Background()); err != nil {
-		t.Fatalf("expected session.start completion, got %v", err)
+		t.Fatalf("expected session channel run success, got %v", err)
 	}
-	if len(client.updates) != 1 || client.updates[0].Status != "completed" {
-		t.Fatalf("expected completed session.start update, got %#v", client.updates)
+	if client.opens != 1 {
+		t.Fatalf("expected session channel open, got %d", client.opens)
 	}
-	if client.updates[0].Result["handled"] != "session.start" {
-		t.Fatalf("unexpected session.start result %#v", client.updates[0].Result)
+	if len(client.updates) != 0 {
+		t.Fatalf("expected session ownership to stay active without completion patch, got %#v", client.updates)
 	}
-	if client.updates[0].Result["runtime"] != "ama" || client.updates[0].Result["provider"] != "workers-ai" {
-		t.Fatalf("expected runtime provider model result, got %#v", client.updates[0].Result)
+	got := channel.writtenEvents()
+	want := []string{"runner.session.started", "runner.tool.started", "runner.tool.completed"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("expected channel events %v, got %v", want, got)
 	}
-	if len(client.events) != 1 || client.events[0].Events[0].Type != "runner.session.started" {
-		t.Fatalf("expected session event, got %#v", client.events)
+	channel.mu.Lock()
+	completed := channel.writes[2]
+	channel.mu.Unlock()
+	event, _ := completed["event"].(map[string]any)
+	payload, _ := event["payload"].(map[string]any)
+	if _, ok := payload["durationMs"]; !ok {
+		t.Fatalf("expected completed event to include top-level durationMs, got %#v", payload)
+	}
+	if !channel.closed {
+		t.Fatal("expected session channel to close")
 	}
 }
 
-func TestSessionStartReturnsEventUploadErrors(t *testing.T) {
-	client := &fakeControlPlane{lease: sessionStartLease(), eventErr: errors.New("event failed")}
+func TestSessionStartFailsLeaseWhenChannelOpenFails(t *testing.T) {
+	client := &fakeControlPlane{lease: sessionStartLease(), channelErr: errors.New("channel failed")}
 	daemon := testDaemon(client, &fakeAdapter{})
 	err := daemon.RunOnce(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "event failed") {
-		t.Fatalf("expected event upload error, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "channel failed") {
+		t.Fatalf("expected channel error, got %v", err)
+	}
+	if len(client.updates) != 1 || client.updates[0].Status != "failed" {
+		t.Fatalf("expected failed session.start lease, got %#v", client.updates)
 	}
 }
 
@@ -276,23 +400,28 @@ func TestRunOnceReturnsEventUploadErrors(t *testing.T) {
 	}
 }
 
-func TestRunOnceCompletesSessionStartWithoutLocalPiRuntime(t *testing.T) {
+func TestRunOnceSessionStartCancelsLeaseWhenContextCancels(t *testing.T) {
 	lease := approvedLease()
 	lease.WorkItem.Type = "session.start"
 	lease.WorkItem.Payload = sessionStartLease().WorkItem.Payload
-	client := &fakeControlPlane{lease: lease}
-	daemon := testDaemon(client, &fakeAdapter{err: errors.New("adapter must not run")})
-	if err := daemon.RunOnce(context.Background()); err != nil {
-		t.Fatalf("expected session.start completion, got %v", err)
+	channel := newFakeRunnerSessionChannel(ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"})
+	client := &fakeControlPlane{lease: lease, channel: channel}
+	daemon := testDaemon(client, &fakeAdapter{})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- daemon.RunOnce(ctx)
+	}()
+	time.Sleep(5 * time.Millisecond)
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("expected cancellation update to succeed, got %v", err)
 	}
-	if len(client.updates) != 1 || client.updates[0].Status != "completed" {
-		t.Fatalf("expected completed session.start update, got %#v", client.updates)
+	if len(client.updates) != 1 || client.updates[0].Status != "cancelled" {
+		t.Fatalf("expected cancelled update, got %#v", client.updates)
 	}
-	if client.updates[0].Result["handled"] != "session.start" {
-		t.Fatalf("unexpected session.start result %#v", client.updates[0].Result)
-	}
-	if client.updates[0].Result["runtime"] != "ama" || client.updates[0].Result["provider"] != "workers-ai" {
-		t.Fatalf("expected runtime provider model result, got %#v", client.updates[0].Result)
+	if !channel.closed {
+		t.Fatal("expected channel to close on context cancellation")
 	}
 }
 
@@ -342,6 +471,23 @@ func TestLeaseRenewalFailureCancelsLocalWorkWithoutCompletionRetry(t *testing.T)
 	}
 	if len(client.updates) != 1 || client.updates[0].Status != "active" {
 		t.Fatalf("expected only renew update, got %#v", client.updates)
+	}
+}
+
+func TestSessionChannelRenewalFailureClosesChannelWithoutCompletion(t *testing.T) {
+	channel := newFakeRunnerSessionChannel(ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"})
+	client := &fakeControlPlane{lease: sessionStartLease(), channel: channel, updateErr: errors.New("lease lost")}
+	daemon := testDaemon(client, &fakeAdapter{})
+	daemon.Config.RenewInterval = time.Millisecond
+	err := daemon.RunOnce(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "runner lease renewal failed") {
+		t.Fatalf("expected renew failure, got %v", err)
+	}
+	if len(client.updates) != 1 || client.updates[0].Status != "active" {
+		t.Fatalf("expected only renew update, got %#v", client.updates)
+	}
+	if !channel.closed {
+		t.Fatal("expected renewal failure to close channel")
 	}
 }
 
@@ -423,8 +569,9 @@ func testDaemon(client *fakeControlPlane, adapter SandboxAdapter) RunnerDaemon {
 			CommandTimeout:        time.Second,
 			ShutdownGraceInterval: time.Millisecond,
 		},
-		Client:  client,
-		Adapter: adapter,
+		Client:   client,
+		Channels: client,
+		Adapter:  adapter,
 	}
 }
 
