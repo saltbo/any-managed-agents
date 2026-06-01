@@ -306,7 +306,7 @@ func (d *RunnerDaemon) completeSessionStart(ctx context.Context, lease *ama.Runn
 		"executor":      d.Config.SandboxAdapter,
 	}
 	writeSessionStarted := d.writeChannelEvent
-	if payload.Runtime == "codex" || payload.Runtime == "claude-code" {
+	if payload.Runtime == "codex" || payload.Runtime == "claude-code" || payload.Runtime == "copilot" {
 		writeSessionStarted = d.writeAcknowledgedChannelEvent
 	}
 	if err := writeSessionStarted(leaseCtx, channel, "runner.session.started", sessionStartedPayload); err != nil {
@@ -328,7 +328,7 @@ func (d *RunnerDaemon) completeSessionStart(ctx context.Context, lease *ama.Runn
 		}
 		return err
 	}
-	if payload.Runtime == "claude-code" {
+	if payload.Runtime == "claude-code" || payload.Runtime == "copilot" {
 		err := d.runExternalSession(leaseCtx, channel, lease, payload)
 		cancel()
 		select {
@@ -418,7 +418,7 @@ func (d *RunnerDaemon) runExternalSession(
 		return d.writeAcknowledgedChannelEvent(ctx, channel, eventType, eventPayload)
 	})
 	if runErr != nil {
-		_ = d.writeAcknowledgedChannelEvent(context.Background(), channel, "claude-code.error", ama.JSON{
+		_ = d.writeAcknowledgedChannelEvent(context.Background(), channel, payload.Runtime+".error", ama.JSON{
 			"error": ama.JSON{"message": runErr.Error(), "code": "runtime_failed"},
 		})
 		if finishErr := d.finishFailed(context.Background(), lease, runErr, result); finishErr != nil {

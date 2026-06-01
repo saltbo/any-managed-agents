@@ -63,7 +63,7 @@ Feature: External agent runtimes on self-hosted runners
     And Claude Code output is translated into canonical lifecycle, transcript, tool, usage, output, and error events
     And the session reaches idle, stopped, or error with inspectable final events
 
-  @planned
+  @implemented
   Scenario: Run a Copilot session on ama-runner
     Given a self-hosted environment selects copilot runtime
     And an active runner supports the selected Copilot provider and model
