@@ -1,6 +1,8 @@
 @api @runners
 Feature: Self-hosted runner work queue
   Self-hosted environments are serviced by registered runtime runners that lease AMA session work.
+  The work queue assigns sessions to runners; claimed sessions use a runner-owned
+  session channel for real-time runtime and tool execution.
 
   @implemented
   Scenario: Publish runner queue routes in OpenAPI

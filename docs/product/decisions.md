@@ -18,14 +18,17 @@ These decisions define the intended end state for Any Managed Agents.
 
 ## Runtime Boundary
 
-- The previous decision that AMA cloud-side Pi loop is the only v1 runtime owner is overturned.
-- All agent products run as Environment-selected runtimes. `ama`, `claude-code`, `codex`, and `copilot` are peer runtime choices behind the same AMA control plane.
+- All agent products run as Environment-selected runtimes behind the same AMA control plane and canonical session event surface.
+- The `ama` runtime is the first-party AMA/Pi runtime owned by the cloud control plane.
+- `claude-code`, `codex`, and `copilot` are external agent runtimes launched, managed, observed, and translated by self-hosted `ama-runner` processes.
 - `Agent` owns persona, instructions, policy, provider, model, skills, tools, and MCP connector configuration.
 - `Environment` owns hosting mode, runtime, workspace, secrets, network, resource limits, and runtime config.
 - `Session` snapshots the selected Agent and Environment and validates the exact runtime, provider, and model combination before any runtime work starts.
 - Session creation must fail before workspace allocation when the selected environment runtime does not support the Agent's exact provider/model.
-- `cloud` environments run the selected runtime through AMA-managed Cloudflare infrastructure. `self_hosted` environments run the selected runtime through registered self-hosted runtime workers.
-- Self-hosted runners are registered runtime hosts for `self_hosted` environments. They heartbeat safe capability/load metadata, lease session runtime work, renew or finish leases, and upload canonical AMA session events/results through AMA APIs.
+- `cloud` environments run first-party AMA runtime execution through AMA-managed Cloudflare infrastructure. `self_hosted` environments run external agent runtimes through registered self-hosted runtime runners.
+- Self-hosted runners are registered runtime hosts for `self_hosted` environments. They heartbeat safe capability/load metadata, claim session leases, renew or finish leases, open one outbound WebSocket per claimed session, execute runtime/tool work locally, and stream canonical AMA session events/results through AMA.
+- Runner HTTP queue and lease APIs are for dispatch, ownership, heartbeat, expiry, recovery, and audit. A claimed self-hosted session uses its runner-owned session WebSocket as the real-time runtime/tool execution path.
+- A claimed self-hosted session becomes active only after AMA authenticates and accepts the runner session WebSocket. Duplicate, stale, or mismatched runner channels cannot submit tool or runtime results.
 - OIDC provider owns authentication, users, and organizations. AMA owns OIDC provider-backed tenancy enforcement, projects, agent, environment, and session metadata, OpenAPI CRUD, sandbox lifecycle, runtime proxy, UI, audit metadata, and usage metadata.
 - Runtime traffic uses AMA session endpoints. Browser, SDK, and CLI helpers must not connect directly to sandbox-owned or runner-owned agent processes.
 - The canonical AMA session event protocol is the only UI, API, and session-state contract. Every runtime adapter must translate provider, model, tool, workspace, policy, lifecycle, usage, and error activity into that protocol before clients observe state.
@@ -54,6 +57,7 @@ These decisions define the intended end state for Any Managed Agents.
 - Authentication integrates with OIDC provider.
 - This project must not reimplement a parallel authentication system.
 - Control-plane and runtime requests resolve tenant context from OIDC sessions or credentials.
+- Runner daemon authentication must use FlareAuth/OIDC device login once FlareAuth exposes OAuth/OIDC device authorization for runner clients. AMA must not build a parallel runner credential issuer.
 
 ## Providers
 

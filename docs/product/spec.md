@@ -10,7 +10,8 @@ Any Managed Agents is a Cloudflare-native managed agents system. It is inspired 
 - The web console uses the project-local Hono RPC client for internal control-plane calls.
 - Command-line automation uses restish against the published OpenAPI document; this repository does not maintain a bespoke CLI binary.
 - The project provides an agent-facing skill that teaches automation agents how to use restish with the AMA OpenAPI document.
-- Agent products run as Environment-selected runtimes. `ama`, `claude-code`, `codex`, and `copilot` are peer runtime choices.
+- Agent products run as Environment-selected runtimes. `ama`, `claude-code`, `codex`, and `copilot` are runtime choices behind one AMA control-plane and event surface.
+- The `ama` runtime is the first-party AMA/Pi runtime. External runtimes such as `claude-code`, `codex`, and `copilot` are runner-managed integrations, not replacements for AMA's control plane.
 - Runtime traffic goes through AMA session endpoints; clients do not connect directly to sandbox-owned or runner-owned agent processes.
 - The canonical AMA session event protocol is the only UI, API, and session-state contract.
 - Cloudflare Agents SDK is not the v1.0 runtime contract. It may be added later as an adapter, but v1.0 must not require `/agents/*` compatibility.
@@ -43,11 +44,9 @@ The platform owns the control plane:
 - Cloudflare Secrets references
 - governance rules
 
-AMA owns the control-plane surface, tenant enforcement, session record state machine, runtime endpoint, policy gates, and event persistence. Environment runtime adapters own runtime execution for `ama`, `claude-code`, `codex`, and `copilot`.
+AMA owns the control-plane surface, tenant enforcement, session record state machine, runtime endpoint, policy gates, and event persistence. The `ama` runtime owns first-party AMA/Pi loop behavior. External runtime adapters for `claude-code`, `codex`, and `copilot` are launched and observed by self-hosted runners while AMA remains the canonical session owner.
 
-The previous decision that AMA cloud-side Pi loop is the only v1 runtime owner is overturned. The `ama` runtime may use `@earendil-works/pi-agent-core`, but it is one environment runtime option, not the universal session loop for all agent products.
-
-Cloudflare Sandbox owns filesystem, shell, process isolation, and per-session `cloud` workspace execution. Self-hosted runners own `self_hosted` runtime execution after leasing session work. Neither surface may expose raw runtime process endpoints to product clients.
+Cloudflare Sandbox owns filesystem, shell, process isolation, and per-session `cloud` workspace execution. Self-hosted runners own `self_hosted` external runtime process execution after claiming session work. Neither surface may expose raw runtime process endpoints to product clients.
 
 AMA must not define a custom sandbox SDK. Sandbox access is an internal platform responsibility behind environments, sessions, policy, and tool executor dispatch.
 
@@ -69,7 +68,7 @@ Runtime:
 
 Runtime hosting:
   cloud environment -> AMA-managed Cloudflare infrastructure -> selected runtime -> workspace / safe secrets / policy gates
-  self_hosted environment -> runner work queue -> self-hosted runtime lease -> selected runtime -> structured events/results
+  self_hosted environment -> runner work queue -> self-hosted runtime lease -> per-session runner WebSocket -> selected external runtime -> structured events/results
 ```
 
 ## Product Model
@@ -78,7 +77,7 @@ Runtime hosting:
 - `Environment` is a long-lived hosting and runtime configuration: hosting mode, runtime, workspace setup, packages, variables, safe secret references, network policy, resource limits, runtime config, and metadata. It is not a running sandbox or runner.
 - `Sandbox` is an ephemeral `cloud` workspace/runtime instance created from an environment snapshot for exactly one cloud session when the selected hosting/runtime combination requires Cloudflare Sandbox.
 - `Session` is a concrete run of an agent in an explicitly selected environment. Each session binds an agent version snapshot, environment snapshot, safe resource references, runtime/provider/model validation result, runtime endpoint, canonical AMA session events, and status.
-- `Runner` is a registered `self_hosted` runtime host. Runners heartbeat capability, supported runtime/provider/model combinations, load, and safe metadata to AMA, claim leases for queued self-hosted session runtime work, and upload canonical AMA session events/results.
+- `Runner` is a registered `self_hosted` runtime host. Runners heartbeat capability, supported runtime/provider/model combinations, load, and safe metadata to AMA, claim leases for queued self-hosted session runtime work, open one outbound session WebSocket per claimed session, and send canonical AMA session events/results through AMA.
 
 Environment `hostingMode` is exactly `cloud` or `self_hosted`. Environment `runtime` is exactly `ama`, `claude-code`, `codex`, or `copilot`.
 
@@ -88,9 +87,11 @@ Session creation validates the selected Agent provider/model against the selecte
 
 `cloud` sessions use AMA-managed Cloudflare infrastructure for the selected runtime. `self_hosted` environments enqueue runtime work and keep sessions pending with `statusReason: "waiting-for-runner"` until an eligible runner that supports the exact runtime/provider/model combination claims a lease. `self_hosted` session creation must not create a Cloudflare Sandbox or expose runner-local endpoints.
 
+Queue and lease APIs solve session dispatch, ownership, heartbeat, expiry, and recovery. They are not the per-tool real-time execution path. After a runner claims a self-hosted session, the runner opens an outbound WebSocket for that exact session because self-hosted runners may sit behind NAT or firewalls. AMA sends approved runtime/tool calls over that claimed session channel, and the runner streams lifecycle, stdout, stderr, output, timing, usage, safe errors, and tool/runtime results back over the same channel. A self-hosted session becomes active only after AMA accepts the claimed runner session channel. Duplicate, stale, or mismatched runner channels cannot submit results.
+
 All runtimes emit canonical AMA session events. The protocol covers lifecycle, message, provider call, tool call, workspace, policy, usage, and error events with monotonically increasing sequence numbers, stable ids, redacted payloads, and runtime-specific details confined to safe metadata.
 
-Runner credentials are stored outside D1. D1 may store runner ids, names, capabilities, supported runtime/provider/model combinations, environment binding metadata, heartbeat/load state, work item payloads, lease state, result/error metadata, and secret references only. Raw runner tokens, provider secrets, or vault secret values must not appear in D1, OpenAPI responses, events, logs, or UI state.
+Runner authentication uses FlareAuth/OIDC. `ama-runner login` uses OAuth/OIDC device authorization for the registered runner client when FlareAuth exposes that flow. AMA validates FlareAuth-issued tokens and must not implement a parallel runner credential issuer. D1 may store runner ids, names, capabilities, supported runtime/provider/model combinations, environment binding metadata, heartbeat/load state, work item payloads, lease state, result/error metadata, and secret references only. Raw runner tokens, provider secrets, or vault secret values must not appear in D1, OpenAPI responses, events, logs, or UI state.
 
 Environment `networkPolicy.mode` is exactly `unrestricted`, `restricted`, or `offline`. Restricted policy requires explicit `allowedHosts`; unrestricted and offline policy do not carry host allow-lists. Offline policy denies outbound sandbox network operations.
 

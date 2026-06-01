@@ -25,6 +25,7 @@ This repository publishes the OpenAPI contract for product resources. Generated 
 - `environments.feature` - long-lived environment descriptions
 - `environment-detail.feature`, `environments-api.feature`, `environments-mcp.feature`, `environments-ui.feature` - environment coverage
 - `sandbox-execution.feature` - per-session Cloudflare Sandbox execution, files, commands, lifecycle, and policy
+- `external-runtimes.feature` - self-hosted external agent runtimes, runner session dispatch, per-session runner WebSocket channels, OIDC device login for runners, and Codex/Claude Code/Copilot runtime adapters
 - `tools-mcp.feature` - tool configuration, MCP discovery, approval, and runtime enforcement
 - `engine-cooperative-cancellation.feature`, `engine-error-termination.feature`, `engine-mcp.feature`, `engine-mcp-e2e.feature` - runtime engine coverage
 - `mcp-client.feature`, `mcp-client-integration.feature`, `mcp-connections.feature`, `mcp-discovery.feature`, `mcp-policy-enforcement.feature` - MCP coverage
