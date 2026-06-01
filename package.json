@@ -4,14 +4,12 @@
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
-  "workspaces": [
-    "sdk/typescript"
-  ],
+  "packageManager": "pnpm@10.30.2",
   "scripts": {
     "dev": "CLOUDFLARE_ENV=staging vite dev",
     "build": "vite build",
     "build:staging": "CLOUDFLARE_ENV=staging vite build",
-    "deploy": "npm run db:migrate:d1:prod && wrangler deploy",
+    "deploy": "pnpm run db:migrate:d1:prod && wrangler deploy",
     "db:generate": "drizzle-kit generate",
     "db:migrate:d1": "wrangler d1 migrations apply any-managed-agents-db-staging --local --env staging",
     "db:migrate:d1:staging": "wrangler d1 migrations apply any-managed-agents-db-staging --remote --env staging",
@@ -86,6 +84,6 @@
   },
   "volta": {
     "node": "24.14.1",
-    "npm": "11.11.0"
+    "pnpm": "10.30.2"
   }
 }

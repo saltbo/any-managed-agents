@@ -16,25 +16,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.2
+          run_install: false
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: npm
+          cache: pnpm
       - uses: actions/setup-go@v6
         with:
           go-version: '1.25'
           cache: false
-      - run: npm ci
+      - run: pnpm install --frozen-lockfile
       - run: go install github.com/rest-sh/restish@v0.21.2
       - run: echo "$HOME/go/bin" >> "$GITHUB_PATH"
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm run openapi:check
-      - run: npm run --workspace sdk/typescript typecheck
-      - run: npm run --workspace sdk/typescript smoke
-      - run: npm test
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
+      - run: pnpm run lint
+      - run: pnpm run typecheck
+      - run: pnpm run openapi:check
+      - run: pnpm --filter @any-managed-agents/sdk run typecheck
+      - run: pnpm --filter @any-managed-agents/sdk run smoke
+      - run: pnpm test
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm run test:e2e
       - name: Staging smoke dry-run only
-        run: NODE_OPTIONS='--import tsx' npx cucumber-js --dry-run --tags '@implemented and not @planned' --import 'test/e2e/**/*.steps.ts' 'specs/smoke/**/*.feature'
-      - run: npm run build
+        run: NODE_OPTIONS='--import tsx' pnpm exec cucumber-js --dry-run --tags '@implemented and not @planned' --import 'test/e2e/**/*.steps.ts' 'specs/smoke/**/*.feature'
+      - run: pnpm run build

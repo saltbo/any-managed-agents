@@ -94,7 +94,7 @@ Local product e2e runs against a local Worker/dev server and must not depend on
 deployed origins or real model quota:
 
 ```bash
-npm run test:e2e
+pnpm run test:e2e
 ```
 
 Staging smoke runs against an explicit deployed staging origin and real
@@ -103,7 +103,7 @@ secret-backed authentication:
 ```bash
 AMA_STAGING_ORIGIN=https://any-managed-agents-staging.saltbo.workers.dev \
 AMA_E2E_ACCESS_TOKEN="$OIDC_ACCESS_TOKEN" \
-npm run test:smoke
+pnpm run test:smoke
 ```
 
 Auth input precedence for staging smoke is explicit:

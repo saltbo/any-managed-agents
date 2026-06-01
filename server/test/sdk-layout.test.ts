@@ -4,14 +4,14 @@ import { describe, expect, it } from 'vitest'
 
 describe('generated SDK layout', () => {
   it('keeps generated OpenAPI and SDK artifacts aligned with Hono routes', () => {
-    expect(() => execFileSync('npm', ['run', 'openapi:check'], { encoding: 'utf8' })).not.toThrow()
+    expect(() => execFileSync('pnpm', ['run', 'openapi:check'], { encoding: 'utf8' })).not.toThrow()
   })
 
-  it('keeps only the TypeScript SDK in npm workspaces', () => {
-    const rootPackage = JSON.parse(readFileSync('package.json', 'utf8')) as { workspaces?: string[] }
+  it('keeps only the TypeScript SDK in pnpm workspaces', () => {
+    const workspace = readFileSync('pnpm-workspace.yaml', 'utf8')
     const sdkPackage = JSON.parse(readFileSync('sdk/typescript/package.json', 'utf8')) as { name?: string }
 
-    expect(rootPackage.workspaces).toEqual(['sdk/typescript'])
+    expect(workspace).toContain('- sdk/typescript')
     expect(sdkPackage.name).toBe('@any-managed-agents/sdk')
     expect(readFileSync('sdk/go/go.mod', 'utf8')).toMatch(/^module github\.com\/saltbo\/any-managed-agents\/sdk\/go/m)
     expect(readFileSync('sdk/python/pyproject.toml', 'utf8')).toMatch(/^name = "any-managed-agents-sdk"/m)
@@ -19,7 +19,7 @@ describe('generated SDK layout', () => {
 
   it('builds an importable TypeScript SDK package', () => {
     expect(() =>
-      execFileSync('npm', ['run', '--workspace', 'sdk/typescript', 'smoke'], { encoding: 'utf8' }),
+      execFileSync('pnpm', ['--filter', '@any-managed-agents/sdk', 'run', 'smoke'], { encoding: 'utf8' }),
     ).not.toThrow()
   })
 

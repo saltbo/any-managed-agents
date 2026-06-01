@@ -69,13 +69,13 @@ restish ama read-usage-summary --rsh-output-format json
 restish ama list-audit-records --rsh-output-format json
 ```
 
-Run `npm run test:e2e` in this repository when you need local evidence that the current OpenAPI document is ingestible by restish and that restish can serialize the core create environment, create agent, and create session workflow.
+Run `pnpm run test:e2e` in this repository when you need local evidence that the current OpenAPI document is ingestible by restish and that restish can serialize the core create environment, create agent, and create session workflow.
 
-If SDK artifacts change, run `npm run openapi:generate` and `npm run openapi:check`. Restish remains the default command-line path; do not replace these workflows with a bespoke AMA CLI.
+If SDK artifacts change, run `pnpm run openapi:generate` and `pnpm run openapi:check`. Restish remains the default command-line path; do not replace these workflows with a bespoke AMA CLI.
 
 ## Safety Boundaries
 
 - Confirm ids before `archiveAgent`, `archiveEnvironment`, `archiveVault`, `archiveSession`, `deleteProvider`, or `deleteVaultCredentialVersion`.
 - Treat vault values and auth tokens as secrets. Never paste raw secret values into notes, commits, or screenshots.
 - Runtime interaction remains behind AMA session endpoints and canonical AMA events. Discover a session's `runtimeEndpointPath` with `readSession`, then use AMA runtime helpers for task traffic.
-- Do not add a `bin`, shell wrapper, npm global command, or project-specific command surface for AMA control-plane work.
+- Do not add a `bin`, shell wrapper, package-manager global command, or project-specific command surface for AMA control-plane work.

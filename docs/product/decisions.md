@@ -36,7 +36,7 @@ These decisions define the intended end state for Any Managed Agents.
 
 - This repository maintains repo-local generated SDK scaffolds under `sdk/typescript`, `sdk/go`, and `sdk/python` until the SDK release process moves out.
 - This repository publishes the control-plane OpenAPI document.
-- The TypeScript SDK is the only SDK npm workspace. Go and Python use language-native module or package metadata and are not npm workspaces.
+- The TypeScript SDK is the only SDK pnpm workspace. Go and Python use language-native module or package metadata and are not pnpm workspaces.
 - External SDK behavior must be generated from or mechanically aligned with this repository's Hono-generated OpenAPI document.
 - This repository must not accumulate hand-authored bespoke SDK behavior that drifts from OpenAPI.
 - Runtime helpers in external SDKs must delegate to AMA runtime endpoints.

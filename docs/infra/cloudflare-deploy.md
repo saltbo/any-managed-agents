@@ -43,7 +43,7 @@ requests to the sandbox. The sandbox runs commands and file operations in
 
 The container image must be built from this repository's `Dockerfile`. Runtime
 packages required for tool execution must be baked into the container image. The
-runtime must not install npm packages during session start; session startup
+runtime must not install Node packages during session start; session startup
 should only create workspace metadata and initialize the executor backend.
 
 Required Worker bindings and variables:
@@ -90,7 +90,7 @@ Run browser e2e against the local dev server in local development and CI. This
 path must not consume real model quota or depend on deployed origins:
 
 ```bash
-npm run test:e2e
+pnpm run test:e2e
 ```
 
 After deploying staging, run the real runtime smoke against the staging origin:
@@ -98,7 +98,7 @@ After deploying staging, run the real runtime smoke against the staging origin:
 ```bash
 AMA_STAGING_ORIGIN=https://any-managed-agents-staging.saltbo.workers.dev \
 AMA_E2E_ACCESS_TOKEN="$OIDC_ACCESS_TOKEN" \
-npm run test:smoke
+pnpm run test:smoke
 ```
 
 `AMA_STAGING_ORIGIN` defaults to the staging Workers host. Auth input precedence is
@@ -125,8 +125,8 @@ startup may consume runtime and model quota.
 
 Use these settings when connecting the GitHub repository in Cloudflare:
 
-- Production build command: `npm run build`
-- Staging build command: `npm run build:staging`
+- Production build command: `pnpm run build`
+- Staging build command: `pnpm run build:staging`
 - Deploy command: managed by Cloudflare Workers Builds
 - Root directory: repository root
 - Production branch: `master`
@@ -134,8 +134,8 @@ Use these settings when connecting the GitHub repository in Cloudflare:
 Database migrations are explicit and should be run before deploy promotion:
 
 ```bash
-npm run db:migrate:d1:staging
-npm run db:migrate:d1:prod
+pnpm run db:migrate:d1:staging
+pnpm run db:migrate:d1:prod
 ```
 
 ## Durable Object migration bootstrap
@@ -145,8 +145,8 @@ Cloudflare Workers Builds deploys with `wrangler versions upload`. The first dep
 For a brand-new Worker, run this once after creating D1 resources and before relying on Workers Builds:
 
 ```bash
-npm run build
-npx wrangler deploy
+pnpm run build
+pnpm exec wrangler deploy
 ```
 
 After that bootstrap deployment, Workers Builds can upload new versions normally.

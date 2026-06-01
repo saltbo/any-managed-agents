@@ -5,11 +5,11 @@ This directory is the generated Go SDK module scaffold for the external Any Mana
 Regenerate the OpenAPI snapshot and generated operation metadata from Hono routes:
 
 ```bash
-npm run openapi:generate
+pnpm run openapi:generate
 go test ./...
 ```
 
-This module is not an npm workspace. It uses native Go module metadata and must remain generated from or mechanically aligned with `sdk/openapi.json`.
+This module is not a pnpm workspace. It uses native Go module metadata and must remain generated from or mechanically aligned with `sdk/openapi.json`.
 
 Environment resources own hosting and runtime selection:
 

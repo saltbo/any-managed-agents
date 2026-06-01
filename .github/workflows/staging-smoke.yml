@@ -15,13 +15,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.2
+          run_install: false
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:smoke
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm run test:smoke
         env:
           AMA_STAGING_ORIGIN: ${{ secrets.AMA_STAGING_ORIGIN }}
           AMA_E2E_ACCESS_TOKEN: ${{ secrets.AMA_E2E_ACCESS_TOKEN }}

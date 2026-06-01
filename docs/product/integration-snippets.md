@@ -53,7 +53,7 @@ printf '%s\n' '{"agentId":"agent_abc123","environmentId":"env_abc123"}' \
 The local e2e check exercises actual restish discovery plus create environment, create agent, and create session serialization:
 
 ```bash
-npm run test:e2e
+pnpm run test:e2e
 ```
 
 Common control-plane workflows map to these OpenAPI operations:
@@ -119,6 +119,6 @@ Runtime task interaction is separate from restish control-plane automation. Use 
 Regenerate repo-local SDK scaffolds from the Hono-generated OpenAPI document before publishing SDK changes:
 
 ```bash
-npm run openapi:generate
-npm run openapi:check
+pnpm run openapi:generate
+pnpm run openapi:check
 ```

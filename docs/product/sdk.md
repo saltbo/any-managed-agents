@@ -37,16 +37,16 @@ SDKs should stay thin. They wrap the public control-plane API and may provide a 
 The generated SDK layout is:
 
 - `sdk/openapi.json` - committed OpenAPI snapshot generated from `createApp()` and Hono route schemas.
-- `sdk/typescript` - npm workspace package `@any-managed-agents/sdk`.
-- `sdk/go` - native Go module, not an npm workspace.
-- `sdk/python` - native Python package, not an npm workspace.
+- `sdk/typescript` - pnpm workspace package `@any-managed-agents/sdk`.
+- `sdk/go` - native Go module, not a pnpm workspace.
+- `sdk/python` - native Python package, not a pnpm workspace.
 
 Regenerate and check the SDK artifacts with:
 
 ```bash
-npm run openapi:generate
-npm run openapi:check
-npm run --workspace sdk/typescript typecheck
+pnpm run openapi:generate
+pnpm run openapi:check
+pnpm --filter -managed-agents/sdk run typecheck
 ```
 
 The generator is intentionally repo-local and route-driven. Do not edit generated operation metadata or OpenAPI snapshots by hand.
