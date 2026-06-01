@@ -32,6 +32,10 @@ migrations_dir = "./migrations"
 name = "SANDBOX"
 class_name = "Sandbox"
 
+[[durable_objects.bindings]]
+name = "RUNNER_SESSION_CHANNEL"
+class_name = "RunnerSessionChannelObject"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["ManagedAgent"]
@@ -39,3 +43,7 @@ new_sqlite_classes = ["ManagedAgent"]
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = ["Sandbox"]
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["RunnerSessionChannelObject"]

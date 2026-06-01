@@ -65,6 +65,15 @@ OPERATIONS = [
     ]
   },
   {
+    "method": "GET",
+    "path": "/api/runners/{runnerId}/leases/{leaseId}/channel",
+    "operationId": "connectRunnerSessionChannel",
+    "summary": "Open a claimed runner session WebSocket channel",
+    "tags": [
+      "Runner leases"
+    ]
+  },
+  {
     "method": "POST",
     "path": "/api/agents",
     "operationId": "createAgent",

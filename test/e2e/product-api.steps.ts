@@ -48,6 +48,9 @@ interface E2EState {
   mcpConnection?: Json
   runner?: Json
   lease?: Json
+  runnerChannelMessages?: Json[]
+  staleRunnerChannelMessages?: Json[]
+  channelEventText?: string
   otherPage?: Page
   deletedCredentialVersionId?: string
   response?: Json
@@ -2339,6 +2342,65 @@ Given('a self-hosted environment has an active runner', async function (this: Pr
   })
 })
 
+Given('a self-hosted environment selects an external runtime', async function (this: ProductWorld) {
+  const state = await ensureSignedIn(this)
+  state.environment = await createEnvironment(state, {
+    name: `${state.runId} external runner env`,
+    hostingMode: 'self_hosted',
+    runtime: 'codex',
+    networkPolicy: { mode: 'unrestricted' },
+  })
+  state.provider = await createProvider(state, {
+    type: 'openai-compatible',
+    displayName: `${state.runId} external provider`,
+    baseUrl: 'https://models.example.test/v1',
+    credentialSecretRef: `secret://providers/${state.runId}/external`,
+  })
+  state.providerModel = await createProviderModel(state, state.provider, {
+    modelId: CODEX_E2E_MODEL,
+    displayName: 'GPT 5.3 Codex',
+    capabilities: ['text'],
+  })
+  state.agent = await createAgent(state, {
+    name: `${state.runId} external agent`,
+    provider: state.provider.id,
+    model: CODEX_E2E_MODEL,
+  })
+})
+
+Given(
+  'an active runner advertises the exact runtime, provider, and model capability',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    const capability = `runtime-provider-model:codex:${state.provider?.id}:${CODEX_E2E_MODEL}`
+    state.runner = await apiJson<Json>(state.page.request, '/api/runners', {
+      method: 'POST',
+      data: {
+        name: `${state.runId} external runner`,
+        environmentId: state.environment?.id,
+        capabilities: ['sandbox.exec', capability],
+      },
+    })
+    state.runner = await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/heartbeats`, {
+      method: 'POST',
+      data: { status: 'active', currentLoad: 0, capabilities: ['sandbox.exec', capability] },
+    })
+    const wrongCapability = `runtime-provider-model:codex:${state.provider?.id}:${CODEX_E2E_MODEL}-mini`
+    state.otherProvider = await apiJson<Json>(state.page.request, '/api/runners', {
+      method: 'POST',
+      data: {
+        name: `${state.runId} ineligible external runner`,
+        environmentId: state.environment?.id,
+        capabilities: [wrongCapability],
+      },
+    })
+    await apiJson<Json>(state.page.request, `/api/runners/${state.otherProvider.id}/heartbeats`, {
+      method: 'POST',
+      data: { status: 'active', currentLoad: 0, capabilities: [wrongCapability] },
+    })
+  },
+)
+
 When('the user creates a session in that environment', async function (this: ProductWorld) {
   const state = await ensureState(this)
   state.latestSession = await apiJson<Json>(state.page.request, '/api/sessions', {
@@ -2368,6 +2430,24 @@ Then('AMA queues session work without creating a Cloudflare Sandbox', async func
   assert.equal(payload.runtimeOwner, undefined)
 })
 
+Then(
+  'AMA queues the session for that environment without creating a Cloudflare Sandbox',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    const session = required(state.latestSession, 'session')
+    assert.equal(session.status, 'pending')
+    assert.equal(session.statusReason, 'waiting-for-runner')
+    assert.equal(session.sandboxId, null)
+    assert.equal(session.runtimeEndpointPath, null)
+    state.list = await apiJson<ListResponse<Json>>(
+      state.page.request,
+      `/api/runners/work-items?sessionId=${session.id}`,
+    )
+    assert.equal(state.list.data.length, 1)
+    assert.equal(objectValue(state.list.data[0]?.payload).hostingMode, 'self_hosted')
+  },
+)
+
 Then('the runner can claim a lease for the queued work', async function (this: ProductWorld) {
   const state = await ensureState(this)
   const runner = required(state.runner, 'runner')
@@ -2378,7 +2458,22 @@ Then('the runner can claim a lease for the queued work', async function (this: P
   assert.equal(state.lease.status, 'active')
   assert.equal(objectValue(state.lease.workItem).status, 'leased')
   const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
-  assert.equal(session.status, 'running')
+  assert.equal(session.status, 'pending')
+  assert.equal(session.statusReason, 'waiting-for-runner')
+})
+
+Then('the eligible runner can claim ownership of the session', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const runner = required(state.runner, 'runner')
+  state.lease = await apiJson<Json>(state.page.request, `/api/runners/${runner.id}/leases`, {
+    method: 'POST',
+    data: { leaseDurationSeconds: 90 },
+  })
+  assert.equal(state.lease.status, 'active')
+  assert.equal(objectValue(state.lease.workItem).sessionId, state.latestSession?.id)
+  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
+  assert.equal(session.status, 'pending')
+  assert.equal(session.statusReason, 'waiting-for-runner')
 })
 
 Then('the runner can upload structured events and complete the lease', async function (this: ProductWorld) {
@@ -2867,6 +2962,19 @@ Then('runners that lack the exact combination cannot lease the work', async func
 })
 
 Then(
+  'runners that do not advertise the exact runtime, provider, and model cannot claim the session',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    const wrongRunner = required(state.otherProvider, 'wrong runner')
+    const response = await apiResponse(state.page.request, `/api/runners/${wrongRunner.id}/leases`, {
+      method: 'POST',
+      data: { leaseDurationSeconds: 90 },
+    })
+    assert.equal(response.status(), 204)
+  },
+)
+
+Then(
   'the session remains pending with a waiting-for-runner reason until the eligible runner leases it',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
@@ -2875,6 +2983,206 @@ Then(
     assert.equal(session.statusReason, 'waiting-for-runner')
   },
 )
+
+Then(
+  'the session remains pending with a waiting-for-runner reason until a runner claims it',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
+    assert.equal(session.status, 'pending')
+    assert.equal(session.statusReason, 'waiting-for-runner')
+  },
+)
+
+Given('a runner has claimed a self-hosted session', async function (this: ProductWorld) {
+  await setupClaimedSelfHostedSession(this)
+})
+
+When('the runner starts the session runtime', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  state.runnerChannelMessages = await openRunnerChannel(state, 'amaRunnerChannel')
+})
+
+Then('the runner opens an outbound WebSocket for that session to AMA', function (this: ProductWorld) {
+  const messages = required(this.e2e?.runnerChannelMessages, 'runner channel messages')
+  assert.ok(messages.some((message) => message.type === 'session.channel.accepted'))
+})
+
+Then('AMA authenticates the channel as the claimed runner and session', function (this: ProductWorld) {
+  const accepted = required(this.e2e?.runnerChannelMessages, 'runner channel messages').find(
+    (message) => message.type === 'session.channel.accepted',
+  )
+  assert.equal(accepted?.sessionId, this.e2e?.latestSession?.id)
+  assert.ok(String(accepted?.channelId).startsWith('channel_'))
+})
+
+Then('the session becomes active only after the WebSocket is accepted', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
+  assert.equal(session.status, 'running')
+  assert.equal(session.statusReason, null)
+  assert.equal(session.runtimeEndpointPath, `/runtime/sessions/${state.latestSession?.id}/rpc`)
+})
+
+Then('AMA does not expose any runner-local runtime process endpoint to clients', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
+  const serialized = JSON.stringify(session)
+  assert.equal(serialized.includes('localhost'), false)
+  assert.equal(serialized.includes('127.0.0.1'), false)
+  assert.equal(serialized.includes('runner-local'), false)
+})
+
+Given('a self-hosted session has an accepted runner WebSocket', async function (this: ProductWorld) {
+  const state = await setupClaimedSelfHostedSession(this)
+  state.runnerChannelMessages = await openRunnerChannel(state, 'amaRunnerChannel')
+})
+
+When(
+  'the cloud-side AMA control plane sends an approved tool call for the session',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    state.response = await apiJson<Json>(state.page.request, `/runtime/sessions/${state.latestSession?.id}/rpc`, {
+      method: 'POST',
+      data: {
+        toolCalls: [
+          {
+            id: 'call_e2e_channel',
+            name: 'sandbox.exec',
+            input: { command: 'printf channel-ok' },
+          },
+        ],
+      },
+    })
+    state.runnerChannelMessages = await waitForRunnerMessages(state, 'amaRunnerChannel', 2)
+  },
+)
+
+Then('the tool call is delivered over the session WebSocket to the owning runner', function (this: ProductWorld) {
+  const messages = required(this.e2e?.runnerChannelMessages, 'runner channel messages')
+  assert.ok(messages.some((message) => message.type === 'session.command'))
+})
+
+Then('the runner executes the tool in the configured local execution backend', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  await sendRunnerChannelEvent(state, 'amaRunnerChannel', {
+    type: 'runner.tool.started',
+    payload: { toolCallId: 'call_e2e_channel', toolName: 'sandbox.exec' },
+  })
+})
+
+Then(
+  'the runner streams stdout, stderr, output, timing, and safe errors over the same WebSocket',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    await sendRunnerChannelEvent(state, 'amaRunnerChannel', {
+      type: 'runner.tool.completed',
+      payload: {
+        toolCallId: 'call_e2e_channel',
+        toolName: 'sandbox.exec',
+        stdout: 'channel-ok',
+        stderr: '',
+        output: { exitCode: 0, stdout: 'channel-ok', stderr: '' },
+        timing: { durationMs: 7 },
+        error: null,
+      },
+    })
+  },
+)
+
+Then(
+  'AMA stores the tool result as canonical session events before continuing the session',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    const events = await waitForSessionEventText(state, 'channel-ok')
+    assert.ok(JSON.stringify(events.data).includes('tool_call.completed'))
+  },
+)
+
+Given('a self-hosted session is owned by a runner', async function (this: ProductWorld) {
+  const state = await setupClaimedSelfHostedSession(this)
+  state.runnerChannelMessages = await openRunnerChannel(state, 'amaRunnerChannel')
+})
+
+When('the session WebSocket disconnects before the session is idle or complete', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  await closeRunnerChannel(state, 'amaRunnerChannel')
+})
+
+Then('AMA marks the session as waiting for runner recovery', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
+  assert.equal(session.status, 'pending')
+  assert.equal(session.statusReason, 'waiting-for-runner-recovery')
+})
+
+Then('the original runner can reconnect before the lease expires', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  state.runnerChannelMessages = await openRunnerChannel(state, 'amaRunnerChannel')
+  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
+  assert.equal(session.status, 'running')
+})
+
+Then(
+  'an eligible replacement runner can claim the session after the lease expires',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    await apiJson<Json>(state.page.request, `/api/runners/${state.runner?.id}/leases/${state.lease?.id}`, {
+      method: 'PATCH',
+      data: { status: 'active', leaseDurationSeconds: 15 },
+    })
+    await delay(16_000)
+    const replacement = await apiJson<Json>(state.page.request, '/api/runners', {
+      method: 'POST',
+      data: {
+        name: `${state.runId} replacement runner`,
+        environmentId: state.environment?.id,
+        capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+      },
+    })
+    await apiJson<Json>(state.page.request, `/api/runners/${replacement.id}/heartbeats`, {
+      method: 'POST',
+      data: { status: 'active', currentLoad: 0, capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY] },
+    })
+    state.runner = replacement
+    state.lease = await apiJson<Json>(state.page.request, `/api/runners/${replacement.id}/leases`, {
+      method: 'POST',
+      data: { leaseDurationSeconds: 90 },
+    })
+    assert.equal(state.lease.status, 'active')
+  },
+)
+
+Then('duplicate or stale channels cannot submit tool results for the session', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  state.runnerChannelMessages = await openRunnerChannel(state, 'duplicateRunnerChannel')
+  await sendRunnerChannelEvent(state, 'amaRunnerChannel', {
+    type: 'runner.tool.completed',
+    payload: { toolCallId: 'duplicate_e2e', toolName: 'sandbox.exec', output: { stdout: 'duplicate-e2e' } },
+  })
+  await sendRunnerChannelEvent(state, 'duplicateRunnerChannel', {
+    type: 'runner.tool.completed',
+    payload: { toolCallId: 'replacement_e2e', toolName: 'sandbox.exec', output: { stdout: 'replacement-e2e' } },
+  })
+  const duplicateEvents = await waitForSessionEventText(state, 'replacement-e2e')
+  const duplicateSerialized = JSON.stringify(duplicateEvents.data)
+  assert.equal(duplicateSerialized.includes('replacement-e2e'), true)
+  assert.equal(duplicateSerialized.includes('duplicate-e2e'), false)
+
+  await sendRunnerChannelEvent(state, 'amaRunnerChannel', {
+    type: 'runner.tool.completed',
+    payload: { toolCallId: 'stale_e2e', toolName: 'sandbox.exec', output: { stdout: 'stale-e2e' } },
+  })
+  state.runnerChannelMessages = await openRunnerChannel(state, 'replacementRunnerChannel')
+  await sendRunnerChannelEvent(state, 'replacementRunnerChannel', {
+    type: 'runner.tool.completed',
+    payload: { toolCallId: 'fresh_e2e', toolName: 'sandbox.exec', output: { stdout: 'fresh-e2e' } },
+  })
+  const events = await waitForSessionEventText(state, 'fresh-e2e')
+  const serialized = JSON.stringify(events.data)
+  assert.equal(serialized.includes('fresh-e2e'), true)
+  assert.equal(serialized.includes('stale-e2e'), false)
+})
 
 Then('the runtime accepts the message', function (this: ProductWorld) {
   assert.ok(this.e2e?.runtimeMessage)
@@ -3398,6 +3706,137 @@ async function waitForRuntimeEvents(state: E2EState) {
     await delay(500)
   }
   throw new Error(`Session ${state.latestSession?.id} did not persist runtime message events`)
+}
+
+async function setupClaimedSelfHostedSession(world: ProductWorld) {
+  const state = await ensureSignedIn(world)
+  state.environment = await createEnvironment(state, {
+    name: `${state.runId} claimed channel env`,
+    hostingMode: 'self_hosted',
+    runtime: 'ama',
+    networkPolicy: { mode: 'unrestricted' },
+  })
+  state.agent = await createAgent(state, { name: `${state.runId} claimed channel agent` })
+  state.runner = await apiJson<Json>(state.page.request, '/api/runners', {
+    method: 'POST',
+    data: {
+      name: `${state.runId} claimed channel runner`,
+      environmentId: state.environment.id,
+      capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+    },
+  })
+  state.runner = await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/heartbeats`, {
+    method: 'POST',
+    data: {
+      status: 'active',
+      currentLoad: 0,
+      capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+    },
+  })
+  state.latestSession = await apiJson<Json>(state.page.request, '/api/sessions', {
+    method: 'POST',
+    data: {
+      agentId: state.agent.id,
+      environmentId: state.environment.id,
+      title: `${state.runId} claimed channel session`,
+    },
+  })
+  state.lease = await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/leases`, {
+    method: 'POST',
+    data: { leaseDurationSeconds: 90 },
+  })
+  assert.equal(state.lease.status, 'active')
+  return state
+}
+
+async function openRunnerChannel(state: E2EState, key: string) {
+  const messages = await state.page.evaluate(
+    async ({ key, runnerId, leaseId }) => {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      const token = window.localStorage.getItem('ama:e2e-access-token')
+      const url = new URL(`${protocol}//${window.location.host}/api/runners/${runnerId}/leases/${leaseId}/channel`)
+      if (token) {
+        url.searchParams.set('access_token', token)
+      }
+      const socket = new WebSocket(url)
+      const store = { socket, messages: [] as Json[] }
+      ;(window as unknown as Record<string, typeof store>)[key] = store
+      socket.addEventListener('message', (event) => {
+        store.messages.push(JSON.parse(String(event.data)) as Json)
+      })
+      await new Promise<void>((resolve, reject) => {
+        socket.addEventListener('open', () => resolve(), { once: true })
+        socket.addEventListener('error', () => reject(new Error('runner channel websocket failed')), { once: true })
+      })
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        if (store.messages.some((message) => message.type === 'session.channel.accepted')) {
+          return store.messages
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50))
+      }
+      throw new Error('runner channel was not accepted')
+    },
+    { key, runnerId: state.runner?.id, leaseId: state.lease?.id },
+  )
+  return messages as Json[]
+}
+
+async function waitForRunnerMessages(state: E2EState, key: string, count: number) {
+  return (await state.page.evaluate(
+    async ({ key, count }) => {
+      const store = (window as unknown as Record<string, { messages: Json[] }>)[key]
+      if (!store) {
+        throw new Error(`runner channel ${key} is not open`)
+      }
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        if (store.messages.length >= count) {
+          return store.messages
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50))
+      }
+      return store.messages
+    },
+    { key, count },
+  )) as Json[]
+}
+
+async function sendRunnerChannelEvent(state: E2EState, key: string, event: Json) {
+  await state.page.evaluate(
+    ({ key, event }) => {
+      const store = (window as unknown as Record<string, { socket: WebSocket }>)[key]
+      if (!store) {
+        throw new Error(`runner channel ${key} is not open`)
+      }
+      store.socket.send(JSON.stringify({ type: 'runner.event', event }))
+    },
+    { key, event },
+  )
+  await delay(250)
+}
+
+async function closeRunnerChannel(state: E2EState, key: string) {
+  await state.page.evaluate(
+    ({ key }) => {
+      const store = (window as unknown as Record<string, { socket: WebSocket }>)[key]
+      if (!store) {
+        throw new Error(`runner channel ${key} is not open`)
+      }
+      store.socket.close()
+    },
+    { key },
+  )
+  await delay(500)
+}
+
+async function waitForSessionEventText(state: E2EState, text: string) {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const events = await sessionEvents(state)
+    if (JSON.stringify(events.data).includes(text)) {
+      return events
+    }
+    await delay(500)
+  }
+  throw new Error(`Session ${state.latestSession?.id} did not persist event text ${text}`)
 }
 
 async function sessionEvents(state: E2EState) {

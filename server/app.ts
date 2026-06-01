@@ -20,7 +20,7 @@ import health from './routes/health'
 import mcp from './routes/mcp'
 import projects from './routes/projects'
 import providers from './routes/providers'
-import runners from './routes/runners'
+import runners, { dispatchRunnerSessionCommand, hasAcceptedRunnerSessionChannel } from './routes/runners'
 import runtimeAi from './routes/runtime-ai'
 import schedules from './routes/schedules'
 import sessionRoutes from './routes/sessions'
@@ -653,11 +653,57 @@ export function createApp() {
     if (session.status !== 'idle' && session.status !== 'running') {
       return errorResponse(c, 409, 'conflict', 'Session runtime is not active')
     }
+    const path = c.req.path.replace(`/runtime/sessions/${sessionId}`, '')
     if (!session.sandboxId) {
+      if (path === '/rpc' && c.req.method === 'POST' && (await hasAcceptedRunnerSessionChannel(c.env, session.id))) {
+        const body = await c.req.raw
+          .clone()
+          .json()
+          .catch(() => ({}))
+        if (c.env.AMA_RUNTIME_MODE !== 'test' && runtimeRequestHasTestOnlyFields(body)) {
+          return errorResponse(
+            c,
+            400,
+            'validation_error',
+            'Runtime clients cannot submit tool calls, tool results, or simulated runtime outcomes',
+          )
+        }
+        const sandboxPolicyDenial = await evaluateRuntimeSandboxOperations(db, resolvedAuth, session, body)
+        if (sandboxPolicyDenial) {
+          await denyRuntimePolicy(db, resolvedAuth, {
+            sessionId,
+            decision: sandboxPolicyDenial.decision,
+            requestId: requestId(c),
+            action: 'runtime_sandbox.operation',
+            resourceType: sandboxPolicyDenial.operation.resourceType,
+            resourceId: sandboxPolicyDenial.operation.resourceId,
+            payload: {
+              operation: sandboxPolicyDenial.operation.operation,
+              command: 'command' in sandboxPolicyDenial.operation ? sandboxPolicyDenial.operation.command : undefined,
+              host: 'host' in sandboxPolicyDenial.operation ? sandboxPolicyDenial.operation.host : undefined,
+            },
+          })
+          return errorResponse(c, 403, 'policy_denied', sandboxPolicyDenial.decision.message, {
+            category: sandboxPolicyDenial.decision.category,
+            resourceType: sandboxPolicyDenial.operation.resourceType,
+            resourceId: sandboxPolicyDenial.operation.resourceId,
+            ruleId: sandboxPolicyDenial.decision.rule,
+          })
+        }
+        const dispatched = await dispatchRunnerSessionCommand(c.env, session.id, {
+          id: newId('runnercmd'),
+          type: 'runtime.rpc',
+          path,
+          body: redactRuntimeValue(body),
+        })
+        if (!dispatched) {
+          return errorResponse(c, 409, 'conflict', 'Runner session channel is unavailable')
+        }
+        return Response.json({ runtime: 'self-hosted-runner', accepted: true, sessionId: session.id, path })
+      }
       return errorResponse(c, 409, 'conflict', 'Session runtime is unavailable')
     }
 
-    const path = c.req.path.replace(`/runtime/sessions/${sessionId}`, '')
     if (path === '/ws') {
       if (c.req.header('upgrade')?.toLowerCase() !== 'websocket') {
         return errorResponse(c, 426, 'conflict', 'Runtime endpoint requires a WebSocket upgrade')

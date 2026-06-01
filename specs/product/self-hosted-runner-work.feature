@@ -19,6 +19,8 @@ Feature: Self-hosted runner work queue
     And the OpenAPI path "/api/runners/{runnerId}/leases/{leaseId}" should include method "patch"
     And the OpenAPI document should include path "/api/runners/{runnerId}/leases/{leaseId}/events"
     And the OpenAPI path "/api/runners/{runnerId}/leases/{leaseId}/events" should include method "post"
+    And the OpenAPI document should include path "/api/runners/{runnerId}/leases/{leaseId}/channel"
+    And the OpenAPI path "/api/runners/{runnerId}/leases/{leaseId}/channel" should include method "get"
     And the OpenAPI document should include path "/api/runners/work-items"
     And the OpenAPI path "/api/runners/work-items" should include method "get"
 
