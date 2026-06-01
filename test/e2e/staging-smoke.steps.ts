@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { type ChildProcess, spawn } from 'node:child_process'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { Given, Then, When } from '@cucumber/cucumber'
 import { type APIRequestContext, chromium, expect, type Page } from '@playwright/test'
 import type { AmaWorld, StagingSmokeConfig, StagingSmokeEvidence } from './world'
@@ -47,13 +50,10 @@ interface RunnerWorkItem {
   id: string
   status: string
   payload: Record<string, unknown>
+  result?: Record<string, unknown> | null
 }
 
-interface RunnerWorkLease {
-  id: string
-  status: string
-  workItem: RunnerWorkItem
-}
+type AmaRunnerProcess = ChildProcess & { smokeOutput: string[] }
 
 function assertIncludes(path: string, ...patterns: RegExp[]) {
   const content = readFileSync(path, 'utf8')
@@ -171,7 +171,7 @@ Then(
   },
 )
 
-Then('the staging smoke verifies self-hosted runner queue and lease execution', function (this: AmaWorld) {
+Then('the staging smoke verifies real self-hosted runner daemon lease execution', function (this: AmaWorld) {
   assert.ok(this.stagingSmokeEvidence, 'Staging smoke must run before asserting self-hosted runner behavior')
   assert.equal(this.stagingSmokeEvidence.selfHostedRunnerOk, true)
 })
@@ -202,7 +202,7 @@ async function runStagingSmoke(config: StagingSmokeConfig): Promise<StagingSmoke
     let persistedDedupeOk = false
     let selfHostedRunnerOk = false
 
-    await authenticate(page, config)
+    const accessToken = await authenticate(page, config)
     await expectAuthenticated(page)
     authenticated = true
 
@@ -313,7 +313,7 @@ async function runStagingSmoke(config: StagingSmokeConfig): Promise<StagingSmoke
       await assertNoDuplicatePersistedEvents(page.request, readySession.id, persistedEventsBeforeReconnect)
       replayDedupeOk = true
       persistedDedupeOk = true
-      selfHostedRunnerOk = await exerciseSelfHostedRunnerMode(page.request, config)
+      selfHostedRunnerOk = await exerciseSelfHostedRunnerMode(page.request, config, accessToken)
 
       assert.ok(created.environmentId, 'Staging smoke should create an environment')
       assert.ok(created.agentId, 'Staging smoke should create an agent')
@@ -345,9 +345,15 @@ async function runStagingSmoke(config: StagingSmokeConfig): Promise<StagingSmoke
   }
 }
 
-async function exerciseSelfHostedRunnerMode(request: APIRequestContext, config: StagingSmokeConfig) {
+async function exerciseSelfHostedRunnerMode(
+  request: APIRequestContext,
+  config: StagingSmokeConfig,
+  accessToken: string,
+) {
   const created: { sessionId?: string; agentId?: string; environmentId?: string; runnerId?: string } = {}
   let primaryError: unknown
+  let runnerProcess: AmaRunnerProcess | null = null
+  const runnerWorkDir = mkdtempSync(join(tmpdir(), 'ama-runner-smoke-'))
   try {
     const environment = await apiJson<Environment>(request, '/api/environments', {
       method: 'POST',
@@ -392,17 +398,6 @@ async function exerciseSelfHostedRunnerMode(request: APIRequestContext, config: 
     })
     created.runnerId = runner.id
 
-    const activeRunner = await apiJson<Runner>(request, `/api/runners/${runner.id}/heartbeats`, {
-      method: 'POST',
-      data: {
-        status: 'active',
-        currentLoad: 0,
-        capabilities,
-        metadata: { runId: config.runId, smokeMode: 'self-hosted-runner' },
-      },
-    })
-    assert.equal(activeRunner.status, 'active')
-
     const session = await apiJson<Session>(request, '/api/sessions', {
       method: 'POST',
       data: {
@@ -419,6 +414,14 @@ async function exerciseSelfHostedRunnerMode(request: APIRequestContext, config: 
     assert.equal(session.sandboxId, null)
     assert.equal(session.runtimeEndpointPath, null)
 
+    runnerProcess = startAmaRunnerProcess({
+      origin: config.origin,
+      token: accessToken,
+      runnerId: runner.id,
+      capabilities,
+      workDir: runnerWorkDir,
+    })
+
     const workItems = await apiJson<ListResponse<RunnerWorkItem>>(
       request,
       `/api/runners/work-items?sessionId=${session.id}`,
@@ -428,48 +431,30 @@ async function exerciseSelfHostedRunnerMode(request: APIRequestContext, config: 
     assert.equal(objectValue(workItems.data[0]?.payload).runtimeDriver, 'ama-self-hosted')
     assert.equal(objectValue(workItems.data[0]?.payload).runtimeOwner, undefined)
 
-    const lease = await apiJson<RunnerWorkLease>(request, `/api/runners/${runner.id}/leases`, {
-      method: 'POST',
-      data: { leaseDurationSeconds: 90 },
-    })
-    assert.equal(lease.status, 'active')
-    assert.equal(lease.workItem.status, 'leased')
-
-    const running = await apiJson<Session>(request, `/api/sessions/${session.id}`)
-    assert.equal(running.status, 'running')
-
-    const events = await apiJson<{ accepted: number }>(request, `/api/runners/${runner.id}/leases/${lease.id}/events`, {
-      method: 'POST',
-      data: {
-        events: [
-          {
-            type: 'tool_call.started',
-            payload: {
-              type: 'tool_call.started',
-              toolName: 'sandbox.exec',
-              input: { command: 'printf self-hosted-runner-smoke' },
-            },
-            metadata: { runnerId: runner.id, runId: config.runId },
-          },
-        ],
-      },
-    })
-    assert.equal(events.accepted, 1)
-
-    const completed = await apiJson<RunnerWorkLease>(request, `/api/runners/${runner.id}/leases/${lease.id}`, {
-      method: 'PATCH',
-      data: { status: 'completed', result: { ok: true, smokeMode: 'self-hosted-runner' } },
-    })
-    assert.equal(completed.status, 'completed')
-    assert.equal(completed.workItem.status, 'succeeded')
-
-    const idle = await apiJson<Session>(request, `/api/sessions/${session.id}`)
+    const idle = await waitForSelfHostedSession(request, session.id, runnerProcess)
     assert.equal(idle.status, 'idle')
+    const completedWorkItems = await apiJson<ListResponse<RunnerWorkItem>>(
+      request,
+      `/api/runners/work-items?sessionId=${session.id}&includeArchived=true`,
+    )
+    assert.equal(completedWorkItems.data[0]?.status, 'succeeded')
+    assert.equal(objectValue(completedWorkItems.data[0]?.result).handled, 'session.start')
+    assert.equal(objectValue(completedWorkItems.data[0]?.result).executor, 'process-unsafe')
+
+    await waitForPersistedEvents(
+      request,
+      session.id,
+      (events) =>
+        events.some((event) => event.type === 'session.lifecycle' && eventContains(event, 'runner.session.started')),
+      0,
+    )
     return true
   } catch (error) {
     primaryError = error
     throw error
   } finally {
+    await stopAmaRunnerProcess(runnerProcess)
+    rmSync(runnerWorkDir, { recursive: true, force: true })
     await cleanupSelfHostedRunnerMode(request, created, primaryError)
   }
 }
@@ -477,12 +462,11 @@ async function exerciseSelfHostedRunnerMode(request: APIRequestContext, config: 
 async function authenticate(page: Page, config: StagingSmokeConfig) {
   if (config.accessToken) {
     await page.goto('/quickstart')
-    return
+    return config.accessToken
   }
   if (config.effectiveStorageState) {
     await page.goto('/quickstart')
-    await installBearerFromBrowserStorage(page)
-    return
+    return await installBearerFromBrowserStorage(page)
   }
 
   await page.goto('/quickstart')
@@ -499,7 +483,7 @@ async function authenticate(page: Page, config: StagingSmokeConfig) {
       timeout: 60_000,
     },
   )
-  await installBearerFromBrowserStorage(page)
+  return await installBearerFromBrowserStorage(page)
 }
 
 async function expectAuthenticated(page: Page) {
@@ -557,6 +541,101 @@ async function installBearerFromBrowserStorage(page: Page) {
     throw new Error('OIDC sign-in completed without a usable access token in browser storage')
   }
   await page.context().setExtraHTTPHeaders({ authorization: `Bearer ${accessToken}` })
+  return accessToken
+}
+
+function startAmaRunnerProcess(input: {
+  origin: string
+  token: string
+  runnerId: string
+  capabilities: string[]
+  workDir: string
+}): AmaRunnerProcess {
+  const child = spawn(
+    'go',
+    [
+      'run',
+      '.',
+      '--origin',
+      input.origin,
+      '--token',
+      input.token,
+      '--runner-id',
+      input.runnerId,
+      '--capabilities',
+      input.capabilities.join(','),
+      '--allow-unsafe-process',
+      '--workdir',
+      input.workDir,
+      '--poll-interval',
+      '1s',
+      '--heartbeat-interval',
+      '5s',
+      '--lease-seconds',
+      '30',
+      '--renew-interval',
+      '10s',
+      '--command-timeout',
+      '30s',
+    ],
+    {
+      cwd: 'cmd/ama-runner',
+      env: {
+        PATH: process.env.PATH,
+        HOME: process.env.HOME,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  )
+  const output: string[] = []
+  child.stdout.on('data', (chunk) => output.push(String(chunk)))
+  child.stderr.on('data', (chunk) => output.push(String(chunk)))
+  child.on('exit', (code, signal) => {
+    if (code && code !== 0) {
+      output.push(`ama-runner exited with code ${code}${signal ? ` signal ${signal}` : ''}`)
+    }
+  })
+  return Object.assign(child, { smokeOutput: output })
+}
+
+async function waitForSelfHostedSession(
+  request: APIRequestContext,
+  sessionId: string,
+  runnerProcess: AmaRunnerProcess,
+) {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const session = await apiJson<Session>(request, `/api/sessions/${sessionId}`)
+    if (session.status === 'idle') {
+      return session
+    }
+    if (session.status === 'error') {
+      throw new Error(`Self-hosted session failed: ${session.statusReason ?? 'unknown error'}`)
+    }
+    if (runnerProcess.exitCode !== null) {
+      throw new Error(`ama-runner exited before session became idle:\n${runnerProcess.smokeOutput.join('')}`)
+    }
+    await delay(1_000)
+  }
+  throw new Error(`Self-hosted session ${sessionId} did not become idle:\n${runnerProcess.smokeOutput.join('')}`)
+}
+
+async function stopAmaRunnerProcess(child: AmaRunnerProcess | null) {
+  if (!child || child.exitCode !== null) {
+    return
+  }
+  child.kill('SIGTERM')
+  await new Promise<void>((resolve) => {
+    const timeout = setTimeout(() => {
+      if (child.exitCode === null) {
+        child.kill('SIGKILL')
+      }
+      resolve()
+    }, 5_000)
+    child.once('exit', () => {
+      clearTimeout(timeout)
+      resolve()
+    })
+  })
 }
 
 async function apiJson<T>(

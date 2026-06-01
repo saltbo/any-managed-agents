@@ -13,4 +13,4 @@ Feature: Staging runtime smoke
     Then the staging smoke authenticates without direct auth database access
     And the staging smoke creates resources through public AMA APIs
     And the staging smoke verifies runtime chat, tool rendering, debug errors, and replay dedupe
-    And the staging smoke verifies self-hosted runner queue and lease execution
+    And the staging smoke verifies real self-hosted runner daemon lease execution
