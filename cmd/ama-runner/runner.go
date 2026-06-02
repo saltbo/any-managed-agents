@@ -274,6 +274,14 @@ func (d *RunnerDaemon) executeLease(ctx context.Context, lease *ama.RunnerWorkLe
 }
 
 func (d *RunnerDaemon) completeSessionStart(ctx context.Context, lease *ama.RunnerWorkLease, payload WorkPayload) error {
+	handler, err := sessionRuntimeHandlerFor(payload.Runtime)
+	if err != nil {
+		if finishErr := d.finishFailed(ctx, lease, err, nil); finishErr != nil {
+			return finishErr
+		}
+		return err
+	}
+
 	channel, err := d.openRunnerSessionChannel(ctx, lease.ID)
 	if err != nil {
 		if finishErr := d.finishFailed(ctx, lease, err, nil); finishErr != nil {
@@ -294,6 +302,16 @@ func (d *RunnerDaemon) completeSessionStart(ctx context.Context, lease *ama.Runn
 	defer cancel()
 	renewErrors := make(chan error, 1)
 	go d.renewLease(leaseCtx, lease, cancel, renewErrors)
+	checkRenewal := func() error {
+		select {
+		case renewErr := <-renewErrors:
+			if renewErr != nil {
+				return renewErr
+			}
+		default:
+		}
+		return nil
+	}
 
 	sessionStartedPayload := ama.JSON{
 		"sessionId":     payload.SessionID,
@@ -306,7 +324,7 @@ func (d *RunnerDaemon) completeSessionStart(ctx context.Context, lease *ama.Runn
 		"executor":      d.Config.SandboxAdapter,
 	}
 	writeSessionStarted := d.writeChannelEvent
-	if payload.Runtime == "codex" || payload.Runtime == "claude-code" || payload.Runtime == "copilot" {
+	if handler.acknowledgeSessionStarted {
 		writeSessionStarted = d.writeAcknowledgedChannelEvent
 	}
 	if err := writeSessionStarted(leaseCtx, channel, "runner.session.started", sessionStartedPayload); err != nil {
@@ -316,46 +334,29 @@ func (d *RunnerDaemon) completeSessionStart(ctx context.Context, lease *ama.Runn
 		return err
 	}
 
-	if payload.Runtime == "codex" {
-		err := d.runCodexSession(leaseCtx, channel, lease, payload)
-		cancel()
-		select {
-		case renewErr := <-renewErrors:
-			if renewErr != nil {
-				return renewErr
-			}
-		default:
-		}
-		return err
+	err = handler.run(d, sessionRuntimeExecution{
+		RequestContext: ctx,
+		LeaseContext:   leaseCtx,
+		Channel:        channel,
+		Lease:          lease,
+		Payload:        payload,
+		CheckRenewal:   checkRenewal,
+	})
+	cancel()
+	if renewErr := checkRenewal(); renewErr != nil {
+		return renewErr
 	}
-	if payload.Runtime == "claude-code" || payload.Runtime == "copilot" {
-		err := d.runExternalSession(leaseCtx, channel, lease, payload)
-		cancel()
-		select {
-		case renewErr := <-renewErrors:
-			if renewErr != nil {
-				return renewErr
-			}
-		default:
-		}
-		return err
-	}
+	return err
+}
 
+func (d *RunnerDaemon) runAMASession(execution sessionRuntimeExecution) error {
 	for {
 		var message RunnerChannelMessage
-		if err := channel.ReadJSON(leaseCtx, &message); err != nil {
-			cancel()
-			select {
-			case renewErr := <-renewErrors:
-				if renewErr != nil {
-					return renewErr
-				}
-			default:
-			}
-			if ctx.Err() != nil {
-				_, updateErr := d.Client.UpdateRunnerLease(context.Background(), d.RunnerID, lease.ID, ama.UpdateRunnerLeaseRequest{
+		if err := execution.Channel.ReadJSON(execution.LeaseContext, &message); err != nil {
+			if execution.RequestContext.Err() != nil {
+				_, updateErr := d.Client.UpdateRunnerLease(context.Background(), d.RunnerID, execution.Lease.ID, ama.UpdateRunnerLeaseRequest{
 					Status: "cancelled",
-					Error:  ama.JSON{"message": ctx.Err().Error()},
+					Error:  ama.JSON{"message": execution.RequestContext.Err().Error()},
 				})
 				return updateErr
 			}
@@ -364,27 +365,21 @@ func (d *RunnerDaemon) completeSessionStart(ctx context.Context, lease *ama.Runn
 		if message.Type != "session.command" {
 			continue
 		}
-		if message.SessionID != payload.SessionID || message.LeaseID != lease.ID || message.RunnerID != d.RunnerID {
+		if message.SessionID != execution.Payload.SessionID || message.LeaseID != execution.Lease.ID || message.RunnerID != d.RunnerID {
 			err := fmt.Errorf("runner session command ownership mismatch")
-			cancel()
-			if finishErr := d.finishFailed(context.Background(), lease, err, nil); finishErr != nil {
+			if finishErr := d.finishFailed(context.Background(), execution.Lease, err, nil); finishErr != nil {
 				return finishErr
 			}
 			return err
 		}
-		if err := d.handleSessionCommand(leaseCtx, channel, message.Command); err != nil {
-			cancel()
-			if finishErr := d.finishFailed(context.Background(), lease, err, nil); finishErr != nil {
+		if err := d.handleSessionCommand(execution.LeaseContext, execution.Channel, message.Command); err != nil {
+			if finishErr := d.finishFailed(context.Background(), execution.Lease, err, nil); finishErr != nil {
 				return finishErr
 			}
 			return err
 		}
-		select {
-		case renewErr := <-renewErrors:
-			if renewErr != nil {
-				return renewErr
-			}
-		default:
+		if err := execution.CheckRenewal(); err != nil {
+			return err
 		}
 	}
 }

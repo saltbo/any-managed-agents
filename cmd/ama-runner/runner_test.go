@@ -924,6 +924,51 @@ func TestSessionChannelRenewalFailureClosesChannelWithoutCompletion(t *testing.T
 	}
 }
 
+func TestAMASessionChecksLeaseRenewalAfterHandlingCommand(t *testing.T) {
+	renewErr := errors.New("renewal stopped after command")
+	channel := newFakeRunnerSessionChannel(
+		ama.JSON{
+			"type":      "session.command",
+			"sessionId": "session_1",
+			"runnerId":  "runner_1",
+			"leaseId":   "lease_1",
+			"command": ama.JSON{
+				"id":   "runnercmd_1",
+				"type": "runtime.rpc",
+				"path": "/rpc",
+				"body": ama.JSON{
+					"toolCalls": []ama.JSON{
+						{"id": "call_1", "name": "sandbox.exec", "input": ama.JSON{"command": "printf ok"}},
+					},
+				},
+			},
+		},
+		io.EOF,
+	)
+	lease := sessionStartLease()
+	daemon := testDaemon(&fakeControlPlane{}, &fakeAdapter{result: ToolResult{Output: ama.JSON{"stdout": "ok"}}})
+	daemon.RunnerID = "runner_1"
+
+	err := daemon.runAMASession(sessionRuntimeExecution{
+		RequestContext: context.Background(),
+		LeaseContext:   context.Background(),
+		Channel:        channel,
+		Lease:          lease,
+		Payload: WorkPayload{
+			SessionID: "session_1",
+		},
+		CheckRenewal: func() error {
+			return renewErr
+		},
+	})
+	if !errors.Is(err, renewErr) {
+		t.Fatalf("expected renewal check error after handled command, got %v", err)
+	}
+	if got := channel.writtenEvents(); strings.Join(got, ",") != "runner.tool.started,runner.tool.completed" {
+		t.Fatalf("expected command events before renewal error, got %v", got)
+	}
+}
+
 func TestContextCancellationMarksLeaseCancelled(t *testing.T) {
 	client := &fakeControlPlane{lease: approvedLease()}
 	adapter := &fakeAdapter{waitForCancel: true}
