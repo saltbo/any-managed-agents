@@ -37,11 +37,7 @@ export interface AuthIdentity {
 }
 
 export function isRunnerOidcAuth(env: Env, auth: Pick<AuthContext, 'oidc'>) {
-  return (
-    !!env.OIDC_RUNNER_CLIENT_ID &&
-    auth.oidc.clientId === env.OIDC_RUNNER_CLIENT_ID &&
-    auth.oidc.scope?.split(/\s+/).includes('ama:runner') === true
-  )
+  return !!env.OIDC_RUNNER_CLIENT_ID && auth.oidc.clientId === env.OIDC_RUNNER_CLIENT_ID
 }
 
 function bearerToken(headers: Headers, url: string) {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -25,7 +26,7 @@ func TestLoginWithDeviceAuthorizationStoresTokenWithoutPrintingIt(t *testing.T) 
 				"token_endpoint":                "http://" + r.Host + "/token",
 			})
 		case "/device":
-			if r.FormValue("client_id") != "runner-client" || r.FormValue("scope") != "openid ama:runner" {
+			if r.FormValue("client_id") != "runner-client" || r.FormValue("scope") != "openid profile email offline_access" {
 				t.Fatalf("unexpected device request form: %s", r.Form.Encode())
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{
@@ -46,7 +47,7 @@ func TestLoginWithDeviceAuthorizationStoresTokenWithoutPrintingIt(t *testing.T) 
 				"refresh_token": "refresh-token-secret",
 				"token_type":    "Bearer",
 				"expires_in":    3600,
-				"scope":         "openid ama:runner",
+				"scope":         "openid profile email offline_access",
 			})
 		default:
 			t.Fatalf("unexpected request %s", r.URL.Path)
@@ -59,7 +60,7 @@ func TestLoginWithDeviceAuthorizationStoresTokenWithoutPrintingIt(t *testing.T) 
 		Origin:       "https://ama.example.test",
 		Issuer:       server.URL,
 		ClientID:     "runner-client",
-		Scopes:       "openid ama:runner",
+		Scopes:       "openid profile email offline_access",
 		ConfigPath:   configPath,
 		Output:       &output,
 		PollInterval: time.Millisecond,
@@ -89,6 +90,80 @@ func TestLoginWithDeviceAuthorizationStoresTokenWithoutPrintingIt(t *testing.T) 
 		t.Fatal(err)
 	}
 	if saved.AccessToken != "access-token-secret" || saved.RefreshToken != "refresh-token-secret" {
+		t.Fatalf("unexpected saved token config: %#v", saved)
+	}
+}
+
+func TestLoginWithDeviceAuthorizationFallsBackToJSONDeviceEndpoint(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "ama-runner", "config.json")
+	deviceRequests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/.well-known/openid-configuration":
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"issuer":                        "https://issuer.example.test",
+				"device_authorization_endpoint": "http://" + r.Host + "/device",
+				"token_endpoint":                "http://" + r.Host + "/token",
+			})
+		case "/device":
+			deviceRequests += 1
+			if strings.HasPrefix(r.Header.Get("content-type"), "application/x-www-form-urlencoded") {
+				w.WriteHeader(http.StatusUnsupportedMediaType)
+				_, _ = w.Write([]byte(`{"code":"UNSUPPORTED_MEDIA_TYPE"}`))
+				return
+			}
+			if r.Header.Get("content-type") != "application/json" {
+				t.Fatalf("expected JSON fallback request, got %s", r.Header.Get("content-type"))
+			}
+			var payload map[string]string
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("expected JSON device payload, got %v", err)
+			}
+			if payload["client_id"] != "runner-client" || payload["scope"] != "openid profile email offline_access" {
+				t.Fatalf("unexpected device JSON payload: %#v", payload)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"device_code":      "device-code",
+				"user_code":        "ABCD-EFGH",
+				"verification_uri": "https://issuer.example.test/device",
+				"expires_in":       60,
+			})
+		case "/token":
+			if r.FormValue("grant_type") != deviceGrantType || r.FormValue("device_code") != "device-code" {
+				t.Fatalf("unexpected token request form: %s", r.Form.Encode())
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"access_token": "access-token-secret",
+				"token_type":   "Bearer",
+				"expires_in":   3600,
+				"scope":        "openid profile email offline_access",
+			})
+		default:
+			t.Fatalf("unexpected request %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	_, err := LoginWithDeviceAuthorization(context.Background(), DeviceAuthClient{HTTPClient: server.Client()}, DeviceLoginOptions{
+		Origin:       "https://ama.example.test",
+		Issuer:       server.URL,
+		ClientID:     "runner-client",
+		Scopes:       "openid profile email offline_access",
+		ConfigPath:   configPath,
+		Output:       io.Discard,
+		PollInterval: time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("expected login to succeed with JSON device fallback, got %v", err)
+	}
+	if deviceRequests != 2 {
+		t.Fatalf("expected form attempt followed by JSON fallback, got %d requests", deviceRequests)
+	}
+	saved, err := LoadSavedRunnerConfig(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.AccessToken != "access-token-secret" {
 		t.Fatalf("unexpected saved token config: %#v", saved)
 	}
 }
@@ -201,6 +276,42 @@ func TestLoginWithDeviceAuthorizationErrors(t *testing.T) {
 }
 
 func TestDeviceTokenPollingHandlesPendingSlowDownExpiredAndErrors(t *testing.T) {
+	t.Run("fallback to JSON on unsupported media type", func(t *testing.T) {
+		polls := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			polls += 1
+			if strings.HasPrefix(r.Header.Get("content-type"), "application/x-www-form-urlencoded") {
+				w.WriteHeader(http.StatusUnsupportedMediaType)
+				_, _ = w.Write([]byte(`{"code":"UNSUPPORTED_MEDIA_TYPE"}`))
+				return
+			}
+			if r.Header.Get("content-type") != "application/json" {
+				t.Fatalf("expected JSON fallback request, got %s", r.Header.Get("content-type"))
+			}
+			var payload map[string]string
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("expected JSON token payload, got %v", err)
+			}
+			if payload["grant_type"] != deviceGrantType ||
+				payload["client_id"] != "runner-client" ||
+				payload["device_code"] != "device" {
+				t.Fatalf("unexpected token JSON payload: %#v", payload)
+			}
+			_, _ = w.Write([]byte(`{"access_token":"token","token_type":"Bearer"}`))
+		}))
+		defer server.Close()
+		token, err := (DeviceAuthClient{HTTPClient: server.Client()}).PollDeviceToken(
+			context.Background(),
+			server.URL,
+			"runner-client",
+			deviceAuthorizationResponse{DeviceCode: "device", ExpiresIn: 60},
+			time.Millisecond,
+		)
+		if err != nil || token.AccessToken != "token" || polls != 2 {
+			t.Fatalf("unexpected polling result token=%#v polls=%d err=%v", token, polls, err)
+		}
+	})
+
 	t.Run("pending then slow down then success", func(t *testing.T) {
 		polls := 0
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -325,7 +436,7 @@ func TestDeviceAuthorizationStartAndDiscoveryErrors(t *testing.T) {
 			context.Background(),
 			server.URL,
 			"runner-client",
-			"openid ama:runner",
+			"openid profile email offline_access",
 		)
 		if err == nil || !strings.Contains(err.Error(), "client rejected") {
 			t.Fatalf("expected device endpoint error, got %v", err)
@@ -341,7 +452,7 @@ func TestDeviceAuthorizationStartAndDiscoveryErrors(t *testing.T) {
 			context.Background(),
 			server.URL,
 			"runner-client",
-			"openid ama:runner",
+			"openid profile email offline_access",
 		)
 		if err == nil || !strings.Contains(err.Error(), "incomplete") {
 			t.Fatalf("expected incomplete response error, got %v", err)

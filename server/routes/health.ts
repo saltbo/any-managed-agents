@@ -10,7 +10,7 @@ const HealthResponseSchema = z
     runtime: z.literal('cloudflare-workers').openapi({ example: 'cloudflare-workers' }),
     oidcIssuer: z.string().nullable().openapi({ example: 'https://id.example.com/api/auth' }),
     runnerClientId: z.string().nullable().openapi({ example: 'ama-runner' }),
-    runnerScopes: z.string().nullable().openapi({ example: 'openid profile email offline_access ama:runner' }),
+    runnerScopes: z.string().nullable().openapi({ example: 'openid profile email offline_access' }),
     timestamp: z.string().datetime().openapi({ example: '2026-05-22T00:00:00.000Z' }),
   })
   .openapi('HealthResponse')
@@ -45,7 +45,7 @@ export function healthResponse(env: {
     runtime: 'cloudflare-workers',
     oidcIssuer: env.OIDC_ISSUER?.replace(/\/$/, '') ?? null,
     runnerClientId,
-    runnerScopes: runnerClientId ? (env.OIDC_RUNNER_SCOPES ?? 'openid profile email offline_access ama:runner') : null,
+    runnerScopes: runnerClientId ? (env.OIDC_RUNNER_SCOPES ?? 'openid profile email offline_access') : null,
     timestamp: new Date().toISOString(),
   } as const
 }

@@ -37,7 +37,7 @@ func TestRunLoginDiscoversDeviceFlowAndStoresToken(t *testing.T) {
 				"runtime":        "cloudflare-workers",
 				"oidcIssuer":     "http://" + r.Host + "/issuer",
 				"runnerClientId": "runner-client",
-				"runnerScopes":   "openid ama:runner",
+				"runnerScopes":   "openid profile email offline_access",
 			})
 		case "/issuer/.well-known/openid-configuration":
 			_ = json.NewEncoder(w).Encode(map[string]string{
@@ -92,7 +92,7 @@ func TestRunWithContextWiresSDKDaemonAndStops(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/health":
-			_, _ = w.Write([]byte(`{"status":"ok","name":"Any Managed Agents","runtime":"cloudflare-workers","oidcIssuer":"https://issuer.example.test","runnerClientId":"runner-client","runnerScopes":"openid ama:runner"}`))
+			_, _ = w.Write([]byte(`{"status":"ok","name":"Any Managed Agents","runtime":"cloudflare-workers","oidcIssuer":"https://issuer.example.test","runnerClientId":"runner-client","runnerScopes":"openid profile email offline_access"}`))
 		case r.Method == http.MethodPost && r.URL.Path == "/api/runners":
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(`{"id":"runner_1","name":"runner","capabilities":["sandbox.exec"],"status":"offline","currentLoad":0,"maxConcurrent":1}`))

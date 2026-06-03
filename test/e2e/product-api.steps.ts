@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { After, AfterAll, Given, setDefaultTimeout, Then, When } from '@cucumber/cucumber'
 import type { APIRequestContext, Page } from '@playwright/test'
+import WebSocket from 'ws'
 import {
   apiJson,
   apiResponse,
@@ -63,6 +64,7 @@ interface E2EState {
   runnerAccessToken?: string
   runnerChannelMessages?: Json[]
   staleRunnerChannelMessages?: Json[]
+  runnerChannels?: Record<string, WebSocket>
   channelEventText?: string
   runnerConfigPath?: string
   deviceLoginOutput?: string
@@ -84,6 +86,7 @@ type AmaRunnerProcess = ChildProcessWithoutNullStreams & { runnerOutput: string[
 setDefaultTimeout(120_000)
 
 After(async function (this: ProductWorld) {
+  await closeRunnerChannels(this.e2e)
   await stopProductAmaRunner(this.e2e)
 })
 
@@ -3652,11 +3655,20 @@ Then(
   'the runner streams stdout, stderr, output, timing, and safe errors over the same WebSocket',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    const events = await waitForSessionEventText(state, 'durationMs')
-    const serialized = JSON.stringify(events.data)
-    assert.equal(serialized.includes('stdout'), true)
-    assert.equal(serialized.includes('stderr'), true)
-    assert.equal(serialized.includes('durationMs'), true)
+    const completed = await waitForSessionEvent(
+      state,
+      (event) => {
+        const payload = objectValue(event.payload)
+        const toolCall = objectValue(payload.toolCall)
+        return event.type === 'tool_call.completed' && toolCall.id === 'call_e2e_channel'
+      },
+      'completed channel tool call event',
+    )
+    const toolCall = objectValue(objectValue(completed.payload).toolCall)
+    const output = objectValue(toolCall.output)
+    assert.equal(output.stdout, 'channel-ok')
+    assert.equal(typeof output.stderr, 'string')
+    assert.equal(typeof toolCall.durationMs, 'number')
   },
 )
 
@@ -4522,63 +4534,61 @@ async function waitForSessionStatus(state: E2EState, status: string) {
 }
 
 async function openRunnerChannel(state: E2EState, key: string) {
-  const messages = await state.page.evaluate(
-    async ({ key, runnerId, leaseId }) => {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      const token = window.localStorage.getItem('ama:e2e-access-token')
-      const url = new URL(`${protocol}//${window.location.host}/api/runners/${runnerId}/leases/${leaseId}/channel`)
-      if (token) {
-        url.searchParams.set('access_token', token)
-      }
-      const socket = new WebSocket(url)
-      const store = { socket, messages: [] as Json[] }
-      ;(window as unknown as Record<string, typeof store>)[key] = store
-      socket.addEventListener('message', (event) => {
-        store.messages.push(JSON.parse(String(event.data)) as Json)
-      })
-      await new Promise<void>((resolve, reject) => {
-        socket.addEventListener('open', () => resolve(), { once: true })
-        socket.addEventListener('error', () => reject(new Error('runner channel websocket failed')), { once: true })
-      })
-      for (let attempt = 0; attempt < 40; attempt += 1) {
-        if (store.messages.some((message) => message.type === 'session.channel.accepted')) {
-          return store.messages
-        }
-        await new Promise((resolve) => setTimeout(resolve, 50))
-      }
-      throw new Error('runner channel was not accepted')
-    },
-    { key, runnerId: state.runner?.id, leaseId: state.lease?.id },
-  )
-  return messages as Json[]
+  const origin = await ensureLocalApp()
+  const url = new URL(`/api/runners/${state.runner?.id}/leases/${state.lease?.id}/channel`, origin)
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+  const token = state.runnerAccessToken ?? state.accessToken
+  if (token) {
+    url.searchParams.set('access_token', token)
+  }
+  const messages: Json[] = []
+  const socket = new WebSocket(url)
+  socket.on('message', (data) => {
+    messages.push(JSON.parse(String(data)) as Json)
+  })
+  await new Promise<void>((resolve, reject) => {
+    socket.once('open', () => resolve())
+    socket.once('error', (error) => reject(error))
+  })
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    if (messages.some((message) => message.type === 'session.channel.accepted')) {
+      state.runnerChannels = { ...(state.runnerChannels ?? {}), [key]: socket }
+      return messages
+    }
+    await delay(50)
+  }
+  socket.close()
+  throw new Error('runner channel was not accepted')
 }
 
 async function sendRunnerChannelEvent(state: E2EState, key: string, event: Json) {
-  await state.page.evaluate(
-    ({ key, event }) => {
-      const store = (window as unknown as Record<string, { socket: WebSocket }>)[key]
-      if (!store) {
-        throw new Error(`runner channel ${key} is not open`)
-      }
-      store.socket.send(JSON.stringify({ type: 'runner.event', event }))
-    },
-    { key, event },
-  )
+  const socket = state.runnerChannels?.[key]
+  if (!socket) {
+    throw new Error(`runner channel ${key} is not open`)
+  }
+  socket.send(JSON.stringify({ type: 'runner.event', event }))
   await delay(250)
 }
 
 async function closeRunnerChannel(state: E2EState, key: string) {
-  await state.page.evaluate(
-    ({ key }) => {
-      const store = (window as unknown as Record<string, { socket: WebSocket }>)[key]
-      if (!store) {
-        throw new Error(`runner channel ${key} is not open`)
-      }
-      store.socket.close()
-    },
-    { key },
-  )
+  const socket = state.runnerChannels?.[key]
+  if (!socket) {
+    throw new Error(`runner channel ${key} is not open`)
+  }
+  socket.close()
+  delete state.runnerChannels?.[key]
   await delay(500)
+}
+
+async function closeRunnerChannels(state?: E2EState) {
+  if (!state?.runnerChannels) {
+    return
+  }
+  for (const socket of Object.values(state.runnerChannels)) {
+    socket.close()
+  }
+  state.runnerChannels = {}
+  await delay(50)
 }
 
 async function waitForSessionEventText(state: E2EState, text: string) {
@@ -4593,6 +4603,28 @@ async function waitForSessionEventText(state: E2EState, text: string) {
   }
   throw new Error(
     `Session ${state.latestSession?.id} did not persist event text ${text}. Event types: ${latestEvents?.data
+      .map((event) => `${event.sequence}:${event.type}`)
+      .join(', ')}`,
+  )
+}
+
+async function waitForSessionEvent(
+  state: E2EState,
+  predicate: (event: Json) => boolean,
+  label: string,
+) {
+  let latestEvents: ListResponse<Json> | null = null
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const events = await sessionEventsViaFetch(state)
+    latestEvents = events
+    const match = events.data.find(predicate)
+    if (match) {
+      return match
+    }
+    await delay(500)
+  }
+  throw new Error(
+    `Session ${state.latestSession?.id} did not persist ${label}. Event types: ${latestEvents?.data
       .map((event) => `${event.sequence}:${event.type}`)
       .join(', ')}`,
   )
@@ -4613,7 +4645,7 @@ async function runDeterministicAmaRunnerLogin(state: E2EState) {
           runtime: 'cloudflare-workers',
           oidcIssuer: `http://127.0.0.1:${(server.address() as { port: number }).port}/issuer`,
           runnerClientId: 'ama-runner-e2e',
-          runnerScopes: 'openid profile email offline_access ama:runner',
+          runnerScopes: 'openid profile email offline_access',
         }),
       )
       return
@@ -4649,7 +4681,7 @@ async function runDeterministicAmaRunnerLogin(state: E2EState) {
           refresh_token: 'refresh-e2e-runner',
           token_type: 'Bearer',
           expires_in: 3600,
-          scope: 'openid profile email offline_access ama:runner',
+          scope: 'openid profile email offline_access',
         }),
       )
       return

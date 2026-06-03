@@ -13,7 +13,7 @@ describe('[CF] GET /api/health', () => {
       runtime: 'cloudflare-workers',
       oidcIssuer: 'https://oidc.test',
       runnerClientId: 'ama-runner-test',
-      runnerScopes: 'openid profile email offline_access ama:runner',
+      runnerScopes: 'openid profile email offline_access',
     })
   })
 
@@ -21,7 +21,7 @@ describe('[CF] GET /api/health', () => {
     expect(
       healthResponse({
         OIDC_ISSUER: 'https://oidc.test/',
-        OIDC_RUNNER_SCOPES: 'openid profile email offline_access ama:runner',
+        OIDC_RUNNER_SCOPES: 'openid profile email offline_access',
       }),
     ).toMatchObject({
       oidcIssuer: 'https://oidc.test',

@@ -54,7 +54,7 @@
           "runnerScopes": {
             "type": "string",
             "nullable": true,
-            "example": "openid profile email offline_access ama:runner"
+            "example": "openid profile email offline_access"
           },
           "timestamp": {
             "type": "string",

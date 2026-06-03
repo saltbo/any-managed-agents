@@ -215,12 +215,33 @@ func (c DeviceAuthClient) getJSON(ctx context.Context, endpoint string, out any)
 }
 
 func (c DeviceAuthClient) postForm(ctx context.Context, endpoint string, values url.Values, out any) error {
+	if err := c.postFormOnly(ctx, endpoint, values, out); !isUnsupportedMediaType(err) {
+		return err
+	}
+	return c.postJSON(ctx, endpoint, formValuesJSON(values), out)
+}
+
+func (c DeviceAuthClient) postFormOnly(ctx context.Context, endpoint string, values url.Values, out any) error {
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(values.Encode()))
 	if err != nil {
 		return err
 	}
 	request.Header.Set("accept", "application/json")
 	request.Header.Set("content-type", "application/x-www-form-urlencoded")
+	return c.do(request, out)
+}
+
+func (c DeviceAuthClient) postJSON(ctx context.Context, endpoint string, values map[string]string, out any) error {
+	data, err := json.Marshal(values)
+	if err != nil {
+		return err
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(string(data)))
+	if err != nil {
+		return err
+	}
+	request.Header.Set("accept", "application/json")
+	request.Header.Set("content-type", "application/json")
 	return c.do(request, out)
 }
 
@@ -243,12 +264,34 @@ func (c DeviceAuthClient) do(request *http.Request, out any) error {
 		if json.Unmarshal(body, &tokenErr) == nil && tokenErr.Error != "" {
 			return deviceTokenError{Code: tokenErr.Error, Description: tokenErr.Description}
 		}
-		return fmt.Errorf("OIDC %s failed with status %d", request.URL.Path, response.StatusCode)
+		return oidcStatusError{Path: request.URL.Path, Status: response.StatusCode}
 	}
 	if err := json.Unmarshal(body, out); err != nil {
 		return err
 	}
 	return nil
+}
+
+type oidcStatusError struct {
+	Path   string
+	Status int
+}
+
+func (e oidcStatusError) Error() string {
+	return fmt.Sprintf("OIDC %s failed with status %d", e.Path, e.Status)
+}
+
+func isUnsupportedMediaType(err error) bool {
+	var statusErr oidcStatusError
+	return errors.As(err, &statusErr) && statusErr.Status == http.StatusUnsupportedMediaType
+}
+
+func formValuesJSON(values url.Values) map[string]string {
+	result := map[string]string{}
+	for key := range values {
+		result[key] = values.Get(key)
+	}
+	return result
 }
 
 type deviceTokenError struct {

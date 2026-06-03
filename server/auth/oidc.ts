@@ -104,13 +104,13 @@ async function createOidcClient(env: Env) {
 
 export async function getBearerClaims(env: Env, accessToken: string): Promise<UserInfoClaims> {
   if (env.AMA_E2E_TEST_AUTH === 'true' && accessToken.startsWith('e2e:')) {
-    return e2eClaims(env, accessToken.slice('e2e:'.length), env.OIDC_CLIENT_ID, false)
+    return e2eClaims(env, accessToken.slice('e2e:'.length), env.OIDC_CLIENT_ID)
   }
   if (env.AMA_E2E_TEST_AUTH === 'true' && accessToken.startsWith('e2e-runner:')) {
     if (!env.OIDC_RUNNER_CLIENT_ID) {
       throw new OidcError('OIDC_RUNNER_CLIENT_ID is required for runner e2e tokens')
     }
-    return e2eClaims(env, accessToken.slice('e2e-runner:'.length), env.OIDC_RUNNER_CLIENT_ID, true)
+    return e2eClaims(env, accessToken.slice('e2e-runner:'.length), env.OIDC_RUNNER_CLIENT_ID)
   }
 
   const oidcClient = await createOidcClient(env)
@@ -161,8 +161,7 @@ function normalizeClaims(env: Env, claims: Record<string, unknown> & { sub: stri
   const roles = stringArray(claims.roles)
   const permissions = stringArray(claims.permissions)
   const clientId = stringClaim(claims.client_id) ?? stringClaim(claims.azp)
-  const scope = stringClaim(claims.scope)
-  const runnerScoped = isRunnerTokenClaim(env, clientId, scope)
+  const runnerScoped = isRunnerTokenClaim(env, clientId)
   return {
     sub: claims.sub,
     ...optionalClaim('email', claims.email),
@@ -180,10 +179,10 @@ function normalizeClaims(env: Env, claims: Record<string, unknown> & { sub: stri
   }
 }
 
-function e2eClaims(env: Env, runId: string, clientId: string | undefined, runnerScope: boolean): UserInfoClaims {
+function e2eClaims(env: Env, runId: string, clientId: string | undefined): UserInfoClaims {
   const safeRunId = runId.replaceAll(/[^A-Za-z0-9_-]/g, '_') || newId('run')
-  const scope = runnerScope ? 'openid profile email offline_access ama:runner' : 'openid profile email offline_access'
-  const runnerScoped = isRunnerTokenClaim(env, clientId, scope)
+  const scope = 'openid profile email offline_access'
+  const runnerScoped = isRunnerTokenClaim(env, clientId)
   return {
     sub: `user_e2e_${safeRunId}`,
     email: `${safeRunId}@e2e.example.com`,
@@ -232,10 +231,6 @@ function stringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.length > 0) : []
 }
 
-function isRunnerTokenClaim(env: Env, clientId: string | undefined, scope: string | undefined) {
-  return (
-    !!env.OIDC_RUNNER_CLIENT_ID &&
-    clientId === env.OIDC_RUNNER_CLIENT_ID &&
-    scope?.split(/\s+/).includes('ama:runner') === true
-  )
+function isRunnerTokenClaim(env: Env, clientId: string | undefined) {
+  return !!env.OIDC_RUNNER_CLIENT_ID && clientId === env.OIDC_RUNNER_CLIENT_ID
 }
