@@ -7,7 +7,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { After, AfterAll, Given, setDefaultTimeout, Then, When } from '@cucumber/cucumber'
 import type { APIRequestContext, Page } from '@playwright/test'
-import WebSocket from 'ws'
 import {
   apiJson,
   apiResponse,
@@ -4542,13 +4541,13 @@ async function openRunnerChannel(state: E2EState, key: string) {
     url.searchParams.set('access_token', token)
   }
   const messages: Json[] = []
-  const socket = new WebSocket(url)
-  socket.on('message', (data) => {
-    messages.push(JSON.parse(String(data)) as Json)
+  const socket = new WebSocket(url.toString())
+  socket.addEventListener('message', (event) => {
+    messages.push(JSON.parse(String(event.data)) as Json)
   })
   await new Promise<void>((resolve, reject) => {
-    socket.once('open', () => resolve())
-    socket.once('error', (error) => reject(error))
+    socket.addEventListener('open', () => resolve(), { once: true })
+    socket.addEventListener('error', () => reject(new Error('runner channel websocket failed')), { once: true })
   })
   for (let attempt = 0; attempt < 40; attempt += 1) {
     if (messages.some((message) => message.type === 'session.channel.accepted')) {
