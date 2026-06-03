@@ -4608,11 +4608,7 @@ async function waitForSessionEventText(state: E2EState, text: string) {
   )
 }
 
-async function waitForSessionEvent(
-  state: E2EState,
-  predicate: (event: Json) => boolean,
-  label: string,
-) {
+async function waitForSessionEvent(state: E2EState, predicate: (event: Json) => boolean, label: string) {
   let latestEvents: ListResponse<Json> | null = null
   for (let attempt = 0; attempt < 30; attempt += 1) {
     const events = await sessionEventsViaFetch(state)
