@@ -310,6 +310,9 @@
               "owner": "platform"
             }
           },
+          "externalRef": {
+            "$ref": "#/components/schemas/AgentExternalReference"
+          },
           "status": {
             "type": "string",
             "enum": [
@@ -357,6 +360,7 @@
           "allowedTools",
           "mcpConnectors",
           "metadata",
+          "externalRef",
           "status",
           "archivedAt",
           "currentVersionId",
@@ -364,6 +368,37 @@
           "createdAt",
           "updatedAt"
         ]
+      },
+      "AgentExternalReference": {
+        "type": "object",
+        "nullable": true,
+        "properties": {
+          "product": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "example": "agent-kanban"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "agent_profile"
+            ],
+            "example": "agent_profile"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240,
+            "example": "profile_abc123"
+          }
+        },
+        "required": [
+          "product",
+          "kind",
+          "id"
+        ],
+        "additionalProperties": false
       },
       "CreateAgentRequest": {
         "type": "object",
@@ -446,6 +481,94 @@
         },
         "required": [
           "name"
+        ],
+        "additionalProperties": false
+      },
+      "UpsertExternalAgentRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "example": "Research assistant"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000,
+            "example": "Answers with citations."
+          },
+          "instructions": {
+            "type": "string",
+            "maxLength": 8000,
+            "example": "Answer with citations."
+          },
+          "provider": {
+            "type": "string",
+            "minLength": 1,
+            "example": "workers-ai"
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1,
+            "example": "@cf/moonshotai/kimi-k2.6"
+          },
+          "systemPrompt": {
+            "type": "string",
+            "maxLength": 8000,
+            "example": "Answer with citations."
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "maxItems": 100,
+            "example": [
+              "ama@code-review"
+            ]
+          },
+          "allowedTools": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "maxItems": 100,
+            "example": [
+              "web.search"
+            ]
+          },
+          "mcpConnectors": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "maxItems": 50,
+            "example": [
+              "github"
+            ]
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "owner": "platform"
+            }
+          },
+          "externalRef": {
+            "$ref": "#/components/schemas/AgentExternalReference"
+          }
+        },
+        "required": [
+          "name",
+          "externalRef"
         ],
         "additionalProperties": false
       },
@@ -806,6 +929,9 @@
               "owner": "platform"
             }
           },
+          "externalRef": {
+            "$ref": "#/components/schemas/EnvironmentExternalReference"
+          },
           "status": {
             "type": "string",
             "enum": [
@@ -856,6 +982,7 @@
           "resourceLimits",
           "runtimeConfig",
           "metadata",
+          "externalRef",
           "status",
           "archivedAt",
           "currentVersionId",
@@ -978,6 +1105,37 @@
             "github"
           ]
         }
+      },
+      "EnvironmentExternalReference": {
+        "type": "object",
+        "nullable": true,
+        "properties": {
+          "product": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "example": "agent-kanban"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "execution_target"
+            ],
+            "example": "execution_target"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240,
+            "example": "target_abc123"
+          }
+        },
+        "required": [
+          "product",
+          "kind",
+          "id"
+        ],
+        "additionalProperties": false
       },
       "CreateEnvironmentRequest": {
         "type": "object",
@@ -1138,6 +1296,172 @@
         },
         "required": [
           "name"
+        ],
+        "additionalProperties": false
+      },
+      "UpsertExternalEnvironmentRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "example": "Node workspace"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000,
+            "example": "Default Node.js environment."
+          },
+          "packages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                "version": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                }
+              },
+              "required": [
+                "name"
+              ]
+            },
+            "maxItems": 200,
+            "example": [
+              {
+                "name": "tsx",
+                "version": "latest"
+              }
+            ]
+          },
+          "variables": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "description": {
+                  "type": "string",
+                  "maxLength": 500
+                },
+                "required": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "example": {
+              "NODE_ENV": {
+                "required": true
+              }
+            }
+          },
+          "secretRefs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                "ref": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 240
+                }
+              },
+              "required": [
+                "name",
+                "ref"
+              ]
+            },
+            "maxItems": 100,
+            "example": [
+              {
+                "name": "NPM_TOKEN",
+                "ref": "vault_secret_123"
+              }
+            ]
+          },
+          "hostingMode": {
+            "$ref": "#/components/schemas/EnvironmentHostingMode"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/EnvironmentRuntime"
+          },
+          "networkPolicy": {
+            "$ref": "#/components/schemas/EnvironmentNetworkPolicy"
+          },
+          "mcpPolicy": {
+            "$ref": "#/components/schemas/EnvironmentMcpPolicy"
+          },
+          "packageManagerPolicy": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "allowedRegistries": [
+                "registry.npmjs.org"
+              ]
+            }
+          },
+          "resourceLimits": {
+            "type": "object",
+            "properties": {
+              "cpuMs": {
+                "type": "integer",
+                "minimum": 0,
+                "exclusiveMinimum": true
+              },
+              "memoryMb": {
+                "type": "integer",
+                "minimum": 0,
+                "exclusiveMinimum": true
+              },
+              "timeoutSeconds": {
+                "type": "integer",
+                "minimum": 0,
+                "exclusiveMinimum": true
+              }
+            },
+            "additionalProperties": false,
+            "example": {
+              "memoryMb": 512
+            }
+          },
+          "runtimeConfig": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "image": "node:24"
+            }
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "owner": "platform"
+            }
+          },
+          "externalRef": {
+            "$ref": "#/components/schemas/EnvironmentExternalReference"
+          }
+        },
+        "required": [
+          "name",
+          "externalRef"
         ],
         "additionalProperties": false
       },
@@ -4488,6 +4812,10 @@
             "nullable": true,
             "example": "/runtime/sessions/session_abc123/rpc"
           },
+          "eventEndpointPath": {
+            "type": "string",
+            "example": "/api/sessions/session_abc123/events"
+          },
           "runtimeMetadata": {
             "$ref": "#/components/schemas/SessionRuntimeMetadata"
           },
@@ -4513,6 +4841,9 @@
             "additionalProperties": {
               "nullable": true
             }
+          },
+          "externalRef": {
+            "$ref": "#/components/schemas/SessionExternalReference"
           },
           "startedAt": {
             "type": "string",
@@ -4554,10 +4885,12 @@
           "durableObjectName",
           "sandboxId",
           "runtimeEndpointPath",
+          "eventEndpointPath",
           "runtimeMetadata",
           "status",
           "statusReason",
           "metadata",
+          "externalRef",
           "startedAt",
           "stoppedAt",
           "archivedAt",
@@ -4850,6 +5183,37 @@
           "protocol"
         ]
       },
+      "SessionExternalReference": {
+        "type": "object",
+        "nullable": true,
+        "properties": {
+          "product": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "example": "agent-kanban"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "task_run"
+            ],
+            "example": "task_run"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240,
+            "example": "run_abc123"
+          }
+        },
+        "required": [
+          "product",
+          "kind",
+          "id"
+        ],
+        "additionalProperties": false
+      },
       "CreateSessionRequest": {
         "type": "object",
         "properties": {
@@ -4877,6 +5241,9 @@
             "example": {
               "ticket": "AMA-123"
             }
+          },
+          "externalRef": {
+            "$ref": "#/components/schemas/SessionExternalReference"
           },
           "resourceRefs": {
             "type": "array",
@@ -5957,6 +6324,82 @@
         }
       }
     },
+    "/api/agents/external": {
+      "put": {
+        "operationId": "upsertExternalAgentMapping",
+        "tags": [
+          "Agents"
+        ],
+        "summary": "Create or update an agent mapped from an external product reference",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertExternalAgentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated mapped agent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Agent"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created mapped agent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Agent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Mapped agent conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/agents/{agentId}": {
       "get": {
         "operationId": "readAgent",
@@ -6374,6 +6817,82 @@
           },
           "401": {
             "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/environments/external": {
+      "put": {
+        "operationId": "upsertExternalEnvironmentMapping",
+        "tags": [
+          "Environments"
+        ],
+        "summary": "Create or update an environment mapped from an external product reference",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertExternalEnvironmentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated mapped environment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Environment"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created mapped environment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Environment"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Mapped environment conflict",
             "content": {
               "application/json": {
                 "schema": {
@@ -10325,6 +10844,16 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "Existing session for external task run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
           "201": {
             "description": "Created session",
             "content": {

@@ -308,6 +308,29 @@ Given('an environment is archived', async function (this: ProductWorld) {
   await emptyResponse(this.e2e.page.request, `/api/environments/${this.e2e.environment?.id}`, { method: 'DELETE' })
 })
 
+Given('an external product has its own agent profile and execution target ids', async function (this: ProductWorld) {
+  const state = await ensureSignedIn(this)
+  state.response = externalProductReferences(state)
+})
+
+Given(
+  'an external product has mapped an agent profile to an AMA agent definition',
+  async function (this: ProductWorld) {
+    const state = await ensureExternalProductMappings(this)
+    assert.equal(objectValue(state.agent?.externalRef).kind, 'agent_profile')
+  },
+)
+
+Given('the external product has mapped an execution target to an AMA environment', async function (this: ProductWorld) {
+  const state = await ensureExternalProductMappings(this)
+  assert.equal(objectValue(state.environment?.externalRef).kind, 'execution_target')
+})
+
+Given('an external product created an AMA session', async function (this: ProductWorld) {
+  const state = await ensureExternalProductMappings(this)
+  state.latestSession = await createExternalProductSession(state)
+})
+
 Given('a session exists', async function (this: ProductWorld) {
   await ensureAgentAndEnvironment(this)
   this.e2e.latestSession = await createSession(this.e2e)
@@ -499,6 +522,57 @@ When('the user creates an agent with a name and instructions', async function (t
     instructions: 'Answer briefly.',
   })
 })
+
+When('the external product creates or updates the corresponding AMA resources', async function (this: ProductWorld) {
+  const state = await ensureSignedIn(this)
+  state.response ??= externalProductReferences(state)
+  const refs = objectValue(state.response)
+  const agentRef = objectValue(refs.agentRef)
+  const environmentRef = objectValue(refs.environmentRef)
+  state.agent = await upsertExternalAgent(state, agentRef, {
+    name: `${state.runId} external profile`,
+    instructions: 'Handle externally coordinated work.',
+    metadata: { source: 'external-product-e2e' },
+  })
+  state.updatedAgent = await upsertExternalAgent(state, agentRef, {
+    name: `${state.runId} external profile updated`,
+    instructions: 'Handle externally coordinated work with updates.',
+    metadata: { revision: 'updated' },
+  })
+  state.environment = await upsertExternalEnvironment(state, environmentRef, {
+    name: `${state.runId} external target`,
+    runtimeConfig: { image: 'ama-pi-runtime' },
+    metadata: { source: 'external-product-e2e' },
+  })
+  state.updatedEnvironment = await upsertExternalEnvironment(state, environmentRef, {
+    name: `${state.runId} external target updated`,
+    runtimeConfig: { image: 'ama-pi-runtime', profile: 'updated' },
+    metadata: { revision: 'updated' },
+  })
+})
+
+When(
+  'the external product creates an AMA session with its task correlation metadata',
+  async function (this: ProductWorld) {
+    const state = await ensureExternalProductMappings(this)
+    state.latestSession = await createExternalProductSession(state)
+    const duplicate = await createExternalProductSession(state)
+    state.previousSession = duplicate
+  },
+)
+
+When(
+  'the external product sends a follow-up message, stop request, or resume request',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    await sendRuntimeMessage(state, 'external product follow-up')
+    state.latestSession = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}/stop`, {
+      method: 'POST',
+    })
+    state.latestSession = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}/reconnect`)
+    state.events = await sessionEvents(state)
+  },
+)
 
 When('an operator adds a provider', async function (this: ProductWorld) {
   await ensureSignedIn(this)
@@ -2667,19 +2741,22 @@ Then('ama-runner starts the embedded Claude Code SDK bridge for that session', a
   )
 })
 
-Then('Claude Code receives the prompt, workspace, runtime config, and safe environment', async function (this: ProductWorld) {
-  const state = await ensureState(this)
-  const events = await waitForSessionEventText(state, 'claude-code-bridge-test safe diagnostic')
-  const serialized = JSON.stringify(events.data)
-  assert.equal(serialized.includes(String(state.runtimeMessage)), true)
-  assert.equal(serialized.includes(String(state.provider?.id)), true)
-  assert.equal(serialized.includes(CLAUDE_CODE_E2E_MODEL), true)
-  assert.equal(serialized.includes(`workspace:${runnerSessionWorkDir(state)}`), true)
-  assert.equal(serialized.includes('"e2eBridgeTest":true'), true)
-  assert.equal(serialized.includes('raw-secret-value'), false)
-  assert.equal(serialized.includes('AMA_TOKEN'), false)
-  assert.equal(serialized.includes('secret://providers'), false)
-})
+Then(
+  'Claude Code receives the prompt, workspace, runtime config, and safe environment',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    const events = await waitForSessionEventText(state, 'claude-code-bridge-test safe diagnostic')
+    const serialized = JSON.stringify(events.data)
+    assert.equal(serialized.includes(String(state.runtimeMessage)), true)
+    assert.equal(serialized.includes(String(state.provider?.id)), true)
+    assert.equal(serialized.includes(CLAUDE_CODE_E2E_MODEL), true)
+    assert.equal(serialized.includes(`workspace:${runnerSessionWorkDir(state)}`), true)
+    assert.equal(serialized.includes('"e2eBridgeTest":true'), true)
+    assert.equal(serialized.includes('raw-secret-value'), false)
+    assert.equal(serialized.includes('AMA_TOKEN'), false)
+    assert.equal(serialized.includes('secret://providers'), false)
+  },
+)
 
 Then(
   'Claude Code output is translated into canonical lifecycle, transcript, tool, usage, output, and error events',
@@ -2765,7 +2842,10 @@ Then(
     assert.equal(objectValue(stdoutOutput.payload).stream, 'stdout')
     assert.equal(objectValue(stderrOutput.payload).stream, 'stderr')
     const serialized = JSON.stringify(events.data)
-    assert.equal(serialized.includes('claude-code-bridge-test received:Run the deterministic Claude Code bridge test.'), true)
+    assert.equal(
+      serialized.includes('claude-code-bridge-test received:Run the deterministic Claude Code bridge test.'),
+      true,
+    )
     assert.equal(serialized.includes('claude-code-bridge-test-stdout'), true)
     assert.equal(serialized.includes('claude-code-bridge-test-stderr'), true)
     assert.equal(serialized.includes('raw-secret-value'), false)
@@ -3024,6 +3104,120 @@ Then('the sessions API enforces auth, project tenancy, and immutable snapshots',
   const session = await createSession(state)
   assert.equal(objectValue(session.agentSnapshot).version, objectValue(state.agent).version)
 })
+
+Then('AMA stores the agent definition with the external product reference metadata', function (this: ProductWorld) {
+  const agent = required(this.e2e?.updatedAgent, 'updated external agent')
+  const externalRef = objectValue(agent.externalRef)
+  assert.equal(externalRef.product, 'external-product-e2e')
+  assert.equal(externalRef.kind, 'agent_profile')
+  assert.equal(externalRef.id, `${this.e2e?.runId}:agent-profile`)
+  assert.deepEqual(objectValue(agent.metadata).externalReference, externalRef)
+})
+
+Then('AMA stores the environment with the external product reference metadata', function (this: ProductWorld) {
+  const environment = required(this.e2e?.updatedEnvironment, 'updated external environment')
+  const externalRef = objectValue(environment.externalRef)
+  assert.equal(externalRef.product, 'external-product-e2e')
+  assert.equal(externalRef.kind, 'execution_target')
+  assert.equal(externalRef.id, `${this.e2e?.runId}:execution-target`)
+  assert.deepEqual(objectValue(environment.metadata).externalReference, externalRef)
+})
+
+Then(
+  'repeated requests with the same external references update the same AMA resources',
+  function (this: ProductWorld) {
+    assert.equal(this.e2e?.agent?.id, this.e2e?.updatedAgent?.id)
+    assert.equal(this.e2e?.environment?.id, this.e2e?.updatedEnvironment?.id)
+    assert.equal(this.e2e?.updatedAgent?.version, 2)
+    assert.equal(this.e2e?.updatedEnvironment?.version, 2)
+  },
+)
+
+Then(
+  'AMA does not require the external product to expose board, task, review, or PR concepts',
+  function (this: ProductWorld) {
+    const serialized = JSON.stringify({
+      agent: this.e2e?.updatedAgent?.externalRef,
+      environment: this.e2e?.updatedEnvironment?.externalRef,
+    })
+    assert.equal(serialized.includes('board'), false)
+    assert.equal(serialized.includes('review'), false)
+    assert.equal(serialized.includes('pullRequest'), false)
+  },
+)
+
+Then('AMA snapshots the selected agent and environment', function (this: ProductWorld) {
+  const session = required(this.e2e?.latestSession, 'external session')
+  assert.equal(objectValue(session.agentSnapshot).agentId, this.e2e?.agent?.id)
+  assert.equal(objectValue(session.environmentSnapshot).environmentId, this.e2e?.environment?.id)
+})
+
+Then(
+  'AMA validates the environment runtime, provider, and model before runtime work starts',
+  function (this: ProductWorld) {
+    const session = required(this.e2e?.latestSession, 'external session')
+    const runtimeMetadata = objectValue(session.runtimeMetadata)
+    assert.equal(runtimeMetadata.runtime, 'ama')
+    assert.equal(runtimeMetadata.provider, objectValue(session.agentSnapshot).provider)
+    assert.equal(runtimeMetadata.model, objectValue(session.agentSnapshot).model)
+  },
+)
+
+Then(
+  'AMA returns a stable session id, status, status reason, runtime, and event endpoint',
+  function (this: ProductWorld) {
+    const session = required(this.e2e?.latestSession, 'external session')
+    const duplicate = required(this.e2e?.previousSession, 'duplicate external session')
+    assert.equal(session.id, duplicate.id)
+    assert.match(String(session.id), /^session_/)
+    assert.ok(['pending', 'idle', 'running', 'stopped', 'error'].includes(String(session.status)))
+    assert.ok('statusReason' in session)
+    assert.equal(objectValue(session.runtimeMetadata).runtime, 'ama')
+    assert.equal(session.eventEndpointPath, `/api/sessions/${session.id}/events`)
+    const externalRef = objectValue(session.externalRef)
+    assert.equal(externalRef.product, 'external-product-e2e')
+    assert.equal(externalRef.kind, 'task_run')
+    assert.equal(externalRef.id, `${this.e2e?.runId}:task-run`)
+    const metadata = objectValue(session.metadata)
+    assert.equal(metadata.correlationId, `${this.e2e?.runId}:external-work`)
+    assert.equal(metadata.workItem, 'implementation')
+    assert.deepEqual(metadata.externalReference, externalRef)
+  },
+)
+
+Then(
+  'the external product can render progress from AMA session status and canonical events only',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
+    const events = await apiJson<ListResponse<Json>>(state.page.request, String(session.eventEndpointPath))
+    assert.equal(session.id, state.latestSession?.id)
+    assert.ok(Array.isArray(events.data))
+    assert.equal('piRuntimeId' in session, false)
+    assert.equal('piProcessId' in session, false)
+  },
+)
+
+Then('AMA routes the command to the selected runtime or owning self-hosted runner', function (this: ProductWorld) {
+  assert.equal(this.e2e?.latestSession?.status, 'stopped')
+})
+
+Then('AMA records the command result as canonical session events', function (this: ProductWorld) {
+  const events = required(this.e2e?.events, 'external session events')
+  const serialized = JSON.stringify(events.data)
+  assert.equal(serialized.includes('external product follow-up'), true)
+  assert.equal(serialized.includes('session.stop'), true)
+})
+
+Then(
+  'the external product never connects to a sandbox-local, runner-local, or official-runtime-local endpoint',
+  function (this: ProductWorld) {
+    const session = required(this.e2e?.latestSession, 'external session')
+    assert.match(String(session.runtimeEndpointPath), /^\/runtime\/sessions\/session_[A-Za-z0-9]+\/rpc$/)
+    assert.equal(JSON.stringify(session).includes('localhost'), false)
+    assert.equal(JSON.stringify(session).includes('127.0.0.1'), false)
+  },
+)
 
 Then('inactive session runtime requests use the standard error envelope', async function (this: ProductWorld) {
   const state = await ensureAgentAndEnvironment(this)
@@ -3475,9 +3669,9 @@ Then(
     const types = new Set(events.data.map((event) => event.type))
     const stderrOutput = events.data.find(
       (event) =>
-          event.type === 'runtime.output' &&
-          objectValue(event.payload).stream === 'stderr' &&
-          objectValue(event.payload).content === 'codex-bridge-test-stderr',
+        event.type === 'runtime.output' &&
+        objectValue(event.payload).stream === 'stderr' &&
+        objectValue(event.payload).content === 'codex-bridge-test-stderr',
     )
     assert.ok(stderrOutput)
     for (const type of [
@@ -3531,15 +3725,15 @@ Then(
     const serialized = JSON.stringify(events.data)
     const stderrOutput = events.data.find(
       (event) =>
-          event.type === 'runtime.output' &&
-          objectValue(event.payload).stream === 'stderr' &&
-          objectValue(event.payload).content === 'copilot-bridge-test-stderr',
+        event.type === 'runtime.output' &&
+        objectValue(event.payload).stream === 'stderr' &&
+        objectValue(event.payload).content === 'copilot-bridge-test-stderr',
     )
     const stdoutOutput = events.data.find(
       (event) =>
-          event.type === 'runtime.output' &&
-          objectValue(event.payload).stream === 'stdout' &&
-          objectValue(event.payload).content === 'copilot-bridge-test-stdout',
+        event.type === 'runtime.output' &&
+        objectValue(event.payload).stream === 'stdout' &&
+        objectValue(event.payload).content === 'copilot-bridge-test-stdout',
     )
     assert.ok(stderrOutput)
     assert.ok(stdoutOutput)
@@ -3725,7 +3919,12 @@ Then('duplicate or stale channels cannot submit tool results for the session', a
   state.runnerChannelMessages = await openRunnerChannel(state, 'duplicateRunnerChannel')
   await sendRunnerChannelEvent(state, 'amaRunnerChannel', {
     type: 'tool_execution_end',
-    payload: { toolCallId: 'duplicate_e2e', toolName: 'sandbox.exec', result: { stdout: 'duplicate-e2e' }, isError: false },
+    payload: {
+      toolCallId: 'duplicate_e2e',
+      toolName: 'sandbox.exec',
+      result: { stdout: 'duplicate-e2e' },
+      isError: false,
+    },
   })
   await sendRunnerChannelEvent(state, 'duplicateRunnerChannel', {
     type: 'tool_execution_end',
@@ -3820,13 +4019,7 @@ Then('AMA stores the activity as canonical session events', async function (this
   const state = await ensureState(this)
   const events = state.events ?? (await sessionEvents(state))
   const types = new Set(events.data.map((event) => String(event.type)))
-  for (const type of [
-    'turn_end',
-    'message_end',
-    'tool_execution_start',
-    'tool_execution_end',
-    'usage.recorded',
-  ]) {
+  for (const type of ['turn_end', 'message_end', 'tool_execution_start', 'tool_execution_end', 'usage.recorded']) {
     assert.ok(types.has(type), `missing canonical event type ${type}`)
   }
 })
@@ -4169,6 +4362,85 @@ async function ensureState(world: ProductWorld) {
   return world.e2e
 }
 
+function externalProductReferences(state: E2EState) {
+  return {
+    agentRef: {
+      product: 'external-product-e2e',
+      kind: 'agent_profile',
+      id: `${state.runId}:agent-profile`,
+    },
+    environmentRef: {
+      product: 'external-product-e2e',
+      kind: 'execution_target',
+      id: `${state.runId}:execution-target`,
+    },
+    sessionRef: {
+      product: 'external-product-e2e',
+      kind: 'task_run',
+      id: `${state.runId}:task-run`,
+    },
+  }
+}
+
+async function upsertExternalAgent(state: E2EState, externalRef: Json, data: Json = {}) {
+  return await apiJson<Json>(state.page.request, '/api/agents/external', {
+    method: 'PUT',
+    data: {
+      externalRef,
+      name: `${state.runId} external agent`,
+      instructions: 'External product agent.',
+      ...data,
+    },
+  })
+}
+
+async function upsertExternalEnvironment(state: E2EState, externalRef: Json, data: Json = {}) {
+  return await apiJson<Json>(state.page.request, '/api/environments/external', {
+    method: 'PUT',
+    data: {
+      externalRef,
+      name: `${state.runId} external environment`,
+      runtimeConfig: { image: 'ama-pi-runtime' },
+      ...data,
+    },
+  })
+}
+
+async function ensureExternalProductMappings(world: ProductWorld) {
+  const state = await ensureSignedIn(world)
+  state.response ??= externalProductReferences(state)
+  const refs = objectValue(state.response)
+  const agentRef = objectValue(refs.agentRef)
+  const environmentRef = objectValue(refs.environmentRef)
+  state.agent ??= await upsertExternalAgent(state, agentRef, {
+    name: `${state.runId} external mapped profile`,
+    instructions: 'Handle externally coordinated work.',
+  })
+  state.environment ??= await upsertExternalEnvironment(state, environmentRef, {
+    name: `${state.runId} external mapped target`,
+    runtimeConfig: { image: 'ama-pi-runtime' },
+  })
+  return state
+}
+
+async function createExternalProductSession(state: E2EState) {
+  const refs = objectValue(state.response ?? externalProductReferences(state))
+  const session = await apiJson<Json>(state.page.request, '/api/sessions', {
+    method: 'POST',
+    data: {
+      agentId: state.agent?.id,
+      environmentId: state.environment?.id,
+      title: `${state.runId} external product work`,
+      externalRef: objectValue(refs.sessionRef),
+      metadata: {
+        correlationId: `${state.runId}:external-work`,
+        workItem: 'implementation',
+      },
+    },
+  })
+  return await waitForSession(state.page.request, String(session.id))
+}
+
 async function createAgent(state: E2EState, data: Json = {}) {
   return await apiJson<Json>(state.page.request, '/api/agents', {
     method: 'POST',
@@ -4469,7 +4741,9 @@ function bridgeTestRuntimeConfig() {
 }
 
 function runnerSessionWorkDir(state: E2EState) {
-  return realpathSync(join(required(state.runnerWorkDir, 'runner workdir'), 'sessions', String(state.latestSession?.id)))
+  return realpathSync(
+    join(required(state.runnerWorkDir, 'runner workdir'), 'sessions', String(state.latestSession?.id)),
+  )
 }
 
 async function stopProductAmaRunner(state?: E2EState) {

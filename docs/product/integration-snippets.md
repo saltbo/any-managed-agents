@@ -34,6 +34,37 @@ curl -fsS "$AMA_ORIGIN/api/sessions" \
   -d '{"agentId":"agent_abc123","environmentId":"env_abc123"}'
 ```
 
+External products that own higher-level workflow can map their stable product references to AMA resources without exposing their own board, review, or pull-request concepts to AMA. The `externalRef` object is AMA-owned product language:
+
+```json
+{
+  "product": "agent-kanban",
+  "kind": "agent_profile",
+  "id": "profile_abc123"
+}
+```
+
+Use idempotent mapping upserts for agent profiles and execution targets, then create a correlated task-run session:
+
+```bash
+curl -fsS -X PUT "$AMA_ORIGIN/api/agents/external" \
+  -H "content-type: application/json" \
+  -H "authorization: Bearer $OIDC_ACCESS_TOKEN" \
+  -d '{"externalRef":{"product":"agent-kanban","kind":"agent_profile","id":"profile_abc123"},"name":"AK worker","instructions":"Work from the product-provided task context.","provider":"workers-ai","model":"@cf/moonshotai/kimi-k2.6"}'
+
+curl -fsS -X PUT "$AMA_ORIGIN/api/environments/external" \
+  -H "content-type: application/json" \
+  -H "authorization: Bearer $OIDC_ACCESS_TOKEN" \
+  -d '{"externalRef":{"product":"agent-kanban","kind":"execution_target","id":"target_abc123"},"name":"AK target","hostingMode":"cloud","runtime":"ama","runtimeConfig":{"image":"node:24"}}'
+
+curl -fsS "$AMA_ORIGIN/api/sessions" \
+  -H "content-type: application/json" \
+  -H "authorization: Bearer $OIDC_ACCESS_TOKEN" \
+  -d '{"agentId":"agent_abc123","environmentId":"env_abc123","externalRef":{"product":"agent-kanban","kind":"task_run","id":"run_abc123"},"metadata":{"correlationId":"ak:run_abc123","workItem":"implementation"}}'
+```
+
+Repeated agent/environment upserts with the same `externalRef` update the same AMA resource. Repeated session creates with the same task-run `externalRef` return the existing AMA session unless the request points at a different agent or environment.
+
 ## restish
 
 Configure restish from the deployment OpenAPI document and keep JSON output enabled for automation.
@@ -61,8 +92,8 @@ Common control-plane workflows map to these OpenAPI operations:
 | Workflow | Operation IDs | Paths |
 | --- | --- | --- |
 | Health | `getHealth` | `GET /api/health` |
-| Agents | `listAgents`, `createAgent`, `readAgent`, `updateAgent`, `archiveAgent`, `listAgentVersions` | `/api/agents` |
-| Environments | `listEnvironments`, `createEnvironment`, `readEnvironment`, `updateEnvironment`, `archiveEnvironment`, `listEnvironmentVersions` | `/api/environments` |
+| Agents | `listAgents`, `createAgent`, `upsertExternalAgentMapping`, `readAgent`, `updateAgent`, `archiveAgent`, `listAgentVersions` | `/api/agents` |
+| Environments | `listEnvironments`, `createEnvironment`, `upsertExternalEnvironmentMapping`, `readEnvironment`, `updateEnvironment`, `archiveEnvironment`, `listEnvironmentVersions` | `/api/environments` |
 | Sessions | `listSessions`, `createSession`, `readSession`, `updateSession`, `stopSession`, `archiveSession`, `listSessionEvents`, `exportSessionEvents`, `streamSessionEvents` | `/api/sessions` |
 | Providers | `listProviders`, `createProvider`, `readProvider`, `updateProvider`, `deleteProvider`, `listProviderModels`, `upsertProviderModel` | `/api/providers` |
 | Vaults | `listVaults`, `createVault`, `readVault`, `updateVault`, `archiveVault`, credential and version operations | `/api/vaults` |
@@ -97,9 +128,27 @@ const agent = await client.agents.create({
   model: '@cf/moonshotai/kimi-k2.6',
 })
 
+const mappedAgent = await client.agents.upsertExternalMapping({
+  externalRef: { product: 'agent-kanban', kind: 'agent_profile', id: 'profile_abc123' },
+  name: 'AK worker',
+  instructions: 'Work from the product-provided task context.',
+  provider: 'workers-ai',
+  model: '@cf/moonshotai/kimi-k2.6',
+})
+
+const mappedEnvironment = await client.environments.upsertExternalMapping({
+  externalRef: { product: 'agent-kanban', kind: 'execution_target', id: 'target_abc123' },
+  name: 'AK target',
+  hostingMode: 'cloud',
+  runtime: 'ama',
+  runtimeConfig: { image: 'node:24' },
+})
+
 const session = await client.sessions.create({
-  agentId: agent.id,
-  environmentId: environment.id,
+  agentId: mappedAgent.id,
+  environmentId: mappedEnvironment.id,
+  externalRef: { product: 'agent-kanban', kind: 'task_run', id: 'run_abc123' },
+  metadata: { correlationId: 'ak:run_abc123', workItem: 'implementation' },
   resourceRefs: [
     {
       type: 'github_repository',

@@ -79,6 +79,8 @@ Runtime hosting:
 - `Session` is a concrete run of an agent in an explicitly selected environment. Each session binds an agent version snapshot, environment snapshot, safe resource references, runtime/provider/model validation result, runtime endpoint, canonical AMA session events, and status.
 - `Runner` is a registered `self_hosted` runtime host. Runners heartbeat capability, supported runtime/provider/model combinations, load, and safe metadata to AMA, claim leases for queued self-hosted session runtime work, open one outbound session WebSocket per claimed session, and send canonical AMA session events/results through AMA.
 
+External products may map their own stable references to AMA resources through `externalRef` objects. The shape is `{ product, kind, id }`, with `kind` set to `agent_profile`, `execution_target`, or `task_run`. AMA stores the mapping as a project-scoped unique reference and also returns it in safe metadata as `externalReference`. The reference names are AMA product language and do not require external products to expose board, review, pull-request, or runtime-process concepts.
+
 Environment `hostingMode` is exactly `cloud` or `self_hosted`. Environment `runtime` is exactly `ama`, `claude-code`, `codex`, or `copilot`.
 
 The Environment API surface is `hostingMode`, `runtime`, and `runtimeConfig`. Hosting mode chooses AMA-managed cloud infrastructure or registered self-hosted runners, while `runtime` selects the adapter family and `runtimeConfig` stores runtime-owned configuration such as image, command, or adapter settings.

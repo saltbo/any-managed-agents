@@ -91,5 +91,7 @@ var Operations = []Operation{
 	{Method: "PATCH", Path: "/api/sessions/{sessionId}", OperationID: "updateSession", Summary: "Update a session lifecycle state", Tags: []string{"Sessions"}},
 	{Method: "PATCH", Path: "/api/vaults/{vaultId}", OperationID: "updateVault", Summary: "Update a vault", Tags: []string{"Vaults"}},
 	{Method: "PATCH", Path: "/api/vaults/{vaultId}/credentials/{credentialId}", OperationID: "updateVaultCredential", Summary: "Update or revoke vault credential metadata", Tags: []string{"Vaults"}},
+	{Method: "PUT", Path: "/api/agents/external", OperationID: "upsertExternalAgentMapping", Summary: "Create or update an agent mapped from an external product reference", Tags: []string{"Agents"}},
+	{Method: "PUT", Path: "/api/environments/external", OperationID: "upsertExternalEnvironmentMapping", Summary: "Create or update an environment mapped from an external product reference", Tags: []string{"Environments"}},
 	{Method: "POST", Path: "/api/providers/{providerId}/models", OperationID: "upsertProviderModel", Summary: "Upsert provider model metadata", Tags: []string{"Providers"}},
 }

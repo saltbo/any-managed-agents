@@ -27,6 +27,14 @@ const DEFAULT_MODEL = '@cf/moonshotai/kimi-k2.6'
 const BLOCKED_TOOLS = new Set(['secrets.read', 'filesystem.host', 'network.raw'])
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
+const ExternalRefSchema = z
+  .object({
+    product: z.string().min(1).max(120).openapi({ example: 'agent-kanban' }),
+    kind: z.literal('agent_profile').openapi({ example: 'agent_profile' }),
+    id: z.string().min(1).max(240).openapi({ example: 'profile_abc123' }),
+  })
+  .strict()
+  .openapi('AgentExternalReference')
 
 const AgentSchema = z
   .object({
@@ -42,6 +50,7 @@ const AgentSchema = z
     allowedTools: z.array(z.string()).openapi({ example: ['web.search'] }),
     mcpConnectors: z.array(z.string()).openapi({ example: ['github'] }),
     metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
+    externalRef: ExternalRefSchema.nullable(),
     status: z.enum(['active', 'archived']).openapi({ example: 'active' }),
     archivedAt: z.string().datetime().nullable().openapi({ example: null }),
     currentVersionId: z.string().nullable().openapi({ example: 'agentver_abc123' }),
@@ -98,6 +107,9 @@ const AgentPayloadSchema = z
 
 const CreateAgentSchema = AgentPayloadSchema.openapi('CreateAgentRequest')
 const UpdateAgentSchema = AgentPayloadSchema.partial().openapi('UpdateAgentRequest')
+const UpsertExternalAgentSchema = AgentPayloadSchema.extend({
+  externalRef: ExternalRefSchema,
+}).openapi('UpsertExternalAgentRequest')
 
 const AgentParamsSchema = z.object({
   agentId: z.string().openapi({
@@ -201,7 +213,7 @@ async function validateConfiguredProviderModel(
     .from(providerConfigs)
     .where(and(eq(providerConfigs.id, provider), eq(providerConfigs.projectId, projectId)))
     .get()
-  if (!configured || configured.status !== 'active') {
+  if (configured?.status !== 'active') {
     return { provider: 'Provider is disabled or unavailable for this project.' }
   }
   const knownModels = await db
@@ -287,6 +299,17 @@ function mergeMetadata(current: Record<string, unknown>, update: Record<string, 
   return Object.fromEntries(Object.entries({ ...current, ...update }).filter(([key]) => update[key] !== null))
 }
 
+function externalRef(row: Pick<AgentRow, 'externalProduct' | 'externalKind' | 'externalId'>) {
+  if (!row.externalProduct || row.externalKind !== 'agent_profile' || !row.externalId) {
+    return null
+  }
+  return { product: row.externalProduct, kind: row.externalKind as 'agent_profile', id: row.externalId }
+}
+
+function metadataWithExternalRef(metadata: Record<string, unknown>, reference: z.infer<typeof ExternalRefSchema>) {
+  return { ...metadata, externalReference: reference }
+}
+
 async function validateMcpConnectors(db: ReturnType<typeof drizzle>, projectId: string, connectorIds: string[]) {
   for (const connectorId of connectorIds) {
     const connection = await db
@@ -321,6 +344,7 @@ function serializeAgent(row: AgentRow, version: AgentVersionRow | null) {
     allowedTools: parseJson<string[]>(row.allowedTools),
     mcpConnectors: parseJson<string[]>(row.mcpConnectors),
     metadata: parseJson<Record<string, unknown>>(row.metadata),
+    externalRef: externalRef(row),
     status: row.status as 'active' | 'archived',
     archivedAt: row.archivedAt,
     currentVersionId: row.currentVersionId,
@@ -401,6 +425,25 @@ async function findAgent(db: ReturnType<typeof drizzle>, agentId: string, projec
     .get()
 }
 
+async function findExternalAgent(
+  db: ReturnType<typeof drizzle>,
+  projectId: string,
+  reference: z.infer<typeof ExternalRefSchema>,
+) {
+  return await db
+    .select()
+    .from(agentDefinitions)
+    .where(
+      and(
+        eq(agentDefinitions.projectId, projectId),
+        eq(agentDefinitions.externalProduct, reference.product),
+        eq(agentDefinitions.externalKind, reference.kind),
+        eq(agentDefinitions.externalId, reference.id),
+      ),
+    )
+    .get()
+}
+
 async function currentAgentVersion(db: ReturnType<typeof drizzle>, agent: AgentRow) {
   if (!agent.currentVersionId) {
     return null
@@ -444,6 +487,23 @@ const createAgentRoute = createRoute({
     201: { description: 'Created agent', content: { 'application/json': { schema: AgentSchema } } },
     400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+  },
+})
+
+const upsertExternalAgentRoute = createRoute({
+  method: 'put',
+  path: '/external',
+  operationId: 'upsertExternalAgentMapping',
+  tags: ['Agents'],
+  summary: 'Create or update an agent mapped from an external product reference',
+  ...AuthenticatedOperation,
+  request: { body: { required: true, content: { 'application/json': { schema: UpsertExternalAgentSchema } } } },
+  responses: {
+    200: { description: 'Updated mapped agent', content: { 'application/json': { schema: AgentSchema } } },
+    201: { description: 'Created mapped agent', content: { 'application/json': { schema: AgentSchema } } },
+    400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    409: { description: 'Mapped agent conflict', content: { 'application/json': { schema: ErrorResponseSchema } } },
   },
 })
 
@@ -598,6 +658,9 @@ const routes = app
       allowedTools: stringify(allowedTools),
       mcpConnectors: stringify(mcpConnectors),
       metadata: stringify(metadata),
+      externalProduct: null,
+      externalKind: null,
+      externalId: null,
       status: 'active',
       archivedAt: null,
       currentVersionId: null,
@@ -616,6 +679,109 @@ const routes = app
     await db.update(agentDefinitions).set({ currentVersionId: version.id }).where(eq(agentDefinitions.id, row.id))
 
     return c.json(serializeAgent({ ...row, currentVersionId: version.id }, version), 201)
+  })
+  .openapi(upsertExternalAgentRoute, async (c) => {
+    const body = c.req.valid('json')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+
+    const existing = await findExternalAgent(db, auth.project.id, body.externalRef)
+    if (existing?.status === 'archived') {
+      return c.json({ error: { type: 'conflict', message: 'Mapped agent is archived' } }, 409)
+    }
+
+    const provider = await normalizeRequestedProvider(
+      db,
+      auth.project.id,
+      body.provider ?? existing?.provider ?? (await defaultProvider(db, auth.project.id)),
+    )
+    const model = body.model ?? existing?.model ?? c.env.AMA_DEFAULT_MODEL ?? DEFAULT_MODEL
+    const skills = body.skills ?? (existing ? parseJson<string[]>(existing.skills) : [])
+    const allowedTools = body.allowedTools ?? (existing ? parseJson<string[]>(existing.allowedTools) : [])
+    const mcpConnectors = body.mcpConnectors ?? (existing ? parseJson<string[]>(existing.mcpConnectors) : [])
+    const metadata = metadataWithExternalRef(
+      existing
+        ? mergeMetadata(parseJson<Record<string, unknown>>(existing.metadata), body.metadata)
+        : (body.metadata ?? {}),
+      body.externalRef,
+    )
+    const validation =
+      (await validateConfiguredProviderModel(db, auth.project.id, provider, model, c.env.AMA_DEFAULT_MODEL)) ??
+      validateSkills(skills) ??
+      validateAllowedTools(allowedTools) ??
+      (await validateMcpConnectors(db, auth.project.id, mcpConnectors)) ??
+      (hasSecretMaterial(metadata) ? { metadata: 'Secret material must be stored in a vault.' } : null)
+    if (validation) {
+      return c.json(domainValidation('Invalid agent configuration', validation), 400)
+    }
+
+    const timestamp = now()
+    if (!existing) {
+      const row = {
+        id: newId('agent'),
+        projectId: auth.project.id,
+        name: body.name,
+        description: body.description ?? null,
+        instructions: body.instructions ?? body.systemPrompt ?? null,
+        provider,
+        model,
+        systemPrompt: body.systemPrompt ?? body.instructions ?? null,
+        skills: stringify(skills),
+        allowedTools: stringify(allowedTools),
+        mcpConnectors: stringify(mcpConnectors),
+        metadata: stringify(metadata),
+        externalProduct: body.externalRef.product,
+        externalKind: body.externalRef.kind,
+        externalId: body.externalRef.id,
+        status: 'active',
+        archivedAt: null,
+        currentVersionId: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }
+      await db.insert(agentDefinitions).values(row)
+      const version = await createAgentVersion(db, row, {
+        ...row,
+        skills,
+        allowedTools,
+        mcpConnectors,
+        metadata,
+        createdAt: timestamp,
+      })
+      await db.update(agentDefinitions).set({ currentVersionId: version.id }).where(eq(agentDefinitions.id, row.id))
+      return c.json(serializeAgent({ ...row, currentVersionId: version.id }, version), 201)
+    }
+
+    const next = {
+      name: body.name,
+      description: body.description ?? existing.description,
+      instructions: body.instructions ?? existing.instructions,
+      provider,
+      model,
+      systemPrompt: body.systemPrompt ?? existing.systemPrompt,
+      skills,
+      allowedTools,
+      mcpConnectors,
+      metadata,
+    }
+    const version = await createAgentVersion(db, existing, { ...next, createdAt: timestamp })
+    const updated = {
+      ...next,
+      skills: stringify(next.skills),
+      allowedTools: stringify(next.allowedTools),
+      mcpConnectors: stringify(next.mcpConnectors),
+      metadata: stringify(next.metadata),
+      currentVersionId: version.id,
+      updatedAt: timestamp,
+    }
+    await db
+      .update(agentDefinitions)
+      .set(updated)
+      .where(and(eq(agentDefinitions.id, existing.id), eq(agentDefinitions.projectId, auth.project.id)))
+    return c.json(serializeAgent({ ...existing, ...updated }, version), 200)
   })
   .openapi(readAgentRoute, async (c) => {
     const { agentId } = c.req.valid('param')

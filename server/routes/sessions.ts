@@ -1,5 +1,5 @@
 import { createRoute, z } from '@hono/zod-openapi'
-import { and, asc, desc, eq, gt, gte, inArray, isNull, like, lt, lte, max, ne, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, gte, isNull, like, lt, lte, max, ne, or } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
 import {
@@ -67,6 +67,14 @@ const EVENT_VISIBILITIES = ['runtime', 'transcript', 'debug', 'audit'] as const
 const RUNTIME_START_TIMEOUT_MS = 300_000
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
+const ExternalRefSchema = z
+  .object({
+    product: z.string().min(1).max(120).openapi({ example: 'agent-kanban' }),
+    kind: z.literal('task_run').openapi({ example: 'task_run' }),
+    id: z.string().min(1).max(240).openapi({ example: 'run_abc123' }),
+  })
+  .strict()
+  .openapi('SessionExternalReference')
 const GitHubOwnerSchema = z
   .string()
   .min(1)
@@ -188,10 +196,12 @@ export const SessionSchema = z
     durableObjectName: z.string().openapi({ example: 'org_org123:project_project123:session_session123' }),
     sandboxId: z.string().nullable().openapi({ example: 'session_abc123' }),
     runtimeEndpointPath: z.string().nullable().openapi({ example: '/runtime/sessions/session_abc123/rpc' }),
+    eventEndpointPath: z.string().openapi({ example: '/api/sessions/session_abc123/events' }),
     runtimeMetadata: SessionRuntimeMetadataSchema,
     status: z.enum(SESSION_STATUSES).openapi({ example: 'idle' }),
     statusReason: z.string().nullable(),
     metadata: JsonObjectSchema,
+    externalRef: ExternalRefSchema.nullable(),
     startedAt: z.string().datetime().nullable(),
     stoppedAt: z.string().datetime().nullable(),
     archivedAt: z.string().datetime().nullable(),
@@ -224,6 +234,7 @@ const CreateSessionSchema = z
     environmentId: z.string().min(1).openapi({ example: 'env_abc123' }),
     title: z.string().min(1).max(160).optional().openapi({ example: 'Implement billing export' }),
     metadata: JsonObjectSchema.optional().openapi({ example: { ticket: 'AMA-123' } }),
+    externalRef: ExternalRefSchema.optional(),
     resourceRefs: z
       .array(ResourceRefSchema)
       .max(50)
@@ -309,6 +320,20 @@ function parseJson<T>(value: string | null) {
 
 function stringify(value: unknown) {
   return JSON.stringify(value)
+}
+
+function externalRef(row: Pick<SessionRow, 'externalProduct' | 'externalKind' | 'externalId'>) {
+  if (!row.externalProduct || row.externalKind !== 'task_run' || !row.externalId) {
+    return null
+  }
+  return { product: row.externalProduct, kind: row.externalKind as 'task_run', id: row.externalId }
+}
+
+function metadataWithExternalRef(
+  metadata: Record<string, unknown> | undefined,
+  reference: z.infer<typeof ExternalRefSchema> | undefined,
+) {
+  return reference ? { ...(metadata ?? {}), externalReference: reference } : (metadata ?? {})
 }
 
 function secretKey(key: string) {
@@ -586,6 +611,7 @@ function serializeSession(row: SessionRow) {
     runtimeEndpointPath:
       row.runtimeEndpointPath ??
       (environmentHostingMode(environmentSnapshot) === 'cloud' ? runtimeEndpointPath(row.id) : null),
+    eventEndpointPath: `/api/sessions/${row.id}/events`,
     runtimeMetadata: runtimeMetadata({
       hostingMode,
       runtime,
@@ -597,6 +623,7 @@ function serializeSession(row: SessionRow) {
     status: row.status as (typeof SESSION_STATUSES)[number],
     statusReason: row.statusReason,
     metadata,
+    externalRef: externalRef(row),
     startedAt: row.startedAt,
     stoppedAt: row.stoppedAt,
     archivedAt: row.archivedAt,
@@ -888,6 +915,23 @@ async function findSession(db: Db, auth: AuthContext, sessionId: string) {
   )
 }
 
+async function findExternalSession(db: Db, auth: AuthContext, reference: z.infer<typeof ExternalRefSchema>) {
+  return (
+    (await db
+      .select()
+      .from(sessions)
+      .where(
+        and(
+          eq(sessions.projectId, auth.project.id),
+          eq(sessions.externalProduct, reference.product),
+          eq(sessions.externalKind, reference.kind),
+          eq(sessions.externalId, reference.id),
+        ),
+      )
+      .get()) ?? null
+  )
+}
+
 export async function createSessionForAgent(
   c: Context<{ Bindings: Env }>,
   db: Db,
@@ -900,6 +944,7 @@ export async function createSessionForAgent(
     resourceRefs?: Array<z.infer<typeof ResourceRefSchema>>
     vaultRefs?: Record<string, unknown>[]
     initialPrompt?: string
+    externalRef?: z.infer<typeof ExternalRefSchema>
   } = {},
 ) {
   if (
@@ -920,6 +965,15 @@ export async function createSessionForAgent(
     return errorResponse(c, 400, 'validation_error', 'Invalid session resource references', {
       fields: normalizedResources.fields,
     })
+  }
+  if (options.externalRef) {
+    const existing = await findExternalSession(db, auth, options.externalRef)
+    if (existing) {
+      if (existing.agentId !== agentId || existing.environmentId !== environmentId) {
+        return errorResponse(c, 409, 'conflict', 'External task run is already mapped to a different session')
+      }
+      return c.json(serializeSession(existing), 200)
+    }
   }
 
   const agent = await db
@@ -1080,12 +1134,15 @@ export async function createSessionForAgent(
     status: 'pending',
     statusReason: hostingMode === 'self_hosted' ? 'waiting-for-runner' : null,
     metadata: stringify({
-      ...(options.metadata ?? {}),
+      ...metadataWithExternalRef(options.metadata, options.externalRef),
       hostingMode,
       runtime,
       runtimeDriver: runtimeDriverName(runtime, hostingMode),
       ...(hostingMode === 'self_hosted' ? { runnerState: 'queued', runnerProtocol: 'ama-runner-work' } : {}),
     }),
+    externalProduct: options.externalRef?.product ?? null,
+    externalKind: options.externalRef?.kind ?? null,
+    externalId: options.externalRef?.id ?? null,
     startedAt: null,
     stoppedAt: null,
     archivedAt: null,
@@ -1174,7 +1231,7 @@ async function startSessionRuntimeForRow(
       'Session runtime startup timed out',
     )
     const current = await findSession(db, auth, sessionId)
-    if (!current || current.status !== 'pending') {
+    if (current?.status !== 'pending') {
       if (current?.status !== 'idle') {
         await stopCloudSessionRuntime(env, sandboxId).catch(() => undefined)
       }
@@ -1651,6 +1708,12 @@ async function stopSession(
     .update(sessions)
     .set({ status: 'stopped', stoppedAt, updatedAt: stoppedAt })
     .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
+  await appendRuntimeEvent(db, {
+    auth,
+    sessionId: session.id,
+    event: { type: 'session.stop', status: 'stopped', reason },
+    metadata: { source: 'api' },
+  })
   await recordAudit(db, {
     auth,
     action: 'session.stop',
@@ -1733,6 +1796,10 @@ const createSessionRoute = createRoute({
   ...AuthenticatedOperation,
   request: { body: { required: true, content: { 'application/json': { schema: CreateSessionSchema } } } },
   responses: {
+    200: {
+      description: 'Existing session for external task run',
+      content: { 'application/json': { schema: SessionSchema } },
+    },
     201: { description: 'Created session', content: { 'application/json': { schema: SessionSchema } } },
     400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
@@ -1996,7 +2063,8 @@ async function streamEventsNdjsonResponse(c: Context<{ Bindings: Env }>, session
 
 const routes = app
   .openapi(createSessionRoute, async (c) => {
-    const { agentId, environmentId, title, metadata, resourceRefs, vaultRefs, initialPrompt } = c.req.valid('json')
+    const { agentId, environmentId, title, metadata, externalRef, resourceRefs, vaultRefs, initialPrompt } =
+      c.req.valid('json')
     const db = drizzle(c.env.DB)
     const auth = await requireAuth(c, db)
     if (auth instanceof Response) {
@@ -2005,6 +2073,7 @@ const routes = app
     return await createSessionForAgent(c, db, auth, agentId, environmentId, {
       ...(title !== undefined ? { title } : {}),
       ...(metadata !== undefined ? { metadata } : {}),
+      ...(externalRef !== undefined ? { externalRef } : {}),
       ...(resourceRefs !== undefined ? { resourceRefs } : {}),
       ...(vaultRefs !== undefined ? { vaultRefs } : {}),
       ...(initialPrompt !== undefined ? { initialPrompt } : {}),

@@ -26,6 +26,14 @@ import {
 const app = createApiRouter()
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
+const ExternalRefSchema = z
+  .object({
+    product: z.string().min(1).max(120).openapi({ example: 'agent-kanban' }),
+    kind: z.literal('execution_target').openapi({ example: 'execution_target' }),
+    id: z.string().min(1).max(240).openapi({ example: 'target_abc123' }),
+  })
+  .strict()
+  .openapi('EnvironmentExternalReference')
 const PackageSchema = z.object({
   name: z.string().min(1).max(120),
   version: z.string().min(1).max(120).optional(),
@@ -80,6 +88,7 @@ const EnvironmentSchema = z
     resourceLimits: JsonObjectSchema.openapi({ example: { memoryMb: 512 } }),
     runtimeConfig: JsonObjectSchema.openapi({ example: { image: 'node:24' } }),
     metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
+    externalRef: ExternalRefSchema.nullable(),
     status: z.enum(['active', 'archived']).openapi({ example: 'active' }),
     archivedAt: z.string().datetime().nullable().openapi({ example: null }),
     currentVersionId: z.string().nullable().openapi({ example: 'envver_abc123' }),
@@ -146,6 +155,9 @@ const EnvironmentPayloadSchema = z
   .strict()
 const CreateEnvironmentSchema = EnvironmentPayloadSchema.openapi('CreateEnvironmentRequest')
 const UpdateEnvironmentSchema = EnvironmentPayloadSchema.partial().openapi('UpdateEnvironmentRequest')
+const UpsertExternalEnvironmentSchema = EnvironmentPayloadSchema.extend({
+  externalRef: ExternalRefSchema,
+}).openapi('UpsertExternalEnvironmentRequest')
 
 const EnvironmentParamsSchema = z.object({
   environmentId: z.string().openapi({
@@ -180,6 +192,24 @@ function parseJson<T>(value: string) {
 
 function stringify(value: unknown) {
   return JSON.stringify(value)
+}
+
+function mergeMetadata(current: Record<string, unknown>, update: Record<string, unknown> | undefined) {
+  if (!update) {
+    return current
+  }
+  return Object.fromEntries(Object.entries({ ...current, ...update }).filter(([key]) => update[key] !== null))
+}
+
+function externalRef(row: Pick<EnvironmentRow, 'externalProduct' | 'externalKind' | 'externalId'>) {
+  if (!row.externalProduct || row.externalKind !== 'execution_target' || !row.externalId) {
+    return null
+  }
+  return { product: row.externalProduct, kind: row.externalKind as 'execution_target', id: row.externalId }
+}
+
+function metadataWithExternalRef(metadata: Record<string, unknown>, reference: z.infer<typeof ExternalRefSchema>) {
+  return { ...metadata, externalReference: reference }
 }
 
 const normalizeNetworkPolicy = normalizeEnvironmentNetworkPolicy
@@ -361,6 +391,7 @@ function serializeEnvironment(row: EnvironmentRow, version: EnvironmentVersionRo
     resourceLimits: parseJson<Record<string, unknown>>(row.resourceLimits),
     runtimeConfig: parseJson<Record<string, unknown>>(row.runtimeConfig),
     metadata: parseJson<Record<string, unknown>>(row.metadata),
+    externalRef: externalRef(row),
     status: row.status as 'active' | 'archived',
     archivedAt: row.archivedAt,
     currentVersionId: row.currentVersionId,
@@ -375,6 +406,25 @@ async function findEnvironment(db: ReturnType<typeof drizzle>, environmentId: st
     .select()
     .from(environments)
     .where(and(eq(environments.id, environmentId), eq(environments.projectId, projectId)))
+    .get()
+}
+
+async function findExternalEnvironment(
+  db: ReturnType<typeof drizzle>,
+  projectId: string,
+  reference: z.infer<typeof ExternalRefSchema>,
+) {
+  return await db
+    .select()
+    .from(environments)
+    .where(
+      and(
+        eq(environments.projectId, projectId),
+        eq(environments.externalProduct, reference.product),
+        eq(environments.externalKind, reference.kind),
+        eq(environments.externalId, reference.id),
+      ),
+    )
     .get()
 }
 
@@ -473,6 +523,26 @@ const createRouteConfig = createRoute({
     201: { description: 'Created environment', content: { 'application/json': { schema: EnvironmentSchema } } },
     400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+  },
+})
+
+const upsertExternalRoute = createRoute({
+  method: 'put',
+  path: '/external',
+  operationId: 'upsertExternalEnvironmentMapping',
+  tags: ['Environments'],
+  summary: 'Create or update an environment mapped from an external product reference',
+  ...AuthenticatedOperation,
+  request: { body: { required: true, content: { 'application/json': { schema: UpsertExternalEnvironmentSchema } } } },
+  responses: {
+    200: { description: 'Updated mapped environment', content: { 'application/json': { schema: EnvironmentSchema } } },
+    201: { description: 'Created mapped environment', content: { 'application/json': { schema: EnvironmentSchema } } },
+    400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    409: {
+      description: 'Mapped environment conflict',
+      content: { 'application/json': { schema: ErrorResponseSchema } },
+    },
   },
 })
 
@@ -639,6 +709,9 @@ const routes = app
       resourceLimits: stringify(values.resourceLimits),
       runtimeConfig: stringify(values.runtimeConfig),
       metadata: stringify(values.metadata),
+      externalProduct: null,
+      externalKind: null,
+      externalId: null,
       status: 'active',
       archivedAt: null,
       currentVersionId: null,
@@ -649,6 +722,106 @@ const routes = app
     const version = await createVersion(db, row, { ...values, createdAt: timestamp })
     await db.update(environments).set({ currentVersionId: version.id }).where(eq(environments.id, row.id))
     return c.json(serializeEnvironment({ ...row, currentVersionId: version.id }, version), 201)
+  })
+  .openapi(upsertExternalRoute, async (c) => {
+    const body = c.req.valid('json')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+
+    const existing = await findExternalEnvironment(db, auth.project.id, body.externalRef)
+    if (existing?.status === 'archived') {
+      return c.json({ error: { type: 'conflict', message: 'Mapped environment is archived' } }, 409)
+    }
+    const next = {
+      packages: body.packages ?? (existing ? parseJson<Package[]>(existing.packages) : []),
+      variables: body.variables ?? (existing ? parseJson<Record<string, Variable>>(existing.variables) : {}),
+      secretRefs: body.secretRefs ?? (existing ? parseJson<SecretRef[]>(existing.secretRefs) : []),
+      hostingMode: body.hostingMode ?? (existing?.hostingMode as EnvironmentHostingMode | undefined) ?? 'cloud',
+      runtime: body.runtime ?? (existing?.runtime as EnvironmentRuntime | undefined) ?? 'ama',
+      networkPolicy:
+        body.networkPolicy ??
+        (existing ? normalizeNetworkPolicy(parseJson<unknown>(existing.networkPolicy)) : { mode: 'unrestricted' }),
+      mcpPolicy: body.mcpPolicy ?? (existing ? parseJson<Record<string, unknown>>(existing.mcpPolicy) : {}),
+      packageManagerPolicy:
+        body.packageManagerPolicy ??
+        (existing ? parseJson<Record<string, unknown>>(existing.packageManagerPolicy) : {}),
+      resourceLimits:
+        body.resourceLimits ?? (existing ? parseJson<Record<string, unknown>>(existing.resourceLimits) : {}),
+      runtimeConfig: body.runtimeConfig ?? (existing ? parseJson<Record<string, unknown>>(existing.runtimeConfig) : {}),
+      metadata: metadataWithExternalRef(
+        existing
+          ? mergeMetadata(parseJson<Record<string, unknown>>(existing.metadata), body.metadata)
+          : (body.metadata ?? {}),
+        body.externalRef,
+      ),
+    }
+    const validation =
+      (await validateSecretRefs(db, auth.organization.id, auth.project.id, next.secretRefs)) ??
+      (await validateMcpPolicy(db, auth.project.id, next.mcpPolicy)) ??
+      validateSecretFreeObjects(next)
+    if (validation) {
+      return c.json(domainValidation('Invalid environment configuration', validation), 400)
+    }
+
+    const timestamp = now()
+    if (!existing) {
+      const row = {
+        id: newId('env'),
+        projectId: auth.project.id,
+        name: body.name,
+        description: body.description ?? null,
+        packages: stringify(next.packages),
+        variables: stringify(next.variables),
+        secretRefs: stringify(next.secretRefs),
+        hostingMode: next.hostingMode,
+        runtime: next.runtime,
+        networkPolicy: stringify(next.networkPolicy),
+        mcpPolicy: stringify(next.mcpPolicy),
+        packageManagerPolicy: stringify(next.packageManagerPolicy),
+        resourceLimits: stringify(next.resourceLimits),
+        runtimeConfig: stringify(next.runtimeConfig),
+        metadata: stringify(next.metadata),
+        externalProduct: body.externalRef.product,
+        externalKind: body.externalRef.kind,
+        externalId: body.externalRef.id,
+        status: 'active',
+        archivedAt: null,
+        currentVersionId: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }
+      await db.insert(environments).values(row)
+      const version = await createVersion(db, row, { ...next, createdAt: timestamp })
+      await db.update(environments).set({ currentVersionId: version.id }).where(eq(environments.id, row.id))
+      return c.json(serializeEnvironment({ ...row, currentVersionId: version.id }, version), 201)
+    }
+
+    const version = await createVersion(db, existing, { ...next, createdAt: timestamp })
+    const updated = {
+      name: body.name,
+      description: body.description ?? existing.description,
+      packages: stringify(next.packages),
+      variables: stringify(next.variables),
+      secretRefs: stringify(next.secretRefs),
+      hostingMode: next.hostingMode,
+      runtime: next.runtime,
+      networkPolicy: stringify(next.networkPolicy),
+      mcpPolicy: stringify(next.mcpPolicy),
+      packageManagerPolicy: stringify(next.packageManagerPolicy),
+      resourceLimits: stringify(next.resourceLimits),
+      runtimeConfig: stringify(next.runtimeConfig),
+      metadata: stringify(next.metadata),
+      currentVersionId: version.id,
+      updatedAt: timestamp,
+    }
+    await db
+      .update(environments)
+      .set(updated)
+      .where(and(eq(environments.id, existing.id), eq(environments.projectId, auth.project.id)))
+    return c.json(serializeEnvironment({ ...existing, ...updated }, version), 200)
   })
   .openapi(readRoute, async (c) => {
     const { environmentId } = c.req.valid('param')

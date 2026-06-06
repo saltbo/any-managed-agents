@@ -25,8 +25,10 @@ Web console
 Repo-local generated SDK scaffolds use this repository's OpenAPI document as their source of truth. Those SDKs are the developer entry point for product resources:
 
 - create, read, update, archive, and version agents
+- create or update agent mappings by stable external product references
 - create and manage environments
-- create, start, stop, resume, and inspect sessions
+- create or update environment mappings by stable external product references
+- create, start, stop, resume, and inspect sessions, including idempotent task-run session creation by external product reference
 - manage provider, vault, policy, usage, and audit resources
 - connect to a running session through AMA session endpoints
 
@@ -99,5 +101,6 @@ The platform uses sandbox capabilities internally to provide filesystem, shell, 
 - `Environment` is a long-lived hosting and runtime configuration, not a running sandbox or runner. `hostingMode` is `cloud` or `self_hosted`; `runtime` is `ama`, `claude-code`, `codex`, or `copilot`.
 - `Sandbox` is a per-session cloud workspace instance created from an environment snapshot when the selected hosting/runtime combination requires it.
 - `Session` is a concrete run of an agent, binding an agent version snapshot, environment snapshot, validated runtime/provider/model combination, runtime endpoint, canonical events, transcript, tool calls, and status.
+- `externalRef` is the public mapping shape for product servers that own higher-level workflow. It has `product`, `kind`, and `id` fields. Supported kinds are `agent_profile`, `execution_target`, and `task_run`; AMA persists these as unique project-scoped references while keeping external product workflow concepts out of the runtime contract.
 
 External SDKs should make this model explicit.

@@ -722,6 +722,24 @@ OPERATIONS = [
     ]
   },
   {
+    "method": "PUT",
+    "path": "/api/agents/external",
+    "operationId": "upsertExternalAgentMapping",
+    "summary": "Create or update an agent mapped from an external product reference",
+    "tags": [
+      "Agents"
+    ]
+  },
+  {
+    "method": "PUT",
+    "path": "/api/environments/external",
+    "operationId": "upsertExternalEnvironmentMapping",
+    "summary": "Create or update an environment mapped from an external product reference",
+    "tags": [
+      "Environments"
+    ]
+  },
+  {
     "method": "POST",
     "path": "/api/providers/{providerId}/models",
     "operationId": "upsertProviderModel",

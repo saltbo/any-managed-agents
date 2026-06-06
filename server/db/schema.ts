@@ -23,6 +23,9 @@ export const agentDefinitions = sqliteTable(
     allowedTools: text('allowed_tools').notNull().default('[]'),
     mcpConnectors: text('mcp_connectors').notNull().default('[]'),
     metadata: text('metadata').notNull().default('{}'),
+    externalProduct: text('external_product'),
+    externalKind: text('external_kind'),
+    externalId: text('external_id'),
     status: text('status').notNull().default('active'),
     archivedAt: text('archived_at'),
     currentVersionId: text('current_version_id'),
@@ -31,6 +34,12 @@ export const agentDefinitions = sqliteTable(
   },
   (table) => [
     index('idx_agent_definitions_project_status_created').on(table.projectId, table.status, table.createdAt, table.id),
+    uniqueIndex('idx_agent_definitions_external_ref').on(
+      table.projectId,
+      table.externalProduct,
+      table.externalKind,
+      table.externalId,
+    ),
   ],
 )
 
@@ -81,6 +90,9 @@ export const environments = sqliteTable(
     resourceLimits: text('resource_limits').notNull().default('{}'),
     runtimeConfig: text('runtime_config').notNull().default('{}'),
     metadata: text('metadata').notNull().default('{}'),
+    externalProduct: text('external_product'),
+    externalKind: text('external_kind'),
+    externalId: text('external_id'),
     status: text('status').notNull().default('active'),
     archivedAt: text('archived_at'),
     currentVersionId: text('current_version_id'),
@@ -89,6 +101,12 @@ export const environments = sqliteTable(
   },
   (table) => [
     index('idx_environments_project_status_created').on(table.projectId, table.status, table.createdAt, table.id),
+    uniqueIndex('idx_environments_external_ref').on(
+      table.projectId,
+      table.externalProduct,
+      table.externalKind,
+      table.externalId,
+    ),
   ],
 )
 
@@ -235,6 +253,9 @@ export const sessions = sqliteTable(
     status: text('status').notNull(),
     statusReason: text('status_reason'),
     metadata: text('metadata').notNull().default('{}'),
+    externalProduct: text('external_product'),
+    externalKind: text('external_kind'),
+    externalId: text('external_id'),
     startedAt: text('started_at'),
     stoppedAt: text('stopped_at'),
     archivedAt: text('archived_at'),
@@ -243,6 +264,12 @@ export const sessions = sqliteTable(
   },
   (table) => [
     index('idx_sessions_project_status_created').on(table.projectId, table.status, table.createdAt, table.id),
+    uniqueIndex('idx_sessions_external_ref').on(
+      table.projectId,
+      table.externalProduct,
+      table.externalKind,
+      table.externalId,
+    ),
   ],
 )
 
