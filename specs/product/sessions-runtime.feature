@@ -47,6 +47,30 @@ Feature: Agent sessions
     Then session metadata, runtime endpoint, environment runtime snapshot, and status are available
 
   @planned
+  Scenario: Send live commands to a self-hosted runtime session
+    Given a self-hosted session has an accepted runner channel and a live runtime handle
+    When a client sends a follow-up message through the AMA session endpoint
+    Then AMA routes the message to the owning runner over the accepted session channel
+    And the runner delivers the message to the selected runtime handle
+    And AMA persists the resulting runtime activity as canonical session events
+
+  @planned
+  Scenario: Stop a self-hosted runtime session through AMA
+    Given a self-hosted session has an accepted runner channel and a live runtime handle
+    When a client stops the session through the AMA session endpoint
+    Then AMA sends a stop command to the owning runner over the accepted session channel
+    And the runner aborts the selected runtime handle
+    And AMA records lifecycle events and a terminal stopped or error status
+
+  @planned
+  Scenario: Resume a session from the latest safe checkpoint
+    Given a session has a stored safe resume point
+    When a client resumes the session through AMA
+    Then AMA sends the resume request to the selected runtime driver or owning runner
+    And the runtime continues from the safe resume point without creating a duplicate session history
+    And AMA records resumed lifecycle events and later runtime activity in the same session event stream
+
+  @planned
   Scenario: Keep runtime process details behind AMA endpoints
     Given a session is running in any supported runtime
     When the client sends commands or subscribes to events

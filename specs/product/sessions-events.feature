@@ -36,3 +36,20 @@ Feature: Session events
     Then AMA stores the activity as canonical session events
     And UI, API, and session-state views read only canonical session events
     And runtime-specific details appear only as safe metadata
+
+  @planned
+  Scenario: Preserve event hierarchy for product consumers
+    Given a runtime emits nested turns, messages, tool calls, permission requests, and substeps
+    When AMA stores the session events
+    Then every canonical event has a stable event id and monotonically increasing sequence
+    And related events share stable turn, message, tool call, and span identifiers
+    And child events reference their parent event, tool call, or span where nesting exists
+    And product clients can reconstruct transcript, tool progress, runtime diagnostics, usage, and errors without raw runtime events
+
+  @planned
+  Scenario: Record runtime checkpoints and resume tokens as canonical events
+    Given a runtime creates a checkpoint, thread id, session id, or resume token
+    When AMA receives the runtime update
+    Then AMA stores a canonical checkpoint or runtime metadata event with a safe resume reference
+    And the raw provider token value is redacted when it is sensitive
+    And session state can identify the latest safe resume point without parsing raw runtime events

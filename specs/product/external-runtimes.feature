@@ -73,6 +73,23 @@ Feature: External agent runtimes on self-hosted runners
     And Copilot output is translated into canonical lifecycle, transcript, tool, usage, output, and error events
     And the session reaches idle, stopped, or error with inspectable final events
 
+  @planned
+  Scenario: Surface official runtime authentication and authorization failures
+    Given a self-hosted environment selects codex, claude-code, or copilot runtime
+    And the owning runner starts the selected official runtime
+    When the official runtime reports missing login, unauthorized account, disabled product policy, or expired credentials
+    Then ama-runner emits a canonical runtime error event with a stable error code
+    And AMA marks the session with a safe status reason that product clients can display
+    And raw credential material, local auth files, and provider tokens are not stored in session events, runner metadata, logs, or OpenAPI responses
+
+  @planned
+  Scenario: Normalize official runtime permission requests
+    Given an official runtime requests permission for a tool, file, network, or shell action
+    When ama-runner receives the permission request
+    Then ama-runner emits a canonical permission request event with safe action details
+    And AMA applies the session policy before approving or denying the action
+    And the final approval or denial is recorded as canonical policy and tool events
+
   @implemented
   Scenario: Authenticate ama-runner through OIDC device login
     Given FlareAuth exposes OAuth/OIDC device authorization for a runner client
