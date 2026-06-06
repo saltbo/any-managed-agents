@@ -27,24 +27,36 @@ function event(sequence: number, type: AmaSessionEventType, payload: Record<stri
 }
 
 const canonicalEventPayloads = {
-  'session.lifecycle': { type: 'session.lifecycle', stage: 'turn_started' },
-  'transcript.message': { type: 'transcript.message', message: { role: 'assistant', timestamp: 1, content: 'Hello' } },
-  'transcript.message.delta': {
-    type: 'transcript.message.delta',
+  agent_start: { type: 'agent_start' },
+  agent_end: { type: 'agent_end', messages: [] },
+  turn_start: { type: 'turn_start' },
+  turn_end: { type: 'turn_end', message: { role: 'assistant', timestamp: 2, content: 'Done' }, toolResults: [] },
+  message_start: { type: 'message_start', message: { role: 'assistant', timestamp: 1, content: '' } },
+  message_update: {
+    type: 'message_update',
     message: { id: 'message_1', role: 'assistant', timestamp: 1, content: 'Hello' },
   },
-  'tool_call.started': {
-    type: 'tool_call.started',
-    toolCall: { id: 'tool_1', name: 'read_file', input: { path: 'README.md' } },
+  message_end: { type: 'message_end', message: { role: 'assistant', timestamp: 1, content: 'Hello' } },
+  tool_execution_start: {
+    type: 'tool_execution_start',
+    toolCallId: 'tool_1',
+    toolName: 'read_file',
+    args: { path: 'README.md' },
   },
-  'tool_call.updated': {
-    type: 'tool_call.updated',
-    toolCall: { id: 'tool_1', name: 'read_file', output: { content: [] } },
+  tool_execution_update: {
+    type: 'tool_execution_update',
+    toolCallId: 'tool_1',
+    toolName: 'read_file',
+    args: { path: 'README.md' },
+    partialResult: { content: [] },
   },
-  'tool_call.completed': {
-    type: 'tool_call.completed',
-    toolCall: { id: 'tool_1', name: 'read_file', output: { content: [{ type: 'text', text: 'ok' }] } },
-    status: 'success',
+  tool_execution_end: {
+    type: 'tool_execution_end',
+    toolCallId: 'tool_1',
+    toolName: 'read_file',
+    args: { path: 'README.md' },
+    result: { content: [{ type: 'text', text: 'ok' }] },
+    isError: false,
   },
   'usage.recorded': { type: 'usage.recorded', promptTokens: 1, completionTokens: 2, totalTokens: 3 },
   'policy.decision': { type: 'policy.decision', allowed: false, category: 'tool' },
@@ -103,7 +115,7 @@ describe('sessionRuntimeReducer', () => {
     const started = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
       event: {
-        type: 'tool_call.started',
+        type: 'tool_execution_start',
         toolCall: { id: 'tool_empty_values', name: 'inspect', input: { path: 'README.md' } },
       },
       at: new Date(1000).toISOString(),
@@ -111,7 +123,7 @@ describe('sessionRuntimeReducer', () => {
     const withText = sessionRuntimeReducer(started, {
       type: 'event',
       event: {
-        type: 'tool_call.updated',
+        type: 'tool_execution_update',
         toolCall: {
           id: 'tool_empty_values',
           name: 'inspect',
@@ -123,7 +135,7 @@ describe('sessionRuntimeReducer', () => {
     const withEmptyString = sessionRuntimeReducer(withText, {
       type: 'event',
       event: {
-        type: 'tool_call.updated',
+        type: 'tool_execution_update',
         toolCall: { id: 'tool_empty_values', name: 'inspect', output: '' },
       },
       at: new Date(3000).toISOString(),
@@ -131,7 +143,7 @@ describe('sessionRuntimeReducer', () => {
     const withEmptyArray = sessionRuntimeReducer(withEmptyString, {
       type: 'event',
       event: {
-        type: 'tool_call.updated',
+        type: 'tool_execution_update',
         toolCall: { id: 'tool_empty_values', name: 'inspect', output: [] },
       },
       at: new Date(4000).toISOString(),
@@ -182,7 +194,7 @@ describe('sessionRuntimeReducer', () => {
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
       event: {
-        type: 'tool_call.completed',
+        type: 'tool_execution_end',
         isError: true,
         toolCall: { id: 'tool_missing_error', name: 'inspect', output: null },
       },
@@ -215,7 +227,7 @@ describe('sessionRuntimeReducer', () => {
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'event',
       event: {
-        type: 'transcript.message',
+        type: 'message_end',
         message: {
           role: 'assistant',
           content: [
@@ -234,15 +246,15 @@ describe('sessionRuntimeReducer', () => {
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'persisted_events',
       events: [
-        event(1, 'transcript.message.delta', {
-          type: 'transcript.message.delta',
+        event(1, 'message_update', {
+          type: 'message_update',
           message: { role: 'assistant', content: [{ type: 'text', text: 'AMA' }] },
         }),
-        event(2, 'transcript.message', {
-          type: 'transcript.message',
+        event(2, 'message_end', {
+          type: 'message_end',
           message: { role: 'assistant', content: [{ type: 'text', text: 'AMA proxy ok' }] },
         }),
-        event(3, 'session.lifecycle', { type: 'session.lifecycle' }),
+        event(3, 'turn_end', { type: 'turn_end' }),
       ],
     })
 
@@ -259,39 +271,39 @@ describe('sessionRuntimeReducer', () => {
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'persisted_events',
       events: [
-        event(1, 'transcript.message', {
-          type: 'transcript.message',
+        event(1, 'message_end', {
+          type: 'message_end',
           message: { role: 'user', content: [{ type: 'text', text: 'run whoami' }] },
         }),
-        event(2, 'tool_call.started', {
-          type: 'tool_call.started',
+        event(2, 'tool_execution_start', {
+          type: 'tool_execution_start',
           toolCallId: 'functions.bash:0',
           toolName: 'bash',
           args: { command: 'whoami' },
         }),
-        event(3, 'tool_call.updated', {
-          type: 'tool_call.updated',
+        event(3, 'tool_execution_update', {
+          type: 'tool_execution_update',
           toolCallId: 'functions.bash:0',
           toolName: 'bash',
           args: { command: 'whoami' },
           partialResult: { content: [] },
         }),
-        event(4, 'tool_call.updated', {
-          type: 'tool_call.updated',
+        event(4, 'tool_execution_update', {
+          type: 'tool_execution_update',
           toolCallId: 'functions.bash:0',
           toolName: 'bash',
           args: { command: 'whoami' },
           partialResult: { content: [{ type: 'text', text: 'root\n' }] },
         }),
-        event(5, 'tool_call.completed', {
-          type: 'tool_call.completed',
+        event(5, 'tool_execution_end', {
+          type: 'tool_execution_end',
           toolCallId: 'functions.bash:0',
           toolName: 'bash',
           result: { content: [{ type: 'text', text: 'root\n' }] },
           isError: false,
         }),
-        event(6, 'transcript.message', {
-          type: 'transcript.message',
+        event(6, 'message_end', {
+          type: 'message_end',
           message: {
             role: 'toolResult',
             toolCallId: 'functions.bash:0',
@@ -300,11 +312,11 @@ describe('sessionRuntimeReducer', () => {
             isError: false,
           },
         }),
-        event(7, 'transcript.message', {
-          type: 'transcript.message',
+        event(7, 'message_end', {
+          type: 'message_end',
           message: { role: 'assistant', content: [{ type: 'text', text: 'You are running as `root`.' }] },
         }),
-        event(8, 'session.lifecycle', { type: 'session.lifecycle' }),
+        event(8, 'turn_end', { type: 'turn_end' }),
       ],
     })
 
@@ -322,51 +334,51 @@ describe('sessionRuntimeReducer', () => {
 
   it('keeps repeated tool call ids in separate turns', () => {
     const firstTurn = [
-      event(1, 'transcript.message', {
-        type: 'transcript.message',
+      event(1, 'message_end', {
+        type: 'message_end',
         message: { role: 'user', content: [{ type: 'text', text: 'run whoami' }] },
       }),
-      event(2, 'tool_call.started', {
-        type: 'tool_call.started',
+      event(2, 'tool_execution_start', {
+        type: 'tool_execution_start',
         toolCallId: 'functions.bash:0',
         toolName: 'bash',
         args: { command: 'whoami' },
       }),
-      event(3, 'tool_call.completed', {
-        type: 'tool_call.completed',
+      event(3, 'tool_execution_end', {
+        type: 'tool_execution_end',
         toolCallId: 'functions.bash:0',
         toolName: 'bash',
         result: { content: [{ type: 'text', text: 'root\n' }] },
         isError: false,
       }),
-      event(4, 'transcript.message', {
-        type: 'transcript.message',
+      event(4, 'message_end', {
+        type: 'message_end',
         message: { role: 'assistant', content: [{ type: 'text', text: 'You are running as `root`.' }] },
       }),
     ]
     const secondTurn = [
-      event(20, 'transcript.message', {
-        type: 'transcript.message',
+      event(20, 'message_end', {
+        type: 'message_end',
         message: { role: 'user', content: [{ type: 'text', text: 'run whoami' }] },
       }),
-      event(21, 'tool_call.started', {
-        type: 'tool_call.started',
+      event(21, 'tool_execution_start', {
+        type: 'tool_execution_start',
         toolCallId: 'functions.bash:0',
         toolName: 'bash',
         args: { command: 'whoami' },
       }),
-      event(22, 'tool_call.completed', {
-        type: 'tool_call.completed',
+      event(22, 'tool_execution_end', {
+        type: 'tool_execution_end',
         toolCallId: 'functions.bash:0',
         toolName: 'bash',
         result: { content: [{ type: 'text', text: 'root\n' }] },
         isError: false,
       }),
-      event(23, 'transcript.message', {
-        type: 'transcript.message',
+      event(23, 'message_end', {
+        type: 'message_end',
         message: { role: 'assistant', content: [{ type: 'text', text: 'You are running as `root`.' }] },
       }),
-      event(24, 'session.lifecycle', { type: 'session.lifecycle' }),
+      event(24, 'turn_end', { type: 'turn_end' }),
     ]
 
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
@@ -385,29 +397,29 @@ describe('sessionRuntimeReducer', () => {
 
   it('dedupes replayed persisted Pi events with the same runtime timestamps', () => {
     const turn = [
-      event(1, 'transcript.message', {
-        type: 'transcript.message',
+      event(1, 'message_end', {
+        type: 'message_end',
         message: {
           role: 'user',
           timestamp: 1779675439881,
           content: [{ type: 'text', text: 'run whoami' }],
         },
       }),
-      event(2, 'tool_call.started', {
-        type: 'tool_call.started',
+      event(2, 'tool_execution_start', {
+        type: 'tool_execution_start',
         toolCallId: 'functions.bash:0',
         toolName: 'bash',
         args: { command: 'whoami' },
       }),
-      event(3, 'tool_call.completed', {
-        type: 'tool_call.completed',
+      event(3, 'tool_execution_end', {
+        type: 'tool_execution_end',
         toolCallId: 'functions.bash:0',
         toolName: 'bash',
         result: { content: [{ type: 'text', text: 'root\n' }] },
         isError: false,
       }),
-      event(4, 'transcript.message', {
-        type: 'transcript.message',
+      event(4, 'message_end', {
+        type: 'message_end',
         message: {
           role: 'assistant',
           timestamp: 1779675443748,
@@ -424,39 +436,39 @@ describe('sessionRuntimeReducer', () => {
 
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'persisted_events',
-      events: [...turn, ...replay, event(200, 'session.lifecycle', { type: 'session.lifecycle' })],
+      events: [...turn, ...replay, event(200, 'turn_end', { type: 'turn_end' })],
     })
 
     expect(state.tools).toHaveLength(1)
     expect(state.messages.map((message) => message.content)).toEqual(['run whoami', 'You are running as `root`.'])
-    expect(state.debugEvents.filter((item) => item.type === 'tool_call.started')).toHaveLength(1)
+    expect(state.debugEvents.filter((item) => item.type === 'tool_execution_start')).toHaveLength(1)
   })
 
   it('keeps repeated persisted commands when Runtime timestamps are new', () => {
     const firstTurn = [
-      event(1, 'transcript.message', {
-        type: 'transcript.message',
+      event(1, 'message_end', {
+        type: 'message_end',
         message: {
           role: 'user',
           timestamp: 1779675439881,
           content: [{ type: 'text', text: 'run whoami' }],
         },
       }),
-      event(2, 'tool_call.started', {
-        type: 'tool_call.started',
+      event(2, 'tool_execution_start', {
+        type: 'tool_execution_start',
         toolCallId: 'functions.bash:0',
         toolName: 'bash',
         args: { command: 'whoami' },
       }),
-      event(3, 'tool_call.completed', {
-        type: 'tool_call.completed',
+      event(3, 'tool_execution_end', {
+        type: 'tool_execution_end',
         toolCallId: 'functions.bash:0',
         toolName: 'bash',
         result: { content: [{ type: 'text', text: 'root\n' }] },
         isError: false,
       }),
-      event(4, 'transcript.message', {
-        type: 'transcript.message',
+      event(4, 'message_end', {
+        type: 'message_end',
         message: {
           role: 'assistant',
           timestamp: 1779675443748,
@@ -465,29 +477,29 @@ describe('sessionRuntimeReducer', () => {
       }),
     ]
     const secondTurn = [
-      event(20, 'transcript.message', {
-        type: 'transcript.message',
+      event(20, 'message_end', {
+        type: 'message_end',
         message: {
           role: 'user',
           timestamp: 1779675539881,
           content: [{ type: 'text', text: 'run whoami' }],
         },
       }),
-      event(21, 'tool_call.started', {
-        type: 'tool_call.started',
+      event(21, 'tool_execution_start', {
+        type: 'tool_execution_start',
         toolCallId: 'functions.bash:0',
         toolName: 'bash',
         args: { command: 'whoami' },
       }),
-      event(22, 'tool_call.completed', {
-        type: 'tool_call.completed',
+      event(22, 'tool_execution_end', {
+        type: 'tool_execution_end',
         toolCallId: 'functions.bash:0',
         toolName: 'bash',
         result: { content: [{ type: 'text', text: 'root\n' }] },
         isError: false,
       }),
-      event(23, 'transcript.message', {
-        type: 'transcript.message',
+      event(23, 'message_end', {
+        type: 'message_end',
         message: {
           role: 'assistant',
           timestamp: 1779675543748,
@@ -498,7 +510,7 @@ describe('sessionRuntimeReducer', () => {
 
     const state = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'persisted_events',
-      events: [...firstTurn, ...secondTurn, event(24, 'session.lifecycle', { type: 'session.lifecycle' })],
+      events: [...firstTurn, ...secondTurn, event(24, 'turn_end', { type: 'turn_end' })],
     })
 
     expect(state.tools).toHaveLength(2)
@@ -512,7 +524,7 @@ describe('sessionRuntimeReducer', () => {
 
   it('ignores live events that were already loaded from history', () => {
     const messagePayload = {
-      type: 'transcript.message',
+      type: 'message_end',
       message: {
         role: 'assistant',
         content: [{ type: 'text', text: 'History loaded' }],
@@ -522,8 +534,8 @@ describe('sessionRuntimeReducer', () => {
     const loaded = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'persisted_events',
       events: [
-        event(1, 'transcript.message', messagePayload),
-        event(2, 'session.lifecycle', { type: 'session.lifecycle' }),
+        event(1, 'message_end', messagePayload),
+        event(2, 'turn_end', { type: 'turn_end' }),
       ],
     })
     const replayed = sessionRuntimeReducer(loaded, {
@@ -538,12 +550,12 @@ describe('sessionRuntimeReducer', () => {
 
   it('ignores live tool events that were already loaded from history', () => {
     const startPayload = {
-      type: 'tool_call.started',
+      type: 'tool_execution_start',
       id: 'tool_1',
       toolCall: { id: 'tool_1', name: 'write_file', input: { path: 'todo.md' } },
     }
     const endPayload = {
-      type: 'tool_call.completed',
+      type: 'tool_execution_end',
       id: 'tool_1',
       toolCall: {
         id: 'tool_1',
@@ -555,7 +567,7 @@ describe('sessionRuntimeReducer', () => {
     }
     const loaded = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'persisted_events',
-      events: [event(1, 'tool_call.started', startPayload), event(2, 'tool_call.completed', endPayload)],
+      events: [event(1, 'tool_execution_start', startPayload), event(2, 'tool_execution_end', endPayload)],
     })
     const replayedStart = sessionRuntimeReducer(loaded, {
       type: 'event',

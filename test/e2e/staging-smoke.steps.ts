@@ -445,7 +445,7 @@ async function exerciseSelfHostedRunnerMode(
       request,
       session.id,
       (events) =>
-        events.some((event) => event.type === 'session.lifecycle' && eventContains(event, 'runner.session.started')),
+        events.some((event) => event.type === 'turn_end' && eventContains(event, 'runner.session.started')),
       0,
     )
     return true
@@ -721,7 +721,7 @@ async function waitForAssistantMessage(
       events.some(
         (event) =>
           event.sequence > afterSequence &&
-          (event.type === 'transcript.message' || event.type === 'session.lifecycle') &&
+          (event.type === 'message_end' || event.type === 'turn_end') &&
           eventRole(event) === 'assistant' &&
           expected.test(eventText(event)),
       ),
@@ -738,7 +738,7 @@ async function waitForAssistantTurn(request: APIRequestContext, sessionId: strin
       const event = events.find(
         (candidate) =>
           candidate.sequence > afterSequence &&
-          (candidate.type === 'transcript.message' || candidate.type === 'transcript.message.delta') &&
+          (candidate.type === 'message_end' || candidate.type === 'message_update') &&
           eventRole(candidate) === 'assistant',
       )
       if (!event) {
@@ -931,7 +931,7 @@ async function clickFirstVisible(page: Page, selectors: string[]) {
 }
 
 function hasToolPayload(event: SessionEvent) {
-  return Boolean(event.payload.toolCall ?? event.payload.toolExecution ?? event.payload.call)
+  return Boolean(event.payload.toolCallId ?? event.payload.toolName ?? event.payload.toolExecution ?? event.payload.call)
 }
 
 function eventContains(event: SessionEvent, text: string) {

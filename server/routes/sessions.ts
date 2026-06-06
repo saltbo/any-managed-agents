@@ -268,7 +268,7 @@ const EventsQuerySchema = eventListQuerySchema().extend({
   type: z
     .enum(AMA_SESSION_EVENT_TYPES)
     .optional()
-    .openapi({ param: { name: 'type', in: 'query' }, example: 'transcript.message' }),
+    .openapi({ param: { name: 'type', in: 'query' }, example: 'message_end' }),
   visibility: z
     .enum(EVENT_VISIBILITIES)
     .optional()
@@ -618,12 +618,12 @@ function serializeEvent(row: SessionEventRow) {
       }
     : canonicalAmaSessionEventFromRuntimeEvent(
         { ...rawPayload, type: row.type },
-        { source: 'legacy-session-event', ...rawMetadata },
+        { source: 'stored-session-event', ...rawMetadata },
       )
   if (!isAmaSessionEventType(row.type)) {
     event.metadata = {
       ...event.metadata,
-      legacySessionEventType: row.type,
+      rawSessionEventType: row.type,
     }
   }
   return {
@@ -655,63 +655,7 @@ function eventTypeFilter(type: AmaSessionEventType | undefined) {
   if (!type) {
     return undefined
   }
-  const aliases = LEGACY_EVENT_TYPE_ALIASES[type] ?? [type]
-  const firstAlias = aliases[0]
-  if (!firstAlias) {
-    throw new Error(`Missing event type alias for ${type}`)
-  }
-  const directFilter = aliases.length === 1 ? eq(sessionEvents.type, firstAlias) : inArray(sessionEvents.type, aliases)
-  if (type === 'session.lifecycle') {
-    return or(
-      directFilter,
-      and(
-        eq(sessionEvents.type, 'bridge_exit'),
-        or(
-          sql`json_extract(${sessionEvents.payload}, '$.code') = 0`,
-          sql`json_type(${sessionEvents.payload}, '$.code') = 'null'`,
-        ),
-      ),
-    )
-  }
-  if (type === 'runtime.error') {
-    return or(
-      directFilter,
-      and(
-        eq(sessionEvents.type, 'bridge_exit'),
-        or(
-          sql`json_type(${sessionEvents.payload}, '$.code') IS NULL`,
-          and(
-            sql`json_type(${sessionEvents.payload}, '$.code') != 'null'`,
-            sql`json_extract(${sessionEvents.payload}, '$.code') != 0`,
-          ),
-        ),
-      ),
-    )
-  }
-  return directFilter
-}
-
-const LEGACY_EVENT_TYPE_ALIASES: Record<AmaSessionEventType, string[]> = {
-  'session.lifecycle': [
-    'session.lifecycle',
-    'agent_start',
-    'turn_start',
-    'message_start',
-    'agent_end',
-    'turn_end',
-    'response',
-  ],
-  'transcript.message': ['transcript.message', 'message', 'message_end'],
-  'transcript.message.delta': ['transcript.message.delta', 'message_update'],
-  'tool_call.started': ['tool_call.started', 'tool_execution_start'],
-  'tool_call.updated': ['tool_call.updated', 'tool_execution_update'],
-  'tool_call.completed': ['tool_call.completed', 'tool_execution_end'],
-  'usage.recorded': ['usage.recorded', 'usage'],
-  'policy.decision': ['policy.decision', 'policy_denied'],
-  'runtime.error': ['runtime.error', 'error'],
-  'runtime.metadata': ['runtime.metadata', 'queue_update', 'session_info_changed'],
-  'runtime.output': ['runtime.output', 'bridge_stderr'],
-  'runner.metadata': ['runner.metadata', 'runner_heartbeat', 'runner_status'],
+  return eq(sessionEvents.type, type)
 }
 
 function eventOrder(order?: EventOrder) {

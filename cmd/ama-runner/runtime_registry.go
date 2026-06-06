@@ -31,7 +31,7 @@ func sessionRuntimeHandlers() map[string]sessionRuntimeHandler {
 		"codex": {
 			acknowledgeSessionStarted: true,
 			run: func(d *RunnerDaemon, execution sessionRuntimeExecution) error {
-				return d.runCodexSession(execution.LeaseContext, execution.Channel, execution.Lease, execution.Payload)
+				return d.runExternalSession(execution.LeaseContext, execution.Channel, execution.Lease, execution.Payload)
 			},
 		},
 		"claude-code": {

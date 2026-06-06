@@ -212,9 +212,10 @@ func (d *RunnerDaemon) executeLease(ctx context.Context, lease *ama.RunnerWorkLe
 	if !d.supportsRequiredCapability(payload.RequiredRunnerCapability) {
 		return d.finishFailed(ctx, lease, fmt.Errorf("runner does not advertise required capability %q", payload.RequiredRunnerCapability), nil)
 	}
-	if err := d.uploadEvent(ctx, lease, "runner.tool.started", ama.JSON{
+	if err := d.uploadEvent(ctx, lease, "tool_execution_start", ama.JSON{
 		"toolCallId": payload.ToolCallID,
 		"toolName":   payload.ToolName,
+		"args":       payload.Input,
 	}); err != nil {
 		return err
 	}
@@ -247,18 +248,20 @@ func (d *RunnerDaemon) executeLease(ctx context.Context, lease *ama.RunnerWorkLe
 		return err
 	}
 	if execErr != nil {
-		_ = d.uploadEvent(context.Background(), lease, "runner.tool.failed", ama.JSON{
+		_ = d.uploadEvent(context.Background(), lease, "tool_execution_end", ama.JSON{
 			"toolCallId": payload.ToolCallID,
 			"toolName":   payload.ToolName,
 			"error":      execErr.Error(),
-			"output":     result.Output,
+			"result":     result.Output,
+			"isError":    true,
 		})
 		return d.finishFailed(context.Background(), lease, execErr, result.Output)
 	}
-	if err := d.uploadEvent(ctx, lease, "runner.tool.completed", ama.JSON{
+	if err := d.uploadEvent(ctx, lease, "tool_execution_end", ama.JSON{
 		"toolCallId": payload.ToolCallID,
 		"toolName":   payload.ToolName,
-		"output":     result.Output,
+		"result":     result.Output,
+		"isError":    false,
 	}); err != nil {
 		return err
 	}
@@ -392,11 +395,11 @@ func (d *RunnerDaemon) runExternalSession(
 ) error {
 	adapter := d.RuntimeAdapter
 	if adapter == nil {
-		adapter = ExternalCommandRuntimeAdapter{
-			Runtime:               payload.Runtime,
-			CommandTimeout:        d.Config.CommandTimeout,
-			ShutdownGraceInterval: d.Config.ShutdownGraceInterval,
+		selectedAdapter, err := runtimeAdapterFor(payload.Runtime, d.Config.CommandTimeout, d.Config.ShutdownGraceInterval)
+		if err != nil {
+			return err
 		}
+		adapter = selectedAdapter
 	}
 	var writeMu sync.Mutex
 	result, runErr := adapter.Run(ctx, RuntimeRequest{
@@ -413,7 +416,7 @@ func (d *RunnerDaemon) runExternalSession(
 		return d.writeAcknowledgedChannelEvent(ctx, channel, eventType, eventPayload)
 	})
 	if runErr != nil {
-		_ = d.writeAcknowledgedChannelEvent(context.Background(), channel, payload.Runtime+".error", ama.JSON{
+		_ = d.writeAcknowledgedChannelEvent(context.Background(), channel, "runtime.error", ama.JSON{
 			"error": ama.JSON{"message": runErr.Error(), "code": "runtime_failed"},
 		})
 		if finishErr := d.finishFailed(context.Background(), lease, runErr, result); finishErr != nil {
@@ -477,10 +480,10 @@ func (d *RunnerDaemon) executeSessionToolCall(
 	toolName string,
 	input map[string]any,
 ) error {
-	if err := d.writeChannelEvent(ctx, channel, "runner.tool.started", ama.JSON{
+	if err := d.writeChannelEvent(ctx, channel, "tool_execution_start", ama.JSON{
 		"toolCallId": toolCallID,
 		"toolName":   toolName,
-		"input":      input,
+		"args":       input,
 	}); err != nil {
 		return err
 	}
@@ -494,14 +497,16 @@ func (d *RunnerDaemon) executeSessionToolCall(
 	payload := ama.JSON{
 		"toolCallId": toolCallID,
 		"toolName":   toolName,
-		"output":     result.Output,
+		"result":     result.Output,
 		"durationMs": time.Since(startedAt).Milliseconds(),
 	}
 	if execErr != nil {
 		payload["error"] = ama.JSON{"message": execErr.Error()}
-		return d.writeChannelEvent(context.Background(), channel, "runner.tool.failed", payload)
+		payload["isError"] = true
+		return d.writeChannelEvent(context.Background(), channel, "tool_execution_end", payload)
 	}
-	return d.writeChannelEvent(ctx, channel, "runner.tool.completed", payload)
+	payload["isError"] = false
+	return d.writeChannelEvent(ctx, channel, "tool_execution_end", payload)
 }
 
 func (d *RunnerDaemon) writeChannelEvent(ctx context.Context, channel RunnerSessionChannel, eventType string, payload ama.JSON) error {

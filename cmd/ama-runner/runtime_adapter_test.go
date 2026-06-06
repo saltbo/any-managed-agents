@@ -1,7 +1,8 @@
 package main
 
 import (
-	"context"
+	"bufio"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,194 +12,186 @@ import (
 	ama "github.com/saltbo/any-managed-agents/sdk/go/ama"
 )
 
-func TestClaudeCodeRuntimeAdapterPassesPromptWorkspaceConfigAndSafeEnvironment(t *testing.T) {
+func TestRuntimeAdapterForUsesSDKBridgeForOfficialRuntimes(t *testing.T) {
+	for _, runtimeName := range []string{"codex", "claude-code", "copilot"} {
+		adapter, err := runtimeAdapterFor(runtimeName, time.Second, time.Millisecond)
+		if err != nil {
+			t.Fatalf("expected %s adapter, got %v", runtimeName, err)
+		}
+		bridge, ok := adapter.(SDKBridgeRuntimeAdapter)
+		if !ok {
+			t.Fatalf("expected %s to use SDK bridge adapter, got %T", runtimeName, adapter)
+		}
+		if bridge.Runtime != runtimeName {
+			t.Fatalf("expected bridge runtime %q, got %#v", runtimeName, bridge)
+		}
+	}
+	if _, err := runtimeAdapterFor("unknown", time.Second, time.Millisecond); err == nil || !strings.Contains(err.Error(), "unsupported external runtime") {
+		t.Fatalf("expected unsupported runtime error, got %v", err)
+	}
+}
+
+func TestRuntimeCommandEnvironmentSanitizesRunnerSecrets(t *testing.T) {
 	t.Setenv("AMA_TOKEN", "operator-token")
 	t.Setenv("AMA_RUNNER_OPERATOR_SECRET", "operator-secret")
 	workDir := t.TempDir()
-	resolvedWorkDir, err := filepath.EvalSymlinks(workDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	adapter := ClaudeCodeRuntimeAdapter{CommandTimeout: time.Second, ShutdownGraceInterval: time.Millisecond}
-	var events []string
-	result, err := adapter.Run(context.Background(), RuntimeRequest{
+	env, err := runtimeCommandEnvironment(RuntimeRequest{
 		SessionID:     "session_1",
-		Runtime:       "claude-code",
-		RuntimeConfig: map[string]any{"command": []any{"sh", "-c", "cat > prompt.txt; env > env.txt; printf '{\"type\":\"claude-code.message\",\"payload\":{\"message\":{\"role\":\"assistant\",\"content\":\"ok\"}}}\\n'; printf stderr-line >&2"}, "mode": "test"},
-		Provider:      "anthropic",
-		Model:         "claude-sonnet-4-6",
-		InitialPrompt: "hello claude",
+		Runtime:       "codex",
+		RuntimeConfig: map[string]any{"mode": "test"},
+		Provider:      "provider_codex",
+		Model:         "gpt-5.3-codex",
 		WorkDir:       workDir,
-	}, func(eventType string, _ ama.JSON) error {
-		events = append(events, eventType)
-		return nil
 	})
 	if err != nil {
-		t.Fatalf("expected runtime success, got %v", err)
+		t.Fatalf("expected runtime env, got %v", err)
 	}
-	if result["exitCode"] != 0 {
-		t.Fatalf("expected exit 0, got %#v", result)
-	}
-	prompt, err := os.ReadFile(filepath.Join(workDir, "prompt.txt"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(prompt) != "hello claude" {
-		t.Fatalf("expected prompt on stdin, got %q", prompt)
-	}
-	env, err := os.ReadFile(filepath.Join(workDir, "env.txt"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	envText := string(env)
+	envText := strings.Join(env, "\n")
 	for _, expected := range []string{
 		"AMA_SESSION_ID=session_1",
-		"AMA_RUNTIME=claude-code",
-		"AMA_PROVIDER=anthropic",
-		"AMA_MODEL=claude-sonnet-4-6",
-		"AMA_WORKSPACE=" + resolvedWorkDir,
+		"AMA_RUNTIME=codex",
+		"AMA_PROVIDER=provider_codex",
+		"AMA_MODEL=gpt-5.3-codex",
+		"AMA_WORKSPACE=" + workDir,
+		`AMA_RUNTIME_CONFIG={"mode":"test"}`,
 	} {
 		if !strings.Contains(envText, expected) {
 			t.Fatalf("expected env %q in %q", expected, envText)
 		}
 	}
-	for _, leaked := range []string{"operator-token", "operator-secret", "AMA_INITIAL_PROMPT=", "hello claude"} {
+	for _, leaked := range []string{"operator-token", "operator-secret", "AMA_INITIAL_PROMPT="} {
 		if strings.Contains(envText, leaked) {
-			t.Fatalf("expected safe runtime env, found %q in %q", leaked, envText)
+			t.Fatalf("expected sanitized runtime env, found %q in %q", leaked, envText)
 		}
-	}
-	for _, expected := range []string{"claude-code.lifecycle", "claude-code.message", "claude-code.output"} {
-		if !containsString(events, expected) {
-			t.Fatalf("expected event %q in %v", expected, events)
-		}
-	}
-	if got := events[len(events)-1]; got != "claude-code.lifecycle" {
-		t.Fatalf("unexpected event sequence %v", events)
 	}
 }
 
-func TestClaudeCodeRuntimeAdapterMapsExitFailures(t *testing.T) {
-	adapter := ClaudeCodeRuntimeAdapter{CommandTimeout: time.Second, ShutdownGraceInterval: time.Millisecond}
-	result, err := adapter.Run(context.Background(), RuntimeRequest{
+func TestRuntimeCommandEnvironmentRejectsUnserializableConfig(t *testing.T) {
+	if _, err := runtimeCommandEnvironment(RuntimeRequest{
 		SessionID:     "session_1",
-		Runtime:       "claude-code",
-		RuntimeConfig: map[string]any{"command": []any{"sh", "-c", "printf bad >&2; exit 7"}},
-		Provider:      "anthropic",
-		Model:         "claude-sonnet-4-6",
+		Runtime:       "codex",
+		RuntimeConfig: map[string]any{"bad": make(chan int)},
 		WorkDir:       t.TempDir(),
-	}, func(string, ama.JSON) error { return nil })
-	if err == nil || !strings.Contains(err.Error(), "exited with code 7") {
-		t.Fatalf("expected exit failure, got %v", err)
-	}
-	if result["exitCode"] != 7 || !strings.Contains(result["stderr"].(string), "bad") {
-		t.Fatalf("unexpected failure result %#v", result)
+	}); err == nil || !strings.Contains(err.Error(), "unsupported type") {
+		t.Fatalf("expected runtime config marshal error, got %v", err)
 	}
 }
 
-func TestClaudeCodeRuntimeAdapterStreamsEventsBeforeProcessExit(t *testing.T) {
-	workDir := t.TempDir()
-	adapter := ClaudeCodeRuntimeAdapter{CommandTimeout: time.Second, ShutdownGraceInterval: time.Millisecond}
-	observedMessage := make(chan struct{})
-	observedStdout := make(chan struct{})
-	observedStderr := make(chan struct{})
-	done := make(chan error, 1)
-	go func() {
-		_, err := adapter.Run(context.Background(), RuntimeRequest{
-			SessionID: "session_1",
-			Runtime:   "claude-code",
-			RuntimeConfig: map[string]any{"command": []any{
-				"sh",
-				"-c",
-				"printf '{\"type\":\"claude-code.message\",\"payload\":{\"message\":{\"role\":\"assistant\",\"content\":\"streamed\"}}}\\n'; printf 'plain stdout\\n'; printf 'plain stderr\\n' >&2; while [ ! -f continue ]; do sleep 0.01; done",
-			}},
-			Provider:      "anthropic",
-			Model:         "claude-sonnet-4-6",
-			InitialPrompt: "hello claude",
-			WorkDir:       workDir,
-		}, func(eventType string, payload ama.JSON) error {
-			if eventType == "claude-code.message" {
-				select {
-				case <-observedMessage:
-				default:
-					close(observedMessage)
-				}
-			}
-			if eventType == "claude-code.output" && payload["stream"] == "stdout" && payload["content"] == "plain stdout" {
-				select {
-				case <-observedStdout:
-				default:
-					close(observedStdout)
-				}
-			}
-			if eventType == "claude-code.output" && payload["stream"] == "stderr" && payload["content"] == "plain stderr" {
-				select {
-				case <-observedStderr:
-				default:
-					close(observedStderr)
-				}
-			}
-			return nil
-		})
-		done <- err
-	}()
-
-	for name, observed := range map[string]<-chan struct{}{
-		"structured stdout event": observedMessage,
-		"plain stdout event":      observedStdout,
-		"stderr event":            observedStderr,
+func TestRuntimeBridgeHostEnvIncludesNodeToolchainAndTestModeOnly(t *testing.T) {
+	t.Setenv("VOLTA_HOME", "/volta")
+	t.Setenv("NODE_PATH", "/node-path")
+	t.Setenv("PNPM_HOME", "/pnpm")
+	t.Setenv("NVM_DIR", "/nvm")
+	t.Setenv("AMA_RUNTIME_BRIDGE_TEST_MODE", "1")
+	t.Setenv("AMA_TOKEN", "raw-secret-value")
+	env := appendRuntimeBridgeHostEnv([]string{"PATH=/bin"})
+	envText := strings.Join(env, "\n")
+	for _, expected := range []string{
+		"AMA_RUNTIME_BRIDGE_HOST_HOME=",
+		"VOLTA_HOME=/volta",
+		"NODE_PATH=/node-path",
+		"PNPM_HOME=/pnpm",
+		"NVM_DIR=/nvm",
+		"AMA_RUNTIME_BRIDGE_TEST_MODE=1",
 	} {
-		select {
-		case <-observed:
-		case <-time.After(time.Second):
-			t.Fatalf("timed out waiting for %s before process exit", name)
+		if !strings.Contains(envText, expected) {
+			t.Fatalf("expected bridge host env %q in %q", expected, envText)
 		}
 	}
-	select {
-	case err := <-done:
-		t.Fatalf("runtime finished before continuation file was created: %v", err)
-	default:
+	if strings.Contains(envText, "raw-secret-value") {
+		t.Fatalf("expected runner secrets to remain filtered, got %q", envText)
 	}
-	if err := os.WriteFile(filepath.Join(workDir, "continue"), []byte("ok"), 0o600); err != nil {
+}
+
+func TestRuntimeWorkspaceSafety(t *testing.T) {
+	workDir := t.TempDir()
+	workspace, err := runtimeWorkspace(filepath.Join(workDir, "missing-parent", "child"), "session_1")
+	if err != nil {
+		t.Fatalf("expected workspace creation success, got %v", err)
+	}
+	if !strings.HasSuffix(workspace, filepath.Join("sessions", "session_1")) {
+		t.Fatalf("expected session workspace path, got %q", workspace)
+	}
+	if _, err := runtimeWorkspace(workDir, "../outside-session"); err == nil || !strings.Contains(err.Error(), "single path segment") {
+		t.Fatalf("expected traversal rejection, got %v", err)
+	}
+	fileRoot := filepath.Join(t.TempDir(), "root-file")
+	if err := os.WriteFile(fileRoot, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("expected runtime success after continuation, got %v", err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for runtime completion")
+	if _, err := runtimeWorkspace(fileRoot, "session_1"); err == nil {
+		t.Fatal("expected workspace root file error")
 	}
 }
 
-func TestClaudeCodeRuntimeAdapterStopsProcessGroupOnTimeout(t *testing.T) {
-	adapter := ClaudeCodeRuntimeAdapter{CommandTimeout: 20 * time.Millisecond, ShutdownGraceInterval: time.Millisecond}
-	result, err := adapter.Run(context.Background(), RuntimeRequest{
-		SessionID:     "session_1",
-		Runtime:       "claude-code",
-		RuntimeConfig: map[string]any{"command": []any{"sh", "-c", "sleep 10 & wait"}},
-		Provider:      "anthropic",
-		Model:         "claude-sonnet-4-6",
-		WorkDir:       t.TempDir(),
-	}, func(string, ama.JSON) error { return nil })
-	if err == nil || !strings.Contains(err.Error(), "deadline") {
-		t.Fatalf("expected timeout error, got %v", err)
+func TestMaterializeRuntimeBridgeWritesEmbeddedBundle(t *testing.T) {
+	path, err := materializeRuntimeBridge()
+	if err != nil {
+		t.Fatalf("expected embedded bridge to materialize, got %v", err)
 	}
-	if result["exitCode"] == 0 {
-		t.Fatalf("expected non-zero timeout result, got %#v", result)
+	if !strings.HasSuffix(path, ".mjs") {
+		t.Fatalf("expected bridge bundle path, got %q", path)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != string(embeddedRuntimeBridge) {
+		t.Fatal("expected materialized bridge to match embedded bundle")
 	}
 }
 
-func TestRuntimeCommandValidatesCommandConfig(t *testing.T) {
-	for _, config := range []map[string]any{
-		{},
-		{"command": ""},
-		{"command": []any{}},
-		{"command": []any{"sh", 1}},
-		{"command": 123},
-	} {
-		if _, _, err := runtimeCommand("claude-code", config); err == nil {
-			t.Fatalf("expected command validation error for %#v", config)
-		}
+func TestBridgeProtocolReadsReadyEventsResultsErrorsAndLogs(t *testing.T) {
+	output := strings.Join([]string{
+		`{"type":"ready"}`,
+		`{"type":"event","requestId":"run_session_1","event":{"type":"message_end","payload":{"message":{"role":"assistant","content":"ok"}}}}`,
+		`{"type":"log","requestId":"run_session_1","message":"bridge diagnostic"}`,
+		`{"type":"event","requestId":"other","event":{"type":"message_end","payload":{"message":{"role":"assistant","content":"ignored"}}}}`,
+		`{"type":"result","requestId":"run_session_1","result":{"exitCode":0,"providerThreadId":"thread_1"}}`,
+	}, "\n")
+	scanner := bridgeScanner(strings.NewReader(output))
+	if err := waitBridgeReady(scanner); err != nil {
+		t.Fatalf("expected bridge ready, got %v", err)
+	}
+	var events []string
+	var result ama.JSON
+	err := readBridgeMessages(scanner, "run_session_1", func(eventType string, payload ama.JSON) error {
+		events = append(events, eventType+":"+mustJSON(t, payload))
+		return nil
+	}, &result)
+	if err != nil {
+		t.Fatalf("expected bridge messages, got %v", err)
+	}
+	if len(events) != 2 || !strings.Contains(events[0], "message_end") || !strings.Contains(events[1], "bridge diagnostic") {
+		t.Fatalf("expected forwarded event and log, got %v", events)
+	}
+	if result["providerThreadId"] != "thread_1" {
+		t.Fatalf("expected bridge result, got %#v", result)
+	}
+}
+
+func TestBridgeProtocolErrorBranches(t *testing.T) {
+	if err := waitBridgeReady(bufio.NewScanner(strings.NewReader(`{"type":"log"}` + "\n"))); err == nil || !strings.Contains(err.Error(), "did not send ready") {
+		t.Fatalf("expected ready error, got %v", err)
+	}
+	scanner := bridgeScanner(strings.NewReader(strings.Join([]string{
+		`{"type":"ready"}`,
+		`{"type":"event","requestId":"run_session_1","event":{"payload":{}}}`,
+	}, "\n")))
+	if err := waitBridgeReady(scanner); err != nil {
+		t.Fatal(err)
+	}
+	var result ama.JSON
+	if err := readBridgeMessages(scanner, "run_session_1", func(string, ama.JSON) error { return nil }, &result); err == nil || !strings.Contains(err.Error(), "missing type") {
+		t.Fatalf("expected missing event type error, got %v", err)
+	}
+	scanner = bridgeScanner(strings.NewReader(`{"type":"error","requestId":"run_session_1","error":{"message":"sdk failed"}}` + "\n"))
+	if err := readBridgeMessages(scanner, "run_session_1", func(string, ama.JSON) error { return nil }, &result); err == nil || !strings.Contains(err.Error(), "sdk failed") {
+		t.Fatalf("expected bridge error, got %v", err)
+	}
+	writeErr := errors.New("write failed")
+	scanner = bridgeScanner(strings.NewReader(`{"type":"log","requestId":"run_session_1","message":"diag"}` + "\n"))
+	if err := readBridgeMessages(scanner, "run_session_1", func(string, ama.JSON) error { return writeErr }, &result); !errors.Is(err, writeErr) {
+		t.Fatalf("expected writer error, got %v", err)
 	}
 }

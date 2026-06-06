@@ -722,31 +722,15 @@ export function runtimeMessagesFromEvents(events: Array<{ type?: string; payload
       continue
     }
     const record = payload as Record<string, unknown>
-    const canonicalMessage = record.message
-    if (
-      event.type === 'transcript.message' &&
-      canonicalMessage &&
-      typeof canonicalMessage === 'object' &&
-      !Array.isArray(canonicalMessage)
-    ) {
-      const message = canonicalMessage as Record<string, unknown>
-      const role = message.role
-      if (role === 'user' || role === 'assistant') {
-        messageEndMessages.push({
-          role,
-          content: typeof message.content === 'string' ? message.content : textContent(message.content),
-        } as AgentMessage)
-      }
-      continue
-    }
-    if (record.type === 'agent_end' && Array.isArray(record.messages)) {
+    const sourceType = typeof event.type === 'string' ? event.type : typeof record.type === 'string' ? record.type : undefined
+    if (sourceType === 'agent_end' && Array.isArray(record.messages)) {
       const messages = record.messages.filter(isPersistedMessage)
       if (messages.length > 0) {
         latestAgentEndMessages = messages
       }
       continue
     }
-    if (record.type !== 'message_end' || !isPersistedMessage(record.message)) {
+    if (sourceType !== 'message_end' || !isPersistedMessage(record.message)) {
       continue
     }
     messageEndMessages.push(record.message)

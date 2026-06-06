@@ -50,7 +50,7 @@ describe('runtime drivers', () => {
       runtimeMetadata({
         hostingMode: 'self_hosted',
         runtime: 'codex',
-        runtimeConfig: { command: 'codex' },
+        runtimeConfig: { mode: 'sdk-bridge' },
         provider: 'provider_codex',
         model: 'gpt-5.3-codex',
         metadata: { runnerProtocol: 'ama-runner-work' },
@@ -58,7 +58,7 @@ describe('runtime drivers', () => {
     ).toEqual({
       hostingMode: 'self_hosted',
       runtime: 'codex',
-      runtimeConfig: { command: 'codex' },
+      runtimeConfig: { mode: 'sdk-bridge' },
       provider: 'provider_codex',
       model: 'gpt-5.3-codex',
       driver: 'codex-self-hosted',

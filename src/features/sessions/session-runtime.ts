@@ -120,9 +120,8 @@ export function sessionRuntimeReducer(state: SessionRuntimeState, action: Sessio
     createdAt: action.at,
   }
 
-  if (eventType === 'session.lifecycle') {
-    const stage = stringField(action.event, 'stage')
-    const terminal = stage === 'agent_completed' || stage === 'turn_completed' || stage === 'runtime_exited'
+  if (eventType === 'agent_start' || eventType === 'turn_start' || eventType === 'agent_end' || eventType === 'turn_end') {
+    const terminal = eventType === 'agent_end' || eventType === 'turn_end'
     return {
       ...state,
       runState: terminal ? 'idle' : 'running',
@@ -130,11 +129,11 @@ export function sessionRuntimeReducer(state: SessionRuntimeState, action: Sessio
       eventKeys: appendEventKey(state.eventKeys, eventKey),
     }
   }
-  if (eventType === 'transcript.message' || eventType === 'transcript.message.delta') {
+  if (eventType === 'message_start' || eventType === 'message_update' || eventType === 'message_end') {
     const message = messageFromSessionEvent(
       action.event,
       action.at,
-      eventType === 'transcript.message.delta' ? 'streaming' : 'complete',
+      eventType === 'message_end' ? 'complete' : 'streaming',
     )
     return {
       ...state,
@@ -143,7 +142,11 @@ export function sessionRuntimeReducer(state: SessionRuntimeState, action: Sessio
       eventKeys: appendEventKey(state.eventKeys, eventKey),
     }
   }
-  if (eventType === 'tool_call.started' || eventType === 'tool_call.updated' || eventType === 'tool_call.completed') {
+  if (
+    eventType === 'tool_execution_start' ||
+    eventType === 'tool_execution_update' ||
+    eventType === 'tool_execution_end'
+  ) {
     const tool = toolFromSessionEvent(action.event, action.at, eventType)
     return {
       ...state,
@@ -202,7 +205,7 @@ function mergePersistedEvents(state: SessionRuntimeState, events: SessionEvent[]
     runtimeEvents
       .map(({ stored, payload }) => {
         const type = sessionEventType(stored, payload)
-        if (type === 'transcript.message') {
+        if (type === 'message_end') {
           return messageFromSessionEvent(payload, stored.createdAt, 'complete')
         }
         if (type === 'runtime.error') {
@@ -229,9 +232,9 @@ function mergePersistedEvents(state: SessionRuntimeState, events: SessionEvent[]
   const eventKeys = runtimeEvents
     .map(({ stored, payload }) => runtimeEventKey(payload, sessionEventType(stored, payload)))
     .filter((key): key is string => Boolean(key))
-  const hasTerminalEvent = runtimeEvents.some(({ payload }) => {
-    const stage = stringField(payload, 'stage')
-    return stage === 'agent_completed' || stage === 'turn_completed' || stage === 'runtime_exited'
+  const hasTerminalEvent = runtimeEvents.some(({ stored, payload }) => {
+    const type = sessionEventType(stored, payload)
+    return type === 'agent_end' || type === 'turn_end'
   })
   const hasErrorEvent = runtimeEvents.some(({ stored }) => {
     return stored.type === 'runtime.error'
@@ -363,7 +366,11 @@ function toolFromSessionEvent(
   eventType: string,
 ): SessionRuntimeToolTrace | null {
   const toolCall = objectValue(event.toolCall ?? event)
-  const callId = stringField(toolCall, 'id') ?? stringField(toolCall, 'toolCallId') ?? stringField(event, 'id')
+  const callId =
+    stringField(toolCall, 'id') ??
+    stringField(toolCall, 'toolCallId') ??
+    stringField(event, 'toolCallId') ??
+    stringField(event, 'id')
   if (!callId) {
     return null
   }
@@ -374,8 +381,8 @@ function toolFromSessionEvent(
   return {
     id: callId,
     callId,
-    name: stringField(toolCall, 'name') ?? stringField(toolCall, 'toolName') ?? 'tool',
-    status: eventType === 'tool_call.completed' ? (failed ? 'error' : 'success') : 'running',
+    name: stringField(toolCall, 'name') ?? stringField(toolCall, 'toolName') ?? stringField(event, 'toolName') ?? 'tool',
+    status: eventType === 'tool_execution_end' ? (failed ? 'error' : 'success') : 'running',
     input,
     output: readableToolValue(output),
     error: failed ? readableContent(toolCall.error ?? event.error) : null,
@@ -423,7 +430,7 @@ function normalizeMessageContent(value: string) {
 function upsertTool(tools: SessionRuntimeToolTrace[], tool: SessionRuntimeToolTrace) {
   const runningIndex = findLastToolIndex(tools, (item) => item.callId === tool.callId && item.status === 'running')
   const index =
-    tool.eventType === 'tool_call.started'
+    tool.eventType === 'tool_execution_start'
       ? runningIndex
       : runningIndex !== -1
         ? runningIndex
@@ -484,13 +491,20 @@ function runtimeEventKey(event: Record<string, unknown>, eventType: string, turn
     }
     return `${eventType}:${turnKey}:${toolCallId ?? ''}:${stableStringify(toolCall)}`
   }
-  if (eventType === 'transcript.message.delta') {
+  if (eventType === 'message_update') {
     if (!timestamp) {
       return null
     }
     return `${eventType}:${timestamp ?? ''}:${stableStringify(message.content ?? event.delta)}`
   }
-  if (eventType === 'transcript.message' || eventType === 'session.lifecycle') {
+  if (
+    eventType === 'message_start' ||
+    eventType === 'message_end' ||
+    eventType === 'agent_start' ||
+    eventType === 'agent_end' ||
+    eventType === 'turn_start' ||
+    eventType === 'turn_end'
+  ) {
     if (!timestamp) {
       return null
     }

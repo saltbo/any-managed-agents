@@ -303,11 +303,11 @@ describe('[CF] /api/sessions', () => {
     expect(events.pagination).toMatchObject({ limit: 100, hasMore: false, nextCursor: null })
     expect(events.data.map((event) => event.type)).toEqual(
       expect.arrayContaining([
-        'session.lifecycle',
-        'transcript.message.delta',
-        'transcript.message',
-        'tool_call.started',
-        'tool_call.completed',
+        'turn_end',
+        'message_update',
+        'message_end',
+        'tool_execution_start',
+        'tool_execution_end',
         'usage.recorded',
       ]),
     )
@@ -315,40 +315,36 @@ describe('[CF] /api/sessions', () => {
     expect(events.data).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          type: 'transcript.message',
+          type: 'message_end',
           payload: expect.objectContaining({
             message: expect.objectContaining({ role: 'assistant' }),
           }),
         }),
         expect.objectContaining({
-          type: 'tool_call.completed',
+          type: 'tool_execution_end',
           payload: expect.objectContaining({
-            toolCall: expect.objectContaining({
-              id: 'call_git_status',
-              name: 'sandbox.exec',
-            }),
-            status: 'success',
+            toolCallId: 'call_git_status',
+            toolName: 'sandbox.exec',
+            isError: false,
           }),
         }),
       ]),
     )
     const toolCallEvent = events.data.find(
       (event) =>
-        event.type === 'tool_call.started' &&
-        (event.payload.toolCall as { id?: string } | undefined)?.id === 'call_git_status',
+        event.type === 'tool_execution_start' &&
+        event.payload.toolCallId === 'call_git_status',
     )
     const toolResultEvent = events.data.find(
       (event) =>
-        event.type === 'tool_call.completed' &&
-        (event.payload.toolCall as { id?: string } | undefined)?.id === 'call_git_status',
+        event.type === 'tool_execution_end' &&
+        event.payload.toolCallId === 'call_git_status',
     )
     expect(toolCallEvent).toMatchObject({
       correlationId: null,
       parentEventId: null,
       payload: expect.objectContaining({
-        toolCall: expect.objectContaining({
-          input: { command: 'git status' },
-        }),
+        args: { command: 'git status' },
       }),
     })
     expect(toolResultEvent).toMatchObject({
@@ -368,7 +364,7 @@ describe('[CF] /api/sessions', () => {
       data: Array<{ sequence: number; type: string }>
       pagination: { hasMore: boolean; nextCursor: string | null }
     }
-    expect(pagedEvents.data).toEqual([expect.objectContaining({ sequence: 1, type: 'session.lifecycle' })])
+    expect(pagedEvents.data).toEqual([expect.objectContaining({ sequence: 1, type: 'agent_start' })])
     expect(pagedEvents.pagination).toMatchObject({ hasMore: true, nextCursor: '1' })
 
     const cursorEventsRes = await jsonFetch(`/api/sessions/${created.id}/events?cursor=1&limit=2`, authorization)
@@ -405,12 +401,12 @@ describe('[CF] /api/sessions', () => {
     expect(latestEvents.data.map((event) => event.sequence)).toEqual([events.data.length, events.data.length - 1])
 
     const filteredEventsRes = await jsonFetch(
-      `/api/sessions/${created.id}/events?cursor=1&type=tool_call.completed`,
+      `/api/sessions/${created.id}/events?cursor=1&type=tool_execution_end`,
       authorization,
     )
     const filteredEvents = (await filteredEventsRes.json()) as { data: Array<{ sequence: number; type: string }> }
     expect(filteredEvents.data).toEqual(
-      expect.arrayContaining([expect.objectContaining({ type: 'tool_call.completed' })]),
+      expect.arrayContaining([expect.objectContaining({ type: 'tool_execution_end' })]),
     )
 
     const exportRes = await jsonFetch(`/api/sessions/${created.id}/events/export?cursor=2&limit=2`, authorization)
@@ -694,7 +690,7 @@ describe('[CF] /api/sessions', () => {
     })
   })
 
-  it('serializes legacy runtime event rows as canonical AMA session events', async () => {
+  it('serializes stored canonical Pi runtime event rows as AMA session events', async () => {
     const authorization = await signIn()
     await connectMcp(authorization, 'github')
     const environment = await createEnvironment(authorization)
@@ -732,24 +728,23 @@ describe('[CF] /api/sessions', () => {
         'tool_execution_start',
         'runtime',
         null,
-        JSON.stringify({ toolCallId: 'call_legacy', toolName: 'sandbox.exec', input: { command: 'npm test' } }),
-        JSON.stringify({ source: 'legacy-runtime' }),
+        JSON.stringify({ toolCallId: 'call_pi', toolName: 'sandbox.exec', args: { command: 'npm test' } }),
+        JSON.stringify({ source: 'stored-runtime' }),
         new Date().toISOString(),
       )
       .run()
 
-    const eventsRes = await jsonFetch(`/api/sessions/${created.id}/events?type=tool_call.started`, authorization)
+    const eventsRes = await jsonFetch(`/api/sessions/${created.id}/events?type=tool_execution_start`, authorization)
     expect(eventsRes.status).toBe(200)
     const events = (await eventsRes.json()) as { data: Array<{ type: string; payload: Record<string, unknown> }> }
     expect(events.data).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          type: 'tool_call.started',
+          type: 'tool_execution_start',
           payload: expect.objectContaining({
-            toolCall: expect.objectContaining({
-              id: 'call_legacy',
-              name: 'sandbox.exec',
-            }),
+            toolCallId: 'call_pi',
+            toolName: 'sandbox.exec',
+            args: { command: 'npm test' },
           }),
         }),
       ]),
@@ -769,7 +764,7 @@ describe('[CF] /api/sessions', () => {
           payload,
           metadata,
           created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
     )
       .bind(
@@ -778,53 +773,39 @@ describe('[CF] /api/sessions', () => {
         created.projectId,
         created.id,
         101,
-        'bridge_exit',
+        'turn_end',
         'runtime',
         null,
-        JSON.stringify({ code: 0, signal: null }),
-        JSON.stringify({ source: 'legacy-runtime' }),
+        JSON.stringify({ message: { role: 'assistant', content: 'done' }, toolResults: [] }),
+        JSON.stringify({ source: 'stored-runtime' }),
         new Date().toISOString(),
         `event_${crypto.randomUUID().replaceAll('-', '')}`,
         created.organizationId,
         created.projectId,
         created.id,
         102,
-        'bridge_exit',
+        'runtime.error',
         'runtime',
         null,
-        JSON.stringify({ code: 1, signal: null }),
-        JSON.stringify({ source: 'legacy-runtime' }),
-        new Date().toISOString(),
-        `event_${crypto.randomUUID().replaceAll('-', '')}`,
-        created.organizationId,
-        created.projectId,
-        created.id,
-        103,
-        'bridge_exit',
-        'runtime',
-        null,
-        JSON.stringify({ signal: 'SIGTERM' }),
-        JSON.stringify({ source: 'legacy-runtime' }),
+        JSON.stringify({ message: 'Runtime failed safely', code: 'runtime_exit', details: { exitCode: 1 } }),
+        JSON.stringify({ source: 'stored-runtime' }),
         new Date().toISOString(),
       )
       .run()
 
-    const lifecycleEventsRes = await jsonFetch(
-      `/api/sessions/${created.id}/events?type=session.lifecycle`,
-      authorization,
-    )
+    const lifecycleEventsRes = await jsonFetch(`/api/sessions/${created.id}/events?type=turn_end`, authorization)
     const lifecycleEvents = (await lifecycleEventsRes.json()) as {
       data: Array<{ type: string; payload: Record<string, unknown> }>
     }
     expect(lifecycleEvents.data).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          type: 'session.lifecycle',
-          payload: expect.objectContaining({ stage: 'runtime_exited' }),
+          type: 'turn_end',
+          payload: expect.objectContaining({ message: { role: 'assistant', content: 'done' }, toolResults: [] }),
         }),
       ]),
     )
-    expect(lifecycleEvents.data.every((event) => event.type === 'session.lifecycle')).toBe(true)
+    expect(lifecycleEvents.data.every((event) => event.type === 'turn_end')).toBe(true)
 
     const runtimeErrorEventsRes = await jsonFetch(
       `/api/sessions/${created.id}/events?type=runtime.error`,
@@ -837,17 +818,13 @@ describe('[CF] /api/sessions', () => {
       expect.arrayContaining([
         expect.objectContaining({
           type: 'runtime.error',
-          payload: expect.objectContaining({ code: 1 }),
-        }),
-        expect.objectContaining({
-          type: 'runtime.error',
-          payload: expect.objectContaining({ signal: 'SIGTERM' }),
+          payload: expect.objectContaining({ message: 'Runtime failed safely', code: 'runtime_exit' }),
         }),
       ]),
     )
   })
 
-  it('streams legacy runtime websocket activity as canonical AMA session events', async () => {
+  it('streams canonical runtime websocket activity as AMA session events', async () => {
     const authorization = await signIn()
     await connectMcp(authorization, 'github')
     const environment = await createEnvironment(authorization)
@@ -878,9 +855,10 @@ describe('[CF] /api/sessions', () => {
         payloads.push(payload)
         const types = payloads.map((item) => item.type)
         if (
-          types.includes('transcript.message') &&
-          types.includes('tool_call.started') &&
-          types.includes('tool_call.completed')
+          types.includes('message_end') &&
+          types.includes('tool_execution_start') &&
+          types.includes('tool_execution_end') &&
+          types.includes('turn_end')
         ) {
           clearTimeout(timeout)
           socket.close()
@@ -899,13 +877,15 @@ describe('[CF] /api/sessions', () => {
     const types = payloads.map((payload) => payload.type)
     expect(types).toEqual(
       expect.arrayContaining([
-        'session.lifecycle',
-        'transcript.message.delta',
-        'transcript.message',
-        'tool_call.started',
+        'agent_start',
+        'turn_start',
+        'turn_end',
+        'message_update',
+        'message_end',
+        'tool_execution_start',
       ]),
     )
-    expect(types).not.toEqual(expect.arrayContaining(['message_update', 'tool_execution_start']))
+    expect(types).not.toEqual(expect.arrayContaining(['transcript.message', 'tool_call.started']))
     expect(JSON.stringify(payloads)).not.toContain('raw-secret-token')
   })
 
@@ -1015,7 +995,7 @@ describe('[CF] /api/sessions', () => {
     }
     const successfulAssistantCompletions = events.data.filter((event) => {
       const message = (event.payload as { message?: { role?: string; stopReason?: string } }).message
-      return event.type === 'transcript.message' && message?.role === 'assistant' && message.stopReason === 'stop'
+      return event.type === 'message_end' && message?.role === 'assistant' && message.stopReason === 'stop'
     })
     expect(successfulAssistantCompletions).toEqual([])
     expect(JSON.stringify(events.data)).not.toContain('AMA runtime processed: Wait for cancellation before completing')
@@ -1069,7 +1049,7 @@ describe('[CF] /api/sessions', () => {
     expect(events.data).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          type: 'transcript.message',
+          type: 'message_end',
           payload: expect.objectContaining({
             message: expect.objectContaining({ role: 'assistant' }),
           }),

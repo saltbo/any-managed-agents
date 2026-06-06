@@ -48,7 +48,7 @@ Feature: External agent runtimes on self-hosted runners
     Given a self-hosted environment selects codex runtime
     And an active runner supports the selected Codex provider and model
     When the user starts a session with an initial prompt
-    Then ama-runner launches the configured Codex command for that session
+    Then ama-runner starts the embedded Codex SDK bridge for that session
     And Codex receives the prompt, workspace, runtime config, and safe environment
     And Codex output is translated into canonical lifecycle, transcript, tool, usage, output, and error events
     And the session reaches idle, stopped, or error with inspectable final events
@@ -58,7 +58,7 @@ Feature: External agent runtimes on self-hosted runners
     Given a self-hosted environment selects claude-code runtime
     And an active runner supports the selected Claude Code provider and model
     When the user starts a session with an initial prompt
-    Then ama-runner launches the configured Claude Code command for that session
+    Then ama-runner starts the embedded Claude Code SDK bridge for that session
     And Claude Code receives the prompt, workspace, runtime config, and safe environment
     And Claude Code output is translated into canonical lifecycle, transcript, tool, usage, output, and error events
     And the session reaches idle, stopped, or error with inspectable final events
@@ -68,7 +68,7 @@ Feature: External agent runtimes on self-hosted runners
     Given a self-hosted environment selects copilot runtime
     And an active runner supports the selected Copilot provider and model
     When the user starts a session with an initial prompt
-    Then ama-runner launches the configured Copilot command for that session
+    Then ama-runner starts the embedded Copilot SDK bridge for that session
     And Copilot receives the prompt, workspace, runtime config, and safe environment
     And Copilot output is translated into canonical lifecycle, transcript, tool, usage, output, and error events
     And the session reaches idle, stopped, or error with inspectable final events

@@ -13,7 +13,7 @@ function networkSummary(environment: Environment) {
 }
 
 function runtimeConfigSummary(environment: Environment) {
-  return String(environment.runtimeConfig.image ?? environment.runtimeConfig.command ?? 'Default')
+  return String(environment.runtimeConfig.image ?? environment.runtimeConfig.mode ?? 'Default')
 }
 
 export function EnvironmentDetailView({

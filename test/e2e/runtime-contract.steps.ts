@@ -13,7 +13,7 @@ Then('browser clients use WebSocket for bidirectional runtime commands and event
 })
 
 Then('AMA persists runtime events before exposing them to clients', () => {
-  assert.ok(AMA_SESSION_EVENT_TYPES.includes('transcript.message'))
+  assert.ok(AMA_SESSION_EVENT_TYPES.includes('message_end'))
 })
 
 Then('clients can list or stream persisted session events', () => {

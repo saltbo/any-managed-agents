@@ -67,7 +67,6 @@ interface E2EState {
   channelEventText?: string
   runnerConfigPath?: string
   deviceLoginOutput?: string
-  claudeShimReceipt?: Json
   otherPage?: Page
   deletedCredentialVersionId?: string
   response?: Json
@@ -362,7 +361,7 @@ Given('a self-hosted environment selects codex runtime', async function (this: P
     name: `${state.runId} codex self-hosted env`,
     hostingMode: 'self_hosted',
     runtime: 'codex',
-    runtimeConfig: codexShimRuntimeConfig(),
+    runtimeConfig: bridgeTestRuntimeConfig(),
     networkPolicy: { mode: 'unrestricted' },
   })
 })
@@ -373,7 +372,7 @@ Given('a self-hosted environment selects copilot runtime', async function (this:
     name: `${state.runId} copilot self-hosted env`,
     hostingMode: 'self_hosted',
     runtime: 'copilot',
-    runtimeConfig: copilotShimRuntimeConfig(),
+    runtimeConfig: bridgeTestRuntimeConfig(),
     networkPolicy: { mode: 'unrestricted' },
   })
 })
@@ -400,16 +399,11 @@ Given('the agent selects an exact provider and model', async function (this: Pro
 
 Given('a self-hosted environment selects claude-code runtime', async function (this: ProductWorld) {
   const state = await ensureSignedIn(this)
-  const shimPath = join(process.cwd(), 'test/e2e/fixtures/claude-code-shim.mjs')
   state.environment = await createEnvironment(state, {
     name: `${state.runId} claude-code self-hosted env`,
     hostingMode: 'self_hosted',
     runtime: 'claude-code',
-    runtimeConfig: {
-      command: [process.execPath, shimPath],
-      adapter: 'claude-code-shim',
-      mode: 'deterministic-e2e',
-    },
+    runtimeConfig: bridgeTestRuntimeConfig(),
     networkPolicy: { mode: 'unrestricted' },
   })
 })
@@ -1300,7 +1294,7 @@ When('the client lists events with limit, order, type filter, or cursor', async 
   )
   const typedPage = await apiJson<ListResponse<Json>>(
     state.page.request,
-    `/api/sessions/${state.latestSession?.id}/events?type=transcript.message&limit=10`,
+    `/api/sessions/${state.latestSession?.id}/events?type=message_end&limit=10`,
   )
   state.eventPages = { firstPage, nextPage, descPage, typedPage }
 })
@@ -2646,7 +2640,7 @@ When('the user starts a session with an initial prompt', async function (this: P
   const state = await ensureState(this)
   const runtime = String(objectValue(state.environment).runtime)
   if (runtime === 'claude-code') {
-    state.runtimeMessage = 'Run the deterministic Claude Code shim.'
+    state.runtimeMessage = 'Run the deterministic Claude Code bridge test.'
   } else {
     state.runtimeMessage = `${state.runId} ${runtime} prompt`
   }
@@ -2664,43 +2658,40 @@ When('the user starts a session with an initial prompt', async function (this: P
   await startProductAmaRunner(state)
 })
 
-Then('ama-runner launches the configured Claude Code command for that session', async function (this: ProductWorld) {
+Then('ama-runner starts the embedded Claude Code SDK bridge for that session', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  await waitForSessionStatus(state, 'idle')
-  const receipt = JSON.parse(
-    readFileSync(join(required(state.runnerWorkDir, 'runner workdir'), 'claude-code-shim-received.json'), 'utf8'),
-  ) as Json
-  state.claudeShimReceipt = receipt
-  assert.equal(receipt.sessionId, state.latestSession?.id)
-  assert.equal(receipt.runtime, 'claude-code')
+  const events = await waitForSessionEventText(state, 'claude-code-bridge-test-started')
+  assert.equal(
+    events.data.some((event) => event.type === 'turn_start'),
+    true,
+  )
 })
 
-Then('Claude Code receives the prompt, workspace, runtime config, and safe environment', function (this: ProductWorld) {
-  const state = required(this.e2e, 'state')
-  const receipt = required(state.claudeShimReceipt, 'claude shim receipt')
-  assert.equal(receipt.prompt, state.runtimeMessage)
-  assert.equal(receipt.workspace, state.runnerWorkDir)
-  assert.equal(receipt.workspaceEnv, state.runnerWorkDir)
-  assert.equal(receipt.provider, state.provider?.id)
-  assert.equal(receipt.model, CLAUDE_CODE_E2E_MODEL)
-  assert.equal(objectValue(receipt.runtimeConfig).adapter, 'claude-code-shim')
-  assert.equal(receipt.leakedToken, null)
-  assert.equal(receipt.leakedOperatorSecret, null)
-  assert.ok(String(receipt.home).startsWith(String(state.runnerWorkDir)))
-  assert.ok(String(receipt.tmpdir).startsWith(String(state.runnerWorkDir)))
+Then('Claude Code receives the prompt, workspace, runtime config, and safe environment', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const events = await waitForSessionEventText(state, 'claude-code-bridge-test safe diagnostic')
+  const serialized = JSON.stringify(events.data)
+  assert.equal(serialized.includes(String(state.runtimeMessage)), true)
+  assert.equal(serialized.includes(String(state.provider?.id)), true)
+  assert.equal(serialized.includes(CLAUDE_CODE_E2E_MODEL), true)
+  assert.equal(serialized.includes(`workspace:${runnerSessionWorkDir(state)}`), true)
+  assert.equal(serialized.includes('"e2eBridgeTest":true'), true)
+  assert.equal(serialized.includes('raw-secret-value'), false)
+  assert.equal(serialized.includes('AMA_TOKEN'), false)
+  assert.equal(serialized.includes('secret://providers'), false)
 })
 
 Then(
   'Claude Code output is translated into canonical lifecycle, transcript, tool, usage, output, and error events',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    const events = await waitForSessionEventText(state, 'claude-code-shim-stderr')
+    const events = await waitForSessionEventText(state, 'claude-code-bridge-test-stderr')
     const eventTypes = new Set(events.data.map((event) => String(event.type)))
     for (const type of [
-      'session.lifecycle',
-      'transcript.message',
-      'tool_call.started',
-      'tool_call.completed',
+      'turn_end',
+      'message_end',
+      'tool_execution_start',
+      'tool_execution_end',
       'usage.recorded',
       'runtime.output',
       'runtime.error',
@@ -2710,54 +2701,55 @@ Then(
     const lifecycle = required(
       events.data.find(
         (event) =>
-          event.type === 'session.lifecycle' && String(objectValue(event.payload).stage).includes('claude-code'),
+          event.type === 'turn_end' && String(objectValue(event.payload).stage).includes('claude-code-bridge-test'),
       ),
       'Claude Code lifecycle event',
     )
-    assert.ok(String(objectValue(lifecycle.payload).stage).includes('claude-code'))
+    assert.ok(String(objectValue(lifecycle.payload).stage).includes('claude-code-bridge-test'))
     const transcript = required(
-      events.data.find((event) => event.type === 'transcript.message'),
+      events.data.find((event) => event.type === 'message_end'),
       'transcript event',
     )
     const transcriptMessage = objectValue(objectValue(transcript.payload).message)
     assert.equal(transcriptMessage.role, 'assistant')
-    assert.equal(transcriptMessage.content, 'Claude shim received: Run the deterministic Claude Code shim.')
+    assert.deepEqual(transcriptMessage.content, [
+      { type: 'text', text: 'claude-code-bridge-test received:Run the deterministic Claude Code bridge test.' },
+    ])
     const toolStarted = required(
-      events.data.find((event) => event.type === 'tool_call.started'),
+      events.data.find((event) => event.type === 'tool_execution_start'),
       'tool started event',
     )
-    const startedCall = objectValue(objectValue(toolStarted.payload).toolCall)
-    assert.equal(startedCall.id, 'claude_shim_tool')
-    assert.equal(startedCall.name, 'sandbox.exec')
-    assert.equal(objectValue(startedCall.input).command, 'printf claude-tool-ok')
+    const startedCall = objectValue(toolStarted.payload)
+    assert.equal(startedCall.toolCallId, 'claude_code_tool')
+    assert.equal(startedCall.toolName, 'sandbox.exec')
+    assert.equal(objectValue(startedCall.args).command, 'printf claude-code-tool-ok')
     const toolCompleted = required(
-      events.data.find((event) => event.type === 'tool_call.completed'),
+      events.data.find((event) => event.type === 'tool_execution_end'),
       'tool completed event',
     )
-    const completedCall = objectValue(objectValue(toolCompleted.payload).toolCall)
-    assert.equal(completedCall.id, 'claude_shim_tool')
-    assert.equal(objectValue(completedCall.output).stdout, 'claude-tool-ok')
-    assert.equal(completedCall.durationMs, 1)
+    const completedCall = objectValue(toolCompleted.payload)
+    assert.equal(completedCall.toolCallId, 'claude_code_tool')
+    assert.equal(objectValue(completedCall.result).stdout, 'claude-code-tool-ok')
     const usage = required(
       events.data.find((event) => event.type === 'usage.recorded'),
       'usage event',
     )
     assert.equal(objectValue(usage.payload).provider, state.provider?.id)
     assert.equal(objectValue(usage.payload).model, CLAUDE_CODE_E2E_MODEL)
-    assert.equal(objectValue(usage.payload).inputTokens, 11)
-    assert.equal(objectValue(usage.payload).outputTokens, 7)
+    assert.equal(objectValue(usage.payload).inputTokens, 4)
+    assert.equal(objectValue(usage.payload).outputTokens, 6)
     const runtimeError = required(
       events.data.find((event) => event.type === 'runtime.error'),
       'runtime error event',
     )
-    assert.equal(objectValue(runtimeError.payload).message, 'Claude shim safe diagnostic')
-    assert.equal(objectValue(runtimeError.payload).code, 'shim_diagnostic')
+    assert.equal(objectValue(runtimeError.payload).message, 'claude-code-bridge-test safe diagnostic')
+    assert.equal(objectValue(runtimeError.payload).code, 'bridge_test_diagnostic')
     const stdoutOutput = required(
       events.data.find(
         (event) =>
           event.type === 'runtime.output' &&
           objectValue(event.payload).stream === 'stdout' &&
-          objectValue(event.payload).content === 'claude-code-shim-output',
+          objectValue(event.payload).content === 'claude-code-bridge-test-stdout',
       ),
       'stdout runtime output event',
     )
@@ -2766,16 +2758,16 @@ Then(
         (event) =>
           event.type === 'runtime.output' &&
           objectValue(event.payload).stream === 'stderr' &&
-          objectValue(event.payload).content === 'claude-code-shim-stderr',
+          objectValue(event.payload).content === 'claude-code-bridge-test-stderr',
       ),
       'stderr runtime output event',
     )
     assert.equal(objectValue(stdoutOutput.payload).stream, 'stdout')
     assert.equal(objectValue(stderrOutput.payload).stream, 'stderr')
     const serialized = JSON.stringify(events.data)
-    assert.equal(serialized.includes('Claude shim received: Run the deterministic Claude Code shim.'), true)
-    assert.equal(serialized.includes('claude-code-shim-output'), true)
-    assert.equal(serialized.includes('claude-code-shim-stderr'), true)
+    assert.equal(serialized.includes('claude-code-bridge-test received:Run the deterministic Claude Code bridge test.'), true)
+    assert.equal(serialized.includes('claude-code-bridge-test-stdout'), true)
+    assert.equal(serialized.includes('claude-code-bridge-test-stderr'), true)
     assert.equal(serialized.includes('raw-secret-value'), false)
   },
 )
@@ -2787,10 +2779,10 @@ Then('the session reaches idle, stopped, or error with inspectable final events'
   const events = await sessionEvents(state)
   assert.ok(events.data.length > 0)
   if (String(objectValue(state.environment).runtime) === 'codex') {
-    assert.equal(JSON.stringify(events.data).includes('codex-shim-completed'), true)
+    assert.equal(JSON.stringify(events.data).includes('codex-bridge-test-completed'), true)
   }
   if (String(objectValue(state.environment).runtime) === 'copilot') {
-    assert.equal(JSON.stringify(events.data).includes('copilot-shim-completed'), true)
+    assert.equal(JSON.stringify(events.data).includes('copilot-bridge-test-completed'), true)
   }
   const serialized = JSON.stringify(session)
   assert.equal(serialized.includes('localhost'), false)
@@ -2868,8 +2860,8 @@ Then('the runner can upload structured events and complete the lease', async fun
     data: {
       events: [
         {
-          type: 'tool_call.started',
-          payload: { type: 'tool_call.started', toolName: 'sandbox.exec', input: { command: 'npm test' } },
+          type: 'tool_execution_start',
+          payload: { type: 'tool_execution_start', toolName: 'sandbox.exec', input: { command: 'npm test' } },
           metadata: { runnerId: runner.id },
         },
       ],
@@ -3239,7 +3231,7 @@ Then(
       '/api/audit-records?action=session.initial_prompt',
     )
     assert.ok(events.data.length > 0)
-    assert.ok(events.data.some((event) => event.type === 'transcript.message'))
+    assert.ok(events.data.some((event) => event.type === 'message_end'))
     assert.ok(audit.data.some((record) => record.sessionId === state.latestSession?.id && record.outcome === 'success'))
   },
 )
@@ -3449,12 +3441,12 @@ Given('an active runner supports the selected Copilot provider and model', async
   })
 })
 
-Then('ama-runner launches the configured Codex command for that session', async function (this: ProductWorld) {
+Then('ama-runner starts the embedded Codex SDK bridge for that session', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const events = await waitForSessionEventText(state, 'codex-shim-started')
+  const events = await waitForSessionEventText(state, 'codex-bridge-test-started')
   const serialized = JSON.stringify(events.data)
   assert.equal(
-    events.data.some((event) => event.type === 'session.lifecycle'),
+    events.data.some((event) => event.type === 'turn_start'),
     true,
   )
   assert.equal(serialized.includes(String(state.latestSession?.id)), true)
@@ -3462,13 +3454,13 @@ Then('ama-runner launches the configured Codex command for that session', async 
 
 Then('Codex receives the prompt, workspace, runtime config, and safe environment', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const events = await waitForSessionEventText(state, 'safe-env-ok')
+  const events = await waitForSessionEventText(state, 'codex-bridge-test safe diagnostic')
   const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
   const serialized = JSON.stringify(events.data)
   assert.equal(serialized.includes(state.runtimeMessage ?? ''), true)
   assert.equal(serialized.includes('workspace:'), true)
   assert.equal(serialized.includes(`/sessions/${String(state.latestSession?.id)}`), true)
-  assert.equal(objectValue(objectValue(session.environmentSnapshot).runtimeConfig).codexShim, true)
+  assert.equal(objectValue(objectValue(session.environmentSnapshot).runtimeConfig).e2eBridgeTest, true)
   assert.equal(serialized.includes(String(state.provider?.id)), true)
   assert.equal(serialized.includes(CODEX_E2E_MODEL), true)
   assert.equal(serialized.includes('AMA_TOKEN'), false)
@@ -3479,20 +3471,20 @@ Then(
   'Codex output is translated into canonical lifecycle, transcript, tool, usage, output, and error events',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    const events = await waitForSessionEventText(state, 'codex stderr diagnostic')
+    const events = await waitForSessionEventText(state, 'codex-bridge-test-stderr')
     const types = new Set(events.data.map((event) => event.type))
     const stderrOutput = events.data.find(
       (event) =>
-        event.type === 'runtime.output' &&
-        objectValue(event.payload).stream === 'stderr' &&
-        objectValue(event.payload).content === 'codex stderr diagnostic',
+          event.type === 'runtime.output' &&
+          objectValue(event.payload).stream === 'stderr' &&
+          objectValue(event.payload).content === 'codex-bridge-test-stderr',
     )
     assert.ok(stderrOutput)
     for (const type of [
-      'session.lifecycle',
-      'transcript.message',
-      'tool_call.started',
-      'tool_call.completed',
+      'turn_end',
+      'message_end',
+      'tool_execution_start',
+      'tool_execution_end',
       'usage.recorded',
       'runtime.output',
       'runtime.error',
@@ -3502,12 +3494,12 @@ Then(
   },
 )
 
-Then('ama-runner launches the configured Copilot command for that session', async function (this: ProductWorld) {
+Then('ama-runner starts the embedded Copilot SDK bridge for that session', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const events = await waitForSessionEventText(state, 'copilot-shim-started')
+  const events = await waitForSessionEventText(state, 'copilot-bridge-test-started')
   const serialized = JSON.stringify(events.data)
   assert.equal(
-    events.data.some((event) => event.type === 'session.lifecycle'),
+    events.data.some((event) => event.type === 'turn_start'),
     true,
   )
   assert.equal(serialized.includes(String(state.latestSession?.id)), true)
@@ -3517,21 +3509,16 @@ Then(
   'Copilot receives the prompt, workspace, runtime config, and safe environment',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    await waitForSessionStatus(state, 'idle')
-    const receipt = copilotShimReceipt(state)
-    assert.equal(receipt.prompt, state.runtimeMessage)
-    assert.equal(receipt.sessionId, state.latestSession?.id)
-    assert.equal(receipt.runtime, 'copilot')
-    assert.equal(receipt.provider, state.provider?.id)
-    assert.equal(receipt.model, COPILOT_E2E_MODEL)
-    assert.equal(objectValue(receipt.runtimeConfig).mode, 'deterministic-shim')
-    assert.equal(receipt.workspace, receipt.amaWorkspace)
-    assert.equal(receipt.workspace, realpathSync(required(state.runnerWorkDir, 'runner workdir')))
-    assert.equal(receipt.hasAmaToken, false)
-    assert.equal(receipt.leakedToken, null)
-    assert.equal(receipt.leakedOperatorSecret, null)
-    assert.equal(String(receipt.home).startsWith(String(receipt.workspace)), true)
-    assert.equal(String(receipt.tmpdir).startsWith(String(receipt.workspace)), true)
+    const events = await waitForSessionEventText(state, 'copilot-bridge-test safe diagnostic')
+    const serialized = JSON.stringify(events.data)
+    assert.equal(serialized.includes(String(state.runtimeMessage)), true)
+    assert.equal(serialized.includes(String(state.provider?.id)), true)
+    assert.equal(serialized.includes(COPILOT_E2E_MODEL), true)
+    assert.equal(serialized.includes(`workspace:${runnerSessionWorkDir(state)}`), true)
+    assert.equal(serialized.includes('"e2eBridgeTest":true'), true)
+    assert.equal(serialized.includes('raw-secret-value'), false)
+    assert.equal(serialized.includes('AMA_TOKEN'), false)
+    assert.equal(serialized.includes('secret://providers'), false)
   },
 )
 
@@ -3539,30 +3526,30 @@ Then(
   'Copilot output is translated into canonical lifecycle, transcript, tool, usage, output, and error events',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    const events = await waitForSessionEventText(state, 'copilot stderr diagnostic')
+    const events = await waitForSessionEventText(state, 'copilot-bridge-test-stderr')
     const types = new Set(events.data.map((event) => event.type))
     const serialized = JSON.stringify(events.data)
     const stderrOutput = events.data.find(
       (event) =>
-        event.type === 'runtime.output' &&
-        objectValue(event.payload).stream === 'stderr' &&
-        objectValue(event.payload).content === 'copilot stderr diagnostic',
+          event.type === 'runtime.output' &&
+          objectValue(event.payload).stream === 'stderr' &&
+          objectValue(event.payload).content === 'copilot-bridge-test-stderr',
     )
     const stdoutOutput = events.data.find(
       (event) =>
-        event.type === 'runtime.output' &&
-        objectValue(event.payload).stream === 'stdout' &&
-        objectValue(event.payload).content === 'copilot stdout diagnostic',
+          event.type === 'runtime.output' &&
+          objectValue(event.payload).stream === 'stdout' &&
+          objectValue(event.payload).content === 'copilot-bridge-test-stdout',
     )
     assert.ok(stderrOutput)
     assert.ok(stdoutOutput)
     assert.equal(serialized.includes(`received:${state.runtimeMessage}`), true)
-    assert.equal(serialized.includes('copilot shim safe error'), true)
+    assert.equal(serialized.includes('copilot-bridge-test safe diagnostic'), true)
     for (const type of [
-      'session.lifecycle',
-      'transcript.message',
-      'tool_call.started',
-      'tool_call.completed',
+      'turn_end',
+      'message_end',
+      'tool_execution_start',
+      'tool_execution_end',
       'usage.recorded',
       'runtime.output',
       'runtime.error',
@@ -3641,7 +3628,7 @@ When(
 Then('the tool call is delivered over the session WebSocket to the owning runner', async function (this: ProductWorld) {
   const state = await ensureState(this)
   const events = await waitForSessionEventText(state, 'call_e2e_channel')
-  assert.ok(JSON.stringify(events.data).includes('runner.tool.started'))
+  assert.ok(JSON.stringify(events.data).includes('tool_execution_start'))
 })
 
 Then('the runner executes the tool in the configured local execution backend', async function (this: ProductWorld) {
@@ -3658,16 +3645,15 @@ Then(
       state,
       (event) => {
         const payload = objectValue(event.payload)
-        const toolCall = objectValue(payload.toolCall)
-        return event.type === 'tool_call.completed' && toolCall.id === 'call_e2e_channel'
+        return event.type === 'tool_execution_end' && payload.toolCallId === 'call_e2e_channel'
       },
       'completed channel tool call event',
     )
-    const toolCall = objectValue(objectValue(completed.payload).toolCall)
-    const output = objectValue(toolCall.output)
+    const payload = objectValue(completed.payload)
+    const output = objectValue(payload.result)
     assert.equal(output.stdout, 'channel-ok')
     assert.equal(typeof output.stderr, 'string')
-    assert.equal(typeof toolCall.durationMs, 'number')
+    assert.equal(typeof payload.durationMs, 'number')
   },
 )
 
@@ -3676,7 +3662,7 @@ Then(
   async function (this: ProductWorld) {
     const state = await ensureState(this)
     const events = await waitForSessionEventText(state, 'channel-ok')
-    assert.ok(JSON.stringify(events.data).includes('tool_call.completed'))
+    assert.ok(JSON.stringify(events.data).includes('tool_execution_end'))
   },
 )
 
@@ -3738,12 +3724,17 @@ Then('duplicate or stale channels cannot submit tool results for the session', a
   const state = await ensureState(this)
   state.runnerChannelMessages = await openRunnerChannel(state, 'duplicateRunnerChannel')
   await sendRunnerChannelEvent(state, 'amaRunnerChannel', {
-    type: 'runner.tool.completed',
-    payload: { toolCallId: 'duplicate_e2e', toolName: 'sandbox.exec', output: { stdout: 'duplicate-e2e' } },
+    type: 'tool_execution_end',
+    payload: { toolCallId: 'duplicate_e2e', toolName: 'sandbox.exec', result: { stdout: 'duplicate-e2e' }, isError: false },
   })
   await sendRunnerChannelEvent(state, 'duplicateRunnerChannel', {
-    type: 'runner.tool.completed',
-    payload: { toolCallId: 'replacement_e2e', toolName: 'sandbox.exec', output: { stdout: 'replacement-e2e' } },
+    type: 'tool_execution_end',
+    payload: {
+      toolCallId: 'replacement_e2e',
+      toolName: 'sandbox.exec',
+      result: { stdout: 'replacement-e2e' },
+      isError: false,
+    },
   })
   const duplicateEvents = await waitForSessionEventText(state, 'replacement-e2e')
   const duplicateSerialized = JSON.stringify(duplicateEvents.data)
@@ -3751,13 +3742,13 @@ Then('duplicate or stale channels cannot submit tool results for the session', a
   assert.equal(duplicateSerialized.includes('duplicate-e2e'), false)
 
   await sendRunnerChannelEvent(state, 'amaRunnerChannel', {
-    type: 'runner.tool.completed',
-    payload: { toolCallId: 'stale_e2e', toolName: 'sandbox.exec', output: { stdout: 'stale-e2e' } },
+    type: 'tool_execution_end',
+    payload: { toolCallId: 'stale_e2e', toolName: 'sandbox.exec', result: { stdout: 'stale-e2e' }, isError: false },
   })
   state.runnerChannelMessages = await openRunnerChannel(state, 'replacementRunnerChannel')
   await sendRunnerChannelEvent(state, 'replacementRunnerChannel', {
-    type: 'runner.tool.completed',
-    payload: { toolCallId: 'fresh_e2e', toolName: 'sandbox.exec', output: { stdout: 'fresh-e2e' } },
+    type: 'tool_execution_end',
+    payload: { toolCallId: 'fresh_e2e', toolName: 'sandbox.exec', result: { stdout: 'fresh-e2e' }, isError: false },
   })
   const events = await waitForSessionEventText(state, 'fresh-e2e')
   const serialized = JSON.stringify(events.data)
@@ -3830,10 +3821,10 @@ Then('AMA stores the activity as canonical session events', async function (this
   const events = state.events ?? (await sessionEvents(state))
   const types = new Set(events.data.map((event) => String(event.type)))
   for (const type of [
-    'session.lifecycle',
-    'transcript.message',
-    'tool_call.started',
-    'tool_call.completed',
+    'turn_end',
+    'message_end',
+    'tool_execution_start',
+    'tool_execution_end',
     'usage.recorded',
   ]) {
     assert.ok(types.has(type), `missing canonical event type ${type}`)
@@ -3843,20 +3834,48 @@ Then('AMA stores the activity as canonical session events', async function (this
 Then('UI, API, and session-state views read only canonical session events', async function (this: ProductWorld) {
   const state = await ensureState(this)
   const events = state.events ?? (await sessionEvents(state))
+  const canonicalTypes = new Set([
+    'agent_start',
+    'agent_end',
+    'turn_start',
+    'turn_end',
+    'message_start',
+    'message_update',
+    'message_end',
+    'tool_execution_start',
+    'tool_execution_update',
+    'tool_execution_end',
+    'usage.recorded',
+    'policy.decision',
+    'runtime.error',
+    'runtime.metadata',
+    'runtime.output',
+    'runner.metadata',
+  ])
+  const legacyTypes = new Set([
+    'session.lifecycle',
+    'transcript.message',
+    'transcript.message.delta',
+    'tool_call.started',
+    'tool_call.updated',
+    'tool_call.completed',
+  ])
   for (const type of state.observedEventTypes ?? []) {
-    assert.match(String(type), /^[a-z]+(?:_[a-z]+)?\.[a-z]+(?:\.[a-z]+)?$/)
+    assert.ok(canonicalTypes.has(String(type)), `unexpected observed event type ${type}`)
+    assert.equal(legacyTypes.has(String(type)), false)
   }
-  assert.ok((state.observedEventTypes ?? []).includes('transcript.message'))
-  assert.ok((state.observedEventTypes ?? []).includes('tool_call.started'))
+  assert.ok((state.observedEventTypes ?? []).includes('message_end'))
+  assert.ok((state.observedEventTypes ?? []).includes('tool_execution_start'))
   for (const event of events.data) {
-    assert.match(String(event.type), /^[a-z]+(?:_[a-z]+)?\.[a-z]+(?:\.[a-z]+)?$/)
+    assert.ok(canonicalTypes.has(String(event.type)), `unexpected stored event type ${event.type}`)
+    assert.equal(legacyTypes.has(String(event.type)), false)
   }
   assert.equal(
-    events.data.some((event) => String(event.type).includes('tool_execution_')),
+    events.data.some((event) => String(event.type).startsWith('tool_call.')),
     false,
   )
   assert.equal(
-    events.data.some((event) => String(event.type).includes('message_update')),
+    events.data.some((event) => String(event.type).startsWith('transcript.message')),
     false,
   )
 })
@@ -3901,7 +3920,7 @@ Then('event list endpoints support pagination, order, and event type filters', a
   await apiJson<ListResponse<Json>>(state.page.request, `/api/sessions/${state.latestSession?.id}/events?order=desc`)
   await apiJson<ListResponse<Json>>(
     state.page.request,
-    `/api/sessions/${state.latestSession?.id}/events?type=transcript.message`,
+    `/api/sessions/${state.latestSession?.id}/events?type=message_end`,
   )
 })
 
@@ -3910,7 +3929,7 @@ Then('the response returns a deterministic page', function (this: ProductWorld) 
   assert.equal(pages.firstPage.data.length, 1)
   assert.ok(pages.nextPage.data.every((event) => Number(event.sequence) > Number(pages.firstPage.data[0]?.sequence)))
   assert.ok(pages.descPage.data.length > 0)
-  assert.ok(pages.typedPage.data.every((event) => event.type === 'transcript.message'))
+  assert.ok(pages.typedPage.data.every((event) => event.type === 'message_end'))
 })
 
 Then('hasMore, firstId, lastId, and sequence boundaries allow stable pagination', function (this: ProductWorld) {
@@ -4409,6 +4428,11 @@ async function startProductAmaRunner(state: E2EState) {
       env: {
         PATH: process.env.PATH,
         HOME: process.env.HOME,
+        VOLTA_HOME: process.env.VOLTA_HOME,
+        NODE_PATH: process.env.NODE_PATH,
+        PNPM_HOME: process.env.PNPM_HOME,
+        NVM_DIR: process.env.NVM_DIR,
+        AMA_RUNTIME_BRIDGE_TEST_MODE: '1',
         AMA_TOKEN: 'raw-secret-value',
         AMA_RUNNER_OPERATOR_SECRET: 'raw-secret-value',
       },
@@ -4437,55 +4461,15 @@ function runnerCapabilities(state: E2EState) {
   return ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY]
 }
 
-function codexShimRuntimeConfig() {
+function bridgeTestRuntimeConfig() {
   return {
-    command: 'node',
-    args: [
-      '-e',
-      `
-const chunks = []
-process.stdin.on('data', (chunk) => chunks.push(chunk))
-process.stdin.on('end', () => {
-  const prompt = Buffer.concat(chunks).toString()
-  const runtimeConfig = JSON.parse(process.env.AMA_RUNTIME_CONFIG)
-  const safeEnv = Object.keys(process.env).filter((key) => key.startsWith('AMA_')).sort()
-  const base = {
-    sessionId: process.env.AMA_SESSION_ID,
-    runtime: process.env.AMA_RUNTIME,
-    runtimeDriver: process.env.AMA_RUNTIME_DRIVER,
-    provider: process.env.AMA_PROVIDER,
-    model: process.env.AMA_MODEL,
-    workspace: process.env.AMA_WORKSPACE,
-    runtimeConfig: { codexShim: runtimeConfig.codexShim },
-    safeEnv,
-  }
-  console.log(JSON.stringify({ type: 'codex.lifecycle', payload: { ...base, status: 'codex-shim-started' } }))
-  console.log(JSON.stringify({ type: 'codex.message', payload: { message: { role: 'assistant', content: prompt } } }))
-  console.log(JSON.stringify({ type: 'codex.tool.started', payload: { toolCallId: 'codex_tool_1', toolName: 'sandbox.exec', input: { command: 'printf codex-tool-ok' } } }))
-  console.log(JSON.stringify({ type: 'codex.tool.completed', payload: { toolCallId: 'codex_tool_1', toolName: 'sandbox.exec', output: { stdout: 'codex-tool-ok', stderr: '', exitCode: 0 }, durationMs: 4 } }))
-  console.log(JSON.stringify({ type: 'codex.usage', payload: { provider: process.env.AMA_PROVIDER, model: process.env.AMA_MODEL, inputTokens: 4, outputTokens: 6, totalTokens: 10 } }))
-  console.log(JSON.stringify({ type: 'codex.output', payload: { stream: 'stdout', content: 'workspace:' + process.env.AMA_WORKSPACE } }))
-  console.log(JSON.stringify({ type: 'codex.output', payload: { stream: 'stdout', content: 'safe-env-ok' } }))
-  console.log(JSON.stringify({ type: 'codex.error', payload: { error: { message: 'safe-env-ok' }, code: 'shim-diagnostic' } }))
-  console.error('codex stderr diagnostic')
-  console.log(JSON.stringify({ type: 'codex.lifecycle', payload: { ...base, status: 'codex-shim-completed' } }))
-})
-`,
-    ],
-    codexShim: true,
+    e2eBridgeTest: true,
+    mode: 'deterministic-bridge-test',
   }
 }
 
-function copilotShimRuntimeConfig() {
-  return {
-    command: [process.execPath, join(process.cwd(), 'test/e2e/fixtures/copilot-shim.mjs')],
-    mode: 'deterministic-shim',
-  }
-}
-
-function copilotShimReceipt(state: E2EState) {
-  const receiptPath = join(required(state.runnerWorkDir, 'runner workdir'), 'copilot-shim-receipt.json')
-  return JSON.parse(readFileSync(receiptPath, 'utf8')) as Json
+function runnerSessionWorkDir(state: E2EState) {
+  return realpathSync(join(required(state.runnerWorkDir, 'runner workdir'), 'sessions', String(state.latestSession?.id)))
 }
 
 async function stopProductAmaRunner(state?: E2EState) {

@@ -306,13 +306,13 @@ describe('session-runtime', () => {
   it('ignores canonical transcript deltas when rebuilding persisted context', () => {
     const messages = runtimeMessagesFromEvents([
       {
-        type: 'transcript.message.delta',
+        type: 'message_update',
         payload: {
           message: { role: 'assistant', content: 'partial assistant text' },
         },
       },
       {
-        type: 'transcript.message',
+        type: 'message_end',
         payload: {
           message: { role: 'assistant', content: 'completed assistant text' },
         },
@@ -333,7 +333,7 @@ describe('session-runtime', () => {
       model: '@cf/moonshotai/kimi-k2.6',
       agentSnapshot: { instructions: 'Continue from history.', allowedTools: [] },
       messages: runtimeMessagesFromEvents([
-        { type: 'transcript.message', payload: { message: { role: 'assistant', content: 'Acknowledged.' } } },
+        { type: 'message_end', payload: { message: { role: 'assistant', content: 'Acknowledged.' } } },
       ]),
       prompt: 'Continue',
       onEvent: async (event) => {

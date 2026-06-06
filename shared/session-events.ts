@@ -1,10 +1,14 @@
 export const AMA_SESSION_EVENT_DEFINITIONS = {
-  'session.lifecycle': { category: 'lifecycle', label: 'Session lifecycle' },
-  'transcript.message': { category: 'transcript', label: 'Transcript message' },
-  'transcript.message.delta': { category: 'transcript', label: 'Transcript delta' },
-  'tool_call.started': { category: 'tool', label: 'Tool started' },
-  'tool_call.updated': { category: 'tool', label: 'Tool updated' },
-  'tool_call.completed': { category: 'tool', label: 'Tool completed' },
+  agent_start: { category: 'lifecycle', label: 'Agent started' },
+  agent_end: { category: 'lifecycle', label: 'Agent completed' },
+  turn_start: { category: 'lifecycle', label: 'Turn started' },
+  turn_end: { category: 'lifecycle', label: 'Turn completed' },
+  message_start: { category: 'transcript', label: 'Message started' },
+  message_update: { category: 'transcript', label: 'Message updated' },
+  message_end: { category: 'transcript', label: 'Message completed' },
+  tool_execution_start: { category: 'tool', label: 'Tool execution started' },
+  tool_execution_update: { category: 'tool', label: 'Tool execution updated' },
+  tool_execution_end: { category: 'tool', label: 'Tool execution completed' },
   'usage.recorded': { category: 'usage', label: 'Usage recorded' },
   'policy.decision': { category: 'policy', label: 'Policy decision' },
   'runtime.error': { category: 'error', label: 'Runtime error' },
@@ -54,6 +58,23 @@ export function amaSessionEventTypeFromPayload(event: Record<string, unknown>): 
   return typeof event.type === 'string' && event.type ? event.type : 'unknown'
 }
 
+const PI_AGENT_EVENT_TYPES = new Set<string>([
+  'agent_start',
+  'agent_end',
+  'turn_start',
+  'turn_end',
+  'message_start',
+  'message_update',
+  'message_end',
+  'tool_execution_start',
+  'tool_execution_update',
+  'tool_execution_end',
+])
+
+export function isPiAgentSessionEventType(value: string): value is AmaSessionEventType {
+  return PI_AGENT_EVENT_TYPES.has(value)
+}
+
 export function canonicalAmaSessionEventFromRuntimeEvent(
   event: Record<string, unknown>,
   metadata: Record<string, unknown> = {},
@@ -79,43 +100,17 @@ function sourceEventTypeFromRuntimeEvent(event: Record<string, unknown>) {
 
 function canonicalType(sourceEventType: string, event: Record<string, unknown>): AmaSessionEventType {
   if (isAmaSessionEventType(sourceEventType)) return sourceEventType
-  if (matchesRuntimeEvent(sourceEventType, 'message')) return 'transcript.message'
-  if (matchesRuntimeEvent(sourceEventType, 'message.delta') || matchesRuntimeEvent(sourceEventType, 'message_update')) {
-    return 'transcript.message.delta'
-  }
-  if (matchesRuntimeEvent(sourceEventType, 'tool.started') || matchesRuntimeEvent(sourceEventType, 'tool_execution_start')) {
-    return 'tool_call.started'
-  }
-  if (matchesRuntimeEvent(sourceEventType, 'tool.updated') || matchesRuntimeEvent(sourceEventType, 'tool_execution_update')) {
-    return 'tool_call.updated'
-  }
-  if (
-    matchesRuntimeEvent(sourceEventType, 'tool.completed') ||
-    matchesRuntimeEvent(sourceEventType, 'tool.failed') ||
-    matchesRuntimeEvent(sourceEventType, 'tool_execution_end')
-  ) {
-    return 'tool_call.completed'
-  }
   if (matchesRuntimeEvent(sourceEventType, 'usage')) return 'usage.recorded'
   if (matchesRuntimeEvent(sourceEventType, 'error')) return 'runtime.error'
   if (matchesRuntimeEvent(sourceEventType, 'output')) return 'runtime.output'
-  if (sourceEventType === 'message') return 'transcript.message'
-  if (sourceEventType === 'message_update') return 'transcript.message.delta'
-  if (sourceEventType === 'message_end') return 'transcript.message'
-  if (sourceEventType === 'tool_execution_start') return 'tool_call.started'
-  if (sourceEventType === 'tool_execution_update') return 'tool_call.updated'
-  if (sourceEventType === 'tool_execution_end') return 'tool_call.completed'
   if (sourceEventType === 'usage') return 'usage.recorded'
   if (sourceEventType === 'policy_denied') return 'policy.decision'
   if (sourceEventType === 'error') return 'runtime.error'
   if (sourceEventType === 'bridge_stderr') return 'runtime.output'
-  if (sourceEventType === 'bridge_exit') {
-    const code = event.code
-    return code === 0 || code === null ? 'session.lifecycle' : 'runtime.error'
-  }
+  if (sourceEventType === 'bridge_exit') return 'runtime.error'
   if (sourceEventType === 'queue_update' || sourceEventType === 'session_info_changed') return 'runtime.metadata'
   if (sourceEventType === 'runner_heartbeat' || sourceEventType === 'runner_status') return 'runner.metadata'
-  return 'session.lifecycle'
+  return 'runtime.metadata'
 }
 
 function matchesRuntimeEvent(sourceEventType: string, suffix: string) {
@@ -133,33 +128,8 @@ function canonicalPayload(
   sourceEventType: string,
   event: Record<string, unknown>,
 ): Record<string, unknown> {
-  if (type === 'transcript.message' || type === 'transcript.message.delta') {
-    const message = objectValue(event.message)
-    const assistantEvent = objectValue(event.assistantMessageEvent)
-    return {
-      message: {
-        id: stringField(event, 'messageId') ?? stringField(event, 'id') ?? stringField(message, 'id'),
-        role: stringField(message, 'role') ?? stringField(event, 'role') ?? 'assistant',
-        content: event.content ?? message.content ?? assistantEvent.text ?? assistantEvent.delta ?? '',
-      },
-      ...(assistantEvent.type ? { deltaType: assistantEvent.type } : {}),
-      ...(assistantEvent.responseId ? { responseId: assistantEvent.responseId } : {}),
-    }
-  }
-
-  if (type === 'tool_call.started' || type === 'tool_call.updated' || type === 'tool_call.completed') {
-    const toolCall = objectValue(event.toolCall ?? event.call ?? event.toolExecution ?? event)
-    return {
-      toolCall: {
-        id: stringField(toolCall, 'id') ?? stringField(toolCall, 'toolCallId') ?? stringField(event, 'toolCallId'),
-        name: stringField(toolCall, 'name') ?? stringField(toolCall, 'toolName') ?? stringField(event, 'toolName'),
-        input: toolCall.input ?? toolCall.args ?? event.input ?? event.args,
-        output: toolCall.output ?? toolCall.result ?? toolCall.partialResult ?? event.output ?? event.result,
-        error: toolCall.error ?? event.error,
-        durationMs: numberField(toolCall, 'durationMs') ?? numberField(event, 'durationMs'),
-      },
-      status: type === 'tool_call.completed' ? (event.isError || toolCall.error ? 'error' : 'success') : 'running',
-    }
+  if (isPiAgentSessionEventType(sourceEventType)) {
+    return withoutType(event)
   }
 
   if (type === 'usage.recorded') {
@@ -212,28 +182,15 @@ function canonicalPayload(
     return { data }
   }
 
-  return {
-    stage: lifecycleStage(sourceEventType),
-    status: event.status,
-    reason: event.reason,
-    sessionId: event.sessionId,
-    willRetry: event.willRetry,
-  }
-}
-
-function lifecycleStage(sourceEventType: string) {
-  if (sourceEventType === 'agent_start') return 'agent_started'
-  if (sourceEventType === 'turn_start') return 'turn_started'
-  if (sourceEventType === 'message_start') return 'message_started'
-  if (sourceEventType === 'agent_end') return 'agent_completed'
-  if (sourceEventType === 'turn_end') return 'turn_completed'
-  if (sourceEventType === 'bridge_exit') return 'runtime_exited'
-  if (sourceEventType === 'response') return 'command_completed'
-  return sourceEventType
+  return withoutType(event)
 }
 
 function canonicalRole(type: AmaSessionEventType, event: Record<string, unknown>) {
-  if (type !== 'transcript.message' && type !== 'transcript.message.delta') {
+  if (
+    type !== 'message_start' &&
+    type !== 'message_update' &&
+    type !== 'message_end'
+  ) {
     return null
   }
   const message = objectValue(event.message)
@@ -274,4 +231,9 @@ function stringField(record: Record<string, unknown>, key: string) {
 function numberField(record: Record<string, unknown>, key: string) {
   const value = record[key]
   return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function withoutType(event: Record<string, unknown>) {
+  const { type: _type, ...payload } = event
+  return payload
 }

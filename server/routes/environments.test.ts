@@ -143,7 +143,7 @@ describe('[CF] /api/environments', () => {
       body: JSON.stringify({
         hostingMode: 'self_hosted',
         runtime: 'codex',
-        runtimeConfig: { image: 'codex-runtime', command: 'codex' },
+        runtimeConfig: { mode: 'sdk-bridge', sandboxMode: 'workspace-write' },
         metadata: { owner: 'runtime' },
       }),
     })
@@ -159,7 +159,7 @@ describe('[CF] /api/environments', () => {
     expect(updated.currentVersionId).not.toBe(created.currentVersionId)
     expect(updated.hostingMode).toBe('self_hosted')
     expect(updated.runtime).toBe('codex')
-    expect(updated.runtimeConfig).toEqual({ image: 'codex-runtime', command: 'codex' })
+    expect(updated.runtimeConfig).toEqual({ mode: 'sdk-bridge', sandboxMode: 'workspace-write' })
 
     const legacyUpdateRes = await jsonFetch(`/api/environments/${created.id}`, authorization, {
       method: 'PATCH',
@@ -181,7 +181,7 @@ describe('[CF] /api/environments', () => {
     expect(versions.data.map((version) => version.version)).toEqual([2, 1])
     expect(versions.data.map((version) => version.hostingMode)).toEqual(['self_hosted', 'cloud'])
     expect(versions.data.map((version) => version.runtime)).toEqual(['codex', 'ama'])
-    expect(versions.data[0]?.runtimeConfig).toEqual({ image: 'codex-runtime', command: 'codex' })
+    expect(versions.data[0]?.runtimeConfig).toEqual({ mode: 'sdk-bridge', sandboxMode: 'workspace-write' })
     expect(JSON.stringify(versions)).not.toContain('runtimeType')
     expect(JSON.stringify(versions)).not.toContain('runtimeImage')
     expect(versions.data.find((version) => version.version === 1)?.packages).toEqual([
@@ -212,7 +212,7 @@ describe('[CF] /api/environments', () => {
         status: 'archived',
         hostingMode: 'self_hosted',
         runtime: 'codex',
-        runtimeConfig: { image: 'codex-runtime', command: 'codex' },
+        runtimeConfig: { mode: 'sdk-bridge', sandboxMode: 'workspace-write' },
       }),
     )
     expect(JSON.stringify(archivedList)).not.toContain('runtimeType')

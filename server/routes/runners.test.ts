@@ -220,16 +220,16 @@ describe('[CF] /api/runners', () => {
       body: JSON.stringify({
         events: [
           {
-            type: 'runner.tool.started',
+            type: 'tool_execution_start',
             payload: {
               toolCallId: 'call_1',
               toolName: 'sandbox.exec',
-              input: { command: 'npm test', token: 'raw-secret-value' },
+              args: { command: 'npm test', token: 'raw-secret-value' },
             },
             metadata: { runnerId: runner.id },
           },
           {
-            type: 'codex.usage',
+            type: 'usage.recorded',
             payload: {
               provider: 'workers-ai',
               model: '@cf/moonshotai/kimi-k2.6',
@@ -238,7 +238,7 @@ describe('[CF] /api/runners', () => {
             },
           },
           {
-            type: 'copilot.error',
+            type: 'runtime.error',
             payload: {
               error: { message: 'Runtime failed safely', code: 'runtime_exit', details: { exitCode: 2 } },
             },
@@ -288,7 +288,7 @@ describe('[CF] /api/runners', () => {
     expect(sessionEvents.data).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          type: 'tool_call.started',
+          type: 'tool_execution_start',
           metadata: expect.objectContaining({
             source: 'self-hosted-runner',
             runnerId: runner.id,
@@ -425,7 +425,7 @@ describe('[CF] /api/runners', () => {
       operatorAuthorization,
       {
         method: 'POST',
-        body: JSON.stringify({ events: [{ type: 'runner.tool.started', payload: { toolCallId: 'call_1' } }] }),
+        body: JSON.stringify({ events: [{ type: 'tool_execution_start', payload: { toolCallId: 'call_1' } }] }),
       },
     )
     expect(forbiddenEvents.status).toBe(403)
@@ -585,13 +585,14 @@ describe('[CF] /api/runners', () => {
       JSON.stringify({
         type: 'runner.event',
         event: {
-          type: 'runner.tool.completed',
+          type: 'tool_execution_end',
           payload: {
             toolCallId: 'call_channel_1',
             toolName: 'sandbox.exec',
             stdout: 'ok',
             stderr: '',
-            output: { exitCode: 0, stdout: 'ok', stderr: '' },
+            result: { exitCode: 0, stdout: 'ok', stderr: '' },
+            isError: false,
             timing: { durationMs: 12 },
             commandId,
           },
@@ -607,7 +608,7 @@ describe('[CF] /api/runners', () => {
     expect(sessionEvents.data).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          type: 'tool_call.completed',
+          type: 'tool_execution_end',
           metadata: expect.objectContaining({
             source: 'self-hosted-runner',
             runnerId: runner.id,
@@ -658,11 +659,12 @@ describe('[CF] /api/runners', () => {
         type: 'runner.event',
         eventId: 'runner_event_ack_1',
         event: {
-          type: 'runner.tool.completed',
+          type: 'tool_execution_end',
           payload: {
             toolCallId: 'call_ack_1',
             toolName: 'sandbox.exec',
-            output: { exitCode: 0, stdout: 'ack-ok', stderr: '' },
+            result: { exitCode: 0, stdout: 'ack-ok', stderr: '' },
+            isError: false,
           },
         },
       }),
@@ -678,7 +680,7 @@ describe('[CF] /api/runners', () => {
         type: 'runner.event',
         eventId: 'runner_event_bad_1',
         event: {
-          type: 'runner.tool.completed',
+          type: 'tool_execution_end',
         },
       }),
     )
@@ -700,14 +702,12 @@ describe('[CF] /api/runners', () => {
     expect(sessionEvents.data).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          type: 'tool_call.completed',
+          type: 'tool_execution_end',
           payload: expect.objectContaining({
-            status: 'success',
-            toolCall: expect.objectContaining({
-              id: 'call_ack_1',
-              name: 'sandbox.exec',
-              output: { exitCode: 0, stdout: 'ack-ok', stderr: '' },
-            }),
+            toolCallId: 'call_ack_1',
+            toolName: 'sandbox.exec',
+            result: { exitCode: 0, stdout: 'ack-ok', stderr: '' },
+            isError: false,
           }),
           metadata: expect.objectContaining({
             source: 'self-hosted-runner',
@@ -831,8 +831,8 @@ describe('[CF] /api/runners', () => {
       JSON.stringify({
         type: 'runner.event',
         event: {
-          type: 'runner.tool.completed',
-          payload: { toolCallId: 'stale_call', toolName: 'sandbox.exec', output: { stdout: 'stale' } },
+          type: 'tool_execution_end',
+          payload: { toolCallId: 'stale_call', toolName: 'sandbox.exec', result: { stdout: 'stale' }, isError: false },
         },
       }),
     )
@@ -860,8 +860,8 @@ describe('[CF] /api/runners', () => {
       JSON.stringify({
         type: 'runner.event',
         event: {
-          type: 'runner.tool.completed',
-          payload: { toolCallId: 'fresh_call', toolName: 'sandbox.exec', output: { stdout: 'fresh' } },
+          type: 'tool_execution_end',
+          payload: { toolCallId: 'fresh_call', toolName: 'sandbox.exec', result: { stdout: 'fresh' }, isError: false },
         },
       }),
     )
@@ -1176,7 +1176,7 @@ describe('[CF] /api/runners', () => {
     const eventsRes = await jsonFetch(`/api/runners/${runner.id}/leases/${lease.id}/events`, authorization, {
       method: 'POST',
       body: JSON.stringify({
-        events: [{ type: 'tool_call.started', payload: { toolCall: { id: 'call_1', name: 'sandbox.exec' } } }],
+        events: [{ type: 'tool_execution_start', payload: { toolCallId: 'call_1', toolName: 'sandbox.exec' } }],
       }),
     })
     expect(eventsRes.status).toBe(409)

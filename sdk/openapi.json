@@ -4995,12 +4995,16 @@
           "type": {
             "type": "string",
             "enum": [
-              "session.lifecycle",
-              "transcript.message",
-              "transcript.message.delta",
-              "tool_call.started",
-              "tool_call.updated",
-              "tool_call.completed",
+              "agent_start",
+              "agent_end",
+              "turn_start",
+              "turn_end",
+              "message_start",
+              "message_update",
+              "message_end",
+              "tool_execution_start",
+              "tool_execution_update",
+              "tool_execution_end",
               "usage.recorded",
               "policy.decision",
               "runtime.error",
@@ -10894,12 +10898,16 @@
             "schema": {
               "type": "string",
               "enum": [
-                "session.lifecycle",
-                "transcript.message",
-                "transcript.message.delta",
-                "tool_call.started",
-                "tool_call.updated",
-                "tool_call.completed",
+                "agent_start",
+                "agent_end",
+                "turn_start",
+                "turn_end",
+                "message_start",
+                "message_update",
+                "message_end",
+                "tool_execution_start",
+                "tool_execution_update",
+                "tool_execution_end",
                 "usage.recorded",
                 "policy.decision",
                 "runtime.error",
@@ -10907,7 +10915,7 @@
                 "runtime.output",
                 "runner.metadata"
               ],
-              "example": "transcript.message"
+              "example": "message_end"
             },
             "required": false,
             "name": "type",
@@ -11054,12 +11062,16 @@
             "schema": {
               "type": "string",
               "enum": [
-                "session.lifecycle",
-                "transcript.message",
-                "transcript.message.delta",
-                "tool_call.started",
-                "tool_call.updated",
-                "tool_call.completed",
+                "agent_start",
+                "agent_end",
+                "turn_start",
+                "turn_end",
+                "message_start",
+                "message_update",
+                "message_end",
+                "tool_execution_start",
+                "tool_execution_update",
+                "tool_execution_end",
                 "usage.recorded",
                 "policy.decision",
                 "runtime.error",
@@ -11067,7 +11079,7 @@
                 "runtime.output",
                 "runner.metadata"
               ],
-              "example": "transcript.message"
+              "example": "message_end"
             },
             "required": false,
             "name": "type",
@@ -11214,12 +11226,16 @@
             "schema": {
               "type": "string",
               "enum": [
-                "session.lifecycle",
-                "transcript.message",
-                "transcript.message.delta",
-                "tool_call.started",
-                "tool_call.updated",
-                "tool_call.completed",
+                "agent_start",
+                "agent_end",
+                "turn_start",
+                "turn_end",
+                "message_start",
+                "message_update",
+                "message_end",
+                "tool_execution_start",
+                "tool_execution_update",
+                "tool_execution_end",
                 "usage.recorded",
                 "policy.decision",
                 "runtime.error",
@@ -11227,7 +11243,7 @@
                 "runtime.output",
                 "runner.metadata"
               ],
-              "example": "transcript.message"
+              "example": "message_end"
             },
             "required": false,
             "name": "type",

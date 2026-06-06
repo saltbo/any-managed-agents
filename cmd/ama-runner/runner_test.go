@@ -107,8 +107,14 @@ type fakeAdapter struct {
 
 type fakeRuntimeAdapter struct {
 	request RuntimeRequest
+	events  []RuntimeEventRecord
 	result  ama.JSON
 	err     error
+}
+
+type RuntimeEventRecord struct {
+	Type    string
+	Payload ama.JSON
 }
 
 type fakeRunnerSessionChannel struct {
@@ -235,10 +241,19 @@ func (a *fakeAdapter) Execute(ctx context.Context, _ ToolRequest) (ToolResult, e
 
 func (a *fakeRuntimeAdapter) Run(_ context.Context, request RuntimeRequest, write RuntimeEventWriter) (ama.JSON, error) {
 	a.request = request
-	if err := write("claude-code.message", ama.JSON{
-		"message": ama.JSON{"role": "assistant", "content": "runtime ok"},
-	}); err != nil {
-		return nil, err
+	events := a.events
+	if len(events) == 0 {
+		events = []RuntimeEventRecord{{
+			Type: "message_end",
+			Payload: ama.JSON{
+				"message": ama.JSON{"role": "assistant", "content": "runtime ok"},
+			},
+		}}
+	}
+	for _, event := range events {
+		if err := write(event.Type, event.Payload); err != nil {
+			return nil, err
+		}
 	}
 	return a.result, a.err
 }
@@ -312,7 +327,7 @@ func TestRunOnceOpensSessionChannelAndExecutesRuntimeCommand(t *testing.T) {
 		t.Fatalf("expected session ownership to stay active without completion patch, got %#v", client.updates)
 	}
 	got := channel.writtenEvents()
-	want := []string{"runner.session.started", "runner.tool.started", "runner.tool.completed"}
+	want := []string{"runner.session.started", "tool_execution_start", "tool_execution_end"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("expected channel events %v, got %v", want, got)
 	}
@@ -384,34 +399,47 @@ func TestRunOnceCancelsSessionChannelWhenContextIsCancelled(t *testing.T) {
 	}
 }
 
-func TestRunOnceLaunchesCodexCommandAndCompletesSessionLease(t *testing.T) {
+func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *testing.T) {
 	workDir := t.TempDir()
-	shim := filepath.Join(workDir, "codex-shim.sh")
-	if err := os.WriteFile(shim, []byte(`#!/bin/sh
-prompt="$(cat)"
-printf '{"type":"codex.lifecycle","payload":{"status":"started","workspace":"%s","provider":"%s","model":"%s","runtimeConfig":%s}}\n' "$AMA_WORKSPACE" "$AMA_PROVIDER" "$AMA_MODEL" "$AMA_RUNTIME_CONFIG"
-printf '{"type":"codex.message","payload":{"message":{"role":"assistant","content":"prompt:%s"}}}\n' "$prompt"
-printf '{"type":"codex.tool.started","payload":{"toolCallId":"tool_1","toolName":"sandbox.exec","input":{"command":"printf ok"}}}\n'
-printf '{"type":"codex.tool.completed","payload":{"toolCallId":"tool_1","toolName":"sandbox.exec","output":{"stdout":"ok","stderr":"","exitCode":0},"durationMs":3}}\n'
-printf '{"type":"codex.usage","payload":{"provider":"%s","model":"%s","inputTokens":4,"outputTokens":5,"totalTokens":9}}\n' "$AMA_PROVIDER" "$AMA_MODEL"
-printf 'diagnostic line\n' >&2
-`), 0o755); err != nil {
-		t.Fatal(err)
-	}
 	prompt := "build the feature"
-	lease := codexSessionStartLease(shim, prompt)
+	lease := codexSessionStartLease(prompt)
 	channel := newFakeRunnerSessionChannel(
 		ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"},
 	)
 	client := &fakeControlPlane{lease: lease, channel: channel}
+	runtimeAdapter := &fakeRuntimeAdapter{
+		result: ama.JSON{"exitCode": 0, "providerThreadId": "codex_thread_1"},
+		events: []RuntimeEventRecord{
+			{Type: "runtime.metadata", Payload: ama.JSON{"data": ama.JSON{"stage": "sdk_bridge_started", "status": "running"}}},
+			{Type: "message_end", Payload: ama.JSON{"message": ama.JSON{"role": "assistant", "content": []any{ama.JSON{"type": "text", "text": "prompt:build the feature"}}}}},
+			{Type: "tool_execution_start", Payload: ama.JSON{"toolCallId": "tool_1", "toolName": "sandbox.exec", "input": ama.JSON{"command": "printf ok"}}},
+			{Type: "tool_execution_end", Payload: ama.JSON{"toolCallId": "tool_1", "toolName": "sandbox.exec", "output": ama.JSON{"stdout": "ok", "stderr": "", "exitCode": 0}, "durationMs": 3}},
+			{Type: "usage", Payload: ama.JSON{"provider": "provider_codex", "model": "gpt-5.3-codex", "inputTokens": 4, "outputTokens": 5, "totalTokens": 9}},
+			{Type: "runtime.output", Payload: ama.JSON{"stream": "bridge", "content": "diagnostic line"}},
+		},
+	}
 	daemon := testDaemon(client, &fakeAdapter{})
+	daemon.RuntimeAdapter = runtimeAdapter
 	daemon.Config.WorkDir = workDir
 	daemon.Config.Capabilities = append(daemon.Config.Capabilities, "runtime-provider-model:codex:provider_codex:gpt-5.3-codex")
 	if err := daemon.RunOnce(context.Background()); err != nil {
 		t.Fatalf("expected codex run success, got %v", err)
 	}
+	if runtimeAdapter.request.Runtime != "codex" ||
+		runtimeAdapter.request.InitialPrompt != prompt ||
+		runtimeAdapter.request.Provider != "provider_codex" ||
+		runtimeAdapter.request.Model != "gpt-5.3-codex" ||
+		runtimeAdapter.request.WorkDir != workDir {
+		t.Fatalf("expected runtime request metadata, got %#v", runtimeAdapter.request)
+	}
+	if runtimeAdapter.request.RuntimeConfig["model"] != "gpt-5.3-codex" {
+		t.Fatalf("expected runtime config to reach adapter, got %#v", runtimeAdapter.request.RuntimeConfig)
+	}
 	if len(client.updates) != 1 || client.updates[0].Status != "completed" {
 		t.Fatalf("expected completed lease update, got %#v", client.updates)
+	}
+	if client.updates[0].Result["providerThreadId"] != "codex_thread_1" {
+		t.Fatalf("expected adapter result to complete lease, got %#v", client.updates[0].Result)
 	}
 	if len(client.events) != 0 {
 		t.Fatalf("expected codex session to write runtime events on channel without HTTP uploads, got %#v", client.events)
@@ -419,19 +447,16 @@ printf 'diagnostic line\n' >&2
 	gotTypes := channel.writtenEvents()
 	for _, want := range []string{
 		"runner.session.started",
-		"codex.lifecycle",
-		"codex.message",
-		"codex.tool.started",
-		"codex.tool.completed",
-		"codex.usage",
-		"codex.output",
+		"runtime.metadata",
+		"message_end",
+		"tool_execution_start",
+		"tool_execution_end",
+		"usage",
+		"runtime.output",
 	} {
 		if !containsString(gotTypes, want) {
 			t.Fatalf("expected channel/uploaded events to include %q, got %v", want, gotTypes)
 		}
-	}
-	if got := countString(gotTypes, "codex.lifecycle"); got < 2 {
-		t.Fatalf("expected start and completion lifecycle events, got %v", gotTypes)
 	}
 	for _, message := range channel.writtenMessages() {
 		if message["type"] != "runner.event" {
@@ -445,28 +470,31 @@ printf 'diagnostic line\n' >&2
 	if !strings.Contains(serializedEvents, "prompt:build the feature") ||
 		!strings.Contains(serializedEvents, "provider_codex") ||
 		!strings.Contains(serializedEvents, "gpt-5.3-codex") ||
-		!strings.Contains(serializedEvents, "/sessions/session_1") ||
 		!strings.Contains(serializedEvents, "diagnostic line") {
 		t.Fatalf("expected prompt/provider/model/stderr events, got %s", serializedEvents)
 	}
 }
 
-func TestRunOnceFailsCodexLeaseOnCommandFailure(t *testing.T) {
+func TestRunOnceFailsCodexLeaseOnRuntimeAdapterFailure(t *testing.T) {
 	workDir := t.TempDir()
-	shim := filepath.Join(workDir, "codex-fail.sh")
-	if err := os.WriteFile(shim, []byte("#!/bin/sh\nprintf 'bad failure\\n' >&2\nexit 7\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	lease := codexSessionStartLease(shim, "fail")
+	lease := codexSessionStartLease("fail")
 	channel := newFakeRunnerSessionChannel(
 		ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"},
 	)
 	client := &fakeControlPlane{lease: lease, channel: channel}
+	runtimeAdapter := &fakeRuntimeAdapter{
+		result: ama.JSON{"exitCode": 7, "stderr": "bad failure"},
+		err:    errors.New("codex SDK bridge failed"),
+		events: []RuntimeEventRecord{
+			{Type: "runtime.output", Payload: ama.JSON{"stream": "stderr", "content": "bad failure"}},
+		},
+	}
 	daemon := testDaemon(client, &fakeAdapter{})
+	daemon.RuntimeAdapter = runtimeAdapter
 	daemon.Config.WorkDir = workDir
 	daemon.Config.Capabilities = append(daemon.Config.Capabilities, "runtime-provider-model:codex:provider_codex:gpt-5.3-codex")
-	if err := daemon.RunOnce(context.Background()); err != nil {
-		t.Fatalf("expected failed lease update to succeed, got %v", err)
+	if err := daemon.RunOnce(context.Background()); err == nil || !strings.Contains(err.Error(), "codex SDK bridge failed") {
+		t.Fatalf("expected codex bridge error after failed lease update, got %v", err)
 	}
 	if len(client.updates) != 1 || client.updates[0].Status != "failed" {
 		t.Fatalf("expected failed lease update, got %#v", client.updates)
@@ -475,22 +503,20 @@ func TestRunOnceFailsCodexLeaseOnCommandFailure(t *testing.T) {
 		t.Fatalf("expected failed codex session to write runtime events on channel without HTTP uploads, got %#v", client.events)
 	}
 	serializedEvents := mustJSON(t, channel.writtenMessages())
-	if !strings.Contains(serializedEvents, "codex.error") || !strings.Contains(serializedEvents, "bad failure") {
-		t.Fatalf("expected codex error events, got %s", serializedEvents)
+	if !strings.Contains(serializedEvents, "runtime.error") || !strings.Contains(serializedEvents, "codex SDK bridge failed") || !strings.Contains(serializedEvents, "bad failure") {
+		t.Fatalf("expected runtime error events, got %s", serializedEvents)
 	}
 }
 
 func TestRunOnceFailsCodexLeaseWhenSessionStartedChannelEventIsRejected(t *testing.T) {
 	workDir := t.TempDir()
-	shim := filepath.Join(workDir, "codex-shim.sh")
-	if err := os.WriteFile(shim, []byte("#!/bin/sh\nprintf '{}'\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	lease := codexSessionStartLease(shim, "start")
+	lease := codexSessionStartLease("start")
 	channel := newFakeRunnerSessionChannel(ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"})
 	channel.eventErrors = map[string]string{"runner.session.started": "start rejected"}
 	client := &fakeControlPlane{lease: lease, channel: channel}
+	runtimeAdapter := &fakeRuntimeAdapter{}
 	daemon := testDaemon(client, &fakeAdapter{})
+	daemon.RuntimeAdapter = runtimeAdapter
 	daemon.Config.WorkDir = workDir
 	daemon.Config.Capabilities = append(daemon.Config.Capabilities, "runtime-provider-model:codex:provider_codex:gpt-5.3-codex")
 	err := daemon.RunOnce(context.Background())
@@ -503,53 +529,32 @@ func TestRunOnceFailsCodexLeaseWhenSessionStartedChannelEventIsRejected(t *testi
 	if len(channel.writtenEvents()) != 1 || channel.writtenEvents()[0] != "runner.session.started" {
 		t.Fatalf("expected only acknowledged session started write before failure, got %v", channel.writtenEvents())
 	}
-}
-
-func TestAcknowledgedChannelEventFailsOnUnscopedChannelError(t *testing.T) {
-	channel := newFakeRunnerSessionChannel(ama.JSON{"type": "session.channel.error", "message": "previous event rejected"})
-	daemon := testDaemon(&fakeControlPlane{}, &fakeAdapter{})
-	err := daemon.writeAcknowledgedChannelEvent(context.Background(), channel, "codex.lifecycle", ama.JSON{"status": "started"})
-	if err == nil || !strings.Contains(err.Error(), "previous event rejected") {
-		t.Fatalf("expected unscoped channel error, got %v", err)
+	if runtimeAdapter.request.SessionID != "" {
+		t.Fatalf("expected runtime adapter not to run after start rejection, got %#v", runtimeAdapter.request)
 	}
 }
 
 func TestCodexSessionWorkspaceRejectsTraversalBeforeCreatingDirectory(t *testing.T) {
 	workDir := t.TempDir()
-	_, err := prepareSessionWorkspace(workDir, "../outside-session")
+	_, err := runtimeWorkspace(workDir, "../outside-session")
 	if err == nil || !strings.Contains(err.Error(), "single path segment") {
 		t.Fatalf("expected session id validation error, got %v", err)
 	}
 	if _, statErr := os.Stat(filepath.Join(workDir, "..", "outside-session")); !os.IsNotExist(statErr) {
 		t.Fatalf("expected no directory outside workspace, stat error %v", statErr)
 	}
-	_, err = prepareSessionWorkspace(workDir, "..")
+	_, err = runtimeWorkspace(workDir, "..")
 	if err == nil || !strings.Contains(err.Error(), "single path segment") {
 		t.Fatalf("expected parent segment validation error, got %v", err)
 	}
 }
 
-func TestCodexProcessTimeoutStopsChildKeepingStdoutOpen(t *testing.T) {
-	workDir := t.TempDir()
-	shim := filepath.Join(workDir, "codex-hanging-child.sh")
-	if err := os.WriteFile(shim, []byte("#!/bin/sh\n(sleep 5) &\nprintf done\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	lease := codexSessionStartLease(shim, "timeout")
-	payload, err := parseWorkPayload(lease.WorkItem.Payload)
-	if err != nil {
-		t.Fatal(err)
-	}
+func TestAcknowledgedChannelEventFailsOnUnscopedChannelError(t *testing.T) {
+	channel := newFakeRunnerSessionChannel(ama.JSON{"type": "session.channel.error", "message": "previous event rejected"})
 	daemon := testDaemon(&fakeControlPlane{}, &fakeAdapter{})
-	daemon.Config.WorkDir = workDir
-	daemon.Config.CommandTimeout = 50 * time.Millisecond
-	started := time.Now()
-	_, err = daemon.runCodexProcess(context.Background(), payload, func(string, ama.JSON) error { return nil })
-	if err == nil || !strings.Contains(err.Error(), "deadline") {
-		t.Fatalf("expected timeout error, got %v", err)
-	}
-	if time.Since(started) > time.Second {
-		t.Fatalf("expected hanging child to be stopped quickly, duration %s", time.Since(started))
+	err := daemon.writeAcknowledgedChannelEvent(context.Background(), channel, "runtime.metadata", ama.JSON{"status": "started"})
+	if err == nil || !strings.Contains(err.Error(), "previous event rejected") {
+		t.Fatalf("expected unscoped channel error, got %v", err)
 	}
 }
 
@@ -583,14 +588,14 @@ func TestRunOnceLaunchesClaudeCodeRuntimeAndCompletesLease(t *testing.T) {
 	if runtimeAdapter.request.Provider != "anthropic" || runtimeAdapter.request.Model != "claude-sonnet-4-6" {
 		t.Fatalf("expected provider/model metadata, got %#v", runtimeAdapter.request)
 	}
-	if runtimeAdapter.request.RuntimeConfig["command"] != "claude" {
+	if runtimeAdapter.request.RuntimeConfig["permissionMode"] != "acceptEdits" {
 		t.Fatalf("expected runtime config to reach adapter, got %#v", runtimeAdapter.request.RuntimeConfig)
 	}
 	if len(client.updates) != 1 || client.updates[0].Status != "completed" {
 		t.Fatalf("expected completed lease update, got %#v", client.updates)
 	}
 	got := channel.writtenEvents()
-	want := []string{"runner.session.started", "claude-code.message"}
+	want := []string{"runner.session.started", "message_end"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("expected channel events %v, got %v", want, got)
 	}
@@ -672,7 +677,7 @@ func TestRunOnceFailsLeaseWhenRuntimeEventAcknowledgementRejects(t *testing.T) {
 		t.Fatalf("expected failed lease update after rejected event, got %#v", client.updates)
 	}
 	got := channel.writtenEvents()
-	want := []string{"runner.session.started", "claude-code.message", "claude-code.error"}
+	want := []string{"runner.session.started", "message_end", "runtime.error"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("expected channel events %v, got %v", want, got)
 	}
@@ -964,7 +969,7 @@ func TestAMASessionChecksLeaseRenewalAfterHandlingCommand(t *testing.T) {
 	if !errors.Is(err, renewErr) {
 		t.Fatalf("expected renewal check error after handled command, got %v", err)
 	}
-	if got := channel.writtenEvents(); strings.Join(got, ",") != "runner.tool.started,runner.tool.completed" {
+	if got := channel.writtenEvents(); strings.Join(got, ",") != "tool_execution_start,tool_execution_end" {
 		t.Fatalf("expected command events before renewal error, got %v", got)
 	}
 }
@@ -1099,10 +1104,10 @@ func sessionStartLease() *ama.RunnerWorkLease {
 	}
 }
 
-func codexSessionStartLease(command string, prompt string) *ama.RunnerWorkLease {
+func codexSessionStartLease(prompt string) *ama.RunnerWorkLease {
 	lease := sessionStartLease()
 	lease.WorkItem.Payload["runtime"] = "codex"
-	lease.WorkItem.Payload["runtimeConfig"] = map[string]any{"command": command, "args": []any{}}
+	lease.WorkItem.Payload["runtimeConfig"] = map[string]any{"model": "gpt-5.3-codex", "sandboxMode": "workspace-write"}
 	lease.WorkItem.Payload["provider"] = "provider_codex"
 	lease.WorkItem.Payload["model"] = "gpt-5.3-codex"
 	lease.WorkItem.Payload["runtimeDriver"] = "codex-self-hosted"
@@ -1129,26 +1134,20 @@ func containsString(values []string, want string) bool {
 	return false
 }
 
-func countString(values []string, want string) int {
-	count := 0
-	for _, value := range values {
-		if value == want {
-			count += 1
-		}
-	}
-	return count
-}
-
 func claudeCodeSessionStartLease() *ama.RunnerWorkLease {
-	lease := externalRuntimeSessionStartLease("claude-code", "anthropic", "claude-sonnet-4-6", "claude")
+	lease := externalRuntimeSessionStartLease("claude-code", "anthropic", "claude-sonnet-4-6", map[string]any{"permissionMode": "acceptEdits"})
 	lease.WorkItem.Payload["initialPrompt"] = "Run Claude Code"
 	return lease
 }
 
-func externalRuntimeSessionStartLease(runtimeName string, provider string, model string, command any) *ama.RunnerWorkLease {
+func externalRuntimeSessionStartLease(runtimeName string, provider string, model string, runtimeConfig any) *ama.RunnerWorkLease {
 	lease := sessionStartLease()
 	lease.WorkItem.Payload["runtime"] = runtimeName
-	lease.WorkItem.Payload["runtimeConfig"] = map[string]any{"command": command}
+	if config, ok := runtimeConfig.(map[string]any); ok {
+		lease.WorkItem.Payload["runtimeConfig"] = config
+	} else {
+		lease.WorkItem.Payload["runtimeConfig"] = map[string]any{"mode": runtimeConfig}
+	}
 	lease.WorkItem.Payload["provider"] = provider
 	lease.WorkItem.Payload["model"] = model
 	lease.WorkItem.Payload["runtimeDriver"] = runtimeName + "-self-hosted"

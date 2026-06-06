@@ -63,8 +63,9 @@ export function useSessionRuntimeSession({
       }
       dispatch({ type: 'event', event: payload, at: new Date().toISOString() })
       if (
-        payload.type === 'session.lifecycle' ||
-        payload.type === 'tool_call.completed' ||
+        payload.type === 'agent_end' ||
+        payload.type === 'turn_end' ||
+        payload.type === 'tool_execution_end' ||
         payload.type === 'runtime.error'
       ) {
         window.clearTimeout(refreshTimerRef.current ?? undefined)

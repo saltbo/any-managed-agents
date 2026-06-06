@@ -145,7 +145,7 @@ function buildPersistedEvent(overrides: Partial<SessionEvent> = {}): SessionEven
     projectId: 'project_1',
     sessionId: 'session_1',
     sequence: 1,
-    type: 'transcript.message',
+    type: 'message_end',
     visibility: 'runtime',
     role: null,
     parentEventId: null,
@@ -443,7 +443,7 @@ describe('sessions UI contracts', () => {
           durationMs: 12,
           createdAt: '2026-05-23T00:00:01.000Z',
           updatedAt: '2026-05-23T00:00:01.000Z',
-          eventType: 'tool_call.completed',
+          eventType: 'tool_execution_end',
         },
       ],
       debugEvents: [
@@ -548,7 +548,7 @@ describe('sessions UI contracts', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Copy events' }))
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"transcript.message"')))
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"message_end"')))
 
     fireEvent.click(screen.getByRole('button', { name: 'Download events' }))
     expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob))
@@ -568,8 +568,8 @@ describe('sessions UI contracts', () => {
           debugEvents: [
             {
               id: 'debug_message',
-              type: 'transcript.message',
-              payload: { type: 'transcript.message', marker: 'payload_message' },
+              type: 'message_end',
+              payload: { type: 'message_end', marker: 'payload_message' },
               createdAt: '2026-05-23T00:00:00.000Z',
             },
           ],
@@ -619,8 +619,8 @@ describe('sessions UI contracts', () => {
           debugEvents: [
             {
               id: 'debug_message',
-              type: 'transcript.message',
-              payload: { type: 'transcript.message', marker: 'payload_message' },
+              type: 'message_end',
+              payload: { type: 'message_end', marker: 'payload_message' },
               createdAt: '2026-05-23T00:00:00.000Z',
             },
             {
