@@ -1544,7 +1544,7 @@ async function dispatchSessionPromptCommand(
   }
   const path = '/rpc'
   if (!session.sandboxId) {
-    if (!(await hasAcceptedRunnerSessionChannel(env, session.id))) {
+    if (session.status === 'idle' || !(await hasAcceptedRunnerSessionChannel(env, session.id))) {
       const agentSnapshot = parseAgentSnapshot(session.agentSnapshot)
       if (!agentSnapshot) {
         return { status: 409 as const, message: 'Session agent snapshot is required' }

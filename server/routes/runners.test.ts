@@ -278,6 +278,42 @@ describe('[CF] /api/runners', () => {
       status: 'idle',
       statusReason: null,
     })
+
+    const commandRes = await jsonFetch(`/api/sessions/${session.id}/commands`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ type: 'prompt', message: 'Resume through queued runner work.' }),
+    })
+    expect(commandRes.status).toBe(202)
+    await expect(commandRes.json()).resolves.toMatchObject({
+      runtime: 'self-hosted-runner',
+      accepted: true,
+      sessionId: session.id,
+    })
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(channelMessages).toEqual([
+      expect.objectContaining({ type: 'session.channel.accepted', sessionId: session.id }),
+    ])
+    const queuedCommandSessionRes = await jsonFetch(`/api/sessions/${session.id}`, authorization)
+    await expect(queuedCommandSessionRes.json()).resolves.toMatchObject({
+      id: session.id,
+      status: 'pending',
+      statusReason: 'waiting-for-runner',
+    })
+    const resumedWorkRes = await jsonFetch(`/api/runners/work-items?sessionId=${session.id}`, authorization)
+    const resumedWork = (await resumedWorkRes.json()) as { data: Array<{ status: string; payload: Record<string, unknown> }> }
+    expect(resumedWork.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          status: 'available',
+          payload: expect.objectContaining({
+            type: 'session.start',
+            sessionId: session.id,
+            resume: true,
+            initialPrompt: 'Resume through queued runner work.',
+          }),
+        }),
+      ]),
+    )
     channel.close()
 
     const sessionEventsRes = await jsonFetch(`/api/sessions/${session.id}/events`, authorization)
