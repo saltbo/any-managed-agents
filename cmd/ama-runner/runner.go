@@ -156,9 +156,6 @@ func (d *RunnerDaemon) RunOnce(ctx context.Context) error {
 }
 
 func (d *RunnerDaemon) ensureRunner(ctx context.Context) (string, error) {
-	if d.Config.RunnerID != "" {
-		return d.Config.RunnerID, nil
-	}
 	runner, err := d.Client.CreateRunner(ctx, ama.CreateRunnerRequest{
 		Name:          d.Config.RunnerName,
 		Capabilities:  d.Config.Capabilities,

@@ -19,10 +19,12 @@ const defaultRuntimeProviderModelCapability = "runtime-provider-model:ama:worker
 
 type fakeControlPlane struct {
 	mu           sync.Mutex
+	creates      []ama.CreateRunnerRequest
 	heartbeats   []ama.RunnerHeartbeatRequest
 	updates      []ama.UpdateRunnerLeaseRequest
 	events       []ama.UploadRunnerLeaseEventsRequest
 	lease        *ama.RunnerWorkLease
+	runnerID     string
 	healthErr    error
 	createErr    error
 	heartbeatErr error
@@ -41,11 +43,18 @@ func (f *fakeControlPlane) CheckHealth(context.Context) (*ama.Health, error) {
 	return &ama.Health{Status: "ok", Name: "Any Managed Agents", Runtime: "cloudflare-workers"}, nil
 }
 
-func (f *fakeControlPlane) CreateRunner(context.Context, ama.CreateRunnerRequest) (*ama.Runner, error) {
+func (f *fakeControlPlane) CreateRunner(_ context.Context, body ama.CreateRunnerRequest) (*ama.Runner, error) {
 	if f.createErr != nil {
 		return nil, f.createErr
 	}
-	return &ama.Runner{ID: "runner_registered"}, nil
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.creates = append(f.creates, body)
+	runnerID := f.runnerID
+	if runnerID == "" {
+		runnerID = "runner_1"
+	}
+	return &ama.Runner{ID: runnerID}, nil
 }
 
 func (f *fakeControlPlane) CreateRunnerHeartbeat(_ context.Context, runnerID string, body ama.RunnerHeartbeatRequest) (*ama.Runner, error) {
@@ -268,6 +277,12 @@ func TestRunOnceSendsHeartbeatAndCompletesApprovedToolWork(t *testing.T) {
 	if len(client.heartbeats) != 1 {
 		t.Fatalf("expected heartbeat before claim, got %d", len(client.heartbeats))
 	}
+	if len(client.creates) != 1 {
+		t.Fatalf("expected runner registration before heartbeat, got %d", len(client.creates))
+	}
+	if daemon.RunnerID != "runner_1" {
+		t.Fatalf("expected registered runner id, got %q", daemon.RunnerID)
+	}
 	if len(client.updates) != 1 || client.updates[0].Status != "completed" {
 		t.Fatalf("expected completed update, got %#v", client.updates)
 	}
@@ -277,7 +292,7 @@ func TestRunOnceSendsHeartbeatAndCompletesApprovedToolWork(t *testing.T) {
 }
 
 func TestRunOnceRegistersRunnerWhenIDIsMissing(t *testing.T) {
-	client := &fakeControlPlane{lease: approvedLease()}
+	client := &fakeControlPlane{lease: approvedLease(), runnerID: "runner_registered"}
 	adapter := &fakeAdapter{result: ToolResult{Output: map[string]any{"stdout": "ok", "stderr": "", "exitCode": 0}}}
 	daemon := testDaemon(client, adapter)
 	daemon.Config.RunnerID = ""
@@ -722,7 +737,7 @@ func waitForRunnerWriteCount(t *testing.T, channel *fakeRunnerSessionChannel, co
 }
 
 func TestStartRegistersRunnerAndSendsOfflineHeartbeatOnShutdown(t *testing.T) {
-	client := &fakeControlPlane{}
+	client := &fakeControlPlane{runnerID: "runner_registered"}
 	adapter := &fakeAdapter{}
 	daemon := testDaemon(client, adapter)
 	daemon.Config.RunnerID = ""

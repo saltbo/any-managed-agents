@@ -544,6 +544,21 @@ describe('[CF] /api/runners', () => {
     })
     expect(JSON.stringify(runner)).not.toContain('ignored-by-token')
 
+    const restartedRunnerRes = await jsonFetch('/api/runners', federatedAuthorization, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Federated AK runner restarted', maxConcurrent: 3 }),
+    })
+    expect(restartedRunnerRes.status).toBe(201)
+    await expect(restartedRunnerRes.json()).resolves.toMatchObject({
+      id: runnerId,
+      name: 'Federated AK runner restarted',
+      maxConcurrent: 3,
+      authMode: 'federated',
+      projectId,
+      environmentId: environment.id,
+      capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+    })
+
     const heartbeatRes = await jsonFetch(`/api/runners/${runnerId}/heartbeats`, federatedAuthorization, {
       method: 'POST',
       body: JSON.stringify({

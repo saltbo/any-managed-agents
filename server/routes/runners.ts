@@ -1065,8 +1065,10 @@ const routes = app
       })
     }
     const timestamp = now()
+    const runnerId = runnerIdForRegistration(auth)
+    const existingRunner = await db.select().from(runners).where(eq(runners.id, runnerId)).get()
     const runner = {
-      id: runnerIdForRegistration(auth),
+      id: runnerId,
       organizationId: auth.organization.id,
       projectId: auth.project.id,
       name: body.name,
@@ -1083,6 +1085,47 @@ const routes = app
       lastHeartbeatAt: null,
       createdAt: timestamp,
       updatedAt: timestamp,
+    }
+    if (existingRunner) {
+      if (
+        existingRunner.projectId !== auth.project.id ||
+        existingRunner.authMode !== 'federated' ||
+        !auth.oidc.runnerId ||
+        existingRunner.oidcSubject !== auth.oidc.subject
+      ) {
+        return errorResponse(c, 409, 'conflict', 'Runner id is already registered')
+      }
+      await db
+        .update(runners)
+        .set({
+          organizationId: runner.organizationId,
+          projectId: runner.projectId,
+          name: runner.name,
+          capabilities: runner.capabilities,
+          environmentId: runner.environmentId,
+          credentialSecretRef: runner.credentialSecretRef,
+          authMode: runner.authMode,
+          oidcSubject: runner.oidcSubject,
+          oidcClientId: runner.oidcClientId,
+          maxConcurrent: runner.maxConcurrent,
+          metadata: runner.metadata,
+          updatedAt: runner.updatedAt,
+        })
+        .where(and(eq(runners.id, runner.id), eq(runners.projectId, auth.project.id)))
+      const updatedRunner = await findRunner(db, auth, runner.id)
+      if (!updatedRunner) {
+        throw new Error('Federated runner registration update did not return a runner')
+      }
+      await recordAudit(db, {
+        auth,
+        action: 'runner.update',
+        resourceType: 'runner',
+        resourceId: updatedRunner.id,
+        outcome: 'success',
+        requestId: requestId(c),
+        metadata: { environmentId: updatedRunner.environmentId },
+      })
+      return c.json(serializeRunner(updatedRunner), 201)
     }
     await db.insert(runners).values(runner)
     await recordAudit(db, {
