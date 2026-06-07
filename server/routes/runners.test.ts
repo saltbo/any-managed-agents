@@ -50,13 +50,39 @@ async function createAgent(authorization: string) {
   return (await res.json()) as { id: string }
 }
 
-async function createSelfHostedSession(authorization: string, agentId: string, environmentId: string) {
+async function createRuntimeSecret(authorization: string) {
+  const vaultRes = await jsonFetch('/api/vaults', authorization, {
+    method: 'POST',
+    body: JSON.stringify({ name: `Runner runtime secrets ${crypto.randomUUID()}` }),
+  })
+  expect(vaultRes.status).toBe(201)
+  const vault = (await vaultRes.json()) as { id: string }
+  const credentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, authorization, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'AK agent session key',
+      type: 'session_env_secret',
+      secret: { provider: 'cloudflare-secrets', secretValue: 'raw-ak-agent-key' },
+    }),
+  })
+  expect(credentialRes.status).toBe(201)
+  const credential = (await credentialRes.json()) as { activeVersion: { id: string } }
+  return credential.activeVersion.id
+}
+
+async function createSelfHostedSession(
+  authorization: string,
+  agentId: string,
+  environmentId: string,
+  sessionConfig: { runtimeEnv?: Record<string, string>; runtimeSecretEnv?: Array<{ name: string; ref: string }> } = {},
+) {
   const res = await jsonFetch('/api/sessions', authorization, {
     method: 'POST',
     body: JSON.stringify({
       agentId,
       environmentId,
       initialPrompt: 'Run the first queued self-hosted task.',
+      ...sessionConfig,
     }),
   })
   expect(res.status).toBe(201)
@@ -145,7 +171,11 @@ describe('[CF] /api/runners', () => {
       lastHeartbeatAt: expect.any(String),
     })
 
-    const session = await createSelfHostedSession(authorization, agent.id, environment.id)
+    const runtimeSecretVersionId = await createRuntimeSecret(authorization)
+    const session = await createSelfHostedSession(authorization, agent.id, environment.id, {
+      runtimeEnv: { AK_API_URL: 'https://ak.example.test', AK_AGENT_ID: 'agent_worker' },
+      runtimeSecretEnv: [{ name: 'AK_AGENT_KEY', ref: runtimeSecretVersionId }],
+    })
     expect(session).toMatchObject({
       status: 'pending',
       statusReason: 'waiting-for-runner',
@@ -310,11 +340,28 @@ describe('[CF] /api/runners', () => {
             sessionId: session.id,
             resume: true,
             initialPrompt: 'Resume through queued runner work.',
+            runtimeEnv: { AK_API_URL: 'https://ak.example.test', AK_AGENT_ID: 'agent_worker' },
+            runtimeSecretEnv: '[REDACTED]',
           }),
         }),
       ]),
     )
     channel.close()
+
+    const resumedLeaseRes = await jsonFetch(`/api/runners/${runner.id}/leases`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ leaseDurationSeconds: 90 }),
+    })
+    expect(resumedLeaseRes.status).toBe(201)
+    const resumedLease = (await resumedLeaseRes.json()) as {
+      workItem: { payload: { runtimeEnv: Record<string, string>; runtimeSecretEnv: Array<{ name: string; ref: string }> } }
+    }
+    expect(resumedLease.workItem.payload.runtimeEnv).toMatchObject({
+      AK_API_URL: 'https://ak.example.test',
+      AK_AGENT_ID: 'agent_worker',
+      AK_AGENT_KEY: 'raw-ak-agent-key',
+    })
+    expect(resumedLease.workItem.payload.runtimeSecretEnv).toEqual([{ name: 'AK_AGENT_KEY', ref: runtimeSecretVersionId }])
 
     const sessionEventsRes = await jsonFetch(`/api/sessions/${session.id}/events`, authorization)
     expect(sessionEventsRes.status).toBe(200)

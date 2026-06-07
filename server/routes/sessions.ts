@@ -1572,6 +1572,8 @@ async function dispatchSessionPromptCommand(
         session,
         agentSnapshot,
         environmentSnapshot,
+        runtimeEnv: parseJson<Record<string, string>>(session.runtimeEnv) ?? {},
+        runtimeSecretEnv: parseJson<Array<z.infer<typeof RuntimeSecretEnvSchema>>>(session.runtimeSecretEnv) ?? [],
         initialPrompt: message,
         resume: true,
         resumeToken: await latestRunnerResumeToken(db, auth, session.id),
