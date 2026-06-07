@@ -26,7 +26,10 @@ const RuntimeSecretEnvSchema = z
       .string()
       .regex(/^[A-Z_][A-Z0-9_]*$/)
       .openapi({ example: 'AK_AGENT_KEY' }),
-    ref: z.string().regex(/^vaultver_[a-zA-Z0-9]+$/).openapi({ example: 'vaultver_abc123' }),
+    ref: z
+      .string()
+      .regex(/^vaultver_[a-zA-Z0-9]+$/)
+      .openapi({ example: 'vaultver_abc123' }),
   })
   .strict()
 
@@ -100,13 +103,21 @@ const CreateScheduledAgentTriggerSchema = z
     promptTemplate: z.string().trim().min(1).max(16000).openapi({
       example: 'Research current Canadian banking bonus offers.',
     }),
-    resourceRefs: z.array(JsonObjectSchema).max(50).optional().openapi({
-      example: [{ type: 'github_repository', owner: 'openai', repo: 'openai' }],
-    }),
+    resourceRefs: z
+      .array(JsonObjectSchema)
+      .max(50)
+      .optional()
+      .openapi({
+        example: [{ type: 'github_repository', owner: 'openai', repo: 'openai' }],
+      }),
     runtimeEnv: JsonObjectSchema.optional().openapi({ example: { AK_API_URL: 'https://ak.example.com' } }),
-    runtimeSecretEnv: z.array(RuntimeSecretEnvSchema).max(50).optional().openapi({
-      example: [{ name: 'AK_AGENT_KEY', ref: 'vaultver_abc123' }],
-    }),
+    runtimeSecretEnv: z
+      .array(RuntimeSecretEnvSchema)
+      .max(50)
+      .optional()
+      .openapi({
+        example: [{ name: 'AK_AGENT_KEY', ref: 'vaultver_abc123' }],
+      }),
     schedule: SchedulePayloadSchema,
     status: z.enum(['active', 'paused']).optional().openapi({ example: 'active' }),
     nextDueAt: z.string().datetime().optional().openapi({ example: '2026-05-26T12:00:00.000Z' }),
@@ -123,13 +134,21 @@ const UpdateScheduledAgentTriggerSchema = z
     promptTemplate: z.string().trim().min(1).max(16000).optional().openapi({
       example: 'Research current Canadian banking bonus offers.',
     }),
-    resourceRefs: z.array(JsonObjectSchema).max(50).optional().openapi({
-      example: [{ type: 'github_repository', owner: 'openai', repo: 'openai' }],
-    }),
+    resourceRefs: z
+      .array(JsonObjectSchema)
+      .max(50)
+      .optional()
+      .openapi({
+        example: [{ type: 'github_repository', owner: 'openai', repo: 'openai' }],
+      }),
     runtimeEnv: JsonObjectSchema.optional().openapi({ example: { AK_API_URL: 'https://ak.example.com' } }),
-    runtimeSecretEnv: z.array(RuntimeSecretEnvSchema).max(50).optional().openapi({
-      example: [{ name: 'AK_AGENT_KEY', ref: 'vaultver_abc123' }],
-    }),
+    runtimeSecretEnv: z
+      .array(RuntimeSecretEnvSchema)
+      .max(50)
+      .optional()
+      .openapi({
+        example: [{ name: 'AK_AGENT_KEY', ref: 'vaultver_abc123' }],
+      }),
     schedule: SchedulePayloadSchema.optional(),
     status: z.enum(['active', 'paused']).optional().openapi({ example: 'paused' }),
     nextDueAt: z.string().datetime().optional().openapi({ example: '2026-05-27T12:00:00.000Z' }),
@@ -602,7 +621,8 @@ const routes = app
       promptTemplate: body.promptTemplate ?? trigger.promptTemplate,
       resourceRefs: body.resourceRefs !== undefined ? stringify(body.resourceRefs) : trigger.resourceRefs,
       runtimeEnv: body.runtimeEnv !== undefined ? stringify(body.runtimeEnv) : trigger.runtimeEnv,
-      runtimeSecretEnv: body.runtimeSecretEnv !== undefined ? stringify(body.runtimeSecretEnv) : trigger.runtimeSecretEnv,
+      runtimeSecretEnv:
+        body.runtimeSecretEnv !== undefined ? stringify(body.runtimeSecretEnv) : trigger.runtimeSecretEnv,
       intervalSeconds: body.schedule?.intervalSeconds ?? trigger.intervalSeconds,
       windowSeconds: body.schedule?.windowSeconds ?? trigger.windowSeconds,
       status: body.status ?? trigger.status,

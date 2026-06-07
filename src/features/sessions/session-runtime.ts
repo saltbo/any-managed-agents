@@ -120,7 +120,12 @@ export function sessionRuntimeReducer(state: SessionRuntimeState, action: Sessio
     createdAt: action.at,
   }
 
-  if (eventType === 'agent_start' || eventType === 'turn_start' || eventType === 'agent_end' || eventType === 'turn_end') {
+  if (
+    eventType === 'agent_start' ||
+    eventType === 'turn_start' ||
+    eventType === 'agent_end' ||
+    eventType === 'turn_end'
+  ) {
     const terminal = eventType === 'agent_end' || eventType === 'turn_end'
     return {
       ...state,
@@ -381,7 +386,8 @@ function toolFromSessionEvent(
   return {
     id: callId,
     callId,
-    name: stringField(toolCall, 'name') ?? stringField(toolCall, 'toolName') ?? stringField(event, 'toolName') ?? 'tool',
+    name:
+      stringField(toolCall, 'name') ?? stringField(toolCall, 'toolName') ?? stringField(event, 'toolName') ?? 'tool',
     status: eventType === 'tool_execution_end' ? (failed ? 'error' : 'success') : 'running',
     input,
     output: readableToolValue(output),

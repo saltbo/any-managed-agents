@@ -341,14 +341,10 @@ describe('[CF] /api/sessions', () => {
       ]),
     )
     const toolCallEvent = events.data.find(
-      (event) =>
-        event.type === 'tool_execution_start' &&
-        event.payload.toolCallId === 'call_git_status',
+      (event) => event.type === 'tool_execution_start' && event.payload.toolCallId === 'call_git_status',
     )
     const toolResultEvent = events.data.find(
-      (event) =>
-        event.type === 'tool_execution_end' &&
-        event.payload.toolCallId === 'call_git_status',
+      (event) => event.type === 'tool_execution_end' && event.payload.toolCallId === 'call_git_status',
     )
     expect(toolCallEvent).toMatchObject({
       correlationId: null,
@@ -601,7 +597,9 @@ describe('[CF] /api/sessions', () => {
     })
     expect(leaseRes.status).toBe(201)
     const lease = (await leaseRes.json()) as {
-      workItem: { payload: { runtimeEnv: Record<string, string>; runtimeSecretEnv: Array<{ name: string; ref: string }> } }
+      workItem: {
+        payload: { runtimeEnv: Record<string, string>; runtimeSecretEnv: Array<{ name: string; ref: string }> }
+      }
     }
     expect(lease.workItem.payload.runtimeEnv.AK_AGENT_KEY).toBe('raw-github-token')
     expect(lease.workItem.payload.runtimeSecretEnv).toEqual([{ name: 'AK_AGENT_KEY', ref: credential.activeVersionId }])

@@ -1136,7 +1136,9 @@ const routes = app
       organizationId: auth.organization.id,
       projectId: auth.project.id,
       name: body.name,
-      capabilities: stringify(auth.oidc.runnerCapabilities.length ? auth.oidc.runnerCapabilities : body.capabilities ?? []),
+      capabilities: stringify(
+        auth.oidc.runnerCapabilities.length ? auth.oidc.runnerCapabilities : (body.capabilities ?? []),
+      ),
       environmentId: environmentId ?? null,
       credentialSecretRef: body.credentialSecretRef ?? null,
       authMode,
@@ -1235,7 +1237,9 @@ const routes = app
       eq(runners.projectId, auth.project.id),
       runnerToken && auth.oidc.runnerId ? eq(runners.id, auth.oidc.runnerId) : undefined,
       runnerToken && !auth.oidc.runnerId ? eq(runners.oidcSubject, auth.oidc.subject) : undefined,
-      runnerToken && !auth.oidc.runnerId && auth.oidc.clientId ? eq(runners.oidcClientId, auth.oidc.clientId) : undefined,
+      runnerToken && !auth.oidc.runnerId && auth.oidc.clientId
+        ? eq(runners.oidcClientId, auth.oidc.clientId)
+        : undefined,
       status
         ? eq(runners.status, status)
         : includeArchived === 'true'
@@ -1603,7 +1607,13 @@ const routes = app
         await db
           .update(sessions)
           .set(sessionUpdate)
-          .where(and(eq(sessions.id, workItem.sessionId), eq(sessions.projectId, auth.project.id), eq(sessions.status, 'running')))
+          .where(
+            and(
+              eq(sessions.id, workItem.sessionId),
+              eq(sessions.projectId, auth.project.id),
+              eq(sessions.status, 'running'),
+            ),
+          )
       }
     }
     const updatedLease = await db.select().from(runnerWorkLeases).where(eq(runnerWorkLeases.id, leaseId)).get()

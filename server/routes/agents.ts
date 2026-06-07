@@ -814,7 +814,9 @@ const routes = app
       validateCapabilityTags(next.capabilityTags) ??
       validateAllowedTools(next.allowedTools) ??
       (await validateMcpConnectors(db, auth.project.id, next.mcpConnectors)) ??
-      (hasSecretMaterial(next.handoffPolicy) ? { handoffPolicy: 'Secret material must be stored in a vault.' } : null) ??
+      (hasSecretMaterial(next.handoffPolicy)
+        ? { handoffPolicy: 'Secret material must be stored in a vault.' }
+        : null) ??
       (hasSecretMaterial(next.memoryPolicy) ? { memoryPolicy: 'Secret material must be stored in a vault.' } : null) ??
       (hasSecretMaterial(next.metadata) ? { metadata: 'Secret material must be stored in a vault.' } : null)
     if (validation) {
@@ -974,7 +976,10 @@ const routes = app
       return c.json({ error: { type: 'conflict', message: 'Agent memory is disabled' } }, 409)
     }
     if (hasSecretMaterial(body.metadata)) {
-      return c.json(domainValidation('Invalid agent memory', { metadata: 'Secret material must be stored in a vault.' }), 400)
+      return c.json(
+        domainValidation('Invalid agent memory', { metadata: 'Secret material must be stored in a vault.' }),
+        400,
+      )
     }
 
     const existing = await db

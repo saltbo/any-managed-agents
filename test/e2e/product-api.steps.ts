@@ -588,15 +588,18 @@ When('the agent records notes, decisions, or follow-up context in memory', async
   })
 })
 
-When('the user creates a session with allowed runtime secret environment references', async function (this: ProductWorld) {
-  await ensureVaultCredential(this)
-  await ensureAgentAndEnvironment(this)
-  this.e2e.latestSession = await createSession(this.e2e, {
-    runtimeSecretEnv: [{ name: 'AK_AGENT_KEY', ref: this.e2e.credential?.activeVersionId }],
-    vaultRefs: [{ type: 'credential', id: this.e2e.credential?.id }],
-    initialPrompt: 'Use the credential only through runtime secret bindings.',
-  })
-})
+When(
+  'the user creates a session with allowed runtime secret environment references',
+  async function (this: ProductWorld) {
+    await ensureVaultCredential(this)
+    await ensureAgentAndEnvironment(this)
+    this.e2e.latestSession = await createSession(this.e2e, {
+      runtimeSecretEnv: [{ name: 'AK_AGENT_KEY', ref: this.e2e.credential?.activeVersionId }],
+      vaultRefs: [{ type: 'credential', id: this.e2e.credential?.id }],
+      initialPrompt: 'Use the credential only through runtime secret bindings.',
+    })
+  },
+)
 
 When('an operator adds a provider', async function (this: ProductWorld) {
   await ensureSignedIn(this)
@@ -2021,21 +2024,27 @@ Then('AMA stores those fields as standard agent definition configuration', async
   assert.equal(JSON.stringify(agent).includes('externalBoard'), false)
 })
 
-Then('the current agent version snapshots the role, capability tags, and handoff policy', async function (this: ProductWorld) {
-  const state = await ensureState(this)
-  const versions = await apiJson<ListResponse<Json>>(state.page.request, `/api/agents/${state.agent?.id}/versions`)
-  const version = required(versions.data[0], 'agent version')
-  assert.equal(version.role, 'maintainer')
-  assert.deepEqual(version.capabilityTags, ['triage', 'handoff'])
-  assert.deepEqual(version.handoffPolicy, { targets: [{ role: 'worker', capability: 'implementation' }] })
-})
+Then(
+  'the current agent version snapshots the role, capability tags, and handoff policy',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    const versions = await apiJson<ListResponse<Json>>(state.page.request, `/api/agents/${state.agent?.id}/versions`)
+    const version = required(versions.data[0], 'agent version')
+    assert.equal(version.role, 'maintainer')
+    assert.deepEqual(version.capabilityTags, ['triage', 'handoff'])
+    assert.deepEqual(version.handoffPolicy, { targets: [{ role: 'worker', capability: 'implementation' }] })
+  },
+)
 
-Then('sessions created from the agent include those fields in the immutable agent snapshot', function (this: ProductWorld) {
-  const snapshot = objectValue(this.e2e?.latestSession?.agentSnapshot)
-  assert.equal(snapshot.role, 'maintainer')
-  assert.deepEqual(snapshot.capabilityTags, ['triage', 'handoff'])
-  assert.deepEqual(snapshot.handoffPolicy, { targets: [{ role: 'worker', capability: 'implementation' }] })
-})
+Then(
+  'sessions created from the agent include those fields in the immutable agent snapshot',
+  function (this: ProductWorld) {
+    const snapshot = objectValue(this.e2e?.latestSession?.agentSnapshot)
+    assert.equal(snapshot.role, 'maintainer')
+    assert.deepEqual(snapshot.capabilityTags, ['triage', 'handoff'])
+    assert.deepEqual(snapshot.handoffPolicy, { targets: [{ role: 'worker', capability: 'implementation' }] })
+  },
+)
 
 Then('the fields are available through OpenAPI and generated SDKs', async function (this: ProductWorld) {
   const state = await ensureState(this)
@@ -2044,7 +2053,9 @@ Then('the fields are available through OpenAPI and generated SDKs', async functi
   assert.ok(serialized.includes('role'))
   assert.ok(serialized.includes('capabilityTags'))
   assert.ok(serialized.includes('handoffPolicy'))
-  assert.ok(readFileSync(join(process.cwd(), 'sdk/typescript/src/generated/operations.ts'), 'utf8').includes('operationId'))
+  assert.ok(
+    readFileSync(join(process.cwd(), 'sdk/typescript/src/generated/operations.ts'), 'utf8').includes('operationId'),
+  )
 })
 
 Then('AMA provides project-scoped memory through the agent memory API', async function (this: ProductWorld) {
@@ -2092,26 +2103,38 @@ Then('the memory contract is exposed through OpenAPI and generated SDKs', async 
   assert.ok(sdk.includes('updateAgentMemory'))
 })
 
-Then('AMA stores that memory as generic agent runtime state through the agent memory API', function (this: ProductWorld) {
-  const memory = required(this.e2e?.response, 'agent memory')
-  assert.equal(memory.agentId, this.e2e?.agent?.id)
-  assert.equal(memory.content, 'Remember that the next heartbeat should inspect open defects and unresolved proposals.')
-  assert.equal(objectValue(memory.metadata).source, 'runtime')
-})
+Then(
+  'AMA stores that memory as generic agent runtime state through the agent memory API',
+  function (this: ProductWorld) {
+    const memory = required(this.e2e?.response, 'agent memory')
+    assert.equal(memory.agentId, this.e2e?.agent?.id)
+    assert.equal(
+      memory.content,
+      'Remember that the next heartbeat should inspect open defects and unresolved proposals.',
+    )
+    assert.equal(objectValue(memory.metadata).source, 'runtime')
+  },
+)
 
-Then('external products can link to or summarize memory through AMA ids and API responses', function (this: ProductWorld) {
-  const memory = required(this.e2e?.response, 'agent memory')
-  assert.equal(typeof memory.agentId, 'string')
-  assert.equal(typeof memory.projectId, 'string')
-  assert.equal(typeof memory.updatedAt, 'string')
-})
+Then(
+  'external products can link to or summarize memory through AMA ids and API responses',
+  function (this: ProductWorld) {
+    const memory = required(this.e2e?.response, 'agent memory')
+    assert.equal(typeof memory.agentId, 'string')
+    assert.equal(typeof memory.projectId, 'string')
+    assert.equal(typeof memory.updatedAt, 'string')
+  },
+)
 
-Then('AMA does not store external product workflow semantics inside memory schema fields', function (this: ProductWorld) {
-  const serialized = JSON.stringify(required(this.e2e?.response, 'agent memory'))
-  assert.equal(serialized.includes('externalTask'), false)
-  assert.equal(serialized.includes('externalBoard'), false)
-  assert.equal(serialized.includes('reviewStatus'), false)
-})
+Then(
+  'AMA does not store external product workflow semantics inside memory schema fields',
+  function (this: ProductWorld) {
+    const serialized = JSON.stringify(required(this.e2e?.response, 'agent memory'))
+    assert.equal(serialized.includes('externalTask'), false)
+    assert.equal(serialized.includes('externalBoard'), false)
+    assert.equal(serialized.includes('reviewStatus'), false)
+  },
+)
 
 Then('the response includes the agent id, version, and timestamps', function (this: ProductWorld) {
   const agent = required(this.e2e?.agent, 'agent')
@@ -3019,19 +3042,22 @@ Then('ama-runner starts the embedded Claude Code SDK bridge for that session', a
   )
 })
 
-Then('Claude Code receives the prompt, workspace, runtime config, and safe environment', async function (this: ProductWorld) {
-  const state = await ensureState(this)
-  const events = await waitForSessionEventText(state, 'claude-code-bridge-test safe diagnostic')
-  const serialized = JSON.stringify(events.data)
-  assert.equal(serialized.includes(String(state.runtimeMessage)), true)
-  assert.equal(serialized.includes(String(state.provider?.id)), true)
-  assert.equal(serialized.includes(CLAUDE_CODE_E2E_MODEL), true)
-  assert.equal(serialized.includes(`workspace:${runnerSessionWorkDir(state)}`), true)
-  assert.equal(serialized.includes('"e2eBridgeTest":true'), true)
-  assert.equal(serialized.includes('raw-secret-value'), false)
-  assert.equal(serialized.includes('AMA_TOKEN'), false)
-  assert.equal(serialized.includes('secret://providers'), false)
-})
+Then(
+  'Claude Code receives the prompt, workspace, runtime config, and safe environment',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    const events = await waitForSessionEventText(state, 'claude-code-bridge-test safe diagnostic')
+    const serialized = JSON.stringify(events.data)
+    assert.equal(serialized.includes(String(state.runtimeMessage)), true)
+    assert.equal(serialized.includes(String(state.provider?.id)), true)
+    assert.equal(serialized.includes(CLAUDE_CODE_E2E_MODEL), true)
+    assert.equal(serialized.includes(`workspace:${runnerSessionWorkDir(state)}`), true)
+    assert.equal(serialized.includes('"e2eBridgeTest":true'), true)
+    assert.equal(serialized.includes('raw-secret-value'), false)
+    assert.equal(serialized.includes('AMA_TOKEN'), false)
+    assert.equal(serialized.includes('secret://providers'), false)
+  },
+)
 
 Then(
   'Claude Code output is translated into canonical lifecycle, transcript, tool, usage, output, and error events',
@@ -3117,7 +3143,10 @@ Then(
     assert.equal(objectValue(stdoutOutput.payload).stream, 'stdout')
     assert.equal(objectValue(stderrOutput.payload).stream, 'stderr')
     const serialized = JSON.stringify(events.data)
-    assert.equal(serialized.includes('claude-code-bridge-test received:Run the deterministic Claude Code bridge test.'), true)
+    assert.equal(
+      serialized.includes('claude-code-bridge-test received:Run the deterministic Claude Code bridge test.'),
+      true,
+    )
     assert.equal(serialized.includes('claude-code-bridge-test-stdout'), true)
     assert.equal(serialized.includes('claude-code-bridge-test-stderr'), true)
     assert.equal(serialized.includes('raw-secret-value'), false)
@@ -3868,9 +3897,9 @@ Then(
     const types = new Set(events.data.map((event) => event.type))
     const stderrOutput = events.data.find(
       (event) =>
-          event.type === 'runtime.output' &&
-          objectValue(event.payload).stream === 'stderr' &&
-          objectValue(event.payload).content === 'codex-bridge-test-stderr',
+        event.type === 'runtime.output' &&
+        objectValue(event.payload).stream === 'stderr' &&
+        objectValue(event.payload).content === 'codex-bridge-test-stderr',
     )
     assert.ok(stderrOutput)
     for (const type of [
@@ -3924,15 +3953,15 @@ Then(
     const serialized = JSON.stringify(events.data)
     const stderrOutput = events.data.find(
       (event) =>
-          event.type === 'runtime.output' &&
-          objectValue(event.payload).stream === 'stderr' &&
-          objectValue(event.payload).content === 'copilot-bridge-test-stderr',
+        event.type === 'runtime.output' &&
+        objectValue(event.payload).stream === 'stderr' &&
+        objectValue(event.payload).content === 'copilot-bridge-test-stderr',
     )
     const stdoutOutput = events.data.find(
       (event) =>
-          event.type === 'runtime.output' &&
-          objectValue(event.payload).stream === 'stdout' &&
-          objectValue(event.payload).content === 'copilot-bridge-test-stdout',
+        event.type === 'runtime.output' &&
+        objectValue(event.payload).stream === 'stdout' &&
+        objectValue(event.payload).content === 'copilot-bridge-test-stdout',
     )
     assert.ok(stderrOutput)
     assert.ok(stdoutOutput)
@@ -4118,7 +4147,12 @@ Then('duplicate or stale channels cannot submit tool results for the session', a
   state.runnerChannelMessages = await openRunnerChannel(state, 'duplicateRunnerChannel')
   await sendRunnerChannelEvent(state, 'amaRunnerChannel', {
     type: 'tool_execution_end',
-    payload: { toolCallId: 'duplicate_e2e', toolName: 'sandbox.exec', result: { stdout: 'duplicate-e2e' }, isError: false },
+    payload: {
+      toolCallId: 'duplicate_e2e',
+      toolName: 'sandbox.exec',
+      result: { stdout: 'duplicate-e2e' },
+      isError: false,
+    },
   })
   await sendRunnerChannelEvent(state, 'duplicateRunnerChannel', {
     type: 'tool_execution_end',
@@ -4227,13 +4261,7 @@ Then('AMA stores the activity as canonical session events', async function (this
   const state = await ensureState(this)
   const events = state.events ?? (await sessionEvents(state))
   const types = new Set(events.data.map((event) => String(event.type)))
-  for (const type of [
-    'turn_end',
-    'message_end',
-    'tool_execution_start',
-    'tool_execution_end',
-    'usage.recorded',
-  ]) {
+  for (const type of ['turn_end', 'message_end', 'tool_execution_start', 'tool_execution_end', 'usage.recorded']) {
     assert.ok(types.has(type), `missing canonical event type ${type}`)
   }
 })
@@ -4306,12 +4334,15 @@ Then(
   },
 )
 
-Then('the lower-level runtime endpoint remains a compatibility path for runtime clients', async function (this: ProductWorld) {
-  const state = await ensureState(this)
-  await sendRuntimeMessage(state, 'runtime endpoint compatibility message')
-  const events = await sessionEvents(state)
-  assert.ok(JSON.stringify(events.data).includes('runtime endpoint compatibility message'))
-})
+Then(
+  'the lower-level runtime endpoint remains a compatibility path for runtime clients',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    await sendRuntimeMessage(state, 'runtime endpoint compatibility message')
+    const events = await sessionEvents(state)
+    assert.ok(JSON.stringify(events.data).includes('runtime endpoint compatibility message'))
+  },
+)
 
 Then('events are streamed in sequence order', function (this: ProductWorld) {
   const events = required(this.e2e?.events, 'events')
@@ -4898,7 +4929,9 @@ function bridgeTestRuntimeConfig() {
 }
 
 function runnerSessionWorkDir(state: E2EState) {
-  return realpathSync(join(required(state.runnerWorkDir, 'runner workdir'), 'sessions', String(state.latestSession?.id)))
+  return realpathSync(
+    join(required(state.runnerWorkDir, 'runner workdir'), 'sessions', String(state.latestSession?.id)),
+  )
 }
 
 async function stopProductAmaRunner(state?: E2EState) {

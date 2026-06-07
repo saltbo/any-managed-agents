@@ -734,7 +734,8 @@ export function runtimeMessagesFromEvents(events: Array<{ type?: string; payload
       continue
     }
     const record = payload as Record<string, unknown>
-    const sourceType = typeof event.type === 'string' ? event.type : typeof record.type === 'string' ? record.type : undefined
+    const sourceType =
+      typeof event.type === 'string' ? event.type : typeof record.type === 'string' ? record.type : undefined
     if (sourceType === 'agent_end' && Array.isArray(record.messages)) {
       const messages = record.messages.filter(isPersistedMessage)
       if (messages.length > 0) {

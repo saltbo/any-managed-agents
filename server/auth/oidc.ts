@@ -152,7 +152,9 @@ export async function getBearerClaims(env: Env, accessToken: string): Promise<Us
   }
 
   const oidcClient = await createOidcClient(env)
-  const claims = await runOidcWithIntrospectionFallback(env, accessToken, () => client.fetchUserInfo(oidcClient, accessToken, client.skipSubjectCheck))
+  const claims = await runOidcWithIntrospectionFallback(env, accessToken, () =>
+    client.fetchUserInfo(oidcClient, accessToken, client.skipSubjectCheck),
+  )
   if (!claims.sub) {
     throw new OidcError('OIDC provider userinfo did not include required subject')
   }
@@ -175,7 +177,10 @@ async function runOidcWithIntrospectionFallback<T extends Record<string, unknown
   }
 }
 
-async function introspectAccessToken(env: Env, accessToken: string): Promise<(Record<string, unknown> & { sub: string }) | null> {
+async function introspectAccessToken(
+  env: Env,
+  accessToken: string,
+): Promise<(Record<string, unknown> & { sub: string }) | null> {
   const issuer = env.OIDC_ISSUER?.replace(/\/$/, '')
   const clientId = env.OIDC_INTROSPECTION_CLIENT_ID ?? env.OIDC_CLIENT_ID
   const clientSecret = env.OIDC_INTROSPECTION_CLIENT_SECRET ?? env.OIDC_CLIENT_SECRET
@@ -216,7 +221,9 @@ function oidcFetch(env: Env, url: string, init: RequestInit) {
   const requestUrl = new URL(url)
   const issuerUrl = new URL(env.OIDC_ISSUER ?? url)
   const useServiceBinding = env.OIDC_USE_SERVICE_BINDING !== 'false'
-  return useServiceBinding && requestUrl.origin === issuerUrl.origin && env.OIDC_PROVIDER ? env.OIDC_PROVIDER.fetch(url, init) : fetch(url, init)
+  return useServiceBinding && requestUrl.origin === issuerUrl.origin && env.OIDC_PROVIDER
+    ? env.OIDC_PROVIDER.fetch(url, init)
+    : fetch(url, init)
 }
 
 export async function upsertProjectForClaims(
@@ -291,7 +298,9 @@ async function projectForFederatedClaims(db: DrizzleD1Database, claims: UserInfo
 function normalizeClaims(env: Env, claims: Record<string, unknown> & { sub: string }): UserInfoClaims {
   const authorization = objectClaim(claims.authorization)
   const roles = stringArray(claims.roles).length ? stringArray(claims.roles) : stringArray(authorization?.roles)
-  const permissions = stringArray(claims.permissions).length ? stringArray(claims.permissions) : stringArray(authorization?.permissions)
+  const permissions = stringArray(claims.permissions).length
+    ? stringArray(claims.permissions)
+    : stringArray(authorization?.permissions)
   const clientId = stringClaim(claims.client_id) ?? stringClaim(claims.azp)
   const runnerScoped = isRunnerTokenClaim(env, clientId, claims)
   return {
@@ -398,5 +407,7 @@ function objectClaim(value: unknown) {
 }
 
 function isRunnerTokenClaim(env: Env, clientId: string | undefined, claims?: Record<string, unknown>) {
-  return (!!env.OIDC_RUNNER_CLIENT_ID && clientId === env.OIDC_RUNNER_CLIENT_ID) || typeof claims?.ama_runner_id === 'string'
+  return (
+    (!!env.OIDC_RUNNER_CLIENT_ID && clientId === env.OIDC_RUNNER_CLIENT_ID) || typeof claims?.ama_runner_id === 'string'
+  )
 }

@@ -330,7 +330,9 @@ describe('[CF] /api/runners', () => {
       statusReason: 'waiting-for-runner',
     })
     const resumedWorkRes = await jsonFetch(`/api/runners/work-items?sessionId=${session.id}`, authorization)
-    const resumedWork = (await resumedWorkRes.json()) as { data: Array<{ status: string; payload: Record<string, unknown> }> }
+    const resumedWork = (await resumedWorkRes.json()) as {
+      data: Array<{ status: string; payload: Record<string, unknown> }>
+    }
     expect(resumedWork.data).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -354,14 +356,18 @@ describe('[CF] /api/runners', () => {
     })
     expect(resumedLeaseRes.status).toBe(201)
     const resumedLease = (await resumedLeaseRes.json()) as {
-      workItem: { payload: { runtimeEnv: Record<string, string>; runtimeSecretEnv: Array<{ name: string; ref: string }> } }
+      workItem: {
+        payload: { runtimeEnv: Record<string, string>; runtimeSecretEnv: Array<{ name: string; ref: string }> }
+      }
     }
     expect(resumedLease.workItem.payload.runtimeEnv).toMatchObject({
       AK_API_URL: 'https://ak.example.test',
       AK_AGENT_ID: 'agent_worker',
       AK_AGENT_KEY: 'raw-ak-agent-key',
     })
-    expect(resumedLease.workItem.payload.runtimeSecretEnv).toEqual([{ name: 'AK_AGENT_KEY', ref: runtimeSecretVersionId }])
+    expect(resumedLease.workItem.payload.runtimeSecretEnv).toEqual([
+      { name: 'AK_AGENT_KEY', ref: runtimeSecretVersionId },
+    ])
 
     const sessionEventsRes = await jsonFetch(`/api/sessions/${session.id}/events`, authorization)
     expect(sessionEventsRes.status).toBe(200)
@@ -435,7 +441,9 @@ describe('[CF] /api/runners', () => {
     const lease = (await leaseRes.json()) as { id: string }
 
     const channel = await openRunnerSessionChannel(authorization, runner.id, lease.id)
-    await env.DB.prepare("UPDATE sessions SET status = 'pending', status_reason = 'waiting-for-runner', updated_at = ? WHERE id = ?")
+    await env.DB.prepare(
+      "UPDATE sessions SET status = 'pending', status_reason = 'waiting-for-runner', updated_at = ? WHERE id = ?",
+    )
       .bind(new Date().toISOString(), session.id)
       .run()
 
@@ -774,10 +782,12 @@ describe('[CF] /api/runners', () => {
     const token = `fatx_${crypto.randomUUID().replaceAll('-', '')}`
 
     ;(env as unknown as { OIDC_ISSUER: string }).OIDC_ISSUER = 'https://oidc.test/api/auth'
-    ;(env as unknown as { OIDC_INTROSPECTION_CLIENT_ID: string; OIDC_INTROSPECTION_CLIENT_SECRET: string }).OIDC_INTROSPECTION_CLIENT_ID =
-      'ama-introspection'
-    ;(env as unknown as { OIDC_INTROSPECTION_CLIENT_ID: string; OIDC_INTROSPECTION_CLIENT_SECRET: string }).OIDC_INTROSPECTION_CLIENT_SECRET =
-      'ama-introspection-secret'
+    ;(
+      env as unknown as { OIDC_INTROSPECTION_CLIENT_ID: string; OIDC_INTROSPECTION_CLIENT_SECRET: string }
+    ).OIDC_INTROSPECTION_CLIENT_ID = 'ama-introspection'
+    ;(
+      env as unknown as { OIDC_INTROSPECTION_CLIENT_ID: string; OIDC_INTROSPECTION_CLIENT_SECRET: string }
+    ).OIDC_INTROSPECTION_CLIENT_SECRET = 'ama-introspection-secret'
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -1685,12 +1695,16 @@ describe('[CF] /api/runners', () => {
       capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
     })
 
-    const unboundRunnerRes = await jsonFetch('/api/runners', signInFederatedRunner('ak_org_missing', 'runner_missing'), {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Unbound federated runner',
-      }),
-    })
+    const unboundRunnerRes = await jsonFetch(
+      '/api/runners',
+      signInFederatedRunner('ak_org_missing', 'runner_missing'),
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'Unbound federated runner',
+        }),
+      },
+    )
     expect(unboundRunnerRes.status).toBe(401)
   })
 })

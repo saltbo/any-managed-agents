@@ -41,11 +41,7 @@ import {
 } from '../openapi'
 import { evaluateMcpToolPolicy, evaluateProviderPolicy, evaluateSandboxRuntimePolicy } from '../policy'
 import { redactSensitiveValue } from '../redaction'
-import {
-  runnerSupportsRuntimeProviderModel,
-  runtimeCatalogSupportsProviderModel,
-  runtimeProviderModelCapability,
-} from '../runtime/catalog'
+import { runtimeCatalogSupportsProviderModel, runtimeProviderModelCapability } from '../runtime/catalog'
 import { runtimeDriver, runtimeDriverName, runtimeMetadata } from '../runtime/drivers'
 import { safeRuntimeError } from '../runtime/runtime-error'
 import {
@@ -1296,7 +1292,8 @@ async function startSessionRuntimeForRow(
     initialPrompt?: string
   },
 ) {
-  const { pending, agentSnapshot, environmentSnapshot, resourceRefs, runtimeEnv, runtimeSecretEnv, initialPrompt } = input
+  const { pending, agentSnapshot, environmentSnapshot, resourceRefs, runtimeEnv, runtimeSecretEnv, initialPrompt } =
+    input
   const sessionId = pending.id
   const sandboxId = pending.sandboxId ?? sessionId.toLowerCase()
   const runtimeName = environmentSnapshot?.runtime ?? 'ama'
@@ -1532,13 +1529,7 @@ async function dispatchInitialPrompt(env: Env, db: Db, auth: AuthContext, sessio
   }
 }
 
-async function dispatchSessionPromptCommand(
-  env: Env,
-  db: Db,
-  auth: AuthContext,
-  session: SessionRow,
-  message: string,
-) {
+async function dispatchSessionPromptCommand(env: Env, db: Db, auth: AuthContext, session: SessionRow, message: string) {
   if (session.status !== 'idle' && session.status !== 'running') {
     return { status: 409 as const, message: 'Session runtime is not active' }
   }
@@ -2019,7 +2010,9 @@ async function stopSelfHostedSession(
   if (activeWorkItems.length) {
     const workItemIds = activeWorkItems.map((item) => item.id)
     const leaseIds = activeWorkItems.map((item) => item.leaseId).filter((id): id is string => Boolean(id))
-    const runnerIds = [...new Set(activeWorkItems.map((item) => item.runnerId).filter((id): id is string => Boolean(id)))]
+    const runnerIds = [
+      ...new Set(activeWorkItems.map((item) => item.runnerId).filter((id): id is string => Boolean(id))),
+    ]
 
     await db
       .update(runnerWorkItems)
@@ -2233,7 +2226,10 @@ const createSessionCommandRoute = createRoute({
     body: { required: true, content: { 'application/json': { schema: CreateSessionCommandSchema } } },
   },
   responses: {
-    202: { description: 'Session command accepted', content: { 'application/json': { schema: SessionCommandResponseSchema } } },
+    202: {
+      description: 'Session command accepted',
+      content: { 'application/json': { schema: SessionCommandResponseSchema } },
+    },
     400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
     404: { description: 'Session not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
@@ -2425,8 +2421,17 @@ async function streamEventsNdjsonResponse(c: Context<{ Bindings: Env }>, session
 
 const routes = app
   .openapi(createSessionRoute, async (c) => {
-    const { agentId, environmentId, title, metadata, resourceRefs, vaultRefs, runtimeEnv, runtimeSecretEnv, initialPrompt } =
-      c.req.valid('json')
+    const {
+      agentId,
+      environmentId,
+      title,
+      metadata,
+      resourceRefs,
+      vaultRefs,
+      runtimeEnv,
+      runtimeSecretEnv,
+      initialPrompt,
+    } = c.req.valid('json')
     const db = drizzle(c.env.DB)
     const auth = await requireAuth(c, db)
     if (auth instanceof Response) {

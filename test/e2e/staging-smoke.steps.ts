@@ -444,8 +444,7 @@ async function exerciseSelfHostedRunnerMode(
     await waitForPersistedEvents(
       request,
       session.id,
-      (events) =>
-        events.some((event) => event.type === 'turn_end' && eventContains(event, 'runner.session.started')),
+      (events) => events.some((event) => event.type === 'turn_end' && eventContains(event, 'runner.session.started')),
       0,
     )
     return true
@@ -931,7 +930,9 @@ async function clickFirstVisible(page: Page, selectors: string[]) {
 }
 
 function hasToolPayload(event: SessionEvent) {
-  return Boolean(event.payload.toolCallId ?? event.payload.toolName ?? event.payload.toolExecution ?? event.payload.call)
+  return Boolean(
+    event.payload.toolCallId ?? event.payload.toolName ?? event.payload.toolExecution ?? event.payload.call,
+  )
 }
 
 function eventContains(event: SessionEvent, text: string) {

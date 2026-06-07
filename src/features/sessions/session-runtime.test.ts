@@ -533,10 +533,7 @@ describe('sessionRuntimeReducer', () => {
     }
     const loaded = sessionRuntimeReducer(initialSessionRuntimeState, {
       type: 'persisted_events',
-      events: [
-        event(1, 'message_end', messagePayload),
-        event(2, 'turn_end', { type: 'turn_end' }),
-      ],
+      events: [event(1, 'message_end', messagePayload), event(2, 'turn_end', { type: 'turn_end' })],
     })
     const replayed = sessionRuntimeReducer(loaded, {
       type: 'event',
