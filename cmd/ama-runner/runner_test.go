@@ -25,6 +25,7 @@ type fakeControlPlane struct {
 	events       []ama.UploadRunnerLeaseEventsRequest
 	lease        *ama.RunnerWorkLease
 	runnerID     string
+	claims       int
 	healthErr    error
 	createErr    error
 	heartbeatErr error
@@ -68,6 +69,9 @@ func (f *fakeControlPlane) CreateRunnerHeartbeat(_ context.Context, runnerID str
 }
 
 func (f *fakeControlPlane) CreateRunnerLease(context.Context, string, ama.ClaimRunnerLeaseRequest) (*ama.RunnerWorkLease, error) {
+	f.mu.Lock()
+	f.claims += 1
+	f.mu.Unlock()
 	if f.claimErr != nil {
 		return nil, f.claimErr
 	}
@@ -798,13 +802,33 @@ func TestStartFailsFastOnControlPlaneSetupErrors(t *testing.T) {
 	}
 }
 
-func TestStartReturnsLeasePollingErrors(t *testing.T) {
+func TestStartContinuesAfterLeasePollingErrors(t *testing.T) {
 	client := &fakeControlPlane{claimErr: errors.New("claim failed")}
 	daemon := testDaemon(client, &fakeAdapter{})
-	daemon.Config.PollInterval = time.Hour
-	err := daemon.Start(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "claim failed") {
-		t.Fatalf("expected claim error, got %v", err)
+	daemon.Config.PollInterval = time.Millisecond
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- daemon.Start(ctx)
+	}()
+	deadline := time.After(time.Second)
+	for {
+		client.mu.Lock()
+		claims := client.claims
+		client.mu.Unlock()
+		if claims >= 2 {
+			cancel()
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for runner to continue after claim errors")
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context cancellation after continued polling, got %v", err)
 	}
 }
 

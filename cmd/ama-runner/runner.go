@@ -128,7 +128,10 @@ func (d *RunnerDaemon) Start(ctx context.Context) error {
 			}
 		case <-pollTimer.C:
 			if err := d.RunOnce(ctx); err != nil {
-				return err
+				if ctx.Err() != nil {
+					_ = d.sendOfflineHeartbeat(context.Background())
+					return ctx.Err()
+				}
 			}
 			pollTimer.Reset(d.Config.PollInterval)
 		}
