@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -161,6 +162,9 @@ func (a SDKBridgeRuntimeAdapter) Run(ctx context.Context, request RuntimeRequest
 		final["error"] = readErr.Error()
 		return final, readErr
 	}
+	if stderrErr != nil && bridgePipeClosedAfterResult(stderrErr, result) {
+		stderrErr = nil
+	}
 	if stderrErr != nil {
 		final["error"] = stderrErr.Error()
 		return final, stderrErr
@@ -244,6 +248,10 @@ func readBridgeMessages(scanner *bufio.Scanner, requestID string, write RuntimeE
 		}
 	}
 	return scanner.Err()
+}
+
+func bridgePipeClosedAfterResult(err error, result ama.JSON) bool {
+	return err != nil && result != nil && errors.Is(err, os.ErrClosed)
 }
 
 func writeBridgeInput(writer io.Writer, value ama.JSON) error {

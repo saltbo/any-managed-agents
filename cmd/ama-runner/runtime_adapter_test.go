@@ -195,3 +195,15 @@ func TestBridgeProtocolErrorBranches(t *testing.T) {
 		t.Fatalf("expected writer error, got %v", err)
 	}
 }
+
+func TestBridgePipeClosedAfterResultOnlyIgnoresCompletedBridgeClose(t *testing.T) {
+	if !bridgePipeClosedAfterResult(os.ErrClosed, ama.JSON{"exitCode": 0}) {
+		t.Fatal("expected closed bridge pipe after result to be ignored")
+	}
+	if bridgePipeClosedAfterResult(os.ErrClosed, nil) {
+		t.Fatal("expected closed bridge pipe before result to remain fatal")
+	}
+	if bridgePipeClosedAfterResult(errors.New("bridge failed"), ama.JSON{"exitCode": 0}) {
+		t.Fatal("expected non-close bridge errors to remain fatal")
+	}
+}
