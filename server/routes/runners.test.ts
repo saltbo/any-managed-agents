@@ -403,6 +403,56 @@ describe('[CF] /api/runners', () => {
     expect(JSON.stringify(sessionEvents.data)).not.toContain('raw-secret-value')
   })
 
+  it('does not let a stale completed lease overwrite a newer pending self-hosted session turn', async () => {
+    const authorization = await signIn()
+    const environment = await createSelfHostedEnvironment(authorization)
+    const agent = await createAgent(authorization)
+
+    const runnerRes = await jsonFetch('/api/runners', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Local runner',
+        environmentId: environment.id,
+        capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+        maxConcurrent: 1,
+      }),
+    })
+    expect(runnerRes.status).toBe(201)
+    const runner = (await runnerRes.json()) as { id: string }
+
+    const heartbeatRes = await jsonFetch(`/api/runners/${runner.id}/heartbeats`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ status: 'active', capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY] }),
+    })
+    expect(heartbeatRes.status).toBe(200)
+
+    const session = await createSelfHostedSession(authorization, agent.id, environment.id)
+    const leaseRes = await jsonFetch(`/api/runners/${runner.id}/leases`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ leaseDurationSeconds: 90 }),
+    })
+    expect(leaseRes.status).toBe(201)
+    const lease = (await leaseRes.json()) as { id: string }
+
+    const channel = await openRunnerSessionChannel(authorization, runner.id, lease.id)
+    await env.DB.prepare("UPDATE sessions SET status = 'pending', status_reason = 'waiting-for-runner', updated_at = ? WHERE id = ?")
+      .bind(new Date().toISOString(), session.id)
+      .run()
+
+    const completeRes = await jsonFetch(`/api/runners/${runner.id}/leases/${lease.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'completed', result: { ok: true } }),
+    })
+    expect(completeRes.status).toBe(200)
+    const sessionRes = await jsonFetch(`/api/sessions/${session.id}`, authorization)
+    await expect(sessionRes.json()).resolves.toMatchObject({
+      id: session.id,
+      status: 'pending',
+      statusReason: 'waiting-for-runner',
+    })
+    channel.close()
+  })
+
   it('accepts FlareAuth runner tokens and rejects missing, invalid, or mismatched runner tokens', async () => {
     const operatorAuthorization = await signIn()
     const runnerAuthorization = operatorAuthorization.replace('e2e:', 'e2e-runner:')

@@ -1603,7 +1603,7 @@ const routes = app
         await db
           .update(sessions)
           .set(sessionUpdate)
-          .where(and(eq(sessions.id, workItem.sessionId), eq(sessions.projectId, auth.project.id)))
+          .where(and(eq(sessions.id, workItem.sessionId), eq(sessions.projectId, auth.project.id), eq(sessions.status, 'running')))
       }
     }
     const updatedLease = await db.select().from(runnerWorkLeases).where(eq(runnerWorkLeases.id, leaseId)).get()
