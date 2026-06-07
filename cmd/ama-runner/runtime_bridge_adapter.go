@@ -138,6 +138,8 @@ func (a SDKBridgeRuntimeAdapter) Run(ctx context.Context, request RuntimeRequest
 		"provider":      request.Provider,
 		"model":         request.Model,
 		"runtimeConfig": request.RuntimeConfig,
+		"resume":        request.Resume,
+		"resumeToken":   request.ResumeToken,
 	}
 	if err := writeBridgeInput(stdinWriter, runRequest); err != nil {
 		a.stopProcess(cmd)

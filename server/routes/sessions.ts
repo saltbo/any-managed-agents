@@ -811,6 +811,8 @@ async function enqueueSelfHostedSessionWork(
     runtimeEnv?: Record<string, string>
     runtimeSecretEnv?: Array<z.infer<typeof RuntimeSecretEnvSchema>>
     initialPrompt?: string
+    resume?: boolean
+    resumeToken?: string | null
   },
 ) {
   const timestamp = now()
@@ -829,6 +831,8 @@ async function enqueueSelfHostedSessionWork(
     runtimeEnv: values.runtimeEnv ?? {},
     runtimeSecretEnv: values.runtimeSecretEnv ?? [],
     initialPrompt: values.initialPrompt ?? null,
+    resume: values.resume ?? false,
+    resumeToken: values.resumeToken ?? null,
     requiredRunnerCapability:
       values.environmentSnapshot?.hostingMode === 'self_hosted'
         ? runtimeProviderModelCapability(
@@ -859,6 +863,28 @@ async function enqueueSelfHostedSessionWork(
     createdAt: timestamp,
     updatedAt: timestamp,
   })
+}
+
+async function latestRunnerResumeToken(db: Db, auth: AuthContext, sessionId: string) {
+  const rows = await db
+    .select({ result: runnerWorkItems.result })
+    .from(runnerWorkItems)
+    .where(
+      and(
+        eq(runnerWorkItems.projectId, auth.project.id),
+        eq(runnerWorkItems.sessionId, sessionId),
+        eq(runnerWorkItems.status, 'succeeded'),
+      ),
+    )
+    .orderBy(desc(runnerWorkItems.updatedAt))
+    .limit(5)
+  for (const row of rows) {
+    const result = parseJson<Record<string, unknown>>(row.result)
+    if (typeof result?.resumeToken === 'string' && result.resumeToken) {
+      return result.resumeToken
+    }
+  }
+  return null
 }
 
 function mcpConnectorIds(snapshot: Record<string, unknown>) {
@@ -1519,7 +1545,38 @@ async function dispatchSessionPromptCommand(
   const path = '/rpc'
   if (!session.sandboxId) {
     if (!(await hasAcceptedRunnerSessionChannel(env, session.id))) {
-      return { status: 409 as const, message: 'Runner session channel is unavailable' }
+      const agentSnapshot = parseAgentSnapshot(session.agentSnapshot)
+      if (!agentSnapshot) {
+        return { status: 409 as const, message: 'Session agent snapshot is required' }
+      }
+      const environmentSnapshot = normalizeEnvironmentSnapshot(
+        parseJson<ReturnType<typeof serializeEnvironmentVersion>>(session.environmentSnapshot),
+      )
+      const submittedAt = now()
+      const queued = await db
+        .update(sessions)
+        .set({ status: 'pending', statusReason: 'waiting-for-runner', updatedAt: submittedAt })
+        .where(
+          and(
+            eq(sessions.id, session.id),
+            eq(sessions.projectId, auth.project.id),
+            or(eq(sessions.status, 'idle'), eq(sessions.status, 'running')),
+          ),
+        )
+        .returning({ id: sessions.id })
+        .get()
+      if (!queued) {
+        return { status: 409 as const, message: 'Session runtime is no longer active' }
+      }
+      await enqueueSelfHostedSessionWork(env, db, auth, {
+        session,
+        agentSnapshot,
+        environmentSnapshot,
+        initialPrompt: message,
+        resume: true,
+        resumeToken: await latestRunnerResumeToken(db, auth, session.id),
+      })
+      return { status: 202 as const, runtime: 'self-hosted-runner' as const, accepted: true, sessionId: session.id, path }
     }
     const dispatched = await dispatchRunnerSessionCommand(env, session.id, {
       id: newId('runnercmd'),

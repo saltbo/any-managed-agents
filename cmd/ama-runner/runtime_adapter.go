@@ -20,6 +20,8 @@ type RuntimeRequest struct {
 	Provider      string
 	Model         string
 	InitialPrompt string
+	Resume        bool
+	ResumeToken   string
 	WorkDir       string
 }
 

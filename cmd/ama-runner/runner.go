@@ -53,6 +53,8 @@ type WorkPayload struct {
 	RequiredRunnerCapability string            `json:"requiredRunnerCapability"`
 	RuntimeEnv               map[string]string `json:"runtimeEnv"`
 	InitialPrompt            *string           `json:"initialPrompt"`
+	Resume                   bool              `json:"resume"`
+	ResumeToken              string            `json:"resumeToken"`
 	Approved                 bool              `json:"approved"`
 	ToolCallID               string            `json:"toolCallId"`
 	ToolName                 string            `json:"toolName"`
@@ -419,6 +421,8 @@ func (d *RunnerDaemon) runExternalSession(
 		Provider:      payload.Provider,
 		Model:         payload.Model,
 		InitialPrompt: initialPrompt(payload),
+		Resume:        payload.Resume,
+		ResumeToken:   payload.ResumeToken,
 		WorkDir:       d.Config.WorkDir,
 	}, func(eventType string, eventPayload ama.JSON) error {
 		writeMu.Lock()
