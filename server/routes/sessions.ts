@@ -1545,49 +1545,21 @@ async function dispatchSessionPromptCommand(
   const path = '/rpc'
   if (!session.sandboxId) {
     if (session.status === 'idle' || !(await hasAcceptedRunnerSessionChannel(env, session.id))) {
-      const agentSnapshot = parseAgentSnapshot(session.agentSnapshot)
-      if (!agentSnapshot) {
-        return { status: 409 as const, message: 'Session agent snapshot is required' }
-      }
-      const environmentSnapshot = normalizeEnvironmentSnapshot(
-        parseJson<ReturnType<typeof serializeEnvironmentVersion>>(session.environmentSnapshot),
-      )
-      const submittedAt = now()
-      const queued = await db
-        .update(sessions)
-        .set({ status: 'pending', statusReason: 'waiting-for-runner', updatedAt: submittedAt })
-        .where(
-          and(
-            eq(sessions.id, session.id),
-            eq(sessions.projectId, auth.project.id),
-            or(eq(sessions.status, 'idle'), eq(sessions.status, 'running')),
-          ),
-        )
-        .returning({ id: sessions.id })
-        .get()
-      if (!queued) {
-        return { status: 409 as const, message: 'Session runtime is no longer active' }
-      }
-      await enqueueSelfHostedSessionWork(env, db, auth, {
-        session,
-        agentSnapshot,
-        environmentSnapshot,
-        runtimeEnv: parseJson<Record<string, string>>(session.runtimeEnv) ?? {},
-        runtimeSecretEnv: parseJson<Array<z.infer<typeof RuntimeSecretEnvSchema>>>(session.runtimeSecretEnv) ?? [],
-        initialPrompt: message,
-        resume: true,
-        resumeToken: await latestRunnerResumeToken(db, auth, session.id),
-      })
-      return { status: 202 as const, runtime: 'self-hosted-runner' as const, accepted: true, sessionId: session.id, path }
+      return await queueSelfHostedSessionCommand(env, db, auth, session, message, path)
     }
-    const dispatched = await dispatchRunnerSessionCommand(env, session.id, {
-      id: newId('runnercmd'),
-      type: 'runtime.rpc',
-      path,
-      body: { type: 'prompt', message },
-    })
+    let dispatched = false
+    try {
+      dispatched = await dispatchRunnerSessionCommand(env, session.id, {
+        id: newId('runnercmd'),
+        type: 'runtime.rpc',
+        path,
+        body: { type: 'prompt', message },
+      })
+    } catch {
+      dispatched = false
+    }
     if (!dispatched) {
-      return { status: 409 as const, message: 'Runner session channel is unavailable' }
+      return await queueSelfHostedSessionCommand(env, db, auth, session, message, path)
     }
     return { status: 202 as const, runtime: 'self-hosted-runner' as const, accepted: true, sessionId: session.id, path }
   }
@@ -1710,6 +1682,50 @@ async function dispatchSessionPromptCommand(
     await markInitialPromptFailed(db, auth, session, safeError.message)
     return { status: 500 as const, message: safeError.message, runtimeError: safeError }
   }
+}
+
+async function queueSelfHostedSessionCommand(
+  env: Env,
+  db: Db,
+  auth: AuthContext,
+  session: SessionRow,
+  message: string,
+  path: string,
+) {
+  const agentSnapshot = parseAgentSnapshot(session.agentSnapshot)
+  if (!agentSnapshot) {
+    return { status: 409 as const, message: 'Session agent snapshot is required' }
+  }
+  const environmentSnapshot = normalizeEnvironmentSnapshot(
+    parseJson<ReturnType<typeof serializeEnvironmentVersion>>(session.environmentSnapshot),
+  )
+  const submittedAt = now()
+  const queued = await db
+    .update(sessions)
+    .set({ status: 'pending', statusReason: 'waiting-for-runner', updatedAt: submittedAt })
+    .where(
+      and(
+        eq(sessions.id, session.id),
+        eq(sessions.projectId, auth.project.id),
+        or(eq(sessions.status, 'idle'), eq(sessions.status, 'running')),
+      ),
+    )
+    .returning({ id: sessions.id })
+    .get()
+  if (!queued) {
+    return { status: 409 as const, message: 'Session runtime is no longer active' }
+  }
+  await enqueueSelfHostedSessionWork(env, db, auth, {
+    session,
+    agentSnapshot,
+    environmentSnapshot,
+    runtimeEnv: parseJson<Record<string, string>>(session.runtimeEnv) ?? {},
+    runtimeSecretEnv: parseJson<Array<z.infer<typeof RuntimeSecretEnvSchema>>>(session.runtimeSecretEnv) ?? [],
+    initialPrompt: message,
+    resume: true,
+    resumeToken: await latestRunnerResumeToken(db, auth, session.id),
+  })
+  return { status: 202 as const, runtime: 'self-hosted-runner' as const, accepted: true, sessionId: session.id, path }
 }
 
 async function assertRuntimeSessionRunning(db: Db, auth: AuthContext, sessionId: string) {
