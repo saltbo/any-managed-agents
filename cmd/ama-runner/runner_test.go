@@ -281,11 +281,11 @@ func TestRunOnceSendsHeartbeatAndCompletesApprovedToolWork(t *testing.T) {
 	if len(client.heartbeats) != 1 {
 		t.Fatalf("expected heartbeat before claim, got %d", len(client.heartbeats))
 	}
-	if len(client.creates) != 1 {
-		t.Fatalf("expected runner registration before heartbeat, got %d", len(client.creates))
+	if len(client.creates) != 0 {
+		t.Fatalf("expected existing runner id to skip registration, got %d registrations", len(client.creates))
 	}
 	if daemon.RunnerID != "runner_1" {
-		t.Fatalf("expected registered runner id, got %q", daemon.RunnerID)
+		t.Fatalf("expected configured runner id, got %q", daemon.RunnerID)
 	}
 	if len(client.updates) != 1 || client.updates[0].Status != "completed" {
 		t.Fatalf("expected completed update, got %#v", client.updates)
@@ -622,7 +622,7 @@ func TestRunOnceLaunchesClaudeCodeRuntimeAndCompletesLease(t *testing.T) {
 
 func TestRunOnceCompletesExternalRuntimeWhenSuccessfulResultHasCompletionWarning(t *testing.T) {
 	for name, result := range map[string]ama.JSON{
-		"top-level-exit-code": {"exitCode": 0},
+		"top-level-exit-code":     {"exitCode": 0},
 		"nested-output-exit-code": {"output": ama.JSON{"exitCode": 0}},
 	} {
 		t.Run(name, func(t *testing.T) {

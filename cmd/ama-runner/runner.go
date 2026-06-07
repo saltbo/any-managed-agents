@@ -106,11 +106,9 @@ func (d *RunnerDaemon) Start(ctx context.Context) error {
 	if _, err := d.Client.CheckHealth(ctx); err != nil {
 		return err
 	}
-	runnerID, err := d.ensureRunner(ctx)
-	if err != nil {
+	if err := d.ensureRunnerID(ctx); err != nil {
 		return err
 	}
-	d.RunnerID = runnerID
 	if err := d.heartbeat(ctx); err != nil {
 		return err
 	}
@@ -141,12 +139,8 @@ func (d *RunnerDaemon) Start(ctx context.Context) error {
 }
 
 func (d *RunnerDaemon) RunOnce(ctx context.Context) error {
-	if d.RunnerID == "" {
-		runnerID, err := d.ensureRunner(ctx)
-		if err != nil {
-			return err
-		}
-		d.RunnerID = runnerID
+	if err := d.ensureRunnerID(ctx); err != nil {
+		return err
 	}
 	if err := d.heartbeat(ctx); err != nil {
 		return err
@@ -158,6 +152,22 @@ func (d *RunnerDaemon) RunOnce(ctx context.Context) error {
 		return err
 	}
 	return d.executeLease(ctx, lease)
+}
+
+func (d *RunnerDaemon) ensureRunnerID(ctx context.Context) error {
+	if d.RunnerID != "" {
+		return nil
+	}
+	if d.Config.RunnerID != "" {
+		d.RunnerID = d.Config.RunnerID
+		return nil
+	}
+	runnerID, err := d.ensureRunner(ctx)
+	if err != nil {
+		return err
+	}
+	d.RunnerID = runnerID
+	return nil
 }
 
 func (d *RunnerDaemon) ensureRunner(ctx context.Context) (string, error) {
