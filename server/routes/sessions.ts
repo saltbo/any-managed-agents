@@ -20,6 +20,7 @@ import {
   mcpConnectionTools,
   runners,
   runnerWorkItems,
+  runnerWorkLeases,
   sessionEvents,
   sessions,
   vaultCredentials,
@@ -1943,7 +1944,7 @@ async function stopSession(
     return errorResponse(c, 409, 'conflict', 'Archived sessions cannot be stopped')
   }
   if (!session.sandboxId) {
-    return errorResponse(c, 409, 'conflict', 'Session has no sandbox runtime to stop')
+    return await stopSelfHostedSession(c, db, auth, session, reason)
   }
 
   const stoppingAt = now()
@@ -1992,6 +1993,85 @@ async function stopSession(
   const stopped = await findSession(db, auth, session.id)
   if (!stopped) {
     throw new Error('Stopped session row is required')
+  }
+  return c.json(serializeSession(stopped), 200)
+}
+
+async function stopSelfHostedSession(
+  c: Context<{ Bindings: Env }>,
+  db: Db,
+  auth: AuthContext,
+  session: SessionRow,
+  reason: string,
+) {
+  const stoppedAt = now()
+  const activeWorkItems = await db
+    .select({ id: runnerWorkItems.id, runnerId: runnerWorkItems.runnerId, leaseId: runnerWorkItems.leaseId })
+    .from(runnerWorkItems)
+    .where(
+      and(
+        eq(runnerWorkItems.projectId, auth.project.id),
+        eq(runnerWorkItems.sessionId, session.id),
+        inArray(runnerWorkItems.status, ['available', 'leased']),
+      ),
+    )
+
+  if (activeWorkItems.length) {
+    const workItemIds = activeWorkItems.map((item) => item.id)
+    const leaseIds = activeWorkItems.map((item) => item.leaseId).filter((id): id is string => Boolean(id))
+    const runnerIds = [...new Set(activeWorkItems.map((item) => item.runnerId).filter((id): id is string => Boolean(id)))]
+
+    await db
+      .update(runnerWorkItems)
+      .set({
+        status: 'cancelled',
+        leaseExpiresAt: null,
+        error: stringify({ message: `Session stopped: ${reason}` }),
+        updatedAt: stoppedAt,
+      })
+      .where(and(eq(runnerWorkItems.projectId, auth.project.id), inArray(runnerWorkItems.id, workItemIds)))
+
+    if (leaseIds.length) {
+      await db
+        .update(runnerWorkLeases)
+        .set({
+          status: 'cancelled',
+          error: stringify({ message: `Session stopped: ${reason}` }),
+          updatedAt: stoppedAt,
+        })
+        .where(and(eq(runnerWorkLeases.projectId, auth.project.id), inArray(runnerWorkLeases.id, leaseIds)))
+    }
+
+    for (const runnerId of runnerIds) {
+      await db
+        .update(runners)
+        .set({
+          currentLoad: sql`case when ${runners.currentLoad} > 0 then ${runners.currentLoad} - 1 else 0 end`,
+          updatedAt: stoppedAt,
+        })
+        .where(and(eq(runners.id, runnerId), eq(runners.projectId, auth.project.id)))
+    }
+  }
+
+  await db
+    .update(sessions)
+    .set({ status: 'stopped', statusReason: 'runner-cancelled', stoppedAt, updatedAt: stoppedAt })
+    .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
+
+  await recordAudit(db, {
+    auth,
+    action: 'session.stop',
+    resourceType: 'session',
+    resourceId: session.id,
+    outcome: 'success',
+    requestId: requestId(c),
+    sessionId: session.id,
+    metadata: { reason, hostingMode: 'self_hosted', cancelledWorkItems: activeWorkItems.length },
+  })
+
+  const stopped = await findSession(db, auth, session.id)
+  if (!stopped) {
+    throw new Error('Stopped self-hosted session row is required')
   }
   return c.json(serializeSession(stopped), 200)
 }
