@@ -55,7 +55,6 @@ import {
   runtimeMessagesFromEvents,
   stopSessionRuntime as stopCloudSessionRuntime,
 } from '../runtime/session-runtime'
-import { dispatchRunnerSessionCommand, hasAcceptedRunnerSessionChannel } from './runners'
 import {
   type EnvironmentHostingMode,
   EnvironmentHostingModeSchema,
@@ -1544,24 +1543,7 @@ async function dispatchSessionPromptCommand(
   }
   const path = '/rpc'
   if (!session.sandboxId) {
-    if (session.status === 'idle' || !(await hasAcceptedRunnerSessionChannel(env, session.id))) {
-      return await queueSelfHostedSessionCommand(env, db, auth, session, message, path)
-    }
-    let dispatched = false
-    try {
-      dispatched = await dispatchRunnerSessionCommand(env, session.id, {
-        id: newId('runnercmd'),
-        type: 'runtime.rpc',
-        path,
-        body: { type: 'prompt', message },
-      })
-    } catch {
-      dispatched = false
-    }
-    if (!dispatched) {
-      return await queueSelfHostedSessionCommand(env, db, auth, session, message, path)
-    }
-    return { status: 202 as const, runtime: 'self-hosted-runner' as const, accepted: true, sessionId: session.id, path }
+    return await queueSelfHostedSessionCommand(env, db, auth, session, message, path)
   }
 
   const submittedAt = now()
