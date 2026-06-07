@@ -597,6 +597,39 @@ describe('[CF] /api/runners', () => {
     })
   })
 
+  it('binds external tenants to a non-default project in the same organization', async () => {
+    const operatorAuthorization = await signIn()
+    const createProjectRes = await jsonFetch('/api/projects', operatorAuthorization, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Secondary project' }),
+    })
+    expect(createProjectRes.status).toBe(201)
+    const project = (await createProjectRes.json()) as { id: string }
+    const externalTenantId = `ak-org-${crypto.randomUUID()}`
+
+    const bindingRes = await jsonFetch(`/api/projects/${project.id}/external-bindings`, operatorAuthorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        issuer: 'https://ak-secondary.e2e.example.com',
+        externalTenantId,
+        capabilities: ['sandbox.exec'],
+        metadata: { platform: 'agent-kanban' },
+      }),
+    })
+    expect(bindingRes.status).toBe(201)
+    await expect(bindingRes.json()).resolves.toMatchObject({
+      issuer: 'https://ak-secondary.e2e.example.com',
+      externalTenantId,
+      projectId: project.id,
+    })
+
+    const listRes = await jsonFetch(`/api/projects/${project.id}/external-bindings`, operatorAuthorization)
+    expect(listRes.status).toBe(200)
+    await expect(listRes.json()).resolves.toMatchObject({
+      data: [expect.objectContaining({ externalTenantId, projectId: project.id })],
+    })
+  })
+
   it('accepts introspected FlareAuth token-exchange access tokens for federated runner registration', async () => {
     const operatorAuthorization = await signIn()
     const environment = await createSelfHostedEnvironment(operatorAuthorization)

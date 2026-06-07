@@ -233,8 +233,13 @@ const routes = app
       return auth
     }
     const { projectId } = c.req.valid('param')
-    if (projectId !== auth.project.id) {
-      return c.json({ data: [] }, 200)
+    const project = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.organizationId, auth.organization.id)))
+      .get()
+    if (!project) {
+      return c.json({ error: { type: 'not_found', message: 'Project not found' } }, 404)
     }
     const rows = await db.select().from(externalProjectBindings).where(eq(externalProjectBindings.projectId, projectId))
     return c.json({ data: rows.map(serializeExternalBinding) }, 200)
@@ -246,7 +251,12 @@ const routes = app
       return auth
     }
     const { projectId } = c.req.valid('param')
-    if (projectId !== auth.project.id) {
+    const project = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.organizationId, auth.organization.id)))
+      .get()
+    if (!project) {
       return c.json({ error: { type: 'not_found', message: 'Project not found' } }, 404)
     }
     const body = c.req.valid('json')
