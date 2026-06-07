@@ -1250,6 +1250,54 @@ describe('[CF] /api/runners', () => {
     replacementChannel.close()
   })
 
+  it('settles a completed lease when its accepted channel closes first', async () => {
+    const authorization = await signIn()
+    const environment = await createSelfHostedEnvironment(authorization)
+    const agent = await createAgent(authorization)
+    const runnerRes = await jsonFetch('/api/runners', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Completion race runner',
+        environmentId: environment.id,
+        capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY],
+      }),
+    })
+    const runner = (await runnerRes.json()) as { id: string }
+    await jsonFetch(`/api/runners/${runner.id}/heartbeats`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ status: 'active', currentLoad: 0, capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY] }),
+    })
+    const session = await createSelfHostedSession(authorization, agent.id, environment.id)
+    const claimRes = await jsonFetch(`/api/runners/${runner.id}/leases`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ leaseDurationSeconds: 90 }),
+    })
+    const lease = (await claimRes.json()) as { id: string }
+    const channel = await openRunnerSessionChannel(authorization, runner.id, lease.id)
+    const messages = collectMessages(channel)
+    await waitForMessages(messages, 1)
+
+    channel.close()
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    const recoverySessionRes = await jsonFetch(`/api/sessions/${session.id}`, authorization)
+    await expect(recoverySessionRes.json()).resolves.toMatchObject({
+      status: 'pending',
+      statusReason: 'waiting-for-runner-recovery',
+    })
+
+    const completeRes = await jsonFetch(`/api/runners/${runner.id}/leases/${lease.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'completed', result: { ok: true } }),
+    })
+    expect(completeRes.status).toBe(200)
+    const completedSessionRes = await jsonFetch(`/api/sessions/${session.id}`, authorization)
+    await expect(completedSessionRes.json()).resolves.toMatchObject({
+      id: session.id,
+      status: 'idle',
+      statusReason: null,
+    })
+  })
+
   it('does not accept a runner channel for a session that is no longer waiting', async () => {
     const authorization = await signIn()
     const environment = await createSelfHostedEnvironment(authorization)

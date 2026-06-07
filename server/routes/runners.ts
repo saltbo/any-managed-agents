@@ -1620,6 +1620,10 @@ const routes = app
           eq(sessions.status, 'pending'),
           or(eq(sessions.statusReason, 'waiting-for-runner'), eq(sessions.statusReason, 'waiting-for-runner-recovery')),
         )
+        const pendingRecoveryForAcceptedChannel = and(
+          eq(sessions.status, 'pending'),
+          eq(sessions.statusReason, 'waiting-for-runner-recovery'),
+        )
         await db
           .update(sessions)
           .set(sessionUpdate)
@@ -1628,7 +1632,7 @@ const routes = app
               eq(sessions.id, workItem.sessionId),
               eq(sessions.projectId, auth.project.id),
               activeChannel
-                ? eq(sessions.status, 'running')
+                ? or(eq(sessions.status, 'running'), pendingRecoveryForAcceptedChannel)
                 : or(eq(sessions.status, 'running'), pendingWithoutAcceptedChannel),
             ),
           )
