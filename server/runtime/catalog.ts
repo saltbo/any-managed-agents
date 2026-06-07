@@ -23,7 +23,7 @@ export const RUNTIME_CATALOG: readonly RuntimeCatalogEntry[] = [
   {
     runtime: 'codex',
     hostingModes: ['self_hosted'],
-    providerModels: [{ provider: 'provider_codex', model: 'gpt-5.3-codex' }],
+    providerModels: [{ provider: '*', model: 'gpt-5.3-codex' }],
   },
   {
     runtime: 'copilot',
@@ -54,7 +54,9 @@ export function runtimeCatalogSupportsProviderModel(
   const entry = RUNTIME_CATALOG.find((item) => item.runtime === runtime)
   return Boolean(
     entry?.hostingModes.includes(hostingMode) &&
-      entry.providerModels.some((capability) => capability.provider === provider && capability.model === model),
+      entry.providerModels.some(
+        (capability) => (capability.provider === '*' || capability.provider === provider) && capability.model === model,
+      ),
   )
 }
 
