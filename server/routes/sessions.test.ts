@@ -496,7 +496,7 @@ describe('[CF] /api/sessions', () => {
     const environment = (await environmentRes.json()) as { id: string; hostingMode: string; runtime: string }
     expect(environment.hostingMode).toBe('self_hosted')
     expect(environment.runtime).toBe('ama')
-    await registerSelfHostedRunnerSupport(authorization, environment.id, DEFAULT_AMA_RUNNER_CAPABILITY)
+    const runner = await registerSelfHostedRunnerSupport(authorization, environment.id, DEFAULT_AMA_RUNNER_CAPABILITY)
     const agentRes = await jsonFetch('/api/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({
@@ -579,6 +579,32 @@ describe('[CF] /api/sessions', () => {
         message: 'Session runtime is not active',
       },
     })
+    const workRow = await env.DB.prepare('SELECT payload FROM runner_work_items WHERE session_id = ?')
+      .bind(created.id)
+      .first<{ payload: string }>()
+    expect(workRow).toBeTruthy()
+    const storedPayload = JSON.parse(workRow!.payload) as {
+      runtimeEnv: Record<string, string>
+      runtimeSecretEnv: Array<{ name: string; ref: string }>
+    }
+    expect(storedPayload.runtimeEnv).not.toHaveProperty('AK_AGENT_KEY')
+    expect(storedPayload.runtimeSecretEnv).toEqual([{ name: 'AK_AGENT_KEY', ref: credential.activeVersionId }])
+
+    const heartbeatRes = await jsonFetch(`/api/runners/${runner.id}/heartbeats`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ status: 'active', capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY] }),
+    })
+    expect(heartbeatRes.status).toBe(200)
+    const leaseRes = await jsonFetch(`/api/runners/${runner.id}/leases`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+    expect(leaseRes.status).toBe(201)
+    const lease = (await leaseRes.json()) as {
+      workItem: { payload: { runtimeEnv: Record<string, string>; runtimeSecretEnv: Array<{ name: string; ref: string }> } }
+    }
+    expect(lease.workItem.payload.runtimeEnv.AK_AGENT_KEY).toBe('raw-github-token')
+    expect(lease.workItem.payload.runtimeSecretEnv).toEqual([{ name: 'AK_AGENT_KEY', ref: credential.activeVersionId }])
   })
 
   it('normalizes GitHub repository resource refs and rejects unsafe workspace inputs', async () => {

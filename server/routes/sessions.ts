@@ -55,7 +55,6 @@ import {
   runtimeMessagesFromEvents,
   stopSessionRuntime as stopCloudSessionRuntime,
 } from '../runtime/session-runtime'
-import { decryptSecretValue } from '../vaultCrypto'
 import { dispatchRunnerSessionCommand, hasAcceptedRunnerSessionChannel } from './runners'
 import {
   type EnvironmentHostingMode,
@@ -815,7 +814,6 @@ async function enqueueSelfHostedSessionWork(
   },
 ) {
   const timestamp = now()
-  const runtimeEnv = await materializeSelfHostedRuntimeEnv(env, db, auth, values.runtimeEnv ?? {}, values.runtimeSecretEnv ?? [])
   const payload = {
     protocol: 'ama-runner-work',
     type: 'session.start',
@@ -828,7 +826,7 @@ async function enqueueSelfHostedSessionWork(
     runtimeDriver: runtimeDriverName(values.environmentSnapshot?.runtime ?? 'ama', 'self_hosted'),
     agentSnapshot: values.agentSnapshot,
     environmentSnapshot: values.environmentSnapshot,
-    runtimeEnv,
+    runtimeEnv: values.runtimeEnv ?? {},
     runtimeSecretEnv: values.runtimeSecretEnv ?? [],
     initialPrompt: values.initialPrompt ?? null,
     requiredRunnerCapability:
@@ -861,43 +859,6 @@ async function enqueueSelfHostedSessionWork(
     createdAt: timestamp,
     updatedAt: timestamp,
   })
-}
-
-async function materializeSelfHostedRuntimeEnv(
-  env: Env,
-  db: Db,
-  auth: AuthContext,
-  runtimeEnv: Record<string, string>,
-  runtimeSecretEnv: Array<z.infer<typeof RuntimeSecretEnvSchema>>,
-) {
-  const materialized: Record<string, string> = { ...runtimeEnv }
-  for (const item of runtimeSecretEnv) {
-    const version = await db
-      .select({ metadata: vaultCredentialVersions.metadata })
-      .from(vaultCredentialVersions)
-      .where(
-        and(
-          eq(vaultCredentialVersions.id, item.ref),
-          eq(vaultCredentialVersions.organizationId, auth.organization.id),
-          or(eq(vaultCredentialVersions.projectId, auth.project.id), isNull(vaultCredentialVersions.projectId)),
-          eq(vaultCredentialVersions.status, 'active'),
-        ),
-      )
-      .get()
-    const metadata = version ? parseJson<Record<string, unknown>>(version.metadata) : null
-    const value = await decryptSecretValue(env, metadata?.encryptedSecretValue)
-    if (typeof value === 'string') {
-      materialized[item.name] = value
-      continue
-    }
-    const legacyValue = metadata?.localSecretValue
-    if (typeof legacyValue === 'string') {
-      materialized[item.name] = legacyValue
-      continue
-    }
-    throw new Error(`Runtime secret ${item.ref} cannot be resolved for self-hosted runner dispatch`)
-  }
-  return materialized
 }
 
 function mcpConnectorIds(snapshot: Record<string, unknown>) {

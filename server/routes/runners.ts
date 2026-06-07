@@ -28,6 +28,7 @@ import {
   parseListCursor,
 } from '../openapi'
 import { redactSensitiveValue } from '../redaction'
+import { decryptSecretValue } from '../vaultCrypto'
 
 const app = createApiRouter()
 
@@ -232,6 +233,10 @@ function parseJson<T>(value: string | null) {
   return value ? (redactSensitiveValue(JSON.parse(value)) as T) : null
 }
 
+function parseRawJson<T>(value: string | null) {
+  return value ? (JSON.parse(value) as T) : null
+}
+
 function stringify(value: unknown) {
   return JSON.stringify(redactSensitiveValue(value))
 }
@@ -338,6 +343,65 @@ function serializeLease(lease: LeaseRow, workItem: WorkItemRow) {
     createdAt: lease.createdAt,
     updatedAt: lease.updatedAt,
   }
+}
+
+function serializeLeaseForRunner(lease: LeaseRow, workItem: WorkItemRow) {
+  return {
+    ...serializeLease(lease, workItem),
+    workItem: {
+      ...serializeWorkItem(workItem),
+      payload: parseRawJson<Record<string, unknown>>(workItem.payload) ?? {},
+    },
+  }
+}
+
+async function materializeLeaseWorkItemForRunner(env: Env, db: Db, auth: AuthContext, workItem: WorkItemRow) {
+  const payload = parseRawJson<Record<string, unknown>>(workItem.payload) ?? {}
+  if (payload.type !== 'session.start') {
+    return workItem
+  }
+  const runtimeSecretEnv = Array.isArray(payload.runtimeSecretEnv) ? payload.runtimeSecretEnv : []
+  if (runtimeSecretEnv.length === 0) {
+    return workItem
+  }
+  const runtimeEnv =
+    payload.runtimeEnv && typeof payload.runtimeEnv === 'object' && !Array.isArray(payload.runtimeEnv)
+      ? { ...(payload.runtimeEnv as Record<string, string>) }
+      : {}
+  for (const item of runtimeSecretEnv) {
+    if (!item || typeof item !== 'object') {
+      continue
+    }
+    const { name, ref } = item as { name?: unknown; ref?: unknown }
+    if (typeof name !== 'string' || typeof ref !== 'string') {
+      continue
+    }
+    const version = await db
+      .select({ metadata: vaultCredentialVersions.metadata })
+      .from(vaultCredentialVersions)
+      .where(
+        and(
+          eq(vaultCredentialVersions.id, ref),
+          eq(vaultCredentialVersions.organizationId, auth.organization.id),
+          or(eq(vaultCredentialVersions.projectId, auth.project.id), isNull(vaultCredentialVersions.projectId)),
+          eq(vaultCredentialVersions.status, 'active'),
+        ),
+      )
+      .get()
+    const metadata = version ? parseRawJson<Record<string, unknown>>(version.metadata) : null
+    const value = await decryptSecretValue(env, metadata?.encryptedSecretValue)
+    if (typeof value === 'string') {
+      runtimeEnv[name] = value
+      continue
+    }
+    const legacyValue = metadata?.localSecretValue
+    if (typeof legacyValue === 'string') {
+      runtimeEnv[name] = legacyValue
+      continue
+    }
+    throw new Error(`Runtime secret ${ref} cannot be resolved for self-hosted runner dispatch`)
+  }
+  return { ...workItem, payload: JSON.stringify({ ...payload, runtimeEnv }) }
 }
 
 async function findRunner(db: Db, auth: AuthContext, runnerId: string) {
@@ -1417,7 +1481,8 @@ const routes = app
     if (!leasedWorkItem) {
       throw new Error('Leased work item row is required')
     }
-    return c.json(serializeLease(lease, leasedWorkItem), 201)
+    const responseWorkItem = await materializeLeaseWorkItemForRunner(c.env, db, auth, leasedWorkItem)
+    return c.json(serializeLeaseForRunner(lease, responseWorkItem), 201)
   })
   .openapi(updateLeaseRoute, async (c) => {
     const { runnerId, leaseId } = c.req.valid('param')
