@@ -40,7 +40,11 @@ import {
 } from '../openapi'
 import { evaluateMcpToolPolicy, evaluateProviderPolicy, evaluateSandboxRuntimePolicy } from '../policy'
 import { redactSensitiveValue } from '../redaction'
-import { runnerSupportsRuntimeProviderModel, runtimeProviderModelCapability } from '../runtime/catalog'
+import {
+  runnerSupportsRuntimeProviderModel,
+  runtimeCatalogSupportsProviderModel,
+  runtimeProviderModelCapability,
+} from '../runtime/catalog'
 import { runtimeDriver, runtimeDriverName, runtimeMetadata } from '../runtime/drivers'
 import { safeRuntimeError } from '../runtime/runtime-error'
 import {
@@ -997,29 +1001,6 @@ async function sessionInitialPrompt(db: Db, projectId: string, agent: AgentRow, 
   return initialPrompt ? `${memoryBlock}\n\nCurrent task:\n${initialPrompt}` : memoryBlock
 }
 
-async function selfHostedRunnerSupportsProviderModel(
-  db: Db,
-  auth: AuthContext,
-  environmentId: string,
-  runtime: EnvironmentRuntime,
-  provider: string,
-  model: string,
-) {
-  const rows = await db
-    .select({ capabilities: runners.capabilities })
-    .from(runners)
-    .where(
-      and(
-        eq(runners.projectId, auth.project.id),
-        ne(runners.status, 'disabled'),
-        or(eq(runners.environmentId, environmentId), isNull(runners.environmentId)),
-      ),
-    )
-  return rows.some((row) =>
-    runnerSupportsRuntimeProviderModel(parseJson<string[]>(row.capabilities) ?? [], runtime, provider, model),
-  )
-}
-
 async function validateRuntimeProviderModel(
   db: Db,
   auth: AuthContext,
@@ -1034,7 +1015,7 @@ async function validateRuntimeProviderModel(
     return false
   }
   if (hostingMode === 'self_hosted') {
-    return await selfHostedRunnerSupportsProviderModel(db, auth, environmentId, runtime, provider, model)
+    return runtimeCatalogSupportsProviderModel(hostingMode, runtime, provider, model)
   }
   return driver.supportsCloudProviderModel(provider, model)
 }

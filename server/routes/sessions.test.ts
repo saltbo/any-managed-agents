@@ -974,22 +974,14 @@ describe('[CF] /api/sessions', () => {
     expect(agentRes.status).toBe(201)
     const agent = (await agentRes.json()) as { id: string }
 
-    const unsupportedRes = await jsonFetch('/api/sessions', authorization, {
+    const queuedRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
     })
-    expect(unsupportedRes.status).toBe(409)
-    await expect(unsupportedRes.json()).resolves.toMatchObject({
-      error: {
-        type: 'conflict',
-        details: {
-          resourceType: 'runtime_catalog',
-          hostingMode: 'self_hosted',
-          runtime: 'ama',
-          provider: 'workers-ai',
-          model: '@cf/moonshotai/kimi-k2.6',
-        },
-      },
+    expect(queuedRes.status).toBe(201)
+    await expect(queuedRes.json()).resolves.toMatchObject({
+      status: 'pending',
+      statusReason: 'waiting-for-runner',
     })
     await registerSelfHostedRunnerSupport(authorization, environment.id, DEFAULT_AMA_RUNNER_CAPABILITY)
     const policyRes = await jsonFetch('/api/governance/policy', authorization, {
@@ -1805,7 +1797,7 @@ describe('[CF] /api/sessions', () => {
     })
   })
 
-  it('requires self-hosted external runtimes to declare exact provider and model support', async () => {
+  it('queues self-hosted external runtime sessions and requires exact runner provider/model support on lease claim', async () => {
     const authorization = await signIn()
     const model = 'gpt-5.3-codex'
     const { providerId } = await createProviderModel(authorization, model)
@@ -1826,21 +1818,13 @@ describe('[CF] /api/sessions', () => {
     })
     expect(wrongRunnerRes.status).toBe(201)
 
-    const unsupportedRes = await jsonFetch('/api/sessions', authorization, {
+    const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
     })
-    expect(unsupportedRes.status).toBe(409)
-    await expect(unsupportedRes.json()).resolves.toMatchObject({
-      error: {
-        type: 'conflict',
-        details: {
-          runtime: 'codex',
-          provider: providerId,
-          model,
-        },
-      },
-    })
+    expect(createRes.status).toBe(201)
+    const session = (await createRes.json()) as { id: string; status: string; statusReason: string | null }
+    expect(session).toMatchObject({ status: 'pending', statusReason: 'waiting-for-runner' })
 
     const exactRunnerRes = await jsonFetch('/api/runners', authorization, {
       method: 'POST',
@@ -1852,14 +1836,6 @@ describe('[CF] /api/sessions', () => {
     })
     expect(exactRunnerRes.status).toBe(201)
     const exactRunner = (await exactRunnerRes.json()) as { id: string }
-
-    const createRes = await jsonFetch('/api/sessions', authorization, {
-      method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
-    })
-    expect(createRes.status).toBe(201)
-    const session = (await createRes.json()) as { id: string; status: string; statusReason: string | null }
-    expect(session).toMatchObject({ status: 'pending', statusReason: 'waiting-for-runner' })
 
     const wrongRunner = (await wrongRunnerRes.json()) as { id: string }
     const wrongHeartbeatRes = await jsonFetch(`/api/runners/${wrongRunner.id}/heartbeats`, authorization, {
