@@ -66,6 +66,12 @@ function systemAuth(project: { id: string; name: string }, organizationId: strin
       subject: 'system:scheduler',
       clientId: null,
       scope: null,
+      issuer: null,
+      externalTenantId: null,
+      runnerId: null,
+      runnerProjectId: null,
+      runnerEnvironmentId: null,
+      runnerCapabilities: [],
     },
   }
 }
@@ -193,6 +199,9 @@ async function dispatchTrigger(env: Env, ctx: ExecutionContext, db: Db, trigger:
       {
         title: trigger.name,
         metadata: sessionMetadata,
+        resourceRefs: parseJson<Record<string, unknown>[]>(trigger.resourceRefs, []),
+        runtimeEnv: parseJson<Record<string, string>>(trigger.runtimeEnv, {}),
+        runtimeSecretEnv: parseJson<Array<{ name: string; ref: string }>>(trigger.runtimeSecretEnv, []),
         initialPrompt: trigger.promptTemplate,
       },
     )

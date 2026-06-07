@@ -16,6 +16,9 @@ func TestRunnerClientSendsBearerJSONRequests(t *testing.T) {
 		if r.Header.Get("authorization") != "Bearer token" {
 			t.Fatalf("missing bearer token")
 		}
+		if r.Header.Get("x-ama-project-id") != "project_1" {
+			t.Fatalf("missing project header")
+		}
 		var body ClaimRunnerLeaseRequest
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Fatal(err)
@@ -28,7 +31,7 @@ func TestRunnerClientSendsBearerJSONRequests(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := Client{Origin: server.URL, AccessToken: "token", HTTPClient: server.Client()}
+	client := Client{Origin: server.URL, AccessToken: "token", ProjectID: "project_1", HTTPClient: server.Client()}
 	lease, err := client.CreateRunnerLease(context.Background(), "runner_1", ClaimRunnerLeaseRequest{LeaseDurationSeconds: 60})
 	if err != nil {
 		t.Fatalf("expected lease, got %v", err)

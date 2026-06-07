@@ -30,9 +30,6 @@ async function main() {
   const operations = generatedOperations(document)
   const outputs = new Map<string, string>([
     ['sdk/openapi.json', jsonContent(document)],
-    ['sdk/typescript/openapi.json', jsonContent(document)],
-    ['sdk/go/openapi.json', jsonContent(document)],
-    ['sdk/python/openapi.json', jsonContent(document)],
     [
       'sdk/typescript/src/generated/operations.ts',
       `// ${GENERATED_HEADER}

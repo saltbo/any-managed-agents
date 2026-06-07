@@ -113,6 +113,10 @@ describe('[CF] /api/agents', () => {
         provider: 'workers-ai',
         model: '@cf/moonshotai/kimi-k2.6',
         skills: ['ama@research'],
+        role: 'maintainer',
+        capabilityTags: ['issue-triage', 'code-review'],
+        handoffPolicy: { enabled: true, targets: [{ role: 'reviewer' }] },
+        memoryPolicy: { enabled: true, mode: 'notebook', scope: 'project_agent' },
         allowedTools: ['web.search'],
         mcpConnectors: ['github'],
         metadata: { owner: 'platform', remove: 'stale' },
@@ -134,6 +138,10 @@ describe('[CF] /api/agents', () => {
       id: created.id,
       version: 1,
       skills: ['ama@research'],
+      role: 'maintainer',
+      capabilityTags: ['issue-triage', 'code-review'],
+      handoffPolicy: { enabled: true, targets: [{ role: 'reviewer' }] },
+      memoryPolicy: { enabled: true, mode: 'notebook', scope: 'project_agent' },
       allowedTools: ['web.search'],
       mcpConnectors: ['github'],
     })
@@ -149,6 +157,10 @@ describe('[CF] /api/agents', () => {
       description: string
       metadata: Record<string, unknown>
       skills: string[]
+      role: string
+      capabilityTags: string[]
+      handoffPolicy: Record<string, unknown>
+      memoryPolicy: Record<string, unknown>
       allowedTools: string[]
     }
     expect(updated.version).toBe(2)
@@ -157,6 +169,10 @@ describe('[CF] /api/agents', () => {
       description: 'Updated description',
       metadata: { owner: 'runtime' },
       skills: ['ama@research'],
+      role: 'maintainer',
+      capabilityTags: ['issue-triage', 'code-review'],
+      handoffPolicy: { enabled: true, targets: [{ role: 'reviewer' }] },
+      memoryPolicy: { enabled: true, mode: 'notebook', scope: 'project_agent' },
       allowedTools: ['web.search'],
     })
     expect(updated.metadata).not.toHaveProperty('remove')
@@ -169,11 +185,36 @@ describe('[CF] /api/agents', () => {
     const clearedTools = (await clearToolsRes.json()) as { version: number; allowedTools: string[] }
     expect(clearedTools).toMatchObject({ version: 3, allowedTools: [] })
 
+    const updateRoleRes = await jsonFetch(`/api/agents/${created.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        role: 'lead',
+        capabilityTags: ['planning'],
+        handoffPolicy: { enabled: true, targets: [{ capability: 'implementation' }] },
+        memoryPolicy: { enabled: false },
+      }),
+    })
+    expect(updateRoleRes.status).toBe(200)
+    const roleUpdated = (await updateRoleRes.json()) as { version: number }
+    expect(roleUpdated).toMatchObject({
+      version: 4,
+      role: 'lead',
+      capabilityTags: ['planning'],
+      handoffPolicy: { enabled: true, targets: [{ capability: 'implementation' }] },
+      memoryPolicy: { enabled: false },
+    })
+
     const versionsRes = await jsonFetch(`/api/agents/${created.id}/versions`, authorization)
     expect(versionsRes.status).toBe(200)
-    const versions = (await versionsRes.json()) as { data: Array<{ version: number; instructions: string }> }
-    expect(versions.data.map((version) => version.version)).toEqual([3, 2, 1])
+    const versions = (await versionsRes.json()) as {
+      data: Array<{ version: number; instructions: string; role: string | null; capabilityTags: string[] }>
+    }
+    expect(versions.data.map((version) => version.version)).toEqual([4, 3, 2, 1])
     expect(versions.data.find((version) => version.version === 1)?.instructions).toBe('Answer with citations.')
+    expect(versions.data.find((version) => version.version === 4)).toMatchObject({
+      role: 'lead',
+      capabilityTags: ['planning'],
+    })
 
     const archiveRes = await jsonFetch(`/api/agents/${created.id}`, authorization, { method: 'DELETE' })
     expect(archiveRes.status).toBe(204)
@@ -282,6 +323,10 @@ describe('[CF] /api/agents', () => {
       body: JSON.stringify({
         name: 'Snapshot agent',
         instructions: 'Original instructions.',
+        role: 'maintainer',
+        capabilityTags: ['triage'],
+        handoffPolicy: { enabled: true, targets: [{ role: 'worker' }] },
+        memoryPolicy: { enabled: true },
       }),
     })
     const agent = (await agentRes.json()) as { id: string }
@@ -293,11 +338,25 @@ describe('[CF] /api/agents', () => {
     expect(sessionRes.status).toBe(201)
     const session = (await sessionRes.json()) as {
       agentVersionId: string
-      agentSnapshot: { version: number; instructions: string }
+      agentSnapshot: {
+        version: number
+        instructions: string
+        role: string
+        capabilityTags: string[]
+        handoffPolicy: Record<string, unknown>
+        memoryPolicy: Record<string, unknown>
+      }
       environmentVersionId: string
       environmentSnapshot: { version: number; packages: Array<{ name: string }> }
     }
-    expect(session.agentSnapshot).toMatchObject({ version: 1, instructions: 'Original instructions.' })
+    expect(session.agentSnapshot).toMatchObject({
+      version: 1,
+      instructions: 'Original instructions.',
+      role: 'maintainer',
+      capabilityTags: ['triage'],
+      handoffPolicy: { enabled: true, targets: [{ role: 'worker' }] },
+      memoryPolicy: { enabled: true },
+    })
     expect(session.environmentSnapshot.version).toBe(1)
 
     await jsonFetch(`/api/environments/${environment.id}`, authorization, {
@@ -311,6 +370,68 @@ describe('[CF] /api/agents', () => {
 
     expect(session.agentSnapshot).toMatchObject({ version: 1, instructions: 'Original instructions.' })
     expect(session.environmentSnapshot.packages).toEqual([{ name: 'tsx', version: 'latest' }])
+  })
+
+  it('stores agent memory only for agents with memory enabled', async () => {
+    const authorization = await signIn()
+    const disabledRes = await jsonFetch('/api/agents', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Worker agent' }),
+    })
+    const disabled = (await disabledRes.json()) as { id: string }
+    const disabledMemoryRes = await jsonFetch(`/api/agents/${disabled.id}/memory`, authorization)
+    expect(disabledMemoryRes.status).toBe(409)
+    await expect(disabledMemoryRes.json()).resolves.toMatchObject({
+      error: { type: 'conflict', message: 'Agent memory is disabled' },
+    })
+
+    const enabledRes = await jsonFetch('/api/agents', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Maintainer agent',
+        memoryPolicy: { enabled: true, mode: 'notebook' },
+      }),
+    })
+    const enabled = (await enabledRes.json()) as { id: string }
+    const emptyMemoryRes = await jsonFetch(`/api/agents/${enabled.id}/memory`, authorization)
+    expect(emptyMemoryRes.status).toBe(200)
+    await expect(emptyMemoryRes.json()).resolves.toMatchObject({
+      agentId: enabled.id,
+      content: '',
+      metadata: {},
+    })
+
+    const updateMemoryRes = await jsonFetch(`/api/agents/${enabled.id}/memory`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        content: 'Checked stale tasks. Follow up on repo resources next heartbeat.',
+        metadata: { format: 'markdown', remove: 'stale' },
+      }),
+    })
+    expect(updateMemoryRes.status).toBe(200)
+    await expect(updateMemoryRes.json()).resolves.toMatchObject({
+      agentId: enabled.id,
+      content: 'Checked stale tasks. Follow up on repo resources next heartbeat.',
+      metadata: { format: 'markdown', remove: 'stale' },
+    })
+
+    const mergeMemoryRes = await jsonFetch(`/api/agents/${enabled.id}/memory`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ metadata: { remove: null, lastHeartbeat: '2026-05-22' } }),
+    })
+    expect(mergeMemoryRes.status).toBe(200)
+    await expect(mergeMemoryRes.json()).resolves.toMatchObject({
+      metadata: { format: 'markdown', lastHeartbeat: '2026-05-22' },
+    })
+
+    const secretMemoryRes = await jsonFetch(`/api/agents/${enabled.id}/memory`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ metadata: { secretValue: 'raw-secret' } }),
+    })
+    expect(secretMemoryRes.status).toBe(400)
+    await expect(secretMemoryRes.json()).resolves.toMatchObject({
+      error: { details: { fields: { metadata: expect.any(String) } } },
+    })
   })
 
   it('rejects new sessions for archived agents and archived environments', async () => {

@@ -6,6 +6,7 @@ import { requireAuth } from '../auth/session'
 import {
   agentDefinitions,
   agentDefinitionVersions,
+  agentMemories,
   mcpConnections,
   providerConfigs,
   providerModels,
@@ -27,6 +28,12 @@ const DEFAULT_MODEL = '@cf/moonshotai/kimi-k2.6'
 const BLOCKED_TOOLS = new Set(['secrets.read', 'filesystem.host', 'network.raw'])
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
+const HandoffPolicySchema = JsonObjectSchema.openapi({
+  example: { enabled: true, targets: [{ role: 'reviewer' }, { capability: 'code-review' }] },
+})
+const MemoryPolicySchema = JsonObjectSchema.openapi({
+  example: { enabled: true, mode: 'notebook', scope: 'project_agent' },
+})
 
 const AgentSchema = z
   .object({
@@ -39,6 +46,10 @@ const AgentSchema = z
     model: z.string().openapi({ example: DEFAULT_MODEL }),
     systemPrompt: z.string().nullable().openapi({ example: 'Answer with citations.' }),
     skills: z.array(z.string()).openapi({ example: ['ama@code-review'] }),
+    role: z.string().nullable().openapi({ example: 'maintainer' }),
+    capabilityTags: z.array(z.string()).openapi({ example: ['issue-triage', 'code-review'] }),
+    handoffPolicy: HandoffPolicySchema,
+    memoryPolicy: MemoryPolicySchema,
     allowedTools: z.array(z.string()).openapi({ example: ['web.search'] }),
     mcpConnectors: z.array(z.string()).openapi({ example: ['github'] }),
     metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
@@ -62,6 +73,10 @@ const AgentVersionSchema = z
     model: z.string().openapi({ example: DEFAULT_MODEL }),
     systemPrompt: z.string().nullable().openapi({ example: 'Answer with citations.' }),
     skills: z.array(z.string()).openapi({ example: ['ama@code-review'] }),
+    role: z.string().nullable().openapi({ example: 'maintainer' }),
+    capabilityTags: z.array(z.string()).openapi({ example: ['issue-triage', 'code-review'] }),
+    handoffPolicy: HandoffPolicySchema,
+    memoryPolicy: MemoryPolicySchema,
     allowedTools: z.array(z.string()).openapi({ example: ['web.search'] }),
     mcpConnectors: z.array(z.string()).openapi({ example: ['github'] }),
     metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
@@ -82,6 +97,14 @@ const AgentPayloadSchema = z
       .max(100)
       .optional()
       .openapi({ example: ['ama@code-review'] }),
+    role: z.string().trim().min(1).max(80).nullable().optional().openapi({ example: 'maintainer' }),
+    capabilityTags: z
+      .array(z.string().trim().min(1).max(80))
+      .max(50)
+      .optional()
+      .openapi({ example: ['issue-triage', 'code-review'] }),
+    handoffPolicy: HandoffPolicySchema.optional(),
+    memoryPolicy: MemoryPolicySchema.optional(),
     allowedTools: z
       .array(z.string().min(1))
       .max(100)
@@ -109,9 +132,29 @@ const AgentParamsSchema = z.object({
 const ListQuerySchema = listQuerySchema(['active', 'archived'])
 const AgentListResponseSchema = listResponseSchema('AgentListResponse', AgentSchema)
 const AgentVersionListResponseSchema = listResponseSchema('AgentVersionListResponse', AgentVersionSchema)
+const AgentMemorySchema = z
+  .object({
+    agentId: z.string().openapi({ example: 'agent_abc123' }),
+    projectId: z.string().openapi({ example: 'project_abc123' }),
+    content: z.string().openapi({ example: 'Previous heartbeat checked open PRs and deferred billing export.' }),
+    metadata: JsonObjectSchema.openapi({ example: { format: 'markdown' } }),
+    createdAt: z.string().datetime().openapi({ example: '2026-05-22T00:00:00.000Z' }),
+    updatedAt: z.string().datetime().openapi({ example: '2026-05-22T00:00:00.000Z' }),
+  })
+  .openapi('AgentMemory')
+const UpdateAgentMemorySchema = z
+  .object({
+    content: z.string().max(128_000).optional().openapi({
+      example: 'Checked stale tasks. Follow up on repo resource migration next heartbeat.',
+    }),
+    metadata: JsonObjectSchema.optional().openapi({ example: { format: 'markdown' } }),
+  })
+  .strict()
+  .openapi('UpdateAgentMemoryRequest')
 
 type AgentRow = typeof agentDefinitions.$inferSelect
 type AgentVersionRow = typeof agentDefinitionVersions.$inferSelect
+type AgentMemoryRow = typeof agentMemories.$inferSelect
 
 function newId(prefix: string) {
   return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
@@ -280,6 +323,18 @@ function validateSkills(skills: string[]) {
   return null
 }
 
+function validateCapabilityTags(capabilityTags: string[]) {
+  for (const tag of capabilityTags) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9._/-]{0,79}$/.test(tag)) {
+      return { capabilityTags: `Capability tag must be a stable identifier: ${tag}` }
+    }
+    if (secretString(tag)) {
+      return { capabilityTags: 'Secret material must be stored in a vault.' }
+    }
+  }
+  return null
+}
+
 function mergeMetadata(current: Record<string, unknown>, update: Record<string, unknown> | undefined) {
   if (!update) {
     return current
@@ -318,6 +373,10 @@ function serializeAgent(row: AgentRow, version: AgentVersionRow | null) {
     model: row.model,
     systemPrompt: row.systemPrompt,
     skills: parseJson<string[]>(row.skills),
+    role: row.role,
+    capabilityTags: parseJson<string[]>(row.capabilityTags),
+    handoffPolicy: parseJson<Record<string, unknown>>(row.handoffPolicy),
+    memoryPolicy: parseJson<Record<string, unknown>>(row.memoryPolicy),
     allowedTools: parseJson<string[]>(row.allowedTools),
     mcpConnectors: parseJson<string[]>(row.mcpConnectors),
     metadata: parseJson<Record<string, unknown>>(row.metadata),
@@ -341,10 +400,25 @@ function serializeAgentVersion(row: AgentVersionRow) {
     model: row.model,
     systemPrompt: row.systemPrompt,
     skills: parseJson<string[]>(row.skills),
+    role: row.role,
+    capabilityTags: parseJson<string[]>(row.capabilityTags),
+    handoffPolicy: parseJson<Record<string, unknown>>(row.handoffPolicy),
+    memoryPolicy: parseJson<Record<string, unknown>>(row.memoryPolicy),
     allowedTools: parseJson<string[]>(row.allowedTools),
     mcpConnectors: parseJson<string[]>(row.mcpConnectors),
     metadata: parseJson<Record<string, unknown>>(row.metadata),
     createdAt: row.createdAt,
+  }
+}
+
+function serializeAgentMemory(row: AgentMemoryRow) {
+  return {
+    agentId: row.agentId,
+    projectId: row.projectId,
+    content: row.content,
+    metadata: parseJson<Record<string, unknown>>(row.metadata),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   }
 }
 
@@ -357,6 +431,10 @@ async function createAgentVersion(
     model: string
     systemPrompt: string | null
     skills: string[]
+    role: string | null
+    capabilityTags: string[]
+    handoffPolicy: Record<string, unknown>
+    memoryPolicy: Record<string, unknown>
     allowedTools: string[]
     mcpConnectors: string[]
     metadata: Record<string, unknown>
@@ -384,6 +462,10 @@ async function createAgentVersion(
     model: values.model,
     systemPrompt: values.systemPrompt,
     skills: stringify(values.skills),
+    role: values.role,
+    capabilityTags: stringify(values.capabilityTags),
+    handoffPolicy: stringify(values.handoffPolicy),
+    memoryPolicy: stringify(values.memoryPolicy),
     allowedTools: stringify(values.allowedTools),
     mcpConnectors: stringify(values.mcpConnectors),
     metadata: stringify(values.metadata),
@@ -412,6 +494,11 @@ async function currentAgentVersion(db: ReturnType<typeof drizzle>, agent: AgentR
       .where(and(eq(agentDefinitionVersions.id, agent.currentVersionId), eq(agentDefinitionVersions.agentId, agent.id)))
       .get()) ?? null
   )
+}
+
+function memoryEnabled(agent: AgentRow) {
+  const memoryPolicy = parseJson<Record<string, unknown>>(agent.memoryPolicy)
+  return memoryPolicy.enabled === true
 }
 
 const listAgentsRoute = createRoute({
@@ -515,6 +602,42 @@ const listAgentVersionsRoute = createRoute({
   },
 })
 
+const readAgentMemoryRoute = createRoute({
+  method: 'get',
+  path: '/{agentId}/memory',
+  operationId: 'readAgentMemory',
+  tags: ['Agents'],
+  summary: 'Read agent memory',
+  ...AuthenticatedOperation,
+  request: { params: AgentParamsSchema },
+  responses: {
+    200: { description: 'Agent memory', content: { 'application/json': { schema: AgentMemorySchema } } },
+    401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    404: { description: 'Agent not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    409: { description: 'Agent memory disabled', content: { 'application/json': { schema: ErrorResponseSchema } } },
+  },
+})
+
+const updateAgentMemoryRoute = createRoute({
+  method: 'patch',
+  path: '/{agentId}/memory',
+  operationId: 'updateAgentMemory',
+  tags: ['Agents'],
+  summary: 'Update agent memory',
+  ...AuthenticatedOperation,
+  request: {
+    params: AgentParamsSchema,
+    body: { required: true, content: { 'application/json': { schema: UpdateAgentMemorySchema } } },
+  },
+  responses: {
+    200: { description: 'Updated agent memory', content: { 'application/json': { schema: AgentMemorySchema } } },
+    400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    404: { description: 'Agent not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    409: { description: 'Agent memory disabled', content: { 'application/json': { schema: ErrorResponseSchema } } },
+  },
+})
+
 const routes = app
   .openapi(listAgentsRoute, async (c) => {
     const db = drizzle(c.env.DB)
@@ -571,14 +694,21 @@ const routes = app
     )
     const model = body.model ?? c.env.AMA_DEFAULT_MODEL ?? DEFAULT_MODEL
     const skills = body.skills ?? []
+    const role = body.role ?? null
+    const capabilityTags = body.capabilityTags ?? []
+    const handoffPolicy = body.handoffPolicy ?? {}
+    const memoryPolicy = body.memoryPolicy ?? { enabled: false }
     const allowedTools = body.allowedTools ?? []
     const mcpConnectors = body.mcpConnectors ?? []
     const metadata = body.metadata ?? {}
     const validation =
       (await validateConfiguredProviderModel(db, auth.project.id, provider, model, c.env.AMA_DEFAULT_MODEL)) ??
       validateSkills(skills) ??
+      validateCapabilityTags(capabilityTags) ??
       validateAllowedTools(allowedTools) ??
       (await validateMcpConnectors(db, auth.project.id, mcpConnectors)) ??
+      (hasSecretMaterial(handoffPolicy) ? { handoffPolicy: 'Secret material must be stored in a vault.' } : null) ??
+      (hasSecretMaterial(memoryPolicy) ? { memoryPolicy: 'Secret material must be stored in a vault.' } : null) ??
       (hasSecretMaterial(metadata) ? { metadata: 'Secret material must be stored in a vault.' } : null)
     if (validation) {
       return c.json(domainValidation('Invalid agent configuration', validation), 400)
@@ -595,6 +725,10 @@ const routes = app
       model,
       systemPrompt: body.systemPrompt ?? body.instructions ?? null,
       skills: stringify(skills),
+      role,
+      capabilityTags: stringify(capabilityTags),
+      handoffPolicy: stringify(handoffPolicy),
+      memoryPolicy: stringify(memoryPolicy),
       allowedTools: stringify(allowedTools),
       mcpConnectors: stringify(mcpConnectors),
       metadata: stringify(metadata),
@@ -608,6 +742,10 @@ const routes = app
     const version = await createAgentVersion(db, row, {
       ...row,
       skills,
+      role,
+      capabilityTags,
+      handoffPolicy,
+      memoryPolicy,
       allowedTools,
       mcpConnectors,
       metadata,
@@ -656,6 +794,10 @@ const routes = app
       model: body.model ?? agent.model,
       systemPrompt: body.systemPrompt ?? agent.systemPrompt,
       skills: body.skills ?? parseJson<string[]>(agent.skills),
+      role: body.role !== undefined ? body.role : agent.role,
+      capabilityTags: body.capabilityTags ?? parseJson<string[]>(agent.capabilityTags),
+      handoffPolicy: body.handoffPolicy ?? parseJson<Record<string, unknown>>(agent.handoffPolicy),
+      memoryPolicy: body.memoryPolicy ?? parseJson<Record<string, unknown>>(agent.memoryPolicy),
       allowedTools: body.allowedTools ?? parseJson<string[]>(agent.allowedTools),
       mcpConnectors: body.mcpConnectors ?? parseJson<string[]>(agent.mcpConnectors),
       metadata: mergeMetadata(parseJson<Record<string, unknown>>(agent.metadata), body.metadata),
@@ -669,8 +811,11 @@ const routes = app
         c.env.AMA_DEFAULT_MODEL,
       )) ??
       validateSkills(next.skills) ??
+      validateCapabilityTags(next.capabilityTags) ??
       validateAllowedTools(next.allowedTools) ??
       (await validateMcpConnectors(db, auth.project.id, next.mcpConnectors)) ??
+      (hasSecretMaterial(next.handoffPolicy) ? { handoffPolicy: 'Secret material must be stored in a vault.' } : null) ??
+      (hasSecretMaterial(next.memoryPolicy) ? { memoryPolicy: 'Secret material must be stored in a vault.' } : null) ??
       (hasSecretMaterial(next.metadata) ? { metadata: 'Secret material must be stored in a vault.' } : null)
     if (validation) {
       return c.json(domainValidation('Invalid agent configuration', validation), 400)
@@ -683,6 +828,10 @@ const routes = app
       body.model !== undefined ||
       body.systemPrompt !== undefined ||
       body.skills !== undefined ||
+      body.role !== undefined ||
+      body.capabilityTags !== undefined ||
+      body.handoffPolicy !== undefined ||
+      body.memoryPolicy !== undefined ||
       body.allowedTools !== undefined ||
       body.mcpConnectors !== undefined ||
       body.metadata !== undefined
@@ -692,6 +841,10 @@ const routes = app
     const updated = {
       ...next,
       skills: stringify(next.skills),
+      role: next.role,
+      capabilityTags: stringify(next.capabilityTags),
+      handoffPolicy: stringify(next.handoffPolicy),
+      memoryPolicy: stringify(next.memoryPolicy),
       allowedTools: stringify(next.allowedTools),
       mcpConnectors: stringify(next.mcpConnectors),
       metadata: stringify(next.metadata),
@@ -766,6 +919,93 @@ const routes = app
       },
       200,
     )
+  })
+  .openapi(readAgentMemoryRoute, async (c) => {
+    const { agentId } = c.req.valid('param')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+
+    const agent = await findAgent(db, agentId, auth.project.id)
+    if (!agent) {
+      return c.json({ error: { type: 'not_found', message: 'Agent not found' } }, 404)
+    }
+    if (!memoryEnabled(agent)) {
+      return c.json({ error: { type: 'conflict', message: 'Agent memory is disabled' } }, 409)
+    }
+
+    const existing = await db
+      .select()
+      .from(agentMemories)
+      .where(and(eq(agentMemories.agentId, agentId), eq(agentMemories.projectId, auth.project.id)))
+      .get()
+    if (existing) {
+      return c.json(serializeAgentMemory(existing), 200)
+    }
+
+    const timestamp = now()
+    const created = {
+      agentId,
+      projectId: auth.project.id,
+      content: '',
+      metadata: stringify({}),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }
+    await db.insert(agentMemories).values(created)
+    return c.json(serializeAgentMemory(created), 200)
+  })
+  .openapi(updateAgentMemoryRoute, async (c) => {
+    const { agentId } = c.req.valid('param')
+    const body = c.req.valid('json')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+
+    const agent = await findAgent(db, agentId, auth.project.id)
+    if (!agent) {
+      return c.json({ error: { type: 'not_found', message: 'Agent not found' } }, 404)
+    }
+    if (!memoryEnabled(agent)) {
+      return c.json({ error: { type: 'conflict', message: 'Agent memory is disabled' } }, 409)
+    }
+    if (hasSecretMaterial(body.metadata)) {
+      return c.json(domainValidation('Invalid agent memory', { metadata: 'Secret material must be stored in a vault.' }), 400)
+    }
+
+    const existing = await db
+      .select()
+      .from(agentMemories)
+      .where(and(eq(agentMemories.agentId, agentId), eq(agentMemories.projectId, auth.project.id)))
+      .get()
+    const timestamp = now()
+    if (!existing) {
+      const created = {
+        agentId,
+        projectId: auth.project.id,
+        content: body.content ?? '',
+        metadata: stringify(body.metadata ?? {}),
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }
+      await db.insert(agentMemories).values(created)
+      return c.json(serializeAgentMemory(created), 200)
+    }
+
+    const updated = {
+      content: body.content ?? existing.content,
+      metadata: stringify(mergeMetadata(parseJson<Record<string, unknown>>(existing.metadata), body.metadata)),
+      updatedAt: timestamp,
+    }
+    await db
+      .update(agentMemories)
+      .set(updated)
+      .where(and(eq(agentMemories.agentId, agentId), eq(agentMemories.projectId, auth.project.id)))
+    return c.json(serializeAgentMemory({ ...existing, ...updated }), 200)
   })
 
 export default routes

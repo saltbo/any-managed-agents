@@ -1,8 +1,8 @@
 import { SELF } from 'cloudflare:test'
 import { env } from 'cloudflare:workers'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { runtimeProviderModelCapability } from '../runtime/catalog'
-import { defaultClaims, expectAuthRequired, setupOidcProvider, signIn } from '../test/auth'
+import { defaultClaims, expectAuthRequired, setupOidcProvider, signIn, signInFederatedRunner } from '../test/auth'
 
 const DEFAULT_AMA_RUNNER_CAPABILITY = runtimeProviderModelCapability('ama', 'workers-ai', '@cf/moonshotai/kimi-k2.6')
 
@@ -469,6 +469,191 @@ describe('[CF] /api/runners', () => {
 
     const sessionEventsRes = await jsonFetch(`/api/sessions/${session.id}/events`, operatorAuthorization)
     expect(await sessionEventsRes.text()).not.toContain('e2e-runner:')
+  })
+
+  it('binds external tenants to projects and accepts only scoped federated runner operations', async () => {
+    const operatorAuthorization = await signIn()
+    const environment = await createSelfHostedEnvironment(operatorAuthorization)
+    const projectsRes = await jsonFetch('/api/projects', operatorAuthorization)
+    expect(projectsRes.status).toBe(200)
+    const projectList = (await projectsRes.json()) as { data: Array<{ id: string }> }
+    const projectId = projectList.data[0]?.id
+    expect(projectId).toMatch(/^project_/)
+
+    const externalTenantId = `ak-org-${crypto.randomUUID()}`
+    const runnerId = `runner_${crypto.randomUUID().replaceAll('-', '')}`
+    const federatedAuthorization = signInFederatedRunner(externalTenantId, runnerId, environment.id)
+
+    const unboundRes = await jsonFetch('/api/runners', federatedAuthorization, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Unbound federated runner' }),
+    })
+    expect(unboundRes.status).toBe(401)
+    expectAuthRequired(await unboundRes.json())
+
+    const bindingRes = await jsonFetch(`/api/projects/${projectId}/external-bindings`, operatorAuthorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        issuer: 'https://ak.e2e.example.com',
+        externalTenantId,
+        environmentId: environment.id,
+        capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+        metadata: { platform: 'agent-kanban' },
+      }),
+    })
+    expect(bindingRes.status).toBe(201)
+    await expect(bindingRes.json()).resolves.toMatchObject({
+      issuer: 'https://ak.e2e.example.com',
+      externalTenantId,
+      projectId,
+      environmentId: environment.id,
+    })
+
+    const bearerRunnerRes = await jsonFetch('/api/runners', federatedAuthorization, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Federated bearer bypass', authMode: 'bearer' }),
+    })
+    expect(bearerRunnerRes.status).toBe(400)
+    await expect(bearerRunnerRes.json()).resolves.toMatchObject({
+      error: {
+        type: 'validation_error',
+        details: {
+          fields: { authMode: 'Federated runner tokens can only register federated runners.' },
+        },
+      },
+    })
+
+    const runnerRes = await jsonFetch('/api/runners', federatedAuthorization, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Federated AK runner', capabilities: ['ignored-by-token'] }),
+    })
+    expect(runnerRes.status).toBe(201)
+    const runner = (await runnerRes.json()) as {
+      id: string
+      authMode: string
+      projectId: string
+      environmentId: string
+      capabilities: string[]
+    }
+    expect(runner).toMatchObject({
+      id: runnerId,
+      authMode: 'federated',
+      projectId,
+      environmentId: environment.id,
+      capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+    })
+    expect(JSON.stringify(runner)).not.toContain('ignored-by-token')
+
+    const heartbeatRes = await jsonFetch(`/api/runners/${runnerId}/heartbeats`, federatedAuthorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        status: 'active',
+        currentLoad: 0,
+        capabilities: ['attempted-escalation'],
+      }),
+    })
+    expect(heartbeatRes.status).toBe(200)
+    await expect(heartbeatRes.json()).resolves.toMatchObject({
+      id: runnerId,
+      status: 'active',
+      capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+    })
+
+    const otherRunnerRes = await jsonFetch('/api/runners', operatorAuthorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Project bearer runner',
+        environmentId: environment.id,
+        authMode: 'bearer',
+      }),
+    })
+    expect(otherRunnerRes.status).toBe(201)
+    const otherRunner = (await otherRunnerRes.json()) as { id: string }
+    const forbiddenReadRes = await jsonFetch(`/api/runners/${otherRunner.id}`, federatedAuthorization)
+    expect(forbiddenReadRes.status).toBe(403)
+    await expect(forbiddenReadRes.json()).resolves.toMatchObject({
+      error: { type: 'forbidden', message: 'Runner token is not authorized for this runner' },
+    })
+
+    const forbiddenControlPlaneRes = await jsonFetch('/api/projects', federatedAuthorization)
+    expect(forbiddenControlPlaneRes.status).toBe(403)
+    await expect(forbiddenControlPlaneRes.json()).resolves.toMatchObject({
+      error: { type: 'forbidden', message: 'Runner token is not authorized for this resource' },
+    })
+  })
+
+  it('accepts introspected FlareAuth token-exchange access tokens for federated runner registration', async () => {
+    const operatorAuthorization = await signIn()
+    const environment = await createSelfHostedEnvironment(operatorAuthorization)
+    const projectsRes = await jsonFetch('/api/projects', operatorAuthorization)
+    const projectList = (await projectsRes.json()) as { data: Array<{ id: string }> }
+    const projectId = projectList.data[0]?.id
+    const externalTenantId = `ak-org-fatx-${crypto.randomUUID()}`
+    const runnerId = `runner_${crypto.randomUUID().replaceAll('-', '')}`
+    const token = `fatx_${crypto.randomUUID().replaceAll('-', '')}`
+
+    ;(env as unknown as { OIDC_ISSUER: string }).OIDC_ISSUER = 'https://oidc.test/api/auth'
+    ;(env as unknown as { OIDC_INTROSPECTION_CLIENT_ID: string; OIDC_INTROSPECTION_CLIENT_SECRET: string }).OIDC_INTROSPECTION_CLIENT_ID =
+      'ama-introspection'
+    ;(env as unknown as { OIDC_INTROSPECTION_CLIENT_ID: string; OIDC_INTROSPECTION_CLIENT_SECRET: string }).OIDC_INTROSPECTION_CLIENT_SECRET =
+      'ama-introspection-secret'
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(input instanceof Request ? input.url : input.toString())
+        if (url.pathname === '/api/auth/oauth2/userinfo') {
+          return new Response('userinfo unavailable', { status: 401 })
+        }
+        if (url.pathname === '/api/auth/oauth2/introspect') {
+          expect(init?.method).toBe('POST')
+          expect((init?.headers as Record<string, string>).authorization).toBe(
+            `Basic ${btoa('ama-introspection:ama-introspection-secret')}`,
+          )
+          const form = new URLSearchParams(String(init?.body))
+          expect(form.get('token')).toBe(token)
+          return Response.json({
+            active: true,
+            iss: 'https://ak.example.com',
+            sub: `${externalTenantId}:${runnerId}`,
+            client_id: 'ak-runner-client',
+            scope: 'runner:connect',
+            external_tenant_id: externalTenantId,
+            ama_runner_id: runnerId,
+            ama_environment_id: environment.id,
+            runner_capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+          })
+        }
+        return new Response('not found', { status: 404 })
+      }),
+    )
+
+    const bindingRes = await jsonFetch(`/api/projects/${projectId}/external-bindings`, operatorAuthorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        issuer: 'https://ak.example.com',
+        externalTenantId,
+        environmentId: environment.id,
+        capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+      }),
+    })
+    expect(bindingRes.status).toBe(201)
+
+    const runnerAuthorization = `Bearer ${token}`
+    const runnerRes = await jsonFetch('/api/runners', runnerAuthorization, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'FlareAuth token-exchange runner' }),
+    })
+    expect(runnerRes.status).toBe(201)
+    await expect(runnerRes.json()).resolves.toMatchObject({
+      id: runnerId,
+      authMode: 'federated',
+      projectId,
+      environmentId: environment.id,
+      capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+    })
+
+    const forbiddenControlPlaneRes = await jsonFetch('/api/projects', runnerAuthorization)
+    expect(forbiddenControlPlaneRes.status).toBe(403)
   })
 
   it('rejects runner credential secret references that are not safe references', async () => {
@@ -1271,5 +1456,60 @@ describe('[CF] /api/runners', () => {
     expect(second.status).toBe(201)
     const updatedRunnerRes = await jsonFetch(`/api/runners/${runner.id}`, authorization)
     await expect(updatedRunnerRes.json()).resolves.toMatchObject({ currentLoad: 2 })
+  })
+
+  it('accepts federated runner tokens only when the external tenant is bound to the project', async () => {
+    const operatorAuthorization = await signIn()
+    const environment = await createSelfHostedEnvironment(operatorAuthorization)
+    const projectsRes = await jsonFetch('/api/projects', operatorAuthorization)
+    expect(projectsRes.status).toBe(200)
+    const projectsBody = (await projectsRes.json()) as { data: Array<{ id: string }> }
+    const projectId = projectsBody.data[0].id
+
+    const bindingRes = await jsonFetch(`/api/projects/${projectId}/external-bindings`, operatorAuthorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        issuer: 'https://ak.e2e.example.com',
+        externalTenantId: 'ak_org_1',
+        environmentId: environment.id,
+        capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+      }),
+    })
+    expect(bindingRes.status).toBe(201)
+
+    const runnerAuthorization = signInFederatedRunner('ak_org_1', 'runner_federated_1', environment.id)
+    const forbiddenControlPlaneRes = await jsonFetch('/api/agents', runnerAuthorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Runner token forbidden agent',
+        instructions: 'Must not be created',
+      }),
+    })
+    expect(forbiddenControlPlaneRes.status).toBe(403)
+    await expect(forbiddenControlPlaneRes.json()).resolves.toMatchObject({
+      error: { type: 'forbidden', message: 'Runner token is not authorized for this resource' },
+    })
+
+    const runnerRes = await jsonFetch('/api/runners', runnerAuthorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Federated AK runner',
+      }),
+    })
+    expect(runnerRes.status).toBe(201)
+    await expect(runnerRes.json()).resolves.toMatchObject({
+      id: 'runner_federated_1',
+      authMode: 'federated',
+      environmentId: environment.id,
+      capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+    })
+
+    const unboundRunnerRes = await jsonFetch('/api/runners', signInFederatedRunner('ak_org_missing', 'runner_missing'), {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Unbound federated runner',
+      }),
+    })
+    expect(unboundRunnerRes.status).toBe(401)
   })
 })

@@ -64,6 +64,7 @@ type SavedRunnerConfig struct {
 	Origin       string `json:"origin"`
 	AccessToken  string `json:"accessToken"`
 	Token        string `json:"token,omitempty"`
+	ProjectID    string `json:"projectId,omitempty"`
 	RefreshToken string `json:"refreshToken,omitempty"`
 	TokenType    string `json:"tokenType"`
 	ExpiresAt    string `json:"expiresAt,omitempty"`

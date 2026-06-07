@@ -14,12 +14,13 @@ import {
   paginateRows,
   parseListCursor,
 } from '../openapi'
+import { encryptSecretValue } from '../vaultCrypto'
 
 const app = createApiRouter()
 
 const ACTIVE_SESSION_STATUSES = ['idle', 'running'] as const
 const JsonObjectSchema = z.record(z.string(), z.unknown())
-const SecretProviderSchema = z.enum(['cloudflare-secrets', 'external-vault'])
+const SecretProviderSchema = z.enum(['ama-managed', 'cloudflare-secrets', 'external-vault'])
 
 const ConnectorBindingSchema = z
   .object({
@@ -211,6 +212,23 @@ function secretReference(
       metadata: stringify(values.metadata ?? {}),
     }
   }
+  if (provider === 'ama-managed') {
+    if (!values.secretValue) {
+      throw new Error('secretValue is required for ama-managed credentials')
+    }
+    if (values.externalVaultPath) {
+      throw new Error('externalVaultPath is not accepted for ama-managed credentials')
+    }
+    const referenceName = secretReferenceName(credentialId, version, values.referenceName)
+    return {
+      provider,
+      secretRef: `ama-managed:${referenceName}`,
+      externalVaultPath: null,
+      referenceName,
+      hasSecret: true,
+      metadata: stringify(values.metadata ?? {}),
+    }
+  }
 
   if (!values.secretValue) {
     throw new Error('secretValue is required for cloudflare-secrets credentials')
@@ -230,6 +248,9 @@ function secretReference(
 }
 
 async function storeCloudflareSecret(env: Env, referenceName: string, secretValue: string) {
+  if (env.AMA_LOCAL_SECRET_STORE === 'test') {
+    return `test-cloudflare-secret:${referenceName}:${crypto.randomUUID()}`
+  }
   if (!env.AMA_WORKERS_AI_ACCOUNT_ID) {
     throw new Error('AMA_WORKERS_AI_ACCOUNT_ID is required to store Cloudflare secrets')
   }
@@ -275,13 +296,32 @@ async function storeSecretMaterial(env: Env, reference: ReturnType<typeof secret
   }
 
   if (!values.secretValue) {
-    throw new Error('secretValue is required for cloudflare-secrets credentials')
+    throw new Error(`secretValue is required for ${reference.provider} credentials`)
   }
-  return { cloudflareSecretId: await storeCloudflareSecret(env, reference.referenceName, values.secretValue) }
+  if (env.AMA_LOCAL_SECRET_STORE === 'test') {
+    return {
+      ...(reference.provider === 'cloudflare-secrets'
+        ? { cloudflareSecretId: await storeCloudflareSecret(env, reference.referenceName, values.secretValue) }
+        : {}),
+      localSecretValue: values.secretValue,
+    }
+  }
+  const encryptedSecretValue = await encryptSecretValue(env, values.secretValue)
+  if (reference.provider === 'ama-managed') {
+    return { encryptedSecretValue }
+  }
+  return {
+    cloudflareSecretId: await storeCloudflareSecret(env, reference.referenceName, values.secretValue),
+    encryptedSecretValue,
+    ...(env.AMA_LOCAL_SECRET_STORE === 'test' ? { localSecretValue: values.secretValue } : {}),
+  }
 }
 
 async function deleteCloudflareSecret(env: Env, version: CredentialVersionRow) {
   if (version.provider !== 'cloudflare-secrets' || !version.hasSecret) {
+    return
+  }
+  if (env.AMA_LOCAL_SECRET_STORE === 'test') {
     return
   }
   if (!env.AMA_WORKERS_AI_ACCOUNT_ID) {

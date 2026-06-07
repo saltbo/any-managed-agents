@@ -12,11 +12,11 @@ Feature: Vaults and secrets
     And D1 stores only secret metadata and references
     And API responses never include the raw secret value
 
-  @planned
+  @implemented
   Scenario: Attach vaults to an agent session
     Given an agent requires credentials
-    When the user creates a session with an allowed vault
-    Then the runtime can resolve approved Cloudflare Secrets references
+    When the user creates a session with allowed runtime secret environment references
+    Then the runtime receives only approved vault binding references
     And the transcript shows only redacted values
 
   @planned

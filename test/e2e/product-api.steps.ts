@@ -243,6 +243,19 @@ Given('a project has an active agent and active environments', async function (t
   await ensureAgentAndEnvironment(this)
 })
 
+Given('a project needs agents with different responsibilities', async function (this: ProductWorld) {
+  await ensureSignedIn(this)
+})
+
+Given('a project has long-running maintainer or lead agents', async function (this: ProductWorld) {
+  await ensureSignedIn(this)
+})
+
+Given('an external product uses AMA for scheduled agent sessions', async function (this: ProductWorld) {
+  const state = await ensureSignedIn(this)
+  state.environment ??= await createEnvironment(state, { name: `${state.runId} maintainer env` })
+})
+
 Given('an agent exists with version 1', async function (this: ProductWorld) {
   await ensureAgentAndEnvironment(this)
   assert.equal(this.e2e?.agent?.version, 1)
@@ -257,6 +270,26 @@ Given(
       description: 'Initial description',
       instructions: 'Initial instructions',
       systemPrompt: 'Initial prompt',
+      skills: ['ama@initial-skill'],
+      allowedTools: ['sandbox.exec'],
+      metadata: { keep: 'yes', remove: 'soon' },
+    })
+  },
+)
+
+Given(
+  'an agent has instructions, description, model config, role, capability tags, handoff policy, memory policy, skills, tools, and metadata',
+  async function (this: ProductWorld) {
+    await ensureSignedIn(this)
+    this.e2e.agent = await createAgent(this.e2e, {
+      name: `${this.e2e.runId} rich agent`,
+      description: 'Initial description',
+      instructions: 'Initial instructions',
+      systemPrompt: 'Initial prompt',
+      role: 'maintainer',
+      capabilityTags: ['triage', 'review'],
+      handoffPolicy: { targets: [{ role: 'worker', capability: 'implementation' }] },
+      memoryPolicy: { enabled: true, scope: 'project' },
       skills: ['ama@initial-skill'],
       allowedTools: ['sandbox.exec'],
       metadata: { keep: 'yes', remove: 'soon' },
@@ -451,7 +484,12 @@ Given('a session is idle', async function (this: ProductWorld) {
 })
 
 Given('an idle session has cloud-owned runtime state and a sandbox executor', async function (this: ProductWorld) {
-  await ensureAgentAndEnvironment(this)
+  const state = await ensureSignedIn(this)
+  state.agent = await createAgent(state, {
+    name: `${state.runId} sandbox command agent`,
+    allowedTools: ['sandbox.exec'],
+  })
+  state.environment ??= await createEnvironment(state, { name: `${state.runId} sandbox command env` })
   this.e2e.latestSession = await createSession(this.e2e)
   assert.equal(this.e2e.latestSession.status, 'idle')
 })
@@ -492,11 +530,71 @@ Given('a project has a vault', async function (this: ProductWorld) {
   this.e2e.vault ??= await createVault(this.e2e)
 })
 
+Given('an agent requires credentials', async function (this: ProductWorld) {
+  await ensureVaultCredential(this)
+  const state = await ensureAgentAndEnvironment(this)
+  state.agent = await apiJson<Json>(state.page.request, `/api/agents/${state.agent?.id}`, {
+    method: 'PATCH',
+    data: { allowedTools: ['sandbox.exec'], metadata: { credentialUse: 'runtime-secret-env' } },
+  })
+})
+
 When('the user creates an agent with a name and instructions', async function (this: ProductWorld) {
   await ensureSignedIn(this)
   this.e2e.agent = await createAgent(this.e2e, {
     name: `${this.e2e.runId} minimal agent`,
     instructions: 'Answer briefly.',
+  })
+})
+
+When(
+  'the user creates an agent definition with a role, capability tags, and handoff policy',
+  async function (this: ProductWorld) {
+    const state = await ensureSignedIn(this)
+    state.agent = await createAgent(state, {
+      name: `${state.runId} maintainer agent`,
+      role: 'maintainer',
+      capabilityTags: ['triage', 'handoff'],
+      handoffPolicy: { targets: [{ role: 'worker', capability: 'implementation' }] },
+    })
+    state.environment ??= await createEnvironment(state, { name: `${state.runId} handoff env` })
+    state.latestSession = await createSession(state)
+  },
+)
+
+When('the user enables agent memory for an agent definition', async function (this: ProductWorld) {
+  const state = await ensureSignedIn(this)
+  state.agent = await createAgent(state, {
+    name: `${state.runId} memory maintainer`,
+    role: 'maintainer',
+    memoryPolicy: { enabled: true, scope: 'project' },
+  })
+  state.environment ??= await createEnvironment(state, { name: `${state.runId} memory env` })
+})
+
+When('the agent records notes, decisions, or follow-up context in memory', async function (this: ProductWorld) {
+  const state = await ensureSignedIn(this)
+  state.agent = await createAgent(state, {
+    name: `${state.runId} external memory agent`,
+    role: 'maintainer',
+    memoryPolicy: { enabled: true, scope: 'project' },
+  })
+  state.response = await apiJson<Json>(state.page.request, `/api/agents/${state.agent.id}/memory`, {
+    method: 'PATCH',
+    data: {
+      content: 'Remember that the next heartbeat should inspect open defects and unresolved proposals.',
+      metadata: { category: 'notebook', source: 'runtime' },
+    },
+  })
+})
+
+When('the user creates a session with allowed runtime secret environment references', async function (this: ProductWorld) {
+  await ensureVaultCredential(this)
+  await ensureAgentAndEnvironment(this)
+  this.e2e.latestSession = await createSession(this.e2e, {
+    runtimeSecretEnv: [{ name: 'AK_AGENT_KEY', ref: this.e2e.credential?.activeVersionId }],
+    vaultRefs: [{ type: 'credential', id: this.e2e.credential?.id }],
+    initialPrompt: 'Use the credential only through runtime secret bindings.',
   })
 })
 
@@ -824,6 +922,27 @@ When(
 )
 
 When(
+  'the user creates an agent with instructions, provider, model, role, capability tags, handoff policy, memory policy, skills, allowed tools, MCP connectors, and metadata',
+  async function (this: ProductWorld) {
+    await ensureSignedIn(this)
+    this.e2e.agent = await createAgent(this.e2e, {
+      name: `${this.e2e.runId} full agent`,
+      instructions: 'Use tools when needed.',
+      provider: 'workers-ai',
+      model: '@cf/moonshotai/kimi-k2.6',
+      role: 'reviewer',
+      capabilityTags: ['code-review', 'triage'],
+      handoffPolicy: { targets: [{ role: 'worker', capability: 'implementation' }] },
+      memoryPolicy: { enabled: true, scope: 'project' },
+      skills: ['ama@code-review'],
+      allowedTools: ['sandbox.exec'],
+      mcpConnectors: [],
+      metadata: { purpose: 'e2e' },
+    })
+  },
+)
+
+When(
   'the user changes instructions, model config, skills, tools, MCP connectors, or metadata',
   async function (this: ProductWorld) {
     const state = await ensureAgentAndEnvironment(this)
@@ -832,6 +951,28 @@ When(
       method: 'PATCH',
       data: {
         instructions: 'Updated instructions',
+        skills: ['ama@updated-skill'],
+        allowedTools: [],
+        metadata: { updated: true },
+      },
+    })
+    state.latestSession = await createSession(state)
+  },
+)
+
+When(
+  'the user changes instructions, model config, role, capability tags, handoff policy, memory policy, skills, tools, MCP connectors, or metadata',
+  async function (this: ProductWorld) {
+    const state = await ensureAgentAndEnvironment(this)
+    state.previousSession = await createSession(state)
+    state.updatedAgent = await apiJson<Json>(state.page.request, `/api/agents/${state.agent?.id}`, {
+      method: 'PATCH',
+      data: {
+        instructions: 'Updated instructions',
+        role: 'lead-reviewer',
+        capabilityTags: ['review', 'handoff'],
+        handoffPolicy: { targets: [{ role: 'worker', capability: 'fix' }] },
+        memoryPolicy: { enabled: true, scope: 'project' },
         skills: ['ama@updated-skill'],
         allowedTools: [],
         metadata: { updated: true },
@@ -1078,6 +1219,22 @@ When(
 )
 
 When(
+  'the user creates a session with an explicit environment, title, metadata, resource references, runtime env, runtime secret env references, and vault references',
+  async function (this: ProductWorld) {
+    await ensureAgentAndEnvironment(this)
+    await ensureVaultCredential(this)
+    this.e2e.latestSession = await createSession(this.e2e, {
+      title: `${this.e2e.runId} explicit session`,
+      metadata: { ticket: 'AMA-E2E' },
+      resourceRefs: [{ type: 'github_repository', owner: 'saltbo', repo: 'any-managed-agents' }],
+      runtimeEnv: { AK_API_URL: 'https://ak.example.test', AK_SESSION_ID: 'ak-session-e2e' },
+      runtimeSecretEnv: [{ name: 'AK_AGENT_KEY', ref: this.e2e.credential?.activeVersionId }],
+      vaultRefs: [{ type: 'credential', id: this.e2e.credential?.id }],
+    })
+  },
+)
+
+When(
   'an external scheduler creates a session with an initial prompt and run correlation metadata',
   async function (this: ProductWorld) {
     await ensureAgentAndEnvironment(this)
@@ -1267,6 +1424,18 @@ When('a runner advertises the exact runtime provider and model', async function 
 When('the user sends a runtime message to the session runtime endpoint', async function (this: ProductWorld) {
   const state = await ensureState(this)
   await sendRuntimeMessage(state, 'runtime endpoint message')
+})
+
+When('the user sends a prompt command through the sessions API', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  state.runtimeMessage = 'session command prompt message'
+  state.response = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}/commands`, {
+    method: 'POST',
+    data: { type: 'prompt', message: state.runtimeMessage },
+  })
+  state.latestSession = await waitForSession(state.page.request, String(state.latestSession?.id))
+  const events = await sessionEvents(state)
+  state.observedEventTypes = events.data.map((event) => String(event.type))
 })
 
 When('a client subscribes to session events', async function (this: ProductWorld) {
@@ -1842,6 +2011,108 @@ Then('the platform stores the agent definition in D1', async function (this: Pro
   assert.equal(read.id, agent.id)
 })
 
+Then('AMA stores those fields as standard agent definition configuration', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const agent = await apiJson<Json>(state.page.request, `/api/agents/${state.agent?.id}`)
+  assert.equal(agent.role, 'maintainer')
+  assert.deepEqual(agent.capabilityTags, ['triage', 'handoff'])
+  assert.deepEqual(agent.handoffPolicy, { targets: [{ role: 'worker', capability: 'implementation' }] })
+  assert.equal(JSON.stringify(agent).includes('externalTask'), false)
+  assert.equal(JSON.stringify(agent).includes('externalBoard'), false)
+})
+
+Then('the current agent version snapshots the role, capability tags, and handoff policy', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const versions = await apiJson<ListResponse<Json>>(state.page.request, `/api/agents/${state.agent?.id}/versions`)
+  const version = required(versions.data[0], 'agent version')
+  assert.equal(version.role, 'maintainer')
+  assert.deepEqual(version.capabilityTags, ['triage', 'handoff'])
+  assert.deepEqual(version.handoffPolicy, { targets: [{ role: 'worker', capability: 'implementation' }] })
+})
+
+Then('sessions created from the agent include those fields in the immutable agent snapshot', function (this: ProductWorld) {
+  const snapshot = objectValue(this.e2e?.latestSession?.agentSnapshot)
+  assert.equal(snapshot.role, 'maintainer')
+  assert.deepEqual(snapshot.capabilityTags, ['triage', 'handoff'])
+  assert.deepEqual(snapshot.handoffPolicy, { targets: [{ role: 'worker', capability: 'implementation' }] })
+})
+
+Then('the fields are available through OpenAPI and generated SDKs', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const openapi = await apiJson<Json>(state.page.request, '/api/openapi.json')
+  const serialized = JSON.stringify(openapi)
+  assert.ok(serialized.includes('role'))
+  assert.ok(serialized.includes('capabilityTags'))
+  assert.ok(serialized.includes('handoffPolicy'))
+  assert.ok(readFileSync(join(process.cwd(), 'sdk/typescript/src/generated/operations.ts'), 'utf8').includes('operationId'))
+})
+
+Then('AMA provides project-scoped memory through the agent memory API', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const memory = await apiJson<Json>(state.page.request, `/api/agents/${state.agent?.id}/memory`, {
+    method: 'PATCH',
+    data: { content: 'Daily maintainer notes', metadata: { scope: 'project' } },
+  })
+  assert.equal(memory.agentId, state.agent?.id)
+  assert.equal(memory.projectId, state.auth?.project?.id)
+  assert.equal(memory.content, 'Daily maintainer notes')
+})
+
+Then('scheduled trigger sessions can reference the same agent memory API', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  state.scheduledTrigger = await apiJson<Json>(state.page.request, '/api/scheduled-agent-triggers', {
+    method: 'POST',
+    data: {
+      agentId: state.agent?.id,
+      environmentId: state.environment?.id,
+      name: `${state.runId} memory heartbeat`,
+      promptTemplate: 'Run the maintainer heartbeat.',
+      schedule: { intervalSeconds: 3600 },
+      nextDueAt: '2026-05-26T12:00:00.000Z',
+    },
+  })
+  const read = await apiJson<Json>(state.page.request, `/api/agents/${state.agent?.id}/memory`)
+  assert.equal(read.agentId, state.agent?.id)
+  assert.equal(state.scheduledTrigger.agentId, state.agent?.id)
+})
+
+Then('pure worker agents can leave memory disabled', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const worker = await createAgent(state, { name: `${state.runId} memoryless worker`, role: 'worker' })
+  const response = await apiResponse(state.page.request, `/api/agents/${worker.id}/memory`)
+  assert.equal(response.status(), 409)
+})
+
+Then('the memory contract is exposed through OpenAPI and generated SDKs', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const openapi = await apiJson<Json>(state.page.request, '/api/openapi.json')
+  assert.ok(JSON.stringify(openapi).includes('/api/agents/{agentId}/memory'))
+  const sdk = readFileSync(join(process.cwd(), 'sdk/typescript/src/generated/operations.ts'), 'utf8')
+  assert.ok(sdk.includes('readAgentMemory'))
+  assert.ok(sdk.includes('updateAgentMemory'))
+})
+
+Then('AMA stores that memory as generic agent runtime state through the agent memory API', function (this: ProductWorld) {
+  const memory = required(this.e2e?.response, 'agent memory')
+  assert.equal(memory.agentId, this.e2e?.agent?.id)
+  assert.equal(memory.content, 'Remember that the next heartbeat should inspect open defects and unresolved proposals.')
+  assert.equal(objectValue(memory.metadata).source, 'runtime')
+})
+
+Then('external products can link to or summarize memory through AMA ids and API responses', function (this: ProductWorld) {
+  const memory = required(this.e2e?.response, 'agent memory')
+  assert.equal(typeof memory.agentId, 'string')
+  assert.equal(typeof memory.projectId, 'string')
+  assert.equal(typeof memory.updatedAt, 'string')
+})
+
+Then('AMA does not store external product workflow semantics inside memory schema fields', function (this: ProductWorld) {
+  const serialized = JSON.stringify(required(this.e2e?.response, 'agent memory'))
+  assert.equal(serialized.includes('externalTask'), false)
+  assert.equal(serialized.includes('externalBoard'), false)
+  assert.equal(serialized.includes('reviewStatus'), false)
+})
+
 Then('the response includes the agent id, version, and timestamps', function (this: ProductWorld) {
   const agent = required(this.e2e?.agent, 'agent')
   assert.match(String(agent.id), /^agent_/)
@@ -1876,6 +2147,9 @@ Then(
     assert.ok(Array.isArray(agent.skills))
     assert.ok(Array.isArray(agent.allowedTools))
     assert.ok(Array.isArray(agent.mcpConnectors))
+    assert.ok(Array.isArray(agent.capabilityTags))
+    assert.equal(typeof agent.handoffPolicy, 'object')
+    assert.equal(typeof agent.memoryPolicy, 'object')
     assert.equal(typeof agent.metadata, 'object')
     assert.equal('sandboxPolicy' in agent, false)
   },
@@ -1892,6 +2166,28 @@ Then(
   },
 )
 
+Then(
+  'the first agent version stores the instructions, model config, role, capability tags, handoff policy, memory policy, skills, tool policy, MCP connectors, and metadata',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    const versions = await apiJson<ListResponse<Json>>(state.page.request, `/api/agents/${state.agent?.id}/versions`)
+    const version = required(versions.data[0], 'agent version')
+    assert.equal(version.version, 1)
+    assert.equal(version.instructions, state.agent?.instructions)
+    assert.equal(version.provider, state.agent?.provider)
+    assert.equal(version.model, state.agent?.model)
+    assert.equal(version.role ?? null, state.agent?.role ?? null)
+    assert.deepEqual(version.capabilityTags, state.agent?.capabilityTags ?? [])
+    assert.deepEqual(version.handoffPolicy, state.agent?.handoffPolicy ?? {})
+    assert.deepEqual(version.memoryPolicy, state.agent?.memoryPolicy ?? { enabled: false })
+    assert.deepEqual(version.skills, state.agent?.skills ?? [])
+    assert.deepEqual(version.allowedTools, state.agent?.allowedTools ?? [])
+    assert.deepEqual(version.mcpConnectors, state.agent?.mcpConnectors ?? [])
+    assert.deepEqual(version.metadata, state.agent?.metadata ?? {})
+    assert.equal('sandboxPolicy' in version, false)
+  },
+)
+
 Then('normal agent responses do not expose sandbox policy', function (this: ProductWorld) {
   const agent = required(this.e2e?.agent, 'agent')
   assert.equal('sandboxPolicy' in agent, false)
@@ -1899,6 +2195,12 @@ Then('normal agent responses do not expose sandbox policy', function (this: Prod
 
 Then('the response echoes the normalized runtime configuration', function (this: ProductWorld) {
   const agent = required(this.e2e?.agent, 'agent')
+  if (agent.role !== undefined && agent.role !== null) {
+    assert.equal(agent.role, 'reviewer')
+    assert.deepEqual(agent.capabilityTags, ['code-review', 'triage'])
+    assert.deepEqual(agent.handoffPolicy, { targets: [{ role: 'worker', capability: 'implementation' }] })
+    assert.deepEqual(agent.memoryPolicy, { enabled: true, scope: 'project' })
+  }
   assert.deepEqual(agent.skills, ['ama@code-review'])
   assert.deepEqual(agent.allowedTools, ['sandbox.exec'])
   assert.deepEqual(agent.metadata, { purpose: 'e2e' })
@@ -1931,6 +2233,36 @@ Then(
 )
 
 Then(
+  'blocked tools, unavailable models, invalid skills, invalid capability tags, and agent sandbox policies are rejected with field-level validation details',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    const invalid = await apiResponse(state.page.request, '/api/agents', {
+      method: 'POST',
+      data: { name: `${state.runId} blocked`, allowedTools: ['secrets.read'] },
+    })
+    assert.equal(invalid.status(), 400)
+
+    const invalidSkill = await apiResponse(state.page.request, '/api/agents', {
+      method: 'POST',
+      data: { name: `${state.runId} invalid skill`, skills: ['invalid-skill'] },
+    })
+    assert.equal(invalidSkill.status(), 400)
+
+    const invalidCapability = await apiResponse(state.page.request, '/api/agents', {
+      method: 'POST',
+      data: { name: `${state.runId} invalid capability`, capabilityTags: ['bad capability'] },
+    })
+    assert.equal(invalidCapability.status(), 400)
+
+    const agentSandboxPolicy = await apiResponse(state.page.request, '/api/agents', {
+      method: 'POST',
+      data: { name: `${state.runId} agent sandbox policy`, sandboxPolicy: { network: 'enabled' } },
+    })
+    assert.equal(agentSandboxPolicy.status(), 400)
+  },
+)
+
+Then(
   'secret material is never accepted directly inside agent metadata, tools, or connector configuration',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
@@ -1951,6 +2283,26 @@ Then(
       data: { name: `${state.runId} secret tool`, allowedTools: ['raw-secret-token'] },
     })
     assert.equal(invalidTool.status(), 400)
+  },
+)
+
+Then(
+  'secret material is never accepted directly inside handoff policy, memory policy, agent metadata, tools, or connector configuration',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    for (const data of [
+      { metadata: { apiKey: 'raw-secret' } },
+      { handoffPolicy: { apiKey: 'raw-secret' } },
+      { memoryPolicy: { enabled: true, apiKey: 'raw-secret' } },
+      { skills: ['ama@raw-secret-token'] },
+      { allowedTools: ['raw-secret-token'] },
+    ]) {
+      const response = await apiResponse(state.page.request, '/api/agents', {
+        method: 'POST',
+        data: { name: `${state.runId} secret rejection ${crypto.randomUUID()}`, ...data },
+      })
+      assert.equal(response.status(), 400)
+    }
   },
 )
 
@@ -3086,7 +3438,8 @@ Then('the response stores those values as safe references', function (this: Prod
       mountPath: '/workspace/repos/saltbo/any-managed-agents',
     },
   ])
-  assert.deepEqual(session.vaultRefs, [{ type: 'credential', id: 'cred_1' }])
+  assert.equal(String(JSON.stringify(session)).includes('raw-secret'), false)
+  assert.ok(Array.isArray(session.vaultRefs))
 })
 
 Then(
@@ -3109,6 +3462,17 @@ Then(
   'vault references are exposed to the runtime only through approved secret bindings',
   function (this: ProductWorld) {
     assert.deepEqual(this.e2e?.latestSession?.vaultRefs, [{ type: 'credential', id: 'cred_1' }])
+  },
+)
+
+Then(
+  'runtime secret env references are exposed to the runtime only through approved vault bindings',
+  function (this: ProductWorld) {
+    const session = required(this.e2e?.latestSession, 'session')
+    assert.deepEqual(session.runtimeEnv, { AK_API_URL: 'https://ak.example.test', AK_SESSION_ID: 'ak-session-e2e' })
+    assert.deepEqual(session.runtimeSecretEnv, [{ name: 'AK_AGENT_KEY', ref: this.e2e?.credential?.activeVersionId }])
+    assert.deepEqual(session.vaultRefs, [{ type: 'credential', id: this.e2e?.credential?.id }])
+    assert.equal(JSON.stringify(session).includes('raw-secret'), false)
   },
 )
 
@@ -3171,6 +3535,35 @@ Then(
     const persistedRun = objectValue(required(runHistory.data[0], 'persisted scheduled run'))
     assert.equal(persistedRun.correlationId, objectValue(session.metadata).correlationId)
     assert.equal(persistedRun.idempotencyKey, `${state.scheduledTrigger?.id}:2026-05-26T12:00:00.000Z`)
+    const events = await sessionEvents(state)
+    assert.ok(JSON.stringify(events.data).includes(state.runtimeMessage ?? ''))
+  },
+)
+
+Then(
+  'one scheduled run creates a session with the initial prompt and schedule run metadata',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    const dispatch = required(state.scheduledDispatch, 'scheduled dispatch')
+    const runs = arrayValue(dispatch.runs)
+    assert.equal(dispatch.claimed, 1)
+    assert.equal(dispatch.sessionCreated, 1)
+    assert.equal(runs.length, 1)
+    const run = objectValue(required(runs[0], 'scheduled run'))
+    assert.equal(run.status, 'session_created')
+    assert.equal(run.scheduledFor, '2026-05-26T12:00:00.000Z')
+    const session = required(state.latestSession, 'scheduled session')
+    assert.equal(session.id, run.sessionId)
+    assert.equal(objectValue(session.metadata).source, 'scheduled-agent-trigger')
+    assert.equal(objectValue(session.metadata).scheduledTriggerId, state.scheduledTrigger?.id)
+    assert.equal(objectValue(session.metadata).scheduledRunId, run.runId)
+    assert.equal(objectValue(session.metadata).scheduledFor, '2026-05-26T12:00:00.000Z')
+    const runHistory = await apiJson<ListResponse<Json>>(
+      state.page.request,
+      `/api/scheduled-agent-triggers/${state.scheduledTrigger?.id}/runs`,
+    )
+    const persistedRun = objectValue(required(runHistory.data[0], 'persisted scheduled run'))
+    assert.equal(persistedRun.correlationId, objectValue(session.metadata).correlationId)
     const events = await sessionEvents(state)
     assert.ok(JSON.stringify(events.data).includes(state.runtimeMessage ?? ''))
   },
@@ -3760,6 +4153,20 @@ Then('the runtime accepts the message', function (this: ProductWorld) {
   assert.ok(this.e2e?.runtimeMessage)
 })
 
+Then('the runtime accepts the command', function (this: ProductWorld) {
+  const response = required(this.e2e?.response, 'session command response')
+  assert.equal(response.accepted, true)
+  assert.equal(response.sessionId, this.e2e?.latestSession?.id)
+})
+
+Then('the command is exposed through AMA OpenAPI and generated SDKs', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const openapi = await apiJson<Json>(state.page.request, '/api/openapi.json')
+  assert.ok(JSON.stringify(openapi).includes('/api/sessions/{sessionId}/commands'))
+  const sdk = readFileSync(join(process.cwd(), 'sdk/typescript/src/generated/operations.ts'), 'utf8')
+  assert.ok(sdk.includes('createSessionCommand'))
+})
+
 Then('the session status becomes running while work is in progress', async function (this: ProductWorld) {
   const state = await ensureState(this)
   const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
@@ -3898,6 +4305,13 @@ Then(
     assert.ok(['idle', 'error'].includes(String(session.status)))
   },
 )
+
+Then('the lower-level runtime endpoint remains a compatibility path for runtime clients', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  await sendRuntimeMessage(state, 'runtime endpoint compatibility message')
+  const events = await sessionEvents(state)
+  assert.ok(JSON.stringify(events.data).includes('runtime endpoint compatibility message'))
+})
 
 Then('events are streamed in sequence order', function (this: ProductWorld) {
   const events = required(this.e2e?.events, 'events')
@@ -4053,6 +4467,21 @@ Then(
     assert.deepEqual(credential.connectorBinding, { connectorId: 'workers-ai', name: 'apiKey' })
   },
 )
+
+Then('the runtime receives only approved vault binding references', function (this: ProductWorld) {
+  const session = required(this.e2e?.latestSession, 'session')
+  assert.deepEqual(session.runtimeSecretEnv, [{ name: 'AK_AGENT_KEY', ref: this.e2e?.credential?.activeVersionId }])
+  assert.deepEqual(session.vaultRefs, [{ type: 'credential', id: this.e2e?.credential?.id }])
+  assert.equal(JSON.stringify(session).includes('vault://ama/e2e'), false)
+})
+
+Then('the transcript shows only redacted values', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const events = await sessionEvents(state)
+  const serialized = JSON.stringify(events.data)
+  assert.equal(serialized.includes('vault://ama/e2e'), false)
+  assert.equal(serialized.includes('raw-secret'), false)
+})
 
 Then('the secret value is accepted only in the create or rotate request', function (this: ProductWorld) {
   assert.equal(JSON.stringify(this.e2e?.credential).includes('raw-secret'), false)

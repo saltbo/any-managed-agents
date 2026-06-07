@@ -1,0 +1,1 @@
+ALTER TABLE sessions ADD COLUMN runtime_env TEXT NOT NULL DEFAULT '{}';

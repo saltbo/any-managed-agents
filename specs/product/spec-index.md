@@ -17,6 +17,7 @@ This repository publishes the OpenAPI contract for product resources. Generated 
 - `agents-control-plane.feature` - agent definitions, versions, validation, and archive behavior
 - `agent-builder.feature` - guided UI for creating and testing agents
 - `agent-detail.feature`, `agents-api.feature`, `agents-ui.feature`, `agents-update.feature` - agent API and UI coverage
+- `agent-roles-memory.feature` - generic agent role, handoff, and memory/notebook capability
 - `sessions-runtime.feature` - session lifecycle and AMA session endpoint behavior
 - `session-detail-tool-tracing.feature`, `session-stop.feature`, `sessions-api.feature`, `sessions-events.feature`, `sessions-list-bulk-archive.feature`, `sessions-ui.feature` - session coverage
 - `external-product-integration.feature` - external products use AMA APIs, sessions, and canonical events without owning runtime processes

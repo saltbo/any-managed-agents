@@ -218,6 +218,114 @@
           "name"
         ]
       },
+      "ExternalProjectBinding": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "epb_abc123"
+          },
+          "issuer": {
+            "type": "string",
+            "format": "uri",
+            "example": "https://ak.example.com"
+          },
+          "externalTenantId": {
+            "type": "string",
+            "example": "org_abc123"
+          },
+          "projectId": {
+            "type": "string",
+            "example": "project_abc123"
+          },
+          "environmentId": {
+            "type": "string",
+            "nullable": true,
+            "example": "env_abc123"
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "session:poll",
+              "session:claim"
+            ]
+          },
+          "enabled": {
+            "type": "boolean",
+            "example": true
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "platform": "agent-kanban"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "issuer",
+          "externalTenantId",
+          "projectId",
+          "environmentId",
+          "capabilities",
+          "enabled",
+          "metadata",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateExternalProjectBindingRequest": {
+        "type": "object",
+        "properties": {
+          "issuer": {
+            "type": "string",
+            "format": "uri"
+          },
+          "externalTenantId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          },
+          "environmentId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "maxItems": 100
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          }
+        },
+        "required": [
+          "issuer",
+          "externalTenantId"
+        ],
+        "additionalProperties": false
+      },
       "AgentListResponse": {
         "type": "object",
         "properties": {
@@ -282,6 +390,49 @@
             "example": [
               "ama@code-review"
             ]
+          },
+          "role": {
+            "type": "string",
+            "nullable": true,
+            "example": "maintainer"
+          },
+          "capabilityTags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "issue-triage",
+              "code-review"
+            ]
+          },
+          "handoffPolicy": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "enabled": true,
+              "targets": [
+                {
+                  "role": "reviewer"
+                },
+                {
+                  "capability": "code-review"
+                }
+              ]
+            }
+          },
+          "memoryPolicy": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "enabled": true,
+              "mode": "notebook",
+              "scope": "project_agent"
+            }
           },
           "allowedTools": {
             "type": "array",
@@ -354,6 +505,10 @@
           "model",
           "systemPrompt",
           "skills",
+          "role",
+          "capabilityTags",
+          "handoffPolicy",
+          "memoryPolicy",
           "allowedTools",
           "mcpConnectors",
           "metadata",
@@ -410,6 +565,54 @@
             "example": [
               "ama@code-review"
             ]
+          },
+          "role": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 80,
+            "example": "maintainer"
+          },
+          "capabilityTags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "maxItems": 50,
+            "example": [
+              "issue-triage",
+              "code-review"
+            ]
+          },
+          "handoffPolicy": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "enabled": true,
+              "targets": [
+                {
+                  "role": "reviewer"
+                },
+                {
+                  "capability": "code-review"
+                }
+              ]
+            }
+          },
+          "memoryPolicy": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "enabled": true,
+              "mode": "notebook",
+              "scope": "project_agent"
+            }
           },
           "allowedTools": {
             "type": "array",
@@ -494,6 +697,54 @@
             "example": [
               "ama@code-review"
             ]
+          },
+          "role": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 80,
+            "example": "maintainer"
+          },
+          "capabilityTags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "maxItems": 50,
+            "example": [
+              "issue-triage",
+              "code-review"
+            ]
+          },
+          "handoffPolicy": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "enabled": true,
+              "targets": [
+                {
+                  "role": "reviewer"
+                },
+                {
+                  "capability": "code-review"
+                }
+              ]
+            }
+          },
+          "memoryPolicy": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "enabled": true,
+              "mode": "notebook",
+              "scope": "project_agent"
+            }
           },
           "allowedTools": {
             "type": "array",
@@ -594,6 +845,49 @@
               "ama@code-review"
             ]
           },
+          "role": {
+            "type": "string",
+            "nullable": true,
+            "example": "maintainer"
+          },
+          "capabilityTags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "issue-triage",
+              "code-review"
+            ]
+          },
+          "handoffPolicy": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "enabled": true,
+              "targets": [
+                {
+                  "role": "reviewer"
+                },
+                {
+                  "capability": "code-review"
+                }
+              ]
+            }
+          },
+          "memoryPolicy": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "enabled": true,
+              "mode": "notebook",
+              "scope": "project_agent"
+            }
+          },
           "allowedTools": {
             "type": "array",
             "items": {
@@ -637,11 +931,79 @@
           "model",
           "systemPrompt",
           "skills",
+          "role",
+          "capabilityTags",
+          "handoffPolicy",
+          "memoryPolicy",
           "allowedTools",
           "mcpConnectors",
           "metadata",
           "createdAt"
         ]
+      },
+      "AgentMemory": {
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "string",
+            "example": "agent_abc123"
+          },
+          "projectId": {
+            "type": "string",
+            "example": "project_abc123"
+          },
+          "content": {
+            "type": "string",
+            "example": "Previous heartbeat checked open PRs and deferred billing export."
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "format": "markdown"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-05-22T00:00:00.000Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-05-22T00:00:00.000Z"
+          }
+        },
+        "required": [
+          "agentId",
+          "projectId",
+          "content",
+          "metadata",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "UpdateAgentMemoryRequest": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "maxLength": 128000,
+            "example": "Checked stale tasks. Follow up on repo resource migration next heartbeat."
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "format": "markdown"
+            }
+          }
+        },
+        "additionalProperties": false
       },
       "EnvironmentListResponse": {
         "type": "object",
@@ -2076,7 +2438,8 @@
             "enum": [
               "bearer",
               "mtls",
-              "oidc"
+              "oidc",
+              "federated"
             ],
             "example": "bearer"
           },
@@ -4008,6 +4371,60 @@
             "type": "string",
             "example": "Research current Canadian banking bonus offers."
           },
+          "resourceRefs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {
+                "nullable": true
+              }
+            },
+            "example": [
+              {
+                "type": "github_repository",
+                "owner": "openai",
+                "repo": "openai"
+              }
+            ]
+          },
+          "runtimeEnv": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "AK_API_URL": "https://ak.example.com"
+            }
+          },
+          "runtimeSecretEnv": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^[A-Z_][A-Z0-9_]*$",
+                  "example": "AK_AGENT_KEY"
+                },
+                "ref": {
+                  "type": "string",
+                  "pattern": "^vaultver_[a-zA-Z0-9]+$",
+                  "example": "vaultver_abc123"
+                }
+              },
+              "required": [
+                "name",
+                "ref"
+              ],
+              "additionalProperties": false
+            },
+            "example": [
+              {
+                "name": "AK_AGENT_KEY",
+                "ref": "vaultver_abc123"
+              }
+            ]
+          },
           "schedule": {
             "type": "object",
             "properties": {
@@ -4099,6 +4516,9 @@
           "environmentId",
           "name",
           "promptTemplate",
+          "resourceRefs",
+          "runtimeEnv",
+          "runtimeSecretEnv",
           "schedule",
           "status",
           "nextDueAt",
@@ -4135,6 +4555,62 @@
             "minLength": 1,
             "maxLength": 16000,
             "example": "Research current Canadian banking bonus offers."
+          },
+          "resourceRefs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {
+                "nullable": true
+              }
+            },
+            "maxItems": 50,
+            "example": [
+              {
+                "type": "github_repository",
+                "owner": "openai",
+                "repo": "openai"
+              }
+            ]
+          },
+          "runtimeEnv": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "AK_API_URL": "https://ak.example.com"
+            }
+          },
+          "runtimeSecretEnv": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^[A-Z_][A-Z0-9_]*$",
+                  "example": "AK_AGENT_KEY"
+                },
+                "ref": {
+                  "type": "string",
+                  "pattern": "^vaultver_[a-zA-Z0-9]+$",
+                  "example": "vaultver_abc123"
+                }
+              },
+              "required": [
+                "name",
+                "ref"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 50,
+            "example": [
+              {
+                "name": "AK_AGENT_KEY",
+                "ref": "vaultver_abc123"
+              }
+            ]
           },
           "schedule": {
             "type": "object",
@@ -4238,6 +4714,62 @@
             "minLength": 1,
             "maxLength": 16000,
             "example": "Research current Canadian banking bonus offers."
+          },
+          "resourceRefs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {
+                "nullable": true
+              }
+            },
+            "maxItems": 50,
+            "example": [
+              {
+                "type": "github_repository",
+                "owner": "openai",
+                "repo": "openai"
+              }
+            ]
+          },
+          "runtimeEnv": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "AK_API_URL": "https://ak.example.com"
+            }
+          },
+          "runtimeSecretEnv": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^[A-Z_][A-Z0-9_]*$",
+                  "example": "AK_AGENT_KEY"
+                },
+                "ref": {
+                  "type": "string",
+                  "pattern": "^vaultver_[a-zA-Z0-9]+$",
+                  "example": "vaultver_abc123"
+                }
+              },
+              "required": [
+                "name",
+                "ref"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 50,
+            "example": [
+              {
+                "name": "AK_AGENT_KEY",
+                "ref": "vaultver_abc123"
+              }
+            ]
           },
           "schedule": {
             "type": "object",
@@ -4474,6 +5006,27 @@
               }
             ]
           },
+          "runtimeEnv": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "AK_API_URL": "https://ak.example.com"
+            }
+          },
+          "runtimeSecretEnv": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SessionRuntimeSecretEnvRef"
+            },
+            "example": [
+              {
+                "name": "AK_AGENT_KEY",
+                "ref": "vaultver_abc123"
+              }
+            ]
+          },
           "durableObjectName": {
             "type": "string",
             "example": "org_org123:project_project123:session_session123"
@@ -4551,6 +5104,8 @@
           "title",
           "resourceRefs",
           "vaultRefs",
+          "runtimeEnv",
+          "runtimeSecretEnv",
           "durableObjectName",
           "sandboxId",
           "runtimeEndpointPath",
@@ -4600,6 +5155,28 @@
               "type": "string"
             }
           },
+          "role": {
+            "type": "string",
+            "nullable": true
+          },
+          "capabilityTags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "handoffPolicy": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          },
+          "memoryPolicy": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          },
           "allowedTools": {
             "type": "array",
             "items": {
@@ -4633,6 +5210,10 @@
           "model",
           "systemPrompt",
           "skills",
+          "role",
+          "capabilityTags",
+          "handoffPolicy",
+          "memoryPolicy",
           "allowedTools",
           "mcpConnectors",
           "metadata",
@@ -4800,6 +5381,28 @@
         ],
         "additionalProperties": false
       },
+      "SessionRuntimeSecretEnvRef": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "^vaultver_[A-Za-z0-9_]+$"
+          }
+        },
+        "required": [
+          "name",
+          "ref"
+        ],
+        "additionalProperties": false
+      },
       "SessionRuntimeMetadata": {
         "type": "object",
         "properties": {
@@ -4909,6 +5512,29 @@
               }
             ]
           },
+          "runtimeEnv": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "example": {
+              "AK_API_URL": "https://ak.example.com",
+              "AK_AGENT_ID": "agent_abc123"
+            }
+          },
+          "runtimeSecretEnv": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SessionRuntimeSecretEnvRef"
+            },
+            "maxItems": 50,
+            "example": [
+              {
+                "name": "AK_AGENT_KEY",
+                "ref": "vaultver_abc123"
+              }
+            ]
+          },
           "initialPrompt": {
             "type": "string",
             "minLength": 1,
@@ -4955,6 +5581,60 @@
         "required": [
           "status"
         ]
+      },
+      "SessionCommandResponse": {
+        "type": "object",
+        "properties": {
+          "runtime": {
+            "type": "string",
+            "enum": [
+              "ama-cloud",
+              "self-hosted-runner"
+            ],
+            "example": "ama-cloud"
+          },
+          "accepted": {
+            "type": "boolean",
+            "example": true
+          },
+          "sessionId": {
+            "type": "string",
+            "example": "session_abc123"
+          },
+          "path": {
+            "type": "string",
+            "example": "/rpc"
+          }
+        },
+        "required": [
+          "runtime",
+          "accepted",
+          "sessionId",
+          "path"
+        ]
+      },
+      "CreateSessionCommandRequest": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "prompt"
+            ],
+            "example": "prompt"
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 16000,
+            "example": "Please continue the task and summarize the current blocker."
+          }
+        },
+        "required": [
+          "type",
+          "message"
+        ],
+        "additionalProperties": false
       },
       "SessionEventListResponse": {
         "type": "object",
@@ -5404,6 +6084,7 @@
           "provider": {
             "type": "string",
             "enum": [
+              "ama-managed",
               "cloudflare-secrets",
               "external-vault"
             ],
@@ -5539,6 +6220,7 @@
               "provider": {
                 "type": "string",
                 "enum": [
+                  "ama-managed",
                   "cloudflare-secrets",
                   "external-vault"
                 ],
@@ -5636,6 +6318,7 @@
           "provider": {
             "type": "string",
             "enum": [
+              "ama-managed",
               "cloudflare-secrets",
               "external-vault"
             ],
@@ -5765,6 +6448,139 @@
           },
           "401": {
             "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/external-bindings": {
+      "get": {
+        "operationId": "listExternalProjectBindings",
+        "tags": [
+          "Projects"
+        ],
+        "summary": "List external tenant bindings for a project",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "project_abc123"
+            },
+            "required": true,
+            "name": "projectId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "External project bindings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ExternalProjectBinding"
+                      }
+                    }
+                  },
+                  "required": [
+                    "data"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Project not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createExternalProjectBinding",
+        "tags": [
+          "Projects"
+        ],
+        "summary": "Bind an external issuer tenant to a project",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "project_abc123"
+            },
+            "required": true,
+            "name": "projectId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateExternalProjectBindingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created external project binding",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalProjectBinding"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Project not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -6193,6 +7009,158 @@
           },
           "404": {
             "description": "Agent not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{agentId}/memory": {
+      "get": {
+        "operationId": "readAgentMemory",
+        "tags": [
+          "Agents"
+        ],
+        "summary": "Read agent memory",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "agent_abc123"
+            },
+            "required": true,
+            "name": "agentId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agent memory",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentMemory"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Agent memory disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateAgentMemory",
+        "tags": [
+          "Agents"
+        ],
+        "summary": "Update agent memory",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "agent_abc123"
+            },
+            "required": true,
+            "name": "agentId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAgentMemoryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated agent memory",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentMemory"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Agent memory disabled",
             "content": {
               "application/json": {
                 "schema": {
@@ -10769,6 +11737,103 @@
           },
           "409": {
             "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{sessionId}/commands": {
+      "post": {
+        "operationId": "createSessionCommand",
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Send a command to an active session",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "session_abc123"
+            },
+            "required": true,
+            "name": "sessionId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSessionCommandRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Session command accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionCommandResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Runtime error",
             "content": {
               "application/json": {
                 "schema": {

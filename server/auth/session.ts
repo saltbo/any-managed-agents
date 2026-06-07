@@ -18,6 +18,7 @@ export interface AuthContext {
   project: {
     id: string
     name: string
+    organizationId?: string
   }
   roles: string[]
   permissions: string[]
@@ -25,6 +26,12 @@ export interface AuthContext {
     subject: string
     clientId: string | null
     scope: string | null
+    issuer: string | null
+    externalTenantId: string | null
+    runnerId: string | null
+    runnerProjectId: string | null
+    runnerEnvironmentId: string | null
+    runnerCapabilities: string[]
   }
 }
 
@@ -37,7 +44,7 @@ export interface AuthIdentity {
 }
 
 export function isRunnerOidcAuth(env: Env, auth: Pick<AuthContext, 'oidc'>) {
-  return !!env.OIDC_RUNNER_CLIENT_ID && auth.oidc.clientId === env.OIDC_RUNNER_CLIENT_ID
+  return (!!env.OIDC_RUNNER_CLIENT_ID && auth.oidc.clientId === env.OIDC_RUNNER_CLIENT_ID) || !!auth.oidc.runnerId
 }
 
 function bearerToken(headers: Headers, url: string) {
@@ -65,6 +72,10 @@ export async function resolveAuthContext(
   const project = await upsertProjectForClaims(db, claims, new Date().toISOString(), requestedProjectId)
   return {
     ...identity,
+    organization: {
+      ...identity.organization,
+      id: project.organizationId ?? identity.organization.id,
+    },
     project,
   }
 }
@@ -97,6 +108,12 @@ function authIdentityFromClaims(claims: Awaited<ReturnType<typeof getBearerClaim
       subject: claims.sub,
       clientId: claims.client_id ?? claims.azp ?? null,
       scope: claims.scope ?? null,
+      issuer: claims.iss ?? null,
+      externalTenantId: claims.external_tenant_id ?? claims.tenant_id ?? null,
+      runnerId: claims.ama_runner_id ?? null,
+      runnerProjectId: claims.ama_project_id ?? null,
+      runnerEnvironmentId: claims.ama_environment_id ?? null,
+      runnerCapabilities: claims.runner_capabilities,
     },
   }
 }

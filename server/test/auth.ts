@@ -71,6 +71,10 @@ export async function signInRunner(claims = defaultClaims()) {
   return `Bearer e2e-runner:${runId}`
 }
 
+export function signInFederatedRunner(externalTenantId: string, runnerId: string, environmentId?: string) {
+  return `Bearer e2e-federated-runner:${externalTenantId}:${runnerId}${environmentId ? `:${environmentId}` : ''}`
+}
+
 export async function signInUser(suffix: string) {
   return signIn({
     ...defaultClaims(),

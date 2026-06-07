@@ -17,6 +17,7 @@ type Config struct {
 	ConfigPath            string        `json:"-"`
 	Origin                string        `json:"origin"`
 	Token                 string        `json:"token"`
+	ProjectID             string        `json:"projectId"`
 	RunnerID              string        `json:"runnerId"`
 	RunnerName            string        `json:"runnerName"`
 	EnvironmentID         string        `json:"environmentId"`
@@ -73,6 +74,7 @@ func LoadConfig(args []string, getenv func(string) string) (Config, error) {
 		ConfigPath:            defaultConfigPath(getenv),
 		Origin:                getenv("AMA_ORIGIN"),
 		Token:                 getenv("AMA_TOKEN"),
+		ProjectID:             getenv("AMA_PROJECT_ID"),
 		RunnerID:              getenv("AMA_RUNNER_ID"),
 		RunnerName:            getenv("AMA_RUNNER_NAME"),
 		EnvironmentID:         getenv("AMA_ENVIRONMENT_ID"),
@@ -93,6 +95,7 @@ func LoadConfig(args []string, getenv func(string) string) (Config, error) {
 	configPath := flags.String("config", config.ConfigPath, "JSON config file")
 	origin := flags.String("origin", config.Origin, "AMA control-plane origin")
 	token := flags.String("token", config.Token, "AMA bearer token")
+	projectID := flags.String("project-id", config.ProjectID, "AMA project id")
 	runnerID := flags.String("runner-id", config.RunnerID, "existing runner id")
 	runnerName := flags.String("runner-name", config.RunnerName, "runner name for registration")
 	environmentID := flags.String("environment-id", config.EnvironmentID, "optional bound environment id")
@@ -135,6 +138,9 @@ func LoadConfig(args []string, getenv func(string) string) (Config, error) {
 	}
 	if visited["token"] {
 		config.Token = *token
+	}
+	if visited["project-id"] {
+		config.ProjectID = *projectID
 	}
 	if visited["runner-id"] {
 		config.RunnerID = *runnerID
@@ -190,6 +196,9 @@ func LoadConfig(args []string, getenv func(string) string) (Config, error) {
 			}
 			if strings.TrimSpace(config.Token) == "" && config.Origin == saved.Origin {
 				config.Token = saved.AccessToken
+			}
+			if strings.TrimSpace(config.ProjectID) == "" && config.Origin == saved.Origin {
+				config.ProjectID = saved.ProjectID
 			}
 		}
 	}

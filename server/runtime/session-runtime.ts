@@ -30,6 +30,8 @@ export type SessionRuntimeStartInput = {
   environmentSnapshot: Record<string, unknown> | null
   mcpSnapshot?: Record<string, unknown>
   resourceRefs?: Record<string, unknown>[]
+  runtimeEnv?: Record<string, string>
+  runtimeSecretEnv?: Array<{ name: string; ref: string }>
 }
 
 export type SessionRuntimeStartResult = {
@@ -158,6 +160,8 @@ export async function startSessionRuntime(
         agentSnapshot: input.agentSnapshot,
         environmentSnapshot: input.environmentSnapshot,
         mcpSnapshot: input.mcpSnapshot ?? { connectors: [] },
+        runtimeEnv: input.runtimeEnv ?? {},
+        runtimeSecretEnv: input.runtimeSecretEnv ?? [],
       }),
       { encoding: 'utf-8' },
     )
@@ -168,6 +172,12 @@ export async function startSessionRuntime(
         encoding: 'utf-8',
       },
     )
+    await sandbox.writeFile('/workspace/.ama/runtime-env.json', JSON.stringify(input.runtimeEnv ?? {}), {
+      encoding: 'utf-8',
+    })
+    await sandbox.writeFile('/workspace/.ama/runtime-secret-env.json', JSON.stringify(input.runtimeSecretEnv ?? []), {
+      encoding: 'utf-8',
+    })
   }
 
   return {
@@ -182,6 +192,8 @@ export async function startSessionRuntime(
       executor: 'cloudflare-sandbox',
       piCorePackage: '@earendil-works/pi-agent-core',
       resourceManifestPath: '/workspace/.ama/resources.json',
+      runtimeEnvPath: '/workspace/.ama/runtime-env.json',
+      runtimeSecretEnvPath: '/workspace/.ama/runtime-secret-env.json',
     },
   }
 }

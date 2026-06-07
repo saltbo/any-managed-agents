@@ -16,6 +16,7 @@ type RuntimeRequest struct {
 	SessionID     string
 	Runtime       string
 	RuntimeConfig map[string]any
+	RuntimeEnv    map[string]string
 	Provider      string
 	Model         string
 	InitialPrompt string
@@ -50,14 +51,18 @@ func runtimeCommandEnvironment(request RuntimeRequest) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return append(env,
+	env = append(env,
 		"AMA_SESSION_ID="+request.SessionID,
 		"AMA_RUNTIME="+request.Runtime,
 		"AMA_PROVIDER="+request.Provider,
 		"AMA_MODEL="+request.Model,
 		"AMA_WORKSPACE="+request.WorkDir,
 		"AMA_RUNTIME_CONFIG="+string(config),
-	), nil
+	)
+	for key, value := range request.RuntimeEnv {
+		env = append(env, key+"="+value)
+	}
+	return env, nil
 }
 
 func runtimeWorkspace(workDir string, sessionID string) (string, error) {

@@ -4,23 +4,25 @@ Feature: External products use AMA as the runtime substrate
   lower-level agent definition, environment, session, runner, and event layer.
 
   @planned
-  Scenario: External product maps its agents and execution targets to AMA resources
-    Given an external product has its own agent profile and execution target ids
-    When the external product creates or updates the corresponding AMA resources
-    Then AMA stores the agent definition with the external product reference metadata
-    And AMA stores the environment with the external product reference metadata
-    And repeated requests with the same external references update the same AMA resources
-    And AMA does not require the external product to expose board, task, review, or PR concepts
+  Scenario: External product manages standard AMA resources through the SDK
+    Given an external product owns its workflow identifiers and product state
+    When the product creates or updates AMA agent definitions, environments, and resources through the OpenAPI SDK
+    Then AMA stores only standard AMA resource fields
+    And AMA does not store product-specific external references as first-class fields
+    And the product keeps any mapping between product records and AMA ids in its own storage
+    And AMA does not require the product to expose board, task, review, or PR concepts
 
   @planned
-  Scenario: External product starts task work by creating an AMA session
-    Given an external product has mapped an agent profile to an AMA agent definition
-    And the external product has mapped an execution target to an AMA environment
-    When the external product creates an AMA session with its task correlation metadata
+  Scenario: External product starts work by creating an AMA session
+    Given an external product has selected a standard AMA agent definition
+    And the external product has selected a standard AMA environment
+    And the external product has selected standard AMA resource references
+    When the external product creates an AMA session through the OpenAPI SDK
     Then AMA snapshots the selected agent and environment
     And AMA validates the environment runtime, provider, and model before runtime work starts
     And AMA returns a stable session id, status, status reason, runtime, and event endpoint
-    And the external product can render progress from AMA session status and canonical events only
+    And the external product can store the returned AMA ids in its own product records
+    And the external product can render progress from AMA session status and canonical events
 
   @planned
   Scenario: External product controls a running session only through AMA endpoints

@@ -158,6 +158,7 @@ export const codexProvider: RuntimeProvider = {
     const model = resolveModel(request)
     const threadOptions = {
       workingDirectory: request.cwd,
+      skipGitRepoCheck: true,
       sandboxMode: 'danger-full-access' as const,
       approvalPolicy: 'never' as const,
       ...(model ? { model } : {}),

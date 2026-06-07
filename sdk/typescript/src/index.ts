@@ -5,6 +5,7 @@ export { operations, type AmaOperationId }
 export type AmaClientOptions = {
   origin: string
   accessToken: string
+  projectId?: string
 }
 
 export type AmaRequestOptions = {
@@ -16,10 +17,12 @@ export type AmaRequestOptions = {
 export class AmaClient {
   readonly #origin: string
   readonly #accessToken: string
+  readonly #projectId: string | undefined
 
   constructor(options: AmaClientOptions) {
     this.#origin = options.origin.replace(/\/$/, '')
     this.#accessToken = options.accessToken
+    this.#projectId = options.projectId
   }
 
   async request<T>(operationId: AmaOperationId, options: AmaRequestOptions = {}) {
@@ -39,6 +42,7 @@ export class AmaClient {
       method: operation.method,
       headers: {
         authorization: `Bearer ${this.#accessToken}`,
+        ...(this.#projectId ? { 'x-ama-project-id': this.#projectId } : {}),
         ...(options.body === undefined ? {} : { 'content-type': 'application/json' }),
       },
     }

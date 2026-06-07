@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 describe('generated SDK layout', () => {
@@ -15,6 +15,13 @@ describe('generated SDK layout', () => {
     expect(sdkPackage.name).toBe('@any-managed-agents/sdk')
     expect(readFileSync('sdk/go/go.mod', 'utf8')).toMatch(/^module github\.com\/saltbo\/any-managed-agents\/sdk\/go/m)
     expect(readFileSync('sdk/python/pyproject.toml', 'utf8')).toMatch(/^name = "any-managed-agents-sdk"/m)
+  })
+
+  it('keeps a single canonical OpenAPI snapshot', () => {
+    expect(existsSync('sdk/openapi.json')).toBe(true)
+    expect(existsSync('sdk/typescript/openapi.json')).toBe(false)
+    expect(existsSync('sdk/go/openapi.json')).toBe(false)
+    expect(existsSync('sdk/python/openapi.json')).toBe(false)
   })
 
   it('builds an importable TypeScript SDK package', () => {

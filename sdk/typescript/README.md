@@ -9,6 +9,9 @@ pnpm run openapi:generate
 pnpm --filter -managed-agents/sdk run typecheck
 ```
 
+The canonical OpenAPI snapshot is `sdk/openapi.json`. Language SDK directories
+do not carry their own OpenAPI copies.
+
 The web console does not import this package. Console code continues to use the project-local Hono RPC client in `src/lib/api.ts`.
 
 Environment resources own hosting and runtime selection:

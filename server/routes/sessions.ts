@@ -13,6 +13,7 @@ import { type AuthContext, requireAuth } from '../auth/session'
 import {
   agentDefinitions,
   agentDefinitionVersions,
+  agentMemories,
   environments,
   environmentVersions,
   mcpConnections,
@@ -50,6 +51,8 @@ import {
   runtimeMessagesFromEvents,
   stopSessionRuntime as stopCloudSessionRuntime,
 } from '../runtime/session-runtime'
+import { decryptSecretValue } from '../vaultCrypto'
+import { dispatchRunnerSessionCommand, hasAcceptedRunnerSessionChannel } from './runners'
 import {
   type EnvironmentHostingMode,
   EnvironmentHostingModeSchema,
@@ -117,6 +120,21 @@ const ResourceRefSchema = z
   .union([GitHubRepositoryResourceRefSchema, LegacyResourceRefSchema])
   .openapi('SessionResourceRef')
 export type GitHubRepositoryResourceRef = z.infer<typeof GitHubRepositoryResourceRefSchema>
+const RuntimeSecretEnvSchema = z
+  .object({
+    name: z
+      .string()
+      .min(1)
+      .max(120)
+      .regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'Use a valid environment variable name.'),
+    ref: z
+      .string()
+      .min(1)
+      .max(120)
+      .regex(/^vaultver_[A-Za-z0-9_]+$/, 'Use a vault credential version id.'),
+  })
+  .strict()
+  .openapi('SessionRuntimeSecretEnvRef')
 const AgentVersionSchema = z
   .object({
     id: z.string(),
@@ -128,6 +146,10 @@ const AgentVersionSchema = z
     model: z.string(),
     systemPrompt: z.string().nullable(),
     skills: z.array(z.string()),
+    role: z.string().nullable(),
+    capabilityTags: z.array(z.string()),
+    handoffPolicy: JsonObjectSchema,
+    memoryPolicy: JsonObjectSchema,
     allowedTools: z.array(z.string()),
     mcpConnectors: z.array(z.string()),
     metadata: JsonObjectSchema,
@@ -185,6 +207,10 @@ export const SessionSchema = z
       .array(ResourceRefSchema)
       .openapi({ example: [{ type: 'github_repository', owner: 'saltbo', repo: 'any-managed-agents', ref: 'main' }] }),
     vaultRefs: z.array(JsonObjectSchema).openapi({ example: [{ type: 'credential', id: 'cred_abc123' }] }),
+    runtimeEnv: JsonObjectSchema.openapi({ example: { AK_API_URL: 'https://ak.example.com' } }),
+    runtimeSecretEnv: z.array(RuntimeSecretEnvSchema).openapi({
+      example: [{ name: 'AK_AGENT_KEY', ref: 'vaultver_abc123' }],
+    }),
     durableObjectName: z.string().openapi({ example: 'org_org123:project_project123:session_session123' }),
     sandboxId: z.string().nullable().openapi({ example: 'session_abc123' }),
     runtimeEndpointPath: z.string().nullable().openapi({ example: '/runtime/sessions/session_abc123/rpc' }),
@@ -236,6 +262,15 @@ const CreateSessionSchema = z
       .max(50)
       .optional()
       .openapi({ example: [{ type: 'credential', id: 'cred_abc123' }] }),
+    runtimeEnv: z
+      .record(z.string(), z.string())
+      .optional()
+      .openapi({ example: { AK_API_URL: 'https://ak.example.com', AK_AGENT_ID: 'agent_abc123' } }),
+    runtimeSecretEnv: z
+      .array(RuntimeSecretEnvSchema)
+      .max(50)
+      .optional()
+      .openapi({ example: [{ name: 'AK_AGENT_KEY', ref: 'vaultver_abc123' }] }),
     initialPrompt: z
       .string()
       .trim()
@@ -252,6 +287,28 @@ const UpdateSessionSchema = z
     status: z.enum(['stopped', 'archived']).openapi({ example: 'stopped' }),
   })
   .openapi('UpdateSessionRequest')
+
+const CreateSessionCommandSchema = z
+  .object({
+    type: z.literal('prompt').openapi({ example: 'prompt' }),
+    message: z
+      .string()
+      .trim()
+      .min(1)
+      .max(16000)
+      .openapi({ example: 'Please continue the task and summarize the current blocker.' }),
+  })
+  .strict()
+  .openapi('CreateSessionCommandRequest')
+
+const SessionCommandResponseSchema = z
+  .object({
+    runtime: z.enum(['ama-cloud', 'self-hosted-runner']).openapi({ example: 'ama-cloud' }),
+    accepted: z.boolean().openapi({ example: true }),
+    sessionId: z.string().openapi({ example: 'session_abc123' }),
+    path: z.string().openapi({ example: '/rpc' }),
+  })
+  .openapi('SessionCommandResponse')
 
 const ParamsSchema = z.object({
   sessionId: z.string().openapi({ param: { name: 'sessionId', in: 'path' }, example: 'session_abc123' }),
@@ -460,6 +517,39 @@ async function validateResourceCredentialRefs(
   return null
 }
 
+async function validateRuntimeSecretEnvRefs(
+  db: Db,
+  auth: AuthContext,
+  runtimeSecretEnv: Array<z.infer<typeof RuntimeSecretEnvSchema>>,
+) {
+  const names = new Set<string>()
+  for (const [index, ref] of runtimeSecretEnv.entries()) {
+    const field = `runtimeSecretEnv.${index}`
+    if (names.has(ref.name)) {
+      return { [`${field}.name`]: 'Runtime secret environment variable names must be unique.' }
+    }
+    names.add(ref.name)
+    const version = await db
+      .select({ id: vaultCredentialVersions.id })
+      .from(vaultCredentialVersions)
+      .where(
+        and(
+          eq(vaultCredentialVersions.id, ref.ref),
+          eq(vaultCredentialVersions.organizationId, auth.organization.id),
+          or(eq(vaultCredentialVersions.projectId, auth.project.id), isNull(vaultCredentialVersions.projectId)),
+          eq(vaultCredentialVersions.status, 'active'),
+        ),
+      )
+      .get()
+    if (!version) {
+      return {
+        [`${field}.ref`]: 'Secret reference must be an active credential version in this project or organization.',
+      }
+    }
+  }
+  return null
+}
+
 function serializeAgentVersion(row: AgentVersionRow) {
   return {
     id: row.id,
@@ -471,6 +561,10 @@ function serializeAgentVersion(row: AgentVersionRow) {
     model: row.model,
     systemPrompt: row.systemPrompt,
     skills: JSON.parse(row.skills) as string[],
+    role: row.role,
+    capabilityTags: JSON.parse(row.capabilityTags) as string[],
+    handoffPolicy: JSON.parse(row.handoffPolicy) as Record<string, unknown>,
+    memoryPolicy: JSON.parse(row.memoryPolicy) as Record<string, unknown>,
     allowedTools: JSON.parse(row.allowedTools) as string[],
     mcpConnectors: JSON.parse(row.mcpConnectors) as string[],
     metadata: JSON.parse(row.metadata) as Record<string, unknown>,
@@ -489,6 +583,10 @@ function parseAgentSnapshot(value: string | null) {
   return {
     ...snapshot,
     skills: Array.isArray(parsed.skills) ? parsed.skills : [],
+    role: typeof parsed.role === 'string' ? parsed.role : null,
+    capabilityTags: Array.isArray(parsed.capabilityTags) ? parsed.capabilityTags : [],
+    handoffPolicy: objectValue(parsed.handoffPolicy),
+    memoryPolicy: objectValue(parsed.memoryPolicy),
   } satisfies SerializedAgentVersion
 }
 
@@ -581,6 +679,8 @@ function serializeSession(row: SessionRow) {
     title: row.title,
     resourceRefs: parseJson<z.infer<typeof ResourceRefSchema>[]>(row.resourceRefs) ?? [],
     vaultRefs: parseJson<Record<string, unknown>[]>(row.vaultRefs) ?? [],
+    runtimeEnv: parseJson<Record<string, string>>(row.runtimeEnv) ?? {},
+    runtimeSecretEnv: parseJson<Array<z.infer<typeof RuntimeSecretEnvSchema>>>(row.runtimeSecretEnv) ?? [],
     durableObjectName: row.durableObjectName,
     sandboxId: row.sandboxId,
     runtimeEndpointPath:
@@ -698,16 +798,20 @@ async function markExpiredPendingSessions(db: Db, auth: AuthContext) {
 }
 
 async function enqueueSelfHostedSessionWork(
+  env: Env,
   db: Db,
   auth: AuthContext,
   values: {
     session: SessionRow
     agentSnapshot: ReturnType<typeof serializeAgentVersion>
     environmentSnapshot: NormalizedEnvironmentSnapshot | null
+    runtimeEnv?: Record<string, string>
+    runtimeSecretEnv?: Array<z.infer<typeof RuntimeSecretEnvSchema>>
     initialPrompt?: string
   },
 ) {
   const timestamp = now()
+  const runtimeEnv = await materializeSelfHostedRuntimeEnv(env, db, auth, values.runtimeEnv ?? {}, values.runtimeSecretEnv ?? [])
   const payload = {
     protocol: 'ama-runner-work',
     type: 'session.start',
@@ -720,6 +824,8 @@ async function enqueueSelfHostedSessionWork(
     runtimeDriver: runtimeDriverName(values.environmentSnapshot?.runtime ?? 'ama', 'self_hosted'),
     agentSnapshot: values.agentSnapshot,
     environmentSnapshot: values.environmentSnapshot,
+    runtimeEnv,
+    runtimeSecretEnv: values.runtimeSecretEnv ?? [],
     initialPrompt: values.initialPrompt ?? null,
     requiredRunnerCapability:
       values.environmentSnapshot?.hostingMode === 'self_hosted'
@@ -751,6 +857,43 @@ async function enqueueSelfHostedSessionWork(
     createdAt: timestamp,
     updatedAt: timestamp,
   })
+}
+
+async function materializeSelfHostedRuntimeEnv(
+  env: Env,
+  db: Db,
+  auth: AuthContext,
+  runtimeEnv: Record<string, string>,
+  runtimeSecretEnv: Array<z.infer<typeof RuntimeSecretEnvSchema>>,
+) {
+  const materialized: Record<string, string> = { ...runtimeEnv }
+  for (const item of runtimeSecretEnv) {
+    const version = await db
+      .select({ metadata: vaultCredentialVersions.metadata })
+      .from(vaultCredentialVersions)
+      .where(
+        and(
+          eq(vaultCredentialVersions.id, item.ref),
+          eq(vaultCredentialVersions.organizationId, auth.organization.id),
+          or(eq(vaultCredentialVersions.projectId, auth.project.id), isNull(vaultCredentialVersions.projectId)),
+          eq(vaultCredentialVersions.status, 'active'),
+        ),
+      )
+      .get()
+    const metadata = version ? parseJson<Record<string, unknown>>(version.metadata) : null
+    const value = await decryptSecretValue(env, metadata?.encryptedSecretValue)
+    if (typeof value === 'string') {
+      materialized[item.name] = value
+      continue
+    }
+    const legacyValue = metadata?.localSecretValue
+    if (typeof legacyValue === 'string') {
+      materialized[item.name] = legacyValue
+      continue
+    }
+    throw new Error(`Runtime secret ${item.ref} cannot be resolved for self-hosted runner dispatch`)
+  }
+  return materialized
 }
 
 function mcpConnectorIds(snapshot: Record<string, unknown>) {
@@ -836,6 +979,24 @@ async function currentAgentVersion(db: Db, agent: AgentRow) {
   )
 }
 
+async function sessionInitialPrompt(db: Db, projectId: string, agent: AgentRow, initialPrompt: string | undefined) {
+  const memoryPolicy = parseJson<Record<string, unknown>>(agent.memoryPolicy) ?? {}
+  if (memoryPolicy.enabled !== true) {
+    return initialPrompt
+  }
+  const memory = await db
+    .select({ content: agentMemories.content })
+    .from(agentMemories)
+    .where(and(eq(agentMemories.agentId, agent.id), eq(agentMemories.projectId, projectId)))
+    .get()
+  const content = memory?.content.trim()
+  if (!content) {
+    return initialPrompt
+  }
+  const memoryBlock = [`Agent memory for this agent:`, content].join('\n')
+  return initialPrompt ? `${memoryBlock}\n\nCurrent task:\n${initialPrompt}` : memoryBlock
+}
+
 async function selfHostedRunnerSupportsProviderModel(
   db: Db,
   auth: AuthContext,
@@ -899,19 +1060,23 @@ export async function createSessionForAgent(
     metadata?: Record<string, unknown>
     resourceRefs?: Array<z.infer<typeof ResourceRefSchema>>
     vaultRefs?: Record<string, unknown>[]
+    runtimeEnv?: Record<string, string>
+    runtimeSecretEnv?: Array<z.infer<typeof RuntimeSecretEnvSchema>>
     initialPrompt?: string
   } = {},
 ) {
   if (
     hasSecretMaterial(options.metadata) ||
     hasSecretMaterial(options.resourceRefs) ||
-    hasSecretMaterial(options.vaultRefs)
+    hasSecretMaterial(options.vaultRefs) ||
+    hasSecretMaterial(options.runtimeEnv)
   ) {
     return errorResponse(c, 400, 'validation_error', 'Invalid session configuration', {
       fields: {
         metadata: 'Secret material must be stored in vault references.',
         resourceRefs: 'Resource references must not contain secret material.',
         vaultRefs: 'Vault references must not contain raw secret material.',
+        runtimeEnv: 'Runtime environment variables must not contain raw secret material.',
       },
     })
   }
@@ -938,6 +1103,7 @@ export async function createSessionForAgent(
   if (!agentVersion) {
     throw new Error('Agent current version is required')
   }
+  const initialPrompt = await sessionInitialPrompt(db, auth.project.id, agent, options.initialPrompt)
   const policyDecision = await evaluateProviderPolicy(db, auth, {
     providerId: agentVersion.provider,
     modelId: agentVersion.model,
@@ -998,6 +1164,12 @@ export async function createSessionForAgent(
   if (credentialError) {
     return errorResponse(c, 400, 'validation_error', 'Invalid session resource credential reference', {
       fields: credentialError,
+    })
+  }
+  const runtimeSecretEnvError = await validateRuntimeSecretEnvRefs(db, auth, options.runtimeSecretEnv ?? [])
+  if (runtimeSecretEnvError) {
+    return errorResponse(c, 400, 'validation_error', 'Invalid runtime secret environment references', {
+      fields: runtimeSecretEnvError,
     })
   }
 
@@ -1069,6 +1241,8 @@ export async function createSessionForAgent(
     title: options.title ?? null,
     resourceRefs: stringify(normalizedResources.resourceRefs),
     vaultRefs: stringify(options.vaultRefs ?? []),
+    runtimeEnv: stringify(options.runtimeEnv ?? {}),
+    runtimeSecretEnv: stringify(options.runtimeSecretEnv ?? []),
     projectId: auth.project.id,
     durableObjectName: `org_${auth.organization.id}:project_${auth.project.id}:session_${id}`,
     sandboxId,
@@ -1105,11 +1279,13 @@ export async function createSessionForAgent(
   })
 
   if (hostingMode === 'self_hosted') {
-    await enqueueSelfHostedSessionWork(db, auth, {
+    await enqueueSelfHostedSessionWork(c.env, db, auth, {
       session: pending,
       agentSnapshot,
       environmentSnapshot,
-      ...(options.initialPrompt !== undefined ? { initialPrompt: options.initialPrompt } : {}),
+      runtimeEnv: options.runtimeEnv ?? {},
+      runtimeSecretEnv: options.runtimeSecretEnv ?? [],
+      ...(initialPrompt !== undefined ? { initialPrompt } : {}),
     })
     return c.json(serializeSession(pending), 201)
   }
@@ -1120,7 +1296,9 @@ export async function createSessionForAgent(
       agentSnapshot,
       environmentSnapshot,
       resourceRefs: normalizedResources.resourceRefs,
-      ...(options.initialPrompt !== undefined ? { initialPrompt: options.initialPrompt } : {}),
+      runtimeEnv: options.runtimeEnv ?? {},
+      runtimeSecretEnv: options.runtimeSecretEnv ?? [],
+      ...(initialPrompt !== undefined ? { initialPrompt } : {}),
     })
 
   if (c.env.AMA_RUNTIME_MODE !== 'test') {
@@ -1145,10 +1323,12 @@ async function startSessionRuntimeForRow(
     agentSnapshot: ReturnType<typeof serializeAgentVersion>
     environmentSnapshot: NormalizedEnvironmentSnapshot | null
     resourceRefs: Array<z.infer<typeof ResourceRefSchema>>
+    runtimeEnv?: Record<string, string>
+    runtimeSecretEnv?: Array<z.infer<typeof RuntimeSecretEnvSchema>>
     initialPrompt?: string
   },
 ) {
-  const { pending, agentSnapshot, environmentSnapshot, resourceRefs, initialPrompt } = input
+  const { pending, agentSnapshot, environmentSnapshot, resourceRefs, runtimeEnv, runtimeSecretEnv, initialPrompt } = input
   const sessionId = pending.id
   const sandboxId = pending.sandboxId ?? sessionId.toLowerCase()
   const runtimeName = environmentSnapshot?.runtime ?? 'ama'
@@ -1169,6 +1349,8 @@ async function startSessionRuntimeForRow(
         environmentSnapshot,
         mcpSnapshot,
         resourceRefs,
+        runtimeEnv: runtimeEnv ?? {},
+        runtimeSecretEnv: runtimeSecretEnv ?? [],
       }),
       RUNTIME_START_TIMEOUT_MS,
       'Session runtime startup timed out',
@@ -1379,6 +1561,153 @@ async function dispatchInitialPrompt(env: Env, db: Db, auth: AuthContext, sessio
     }
     const safeError = safeRuntimeError(error)
     await markInitialPromptFailed(db, auth, session, safeError.message)
+  }
+}
+
+async function dispatchSessionPromptCommand(
+  env: Env,
+  db: Db,
+  auth: AuthContext,
+  session: SessionRow,
+  message: string,
+) {
+  if (session.status !== 'idle' && session.status !== 'running') {
+    return { status: 409 as const, message: 'Session runtime is not active' }
+  }
+  const path = '/rpc'
+  if (!session.sandboxId) {
+    if (!(await hasAcceptedRunnerSessionChannel(env, session.id))) {
+      return { status: 409 as const, message: 'Runner session channel is unavailable' }
+    }
+    const dispatched = await dispatchRunnerSessionCommand(env, session.id, {
+      id: newId('runnercmd'),
+      type: 'runtime.rpc',
+      path,
+      body: { type: 'prompt', message },
+    })
+    if (!dispatched) {
+      return { status: 409 as const, message: 'Runner session channel is unavailable' }
+    }
+    return { status: 202 as const, runtime: 'self-hosted-runner' as const, accepted: true, sessionId: session.id, path }
+  }
+
+  const submittedAt = now()
+  const started = await db
+    .update(sessions)
+    .set({ status: 'running', statusReason: null, updatedAt: submittedAt })
+    .where(
+      and(
+        eq(sessions.id, session.id),
+        eq(sessions.projectId, auth.project.id),
+        or(eq(sessions.status, 'idle'), eq(sessions.status, 'running')),
+      ),
+    )
+    .returning({ id: sessions.id })
+    .get()
+  if (!started) {
+    return { status: 409 as const, message: 'Session runtime is no longer active' }
+  }
+
+  try {
+    const agentSnapshot = parseAgentSnapshot(session.agentSnapshot)
+    if (!agentSnapshot) {
+      throw new Error('Session agent snapshot is required')
+    }
+    const modelConfig = parseJson<Record<string, unknown>>(session.modelConfig) ?? {}
+    const messages = await loadRuntimeMessages(db, session.id)
+    const ensureActive = async () => {
+      await assertRuntimeSessionRunning(db, auth, session.id)
+    }
+    const result = await runSessionTurn(env, {
+      sessionId: session.id,
+      sandboxId: session.sandboxId,
+      provider: session.modelProvider ?? agentSnapshot.provider,
+      model: String(modelConfig.model ?? agentSnapshot.model),
+      agentSnapshot,
+      prompt: message,
+      messages,
+      ensureActive,
+      onEvent: async (event, metadata) => {
+        await ensureActive()
+        await appendRuntimeEvent(db, {
+          auth,
+          sessionId: session.id,
+          event,
+          ...(metadata ? { metadata } : {}),
+        })
+      },
+      approveToolCall: async ({ toolName, input }) => {
+        await ensureActive()
+        if (toolName === 'sandbox.exec') {
+          const command = typeof input.command === 'string' ? input.command : null
+          const decision = await evaluateSandboxRuntimePolicy(db, auth, {
+            session: {
+              id: session.id,
+              agentSnapshot: session.agentSnapshot,
+              environmentSnapshot: session.environmentSnapshot,
+            },
+            operation: 'command',
+            command,
+          })
+          if (!decision.allowed) {
+            await ensureActive()
+            await appendRuntimeEvent(db, {
+              auth,
+              sessionId: session.id,
+              event: {
+                type: 'policy_denied',
+                category: decision.category,
+                ruleId: decision.rule,
+                resourceType: 'sandbox_command',
+                resourceId: command?.trim().split(/\s+/)[0] ?? 'sandbox.exec',
+                decision,
+                operation: 'command',
+                command,
+              },
+              metadata: { source: 'policy' },
+            })
+            await recordAudit(db, {
+              auth,
+              action: 'runtime_sandbox.operation',
+              resourceType: 'sandbox_command',
+              resourceId: command?.trim().split(/\s+/)[0] ?? 'sandbox.exec',
+              outcome: 'denied',
+              sessionId: session.id,
+              policyCategory: decision.category,
+              metadata: { operation: 'command', command, decision },
+            })
+          }
+          await ensureActive()
+          return { allowed: decision.allowed, reason: decision.message }
+        }
+        return { allowed: true }
+      },
+    })
+    if (result.status === 'idle') {
+      await db
+        .update(sessions)
+        .set({ status: 'idle', updatedAt: now() })
+        .where(
+          and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id), eq(sessions.status, 'running')),
+        )
+    }
+    await recordAudit(db, {
+      auth,
+      action: 'session.command',
+      resourceType: 'session',
+      resourceId: session.id,
+      outcome: 'success',
+      sessionId: session.id,
+      metadata: { type: 'prompt' },
+    })
+    return { status: 202 as const, runtime: 'ama-cloud' as const, accepted: true, sessionId: session.id, path }
+  } catch (error) {
+    if (isRuntimeTurnCancelled(error)) {
+      return { status: 409 as const, message: 'Session runtime is no longer active' }
+    }
+    const safeError = safeRuntimeError(error)
+    await markInitialPromptFailed(db, auth, session, safeError.message)
+    return { status: 500 as const, message: safeError.message, runtimeError: safeError }
   }
 }
 
@@ -1813,6 +2142,27 @@ const stopSessionRoute = createRoute({
   },
 })
 
+const createSessionCommandRoute = createRoute({
+  method: 'post',
+  path: '/{sessionId}/commands',
+  operationId: 'createSessionCommand',
+  tags: ['Sessions'],
+  summary: 'Send a command to an active session',
+  ...AuthenticatedOperation,
+  request: {
+    params: ParamsSchema,
+    body: { required: true, content: { 'application/json': { schema: CreateSessionCommandSchema } } },
+  },
+  responses: {
+    202: { description: 'Session command accepted', content: { 'application/json': { schema: SessionCommandResponseSchema } } },
+    400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    404: { description: 'Session not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    409: { description: 'Conflict', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    500: { description: 'Runtime error', content: { 'application/json': { schema: ErrorResponseSchema } } },
+  },
+})
+
 const archiveSessionRoute = createRoute({
   method: 'delete',
   path: '/{sessionId}',
@@ -1996,7 +2346,8 @@ async function streamEventsNdjsonResponse(c: Context<{ Bindings: Env }>, session
 
 const routes = app
   .openapi(createSessionRoute, async (c) => {
-    const { agentId, environmentId, title, metadata, resourceRefs, vaultRefs, initialPrompt } = c.req.valid('json')
+    const { agentId, environmentId, title, metadata, resourceRefs, vaultRefs, runtimeEnv, runtimeSecretEnv, initialPrompt } =
+      c.req.valid('json')
     const db = drizzle(c.env.DB)
     const auth = await requireAuth(c, db)
     if (auth instanceof Response) {
@@ -2007,6 +2358,8 @@ const routes = app
       ...(metadata !== undefined ? { metadata } : {}),
       ...(resourceRefs !== undefined ? { resourceRefs } : {}),
       ...(vaultRefs !== undefined ? { vaultRefs } : {}),
+      ...(runtimeEnv !== undefined ? { runtimeEnv } : {}),
+      ...(runtimeSecretEnv !== undefined ? { runtimeSecretEnv } : {}),
       ...(initialPrompt !== undefined ? { initialPrompt } : {}),
     })
   })
@@ -2098,6 +2451,30 @@ const routes = app
       return errorResponse(c, 404, 'not_found', 'Session not found')
     }
     return await stopSession(c, db, auth, session, reason)
+  })
+  .openapi(createSessionCommandRoute, async (c) => {
+    const { sessionId } = c.req.valid('param')
+    const { message } = c.req.valid('json')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+
+    const session = await findSession(db, auth, sessionId)
+    if (!session) {
+      return errorResponse(c, 404, 'not_found', 'Session not found')
+    }
+    const result = await dispatchSessionPromptCommand(c.env, db, auth, session, message)
+    if (result.status !== 202) {
+      return errorResponse(c, result.status, result.status === 500 ? 'internal_error' : 'conflict', result.message, {
+        ...('runtimeError' in result ? { runtime: result.runtimeError } : {}),
+      })
+    }
+    return c.json(
+      { runtime: result.runtime, accepted: result.accepted, sessionId: result.sessionId, path: result.path },
+      202,
+    )
   })
   .openapi(archiveSessionRoute, async (c) => {
     const { sessionId } = c.req.valid('param')

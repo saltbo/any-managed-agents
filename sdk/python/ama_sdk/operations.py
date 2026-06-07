@@ -102,6 +102,15 @@ OPERATIONS = [
   },
   {
     "method": "POST",
+    "path": "/api/projects/{projectId}/external-bindings",
+    "operationId": "createExternalProjectBinding",
+    "summary": "Bind an external issuer tenant to a project",
+    "tags": [
+      "Projects"
+    ]
+  },
+  {
+    "method": "POST",
     "path": "/api/projects",
     "operationId": "createProject",
     "summary": "Create a project in the current organization",
@@ -177,6 +186,15 @@ OPERATIONS = [
     "path": "/api/sessions",
     "operationId": "createSession",
     "summary": "Create a session",
+    "tags": [
+      "Sessions"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/sessions/{sessionId}/commands",
+    "operationId": "createSessionCommand",
+    "summary": "Send a command to an active session",
     "tags": [
       "Sessions"
     ]
@@ -314,6 +332,15 @@ OPERATIONS = [
     "summary": "List environment versions",
     "tags": [
       "Environments"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/projects/{projectId}/external-bindings",
+    "operationId": "listExternalProjectBindings",
+    "summary": "List external tenant bindings for a project",
+    "tags": [
+      "Projects"
     ]
   },
   {
@@ -480,6 +507,15 @@ OPERATIONS = [
   },
   {
     "method": "GET",
+    "path": "/api/agents/{agentId}/memory",
+    "operationId": "readAgentMemory",
+    "summary": "Read agent memory",
+    "tags": [
+      "Agents"
+    ]
+  },
+  {
+    "method": "GET",
     "path": "/api/governance/effective-policy",
     "operationId": "readEffectiveGovernancePolicy",
     "summary": "Read effective governance policy",
@@ -627,6 +663,15 @@ OPERATIONS = [
     "path": "/api/agents/{agentId}",
     "operationId": "updateAgent",
     "summary": "Update an agent",
+    "tags": [
+      "Agents"
+    ]
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/agents/{agentId}/memory",
+    "operationId": "updateAgentMemory",
+    "summary": "Update agent memory",
     "tags": [
       "Agents"
     ]

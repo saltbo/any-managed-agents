@@ -71,6 +71,7 @@ func TestLoadConfigParsesValidatedRunnerConfig(t *testing.T) {
 	env := map[string]string{
 		"AMA_ORIGIN":                      "https://ama.example.test",
 		"AMA_TOKEN":                       "token",
+		"AMA_PROJECT_ID":                  "project_env",
 		"AMA_RUNNER_NAME":                 "runner",
 		"AMA_RUNNER_CAPABILITIES":         "sandbox.exec,sandbox.read",
 		"AMA_RUNNER_ALLOW_UNSAFE_PROCESS": "true",
@@ -81,7 +82,7 @@ func TestLoadConfigParsesValidatedRunnerConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected valid config, got %v", err)
 	}
-	if config.Origin != "https://ama.example.test" || config.RunnerName != "runner" {
+	if config.Origin != "https://ama.example.test" || config.RunnerName != "runner" || config.ProjectID != "project_env" {
 		t.Fatalf("unexpected config: %#v", config)
 	}
 	if got := strings.Join(config.Capabilities, ","); got != "sandbox.exec,sandbox.read" {
@@ -97,6 +98,7 @@ func TestLoadConfigUsesSavedDeviceLoginTokenWhenNoExplicitTokenIsProvided(t *tes
 	if err := SaveRunnerConfig(configPath, SavedRunnerConfig{
 		Origin:      "https://ama.example.test",
 		AccessToken: "saved-token",
+		ProjectID:   "project_saved",
 		TokenType:   "Bearer",
 		ExpiresAt:   time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
 	}); err != nil {
@@ -117,7 +119,7 @@ func TestLoadConfigUsesSavedDeviceLoginTokenWhenNoExplicitTokenIsProvided(t *tes
 	if err != nil {
 		t.Fatalf("expected saved token config to load, got %v", err)
 	}
-	if config.Origin != "https://ama.example.test" || config.Token != "saved-token" {
+	if config.Origin != "https://ama.example.test" || config.Token != "saved-token" || config.ProjectID != "project_saved" {
 		t.Fatalf("unexpected saved token config: %#v", config)
 	}
 
@@ -135,6 +137,7 @@ func TestLoadConfigFlagsOverrideEnvironment(t *testing.T) {
 	env := map[string]string{
 		"AMA_ORIGIN":                      "https://env.example.test",
 		"AMA_TOKEN":                       "env-token",
+		"AMA_PROJECT_ID":                  "project_env",
 		"AMA_RUNNER_ID":                   "runner_env",
 		"AMA_RUNNER_NAME":                 "env-runner",
 		"AMA_ENVIRONMENT_ID":              "env_old",
@@ -144,6 +147,7 @@ func TestLoadConfigFlagsOverrideEnvironment(t *testing.T) {
 	config, err := LoadConfig([]string{
 		"--origin", "https://flag.example.test",
 		"--token", "flag-token",
+		"--project-id", "project_flag",
 		"--runner-id", "runner_flag",
 		"--runner-name", "flag-runner",
 		"--environment-id", "env_flag",
@@ -163,7 +167,7 @@ func TestLoadConfigFlagsOverrideEnvironment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected valid flag config, got %v", err)
 	}
-	if config.Origin != "https://flag.example.test" || config.Token != "flag-token" || config.RunnerID != "runner_flag" {
+	if config.Origin != "https://flag.example.test" || config.Token != "flag-token" || config.RunnerID != "runner_flag" || config.ProjectID != "project_flag" {
 		t.Fatalf("flags did not override env: %#v", config)
 	}
 	if config.WorkDir != "/tmp/flag-work" || config.PollInterval != 2*time.Second || config.CommandTimeout != 45*time.Second {

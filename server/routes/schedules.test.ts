@@ -37,6 +37,25 @@ async function createAgent(authorization: string) {
   return (await res.json()) as { id: string }
 }
 
+async function createRuntimeSecret(authorization: string) {
+  const vaultRes = await jsonFetch('/api/vaults', authorization, {
+    method: 'POST',
+    body: JSON.stringify({ name: `Scheduled runtime secrets ${crypto.randomUUID()}` }),
+  })
+  expect(vaultRes.status).toBe(201)
+  const vault = (await vaultRes.json()) as { id: string }
+  const credentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, authorization, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'AK agent session key',
+      type: 'session_env_secret',
+      secret: { provider: 'cloudflare-secrets', secretValue: 'raw-ak-agent-key' },
+    }),
+  })
+  expect(credentialRes.status).toBe(201)
+  return (await credentialRes.json()) as { activeVersionId: string }
+}
+
 async function createTrigger(
   authorization: string,
   agentId: string,
@@ -62,6 +81,9 @@ async function createTrigger(
     nextDueAt: string
     status: string
     metadata: Record<string, unknown>
+    resourceRefs: Record<string, unknown>[]
+    runtimeEnv: Record<string, unknown>
+    runtimeSecretEnv: Array<{ name: string; ref: string }>
     schedule: { intervalSeconds: number; windowSeconds: number }
   }
 }
@@ -248,6 +270,7 @@ describe('[CF] /api/scheduled-agent-triggers', () => {
     const authorization = await signIn()
     const agent = await createAgent(authorization)
     const environment = await createEnvironment(authorization)
+    const runtimeSecret = await createRuntimeSecret(authorization)
     const dueAt = '2026-05-26T12:00:00.000Z'
     const heartbeatAt = '2026-05-26T12:01:00.000Z'
 
@@ -258,6 +281,9 @@ describe('[CF] /api/scheduled-agent-triggers', () => {
         environmentId: environment.id,
         name: 'Banking bonus heartbeat',
         promptTemplate: 'Research current Canadian banking bonus offers.',
+        resourceRefs: [{ type: 'github_repository', owner: 'saltbo', repo: 'agent-kanban' }],
+        runtimeEnv: { AK_API_URL: 'http://localhost:8788', AK_WORKER: agent.id },
+        runtimeSecretEnv: [{ name: 'AK_AGENT_KEY', ref: runtimeSecret.activeVersionId }],
         schedule: { type: 'interval', intervalSeconds: 3600 },
         nextDueAt: dueAt,
         metadata: { externalRunGroup: 'banking-bonus' },
@@ -273,6 +299,9 @@ describe('[CF] /api/scheduled-agent-triggers', () => {
     expect(trigger).toMatchObject({
       status: 'active',
       nextDueAt: dueAt,
+      resourceRefs: [{ type: 'github_repository', owner: 'saltbo', repo: 'agent-kanban' }],
+      runtimeEnv: { AK_API_URL: 'http://localhost:8788', AK_WORKER: agent.id },
+      runtimeSecretEnv: [{ name: 'AK_AGENT_KEY', ref: runtimeSecret.activeVersionId }],
       schedule: { intervalSeconds: 3600 },
     })
 
@@ -318,6 +347,16 @@ describe('[CF] /api/scheduled-agent-triggers', () => {
     const session = await sessionRes.json()
     expect(session).toMatchObject({
       id: sessionId,
+      resourceRefs: [
+        {
+          type: 'github_repository',
+          owner: 'saltbo',
+          repo: 'agent-kanban',
+          mountPath: '/workspace/repos/saltbo/agent-kanban',
+        },
+      ],
+      runtimeEnv: { AK_API_URL: 'http://localhost:8788', AK_WORKER: agent.id },
+      runtimeSecretEnv: [{ name: 'AK_AGENT_KEY', ref: runtimeSecret.activeVersionId }],
       metadata: expect.objectContaining({
         source: 'scheduled-agent-trigger',
         scheduledTriggerId: trigger.id,

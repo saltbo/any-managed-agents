@@ -8,6 +8,28 @@ export const projects = sqliteTable('projects', {
   updatedAt: text('updated_at').notNull(),
 })
 
+export const externalProjectBindings = sqliteTable(
+  'external_project_bindings',
+  {
+    id: text('id').primaryKey(),
+    issuer: text('issuer').notNull(),
+    externalTenantId: text('external_tenant_id').notNull(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id),
+    environmentId: text('environment_id'),
+    capabilities: text('capabilities').notNull().default('[]'),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    metadata: text('metadata').notNull().default('{}'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('idx_external_project_bindings_issuer_tenant').on(table.issuer, table.externalTenantId),
+    index('idx_external_project_bindings_project').on(table.projectId),
+  ],
+)
+
 export const agentDefinitions = sqliteTable(
   'agent_definitions',
   {
@@ -20,6 +42,10 @@ export const agentDefinitions = sqliteTable(
     model: text('model').notNull(),
     systemPrompt: text('system_prompt'),
     skills: text('skills').notNull().default('[]'),
+    role: text('role'),
+    capabilityTags: text('capability_tags').notNull().default('[]'),
+    handoffPolicy: text('handoff_policy').notNull().default('{}'),
+    memoryPolicy: text('memory_policy').notNull().default('{"enabled":false}'),
     allowedTools: text('allowed_tools').notNull().default('[]'),
     mcpConnectors: text('mcp_connectors').notNull().default('[]'),
     metadata: text('metadata').notNull().default('{}'),
@@ -50,6 +76,10 @@ export const agentDefinitionVersions = sqliteTable(
     model: text('model').notNull(),
     systemPrompt: text('system_prompt'),
     skills: text('skills').notNull().default('[]'),
+    role: text('role'),
+    capabilityTags: text('capability_tags').notNull().default('[]'),
+    handoffPolicy: text('handoff_policy').notNull().default('{}'),
+    memoryPolicy: text('memory_policy').notNull().default('{"enabled":false}'),
     allowedTools: text('allowed_tools').notNull(),
     mcpConnectors: text('mcp_connectors').notNull().default('[]'),
     metadata: text('metadata').notNull(),
@@ -59,6 +89,23 @@ export const agentDefinitionVersions = sqliteTable(
     index('idx_agent_definition_versions_agent_id').on(table.agentId),
     uniqueIndex('idx_agent_definition_versions_agent_version').on(table.agentId, table.version),
   ],
+)
+
+export const agentMemories = sqliteTable(
+  'agent_memories',
+  {
+    agentId: text('agent_id')
+      .primaryKey()
+      .references(() => agentDefinitions.id),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id),
+    content: text('content').notNull().default(''),
+    metadata: text('metadata').notNull().default('{}'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [index('idx_agent_memories_project_updated').on(table.projectId, table.updatedAt, table.agentId)],
 )
 
 export const environments = sqliteTable(
@@ -224,6 +271,8 @@ export const sessions = sqliteTable(
     title: text('title'),
     resourceRefs: text('resource_refs').notNull().default('[]'),
     vaultRefs: text('vault_refs').notNull().default('[]'),
+    runtimeEnv: text('runtime_env').notNull().default('{}'),
+    runtimeSecretEnv: text('runtime_secret_env').notNull().default('[]'),
     projectId: text('project_id').references(() => projects.id),
     durableObjectName: text('durable_object_name').notNull(),
     sandboxId: text('sandbox_id'),
@@ -295,6 +344,9 @@ export const scheduledAgentTriggers = sqliteTable(
       .references(() => environments.id),
     name: text('name').notNull(),
     promptTemplate: text('prompt_template').notNull(),
+    resourceRefs: text('resource_refs').notNull().default('[]'),
+    runtimeEnv: text('runtime_env').notNull().default('{}'),
+    runtimeSecretEnv: text('runtime_secret_env').notNull().default('[]'),
     intervalSeconds: integer('interval_seconds').notNull(),
     windowSeconds: integer('window_seconds').notNull().default(0),
     status: text('status').notNull().default('active'),

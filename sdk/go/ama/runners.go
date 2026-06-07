@@ -191,6 +191,9 @@ func (c *Client) OpenRunnerSessionChannel(ctx context.Context, runnerID string, 
 	if c.AccessToken != "" {
 		headers.Set("authorization", "Bearer "+c.AccessToken)
 	}
+	if c.ProjectID != "" {
+		headers.Set("x-ama-project-id", c.ProjectID)
+	}
 	conn, _, err := websocket.Dial(ctx, endpoint, &websocket.DialOptions{HTTPHeader: headers})
 	if err != nil {
 		return nil, err
@@ -246,6 +249,9 @@ func (c *Client) doStatus(ctx context.Context, method string, path string, body 
 	}
 	if c.AccessToken != "" {
 		request.Header.Set("authorization", "Bearer "+c.AccessToken)
+	}
+	if c.ProjectID != "" {
+		request.Header.Set("x-ama-project-id", c.ProjectID)
 	}
 	client := c.HTTPClient
 	if client == nil {

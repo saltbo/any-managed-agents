@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -40,22 +41,23 @@ type RunnerDaemon struct {
 }
 
 type WorkPayload struct {
-	Protocol                 string         `json:"protocol"`
-	Type                     string         `json:"type"`
-	SessionID                string         `json:"sessionId"`
-	HostingMode              string         `json:"hostingMode"`
-	Runtime                  string         `json:"runtime"`
-	RuntimeConfig            map[string]any `json:"runtimeConfig"`
-	Provider                 string         `json:"provider"`
-	Model                    string         `json:"model"`
-	RuntimeDriver            string         `json:"runtimeDriver"`
-	RequiredRunnerCapability string         `json:"requiredRunnerCapability"`
-	InitialPrompt            *string        `json:"initialPrompt"`
-	Approved                 bool           `json:"approved"`
-	ToolCallID               string         `json:"toolCallId"`
-	ToolName                 string         `json:"toolName"`
-	Input                    map[string]any `json:"input"`
-	ToolCall                 *ToolCall      `json:"toolCall"`
+	Protocol                 string            `json:"protocol"`
+	Type                     string            `json:"type"`
+	SessionID                string            `json:"sessionId"`
+	HostingMode              string            `json:"hostingMode"`
+	Runtime                  string            `json:"runtime"`
+	RuntimeConfig            map[string]any    `json:"runtimeConfig"`
+	Provider                 string            `json:"provider"`
+	Model                    string            `json:"model"`
+	RuntimeDriver            string            `json:"runtimeDriver"`
+	RequiredRunnerCapability string            `json:"requiredRunnerCapability"`
+	RuntimeEnv               map[string]string `json:"runtimeEnv"`
+	InitialPrompt            *string           `json:"initialPrompt"`
+	Approved                 bool              `json:"approved"`
+	ToolCallID               string            `json:"toolCallId"`
+	ToolName                 string            `json:"toolName"`
+	Input                    map[string]any    `json:"input"`
+	ToolCall                 *ToolCall         `json:"toolCall"`
 }
 
 type ToolCall struct {
@@ -347,9 +349,16 @@ func (d *RunnerDaemon) completeSessionStart(ctx context.Context, lease *ama.Runn
 	})
 	cancel()
 	if renewErr := checkRenewal(); renewErr != nil {
+		if err == nil && isCompletedLeaseRenewalRace(renewErr) {
+			return nil
+		}
 		return renewErr
 	}
 	return err
+}
+
+func isCompletedLeaseRenewalRace(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "Runner lease is no longer active")
 }
 
 func (d *RunnerDaemon) runAMASession(execution sessionRuntimeExecution) error {
@@ -406,6 +415,7 @@ func (d *RunnerDaemon) runExternalSession(
 		SessionID:     payload.SessionID,
 		Runtime:       payload.Runtime,
 		RuntimeConfig: payload.RuntimeConfig,
+		RuntimeEnv:    payload.RuntimeEnv,
 		Provider:      payload.Provider,
 		Model:         payload.Model,
 		InitialPrompt: initialPrompt(payload),

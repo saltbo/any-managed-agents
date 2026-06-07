@@ -125,7 +125,7 @@ const CreateRunnerSchema = z
       .openapi({ example: ['node', 'git'] }),
     environmentId: z.string().min(1).optional().openapi({ example: 'env_abc123' }),
     credentialSecretRef: RunnerCredentialSecretRefSchema.optional(),
-    authMode: z.enum(['bearer', 'mtls', 'oidc']).optional().openapi({ example: 'bearer' }),
+    authMode: z.enum(['bearer', 'mtls', 'oidc', 'federated']).optional().openapi({ example: 'bearer' }),
     maxConcurrent: z.number().int().min(1).max(100).optional().openapi({ example: 2 }),
     metadata: JsonObjectSchema.optional().openapi({ example: { pool: 'default' } }),
   })
@@ -352,6 +352,9 @@ async function findRunner(db: Db, auth: AuthContext, runnerId: string) {
 
 function runnerOperationAuthorized(env: Env, auth: AuthContext, runner: RunnerRow) {
   if (isRunnerOidcAuth(env, auth)) {
+    if (auth.oidc.runnerId) {
+      return runner.authMode === 'federated' && runner.id === auth.oidc.runnerId
+    }
     return (
       runner.authMode === 'oidc' &&
       runner.oidcSubject === auth.oidc.subject &&
@@ -376,6 +379,15 @@ function runnerOidcBindingFields(env: Env, auth: AuthContext, authMode: string) 
   if (!isRunnerOidcAuth(env, auth)) {
     return null
   }
+  if (auth.oidc.runnerId) {
+    if (authMode !== 'federated') {
+      return { authMode: 'Federated runner tokens can only register federated runners.' }
+    }
+    if (!auth.oidc.runnerProjectId && !auth.oidc.externalTenantId) {
+      return { authorization: 'Federated runner token did not include a project or external tenant binding.' }
+    }
+    return null
+  }
   if (authMode !== 'oidc') {
     return { authMode: 'Runner device-login tokens can only register OIDC-authenticated runners.' }
   }
@@ -383,6 +395,18 @@ function runnerOidcBindingFields(env: Env, auth: AuthContext, authMode: string) 
     return { authorization: 'Runner OIDC token did not include a bindable client id.' }
   }
   return null
+}
+
+function runnerAuthModeForRegistration(auth: AuthContext, requested: string | undefined) {
+  return requested ?? (auth.oidc.runnerId ? 'federated' : 'oidc')
+}
+
+function runnerIdForRegistration(auth: AuthContext) {
+  return auth.oidc.runnerId ?? newId('runner')
+}
+
+function environmentIdForRegistration(auth: AuthContext, requested: string | undefined) {
+  return auth.oidc.runnerEnvironmentId ?? requested
 }
 
 async function validateEnvironment(db: Db, auth: AuthContext, environmentId: string | undefined) {
@@ -1023,10 +1047,11 @@ const routes = app
     if (hasSecretMaterial(body.metadata) || hasSecretMaterial(body.capabilities)) {
       return errorResponse(c, 400, 'validation_error', 'Runner metadata must not contain raw secret material')
     }
-    if (!(await validateEnvironment(db, auth, body.environmentId))) {
+    const environmentId = environmentIdForRegistration(auth, body.environmentId)
+    if (!(await validateEnvironment(db, auth, environmentId))) {
       return errorResponse(c, 409, 'conflict', 'Runner environment is unavailable')
     }
-    const authMode = body.authMode ?? 'oidc'
+    const authMode = runnerAuthModeForRegistration(auth, body.authMode)
     const oidcBindingFields = runnerOidcBindingFields(c.env, auth, authMode)
     if (oidcBindingFields) {
       return errorResponse(c, 400, 'validation_error', 'Runner OIDC token is missing required binding claims', {
@@ -1041,12 +1066,12 @@ const routes = app
     }
     const timestamp = now()
     const runner = {
-      id: newId('runner'),
+      id: runnerIdForRegistration(auth),
       organizationId: auth.organization.id,
       projectId: auth.project.id,
       name: body.name,
-      capabilities: stringify(body.capabilities ?? []),
-      environmentId: body.environmentId ?? null,
+      capabilities: stringify(auth.oidc.runnerCapabilities.length ? auth.oidc.runnerCapabilities : body.capabilities ?? []),
+      environmentId: environmentId ?? null,
       credentialSecretRef: body.credentialSecretRef ?? null,
       authMode,
       oidcSubject: auth.oidc.subject,
@@ -1088,7 +1113,7 @@ const routes = app
       environmentId,
     } = c.req.valid('query')
     const runnerToken = isRunnerOidcAuth(c.env, auth)
-    if (runnerToken && !auth.oidc.clientId) {
+    if (runnerToken && !auth.oidc.runnerId && !auth.oidc.clientId) {
       return errorResponse(c, 403, 'forbidden', 'Runner token is not authorized for this resource')
     }
     let parsedCursor: ReturnType<typeof parseListCursor> | null = null
@@ -1101,8 +1126,9 @@ const routes = app
     }
     const filters = [
       eq(runners.projectId, auth.project.id),
-      runnerToken ? eq(runners.oidcSubject, auth.oidc.subject) : undefined,
-      runnerToken && auth.oidc.clientId ? eq(runners.oidcClientId, auth.oidc.clientId) : undefined,
+      runnerToken && auth.oidc.runnerId ? eq(runners.id, auth.oidc.runnerId) : undefined,
+      runnerToken && !auth.oidc.runnerId ? eq(runners.oidcSubject, auth.oidc.subject) : undefined,
+      runnerToken && !auth.oidc.runnerId && auth.oidc.clientId ? eq(runners.oidcClientId, auth.oidc.clientId) : undefined,
       status
         ? eq(runners.status, status)
         : includeArchived === 'true'
@@ -1205,7 +1231,11 @@ const routes = app
     }
     const timestamp = now()
     const status = body.status ?? 'active'
-    const capabilities = body.capabilities ? stringify(body.capabilities) : runner.capabilities
+    const capabilities = auth.oidc.runnerCapabilities.length
+      ? stringify(auth.oidc.runnerCapabilities)
+      : body.capabilities
+        ? stringify(body.capabilities)
+        : runner.capabilities
     const currentLoad = body.currentLoad ?? runner.currentLoad
     await db.insert(runnerHeartbeats).values({
       id: newId('heartbeat'),

@@ -38,6 +38,7 @@ func runWithContext(ctx context.Context, args []string, getenv func(string) stri
 	client := &ama.Client{
 		Origin:      config.Origin,
 		AccessToken: config.Token,
+		ProjectID:   config.ProjectID,
 		HTTPClient:  &http.Client{Timeout: 30 * time.Second},
 	}
 	daemon := RunnerDaemon{

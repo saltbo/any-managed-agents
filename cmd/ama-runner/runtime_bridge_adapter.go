@@ -172,7 +172,7 @@ func (a SDKBridgeRuntimeAdapter) Run(ctx context.Context, request RuntimeRequest
 		return final, fmt.Errorf("%s SDK bridge exited with code %d", request.Runtime, exitCode(waitErr))
 	}
 	if err := writeSerialized("runtime.metadata", ama.JSON{"data": ama.JSON{"runtime": request.Runtime, "stage": "sdk_bridge_exited", "status": "completed"}}); err != nil {
-		return final, err
+		final["finalEventError"] = err.Error()
 	}
 	return final, nil
 }

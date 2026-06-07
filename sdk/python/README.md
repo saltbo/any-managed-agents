@@ -2,7 +2,7 @@
 
 This directory is the generated Python SDK package scaffold for the external Any Managed Agents control-plane API.
 
-Regenerate the OpenAPI snapshot and generated operation metadata from Hono routes:
+Regenerate generated operation metadata from the route-generated OpenAPI document:
 
 ```bash
 pnpm run openapi:generate
@@ -10,6 +10,8 @@ python -m compileall sdk/python/ama_sdk
 ```
 
 This package is not a pnpm workspace. It uses native Python package metadata and must remain generated from or mechanically aligned with `sdk/openapi.json`.
+The canonical OpenAPI snapshot is `sdk/openapi.json`; this directory does not
+carry its own OpenAPI copy.
 
 Environment resources own hosting and runtime selection:
 

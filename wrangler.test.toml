@@ -22,6 +22,7 @@ AMA_RUNTIME_AI_PROXY_TOKEN = "test-runtime-ai-proxy-token"
 AMA_CLOUDFLARE_API_TOKEN = "test-cloudflare-token"
 AMA_CLOUDFLARE_SECRETS_STORE_ID = "test-secrets-store"
 AMA_APPROVED_EXTERNAL_VAULT_PREFIXES = "vault://team/"
+AMA_VAULT_ENCRYPTION_KEY = "test-vault-encryption-key-for-workers-suite-32-bytes"
 
 [[d1_databases]]
 binding = "DB"

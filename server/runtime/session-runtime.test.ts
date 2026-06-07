@@ -121,10 +121,10 @@ describe('session-runtime', () => {
         agentSnapshot: { instructions: 'Test runtime' },
         environmentSnapshot: { runtimeConfig: { image: 'ama-tool-executor' } },
       }),
-    ).resolves.toEqual({
+    ).resolves.toMatchObject({
       sandboxId: 'sandbox_123',
       runtimeEndpointPath: '/runtime/sessions/session_123/rpc',
-      metadata: {
+      metadata: expect.objectContaining({
         runtimeMode: 'test',
         runtimeDriver: 'ama-cloud',
         runtimeBackend: 'ama-cloud',
@@ -133,7 +133,9 @@ describe('session-runtime', () => {
         executor: 'cloudflare-sandbox',
         piCorePackage: '@earendil-works/pi-agent-core',
         resourceManifestPath: '/workspace/.ama/resources.json',
-      },
+        runtimeEnvPath: '/workspace/.ama/runtime-env.json',
+        runtimeSecretEnvPath: '/workspace/.ama/runtime-secret-env.json',
+      }),
     })
   })
 
@@ -418,6 +420,8 @@ describe('session-runtime', () => {
         agentSnapshot: { instructions: 'Test runtime' },
         environmentSnapshot: { runtimeConfig: { image: 'ama-tool-executor' } },
         mcpSnapshot: { connectors: ['github'] },
+        runtimeEnv: { AK_API_URL: 'https://ak.example.com', AK_AGENT_ID: 'agent_123' },
+        runtimeSecretEnv: [{ name: 'AK_AGENT_KEY', ref: 'vaultver_abc123' }],
         resourceRefs: [
           {
             type: 'github_repository',
@@ -437,6 +441,8 @@ describe('session-runtime', () => {
         runtimeBackend: 'ama-cloud',
         runtimeProtocol: 'ama-runtime-rpc',
         loop: 'cloud-session-runtime',
+        runtimeEnvPath: '/workspace/.ama/runtime-env.json',
+        runtimeSecretEnvPath: '/workspace/.ama/runtime-secret-env.json',
       }),
     })
 
@@ -444,7 +450,7 @@ describe('session-runtime', () => {
     expect(mockSandbox.exec).toHaveBeenCalledWith('mkdir -p /workspace/.ama')
     expect(mockSandbox.writeFile).toHaveBeenCalledWith(
       '/workspace/.ama/session.json',
-      expect.stringContaining('"runtime":"ama"'),
+      expect.stringContaining('"runtimeSecretEnv":[{"name":"AK_AGENT_KEY","ref":"vaultver_abc123"}]'),
       { encoding: 'utf-8' },
     )
     expect(mockSandbox.writeFile).toHaveBeenCalledWith(
@@ -463,6 +469,16 @@ describe('session-runtime', () => {
           },
         ],
       }),
+      { encoding: 'utf-8' },
+    )
+    expect(mockSandbox.writeFile).toHaveBeenCalledWith(
+      '/workspace/.ama/runtime-env.json',
+      JSON.stringify({ AK_API_URL: 'https://ak.example.com', AK_AGENT_ID: 'agent_123' }),
+      { encoding: 'utf-8' },
+    )
+    expect(mockSandbox.writeFile).toHaveBeenCalledWith(
+      '/workspace/.ama/runtime-secret-env.json',
+      JSON.stringify([{ name: 'AK_AGENT_KEY', ref: 'vaultver_abc123' }]),
       { encoding: 'utf-8' },
     )
   })

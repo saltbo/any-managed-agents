@@ -1,10 +1,11 @@
 import { and, eq } from 'drizzle-orm'
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
 import * as client from 'openid-client'
-import { projects } from '../db/schema'
+import { externalProjectBindings, projects } from '../db/schema'
 import type { Env } from '../env'
 
 export interface UserInfoClaims {
+  iss?: string
   sub: string
   email?: string
   name?: string
@@ -18,6 +19,40 @@ export interface UserInfoClaims {
   organization_name?: string
   roles: string[]
   permissions: string[]
+  external_tenant_id?: string
+  tenant_id?: string
+  ama_project_id?: string
+  ama_environment_id?: string
+  ama_runner_id?: string
+  runner_capabilities: string[]
+}
+
+interface IntrospectionClaims {
+  active?: boolean
+  iss?: string
+  sub?: string
+  email?: string
+  name?: string
+  picture?: string
+  client_id?: string
+  azp?: string
+  scope?: string
+  org_id?: string
+  organization_id?: string
+  org_name?: string
+  organization_name?: string
+  roles?: unknown
+  permissions?: unknown
+  external_tenant_id?: string
+  tenant_id?: string
+  ama_project_id?: string
+  ama_environment_id?: string
+  ama_runner_id?: string
+  runner_capabilities?: unknown
+  authorization?: {
+    roles?: unknown
+    permissions?: unknown
+  }
 }
 
 export class OidcError extends Error {
@@ -112,13 +147,76 @@ export async function getBearerClaims(env: Env, accessToken: string): Promise<Us
     }
     return e2eClaims(env, accessToken.slice('e2e-runner:'.length), env.OIDC_RUNNER_CLIENT_ID)
   }
+  if (env.AMA_E2E_TEST_AUTH === 'true' && accessToken.startsWith('e2e-federated-runner:')) {
+    return e2eFederatedRunnerClaims(accessToken.slice('e2e-federated-runner:'.length))
+  }
 
   const oidcClient = await createOidcClient(env)
-  const claims = await runOidc(() => client.fetchUserInfo(oidcClient, accessToken, client.skipSubjectCheck))
+  const claims = await runOidcWithIntrospectionFallback(env, accessToken, () => client.fetchUserInfo(oidcClient, accessToken, client.skipSubjectCheck))
   if (!claims.sub) {
     throw new OidcError('OIDC provider userinfo did not include required subject')
   }
   return normalizeClaims(env, claims as Record<string, unknown> & { sub: string })
+}
+
+async function runOidcWithIntrospectionFallback<T extends Record<string, unknown>>(
+  env: Env,
+  accessToken: string,
+  operation: () => Promise<T>,
+) {
+  try {
+    return await operation()
+  } catch (err) {
+    const claims = await introspectAccessToken(env, accessToken)
+    if (claims) {
+      return claims as T
+    }
+    throw toOidcError(err)
+  }
+}
+
+async function introspectAccessToken(env: Env, accessToken: string): Promise<(Record<string, unknown> & { sub: string }) | null> {
+  const issuer = env.OIDC_ISSUER?.replace(/\/$/, '')
+  const clientId = env.OIDC_INTROSPECTION_CLIENT_ID ?? env.OIDC_CLIENT_ID
+  const clientSecret = env.OIDC_INTROSPECTION_CLIENT_SECRET ?? env.OIDC_CLIENT_SECRET
+  if (!issuer || !clientId || !clientSecret) {
+    return null
+  }
+
+  const body = new URLSearchParams()
+  body.set('token', accessToken)
+  const response = await oidcFetch(env, `${issuer}/oauth2/introspect`, {
+    method: 'POST',
+    headers: {
+      authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+      'content-type': 'application/x-www-form-urlencoded',
+    },
+    body,
+  })
+  if (!response.ok) {
+    throw new OidcError(`OIDC token introspection failed with HTTP ${response.status}`)
+  }
+  const claims = (await response.json()) as IntrospectionClaims
+  if (!claims.active) {
+    throw new OidcError('OIDC token introspection reported an inactive token')
+  }
+  const tokenClientId = stringClaim(claims.client_id) ?? stringClaim(claims.azp)
+  const sub = stringClaim(claims.sub) ?? (tokenClientId ? `client:${tokenClientId}` : null)
+  if (!sub) {
+    throw new OidcError('OIDC token introspection did not include subject or client id')
+  }
+  return {
+    ...claims,
+    sub,
+    ...(tokenClientId && !claims.org_id && !claims.organization_id ? { org_id: `client:${tokenClientId}` } : {}),
+  } as Record<string, unknown> & { sub: string }
+}
+
+function oidcFetch(env: Env, url: string, init: RequestInit) {
+  const requestUrl = new URL(url)
+  const issuerUrl = new URL(env.OIDC_ISSUER ?? url)
+  const useServiceBinding = env.OIDC_USE_SERVICE_BINDING !== 'false'
+  return useServiceBinding && requestUrl.origin === issuerUrl.origin && env.OIDC_PROVIDER ? env.OIDC_PROVIDER.fetch(url, init) : fetch(url, init)
 }
 
 export async function upsertProjectForClaims(
@@ -127,6 +225,13 @@ export async function upsertProjectForClaims(
   timestamp: string,
   requestedProjectId?: string,
 ) {
+  const federatedProject = await projectForFederatedClaims(db, claims)
+  if (federatedProject) {
+    return federatedProject
+  }
+  if (claims.iss && (claims.external_tenant_id || claims.tenant_id || claims.ama_runner_id)) {
+    throw new OidcError('Federated token is not bound to an AMA project')
+  }
   const organizationId = organizationIdForClaims(claims)
   const projectName = 'Default project'
   let project = await db.select().from(projects).where(eq(projects.organizationId, organizationId)).get()
@@ -147,23 +252,51 @@ export async function upsertProjectForClaims(
       .where(and(eq(projects.id, requestedProjectId), eq(projects.organizationId, organizationId)))
       .get()
     if (requestedProject) {
-      return { id: requestedProject.id, name: requestedProject.name }
+      return { id: requestedProject.id, name: requestedProject.name, organizationId: requestedProject.organizationId }
     }
   }
-  return { id: project.id, name: project.name }
+  return { id: project.id, name: project.name, organizationId: project.organizationId }
 }
 
 export function organizationIdForClaims(claims: UserInfoClaims) {
   return claims.org_id ?? claims.organization_id ?? `user:${claims.sub}`
 }
 
+async function projectForFederatedClaims(db: DrizzleD1Database, claims: UserInfoClaims) {
+  const externalTenantId = claims.external_tenant_id ?? claims.tenant_id
+  if (claims.iss && externalTenantId) {
+    const binding = await db
+      .select({ project: projects, binding: externalProjectBindings })
+      .from(externalProjectBindings)
+      .innerJoin(projects, eq(projects.id, externalProjectBindings.projectId))
+      .where(
+        and(
+          eq(externalProjectBindings.issuer, claims.iss),
+          eq(externalProjectBindings.externalTenantId, externalTenantId),
+          eq(externalProjectBindings.enabled, true),
+        ),
+      )
+      .get()
+    return binding
+      ? { id: binding.project.id, name: binding.project.name, organizationId: binding.project.organizationId }
+      : null
+  }
+  if (!claims.iss && claims.ama_project_id) {
+    const project = await db.select().from(projects).where(eq(projects.id, claims.ama_project_id)).get()
+    return project ? { id: project.id, name: project.name, organizationId: project.organizationId } : null
+  }
+  return null
+}
+
 function normalizeClaims(env: Env, claims: Record<string, unknown> & { sub: string }): UserInfoClaims {
-  const roles = stringArray(claims.roles)
-  const permissions = stringArray(claims.permissions)
+  const authorization = objectClaim(claims.authorization)
+  const roles = stringArray(claims.roles).length ? stringArray(claims.roles) : stringArray(authorization?.roles)
+  const permissions = stringArray(claims.permissions).length ? stringArray(claims.permissions) : stringArray(authorization?.permissions)
   const clientId = stringClaim(claims.client_id) ?? stringClaim(claims.azp)
-  const runnerScoped = isRunnerTokenClaim(env, clientId)
+  const runnerScoped = isRunnerTokenClaim(env, clientId, claims)
   return {
     sub: claims.sub,
+    ...optionalClaim('iss', claims.iss),
     ...optionalClaim('email', claims.email),
     ...optionalClaim('name', claims.name),
     ...optionalClaim('picture', claims.picture),
@@ -174,8 +307,14 @@ function normalizeClaims(env: Env, claims: Record<string, unknown> & { sub: stri
     ...optionalClaim('organization_id', claims.organization_id),
     ...optionalClaim('org_name', claims.org_name),
     ...optionalClaim('organization_name', claims.organization_name),
+    ...optionalClaim('external_tenant_id', claims.external_tenant_id),
+    ...optionalClaim('tenant_id', claims.tenant_id),
+    ...optionalClaim('ama_project_id', claims.ama_project_id),
+    ...optionalClaim('ama_environment_id', claims.ama_environment_id),
+    ...optionalClaim('ama_runner_id', claims.ama_runner_id),
     roles: roles.length ? roles : runnerScoped ? ['runner'] : ['owner'],
     permissions: permissions.length ? permissions : runnerScoped ? [] : ['*'],
+    runner_capabilities: stringArray(claims.runner_capabilities),
   }
 }
 
@@ -193,7 +332,30 @@ function e2eClaims(env: Env, runId: string, clientId: string | undefined): UserI
     org_name: `E2E Organization ${safeRunId}`,
     roles: runnerScoped ? ['runner'] : ['owner'],
     permissions: runnerScoped ? [] : ['*'],
+    runner_capabilities: [],
   }
+}
+
+function e2eFederatedRunnerClaims(value: string): UserInfoClaims {
+  const [externalTenantId = 'tenant_e2e', runnerId = 'runner_e2e', environmentId = ''] = value.split(':')
+  return {
+    iss: 'https://ak.e2e.example.com',
+    sub: `${externalTenantId}:${runnerId}`,
+    name: `E2E Federated Runner ${runnerId}`,
+    client_id: 'federated-runner-client',
+    azp: 'federated-runner-client',
+    scope: 'runner:connect',
+    external_tenant_id: externalTenantId,
+    ...(environmentId ? { ama_environment_id: environmentId } : {}),
+    ama_runner_id: runnerId,
+    roles: ['runner'],
+    permissions: [],
+    runner_capabilities: ['sandbox.exec', runtimeProviderModelCapabilityForE2E()],
+  }
+}
+
+function runtimeProviderModelCapabilityForE2E() {
+  return 'runtime-provider-model:ama:workers-ai:@cf/moonshotai/kimi-k2.6'
 }
 
 async function runOidc<T>(operation: () => Promise<T>) {
@@ -231,6 +393,10 @@ function stringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.length > 0) : []
 }
 
-function isRunnerTokenClaim(env: Env, clientId: string | undefined) {
-  return !!env.OIDC_RUNNER_CLIENT_ID && clientId === env.OIDC_RUNNER_CLIENT_ID
+function objectClaim(value: unknown) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null
+}
+
+function isRunnerTokenClaim(env: Env, clientId: string | undefined, claims?: Record<string, unknown>) {
+  return (!!env.OIDC_RUNNER_CLIENT_ID && clientId === env.OIDC_RUNNER_CLIENT_ID) || typeof claims?.ama_runner_id === 'string'
 }

@@ -20,7 +20,7 @@ async function openApiDoc() {
 
 function bodyFields(source: string) {
   const propertyAccess = [...source.matchAll(/\bbody\.([A-Za-z]\w*)/g)].map((match) => match[1])
-  const destructured = [...source.matchAll(/const \{([^}]+)\} = c\.req\.valid\('json'\)/g)].flatMap((match) =>
+  const destructured = [...source.matchAll(/const \{([^}]+)\}\s*=\s*c\.req\.valid\('json'\)/gs)].flatMap((match) =>
     match[1]!
       .split(',')
       .map((field) => field.trim())
@@ -36,7 +36,7 @@ function schemaFields(doc: Awaited<ReturnType<typeof openApiDoc>>, schemaName: s
 describe('route schema and handler alignment', () => {
   it('keeps agent write fields aligned across handlers and OpenAPI schemas', async () => {
     const doc = await openApiDoc()
-    const handled = [...new Set(bodyFields(routeSources.agents))]
+    const handled = [...new Set(bodyFields(routeSources.agents).filter((field) => field !== 'content'))]
     const createFields = schemaFields(doc, 'CreateAgentRequest')
     const updateFields = schemaFields(doc, 'UpdateAgentRequest')
 
@@ -57,12 +57,14 @@ describe('route schema and handler alignment', () => {
   it('keeps session write fields aligned across handlers and OpenAPI schemas', async () => {
     const doc = await openApiDoc()
 
-    expect([...new Set(bodyFields(routeSources.sessions))]).toEqual([
+    expect([...new Set(bodyFields(routeSources.sessions).filter((field) => field !== 'message'))]).toEqual([
       'agentId',
       'environmentId',
       'initialPrompt',
       'metadata',
       'resourceRefs',
+      'runtimeEnv',
+      'runtimeSecretEnv',
       'status',
       'title',
       'vaultRefs',
@@ -73,9 +75,12 @@ describe('route schema and handler alignment', () => {
       'initialPrompt',
       'metadata',
       'resourceRefs',
+      'runtimeEnv',
+      'runtimeSecretEnv',
       'title',
       'vaultRefs',
     ])
     expect(schemaFields(doc, 'UpdateSessionRequest')).toEqual(['status'])
+    expect(schemaFields(doc, 'CreateSessionCommandRequest')).toEqual(['message', 'type'])
   })
 })

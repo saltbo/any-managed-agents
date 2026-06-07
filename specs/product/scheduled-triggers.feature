@@ -7,7 +7,7 @@ Feature: Scheduled agent triggers
     Given a project has an active agent and active environments
     When the user creates a due scheduled agent trigger
     And the local heartbeat dispatcher runs twice for the same occurrence
-    Then one scheduled run creates a session with the initial prompt and correlation metadata
+    Then one scheduled run creates a session with the initial prompt and schedule run metadata
     And duplicate heartbeat dispatch does not create another session for the same occurrence
     And scheduled trigger dispatch is recorded in audit history
 

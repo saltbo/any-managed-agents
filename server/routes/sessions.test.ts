@@ -143,7 +143,7 @@ describe('[CF] /api/sessions', () => {
 
   it('creates, reads, lists, reconnects, stops, archives, and records events for a cloud-owned runtime session', async () => {
     const authorization = await signIn()
-    await connectMcp(authorization, 'github')
+    const githubCredential = await connectMcp(authorization, 'github')
     await connectMcp(authorization, 'linear')
     const environment = await createEnvironment(authorization)
     const agent = await createAgent(authorization)
@@ -157,6 +157,8 @@ describe('[CF] /api/sessions', () => {
         metadata: { ticket: 'AMA-1' },
         resourceRefs: [{ type: 'repository', id: 'repo_1' }],
         vaultRefs: [{ type: 'credential', id: 'cred_1' }],
+        runtimeEnv: { AK_API_URL: 'https://ak.example.com', AK_AGENT_ID: 'agent_123' },
+        runtimeSecretEnv: [{ name: 'AK_AGENT_KEY', ref: githubCredential.activeVersionId }],
       }),
     })
     expect(createRes.status).toBe(201)
@@ -176,6 +178,8 @@ describe('[CF] /api/sessions', () => {
       title: string
       resourceRefs: Array<Record<string, unknown>>
       vaultRefs: Array<Record<string, unknown>>
+      runtimeEnv: Record<string, string>
+      runtimeSecretEnv: Array<{ name: string; ref: string }>
       metadata: Record<string, unknown>
       runtimeMetadata: Record<string, unknown>
     }
@@ -196,6 +200,8 @@ describe('[CF] /api/sessions', () => {
       runtimeEndpointPath: `/runtime/sessions/${created.id}/rpc`,
       resourceRefs: [{ type: 'repository', id: 'repo_1' }],
       vaultRefs: [{ type: 'credential', id: 'cred_1' }],
+      runtimeEnv: { AK_API_URL: 'https://ak.example.com', AK_AGENT_ID: 'agent_123' },
+      runtimeSecretEnv: [{ name: 'AK_AGENT_KEY', ref: githubCredential.activeVersionId }],
       metadata: {
         ticket: 'AMA-1',
         hostingMode: 'cloud',
@@ -208,6 +214,8 @@ describe('[CF] /api/sessions', () => {
         executor: 'cloudflare-sandbox',
         piCorePackage: '@earendil-works/pi-agent-core',
         resourceManifestPath: '/workspace/.ama/resources.json',
+        runtimeEnvPath: '/workspace/.ama/runtime-env.json',
+        runtimeSecretEnvPath: '/workspace/.ama/runtime-secret-env.json',
         mcpConnectors: ['github'],
       },
       runtimeMetadata: {
@@ -264,20 +272,22 @@ describe('[CF] /api/sessions', () => {
     const afterTaskRes = await jsonFetch(`/api/sessions/${created.id}`, authorization)
     await expect(afterTaskRes.json()).resolves.toMatchObject({ id: created.id, status: 'idle' })
 
-    const historyTaskRes = await jsonFetch(`/runtime/sessions/${created.id}/rpc`, authorization, {
+    const historyTaskRes = await jsonFetch(`/api/sessions/${created.id}/commands`, authorization, {
       method: 'POST',
       body: JSON.stringify({
         type: 'prompt',
         message: 'What was my previous prompt?',
       }),
     })
-    expect(historyTaskRes.status).toBe(200)
+    expect(historyTaskRes.status).toBe(202)
     await expect(historyTaskRes.json()).resolves.toMatchObject({
       runtime: 'ama-cloud',
       accepted: true,
-      sandboxId: created.id.toLowerCase(),
+      sessionId: created.id,
       path: '/rpc',
     })
+    const afterCommandRes = await jsonFetch(`/api/sessions/${created.id}`, authorization)
+    await expect(afterCommandRes.json()).resolves.toMatchObject({ id: created.id, status: 'idle' })
 
     const stopRes = await jsonFetch(`/api/sessions/${created.id}/stop`, authorization, { method: 'POST' })
     expect(stopRes.status).toBe(200)
@@ -472,6 +482,7 @@ describe('[CF] /api/sessions', () => {
 
   it('queues self-hosted sessions for runner lease support', async () => {
     const authorization = await signIn()
+    const credential = await connectMcp(authorization, 'github')
     const environmentRes = await jsonFetch('/api/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({
@@ -499,7 +510,11 @@ describe('[CF] /api/sessions', () => {
 
     const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtimeSecretEnv: [{ name: 'AK_AGENT_KEY', ref: credential.activeVersionId }],
+      }),
     })
     expect(createRes.status).toBe(201)
     const created = (await createRes.json()) as {
@@ -509,6 +524,7 @@ describe('[CF] /api/sessions', () => {
       sandboxId: string | null
       runtimeEndpointPath: string | null
       environmentSnapshot: { hostingMode: string; runtime: string }
+      runtimeSecretEnv: Array<{ name: string; ref: string }>
       metadata: Record<string, unknown>
       runtimeMetadata: Record<string, unknown>
     }
@@ -518,6 +534,7 @@ describe('[CF] /api/sessions', () => {
       sandboxId: null,
       runtimeEndpointPath: null,
       environmentSnapshot: { hostingMode: 'self_hosted', runtime: 'ama' },
+      runtimeSecretEnv: [{ name: 'AK_AGENT_KEY', ref: credential.activeVersionId }],
       metadata: {
         hostingMode: 'self_hosted',
         runtime: 'ama',
@@ -652,6 +669,50 @@ describe('[CF] /api/sessions', () => {
       }),
     })
     expect(duplicateMountRes.status).toBe(400)
+  })
+
+  it('validates runtime secret environment references without exposing raw secrets', async () => {
+    const authorization = await signIn()
+    const credential = await connectMcp(authorization, 'github')
+    const environment = await createEnvironment(authorization)
+    const agent = await createAgent(authorization)
+
+    const missingRefRes = await jsonFetch('/api/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtimeSecretEnv: [{ name: 'AK_AGENT_KEY', ref: 'vaultver_missing' }],
+      }),
+    })
+    expect(missingRefRes.status).toBe(400)
+    await expect(missingRefRes.json()).resolves.toMatchObject({
+      error: {
+        type: 'validation_error',
+        details: { fields: { 'runtimeSecretEnv.0.ref': expect.any(String) } },
+      },
+    })
+
+    const duplicateNameRes = await jsonFetch('/api/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtimeSecretEnv: [
+          { name: 'AK_AGENT_KEY', ref: credential.activeVersionId },
+          { name: 'AK_AGENT_KEY', ref: credential.activeVersionId },
+        ],
+      }),
+    })
+    expect(duplicateNameRes.status).toBe(400)
+    const duplicateNameText = await duplicateNameRes.text()
+    expect(JSON.parse(duplicateNameText)).toMatchObject({
+      error: {
+        type: 'validation_error',
+        details: { fields: { 'runtimeSecretEnv.1.name': expect.any(String) } },
+      },
+    })
+    expect(duplicateNameText).not.toContain('raw-github-token')
   })
 
   it('preserves canonical session environment snapshots for read contracts', async () => {
@@ -1079,6 +1140,40 @@ describe('[CF] /api/sessions', () => {
         }),
       ]),
     )
+  })
+
+  it('includes enabled agent memory in session initial prompts', async () => {
+    const authorization = await signIn()
+    await connectMcp(authorization, 'github')
+    const environment = await createEnvironment(authorization)
+    const agent = await createAgent(authorization, { memoryPolicy: { enabled: true } })
+
+    const memoryRes = await jsonFetch(`/api/agents/${agent.id}/memory`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        content: 'Previously decided to inspect stale proposals before creating new work.',
+      }),
+    })
+    expect(memoryRes.status).toBe(200)
+
+    const createRes = await jsonFetch('/api/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        initialPrompt: 'Run the maintainer heartbeat.',
+      }),
+    })
+    expect(createRes.status).toBe(201)
+    const created = (await createRes.json()) as { id: string }
+
+    const eventsRes = await jsonFetch(`/api/sessions/${created.id}/events`, authorization)
+    expect(eventsRes.status).toBe(200)
+    const events = await eventsRes.json()
+    const serialized = JSON.stringify(events)
+    expect(serialized).toContain('Agent memory for this agent')
+    expect(serialized).toContain('Previously decided to inspect stale proposals')
+    expect(serialized).toContain('Run the maintainer heartbeat')
   })
 
   it('validates initial prompt input and redacts runtime failure status reasons', async () => {

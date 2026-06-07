@@ -21,10 +21,10 @@ Feature: Sessions API
   @implemented
   Scenario: Create a session with explicit runtime inputs
     Given a project has an active agent and active environments
-    When the user creates a session with an explicit environment, title, metadata, resource references, and vault references
+    When the user creates a session with an explicit environment, title, metadata, resource references, runtime env, runtime secret env references, and vault references
     Then the response stores those values as safe references
     And file and repository resources are declared in the deterministic workspace manifest contract
-    And vault references are exposed to the runtime only through approved secret bindings
+    And runtime secret env references are exposed to the runtime only through approved vault bindings
     And raw credentials are rejected from the request body
 
   @implemented
@@ -54,14 +54,16 @@ Feature: Sessions API
     And no session record is left in an active state
 
   @implemented
-  Scenario: Run a message through the session runtime endpoint
+  Scenario: Send a prompt command to an active session
     Given an idle session has cloud-owned runtime state and a sandbox executor
-    When the user sends a runtime message to the session runtime endpoint
-    Then the runtime accepts the message
+    When the user sends a prompt command through the sessions API
+    Then the runtime accepts the command
+    And the command is exposed through AMA OpenAPI and generated SDKs
     And the session status becomes running while work is in progress
     And the AMA runtime can dispatch approved tools through the Cloudflare Sandbox executor
     And message, tool, sandbox, usage, lifecycle, and error events are stored in sequence
     And the session returns to idle with a final result or moves to error with a safe failure reason
+    And the lower-level runtime endpoint remains a compatibility path for runtime clients
 
   @implemented
   Scenario: Stream and reconnect to session events

@@ -10,12 +10,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    },
-    "./openapi.json": "./openapi.json"
+    }
   },
   "files": [
     "dist",
-    "openapi.json",
     "README.md"
   ],
   "scripts": {

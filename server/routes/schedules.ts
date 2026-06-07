@@ -20,6 +20,15 @@ const app = createApiRouter()
 const TRIGGER_STATUSES = ['active', 'paused', 'archived'] as const
 const RUN_STATUSES = ['claimed', 'session_created', 'failed'] as const
 const JsonObjectSchema = z.record(z.string(), z.unknown())
+const RuntimeSecretEnvSchema = z
+  .object({
+    name: z
+      .string()
+      .regex(/^[A-Z_][A-Z0-9_]*$/)
+      .openapi({ example: 'AK_AGENT_KEY' }),
+    ref: z.string().regex(/^vaultver_[a-zA-Z0-9]+$/).openapi({ example: 'vaultver_abc123' }),
+  })
+  .strict()
 
 const ScheduledAgentTriggerSchema = z
   .object({
@@ -30,6 +39,13 @@ const ScheduledAgentTriggerSchema = z
     environmentId: z.string().openapi({ example: 'env_abc123' }),
     name: z.string().openapi({ example: 'Daily research heartbeat' }),
     promptTemplate: z.string().openapi({ example: 'Research current Canadian banking bonus offers.' }),
+    resourceRefs: z.array(JsonObjectSchema).openapi({
+      example: [{ type: 'github_repository', owner: 'openai', repo: 'openai' }],
+    }),
+    runtimeEnv: JsonObjectSchema.openapi({ example: { AK_API_URL: 'https://ak.example.com' } }),
+    runtimeSecretEnv: z.array(RuntimeSecretEnvSchema).openapi({
+      example: [{ name: 'AK_AGENT_KEY', ref: 'vaultver_abc123' }],
+    }),
     schedule: z
       .object({
         type: z.literal('interval'),
@@ -84,6 +100,13 @@ const CreateScheduledAgentTriggerSchema = z
     promptTemplate: z.string().trim().min(1).max(16000).openapi({
       example: 'Research current Canadian banking bonus offers.',
     }),
+    resourceRefs: z.array(JsonObjectSchema).max(50).optional().openapi({
+      example: [{ type: 'github_repository', owner: 'openai', repo: 'openai' }],
+    }),
+    runtimeEnv: JsonObjectSchema.optional().openapi({ example: { AK_API_URL: 'https://ak.example.com' } }),
+    runtimeSecretEnv: z.array(RuntimeSecretEnvSchema).max(50).optional().openapi({
+      example: [{ name: 'AK_AGENT_KEY', ref: 'vaultver_abc123' }],
+    }),
     schedule: SchedulePayloadSchema,
     status: z.enum(['active', 'paused']).optional().openapi({ example: 'active' }),
     nextDueAt: z.string().datetime().optional().openapi({ example: '2026-05-26T12:00:00.000Z' }),
@@ -99,6 +122,13 @@ const UpdateScheduledAgentTriggerSchema = z
     name: z.string().min(1).max(160).optional().openapi({ example: 'Daily research heartbeat' }),
     promptTemplate: z.string().trim().min(1).max(16000).optional().openapi({
       example: 'Research current Canadian banking bonus offers.',
+    }),
+    resourceRefs: z.array(JsonObjectSchema).max(50).optional().openapi({
+      example: [{ type: 'github_repository', owner: 'openai', repo: 'openai' }],
+    }),
+    runtimeEnv: JsonObjectSchema.optional().openapi({ example: { AK_API_URL: 'https://ak.example.com' } }),
+    runtimeSecretEnv: z.array(RuntimeSecretEnvSchema).max(50).optional().openapi({
+      example: [{ name: 'AK_AGENT_KEY', ref: 'vaultver_abc123' }],
     }),
     schedule: SchedulePayloadSchema.optional(),
     status: z.enum(['active', 'paused']).optional().openapi({ example: 'paused' }),
@@ -188,6 +218,9 @@ function serializeTrigger(row: TriggerRow) {
     environmentId: row.environmentId,
     name: row.name,
     promptTemplate: row.promptTemplate,
+    resourceRefs: parseJson<Record<string, unknown>[]>(row.resourceRefs, []),
+    runtimeEnv: parseJson<Record<string, unknown>>(row.runtimeEnv, {}),
+    runtimeSecretEnv: parseJson<Array<z.infer<typeof RuntimeSecretEnvSchema>>>(row.runtimeSecretEnv, []),
     schedule: {
       type: 'interval' as const,
       intervalSeconds: row.intervalSeconds,
@@ -416,6 +449,14 @@ const routes = app
     if (secretMetadataResponse) {
       return secretMetadataResponse
     }
+    if (hasSecretMaterial(body.resourceRefs) || hasSecretMaterial(body.runtimeEnv)) {
+      return errorResponse(c, 400, 'validation_error', 'Invalid scheduled trigger session configuration', {
+        fields: {
+          resourceRefs: 'Resource references must not contain secret material.',
+          runtimeEnv: 'Runtime environment variables must not contain raw secret material.',
+        },
+      })
+    }
     const invalidDependency = await assertActiveAgentAndEnvironment(
       db,
       auth.project.id,
@@ -440,6 +481,9 @@ const routes = app
       environmentId: body.environmentId,
       name: body.name,
       promptTemplate: body.promptTemplate,
+      resourceRefs: stringify(body.resourceRefs ?? []),
+      runtimeEnv: stringify(body.runtimeEnv ?? {}),
+      runtimeSecretEnv: stringify(body.runtimeSecretEnv ?? []),
       intervalSeconds: body.schedule.intervalSeconds,
       windowSeconds: body.schedule.windowSeconds ?? 0,
       status: body.status ?? 'active',
@@ -531,6 +575,14 @@ const routes = app
     if (secretMetadataResponse) {
       return secretMetadataResponse
     }
+    if (hasSecretMaterial(body.resourceRefs) || hasSecretMaterial(body.runtimeEnv)) {
+      return errorResponse(c, 400, 'validation_error', 'Invalid scheduled trigger session configuration', {
+        fields: {
+          resourceRefs: 'Resource references must not contain secret material.',
+          runtimeEnv: 'Runtime environment variables must not contain raw secret material.',
+        },
+      })
+    }
     const agentId = body.agentId ?? trigger.agentId
     const environmentId = body.environmentId ?? trigger.environmentId
     const invalidDependency = await assertActiveAgentAndEnvironment(db, auth.project.id, agentId, environmentId)
@@ -548,6 +600,9 @@ const routes = app
       environmentId,
       name: body.name ?? trigger.name,
       promptTemplate: body.promptTemplate ?? trigger.promptTemplate,
+      resourceRefs: body.resourceRefs !== undefined ? stringify(body.resourceRefs) : trigger.resourceRefs,
+      runtimeEnv: body.runtimeEnv !== undefined ? stringify(body.runtimeEnv) : trigger.runtimeEnv,
+      runtimeSecretEnv: body.runtimeSecretEnv !== undefined ? stringify(body.runtimeSecretEnv) : trigger.runtimeSecretEnv,
       intervalSeconds: body.schedule?.intervalSeconds ?? trigger.intervalSeconds,
       windowSeconds: body.schedule?.windowSeconds ?? trigger.windowSeconds,
       status: body.status ?? trigger.status,
