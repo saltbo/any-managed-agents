@@ -23,7 +23,7 @@ export const RUNTIME_CATALOG: readonly RuntimeCatalogEntry[] = [
   {
     runtime: 'codex',
     hostingModes: ['self_hosted'],
-    providerModels: [],
+    providerModels: [{ provider: 'provider_codex', model: 'gpt-5.3-codex' }],
   },
   {
     runtime: 'copilot',
