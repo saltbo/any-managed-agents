@@ -409,7 +409,7 @@ describe('[CF] /api/runners', () => {
     expect(JSON.stringify(sessionEvents.data)).not.toContain('raw-secret-value')
   })
 
-  it('does not let a stale completed lease overwrite a newer pending self-hosted session turn', async () => {
+  it('does not let an older lease completion overwrite a newer queued session command', async () => {
     const authorization = await signIn()
     const environment = await createSelfHostedEnvironment(authorization)
     const agent = await createAgent(authorization)
@@ -419,7 +419,7 @@ describe('[CF] /api/runners', () => {
       body: JSON.stringify({
         name: 'Local runner',
         environmentId: environment.id,
-        capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+        capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY],
         maxConcurrent: 1,
       }),
     })
@@ -428,7 +428,7 @@ describe('[CF] /api/runners', () => {
 
     const heartbeatRes = await jsonFetch(`/api/runners/${runner.id}/heartbeats`, authorization, {
       method: 'POST',
-      body: JSON.stringify({ status: 'active', capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY] }),
+      body: JSON.stringify({ status: 'active', capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY] }),
     })
     expect(heartbeatRes.status).toBe(200)
 
@@ -438,13 +438,22 @@ describe('[CF] /api/runners', () => {
       body: JSON.stringify({ leaseDurationSeconds: 90 }),
     })
     expect(leaseRes.status).toBe(201)
-    const lease = (await leaseRes.json()) as { id: string }
+    const lease = (await leaseRes.json()) as { id: string; workItem: { id: string } }
 
     const channel = await openRunnerSessionChannel(authorization, runner.id, lease.id)
+    const channelMessages = collectMessages(channel)
+    await waitForMessages(channelMessages, 1)
+
+    const commandRes = await jsonFetch(`/api/sessions/${session.id}/commands`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ type: 'prompt', message: 'Continue after reviewer rejection.' }),
+    })
+    expect(commandRes.status).toBe(202)
+    channel.close()
     await env.DB.prepare(
-      "UPDATE sessions SET status = 'pending', status_reason = 'waiting-for-runner', updated_at = ? WHERE id = ?",
+      "UPDATE runner_session_channels SET status = 'stale', closed_at = ?, close_reason = 'test-stale', updated_at = ? WHERE lease_id = ?",
     )
-      .bind(new Date().toISOString(), session.id)
+      .bind(new Date().toISOString(), new Date().toISOString(), lease.id)
       .run()
 
     const completeRes = await jsonFetch(`/api/runners/${runner.id}/leases/${lease.id}`, authorization, {
@@ -458,7 +467,25 @@ describe('[CF] /api/runners', () => {
       status: 'pending',
       statusReason: 'waiting-for-runner',
     })
-    channel.close()
+
+    const resumedLeaseRes = await jsonFetch(`/api/runners/${runner.id}/leases`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ leaseDurationSeconds: 90 }),
+    })
+    expect(resumedLeaseRes.status).toBe(201)
+    const resumedLease = (await resumedLeaseRes.json()) as {
+      id: string
+      workItem: { id: string; payload: Record<string, unknown> }
+    }
+    expect(resumedLease.workItem.id).not.toBe(lease.workItem.id)
+    expect(resumedLease.workItem.payload).toMatchObject({
+      sessionId: session.id,
+      resume: true,
+      initialPrompt: 'Continue after reviewer rejection.',
+    })
+
+    const resumedChannel = await openRunnerSessionChannel(authorization, runner.id, resumedLease.id)
+    resumedChannel.close()
   })
 
   it('accepts FlareAuth runner tokens and rejects missing, invalid, or mismatched runner tokens', async () => {

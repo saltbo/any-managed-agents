@@ -1,5 +1,5 @@
 import { createRoute, z } from '@hono/zod-openapi'
-import { and, asc, desc, eq, gte, inArray, isNull, like, lt, lte, max, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, gte, inArray, isNull, like, lt, lte, max, or, sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
 import { canonicalAmaSessionEventFromRuntimeEvent } from '../../shared/session-events'
@@ -517,6 +517,25 @@ async function releaseRunnerLoad(db: Db, projectId: string, runnerId: string, ti
     .update(runners)
     .set({ currentLoad: sql`max(0, ${runners.currentLoad} - 1)`, updatedAt: timestamp })
     .where(and(eq(runners.id, runnerId), eq(runners.projectId, projectId)))
+}
+
+async function hasNewerActiveSessionWork(db: Db, projectId: string, workItem: WorkItemRow) {
+  if (!workItem.sessionId) {
+    return false
+  }
+  const newerWork = await db
+    .select({ id: runnerWorkItems.id })
+    .from(runnerWorkItems)
+    .where(
+      and(
+        eq(runnerWorkItems.projectId, projectId),
+        eq(runnerWorkItems.sessionId, workItem.sessionId),
+        inArray(runnerWorkItems.status, ['available', 'leased']),
+        gt(runnerWorkItems.createdAt, workItem.createdAt),
+      ),
+    )
+    .get()
+  return Boolean(newerWork)
 }
 
 async function expireStaleLeases(db: Db, auth: AuthContext) {
@@ -1590,7 +1609,7 @@ const routes = app
         .set({ status: body.status, result, error, updatedAt: timestamp })
         .where(and(eq(runnerWorkLeases.id, leaseId), eq(runnerWorkLeases.status, 'active')))
       await releaseRunnerLoad(db, auth.project.id, runnerId, timestamp)
-      if (workItem.sessionId) {
+      if (workItem.sessionId && !(await hasNewerActiveSessionWork(db, auth.project.id, workItem))) {
         const activeChannel = await db
           .select({ id: runnerSessionChannels.id })
           .from(runnerSessionChannels)
