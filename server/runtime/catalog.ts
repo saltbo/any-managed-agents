@@ -52,11 +52,16 @@ export function runtimeCatalogSupportsProviderModel(
   model: string,
 ) {
   const entry = RUNTIME_CATALOG.find((item) => item.runtime === runtime)
+  if (!entry?.hostingModes.includes(hostingMode)) {
+    return false
+  }
+  if (entry.providerModels.length === 0) {
+    return true
+  }
   return Boolean(
-    entry?.hostingModes.includes(hostingMode) &&
-      entry.providerModels.some(
-        (capability) => (capability.provider === '*' || capability.provider === provider) && capability.model === model,
-      ),
+    entry.providerModels.some(
+      (capability) => (capability.provider === '*' || capability.provider === provider) && capability.model === model,
+    ),
   )
 }
 

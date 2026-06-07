@@ -41,7 +41,11 @@ import {
 } from '../openapi'
 import { evaluateMcpToolPolicy, evaluateProviderPolicy, evaluateSandboxRuntimePolicy } from '../policy'
 import { redactSensitiveValue } from '../redaction'
-import { runtimeCatalogSupportsProviderModel, runtimeProviderModelCapability } from '../runtime/catalog'
+import {
+  runnerSupportsRuntimeProviderModel,
+  runtimeCatalogSupportsProviderModel,
+  runtimeProviderModelCapability,
+} from '../runtime/catalog'
 import { runtimeDriver, runtimeDriverName, runtimeMetadata } from '../runtime/drivers'
 import { safeRuntimeError } from '../runtime/runtime-error'
 import {
@@ -998,7 +1002,24 @@ async function validateRuntimeProviderModel(
     return false
   }
   if (hostingMode === 'self_hosted') {
-    return runtimeCatalogSupportsProviderModel(hostingMode, runtime, provider, model)
+    if (!runtimeCatalogSupportsProviderModel(hostingMode, runtime, provider, model)) {
+      return false
+    }
+    const activeRunners = await db
+      .select({ capabilities: runners.capabilities })
+      .from(runners)
+      .where(
+        and(
+          eq(runners.projectId, auth.project.id),
+          eq(runners.environmentId, environmentId),
+          eq(runners.status, 'active'),
+        ),
+      )
+    return (
+      activeRunners.some((runner) =>
+        runnerSupportsRuntimeProviderModel(parseJson<string[]>(runner.capabilities) ?? [], runtime, provider, model),
+      ) || activeRunners.length === 0
+    )
   }
   return driver.supportsCloudProviderModel(provider, model)
 }

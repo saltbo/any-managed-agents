@@ -1591,6 +1591,18 @@ const routes = app
         .where(and(eq(runnerWorkLeases.id, leaseId), eq(runnerWorkLeases.status, 'active')))
       await releaseRunnerLoad(db, auth.project.id, runnerId, timestamp)
       if (workItem.sessionId) {
+        const activeChannel = await db
+          .select({ id: runnerSessionChannels.id })
+          .from(runnerSessionChannels)
+          .where(
+            and(
+              eq(runnerSessionChannels.projectId, auth.project.id),
+              eq(runnerSessionChannels.sessionId, workItem.sessionId),
+              eq(runnerSessionChannels.leaseId, lease.id),
+              eq(runnerSessionChannels.status, 'active'),
+            ),
+          )
+          .get()
         const sessionUpdate =
           body.status === 'cancelled'
             ? {
@@ -1604,6 +1616,10 @@ const routes = app
                 statusReason: body.status === 'completed' ? null : 'runner-failed',
                 updatedAt: timestamp,
               }
+        const pendingWithoutAcceptedChannel = and(
+          eq(sessions.status, 'pending'),
+          or(eq(sessions.statusReason, 'waiting-for-runner'), eq(sessions.statusReason, 'waiting-for-runner-recovery')),
+        )
         await db
           .update(sessions)
           .set(sessionUpdate)
@@ -1611,7 +1627,9 @@ const routes = app
             and(
               eq(sessions.id, workItem.sessionId),
               eq(sessions.projectId, auth.project.id),
-              eq(sessions.status, 'running'),
+              activeChannel
+                ? eq(sessions.status, 'running')
+                : or(eq(sessions.status, 'running'), pendingWithoutAcceptedChannel),
             ),
           )
       }
