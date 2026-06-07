@@ -9,14 +9,14 @@ User application
   -> external Any Managed Agents SDK, restish, or direct HTTP
   -> Any Managed Agents OpenAPI control-plane API
   -> AMA session endpoint
-  -> selected environment runtime
+  -> selected session runtime
   -> canonical AMA session events
 
 Web console
   -> Hono RPC client
   -> Any Managed Agents control-plane routes
   -> AMA session endpoint
-  -> selected environment runtime
+  -> selected session runtime
   -> canonical AMA session events
 ```
 

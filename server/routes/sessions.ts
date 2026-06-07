@@ -61,8 +61,8 @@ import {
   EnvironmentHostingModeSchema,
   type EnvironmentNetworkPolicy,
   EnvironmentNetworkPolicySchema,
-  type EnvironmentRuntime,
-  EnvironmentRuntimeSchema,
+  type RuntimeName,
+  RuntimeSchema,
   normalizeEnvironmentNetworkPolicy,
 } from './environment-contracts'
 
@@ -170,7 +170,6 @@ const EnvironmentVersionSchema = z
     variables: JsonObjectSchema,
     secretRefs: z.array(JsonObjectSchema),
     hostingMode: EnvironmentHostingModeSchema,
-    runtime: EnvironmentRuntimeSchema,
     networkPolicy: EnvironmentNetworkPolicySchema,
     mcpPolicy: JsonObjectSchema,
     packageManagerPolicy: JsonObjectSchema,
@@ -184,7 +183,7 @@ const EnvironmentVersionSchema = z
 const SessionRuntimeMetadataSchema = z
   .object({
     hostingMode: EnvironmentHostingModeSchema,
-    runtime: EnvironmentRuntimeSchema,
+    runtime: RuntimeSchema,
     runtimeConfig: JsonObjectSchema,
     provider: z.string().openapi({ example: 'workers-ai' }),
     model: z.string().openapi({ example: '@cf/moonshotai/kimi-k2.6' }),
@@ -251,6 +250,8 @@ const CreateSessionSchema = z
   .object({
     agentId: z.string().min(1).openapi({ example: 'agent_abc123' }),
     environmentId: z.string().min(1).openapi({ example: 'env_abc123' }),
+    runtime: RuntimeSchema.openapi({ example: 'codex' }),
+    runtimeConfig: JsonObjectSchema.optional().openapi({ example: { sandboxMode: 'workspace-write' } }),
     title: z.string().min(1).max(160).optional().openapi({ example: 'Implement billing export' }),
     metadata: JsonObjectSchema.optional().openapi({ example: { ticket: 'AMA-123' } }),
     resourceRefs: z
@@ -600,7 +601,6 @@ function serializeEnvironmentVersion(row: EnvironmentVersionRow) {
     variables: JSON.parse(row.variables) as Record<string, unknown>,
     secretRefs: JSON.parse(row.secretRefs) as Record<string, unknown>[],
     hostingMode: row.hostingMode as EnvironmentHostingMode,
-    runtime: row.runtime as EnvironmentRuntime,
     networkPolicy: JSON.parse(row.networkPolicy) as Record<string, unknown>,
     mcpPolicy: JSON.parse(row.mcpPolicy) as Record<string, unknown>,
     packageManagerPolicy: JSON.parse(row.packageManagerPolicy) as Record<string, unknown>,
@@ -612,10 +612,9 @@ function serializeEnvironmentVersion(row: EnvironmentVersionRow) {
 
 type NormalizedEnvironmentSnapshot = Omit<
   ReturnType<typeof serializeEnvironmentVersion>,
-  'hostingMode' | 'runtime' | 'networkPolicy' | 'runtimeConfig'
+  'hostingMode' | 'networkPolicy' | 'runtimeConfig'
 > & {
   hostingMode: EnvironmentHostingMode
-  runtime: EnvironmentRuntime
   networkPolicy: EnvironmentNetworkPolicy
   runtimeConfig: Record<string, unknown>
 }
@@ -629,11 +628,6 @@ function snapshotHostingMode(snapshot: Record<string, unknown>): EnvironmentHost
   return parsed.success ? parsed.data : 'cloud'
 }
 
-function snapshotRuntime(snapshot: Record<string, unknown>): EnvironmentRuntime {
-  const parsed = EnvironmentRuntimeSchema.safeParse(snapshot.runtime)
-  return parsed.success ? parsed.data : 'ama'
-}
-
 function normalizeEnvironmentSnapshot(
   snapshot: ReturnType<typeof serializeEnvironmentVersion> | Record<string, unknown> | null,
 ): NormalizedEnvironmentSnapshot | null {
@@ -644,7 +638,6 @@ function normalizeEnvironmentSnapshot(
   return {
     ...snapshotRecord,
     hostingMode: snapshotHostingMode(snapshotRecord),
-    runtime: snapshotRuntime(snapshotRecord),
     networkPolicy: normalizeEnvironmentNetworkPolicy(snapshotRecord.networkPolicy),
     runtimeConfig: objectValue(snapshotRecord.runtimeConfig),
   } as NormalizedEnvironmentSnapshot
@@ -652,6 +645,18 @@ function normalizeEnvironmentSnapshot(
 
 function environmentHostingMode(snapshot: NormalizedEnvironmentSnapshot | null) {
   return snapshot?.hostingMode === 'self_hosted' ? 'self_hosted' : 'cloud'
+}
+
+function sessionRuntimeFromMetadata(metadata: Record<string, unknown>): RuntimeName {
+  const parsed = RuntimeSchema.safeParse(metadata.runtime)
+  if (!parsed.success) {
+    throw new Error('Session runtime metadata is required')
+  }
+  return parsed.data
+}
+
+function sessionRuntimeConfig(metadata: Record<string, unknown>) {
+  return objectValue(metadata.runtimeConfig)
 }
 
 function serializeSession(row: SessionRow) {
@@ -665,7 +670,7 @@ function serializeSession(row: SessionRow) {
   const metadata = parseJson<Record<string, unknown>>(row.metadata) ?? {}
   const modelConfig = parseJson<Record<string, unknown>>(row.modelConfig) ?? { model: agentSnapshot.model }
   const hostingMode = environmentHostingMode(environmentSnapshot)
-  const runtime = environmentSnapshot?.runtime ?? 'ama'
+  const runtime = sessionRuntimeFromMetadata(metadata)
   const provider = row.modelProvider ?? agentSnapshot.provider
   const model = String(modelConfig.model ?? agentSnapshot.model)
 
@@ -692,7 +697,7 @@ function serializeSession(row: SessionRow) {
     runtimeMetadata: runtimeMetadata({
       hostingMode,
       runtime,
-      runtimeConfig: environmentSnapshot?.runtimeConfig ?? {},
+      runtimeConfig: sessionRuntimeConfig(metadata),
       provider,
       model,
       metadata,
@@ -808,6 +813,8 @@ async function enqueueSelfHostedSessionWork(
     session: SessionRow
     agentSnapshot: ReturnType<typeof serializeAgentVersion>
     environmentSnapshot: NormalizedEnvironmentSnapshot | null
+    runtime: RuntimeName
+    runtimeConfig: Record<string, unknown>
     runtimeEnv?: Record<string, string>
     runtimeSecretEnv?: Array<z.infer<typeof RuntimeSecretEnvSchema>>
     initialPrompt?: string
@@ -821,11 +828,11 @@ async function enqueueSelfHostedSessionWork(
     type: 'session.start',
     sessionId: values.session.id,
     hostingMode: values.environmentSnapshot?.hostingMode ?? 'self_hosted',
-    runtime: values.environmentSnapshot?.runtime ?? 'ama',
-    runtimeConfig: values.environmentSnapshot?.runtimeConfig ?? {},
+    runtime: values.runtime,
+    runtimeConfig: values.runtimeConfig,
     provider: values.agentSnapshot.provider,
     model: values.agentSnapshot.model,
-    runtimeDriver: runtimeDriverName(values.environmentSnapshot?.runtime ?? 'ama', 'self_hosted'),
+    runtimeDriver: runtimeDriverName(values.runtime, 'self_hosted'),
     agentSnapshot: values.agentSnapshot,
     environmentSnapshot: values.environmentSnapshot,
     runtimeEnv: values.runtimeEnv ?? {},
@@ -835,11 +842,7 @@ async function enqueueSelfHostedSessionWork(
     resumeToken: values.resumeToken ?? null,
     requiredRunnerCapability:
       values.environmentSnapshot?.hostingMode === 'self_hosted'
-        ? runtimeProviderModelCapability(
-            values.environmentSnapshot.runtime,
-            values.agentSnapshot.provider,
-            values.agentSnapshot.model,
-          )
+        ? runtimeProviderModelCapability(values.runtime, values.agentSnapshot.provider, values.agentSnapshot.model)
         : null,
   }
   await db.insert(runnerWorkItems).values({
@@ -993,7 +996,7 @@ async function validateRuntimeProviderModel(
   auth: AuthContext,
   environmentId: string,
   hostingMode: EnvironmentHostingMode,
-  runtime: EnvironmentRuntime,
+  runtime: RuntimeName,
   provider: string,
   model: string,
 ) {
@@ -1045,15 +1048,18 @@ export async function createSessionForAgent(
     metadata?: Record<string, unknown>
     resourceRefs?: Array<z.infer<typeof ResourceRefSchema>>
     vaultRefs?: Record<string, unknown>[]
+    runtime: RuntimeName
+    runtimeConfig?: Record<string, unknown>
     runtimeEnv?: Record<string, string>
     runtimeSecretEnv?: Array<z.infer<typeof RuntimeSecretEnvSchema>>
     initialPrompt?: string
-  } = {},
+  },
 ) {
   if (
     hasSecretMaterial(options.metadata) ||
     hasSecretMaterial(options.resourceRefs) ||
     hasSecretMaterial(options.vaultRefs) ||
+    hasSecretMaterial(options.runtimeConfig) ||
     hasSecretMaterial(options.runtimeEnv)
   ) {
     return errorResponse(c, 400, 'validation_error', 'Invalid session configuration', {
@@ -1061,6 +1067,7 @@ export async function createSessionForAgent(
         metadata: 'Secret material must be stored in vault references.',
         resourceRefs: 'Resource references must not contain secret material.',
         vaultRefs: 'Vault references must not contain raw secret material.',
+        runtimeConfig: 'Secret material must be stored in vault references.',
         runtimeEnv: 'Runtime environment variables must not contain raw secret material.',
       },
     })
@@ -1161,11 +1168,13 @@ export async function createSessionForAgent(
   const timestamp = now()
   const id = newId('session')
   const agentSnapshot = serializeAgentVersion(agentVersion)
-  const environmentSnapshot = environmentVersion
+  const baseEnvironmentSnapshot = environmentVersion
     ? normalizeEnvironmentSnapshot(serializeEnvironmentVersion(environmentVersion))
     : null
+  const runtimeConfig = options.runtimeConfig ?? baseEnvironmentSnapshot?.runtimeConfig ?? {}
+  const environmentSnapshot = baseEnvironmentSnapshot
   const hostingMode = environmentHostingMode(environmentSnapshot)
-  const runtime = environmentSnapshot?.runtime ?? 'ama'
+  const runtime = options.runtime
   if (
     !(await validateRuntimeProviderModel(
       db,
@@ -1242,6 +1251,7 @@ export async function createSessionForAgent(
       ...(options.metadata ?? {}),
       hostingMode,
       runtime,
+      runtimeConfig,
       runtimeDriver: runtimeDriverName(runtime, hostingMode),
       ...(hostingMode === 'self_hosted' ? { runnerState: 'queued', runnerProtocol: 'ama-runner-work' } : {}),
     }),
@@ -1268,6 +1278,8 @@ export async function createSessionForAgent(
       session: pending,
       agentSnapshot,
       environmentSnapshot,
+      runtime,
+      runtimeConfig,
       runtimeEnv: options.runtimeEnv ?? {},
       runtimeSecretEnv: options.runtimeSecretEnv ?? [],
       ...(initialPrompt !== undefined ? { initialPrompt } : {}),
@@ -1280,6 +1292,8 @@ export async function createSessionForAgent(
       pending,
       agentSnapshot,
       environmentSnapshot,
+      runtime,
+      runtimeConfig,
       resourceRefs: normalizedResources.resourceRefs,
       runtimeEnv: options.runtimeEnv ?? {},
       runtimeSecretEnv: options.runtimeSecretEnv ?? [],
@@ -1307,23 +1321,26 @@ async function startSessionRuntimeForRow(
     pending: SessionRow
     agentSnapshot: ReturnType<typeof serializeAgentVersion>
     environmentSnapshot: NormalizedEnvironmentSnapshot | null
+    runtime: RuntimeName
+    runtimeConfig: Record<string, unknown>
     resourceRefs: Array<z.infer<typeof ResourceRefSchema>>
     runtimeEnv?: Record<string, string>
     runtimeSecretEnv?: Array<z.infer<typeof RuntimeSecretEnvSchema>>
     initialPrompt?: string
   },
 ) {
-  const { pending, agentSnapshot, environmentSnapshot, resourceRefs, runtimeEnv, runtimeSecretEnv, initialPrompt } =
+  const { pending, agentSnapshot, environmentSnapshot, runtime, runtimeConfig, resourceRefs, runtimeEnv, runtimeSecretEnv, initialPrompt } =
     input
   const sessionId = pending.id
   const sandboxId = pending.sandboxId ?? sessionId.toLowerCase()
-  const runtimeName = environmentSnapshot?.runtime ?? 'ama'
+  const runtimeName = runtime
   const driver = runtimeDriver(runtimeName)
   if (!driver.startCloudSession) {
     throw new Error(`Runtime ${runtimeName} does not support cloud session startup`)
   }
   try {
     const mcpSnapshot = await resolveMcpSnapshot(db, auth, sessionId, agentSnapshot, environmentSnapshot)
+    const runtimeEnvironmentSnapshot = environmentSnapshot ? { ...environmentSnapshot, runtimeConfig } : null
     const runtime = await withTimeout(
       driver.startCloudSession(env, {
         sessionId,
@@ -1332,7 +1349,7 @@ async function startSessionRuntimeForRow(
         provider: agentSnapshot.provider,
         model: agentSnapshot.model,
         agentSnapshot,
-        environmentSnapshot,
+        environmentSnapshot: runtimeEnvironmentSnapshot,
         mcpSnapshot,
         resourceRefs,
         runtimeEnv: runtimeEnv ?? {},
@@ -1714,6 +1731,8 @@ async function queueSelfHostedSessionCommand(
     session,
     agentSnapshot,
     environmentSnapshot,
+    runtime: sessionRuntimeFromMetadata(parseJson<Record<string, unknown>>(session.metadata) ?? {}),
+    runtimeConfig: sessionRuntimeConfig(parseJson<Record<string, unknown>>(session.metadata) ?? {}),
     runtimeEnv: parseJson<Record<string, string>>(session.runtimeEnv) ?? {},
     runtimeSecretEnv: parseJson<Array<z.infer<typeof RuntimeSecretEnvSchema>>>(session.runtimeSecretEnv) ?? [],
     initialPrompt: message,
@@ -1839,7 +1858,9 @@ export async function recoverSessionRuntime(env: Env, db: Db, auth: AuthContext,
   const environmentSnapshot = normalizeEnvironmentSnapshot(
     parseJson<ReturnType<typeof serializeEnvironmentVersion>>(session.environmentSnapshot),
   )
-  const runtimeName = environmentSnapshot?.runtime ?? 'ama'
+  const sessionMetadata = parseJson<Record<string, unknown>>(session.metadata) ?? {}
+  const runtimeName = sessionRuntimeFromMetadata(sessionMetadata)
+  const runtimeConfig = sessionRuntimeConfig(sessionMetadata)
   const driver = runtimeDriver(runtimeName)
   if (!driver.startCloudSession) {
     throw new Error(`Runtime ${runtimeName} does not support cloud session recovery`)
@@ -1873,6 +1894,7 @@ export async function recoverSessionRuntime(env: Env, db: Db, auth: AuthContext,
   }
   const mcpSnapshot = await resolveMcpSnapshot(db, auth, session.id, agentSnapshot, environmentSnapshot)
   await stopCloudSessionRuntime(env, session.sandboxId).catch(() => undefined)
+  const runtimeEnvironmentSnapshot = environmentSnapshot ? { ...environmentSnapshot, runtimeConfig } : null
   const runtime = await withTimeout(
     driver.startCloudSession(env, {
       sessionId: session.id,
@@ -1881,7 +1903,7 @@ export async function recoverSessionRuntime(env: Env, db: Db, auth: AuthContext,
       provider: agentSnapshot.provider,
       model: agentSnapshot.model,
       agentSnapshot,
-      environmentSnapshot,
+      environmentSnapshot: runtimeEnvironmentSnapshot,
       mcpSnapshot,
       resourceRefs: normalizedResources.resourceRefs,
     }),
@@ -2449,6 +2471,8 @@ const routes = app
       metadata,
       resourceRefs,
       vaultRefs,
+      runtime,
+      runtimeConfig,
       runtimeEnv,
       runtimeSecretEnv,
       initialPrompt,
@@ -2463,6 +2487,8 @@ const routes = app
       ...(metadata !== undefined ? { metadata } : {}),
       ...(resourceRefs !== undefined ? { resourceRefs } : {}),
       ...(vaultRefs !== undefined ? { vaultRefs } : {}),
+      runtime,
+      ...(runtimeConfig !== undefined ? { runtimeConfig } : {}),
       ...(runtimeEnv !== undefined ? { runtimeEnv } : {}),
       ...(runtimeSecretEnv !== undefined ? { runtimeSecretEnv } : {}),
       ...(initialPrompt !== undefined ? { initialPrompt } : {}),

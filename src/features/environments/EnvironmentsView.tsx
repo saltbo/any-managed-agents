@@ -28,7 +28,7 @@ export function EnvironmentsView({
   onArchive: (id: string) => void
 }) {
   if (environments.length === 0) {
-    return <EmptyState title="No environments" body="Create a runtime environment before creating an agent." />
+    return <EmptyState title="No environments" body="Create an execution environment before creating an agent." />
   }
   return (
     <TableSurface viewportRef={pagination.viewportRef} footer={<TablePagination pagination={pagination} />}>
@@ -37,7 +37,6 @@ export function EnvironmentsView({
           <TableHead>Environment</TableHead>
           <TableHead>Status</TableHead>
           <TableHead>Hosting</TableHead>
-          <TableHead>Runtime</TableHead>
           <TableHead>Runtime config</TableHead>
           <TableHead>Packages</TableHead>
           <TableHead>Network</TableHead>
@@ -65,7 +64,6 @@ export function EnvironmentsView({
               </div>
             </TableCell>
             <TableCell>{environment.hostingMode}</TableCell>
-            <TableCell>{environment.runtime}</TableCell>
             <TableCell className="max-w-48 truncate">{runtimeConfigSummary(environment)}</TableCell>
             <TableCell className="max-w-56 truncate">
               {environment.packages.map((item) => `${item.name}${item.version ? `@${item.version}` : ''}`).join(', ') ||

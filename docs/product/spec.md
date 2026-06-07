@@ -64,7 +64,7 @@ Control plane:
   client / generated SDK / restish -> /api/openapi.json + /api/* -> Hono OpenAPI routes -> D1 / governance / metadata
 
 Runtime:
-  client / external SDK helper -> AMA session endpoint -> selected environment runtime -> canonical AMA session events -> D1 events
+  client / external SDK helper -> AMA session endpoint -> selected session runtime -> canonical AMA session events -> D1 events
 
 Runtime hosting:
   cloud environment -> AMA-managed Cloudflare infrastructure -> selected runtime -> workspace / safe secrets / policy gates

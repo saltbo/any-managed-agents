@@ -42,7 +42,7 @@ Feature: Quickstart
     And the preview shows transcript and debug modes
     And the message composer is focused with a safe example prompt
     When the developer sends the prompt
-    Then the message is accepted by the selected environment runtime
+    Then the message is accepted by the selected session runtime
     And session events stream into the preview without a page reload
     And final success or failure remains inspectable in the session detail page
 
@@ -50,7 +50,7 @@ Feature: Quickstart
   Scenario: Run the default Workers AI agent
     Given Workers AI is available
     When the developer creates an agent with the default model
-    Then the agent can respond through an environment runtime in Cloudflare Sandbox
+    Then the agent can respond through a session runtime in Cloudflare Sandbox
     And no Anthropic credential is required
 
   @planned

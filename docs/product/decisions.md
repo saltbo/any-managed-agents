@@ -24,7 +24,7 @@ These decisions define the intended end state for Any Managed Agents.
 - `Agent` owns persona, instructions, policy, provider, model, skills, tools, and MCP connector configuration.
 - `Environment` owns hosting mode, runtime, workspace, secrets, network, resource limits, and runtime config.
 - `Session` snapshots the selected Agent and Environment and validates the exact runtime, provider, and model combination before any runtime work starts.
-- Session creation must fail before workspace allocation when the selected environment runtime does not support the Agent's exact provider/model.
+- Session creation must fail before workspace allocation when the selected session runtime does not support the Agent's exact provider/model.
 - `cloud` environments run first-party AMA runtime execution through AMA-managed Cloudflare infrastructure. `self_hosted` environments run external agent runtimes through registered self-hosted runtime runners.
 - Self-hosted runners are registered runtime hosts for `self_hosted` environments. They heartbeat safe capability/load metadata, claim session leases, renew or finish leases, open one outbound WebSocket per claimed session, execute runtime/tool work locally, and stream canonical AMA session events/results through AMA.
 - Runner HTTP queue and lease APIs are for dispatch, ownership, heartbeat, expiry, recovery, and audit. A claimed self-hosted session uses its runner-owned session WebSocket as the real-time runtime/tool execution path.

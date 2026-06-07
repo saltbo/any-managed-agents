@@ -96,7 +96,7 @@ export function QuickstartView({
         <CardContent>
           <JsonBlock
             value={
-              'restish :/api/openapi.json\nprintf \'%s\\n\' \'{"agentId":"agent_abc123","environmentId":"env_abc123"}\' | restish post :/api/sessions\ncurl -X POST "$ORIGIN/api/sessions/{sessionId}/runtime"'
+              'restish :/api/openapi.json\nprintf \'%s\\n\' \'{"agentId":"agent_abc123","environmentId":"env_abc123","runtime":"ama"}\' | restish post :/api/sessions\ncurl -X POST "$ORIGIN/api/sessions/{sessionId}/runtime"'
             }
           />
         </CardContent>

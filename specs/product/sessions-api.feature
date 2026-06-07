@@ -48,7 +48,7 @@ Feature: Sessions API
     Given a user attempts to create a session
     And an agent selects a provider and model
     And an environment selects a runtime
-    When the selected environment runtime does not support the selected agent provider and model
+    When the selected session runtime does not support the selected agent provider and model
     Then the request fails before workspace allocation, sandbox creation, or self-hosted lease creation
     And the error envelope identifies the unsupported runtime, provider, and model
     And no session record is left in an active state

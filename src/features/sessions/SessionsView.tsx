@@ -64,7 +64,7 @@ export function SessionsView({
           <TableHead>Status</TableHead>
           <TableHead>Agent</TableHead>
           <TableHead>Agent provider/model</TableHead>
-          <TableHead>Environment runtime</TableHead>
+          <TableHead>Hosting / runtime</TableHead>
           <TableHead>Started</TableHead>
           <TableHead>Updated</TableHead>
           <TableHead>Duration</TableHead>
@@ -103,7 +103,7 @@ export function SessionsView({
             </TableCell>
             <TableCell className="min-w-0">
               <span className="block truncate">
-                {`${environmentRuntimeLabel(session)} · ${session.environmentId ?? 'None'}`}
+                {`${hostingRuntimeLabel(session)} · ${session.environmentId ?? 'None'}`}
               </span>
             </TableCell>
             <TableCell className="min-w-0">
@@ -142,10 +142,10 @@ export function SessionsView({
   )
 }
 
-function environmentRuntimeLabel(session: Session) {
+function hostingRuntimeLabel(session: Session) {
   if (!session.environmentSnapshot) {
     return 'None'
   }
   const hostingMode = session.environmentSnapshot.hostingMode === 'self_hosted' ? 'Self-hosted' : 'Cloud'
-  return `${hostingMode} / ${session.environmentSnapshot.runtime}`
+  return `${hostingMode} / ${session.runtimeMetadata.runtime}`
 }

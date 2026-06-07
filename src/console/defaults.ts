@@ -4,7 +4,6 @@ export const emptyEnvironment: EnvironmentFormState = {
   name: 'Node workspace',
   description: 'Default workspace for Pi-backed coding sessions.',
   hostingMode: 'cloud',
-  runtime: 'ama',
   networkMode: 'restricted',
   allowedHosts: 'registry.npmjs.org',
   packages: 'tsx@latest\ntypescript@latest',
@@ -27,6 +26,7 @@ export const emptyAgent: AgentFormState = {
 export const emptySession: SessionFormState = {
   agentId: '',
   environmentId: '',
+  runtime: 'ama',
   title: '',
   metadata: '{}',
   resourceRefs: '[]',

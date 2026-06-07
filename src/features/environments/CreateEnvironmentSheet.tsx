@@ -44,7 +44,6 @@ export function CreateEnvironmentSheet({
         name: form.name,
         description: form.description,
         hostingMode: form.hostingMode,
-        runtime: form.runtime,
         packages: parsePackages(form.packages),
         variables: parseVariables(form.variables),
         networkPolicy: networkPolicy(form),
@@ -69,7 +68,7 @@ export function CreateEnvironmentSheet({
       <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
         <SheetHeader>
           <SheetTitle>Create Environment</SheetTitle>
-          <SheetDescription>Define a reusable runtime environment for future sessions.</SheetDescription>
+          <SheetDescription>Define a reusable execution environment for future sessions.</SheetDescription>
         </SheetHeader>
         <div className="px-4 pb-4">
           <EnvironmentForm value={form} setValue={setForm} onSubmit={submit} />

@@ -45,7 +45,7 @@ Feature: Model providers
   Scenario: Use provider adapters without changing session protocol
     Given an agent uses any supported provider
     When a session sends a runtime message
-    Then provider-specific calls happen behind the selected environment runtime adapter boundary
+    Then provider-specific calls happen behind the selected session runtime adapter boundary
     And clients continue to interact through the AMA session endpoint and canonical event protocol
 
   @implemented

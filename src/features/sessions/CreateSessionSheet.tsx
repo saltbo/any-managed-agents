@@ -42,6 +42,7 @@ export function CreateSessionSheet({
       api.createSession({
         agentId: form.agentId,
         environmentId: form.environmentId,
+        runtime: form.runtime,
         ...(form.title ? { title: form.title } : {}),
         metadata: parseJsonObject(form.metadata, 'Metadata'),
         resourceRefs: parseJsonObjectArray(form.resourceRefs, 'Resource refs'),
@@ -86,7 +87,7 @@ export function CreateSessionSheet({
       <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
         <SheetHeader>
           <SheetTitle>Create Session</SheetTitle>
-          <SheetDescription>Select the agent and runtime environment for this session.</SheetDescription>
+          <SheetDescription>Select the agent, environment, and runtime for this session.</SheetDescription>
         </SheetHeader>
         <div className="px-4 pb-4">
           <SessionForm value={form} setValue={setForm} agents={agents} environments={environments} onSubmit={submit} />
@@ -111,7 +112,7 @@ export function formatCreateSessionError(error: unknown) {
       typeof details.provider === 'string' &&
       typeof details.model === 'string'
     ) {
-      return `Unsupported capability: ${hostingModeLabel(details.hostingMode)} environment runtime ${details.runtime} cannot run Agent provider ${details.provider} with model ${details.model}.`
+      return `Unsupported capability: ${hostingModeLabel(details.hostingMode)} session runtime ${details.runtime} cannot run Agent provider ${details.provider} with model ${details.model}.`
     }
   }
   return error instanceof Error ? error.message : String(error)

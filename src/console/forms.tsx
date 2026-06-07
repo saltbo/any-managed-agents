@@ -56,23 +56,6 @@ export function EnvironmentForm({
           </FieldDescription>
         </Field>
         <Field>
-          <FieldLabel>Runtime</FieldLabel>
-          <Select
-            value={value.runtime}
-            onValueChange={(runtime) => setValue({ ...value, runtime: runtime as EnvironmentFormState['runtime'] })}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ama">AMA</SelectItem>
-              <SelectItem value="claude-code">Claude Code</SelectItem>
-              <SelectItem value="codex">Codex</SelectItem>
-              <SelectItem value="copilot">Copilot</SelectItem>
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field>
           <FieldLabel>Network mode</FieldLabel>
           <Select
             value={value.networkMode}
@@ -247,9 +230,27 @@ export function SessionForm({
           </Select>
           <FieldDescription>
             {selectedEnvironment
-              ? `Environment runtime: ${hostingModeLabel(selectedEnvironment.hostingMode)} / ${selectedEnvironment.runtime}`
-              : 'The environment runtime is selected per session, not stored on the agent.'}
+              ? `Hosting mode: ${hostingModeLabel(selectedEnvironment.hostingMode)}`
+              : 'Select the hosting and policy environment for this session.'}
           </FieldDescription>
+        </Field>
+        <Field>
+          <FieldLabel>Runtime</FieldLabel>
+          <Select
+            value={value.runtime}
+            onValueChange={(runtime) => setValue({ ...value, runtime: runtime as SessionFormState['runtime'] })}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ama">AMA</SelectItem>
+              <SelectItem value="claude-code">Claude Code</SelectItem>
+              <SelectItem value="codex">Codex</SelectItem>
+              <SelectItem value="copilot">Copilot</SelectItem>
+            </SelectContent>
+          </Select>
+          <FieldDescription>Runtime is selected per session.</FieldDescription>
         </Field>
         <TextField
           label="Title"

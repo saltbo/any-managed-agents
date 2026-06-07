@@ -19,7 +19,7 @@ Feature: External products use AMA as the runtime substrate
     And the external product has selected standard AMA resource references
     When the external product creates an AMA session through the OpenAPI SDK
     Then AMA snapshots the selected agent and environment
-    And AMA validates the environment runtime, provider, and model before runtime work starts
+    And AMA validates the session runtime, provider, and model before runtime work starts
     And AMA returns a stable session id, status, status reason, runtime, and event endpoint
     And the external product can store the returned AMA ids in its own product records
     And the external product can render progress from AMA session status and canonical events

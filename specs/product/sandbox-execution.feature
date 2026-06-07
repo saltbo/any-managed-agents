@@ -1,6 +1,6 @@
 @sandbox @runtime
 Feature: Sandbox execution
-  Cloud hosting mode environment runtimes execute approved workspace work inside Cloudflare Sandbox backends when required.
+  Cloud hosting mode runtimes execute approved workspace work inside Cloudflare Sandbox backends when required.
 
   Background:
     Given a session has sandbox access enabled by policy
@@ -16,13 +16,13 @@ Feature: Sandbox execution
 
   @planned
   Scenario: Run a command in the sandbox
-    When the selected environment runtime dispatches an approved command tool request
+    When the selected session runtime dispatches an approved command tool request
     Then the command runs inside the sandbox
     And stdout, stderr, exit code, and timing are recorded as session events
 
   @planned
   Scenario: Manage sandbox files
-    When the selected environment runtime dispatches approved file tool requests
+    When the selected session runtime dispatches approved file tool requests
     Then file operations happen inside the Cloudflare Sandbox filesystem
     And file metadata is visible in the session debug view
 

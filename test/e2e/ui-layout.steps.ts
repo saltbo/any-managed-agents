@@ -419,7 +419,7 @@ When('the user starts the create-session flow', async function (this: UiWorld) {
 })
 
 Then(
-  'the form captures agent provider and model, environment runtime, title, metadata, resources, and vault references',
+  'the form captures agent provider and model, session runtime, title, metadata, resources, and vault references',
   async function (this: UiWorld) {
     const dialog = requireUiWorkflow(this).page.getByRole('dialog')
     await expect(dialog.getByText('Agent', { exact: true })).toBeVisible()

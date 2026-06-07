@@ -333,7 +333,7 @@ describe('[CF] /api/agents', () => {
 
     const sessionRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     expect(sessionRes.status).toBe(201)
     const session = (await sessionRes.json()) as {
@@ -446,7 +446,7 @@ describe('[CF] /api/agents', () => {
     await jsonFetch(`/api/environments/${environment.id}`, authorization, { method: 'DELETE' })
     const archivedEnvironmentSessionRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     expect(archivedEnvironmentSessionRes.status).toBe(409)
     await expect(archivedEnvironmentSessionRes.json()).resolves.toMatchObject({
@@ -462,7 +462,7 @@ describe('[CF] /api/agents', () => {
 
     const archivedAgentSessionRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: noEnvironmentAgent.id, environmentId: environment.id }),
+      body: JSON.stringify({ agentId: noEnvironmentAgent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     expect(archivedAgentSessionRes.status).toBe(409)
     await expect(archivedAgentSessionRes.json()).resolves.toMatchObject({

@@ -46,11 +46,11 @@ export function SessionDetailView({
   const duration = formatDuration(session.startedAt, session.stoppedAt)
   const agentName = agentDisplayName || session.agentSnapshot.systemPrompt || session.agentId
   const environmentName = String(
-    environmentDisplayName ?? session.environmentSnapshot?.runtime ?? session.environmentId ?? 'Environment',
+    environmentDisplayName ?? session.environmentId ?? 'Environment',
   )
   const agentProviderModel = `${session.agentSnapshot.provider} / ${session.agentSnapshot.model}`
-  const environmentRuntime = session.environmentSnapshot
-    ? `${hostingModeLabel(session.environmentSnapshot.hostingMode)} / ${session.environmentSnapshot.runtime}`
+  const hostingRuntime = session.environmentSnapshot
+    ? `${hostingModeLabel(session.environmentSnapshot.hostingMode)} / ${session.runtimeMetadata.runtime}`
     : 'No environment snapshot'
   return (
     <div className="flex min-h-[calc(100dvh-5rem)] flex-col bg-background lg:min-h-screen">
@@ -143,12 +143,12 @@ export function SessionDetailView({
             </div>
             <div className="sr-only">
               <span className="truncate font-mono">Agent provider/model {agentProviderModel}</span>
-              <span className="truncate font-mono">Environment runtime {environmentRuntime}</span>
+              <span className="truncate font-mono">Hosting / runtime {hostingRuntime}</span>
               <span className="truncate font-mono">Runtime endpoint {session.runtimeEndpointPath}</span>
             </div>
             <dl className="grid gap-2 pt-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
               <SessionFact label="Agent provider/model" value={agentProviderModel} />
-              <SessionFact label="Environment runtime" value={environmentRuntime} />
+              <SessionFact label="Hosting / runtime" value={hostingRuntime} />
               <SessionFact label="Hosting mode" value={session.environmentSnapshot?.hostingMode ?? 'None'} />
               <SessionFact label="Runtime status" value={session.statusReason ?? session.status} />
             </dl>
@@ -199,7 +199,7 @@ export function SessionDetailView({
                   <Meta label="Environment id" value={session.environmentId ?? 'None'} />
                   <Meta label="Version" value={`v${session.environmentSnapshot.version}`} />
                   <Meta label="Hosting mode" value={session.environmentSnapshot.hostingMode} />
-                  <Meta label="Runtime" value={session.environmentSnapshot.runtime} />
+                  <Meta label="Runtime" value={session.runtimeMetadata.runtime} />
                   <Meta label="Runtime config" value={stringifyJson(session.environmentSnapshot.runtimeConfig)} />
                   <Meta
                     label="Packages"

@@ -91,7 +91,7 @@ describe('[CF] restish/OpenAPI control-plane path', () => {
 
     const sessionRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     expect(sessionRes.status).toBe(201)
     const session = (await sessionRes.json()) as {

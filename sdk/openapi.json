@@ -1121,9 +1121,6 @@
           "hostingMode": {
             "$ref": "#/components/schemas/EnvironmentHostingMode"
           },
-          "runtime": {
-            "$ref": "#/components/schemas/EnvironmentRuntime"
-          },
           "networkPolicy": {
             "$ref": "#/components/schemas/EnvironmentNetworkPolicy"
           },
@@ -1211,7 +1208,6 @@
           "variables",
           "secretRefs",
           "hostingMode",
-          "runtime",
           "networkPolicy",
           "mcpPolicy",
           "packageManagerPolicy",
@@ -1233,16 +1229,6 @@
           "self_hosted"
         ],
         "example": "cloud"
-      },
-      "EnvironmentRuntime": {
-        "type": "string",
-        "enum": [
-          "ama",
-          "claude-code",
-          "codex",
-          "copilot"
-        ],
-        "example": "ama"
       },
       "EnvironmentNetworkPolicy": {
         "type": "object",
@@ -1435,9 +1421,6 @@
           "hostingMode": {
             "$ref": "#/components/schemas/EnvironmentHostingMode"
           },
-          "runtime": {
-            "$ref": "#/components/schemas/EnvironmentRuntime"
-          },
           "networkPolicy": {
             "$ref": "#/components/schemas/EnvironmentNetworkPolicy"
           },
@@ -1596,9 +1579,6 @@
           },
           "hostingMode": {
             "$ref": "#/components/schemas/EnvironmentHostingMode"
-          },
-          "runtime": {
-            "$ref": "#/components/schemas/EnvironmentRuntime"
           },
           "networkPolicy": {
             "$ref": "#/components/schemas/EnvironmentNetworkPolicy"
@@ -1776,9 +1756,6 @@
           "hostingMode": {
             "$ref": "#/components/schemas/EnvironmentHostingMode"
           },
-          "runtime": {
-            "$ref": "#/components/schemas/EnvironmentRuntime"
-          },
           "networkPolicy": {
             "$ref": "#/components/schemas/EnvironmentNetworkPolicy"
           },
@@ -1838,7 +1815,6 @@
           "variables",
           "secretRefs",
           "hostingMode",
-          "runtime",
           "networkPolicy",
           "mcpPolicy",
           "packageManagerPolicy",
@@ -4363,6 +4339,9 @@
             "type": "string",
             "example": "env_abc123"
           },
+          "runtime": {
+            "$ref": "#/components/schemas/Runtime"
+          },
           "name": {
             "type": "string",
             "example": "Daily research heartbeat"
@@ -4514,6 +4493,7 @@
           "projectId",
           "agentId",
           "environmentId",
+          "runtime",
           "name",
           "promptTemplate",
           "resourceRefs",
@@ -4531,6 +4511,16 @@
           "updatedAt"
         ]
       },
+      "Runtime": {
+        "type": "string",
+        "enum": [
+          "ama",
+          "claude-code",
+          "codex",
+          "copilot"
+        ],
+        "example": "codex"
+      },
       "CreateScheduledAgentTriggerRequest": {
         "type": "object",
         "properties": {
@@ -4543,6 +4533,9 @@
             "type": "string",
             "minLength": 1,
             "example": "env_abc123"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/Runtime"
           },
           "name": {
             "type": "string",
@@ -4666,6 +4659,7 @@
         "required": [
           "agentId",
           "environmentId",
+          "runtime",
           "name",
           "promptTemplate",
           "schedule"
@@ -4702,6 +4696,9 @@
             "type": "string",
             "minLength": 1,
             "example": "env_abc123"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/Runtime"
           },
           "name": {
             "type": "string",
@@ -5263,9 +5260,6 @@
           "hostingMode": {
             "$ref": "#/components/schemas/EnvironmentHostingMode"
           },
-          "runtime": {
-            "$ref": "#/components/schemas/EnvironmentRuntime"
-          },
           "networkPolicy": {
             "$ref": "#/components/schemas/EnvironmentNetworkPolicy"
           },
@@ -5313,7 +5307,6 @@
           "variables",
           "secretRefs",
           "hostingMode",
-          "runtime",
           "networkPolicy",
           "mcpPolicy",
           "packageManagerPolicy",
@@ -5410,7 +5403,7 @@
             "$ref": "#/components/schemas/EnvironmentHostingMode"
           },
           "runtime": {
-            "$ref": "#/components/schemas/EnvironmentRuntime"
+            "$ref": "#/components/schemas/Runtime"
           },
           "runtimeConfig": {
             "type": "object",
@@ -5465,6 +5458,18 @@
             "type": "string",
             "minLength": 1,
             "example": "env_abc123"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/Runtime"
+          },
+          "runtimeConfig": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "sandboxMode": "workspace-write"
+            }
           },
           "title": {
             "type": "string",
@@ -5544,7 +5549,8 @@
         },
         "required": [
           "agentId",
-          "environmentId"
+          "environmentId",
+          "runtime"
         ],
         "additionalProperties": false
       },

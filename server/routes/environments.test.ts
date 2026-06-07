@@ -104,7 +104,6 @@ describe('[CF] /api/environments', () => {
         packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
         resourceLimits: { memoryMb: 512 },
         hostingMode: 'cloud',
-        runtime: 'ama',
         runtimeConfig: { image: 'node:24' },
       }),
     })
@@ -115,12 +114,10 @@ describe('[CF] /api/environments', () => {
       version: number
       secretRefs: unknown[]
       hostingMode: string
-      runtime: string
       networkPolicy: Record<string, unknown>
     }
     expect(created.version).toBe(1)
     expect(created.hostingMode).toBe('cloud')
-    expect(created.runtime).toBe('ama')
     expect(created.networkPolicy).toEqual({ mode: 'restricted', allowedHosts: ['registry.npmjs.org'] })
     expect(JSON.stringify(created)).not.toContain('raw-secret')
     expect(JSON.stringify(created)).not.toContain('runtimeType')
@@ -131,7 +128,6 @@ describe('[CF] /api/environments', () => {
     await expect(readRes.json()).resolves.toMatchObject({
       id: created.id,
       hostingMode: 'cloud',
-      runtime: 'ama',
       packages: [{ name: 'tsx', version: 'latest' }],
       secretRefs: [{ name: 'NPM_TOKEN', ref: credential.activeVersionId }],
       mcpPolicy: { allowedConnectors: ['github'] },
@@ -142,7 +138,6 @@ describe('[CF] /api/environments', () => {
       method: 'PATCH',
       body: JSON.stringify({
         hostingMode: 'self_hosted',
-        runtime: 'codex',
         runtimeConfig: { mode: 'sdk-bridge', sandboxMode: 'workspace-write' },
         metadata: { owner: 'runtime' },
       }),
@@ -152,13 +147,11 @@ describe('[CF] /api/environments', () => {
       version: number
       currentVersionId: string
       hostingMode: string
-      runtime: string
       runtimeConfig: Record<string, unknown>
     }
     expect(updated.version).toBe(2)
     expect(updated.currentVersionId).not.toBe(created.currentVersionId)
     expect(updated.hostingMode).toBe('self_hosted')
-    expect(updated.runtime).toBe('codex')
     expect(updated.runtimeConfig).toEqual({ mode: 'sdk-bridge', sandboxMode: 'workspace-write' })
 
     const legacyUpdateRes = await jsonFetch(`/api/environments/${created.id}`, authorization, {
@@ -173,14 +166,12 @@ describe('[CF] /api/environments', () => {
       data: Array<{
         version: number
         hostingMode: string
-        runtime: string
         runtimeConfig: Record<string, unknown>
         packages: Array<{ name: string }>
       }>
     }
     expect(versions.data.map((version) => version.version)).toEqual([2, 1])
     expect(versions.data.map((version) => version.hostingMode)).toEqual(['self_hosted', 'cloud'])
-    expect(versions.data.map((version) => version.runtime)).toEqual(['codex', 'ama'])
     expect(versions.data[0]?.runtimeConfig).toEqual({ mode: 'sdk-bridge', sandboxMode: 'workspace-write' })
     expect(JSON.stringify(versions)).not.toContain('runtimeType')
     expect(JSON.stringify(versions)).not.toContain('runtimeImage')
@@ -202,7 +193,6 @@ describe('[CF] /api/environments', () => {
         id: string
         status: string
         hostingMode: string
-        runtime: string
         runtimeConfig: Record<string, unknown>
       }>
     }
@@ -211,7 +201,6 @@ describe('[CF] /api/environments', () => {
         id: created.id,
         status: 'archived',
         hostingMode: 'self_hosted',
-        runtime: 'codex',
         runtimeConfig: { mode: 'sdk-bridge', sandboxMode: 'workspace-write' },
       }),
     )
@@ -235,7 +224,7 @@ describe('[CF] /api/environments', () => {
     expect(archivedUpdateRes.status).toBe(409)
   })
 
-  it('rejects legacy public runtime fields and invalid canonical runtime values', async () => {
+  it('rejects legacy and environment-owned runtime fields', async () => {
     const authorization = await signIn()
     const legacyRes = await jsonFetch('/api/environments', authorization, {
       method: 'POST',
@@ -267,7 +256,7 @@ describe('[CF] /api/environments', () => {
         type: 'validation_error',
         issues: expect.arrayContaining([
           expect.objectContaining({ path: ['hostingMode'] }),
-          expect.objectContaining({ path: ['runtime'] }),
+          expect.objectContaining({ keys: ['runtime'] }),
         ]),
       },
     })

@@ -4,7 +4,6 @@ export interface EnvironmentFormState {
   name: string
   description: string
   hostingMode: 'cloud' | 'self_hosted'
-  runtime: 'ama' | 'claude-code' | 'codex' | 'copilot'
   networkMode: 'unrestricted' | 'restricted' | 'offline'
   allowedHosts: string
   packages: string
@@ -27,6 +26,7 @@ export interface AgentFormState {
 export interface SessionFormState {
   agentId: string
   environmentId: string
+  runtime: 'ama' | 'claude-code' | 'codex' | 'copilot'
   title: string
   metadata: string
   resourceRefs: string

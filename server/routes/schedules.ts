@@ -14,6 +14,7 @@ import {
   paginateRows,
   parseListCursor,
 } from '../openapi'
+import { RuntimeSchema } from './environment-contracts'
 
 const app = createApiRouter()
 
@@ -40,6 +41,7 @@ const ScheduledAgentTriggerSchema = z
     projectId: z.string().openapi({ example: 'project_abc123' }),
     agentId: z.string().openapi({ example: 'agent_abc123' }),
     environmentId: z.string().openapi({ example: 'env_abc123' }),
+    runtime: RuntimeSchema.openapi({ example: 'codex' }),
     name: z.string().openapi({ example: 'Daily research heartbeat' }),
     promptTemplate: z.string().openapi({ example: 'Research current Canadian banking bonus offers.' }),
     resourceRefs: z.array(JsonObjectSchema).openapi({
@@ -99,6 +101,7 @@ const CreateScheduledAgentTriggerSchema = z
   .object({
     agentId: z.string().min(1).openapi({ example: 'agent_abc123' }),
     environmentId: z.string().min(1).openapi({ example: 'env_abc123' }),
+    runtime: RuntimeSchema.openapi({ example: 'codex' }),
     name: z.string().min(1).max(160).openapi({ example: 'Daily research heartbeat' }),
     promptTemplate: z.string().trim().min(1).max(16000).openapi({
       example: 'Research current Canadian banking bonus offers.',
@@ -130,6 +133,7 @@ const UpdateScheduledAgentTriggerSchema = z
   .object({
     agentId: z.string().min(1).optional().openapi({ example: 'agent_abc123' }),
     environmentId: z.string().min(1).optional().openapi({ example: 'env_abc123' }),
+    runtime: RuntimeSchema.optional().openapi({ example: 'codex' }),
     name: z.string().min(1).max(160).optional().openapi({ example: 'Daily research heartbeat' }),
     promptTemplate: z.string().trim().min(1).max(16000).optional().openapi({
       example: 'Research current Canadian banking bonus offers.',
@@ -235,6 +239,7 @@ function serializeTrigger(row: TriggerRow) {
     projectId: row.projectId,
     agentId: row.agentId,
     environmentId: row.environmentId,
+    runtime: RuntimeSchema.parse(row.runtime),
     name: row.name,
     promptTemplate: row.promptTemplate,
     resourceRefs: parseJson<Record<string, unknown>[]>(row.resourceRefs, []),
@@ -498,6 +503,7 @@ const routes = app
       projectId: auth.project.id,
       agentId: body.agentId,
       environmentId: body.environmentId,
+      runtime: body.runtime,
       name: body.name,
       promptTemplate: body.promptTemplate,
       resourceRefs: stringify(body.resourceRefs ?? []),
@@ -617,6 +623,7 @@ const routes = app
     const update = {
       agentId,
       environmentId,
+      runtime: body.runtime ?? trigger.runtime,
       name: body.name ?? trigger.name,
       promptTemplate: body.promptTemplate ?? trigger.promptTemplate,
       resourceRefs: body.resourceRefs !== undefined ? stringify(body.resourceRefs) : trigger.resourceRefs,

@@ -29,7 +29,6 @@ async function createSelfHostedEnvironment(authorization: string) {
     body: JSON.stringify({
       name: `Self-hosted workspace ${crypto.randomUUID()}`,
       hostingMode: 'self_hosted',
-      runtime: 'ama',
       networkPolicy: { mode: 'unrestricted' },
     }),
   })
@@ -81,6 +80,7 @@ async function createSelfHostedSession(
     body: JSON.stringify({
       agentId,
       environmentId,
+      runtime: 'ama',
       initialPrompt: 'Run the first queued self-hosted task.',
       ...sessionConfig,
     }),
@@ -496,7 +496,6 @@ describe('[CF] /api/runners', () => {
       body: JSON.stringify({
         name: 'Runner token forbidden environment',
         hostingMode: 'self_hosted',
-        runtime: 'ama',
         networkPolicy: { mode: 'unrestricted' },
       }),
     })

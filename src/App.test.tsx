@@ -118,7 +118,6 @@ function environment(overrides: Partial<Environment> = {}): Environment {
     variables: { NODE_ENV: { description: 'mode', required: false } },
     secretRefs: [{ name: 'npm_token', ref: 'secret:npm' }],
     hostingMode: 'cloud',
-    runtime: 'ama',
     networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
     mcpPolicy: {},
     packageManagerPolicy: {},
@@ -838,7 +837,7 @@ describe('App', () => {
           sandboxId: null,
           runtimeEndpointPath: null,
           environmentSnapshot: {
-            ...environment({ hostingMode: 'self_hosted', runtime: 'ama', networkPolicy: { mode: 'unrestricted' } }),
+            ...environment({ hostingMode: 'self_hosted', networkPolicy: { mode: 'unrestricted' } }),
             environmentId: 'env_1',
             version: 1,
           },

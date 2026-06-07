@@ -84,7 +84,7 @@ describe('[CF] auth and tenancy', () => {
     const sessionRes = await SELF.fetch('https://example.com/api/sessions', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization },
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     expect(sessionRes.status).toBe(201)
     const session = (await sessionRes.json()) as {
@@ -127,7 +127,7 @@ describe('[CF] auth and tenancy', () => {
     const sessionRes = await SELF.fetch('https://example.com/api/sessions', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: tenantA },
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     const session = (await sessionRes.json()) as { runtimeEndpointPath: string }
 

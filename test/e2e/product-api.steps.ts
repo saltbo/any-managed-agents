@@ -1364,7 +1364,7 @@ When('that runtime does not support the exact provider and model', async functio
 })
 
 When(
-  'the selected environment runtime does not support the selected agent provider and model',
+  'the selected session runtime does not support the selected agent provider and model',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
     const response = await apiResponse(state.page.request, '/api/sessions', {
@@ -2632,7 +2632,7 @@ Then(
   },
 )
 
-Then('requests using legacy environment runtime fields fail validation', async function (this: ProductWorld) {
+Then('requests using legacy environment hosting and runtime config fields fail validation', async function (this: ProductWorld) {
   const state = await ensureState(this)
   const invalid = await apiResponse(state.page.request, '/api/environments', {
     method: 'POST',
@@ -4426,7 +4426,7 @@ Then('lifecycle events record the stop', async function (this: ProductWorld) {
 })
 
 Then(
-  'session metadata, runtime endpoint, environment runtime snapshot, and status are available',
+  'session metadata, runtime endpoint, environment and runtime snapshot, and status are available',
   function (this: ProductWorld) {
     const session = required(this.e2e?.latestSession, 'session')
     assert.ok(session.metadata)

@@ -1,6 +1,6 @@
 @runtime @sessions
 Feature: Agent sessions
-  A session is a tenant-scoped run of a specific agent version in a selected environment runtime.
+  A session is a tenant-scoped run of a specific agent version in a selected session runtime.
 
   Background:
     Given a project has an active agent definition
@@ -17,7 +17,7 @@ Feature: Agent sessions
   Scenario: Validate runtime provider and model support
     Given an agent selects a provider and model
     And an environment selects a hostingMode and runtime
-    When the selected environment runtime does not support the selected agent provider and model
+    When the selected session runtime does not support the selected agent provider and model
     Then the request fails before workspace allocation, sandbox creation, or self-hosted lease creation
     And the error envelope identifies the unsupported runtime, provider, and model
     And no runtime fallback or model substitution occurs
@@ -36,7 +36,7 @@ Feature: Agent sessions
   Scenario: Stop a running session
     Given a session is running
     When the user stops the session
-    Then AMA sends the stop request to the selected environment runtime
+    Then AMA sends the stop request to the selected session runtime
     And the session status becomes stopped
     And lifecycle events record the stop
 
@@ -44,7 +44,7 @@ Feature: Agent sessions
   Scenario: Resume an idle session
     Given a session is idle
     When the user reconnects to the session
-    Then session metadata, runtime endpoint, environment runtime snapshot, and status are available
+    Then session metadata, runtime endpoint, environment and runtime snapshot, and status are available
 
   @planned
   Scenario: Send live commands to a self-hosted runtime session

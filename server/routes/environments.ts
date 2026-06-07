@@ -17,8 +17,6 @@ import {
   type EnvironmentHostingMode,
   EnvironmentHostingModeSchema,
   EnvironmentNetworkPolicySchema,
-  type EnvironmentRuntime,
-  EnvironmentRuntimeSchema,
   type EnvironmentNetworkPolicy as NetworkPolicy,
   normalizeEnvironmentNetworkPolicy,
 } from './environment-contracts'
@@ -39,7 +37,6 @@ const SecretRefSchema = z.object({
   ref: z.string().min(1).max(240),
 })
 const HostingModeSchema = EnvironmentHostingModeSchema
-const RuntimeSchema = EnvironmentRuntimeSchema
 const NetworkPolicySchema = EnvironmentNetworkPolicySchema
 const McpPolicySchema = z
   .object({
@@ -71,7 +68,6 @@ const EnvironmentSchema = z
     variables: z.record(z.string(), VariableSchema).openapi({ example: { NODE_ENV: { description: 'Runtime mode' } } }),
     secretRefs: z.array(SecretRefSchema).openapi({ example: [{ name: 'NPM_TOKEN', ref: 'vault_secret_123' }] }),
     hostingMode: HostingModeSchema.openapi({ example: 'cloud' }),
-    runtime: RuntimeSchema.openapi({ example: 'ama' }),
     networkPolicy: NetworkPolicySchema.openapi({
       example: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
     }),
@@ -99,7 +95,6 @@ const EnvironmentVersionSchema = z
     variables: z.record(z.string(), VariableSchema).openapi({ example: { NODE_ENV: { required: true } } }),
     secretRefs: z.array(SecretRefSchema).openapi({ example: [{ name: 'NPM_TOKEN', ref: 'vault_secret_123' }] }),
     hostingMode: HostingModeSchema.openapi({ example: 'cloud' }),
-    runtime: RuntimeSchema.openapi({ example: 'ama' }),
     networkPolicy: NetworkPolicySchema.openapi({
       example: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
     }),
@@ -131,7 +126,6 @@ const EnvironmentPayloadSchema = z
       .optional()
       .openapi({ example: [{ name: 'NPM_TOKEN', ref: 'vault_secret_123' }] }),
     hostingMode: HostingModeSchema.optional().openapi({ example: 'cloud' }),
-    runtime: RuntimeSchema.optional().openapi({ example: 'ama' }),
     networkPolicy: NetworkPolicySchema.optional().openapi({
       example: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
     }),
@@ -333,7 +327,6 @@ function serializeVersion(row: EnvironmentVersionRow) {
     variables: parseJson<Record<string, Variable>>(row.variables),
     secretRefs: parseJson<SecretRef[]>(row.secretRefs),
     hostingMode: row.hostingMode as EnvironmentHostingMode,
-    runtime: row.runtime as EnvironmentRuntime,
     networkPolicy: normalizeNetworkPolicy(parseJson<unknown>(row.networkPolicy)),
     mcpPolicy: parseJson<Record<string, unknown>>(row.mcpPolicy),
     packageManagerPolicy: parseJson<Record<string, unknown>>(row.packageManagerPolicy),
@@ -354,7 +347,6 @@ function serializeEnvironment(row: EnvironmentRow, version: EnvironmentVersionRo
     variables: parseJson<Record<string, Variable>>(row.variables),
     secretRefs: parseJson<SecretRef[]>(row.secretRefs),
     hostingMode: row.hostingMode as EnvironmentHostingMode,
-    runtime: row.runtime as EnvironmentRuntime,
     networkPolicy: normalizeNetworkPolicy(parseJson<unknown>(row.networkPolicy)),
     mcpPolicy: parseJson<Record<string, unknown>>(row.mcpPolicy),
     packageManagerPolicy: parseJson<Record<string, unknown>>(row.packageManagerPolicy),
@@ -404,7 +396,6 @@ async function createVersion(
     variables: Record<string, Variable>
     secretRefs: SecretRef[]
     hostingMode: EnvironmentHostingMode
-    runtime: EnvironmentRuntime
     networkPolicy: NetworkPolicy
     mcpPolicy: Record<string, unknown>
     packageManagerPolicy: Record<string, unknown>
@@ -430,7 +421,6 @@ async function createVersion(
     variables: stringify(values.variables),
     secretRefs: stringify(values.secretRefs),
     hostingMode: values.hostingMode,
-    runtime: values.runtime,
     networkPolicy: stringify(values.networkPolicy),
     mcpPolicy: stringify(values.mcpPolicy),
     packageManagerPolicy: stringify(values.packageManagerPolicy),
@@ -608,7 +598,6 @@ const routes = app
       variables: body.variables ?? {},
       secretRefs: body.secretRefs ?? [],
       hostingMode: body.hostingMode ?? 'cloud',
-      runtime: body.runtime ?? 'ama',
       networkPolicy: body.networkPolicy ?? { mode: 'unrestricted' },
       mcpPolicy: body.mcpPolicy ?? {},
       packageManagerPolicy: body.packageManagerPolicy ?? {},
@@ -632,7 +621,6 @@ const routes = app
       variables: stringify(values.variables),
       secretRefs: stringify(values.secretRefs),
       hostingMode: values.hostingMode,
-      runtime: values.runtime,
       networkPolicy: stringify(values.networkPolicy),
       mcpPolicy: stringify(values.mcpPolicy),
       packageManagerPolicy: stringify(values.packageManagerPolicy),
@@ -688,7 +676,6 @@ const routes = app
       variables: body.variables ?? parseJson<Record<string, Variable>>(environment.variables),
       secretRefs: body.secretRefs ?? parseJson<SecretRef[]>(environment.secretRefs),
       hostingMode: body.hostingMode ?? (environment.hostingMode as EnvironmentHostingMode),
-      runtime: body.runtime ?? (environment.runtime as EnvironmentRuntime),
       networkPolicy: body.networkPolicy ?? normalizeNetworkPolicy(parseJson<unknown>(environment.networkPolicy)),
       mcpPolicy: body.mcpPolicy ?? parseJson<Record<string, unknown>>(environment.mcpPolicy),
       packageManagerPolicy:
@@ -710,7 +697,6 @@ const routes = app
       body.variables !== undefined ||
       body.secretRefs !== undefined ||
       body.hostingMode !== undefined ||
-      body.runtime !== undefined ||
       body.networkPolicy !== undefined ||
       body.mcpPolicy !== undefined ||
       body.packageManagerPolicy !== undefined ||
@@ -726,7 +712,6 @@ const routes = app
       variables: stringify(next.variables),
       secretRefs: stringify(next.secretRefs),
       hostingMode: next.hostingMode,
-      runtime: next.runtime,
       networkPolicy: stringify(next.networkPolicy),
       mcpPolicy: stringify(next.mcpPolicy),
       packageManagerPolicy: stringify(next.packageManagerPolicy),

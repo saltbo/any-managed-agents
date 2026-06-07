@@ -18,7 +18,7 @@ Feature: MCP client
   @planned
   Scenario: Call an MCP tool from a session
     Given a session agent is allowed to use an MCP tool
-    When the selected environment runtime requests the tool
+    When the selected session runtime requests the tool
     Then AMA calls the MCP server through the MCP client
     And tool input, output summary, duration, and safe errors are recorded as session events
     And secret values are redacted from events and logs

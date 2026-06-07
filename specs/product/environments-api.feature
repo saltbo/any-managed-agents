@@ -79,13 +79,13 @@ Feature: Environments API
     And no Cloudflare Sandbox id is assigned before runner lease
 
   @implemented
-  Scenario: Publish canonical environment runtime fields
+  Scenario: Publish canonical environment hosting and runtime config fields
     Given a signed-in user has access to a project
     When the user creates an environment with hostingMode and runtime
     Then hostingMode accepts only cloud or self_hosted
     And runtime accepts only ama, claude-code, codex, or copilot
     And invalid hostingMode or runtime values return field-level validation details
-    And requests using legacy environment runtime fields fail validation
+    And requests using legacy environment hosting and runtime config fields fail validation
     And the API does not infer runtime ownership from the selected agent
 
   @implemented

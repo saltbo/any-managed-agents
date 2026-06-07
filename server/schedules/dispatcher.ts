@@ -7,6 +7,7 @@ import { projects, scheduledAgentTriggers, scheduledTriggerRuns } from '../db/sc
 import type { Env } from '../env'
 import { createSessionForAgent } from '../routes/sessions'
 import { safeRuntimeError } from '../runtime/runtime-error'
+import { RuntimeSchema } from '../routes/environment-contracts'
 
 type Db = ReturnType<typeof drizzle>
 type TriggerRow = typeof scheduledAgentTriggers.$inferSelect
@@ -200,6 +201,7 @@ async function dispatchTrigger(env: Env, ctx: ExecutionContext, db: Db, trigger:
         title: trigger.name,
         metadata: sessionMetadata,
         resourceRefs: parseJson<Record<string, unknown>[]>(trigger.resourceRefs, []),
+        runtime: RuntimeSchema.parse(trigger.runtime),
         runtimeEnv: parseJson<Record<string, string>>(trigger.runtimeEnv, {}),
         runtimeSecretEnv: parseJson<Array<{ name: string; ref: string }>>(trigger.runtimeSecretEnv, []),
         initialPrompt: trigger.promptTemplate,

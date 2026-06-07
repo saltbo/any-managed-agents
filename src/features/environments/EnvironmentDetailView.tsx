@@ -58,7 +58,6 @@ export function EnvironmentDetailView({
           <Meta label="Variables" value={Object.keys(environment.variables).join(', ') || 'None'} />
           <Meta label="Secret refs" value={environment.secretRefs.map((item) => item.name).join(', ') || 'None'} />
           <Meta label="Hosting mode" value={environment.hostingMode} />
-          <Meta label="Runtime" value={environment.runtime} />
           <Meta label="Runtime config" value={runtimeConfigSummary(environment)} />
           <Meta label="Network policy" value={networkSummary(environment)} />
           <Meta label="MCP policy" value={stringifyJson(environment.mcpPolicy)} />

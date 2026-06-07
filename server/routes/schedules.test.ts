@@ -67,6 +67,7 @@ async function createTrigger(
     body: JSON.stringify({
       agentId,
       environmentId,
+      runtime: 'ama',
       name: `Scheduled trigger ${crypto.randomUUID()}`,
       promptTemplate: 'Run scheduled work.',
       schedule: { type: 'interval', intervalSeconds: 3600 },
@@ -207,6 +208,7 @@ describe('[CF] /api/scheduled-agent-triggers', () => {
       body: JSON.stringify({
         agentId: agent.id,
         environmentId: environment.id,
+        runtime: 'ama',
         name: 'Rejected secret metadata heartbeat',
         promptTemplate: 'Should not persist.',
         schedule: { intervalSeconds: 3600 },
@@ -279,6 +281,7 @@ describe('[CF] /api/scheduled-agent-triggers', () => {
       body: JSON.stringify({
         agentId: agent.id,
         environmentId: environment.id,
+        runtime: 'ama',
         name: 'Banking bonus heartbeat',
         promptTemplate: 'Research current Canadian banking bonus offers.',
         resourceRefs: [{ type: 'github_repository', owner: 'saltbo', repo: 'agent-kanban' }],
@@ -430,6 +433,7 @@ describe('[CF] /api/scheduled-agent-triggers', () => {
       body: JSON.stringify({
         agentId: agent.id,
         environmentId: environment.id,
+        runtime: 'ama',
         name: 'Paused heartbeat',
         promptTemplate: 'Do not run.',
         schedule: { intervalSeconds: 3600 },
@@ -445,6 +449,7 @@ describe('[CF] /api/scheduled-agent-triggers', () => {
       body: JSON.stringify({
         agentId: agent.id,
         environmentId: environment.id,
+        runtime: 'ama',
         name: 'Archived heartbeat',
         promptTemplate: 'Do not run either.',
         schedule: { intervalSeconds: 3600 },

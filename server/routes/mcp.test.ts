@@ -75,7 +75,7 @@ async function createSession(authorization: string, allowedTools = ['mcp:github.
   const agent = (await agentRes.json()) as { id: string }
   const sessionRes = await jsonFetch('/api/sessions', authorization, {
     method: 'POST',
-    body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+    body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
   })
   expect(sessionRes.status).toBe(201)
   return (await sessionRes.json()) as { id: string }
@@ -537,7 +537,7 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
     const agent = (await agentRes.json()) as { id: string }
     const sessionRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     expect(sessionRes.status).toBe(201)
     const session = (await sessionRes.json()) as { id: string }

@@ -293,7 +293,8 @@ describe('[CF] OpenAPI documentation', () => {
       'SessionEnvironmentSnapshot',
     ]) {
       const properties = schemaProperties(doc, schemaName)
-      expect(properties).toEqual(expect.arrayContaining(['hostingMode', 'runtime', 'runtimeConfig']))
+      expect(properties).toEqual(expect.arrayContaining(['hostingMode', 'runtimeConfig']))
+      expect(properties).not.toContain('runtime')
       expect(properties).not.toContain('runtimeType')
       expect(properties).not.toContain('runtimeImage')
     }
@@ -457,7 +458,7 @@ describe('[CF] OpenAPI documentation', () => {
     expect(schemas.SessionRuntimeMetadata.properties).toEqual(
       expect.objectContaining({
         hostingMode: { $ref: '#/components/schemas/EnvironmentHostingMode' },
-        runtime: { $ref: '#/components/schemas/EnvironmentRuntime' },
+        runtime: { $ref: '#/components/schemas/Runtime' },
       }),
     )
     expect(schemas.SessionRuntimeMetadata.properties).not.toHaveProperty('runtimeOwner')

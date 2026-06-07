@@ -36,7 +36,7 @@ export interface SecretRef {
 }
 
 export type EnvironmentHostingMode = 'cloud' | 'self_hosted'
-export type EnvironmentRuntime = 'ama' | 'claude-code' | 'codex' | 'copilot'
+export type RuntimeName = 'ama' | 'claude-code' | 'codex' | 'copilot'
 export type EnvironmentNetworkPolicy =
   | { mode: 'unrestricted' }
   | { mode: 'restricted'; allowedHosts: string[] }
@@ -51,7 +51,6 @@ export interface Environment {
   variables: Record<string, EnvironmentVariable>
   secretRefs: SecretRef[]
   hostingMode: EnvironmentHostingMode
-  runtime: EnvironmentRuntime
   networkPolicy: EnvironmentNetworkPolicy
   mcpPolicy: Record<string, unknown>
   packageManagerPolicy: Record<string, unknown>
@@ -116,7 +115,7 @@ export type SessionStatus = 'pending' | 'running' | 'idle' | 'stopped' | 'error'
 
 export interface SessionRuntimeMetadata {
   hostingMode: EnvironmentHostingMode
-  runtime: EnvironmentRuntime
+  runtime: RuntimeName
   runtimeConfig: Record<string, unknown>
   provider: string
   model: string
@@ -397,7 +396,6 @@ export interface EnvironmentInput {
   variables?: Record<string, EnvironmentVariable>
   secretRefs?: SecretRef[]
   hostingMode?: EnvironmentHostingMode
-  runtime?: EnvironmentRuntime
   networkPolicy?: EnvironmentNetworkPolicy
   mcpPolicy?: Record<string, unknown>
   packageManagerPolicy?: Record<string, unknown>
@@ -422,6 +420,8 @@ export interface AgentInput {
 export interface SessionInput {
   agentId: string
   environmentId: string
+  runtime: RuntimeName
+  runtimeConfig?: Record<string, unknown>
   title?: string
   metadata?: Record<string, unknown>
   resourceRefs?: SessionResourceRef[]

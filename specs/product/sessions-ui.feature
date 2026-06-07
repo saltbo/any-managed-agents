@@ -27,5 +27,5 @@ Feature: Sessions UI
   Scenario: Create a session from the sessions page
     Given active agents exist
     When the user starts the create-session flow
-    Then the form captures agent provider and model, environment runtime, title, metadata, resources, and vault references
+    Then the form captures agent provider and model, session runtime, title, metadata, resources, and vault references
     And successful save opens the session detail page with the runtime message composer ready

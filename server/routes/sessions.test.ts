@@ -153,6 +153,7 @@ describe('[CF] /api/sessions', () => {
       body: JSON.stringify({
         agentId: agent.id,
         environmentId: environment.id,
+        runtime: 'ama',
         title: 'Ship the first task',
         metadata: { ticket: 'AMA-1' },
         resourceRefs: [{ type: 'repository', id: 'repo_1' }],
@@ -484,14 +485,12 @@ describe('[CF] /api/sessions', () => {
       body: JSON.stringify({
         name: 'Self-hosted workspace',
         hostingMode: 'self_hosted',
-        runtime: 'ama',
         networkPolicy: { mode: 'unrestricted' },
       }),
     })
     expect(environmentRes.status).toBe(201)
-    const environment = (await environmentRes.json()) as { id: string; hostingMode: string; runtime: string }
+    const environment = (await environmentRes.json()) as { id: string; hostingMode: string }
     expect(environment.hostingMode).toBe('self_hosted')
-    expect(environment.runtime).toBe('ama')
     const runner = await registerSelfHostedRunnerSupport(authorization, environment.id, DEFAULT_AMA_RUNNER_CAPABILITY)
     const agentRes = await jsonFetch('/api/agents', authorization, {
       method: 'POST',
@@ -509,6 +508,7 @@ describe('[CF] /api/sessions', () => {
       body: JSON.stringify({
         agentId: agent.id,
         environmentId: environment.id,
+        runtime: 'ama',
         runtimeSecretEnv: [{ name: 'AK_AGENT_KEY', ref: credential.activeVersionId }],
       }),
     })
@@ -519,7 +519,7 @@ describe('[CF] /api/sessions', () => {
       statusReason: string | null
       sandboxId: string | null
       runtimeEndpointPath: string | null
-      environmentSnapshot: { hostingMode: string; runtime: string }
+      environmentSnapshot: { hostingMode: string }
       runtimeSecretEnv: Array<{ name: string; ref: string }>
       metadata: Record<string, unknown>
       runtimeMetadata: Record<string, unknown>
@@ -529,7 +529,7 @@ describe('[CF] /api/sessions', () => {
       statusReason: 'waiting-for-runner',
       sandboxId: null,
       runtimeEndpointPath: null,
-      environmentSnapshot: { hostingMode: 'self_hosted', runtime: 'ama' },
+      environmentSnapshot: { hostingMode: 'self_hosted' },
       runtimeSecretEnv: [{ name: 'AK_AGENT_KEY', ref: credential.activeVersionId }],
       metadata: {
         hostingMode: 'self_hosted',
@@ -616,6 +616,7 @@ describe('[CF] /api/sessions', () => {
       body: JSON.stringify({
         agentId: agent.id,
         environmentId: environment.id,
+        runtime: 'ama',
         resourceRefs: [
           {
             type: 'github_repository',
@@ -648,6 +649,7 @@ describe('[CF] /api/sessions', () => {
       body: JSON.stringify({
         agentId: agent.id,
         environmentId: environment.id,
+        runtime: 'ama',
         resourceRefs: [
           {
             type: 'github_repository',
@@ -671,6 +673,7 @@ describe('[CF] /api/sessions', () => {
       body: JSON.stringify({
         agentId: agent.id,
         environmentId: environment.id,
+        runtime: 'ama',
         resourceRefs: [
           {
             type: 'repository',
@@ -686,6 +689,7 @@ describe('[CF] /api/sessions', () => {
       body: JSON.stringify({
         agentId: agent.id,
         environmentId: environment.id,
+        runtime: 'ama',
         resourceRefs: [
           { type: 'github_repository', owner: 'saltbo', repo: 'one', mountPath: 'repos/shared' },
           { type: 'github_repository', owner: 'saltbo', repo: 'two', mountPath: '/workspace/repos/shared' },
@@ -706,6 +710,7 @@ describe('[CF] /api/sessions', () => {
       body: JSON.stringify({
         agentId: agent.id,
         environmentId: environment.id,
+        runtime: 'ama',
         runtimeSecretEnv: [{ name: 'AK_AGENT_KEY', ref: 'vaultver_missing' }],
       }),
     })
@@ -722,6 +727,7 @@ describe('[CF] /api/sessions', () => {
       body: JSON.stringify({
         agentId: agent.id,
         environmentId: environment.id,
+        runtime: 'ama',
         runtimeSecretEnv: [
           { name: 'AK_AGENT_KEY', ref: credential.activeVersionId },
           { name: 'AK_AGENT_KEY', ref: credential.activeVersionId },
@@ -747,7 +753,6 @@ describe('[CF] /api/sessions', () => {
       body: JSON.stringify({
         name: `Canonical snapshot workspace ${crypto.randomUUID()}`,
         hostingMode: 'cloud',
-        runtime: 'ama',
         runtimeConfig: { image: 'ama-runtime', timeoutSeconds: 120 },
         networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
       }),
@@ -757,7 +762,7 @@ describe('[CF] /api/sessions', () => {
     const agent = await createAgent(authorization)
     const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     expect(createRes.status).toBe(201)
     const created = (await createRes.json()) as { id: string }
@@ -768,10 +773,10 @@ describe('[CF] /api/sessions', () => {
     expect(body).toMatchObject({
       environmentSnapshot: {
         hostingMode: 'cloud',
-        runtime: 'ama',
         runtimeConfig: { image: 'ama-runtime', timeoutSeconds: 120 },
         networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
       },
+      runtimeMetadata: { runtime: 'ama' },
     })
   })
 
@@ -782,7 +787,7 @@ describe('[CF] /api/sessions', () => {
     const agent = await createAgent(authorization)
     const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     expect(createRes.status).toBe(201)
     const created = (await createRes.json()) as { id: string; organizationId: string; projectId: string }
@@ -916,7 +921,7 @@ describe('[CF] /api/sessions', () => {
     const agent = await createAgent(authorization)
     const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     expect(createRes.status).toBe(201)
     const created = (await createRes.json()) as { id: string }
@@ -981,7 +986,6 @@ describe('[CF] /api/sessions', () => {
       body: JSON.stringify({
         name: 'Self-hosted no sandbox workspace',
         hostingMode: 'self_hosted',
-        runtime: 'ama',
         networkPolicy: { mode: 'unrestricted' },
       }),
     })
@@ -1000,7 +1004,7 @@ describe('[CF] /api/sessions', () => {
 
     const queuedRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     expect(queuedRes.status).toBe(201)
     await expect(queuedRes.json()).resolves.toMatchObject({
@@ -1016,14 +1020,15 @@ describe('[CF] /api/sessions', () => {
 
     const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     expect(createRes.status).toBe(201)
     await expect(createRes.json()).resolves.toMatchObject({
       status: 'pending',
       statusReason: 'waiting-for-runner',
       sandboxId: null,
-      environmentSnapshot: { hostingMode: 'self_hosted', runtime: 'ama' },
+      environmentSnapshot: { hostingMode: 'self_hosted' },
+      runtimeMetadata: { runtime: 'ama' },
     })
   })
 
@@ -1038,6 +1043,7 @@ describe('[CF] /api/sessions', () => {
       body: JSON.stringify({
         agentId: agent.id,
         environmentId: environment.id,
+        runtime: 'ama',
         title: 'Cancellation boundary',
       }),
     })
@@ -1089,6 +1095,7 @@ describe('[CF] /api/sessions', () => {
       body: JSON.stringify({
         agentId: agent.id,
         environmentId: environment.id,
+        runtime: 'ama',
         title: 'Scheduled banking bonus research',
         metadata: {
           externalRunId: 'tftt-banking-bonus-2026-05-26',
@@ -1177,6 +1184,7 @@ describe('[CF] /api/sessions', () => {
       body: JSON.stringify({
         agentId: agent.id,
         environmentId: environment.id,
+        runtime: 'ama',
         initialPrompt: 'Run the maintainer heartbeat.',
       }),
     })
@@ -1203,6 +1211,7 @@ describe('[CF] /api/sessions', () => {
       body: JSON.stringify({
         agentId: agent.id,
         environmentId: environment.id,
+        runtime: 'ama',
         initialPrompt: '',
       }),
     })
@@ -1224,12 +1233,12 @@ describe('[CF] /api/sessions', () => {
 
     const firstRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     const first = (await firstRes.json()) as { id: string; agentId: string; createdAt: string }
     const secondRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     const second = (await secondRes.json()) as { id: string; agentId: string; createdAt: string }
 
@@ -1271,7 +1280,7 @@ describe('[CF] /api/sessions', () => {
     const agent = await createAgent(authorization)
     const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     const created = (await createRes.json()) as { id: string }
 
@@ -1315,7 +1324,7 @@ describe('[CF] /api/sessions', () => {
 
     const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     expect(createRes.status).toBe(403)
     await expect(createRes.json()).resolves.toMatchObject({
@@ -1357,7 +1366,7 @@ describe('[CF] /api/sessions', () => {
 
     const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     expect(createRes.status).toBe(201)
     const session = (await createRes.json()) as { id: string }
@@ -1445,7 +1454,7 @@ describe('[CF] /api/sessions', () => {
 
     const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     expect(createRes.status).toBe(201)
     const session = (await createRes.json()) as { id: string }
@@ -1512,7 +1521,7 @@ describe('[CF] /api/sessions', () => {
 
     const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     expect(createRes.status).toBe(201)
     const session = (await createRes.json()) as { id: string }
@@ -1593,7 +1602,7 @@ describe('[CF] /api/sessions', () => {
     const agent = await createAgent(authorization)
     const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     expect(createRes.status).toBe(201)
     const session = (await createRes.json()) as { id: string }
@@ -1648,7 +1657,7 @@ describe('[CF] /api/sessions', () => {
 
     const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     expect(createRes.status).toBe(201)
     const session = (await createRes.json()) as { id: string }
@@ -1674,7 +1683,7 @@ describe('[CF] /api/sessions', () => {
     const agent = await createAgent(authorization)
     const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     const created = (await createRes.json()) as { id: string }
 
@@ -1718,7 +1727,7 @@ describe('[CF] /api/sessions', () => {
 
     const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     const created = (await createRes.json()) as {
       id: string
@@ -1767,7 +1776,7 @@ describe('[CF] /api/sessions', () => {
     expect(reread.agentSnapshot.sandboxPolicy).toBeUndefined()
   })
 
-  it('rejects cloud sessions when the environment runtime cannot run the exact agent provider model', async () => {
+  it('rejects cloud sessions when the session runtime cannot run the exact agent provider model', async () => {
     const authorization = await signIn()
     const model = 'gpt-5.3-codex'
     const { providerId } = await createProviderModel(authorization, model)
@@ -1776,7 +1785,7 @@ describe('[CF] /api/sessions', () => {
 
     const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
 
     expect(createRes.status).toBe(409)
@@ -1797,12 +1806,12 @@ describe('[CF] /api/sessions', () => {
 
   it('rejects cloud sessions for runtimes without a cloud driver before allocating runtime state', async () => {
     const authorization = await signIn()
-    const environment = await createEnvironment(authorization, { runtime: 'codex', mcpPolicy: {} })
+    const environment = await createEnvironment(authorization, { mcpPolicy: {} })
     const agent = await createAgent(authorization, { mcpConnectors: [] })
 
     const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'codex' }),
     })
 
     expect(createRes.status).toBe(409)
@@ -1827,7 +1836,6 @@ describe('[CF] /api/sessions', () => {
     const { providerId } = await createProviderModel(authorization, model)
     const environment = await createEnvironment(authorization, {
       hostingMode: 'self_hosted',
-      runtime: 'codex',
       mcpPolicy: {},
     })
     const agent = await createAgent(authorization, { provider: providerId, model, mcpConnectors: [] })
@@ -1844,7 +1852,7 @@ describe('[CF] /api/sessions', () => {
 
     const createRes = await jsonFetch('/api/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id }),
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'codex' }),
     })
     expect(createRes.status).toBe(201)
     const session = (await createRes.json()) as { id: string; status: string; statusReason: string | null }

@@ -49,7 +49,6 @@ function buildSession(overrides: Partial<Session> = {}): Session {
       variables: {},
       secretRefs: [],
       hostingMode: 'cloud',
-      runtime: 'ama',
       networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
       mcpPolicy: {},
       packageManagerPolicy: {},
@@ -121,7 +120,6 @@ function buildEnvironment(overrides: Partial<Environment> = {}): Environment {
     variables: {},
     secretRefs: [],
     hostingMode: 'cloud',
-    runtime: 'ama',
     networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
     mcpPolicy: {},
     packageManagerPolicy: {},
@@ -190,12 +188,13 @@ function buildRuntimeState(overrides: Partial<SessionRuntimeState> = {}): Sessio
 }
 
 describe('sessions UI contracts', () => {
-  it('shows Agent-owned provider/model and Environment-owned runtime in session creation', () => {
+  it('shows Agent-owned provider/model, Environment-owned hosting, and Session-owned runtime in session creation', () => {
     render(
       <SessionForm
         value={{
           agentId: 'agent_1',
           environmentId: 'env_1',
+          runtime: 'ama',
           title: '',
           metadata: '{}',
           resourceRefs: '[]',
@@ -203,13 +202,15 @@ describe('sessions UI contracts', () => {
         }}
         setValue={vi.fn()}
         agents={[buildAgent()]}
-        environments={[buildEnvironment({ hostingMode: 'self_hosted', runtime: 'codex' })]}
+        environments={[buildEnvironment({ hostingMode: 'self_hosted' })]}
         onSubmit={vi.fn()}
       />,
     )
 
     expect(screen.getByText('Agent provider/model: workers-ai / @cf/moonshotai/kimi-k2.6')).toBeTruthy()
-    expect(screen.getByText('Environment runtime: Self-hosted / codex')).toBeTruthy()
+    expect(screen.getByText('Hosting mode: Self-hosted')).toBeTruthy()
+    expect(screen.getByText('Runtime is selected per session.')).toBeTruthy()
+    expect(screen.getAllByText('AMA').length).toBeGreaterThan(0)
   })
 
   it('formats structured runtime capability failures with exact runtime provider and model', () => {
@@ -228,7 +229,7 @@ describe('sessions UI contracts', () => {
     })
 
     expect(formatCreateSessionError(error)).toBe(
-      'Unsupported capability: Cloud environment runtime ama cannot run Agent provider workers-ai with model @cf/moonshotai/kimi-k2.6.',
+      'Unsupported capability: Cloud session runtime ama cannot run Agent provider workers-ai with model @cf/moonshotai/kimi-k2.6.',
     )
   })
 
@@ -315,10 +316,14 @@ describe('sessions UI contracts', () => {
     )
   })
 
-  it('renders session rows from Agent provider/model and Environment runtime snapshots', () => {
+  it('renders session rows from Agent provider/model, hosting snapshots, and session runtime', () => {
     const session = buildSession({
       environmentSnapshot: {
         ...buildSession().environmentSnapshot!,
+        hostingMode: 'self_hosted',
+      },
+      runtimeMetadata: {
+        ...buildSession().runtimeMetadata,
         hostingMode: 'self_hosted',
         runtime: 'codex',
       },
@@ -349,7 +354,7 @@ describe('sessions UI contracts', () => {
     )
 
     expect(screen.getByText('Agent provider/model')).toBeTruthy()
-    expect(screen.getByText('Environment runtime')).toBeTruthy()
+    expect(screen.getByText('Hosting / runtime')).toBeTruthy()
     expect(screen.getAllByText('workers-ai / @cf/moonshotai/kimi-k2.6').length).toBeGreaterThan(0)
     expect(screen.getByText('Self-hosted / codex · env_1')).toBeTruthy()
     expect(screen.queryByText(/legacy-provider|legacy-model/)).toBeNull()
@@ -361,6 +366,10 @@ describe('sessions UI contracts', () => {
       statusReason: 'waiting-for-runner',
       environmentSnapshot: {
         ...buildSession().environmentSnapshot!,
+        hostingMode: 'self_hosted',
+      },
+      runtimeMetadata: {
+        ...buildSession().runtimeMetadata,
         hostingMode: 'self_hosted',
         runtime: 'codex',
       },
@@ -387,7 +396,7 @@ describe('sessions UI contracts', () => {
 
     expect(screen.getByText('Agent provider/model')).toBeTruthy()
     expect(screen.getByText('workers-ai / @cf/moonshotai/kimi-k2.6')).toBeTruthy()
-    expect(screen.getByText('Environment runtime')).toBeTruthy()
+    expect(screen.getByText('Hosting / runtime')).toBeTruthy()
     expect(screen.getByText('Self-hosted / codex')).toBeTruthy()
     expect(screen.getByText('Hosting mode')).toBeTruthy()
     expect(screen.getByText('self_hosted')).toBeTruthy()

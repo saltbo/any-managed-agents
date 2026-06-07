@@ -121,7 +121,6 @@ export const environments = sqliteTable(
     variables: text('variables').notNull().default('{}'),
     secretRefs: text('secret_refs').notNull().default('[]'),
     hostingMode: text('hosting_mode').notNull().default('cloud'),
-    runtime: text('runtime').notNull().default('ama'),
     networkPolicy: text('network_policy').notNull().default('{"mode":"unrestricted"}'),
     mcpPolicy: text('mcp_policy').notNull().default('{}'),
     packageManagerPolicy: text('package_manager_policy').notNull().default('{}'),
@@ -239,7 +238,6 @@ export const environmentVersions = sqliteTable(
     variables: text('variables').notNull(),
     secretRefs: text('secret_refs').notNull(),
     hostingMode: text('hosting_mode').notNull().default('cloud'),
-    runtime: text('runtime').notNull().default('ama'),
     networkPolicy: text('network_policy').notNull().default('{"mode":"unrestricted"}'),
     mcpPolicy: text('mcp_policy').notNull().default('{}'),
     packageManagerPolicy: text('package_manager_policy').notNull().default('{}'),
@@ -342,6 +340,7 @@ export const scheduledAgentTriggers = sqliteTable(
     environmentId: text('environment_id')
       .notNull()
       .references(() => environments.id),
+    runtime: text('runtime').notNull(),
     name: text('name').notNull(),
     promptTemplate: text('prompt_template').notNull(),
     resourceRefs: text('resource_refs').notNull().default('[]'),
