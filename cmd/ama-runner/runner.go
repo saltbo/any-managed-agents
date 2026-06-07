@@ -430,6 +430,15 @@ func (d *RunnerDaemon) runExternalSession(
 		return d.writeAcknowledgedChannelEvent(ctx, channel, eventType, eventPayload)
 	})
 	if runErr != nil {
+		if successfulRuntimeResult(result) {
+			completedResult := cloneJSON(result)
+			completedResult["completionWarning"] = runErr.Error()
+			_, err := d.Client.UpdateRunnerLease(ctx, d.RunnerID, lease.ID, ama.UpdateRunnerLeaseRequest{
+				Status: "completed",
+				Result: completedResult,
+			})
+			return err
+		}
 		_ = d.writeAcknowledgedChannelEvent(context.Background(), channel, "runtime.error", ama.JSON{
 			"error": ama.JSON{"message": runErr.Error(), "code": "runtime_failed"},
 		})
@@ -443,6 +452,43 @@ func (d *RunnerDaemon) runExternalSession(
 		Result: result,
 	})
 	return err
+}
+
+func cloneJSON(value ama.JSON) ama.JSON {
+	cloned := ama.JSON{}
+	for key, item := range value {
+		cloned[key] = item
+	}
+	return cloned
+}
+
+func successfulRuntimeResult(result ama.JSON) bool {
+	if result == nil {
+		return false
+	}
+	if exitCodeValue(result["exitCode"]) == 0 {
+		return true
+	}
+	if output, ok := result["output"].(map[string]any); ok && exitCodeValue(output["exitCode"]) == 0 {
+		return true
+	}
+	if output, ok := result["output"].(ama.JSON); ok && exitCodeValue(output["exitCode"]) == 0 {
+		return true
+	}
+	return false
+}
+
+func exitCodeValue(value any) int {
+	switch typed := value.(type) {
+	case int:
+		return typed
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	default:
+		return -1
+	}
 }
 
 func (d *RunnerDaemon) openRunnerSessionChannel(ctx context.Context, leaseID string) (RunnerSessionChannel, error) {

@@ -620,6 +620,38 @@ func TestRunOnceLaunchesClaudeCodeRuntimeAndCompletesLease(t *testing.T) {
 	}
 }
 
+func TestRunOnceCompletesExternalRuntimeWhenSuccessfulResultHasCompletionWarning(t *testing.T) {
+	for name, result := range map[string]ama.JSON{
+		"top-level-exit-code": {"exitCode": 0},
+		"nested-output-exit-code": {"output": ama.JSON{"exitCode": 0}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			channel := newFakeRunnerSessionChannel(
+				ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"},
+			)
+			client := &fakeControlPlane{lease: claudeCodeSessionStartLease(), channel: channel}
+			runtimeAdapter := &fakeRuntimeAdapter{
+				result: result,
+				err:    errors.New("failed to get reader: failed to read frame header: EOF"),
+			}
+			daemon := testDaemon(client, &fakeAdapter{})
+			daemon.RuntimeAdapter = runtimeAdapter
+			daemon.Config.Capabilities = append(daemon.Config.Capabilities, "runtime-provider-model:claude-code:anthropic:claude-sonnet-4-6")
+
+			if err := daemon.RunOnce(context.Background()); err != nil {
+				t.Fatalf("expected successful runtime result to complete despite warning, got %v", err)
+			}
+			if len(client.updates) != 1 || client.updates[0].Status != "completed" {
+				t.Fatalf("expected completed lease update, got %#v", client.updates)
+			}
+			serializedResult := mustJSON(t, client.updates[0].Result)
+			if !strings.Contains(serializedResult, "completionWarning") {
+				t.Fatalf("expected completion warning in result, got %s", serializedResult)
+			}
+		})
+	}
+}
+
 func TestRunOnceWaitsForRuntimeEventAcknowledgementBeforeCompletingLease(t *testing.T) {
 	channel := newFakeRunnerSessionChannel(
 		ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"},
