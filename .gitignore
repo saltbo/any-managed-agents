@@ -1,5 +1,9 @@
 node_modules/
 dist/
+!sdk/
+!sdk/typescript/
+!sdk/typescript/dist/
+!sdk/typescript/dist/**
 .wrangler/
 .playwright-cli/
 .dev.vars
