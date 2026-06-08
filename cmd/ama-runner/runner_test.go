@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -115,7 +117,7 @@ type fakeAdapter struct {
 	waitForCancel bool
 	result        ToolResult
 	err           error
-	cancelled     bool
+	cancelled     atomic.Bool
 }
 
 type fakeRuntimeAdapter struct {
@@ -123,6 +125,7 @@ type fakeRuntimeAdapter struct {
 	events  []RuntimeEventRecord
 	result  ama.JSON
 	err     error
+	inspect func(RuntimeRequest) error
 }
 
 type RuntimeEventRecord struct {
@@ -248,12 +251,17 @@ func (a *fakeAdapter) Execute(ctx context.Context, _ ToolRequest) (ToolResult, e
 		return a.result, a.err
 	}
 	<-ctx.Done()
-	a.cancelled = true
+	a.cancelled.Store(true)
 	return ToolResult{}, ctx.Err()
 }
 
 func (a *fakeRuntimeAdapter) Run(_ context.Context, request RuntimeRequest, write RuntimeEventWriter) (ama.JSON, error) {
 	a.request = request
+	if a.inspect != nil {
+		if err := a.inspect(request); err != nil {
+			return nil, err
+		}
+	}
 	events := a.events
 	if len(events) == 0 {
 		events = []RuntimeEventRecord{{
@@ -478,6 +486,16 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 	client := &fakeControlPlane{lease: lease, channel: channel}
 	runtimeAdapter := &fakeRuntimeAdapter{
 		result: ama.JSON{"exitCode": 0, "providerThreadId": "codex_thread_1"},
+		inspect: func(request RuntimeRequest) error {
+			if _, err := os.Stat(filepath.Join(request.WorkDir, ".ama", "agent.json")); err != nil {
+				return fmt.Errorf("expected agent snapshot manifest in workspace: %w", err)
+			}
+			systemPrompt, err := os.ReadFile(filepath.Join(request.WorkDir, ".ama", "system-prompt.md"))
+			if err != nil || !strings.Contains(string(systemPrompt), "Follow the AK worker protocol.") || !strings.Contains(string(systemPrompt), "Available subagents: @reviewer (reviewer)") {
+				return fmt.Errorf("expected agent system prompt manifest, got %q err=%v", string(systemPrompt), err)
+			}
+			return nil
+		},
 		events: []RuntimeEventRecord{
 			{Type: "runtime.metadata", Payload: ama.JSON{"data": ama.JSON{"stage": "sdk_bridge_started", "status": "running"}}},
 			{Type: "message_end", Payload: ama.JSON{"message": ama.JSON{"role": "assistant", "content": []any{ama.JSON{"type": "text", "text": "prompt:build the feature"}}}}},
@@ -509,11 +527,7 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 		t.Fatalf("expected agent snapshot to reach adapter, got %#v", runtimeAdapter.request.AgentSnapshot)
 	}
 	if _, err := os.Stat(filepath.Join(runtimeAdapter.request.WorkDir, ".ama", "agent.json")); err != nil {
-		t.Fatalf("expected agent snapshot manifest in workspace: %v", err)
-	}
-	systemPrompt, err := os.ReadFile(filepath.Join(runtimeAdapter.request.WorkDir, ".ama", "system-prompt.md"))
-	if err != nil || !strings.Contains(string(systemPrompt), "Follow the AK worker protocol.") || !strings.Contains(string(systemPrompt), "Available subagents: @reviewer (reviewer)") {
-		t.Fatalf("expected agent system prompt manifest, got %q err=%v", string(systemPrompt), err)
+		t.Fatalf("expected completed session workspace to remain inspectable, got %v", err)
 	}
 	if len(client.updates) != 1 || client.updates[0].Status != "completed" {
 		t.Fatalf("expected completed lease update, got %#v", client.updates)
@@ -917,6 +931,40 @@ func TestStartContinuesAfterLeasePollingErrors(t *testing.T) {
 	}
 }
 
+func TestStartClaimsUpToMaxConcurrentLeases(t *testing.T) {
+	client := &fakeControlPlane{lease: approvedLease()}
+	adapter := &fakeAdapter{waitForCancel: true}
+	daemon := testDaemon(client, adapter)
+	daemon.Config.MaxConcurrent = 3
+	daemon.Config.PollInterval = time.Hour
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- daemon.Start(ctx)
+	}()
+	deadline := time.After(time.Second)
+	for {
+		client.mu.Lock()
+		claims := client.claims
+		client.mu.Unlock()
+		if claims >= 3 {
+			cancel()
+			break
+		}
+		select {
+		case err := <-done:
+			t.Fatalf("runner exited before claiming concurrent leases: %v", err)
+		case <-deadline:
+			t.Fatal("timed out waiting for concurrent lease claims")
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context cancellation after concurrent leases, got %v", err)
+	}
+}
+
 func TestRunOnceReturnsWhenNoLeaseIsAvailable(t *testing.T) {
 	client := &fakeControlPlane{}
 	adapter := &fakeAdapter{}
@@ -1028,7 +1076,7 @@ func TestLeaseRenewalFailureCancelsLocalWorkWithoutCompletionRetry(t *testing.T)
 	if err == nil || !strings.Contains(err.Error(), "runner lease renewal failed") {
 		t.Fatalf("expected renew failure, got %v", err)
 	}
-	if !adapter.cancelled {
+	if !adapter.cancelled.Load() {
 		t.Fatal("expected renew failure to cancel adapter context")
 	}
 	if len(client.updates) != 1 || client.updates[0].Status != "active" {

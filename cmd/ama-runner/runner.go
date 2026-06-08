@@ -38,6 +38,8 @@ type RunnerDaemon struct {
 	Adapter        SandboxAdapter
 	RuntimeAdapter RuntimeAdapter
 	RunnerID       string
+	mu             sync.Mutex
+	activeLeases   int
 }
 
 type WorkPayload struct {
@@ -105,6 +107,9 @@ func (d *RunnerDaemon) Start(ctx context.Context) error {
 	if err := os.MkdirAll(d.Config.WorkDir, 0o755); err != nil {
 		return err
 	}
+	if err := cleanupStaleRuntimeWorkspaces(ctx, d.Config.WorkDir, runtimeWorkspaceRetention); err != nil {
+		return err
+	}
 	if _, err := d.Client.CheckHealth(ctx); err != nil {
 		return err
 	}
@@ -129,11 +134,13 @@ func (d *RunnerDaemon) Start(ctx context.Context) error {
 				return err
 			}
 		case <-pollTimer.C:
-			if err := d.RunOnce(ctx); err != nil {
-				if ctx.Err() != nil {
-					_ = d.sendOfflineHeartbeat(context.Background())
-					return ctx.Err()
-				}
+			for d.tryAcquireLeaseSlot() {
+				go func() {
+					defer d.releaseLeaseSlot()
+					if err := d.runOneLease(ctx); err != nil && ctx.Err() != nil {
+						_ = d.sendOfflineHeartbeat(context.Background())
+					}
+				}()
 			}
 			pollTimer.Reset(d.Config.PollInterval)
 		}
@@ -147,6 +154,14 @@ func (d *RunnerDaemon) RunOnce(ctx context.Context) error {
 	if err := d.heartbeat(ctx); err != nil {
 		return err
 	}
+	if !d.tryAcquireLeaseSlot() {
+		return nil
+	}
+	defer d.releaseLeaseSlot()
+	return d.runOneLease(ctx)
+}
+
+func (d *RunnerDaemon) runOneLease(ctx context.Context) error {
 	lease, err := d.Client.CreateRunnerLease(ctx, d.RunnerID, ama.ClaimRunnerLeaseRequest{
 		LeaseDurationSeconds: d.Config.LeaseDurationSeconds,
 	})
@@ -154,6 +169,30 @@ func (d *RunnerDaemon) RunOnce(ctx context.Context) error {
 		return err
 	}
 	return d.executeLease(ctx, lease)
+}
+
+func (d *RunnerDaemon) tryAcquireLeaseSlot() bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.activeLeases >= d.Config.MaxConcurrent {
+		return false
+	}
+	d.activeLeases += 1
+	return true
+}
+
+func (d *RunnerDaemon) releaseLeaseSlot() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.activeLeases > 0 {
+		d.activeLeases -= 1
+	}
+}
+
+func (d *RunnerDaemon) activeLoad() int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.activeLeases
 }
 
 func (d *RunnerDaemon) ensureRunnerID(ctx context.Context) error {
@@ -202,7 +241,7 @@ func (d *RunnerDaemon) ensureRunner(ctx context.Context) (string, error) {
 }
 
 func (d *RunnerDaemon) heartbeat(ctx context.Context) error {
-	load := 0
+	load := d.activeLoad()
 	machineID, err := ensureMachineID(d.Config)
 	if err != nil {
 		return err

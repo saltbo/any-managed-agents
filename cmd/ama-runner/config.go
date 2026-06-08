@@ -43,7 +43,7 @@ func LoadConfig(args []string, getenv func(string) string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	envMaxConcurrent, err := parseEnvInt(getenv, "AMA_RUNNER_MAX_CONCURRENT", 1)
+	envMaxConcurrent, err := parseEnvInt(getenv, "AMA_RUNNER_MAX_CONCURRENT", 5)
 	if err != nil {
 		return Config{}, err
 	}
@@ -261,8 +261,8 @@ func (c Config) Validate() error {
 	if strings.TrimSpace(c.StateDir) == "" {
 		return fmt.Errorf("runner state directory is required")
 	}
-	if c.MaxConcurrent != 1 {
-		return fmt.Errorf("first ama-runner implementation requires max-concurrent=1")
+	if c.MaxConcurrent < 1 {
+		return fmt.Errorf("max concurrent leases must be greater than zero")
 	}
 	if c.LeaseDurationSeconds < 15 || c.LeaseDurationSeconds > 900 {
 		return fmt.Errorf("lease duration must be between 15 and 900 seconds")

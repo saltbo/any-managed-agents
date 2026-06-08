@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -233,6 +234,92 @@ func TestPrepareRuntimeWorkspaceMountsGitHubRepositoryWorktree(t *testing.T) {
 	if !strings.Contains(string(manifest), `"status": "mounted"`) || !strings.Contains(string(manifest), workspace.Cwd) {
 		t.Fatalf("expected mounted resource manifest, got %s", string(manifest))
 	}
+	if err := cleanupRuntimeWorkspace(context.Background(), workspace); err != nil {
+		t.Fatalf("expected workspace cleanup success, got %v", err)
+	}
+	if _, err := os.Stat(workspace.Root); !os.IsNotExist(err) {
+		t.Fatalf("expected session root cleanup, got err=%v", err)
+	}
+	worktrees := runGitOutput(t, cacheDir, "worktree", "list", "--porcelain")
+	if strings.Contains(worktrees, workspace.Cwd) {
+		t.Fatalf("expected git worktree metadata cleanup, got %s", worktrees)
+	}
+}
+
+func TestPrepareRuntimeWorkspaceSerializesSharedRepositoryCache(t *testing.T) {
+	workDir := t.TempDir()
+	sourceDir := filepath.Join(t.TempDir(), "source")
+	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, sourceDir, "init", "-b", "main")
+	runGit(t, sourceDir, "config", "user.email", "runner@example.test")
+	runGit(t, sourceDir, "config", "user.name", "Runner")
+	if err := os.WriteFile(filepath.Join(sourceDir, "README.md"), []byte("zpan\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, sourceDir, "add", "README.md")
+	runGit(t, sourceDir, "commit", "-m", "init")
+	cacheDir := filepath.Join(workDir, "repositories", "saltbo", "zpan")
+	if err := os.MkdirAll(filepath.Dir(cacheDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, filepath.Dir(cacheDir), "clone", sourceDir, cacheDir)
+
+	resource := ResourceRef{
+		Type:      "github_repository",
+		Owner:     "saltbo",
+		Repo:      "zpan",
+		Ref:       "main",
+		MountPath: "/workspace/repos/saltbo/zpan",
+	}
+	workspaces := make(chan PreparedWorkspace, 2)
+	errs := make(chan error, 2)
+	var wg sync.WaitGroup
+	for _, sessionID := range []string{"session_1", "session_2"} {
+		wg.Add(1)
+		go func(sessionID string) {
+			defer wg.Done()
+			workspace, err := prepareRuntimeWorkspace(context.Background(), workDir, sessionID, []ResourceRef{resource})
+			if err != nil {
+				errs <- err
+				return
+			}
+			workspaces <- workspace
+		}(sessionID)
+	}
+	wg.Wait()
+	close(errs)
+	close(workspaces)
+	for err := range errs {
+		t.Fatalf("expected concurrent workspace preparation success, got %v", err)
+	}
+	for workspace := range workspaces {
+		if data, err := os.ReadFile(filepath.Join(workspace.Cwd, "README.md")); err != nil || string(data) != "zpan\n" {
+			t.Fatalf("expected mounted repo content, got %q err=%v", string(data), err)
+		}
+		if err := cleanupRuntimeWorkspace(context.Background(), workspace); err != nil {
+			t.Fatalf("expected concurrent workspace cleanup success, got %v", err)
+		}
+	}
+}
+
+func TestCleanupStaleRuntimeWorkspacesRemovesExpiredSessionRoots(t *testing.T) {
+	workDir := t.TempDir()
+	sessionRoot := filepath.Join(workDir, "sessions", "session_old")
+	if err := os.MkdirAll(filepath.Join(sessionRoot, ".ama"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(sessionRoot, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if err := cleanupStaleRuntimeWorkspaces(context.Background(), workDir, time.Hour); err != nil {
+		t.Fatalf("expected stale workspace cleanup success, got %v", err)
+	}
+	if _, err := os.Stat(sessionRoot); !os.IsNotExist(err) {
+		t.Fatalf("expected stale session root cleanup, got err=%v", err)
+	}
 }
 
 func runGit(t *testing.T, cwd string, args ...string) {
@@ -243,6 +330,17 @@ func runGit(t *testing.T, cwd string, args ...string) {
 	if err != nil {
 		t.Fatalf("git %s failed: %v: %s", strings.Join(args, " "), err, string(output))
 	}
+}
+
+func runGitOutput(t *testing.T, cwd string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = cwd
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s failed: %v: %s", strings.Join(args, " "), err, string(output))
+	}
+	return string(output)
 }
 
 func TestMaterializeRuntimeBridgeWritesEmbeddedBundle(t *testing.T) {

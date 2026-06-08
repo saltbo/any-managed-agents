@@ -84,6 +84,9 @@ func TestLoadConfigParsesValidatedRunnerConfig(t *testing.T) {
 	if config.LeaseDurationSeconds != 90 || config.RenewInterval != 30*time.Second || config.HeartbeatInterval != 25*time.Second {
 		t.Fatalf("unexpected timing config: %#v", config)
 	}
+	if config.MaxConcurrent != 5 {
+		t.Fatalf("expected default max concurrent leases to be 5, got %d", config.MaxConcurrent)
+	}
 }
 
 func TestLoadConfigUsesSavedDeviceLoginTokenWhenNoExplicitTokenIsProvided(t *testing.T) {
@@ -184,7 +187,7 @@ func TestConfigValidateRejectsInvalidBoundaries(t *testing.T) {
 		{"apiServer", func(c *Config) { c.Origin = "://bad" }, "absolute URL"},
 		{"token", func(c *Config) { c.Token = "" }, "AMA token"},
 		{"adapter", func(c *Config) { c.SandboxAdapter = "docker" }, "unsupported sandbox adapter"},
-		{"max", func(c *Config) { c.MaxConcurrent = 2 }, "max-concurrent=1"},
+		{"max", func(c *Config) { c.MaxConcurrent = 0 }, "max concurrent"},
 		{"lease", func(c *Config) { c.LeaseDurationSeconds = 10 }, "lease duration"},
 		{"heartbeat", func(c *Config) { c.HeartbeatInterval = time.Minute }, "heartbeat interval"},
 		{"renew", func(c *Config) { c.RenewInterval = time.Minute }, "renew interval"},

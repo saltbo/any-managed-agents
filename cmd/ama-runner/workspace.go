@@ -9,7 +9,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 )
+
+const runtimeWorkspaceRetention = 24 * time.Hour
 
 type ResourceRef struct {
 	Type          string `json:"type"`
@@ -21,8 +25,25 @@ type ResourceRef struct {
 }
 
 type PreparedWorkspace struct {
-	Root string
-	Cwd  string
+	Root      string
+	Cwd       string
+	worktrees []preparedWorktree
+}
+
+type preparedWorktree struct {
+	cacheDir string
+	path     string
+}
+
+var repositoryCacheLocks sync.Map
+
+func repositoryCacheLock(cacheDir string) *sync.Mutex {
+	absolute, err := filepath.Abs(cacheDir)
+	if err != nil {
+		absolute = cacheDir
+	}
+	lock, _ := repositoryCacheLocks.LoadOrStore(absolute, &sync.Mutex{})
+	return lock.(*sync.Mutex)
 }
 
 type mountedResource struct {
@@ -42,10 +63,12 @@ func prepareRuntimeWorkspace(ctx context.Context, workDir string, sessionID stri
 	}
 	resources := githubRepositoryResources(resourceRefs)
 	mounted := make([]mountedResource, 0, len(resources))
+	worktrees := make([]preparedWorktree, 0, len(resources))
 	cwd := root
 	for index, resource := range resources {
-		localPath, err := materializeGitHubRepository(ctx, workDir, root, resource)
+		localPath, cacheDir, err := materializeGitHubRepository(ctx, workDir, root, resource)
 		if err != nil {
+			_ = cleanupRuntimeWorkspace(context.Background(), PreparedWorkspace{Root: root, Cwd: cwd, worktrees: worktrees})
 			return PreparedWorkspace{}, err
 		}
 		if index == 0 {
@@ -60,11 +83,108 @@ func prepareRuntimeWorkspace(ctx context.Context, workDir string, sessionID stri
 			LocalPath: localPath,
 			Status:    "mounted",
 		})
+		worktrees = append(worktrees, preparedWorktree{cacheDir: cacheDir, path: localPath})
 	}
 	if err := writeWorkspaceManifest(root, mounted); err != nil {
+		_ = cleanupRuntimeWorkspace(context.Background(), PreparedWorkspace{Root: root, Cwd: cwd, worktrees: worktrees})
 		return PreparedWorkspace{}, err
 	}
-	return PreparedWorkspace{Root: root, Cwd: cwd}, nil
+	return PreparedWorkspace{Root: root, Cwd: cwd, worktrees: worktrees}, nil
+}
+
+func cleanupRuntimeWorkspace(ctx context.Context, workspace PreparedWorkspace) error {
+	var errs []string
+	for i := len(workspace.worktrees) - 1; i >= 0; i-- {
+		worktree := workspace.worktrees[i]
+		if !fileExists(filepath.Join(worktree.cacheDir, ".git")) {
+			continue
+		}
+		lock := repositoryCacheLock(worktree.cacheDir)
+		lock.Lock()
+		if fileExists(worktree.path) {
+			if err := git(ctx, worktree.cacheDir, "worktree", "remove", "--force", worktree.path); err != nil {
+				errs = append(errs, err.Error())
+			}
+		}
+		if err := git(ctx, worktree.cacheDir, "worktree", "prune"); err != nil {
+			errs = append(errs, err.Error())
+		}
+		lock.Unlock()
+	}
+	if workspace.Root != "" {
+		if err := os.RemoveAll(workspace.Root); err != nil {
+			errs = append(errs, err.Error())
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("cleanup runtime workspace failed: %s", strings.Join(errs, "; "))
+	}
+	return nil
+}
+
+func cleanupStaleRuntimeWorkspaces(ctx context.Context, workDir string, retention time.Duration) error {
+	if retention <= 0 {
+		return nil
+	}
+	sessionsDir := filepath.Join(workDir, "sessions")
+	entries, err := os.ReadDir(sessionsDir)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	cutoff := time.Now().Add(-retention)
+	var errs []string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			errs = append(errs, err.Error())
+			continue
+		}
+		if !info.ModTime().Before(cutoff) {
+			continue
+		}
+		root := filepath.Join(sessionsDir, entry.Name())
+		workspace := staleRuntimeWorkspace(workDir, root)
+		if err := cleanupRuntimeWorkspace(ctx, workspace); err != nil {
+			errs = append(errs, err.Error())
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("cleanup stale runtime workspaces failed: %s", strings.Join(errs, "; "))
+	}
+	return nil
+}
+
+func staleRuntimeWorkspace(workDir string, root string) PreparedWorkspace {
+	workspace := PreparedWorkspace{Root: root, Cwd: root}
+	data, err := os.ReadFile(filepath.Join(root, ".ama", "resources.json"))
+	if err != nil {
+		return workspace
+	}
+	var manifest struct {
+		Resources []mountedResource `json:"resources"`
+	}
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return workspace
+	}
+	for _, resource := range manifest.Resources {
+		if resource.Type != "github_repository" || resource.LocalPath == "" {
+			continue
+		}
+		if !safeGitHubSegment(resource.Owner) || !safeGitHubSegment(resource.Repo) {
+			continue
+		}
+		workspace.worktrees = append(workspace.worktrees, preparedWorktree{
+			cacheDir: filepath.Join(workDir, "repositories", resource.Owner, resource.Repo),
+			path:     resource.LocalPath,
+		})
+	}
+	return workspace
 }
 
 func prepareAgentWorkspace(ctx context.Context, cwd string, runtimeName string, agentSnapshot map[string]any) error {
@@ -248,32 +368,35 @@ func githubRepositoryResources(resourceRefs []ResourceRef) []ResourceRef {
 	return resources
 }
 
-func materializeGitHubRepository(ctx context.Context, workDir string, sessionRoot string, resource ResourceRef) (string, error) {
+func materializeGitHubRepository(ctx context.Context, workDir string, sessionRoot string, resource ResourceRef) (string, string, error) {
 	if !safeGitHubSegment(resource.Owner) || !safeGitHubSegment(resource.Repo) {
-		return "", fmt.Errorf("github repository resource must include safe owner and repo")
+		return "", "", fmt.Errorf("github repository resource must include safe owner and repo")
 	}
 	mountPath, err := localMountPath(sessionRoot, resource)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if err := os.MkdirAll(filepath.Dir(mountPath), 0o755); err != nil {
-		return "", err
+		return "", "", err
 	}
 	cacheDir := filepath.Join(workDir, "repositories", resource.Owner, resource.Repo)
+	lock := repositoryCacheLock(cacheDir)
+	lock.Lock()
+	defer lock.Unlock()
 	if err := ensureRepositoryCache(ctx, cacheDir, resource); err != nil {
-		return "", err
+		return "", "", err
 	}
 	if fileExists(mountPath) {
-		return mountPath, nil
+		return mountPath, cacheDir, nil
 	}
 	targetRef, err := resolveWorktreeRef(ctx, cacheDir, resource.Ref)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if err := git(ctx, cacheDir, "worktree", "add", "--detach", mountPath, targetRef); err != nil {
-		return "", err
+		return "", "", err
 	}
-	return mountPath, nil
+	return mountPath, cacheDir, nil
 }
 
 func ensureRepositoryCache(ctx context.Context, cacheDir string, resource ResourceRef) error {
