@@ -1184,7 +1184,9 @@ export async function createSessionForAgent(
   }
 
   const timestamp = now()
-  const id = newId('session')
+  // Session ids are bare UUIDs so runtimes (e.g. Claude Code) can use them
+  // directly as their own session id, keeping the runtime session 1:1 with AMA.
+  const id = crypto.randomUUID()
   const agentSnapshot = serializeAgentVersion(agentVersion)
   const baseEnvironmentSnapshot = environmentVersion
     ? normalizeEnvironmentSnapshot(serializeEnvironmentVersion(environmentVersion))
