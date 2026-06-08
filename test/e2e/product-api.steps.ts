@@ -2613,12 +2613,12 @@ Then('hostingMode accepts only cloud or self_hosted', async function (this: Prod
 Then('session runtime accepts only ama, claude-code, codex, or copilot', async function (this: ProductWorld) {
   const state = await ensureState(this)
   assert.equal(state.sessionRuntime, 'codex')
+  state.agent ??= await createAgent(state, { name: `${state.runId} runtime validation agent` })
   for (const runtime of ['ama', 'claude-code', 'copilot']) {
     const session = await createSession(state, { title: `${state.runId} ${runtime} runtime session`, runtime })
     assert.equal(objectValue(session.runtimeMetadata).runtime, runtime)
   }
 
-  state.agent ??= await createAgent(state, { name: `${state.runId} invalid runtime agent` })
   const invalid = await apiResponse(state.page.request, '/api/sessions', {
     method: 'POST',
     data: { agentId: state.agent.id, environmentId: state.environment?.id, runtime: 'pi' },
