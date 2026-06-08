@@ -1,4 +1,3 @@
-BEGIN;
 PRAGMA defer_foreign_keys=ON;
 
 CREATE TABLE agent_definitions_new (
@@ -143,5 +142,3 @@ CREATE INDEX IF NOT EXISTS idx_agent_definition_versions_agent_id ON agent_defin
 CREATE INDEX IF NOT EXISTS idx_agent_definition_versions_project_id ON agent_definition_versions(project_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_definition_versions_agent_version
   ON agent_definition_versions(agent_id, version);
-
-COMMIT;
