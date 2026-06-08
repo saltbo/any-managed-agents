@@ -2615,7 +2615,15 @@ Then('session runtime accepts only ama, claude-code, codex, or copilot', async f
   assert.equal(state.sessionRuntime, 'codex')
   state.agent ??= await createAgent(state, { name: `${state.runId} runtime validation agent` })
   for (const runtime of ['ama', 'claude-code', 'copilot']) {
-    const session = await createSession(state, { title: `${state.runId} ${runtime} runtime session`, runtime })
+    const session = await apiJson<Json>(state.page.request, '/api/sessions', {
+      method: 'POST',
+      data: {
+        agentId: state.agent.id,
+        environmentId: state.environment?.id,
+        title: `${state.runId} ${runtime} runtime session`,
+        runtime,
+      },
+    })
     assert.equal(objectValue(session.runtimeMetadata).runtime, runtime)
   }
 
@@ -3170,7 +3178,9 @@ Then(
 
 Then('the session reaches idle, stopped, or error with inspectable final events', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
+  const session = await waitForSession(state.page.request, String(state.latestSession?.id), (status) =>
+    ['idle', 'stopped', 'error'].includes(status),
+  )
   assert.ok(['idle', 'stopped', 'error'].includes(String(session.status)))
   const events = await sessionEvents(state)
   assert.ok(events.data.length > 0)
