@@ -94,6 +94,15 @@ func (a SDKBridgeRuntimeAdapter) Run(ctx context.Context, request RuntimeRequest
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
+	processDone := make(chan struct{})
+	go func() {
+		select {
+		case <-commandCtx.Done():
+			a.stopProcess(cmd)
+		case <-processDone:
+		}
+	}()
+	defer close(processDone)
 
 	requestID := "run_" + request.SessionID
 	var writeMu sync.Mutex

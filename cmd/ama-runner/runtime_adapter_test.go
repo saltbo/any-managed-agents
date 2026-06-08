@@ -7,7 +7,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -102,6 +104,36 @@ func TestRuntimeBridgeHostEnvIncludesNodeToolchainAndTestModeOnly(t *testing.T) 
 	}
 	if strings.Contains(envText, "raw-secret-value") {
 		t.Fatalf("expected runner secrets to remain filtered, got %q", envText)
+	}
+}
+
+func TestSDKBridgeStopProcessKillsProcessGroup(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("process group signalling is Unix-specific")
+	}
+	marker := filepath.Join(t.TempDir(), "child.pid")
+	cmd := exec.Command("sh", "-lc", "sleep 300 & echo $! > \"$1\"; wait", "sh", marker)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	var childPID string
+	for time.Now().Before(deadline) {
+		data, err := os.ReadFile(marker)
+		if err == nil && strings.TrimSpace(string(data)) != "" {
+			childPID = strings.TrimSpace(string(data))
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if childPID == "" {
+		t.Fatal("timed out waiting for child pid")
+	}
+	SDKBridgeRuntimeAdapter{ShutdownGraceInterval: 10 * time.Millisecond}.stopProcess(cmd)
+	_ = cmd.Wait()
+	if err := exec.Command("kill", "-0", childPID).Run(); err == nil {
+		t.Fatalf("expected child process %s to be killed with process group", childPID)
 	}
 }
 
