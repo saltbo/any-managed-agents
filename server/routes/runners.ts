@@ -416,8 +416,8 @@ async function findRunner(db: Db, auth: AuthContext, runnerId: string) {
 
 function runnerOperationAuthorized(env: Env, auth: AuthContext, runner: RunnerRow) {
   if (isRunnerOidcAuth(env, auth)) {
-    if (auth.oidc.runnerId) {
-      return runner.authMode === 'federated' && runner.id === auth.oidc.runnerId
+    if (runner.authMode === 'federated') {
+      return runner.oidcSubject === auth.oidc.subject
     }
     return (
       runner.authMode === 'oidc' &&
@@ -443,7 +443,7 @@ function runnerOidcBindingFields(env: Env, auth: AuthContext, authMode: string) 
   if (!isRunnerOidcAuth(env, auth)) {
     return null
   }
-  if (auth.oidc.runnerId) {
+  if (auth.oidc.runnerProjectId || auth.oidc.externalTenantId || auth.oidc.runnerEnvironmentId) {
     if (authMode !== 'federated') {
       return { authMode: 'Federated runner tokens can only register federated runners.' }
     }
@@ -462,11 +462,43 @@ function runnerOidcBindingFields(env: Env, auth: AuthContext, authMode: string) 
 }
 
 function runnerAuthModeForRegistration(auth: AuthContext, requested: string | undefined) {
-  return requested ?? (auth.oidc.runnerId ? 'federated' : 'oidc')
+  return requested ?? (auth.oidc.runnerProjectId || auth.oidc.externalTenantId || auth.oidc.runnerEnvironmentId ? 'federated' : 'oidc')
 }
 
-function runnerIdForRegistration(auth: AuthContext) {
-  return auth.oidc.runnerId ?? newId('runner')
+function runnerIdForRegistration() {
+  return newId('runner')
+}
+
+function runnerMachineId(metadata: Record<string, unknown> | undefined) {
+  const value = metadata?.machineId
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+async function findRunnerForMachineRegistration(
+  db: Db,
+  auth: AuthContext,
+  authMode: string,
+  environmentId: string | undefined,
+  machineId: string | null,
+) {
+  if (!machineId || (authMode !== 'federated' && authMode !== 'oidc')) {
+    return null
+  }
+  return (
+    (await db
+      .select()
+      .from(runners)
+      .where(
+        and(
+          eq(runners.projectId, auth.project.id),
+          eq(runners.authMode, authMode),
+          eq(runners.oidcSubject, auth.oidc.subject),
+          environmentId ? eq(runners.environmentId, environmentId) : isNull(runners.environmentId),
+          sql`json_extract(${runners.metadata}, '$.machineId') = ${machineId}`,
+        ),
+      )
+      .get()) ?? null
+  )
 }
 
 function environmentIdForRegistration(auth: AuthContext, requested: string | undefined) {
@@ -1148,16 +1180,16 @@ const routes = app
       })
     }
     const timestamp = now()
-    const runnerId = runnerIdForRegistration(auth)
-    const existingRunner = await db.select().from(runners).where(eq(runners.id, runnerId)).get()
+    const machineId = runnerMachineId(body.metadata)
+    const reusableRunner = await findRunnerForMachineRegistration(db, auth, authMode, environmentId, machineId)
+    const runnerId = reusableRunner?.id ?? runnerIdForRegistration()
+    const existingRunner = reusableRunner ?? (await db.select().from(runners).where(eq(runners.id, runnerId)).get())
     const runner = {
       id: runnerId,
       organizationId: auth.organization.id,
       projectId: auth.project.id,
       name: body.name,
-      capabilities: stringify(
-        auth.oidc.runnerCapabilities.length ? auth.oidc.runnerCapabilities : (body.capabilities ?? []),
-      ),
+      capabilities: stringify(body.capabilities ?? []),
       environmentId: environmentId ?? null,
       credentialSecretRef: body.credentialSecretRef ?? null,
       authMode,
@@ -1175,7 +1207,6 @@ const routes = app
       if (
         existingRunner.projectId !== auth.project.id ||
         existingRunner.authMode !== 'federated' ||
-        !auth.oidc.runnerId ||
         existingRunner.oidcSubject !== auth.oidc.subject
       ) {
         return errorResponse(c, 409, 'conflict', 'Runner id is already registered')
@@ -1361,11 +1392,7 @@ const routes = app
     }
     const timestamp = now()
     const status = body.status ?? 'active'
-    const capabilities = auth.oidc.runnerCapabilities.length
-      ? stringify(auth.oidc.runnerCapabilities)
-      : body.capabilities
-        ? stringify(body.capabilities)
-        : runner.capabilities
+    const capabilities = body.capabilities ? stringify(body.capabilities) : runner.capabilities
     const currentLoad = body.currentLoad ?? runner.currentLoad
     await db.insert(runnerHeartbeats).values({
       id: newId('heartbeat'),

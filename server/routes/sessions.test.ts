@@ -1830,7 +1830,7 @@ describe('[CF] /api/sessions', () => {
     })
   })
 
-  it('queues self-hosted external runtime sessions and requires exact runner provider/model support on lease claim', async () => {
+  it('queues self-hosted external runtime sessions and requires exact runner model support on lease claim', async () => {
     const authorization = await signIn()
     const model = 'gpt-5.3-codex'
     const { providerId } = await createProviderModel(authorization, model)
@@ -1863,7 +1863,7 @@ describe('[CF] /api/sessions', () => {
       body: JSON.stringify({
         name: 'Exact model runner',
         environmentId: environment.id,
-        capabilities: [runtimeProviderModelCapability('codex', providerId, model)],
+        capabilities: [runtimeProviderModelCapability('codex', '*', model)],
       }),
     })
     expect(exactRunnerRes.status).toBe(201)
@@ -1888,7 +1888,7 @@ describe('[CF] /api/sessions', () => {
       method: 'POST',
       body: JSON.stringify({
         status: 'active',
-        capabilities: [runtimeProviderModelCapability('codex', providerId, model)],
+        capabilities: [runtimeProviderModelCapability('codex', '*', model)],
       }),
     })
     const exactLeaseRes = await jsonFetch(`/api/runners/${exactRunner.id}/leases`, authorization, {

@@ -299,8 +299,7 @@ func TestRunOnceRegistersRunnerWhenIDIsMissing(t *testing.T) {
 	client := &fakeControlPlane{lease: approvedLease(), runnerID: "runner_registered"}
 	adapter := &fakeAdapter{result: ToolResult{Output: map[string]any{"stdout": "ok", "stderr": "", "exitCode": 0}}}
 	daemon := testDaemon(client, adapter)
-	daemon.Config.RunnerID = ""
-	daemon.Config.RunnerName = "new-runner"
+	daemon.RunnerID = ""
 	if err := daemon.RunOnce(context.Background()); err != nil {
 		t.Fatalf("expected run once success, got %v", err)
 	}
@@ -309,6 +308,48 @@ func TestRunOnceRegistersRunnerWhenIDIsMissing(t *testing.T) {
 	}
 	if len(client.updates) != 1 || client.updates[0].Status != "completed" {
 		t.Fatalf("expected completed update, got %#v", client.updates)
+	}
+}
+
+func TestRunnerIdentityStateUsesStateDirAndMachineID(t *testing.T) {
+	stateDir := t.TempDir()
+	workDir := t.TempDir()
+	config := Config{
+		Origin:        "https://ama.example.test",
+		ProjectID:     "project_1",
+		EnvironmentID: "env_1",
+		StateDir:      stateDir,
+		WorkDir:       workDir,
+	}
+	machineID, err := ensureMachineID(config)
+	if err != nil {
+		t.Fatalf("expected machine id, got %v", err)
+	}
+	if !strings.HasPrefix(machineID, "machine_") {
+		t.Fatalf("unexpected machine id %q", machineID)
+	}
+	if err := storeRunnerID(config, "runner_1"); err != nil {
+		t.Fatalf("expected runner id store success, got %v", err)
+	}
+	loadedRunnerID, err := loadStoredRunnerID(config)
+	if err != nil {
+		t.Fatalf("expected runner id load success, got %v", err)
+	}
+	if loadedRunnerID != "runner_1" {
+		t.Fatalf("expected stored runner id, got %q", loadedRunnerID)
+	}
+	reloadedMachineID, err := ensureMachineID(config)
+	if err != nil {
+		t.Fatalf("expected machine id reload success, got %v", err)
+	}
+	if reloadedMachineID != machineID {
+		t.Fatalf("expected stable machine id %q, got %q", machineID, reloadedMachineID)
+	}
+	if _, err := os.Stat(filepath.Join(workDir, runnerStateFileName)); !os.IsNotExist(err) {
+		t.Fatalf("runner state should not be written to workdir, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(stateDir, runnerStateFileName)); err != nil {
+		t.Fatalf("expected runner state in state dir, got %v", err)
 	}
 }
 
@@ -440,7 +481,6 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 	daemon := testDaemon(client, &fakeAdapter{})
 	daemon.RuntimeAdapter = runtimeAdapter
 	daemon.Config.WorkDir = workDir
-	daemon.Config.Capabilities = append(daemon.Config.Capabilities, "runtime-provider-model:codex:provider_codex:gpt-5.3-codex")
 	if err := daemon.RunOnce(context.Background()); err != nil {
 		t.Fatalf("expected codex run success, got %v", err)
 	}
@@ -511,7 +551,6 @@ func TestRunOnceFailsCodexLeaseOnRuntimeAdapterFailure(t *testing.T) {
 	daemon := testDaemon(client, &fakeAdapter{})
 	daemon.RuntimeAdapter = runtimeAdapter
 	daemon.Config.WorkDir = workDir
-	daemon.Config.Capabilities = append(daemon.Config.Capabilities, "runtime-provider-model:codex:provider_codex:gpt-5.3-codex")
 	if err := daemon.RunOnce(context.Background()); err == nil || !strings.Contains(err.Error(), "codex SDK bridge failed") {
 		t.Fatalf("expected codex bridge error after failed lease update, got %v", err)
 	}
@@ -537,7 +576,6 @@ func TestRunOnceFailsCodexLeaseWhenSessionStartedChannelEventIsRejected(t *testi
 	daemon := testDaemon(client, &fakeAdapter{})
 	daemon.RuntimeAdapter = runtimeAdapter
 	daemon.Config.WorkDir = workDir
-	daemon.Config.Capabilities = append(daemon.Config.Capabilities, "runtime-provider-model:codex:provider_codex:gpt-5.3-codex")
 	err := daemon.RunOnce(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "start rejected") {
 		t.Fatalf("expected session started channel rejection, got %v", err)
@@ -597,7 +635,6 @@ func TestRunOnceLaunchesClaudeCodeRuntimeAndCompletesLease(t *testing.T) {
 	runtimeAdapter := &fakeRuntimeAdapter{result: ama.JSON{"exitCode": 0}}
 	daemon := testDaemon(client, &fakeAdapter{})
 	daemon.RuntimeAdapter = runtimeAdapter
-	daemon.Config.Capabilities = append(daemon.Config.Capabilities, "runtime-provider-model:claude-code:anthropic:claude-sonnet-4-6")
 	if err := daemon.RunOnce(context.Background()); err != nil {
 		t.Fatalf("expected claude runtime success, got %v", err)
 	}
@@ -636,7 +673,6 @@ func TestRunOnceCompletesExternalRuntimeWhenSuccessfulResultHasCompletionWarning
 			}
 			daemon := testDaemon(client, &fakeAdapter{})
 			daemon.RuntimeAdapter = runtimeAdapter
-			daemon.Config.Capabilities = append(daemon.Config.Capabilities, "runtime-provider-model:claude-code:anthropic:claude-sonnet-4-6")
 
 			if err := daemon.RunOnce(context.Background()); err != nil {
 				t.Fatalf("expected successful runtime result to complete despite warning, got %v", err)
@@ -661,7 +697,6 @@ func TestRunOnceWaitsForRuntimeEventAcknowledgementBeforeCompletingLease(t *test
 	runtimeAdapter := &fakeRuntimeAdapter{result: ama.JSON{"exitCode": 0}}
 	daemon := testDaemon(client, &fakeAdapter{})
 	daemon.RuntimeAdapter = runtimeAdapter
-	daemon.Config.Capabilities = append(daemon.Config.Capabilities, "runtime-provider-model:claude-code:anthropic:claude-sonnet-4-6")
 
 	done := make(chan error, 1)
 	go func() {
@@ -702,7 +737,6 @@ func TestRunOnceFailsLeaseWhenRuntimeEventAcknowledgementRejects(t *testing.T) {
 	runtimeAdapter := &fakeRuntimeAdapter{result: ama.JSON{"exitCode": 0}}
 	daemon := testDaemon(client, &fakeAdapter{})
 	daemon.RuntimeAdapter = runtimeAdapter
-	daemon.Config.Capabilities = append(daemon.Config.Capabilities, "runtime-provider-model:claude-code:anthropic:claude-sonnet-4-6")
 
 	done := make(chan error, 1)
 	go func() {
@@ -776,8 +810,7 @@ func TestStartRegistersRunnerAndSendsOfflineHeartbeatOnShutdown(t *testing.T) {
 	client := &fakeControlPlane{runnerID: "runner_registered"}
 	adapter := &fakeAdapter{}
 	daemon := testDaemon(client, adapter)
-	daemon.Config.RunnerID = ""
-	daemon.Config.RunnerName = "registered"
+	daemon.RunnerID = ""
 	daemon.Config.PollInterval = time.Hour
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
@@ -824,8 +857,7 @@ func TestStartFailsFastOnControlPlaneSetupErrors(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			daemon := testDaemon(tc.client, &fakeAdapter{})
-			daemon.Config.RunnerID = ""
-			daemon.Config.RunnerName = "runner"
+			daemon.RunnerID = ""
 			err := daemon.Start(context.Background())
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("expected %q, got %v", tc.want, err)
@@ -1109,12 +1141,15 @@ func TestParseWorkPayloadRejectsProtocolAndMissingFields(t *testing.T) {
 }
 
 func testDaemon(client *fakeControlPlane, adapter SandboxAdapter) RunnerDaemon {
+	workDir, err := os.MkdirTemp("", "ama-runner-test-*")
+	if err != nil {
+		panic(err)
+	}
 	return RunnerDaemon{
 		Config: Config{
-			RunnerID:              "runner_1",
-			Capabilities:          []string{"sandbox.exec", defaultRuntimeProviderModelCapability},
 			SandboxAdapter:        processUnsafeAdapter,
-			WorkDir:               ".",
+			StateDir:              workDir,
+			WorkDir:               workDir,
 			MaxConcurrent:         1,
 			PollInterval:          time.Second,
 			HeartbeatInterval:     time.Second,
@@ -1126,6 +1161,7 @@ func testDaemon(client *fakeControlPlane, adapter SandboxAdapter) RunnerDaemon {
 		Client:   client,
 		Channels: client,
 		Adapter:  adapter,
+		RunnerID: "runner_1",
 	}
 }
 
@@ -1182,7 +1218,7 @@ func codexSessionStartLease(prompt string) *ama.RunnerWorkLease {
 	lease.WorkItem.Payload["provider"] = "provider_codex"
 	lease.WorkItem.Payload["model"] = "gpt-5.3-codex"
 	lease.WorkItem.Payload["runtimeDriver"] = "codex-self-hosted"
-	lease.WorkItem.Payload["requiredRunnerCapability"] = "runtime-provider-model:codex:provider_codex:gpt-5.3-codex"
+	lease.WorkItem.Payload["requiredRunnerCapability"] = "runtime-provider-model:codex:*:gpt-5.3-codex"
 	lease.WorkItem.Payload["initialPrompt"] = prompt
 	return lease
 }

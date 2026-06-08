@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -15,15 +16,13 @@ const processUnsafeAdapter = "process-unsafe"
 
 type Config struct {
 	ConfigPath            string        `json:"-"`
-	Origin                string        `json:"origin"`
+	Origin                string        `json:"apiServer"`
 	Token                 string        `json:"token"`
 	ProjectID             string        `json:"projectId"`
-	RunnerID              string        `json:"runnerId"`
-	RunnerName            string        `json:"runnerName"`
 	EnvironmentID         string        `json:"environmentId"`
-	Capabilities          []string      `json:"capabilities"`
 	SandboxAdapter        string        `json:"sandboxAdapter"`
 	AllowUnsafeProcess    bool          `json:"allowUnsafeProcess"`
+	StateDir              string        `json:"stateDir"`
 	WorkDir               string        `json:"workDir"`
 	MaxConcurrent         int           `json:"maxConcurrent"`
 	PollInterval          time.Duration `json:"pollInterval"`
@@ -70,17 +69,16 @@ func LoadConfig(args []string, getenv func(string) string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	defaultConfigFile := defaultConfigPath(getenv)
 	config := Config{
-		ConfigPath:            defaultConfigPath(getenv),
-		Origin:                getenv("AMA_ORIGIN"),
+		ConfigPath:            defaultConfigFile,
+		Origin:                getenv("AMA_API_SERVER"),
 		Token:                 getenv("AMA_TOKEN"),
 		ProjectID:             getenv("AMA_PROJECT_ID"),
-		RunnerID:              getenv("AMA_RUNNER_ID"),
-		RunnerName:            getenv("AMA_RUNNER_NAME"),
 		EnvironmentID:         getenv("AMA_ENVIRONMENT_ID"),
-		Capabilities:          splitCSV(getenv("AMA_RUNNER_CAPABILITIES")),
 		SandboxAdapter:        envOr(getenv, "AMA_RUNNER_SANDBOX_ADAPTER", processUnsafeAdapter),
 		AllowUnsafeProcess:    envAllowUnsafeProcess,
+		StateDir:              envOr(getenv, "AMA_RUNNER_STATE_DIR", defaultStateDir(getenv)),
 		WorkDir:               envOr(getenv, "AMA_RUNNER_WORKDIR", ".ama-runner-work"),
 		MaxConcurrent:         envMaxConcurrent,
 		PollInterval:          envPollInterval,
@@ -93,15 +91,13 @@ func LoadConfig(args []string, getenv func(string) string) (Config, error) {
 
 	flags := flag.NewFlagSet("ama-runner", flag.ContinueOnError)
 	configPath := flags.String("config", config.ConfigPath, "JSON config file")
-	origin := flags.String("origin", config.Origin, "AMA control-plane origin")
+	apiServer := flags.String("api-server", config.Origin, "AMA API server URL")
 	token := flags.String("token", config.Token, "AMA bearer token")
 	projectID := flags.String("project-id", config.ProjectID, "AMA project id")
-	runnerID := flags.String("runner-id", config.RunnerID, "existing runner id")
-	runnerName := flags.String("runner-name", config.RunnerName, "runner name for registration")
 	environmentID := flags.String("environment-id", config.EnvironmentID, "optional bound environment id")
-	capabilities := flags.String("capabilities", strings.Join(config.Capabilities, ","), "comma-separated capabilities")
 	sandboxAdapter := flags.String("sandbox-adapter", config.SandboxAdapter, "sandbox adapter: process-unsafe")
 	allowUnsafeProcess := flags.Bool("allow-unsafe-process", config.AllowUnsafeProcess, "acknowledge unsafe process adapter")
+	stateDir := flags.String("state-dir", config.StateDir, "runner local state directory")
 	workDir := flags.String("workdir", config.WorkDir, "local work directory")
 	maxConcurrent := flags.Int("max-concurrent", config.MaxConcurrent, "max concurrent leases")
 	pollInterval := flags.Duration("poll-interval", config.PollInterval, "lease poll interval")
@@ -130,8 +126,8 @@ func LoadConfig(args []string, getenv func(string) string) (Config, error) {
 	flags.Visit(func(flag *flag.Flag) {
 		visited[flag.Name] = true
 	})
-	if visited["origin"] {
-		config.Origin = *origin
+	if visited["api-server"] {
+		config.Origin = *apiServer
 	}
 	if visited["config"] {
 		config.ConfigPath = *configPath
@@ -142,23 +138,17 @@ func LoadConfig(args []string, getenv func(string) string) (Config, error) {
 	if visited["project-id"] {
 		config.ProjectID = *projectID
 	}
-	if visited["runner-id"] {
-		config.RunnerID = *runnerID
-	}
-	if visited["runner-name"] {
-		config.RunnerName = *runnerName
-	}
 	if visited["environment-id"] {
 		config.EnvironmentID = *environmentID
-	}
-	if visited["capabilities"] {
-		config.Capabilities = splitCSV(*capabilities)
 	}
 	if visited["sandbox-adapter"] {
 		config.SandboxAdapter = *sandboxAdapter
 	}
 	if visited["allow-unsafe-process"] {
 		config.AllowUnsafeProcess = *allowUnsafeProcess
+	}
+	if visited["state-dir"] {
+		config.StateDir = *stateDir
 	}
 	if visited["workdir"] {
 		config.WorkDir = *workDir
@@ -200,6 +190,9 @@ func LoadConfig(args []string, getenv func(string) string) (Config, error) {
 			if strings.TrimSpace(config.ProjectID) == "" && config.Origin == saved.Origin {
 				config.ProjectID = saved.ProjectID
 			}
+			if strings.TrimSpace(config.EnvironmentID) == "" && config.Origin == saved.Origin {
+				config.EnvironmentID = saved.EnvironmentID
+			}
 		}
 	}
 
@@ -219,23 +212,23 @@ func LoadLoginCommand(args []string, getenv func(string) string) (LoginCommand, 
 		getenv = os.Getenv
 	}
 	command := LoginCommand{
-		Origin:     getenv("AMA_ORIGIN"),
+		Origin:     getenv("AMA_API_SERVER"),
 		ConfigPath: defaultConfigPath(getenv),
 	}
 	flags := flag.NewFlagSet("ama-runner login", flag.ContinueOnError)
-	origin := flags.String("origin", command.Origin, "AMA control-plane origin")
+	apiServer := flags.String("api-server", command.Origin, "AMA API server URL")
 	configPath := flags.String("config", command.ConfigPath, "runner config file")
 	if err := flags.Parse(args); err != nil {
 		return LoginCommand{}, err
 	}
-	command.Origin = *origin
+	command.Origin = *apiServer
 	command.ConfigPath = *configPath
 	if strings.TrimSpace(command.Origin) == "" {
-		return LoginCommand{}, fmt.Errorf("AMA origin is required")
+		return LoginCommand{}, fmt.Errorf("AMA API server URL is required")
 	}
 	parsed, err := url.Parse(command.Origin)
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		return LoginCommand{}, fmt.Errorf("AMA origin must be an absolute URL")
+		return LoginCommand{}, fmt.Errorf("AMA API server URL must be an absolute URL")
 	}
 	if strings.TrimSpace(command.ConfigPath) == "" {
 		return LoginCommand{}, fmt.Errorf("runner config path is required")
@@ -245,28 +238,14 @@ func LoadLoginCommand(args []string, getenv func(string) string) (LoginCommand, 
 
 func (c Config) Validate() error {
 	if strings.TrimSpace(c.Origin) == "" {
-		return fmt.Errorf("AMA origin is required")
+		return fmt.Errorf("AMA API server URL is required")
 	}
 	parsed, err := url.Parse(c.Origin)
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		return fmt.Errorf("AMA origin must be an absolute URL")
+		return fmt.Errorf("AMA API server URL must be an absolute URL")
 	}
 	if strings.TrimSpace(c.Token) == "" {
 		return fmt.Errorf("AMA token is required")
-	}
-	if strings.TrimSpace(c.RunnerID) == "" && strings.TrimSpace(c.RunnerName) == "" {
-		return fmt.Errorf("runner id or runner name is required")
-	}
-	if len(c.RunnerName) > 120 {
-		return fmt.Errorf("runner name must be at most 120 characters")
-	}
-	if len(c.Capabilities) == 0 || len(c.Capabilities) > 100 {
-		return fmt.Errorf("runner capabilities must contain 1-100 entries")
-	}
-	for _, capability := range c.Capabilities {
-		if strings.TrimSpace(capability) == "" || len(capability) > 120 {
-			return fmt.Errorf("runner capabilities must be non-empty and at most 120 characters")
-		}
 	}
 	if c.SandboxAdapter != processUnsafeAdapter {
 		return fmt.Errorf("unsupported sandbox adapter %q", c.SandboxAdapter)
@@ -276,6 +255,9 @@ func (c Config) Validate() error {
 	}
 	if strings.TrimSpace(c.WorkDir) == "" {
 		return fmt.Errorf("workdir is required")
+	}
+	if strings.TrimSpace(c.StateDir) == "" {
+		return fmt.Errorf("runner state directory is required")
 	}
 	if c.MaxConcurrent != 1 {
 		return fmt.Errorf("first ama-runner implementation requires max-concurrent=1")
@@ -321,6 +303,16 @@ func defaultConfigPath(getenv func(string) string) string {
 	return ""
 }
 
+func defaultStateDir(getenv func(string) string) string {
+	if stateHome := getenv("XDG_STATE_HOME"); strings.TrimSpace(stateHome) != "" {
+		return filepath.Join(stateHome, "ama-runner")
+	}
+	if home := getenv("HOME"); strings.TrimSpace(home) != "" {
+		return filepath.Join(home, ".local", "state", "ama-runner")
+	}
+	return ""
+}
+
 func visitedFlag(args []string, name string) bool {
 	shortPrefix := "-" + name
 	longPrefix := "--" + name
@@ -333,14 +325,12 @@ func visitedFlag(args []string, name string) bool {
 }
 
 type configFile struct {
-	Origin                string       `json:"origin"`
+	Origin                string       `json:"apiServer"`
 	Token                 string       `json:"token"`
-	RunnerID              string       `json:"runnerId"`
-	RunnerName            string       `json:"runnerName"`
 	EnvironmentID         string       `json:"environmentId"`
-	Capabilities          []string     `json:"capabilities"`
 	SandboxAdapter        string       `json:"sandboxAdapter"`
 	AllowUnsafeProcess    *bool        `json:"allowUnsafeProcess"`
+	StateDir              string       `json:"stateDir"`
 	WorkDir               string       `json:"workDir"`
 	MaxConcurrent         int          `json:"maxConcurrent"`
 	PollInterval          durationJSON `json:"pollInterval"`
@@ -355,12 +345,10 @@ func (c configFile) Config() Config {
 	return Config{
 		Origin:                c.Origin,
 		Token:                 c.Token,
-		RunnerID:              c.RunnerID,
-		RunnerName:            c.RunnerName,
 		EnvironmentID:         c.EnvironmentID,
-		Capabilities:          c.Capabilities,
 		SandboxAdapter:        c.SandboxAdapter,
 		AllowUnsafeProcess:    c.AllowUnsafeProcess != nil && *c.AllowUnsafeProcess,
+		StateDir:              c.StateDir,
 		WorkDir:               c.WorkDir,
 		MaxConcurrent:         c.MaxConcurrent,
 		PollInterval:          time.Duration(c.PollInterval),
@@ -402,23 +390,17 @@ func mergeConfig(base Config, override Config) Config {
 	if override.Token != "" {
 		base.Token = override.Token
 	}
-	if override.RunnerID != "" {
-		base.RunnerID = override.RunnerID
-	}
-	if override.RunnerName != "" {
-		base.RunnerName = override.RunnerName
-	}
 	if override.EnvironmentID != "" {
 		base.EnvironmentID = override.EnvironmentID
-	}
-	if len(override.Capabilities) > 0 {
-		base.Capabilities = override.Capabilities
 	}
 	if override.SandboxAdapter != "" {
 		base.SandboxAdapter = override.SandboxAdapter
 	}
 	if override.AllowUnsafeProcess {
 		base.AllowUnsafeProcess = true
+	}
+	if override.StateDir != "" {
+		base.StateDir = override.StateDir
 	}
 	if override.WorkDir != "" {
 		base.WorkDir = override.WorkDir

@@ -16,7 +16,7 @@ import (
 )
 
 func TestRunFailsOnInvalidConfig(t *testing.T) {
-	err := run([]string{"--origin", "://bad"})
+	err := run([]string{"--api-server", "://bad"})
 	if err == nil {
 		t.Fatal("expected invalid config error")
 	}
@@ -67,7 +67,7 @@ func TestRunLoginDiscoversDeviceFlowAndStoresToken(t *testing.T) {
 
 	err := runLogin(
 		context.Background(),
-		[]string{"--origin", server.URL, "--config", configPath},
+		[]string{"--api-server", server.URL, "--config", configPath},
 		func(string) string { return "" },
 		&output,
 	)
@@ -114,12 +114,11 @@ func TestRunWithContextWiresSDKDaemonAndStops(t *testing.T) {
 	defer server.Close()
 
 	env := map[string]string{
-		"AMA_ORIGIN":                      server.URL,
+		"AMA_API_SERVER":                  server.URL,
 		"AMA_TOKEN":                       "token",
-		"AMA_RUNNER_NAME":                 "runner",
-		"AMA_RUNNER_CAPABILITIES":         "sandbox.exec",
 		"AMA_RUNNER_ALLOW_UNSAFE_PROCESS": "true",
 		"AMA_RUNNER_POLL_INTERVAL":        "1s",
+		"XDG_STATE_HOME":                  t.TempDir(),
 	}
 	err := runWithContext(ctx, nil, func(key string) string { return env[key] })
 	if err == nil || !strings.Contains(err.Error(), "context canceled") {

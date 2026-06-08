@@ -156,12 +156,10 @@ func TestMergeConfigOverrideBranches(t *testing.T) {
 	override := Config{
 		Origin:                "origin",
 		Token:                 "token",
-		RunnerID:              "runner",
-		RunnerName:            "name",
 		EnvironmentID:         "env",
-		Capabilities:          []string{"cap"},
 		SandboxAdapter:        processUnsafeAdapter,
 		AllowUnsafeProcess:    true,
+		StateDir:              "state",
 		WorkDir:               "work",
 		MaxConcurrent:         2,
 		PollInterval:          time.Second,
@@ -174,11 +172,9 @@ func TestMergeConfigOverrideBranches(t *testing.T) {
 	got := mergeConfig(base, override)
 	if got.Origin != "origin" ||
 		got.Token != "token" ||
-		got.RunnerID != "runner" ||
-		got.RunnerName != "name" ||
 		got.EnvironmentID != "env" ||
-		got.Capabilities[0] != "cap" ||
 		!got.AllowUnsafeProcess ||
+		got.StateDir != "state" ||
 		got.WorkDir != "work" ||
 		got.MaxConcurrent != 2 ||
 		got.PollInterval != time.Second ||

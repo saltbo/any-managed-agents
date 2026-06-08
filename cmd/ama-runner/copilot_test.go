@@ -25,7 +25,6 @@ func TestRunOnceDispatchesCopilotRuntimeThroughAdapter(t *testing.T) {
 	}
 	daemon := testDaemon(client, &fakeAdapter{})
 	daemon.RuntimeAdapter = runtimeAdapter
-	daemon.Config.Capabilities = append(daemon.Config.Capabilities, "runtime-provider-model:copilot:provider_copilot:copilot-cli")
 	if err := daemon.RunOnce(context.Background()); err != nil {
 		t.Fatalf("expected copilot run success, got %v", err)
 	}
@@ -91,7 +90,6 @@ func TestRunOnceFailsCopilotLeaseOnRuntimeAdapterFailure(t *testing.T) {
 	}
 	daemon := testDaemon(client, &fakeAdapter{})
 	daemon.RuntimeAdapter = runtimeAdapter
-	daemon.Config.Capabilities = append(daemon.Config.Capabilities, "runtime-provider-model:copilot:provider_copilot:copilot-cli")
 	err := daemon.RunOnce(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "copilot SDK bridge failed") {
 		t.Fatalf("expected copilot failure to be returned, got %v", err)
@@ -117,7 +115,6 @@ func TestCopilotSessionStartedRejectionFailsBeforeRuntimeAdapter(t *testing.T) {
 	runtimeAdapter := &fakeRuntimeAdapter{}
 	daemon := testDaemon(client, &fakeAdapter{})
 	daemon.RuntimeAdapter = runtimeAdapter
-	daemon.Config.Capabilities = append(daemon.Config.Capabilities, "runtime-provider-model:copilot:provider_copilot:copilot-cli")
 	err := daemon.RunOnce(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "start rejected") {
 		t.Fatalf("expected session started channel rejection, got %v", err)

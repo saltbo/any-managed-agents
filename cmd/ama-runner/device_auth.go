@@ -61,14 +61,16 @@ type tokenResponse struct {
 }
 
 type SavedRunnerConfig struct {
-	Origin       string `json:"origin"`
-	AccessToken  string `json:"accessToken"`
-	Token        string `json:"token,omitempty"`
-	ProjectID    string `json:"projectId,omitempty"`
-	RefreshToken string `json:"refreshToken,omitempty"`
-	TokenType    string `json:"tokenType"`
-	ExpiresAt    string `json:"expiresAt,omitempty"`
-	Scope        string `json:"scope,omitempty"`
+	Origin        string `json:"apiServer"`
+	AccessToken   string `json:"accessToken"`
+	Token         string `json:"token,omitempty"`
+	ProjectID     string `json:"projectId,omitempty"`
+	EnvironmentID string `json:"environmentId,omitempty"`
+	RunnerID      string `json:"runnerId,omitempty"`
+	RefreshToken  string `json:"refreshToken,omitempty"`
+	TokenType     string `json:"tokenType"`
+	ExpiresAt     string `json:"expiresAt,omitempty"`
+	Scope         string `json:"scope,omitempty"`
 }
 
 func LoginWithDeviceAuthorization(
@@ -328,6 +330,24 @@ func SaveRunnerConfig(path string, config SavedRunnerConfig) error {
 	}
 	data = append(data, '\n')
 	return os.WriteFile(path, data, 0o600)
+}
+
+func SaveRunnerID(path string, runnerID string) error {
+	if strings.TrimSpace(path) == "" {
+		return nil
+	}
+	if strings.TrimSpace(runnerID) == "" {
+		return fmt.Errorf("runner id is required")
+	}
+	config, err := LoadSavedRunnerConfig(path)
+	if err != nil {
+		return err
+	}
+	if config == nil {
+		return nil
+	}
+	config.RunnerID = runnerID
+	return SaveRunnerConfig(path, *config)
 }
 
 func LoadSavedRunnerConfig(path string) (*SavedRunnerConfig, error) {

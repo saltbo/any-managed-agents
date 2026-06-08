@@ -648,8 +648,7 @@ describe('[CF] /api/runners', () => {
     expect(projectId).toMatch(/^project_/)
 
     const externalTenantId = `ak-org-${crypto.randomUUID()}`
-    const runnerId = `runner_${crypto.randomUUID().replaceAll('-', '')}`
-    const federatedAuthorization = signInFederatedRunner(externalTenantId, runnerId, environment.id)
+    const federatedAuthorization = signInFederatedRunner(externalTenantId, `runner_${crypto.randomUUID().replaceAll('-', '')}`, environment.id)
 
     const unboundRes = await jsonFetch('/api/runners', federatedAuthorization, {
       method: 'POST',
@@ -692,7 +691,11 @@ describe('[CF] /api/runners', () => {
 
     const runnerRes = await jsonFetch('/api/runners', federatedAuthorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Federated AK runner', capabilities: ['ignored-by-token'] }),
+      body: JSON.stringify({
+        name: 'Federated AK runner',
+        capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+        metadata: { machineId: 'machine_test_1', hostname: 'runner-host' },
+      }),
     })
     expect(runnerRes.status).toBe(201)
     const runner = (await runnerRes.json()) as {
@@ -703,40 +706,42 @@ describe('[CF] /api/runners', () => {
       capabilities: string[]
     }
     expect(runner).toMatchObject({
-      id: runnerId,
       authMode: 'federated',
       projectId,
       environmentId: environment.id,
       capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
     })
-    expect(JSON.stringify(runner)).not.toContain('ignored-by-token')
 
     const restartedRunnerRes = await jsonFetch('/api/runners', federatedAuthorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Federated AK runner restarted', maxConcurrent: 3 }),
+      body: JSON.stringify({
+        name: 'Federated AK runner restarted',
+        capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+        metadata: { machineId: 'machine_test_1', hostname: 'runner-host-renamed' },
+      }),
     })
     expect(restartedRunnerRes.status).toBe(201)
     await expect(restartedRunnerRes.json()).resolves.toMatchObject({
-      id: runnerId,
+      id: runner.id,
       name: 'Federated AK runner restarted',
-      maxConcurrent: 3,
       authMode: 'federated',
       projectId,
       environmentId: environment.id,
-      capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+      metadata: { machineId: 'machine_test_1', hostname: 'runner-host-renamed' },
     })
 
-    const heartbeatRes = await jsonFetch(`/api/runners/${runnerId}/heartbeats`, federatedAuthorization, {
+    const heartbeatRes = await jsonFetch(`/api/runners/${runner.id}/heartbeats`, federatedAuthorization, {
       method: 'POST',
       body: JSON.stringify({
         status: 'active',
         currentLoad: 0,
-        capabilities: ['attempted-escalation'],
+        capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+        metadata: { machineId: 'machine_test_1', hostname: 'runner-host-renamed' },
       }),
     })
     expect(heartbeatRes.status).toBe(200)
     await expect(heartbeatRes.json()).resolves.toMatchObject({
-      id: runnerId,
+      id: runner.id,
       status: 'active',
       capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
     })
@@ -835,9 +840,7 @@ describe('[CF] /api/runners', () => {
             client_id: 'ak-runner-client',
             scope: 'runner:connect',
             external_tenant_id: externalTenantId,
-            ama_runner_id: runnerId,
             ama_environment_id: environment.id,
-            runner_capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
           })
         }
         return new Response('not found', { status: 404 })
@@ -858,11 +861,13 @@ describe('[CF] /api/runners', () => {
     const runnerAuthorization = `Bearer ${token}`
     const runnerRes = await jsonFetch('/api/runners', runnerAuthorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'FlareAuth token-exchange runner' }),
+      body: JSON.stringify({
+        name: 'FlareAuth token-exchange runner',
+        capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
+      }),
     })
     expect(runnerRes.status).toBe(201)
     await expect(runnerRes.json()).resolves.toMatchObject({
-      id: runnerId,
       authMode: 'federated',
       projectId,
       environmentId: environment.id,
@@ -1359,11 +1364,11 @@ describe('[CF] /api/runners', () => {
     await expect(archivedSessionRes.json()).resolves.toMatchObject({ status: 'stopped' })
   })
 
-  it('skips queued work when runner capabilities do not exactly match the required runtime provider model', async () => {
+  it('skips queued work when runner capabilities do not match the required runtime provider model', async () => {
     const authorization = await signIn()
     const environment = await createSelfHostedEnvironment(authorization)
-    const exactCapability = runtimeProviderModelCapability('codex', 'provider_codex', 'gpt-5.3-codex')
-    const nearCapability = runtimeProviderModelCapability('codex', 'provider_codex', 'gpt-5.3-codex-mini')
+    const exactCapability = runtimeProviderModelCapability('codex', '*', 'gpt-5.3-codex')
+    const nearCapability = runtimeProviderModelCapability('codex', '*', 'gpt-5.3-codex-mini')
 
     const wrongRunnerRes = await jsonFetch('/api/runners', authorization, {
       method: 'POST',
@@ -1759,11 +1764,11 @@ describe('[CF] /api/runners', () => {
       method: 'POST',
       body: JSON.stringify({
         name: 'Federated AK runner',
+        capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
       }),
     })
     expect(runnerRes.status).toBe(201)
     await expect(runnerRes.json()).resolves.toMatchObject({
-      id: 'runner_federated_1',
       authMode: 'federated',
       environmentId: environment.id,
       capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],

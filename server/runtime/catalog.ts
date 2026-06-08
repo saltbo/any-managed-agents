@@ -36,13 +36,22 @@ export function runtimeProviderModelCapability(runtime: RuntimeName, provider: s
   return `${RUNTIME_PROVIDER_MODEL_CAPABILITY_PREFIX}:${runtime}:${provider}:${model}`
 }
 
+export function runtimeRequiredRunnerCapability(runtime: RuntimeName, provider: string, model: string) {
+  const entry = RUNTIME_CATALOG.find((item) => item.runtime === runtime)
+  const wildcard = entry?.providerModels.find((candidate) => candidate.provider === '*' && candidate.model === model)
+  return runtimeProviderModelCapability(runtime, wildcard ? '*' : provider, model)
+}
+
 export function runnerSupportsRuntimeProviderModel(
   capabilities: string[],
   runtime: RuntimeName,
   provider: string,
   model: string,
 ) {
-  return capabilities.includes(runtimeProviderModelCapability(runtime, provider, model))
+  return (
+    capabilities.includes(runtimeProviderModelCapability(runtime, provider, model)) ||
+    capabilities.includes(runtimeProviderModelCapability(runtime, '*', model))
+  )
 }
 
 export function runtimeCatalogSupportsProviderModel(

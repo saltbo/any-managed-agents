@@ -44,7 +44,7 @@ import { redactSensitiveValue } from '../redaction'
 import {
   runnerSupportsRuntimeProviderModel,
   runtimeCatalogSupportsProviderModel,
-  runtimeProviderModelCapability,
+  runtimeRequiredRunnerCapability,
 } from '../runtime/catalog'
 import { runtimeDriver, runtimeDriverName, runtimeMetadata } from '../runtime/drivers'
 import { safeRuntimeError } from '../runtime/runtime-error'
@@ -842,7 +842,7 @@ async function enqueueSelfHostedSessionWork(
     resumeToken: values.resumeToken ?? null,
     requiredRunnerCapability:
       values.environmentSnapshot?.hostingMode === 'self_hosted'
-        ? runtimeProviderModelCapability(values.runtime, values.agentSnapshot.provider, values.agentSnapshot.model)
+        ? runtimeRequiredRunnerCapability(values.runtime, values.agentSnapshot.provider, values.agentSnapshot.model)
         : null,
   }
   await db.insert(runnerWorkItems).values({

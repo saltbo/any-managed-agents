@@ -473,15 +473,15 @@ func TestDeviceAuthorizationStartAndDiscoveryErrors(t *testing.T) {
 
 func TestLoadLoginCommandValidation(t *testing.T) {
 	_, err := LoadLoginCommand(nil, func(string) string { return "" })
-	if err == nil || !strings.Contains(err.Error(), "AMA origin is required") {
-		t.Fatalf("expected missing origin error, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "AMA API server URL is required") {
+		t.Fatalf("expected missing API server error, got %v", err)
 	}
-	_, err = LoadLoginCommand([]string{"--origin", "://bad"}, func(string) string { return "" })
+	_, err = LoadLoginCommand([]string{"--api-server", "://bad"}, func(string) string { return "" })
 	if err == nil || !strings.Contains(err.Error(), "absolute URL") {
-		t.Fatalf("expected malformed origin error, got %v", err)
+		t.Fatalf("expected malformed API server error, got %v", err)
 	}
 	command, err := LoadLoginCommand(
-		[]string{"--origin", "https://ama.example.test", "--config", "/tmp/runner.json"},
+		[]string{"--api-server", "https://ama.example.test", "--config", "/tmp/runner.json"},
 		func(string) string { return "" },
 	)
 	if err != nil {
@@ -523,7 +523,7 @@ func TestRunnerConfigValidationHelpers(t *testing.T) {
 		t.Fatal("expected malformed config error")
 	}
 	badDatePath := filepath.Join(t.TempDir(), "config.json")
-	if err := os.WriteFile(badDatePath, []byte(`{"origin":"https://ama.example.test","accessToken":"token","expiresAt":"soon"}`), 0o600); err != nil {
+	if err := os.WriteFile(badDatePath, []byte(`{"apiServer":"https://ama.example.test","accessToken":"token","expiresAt":"soon"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := LoadSavedRunnerConfig(badDatePath); err == nil {

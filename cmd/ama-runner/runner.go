@@ -158,8 +158,12 @@ func (d *RunnerDaemon) ensureRunnerID(ctx context.Context) error {
 	if d.RunnerID != "" {
 		return nil
 	}
-	if d.Config.RunnerID != "" {
-		d.RunnerID = d.Config.RunnerID
+	storedRunnerID, err := loadStoredRunnerID(d.Config)
+	if err != nil {
+		return err
+	}
+	if storedRunnerID != "" {
+		d.RunnerID = storedRunnerID
 		return nil
 	}
 	runnerID, err := d.ensureRunner(ctx)
@@ -167,17 +171,26 @@ func (d *RunnerDaemon) ensureRunnerID(ctx context.Context) error {
 		return err
 	}
 	d.RunnerID = runnerID
+	if err := storeRunnerID(d.Config, runnerID); err != nil {
+		return err
+	}
 	return nil
 }
 
 func (d *RunnerDaemon) ensureRunner(ctx context.Context) (string, error) {
+	machineID, err := ensureMachineID(d.Config)
+	if err != nil {
+		return "", err
+	}
 	runner, err := d.Client.CreateRunner(ctx, ama.CreateRunnerRequest{
-		Name:          d.Config.RunnerName,
-		Capabilities:  d.Config.Capabilities,
+		Name:          runnerDisplayName(),
+		Capabilities:  runnerCapabilities(),
 		EnvironmentID: d.Config.EnvironmentID,
 		MaxConcurrent: d.Config.MaxConcurrent,
 		Metadata: ama.JSON{
 			"sandboxAdapter": d.Config.SandboxAdapter,
+			"machineId":      machineID,
+			"hostname":       runnerDisplayName(),
 		},
 	})
 	if err != nil {
@@ -188,12 +201,18 @@ func (d *RunnerDaemon) ensureRunner(ctx context.Context) (string, error) {
 
 func (d *RunnerDaemon) heartbeat(ctx context.Context) error {
 	load := 0
-	_, err := d.Client.CreateRunnerHeartbeat(ctx, d.RunnerID, ama.RunnerHeartbeatRequest{
+	machineID, err := ensureMachineID(d.Config)
+	if err != nil {
+		return err
+	}
+	_, err = d.Client.CreateRunnerHeartbeat(ctx, d.RunnerID, ama.RunnerHeartbeatRequest{
 		Status:       "active",
-		Capabilities: d.Config.Capabilities,
+		Capabilities: runnerCapabilities(),
 		CurrentLoad:  &load,
 		Metadata: ama.JSON{
 			"sandboxAdapter": d.Config.SandboxAdapter,
+			"machineId":      machineID,
+			"hostname":       runnerDisplayName(),
 			"unsafe":         true,
 		},
 	})
@@ -726,7 +745,7 @@ func (d *RunnerDaemon) supportsRequiredCapability(required string) bool {
 	if required == "" {
 		return true
 	}
-	for _, capability := range d.Config.Capabilities {
+	for _, capability := range runnerCapabilities() {
 		if capability == required {
 			return true
 		}

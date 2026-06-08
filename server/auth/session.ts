@@ -31,7 +31,6 @@ export interface AuthContext {
     runnerId: string | null
     runnerProjectId: string | null
     runnerEnvironmentId: string | null
-    runnerCapabilities: string[]
   }
 }
 
@@ -44,7 +43,12 @@ export interface AuthIdentity {
 }
 
 export function isRunnerOidcAuth(env: Env, auth: Pick<AuthContext, 'oidc'>) {
-  return (!!env.OIDC_RUNNER_CLIENT_ID && auth.oidc.clientId === env.OIDC_RUNNER_CLIENT_ID) || !!auth.oidc.runnerId
+  return (
+    (!!env.OIDC_RUNNER_CLIENT_ID && auth.oidc.clientId === env.OIDC_RUNNER_CLIENT_ID) ||
+    !!auth.oidc.runnerId ||
+    !!auth.oidc.runnerProjectId ||
+    !!auth.oidc.runnerEnvironmentId
+  )
 }
 
 function bearerToken(headers: Headers, url: string) {
@@ -110,10 +114,9 @@ function authIdentityFromClaims(claims: Awaited<ReturnType<typeof getBearerClaim
       scope: claims.scope ?? null,
       issuer: claims.iss ?? null,
       externalTenantId: claims.external_tenant_id ?? claims.tenant_id ?? null,
-      runnerId: claims.ama_runner_id ?? null,
+      runnerId: null,
       runnerProjectId: claims.ama_project_id ?? null,
       runnerEnvironmentId: claims.ama_environment_id ?? null,
-      runnerCapabilities: claims.runner_capabilities,
     },
   }
 }

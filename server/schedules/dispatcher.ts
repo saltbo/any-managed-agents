@@ -72,7 +72,6 @@ function systemAuth(project: { id: string; name: string }, organizationId: strin
       runnerId: null,
       runnerProjectId: null,
       runnerEnvironmentId: null,
-      runnerCapabilities: [],
     },
   }
 }

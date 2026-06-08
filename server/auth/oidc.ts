@@ -23,8 +23,6 @@ export interface UserInfoClaims {
   tenant_id?: string
   ama_project_id?: string
   ama_environment_id?: string
-  ama_runner_id?: string
-  runner_capabilities: string[]
 }
 
 interface IntrospectionClaims {
@@ -47,8 +45,6 @@ interface IntrospectionClaims {
   tenant_id?: string
   ama_project_id?: string
   ama_environment_id?: string
-  ama_runner_id?: string
-  runner_capabilities?: unknown
   authorization?: {
     roles?: unknown
     permissions?: unknown
@@ -236,7 +232,7 @@ export async function upsertProjectForClaims(
   if (federatedProject) {
     return federatedProject
   }
-  if (claims.iss && (claims.external_tenant_id || claims.tenant_id || claims.ama_runner_id)) {
+  if (claims.iss && (claims.external_tenant_id || claims.tenant_id || claims.ama_environment_id)) {
     throw new OidcError('Federated token is not bound to an AMA project')
   }
   const organizationId = organizationIdForClaims(claims)
@@ -320,10 +316,8 @@ function normalizeClaims(env: Env, claims: Record<string, unknown> & { sub: stri
     ...optionalClaim('tenant_id', claims.tenant_id),
     ...optionalClaim('ama_project_id', claims.ama_project_id),
     ...optionalClaim('ama_environment_id', claims.ama_environment_id),
-    ...optionalClaim('ama_runner_id', claims.ama_runner_id),
     roles: roles.length ? roles : runnerScoped ? ['runner'] : ['owner'],
     permissions: permissions.length ? permissions : runnerScoped ? [] : ['*'],
-    runner_capabilities: stringArray(claims.runner_capabilities),
   }
 }
 
@@ -341,7 +335,6 @@ function e2eClaims(env: Env, runId: string, clientId: string | undefined): UserI
     org_name: `E2E Organization ${safeRunId}`,
     roles: runnerScoped ? ['runner'] : ['owner'],
     permissions: runnerScoped ? [] : ['*'],
-    runner_capabilities: [],
   }
 }
 
@@ -356,15 +349,9 @@ function e2eFederatedRunnerClaims(value: string): UserInfoClaims {
     scope: 'runner:connect',
     external_tenant_id: externalTenantId,
     ...(environmentId ? { ama_environment_id: environmentId } : {}),
-    ama_runner_id: runnerId,
     roles: ['runner'],
     permissions: [],
-    runner_capabilities: ['sandbox.exec', runtimeProviderModelCapabilityForE2E()],
   }
-}
-
-function runtimeProviderModelCapabilityForE2E() {
-  return 'runtime-provider-model:ama:workers-ai:@cf/moonshotai/kimi-k2.6'
 }
 
 async function runOidc<T>(operation: () => Promise<T>) {
@@ -408,6 +395,10 @@ function objectClaim(value: unknown) {
 
 function isRunnerTokenClaim(env: Env, clientId: string | undefined, claims?: Record<string, unknown>) {
   return (
-    (!!env.OIDC_RUNNER_CLIENT_ID && clientId === env.OIDC_RUNNER_CLIENT_ID) || typeof claims?.ama_runner_id === 'string'
+    (!!env.OIDC_RUNNER_CLIENT_ID && clientId === env.OIDC_RUNNER_CLIENT_ID) ||
+    typeof claims?.external_tenant_id === 'string' ||
+    typeof claims?.tenant_id === 'string' ||
+    typeof claims?.ama_project_id === 'string' ||
+    typeof claims?.ama_environment_id === 'string'
   )
 }
