@@ -548,11 +548,13 @@
           },
           "description": {
             "type": "string",
+            "nullable": true,
             "maxLength": 1000,
             "example": "Answers with citations."
           },
           "instructions": {
             "type": "string",
+            "nullable": true,
             "maxLength": 8000,
             "example": "Answer with citations."
           },
@@ -569,6 +571,7 @@
           },
           "systemPrompt": {
             "type": "string",
+            "nullable": true,
             "maxLength": 8000,
             "example": "Answer with citations."
           },
@@ -697,11 +700,13 @@
           },
           "description": {
             "type": "string",
+            "nullable": true,
             "maxLength": 1000,
             "example": "Answers with citations."
           },
           "instructions": {
             "type": "string",
+            "nullable": true,
             "maxLength": 8000,
             "example": "Answer with citations."
           },
@@ -718,6 +723,7 @@
           },
           "systemPrompt": {
             "type": "string",
+            "nullable": true,
             "maxLength": 8000,
             "example": "Answer with citations."
           },

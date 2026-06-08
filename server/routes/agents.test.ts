@@ -177,13 +177,31 @@ describe('[CF] /api/agents', () => {
     })
     expect(updated.metadata).not.toHaveProperty('remove')
 
+    const clearPromptRes = await jsonFetch(`/api/agents/${created.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ description: null, instructions: null, systemPrompt: null }),
+    })
+    expect(clearPromptRes.status).toBe(200)
+    const clearedPrompt = (await clearPromptRes.json()) as {
+      version: number
+      description: string | null
+      instructions: string | null
+      systemPrompt: string | null
+    }
+    expect(clearedPrompt).toMatchObject({
+      version: 3,
+      description: null,
+      instructions: null,
+      systemPrompt: null,
+    })
+
     const clearToolsRes = await jsonFetch(`/api/agents/${created.id}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ allowedTools: [] }),
     })
     expect(clearToolsRes.status).toBe(200)
     const clearedTools = (await clearToolsRes.json()) as { version: number; allowedTools: string[] }
-    expect(clearedTools).toMatchObject({ version: 3, allowedTools: [] })
+    expect(clearedTools).toMatchObject({ version: 4, allowedTools: [] })
 
     const updateRoleRes = await jsonFetch(`/api/agents/${created.id}`, authorization, {
       method: 'PATCH',
@@ -197,7 +215,7 @@ describe('[CF] /api/agents', () => {
     expect(updateRoleRes.status).toBe(200)
     const roleUpdated = (await updateRoleRes.json()) as { version: number }
     expect(roleUpdated).toMatchObject({
-      version: 4,
+      version: 5,
       role: 'lead',
       capabilityTags: ['planning'],
       handoffPolicy: { enabled: true, targets: [{ capability: 'implementation' }] },
@@ -207,11 +225,12 @@ describe('[CF] /api/agents', () => {
     const versionsRes = await jsonFetch(`/api/agents/${created.id}/versions`, authorization)
     expect(versionsRes.status).toBe(200)
     const versions = (await versionsRes.json()) as {
-      data: Array<{ version: number; instructions: string; role: string | null; capabilityTags: string[] }>
+      data: Array<{ version: number; instructions: string | null; role: string | null; capabilityTags: string[] }>
     }
-    expect(versions.data.map((version) => version.version)).toEqual([4, 3, 2, 1])
+    expect(versions.data.map((version) => version.version)).toEqual([5, 4, 3, 2, 1])
     expect(versions.data.find((version) => version.version === 1)?.instructions).toBe('Answer with citations.')
-    expect(versions.data.find((version) => version.version === 4)).toMatchObject({
+    expect(versions.data.find((version) => version.version === 3)?.instructions).toBeNull()
+    expect(versions.data.find((version) => version.version === 5)).toMatchObject({
       role: 'lead',
       capabilityTags: ['planning'],
     })

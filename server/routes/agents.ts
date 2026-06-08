@@ -89,11 +89,11 @@ const AgentVersionSchema = z
 const AgentPayloadSchema = z
   .object({
     name: z.string().min(1).max(120).openapi({ example: 'Research assistant' }),
-    description: z.string().max(1000).optional().openapi({ example: 'Answers with citations.' }),
-    instructions: z.string().max(8000).optional().openapi({ example: 'Answer with citations.' }),
+    description: z.string().max(1000).nullable().optional().openapi({ example: 'Answers with citations.' }),
+    instructions: z.string().max(8000).nullable().optional().openapi({ example: 'Answer with citations.' }),
     provider: z.string().min(1).optional().openapi({ example: DEFAULT_PROVIDER }),
     model: z.string().min(1).nullable().optional().openapi({ example: DEFAULT_MODEL }),
-    systemPrompt: z.string().max(8000).optional().openapi({ example: 'Answer with citations.' }),
+    systemPrompt: z.string().max(8000).nullable().optional().openapi({ example: 'Answer with citations.' }),
     skills: z
       .array(z.string().min(1).max(256))
       .max(100)
@@ -805,11 +805,11 @@ const routes = app
 
     const next = {
       name: body.name ?? agent.name,
-      description: body.description ?? agent.description,
-      instructions: body.instructions ?? agent.instructions,
+      description: body.description !== undefined ? body.description : agent.description,
+      instructions: body.instructions !== undefined ? body.instructions : agent.instructions,
       provider: await normalizeRequestedProvider(db, auth.project.id, body.provider ?? agent.provider),
       model: body.model !== undefined ? body.model : agent.model,
-      systemPrompt: body.systemPrompt ?? agent.systemPrompt,
+      systemPrompt: body.systemPrompt !== undefined ? body.systemPrompt : agent.systemPrompt,
       skills: body.skills ?? parseJson<string[]>(agent.skills),
       subagents: body.subagents ?? parseJson<Record<string, unknown>[]>(agent.subagents),
       role: body.role !== undefined ? body.role : agent.role,
