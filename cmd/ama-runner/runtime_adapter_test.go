@@ -107,6 +107,28 @@ func TestRuntimeBridgeHostEnvIncludesNodeToolchainAndTestModeOnly(t *testing.T) 
 	}
 }
 
+func TestSDKBridgeRuntimeContextDoesNotApplyCommandTimeout(t *testing.T) {
+	parent, cancelParent := context.WithCancel(context.Background())
+	defer cancelParent()
+	commandCtx, cancelCommand := SDKBridgeRuntimeAdapter{
+		CommandTimeout: time.Nanosecond,
+	}.commandContext(parent)
+	defer cancelCommand()
+
+	select {
+	case <-commandCtx.Done():
+		t.Fatal("expected SDK bridge context to ignore per-command timeout")
+	case <-time.After(5 * time.Millisecond):
+	}
+
+	cancelParent()
+	select {
+	case <-commandCtx.Done():
+	case <-time.After(time.Second):
+		t.Fatal("expected SDK bridge context to follow parent cancellation")
+	}
+}
+
 func TestSDKBridgeStopProcessKillsProcessGroup(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("process group signalling is Unix-specific")

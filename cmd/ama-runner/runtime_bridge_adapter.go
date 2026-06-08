@@ -22,7 +22,10 @@ import (
 )
 
 type SDKBridgeRuntimeAdapter struct {
-	Runtime               string
+	Runtime string
+	// CommandTimeout is intentionally not applied to full runtime sessions.
+	// Agent sessions can run for hours; cancellation is driven by the lease
+	// context, runner shutdown, or an explicit session stop.
 	CommandTimeout        time.Duration
 	ShutdownGraceInterval time.Duration
 }
@@ -61,11 +64,7 @@ func (a SDKBridgeRuntimeAdapter) Run(ctx context.Context, request RuntimeRequest
 	if err != nil {
 		return nil, err
 	}
-	timeout := a.CommandTimeout
-	if timeout <= 0 {
-		timeout = 10 * time.Minute
-	}
-	commandCtx, cancel := context.WithTimeout(ctx, timeout)
+	commandCtx, cancel := a.commandContext(ctx)
 	defer cancel()
 
 	env, err := runtimeCommandEnvironment(request)
@@ -187,6 +186,10 @@ func (a SDKBridgeRuntimeAdapter) Run(ctx context.Context, request RuntimeRequest
 		final["finalEventError"] = err.Error()
 	}
 	return final, nil
+}
+
+func (a SDKBridgeRuntimeAdapter) commandContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithCancel(ctx)
 }
 
 func bridgeScanner(reader io.Reader) *bufio.Scanner {
