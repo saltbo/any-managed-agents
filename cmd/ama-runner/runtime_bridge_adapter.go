@@ -53,11 +53,6 @@ func (a SDKBridgeRuntimeAdapter) Run(ctx context.Context, request RuntimeRequest
 	if request.Runtime != a.Runtime {
 		return nil, fmt.Errorf("unsupported SDK bridge runtime %q", request.Runtime)
 	}
-	workspace, err := runtimeWorkspace(request.WorkDir, request.SessionID)
-	if err != nil {
-		return nil, err
-	}
-	request.WorkDir = workspace
 	nodePath, err := exec.LookPath("node")
 	if err != nil {
 		return nil, fmt.Errorf("%s runtime requires Node.js to run the embedded SDK bridge", request.Runtime)
