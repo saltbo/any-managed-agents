@@ -174,7 +174,7 @@ func runnerCapabilities() []string {
 		"copilot",
 		"runtime-provider-model:ama:workers-ai:@cf/moonshotai/kimi-k2.6",
 		"runtime-provider-model:codex:*:gpt-5.3-codex",
-		"runtime-provider-model:claude-code:anthropic:claude-sonnet-4-6",
-		"runtime-provider-model:copilot:provider_copilot:copilot-cli",
+		"runtime-provider-model:claude-code:*:claude-sonnet-4-6",
+		"runtime-provider-model:copilot:*:copilot-cli",
 	}
 }

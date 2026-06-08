@@ -459,7 +459,7 @@ Given('an active runner supports the selected Claude Code provider and model', a
     provider: state.provider.id,
     model: CLAUDE_CODE_E2E_MODEL,
   })
-  const capability = runtimeProviderModelCapability('claude-code', String(state.provider.id), CLAUDE_CODE_E2E_MODEL)
+  const capability = runtimeProviderModelCapability('claude-code', '*', CLAUDE_CODE_E2E_MODEL)
   state.runner = await apiJson<Json>(state.page.request, '/api/runners', {
     method: 'POST',
     data: {
@@ -1067,7 +1067,7 @@ When('the user creates an environment with only a name', async function (this: P
 })
 
 When(
-  'the user creates an environment with package requirements, variables, secret references, hostingMode and runtime fields, allowed outbound hosts, MCP access rules, package-manager access rules, resource limits, runtime config, and metadata',
+  'the user creates an environment with package requirements, variables, secret references, hostingMode, allowed outbound hosts, MCP access rules, package-manager access rules, resource limits, runtime config, and metadata',
   async function (this: ProductWorld) {
     await ensureSignedIn(this)
     this.e2e.environment = await createEnvironment(this.e2e, {
@@ -1076,7 +1076,6 @@ When(
       variables: { NODE_ENV: { required: true } },
       secretRefs: [{ name: 'TOKEN', ref: 'wrangler_secret:AMA_TOKEN' }],
       hostingMode: 'cloud',
-      runtime: 'ama',
       networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
       mcpPolicy: { allowedConnectors: [] },
       packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
@@ -1103,7 +1102,7 @@ When(
 )
 
 When(
-  'the user changes packages, variables, secret references, hostingMode and runtime fields, network policy, resource limits, runtime config, or metadata',
+  'the user changes packages, variables, secret references, hostingMode, network policy, resource limits, runtime config, or metadata',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
     state.updatedEnvironment = await apiJson<Json>(state.page.request, `/api/environments/${state.environment?.id}`, {
@@ -1115,7 +1114,6 @@ When(
         ],
         variables: { E2E: { required: false } },
         hostingMode: 'cloud',
-        runtime: 'ama',
         networkPolicy: { mode: 'offline' },
         resourceLimits: { memoryMb: 768 },
         runtimeConfig: { image: 'ama-pi-runtime' },
@@ -1126,7 +1124,7 @@ When(
   },
 )
 
-When('the user creates an environment with hostingMode and runtime', async function (this: ProductWorld) {
+When('the user creates an environment with hostingMode and runtime config', async function (this: ProductWorld) {
   const state = await ensureSignedIn(this)
   state.environment = await createEnvironment(state, {
     name: `${state.runId} canonical runtime env`,
@@ -1933,7 +1931,7 @@ Then('the platform validates and applies the policy to later sessions', async fu
 Then('the response includes normalized allow and deny rules', function (this: ProductWorld) {
   const rule = required(this.e2e?.accessRule, 'access rule')
   assert.equal(rule.providerId, 'workers-ai')
-  assert.equal(rule.modelId, '@cf/moonshotai/kimi-k2.6')
+  assert.equal(rule.modelId, '*')
   assert.equal(rule.teamId, 'team_e2e')
   assert.equal(rule.effect, 'deny')
 })
@@ -2094,6 +2092,7 @@ Then('scheduled trigger sessions can reference the same agent memory API', async
     data: {
       agentId: state.agent?.id,
       environmentId: state.environment?.id,
+      runtime: state.sessionRuntime ?? 'ama',
       name: `${state.runId} memory heartbeat`,
       promptTemplate: 'Run the maintainer heartbeat.',
       schedule: { intervalSeconds: 3600 },
@@ -2175,10 +2174,10 @@ Then(
   },
 )
 
-Then('the agent defaults to the project default model provider and model', function (this: ProductWorld) {
+Then('the agent defaults to the project default model provider without forcing a model', function (this: ProductWorld) {
   const agent = required(this.e2e?.agent, 'agent')
   assert.equal(agent.provider, 'workers-ai')
-  assert.equal(agent.model, '@cf/moonshotai/kimi-k2.6')
+  assert.equal(agent.model, null)
 })
 
 Then(
@@ -2533,7 +2532,7 @@ Then(
 )
 
 Then(
-  'package lists, variables, secret references, hostingMode and runtime fields, network policy, resource limits, runtime config, and metadata have stable default values',
+  'package lists, variables, secret references, hostingMode, network policy, resource limits, runtime config, and metadata have stable default values',
   function (this: ProductWorld) {
     const env = required(this.e2e?.environment, 'environment')
     for (const key of [
@@ -2601,7 +2600,6 @@ Then('hostingMode accepts only cloud or self_hosted', async function (this: Prod
   const cloud = await createEnvironment(state, {
     name: `${state.runId} cloud runtime env`,
     hostingMode: 'cloud',
-    runtime: 'ama',
   })
   assert.equal(cloud.hostingMode, 'cloud')
 
@@ -2612,7 +2610,7 @@ Then('hostingMode accepts only cloud or self_hosted', async function (this: Prod
   assert.equal(invalid.status(), 400)
 })
 
-Then('runtime accepts only ama, claude-code, codex, or copilot', async function (this: ProductWorld) {
+Then('session runtime accepts only ama, claude-code, codex, or copilot', async function (this: ProductWorld) {
   const state = await ensureState(this)
   assert.equal(state.sessionRuntime, 'codex')
   for (const runtime of ['ama', 'claude-code', 'copilot']) {
@@ -2839,7 +2837,7 @@ Given(
   'an active runner advertises the exact runtime, provider, and model capability',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    const capability = `runtime-provider-model:codex:${state.provider?.id}:${CODEX_E2E_MODEL}`
+    const capability = runtimeProviderModelCapability('codex', '*', CODEX_E2E_MODEL)
     state.runner = await apiJson<Json>(state.page.request, '/api/runners', {
       method: 'POST',
       data: {
@@ -3831,7 +3829,7 @@ Given('an active runner supports the selected Codex provider and model', async f
       model: CODEX_E2E_MODEL,
     })
   }
-  const capability = `runtime-provider-model:codex:${state.provider?.id}:${CODEX_E2E_MODEL}`
+  const capability = runtimeProviderModelCapability('codex', '*', CODEX_E2E_MODEL)
   state.runner = await apiJson<Json>(state.page.request, '/api/runners', {
     method: 'POST',
     data: {
@@ -3867,7 +3865,7 @@ Given('an active runner supports the selected Copilot provider and model', async
       model: COPILOT_E2E_MODEL,
     })
   }
-  const capability = `runtime-provider-model:copilot:${state.provider?.id}:${COPILOT_E2E_MODEL}`
+  const capability = runtimeProviderModelCapability('copilot', '*', COPILOT_E2E_MODEL)
   state.runner = await apiJson<Json>(state.page.request, '/api/runners', {
     method: 'POST',
     data: {

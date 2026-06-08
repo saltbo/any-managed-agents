@@ -137,7 +137,7 @@ func copilotSessionStartLease(prompt string) *ama.RunnerWorkLease {
 	lease.WorkItem.Payload["provider"] = "provider_copilot"
 	lease.WorkItem.Payload["model"] = "copilot-cli"
 	lease.WorkItem.Payload["runtimeDriver"] = "copilot-self-hosted"
-	lease.WorkItem.Payload["requiredRunnerCapability"] = "runtime-provider-model:copilot:provider_copilot:copilot-cli"
+	lease.WorkItem.Payload["requiredRunnerCapability"] = "runtime-provider-model:copilot:*:copilot-cli"
 	lease.WorkItem.Payload["initialPrompt"] = prompt
 	return lease
 }

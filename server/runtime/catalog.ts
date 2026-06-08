@@ -18,7 +18,7 @@ export const RUNTIME_CATALOG: readonly RuntimeCatalogEntry[] = [
   {
     runtime: 'claude-code',
     hostingModes: ['self_hosted'],
-    providerModels: [],
+    providerModels: [{ provider: '*', model: 'claude-sonnet-4-6' }],
   },
   {
     runtime: 'codex',
@@ -28,7 +28,7 @@ export const RUNTIME_CATALOG: readonly RuntimeCatalogEntry[] = [
   {
     runtime: 'copilot',
     hostingModes: ['self_hosted'],
-    providerModels: [],
+    providerModels: [{ provider: '*', model: 'copilot-cli' }],
   },
 ]
 

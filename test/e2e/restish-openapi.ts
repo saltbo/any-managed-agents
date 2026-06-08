@@ -370,6 +370,7 @@ export async function createRestishOpenApiHarness(): Promise<RestishOpenApiHarne
       const session = await runRestishRaw(home, ['ama', 'create-session', '--rsh-output-format', 'json'], {
         agentId: 'agent_restish_contract',
         environmentId: 'env_restish_contract',
+        runtime: 'ama',
       })
 
       return {

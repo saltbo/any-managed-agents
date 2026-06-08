@@ -1243,6 +1243,7 @@ func containsString(values []string, want string) bool {
 
 func claudeCodeSessionStartLease() *ama.RunnerWorkLease {
 	lease := externalRuntimeSessionStartLease("claude-code", "anthropic", "claude-sonnet-4-6", map[string]any{"permissionMode": "acceptEdits"})
+	lease.WorkItem.Payload["requiredRunnerCapability"] = "runtime-provider-model:claude-code:*:claude-sonnet-4-6"
 	lease.WorkItem.Payload["initialPrompt"] = "Run Claude Code"
 	return lease
 }

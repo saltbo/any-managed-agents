@@ -19,11 +19,11 @@ Feature: Environments UI
   Scenario: Render the environments table
     Given a project has environments
     When the user opens the environments page
-    Then each environment row shows name, status, hosting mode, runtime, runtime config, packages, network policy, and updated time
+    Then each environment row shows name, status, hosting mode, runtime config, packages, network policy, and updated time
     And clicking a row opens the environment detail route
 
   @implemented
   Scenario: Create an environment from the environments page
     When the user starts the create-environment flow
-    Then the form captures name, hosting mode, runtime, network mode, allowed hosts, package requirements, variables, and runtime config
+    Then the form captures name, hosting mode, network mode, allowed hosts, package requirements, variables, and runtime config
     And successful save creates an environment version and returns to the browsable environments list

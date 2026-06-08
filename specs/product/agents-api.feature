@@ -29,7 +29,7 @@ Feature: Agents API
     Given a signed-in user has access to a project
     When the user creates an agent with a name and instructions
     Then the response includes an agent id, current version id, project id, timestamps, and archive state
-    And the agent defaults to the project default model provider and model
+    And the agent defaults to the project default model provider without forcing a model
     And optional fields use stable empty values instead of disappearing from the response
     And the first agent version stores the instructions, model config, role, capability tags, handoff policy, memory policy, skills, tool policy, MCP connectors, and metadata
     And normal agent responses do not expose sandbox policy
