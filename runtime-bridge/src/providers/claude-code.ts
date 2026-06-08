@@ -1,5 +1,6 @@
 import { execSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import { runtimeError, runtimeEvent, textMessage, toolEnd, toolStart, usageEvent } from '../events/ama'
@@ -39,15 +40,56 @@ function usageFromResult(msg: Record<string, unknown>) {
   }
 }
 
+function parseClaudeOAuthToken(raw: string): string | undefined {
+  try {
+    const creds = JSON.parse(raw) as { claudeAiOauth?: { accessToken?: string } }
+    return creds.claudeAiOauth?.accessToken || undefined
+  } catch {
+    return undefined
+  }
+}
+
+// Resolve the Claude Code OAuth token from the host login. macOS keeps it in the
+// keychain, which the bundled SDK never reads; other platforms use the
+// credentials file under the host home. Mirrors how the codex provider reads
+// `~/.codex/auth.json`. The session runs with a sandboxed HOME, so the keychain
+// lookup must point `security` at the host login keychain via HOME.
+function readClaudeOAuthToken(home: string | undefined): string | undefined {
+  if (process.platform === 'darwin') {
+    try {
+      const raw = execSync('security find-generic-password -s "Claude Code-credentials" -w', {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+        env: home ? { ...process.env, HOME: home } : process.env,
+      }).trim()
+      const token = parseClaudeOAuthToken(raw)
+      if (token) return token
+    } catch {
+      // fall through to the credentials file
+    }
+  }
+  if (!home) return undefined
+  try {
+    return parseClaudeOAuthToken(readFileSync(join(home, '.claude', '.credentials.json'), 'utf8'))
+  } catch {
+    return undefined
+  }
+}
+
 function sdkEnv(request: RuntimeProviderRequest) {
   const home =
     typeof request.env.AMA_RUNTIME_BRIDGE_HOST_HOME === 'string' && request.env.AMA_RUNTIME_BRIDGE_HOST_HOME
       ? request.env.AMA_RUNTIME_BRIDGE_HOST_HOME
       : undefined
-  return {
+  const env: Record<string, string> = {
     ...request.env,
     ...(home ? { HOME: home, AMA_RUNTIME_BRIDGE_SESSION_HOME: request.env.HOME } : {}),
   }
+  if (!env.CLAUDE_CODE_OAUTH_TOKEN && !env.ANTHROPIC_API_KEY) {
+    const token = readClaudeOAuthToken(home)
+    if (token) env.CLAUDE_CODE_OAUTH_TOKEN = token
+  }
+  return env
 }
 
 function resolveClaudePath(): string | undefined {
@@ -114,12 +156,11 @@ export const claudeCodeProvider: RuntimeProvider = {
       typeof request.runtimeConfig?.systemPromptFile === 'string'
         ? readFileSync(request.runtimeConfig.systemPromptFile, 'utf8')
         : agentSystemPrompt(request)
+    // The AMA session id is a UUID, so it doubles as Claude Code's own session id
+    // for both fresh runs and resumes — keeping the Claude session 1:1 with AMA.
+    let resumeToken = request.resumeToken ?? request.sessionId
     const options = {
-      ...(request.resume
-        ? request.resumeToken
-          ? { resume: request.resumeToken }
-          : {}
-        : { sessionId: request.sessionId }),
+      ...(request.resume ? { resume: request.resumeToken ?? request.sessionId } : { sessionId: request.sessionId }),
       cwd: request.cwd,
       env: sdkEnv(request),
       ...(systemPrompt ? { systemPrompt } : {}),
@@ -136,6 +177,8 @@ export const claudeCodeProvider: RuntimeProvider = {
     })
     const events = (async function* () {
       for await (const msg of q) {
+        const sessionId = (msg as unknown as { session_id?: unknown }).session_id
+        if (typeof sessionId === 'string' && sessionId) resumeToken = sessionId
         yield* mapClaudeMessage(msg)
         if (msg.type === 'result') break
       }
@@ -152,6 +195,9 @@ export const claudeCodeProvider: RuntimeProvider = {
           yield { type: 'user' as const, message: { role: 'user' as const, content: message }, parent_tool_use_id: null }
         }
         await q.streamInput(input())
+      },
+      getResumeToken() {
+        return resumeToken
       },
     })
   },
