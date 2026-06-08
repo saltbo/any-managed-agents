@@ -2,8 +2,10 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -121,6 +123,71 @@ func TestRuntimeWorkspaceSafety(t *testing.T) {
 	}
 	if _, err := runtimeWorkspace(fileRoot, "session_1"); err == nil {
 		t.Fatal("expected workspace root file error")
+	}
+}
+
+func TestPrepareRuntimeWorkspaceMountsGitHubRepositoryWorktree(t *testing.T) {
+	workDir := t.TempDir()
+	sourceDir := filepath.Join(t.TempDir(), "source")
+	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, sourceDir, "init", "-b", "main")
+	runGit(t, sourceDir, "config", "user.email", "runner@example.test")
+	runGit(t, sourceDir, "config", "user.name", "Runner")
+	if err := os.WriteFile(filepath.Join(sourceDir, "README.md"), []byte("zpan\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, sourceDir, "add", "README.md")
+	runGit(t, sourceDir, "commit", "-m", "init")
+	cacheDir := filepath.Join(workDir, "repositories", "saltbo", "zpan")
+	if err := os.MkdirAll(filepath.Dir(cacheDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, filepath.Dir(cacheDir), "clone", sourceDir, cacheDir)
+
+	workspace, err := prepareRuntimeWorkspace(context.Background(), workDir, "session_1", []ResourceRef{{
+		Type:      "github_repository",
+		Owner:     "saltbo",
+		Repo:      "zpan",
+		Ref:       "main",
+		MountPath: "/workspace/repos/saltbo/zpan",
+	}})
+	if err != nil {
+		t.Fatalf("expected workspace preparation success, got %v", err)
+	}
+	if !strings.HasSuffix(workspace.Root, filepath.Join("sessions", "session_1")) {
+		t.Fatalf("expected session root, got %q", workspace.Root)
+	}
+	if !strings.HasSuffix(workspace.Cwd, filepath.Join("sessions", "session_1", "repos", "saltbo", "zpan")) {
+		t.Fatalf("expected repo worktree cwd, got %q", workspace.Cwd)
+	}
+	if data, err := os.ReadFile(filepath.Join(workspace.Cwd, "README.md")); err != nil || string(data) != "zpan\n" {
+		t.Fatalf("expected mounted repo content, got %q err=%v", string(data), err)
+	}
+	gitFile, err := os.Stat(filepath.Join(workspace.Cwd, ".git"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gitFile.IsDir() {
+		t.Fatal("expected git worktree metadata file, got a full clone")
+	}
+	manifest, err := os.ReadFile(filepath.Join(workspace.Root, ".ama", "resources.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(manifest), `"status": "mounted"`) || !strings.Contains(string(manifest), workspace.Cwd) {
+		t.Fatalf("expected mounted resource manifest, got %s", string(manifest))
+	}
+}
+
+func runGit(t *testing.T, cwd string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = cwd
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s failed: %v: %s", strings.Join(args, " "), err, string(output))
 	}
 }
 

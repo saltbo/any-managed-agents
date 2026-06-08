@@ -509,6 +509,7 @@ describe('[CF] /api/sessions', () => {
         agentId: agent.id,
         environmentId: environment.id,
         runtime: 'ama',
+        resourceRefs: [{ type: 'github_repository', owner: 'saltbo', repo: 'agent-kanban', ref: 'main' }],
         runtimeSecretEnv: [{ name: 'AK_AGENT_KEY', ref: credential.activeVersionId }],
       }),
     })
@@ -580,9 +581,19 @@ describe('[CF] /api/sessions', () => {
       .first<{ payload: string }>()
     expect(workRow).toBeTruthy()
     const storedPayload = JSON.parse(workRow!.payload) as {
+      resourceRefs: Array<Record<string, unknown>>
       runtimeEnv: Record<string, string>
       runtimeSecretEnv: Array<{ name: string; ref: string }>
     }
+    expect(storedPayload.resourceRefs).toEqual([
+      {
+        type: 'github_repository',
+        owner: 'saltbo',
+        repo: 'agent-kanban',
+        ref: 'main',
+        mountPath: '/workspace/repos/saltbo/agent-kanban',
+      },
+    ])
     expect(storedPayload.runtimeEnv).not.toHaveProperty('AK_AGENT_KEY')
     expect(storedPayload.runtimeSecretEnv).toEqual([{ name: 'AK_AGENT_KEY', ref: credential.activeVersionId }])
 
@@ -598,9 +609,19 @@ describe('[CF] /api/sessions', () => {
     expect(leaseRes.status).toBe(201)
     const lease = (await leaseRes.json()) as {
       workItem: {
-        payload: { runtimeEnv: Record<string, string>; runtimeSecretEnv: Array<{ name: string; ref: string }> }
+        payload: {
+          resourceRefs: Array<Record<string, unknown>>
+          runtimeEnv: Record<string, string>
+          runtimeSecretEnv: Array<{ name: string; ref: string }>
+        }
       }
     }
+    expect(lease.workItem.payload.resourceRefs[0]).toMatchObject({
+      type: 'github_repository',
+      owner: 'saltbo',
+      repo: 'agent-kanban',
+      mountPath: '/workspace/repos/saltbo/agent-kanban',
+    })
     expect(lease.workItem.payload.runtimeEnv.AK_AGENT_KEY).toBe('raw-github-token')
     expect(lease.workItem.payload.runtimeSecretEnv).toEqual([{ name: 'AK_AGENT_KEY', ref: credential.activeVersionId }])
   })

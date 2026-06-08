@@ -47,6 +47,7 @@ type WorkPayload struct {
 	HostingMode              string            `json:"hostingMode"`
 	Runtime                  string            `json:"runtime"`
 	RuntimeConfig            map[string]any    `json:"runtimeConfig"`
+	ResourceRefs             []ResourceRef     `json:"resourceRefs"`
 	Provider                 string            `json:"provider"`
 	Model                    string            `json:"model"`
 	RuntimeDriver            string            `json:"runtimeDriver"`
@@ -435,6 +436,10 @@ func (d *RunnerDaemon) runExternalSession(
 	lease *ama.RunnerWorkLease,
 	payload WorkPayload,
 ) error {
+	workspace, err := prepareRuntimeWorkspace(ctx, d.Config.WorkDir, payload.SessionID, payload.ResourceRefs)
+	if err != nil {
+		return err
+	}
 	adapter := d.RuntimeAdapter
 	if adapter == nil {
 		selectedAdapter, err := runtimeAdapterFor(payload.Runtime, d.Config.CommandTimeout, d.Config.ShutdownGraceInterval)
@@ -454,7 +459,7 @@ func (d *RunnerDaemon) runExternalSession(
 		InitialPrompt: initialPrompt(payload),
 		Resume:        payload.Resume,
 		ResumeToken:   payload.ResumeToken,
-		WorkDir:       d.Config.WorkDir,
+		WorkDir:       workspace.Cwd,
 	}, func(eventType string, eventPayload ama.JSON) error {
 		writeMu.Lock()
 		defer writeMu.Unlock()
@@ -478,11 +483,11 @@ func (d *RunnerDaemon) runExternalSession(
 		}
 		return runErr
 	}
-	_, err := d.Client.UpdateRunnerLease(ctx, d.RunnerID, lease.ID, ama.UpdateRunnerLeaseRequest{
+	_, updateErr := d.Client.UpdateRunnerLease(ctx, d.RunnerID, lease.ID, ama.UpdateRunnerLeaseRequest{
 		Status: "completed",
 		Result: result,
 	})
-	return err
+	return updateErr
 }
 
 func cloneJSON(value ama.JSON) ama.JSON {

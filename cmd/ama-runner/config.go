@@ -79,7 +79,7 @@ func LoadConfig(args []string, getenv func(string) string) (Config, error) {
 		SandboxAdapter:        envOr(getenv, "AMA_RUNNER_SANDBOX_ADAPTER", processUnsafeAdapter),
 		AllowUnsafeProcess:    envAllowUnsafeProcess,
 		StateDir:              envOr(getenv, "AMA_RUNNER_STATE_DIR", defaultStateDir(getenv)),
-		WorkDir:               envOr(getenv, "AMA_RUNNER_WORKDIR", ".ama-runner-work"),
+		WorkDir:               envOr(getenv, "AMA_RUNNER_WORKDIR", defaultWorkDir(getenv)),
 		MaxConcurrent:         envMaxConcurrent,
 		PollInterval:          envPollInterval,
 		HeartbeatInterval:     envHeartbeatInterval,
@@ -311,6 +311,14 @@ func defaultStateDir(getenv func(string) string) string {
 		return filepath.Join(home, ".local", "state", "ama-runner")
 	}
 	return ""
+}
+
+func defaultWorkDir(getenv func(string) string) string {
+	stateDir := defaultStateDir(getenv)
+	if strings.TrimSpace(stateDir) == "" {
+		return ""
+	}
+	return filepath.Join(stateDir, "work")
 }
 
 func visitedFlag(args []string, name string) bool {

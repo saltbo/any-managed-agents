@@ -357,8 +357,8 @@ func TestDurationJSONRejectsInvalidString(t *testing.T) {
 }
 
 func TestEnvOrUsesFallbackForMissingValue(t *testing.T) {
-	value := envOr(testGetenv(t, nil), "AMA_RUNNER_WORKDIR", ".ama-runner-work")
-	if value != ".ama-runner-work" {
+	value := envOr(testGetenv(t, nil), "AMA_RUNNER_WORKDIR", "/state/ama-runner/work")
+	if value != "/state/ama-runner/work" {
 		t.Fatalf("expected fallback value, got %q", value)
 	}
 }
@@ -371,9 +371,15 @@ func TestDefaultStateDirFollowsXDGStateDirectory(t *testing.T) {
 	if got := defaultStateDir(func(key string) string { return env[key] }); got != filepath.Join("/state", "ama-runner") {
 		t.Fatalf("expected XDG state dir, got %q", got)
 	}
+	if got := defaultWorkDir(func(key string) string { return env[key] }); got != filepath.Join("/state", "ama-runner", "work") {
+		t.Fatalf("expected XDG work dir, got %q", got)
+	}
 	delete(env, "XDG_STATE_HOME")
 	if got := defaultStateDir(func(key string) string { return env[key] }); got != filepath.Join("/home/runner", ".local", "state", "ama-runner") {
 		t.Fatalf("expected HOME state dir, got %q", got)
+	}
+	if got := defaultWorkDir(func(key string) string { return env[key] }); got != filepath.Join("/home/runner", ".local", "state", "ama-runner", "work") {
+		t.Fatalf("expected HOME work dir, got %q", got)
 	}
 	delete(env, "HOME")
 	if got := defaultStateDir(func(key string) string { return env[key] }); got != "" {

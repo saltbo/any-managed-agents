@@ -814,7 +814,7 @@ async function markExpiredPendingSessions(db: Db, auth: AuthContext) {
 }
 
 async function enqueueSelfHostedSessionWork(
-  env: Env,
+  _env: Env,
   db: Db,
   auth: AuthContext,
   values: {
@@ -823,6 +823,7 @@ async function enqueueSelfHostedSessionWork(
     environmentSnapshot: NormalizedEnvironmentSnapshot | null
     runtime: RuntimeName
     runtimeConfig: Record<string, unknown>
+    resourceRefs?: Array<z.infer<typeof ResourceRefSchema>>
     runtimeEnv?: Record<string, string>
     runtimeSecretEnv?: Array<z.infer<typeof RuntimeSecretEnvSchema>>
     initialPrompt?: string
@@ -838,6 +839,7 @@ async function enqueueSelfHostedSessionWork(
     hostingMode: values.environmentSnapshot?.hostingMode ?? 'self_hosted',
     runtime: values.runtime,
     runtimeConfig: values.runtimeConfig,
+    resourceRefs: values.resourceRefs ?? [],
     provider: values.agentSnapshot.provider,
     ...(values.agentSnapshot.model ? { model: values.agentSnapshot.model } : {}),
     runtimeDriver: runtimeDriverName(values.runtime, 'self_hosted'),
@@ -1291,6 +1293,7 @@ export async function createSessionForAgent(
       environmentSnapshot,
       runtime,
       runtimeConfig,
+      resourceRefs: normalizedResources.resourceRefs,
       runtimeEnv: options.runtimeEnv ?? {},
       runtimeSecretEnv: options.runtimeSecretEnv ?? [],
       ...(initialPrompt !== undefined ? { initialPrompt } : {}),
@@ -1753,6 +1756,7 @@ async function queueSelfHostedSessionCommand(
     environmentSnapshot,
     runtime: sessionRuntimeFromMetadata(parseJson<Record<string, unknown>>(session.metadata) ?? {}),
     runtimeConfig: sessionRuntimeConfig(parseJson<Record<string, unknown>>(session.metadata) ?? {}),
+    resourceRefs: parseJson<Array<z.infer<typeof ResourceRefSchema>>>(session.resourceRefs) ?? [],
     runtimeEnv: parseJson<Record<string, string>>(session.runtimeEnv) ?? {},
     runtimeSecretEnv: parseJson<Array<z.infer<typeof RuntimeSecretEnvSchema>>>(session.runtimeSecretEnv) ?? [],
     initialPrompt: message,

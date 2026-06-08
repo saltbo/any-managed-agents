@@ -487,9 +487,11 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 	if runtimeAdapter.request.Runtime != "codex" ||
 		runtimeAdapter.request.InitialPrompt != prompt ||
 		runtimeAdapter.request.Provider != "provider_codex" ||
-		runtimeAdapter.request.Model != "gpt-5.3-codex" ||
-		runtimeAdapter.request.WorkDir != workDir {
+		runtimeAdapter.request.Model != "gpt-5.3-codex" {
 		t.Fatalf("expected runtime request metadata, got %#v", runtimeAdapter.request)
+	}
+	if runtimeAdapter.request.WorkDir == workDir || !strings.HasSuffix(runtimeAdapter.request.WorkDir, filepath.Join("sessions", "session_1")) {
+		t.Fatalf("expected isolated session workspace, got %q from root %q", runtimeAdapter.request.WorkDir, workDir)
 	}
 	if runtimeAdapter.request.RuntimeConfig["model"] != "gpt-5.3-codex" {
 		t.Fatalf("expected runtime config to reach adapter, got %#v", runtimeAdapter.request.RuntimeConfig)
