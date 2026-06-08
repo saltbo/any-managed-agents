@@ -37,6 +37,7 @@ const WORK_STATUSES = ['available', 'leased', 'succeeded', 'failed', 'cancelled'
 const LEASE_STATUSES = ['active', 'completed', 'failed', 'cancelled', 'expired'] as const
 const DEFAULT_LEASE_DURATION_SECONDS = 60
 const MAX_EVENT_BATCH = 100
+const RUNTIME_PROVIDER_MODEL_CAPABILITY_PREFIX = 'runtime-provider-model'
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
 const CapabilitySchema = z.string().min(1).max(120)
@@ -319,9 +320,18 @@ function runnerCapabilityEligibility(capabilities: string[]) {
   if (capabilities.length === 0) {
     return unscopedNonSessionWork
   }
+  const eligibleCapabilities = new Set(capabilities)
+  for (const capability of capabilities) {
+    if (capability.startsWith(`${RUNTIME_PROVIDER_MODEL_CAPABILITY_PREFIX}:`)) {
+      const runtime = capability.split(':')[1]
+      if (runtime) {
+        eligibleCapabilities.add(runtime)
+      }
+    }
+  }
   return or(
     unscopedNonSessionWork,
-    ...capabilities.map(
+    ...[...eligibleCapabilities].map(
       (capability) => sql`json_extract(${runnerWorkItems.payload}, '$.requiredRunnerCapability') = ${capability}`,
     ),
   )
@@ -462,7 +472,10 @@ function runnerOidcBindingFields(env: Env, auth: AuthContext, authMode: string) 
 }
 
 function runnerAuthModeForRegistration(auth: AuthContext, requested: string | undefined) {
-  return requested ?? (auth.oidc.runnerProjectId || auth.oidc.externalTenantId || auth.oidc.runnerEnvironmentId ? 'federated' : 'oidc')
+  return (
+    requested ??
+    (auth.oidc.runnerProjectId || auth.oidc.externalTenantId || auth.oidc.runnerEnvironmentId ? 'federated' : 'oidc')
+  )
 }
 
 function runnerIdForRegistration() {

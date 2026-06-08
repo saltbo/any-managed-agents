@@ -25,7 +25,7 @@ export type SessionRuntimeStartInput = {
   sandboxId: string
   runtime?: string
   provider: string
-  model: string
+  model: string | null
   agentSnapshot: Record<string, unknown>
   environmentSnapshot: Record<string, unknown> | null
   mcpSnapshot?: Record<string, unknown>
@@ -77,7 +77,7 @@ export type SessionTurnInput = {
   sessionId: string
   sandboxId: string
   provider: string
-  model: string
+  model: string | null
   agentSnapshot: Record<string, unknown>
   prompt: string
   messages?: AgentMessage[]
@@ -145,6 +145,7 @@ export async function startSessionRuntime(
   env: Env,
   input: SessionRuntimeStartInput,
 ): Promise<SessionRuntimeStartResult> {
+  const model = resolveRuntimeModel(env, input.provider, input.model)
   if (env.AMA_RUNTIME_MODE !== 'test') {
     const getSandbox = await getSandboxBinding()
     const sandbox = getSandbox(env.SANDBOX, input.sandboxId, { keepAlive: true, normalizeId: true })
@@ -155,7 +156,7 @@ export async function startSessionRuntime(
         sessionId: input.sessionId,
         sandboxId: input.sandboxId,
         provider: input.provider,
-        model: input.model,
+        model,
         runtime: input.runtime ?? 'ama',
         agentSnapshot: input.agentSnapshot,
         environmentSnapshot: input.environmentSnapshot,
@@ -255,6 +256,17 @@ function runtimeSystemPrompt(snapshot: Record<string, unknown>) {
 
 function piProviderName(provider: string) {
   return provider === 'workers-ai' ? 'cloudflare-workers-ai' : provider
+}
+
+function runtimeDefaultModel(env: Env, provider: string) {
+  if (provider === 'workers-ai' || provider === 'cloudflare-workers-ai') {
+    return env.AMA_DEFAULT_MODEL ?? '@cf/moonshotai/kimi-k2.6'
+  }
+  throw new Error(`Runtime model is required for provider: ${provider}`)
+}
+
+function resolveRuntimeModel(env: Env, provider: string, model: string | null) {
+  return model ?? runtimeDefaultModel(env, provider)
 }
 
 function fallbackModel(provider: string, model: string): Model<string> {
@@ -754,7 +766,8 @@ export function runtimeMessagesFromEvents(events: Array<{ type?: string; payload
 export async function runSessionTurn(env: Env, input: SessionTurnInput): Promise<SessionTurnResult> {
   const controller = new AbortController()
   const provider = piProviderName(input.provider)
-  const model = runtimeModel(input.provider, input.model)
+  const modelId = resolveRuntimeModel(env, input.provider, input.model)
+  const model = runtimeModel(input.provider, modelId)
   let aborted = false
   let cancelled = false
   let failureMessage: string | null = null
@@ -803,7 +816,7 @@ export async function runSessionTurn(env: Env, input: SessionTurnInput): Promise
       piCorePackage: '@earendil-works/pi-agent-core',
     })
     if (event.type === 'message_end') {
-      const usage = usageEvent(event.message, provider, input.model)
+      const usage = usageEvent(event.message, provider, modelId)
       if (usage) {
         await input.onEvent(usage, {
           source: 'ama-cloud-runtime',

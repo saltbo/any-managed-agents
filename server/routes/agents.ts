@@ -43,7 +43,7 @@ const AgentSchema = z
     description: z.string().nullable().openapi({ example: 'Answers with citations.' }),
     instructions: z.string().nullable().openapi({ example: 'Answer with citations.' }),
     provider: z.string().openapi({ example: DEFAULT_PROVIDER }),
-    model: z.string().openapi({ example: DEFAULT_MODEL }),
+    model: z.string().nullable().openapi({ example: DEFAULT_MODEL }),
     systemPrompt: z.string().nullable().openapi({ example: 'Answer with citations.' }),
     skills: z.array(z.string()).openapi({ example: ['ama@code-review'] }),
     role: z.string().nullable().openapi({ example: 'maintainer' }),
@@ -70,7 +70,7 @@ const AgentVersionSchema = z
     version: z.number().int().openapi({ example: 1 }),
     instructions: z.string().nullable().openapi({ example: 'Answer with citations.' }),
     provider: z.string().openapi({ example: DEFAULT_PROVIDER }),
-    model: z.string().openapi({ example: DEFAULT_MODEL }),
+    model: z.string().nullable().openapi({ example: DEFAULT_MODEL }),
     systemPrompt: z.string().nullable().openapi({ example: 'Answer with citations.' }),
     skills: z.array(z.string()).openapi({ example: ['ama@code-review'] }),
     role: z.string().nullable().openapi({ example: 'maintainer' }),
@@ -90,7 +90,7 @@ const AgentPayloadSchema = z
     description: z.string().max(1000).optional().openapi({ example: 'Answers with citations.' }),
     instructions: z.string().max(8000).optional().openapi({ example: 'Answer with citations.' }),
     provider: z.string().min(1).optional().openapi({ example: DEFAULT_PROVIDER }),
-    model: z.string().min(1).optional().openapi({ example: DEFAULT_MODEL }),
+    model: z.string().min(1).nullable().optional().openapi({ example: DEFAULT_MODEL }),
     systemPrompt: z.string().max(8000).optional().openapi({ example: 'Answer with citations.' }),
     skills: z
       .array(z.string().min(1).max(256))
@@ -428,7 +428,7 @@ async function createAgentVersion(
   values: {
     instructions: string | null
     provider: string
-    model: string
+    model: string | null
     systemPrompt: string | null
     skills: string[]
     role: string | null
@@ -692,7 +692,7 @@ const routes = app
       auth.project.id,
       body.provider ?? (await defaultProvider(db, auth.project.id)),
     )
-    const model = body.model ?? c.env.AMA_DEFAULT_MODEL ?? DEFAULT_MODEL
+    const model = body.model ?? null
     const skills = body.skills ?? []
     const role = body.role ?? null
     const capabilityTags = body.capabilityTags ?? []
@@ -702,7 +702,9 @@ const routes = app
     const mcpConnectors = body.mcpConnectors ?? []
     const metadata = body.metadata ?? {}
     const validation =
-      (await validateConfiguredProviderModel(db, auth.project.id, provider, model, c.env.AMA_DEFAULT_MODEL)) ??
+      (model
+        ? await validateConfiguredProviderModel(db, auth.project.id, provider, model, c.env.AMA_DEFAULT_MODEL)
+        : null) ??
       validateSkills(skills) ??
       validateCapabilityTags(capabilityTags) ??
       validateAllowedTools(allowedTools) ??
@@ -791,7 +793,7 @@ const routes = app
       description: body.description ?? agent.description,
       instructions: body.instructions ?? agent.instructions,
       provider: await normalizeRequestedProvider(db, auth.project.id, body.provider ?? agent.provider),
-      model: body.model ?? agent.model,
+      model: body.model !== undefined ? body.model : agent.model,
       systemPrompt: body.systemPrompt ?? agent.systemPrompt,
       skills: body.skills ?? parseJson<string[]>(agent.skills),
       role: body.role !== undefined ? body.role : agent.role,
@@ -803,13 +805,9 @@ const routes = app
       metadata: mergeMetadata(parseJson<Record<string, unknown>>(agent.metadata), body.metadata),
     }
     const validation =
-      (await validateConfiguredProviderModel(
-        db,
-        auth.project.id,
-        next.provider,
-        next.model,
-        c.env.AMA_DEFAULT_MODEL,
-      )) ??
+      (next.model
+        ? await validateConfiguredProviderModel(db, auth.project.id, next.provider, next.model, c.env.AMA_DEFAULT_MODEL)
+        : null) ??
       validateSkills(next.skills) ??
       validateCapabilityTags(next.capabilityTags) ??
       validateAllowedTools(next.allowedTools) ??

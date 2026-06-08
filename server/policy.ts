@@ -249,7 +249,7 @@ export async function evaluateProviderPolicy(
   auth: AuthContext,
   values: {
     providerId: string
-    modelId: string
+    modelId: string | null
   },
 ) {
   const provider = await db
@@ -291,20 +291,14 @@ export async function evaluateProviderPolicy(
   if (provider) {
     providerPredicates.push(eq(providerAccessRules.providerId, provider.id))
   }
+  const modelPredicates = [isNull(providerAccessRules.modelId), eq(providerAccessRules.modelId, '*')]
+  if (values.modelId) {
+    modelPredicates.push(eq(providerAccessRules.modelId, values.modelId))
+  }
   const accessRules = await db
     .select()
     .from(providerAccessRules)
-    .where(
-      and(
-        eq(providerAccessRules.projectId, auth.project.id),
-        or(...providerPredicates),
-        or(
-          isNull(providerAccessRules.modelId),
-          eq(providerAccessRules.modelId, '*'),
-          eq(providerAccessRules.modelId, values.modelId),
-        ),
-      ),
-    )
+    .where(and(eq(providerAccessRules.projectId, auth.project.id), or(...providerPredicates), or(...modelPredicates)))
   const deniedAccessRule = accessRules.find((rule) => rule.effect === 'deny')
   if (deniedAccessRule) {
     return {
@@ -320,7 +314,7 @@ export async function evaluateProviderPolicy(
     (rule) =>
       rule.effect === 'deny' &&
       (!rule.providerId || rule.providerId === values.providerId || rule.providerId === provider?.id) &&
-      (!rule.modelId || rule.modelId === values.modelId || rule.modelId === '*'),
+      (!rule.modelId || rule.modelId === '*' || (values.modelId !== null && rule.modelId === values.modelId)),
   )
   if (deniedRule) {
     return {

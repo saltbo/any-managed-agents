@@ -355,9 +355,11 @@ func (d *RunnerDaemon) completeSessionStart(ctx context.Context, lease *ama.Runn
 		"runtime":       payload.Runtime,
 		"runtimeConfig": payload.RuntimeConfig,
 		"provider":      payload.Provider,
-		"model":         payload.Model,
 		"runtimeDriver": payload.RuntimeDriver,
 		"executor":      d.Config.SandboxAdapter,
+	}
+	if payload.Model != "" {
+		sessionStartedPayload["model"] = payload.Model
 	}
 	writeSessionStarted := d.writeChannelEvent
 	if handler.acknowledgeSessionStarted {
@@ -712,8 +714,8 @@ func parseWorkPayload(payload ama.JSON) (WorkPayload, error) {
 		if parsed.HostingMode != "self_hosted" {
 			return WorkPayload{}, fmt.Errorf("session.start work item must target self_hosted hostingMode")
 		}
-		if parsed.Runtime == "" || parsed.Provider == "" || parsed.Model == "" || parsed.RuntimeConfig == nil {
-			return WorkPayload{}, fmt.Errorf("session.start work item must include runtime, runtimeConfig, provider, and model")
+		if parsed.Runtime == "" || parsed.Provider == "" || parsed.RuntimeConfig == nil {
+			return WorkPayload{}, fmt.Errorf("session.start work item must include runtime, runtimeConfig, and provider")
 		}
 		if parsed.RequiredRunnerCapability == "" {
 			return WorkPayload{}, fmt.Errorf("session.start work item must include requiredRunnerCapability")

@@ -57,10 +57,12 @@ func runtimeCommandEnvironment(request RuntimeRequest) ([]string, error) {
 		"AMA_SESSION_ID="+request.SessionID,
 		"AMA_RUNTIME="+request.Runtime,
 		"AMA_PROVIDER="+request.Provider,
-		"AMA_MODEL="+request.Model,
 		"AMA_WORKSPACE="+request.WorkDir,
 		"AMA_RUNTIME_CONFIG="+string(config),
 	)
+	if request.Model != "" {
+		env = append(env, "AMA_MODEL="+request.Model)
+	}
 	for key, value := range request.RuntimeEnv {
 		env = append(env, key+"="+value)
 	}

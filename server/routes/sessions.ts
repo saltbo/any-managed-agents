@@ -61,9 +61,9 @@ import {
   EnvironmentHostingModeSchema,
   type EnvironmentNetworkPolicy,
   EnvironmentNetworkPolicySchema,
+  normalizeEnvironmentNetworkPolicy,
   type RuntimeName,
   RuntimeSchema,
-  normalizeEnvironmentNetworkPolicy,
 } from './environment-contracts'
 
 const app = createApiRouter()
@@ -146,7 +146,7 @@ const AgentVersionSchema = z
     version: z.number().int(),
     instructions: z.string().nullable(),
     provider: z.string(),
-    model: z.string(),
+    model: z.string().nullable(),
     systemPrompt: z.string().nullable(),
     skills: z.array(z.string()),
     role: z.string().nullable(),
@@ -186,7 +186,7 @@ const SessionRuntimeMetadataSchema = z
     runtime: RuntimeSchema,
     runtimeConfig: JsonObjectSchema,
     provider: z.string().openapi({ example: 'workers-ai' }),
-    model: z.string().openapi({ example: '@cf/moonshotai/kimi-k2.6' }),
+    model: z.string().nullable().openapi({ example: '@cf/moonshotai/kimi-k2.6' }),
     driver: z.string().nullable().openapi({ example: 'ama-cloud' }),
     backend: z.string().nullable().openapi({ example: 'ama-cloud' }),
     protocol: z.string().nullable().openapi({ example: 'ama-runtime-rpc' }),
@@ -659,6 +659,14 @@ function sessionRuntimeConfig(metadata: Record<string, unknown>) {
   return objectValue(metadata.runtimeConfig)
 }
 
+function sessionModel(modelConfig: Record<string, unknown>, agentSnapshot: ReturnType<typeof serializeAgentVersion>) {
+  return typeof modelConfig.model === 'string'
+    ? modelConfig.model
+    : typeof agentSnapshot.model === 'string'
+      ? agentSnapshot.model
+      : null
+}
+
 function serializeSession(row: SessionRow) {
   const agentSnapshot = parseAgentSnapshot(row.agentSnapshot)
   if (!agentSnapshot) {
@@ -668,11 +676,11 @@ function serializeSession(row: SessionRow) {
     parseJson<ReturnType<typeof serializeEnvironmentVersion>>(row.environmentSnapshot),
   )
   const metadata = parseJson<Record<string, unknown>>(row.metadata) ?? {}
-  const modelConfig = parseJson<Record<string, unknown>>(row.modelConfig) ?? { model: agentSnapshot.model }
+  const modelConfig = parseJson<Record<string, unknown>>(row.modelConfig) ?? {}
   const hostingMode = environmentHostingMode(environmentSnapshot)
   const runtime = sessionRuntimeFromMetadata(metadata)
   const provider = row.modelProvider ?? agentSnapshot.provider
-  const model = String(modelConfig.model ?? agentSnapshot.model)
+  const model = sessionModel(modelConfig, agentSnapshot)
 
   return {
     id: row.id,
@@ -831,7 +839,7 @@ async function enqueueSelfHostedSessionWork(
     runtime: values.runtime,
     runtimeConfig: values.runtimeConfig,
     provider: values.agentSnapshot.provider,
-    model: values.agentSnapshot.model,
+    ...(values.agentSnapshot.model ? { model: values.agentSnapshot.model } : {}),
     runtimeDriver: runtimeDriverName(values.runtime, 'self_hosted'),
     agentSnapshot: values.agentSnapshot,
     environmentSnapshot: values.environmentSnapshot,
@@ -998,7 +1006,7 @@ async function validateRuntimeProviderModel(
   hostingMode: EnvironmentHostingMode,
   runtime: RuntimeName,
   provider: string,
-  model: string,
+  model: string | null,
 ) {
   const driver = runtimeDriver(runtime)
   if (!driver.supportsHostingMode(hostingMode)) {
@@ -1244,7 +1252,10 @@ export async function createSessionForAgent(
     piProcessId: null,
     runtimeEndpointPath: hostingMode === 'cloud' ? runtimeEndpointPath(id) : null,
     modelProvider: agentSnapshot.provider,
-    modelConfig: stringify({ provider: agentSnapshot.provider, model: agentSnapshot.model }),
+    modelConfig: stringify({
+      provider: agentSnapshot.provider,
+      ...(agentSnapshot.model ? { model: agentSnapshot.model } : {}),
+    }),
     status: 'pending',
     statusReason: hostingMode === 'self_hosted' ? 'waiting-for-runner' : null,
     metadata: stringify({
@@ -1329,8 +1340,17 @@ async function startSessionRuntimeForRow(
     initialPrompt?: string
   },
 ) {
-  const { pending, agentSnapshot, environmentSnapshot, runtime, runtimeConfig, resourceRefs, runtimeEnv, runtimeSecretEnv, initialPrompt } =
-    input
+  const {
+    pending,
+    agentSnapshot,
+    environmentSnapshot,
+    runtime,
+    runtimeConfig,
+    resourceRefs,
+    runtimeEnv,
+    runtimeSecretEnv,
+    initialPrompt,
+  } = input
   const sessionId = pending.id
   const sandboxId = pending.sandboxId ?? sessionId.toLowerCase()
   const runtimeName = runtime
@@ -1479,7 +1499,7 @@ async function dispatchInitialPrompt(env: Env, db: Db, auth: AuthContext, sessio
       sessionId: session.id,
       sandboxId: session.sandboxId ?? '',
       provider: session.modelProvider ?? agentSnapshot.provider,
-      model: String(modelConfig.model ?? agentSnapshot.model),
+      model: sessionModel(modelConfig, agentSnapshot),
       agentSnapshot,
       prompt: initialPrompt,
       messages,
@@ -1607,7 +1627,7 @@ async function dispatchSessionPromptCommand(env: Env, db: Db, auth: AuthContext,
       sessionId: session.id,
       sandboxId: session.sandboxId,
       provider: session.modelProvider ?? agentSnapshot.provider,
-      model: String(modelConfig.model ?? agentSnapshot.model),
+      model: sessionModel(modelConfig, agentSnapshot),
       agentSnapshot,
       prompt: message,
       messages,

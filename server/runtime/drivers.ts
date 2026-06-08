@@ -16,7 +16,7 @@ export type RuntimeDriver = {
   cloudBackend: string | null
   cloudProtocol: string | null
   supportsHostingMode: (hostingMode: RuntimeHostingMode) => boolean
-  supportsCloudProviderModel: (provider: string, model: string) => boolean
+  supportsCloudProviderModel: (provider: string, model: string | null) => boolean
   startCloudSession?: (env: Env, input: SessionRuntimeStartInput) => Promise<SessionRuntimeStartResult>
 }
 
@@ -58,7 +58,7 @@ export function runtimeMetadata(values: {
   runtime: RuntimeName
   runtimeConfig: Record<string, unknown>
   provider: string
-  model: string
+  model: string | null
   metadata?: Record<string, unknown>
 }) {
   const driver = runtimeDriver(values.runtime)

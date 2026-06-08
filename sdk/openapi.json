@@ -375,6 +375,7 @@
           },
           "model": {
             "type": "string",
+            "nullable": true,
             "example": "@cf/moonshotai/kimi-k2.6"
           },
           "systemPrompt": {
@@ -546,6 +547,7 @@
           },
           "model": {
             "type": "string",
+            "nullable": true,
             "minLength": 1,
             "example": "@cf/moonshotai/kimi-k2.6"
           },
@@ -678,6 +680,7 @@
           },
           "model": {
             "type": "string",
+            "nullable": true,
             "minLength": 1,
             "example": "@cf/moonshotai/kimi-k2.6"
           },
@@ -829,6 +832,7 @@
           },
           "model": {
             "type": "string",
+            "nullable": true,
             "example": "@cf/moonshotai/kimi-k2.6"
           },
           "systemPrompt": {
@@ -5140,7 +5144,8 @@
             "type": "string"
           },
           "model": {
-            "type": "string"
+            "type": "string",
+            "nullable": true
           },
           "systemPrompt": {
             "type": "string",
@@ -5417,6 +5422,7 @@
           },
           "model": {
             "type": "string",
+            "nullable": true,
             "example": "@cf/moonshotai/kimi-k2.6"
           },
           "driver": {

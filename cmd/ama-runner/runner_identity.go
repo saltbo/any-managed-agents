@@ -168,6 +168,10 @@ func saveRunnerState(path string, state runnerState) error {
 func runnerCapabilities() []string {
 	return []string{
 		"sandbox.exec",
+		"ama",
+		"codex",
+		"claude-code",
+		"copilot",
 		"runtime-provider-model:ama:workers-ai:@cf/moonshotai/kimi-k2.6",
 		"runtime-provider-model:codex:*:gpt-5.3-codex",
 		"runtime-provider-model:claude-code:anthropic:claude-sonnet-4-6",

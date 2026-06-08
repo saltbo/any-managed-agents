@@ -36,7 +36,10 @@ export function runtimeProviderModelCapability(runtime: RuntimeName, provider: s
   return `${RUNTIME_PROVIDER_MODEL_CAPABILITY_PREFIX}:${runtime}:${provider}:${model}`
 }
 
-export function runtimeRequiredRunnerCapability(runtime: RuntimeName, provider: string, model: string) {
+export function runtimeRequiredRunnerCapability(runtime: RuntimeName, provider: string, model?: string | null) {
+  if (!model) {
+    return runtime
+  }
   const entry = RUNTIME_CATALOG.find((item) => item.runtime === runtime)
   const wildcard = entry?.providerModels.find((candidate) => candidate.provider === '*' && candidate.model === model)
   return runtimeProviderModelCapability(runtime, wildcard ? '*' : provider, model)
@@ -46,8 +49,16 @@ export function runnerSupportsRuntimeProviderModel(
   capabilities: string[],
   runtime: RuntimeName,
   provider: string,
-  model: string,
+  model?: string | null,
 ) {
+  if (!model) {
+    return (
+      capabilities.includes(runtime) ||
+      capabilities.some((capability) =>
+        capability.startsWith(`${RUNTIME_PROVIDER_MODEL_CAPABILITY_PREFIX}:${runtime}:`),
+      )
+    )
+  }
   return (
     capabilities.includes(runtimeProviderModelCapability(runtime, provider, model)) ||
     capabilities.includes(runtimeProviderModelCapability(runtime, '*', model))
@@ -58,11 +69,14 @@ export function runtimeCatalogSupportsProviderModel(
   hostingMode: RuntimeHostingMode,
   runtime: RuntimeName,
   provider: string,
-  model: string,
+  model?: string | null,
 ) {
   const entry = RUNTIME_CATALOG.find((item) => item.runtime === runtime)
   if (!entry?.hostingModes.includes(hostingMode)) {
     return false
+  }
+  if (!model) {
+    return true
   }
   if (entry.providerModels.length === 0) {
     return true

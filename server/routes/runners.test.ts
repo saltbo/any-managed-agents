@@ -199,8 +199,7 @@ describe('[CF] /api/runners', () => {
           runtimeConfig: {},
           runtimeDriver: 'ama-self-hosted',
           provider: 'workers-ai',
-          model: '@cf/moonshotai/kimi-k2.6',
-          requiredRunnerCapability: DEFAULT_AMA_RUNNER_CAPABILITY,
+          requiredRunnerCapability: 'ama',
         }),
       }),
     ])
@@ -384,7 +383,6 @@ describe('[CF] /api/runners', () => {
             leaseId: lease.id,
             runtime: 'ama',
             provider: 'workers-ai',
-            model: '@cf/moonshotai/kimi-k2.6',
           }),
         }),
         expect.objectContaining({
@@ -648,7 +646,11 @@ describe('[CF] /api/runners', () => {
     expect(projectId).toMatch(/^project_/)
 
     const externalTenantId = `ak-org-${crypto.randomUUID()}`
-    const federatedAuthorization = signInFederatedRunner(externalTenantId, `runner_${crypto.randomUUID().replaceAll('-', '')}`, environment.id)
+    const federatedAuthorization = signInFederatedRunner(
+      externalTenantId,
+      `runner_${crypto.randomUUID().replaceAll('-', '')}`,
+      environment.id,
+    )
 
     const unboundRes = await jsonFetch('/api/runners', federatedAuthorization, {
       method: 'POST',
