@@ -5,9 +5,9 @@ import { recordAudit } from '../audit'
 import type { AuthContext } from '../auth/session'
 import { projects, scheduledAgentTriggers, scheduledTriggerRuns } from '../db/schema'
 import type { Env } from '../env'
+import { RuntimeSchema } from '../routes/environment-contracts'
 import { createSessionForAgent } from '../routes/sessions'
 import { safeRuntimeError } from '../runtime/runtime-error'
-import { RuntimeSchema } from '../routes/environment-contracts'
 
 type Db = ReturnType<typeof drizzle>
 type TriggerRow = typeof scheduledAgentTriggers.$inferSelect

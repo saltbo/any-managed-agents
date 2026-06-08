@@ -45,9 +45,7 @@ export function SessionDetailView({
   const shortSessionId = `${session.id.slice(0, 5)}...${session.id.slice(-7)}`
   const duration = formatDuration(session.startedAt, session.stoppedAt)
   const agentName = agentDisplayName || session.agentSnapshot.systemPrompt || session.agentId
-  const environmentName = String(
-    environmentDisplayName ?? session.environmentId ?? 'Environment',
-  )
+  const environmentName = String(environmentDisplayName ?? session.environmentId ?? 'Environment')
   const agentProviderModel = `${session.agentSnapshot.provider} / ${session.agentSnapshot.model}`
   const hostingRuntime = session.environmentSnapshot
     ? `${hostingModeLabel(session.environmentSnapshot.hostingMode)} / ${session.runtimeMetadata.runtime}`

@@ -2632,18 +2632,21 @@ Then(
   },
 )
 
-Then('requests using legacy environment hosting and runtime config fields fail validation', async function (this: ProductWorld) {
-  const state = await ensureState(this)
-  const invalid = await apiResponse(state.page.request, '/api/environments', {
-    method: 'POST',
-    data: {
-      name: `${state.runId} legacy runtime fields`,
-      runtimeType: 'cloud-hosted',
-      runtimeImage: { image: 'node:24' },
-    },
-  })
-  assert.equal(invalid.status(), 400)
-})
+Then(
+  'requests using legacy environment hosting and runtime config fields fail validation',
+  async function (this: ProductWorld) {
+    const state = await ensureState(this)
+    const invalid = await apiResponse(state.page.request, '/api/environments', {
+      method: 'POST',
+      data: {
+        name: `${state.runId} legacy runtime fields`,
+        runtimeType: 'cloud-hosted',
+        runtimeImage: { image: 'node:24' },
+      },
+    })
+    assert.equal(invalid.status(), 400)
+  },
+)
 
 Then('the API does not infer runtime ownership from the selected agent', function (this: ProductWorld) {
   const env = required(this.e2e?.environment, 'environment')
