@@ -246,6 +246,7 @@ async function runStagingSmoke(config: StagingSmokeConfig): Promise<StagingSmoke
         data: {
           agentId: agent.id,
           environmentId: environment.id,
+          runtime: 'ama',
           title: `${config.runId} session`,
           metadata: { runId: config.runId },
         },
@@ -361,7 +362,6 @@ async function exerciseSelfHostedRunnerMode(
         name: `${config.runId} self-hosted environment`,
         description: 'Staging smoke self-hosted environment created through public AMA APIs.',
         hostingMode: 'self_hosted',
-        runtime: 'ama',
         networkPolicy: { mode: 'unrestricted' },
         packages: [],
         metadata: { runId: config.runId, smokeMode: 'self-hosted-runner' },
@@ -403,6 +403,7 @@ async function exerciseSelfHostedRunnerMode(
       data: {
         agentId: agent.id,
         environmentId: environment.id,
+        runtime: 'ama',
         title: `${config.runId} self-hosted session`,
         initialPrompt: 'Execute this self-hosted runner smoke task.',
         metadata: { runId: config.runId, smokeMode: 'self-hosted-runner' },

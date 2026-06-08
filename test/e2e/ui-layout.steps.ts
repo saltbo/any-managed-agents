@@ -384,11 +384,11 @@ Then('the empty state explains that sessions are task runs of versioned agents',
 })
 
 Then(
-  'each session row shows title or id, status, agent, Agent provider and model, Environment runtime, started time, last update time, and duration when available',
+  'each session row shows title or id, status, agent, Agent provider and model, hosting and runtime, started time, last update time, and duration when available',
   async function (this: UiWorld) {
     const page = requireUiWorkflow(this).page
     await expect(page.getByText('Agent provider/model')).toBeVisible()
-    await expect(page.getByText('Environment runtime')).toBeVisible()
+    await expect(page.getByText('Hosting / runtime')).toBeVisible()
     await expect(page.getByText('idle').first()).toBeVisible()
     await expect(page.getByText(/workers-ai/).first()).toBeVisible()
     await expect(page.getByText(/Cloud \/ ama · env_/).first()).toBeVisible()
@@ -425,7 +425,7 @@ Then(
     await expect(dialog.getByText('Agent', { exact: true })).toBeVisible()
     await expect(dialog.getByText(/Agent provider\/model:/)).toBeVisible()
     await expect(dialog.getByText('Environment', { exact: true })).toBeVisible()
-    await expect(dialog.getByText(/Environment runtime:/)).toBeVisible()
+    await expect(dialog.getByText(/Session runtime:/)).toBeVisible()
     await expect(dialog.getByLabel('Title')).toBeVisible()
     await expect(dialog.getByLabel('Metadata')).toBeVisible()
     await expect(dialog.getByLabel('Resource refs')).toBeVisible()
@@ -615,6 +615,7 @@ Given(
       data: {
         agentId: agent.id,
         environmentId: environment.id,
+        runtime: 'ama',
         title: `${runId} session`,
         metadata: { runId },
       },
@@ -779,6 +780,7 @@ async function createUiSessionGraph(workflow: UiWorkflow) {
     data: {
       agentId: agent.id,
       environmentId: environment.id,
+      runtime: 'ama',
       title: `${workflow.runId} session`,
       metadata: { runId: workflow.runId },
     },

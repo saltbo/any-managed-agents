@@ -75,6 +75,7 @@ interface E2EState {
   events?: ListResponse<Json>
   eventPages?: Record<string, ListResponse<Json>>
   runtimeMessage?: string
+  sessionRuntime?: string
   observedEventTypes?: string[]
 }
 
@@ -1177,6 +1178,7 @@ When(
       data: {
         agentId: state.agent?.id,
         environmentId: state.environment?.id,
+        runtime: state.sessionRuntime ?? 'ama',
         title: `${state.runId} rejected session`,
       },
     })
@@ -1248,6 +1250,7 @@ When(
       data: {
         agentId: state.agent?.id,
         environmentId: state.environment?.id,
+        runtime: state.sessionRuntime ?? 'ama',
         title: `${state.runId} scheduled banking bonus research`,
         metadata: {
           externalRunId: `${state.runId}-banking-bonus`,
@@ -1342,7 +1345,11 @@ When(
     await emptyResponse(this.e2e.page.request, `/api/agents/${this.e2e.agent?.id}`, { method: 'DELETE' })
     const response = await apiResponse(this.e2e.page.request, '/api/sessions', {
       method: 'POST',
-      data: { agentId: this.e2e.agent?.id, environmentId: this.e2e.environment?.id },
+      data: {
+        agentId: this.e2e.agent?.id,
+        environmentId: this.e2e.environment?.id,
+        runtime: this.e2e.sessionRuntime ?? 'ama',
+      },
     })
     this.e2e.responseStatus = response.status()
     this.e2e.response = (await response.json()) as Json
@@ -1356,6 +1363,7 @@ When('that runtime does not support the exact provider and model', async functio
     data: {
       agentId: state.agent?.id,
       environmentId: state.environment?.id,
+      runtime: state.sessionRuntime ?? 'ama',
       title: `${state.runId} unsupported runtime session`,
     },
   })
@@ -1372,6 +1380,7 @@ When(
       data: {
         agentId: state.agent?.id,
         environmentId: state.environment?.id,
+        runtime: state.sessionRuntime ?? 'ama',
         title: `${state.runId} unsupported runtime session`,
       },
     })
@@ -1400,6 +1409,7 @@ When('no runner advertises the exact runtime provider and model', async function
     data: {
       agentId: state.agent?.id,
       environmentId: state.environment?.id,
+      runtime: state.sessionRuntime ?? 'ama',
       title: `${state.runId} unsupported self-hosted codex session`,
     },
   })
@@ -1883,6 +1893,7 @@ Then('new sessions using that provider are rejected before runtime startup', asy
     data: {
       agentId: state.agent?.id,
       environmentId: state.environment?.id,
+      runtime: state.sessionRuntime ?? 'ama',
       title: `${state.runId} denied provider session`,
     },
   })
@@ -1931,7 +1942,12 @@ Then(
     const state = await ensureAgentAndEnvironment(this)
     const response = await apiResponse(state.page.request, '/api/sessions', {
       method: 'POST',
-      data: { agentId: state.agent?.id, environmentId: state.environment?.id, title: `${state.runId} access denied` },
+      data: {
+        agentId: state.agent?.id,
+        environmentId: state.environment?.id,
+        runtime: state.sessionRuntime ?? 'ama',
+        title: `${state.runId} access denied`,
+      },
     })
     assert.equal(response.status(), 403)
     const body = await response.json()
@@ -2440,7 +2456,7 @@ Then('new sessions cannot be created from the archived agent', async function (t
   const state = await ensureState(this)
   const response = await apiResponse(state.page.request, '/api/sessions', {
     method: 'POST',
-    data: { agentId: state.agent?.id, environmentId: state.environment?.id },
+    data: { agentId: state.agent?.id, environmentId: state.environment?.id, runtime: state.sessionRuntime ?? 'ama' },
   })
   assert.equal(response.status(), 409)
 })
@@ -2523,7 +2539,6 @@ Then(
       'variables',
       'secretRefs',
       'hostingMode',
-      'runtime',
       'networkPolicy',
       'resourceLimits',
       'runtimeConfig',
@@ -2532,7 +2547,6 @@ Then(
       assert.ok(key in env)
     }
     assert.equal(env.hostingMode, 'cloud')
-    assert.equal(env.runtime, 'ama')
     assert.deepEqual(env.networkPolicy, { mode: 'unrestricted' })
   },
 )
@@ -2575,7 +2589,6 @@ Then('the environment remains available for future sessions', async function (th
 Then('the response stores normalized policy fields', function (this: ProductWorld) {
   const env = required(this.e2e?.environment, 'environment')
   assert.equal(env.hostingMode, 'cloud')
-  assert.equal(env.runtime, 'ama')
   assert.deepEqual(env.networkPolicy, { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] })
   assert.deepEqual(env.packageManagerPolicy, { allowedRegistries: ['registry.npmjs.org'] })
 })
@@ -2592,26 +2605,23 @@ Then('hostingMode accepts only cloud or self_hosted', async function (this: Prod
 
   const invalid = await apiResponse(state.page.request, '/api/environments', {
     method: 'POST',
-    data: { name: `${state.runId} invalid hosting`, hostingMode: 'self-hosted', runtime: 'ama' },
+    data: { name: `${state.runId} invalid hosting`, hostingMode: 'self-hosted' },
   })
   assert.equal(invalid.status(), 400)
 })
 
 Then('runtime accepts only ama, claude-code, codex, or copilot', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  assert.equal(state.environment?.runtime, 'codex')
+  assert.equal(state.sessionRuntime, 'codex')
   for (const runtime of ['ama', 'claude-code', 'copilot']) {
-    const env = await createEnvironment(state, {
-      name: `${state.runId} ${runtime} runtime env`,
-      hostingMode: 'cloud',
-      runtime,
-    })
-    assert.equal(env.runtime, runtime)
+    const session = await createSession(state, { title: `${state.runId} ${runtime} runtime session`, runtime })
+    assert.equal(objectValue(session.runtimeMetadata).runtime, runtime)
   }
 
-  const invalid = await apiResponse(state.page.request, '/api/environments', {
+  state.agent ??= await createAgent(state, { name: `${state.runId} invalid runtime agent` })
+  const invalid = await apiResponse(state.page.request, '/api/sessions', {
     method: 'POST',
-    data: { name: `${state.runId} invalid runtime`, hostingMode: 'cloud', runtime: 'pi' },
+    data: { agentId: state.agent.id, environmentId: state.environment?.id, runtime: 'pi' },
   })
   assert.equal(invalid.status(), 400)
 })
@@ -2620,14 +2630,13 @@ Then(
   'invalid hostingMode or runtime values return field-level validation details',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    const invalid = await apiResponse(state.page.request, '/api/environments', {
+    const invalid = await apiResponse(state.page.request, '/api/sessions', {
       method: 'POST',
-      data: { name: `${state.runId} invalid canonical runtime`, hostingMode: 'hybrid', runtime: 'pi' },
+      data: { agentId: state.agent?.id, environmentId: state.environment?.id, runtime: 'pi' },
     })
     assert.equal(invalid.status(), 400)
     const body = (await invalid.json()) as Json
     const issues = objectValue(required(body.error, 'validation error')).issues as Array<{ path?: string[] }>
-    assert.ok(issues.some((issue) => issue.path?.[0] === 'hostingMode'))
     assert.ok(issues.some((issue) => issue.path?.[0] === 'runtime'))
   },
 )
@@ -2651,15 +2660,15 @@ Then(
 Then('the API does not infer runtime ownership from the selected agent', function (this: ProductWorld) {
   const env = required(this.e2e?.environment, 'environment')
   assert.equal(env.hostingMode, 'self_hosted')
-  assert.equal(env.runtime, 'codex')
+  assert.equal(this.e2e?.sessionRuntime, 'codex')
 })
 
 Then('the environment snapshot stores those runtime fields', function (this: ProductWorld) {
   const env = required(this.e2e?.environment, 'environment')
   const session = required(this.e2e?.latestSession, 'session')
   assert.equal(env.hostingMode, 'cloud')
-  assert.equal(env.runtime, 'ama')
   assert.deepEqual(env.runtimeConfig, { image: 'ama-pi-runtime', command: 'ama' })
+  assert.equal(objectValue(session.runtimeMetadata).runtime, 'ama')
   assert.deepEqual(objectValue(session.environmentSnapshot).runtimeConfig, env.runtimeConfig)
 })
 
@@ -2747,6 +2756,7 @@ When('the user creates a self-hosted environment and starts a session with it', 
     data: {
       agentId: state.agent.id,
       environmentId: state.environment.id,
+      runtime: state.sessionRuntime ?? 'ama',
       title: `${state.runId} self-hosted session`,
     },
   })
@@ -2915,7 +2925,6 @@ Then(
       data: {
         name: `${state.runId} forbidden runner env`,
         hostingMode: 'self_hosted',
-        runtime: 'ama',
         networkPolicy: { mode: 'unrestricted' },
       },
     })
@@ -2926,10 +2935,10 @@ Then(
       data: {
         name: `${state.runId} oidc runner env`,
         hostingMode: 'self_hosted',
-        runtime: 'ama',
         networkPolicy: { mode: 'unrestricted' },
       },
     })
+    state.sessionRuntime = 'ama'
     state.agent = await apiJson<Json>(state.page.request, '/api/agents', {
       method: 'POST',
       headers: operatorHeaders,
@@ -2960,6 +2969,7 @@ Then(
       data: {
         agentId: state.agent.id,
         environmentId: state.environment.id,
+        runtime: state.sessionRuntime ?? 'ama',
         title: `${state.runId} oidc runner session`,
       },
     })
@@ -3008,6 +3018,7 @@ When('the user creates a session in that environment', async function (this: Pro
     data: {
       agentId: state.agent?.id,
       environmentId: state.environment?.id,
+      runtime: state.sessionRuntime ?? 'ama',
       title: `${state.runId} runner-backed session`,
       initialPrompt: 'Execute this self-hosted runner task.',
     },
@@ -3016,7 +3027,7 @@ When('the user creates a session in that environment', async function (this: Pro
 
 When('the user starts a session with an initial prompt', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const runtime = String(objectValue(state.environment).runtime)
+  const runtime = state.sessionRuntime ?? 'ama'
   if (runtime === 'claude-code') {
     state.runtimeMessage = 'Run the deterministic Claude Code bridge test.'
   } else {
@@ -3027,6 +3038,7 @@ When('the user starts a session with an initial prompt', async function (this: P
     data: {
       agentId: state.agent?.id,
       environmentId: state.environment?.id,
+      runtime: state.sessionRuntime ?? 'ama',
       title: `${state.runId} ${runtime} runner session`,
       initialPrompt: state.runtimeMessage,
     },
@@ -3162,10 +3174,10 @@ Then('the session reaches idle, stopped, or error with inspectable final events'
   assert.ok(['idle', 'stopped', 'error'].includes(String(session.status)))
   const events = await sessionEvents(state)
   assert.ok(events.data.length > 0)
-  if (String(objectValue(state.environment).runtime) === 'codex') {
+  if (state.sessionRuntime === 'codex') {
     assert.equal(JSON.stringify(events.data).includes('codex-bridge-test-completed'), true)
   }
-  if (String(objectValue(state.environment).runtime) === 'copilot') {
+  if (state.sessionRuntime === 'copilot') {
     assert.equal(JSON.stringify(events.data).includes('copilot-bridge-test-completed'), true)
   }
   const serialized = JSON.stringify(session)
@@ -3292,6 +3304,7 @@ Given('a runner has leased self-hosted session work', async function (this: Prod
     data: {
       agentId: state.agent.id,
       environmentId: state.environment.id,
+      runtime: state.sessionRuntime ?? 'ama',
       title: `${state.runId} expiring runner session`,
     },
   })
@@ -3429,7 +3442,7 @@ Then(
     assert.equal(typeof session.runtimeEndpointPath, 'string')
     assert.equal(objectValue(session.runtimeMetadata).provider, objectValue(session.agentSnapshot).provider)
     assert.equal(objectValue(session.runtimeMetadata).model, objectValue(session.agentSnapshot).model)
-    assert.equal(objectValue(session.runtimeMetadata).runtime, objectValue(session.environmentSnapshot).runtime)
+    assert.equal(objectValue(session.runtimeMetadata).runtime, this.e2e?.sessionRuntime ?? 'ama')
     assert.equal(objectValue(session.runtimeMetadata).hostingMode, objectValue(session.environmentSnapshot).hostingMode)
   },
 )
@@ -3515,6 +3528,7 @@ Then('raw credentials are rejected from the request body', async function (this:
     data: {
       agentId: state.agent?.id,
       environmentId: state.environment?.id,
+      runtime: state.sessionRuntime ?? 'ama',
       resourceRefs: [{ type: 'github_repository', owner: 'saltbo', repo: 'any-managed-agents', apiKey: 'raw-secret' }],
     },
   })
@@ -4658,12 +4672,16 @@ async function createProviderModel(state: E2EState, provider: Json | undefined, 
 }
 
 async function createEnvironment(state: E2EState, data: Json = {}) {
+  const { runtime, ...environmentData } = data
+  if (typeof runtime === 'string') {
+    state.sessionRuntime = runtime
+  }
   return await apiJson<Json>(state.page.request, '/api/environments', {
     method: 'POST',
     data: {
       name: `${state.runId} env`,
       runtimeConfig: { image: 'ama-pi-runtime' },
-      ...data,
+      ...environmentData,
     },
   })
 }
@@ -4676,6 +4694,7 @@ async function createSession(state: E2EState, data: Json = {}) {
       environmentId: state.environment?.id,
       title: `${state.runId} session`,
       ...data,
+      runtime: typeof data.runtime === 'string' ? data.runtime : (state.sessionRuntime ?? 'ama'),
     },
   })
   return await waitForSession(state.page.request, String(session.id))
@@ -4800,6 +4819,7 @@ async function setupQueuedSelfHostedSession(world: ProductWorld) {
     data: {
       agentId: state.agent.id,
       environmentId: state.environment.id,
+      runtime: state.sessionRuntime ?? 'ama',
       title: `${state.runId} actual runner session`,
     },
   })
@@ -4838,6 +4858,7 @@ async function setupClaimedSelfHostedSession(world: ProductWorld) {
     data: {
       agentId: state.agent.id,
       environmentId: state.environment.id,
+      runtime: state.sessionRuntime ?? 'ama',
       title: `${state.runId} claimed channel session`,
     },
   })
@@ -4914,7 +4935,7 @@ function runnerCapabilities(state: E2EState) {
   if (capabilities.length > 0) {
     return capabilities
   }
-  const runtime = objectValue(state.environment).runtime
+  const runtime = state.sessionRuntime
   if (runtime === 'codex' && state.provider?.id) {
     return ['sandbox.exec', `runtime-provider-model:codex:${String(state.provider.id)}:${CODEX_E2E_MODEL}`]
   }
