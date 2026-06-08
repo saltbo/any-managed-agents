@@ -418,8 +418,6 @@ async function exerciseSelfHostedRunnerMode(
     runnerProcess = startAmaRunnerProcess({
       origin: config.origin,
       token: accessToken,
-      runnerId: runner.id,
-      capabilities,
       workDir: runnerWorkDir,
     })
 
@@ -544,26 +542,16 @@ async function installBearerFromBrowserStorage(page: Page) {
   return accessToken
 }
 
-function startAmaRunnerProcess(input: {
-  origin: string
-  token: string
-  runnerId: string
-  capabilities: string[]
-  workDir: string
-}): AmaRunnerProcess {
+function startAmaRunnerProcess(input: { origin: string; token: string; workDir: string }): AmaRunnerProcess {
   const child = spawn(
     'go',
     [
       'run',
       '.',
-      '--origin',
+      '--api-server',
       input.origin,
       '--token',
       input.token,
-      '--runner-id',
-      input.runnerId,
-      '--capabilities',
-      input.capabilities.join(','),
       '--allow-unsafe-process',
       '--workdir',
       input.workDir,

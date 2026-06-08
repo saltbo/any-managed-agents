@@ -384,7 +384,7 @@ Then('the empty state explains that sessions are task runs of versioned agents',
 })
 
 Then(
-  'each session row shows title or id, status, agent, Agent provider and model, hosting and runtime, started time, last update time, and duration when available',
+  'each session row shows title or id, status, agent, Agent provider and model, Environment runtime, started time, last update time, and duration when available',
   async function (this: UiWorld) {
     const page = requireUiWorkflow(this).page
     await expect(page.getByText('Agent provider/model')).toBeVisible()
@@ -425,7 +425,7 @@ Then(
     await expect(dialog.getByText('Agent', { exact: true })).toBeVisible()
     await expect(dialog.getByText(/Agent provider\/model:/)).toBeVisible()
     await expect(dialog.getByText('Environment', { exact: true })).toBeVisible()
-    await expect(dialog.getByText(/Session runtime:/)).toBeVisible()
+    await expect(dialog.getByLabel('Runtime')).toBeVisible()
     await expect(dialog.getByLabel('Title')).toBeVisible()
     await expect(dialog.getByLabel('Metadata')).toBeVisible()
     await expect(dialog.getByLabel('Resource refs')).toBeVisible()

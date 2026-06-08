@@ -738,7 +738,6 @@ When(
       method: 'POST',
       data: {
         providerId: 'workers-ai',
-        modelId: '@cf/moonshotai/kimi-k2.6',
         teamId: 'team_e2e',
         effect: 'deny',
         reason: 'Project-wide model access is paused.',
@@ -1273,6 +1272,7 @@ When('the user creates a due scheduled agent trigger', async function (this: Pro
     data: {
       agentId: state.agent?.id,
       environmentId: state.environment?.id,
+      runtime: state.sessionRuntime ?? 'ama',
       name: `${state.runId} banking bonus heartbeat`,
       promptTemplate: state.runtimeMessage,
       schedule: { type: 'interval', intervalSeconds: 3600 },
@@ -1308,6 +1308,7 @@ When('the user creates paused and archived scheduled agent triggers', async func
     data: {
       agentId: state.agent?.id,
       environmentId: state.environment?.id,
+      runtime: state.sessionRuntime ?? 'ama',
       name: `${state.runId} paused heartbeat`,
       promptTemplate: 'Do not dispatch paused trigger.',
       schedule: { intervalSeconds: 3600 },
@@ -1320,6 +1321,7 @@ When('the user creates paused and archived scheduled agent triggers', async func
     data: {
       agentId: state.agent?.id,
       environmentId: state.environment?.id,
+      runtime: state.sessionRuntime ?? 'ama',
       name: `${state.runId} archived heartbeat`,
       promptTemplate: 'Do not dispatch archived trigger.',
       schedule: { intervalSeconds: 3600 },
@@ -3760,7 +3762,7 @@ Then(
     assert.equal(state.list.data.length, 1)
     assert.equal(
       objectValue(state.list.data[0]?.payload).requiredRunnerCapability,
-      `runtime-provider-model:codex:${state.provider?.id}:${CODEX_E2E_MODEL}`,
+      `runtime-provider-model:codex:*:${CODEX_E2E_MODEL}`,
     )
   },
 )
@@ -4885,14 +4887,12 @@ async function startProductAmaRunner(state: E2EState) {
     [
       'run',
       '.',
-      '--origin',
+      '--api-server',
       origin,
       '--token',
       token,
-      '--runner-id',
-      String(state.runner?.id),
-      '--capabilities',
-      runnerCapabilities(state).join(','),
+      '--environment-id',
+      String(state.environment?.id),
       '--allow-unsafe-process',
       '--workdir',
       workDir,
@@ -4928,21 +4928,6 @@ async function startProductAmaRunner(state: E2EState) {
   child.stderr.on('data', (chunk) => child.runnerOutput.push(String(chunk)))
   state.runnerProcess = child
   state.runnerWorkDir = workDir
-}
-
-function runnerCapabilities(state: E2EState) {
-  const capabilities = arrayValue(state.runner?.capabilities).map(String)
-  if (capabilities.length > 0) {
-    return capabilities
-  }
-  const runtime = state.sessionRuntime
-  if (runtime === 'codex' && state.provider?.id) {
-    return ['sandbox.exec', `runtime-provider-model:codex:${String(state.provider.id)}:${CODEX_E2E_MODEL}`]
-  }
-  if (runtime === 'copilot' && state.provider?.id) {
-    return ['sandbox.exec', `runtime-provider-model:copilot:${String(state.provider.id)}:${COPILOT_E2E_MODEL}`]
-  }
-  return ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY]
 }
 
 function bridgeTestRuntimeConfig() {
@@ -4990,6 +4975,7 @@ async function waitForSessionStatus(state: E2EState, status: string) {
     const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
     if (session.status === status) {
       state.latestSession = session
+      await syncClaimedRunnerForSession(state)
       return session
     }
     if (state.runnerProcess?.exitCode !== null && state.runnerProcess?.exitCode !== undefined) {
@@ -5000,6 +4986,23 @@ async function waitForSessionStatus(state: E2EState, status: string) {
     await delay(1_000)
   }
   throw new Error(`Session ${state.latestSession?.id} did not become ${status}`)
+}
+
+async function syncClaimedRunnerForSession(state: E2EState) {
+  const sessionId = state.latestSession?.id
+  if (!sessionId) return
+  const workItems = await apiJson<ListResponse<Json>>(
+    state.page.request,
+    `/api/runners/work-items?sessionId=${sessionId}`,
+  )
+  const item = workItems.data.find((candidate) => candidate.runnerId || candidate.leaseId)
+  const runnerId = typeof item?.runnerId === 'string' ? item.runnerId : null
+  if (runnerId) {
+    state.runner = await apiJson<Json>(state.page.request, `/api/runners/${runnerId}`)
+  }
+  if (typeof item?.leaseId === 'string') {
+    state.lease = { ...(state.lease ?? {}), id: item.leaseId, runnerId }
+  }
 }
 
 async function openRunnerChannel(state: E2EState, key: string) {
@@ -5157,7 +5160,7 @@ async function runDeterministicAmaRunnerLogin(state: E2EState) {
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
   try {
     const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`
-    const result = await runLocalCommand('go', ['run', '.', 'login', '--origin', origin, '--config', configPath], {
+    const result = await runLocalCommand('go', ['run', '.', 'login', '--api-server', origin, '--config', configPath], {
       cwd: 'cmd/ama-runner',
       env: { PATH: process.env.PATH, HOME: process.env.HOME },
       timeout: 120_000,
