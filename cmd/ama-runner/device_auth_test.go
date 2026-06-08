@@ -133,10 +133,11 @@ func TestLoginWithDeviceAuthorizationFallsBackToJSONDeviceEndpoint(t *testing.T)
 				t.Fatalf("unexpected token request form: %s", r.Form.Encode())
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"access_token": "access-token-secret",
-				"token_type":   "Bearer",
-				"expires_in":   3600,
-				"scope":        "openid profile email offline_access",
+				"access_token":  "access-token-secret",
+				"refresh_token": "refresh-token-secret",
+				"token_type":    "Bearer",
+				"expires_in":    3600,
+				"scope":         "openid profile email offline_access",
 			})
 		default:
 			t.Fatalf("unexpected request %s", r.URL.Path)
@@ -257,7 +258,7 @@ func TestLoginWithDeviceAuthorizationErrors(t *testing.T) {
 					"expires_in":       60,
 				})
 			case "/token":
-				_, _ = w.Write([]byte(`{"access_token":"token","token_type":"Bearer"}`))
+				_, _ = w.Write([]byte(`{"access_token":"token","refresh_token":"refresh","token_type":"Bearer"}`))
 			default:
 				t.Fatalf("unexpected request %s", r.URL.Path)
 			}

@@ -16,6 +16,7 @@ const processUnsafeAdapter = "process-unsafe"
 
 type Config struct {
 	ConfigPath            string        `json:"-"`
+	TokenExplicit         bool          `json:"-"`
 	Origin                string        `json:"apiServer"`
 	Token                 string        `json:"token"`
 	ProjectID             string        `json:"projectId"`
@@ -37,6 +38,7 @@ func LoadConfig(args []string, getenv func(string) string) (Config, error) {
 	if getenv == nil {
 		getenv = os.Getenv
 	}
+	explicitEnvToken := strings.TrimSpace(getenv("AMA_TOKEN")) != ""
 	envAllowUnsafeProcess, err := parseEnvBool(getenv, "AMA_RUNNER_ALLOW_UNSAFE_PROCESS", false)
 	if err != nil {
 		return Config{}, err
@@ -72,6 +74,7 @@ func LoadConfig(args []string, getenv func(string) string) (Config, error) {
 	defaultConfigFile := defaultConfigPath(getenv)
 	config := Config{
 		ConfigPath:            defaultConfigFile,
+		TokenExplicit:         explicitEnvToken,
 		Origin:                getenv("AMA_API_SERVER"),
 		Token:                 getenv("AMA_TOKEN"),
 		ProjectID:             getenv("AMA_PROJECT_ID"),
@@ -134,6 +137,7 @@ func LoadConfig(args []string, getenv func(string) string) (Config, error) {
 	}
 	if visited["token"] {
 		config.Token = *token
+		config.TokenExplicit = true
 	}
 	if visited["project-id"] {
 		config.ProjectID = *projectID
@@ -175,24 +179,22 @@ func LoadConfig(args []string, getenv func(string) string) (Config, error) {
 		config.ShutdownGraceInterval = *shutdownGrace
 	}
 
-	if !visited["token"] && (strings.TrimSpace(config.Token) == "" || strings.TrimSpace(config.Origin) == "") {
-		saved, err := LoadSavedRunnerConfig(config.ConfigPath)
-		if err != nil {
-			return Config{}, err
+	saved, err := LoadSavedRunnerConfig(config.ConfigPath)
+	if err != nil {
+		return Config{}, err
+	}
+	if saved != nil {
+		if strings.TrimSpace(config.Origin) == "" {
+			config.Origin = saved.Origin
 		}
-		if saved != nil {
-			if strings.TrimSpace(config.Origin) == "" {
-				config.Origin = saved.Origin
-			}
-			if strings.TrimSpace(config.Token) == "" && config.Origin == saved.Origin {
-				config.Token = saved.AccessToken
-			}
-			if strings.TrimSpace(config.ProjectID) == "" && config.Origin == saved.Origin {
-				config.ProjectID = saved.ProjectID
-			}
-			if strings.TrimSpace(config.EnvironmentID) == "" && config.Origin == saved.Origin {
-				config.EnvironmentID = saved.EnvironmentID
-			}
+		if !config.TokenExplicit && strings.TrimSpace(config.Token) == "" && config.Origin == saved.Origin {
+			config.Token = saved.AccessToken
+		}
+		if strings.TrimSpace(config.ProjectID) == "" && config.Origin == saved.Origin {
+			config.ProjectID = saved.ProjectID
+		}
+		if strings.TrimSpace(config.EnvironmentID) == "" && config.Origin == saved.Origin {
+			config.EnvironmentID = saved.EnvironmentID
 		}
 	}
 

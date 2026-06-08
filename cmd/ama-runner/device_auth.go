@@ -15,6 +15,7 @@ import (
 )
 
 const deviceGrantType = "urn:ietf:params:oauth:grant-type:device_code"
+const refreshGrantType = "refresh_token"
 
 type DeviceAuthClient struct {
 	HTTPClient *http.Client
@@ -97,6 +98,9 @@ func LoginWithDeviceAuthorization(
 	token, err := client.PollDeviceToken(ctx, metadata.TokenEndpoint, options.ClientID, device, options.PollInterval)
 	if err != nil {
 		return DeviceLoginResult{}, err
+	}
+	if strings.TrimSpace(token.RefreshToken) == "" {
+		return DeviceLoginResult{}, fmt.Errorf("OIDC token response did not include a refresh token; runner client must allow offline_access")
 	}
 	if err := SaveRunnerConfig(options.ConfigPath, SavedRunnerConfig{
 		Origin:       strings.TrimRight(options.Origin, "/"),
@@ -206,6 +210,32 @@ func (c DeviceAuthClient) PollDeviceToken(
 			return tokenResponse{}, fmt.Errorf("OIDC token polling failed: %s", errorDescription(token))
 		}
 	}
+}
+
+func (c DeviceAuthClient) RefreshToken(
+	ctx context.Context,
+	endpoint string,
+	clientID string,
+	refreshToken string,
+) (tokenResponse, error) {
+	if strings.TrimSpace(refreshToken) == "" {
+		return tokenResponse{}, fmt.Errorf("OIDC refresh token is required")
+	}
+	values := url.Values{}
+	values.Set("grant_type", refreshGrantType)
+	values.Set("refresh_token", refreshToken)
+	values.Set("client_id", clientID)
+	var token tokenResponse
+	if err := c.postForm(ctx, endpoint, values, &token); err != nil {
+		return tokenResponse{}, err
+	}
+	if token.AccessToken == "" {
+		return tokenResponse{}, fmt.Errorf("OIDC refresh response did not include an access token")
+	}
+	if token.TokenType == "" {
+		token.TokenType = "Bearer"
+	}
+	return token, nil
 }
 
 func (c DeviceAuthClient) getJSON(ctx context.Context, endpoint string, out any) error {
@@ -373,7 +403,7 @@ func LoadSavedRunnerConfig(path string) (*SavedRunnerConfig, error) {
 		if err != nil {
 			return nil, err
 		}
-		if !expiresAt.After(time.Now()) {
+		if !expiresAt.After(time.Now()) && strings.TrimSpace(config.RefreshToken) == "" {
 			return nil, fmt.Errorf("saved AMA runner token is expired; run ama-runner login again")
 		}
 	}

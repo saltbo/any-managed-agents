@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/coder/websocket"
 	ama "github.com/saltbo/any-managed-agents/sdk/go/ama"
 )
 
@@ -35,16 +36,27 @@ func runWithContext(ctx context.Context, args []string, getenv func(string) stri
 	if err != nil {
 		return err
 	}
+	baseHTTPClient := &http.Client{Timeout: 30 * time.Second}
+	tokens, err := NewRunnerTokenSource(config, baseHTTPClient)
+	if err != nil {
+		return err
+	}
+	authHTTPClient := &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: runnerAuthTransport{
+			Base:   http.DefaultTransport,
+			Tokens: tokens,
+		},
+	}
 	client := &ama.Client{
-		Origin:      config.Origin,
-		AccessToken: config.Token,
-		ProjectID:   config.ProjectID,
-		HTTPClient:  &http.Client{Timeout: 30 * time.Second},
+		Origin:     config.Origin,
+		ProjectID:  config.ProjectID,
+		HTTPClient: authHTTPClient,
 	}
 	daemon := RunnerDaemon{
 		Config:   config,
 		Client:   client,
-		Channels: sdkRunnerSessionChannelOpener{client: client},
+		Channels: sdkRunnerSessionChannelOpener{client: client, tokens: tokens},
 		Adapter:  ProcessAdapter{CommandTimeout: config.CommandTimeout, ShutdownGraceInterval: config.ShutdownGraceInterval},
 	}
 	return daemon.Start(ctx)
@@ -82,6 +94,7 @@ func runLogin(ctx context.Context, args []string, getenv func(string) string, st
 
 type sdkRunnerSessionChannelOpener struct {
 	client *ama.Client
+	tokens *RunnerTokenSource
 }
 
 func (o sdkRunnerSessionChannelOpener) OpenRunnerSessionChannel(
@@ -89,5 +102,27 @@ func (o sdkRunnerSessionChannelOpener) OpenRunnerSessionChannel(
 	runnerID string,
 	leaseID string,
 ) (RunnerSessionChannel, error) {
-	return o.client.OpenRunnerSessionChannel(ctx, runnerID, leaseID)
+	if o.tokens == nil {
+		return o.client.OpenRunnerSessionChannel(ctx, runnerID, leaseID)
+	}
+	endpoint, err := o.client.RunnerSessionChannelURL(runnerID, leaseID)
+	if err != nil {
+		return nil, err
+	}
+	token, err := o.tokens.AccessToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	headers := http.Header{}
+	if token != "" {
+		headers.Set("authorization", "Bearer "+token)
+	}
+	if o.client.ProjectID != "" {
+		headers.Set("x-ama-project-id", o.client.ProjectID)
+	}
+	conn, _, err := websocket.Dial(ctx, endpoint, &websocket.DialOptions{HTTPHeader: headers})
+	if err != nil {
+		return nil, err
+	}
+	return &ama.RunnerSessionChannel{Conn: conn}, nil
 }
