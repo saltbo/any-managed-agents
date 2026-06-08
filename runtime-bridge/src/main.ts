@@ -63,6 +63,7 @@ function deterministicBridgeTestEvents(request: Extract<RuntimeBridgeInput, { ty
     workspace: request.cwd,
     workspaceEnv: request.env.AMA_WORKSPACE,
     runtimeConfig: request.runtimeConfig,
+    agentSnapshot: request.agentSnapshot,
     hasAmaToken: Object.hasOwn(request.env, 'AMA_TOKEN'),
     leakedToken: Object.values(request.env).includes('raw-secret-value') ? 'raw-secret-value' : null,
     home: request.env.HOME,

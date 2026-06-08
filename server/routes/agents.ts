@@ -46,6 +46,7 @@ const AgentSchema = z
     model: z.string().nullable().openapi({ example: DEFAULT_MODEL }),
     systemPrompt: z.string().nullable().openapi({ example: 'Answer with citations.' }),
     skills: z.array(z.string()).openapi({ example: ['ama@code-review'] }),
+    subagents: z.array(JsonObjectSchema).openapi({ example: [{ username: 'reviewer', role: 'reviewer' }] }),
     role: z.string().nullable().openapi({ example: 'maintainer' }),
     capabilityTags: z.array(z.string()).openapi({ example: ['issue-triage', 'code-review'] }),
     handoffPolicy: HandoffPolicySchema,
@@ -73,6 +74,7 @@ const AgentVersionSchema = z
     model: z.string().nullable().openapi({ example: DEFAULT_MODEL }),
     systemPrompt: z.string().nullable().openapi({ example: 'Answer with citations.' }),
     skills: z.array(z.string()).openapi({ example: ['ama@code-review'] }),
+    subagents: z.array(JsonObjectSchema).openapi({ example: [{ username: 'reviewer', role: 'reviewer' }] }),
     role: z.string().nullable().openapi({ example: 'maintainer' }),
     capabilityTags: z.array(z.string()).openapi({ example: ['issue-triage', 'code-review'] }),
     handoffPolicy: HandoffPolicySchema,
@@ -97,6 +99,11 @@ const AgentPayloadSchema = z
       .max(100)
       .optional()
       .openapi({ example: ['ama@code-review'] }),
+    subagents: z
+      .array(JsonObjectSchema)
+      .max(50)
+      .optional()
+      .openapi({ example: [{ username: 'reviewer', role: 'reviewer' }] }),
     role: z.string().trim().min(1).max(80).nullable().optional().openapi({ example: 'maintainer' }),
     capabilityTags: z
       .array(z.string().trim().min(1).max(80))
@@ -373,6 +380,7 @@ function serializeAgent(row: AgentRow, version: AgentVersionRow | null) {
     model: row.model,
     systemPrompt: row.systemPrompt,
     skills: parseJson<string[]>(row.skills),
+    subagents: parseJson<Record<string, unknown>[]>(row.subagents),
     role: row.role,
     capabilityTags: parseJson<string[]>(row.capabilityTags),
     handoffPolicy: parseJson<Record<string, unknown>>(row.handoffPolicy),
@@ -400,6 +408,7 @@ function serializeAgentVersion(row: AgentVersionRow) {
     model: row.model,
     systemPrompt: row.systemPrompt,
     skills: parseJson<string[]>(row.skills),
+    subagents: parseJson<Record<string, unknown>[]>(row.subagents),
     role: row.role,
     capabilityTags: parseJson<string[]>(row.capabilityTags),
     handoffPolicy: parseJson<Record<string, unknown>>(row.handoffPolicy),
@@ -431,6 +440,7 @@ async function createAgentVersion(
     model: string | null
     systemPrompt: string | null
     skills: string[]
+    subagents: Record<string, unknown>[]
     role: string | null
     capabilityTags: string[]
     handoffPolicy: Record<string, unknown>
@@ -462,6 +472,7 @@ async function createAgentVersion(
     model: values.model,
     systemPrompt: values.systemPrompt,
     skills: stringify(values.skills),
+    subagents: stringify(values.subagents),
     role: values.role,
     capabilityTags: stringify(values.capabilityTags),
     handoffPolicy: stringify(values.handoffPolicy),
@@ -694,6 +705,7 @@ const routes = app
     )
     const model = body.model ?? null
     const skills = body.skills ?? []
+    const subagents = body.subagents ?? []
     const role = body.role ?? null
     const capabilityTags = body.capabilityTags ?? []
     const handoffPolicy = body.handoffPolicy ?? {}
@@ -706,6 +718,7 @@ const routes = app
         ? await validateConfiguredProviderModel(db, auth.project.id, provider, model, c.env.AMA_DEFAULT_MODEL)
         : null) ??
       validateSkills(skills) ??
+      (hasSecretMaterial(subagents) ? { subagents: 'Secret material must be stored in a vault.' } : null) ??
       validateCapabilityTags(capabilityTags) ??
       validateAllowedTools(allowedTools) ??
       (await validateMcpConnectors(db, auth.project.id, mcpConnectors)) ??
@@ -727,6 +740,7 @@ const routes = app
       model,
       systemPrompt: body.systemPrompt ?? body.instructions ?? null,
       skills: stringify(skills),
+      subagents: stringify(subagents),
       role,
       capabilityTags: stringify(capabilityTags),
       handoffPolicy: stringify(handoffPolicy),
@@ -744,6 +758,7 @@ const routes = app
     const version = await createAgentVersion(db, row, {
       ...row,
       skills,
+      subagents,
       role,
       capabilityTags,
       handoffPolicy,
@@ -796,6 +811,7 @@ const routes = app
       model: body.model !== undefined ? body.model : agent.model,
       systemPrompt: body.systemPrompt ?? agent.systemPrompt,
       skills: body.skills ?? parseJson<string[]>(agent.skills),
+      subagents: body.subagents ?? parseJson<Record<string, unknown>[]>(agent.subagents),
       role: body.role !== undefined ? body.role : agent.role,
       capabilityTags: body.capabilityTags ?? parseJson<string[]>(agent.capabilityTags),
       handoffPolicy: body.handoffPolicy ?? parseJson<Record<string, unknown>>(agent.handoffPolicy),
@@ -809,6 +825,7 @@ const routes = app
         ? await validateConfiguredProviderModel(db, auth.project.id, next.provider, next.model, c.env.AMA_DEFAULT_MODEL)
         : null) ??
       validateSkills(next.skills) ??
+      (hasSecretMaterial(next.subagents) ? { subagents: 'Secret material must be stored in a vault.' } : null) ??
       validateCapabilityTags(next.capabilityTags) ??
       validateAllowedTools(next.allowedTools) ??
       (await validateMcpConnectors(db, auth.project.id, next.mcpConnectors)) ??
@@ -828,6 +845,7 @@ const routes = app
       body.model !== undefined ||
       body.systemPrompt !== undefined ||
       body.skills !== undefined ||
+      body.subagents !== undefined ||
       body.role !== undefined ||
       body.capabilityTags !== undefined ||
       body.handoffPolicy !== undefined ||
@@ -841,6 +859,7 @@ const routes = app
     const updated = {
       ...next,
       skills: stringify(next.skills),
+      subagents: stringify(next.subagents),
       role: next.role,
       capabilityTags: stringify(next.capabilityTags),
       handoffPolicy: stringify(next.handoffPolicy),

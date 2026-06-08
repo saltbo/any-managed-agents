@@ -19,6 +19,7 @@ type RuntimeRequest struct {
 	RuntimeEnv    map[string]string
 	Provider      string
 	Model         string
+	AgentSnapshot map[string]any
 	InitialPrompt string
 	Resume        bool
 	ResumeToken   string
@@ -60,6 +61,13 @@ func runtimeCommandEnvironment(request RuntimeRequest) ([]string, error) {
 		"AMA_WORKSPACE="+request.WorkDir,
 		"AMA_RUNTIME_CONFIG="+string(config),
 	)
+	if request.AgentSnapshot != nil {
+		snapshot, err := json.Marshal(request.AgentSnapshot)
+		if err != nil {
+			return nil, err
+		}
+		env = append(env, "AMA_AGENT_SNAPSHOT="+string(snapshot))
+	}
 	if request.Model != "" {
 		env = append(env, "AMA_MODEL="+request.Model)
 	}

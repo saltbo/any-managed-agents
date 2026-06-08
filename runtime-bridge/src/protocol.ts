@@ -10,6 +10,7 @@ export type RuntimeBridgeRequest = {
   prompt: string
   provider?: string
   model?: string
+  agentSnapshot?: Record<string, unknown>
   runtimeConfig?: Record<string, unknown>
   resumeToken?: string
   resume?: boolean
@@ -52,4 +53,53 @@ export type RuntimeProvider = {
 
 export function bridgeError(message: string, code?: string, details?: unknown) {
   return { message, ...(code ? { code } : {}), ...(details !== undefined ? { details } : {}) }
+}
+
+export function agentSystemPrompt(request: RuntimeProviderRequest): string | undefined {
+  const snapshot = request.agentSnapshot
+  if (!snapshot || typeof snapshot !== 'object') return undefined
+  const sections: string[] = []
+  for (const key of ['systemPrompt', 'instructions']) {
+    const value = snapshot[key]
+    if (typeof value === 'string' && value.trim()) {
+      sections.push(value.trim())
+      break
+    }
+  }
+  const capabilitySection = agentCapabilitiesSection(snapshot)
+  if (capabilitySection) sections.push(capabilitySection)
+  return sections.length > 0 ? sections.join('\n\n') : undefined
+}
+
+function agentCapabilitiesSection(snapshot: Record<string, unknown>): string | undefined {
+  const parts: string[] = []
+  const skills = stringArray(snapshot.skills)
+  if (skills.length > 0) parts.push(`Skills: ${skills.join(', ')}`)
+  const tags = stringArray(snapshot.capabilityTags)
+  if (tags.length > 0) parts.push(`Capability tags: ${tags.join(', ')}`)
+  const subagents = subagentSummaries(snapshot.subagents)
+  if (subagents.length > 0) parts.push(`Available subagents: ${subagents.join(', ')}`)
+  const handoffPolicy = objectValue(snapshot.handoffPolicy)
+  if (Object.keys(handoffPolicy).length > 0) parts.push(`Handoff policy: ${JSON.stringify(handoffPolicy)}`)
+  return parts.length > 0 ? `## Agent Capabilities\n\n${parts.join('\n')}` : undefined
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) : []
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+}
+
+function subagentSummaries(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item) => {
+    const subagent = objectValue(item)
+    const username = typeof subagent.username === 'string' ? subagent.username.trim() : ''
+    const name = typeof subagent.name === 'string' ? subagent.name.trim() : ''
+    const role = typeof subagent.role === 'string' ? subagent.role.trim() : ''
+    const label = username || name
+    return label ? [`@${label}${role ? ` (${role})` : ''}`] : []
+  })
 }

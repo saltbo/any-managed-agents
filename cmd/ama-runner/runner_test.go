@@ -463,6 +463,15 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 	workDir := t.TempDir()
 	prompt := "build the feature"
 	lease := codexSessionStartLease(prompt)
+	lease.WorkItem.Payload["agentSnapshot"] = ama.JSON{
+		"instructions":   "Follow the AK worker protocol.",
+		"skills":         []any{},
+		"subagents":      []any{ama.JSON{"username": "reviewer", "role": "reviewer"}},
+		"handoffPolicy":  ama.JSON{"enabled": true, "targets": []any{ama.JSON{"role": "reviewer"}}},
+		"allowedTools":   []any{"sandbox.exec"},
+		"mcpConnectors":  []any{},
+		"capabilityTags": []any{"implementation"},
+	}
 	channel := newFakeRunnerSessionChannel(
 		ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"},
 	)
@@ -495,6 +504,16 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 	}
 	if runtimeAdapter.request.RuntimeConfig["model"] != "gpt-5.3-codex" {
 		t.Fatalf("expected runtime config to reach adapter, got %#v", runtimeAdapter.request.RuntimeConfig)
+	}
+	if runtimeAdapter.request.AgentSnapshot["instructions"] != "Follow the AK worker protocol." {
+		t.Fatalf("expected agent snapshot to reach adapter, got %#v", runtimeAdapter.request.AgentSnapshot)
+	}
+	if _, err := os.Stat(filepath.Join(runtimeAdapter.request.WorkDir, ".ama", "agent.json")); err != nil {
+		t.Fatalf("expected agent snapshot manifest in workspace: %v", err)
+	}
+	systemPrompt, err := os.ReadFile(filepath.Join(runtimeAdapter.request.WorkDir, ".ama", "system-prompt.md"))
+	if err != nil || !strings.Contains(string(systemPrompt), "Follow the AK worker protocol.") || !strings.Contains(string(systemPrompt), "Available subagents: @reviewer (reviewer)") {
+		t.Fatalf("expected agent system prompt manifest, got %q err=%v", string(systemPrompt), err)
 	}
 	if len(client.updates) != 1 || client.updates[0].Status != "completed" {
 		t.Fatalf("expected completed lease update, got %#v", client.updates)

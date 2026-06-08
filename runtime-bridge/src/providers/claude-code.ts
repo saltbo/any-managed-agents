@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import { runtimeError, runtimeEvent, textMessage, toolEnd, toolStart, usageEvent } from '../events/ama'
-import type { AmaRuntimeEvent, RuntimeProvider, RuntimeProviderHandle, RuntimeProviderRequest } from '../protocol'
+import { agentSystemPrompt, type AmaRuntimeEvent, type RuntimeProvider, type RuntimeProviderHandle, type RuntimeProviderRequest } from '../protocol'
 
 function objectValue(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
@@ -113,7 +113,7 @@ export const claudeCodeProvider: RuntimeProvider = {
     const systemPrompt =
       typeof request.runtimeConfig?.systemPromptFile === 'string'
         ? readFileSync(request.runtimeConfig.systemPromptFile, 'utf8')
-        : undefined
+        : agentSystemPrompt(request)
     const options = {
       ...(request.resume
         ? request.resumeToken

@@ -140,6 +140,7 @@ func (a SDKBridgeRuntimeAdapter) Run(ctx context.Context, request RuntimeRequest
 		"env":           envMap(env),
 		"prompt":        request.InitialPrompt,
 		"provider":      request.Provider,
+		"agentSnapshot": request.AgentSnapshot,
 		"runtimeConfig": request.RuntimeConfig,
 		"resume":        request.Resume,
 		"resumeToken":   request.ResumeToken,

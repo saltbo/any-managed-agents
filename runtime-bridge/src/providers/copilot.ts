@@ -3,7 +3,7 @@ import '@github/copilot/sdk'
 import type { SessionEvent } from '@github/copilot-sdk'
 import { approveAll, CopilotClient } from '@github/copilot-sdk'
 import { runtimeError, runtimeEvent, textMessage, toolEnd, toolStart, usageEvent } from '../events/ama'
-import type { AmaRuntimeEvent, RuntimeProvider, RuntimeProviderHandle, RuntimeProviderRequest } from '../protocol'
+import { agentSystemPrompt, type AmaRuntimeEvent, type RuntimeProvider, type RuntimeProviderHandle, type RuntimeProviderRequest } from '../protocol'
 
 function objectValue(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
@@ -84,7 +84,7 @@ export const copilotProvider: RuntimeProvider = {
     const systemPrompt =
       typeof request.runtimeConfig?.systemPromptFile === 'string'
         ? readFileSync(request.runtimeConfig.systemPromptFile, 'utf8')
-        : undefined
+        : agentSystemPrompt(request)
     const client = new CopilotClient({ cwd: request.cwd, env: sdkEnv(request), useLoggedInUser: true })
     await client.start()
     const sessionConfig = {

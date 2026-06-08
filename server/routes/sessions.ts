@@ -149,6 +149,7 @@ const AgentVersionSchema = z
     model: z.string().nullable(),
     systemPrompt: z.string().nullable(),
     skills: z.array(z.string()),
+    subagents: z.array(JsonObjectSchema),
     role: z.string().nullable(),
     capabilityTags: z.array(z.string()),
     handoffPolicy: JsonObjectSchema,
@@ -565,6 +566,7 @@ function serializeAgentVersion(row: AgentVersionRow) {
     model: row.model,
     systemPrompt: row.systemPrompt,
     skills: JSON.parse(row.skills) as string[],
+    subagents: JSON.parse(row.subagents) as Record<string, unknown>[],
     role: row.role,
     capabilityTags: JSON.parse(row.capabilityTags) as string[],
     handoffPolicy: JSON.parse(row.handoffPolicy) as Record<string, unknown>,
@@ -587,6 +589,12 @@ function parseAgentSnapshot(value: string | null) {
   return {
     ...snapshot,
     skills: Array.isArray(parsed.skills) ? parsed.skills : [],
+    subagents: Array.isArray(parsed.subagents)
+      ? parsed.subagents.filter(
+          (value): value is Record<string, unknown> =>
+            value !== null && typeof value === 'object' && !Array.isArray(value),
+        )
+      : [],
     role: typeof parsed.role === 'string' ? parsed.role : null,
     capabilityTags: Array.isArray(parsed.capabilityTags) ? parsed.capabilityTags : [],
     handoffPolicy: objectValue(parsed.handoffPolicy),

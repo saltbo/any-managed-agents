@@ -50,6 +50,7 @@ type WorkPayload struct {
 	ResourceRefs             []ResourceRef     `json:"resourceRefs"`
 	Provider                 string            `json:"provider"`
 	Model                    string            `json:"model"`
+	AgentSnapshot            map[string]any    `json:"agentSnapshot"`
 	RuntimeDriver            string            `json:"runtimeDriver"`
 	RequiredRunnerCapability string            `json:"requiredRunnerCapability"`
 	RuntimeEnv               map[string]string `json:"runtimeEnv"`
@@ -440,6 +441,9 @@ func (d *RunnerDaemon) runExternalSession(
 	if err != nil {
 		return err
 	}
+	if err := prepareAgentWorkspace(ctx, workspace.Cwd, payload.Runtime, payload.AgentSnapshot); err != nil {
+		return err
+	}
 	adapter := d.RuntimeAdapter
 	if adapter == nil {
 		selectedAdapter, err := runtimeAdapterFor(payload.Runtime, d.Config.CommandTimeout, d.Config.ShutdownGraceInterval)
@@ -456,6 +460,7 @@ func (d *RunnerDaemon) runExternalSession(
 		RuntimeEnv:    payload.RuntimeEnv,
 		Provider:      payload.Provider,
 		Model:         payload.Model,
+		AgentSnapshot: payload.AgentSnapshot,
 		InitialPrompt: initialPrompt(payload),
 		Resume:        payload.Resume,
 		ResumeToken:   payload.ResumeToken,

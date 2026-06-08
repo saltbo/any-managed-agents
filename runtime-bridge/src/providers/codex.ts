@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Codex, type ThreadEvent } from '@openai/codex-sdk'
 import { runtimeError, runtimeEvent, textMessage, toolEnd, toolStart, usageEvent } from '../events/ama'
-import type { AmaRuntimeEvent, RuntimeProvider, RuntimeProviderHandle, RuntimeProviderRequest } from '../protocol'
+import { agentSystemPrompt, type AmaRuntimeEvent, type RuntimeProvider, type RuntimeProviderHandle, type RuntimeProviderRequest } from '../protocol'
 
 function hostHome(request: RuntimeProviderRequest): string | undefined {
   return typeof request.env.AMA_RUNTIME_BRIDGE_HOST_HOME === 'string' && request.env.AMA_RUNTIME_BRIDGE_HOST_HOME
@@ -165,7 +165,9 @@ export const codexProvider: RuntimeProvider = {
     }
     const thread =
       request.resume && resumeToken ? codex.resumeThread(resumeToken, threadOptions) : codex.startThread(threadOptions)
-    const streamed = await thread.runStreamed(request.prompt, { signal: abortController.signal })
+    const systemPrompt = agentSystemPrompt(request)
+    const prompt = systemPrompt ? `${systemPrompt}\n\nUser task:\n${request.prompt}` : request.prompt
+    const streamed = await thread.runStreamed(prompt, { signal: abortController.signal })
     const events = (async function* () {
       for await (const event of streamed.events) {
         if (event.type === 'thread.started') resumeToken = event.thread_id

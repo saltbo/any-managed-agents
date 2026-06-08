@@ -392,6 +392,21 @@
               "ama@code-review"
             ]
           },
+          "subagents": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {
+                "nullable": true
+              }
+            },
+            "example": [
+              {
+                "username": "reviewer",
+                "role": "reviewer"
+              }
+            ]
+          },
           "role": {
             "type": "string",
             "nullable": true,
@@ -506,6 +521,7 @@
           "model",
           "systemPrompt",
           "skills",
+          "subagents",
           "role",
           "capabilityTags",
           "handoffPolicy",
@@ -566,6 +582,22 @@
             "maxItems": 100,
             "example": [
               "ama@code-review"
+            ]
+          },
+          "subagents": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {
+                "nullable": true
+              }
+            },
+            "maxItems": 50,
+            "example": [
+              {
+                "username": "reviewer",
+                "role": "reviewer"
+              }
             ]
           },
           "role": {
@@ -699,6 +731,22 @@
             "maxItems": 100,
             "example": [
               "ama@code-review"
+            ]
+          },
+          "subagents": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {
+                "nullable": true
+              }
+            },
+            "maxItems": 50,
+            "example": [
+              {
+                "username": "reviewer",
+                "role": "reviewer"
+              }
             ]
           },
           "role": {
@@ -849,6 +897,21 @@
               "ama@code-review"
             ]
           },
+          "subagents": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {
+                "nullable": true
+              }
+            },
+            "example": [
+              {
+                "username": "reviewer",
+                "role": "reviewer"
+              }
+            ]
+          },
           "role": {
             "type": "string",
             "nullable": true,
@@ -935,6 +998,7 @@
           "model",
           "systemPrompt",
           "skills",
+          "subagents",
           "role",
           "capabilityTags",
           "handoffPolicy",
@@ -5157,6 +5221,15 @@
               "type": "string"
             }
           },
+          "subagents": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {
+                "nullable": true
+              }
+            }
+          },
           "role": {
             "type": "string",
             "nullable": true
@@ -5212,6 +5285,7 @@
           "model",
           "systemPrompt",
           "skills",
+          "subagents",
           "role",
           "capabilityTags",
           "handoffPolicy",
