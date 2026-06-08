@@ -1,4 +1,5 @@
-PRAGMA foreign_keys=off;
+BEGIN;
+PRAGMA defer_foreign_keys=ON;
 
 CREATE TABLE agent_definitions_new (
   id TEXT PRIMARY KEY NOT NULL,
@@ -71,13 +72,6 @@ SELECT
   updated_at
 FROM agent_definitions;
 
-DROP TABLE agent_definitions;
-ALTER TABLE agent_definitions_new RENAME TO agent_definitions;
-
-CREATE INDEX IF NOT EXISTS idx_agent_definitions_project_id ON agent_definitions(project_id);
-CREATE INDEX IF NOT EXISTS idx_agent_definitions_project_status_created
-  ON agent_definitions(project_id, status, created_at, id);
-
 CREATE TABLE agent_definition_versions_new (
   id TEXT PRIMARY KEY NOT NULL,
   agent_id TEXT NOT NULL REFERENCES agent_definitions(id),
@@ -138,11 +132,16 @@ SELECT
 FROM agent_definition_versions;
 
 DROP TABLE agent_definition_versions;
+DROP TABLE agent_definitions;
+ALTER TABLE agent_definitions_new RENAME TO agent_definitions;
 ALTER TABLE agent_definition_versions_new RENAME TO agent_definition_versions;
 
+CREATE INDEX IF NOT EXISTS idx_agent_definitions_project_id ON agent_definitions(project_id);
+CREATE INDEX IF NOT EXISTS idx_agent_definitions_project_status_created
+  ON agent_definitions(project_id, status, created_at, id);
 CREATE INDEX IF NOT EXISTS idx_agent_definition_versions_agent_id ON agent_definition_versions(agent_id);
 CREATE INDEX IF NOT EXISTS idx_agent_definition_versions_project_id ON agent_definition_versions(project_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_definition_versions_agent_version
   ON agent_definition_versions(agent_id, version);
 
-PRAGMA foreign_keys=on;
+COMMIT;
