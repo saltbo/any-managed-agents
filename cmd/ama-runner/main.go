@@ -29,6 +29,9 @@ func run(args []string) error {
 }
 
 func runWithContext(ctx context.Context, args []string, getenv func(string) string) error {
+	if len(args) > 0 && (args[0] == "version" || args[0] == "--version" || args[0] == "-v") {
+		return runVersion(args[1:], os.Stdout)
+	}
 	if len(args) > 0 && args[0] == "login" {
 		return runLogin(ctx, args[1:], getenv, os.Stdout)
 	}

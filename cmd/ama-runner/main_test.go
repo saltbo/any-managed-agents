@@ -25,6 +25,17 @@ func TestRunFailsOnInvalidConfig(t *testing.T) {
 	}
 }
 
+func TestRunVersionPrintsBuildMetadata(t *testing.T) {
+	var output bytes.Buffer
+	err := runVersion([]string{"--json"}, &output)
+	if err != nil {
+		t.Fatalf("expected version output, got %v", err)
+	}
+	if !strings.Contains(output.String(), `"name":"ama-runner"`) || !strings.Contains(output.String(), `"version":"`) {
+		t.Fatalf("unexpected version output: %s", output.String())
+	}
+}
+
 func TestRunLoginDiscoversDeviceFlowAndStoresToken(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.json")
 	var output bytes.Buffer

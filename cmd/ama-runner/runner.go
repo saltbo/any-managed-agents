@@ -229,9 +229,12 @@ func (d *RunnerDaemon) ensureRunner(ctx context.Context) (string, error) {
 		EnvironmentID: d.Config.EnvironmentID,
 		MaxConcurrent: d.Config.MaxConcurrent,
 		Metadata: ama.JSON{
-			"sandboxAdapter": d.Config.SandboxAdapter,
-			"machineId":      machineID,
-			"hostname":       runnerDisplayName(),
+			"sandboxAdapter":  d.Config.SandboxAdapter,
+			"machineId":       machineID,
+			"hostname":        runnerDisplayName(),
+			"runnerVersion":   runnerVersion,
+			"runnerCommit":    runnerCommit,
+			"runnerBuildDate": runnerBuildDate,
 		},
 	})
 	if err != nil {
@@ -251,10 +254,13 @@ func (d *RunnerDaemon) heartbeat(ctx context.Context) error {
 		Capabilities: runnerCapabilities(),
 		CurrentLoad:  &load,
 		Metadata: ama.JSON{
-			"sandboxAdapter": d.Config.SandboxAdapter,
-			"machineId":      machineID,
-			"hostname":       runnerDisplayName(),
-			"unsafe":         true,
+			"sandboxAdapter":  d.Config.SandboxAdapter,
+			"machineId":       machineID,
+			"hostname":        runnerDisplayName(),
+			"runnerVersion":   runnerVersion,
+			"runnerCommit":    runnerCommit,
+			"runnerBuildDate": runnerBuildDate,
+			"unsafe":          true,
 		},
 	})
 	return err

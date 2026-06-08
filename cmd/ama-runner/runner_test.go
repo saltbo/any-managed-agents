@@ -314,6 +314,15 @@ func TestRunOnceRegistersRunnerWhenIDIsMissing(t *testing.T) {
 	if daemon.RunnerID != "runner_registered" {
 		t.Fatalf("expected registered runner id, got %q", daemon.RunnerID)
 	}
+	if len(client.creates) != 1 {
+		t.Fatalf("expected runner registration, got %#v", client.creates)
+	}
+	if got := client.creates[0].Metadata["runnerVersion"]; got != runnerVersion {
+		t.Fatalf("expected runner version metadata %q, got %#v", runnerVersion, got)
+	}
+	if got := client.creates[0].Metadata["runnerCommit"]; got != runnerCommit {
+		t.Fatalf("expected runner commit metadata %q, got %#v", runnerCommit, got)
+	}
 	if len(client.updates) != 1 || client.updates[0].Status != "completed" {
 		t.Fatalf("expected completed update, got %#v", client.updates)
 	}
@@ -876,6 +885,9 @@ func TestStartRegistersRunnerAndSendsOfflineHeartbeatOnShutdown(t *testing.T) {
 	defer client.mu.Unlock()
 	if got := client.heartbeats[len(client.heartbeats)-1].Status; got != "offline" {
 		t.Fatalf("expected offline shutdown heartbeat, got %q", got)
+	}
+	if got := client.heartbeats[0].Metadata["runnerVersion"]; got != runnerVersion {
+		t.Fatalf("expected runner version heartbeat metadata %q, got %#v", runnerVersion, got)
 	}
 }
 
