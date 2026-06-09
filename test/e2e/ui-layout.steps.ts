@@ -406,7 +406,7 @@ Then('clicking a row opens the session detail route', async function (this: UiWo
     .getByRole('link', { name: new RegExp(workflow.runId) })
     .first()
     .click()
-  await expect(workflow.page).toHaveURL(/\/sessions\/session_/)
+  await expect(workflow.page).toHaveURL(/\/sessions\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/)
   await expect(workflow.page.getByRole('tab', { name: 'Transcript' })).toBeVisible()
 })
 
@@ -439,7 +439,7 @@ Then(
     const dialog = workflow.page.getByRole('dialog')
     await dialog.getByLabel('Title').fill(`${workflow.runId} created session`)
     await dialog.getByRole('button', { name: 'Create session' }).click()
-    await expect(workflow.page).toHaveURL(/\/sessions\/session_/)
+    await expect(workflow.page).toHaveURL(/\/sessions\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/)
     await expect(workflow.page.getByPlaceholder('Send a message to the agent')).toBeVisible()
   },
 )

@@ -3444,7 +3444,7 @@ Then(
   'the response includes a session id, project id, organization id, status, timestamps, durable object name, runtime endpoint, and runtime metadata',
   function (this: ProductWorld) {
     const session = required(this.e2e?.latestSession, 'session')
-    assert.match(String(session.id), /^session_/)
+    assert.match(String(session.id), /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
     assert.equal(typeof session.projectId, 'string')
     assert.equal(typeof session.organizationId, 'string')
     assert.equal(session.status, 'idle')
@@ -3547,7 +3547,7 @@ Then('raw credentials are rejected from the request body', async function (this:
 
 Then('the response includes the session id and run correlation metadata', function (this: ProductWorld) {
   const session = required(this.e2e?.response, 'session response')
-  assert.match(String(session.id), /^session_/)
+  assert.match(String(session.id), /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
   assert.equal(objectValue(session.metadata).externalRunId, `${this.e2e?.runId}-banking-bonus`)
   assert.equal(objectValue(session.metadata).source, 'tftt-cron')
 })

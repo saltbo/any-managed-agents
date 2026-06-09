@@ -153,7 +153,7 @@ Then('the staging smoke creates resources through public AMA APIs', function (th
   assert.ok(this.stagingSmokeEvidence, 'Staging smoke must run before asserting created resources')
   assert.match(this.stagingSmokeEvidence.environmentId, /^env_/)
   assert.match(this.stagingSmokeEvidence.agentId, /^agent_/)
-  assert.match(this.stagingSmokeEvidence.sessionId, /^session_/)
+  assert.match(this.stagingSmokeEvidence.sessionId, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
 })
 
 Then(
