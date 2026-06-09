@@ -50,6 +50,21 @@ const RunnerCredentialSecretRefSchema = z
   })
   .openapi({ example: 'cloudflare-secret:runner-token' })
 
+const RuntimeUsageWindowSchema = z
+  .object({
+    label: z.string().openapi({ example: '5-Hour' }),
+    utilization: z.number().openapi({ example: 23 }),
+    resetsAt: z.string().openapi({ example: '2026-06-09T08:30:00.000Z' }),
+  })
+  .openapi('RuntimeUsageWindow')
+
+const RuntimeUsageSchema = z
+  .object({
+    runtime: z.string().openapi({ example: 'claude-code' }),
+    windows: z.array(RuntimeUsageWindowSchema),
+  })
+  .openapi('RuntimeUsage')
+
 const RunnerSchema = z
   .object({
     id: z.string().openapi({ example: 'runner_abc123' }),
@@ -62,6 +77,7 @@ const RunnerSchema = z
     status: z.enum(RUNNER_STATUSES).openapi({ example: 'active' }),
     currentLoad: z.number().int().openapi({ example: 0 }),
     maxConcurrent: z.number().int().openapi({ example: 2 }),
+    runtimeUsage: z.array(RuntimeUsageSchema).openapi({ example: [] }),
     metadata: JsonObjectSchema.openapi({ example: { pool: 'default' } }),
     lastHeartbeatAt: z.string().datetime().nullable(),
     createdAt: z.string().datetime(),
@@ -154,6 +170,7 @@ const HeartbeatSchema = z
       .optional()
       .openapi({ example: ['node', 'git'] }),
     currentLoad: z.number().int().min(0).max(1000).optional().openapi({ example: 1 }),
+    runtimeUsage: z.array(RuntimeUsageSchema).max(20).optional(),
     metadata: JsonObjectSchema.optional().openapi({ example: { hostname: 'runner-1' } }),
   })
   .strict()
@@ -281,6 +298,7 @@ function serializeRunner(row: RunnerRow) {
     status: row.status as (typeof RUNNER_STATUSES)[number],
     currentLoad: row.currentLoad,
     maxConcurrent: row.maxConcurrent,
+    runtimeUsage: parseRawJson<z.infer<typeof RuntimeUsageSchema>[]>(row.runtimeUsage) ?? [],
     metadata: parseJson<Record<string, unknown>>(row.metadata) ?? {},
     lastHeartbeatAt: row.lastHeartbeatAt,
     createdAt: row.createdAt,
@@ -1211,6 +1229,7 @@ const routes = app
       status: 'offline',
       currentLoad: 0,
       maxConcurrent: body.maxConcurrent ?? 1,
+      runtimeUsage: '[]',
       metadata: stringify(body.metadata ?? {}),
       lastHeartbeatAt: null,
       createdAt: timestamp,
@@ -1407,6 +1426,7 @@ const routes = app
     const status = body.status ?? 'active'
     const capabilities = body.capabilities ? stringify(body.capabilities) : runner.capabilities
     const currentLoad = body.currentLoad ?? runner.currentLoad
+    const runtimeUsage = body.runtimeUsage ? stringify(body.runtimeUsage) : runner.runtimeUsage
     await db.insert(runnerHeartbeats).values({
       id: newId('heartbeat'),
       runnerId,
@@ -1424,6 +1444,7 @@ const routes = app
         status,
         capabilities,
         currentLoad,
+        runtimeUsage,
         metadata: body.metadata ? stringify(body.metadata) : runner.metadata,
         lastHeartbeatAt: timestamp,
         updatedAt: timestamp,

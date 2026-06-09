@@ -2410,6 +2410,13 @@
             "type": "integer",
             "example": 2
           },
+          "runtimeUsage": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RuntimeUsage"
+            },
+            "example": []
+          },
           "metadata": {
             "type": "object",
             "additionalProperties": {
@@ -2444,10 +2451,52 @@
           "status",
           "currentLoad",
           "maxConcurrent",
+          "runtimeUsage",
           "metadata",
           "lastHeartbeatAt",
           "createdAt",
           "updatedAt"
+        ]
+      },
+      "RuntimeUsage": {
+        "type": "object",
+        "properties": {
+          "runtime": {
+            "type": "string",
+            "example": "claude-code"
+          },
+          "windows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RuntimeUsageWindow"
+            }
+          }
+        },
+        "required": [
+          "runtime",
+          "windows"
+        ]
+      },
+      "RuntimeUsageWindow": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "example": "5-Hour"
+          },
+          "utilization": {
+            "type": "number",
+            "example": 23
+          },
+          "resetsAt": {
+            "type": "string",
+            "example": "2026-06-09T08:30:00.000Z"
+          }
+        },
+        "required": [
+          "label",
+          "utilization",
+          "resetsAt"
         ]
       },
       "CreateRunnerRequest": {
@@ -2741,6 +2790,13 @@
             "minimum": 0,
             "maximum": 1000,
             "example": 1
+          },
+          "runtimeUsage": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RuntimeUsage"
+            },
+            "maxItems": 20
           },
           "metadata": {
             "type": "object",

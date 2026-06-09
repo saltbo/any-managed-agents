@@ -419,6 +419,7 @@ export const runners = sqliteTable(
     status: text('status').notNull().default('offline'),
     currentLoad: integer('current_load').notNull().default(0),
     maxConcurrent: integer('max_concurrent').notNull().default(1),
+    runtimeUsage: text('runtime_usage').notNull().default('[]'),
     metadata: text('metadata').notNull().default('{}'),
     lastHeartbeatAt: text('last_heartbeat_at'),
     createdAt: text('created_at').notNull(),

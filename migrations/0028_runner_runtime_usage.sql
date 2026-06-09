@@ -1,0 +1,1 @@
+ALTER TABLE runners ADD COLUMN runtime_usage TEXT NOT NULL DEFAULT '[]';
