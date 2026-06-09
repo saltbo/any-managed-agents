@@ -332,7 +332,7 @@ describe('[CF] /api/scheduled-agent-triggers', () => {
       runs: [expect.objectContaining({ scheduledFor: dueAt, status: 'session_created' })],
     })
     const sessionId = dispatch.runs[0]?.sessionId
-    expect(sessionId).toMatch(/^session_/)
+    expect(sessionId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
 
     const duplicateDispatchRes = await jsonFetch('/api/e2e/scheduled-agent-triggers/dispatch', authorization, {
       method: 'POST',
