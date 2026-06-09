@@ -1,9 +1,33 @@
+import { execSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import '@github/copilot/sdk'
 import type { SessionEvent } from '@github/copilot-sdk'
 import { approveAll, CopilotClient } from '@github/copilot-sdk'
 import { runtimeError, runtimeEvent, textMessage, toolEnd, toolStart, usageEvent } from '../events/ama'
-import { agentSystemPrompt, type AmaRuntimeEvent, type RuntimeProvider, type RuntimeProviderHandle, type RuntimeProviderRequest } from '../protocol'
+import {
+  agentSystemPrompt,
+  type AmaRuntimeEvent,
+  type RuntimeProvider,
+  type RuntimeProviderHandle,
+  type RuntimeProviderRequest,
+  type RuntimeUsageWindow,
+} from '../protocol'
+
+const COPILOT_USER_API = 'https://api.github.com/copilot_internal/user'
+
+function readGhToken(home: string | undefined): string | null {
+  try {
+    return (
+      execSync('gh auth token', {
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+        env: home ? { ...process.env, HOME: home } : process.env,
+      }).trim() || null
+    )
+  } catch {
+    return null
+  }
+}
 
 function objectValue(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
@@ -149,5 +173,29 @@ export const copilotProvider: RuntimeProvider = {
         return session.sessionId
       },
     }
+  },
+
+  async fetchUsage({ env }): Promise<RuntimeUsageWindow[] | null> {
+    const home =
+      typeof env.AMA_RUNTIME_BRIDGE_HOST_HOME === 'string' && env.AMA_RUNTIME_BRIDGE_HOST_HOME ? env.AMA_RUNTIME_BRIDGE_HOST_HOME : undefined
+    const token = readGhToken(home)
+    if (!token) return null
+    const res = await fetch(COPILOT_USER_API, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
+      signal: AbortSignal.timeout(5000),
+    })
+    if (!res.ok) return null
+    type QuotaSnapshot = { percent_remaining: number; unlimited: boolean }
+    const data = (await res.json()) as { quota_reset_date_utc?: string; quota_snapshots?: Record<string, QuotaSnapshot> }
+    const resetsAt = data.quota_reset_date_utc ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+    const snapshots = data.quota_snapshots ?? {}
+    const QUOTA_LABELS: Record<string, string> = { premium_interactions: 'Premium', chat: 'Chat', completions: 'Completions' }
+    const windows: RuntimeUsageWindow[] = []
+    for (const [key, label] of Object.entries(QUOTA_LABELS)) {
+      const snapshot = snapshots[key]
+      if (!snapshot || snapshot.unlimited) continue
+      windows.push({ label, utilization: Number((100 - snapshot.percent_remaining).toFixed(2)), resetsAt })
+    }
+    return windows.length > 0 ? windows : null
   },
 }

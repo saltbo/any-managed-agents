@@ -15,15 +15,27 @@ import (
 
 type JSON = map[string]any
 
+type RuntimeUsageWindow struct {
+	Label       string  `json:"label"`
+	Utilization float64 `json:"utilization"`
+	ResetsAt    string  `json:"resetsAt"`
+}
+
+type RuntimeUsage struct {
+	Runtime string               `json:"runtime"`
+	Windows []RuntimeUsageWindow `json:"windows"`
+}
+
 type Runner struct {
-	ID              string   `json:"id"`
-	Name            string   `json:"name"`
-	Capabilities    []string `json:"capabilities"`
-	EnvironmentID   *string  `json:"environmentId"`
-	Status          string   `json:"status"`
-	CurrentLoad     int      `json:"currentLoad"`
-	MaxConcurrent   int      `json:"maxConcurrent"`
-	LastHeartbeatAt *string  `json:"lastHeartbeatAt"`
+	ID              string         `json:"id"`
+	Name            string         `json:"name"`
+	Capabilities    []string       `json:"capabilities"`
+	EnvironmentID   *string        `json:"environmentId"`
+	Status          string         `json:"status"`
+	CurrentLoad     int            `json:"currentLoad"`
+	MaxConcurrent   int            `json:"maxConcurrent"`
+	LastHeartbeatAt *string        `json:"lastHeartbeatAt"`
+	RuntimeUsage    []RuntimeUsage `json:"runtimeUsage,omitempty"`
 }
 
 type CreateRunnerRequest struct {
@@ -35,10 +47,11 @@ type CreateRunnerRequest struct {
 }
 
 type RunnerHeartbeatRequest struct {
-	Status       string   `json:"status,omitempty"`
-	Capabilities []string `json:"capabilities,omitempty"`
-	CurrentLoad  *int     `json:"currentLoad,omitempty"`
-	Metadata     JSON     `json:"metadata,omitempty"`
+	Status       string         `json:"status,omitempty"`
+	Capabilities []string       `json:"capabilities,omitempty"`
+	CurrentLoad  *int           `json:"currentLoad,omitempty"`
+	RuntimeUsage []RuntimeUsage `json:"runtimeUsage,omitempty"`
+	Metadata     JSON           `json:"metadata,omitempty"`
 }
 
 type ClaimRunnerLeaseRequest struct {

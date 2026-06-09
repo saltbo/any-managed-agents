@@ -3,12 +3,36 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Codex, type ThreadEvent } from '@openai/codex-sdk'
 import { runtimeError, runtimeEvent, textMessage, toolEnd, toolStart, usageEvent } from '../events/ama'
-import { agentSystemPrompt, type AmaRuntimeEvent, type RuntimeProvider, type RuntimeProviderHandle, type RuntimeProviderRequest } from '../protocol'
+import {
+  agentSystemPrompt,
+  type AmaRuntimeEvent,
+  type RuntimeProvider,
+  type RuntimeProviderHandle,
+  type RuntimeProviderRequest,
+  type RuntimeUsageWindow,
+} from '../protocol'
+
+const CODEX_USAGE_API = 'https://chatgpt.com/backend-api/wham/usage'
+
+function homeFromEnv(env: Record<string, string>): string | undefined {
+  return typeof env.AMA_RUNTIME_BRIDGE_HOST_HOME === 'string' && env.AMA_RUNTIME_BRIDGE_HOST_HOME ? env.AMA_RUNTIME_BRIDGE_HOST_HOME : undefined
+}
+
+function codexAccessToken(home: string | undefined): string | null {
+  if (!home) return null
+  try {
+    const auth = JSON.parse(readFileSync(join(home, '.codex', 'auth.json'), 'utf8')) as {
+      tokens?: { access_token?: string }
+      access_token?: string
+    }
+    return auth.tokens?.access_token ?? auth.access_token ?? null
+  } catch {
+    return null
+  }
+}
 
 function hostHome(request: RuntimeProviderRequest): string | undefined {
-  return typeof request.env.AMA_RUNTIME_BRIDGE_HOST_HOME === 'string' && request.env.AMA_RUNTIME_BRIDGE_HOST_HOME
-    ? request.env.AMA_RUNTIME_BRIDGE_HOST_HOME
-    : undefined
+  return homeFromEnv(request.env)
 }
 
 function sdkEnv(request: RuntimeProviderRequest) {
@@ -20,17 +44,7 @@ function sdkEnv(request: RuntimeProviderRequest) {
 }
 
 function readAccessToken(request: RuntimeProviderRequest): string | null {
-  const home = hostHome(request)
-  if (!home) return null
-  try {
-    const auth = JSON.parse(readFileSync(join(home, '.codex', 'auth.json'), 'utf8')) as {
-      tokens?: { access_token?: string }
-      access_token?: string
-    }
-    return auth.tokens?.access_token ?? auth.access_token ?? null
-  } catch {
-    return null
-  }
+  return codexAccessToken(hostHome(request))
 }
 
 function resolveCodexPath(): string | undefined {
@@ -186,5 +200,28 @@ export const codexProvider: RuntimeProvider = {
         return resumeToken
       },
     }
+  },
+
+  async fetchUsage({ env }): Promise<RuntimeUsageWindow[] | null> {
+    const token = codexAccessToken(homeFromEnv(env))
+    if (!token) return null
+    const res = await fetch(CODEX_USAGE_API, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(5000),
+    })
+    if (!res.ok) return null
+    type RateLimitWindow = { used_percent: number; reset_at: number; limit_window_seconds: number }
+    const data = (await res.json()) as { rate_limit?: { primary_window?: RateLimitWindow; secondary_window?: RateLimitWindow } }
+    const windowLabel = (secs: number) => (secs <= 18000 ? '5-Hour' : 'Weekly')
+    const windows: RuntimeUsageWindow[] = []
+    for (const window of [data.rate_limit?.primary_window, data.rate_limit?.secondary_window]) {
+      if (!window) continue
+      windows.push({
+        label: windowLabel(window.limit_window_seconds),
+        utilization: window.used_percent,
+        resetsAt: new Date(window.reset_at * 1000).toISOString(),
+      })
+    }
+    return windows
   },
 }

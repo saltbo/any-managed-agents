@@ -22,7 +22,22 @@ export type RuntimeBridgeControl = {
   message?: string
 }
 
-export type RuntimeBridgeInput = RuntimeBridgeRequest | RuntimeBridgeControl
+export type RuntimeBridgeUsageRequest = {
+  type: 'fetchUsage'
+  requestId: string
+  runtime: 'codex' | 'claude-code' | 'copilot'
+  env: Record<string, string>
+}
+
+export type RuntimeBridgeInput = RuntimeBridgeRequest | RuntimeBridgeControl | RuntimeBridgeUsageRequest
+
+/** A provider quota/rate-limit window (host account utilization), per runtime. */
+export type RuntimeUsageWindow = {
+  label: string
+  /** Utilized quota percentage, 0-100. */
+  utilization: number
+  resetsAt: string
+}
 
 export type AmaRuntimeEvent = {
   type: AmaSessionEventType
@@ -49,6 +64,12 @@ export type RuntimeProviderRequest = RuntimeBridgeRequest
 export type RuntimeProvider = {
   readonly name: RuntimeBridgeRequest['runtime']
   execute(request: RuntimeProviderRequest): Promise<RuntimeProviderHandle>
+  /**
+   * Resolve the host provider account's quota/rate-limit windows for this
+   * runtime (e.g. Claude 5-hour/7-day utilization). Returns null when the
+   * runtime has no credentials or the plan exposes no limited quota.
+   */
+  fetchUsage?(input: { env: Record<string, string> }): Promise<RuntimeUsageWindow[] | null>
 }
 
 export function bridgeError(message: string, code?: string, details?: unknown) {

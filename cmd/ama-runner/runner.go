@@ -40,6 +40,43 @@ type RunnerDaemon struct {
 	RunnerID       string
 	mu             sync.Mutex
 	activeLeases   int
+	usageMu        sync.Mutex
+	runtimeUsage   []ama.RuntimeUsage
+}
+
+const runtimeUsageRefreshInterval = 5 * time.Minute
+
+func (d *RunnerDaemon) setRuntimeUsage(usage []ama.RuntimeUsage) {
+	d.usageMu.Lock()
+	defer d.usageMu.Unlock()
+	d.runtimeUsage = usage
+}
+
+func (d *RunnerDaemon) getRuntimeUsage() []ama.RuntimeUsage {
+	d.usageMu.Lock()
+	defer d.usageMu.Unlock()
+	return d.runtimeUsage
+}
+
+// runUsageCollector refreshes the cached per-runtime quota windows on a slow
+// schedule so each heartbeat can report them without spawning the bridge.
+func (d *RunnerDaemon) runUsageCollector(ctx context.Context) {
+	refresh := func() {
+		if usage := collectRuntimeUsage(ctx); usage != nil {
+			d.setRuntimeUsage(usage)
+		}
+	}
+	refresh()
+	ticker := time.NewTicker(runtimeUsageRefreshInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			refresh()
+		}
+	}
 }
 
 type WorkPayload struct {
@@ -119,6 +156,7 @@ func (d *RunnerDaemon) Start(ctx context.Context) error {
 	if err := d.heartbeat(ctx); err != nil {
 		return err
 	}
+	go d.runUsageCollector(ctx)
 
 	heartbeatTicker := time.NewTicker(d.Config.HeartbeatInterval)
 	defer heartbeatTicker.Stop()
@@ -253,6 +291,7 @@ func (d *RunnerDaemon) heartbeat(ctx context.Context) error {
 		Status:       "active",
 		Capabilities: runnerCapabilities(),
 		CurrentLoad:  &load,
+		RuntimeUsage: d.getRuntimeUsage(),
 		Metadata: ama.JSON{
 			"sandboxAdapter":  d.Config.SandboxAdapter,
 			"machineId":       machineID,

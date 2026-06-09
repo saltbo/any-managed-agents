@@ -95,7 +95,18 @@ function deterministicBridgeTestEvents(request: Extract<RuntimeBridgeInput, { ty
   ]
 }
 
-async function control(message: Exclude<RuntimeBridgeInput, { type: 'run' }>) {
+async function fetchUsage(request: Extract<RuntimeBridgeInput, { type: 'fetchUsage' }>) {
+  try {
+    const provider = getProvider(request.runtime)
+    const windows = provider.fetchUsage ? await provider.fetchUsage({ env: request.env }) : null
+    write({ type: 'result', requestId: request.requestId, result: { windows: windows ?? null } })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    write({ type: 'error', requestId: request.requestId, error: bridgeError(message, 'runtime_usage_error') })
+  }
+}
+
+async function control(message: Exclude<RuntimeBridgeInput, { type: 'run' | 'fetchUsage' }>) {
   const state = active.get(message.requestId)
   if (!state?.handle) {
     write({ type: 'error', requestId: message.requestId, error: bridgeError('No active runtime request', 'no_active_request') })
@@ -119,6 +130,8 @@ lines.on('line', (line) => {
       if (!message) return
       if (message.type === 'run') {
         await run(message)
+      } else if (message.type === 'fetchUsage') {
+        await fetchUsage(message)
       } else {
         await control(message)
       }

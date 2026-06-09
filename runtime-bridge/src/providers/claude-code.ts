@@ -4,7 +4,26 @@ import { join } from 'node:path'
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import { runtimeError, runtimeEvent, textMessage, toolEnd, toolStart, usageEvent } from '../events/ama'
-import { agentSystemPrompt, type AmaRuntimeEvent, type RuntimeProvider, type RuntimeProviderHandle, type RuntimeProviderRequest } from '../protocol'
+import {
+  agentSystemPrompt,
+  type AmaRuntimeEvent,
+  type RuntimeProvider,
+  type RuntimeProviderHandle,
+  type RuntimeProviderRequest,
+  type RuntimeUsageWindow,
+} from '../protocol'
+
+const CLAUDE_USAGE_API = 'https://api.anthropic.com/api/oauth/usage'
+const CLAUDE_WINDOW_LABELS: Record<string, string> = {
+  five_hour: '5-Hour',
+  seven_day: '7-Day',
+  seven_day_sonnet: '7-Day Sonnet',
+  seven_day_opus: '7-Day Opus',
+}
+
+function normalizeUsagePercent(value: number): number {
+  return value < 1 ? value * 100 : value
+}
 
 function objectValue(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
@@ -200,5 +219,25 @@ export const claudeCodeProvider: RuntimeProvider = {
         return resumeToken
       },
     })
+  },
+
+  async fetchUsage({ env }): Promise<RuntimeUsageWindow[] | null> {
+    const home =
+      typeof env.AMA_RUNTIME_BRIDGE_HOST_HOME === 'string' && env.AMA_RUNTIME_BRIDGE_HOST_HOME ? env.AMA_RUNTIME_BRIDGE_HOST_HOME : undefined
+    const token = readClaudeOAuthToken(home)
+    if (!token) return null
+    const res = await fetch(CLAUDE_USAGE_API, {
+      headers: { Authorization: `Bearer ${token}`, 'anthropic-beta': 'oauth-2025-04-20' },
+      signal: AbortSignal.timeout(5000),
+    })
+    if (!res.ok) return null
+    const data = (await res.json()) as Record<string, { utilization: number; resets_at: string }>
+    const windows: RuntimeUsageWindow[] = []
+    for (const [key, label] of Object.entries(CLAUDE_WINDOW_LABELS)) {
+      const window = data[key]
+      if (!window) continue
+      windows.push({ label, utilization: normalizeUsagePercent(window.utilization), resetsAt: window.resets_at })
+    }
+    return windows
   },
 }
