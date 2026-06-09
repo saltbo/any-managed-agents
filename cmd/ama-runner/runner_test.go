@@ -471,8 +471,8 @@ func TestRunOnceCancelsSessionChannelWhenContextIsCancelled(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for cancelled session channel")
 	}
-	if len(client.updates) != 1 || client.updates[0].Status != "cancelled" {
-		t.Fatalf("expected cancelled lease update, got %#v", client.updates)
+	if len(client.updates) != 1 || client.updates[0].Status != "interrupted" {
+		t.Fatalf("expected interrupted lease update, got %#v", client.updates)
 	}
 }
 
@@ -1039,8 +1039,8 @@ func TestRunOnceSessionStartCancelsLeaseWhenContextCancels(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Fatalf("expected cancellation update to succeed, got %v", err)
 	}
-	if len(client.updates) != 1 || client.updates[0].Status != "cancelled" {
-		t.Fatalf("expected cancelled update, got %#v", client.updates)
+	if len(client.updates) != 1 || client.updates[0].Status != "interrupted" {
+		t.Fatalf("expected interrupted update, got %#v", client.updates)
 	}
 	if !channel.closed {
 		t.Fatal("expected channel to close on context cancellation")

@@ -485,11 +485,8 @@ func (d *RunnerDaemon) runAMASession(execution sessionRuntimeExecution) error {
 		var message RunnerChannelMessage
 		if err := execution.Channel.ReadJSON(execution.LeaseContext, &message); err != nil {
 			if execution.RequestContext.Err() != nil {
-				_, updateErr := d.Client.UpdateRunnerLease(context.Background(), d.RunnerID, execution.Lease.ID, ama.UpdateRunnerLeaseRequest{
-					Status: "cancelled",
-					Error:  ama.JSON{"message": execution.RequestContext.Err().Error()},
-				})
-				return updateErr
+				// Graceful shutdown — keep the session recoverable for resume on restart.
+				return d.finishInterrupted(context.Background(), execution.Lease)
 			}
 			return nil
 		}
@@ -515,12 +512,11 @@ func (d *RunnerDaemon) runAMASession(execution sessionRuntimeExecution) error {
 	}
 }
 
-func (d *RunnerDaemon) runExternalSession(
-	ctx context.Context,
-	channel RunnerSessionChannel,
-	lease *ama.RunnerWorkLease,
-	payload WorkPayload,
-) error {
+func (d *RunnerDaemon) runExternalSession(execution sessionRuntimeExecution) error {
+	ctx := execution.LeaseContext
+	channel := execution.Channel
+	lease := execution.Lease
+	payload := execution.Payload
 	workspace, err := prepareRuntimeWorkspace(ctx, d.Config.WorkDir, payload.SessionID, payload.ResourceRefs)
 	if err != nil {
 		return err
@@ -563,6 +559,15 @@ func (d *RunnerDaemon) runExternalSession(
 				Result: completedResult,
 			})
 			return err
+		}
+		if execution.RequestContext.Err() != nil {
+			// The runner is shutting down, not the runtime failing. Report the lease
+			// as interrupted so the server re-queues the session for resume instead of
+			// marking it failed; a restarted runner picks it up and continues.
+			if finishErr := d.finishInterrupted(context.Background(), lease); finishErr != nil {
+				return finishErr
+			}
+			return runErr
 		}
 		_ = d.writeAcknowledgedChannelEvent(context.Background(), channel, "runtime.error", ama.JSON{
 			"error": ama.JSON{"message": runErr.Error(), "code": "runtime_failed"},
@@ -786,6 +791,16 @@ func (d *RunnerDaemon) finishFailed(ctx context.Context, lease *ama.RunnerWorkLe
 		body.Result = ama.JSON{"output": output}
 	}
 	_, err := d.Client.UpdateRunnerLease(ctx, d.RunnerID, lease.ID, body)
+	return err
+}
+
+// finishInterrupted ends the lease without failing the work item so the server
+// keeps the session recoverable. Used when the runner stops mid-flight (graceful
+// shutdown) rather than the runtime itself failing.
+func (d *RunnerDaemon) finishInterrupted(ctx context.Context, lease *ama.RunnerWorkLease) error {
+	_, err := d.Client.UpdateRunnerLease(ctx, d.RunnerID, lease.ID, ama.UpdateRunnerLeaseRequest{
+		Status: "interrupted",
+	})
 	return err
 }
 

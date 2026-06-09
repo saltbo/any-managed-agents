@@ -185,7 +185,7 @@ const ClaimLeaseSchema = z
 
 const UpdateLeaseSchema = z
   .object({
-    status: z.enum(['active', 'completed', 'failed', 'cancelled']),
+    status: z.enum(['active', 'completed', 'failed', 'cancelled', 'interrupted']),
     leaseDurationSeconds: z.number().int().min(15).max(900).optional().openapi({ example: 60 }),
     result: JsonObjectSchema.optional().openapi({ example: { exitCode: 0 } }),
     error: JsonObjectSchema.optional().openapi({ example: { message: 'Command failed' } }),
@@ -601,6 +601,84 @@ async function hasNewerActiveSessionWork(db: Db, projectId: string, workItem: Wo
   return Boolean(newerWork)
 }
 
+async function sessionHasRunnerStarted(db: Db, projectId: string, sessionId: string): Promise<boolean> {
+  const row = await db
+    .select({ sequence: max(sessionEvents.sequence) })
+    .from(sessionEvents)
+    .where(and(eq(sessionEvents.projectId, projectId), eq(sessionEvents.sessionId, sessionId)))
+    .get()
+  return typeof row?.sequence === 'number'
+}
+
+// Re-queues a work item whose runner stopped mid-flight so the session can be
+// picked up again. For a started self-hosted runtime session the payload is
+// rewritten to resume so the agent continues where it left off rather than
+// restarting from scratch; once retries are exhausted the work fails terminally.
+async function requeueWorkItemForRecovery(
+  db: Db,
+  projectId: string,
+  workItem: WorkItemRow,
+  timestamp: string,
+): Promise<'requeued' | 'failed'> {
+  const shouldRetry = workItem.attempts < workItem.maxAttempts
+  if (!shouldRetry) {
+    await db
+      .update(runnerWorkItems)
+      .set({
+        status: 'failed',
+        runnerId: null,
+        leaseId: null,
+        leaseExpiresAt: null,
+        error: stringify({ message: 'Runner stopped and retries are exhausted' }),
+        updatedAt: timestamp,
+      })
+      .where(eq(runnerWorkItems.id, workItem.id))
+    if (workItem.sessionId) {
+      await db
+        .update(sessions)
+        .set({ status: 'error', statusReason: 'runner-lease-expired', updatedAt: timestamp })
+        .where(and(eq(sessions.id, workItem.sessionId), eq(sessions.projectId, projectId)))
+    }
+    return 'failed'
+  }
+
+  let payloadJson = workItem.payload
+  if (workItem.sessionId) {
+    const payload = parseJson<Record<string, unknown>>(workItem.payload)
+    if (
+      payload?.type === 'session.start' &&
+      !payload.resume &&
+      (await sessionHasRunnerStarted(db, projectId, workItem.sessionId))
+    ) {
+      // Resume the runtime in place. claude-code resumes from its own session id
+      // (the AMA session id), so a null token still continues the conversation;
+      // other runtimes fall back to a fresh start when no token was captured.
+      payload.resume = true
+      payloadJson = stringify(payload)
+    }
+  }
+  await db
+    .update(runnerWorkItems)
+    .set({
+      status: 'available',
+      runnerId: null,
+      leaseId: null,
+      leaseExpiresAt: null,
+      payload: payloadJson,
+      error: null,
+      availableAt: timestamp,
+      updatedAt: timestamp,
+    })
+    .where(eq(runnerWorkItems.id, workItem.id))
+  if (workItem.sessionId) {
+    await db
+      .update(sessions)
+      .set({ status: 'pending', statusReason: 'waiting-for-runner-recovery', updatedAt: timestamp })
+      .where(and(eq(sessions.id, workItem.sessionId), eq(sessions.projectId, projectId)))
+  }
+  return 'requeued'
+}
+
 async function expireStaleLeases(db: Db, auth: AuthContext) {
   const timestamp = now()
   const staleLeases = await db
@@ -632,7 +710,6 @@ async function expireStaleLeases(db: Db, auth: AuthContext) {
       }
       continue
     }
-    const shouldRetry = workItem.attempts < workItem.maxAttempts
     const expired = await db
       .update(runnerWorkLeases)
       .set({ status: 'expired', updatedAt: timestamp })
@@ -643,27 +720,7 @@ async function expireStaleLeases(db: Db, auth: AuthContext) {
       continue
     }
     await releaseRunnerLoad(db, auth.project.id, lease.runnerId, timestamp)
-    await db
-      .update(runnerWorkItems)
-      .set({
-        status: shouldRetry ? 'available' : 'failed',
-        runnerId: null,
-        leaseId: null,
-        leaseExpiresAt: null,
-        error: shouldRetry ? null : stringify({ message: 'Runner lease expired' }),
-        updatedAt: timestamp,
-      })
-      .where(eq(runnerWorkItems.id, workItem.id))
-    if (workItem.sessionId) {
-      await db
-        .update(sessions)
-        .set({
-          status: shouldRetry ? 'pending' : 'error',
-          statusReason: shouldRetry ? 'waiting-for-runner' : 'runner-lease-expired',
-          updatedAt: timestamp,
-        })
-        .where(and(eq(sessions.id, workItem.sessionId), eq(sessions.projectId, auth.project.id)))
-    }
+    await requeueWorkItemForRecovery(db, auth.project.id, workItem, timestamp)
   }
 }
 
@@ -1640,6 +1697,20 @@ const routes = app
         .update(runnerWorkLeases)
         .set({ expiresAt, renewedAt: timestamp, updatedAt: timestamp })
         .where(and(eq(runnerWorkLeases.id, leaseId), eq(runnerWorkLeases.status, 'active')))
+    } else if (body.status === 'interrupted') {
+      // The runner stopped mid-flight (e.g. graceful shutdown). End the lease but
+      // keep the work recoverable so a restarted runner resumes the session.
+      const released = await db
+        .update(runnerWorkLeases)
+        .set({ status: 'expired', updatedAt: timestamp })
+        .where(and(eq(runnerWorkLeases.id, leaseId), eq(runnerWorkLeases.status, 'active')))
+        .returning({ id: runnerWorkLeases.id })
+        .get()
+      if (!released) {
+        return errorResponse(c, 409, 'conflict', 'Runner lease is no longer active')
+      }
+      await releaseRunnerLoad(db, auth.project.id, runnerId, timestamp)
+      await requeueWorkItemForRecovery(db, auth.project.id, workItem, timestamp)
     } else {
       const result = body.result ? stringify(body.result) : null
       const error = body.error ? stringify(body.error) : null

@@ -2916,7 +2916,8 @@
               "active",
               "completed",
               "failed",
-              "cancelled"
+              "cancelled",
+              "interrupted"
             ]
           },
           "leaseDurationSeconds": {

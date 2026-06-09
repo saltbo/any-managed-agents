@@ -1193,6 +1193,98 @@ describe('[CF] /api/runners', () => {
     })
   })
 
+  it('re-queues a started session for resume when the runner reports the lease interrupted', async () => {
+    const authorization = await signIn()
+    const environment = await createSelfHostedEnvironment(authorization)
+    const agent = await createAgent(authorization)
+    const runnerRes = await jsonFetch('/api/runners', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Interrupt runner',
+        environmentId: environment.id,
+        capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY],
+      }),
+    })
+    const runner = (await runnerRes.json()) as { id: string }
+    await jsonFetch(`/api/runners/${runner.id}/heartbeats`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ status: 'active', currentLoad: 0, capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY] }),
+    })
+    const session = await createSelfHostedSession(authorization, agent.id, environment.id)
+    const claimRes = await jsonFetch(`/api/runners/${runner.id}/leases`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ leaseDurationSeconds: 90 }),
+    })
+    const lease = (await claimRes.json()) as { id: string; workItem: { id: string } }
+    // Accept a channel so the session is running and has emitted a runner event (started).
+    const channel = await openRunnerSessionChannel(authorization, runner.id, lease.id)
+    await waitForMessages(collectMessages(channel), 1)
+
+    // The runner stops mid-flight and reports the lease interrupted.
+    const interruptRes = await jsonFetch(`/api/runners/${runner.id}/leases/${lease.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'interrupted' }),
+    })
+    expect(interruptRes.status).toBe(200)
+
+    // The session stays recoverable (pending), not failed.
+    const sessionRes = await jsonFetch(`/api/sessions/${session.id}`, authorization)
+    await expect(sessionRes.json()).resolves.toMatchObject({
+      status: 'pending',
+      statusReason: 'waiting-for-runner-recovery',
+    })
+
+    // The work item is available again and its payload now resumes the runtime.
+    const workItem = await env.DB.prepare('SELECT status, payload FROM runner_work_items WHERE id = ?')
+      .bind(lease.workItem.id)
+      .first<{ status: string; payload: string }>()
+    expect(workItem?.status).toBe('available')
+    expect(JSON.parse(workItem!.payload).resume).toBe(true)
+  })
+
+  it('fails an interrupted session once retries are exhausted', async () => {
+    const authorization = await signIn()
+    const environment = await createSelfHostedEnvironment(authorization)
+    const agent = await createAgent(authorization)
+    const runnerRes = await jsonFetch('/api/runners', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Exhausted runner',
+        environmentId: environment.id,
+        capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY],
+      }),
+    })
+    const runner = (await runnerRes.json()) as { id: string }
+    await jsonFetch(`/api/runners/${runner.id}/heartbeats`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ status: 'active', currentLoad: 0, capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY] }),
+    })
+    const session = await createSelfHostedSession(authorization, agent.id, environment.id)
+    const claimRes = await jsonFetch(`/api/runners/${runner.id}/leases`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ leaseDurationSeconds: 90 }),
+    })
+    const lease = (await claimRes.json()) as { id: string; workItem: { id: string } }
+    await openRunnerSessionChannel(authorization, runner.id, lease.id)
+    // Pretend this is the final allowed attempt.
+    await env.DB.prepare('UPDATE runner_work_items SET attempts = max_attempts WHERE id = ?')
+      .bind(lease.workItem.id)
+      .run()
+
+    const interruptRes = await jsonFetch(`/api/runners/${runner.id}/leases/${lease.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'interrupted' }),
+    })
+    expect(interruptRes.status).toBe(200)
+
+    const workItem = await env.DB.prepare('SELECT status FROM runner_work_items WHERE id = ?')
+      .bind(lease.workItem.id)
+      .first<{ status: string }>()
+    expect(workItem?.status).toBe('failed')
+    const sessionRes = await jsonFetch(`/api/sessions/${session.id}`, authorization)
+    await expect(sessionRes.json()).resolves.toMatchObject({ status: 'error' })
+  })
+
   it('marks broken channels for recovery and rejects stale channel results', async () => {
     const authorization = await signIn()
     const environment = await createSelfHostedEnvironment(authorization)
