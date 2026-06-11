@@ -212,7 +212,7 @@ func prepareAgentWorkspace(ctx context.Context, cwd string, runtimeName string, 
 			return err
 		}
 	}
-	return nil
+	return materializeSubagents(cwd, runtimeName, agentSubagentProfiles(agentSnapshot))
 }
 
 func agentSystemPrompt(agentSnapshot map[string]any) string {
@@ -333,6 +333,10 @@ func installAgentSkill(ctx context.Context, cwd string, runtimeName string, ref 
 }
 
 func ensureAgentSkillGitignore(cwd string) error {
+	return ensureGitignoreEntries(cwd, "# agent skills (managed by AMA runner)", []string{".claude/skills/", ".agents/", "skills-lock.json"})
+}
+
+func ensureGitignoreEntries(cwd string, comment string, entries []string) error {
 	path := filepath.Join(cwd, ".gitignore")
 	existingBytes, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
@@ -340,7 +344,7 @@ func ensureAgentSkillGitignore(cwd string) error {
 	}
 	existing := string(existingBytes)
 	missing := []string{}
-	for _, entry := range []string{".claude/skills/", ".agents/", "skills-lock.json"} {
+	for _, entry := range entries {
 		if !strings.Contains(existing, entry) {
 			missing = append(missing, entry)
 		}
@@ -348,7 +352,7 @@ func ensureAgentSkillGitignore(cwd string) error {
 	if len(missing) == 0 {
 		return nil
 	}
-	appendix := "\n# agent skills (managed by AMA runner)\n" + strings.Join(missing, "\n") + "\n"
+	appendix := "\n" + comment + "\n" + strings.Join(missing, "\n") + "\n"
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		return err

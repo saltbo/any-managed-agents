@@ -67,7 +67,8 @@ func fetchRuntimeUsageWindows(ctx context.Context, nodePath, bridgePath, hostHom
 		return nil
 	}
 	requestID := "usage_" + runtime
-	if err := writeBridgeInput(stdin, ama.JSON{
+	bridgeStdin := &bridgeStdin{writer: stdin}
+	if err := bridgeStdin.WriteJSON(ama.JSON{
 		"type":      "fetchUsage",
 		"requestId": requestID,
 		"runtime":   runtime,
@@ -77,7 +78,7 @@ func fetchRuntimeUsageWindows(ctx context.Context, nodePath, bridgePath, hostHom
 	}
 	var result ama.JSON
 	noop := func(string, ama.JSON) error { return nil }
-	if err := readBridgeMessages(scanner, requestID, noop, &result); err != nil {
+	if err := readBridgeMessages(scanner, requestID, noop, nil, &result); err != nil {
 		return nil
 	}
 	return parseUsageWindows(result["windows"])

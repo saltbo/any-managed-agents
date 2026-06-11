@@ -165,16 +165,27 @@ func saveRunnerState(path string, state runnerState) error {
 	return os.WriteFile(path, data, 0o600)
 }
 
-func runnerCapabilities() []string {
-	return []string{
+// runnerCapabilities builds the advertised capability strings from the
+// runtimes whose CLI binaries were detected on the host. The string format is
+// load-bearing: the AK server matches on the bare runtime names and on
+// "runtime-provider-model:<runtime>:..." prefixes.
+func runnerCapabilities(availableRuntimes []string) []string {
+	capabilities := []string{
 		"sandbox.exec",
 		"ama",
-		"codex",
-		"claude-code",
-		"copilot",
 		"runtime-provider-model:ama:workers-ai:@cf/moonshotai/kimi-k2.6",
-		"runtime-provider-model:codex:*:gpt-5.3-codex",
-		"runtime-provider-model:claude-code:*:claude-sonnet-4-6",
-		"runtime-provider-model:copilot:*:copilot-cli",
 	}
+	providerModels := map[string]string{
+		"codex":       "runtime-provider-model:codex:*:gpt-5.3-codex",
+		"claude-code": "runtime-provider-model:claude-code:*:claude-sonnet-4-6",
+		"copilot":     "runtime-provider-model:copilot:*:copilot-cli",
+	}
+	for _, runtimeName := range availableRuntimes {
+		providerModel, ok := providerModels[runtimeName]
+		if !ok {
+			continue
+		}
+		capabilities = append(capabilities, runtimeName, providerModel)
+	}
+	return capabilities
 }

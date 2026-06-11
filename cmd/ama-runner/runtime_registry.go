@@ -14,6 +14,9 @@ type sessionRuntimeExecution struct {
 	Lease          *ama.RunnerWorkLease
 	Payload        WorkPayload
 	CheckRenewal   func() error
+	// ResumeTokens carries the latest runtime resume token from the runtime
+	// adapter to lease renewals and the interrupted finalization.
+	ResumeTokens *resumeTokenBox
 }
 
 type sessionRuntimeHandler struct {
