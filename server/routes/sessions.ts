@@ -1662,7 +1662,20 @@ export async function consumeCloudTurnMessage(env: Env, message: CloudTurnMessag
     })
     return
   }
-  if (session.status !== 'running') {
+  // A prompt accepted while another turn was finishing can find the session
+  // back in "idle": the finishing turn's idle write races the prompt's
+  // running write. The queued prompt is still valid — re-mark and run it.
+  if (session.status === 'idle') {
+    const reclaimed = await db
+      .update(sessions)
+      .set({ status: 'running', statusReason: null, updatedAt: now() })
+      .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id), eq(sessions.status, 'idle')))
+      .returning({ id: sessions.id })
+      .get()
+    if (!reclaimed) {
+      return
+    }
+  } else if (session.status !== 'running') {
     return
   }
   await executeCloudSessionTurn(env, db, auth, session, message.prompt, message.auditAction)
