@@ -73,7 +73,11 @@ async function createSelfHostedSession(
   authorization: string,
   agentId: string,
   environmentId: string,
-  sessionConfig: { runtimeEnv?: Record<string, string>; runtimeSecretEnv?: Array<{ name: string; ref: string }> } = {},
+  sessionConfig: {
+    runtime?: string
+    runtimeEnv?: Record<string, string>
+    runtimeSecretEnv?: Array<{ name: string; ref: string }>
+  } = {},
 ) {
   const res = await jsonFetch('/api/sessions', authorization, {
     method: 'POST',
@@ -116,6 +120,33 @@ async function waitForMessages(messages: Array<Record<string, unknown>>, count: 
     await new Promise((resolve) => setTimeout(resolve, 25))
   }
   return messages
+}
+
+async function setupLeasedRuntimeSession(authorization: string, runtime: 'claude-code' | 'codex') {
+  const environment = await createSelfHostedEnvironment(authorization)
+  const agent = await createAgent(authorization)
+  const runnerRes = await jsonFetch('/api/runners', authorization, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: `${runtime} runtime runner ${crypto.randomUUID()}`,
+      environmentId: environment.id,
+      capabilities: [runtime],
+    }),
+  })
+  expect(runnerRes.status).toBe(201)
+  const runner = (await runnerRes.json()) as { id: string }
+  await jsonFetch(`/api/runners/${runner.id}/heartbeats`, authorization, {
+    method: 'POST',
+    body: JSON.stringify({ status: 'active', currentLoad: 0, capabilities: [runtime] }),
+  })
+  const session = await createSelfHostedSession(authorization, agent.id, environment.id, { runtime })
+  const claimRes = await jsonFetch(`/api/runners/${runner.id}/leases`, authorization, {
+    method: 'POST',
+    body: JSON.stringify({ leaseDurationSeconds: 90 }),
+  })
+  expect(claimRes.status).toBe(201)
+  const lease = (await claimRes.json()) as { id: string; workItem: { id: string } }
+  return { runner, session, lease }
 }
 
 describe('[CF] /api/runners', () => {
@@ -1191,6 +1222,308 @@ describe('[CF] /api/runners', () => {
       status: 'pending',
       statusReason: 'waiting-for-runner-recovery',
     })
+  })
+
+  it('re-queues a started session for resume when the runner reports the lease interrupted', async () => {
+    const authorization = await signIn()
+    const environment = await createSelfHostedEnvironment(authorization)
+    const agent = await createAgent(authorization)
+    const runnerRes = await jsonFetch('/api/runners', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Interrupt runner',
+        environmentId: environment.id,
+        capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY],
+      }),
+    })
+    const runner = (await runnerRes.json()) as { id: string }
+    await jsonFetch(`/api/runners/${runner.id}/heartbeats`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ status: 'active', currentLoad: 0, capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY] }),
+    })
+    const session = await createSelfHostedSession(authorization, agent.id, environment.id)
+    const claimRes = await jsonFetch(`/api/runners/${runner.id}/leases`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ leaseDurationSeconds: 90 }),
+    })
+    const lease = (await claimRes.json()) as { id: string; workItem: { id: string } }
+    // Accept a channel so the session is running and has emitted a runner event (started).
+    const channel = await openRunnerSessionChannel(authorization, runner.id, lease.id)
+    await waitForMessages(collectMessages(channel), 1)
+
+    // The runner stops mid-flight and reports the lease interrupted.
+    const interruptRes = await jsonFetch(`/api/runners/${runner.id}/leases/${lease.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'interrupted' }),
+    })
+    expect(interruptRes.status).toBe(200)
+
+    // The session stays recoverable (pending), not failed.
+    const sessionRes = await jsonFetch(`/api/sessions/${session.id}`, authorization)
+    await expect(sessionRes.json()).resolves.toMatchObject({
+      status: 'pending',
+      statusReason: 'waiting-for-runner-recovery',
+    })
+
+    // The work item is available again and its payload now resumes the runtime.
+    const workItem = await env.DB.prepare('SELECT status, payload FROM runner_work_items WHERE id = ?')
+      .bind(lease.workItem.id)
+      .first<{ status: string; payload: string }>()
+    expect(workItem?.status).toBe('available')
+    expect(JSON.parse(workItem!.payload).resume).toBe(true)
+  })
+
+  it('fails an interrupted session once retries are exhausted', async () => {
+    const authorization = await signIn()
+    const environment = await createSelfHostedEnvironment(authorization)
+    const agent = await createAgent(authorization)
+    const runnerRes = await jsonFetch('/api/runners', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Exhausted runner',
+        environmentId: environment.id,
+        capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY],
+      }),
+    })
+    const runner = (await runnerRes.json()) as { id: string }
+    await jsonFetch(`/api/runners/${runner.id}/heartbeats`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ status: 'active', currentLoad: 0, capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY] }),
+    })
+    const session = await createSelfHostedSession(authorization, agent.id, environment.id)
+    const claimRes = await jsonFetch(`/api/runners/${runner.id}/leases`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ leaseDurationSeconds: 90 }),
+    })
+    const lease = (await claimRes.json()) as { id: string; workItem: { id: string } }
+    await openRunnerSessionChannel(authorization, runner.id, lease.id)
+    // Pretend this is the final allowed attempt.
+    await env.DB.prepare('UPDATE runner_work_items SET attempts = max_attempts WHERE id = ?')
+      .bind(lease.workItem.id)
+      .run()
+
+    const interruptRes = await jsonFetch(`/api/runners/${runner.id}/leases/${lease.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'interrupted' }),
+    })
+    expect(interruptRes.status).toBe(200)
+
+    const workItem = await env.DB.prepare('SELECT status FROM runner_work_items WHERE id = ?')
+      .bind(lease.workItem.id)
+      .first<{ status: string }>()
+    expect(workItem?.status).toBe('failed')
+    const sessionRes = await jsonFetch(`/api/sessions/${session.id}`, authorization)
+    await expect(sessionRes.json()).resolves.toMatchObject({ status: 'error' })
+  })
+
+  it('does not requeue an interrupted lease when newer session work is already queued', async () => {
+    const authorization = await signIn()
+    const environment = await createSelfHostedEnvironment(authorization)
+    const agent = await createAgent(authorization)
+    const runnerRes = await jsonFetch('/api/runners', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Superseded interrupt runner',
+        environmentId: environment.id,
+        capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY],
+      }),
+    })
+    const runner = (await runnerRes.json()) as { id: string }
+    await jsonFetch(`/api/runners/${runner.id}/heartbeats`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ status: 'active', currentLoad: 0, capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY] }),
+    })
+    const session = await createSelfHostedSession(authorization, agent.id, environment.id)
+    const claimRes = await jsonFetch(`/api/runners/${runner.id}/leases`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ leaseDurationSeconds: 90 }),
+    })
+    const lease = (await claimRes.json()) as { id: string; workItem: { id: string } }
+    const channel = await openRunnerSessionChannel(authorization, runner.id, lease.id)
+    await waitForMessages(collectMessages(channel), 1)
+
+    // Newer work for the same session is queued while the lease is still active
+    // (e.g. AK queues a reject-resume command).
+    const commandRes = await jsonFetch(`/api/sessions/${session.id}/commands`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ type: 'prompt', message: 'Continue after reviewer rejection.' }),
+    })
+    expect(commandRes.status).toBe(202)
+
+    // The runner stops mid-flight and reports the lease interrupted.
+    const interruptRes = await jsonFetch(`/api/runners/${runner.id}/leases/${lease.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'interrupted' }),
+    })
+    expect(interruptRes.status).toBe(200)
+
+    // The interrupted work item is superseded, not requeued.
+    const interruptedItem = await env.DB.prepare('SELECT status FROM runner_work_items WHERE id = ?')
+      .bind(lease.workItem.id)
+      .first<{ status: string }>()
+    expect(interruptedItem?.status).toBe('cancelled')
+
+    // Only the newer queued command remains claimable for the session.
+    const activeItems = await env.DB.prepare(
+      "SELECT id FROM runner_work_items WHERE session_id = ? AND status IN ('available', 'leased')",
+    )
+      .bind(session.id)
+      .all<{ id: string }>()
+    expect(activeItems.results).toHaveLength(1)
+    expect(activeItems.results[0]?.id).not.toBe(lease.workItem.id)
+  })
+
+  it('persists lease resume tokens and requeues an interrupted lease with the freshest token', async () => {
+    const authorization = await signIn()
+    const { runner, lease } = await setupLeasedRuntimeSession(authorization, 'claude-code')
+    const channel = await openRunnerSessionChannel(authorization, runner.id, lease.id)
+    await waitForMessages(collectMessages(channel), 1)
+
+    // A renewal reports the live runtime resume token; it persists on the payload.
+    const renewRes = await jsonFetch(`/api/runners/${runner.id}/leases/${lease.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'active', leaseDurationSeconds: 90, resumeToken: 'rt-renewal-1' }),
+    })
+    expect(renewRes.status).toBe(200)
+    const renewed = await env.DB.prepare('SELECT payload FROM runner_work_items WHERE id = ?')
+      .bind(lease.workItem.id)
+      .first<{ payload: string }>()
+    expect(JSON.parse(renewed!.payload).resumeToken).toBe('rt-renewal-1')
+
+    // A renewal without a token keeps the persisted one.
+    const renewAgainRes = await jsonFetch(`/api/runners/${runner.id}/leases/${lease.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'active', leaseDurationSeconds: 90 }),
+    })
+    expect(renewAgainRes.status).toBe(200)
+    const renewedAgain = await env.DB.prepare('SELECT payload FROM runner_work_items WHERE id = ?')
+      .bind(lease.workItem.id)
+      .first<{ payload: string }>()
+    expect(JSON.parse(renewedAgain!.payload).resumeToken).toBe('rt-renewal-1')
+
+    // The interrupt carries an even fresher token; the requeued payload resumes with it.
+    const interruptRes = await jsonFetch(`/api/runners/${runner.id}/leases/${lease.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'interrupted', resumeToken: 'rt-interrupt-2' }),
+    })
+    expect(interruptRes.status).toBe(200)
+    const requeued = await env.DB.prepare('SELECT status, payload FROM runner_work_items WHERE id = ?')
+      .bind(lease.workItem.id)
+      .first<{ status: string; payload: string }>()
+    expect(requeued?.status).toBe('available')
+    expect(JSON.parse(requeued!.payload)).toMatchObject({ resume: true, resumeToken: 'rt-interrupt-2' })
+  })
+
+  it('delivers prompt commands to a live claude-code runtime over the lease channel', async () => {
+    const authorization = await signIn()
+    const { runner, session, lease } = await setupLeasedRuntimeSession(authorization, 'claude-code')
+    const channel = await openRunnerSessionChannel(authorization, runner.id, lease.id)
+    const channelMessages = collectMessages(channel)
+    await waitForMessages(channelMessages, 1)
+
+    const commandRes = await jsonFetch(`/api/sessions/${session.id}/commands`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ type: 'prompt', message: 'Live follow-up question.' }),
+    })
+    expect(commandRes.status).toBe(202)
+    await expect(commandRes.json()).resolves.toMatchObject({
+      runtime: 'self-hosted-runner',
+      accepted: true,
+      sessionId: session.id,
+      delivery: 'live',
+    })
+
+    await expect(waitForMessages(channelMessages, 2)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'session.command',
+          sessionId: session.id,
+          leaseId: lease.id,
+          runnerId: runner.id,
+          command: { type: 'prompt', message: 'Live follow-up question.' },
+        }),
+      ]),
+    )
+
+    // The prompt rode the live channel: no new work item was queued and the
+    // session keeps running on the current lease.
+    const workItems = await env.DB.prepare('SELECT id FROM runner_work_items WHERE session_id = ?')
+      .bind(session.id)
+      .all<{ id: string }>()
+    expect(workItems.results).toHaveLength(1)
+    const sessionRes = await jsonFetch(`/api/sessions/${session.id}`, authorization)
+    await expect(sessionRes.json()).resolves.toMatchObject({ status: 'running', statusReason: null })
+    channel.close()
+  })
+
+  it('queues codex prompt commands with the persisted resume token instead of live delivery', async () => {
+    const authorization = await signIn()
+    const { runner, session, lease } = await setupLeasedRuntimeSession(authorization, 'codex')
+    const channel = await openRunnerSessionChannel(authorization, runner.id, lease.id)
+    const channelMessages = collectMessages(channel)
+    await waitForMessages(channelMessages, 1)
+
+    const renewRes = await jsonFetch(`/api/runners/${runner.id}/leases/${lease.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'active', leaseDurationSeconds: 90, resumeToken: 'codex-rollout-1' }),
+    })
+    expect(renewRes.status).toBe(200)
+
+    const commandRes = await jsonFetch(`/api/sessions/${session.id}/commands`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ type: 'prompt', message: 'Queued follow-up.' }),
+    })
+    expect(commandRes.status).toBe(202)
+    await expect(commandRes.json()).resolves.toMatchObject({
+      runtime: 'self-hosted-runner',
+      accepted: true,
+      delivery: 'queued',
+    })
+
+    // codex cannot take live input: the prompt becomes a queued resume work
+    // item carrying the renewal-fresh resume token.
+    const queuedRows = await env.DB.prepare(
+      "SELECT payload FROM runner_work_items WHERE session_id = ? AND status = 'available'",
+    )
+      .bind(session.id)
+      .all<{ payload: string }>()
+    expect(queuedRows.results).toHaveLength(1)
+    expect(JSON.parse(queuedRows.results[0]!.payload)).toMatchObject({
+      resume: true,
+      resumeToken: 'codex-rollout-1',
+      initialPrompt: 'Queued follow-up.',
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(channelMessages.filter((message) => message.type === 'session.command')).toHaveLength(0)
+    channel.close()
+  })
+
+  it('falls back to queueing live prompts when the lease channel is not connected', async () => {
+    const authorization = await signIn()
+    const { session } = await setupLeasedRuntimeSession(authorization, 'claude-code')
+    // The lease is active but the runner never connected its session channel
+    // (e.g. it is still starting the runtime).
+    await env.DB.prepare("UPDATE sessions SET status = 'running', status_reason = NULL WHERE id = ?")
+      .bind(session.id)
+      .run()
+
+    const commandRes = await jsonFetch(`/api/sessions/${session.id}/commands`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ type: 'prompt', message: 'Fallback follow-up.' }),
+    })
+    expect(commandRes.status).toBe(202)
+    await expect(commandRes.json()).resolves.toMatchObject({
+      runtime: 'self-hosted-runner',
+      accepted: true,
+      delivery: 'queued',
+    })
+
+    const workItems = await env.DB.prepare('SELECT status FROM runner_work_items WHERE session_id = ?')
+      .bind(session.id)
+      .all<{ status: string }>()
+    expect(workItems.results).toHaveLength(2)
+    expect(workItems.results.map((row) => row.status).sort()).toEqual(['available', 'leased'])
   })
 
   it('marks broken channels for recovery and rejects stale channel results', async () => {

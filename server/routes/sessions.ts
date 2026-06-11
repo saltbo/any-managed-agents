@@ -45,6 +45,7 @@ import {
   runnerSupportsRuntimeProviderModel,
   runtimeCatalogSupportsProviderModel,
   runtimeRequiredRunnerCapability,
+  runtimeSupportsLivePrompts,
 } from '../runtime/catalog'
 import { runtimeDriver, runtimeDriverName, runtimeMetadata } from '../runtime/drivers'
 import { safeRuntimeError } from '../runtime/runtime-error'
@@ -65,6 +66,7 @@ import {
   type RuntimeName,
   RuntimeSchema,
 } from './environment-contracts'
+import { dispatchRunnerSessionCommand } from './runners'
 
 const app = createApiRouter()
 
@@ -312,6 +314,7 @@ const SessionCommandResponseSchema = z
     accepted: z.boolean().openapi({ example: true }),
     sessionId: z.string().openapi({ example: 'session_abc123' }),
     path: z.string().openapi({ example: '/rpc' }),
+    delivery: z.enum(['live', 'queued']).optional().openapi({ example: 'queued' }),
   })
   .openapi('SessionCommandResponse')
 
@@ -886,23 +889,27 @@ async function enqueueSelfHostedSessionWork(
   })
 }
 
+// Resolves the freshest runtime resume token for a session. Lease renewals
+// persist the live token onto the leased work item payload, so the most
+// recently updated work item wins over the result token of an older succeeded
+// item; within a row a completion result token is newer than its payload.
 async function latestRunnerResumeToken(db: Db, auth: AuthContext, sessionId: string) {
   const rows = await db
-    .select({ result: runnerWorkItems.result })
+    .select({ status: runnerWorkItems.status, payload: runnerWorkItems.payload, result: runnerWorkItems.result })
     .from(runnerWorkItems)
-    .where(
-      and(
-        eq(runnerWorkItems.projectId, auth.project.id),
-        eq(runnerWorkItems.sessionId, sessionId),
-        eq(runnerWorkItems.status, 'succeeded'),
-      ),
-    )
+    .where(and(eq(runnerWorkItems.projectId, auth.project.id), eq(runnerWorkItems.sessionId, sessionId)))
     .orderBy(desc(runnerWorkItems.updatedAt))
     .limit(5)
   for (const row of rows) {
-    const result = parseJson<Record<string, unknown>>(row.result)
-    if (typeof result?.resumeToken === 'string' && result.resumeToken) {
-      return result.resumeToken
+    if (row.status === 'succeeded') {
+      const result = parseJson<Record<string, unknown>>(row.result)
+      if (typeof result?.resumeToken === 'string' && result.resumeToken) {
+        return result.resumeToken
+      }
+    }
+    const payload = parseJson<Record<string, unknown>>(row.payload)
+    if (typeof payload?.resumeToken === 'string' && payload.resumeToken) {
+      return payload.resumeToken
     }
   }
   return null
@@ -1606,6 +1613,33 @@ async function dispatchSessionPromptCommand(env: Env, db: Db, auth: AuthContext,
   }
   const path = '/rpc'
   if (!session.sandboxId) {
+    const metadata = parseJson<Record<string, unknown>>(session.metadata) ?? {}
+    if (runtimeSupportsLivePrompts(sessionRuntimeFromMetadata(metadata))) {
+      // The lease channel Durable Object only delivers when the connected
+      // runner still owns an active lease for this session, so a successful
+      // dispatch reaches the live runtime; otherwise queue so the prompt is
+      // never lost.
+      const delivered = await dispatchRunnerSessionCommand(env, session.id, { type: 'prompt', message })
+      if (delivered) {
+        await recordAudit(db, {
+          auth,
+          action: 'session.command',
+          resourceType: 'session',
+          resourceId: session.id,
+          outcome: 'success',
+          sessionId: session.id,
+          metadata: { type: 'prompt', delivery: 'live' },
+        })
+        return {
+          status: 202 as const,
+          runtime: 'self-hosted-runner' as const,
+          accepted: true,
+          sessionId: session.id,
+          path,
+          delivery: 'live' as const,
+        }
+      }
+    }
     return await queueSelfHostedSessionCommand(env, db, auth, session, message, path)
   }
 
@@ -1773,7 +1807,14 @@ async function queueSelfHostedSessionCommand(
     resume: true,
     resumeToken: await latestRunnerResumeToken(db, auth, session.id),
   })
-  return { status: 202 as const, runtime: 'self-hosted-runner' as const, accepted: true, sessionId: session.id, path }
+  return {
+    status: 202 as const,
+    runtime: 'self-hosted-runner' as const,
+    accepted: true,
+    sessionId: session.id,
+    path,
+    delivery: 'queued' as const,
+  }
 }
 
 async function assertRuntimeSessionRunning(db: Db, auth: AuthContext, sessionId: string) {
@@ -2637,7 +2678,13 @@ const routes = app
       })
     }
     return c.json(
-      { runtime: result.runtime, accepted: result.accepted, sessionId: result.sessionId, path: result.path },
+      {
+        runtime: result.runtime,
+        accepted: result.accepted,
+        sessionId: result.sessionId,
+        path: result.path,
+        ...('delivery' in result ? { delivery: result.delivery } : {}),
+      },
       202,
     )
   })

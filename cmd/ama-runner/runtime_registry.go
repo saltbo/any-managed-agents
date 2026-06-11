@@ -14,6 +14,9 @@ type sessionRuntimeExecution struct {
 	Lease          *ama.RunnerWorkLease
 	Payload        WorkPayload
 	CheckRenewal   func() error
+	// ResumeTokens carries the latest runtime resume token from the runtime
+	// adapter to lease renewals and the interrupted finalization.
+	ResumeTokens *resumeTokenBox
 }
 
 type sessionRuntimeHandler struct {
@@ -31,19 +34,19 @@ func sessionRuntimeHandlers() map[string]sessionRuntimeHandler {
 		"codex": {
 			acknowledgeSessionStarted: true,
 			run: func(d *RunnerDaemon, execution sessionRuntimeExecution) error {
-				return d.runExternalSession(execution.LeaseContext, execution.Channel, execution.Lease, execution.Payload)
+				return d.runExternalSession(execution)
 			},
 		},
 		"claude-code": {
 			acknowledgeSessionStarted: true,
 			run: func(d *RunnerDaemon, execution sessionRuntimeExecution) error {
-				return d.runExternalSession(execution.LeaseContext, execution.Channel, execution.Lease, execution.Payload)
+				return d.runExternalSession(execution)
 			},
 		},
 		"copilot": {
 			acknowledgeSessionStarted: true,
 			run: func(d *RunnerDaemon, execution sessionRuntimeExecution) error {
-				return d.runExternalSession(execution.LeaseContext, execution.Channel, execution.Lease, execution.Payload)
+				return d.runExternalSession(execution)
 			},
 		},
 	}

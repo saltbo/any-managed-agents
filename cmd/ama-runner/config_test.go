@@ -163,6 +163,38 @@ func TestLoadConfigFlagsOverrideEnvironment(t *testing.T) {
 	}
 }
 
+func TestLoadConfigMaxSessionDuration(t *testing.T) {
+	env := map[string]string{
+		"AMA_API_SERVER":                  "https://ama.example.test",
+		"AMA_TOKEN":                       "token",
+		"AMA_RUNNER_ALLOW_UNSAFE_PROCESS": "true",
+	}
+	config, err := LoadConfig(nil, testGetenv(t, env))
+	if err != nil {
+		t.Fatalf("expected valid config, got %v", err)
+	}
+	if config.MaxSessionDuration != 2*time.Hour {
+		t.Fatalf("expected default max session duration of 2h, got %v", config.MaxSessionDuration)
+	}
+
+	env["AMA_RUNNER_MAX_SESSION_DURATION"] = "45m"
+	config, err = LoadConfig(nil, testGetenv(t, env))
+	if err != nil {
+		t.Fatalf("expected valid env config, got %v", err)
+	}
+	if config.MaxSessionDuration != 45*time.Minute {
+		t.Fatalf("expected env max session duration, got %v", config.MaxSessionDuration)
+	}
+
+	config, err = LoadConfig([]string{"--max-session-duration", "0"}, testGetenv(t, env))
+	if err != nil {
+		t.Fatalf("expected valid flag config, got %v", err)
+	}
+	if config.MaxSessionDuration != 0 {
+		t.Fatalf("expected flag to disable max session duration, got %v", config.MaxSessionDuration)
+	}
+}
+
 func TestConfigValidateRejectsInvalidBoundaries(t *testing.T) {
 	valid := Config{
 		Origin:                "https://ama.example.test",
@@ -192,6 +224,7 @@ func TestConfigValidateRejectsInvalidBoundaries(t *testing.T) {
 		{"heartbeat", func(c *Config) { c.HeartbeatInterval = time.Minute }, "heartbeat interval"},
 		{"renew", func(c *Config) { c.RenewInterval = time.Minute }, "renew interval"},
 		{"poll", func(c *Config) { c.PollInterval = 0 }, "must be greater than zero"},
+		{"maxSession", func(c *Config) { c.MaxSessionDuration = -time.Second }, "max session duration"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

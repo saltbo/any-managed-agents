@@ -2,7 +2,14 @@ import { createInterface } from 'node:readline'
 import { stdin, stdout } from 'node:process'
 import { assertAmaRuntimeEvent, runtimeError, runtimeEvent, textMessage, toolEnd, toolStart, usageEvent } from './events/ama'
 import { getProvider } from './providers/registry'
-import { bridgeError, type AmaRuntimeEvent, type RuntimeBridgeInput, type RuntimeBridgeOutput, type RuntimeProviderHandle } from './protocol'
+import {
+  bridgeError,
+  createResumeTokenWatcher,
+  type AmaRuntimeEvent,
+  type RuntimeBridgeInput,
+  type RuntimeBridgeOutput,
+  type RuntimeProviderHandle,
+} from './protocol'
 
 type ActiveRun = {
   handle?: RuntimeProviderHandle
@@ -37,8 +44,16 @@ async function run(request: Extract<RuntimeBridgeInput, { type: 'run' }>) {
     const provider = getProvider(request.runtime)
     const handle = await provider.execute(request)
     state.handle = handle
+    // Surface the resume token as soon as the provider learns it so the runner
+    // can persist it via lease renewals; waiting for the final result message
+    // loses the token when the runner is interrupted mid-run.
+    const emitResumeToken = createResumeTokenWatcher(handle, (resumeToken) => {
+      write({ type: 'resumeToken', requestId: request.requestId, resumeToken })
+    })
+    emitResumeToken()
     for await (const event of handle.events) {
       write({ type: 'event', requestId: request.requestId, event: assertAmaRuntimeEvent(event) })
+      emitResumeToken()
     }
     write({ type: 'result', requestId: request.requestId, result: { resumeToken: handle.getResumeToken?.() } })
   } catch (err) {
@@ -116,7 +131,14 @@ async function control(message: Exclude<RuntimeBridgeInput, { type: 'run' | 'fet
     await state.handle.abort()
     return
   }
-  await state.handle.send(message.message ?? '')
+  try {
+    await state.handle.send(message.message ?? '')
+  } catch (err) {
+    // A rejected mid-run send must not kill the active run; surface it as a
+    // diagnostic so the prompt loss is observable in the session events.
+    const reason = err instanceof Error ? err.message : String(err)
+    write({ type: 'log', requestId: message.requestId, level: 'error', message: `Runtime rejected injected prompt: ${reason}` })
+  }
 }
 
 write({ type: 'ready' })

@@ -32,6 +32,15 @@ export const RUNTIME_CATALOG: readonly RuntimeCatalogEntry[] = [
   },
 ]
 
+// Runtimes whose bridge accepts mid-run prompt injection over the runner
+// session channel. codex runs one prompt per process, so live prompts are not
+// supported there and session commands must queue as new work items.
+const LIVE_PROMPT_RUNTIMES: ReadonlySet<RuntimeName> = new Set(['claude-code', 'copilot'])
+
+export function runtimeSupportsLivePrompts(runtime: RuntimeName) {
+  return LIVE_PROMPT_RUNTIMES.has(runtime)
+}
+
 export function runtimeProviderModelCapability(runtime: RuntimeName, provider: string, model: string) {
   return `${RUNTIME_PROVIDER_MODEL_CAPABILITY_PREFIX}:${runtime}:${provider}:${model}`
 }

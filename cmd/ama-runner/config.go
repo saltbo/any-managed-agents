@@ -32,6 +32,8 @@ type Config struct {
 	RenewInterval         time.Duration `json:"renewInterval"`
 	CommandTimeout        time.Duration `json:"commandTimeout"`
 	ShutdownGraceInterval time.Duration `json:"shutdownGraceInterval"`
+	// MaxSessionDuration caps a single runtime session; 0 disables the cap.
+	MaxSessionDuration time.Duration `json:"maxSessionDuration"`
 }
 
 func LoadConfig(args []string, getenv func(string) string) (Config, error) {
@@ -71,6 +73,10 @@ func LoadConfig(args []string, getenv func(string) string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	envMaxSessionDuration, err := parseEnvDuration(getenv, "AMA_RUNNER_MAX_SESSION_DURATION", 2*time.Hour)
+	if err != nil {
+		return Config{}, err
+	}
 	defaultConfigFile := defaultConfigPath(getenv)
 	config := Config{
 		ConfigPath:            defaultConfigFile,
@@ -90,6 +96,7 @@ func LoadConfig(args []string, getenv func(string) string) (Config, error) {
 		RenewInterval:         envRenewInterval,
 		CommandTimeout:        envCommandTimeout,
 		ShutdownGraceInterval: envShutdownGraceInterval,
+		MaxSessionDuration:    envMaxSessionDuration,
 	}
 
 	flags := flag.NewFlagSet("ama-runner", flag.ContinueOnError)
@@ -109,6 +116,7 @@ func LoadConfig(args []string, getenv func(string) string) (Config, error) {
 	renewInterval := flags.Duration("renew-interval", config.RenewInterval, "lease renew interval")
 	commandTimeout := flags.Duration("command-timeout", config.CommandTimeout, "per-command timeout")
 	shutdownGrace := flags.Duration("shutdown-grace", config.ShutdownGraceInterval, "process shutdown grace interval")
+	maxSessionDuration := flags.Duration("max-session-duration", config.MaxSessionDuration, "max duration for a single runtime session (0 disables)")
 	if err := flags.Parse(args); err != nil {
 		return Config{}, err
 	}
@@ -177,6 +185,9 @@ func LoadConfig(args []string, getenv func(string) string) (Config, error) {
 	}
 	if visited["shutdown-grace"] {
 		config.ShutdownGraceInterval = *shutdownGrace
+	}
+	if visited["max-session-duration"] {
+		config.MaxSessionDuration = *maxSessionDuration
 	}
 
 	saved, err := LoadSavedRunnerConfig(config.ConfigPath)
@@ -277,6 +288,9 @@ func (c Config) Validate() error {
 	if c.PollInterval <= 0 || c.CommandTimeout <= 0 || c.ShutdownGraceInterval <= 0 {
 		return fmt.Errorf("poll, command timeout, and shutdown grace intervals must be greater than zero")
 	}
+	if c.MaxSessionDuration < 0 {
+		return fmt.Errorf("max session duration must be zero (disabled) or greater")
+	}
 	return nil
 }
 
@@ -349,6 +363,7 @@ type configFile struct {
 	RenewInterval         durationJSON `json:"renewInterval"`
 	CommandTimeout        durationJSON `json:"commandTimeout"`
 	ShutdownGraceInterval durationJSON `json:"shutdownGraceInterval"`
+	MaxSessionDuration    durationJSON `json:"maxSessionDuration"`
 }
 
 func (c configFile) Config() Config {
@@ -367,6 +382,7 @@ func (c configFile) Config() Config {
 		RenewInterval:         time.Duration(c.RenewInterval),
 		CommandTimeout:        time.Duration(c.CommandTimeout),
 		ShutdownGraceInterval: time.Duration(c.ShutdownGraceInterval),
+		MaxSessionDuration:    time.Duration(c.MaxSessionDuration),
 	}
 }
 
@@ -435,6 +451,9 @@ func mergeConfig(base Config, override Config) Config {
 	}
 	if override.ShutdownGraceInterval != 0 {
 		base.ShutdownGraceInterval = override.ShutdownGraceInterval
+	}
+	if override.MaxSessionDuration != 0 {
+		base.MaxSessionDuration = override.MaxSessionDuration
 	}
 	return base
 }

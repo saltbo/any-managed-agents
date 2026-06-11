@@ -31,13 +31,14 @@ type SDKBridgeRuntimeAdapter struct {
 }
 
 type bridgeEnvelope struct {
-	Type      string          `json:"type"`
-	RequestID string          `json:"requestId,omitempty"`
-	Event     json.RawMessage `json:"event,omitempty"`
-	Result    ama.JSON        `json:"result,omitempty"`
-	Error     *bridgeError    `json:"error,omitempty"`
-	Level     string          `json:"level,omitempty"`
-	Message   string          `json:"message,omitempty"`
+	Type        string          `json:"type"`
+	RequestID   string          `json:"requestId,omitempty"`
+	Event       json.RawMessage `json:"event,omitempty"`
+	Result      ama.JSON        `json:"result,omitempty"`
+	Error       *bridgeError    `json:"error,omitempty"`
+	Level       string          `json:"level,omitempty"`
+	Message     string          `json:"message,omitempty"`
+	ResumeToken string          `json:"resumeToken,omitempty"`
 }
 
 type bridgeError struct {
@@ -82,6 +83,7 @@ func (a SDKBridgeRuntimeAdapter) Run(ctx context.Context, request RuntimeRequest
 	if err != nil {
 		return nil, err
 	}
+	stdin := &bridgeStdin{writer: stdinWriter}
 	stdoutReader, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, err
@@ -148,15 +150,20 @@ func (a SDKBridgeRuntimeAdapter) Run(ctx context.Context, request RuntimeRequest
 	if request.Model != "" {
 		runRequest["model"] = request.Model
 	}
-	if err := writeBridgeInput(stdinWriter, runRequest); err != nil {
+	if err := stdin.WriteJSON(runRequest); err != nil {
 		a.stopProcess(cmd)
 		_ = cmd.Wait()
 		return nil, err
 	}
+	if request.RegisterPromptSender != nil {
+		request.RegisterPromptSender(func(message string) error {
+			return stdin.WriteJSON(bridgeSendControl(requestID, message))
+		})
+	}
 
 	var result ama.JSON
-	readErr := readBridgeMessages(stdoutScanner, requestID, writeSerialized, &result)
-	_ = stdinWriter.Close()
+	readErr := readBridgeMessages(stdoutScanner, requestID, writeSerialized, request.OnResumeToken, &result)
+	_ = stdin.Close()
 	waitErr := cmd.Wait()
 	stderrErr := <-stderrDone
 
@@ -217,7 +224,7 @@ func waitBridgeReady(scanner *bufio.Scanner) error {
 	return nil
 }
 
-func readBridgeMessages(scanner *bufio.Scanner, requestID string, write RuntimeEventWriter, result *ama.JSON) error {
+func readBridgeMessages(scanner *bufio.Scanner, requestID string, write RuntimeEventWriter, onResumeToken func(string), result *ama.JSON) error {
 	for scanner.Scan() {
 		var envelope bridgeEnvelope
 		if err := json.Unmarshal([]byte(scanner.Text()), &envelope); err != nil {
@@ -227,6 +234,10 @@ func readBridgeMessages(scanner *bufio.Scanner, requestID string, write RuntimeE
 			continue
 		}
 		switch envelope.Type {
+		case "resumeToken":
+			if onResumeToken != nil && envelope.ResumeToken != "" {
+				onResumeToken(envelope.ResumeToken)
+			}
 		case "event":
 			var event bridgeEvent
 			if err := json.Unmarshal(envelope.Event, &event); err != nil {
@@ -264,15 +275,42 @@ func bridgePipeClosedAfterResult(err error, result ama.JSON) bool {
 	return err != nil && result != nil && errors.Is(err, os.ErrClosed)
 }
 
-func writeBridgeInput(writer io.Writer, value ama.JSON) error {
+// bridgeStdin serializes writes to the bridge's stdin so the initial run
+// request, injected prompt controls, and the final close cannot interleave.
+type bridgeStdin struct {
+	mu     sync.Mutex
+	writer io.WriteCloser
+	closed bool
+}
+
+func (s *bridgeStdin) WriteJSON(value ama.JSON) error {
 	data, err := json.Marshal(value)
 	if err != nil {
 		return err
 	}
-	if _, err := writer.Write(append(data, '\n')); err != nil {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return fmt.Errorf("runtime SDK bridge stdin is closed")
+	}
+	if _, err := s.writer.Write(append(data, '\n')); err != nil {
 		return err
 	}
 	return nil
+}
+
+func (s *bridgeStdin) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return nil
+	}
+	s.closed = true
+	return s.writer.Close()
+}
+
+func bridgeSendControl(requestID string, message string) ama.JSON {
+	return ama.JSON{"type": "send", "requestId": requestID, "message": message}
 }
 
 func streamBridgeStderr(reader io.Reader, output *bytes.Buffer, runtimeName string, write RuntimeEventWriter) error {

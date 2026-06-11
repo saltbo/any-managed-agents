@@ -363,7 +363,9 @@ func TestMaterializeRuntimeBridgeWritesEmbeddedBundle(t *testing.T) {
 func TestBridgeProtocolReadsReadyEventsResultsErrorsAndLogs(t *testing.T) {
 	output := strings.Join([]string{
 		`{"type":"ready"}`,
+		`{"type":"resumeToken","requestId":"run_session_1","resumeToken":"thread_1"}`,
 		`{"type":"event","requestId":"run_session_1","event":{"type":"message_end","payload":{"message":{"role":"assistant","content":"ok"}}}}`,
+		`{"type":"resumeToken","requestId":"other","resumeToken":"ignored"}`,
 		`{"type":"log","requestId":"run_session_1","message":"bridge diagnostic"}`,
 		`{"type":"event","requestId":"other","event":{"type":"message_end","payload":{"message":{"role":"assistant","content":"ignored"}}}}`,
 		`{"type":"result","requestId":"run_session_1","result":{"exitCode":0,"providerThreadId":"thread_1"}}`,
@@ -373,16 +375,22 @@ func TestBridgeProtocolReadsReadyEventsResultsErrorsAndLogs(t *testing.T) {
 		t.Fatalf("expected bridge ready, got %v", err)
 	}
 	var events []string
+	var resumeTokens []string
 	var result ama.JSON
 	err := readBridgeMessages(scanner, "run_session_1", func(eventType string, payload ama.JSON) error {
 		events = append(events, eventType+":"+mustJSON(t, payload))
 		return nil
+	}, func(resumeToken string) {
+		resumeTokens = append(resumeTokens, resumeToken)
 	}, &result)
 	if err != nil {
 		t.Fatalf("expected bridge messages, got %v", err)
 	}
 	if len(events) != 2 || !strings.Contains(events[0], "message_end") || !strings.Contains(events[1], "bridge diagnostic") {
 		t.Fatalf("expected forwarded event and log, got %v", events)
+	}
+	if len(resumeTokens) != 1 || resumeTokens[0] != "thread_1" {
+		t.Fatalf("expected scoped resume token callback, got %v", resumeTokens)
 	}
 	if result["providerThreadId"] != "thread_1" {
 		t.Fatalf("expected bridge result, got %#v", result)
@@ -401,16 +409,16 @@ func TestBridgeProtocolErrorBranches(t *testing.T) {
 		t.Fatal(err)
 	}
 	var result ama.JSON
-	if err := readBridgeMessages(scanner, "run_session_1", func(string, ama.JSON) error { return nil }, &result); err == nil || !strings.Contains(err.Error(), "missing type") {
+	if err := readBridgeMessages(scanner, "run_session_1", func(string, ama.JSON) error { return nil }, nil, &result); err == nil || !strings.Contains(err.Error(), "missing type") {
 		t.Fatalf("expected missing event type error, got %v", err)
 	}
 	scanner = bridgeScanner(strings.NewReader(`{"type":"error","requestId":"run_session_1","error":{"message":"sdk failed"}}` + "\n"))
-	if err := readBridgeMessages(scanner, "run_session_1", func(string, ama.JSON) error { return nil }, &result); err == nil || !strings.Contains(err.Error(), "sdk failed") {
+	if err := readBridgeMessages(scanner, "run_session_1", func(string, ama.JSON) error { return nil }, nil, &result); err == nil || !strings.Contains(err.Error(), "sdk failed") {
 		t.Fatalf("expected bridge error, got %v", err)
 	}
 	writeErr := errors.New("write failed")
 	scanner = bridgeScanner(strings.NewReader(`{"type":"log","requestId":"run_session_1","message":"diag"}` + "\n"))
-	if err := readBridgeMessages(scanner, "run_session_1", func(string, ama.JSON) error { return writeErr }, &result); !errors.Is(err, writeErr) {
+	if err := readBridgeMessages(scanner, "run_session_1", func(string, ama.JSON) error { return writeErr }, nil, &result); !errors.Is(err, writeErr) {
 		t.Fatalf("expected writer error, got %v", err)
 	}
 }

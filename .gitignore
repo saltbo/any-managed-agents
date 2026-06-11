@@ -26,3 +26,4 @@ skills-lock.json
 .claude/agents/
 .codex/agents/
 .gemini/agents/
+cmd/ama-runner/ama-runner

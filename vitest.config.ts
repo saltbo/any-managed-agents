@@ -26,6 +26,7 @@ export default defineConfig({
             'server/runtime/**/*.test.ts',
             'server/test/**/*.test.ts',
             'shared/**/*.test.ts',
+            'runtime-bridge/src/**/*.test.ts',
           ],
         },
       },

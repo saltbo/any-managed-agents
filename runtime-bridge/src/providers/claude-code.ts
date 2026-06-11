@@ -1,11 +1,12 @@
 import { execSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
+import type { SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import { runtimeError, runtimeEvent, textMessage, toolEnd, toolStart, usageEvent } from '../events/ama'
 import {
   agentSystemPrompt,
+  createAsyncPushQueue,
   type AmaRuntimeEvent,
   type RuntimeProvider,
   type RuntimeProviderHandle,
@@ -194,26 +195,48 @@ export const claudeCodeProvider: RuntimeProvider = {
       prompt: request.prompt,
       options,
     })
+    // Each injected prompt produces one additional `result` message; track them
+    // so a mid-run injection is processed instead of being cut off when the
+    // original turn's result arrives. Every result is yielded before the break
+    // check, so the final turn's output is never dropped. Known limit: a
+    // prompt injected after the last expected result already ended the loop is
+    // lost — the server-side queue fallback covers disconnected channels, not
+    // this terminal race.
+    let pendingInjectedPrompts = 0
+    // Object wrapper: TS narrows captured let-bindings inside the IIFE
+    // generator to their initial null, breaking optional chaining.
+    const promptInput: { current: ReturnType<typeof createAsyncPushQueue<SDKUserMessage>> | null } = { current: null }
     const events = (async function* () {
       for await (const msg of q) {
         const sessionId = (msg as unknown as { session_id?: unknown }).session_id
         if (typeof sessionId === 'string' && sessionId) resumeToken = sessionId
         yield* mapClaudeMessage(msg)
-        if (msg.type === 'result') break
+        if (msg.type === 'result') {
+          if (pendingInjectedPrompts === 0) break
+          pendingInjectedPrompts -= 1
+        }
       }
+      promptInput.current?.end()
       q.close()
     })()
     return Promise.resolve({
       events,
       async abort() {
         abortController.abort()
+        promptInput.current?.end()
         q.close()
       },
       async send(message: string) {
-        const input = async function* () {
-          yield { type: 'user' as const, message: { role: 'user' as const, content: message }, parent_tool_use_id: null }
+        if (!promptInput.current) {
+          promptInput.current = createAsyncPushQueue<SDKUserMessage>()
+          void q.streamInput(promptInput.current.values)
         }
-        await q.streamInput(input())
+        pendingInjectedPrompts += 1
+        promptInput.current.push({
+          type: 'user' as const,
+          message: { role: 'user' as const, content: message },
+          parent_tool_use_id: null,
+        })
       },
       getResumeToken() {
         return resumeToken
