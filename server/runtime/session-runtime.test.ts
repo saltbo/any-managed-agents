@@ -269,6 +269,53 @@ describe('session-runtime', () => {
     expect(JSON.stringify(secondTurnEvents)).toContain('Previous user prompt: Alpha durable prompt')
   })
 
+  it('pauses a multi-turn run at the budget boundary and finishes via continuation', async () => {
+    mockExecutor.execute.mockResolvedValue({
+      toolCallId: 'call_git_status',
+      toolName: 'sandbox.exec',
+      output: { stdout: 'clean' },
+      error: null,
+      durationMs: 5,
+    })
+
+    const firstEvents: Record<string, unknown>[] = []
+    const first = await runSessionTurn({ AMA_RUNTIME_MODE: 'test' } as Env, {
+      sessionId: 'session_123',
+      sandboxId: 'sandbox_123',
+      provider: 'workers-ai',
+      model: '@cf/moonshotai/kimi-k2.6',
+      agentSnapshot: { instructions: 'Inspect before answering.', allowedTools: ['sandbox.exec'] },
+      prompt: 'Inspect repository status',
+      shouldPause: () => true,
+      onEvent: async (event) => {
+        firstEvents.push(event)
+      },
+    })
+
+    // The tool-call turn completed and persisted, then the run paused instead
+    // of starting the next model turn.
+    expect(first).toEqual({ status: 'paused' })
+    expect(JSON.stringify(firstEvents)).toContain('tool_execution_end')
+    expect(JSON.stringify(firstEvents)).not.toContain('Tool result observed')
+
+    const secondEvents: Record<string, unknown>[] = []
+    const second = await runSessionTurn({ AMA_RUNTIME_MODE: 'test' } as Env, {
+      sessionId: 'session_123',
+      sandboxId: 'sandbox_123',
+      provider: 'workers-ai',
+      model: '@cf/moonshotai/kimi-k2.6',
+      agentSnapshot: { instructions: 'Inspect before answering.', allowedTools: ['sandbox.exec'] },
+      continuation: true,
+      messages: runtimeMessagesFromEvents(firstEvents.map((event) => ({ payload: event }))),
+      onEvent: async (event) => {
+        secondEvents.push(event)
+      },
+    })
+
+    expect(second).toEqual({ status: 'idle' })
+    expect(JSON.stringify(secondEvents)).toContain('Tool result observed')
+  })
+
   it('uses latest agent_end messages as canonical persisted context', () => {
     const messages = runtimeMessagesFromEvents([
       {

@@ -73,7 +73,10 @@ export type RuntimeToolPolicyDecision = {
 }
 
 export type SessionTurnResult = {
-  status: 'idle' | 'aborted'
+  // 'paused': the run still wants more model turns but yielded its execution
+  // budget; the caller re-enters with `continuation` to pick up the
+  // transcript (rebuilt from persisted events) where it left off.
+  status: 'idle' | 'aborted' | 'paused'
 }
 
 export type SessionTurnInput = {
@@ -82,8 +85,13 @@ export type SessionTurnInput = {
   provider: string
   model: string | null
   agentSnapshot: Record<string, unknown>
-  prompt: string
+  // Required unless `continuation` is set: a continuation resumes from the
+  // persisted transcript whose last message is a tool result.
+  prompt?: string
+  continuation?: boolean
   messages?: AgentMessage[]
+  // Checked before each model call after the first; returning true pauses the run.
+  shouldPause?: () => boolean
   ensureActive?: () => Promise<void>
   onEvent: (event: Record<string, unknown>, metadata?: Record<string, unknown>) => Promise<void>
   approveToolCall?: (input: RuntimeToolPolicyInput) => Promise<RuntimeToolPolicyDecision>
@@ -628,6 +636,10 @@ function createRuntimeStreamFn(
   values: {
     ensureActive?: () => Promise<void>
     markCancelled: () => void
+    // Checked before each model call: pausing between completed turns lets a
+    // continuation pick the run up under a fresh execution budget.
+    shouldPause?: () => boolean
+    markPaused?: () => void
   },
 ) {
   return (model: Model<string>, context: Context, options?: StreamOptions) => {
@@ -637,6 +649,14 @@ function createRuntimeStreamFn(
         if (options?.signal?.aborted) {
           const aborted = assistantMessage(model, [], 'aborted', ZERO_USAGE, 'Runtime request aborted')
           emitAssistantMessage(stream, aborted)
+          return
+        }
+        // Only pause once the transcript already contains assistant progress;
+        // the first model call of an invocation always runs.
+        if (values.shouldPause?.() && context.messages.some((message) => message.role === 'assistant')) {
+          values.markPaused?.()
+          const paused = assistantMessage(model, [], 'aborted', ZERO_USAGE, 'Paused for continuation')
+          emitAssistantMessage(stream, paused)
           return
         }
         await ensureTurnActive(options?.signal ?? new AbortController().signal, values.ensureActive)
@@ -850,6 +870,7 @@ export async function runSessionTurn(env: Env, input: SessionTurnInput): Promise
   const model = runtimeModel(input.provider, modelId)
   let aborted = false
   let cancelled = false
+  let paused = false
   let failureMessage: string | null = null
   const agent = new Agent({
     initialState: {
@@ -868,6 +889,14 @@ export async function runSessionTurn(env: Env, input: SessionTurnInput): Promise
       markCancelled: () => {
         cancelled = true
       },
+      ...(input.shouldPause
+        ? {
+            shouldPause: input.shouldPause,
+            markPaused: () => {
+              paused = true
+            },
+          }
+        : {}),
       ...(input.ensureActive ? { ensureActive: input.ensureActive } : {}),
     }),
     toolExecution: 'sequential',
@@ -875,6 +904,12 @@ export async function runSessionTurn(env: Env, input: SessionTurnInput): Promise
   })
 
   agent.subscribe(async (event: AgentEvent) => {
+    // Everything after a pause is filler from the synthetic paused message;
+    // completed turns are already persisted and the continuation rebuilds
+    // from them.
+    if (paused) {
+      return
+    }
     try {
       await ensureTurnActive(controller.signal, input.ensureActive)
     } catch (error) {
@@ -909,8 +944,20 @@ export async function runSessionTurn(env: Env, input: SessionTurnInput): Promise
   controller.signal.addEventListener('abort', () => agent.abort(), { once: true })
   try {
     await ensureTurnActive(controller.signal, input.ensureActive)
-    await agent.prompt(input.prompt)
+    if (input.continuation) {
+      await agent.continue()
+    } else {
+      if (typeof input.prompt !== 'string') {
+        throw new Error('Session turn requires a prompt unless it is a continuation')
+      }
+      await agent.prompt(input.prompt)
+    }
     await agent.waitForIdle()
+    // A pause only fires when the loop was about to start another model call,
+    // so by construction the run still has work for a continuation.
+    if (paused) {
+      return { status: 'paused' }
+    }
     if (aborted || cancelled) {
       return { status: 'aborted' }
     }

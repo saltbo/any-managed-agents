@@ -1515,15 +1515,22 @@ type CloudTurnOutcome =
   | { ok: false; cancelled: true }
   | { ok: false; cancelled: false; error: ReturnType<typeof safeRuntimeError> }
 
+// Per-invocation soft budget for new model turns. A queue consumer owns
+// ~15 minutes of wall clock; pausing turn starts after this leaves headroom
+// for one bounded (10-minute) sandbox exec to finish before the cap.
+const CLOUD_TURN_SOFT_BUDGET_MS = 4 * 60_000
+
 // Runs one cloud session turn end to end: model loop, sandbox tools, event
 // persistence, idle transition, and audit. Callers are the queue consumer
-// (production) and the inline path (test mode).
+// (production) and the inline path (test mode). A run that outgrows the soft
+// budget is paused and re-enqueued as a session.step continuation, so total
+// turn duration is not capped by one invocation.
 async function executeCloudSessionTurn(
   env: Env,
   db: Db,
   auth: AuthContext,
   session: SessionRow,
-  prompt: string,
+  work: { prompt?: string; continuation?: boolean },
   auditAction: 'session.initial_prompt' | 'session.command',
 ): Promise<CloudTurnOutcome> {
   try {
@@ -1536,14 +1543,18 @@ async function executeCloudSessionTurn(
     const ensureActive = async () => {
       await assertRuntimeSessionRunning(db, auth, session.id)
     }
+    const startedAt = Date.now()
     const result = await runSessionTurn(env, {
       sessionId: session.id,
       sandboxId: session.sandboxId ?? '',
       provider: session.modelProvider ?? agentSnapshot.provider,
       model: sessionModel(modelConfig, agentSnapshot),
       agentSnapshot,
-      prompt,
+      ...(work.prompt !== undefined ? { prompt: work.prompt } : {}),
+      ...(work.continuation ? { continuation: true } : {}),
       messages,
+      // Inline mode (tests) has no queue to continue on; never pause there.
+      ...(cloudTurnsRunInline(env) ? {} : { shouldPause: () => Date.now() - startedAt > CLOUD_TURN_SOFT_BUDGET_MS }),
       ensureActive,
       onEvent: async (event, metadata) => {
         await ensureActive()
@@ -1610,6 +1621,25 @@ async function executeCloudSessionTurn(
         )
     }
 
+    if (result.status === 'paused') {
+      // Keep the session running, refresh its liveness for the watchdog, and
+      // chain the next step.
+      await db
+        .update(sessions)
+        .set({ updatedAt: now() })
+        .where(
+          and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id), eq(sessions.status, 'running')),
+        )
+      await enqueueCloudTurn(env, {
+        type: 'session.step',
+        sessionId: session.id,
+        organizationId: auth.organization.id,
+        projectId: auth.project.id,
+        auditAction,
+      })
+      return { ok: true }
+    }
+
     await recordAudit(db, {
       auth,
       action: auditAction,
@@ -1662,6 +1692,15 @@ export async function consumeCloudTurnMessage(env: Env, message: CloudTurnMessag
     })
     return
   }
+  if (message.type === 'session.step') {
+    // Continuations only run while the session is still running; a stop or
+    // error in between drops the chain.
+    if (session.status !== 'running') {
+      return
+    }
+    await executeCloudSessionTurn(env, db, auth, session, { continuation: true }, message.auditAction)
+    return
+  }
   // A prompt accepted while another turn was finishing can find the session
   // back in "idle": the finishing turn's idle write races the prompt's
   // running write. The queued prompt is still valid — re-mark and run it.
@@ -1678,7 +1717,7 @@ export async function consumeCloudTurnMessage(env: Env, message: CloudTurnMessag
   } else if (session.status !== 'running') {
     return
   }
-  await executeCloudSessionTurn(env, db, auth, session, message.prompt, message.auditAction)
+  await executeCloudSessionTurn(env, db, auth, session, { prompt: message.prompt }, message.auditAction)
 }
 
 function cloudTurnSystemAuth(message: CloudTurnMessage): AuthContext {
@@ -1728,7 +1767,7 @@ async function dispatchInitialPrompt(env: Env, db: Db, auth: AuthContext, sessio
   }
 
   if (cloudTurnsRunInline(env)) {
-    await executeCloudSessionTurn(env, db, auth, session, initialPrompt, 'session.initial_prompt')
+    await executeCloudSessionTurn(env, db, auth, session, { prompt: initialPrompt }, 'session.initial_prompt')
     return
   }
   await enqueueCloudTurn(env, {
@@ -1813,7 +1852,7 @@ async function dispatchSessionPromptCommand(env: Env, db: Db, auth: AuthContext,
     }
   }
 
-  const outcome = await executeCloudSessionTurn(env, db, auth, session, message, 'session.command')
+  const outcome = await executeCloudSessionTurn(env, db, auth, session, { prompt: message }, 'session.command')
   if (!outcome.ok && outcome.cancelled) {
     return { status: 409 as const, message: 'Session runtime is no longer active' }
   }

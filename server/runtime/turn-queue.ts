@@ -13,6 +13,17 @@ export type CloudSessionTurnMessage = {
   auditAction: 'session.initial_prompt' | 'session.command'
 }
 
+// Continuation of a paused turn: the transcript is rebuilt from persisted
+// events and the loop continues from the trailing tool results. Chaining
+// steps lifts the per-invocation wall-clock cap from total turn duration.
+export type CloudSessionStepMessage = {
+  type: 'session.step'
+  sessionId: string
+  organizationId: string
+  projectId: string
+  auditAction: 'session.initial_prompt' | 'session.command'
+}
+
 export type CloudSessionStartMessage = {
   type: 'session.start'
   sessionId: string
@@ -26,7 +37,7 @@ export type CloudSessionStartMessage = {
   initialPrompt?: string
 }
 
-export type CloudTurnMessage = CloudSessionTurnMessage | CloudSessionStartMessage
+export type CloudTurnMessage = CloudSessionTurnMessage | CloudSessionStepMessage | CloudSessionStartMessage
 
 // Test mode (and local setups without the queue binding) run turns inline so
 // existing synchronous semantics and assertions keep working.
