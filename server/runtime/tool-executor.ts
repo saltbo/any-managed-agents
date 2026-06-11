@@ -66,6 +66,9 @@ async function getSandboxBinding() {
   return getSandbox
 }
 
+// Parity with the self-hosted runner's per-command default (10 minutes).
+const SANDBOX_EXEC_TIMEOUT_MS = 10 * 60_000
+
 export class CloudflareSandboxToolExecutor implements ToolExecutor {
   constructor(private readonly env: Env) {}
 
@@ -97,7 +100,14 @@ export class CloudflareSandboxToolExecutor implements ToolExecutor {
     input: ToolExecutionInput,
   ) {
     if (input.toolName === 'sandbox.exec') {
-      return sandboxExecOutput(await sandbox.exec(commandFromInput(input.input), { cwd: input.cwd ?? '/workspace' }))
+      // Bounded: an unbounded hang (network stall, interactive prompt) would
+      // otherwise consume the whole turn budget and strand the session.
+      return sandboxExecOutput(
+        await sandbox.exec(commandFromInput(input.input), {
+          cwd: input.cwd ?? '/workspace',
+          timeout: SANDBOX_EXEC_TIMEOUT_MS,
+        }),
+      )
     }
     if (input.toolName === 'sandbox.read') {
       return { content: await sandbox.readFile(filePathFromInput(input.input), { encoding: 'utf-8' }) }
