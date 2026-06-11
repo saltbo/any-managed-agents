@@ -35,8 +35,15 @@ function filePathFromInput(input: Record<string, unknown>) {
   if (typeof path !== 'string' || !path.trim()) {
     throw new Error('sandbox file operations require a non-empty path')
   }
-  if (path.startsWith('/') || path.split('/').includes('..')) {
+  if (path.split('/').includes('..')) {
     throw new Error('sandbox file paths must stay under /workspace')
+  }
+  // Models address files both ways; accept absolute paths inside /workspace.
+  if (path.startsWith('/')) {
+    if (path !== '/workspace' && !path.startsWith('/workspace/')) {
+      throw new Error('sandbox file paths must stay under /workspace')
+    }
+    return path
   }
   return `/workspace/${path}`
 }
