@@ -32,6 +32,9 @@ export type SessionRuntimeStartInput = {
   resourceRefs?: Record<string, unknown>[]
   runtimeEnv?: Record<string, string>
   runtimeSecretEnv?: Array<{ name: string; ref: string }>
+  // Secret env values already resolved from the vault by the control plane.
+  // Applied to the sandbox session env but never written to workspace files.
+  resolvedSecretEnv?: Record<string, string>
 }
 
 export type SessionRuntimeStartResult = {
@@ -141,6 +144,78 @@ export function workspaceResourceManifest(resourceRefs: Record<string, unknown>[
   }
 }
 
+const GIT_CLONE_TIMEOUT_MS = 120_000
+const GITHUB_NAME_RE = /^[A-Za-z0-9_.-]+$/
+
+type CloudWorkspaceSandbox = {
+  exec(
+    command: string,
+    options?: { cwd?: string; timeout?: number },
+  ): Promise<{ success?: boolean; exitCode?: number; stdout?: string; stderr?: string }>
+  writeFile(path: string, content: string, options?: { encoding?: string }): Promise<unknown>
+}
+
+async function execOrThrow(sandbox: CloudWorkspaceSandbox, command: string, options?: { timeout?: number }) {
+  const result = await sandbox.exec(command, options)
+  if (typeof result.exitCode === 'number' && result.exitCode !== 0) {
+    throw new Error(
+      `Sandbox workspace setup failed (exit ${result.exitCode}): ${result.stderr || result.stdout || command}`,
+    )
+  }
+  return result
+}
+
+function shellQuote(value: string) {
+  return `'${value.replaceAll("'", `'\\''`)}'`
+}
+
+// Parity with the self-hosted runner's prepareRuntimeWorkspace: configure the
+// agent git identity, store the GitHub credential, and clone declared
+// github_repository resources so the agent starts with a ready workspace.
+async function prepareCloudWorkspace(
+  sandbox: CloudWorkspaceSandbox,
+  values: { resourceRefs: Record<string, unknown>[]; env: Record<string, string> },
+) {
+  const manifest = workspaceResourceManifest(values.resourceRefs)
+  const token = values.env.GH_TOKEN ?? values.env.GITHUB_TOKEN
+  if (values.env.GIT_AUTHOR_NAME) {
+    await execOrThrow(sandbox, `git config --global user.name ${shellQuote(values.env.GIT_AUTHOR_NAME)}`)
+  }
+  if (values.env.GIT_AUTHOR_EMAIL) {
+    await execOrThrow(sandbox, `git config --global user.email ${shellQuote(values.env.GIT_AUTHOR_EMAIL)}`)
+  }
+  if (token) {
+    await execOrThrow(sandbox, 'git config --global credential.helper store')
+    await sandbox.writeFile('/root/.git-credentials', `https://x-access-token:${token}@github.com\n`, {
+      encoding: 'utf-8',
+    })
+  }
+
+  const resources = []
+  for (const resource of manifest.resources) {
+    const owner = String(resource.owner ?? '')
+    const repo = String(resource.repo ?? '')
+    if (!GITHUB_NAME_RE.test(owner) || !GITHUB_NAME_RE.test(repo)) {
+      throw new Error(`Invalid github_repository resource: ${owner}/${repo}`)
+    }
+    const mountPath =
+      typeof resource.mountPath === 'string' && resource.mountPath ? resource.mountPath : `/workspace/${repo}`
+    if (!mountPath.startsWith('/workspace/')) {
+      throw new Error(`github_repository mountPath must stay under /workspace: ${mountPath}`)
+    }
+    await execOrThrow(sandbox, `git clone https://github.com/${owner}/${repo}.git ${shellQuote(mountPath)}`, {
+      timeout: GIT_CLONE_TIMEOUT_MS,
+    })
+    if (typeof resource.ref === 'string' && resource.ref) {
+      await execOrThrow(sandbox, `git -C ${shellQuote(mountPath)} checkout ${shellQuote(resource.ref)}`)
+    }
+    resources.push({ ...resource, mountPath, status: 'cloned' })
+  }
+  await sandbox.writeFile('/workspace/.ama/resources.json', JSON.stringify({ ...manifest, resources }), {
+    encoding: 'utf-8',
+  })
+}
+
 export async function startSessionRuntime(
   env: Env,
   input: SessionRuntimeStartInput,
@@ -166,18 +241,19 @@ export async function startSessionRuntime(
       }),
       { encoding: 'utf-8' },
     )
-    await sandbox.writeFile(
-      '/workspace/.ama/resources.json',
-      JSON.stringify(workspaceResourceManifest(input.resourceRefs)),
-      {
-        encoding: 'utf-8',
-      },
-    )
     await sandbox.writeFile('/workspace/.ama/runtime-env.json', JSON.stringify(input.runtimeEnv ?? {}), {
       encoding: 'utf-8',
     })
     await sandbox.writeFile('/workspace/.ama/runtime-secret-env.json', JSON.stringify(input.runtimeSecretEnv ?? []), {
       encoding: 'utf-8',
+    })
+    const sessionEnv = { ...(input.runtimeEnv ?? {}), ...(input.resolvedSecretEnv ?? {}) }
+    if (Object.keys(sessionEnv).length > 0) {
+      await sandbox.setEnvVars(sessionEnv)
+    }
+    await prepareCloudWorkspace(sandbox, {
+      resourceRefs: input.resourceRefs ?? [],
+      env: sessionEnv,
     })
   }
 
@@ -672,7 +748,11 @@ function runtimeTools(
   const allowedTools = Array.isArray(values.agentSnapshot.allowedTools)
     ? values.agentSnapshot.allowedTools.filter((tool): tool is string => typeof tool === 'string')
     : []
-  const allowsTool = (toolName: string) => allowedTools.includes('*') || allowedTools.includes(toolName)
+  // An empty allowlist means "no restriction": agents without an explicit
+  // tool policy get the full sandbox toolset, matching environment policy
+  // defaults elsewhere (defaultEffect allow).
+  const allowsTool = (toolName: string) =>
+    allowedTools.length === 0 || allowedTools.includes('*') || allowedTools.includes(toolName)
 
   return [
     tool(

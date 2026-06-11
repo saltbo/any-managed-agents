@@ -5,6 +5,7 @@ const { getSandboxMock, mockExecutor, mockSandbox, toolExecutorMock } = vi.hoist
   const mockSandbox = {
     exec: vi.fn(),
     writeFile: vi.fn(),
+    setEnvVars: vi.fn(),
   }
   const mockExecutor = {
     execute: vi.fn(),
@@ -43,7 +44,9 @@ describe('session-runtime', () => {
     mockExecutor.execute.mockReset()
     mockExecutor.stop.mockReset()
     mockSandbox.exec.mockReset()
+    mockSandbox.exec.mockResolvedValue({ exitCode: 0, stdout: '', stderr: '' })
     mockSandbox.writeFile.mockReset()
+    mockSandbox.setEnvVars.mockReset()
     getSandboxMock.mockClear()
     toolExecutorMock.mockClear()
   })
@@ -382,7 +385,7 @@ describe('session-runtime', () => {
     expect(JSON.stringify(events)).not.toContain('AMA runtime processed: Alpha durable prompt')
   })
 
-  it('does not dispatch sandbox tools that are absent from the agent snapshot allow-list', async () => {
+  it('does not dispatch sandbox tools that are absent from a non-empty allow-list', async () => {
     const events: Record<string, unknown>[] = []
 
     await expect(
@@ -391,7 +394,7 @@ describe('session-runtime', () => {
         sandboxId: 'sandbox_123',
         provider: 'workers-ai',
         model: '@cf/moonshotai/kimi-k2.6',
-        agentSnapshot: { instructions: 'Inspect before answering.', allowedTools: [] },
+        agentSnapshot: { instructions: 'Inspect before answering.', allowedTools: ['sandbox.read'] },
         prompt: 'Inspect repository status',
         onEvent: async (event) => {
           events.push(event)
@@ -407,6 +410,31 @@ describe('session-runtime', () => {
           isError: true,
         }),
       ]),
+    )
+  })
+
+  it('grants the full sandbox toolset when the agent has no explicit allow-list', async () => {
+    mockExecutor.execute.mockResolvedValueOnce({
+      toolCallId: 'call_git_status',
+      toolName: 'sandbox.exec',
+      output: { stdout: 'clean' },
+      error: null,
+      durationMs: 5,
+    })
+
+    await runSessionTurn({ AMA_RUNTIME_MODE: 'test' } as Env, {
+      sessionId: 'session_123',
+      sandboxId: 'sandbox_123',
+      provider: 'workers-ai',
+      model: '@cf/moonshotai/kimi-k2.6',
+      agentSnapshot: { instructions: 'Inspect before answering.', allowedTools: [] },
+      prompt: 'Inspect repository status',
+      onEvent: async () => {},
+    })
+
+    expect(mockExecutor.execute).toHaveBeenCalledWith(
+      expect.objectContaining({ toolName: 'sandbox.exec' }),
+      expect.anything(),
     )
   })
 
@@ -453,6 +481,18 @@ describe('session-runtime', () => {
       expect.stringContaining('"runtimeSecretEnv":[{"name":"AK_AGENT_KEY","ref":"vaultver_abc123"}]'),
       { encoding: 'utf-8' },
     )
+    expect(mockSandbox.setEnvVars).toHaveBeenCalledWith({
+      AK_API_URL: 'https://ak.example.com',
+      AK_AGENT_ID: 'agent_123',
+    })
+    expect(mockSandbox.exec).toHaveBeenCalledWith(
+      "git clone https://github.com/saltbo/any-managed-agents.git '/workspace/repos/saltbo/any-managed-agents'",
+      { timeout: 120_000 },
+    )
+    expect(mockSandbox.exec).toHaveBeenCalledWith(
+      "git -C '/workspace/repos/saltbo/any-managed-agents' checkout 'main'",
+      undefined,
+    )
     expect(mockSandbox.writeFile).toHaveBeenCalledWith(
       '/workspace/.ama/resources.json',
       JSON.stringify({
@@ -465,7 +505,7 @@ describe('session-runtime', () => {
             repo: 'any-managed-agents',
             mountPath: '/workspace/repos/saltbo/any-managed-agents',
             ref: 'main',
-            status: 'declared',
+            status: 'cloned',
           },
         ],
       }),

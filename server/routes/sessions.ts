@@ -49,6 +49,7 @@ import {
 } from '../runtime/catalog'
 import { runtimeDriver, runtimeDriverName, runtimeMetadata } from '../runtime/drivers'
 import { safeRuntimeError } from '../runtime/runtime-error'
+import { resolveRuntimeSecretEnv } from '../runtime/secret-env'
 import {
   isRuntimeTurnCancelled,
   RuntimeTurnCancelledError,
@@ -1381,6 +1382,12 @@ async function startSessionRuntimeForRow(
   try {
     const mcpSnapshot = await resolveMcpSnapshot(db, auth, sessionId, agentSnapshot, environmentSnapshot)
     const runtimeEnvironmentSnapshot = environmentSnapshot ? { ...environmentSnapshot, runtimeConfig } : null
+    const resolvedSecretEnv = await resolveRuntimeSecretEnv(
+      env,
+      db,
+      { organizationId: auth.organization.id, projectId: auth.project.id },
+      runtimeSecretEnv ?? [],
+    )
     const runtime = await withTimeout(
       driver.startCloudSession(env, {
         sessionId,
@@ -1394,12 +1401,13 @@ async function startSessionRuntimeForRow(
         resourceRefs,
         runtimeEnv: runtimeEnv ?? {},
         runtimeSecretEnv: runtimeSecretEnv ?? [],
+        resolvedSecretEnv,
       }),
       RUNTIME_START_TIMEOUT_MS,
       'Session runtime startup timed out',
     )
     const current = await findSession(db, auth, sessionId)
-    if (!current || current.status !== 'pending') {
+    if (current?.status !== 'pending') {
       if (current?.status !== 'idle') {
         await stopCloudSessionRuntime(env, sandboxId).catch(() => undefined)
       }

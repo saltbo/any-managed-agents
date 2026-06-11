@@ -28,7 +28,7 @@ import {
   parseListCursor,
 } from '../openapi'
 import { redactSensitiveValue } from '../redaction'
-import { decryptSecretValue } from '../vaultCrypto'
+import { resolveRuntimeSecretEnv } from '../runtime/secret-env'
 
 const app = createApiRouter()
 
@@ -397,40 +397,13 @@ async function materializeLeaseWorkItemForRunner(env: Env, db: Db, auth: AuthCon
     payload.runtimeEnv && typeof payload.runtimeEnv === 'object' && !Array.isArray(payload.runtimeEnv)
       ? { ...(payload.runtimeEnv as Record<string, string>) }
       : {}
-  for (const item of runtimeSecretEnv) {
-    if (!item || typeof item !== 'object') {
-      continue
-    }
-    const { name, ref } = item as { name?: unknown; ref?: unknown }
-    if (typeof name !== 'string' || typeof ref !== 'string') {
-      continue
-    }
-    const version = await db
-      .select({ metadata: vaultCredentialVersions.metadata })
-      .from(vaultCredentialVersions)
-      .where(
-        and(
-          eq(vaultCredentialVersions.id, ref),
-          eq(vaultCredentialVersions.organizationId, auth.organization.id),
-          or(eq(vaultCredentialVersions.projectId, auth.project.id), isNull(vaultCredentialVersions.projectId)),
-          eq(vaultCredentialVersions.status, 'active'),
-        ),
-      )
-      .get()
-    const metadata = version ? parseRawJson<Record<string, unknown>>(version.metadata) : null
-    const value = await decryptSecretValue(env, metadata?.encryptedSecretValue)
-    if (typeof value === 'string') {
-      runtimeEnv[name] = value
-      continue
-    }
-    const legacyValue = metadata?.localSecretValue
-    if (typeof legacyValue === 'string') {
-      runtimeEnv[name] = legacyValue
-      continue
-    }
-    throw new Error(`Runtime secret ${ref} cannot be resolved for self-hosted runner dispatch`)
-  }
-  return { ...workItem, payload: JSON.stringify({ ...payload, runtimeEnv }) }
+  const resolved = await resolveRuntimeSecretEnv(
+    env,
+    db,
+    { organizationId: auth.organization.id, projectId: auth.project.id },
+    runtimeSecretEnv,
+  )
+  return { ...workItem, payload: JSON.stringify({ ...payload, runtimeEnv: { ...runtimeEnv, ...resolved } }) }
 }
 
 async function findRunner(db: Db, auth: AuthContext, runnerId: string) {
