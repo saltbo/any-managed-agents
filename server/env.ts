@@ -7,6 +7,8 @@ export interface Env {
   OIDC_PROVIDER?: Fetcher
   SANDBOX: DurableObjectNamespace<Sandbox>
   RUNNER_SESSION_CHANNEL: DurableObjectNamespace
+  // Cloud session turn queue; absent in test mode where turns run inline.
+  CLOUD_TURNS?: Queue<unknown>
   AMA_DEFAULT_MODEL?: string
   AMA_RUNTIME_MODE?: string
   AMA_PI_BRIDGE_COMMAND?: string

@@ -58,6 +58,7 @@ import {
   runtimeMessagesFromEvents,
   stopSessionRuntime as stopCloudSessionRuntime,
 } from '../runtime/session-runtime'
+import { type CloudTurnMessage, cloudTurnsRunInline, enqueueCloudTurn } from '../runtime/turn-queue'
 import {
   type EnvironmentHostingMode,
   EnvironmentHostingModeSchema,
@@ -1495,24 +1496,22 @@ async function startSessionRuntimeForRow(
   }
 }
 
-async function dispatchInitialPrompt(env: Env, db: Db, auth: AuthContext, session: SessionRow, initialPrompt: string) {
-  const submittedAt = now()
-  const started = await db
-    .update(sessions)
-    .set({ status: 'running', statusReason: null, updatedAt: submittedAt })
-    .where(
-      and(
-        eq(sessions.id, session.id),
-        eq(sessions.projectId, auth.project.id),
-        or(eq(sessions.status, 'idle'), eq(sessions.status, 'running')),
-      ),
-    )
-    .returning({ id: sessions.id })
-    .get()
-  if (!started) {
-    throw new Error('Session runtime is no longer active')
-  }
+type CloudTurnOutcome =
+  | { ok: true }
+  | { ok: false; cancelled: true }
+  | { ok: false; cancelled: false; error: ReturnType<typeof safeRuntimeError> }
 
+// Runs one cloud session turn end to end: model loop, sandbox tools, event
+// persistence, idle transition, and audit. Callers are the queue consumer
+// (production) and the inline path (test mode).
+async function executeCloudSessionTurn(
+  env: Env,
+  db: Db,
+  auth: AuthContext,
+  session: SessionRow,
+  prompt: string,
+  auditAction: 'session.initial_prompt' | 'session.command',
+): Promise<CloudTurnOutcome> {
   try {
     const agentSnapshot = parseAgentSnapshot(session.agentSnapshot)
     if (!agentSnapshot) {
@@ -1529,7 +1528,7 @@ async function dispatchInitialPrompt(env: Env, db: Db, auth: AuthContext, sessio
       provider: session.modelProvider ?? agentSnapshot.provider,
       model: sessionModel(modelConfig, agentSnapshot),
       agentSnapshot,
-      prompt: initialPrompt,
+      prompt,
       messages,
       ensureActive,
       onEvent: async (event, metadata) => {
@@ -1599,20 +1598,96 @@ async function dispatchInitialPrompt(env: Env, db: Db, auth: AuthContext, sessio
 
     await recordAudit(db, {
       auth,
-      action: 'session.initial_prompt',
+      action: auditAction,
       resourceType: 'session',
       resourceId: session.id,
       outcome: 'success',
       sessionId: session.id,
-      metadata: { source: 'api', promptDispatched: true },
+      metadata:
+        auditAction === 'session.initial_prompt' ? { source: 'api', promptDispatched: true } : { type: 'prompt' },
     })
+    return { ok: true }
   } catch (error) {
     if (isRuntimeTurnCancelled(error)) {
-      return
+      return { ok: false, cancelled: true }
     }
     const safeError = safeRuntimeError(error)
     await markInitialPromptFailed(db, auth, session, safeError.message)
+    return { ok: false, cancelled: false, error: safeError }
   }
+}
+
+// Queue consumer entry: re-resolve the session, skip if it is no longer
+// running (stopped/archived while queued), then execute the turn with the
+// consumer's wall-clock budget.
+export async function consumeCloudTurnMessage(env: Env, message: CloudTurnMessage): Promise<void> {
+  const db = drizzle(env.DB)
+  const auth = cloudTurnSystemAuth(message)
+  const session = await findSession(db, auth, message.sessionId)
+  if (!session || session.status !== 'running') {
+    return
+  }
+  await executeCloudSessionTurn(env, db, auth, session, message.prompt, message.auditAction)
+}
+
+function cloudTurnSystemAuth(message: CloudTurnMessage): AuthContext {
+  return {
+    user: {
+      id: 'system:cloud-turn',
+      email: '',
+      name: 'AMA cloud turn runner',
+      avatarUrl: null,
+    },
+    organization: {
+      id: message.organizationId,
+      name: message.organizationId,
+    },
+    project: { id: message.projectId, name: message.projectId },
+    roles: ['system'],
+    permissions: ['*'],
+    oidc: {
+      subject: 'system:cloud-turn',
+      clientId: null,
+      scope: null,
+      issuer: null,
+      externalTenantId: null,
+      runnerId: null,
+      runnerProjectId: null,
+      runnerEnvironmentId: null,
+    },
+  }
+}
+
+async function dispatchInitialPrompt(env: Env, db: Db, auth: AuthContext, session: SessionRow, initialPrompt: string) {
+  const submittedAt = now()
+  const started = await db
+    .update(sessions)
+    .set({ status: 'running', statusReason: null, updatedAt: submittedAt })
+    .where(
+      and(
+        eq(sessions.id, session.id),
+        eq(sessions.projectId, auth.project.id),
+        or(eq(sessions.status, 'idle'), eq(sessions.status, 'running')),
+      ),
+    )
+    .returning({ id: sessions.id })
+    .get()
+  if (!started) {
+    throw new Error('Session runtime is no longer active')
+  }
+
+  if (cloudTurnsRunInline(env)) {
+    await executeCloudSessionTurn(env, db, auth, session, initialPrompt, 'session.initial_prompt')
+    return
+  }
+  await enqueueCloudTurn(env, {
+    type: 'session.turn',
+    sessionId: session.id,
+    organizationId: auth.organization.id,
+    projectId: auth.project.id,
+    prompt: initialPrompt,
+    auditAction: 'session.initial_prompt',
+  })
 }
 
 async function dispatchSessionPromptCommand(env: Env, db: Db, auth: AuthContext, session: SessionRow, message: string) {
@@ -1668,107 +1743,33 @@ async function dispatchSessionPromptCommand(env: Env, db: Db, auth: AuthContext,
     return { status: 409 as const, message: 'Session runtime is no longer active' }
   }
 
-  try {
-    const agentSnapshot = parseAgentSnapshot(session.agentSnapshot)
-    if (!agentSnapshot) {
-      throw new Error('Session agent snapshot is required')
-    }
-    const modelConfig = parseJson<Record<string, unknown>>(session.modelConfig) ?? {}
-    const messages = await loadRuntimeMessages(db, session.id)
-    const ensureActive = async () => {
-      await assertRuntimeSessionRunning(db, auth, session.id)
-    }
-    const result = await runSessionTurn(env, {
+  if (!cloudTurnsRunInline(env)) {
+    await enqueueCloudTurn(env, {
+      type: 'session.turn',
       sessionId: session.id,
-      sandboxId: session.sandboxId,
-      provider: session.modelProvider ?? agentSnapshot.provider,
-      model: sessionModel(modelConfig, agentSnapshot),
-      agentSnapshot,
+      organizationId: auth.organization.id,
+      projectId: auth.project.id,
       prompt: message,
-      messages,
-      ensureActive,
-      onEvent: async (event, metadata) => {
-        await ensureActive()
-        await appendRuntimeEvent(db, {
-          auth,
-          sessionId: session.id,
-          event,
-          ...(metadata ? { metadata } : {}),
-        })
-      },
-      approveToolCall: async ({ toolName, input }) => {
-        await ensureActive()
-        if (toolName === 'sandbox.exec') {
-          const command = typeof input.command === 'string' ? input.command : null
-          const decision = await evaluateSandboxRuntimePolicy(db, auth, {
-            session: {
-              id: session.id,
-              agentSnapshot: session.agentSnapshot,
-              environmentSnapshot: session.environmentSnapshot,
-            },
-            operation: 'command',
-            command,
-          })
-          if (!decision.allowed) {
-            await ensureActive()
-            await appendRuntimeEvent(db, {
-              auth,
-              sessionId: session.id,
-              event: {
-                type: 'policy_denied',
-                category: decision.category,
-                ruleId: decision.rule,
-                resourceType: 'sandbox_command',
-                resourceId: command?.trim().split(/\s+/)[0] ?? 'sandbox.exec',
-                decision,
-                operation: 'command',
-                command,
-              },
-              metadata: { source: 'policy' },
-            })
-            await recordAudit(db, {
-              auth,
-              action: 'runtime_sandbox.operation',
-              resourceType: 'sandbox_command',
-              resourceId: command?.trim().split(/\s+/)[0] ?? 'sandbox.exec',
-              outcome: 'denied',
-              sessionId: session.id,
-              policyCategory: decision.category,
-              metadata: { operation: 'command', command, decision },
-            })
-          }
-          await ensureActive()
-          return { allowed: decision.allowed, reason: decision.message }
-        }
-        return { allowed: true }
-      },
+      auditAction: 'session.command',
     })
-    if (result.status === 'idle') {
-      await db
-        .update(sessions)
-        .set({ status: 'idle', updatedAt: now() })
-        .where(
-          and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id), eq(sessions.status, 'running')),
-        )
-    }
-    await recordAudit(db, {
-      auth,
-      action: 'session.command',
-      resourceType: 'session',
-      resourceId: session.id,
-      outcome: 'success',
+    return {
+      status: 202 as const,
+      runtime: 'ama-cloud' as const,
+      accepted: true,
       sessionId: session.id,
-      metadata: { type: 'prompt' },
-    })
-    return { status: 202 as const, runtime: 'ama-cloud' as const, accepted: true, sessionId: session.id, path }
-  } catch (error) {
-    if (isRuntimeTurnCancelled(error)) {
-      return { status: 409 as const, message: 'Session runtime is no longer active' }
+      path,
+      delivery: 'queued' as const,
     }
-    const safeError = safeRuntimeError(error)
-    await markInitialPromptFailed(db, auth, session, safeError.message)
-    return { status: 500 as const, message: safeError.message, runtimeError: safeError }
   }
+
+  const outcome = await executeCloudSessionTurn(env, db, auth, session, message, 'session.command')
+  if (!outcome.ok && outcome.cancelled) {
+    return { status: 409 as const, message: 'Session runtime is no longer active' }
+  }
+  if (!outcome.ok) {
+    return { status: 500 as const, message: outcome.error.message, runtimeError: outcome.error }
+  }
+  return { status: 202 as const, runtime: 'ama-cloud' as const, accepted: true, sessionId: session.id, path }
 }
 
 async function queueSelfHostedSessionCommand(

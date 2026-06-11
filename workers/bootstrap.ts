@@ -1,5 +1,8 @@
 import { createApp } from '../server/app'
 import type { Env } from '../server/env'
+import { consumeCloudTurnMessage } from '../server/routes/sessions'
+import { markStalledCloudSessions } from '../server/runtime/session-watchdog'
+import type { CloudTurnMessage } from '../server/runtime/turn-queue'
 import { dispatchDueScheduledTriggers } from '../server/schedules/dispatcher'
 
 export { Sandbox } from '@cloudflare/sandbox'
@@ -14,5 +17,17 @@ export default {
   },
   scheduled(event, env, ctx) {
     ctx.waitUntil(dispatchDueScheduledTriggers(env, ctx, { heartbeatAt: new Date(event.scheduledTime).toISOString() }))
+    ctx.waitUntil(markStalledCloudSessions(env))
+  },
+  async queue(batch, env) {
+    for (const message of batch.messages) {
+      try {
+        await consumeCloudTurnMessage(env, message.body as CloudTurnMessage)
+        message.ack()
+      } catch (error) {
+        console.error(`cloud turn failed for message ${message.id}: ${error}`)
+        message.retry()
+      }
+    }
   },
 } satisfies ExportedHandler<Env>

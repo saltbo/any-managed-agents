@@ -31,6 +31,15 @@ crons = ["*/5 * * * *"]
 [ai]
 binding = "AI"
 
+[[queues.producers]]
+binding = "CLOUD_TURNS"
+queue = "ama-cloud-turns"
+
+[[queues.consumers]]
+queue = "ama-cloud-turns"
+max_batch_size = 1
+max_retries = 1
+
 [[services]]
 binding = "OIDC_PROVIDER"
 service = "flareauth-tftt"
@@ -88,6 +97,15 @@ crons = ["*/5 * * * *"]
 
 [env.staging.ai]
 binding = "AI"
+
+[[env.staging.queues.producers]]
+binding = "CLOUD_TURNS"
+queue = "ama-cloud-turns-staging"
+
+[[env.staging.queues.consumers]]
+queue = "ama-cloud-turns-staging"
+max_batch_size = 1
+max_retries = 1
 
 [[env.staging.services]]
 binding = "OIDC_PROVIDER"
