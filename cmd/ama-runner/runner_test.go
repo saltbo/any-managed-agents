@@ -121,11 +121,12 @@ type fakeAdapter struct {
 }
 
 type fakeRuntimeAdapter struct {
-	request RuntimeRequest
-	events  []RuntimeEventRecord
-	result  ama.JSON
-	err     error
-	inspect func(RuntimeRequest) error
+	request       RuntimeRequest
+	events        []RuntimeEventRecord
+	result        ama.JSON
+	err           error
+	inspect       func(RuntimeRequest) error
+	waitForCancel bool
 }
 
 type RuntimeEventRecord struct {
@@ -255,12 +256,16 @@ func (a *fakeAdapter) Execute(ctx context.Context, _ ToolRequest) (ToolResult, e
 	return ToolResult{}, ctx.Err()
 }
 
-func (a *fakeRuntimeAdapter) Run(_ context.Context, request RuntimeRequest, write RuntimeEventWriter) (ama.JSON, error) {
+func (a *fakeRuntimeAdapter) Run(ctx context.Context, request RuntimeRequest, write RuntimeEventWriter) (ama.JSON, error) {
 	a.request = request
 	if a.inspect != nil {
 		if err := a.inspect(request); err != nil {
 			return nil, err
 		}
+	}
+	if a.waitForCancel {
+		<-ctx.Done()
+		return nil, ctx.Err()
 	}
 	events := a.events
 	if len(events) == 0 {
@@ -1242,7 +1247,21 @@ func testDaemon(client *fakeControlPlane, adapter SandboxAdapter) RunnerDaemon {
 		Client:   client,
 		Channels: client,
 		Adapter:  adapter,
+		LookPath: lookPathFinding("claude", "codex", "copilot"),
 		RunnerID: "runner_1",
+	}
+}
+
+// lookPathFinding fakes exec.LookPath so capability detection in tests does
+// not depend on which CLIs are installed on the host running the tests.
+func lookPathFinding(binaries ...string) func(string) (string, error) {
+	return func(binary string) (string, error) {
+		for _, candidate := range binaries {
+			if candidate == binary {
+				return "/usr/local/bin/" + binary, nil
+			}
+		}
+		return "", fmt.Errorf("%s not found on PATH", binary)
 	}
 }
 
@@ -1343,4 +1362,127 @@ func externalRuntimeSessionStartLease(runtimeName string, provider string, model
 	lease.WorkItem.Payload["initialPrompt"] = "Run external runtime"
 	lease.WorkItem.Payload["requiredRunnerCapability"] = "runtime-provider-model:" + runtimeName + ":" + provider + ":" + model
 	return lease
+}
+
+func TestHeartbeatRefreshesRuntimeCapabilitiesFromPath(t *testing.T) {
+	client := &fakeControlPlane{}
+	daemon := testDaemon(client, &fakeAdapter{})
+	var available atomic.Value
+	available.Store([]string{"codex"})
+	daemon.LookPath = func(binary string) (string, error) {
+		return lookPathFinding(available.Load().([]string)...)(binary)
+	}
+	if err := daemon.heartbeat(context.Background()); err != nil {
+		t.Fatalf("expected heartbeat success, got %v", err)
+	}
+	first := client.heartbeats[0].Capabilities
+	if !containsString(first, "codex") || !containsString(first, "runtime-provider-model:codex:*:gpt-5.3-codex") {
+		t.Fatalf("expected codex capabilities, got %v", first)
+	}
+	if containsString(first, "claude-code") || containsString(first, "copilot") {
+		t.Fatalf("expected missing CLIs to be excluded, got %v", first)
+	}
+
+	available.Store([]string{"codex", "claude"})
+	if err := daemon.heartbeat(context.Background()); err != nil {
+		t.Fatalf("expected heartbeat success, got %v", err)
+	}
+	second := client.heartbeats[1].Capabilities
+	if !containsString(second, "claude-code") || !containsString(second, "runtime-provider-model:claude-code:*:claude-sonnet-4-6") {
+		t.Fatalf("expected claude-code capabilities after installing the CLI, got %v", second)
+	}
+}
+
+func TestHeartbeatAdvertisesNoExternalRuntimesWhenNoCLIsAreInstalled(t *testing.T) {
+	client := &fakeControlPlane{}
+	daemon := testDaemon(client, &fakeAdapter{})
+	daemon.LookPath = lookPathFinding()
+	if err := daemon.heartbeat(context.Background()); err != nil {
+		t.Fatalf("expected heartbeat success, got %v", err)
+	}
+	got := client.heartbeats[0].Capabilities
+	want := []string{"sandbox.exec", "ama", defaultRuntimeProviderModelCapability}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("expected only base capabilities %v, got %v", want, got)
+	}
+}
+
+func TestRunOnceFailsLeaseWhenRuntimeCLIIsMissing(t *testing.T) {
+	lease := codexSessionStartLease("build")
+	client := &fakeControlPlane{lease: lease}
+	daemon := testDaemon(client, &fakeAdapter{})
+	daemon.LookPath = lookPathFinding("claude", "copilot")
+	if err := daemon.RunOnce(context.Background()); err != nil {
+		t.Fatalf("expected failed lease update to succeed, got %v", err)
+	}
+	if len(client.updates) != 1 || client.updates[0].Status != "failed" {
+		t.Fatalf("expected failed lease update, got %#v", client.updates)
+	}
+	message, _ := client.updates[0].Error["message"].(string)
+	if !strings.Contains(message, "required capability") {
+		t.Fatalf("expected capability error for missing codex CLI, got %#v", client.updates[0].Error)
+	}
+}
+
+func TestRunOnceFailsLeaseWhenSessionExceedsMaxDuration(t *testing.T) {
+	channel := newFakeRunnerSessionChannel(
+		ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"},
+	)
+	client := &fakeControlPlane{lease: codexSessionStartLease("runaway"), channel: channel}
+	runtimeAdapter := &fakeRuntimeAdapter{waitForCancel: true}
+	daemon := testDaemon(client, &fakeAdapter{})
+	daemon.RuntimeAdapter = runtimeAdapter
+	daemon.Config.MaxSessionDuration = 20 * time.Millisecond
+
+	err := daemon.RunOnce(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "exceeded max duration") {
+		t.Fatalf("expected session timeout error, got %v", err)
+	}
+	if len(client.updates) != 1 || client.updates[0].Status != "failed" {
+		t.Fatalf("expected failed (not interrupted) lease update, got %#v", client.updates)
+	}
+	message, _ := client.updates[0].Error["message"].(string)
+	if !strings.Contains(message, "session exceeded max duration") {
+		t.Fatalf("expected explicit timeout message, got %#v", client.updates[0].Error)
+	}
+	serializedEvents := mustJSON(t, channel.writtenMessages())
+	if !strings.Contains(serializedEvents, "session_timeout") {
+		t.Fatalf("expected session_timeout runtime.error event, got %s", serializedEvents)
+	}
+}
+
+func TestRunOnceDisablesSessionDeadlineWhenMaxDurationIsZero(t *testing.T) {
+	channel := newFakeRunnerSessionChannel(
+		ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"},
+	)
+	client := &fakeControlPlane{lease: codexSessionStartLease("build"), channel: channel}
+	runtimeAdapter := &fakeRuntimeAdapter{result: ama.JSON{"exitCode": 0}}
+	daemon := testDaemon(client, &fakeAdapter{})
+	daemon.RuntimeAdapter = runtimeAdapter
+	daemon.Config.MaxSessionDuration = 0
+	if err := daemon.RunOnce(context.Background()); err != nil {
+		t.Fatalf("expected run success with disabled session deadline, got %v", err)
+	}
+	if len(client.updates) != 1 || client.updates[0].Status != "completed" {
+		t.Fatalf("expected completed lease update, got %#v", client.updates)
+	}
+}
+
+func TestLeasePollDelayBacksOffAndCaps(t *testing.T) {
+	base := 2 * time.Second
+	if got := leasePollDelay(base, 0); got != base {
+		t.Fatalf("no failures should keep the base delay, got %v", got)
+	}
+	if got := leasePollDelay(base, 1); got != 4*time.Second {
+		t.Fatalf("one failure should double the delay, got %v", got)
+	}
+	if got := leasePollDelay(base, 3); got != 16*time.Second {
+		t.Fatalf("three failures should give 16s, got %v", got)
+	}
+	if got := leasePollDelay(base, 50); got != leaseClaimBackoffCap {
+		t.Fatalf("many failures should cap at %v, got %v", leaseClaimBackoffCap, got)
+	}
+	if got := leasePollDelay(time.Hour, 2); got != leaseClaimBackoffCap {
+		t.Fatalf("overflowing delay should cap at %v, got %v", leaseClaimBackoffCap, got)
+	}
 }

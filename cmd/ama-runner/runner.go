@@ -3,10 +3,15 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"os"
+	"os/exec"
+	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	ama "github.com/saltbo/any-managed-agents/sdk/go/ama"
@@ -37,11 +42,48 @@ type RunnerDaemon struct {
 	Channels       RunnerSessionChannelOpener
 	Adapter        SandboxAdapter
 	RuntimeAdapter RuntimeAdapter
-	RunnerID       string
-	mu             sync.Mutex
-	activeLeases   int
-	usageMu        sync.Mutex
-	runtimeUsage   []ama.RuntimeUsage
+	// LookPath resolves runtime CLI binaries on PATH; defaults to exec.LookPath.
+	LookPath               func(string) (string, error)
+	RunnerID               string
+	mu                     sync.Mutex
+	activeLeases           int
+	usageMu                sync.Mutex
+	runtimeUsage           []ama.RuntimeUsage
+	capabilityMu           sync.Mutex
+	advertisedCapabilities []string
+}
+
+func (d *RunnerDaemon) lookPath() func(string) (string, error) {
+	if d.LookPath != nil {
+		return d.LookPath
+	}
+	return exec.LookPath
+}
+
+// refreshCapabilities re-detects which runtime CLIs are installed on the host
+// so a CLI installed mid-run is picked up by the next heartbeat.
+func (d *RunnerDaemon) refreshCapabilities() []string {
+	available := detectAvailableRuntimes(d.lookPath())
+	capabilities := runnerCapabilities(available)
+	d.capabilityMu.Lock()
+	changed := !slices.Equal(d.advertisedCapabilities, capabilities)
+	d.advertisedCapabilities = capabilities
+	d.capabilityMu.Unlock()
+	if changed && len(available) == 0 {
+		slog.Warn("no runtime CLIs detected on PATH; runner advertises no external runtimes and will receive no runtime work",
+			"binaries", []string{"claude", "codex", "copilot"})
+	}
+	return capabilities
+}
+
+func (d *RunnerDaemon) currentCapabilities() []string {
+	d.capabilityMu.Lock()
+	capabilities := d.advertisedCapabilities
+	d.capabilityMu.Unlock()
+	if capabilities == nil {
+		return d.refreshCapabilities()
+	}
+	return capabilities
 }
 
 const runtimeUsageRefreshInterval = 5 * time.Minute
@@ -123,10 +165,11 @@ type RunnerChannelMessage struct {
 }
 
 type RunnerSessionCommand struct {
-	ID   string               `json:"id"`
-	Type string               `json:"type"`
-	Path string               `json:"path"`
-	Body RunnerRuntimeRequest `json:"body"`
+	ID      string               `json:"id"`
+	Type    string               `json:"type"`
+	Path    string               `json:"path"`
+	Message string               `json:"message"`
+	Body    RunnerRuntimeRequest `json:"body"`
 }
 
 type RunnerRuntimeRequest struct {
@@ -162,26 +205,98 @@ func (d *RunnerDaemon) Start(ctx context.Context) error {
 	defer heartbeatTicker.Stop()
 	pollTimer := time.NewTimer(0)
 	defer pollTimer.Stop()
+	heartbeatFailures := 0
+	// Approximate consecutive-failure count: lease goroutines run while the
+	// poll timer is being reset, so the backoff may briefly lag the true
+	// count. That is fine — the backoff only needs to stop a broken control
+	// plane from being hammered at full poll speed.
+	var leaseFailures atomic.Int64
+	var inFlight sync.WaitGroup
 	for {
 		select {
 		case <-ctx.Done():
+			// Wait for in-flight lease goroutines so their interrupted/failed
+			// finalization reaches the control plane before the process exits;
+			// otherwise recovery silently degrades to lease-expiry timing.
+			d.drainInFlightLeases(&inFlight)
 			_ = d.sendOfflineHeartbeat(context.Background())
 			return ctx.Err()
 		case <-heartbeatTicker.C:
 			if err := d.heartbeat(ctx); err != nil {
-				return err
+				// A transient network blip must not take the runner offline and
+				// interrupt every running session; give up only when the control
+				// plane stays unreachable across many consecutive intervals.
+				heartbeatFailures++
+				slog.Warn("runner heartbeat failed", "consecutiveFailures", heartbeatFailures, "error", err)
+				if heartbeatFailures >= heartbeatMaxConsecutiveFailures {
+					d.drainInFlightLeases(&inFlight)
+					return fmt.Errorf("runner heartbeat failed %d consecutive times: %w", heartbeatFailures, err)
+				}
+				continue
 			}
+			heartbeatFailures = 0
 		case <-pollTimer.C:
 			for d.tryAcquireLeaseSlot() {
+				inFlight.Add(1)
 				go func() {
+					defer inFlight.Done()
 					defer d.releaseLeaseSlot()
-					if err := d.runOneLease(ctx); err != nil && ctx.Err() != nil {
-						_ = d.sendOfflineHeartbeat(context.Background())
+					err := d.runOneLease(ctx)
+					if err == nil {
+						leaseFailures.Store(0)
+						return
 					}
+					// Shutdown cancellation is handled by the ctx.Done() drain
+					// path, which sends the offline heartbeat once.
+					if ctx.Err() != nil {
+						return
+					}
+					leaseFailures.Add(1)
+					slog.Warn("runner lease failed", "consecutiveFailures", leaseFailures.Load(), "error", err)
 				}()
 			}
-			pollTimer.Reset(d.Config.PollInterval)
+			pollTimer.Reset(leasePollDelay(d.Config.PollInterval, leaseFailures.Load()))
 		}
+	}
+}
+
+const (
+	// 10 × HeartbeatInterval (default 30s) ≈ 5 minutes of control-plane
+	// unreachability before the runner gives up and exits.
+	heartbeatMaxConsecutiveFailures = 10
+	leaseClaimBackoffCap            = time.Minute
+	leaseClaimBackoffMaxShift       = 6
+)
+
+// leasePollDelay backs the lease poll off exponentially while claims keep
+// failing, so a broken control plane is not hammered at full poll speed.
+func leasePollDelay(base time.Duration, consecutiveFailures int64) time.Duration {
+	if consecutiveFailures <= 0 {
+		return base
+	}
+	shift := consecutiveFailures
+	if shift > leaseClaimBackoffMaxShift {
+		shift = leaseClaimBackoffMaxShift
+	}
+	delay := base << shift
+	if delay <= 0 || delay > leaseClaimBackoffCap {
+		return leaseClaimBackoffCap
+	}
+	return delay
+}
+
+func (d *RunnerDaemon) drainInFlightLeases(inFlight *sync.WaitGroup) {
+	done := make(chan struct{})
+	go func() {
+		inFlight.Wait()
+		close(done)
+	}()
+	// The runtime gets ShutdownGraceInterval to exit after SIGTERM; allow that
+	// plus headroom for the interrupted-status upload.
+	select {
+	case <-done:
+	case <-time.After(d.Config.ShutdownGraceInterval + 10*time.Second):
+		slog.Warn("shutdown drain timed out; in-flight lease finalization may be lost")
 	}
 }
 
@@ -263,7 +378,7 @@ func (d *RunnerDaemon) ensureRunner(ctx context.Context) (string, error) {
 	}
 	runner, err := d.Client.CreateRunner(ctx, ama.CreateRunnerRequest{
 		Name:          runnerDisplayName(),
-		Capabilities:  runnerCapabilities(),
+		Capabilities:  d.refreshCapabilities(),
 		EnvironmentID: d.Config.EnvironmentID,
 		MaxConcurrent: d.Config.MaxConcurrent,
 		Metadata: ama.JSON{
@@ -289,7 +404,7 @@ func (d *RunnerDaemon) heartbeat(ctx context.Context) error {
 	}
 	_, err = d.Client.CreateRunnerHeartbeat(ctx, d.RunnerID, ama.RunnerHeartbeatRequest{
 		Status:       "active",
-		Capabilities: runnerCapabilities(),
+		Capabilities: d.refreshCapabilities(),
 		CurrentLoad:  &load,
 		RuntimeUsage: d.getRuntimeUsage(),
 		Metadata: ama.JSON{
@@ -342,7 +457,7 @@ func (d *RunnerDaemon) executeLease(ctx context.Context, lease *ama.RunnerWorkLe
 	leaseCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	renewErrors := make(chan error, 1)
-	go d.renewLease(leaseCtx, lease, cancel, renewErrors)
+	go d.renewLease(leaseCtx, lease, cancel, renewErrors, nil)
 
 	result, execErr := d.Adapter.Execute(leaseCtx, ToolRequest{
 		ToolCallID: payload.ToolCallID,
@@ -422,8 +537,12 @@ func (d *RunnerDaemon) completeSessionStart(ctx context.Context, lease *ama.Runn
 
 	leaseCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	// The latest runtime resume token rides along on lease renewals and the
+	// interrupted status so the server can resume the session in place if this
+	// runner stops mid-flight.
+	resumeTokens := &resumeTokenBox{}
 	renewErrors := make(chan error, 1)
-	go d.renewLease(leaseCtx, lease, cancel, renewErrors)
+	go d.renewLease(leaseCtx, lease, cancel, renewErrors, resumeTokens)
 	checkRenewal := func() error {
 		select {
 		case renewErr := <-renewErrors:
@@ -465,6 +584,7 @@ func (d *RunnerDaemon) completeSessionStart(ctx context.Context, lease *ama.Runn
 		Lease:          lease,
 		Payload:        payload,
 		CheckRenewal:   checkRenewal,
+		ResumeTokens:   resumeTokens,
 	})
 	cancel()
 	if renewErr := checkRenewal(); renewErr != nil {
@@ -486,7 +606,7 @@ func (d *RunnerDaemon) runAMASession(execution sessionRuntimeExecution) error {
 		if err := execution.Channel.ReadJSON(execution.LeaseContext, &message); err != nil {
 			if execution.RequestContext.Err() != nil {
 				// Graceful shutdown — keep the session recoverable for resume on restart.
-				return d.finishInterrupted(context.Background(), execution.Lease)
+				return d.finishInterrupted(context.Background(), execution.Lease, execution.ResumeTokens)
 			}
 			return nil
 		}
@@ -514,9 +634,16 @@ func (d *RunnerDaemon) runAMASession(execution sessionRuntimeExecution) error {
 
 func (d *RunnerDaemon) runExternalSession(execution sessionRuntimeExecution) error {
 	ctx := execution.LeaseContext
-	channel := execution.Channel
 	lease := execution.Lease
 	payload := execution.Payload
+	// A single reader goroutine owns the channel for the whole run: it routes
+	// mid-run session.command prompts to the live runtime and everything else
+	// (event acks, channel errors) back to the acknowledged event writers.
+	// Starting it before workspace preparation buffers prompts that arrive
+	// while the runtime is still starting.
+	router := newSessionChannelRouter(execution.Channel, payload.SessionID, lease.ID, d.RunnerID)
+	go router.run(ctx)
+	channel := router.routedChannel()
 	workspace, err := prepareRuntimeWorkspace(ctx, d.Config.WorkDir, payload.SessionID, payload.ResourceRefs)
 	if err != nil {
 		return err
@@ -532,19 +659,31 @@ func (d *RunnerDaemon) runExternalSession(execution sessionRuntimeExecution) err
 		}
 		adapter = selectedAdapter
 	}
+	// Lease renewal keeps a session alive indefinitely, so a runaway runtime
+	// would run forever without a hard per-session deadline. Cancelling the
+	// run context follows the same stop path as a server-side cancel
+	// (SIGTERM, then SIGKILL after the shutdown grace).
+	runCtx := ctx
+	cancelDeadline := func() {}
+	if d.Config.MaxSessionDuration > 0 {
+		runCtx, cancelDeadline = context.WithTimeout(ctx, d.Config.MaxSessionDuration)
+	}
+	defer cancelDeadline()
 	var writeMu sync.Mutex
-	result, runErr := adapter.Run(ctx, RuntimeRequest{
-		SessionID:     payload.SessionID,
-		Runtime:       payload.Runtime,
-		RuntimeConfig: payload.RuntimeConfig,
-		RuntimeEnv:    payload.RuntimeEnv,
-		Provider:      payload.Provider,
-		Model:         payload.Model,
-		AgentSnapshot: payload.AgentSnapshot,
-		InitialPrompt: initialPrompt(payload),
-		Resume:        payload.Resume,
-		ResumeToken:   payload.ResumeToken,
-		WorkDir:       workspace.Cwd,
+	result, runErr := adapter.Run(runCtx, RuntimeRequest{
+		SessionID:            payload.SessionID,
+		Runtime:              payload.Runtime,
+		RuntimeConfig:        payload.RuntimeConfig,
+		RuntimeEnv:           payload.RuntimeEnv,
+		Provider:             payload.Provider,
+		Model:                payload.Model,
+		AgentSnapshot:        payload.AgentSnapshot,
+		InitialPrompt:        initialPrompt(payload),
+		Resume:               payload.Resume,
+		ResumeToken:          payload.ResumeToken,
+		WorkDir:              workspace.Cwd,
+		OnResumeToken:        execution.ResumeTokens.Set,
+		RegisterPromptSender: router.registerPromptSender,
 	}, func(eventType string, eventPayload ama.JSON) error {
 		writeMu.Lock()
 		defer writeMu.Unlock()
@@ -560,11 +699,24 @@ func (d *RunnerDaemon) runExternalSession(execution sessionRuntimeExecution) err
 			})
 			return err
 		}
+		if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
+			// The session hit MaxSessionDuration. Fail the lease explicitly —
+			// never report it as interrupted, which would re-queue the session
+			// for resume and loop the runaway runtime forever.
+			timeoutErr := fmt.Errorf("session exceeded max duration %s", d.Config.MaxSessionDuration)
+			_ = d.writeAcknowledgedChannelEvent(context.Background(), channel, "runtime.error", ama.JSON{
+				"error": ama.JSON{"message": timeoutErr.Error(), "code": "session_timeout"},
+			})
+			if finishErr := d.finishFailed(context.Background(), lease, timeoutErr, result); finishErr != nil {
+				return finishErr
+			}
+			return timeoutErr
+		}
 		if execution.RequestContext.Err() != nil {
 			// The runner is shutting down, not the runtime failing. Report the lease
 			// as interrupted so the server re-queues the session for resume instead of
 			// marking it failed; a restarted runner picks it up and continues.
-			if finishErr := d.finishInterrupted(context.Background(), lease); finishErr != nil {
+			if finishErr := d.finishInterrupted(context.Background(), lease, execution.ResumeTokens); finishErr != nil {
 				return finishErr
 			}
 			return runErr
@@ -752,7 +904,7 @@ func (d *RunnerDaemon) writeAcknowledgedChannelEvent(ctx context.Context, channe
 	}
 }
 
-func (d *RunnerDaemon) renewLease(ctx context.Context, lease *ama.RunnerWorkLease, cancel context.CancelFunc, errors chan<- error) {
+func (d *RunnerDaemon) renewLease(ctx context.Context, lease *ama.RunnerWorkLease, cancel context.CancelFunc, errors chan<- error, resumeTokens *resumeTokenBox) {
 	ticker := time.NewTicker(d.Config.RenewInterval)
 	defer ticker.Stop()
 	for {
@@ -763,6 +915,7 @@ func (d *RunnerDaemon) renewLease(ctx context.Context, lease *ama.RunnerWorkLeas
 			_, err := d.Client.UpdateRunnerLease(ctx, d.RunnerID, lease.ID, ama.UpdateRunnerLeaseRequest{
 				Status:               "active",
 				LeaseDurationSeconds: d.Config.LeaseDurationSeconds,
+				ResumeToken:          resumeTokens.Get(),
 			})
 			if err != nil {
 				select {
@@ -796,10 +949,12 @@ func (d *RunnerDaemon) finishFailed(ctx context.Context, lease *ama.RunnerWorkLe
 
 // finishInterrupted ends the lease without failing the work item so the server
 // keeps the session recoverable. Used when the runner stops mid-flight (graceful
-// shutdown) rather than the runtime itself failing.
-func (d *RunnerDaemon) finishInterrupted(ctx context.Context, lease *ama.RunnerWorkLease) error {
+// shutdown) rather than the runtime itself failing. The latest resume token is
+// attached so the recovery rewrite can resume the runtime where it left off.
+func (d *RunnerDaemon) finishInterrupted(ctx context.Context, lease *ama.RunnerWorkLease, resumeTokens *resumeTokenBox) error {
 	_, err := d.Client.UpdateRunnerLease(ctx, d.RunnerID, lease.ID, ama.UpdateRunnerLeaseRequest{
-		Status: "interrupted",
+		Status:      "interrupted",
+		ResumeToken: resumeTokens.Get(),
 	})
 	return err
 }
@@ -856,7 +1011,7 @@ func (d *RunnerDaemon) supportsRequiredCapability(required string) bool {
 	if required == "" {
 		return true
 	}
-	for _, capability := range runnerCapabilities() {
+	for _, capability := range d.currentCapabilities() {
 		if capability == required {
 			return true
 		}

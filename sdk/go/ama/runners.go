@@ -63,6 +63,10 @@ type UpdateRunnerLeaseRequest struct {
 	LeaseDurationSeconds int    `json:"leaseDurationSeconds,omitempty"`
 	Result               JSON   `json:"result,omitempty"`
 	Error                JSON   `json:"error,omitempty"`
+	// ResumeToken is the latest runtime resume token captured by the runner. It
+	// rides along on renewals and interrupts so the server can resume the
+	// session in place if this runner stops mid-flight.
+	ResumeToken string `json:"resumeToken,omitempty"`
 }
 
 type RunnerLeaseEvent struct {

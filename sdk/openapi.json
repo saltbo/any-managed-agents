@@ -2926,6 +2926,12 @@
             "maximum": 900,
             "example": 60
           },
+          "resumeToken": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "example": "runtime-session-uuid"
+          },
           "result": {
             "type": "object",
             "additionalProperties": {
@@ -5753,6 +5759,14 @@
           "path": {
             "type": "string",
             "example": "/rpc"
+          },
+          "delivery": {
+            "type": "string",
+            "enum": [
+              "live",
+              "queued"
+            ],
+            "example": "queued"
           }
         },
         "required": [

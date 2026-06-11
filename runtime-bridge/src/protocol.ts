@@ -48,6 +48,7 @@ export type AmaRuntimeEvent = {
 export type RuntimeBridgeOutput =
   | { type: 'ready' }
   | { type: 'event'; requestId: string; event: AmaRuntimeEvent }
+  | { type: 'resumeToken'; requestId: string; resumeToken: string }
   | { type: 'result'; requestId: string; result: Record<string, unknown> }
   | { type: 'error'; requestId: string; error: { message: string; code?: string; details?: unknown } }
   | { type: 'log'; requestId?: string; level: 'debug' | 'info' | 'warn' | 'error'; message: string }
@@ -74,6 +75,63 @@ export type RuntimeProvider = {
 
 export function bridgeError(message: string, code?: string, details?: unknown) {
   return { message, ...(code ? { code } : {}), ...(details !== undefined ? { details } : {}) }
+}
+
+/**
+ * An open-ended async stream fed by push(). Used for mid-run prompt injection:
+ * claude-code's query.streamInput closes the CLI's stdin once its iterable
+ * finishes, so injected prompts share a single queue that stays open until the
+ * run ends instead of one short-lived iterable per send.
+ */
+export function createAsyncPushQueue<T>() {
+  const pending: T[] = []
+  let notify: (() => void) | null = null
+  let ended = false
+  const values = (async function* () {
+    while (true) {
+      while (pending.length > 0) {
+        yield pending.shift() as T
+      }
+      if (ended) {
+        return
+      }
+      await new Promise<void>((resolve) => {
+        notify = resolve
+      })
+      notify = null
+    }
+  })()
+  return {
+    values,
+    push(value: T) {
+      pending.push(value)
+      notify?.()
+    },
+    end() {
+      ended = true
+      notify?.()
+    },
+  }
+}
+
+/**
+ * Tracks a provider handle's resume token and emits it as soon as it appears
+ * or changes, so the runner can persist it before the run completes. Returns a
+ * function to call whenever the token may have advanced (after execute and
+ * after each event).
+ */
+export function createResumeTokenWatcher(
+  handle: Pick<RuntimeProviderHandle, 'getResumeToken'>,
+  emit: (resumeToken: string) => void,
+) {
+  let lastToken: string | undefined
+  return () => {
+    const token = handle.getResumeToken?.()
+    if (token && token !== lastToken) {
+      lastToken = token
+      emit(token)
+    }
+  }
 }
 
 export function agentSystemPrompt(request: RuntimeProviderRequest): string | undefined {

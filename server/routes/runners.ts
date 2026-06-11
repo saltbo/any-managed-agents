@@ -187,6 +187,7 @@ const UpdateLeaseSchema = z
   .object({
     status: z.enum(['active', 'completed', 'failed', 'cancelled', 'interrupted']),
     leaseDurationSeconds: z.number().int().min(15).max(900).optional().openapi({ example: 60 }),
+    resumeToken: z.string().min(1).max(2048).optional().openapi({ example: 'runtime-session-uuid' }),
     result: JsonObjectSchema.optional().openapi({ example: { exitCode: 0 } }),
     error: JsonObjectSchema.optional().openapi({ example: { message: 'Command failed' } }),
   })
@@ -610,6 +611,22 @@ async function sessionHasRunnerStarted(db: Db, projectId: string, sessionId: str
   return typeof row?.sequence === 'number'
 }
 
+// The runner reports the freshest runtime resume token on lease renewals and
+// interrupts. Persisting it on the work item payload lets a recovery requeue
+// (and any later queued resume) continue the runtime conversation instead of
+// resuming from the last completed work item. Returns null when there is
+// nothing new to write.
+function payloadWithResumeToken(workItem: WorkItemRow, resumeToken: string | undefined): string | null {
+  if (!resumeToken) {
+    return null
+  }
+  const payload = parseJson<Record<string, unknown>>(workItem.payload)
+  if (!payload || payload.resumeToken === resumeToken) {
+    return null
+  }
+  return stringify({ ...payload, resumeToken })
+}
+
 // Re-queues a work item whose runner stopped mid-flight so the session can be
 // picked up again. For a started self-hosted runtime session the payload is
 // rewritten to resume so the agent continues where it left off rather than
@@ -619,7 +636,25 @@ async function requeueWorkItemForRecovery(
   projectId: string,
   workItem: WorkItemRow,
   timestamp: string,
-): Promise<'requeued' | 'failed'> {
+): Promise<'requeued' | 'failed' | 'superseded'> {
+  if (await hasNewerActiveSessionWork(db, projectId, workItem)) {
+    // Newer work for the session is already queued (e.g. a queued session
+    // command). Requeueing this item too would hand the same session to two
+    // runtimes, so cancel it and let the newer work item drive recovery. The
+    // status guard keeps a concurrent completion from being overwritten.
+    await db
+      .update(runnerWorkItems)
+      .set({
+        status: 'cancelled',
+        runnerId: null,
+        leaseId: null,
+        leaseExpiresAt: null,
+        error: stringify({ message: 'Superseded by newer queued work for the session' }),
+        updatedAt: timestamp,
+      })
+      .where(and(eq(runnerWorkItems.id, workItem.id), eq(runnerWorkItems.status, 'leased')))
+    return 'superseded'
+  }
   const shouldRetry = workItem.attempts < workItem.maxAttempts
   if (!shouldRetry) {
     await db
@@ -1677,9 +1712,14 @@ const routes = app
       const expiresAt = new Date(
         Date.now() + (body.leaseDurationSeconds ?? DEFAULT_LEASE_DURATION_SECONDS) * 1000,
       ).toISOString()
+      const renewedPayload = payloadWithResumeToken(workItem, body.resumeToken)
       const renewedWorkItem = await db
         .update(runnerWorkItems)
-        .set({ leaseExpiresAt: expiresAt, updatedAt: timestamp })
+        .set({
+          leaseExpiresAt: expiresAt,
+          updatedAt: timestamp,
+          ...(renewedPayload !== null ? { payload: renewedPayload } : {}),
+        })
         .where(
           and(
             eq(runnerWorkItems.id, workItem.id),
@@ -1710,7 +1750,13 @@ const routes = app
         return errorResponse(c, 409, 'conflict', 'Runner lease is no longer active')
       }
       await releaseRunnerLoad(db, auth.project.id, runnerId, timestamp)
-      await requeueWorkItemForRecovery(db, auth.project.id, workItem, timestamp)
+      const interruptedPayload = payloadWithResumeToken(workItem, body.resumeToken)
+      await requeueWorkItemForRecovery(
+        db,
+        auth.project.id,
+        interruptedPayload !== null ? { ...workItem, payload: interruptedPayload } : workItem,
+        timestamp,
+      )
     } else {
       const result = body.result ? stringify(body.result) : null
       const error = body.error ? stringify(body.error) : null

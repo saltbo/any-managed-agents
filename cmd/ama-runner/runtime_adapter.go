@@ -24,6 +24,13 @@ type RuntimeRequest struct {
 	Resume        bool
 	ResumeToken   string
 	WorkDir       string
+	// OnResumeToken is invoked as soon as the runtime learns (or rotates) its
+	// resume token, so the runner can persist it before the run completes.
+	OnResumeToken func(resumeToken string)
+	// RegisterPromptSender hands the runner a function that injects a prompt
+	// into the live runtime. Adapters that support mid-run input call it once
+	// the runtime is ready to receive prompts.
+	RegisterPromptSender func(send func(message string) error)
 }
 
 type RuntimeEventWriter func(eventType string, payload ama.JSON) error
