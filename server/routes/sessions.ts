@@ -1320,11 +1320,15 @@ export async function createSessionForAgent(
     return c.json(serializeSession(pending), 201)
   }
 
-  const startRuntime = () =>
-    startSessionRuntimeForRow(c.env, db, auth, {
-      pending,
-      agentSnapshot,
-      environmentSnapshot,
+  // Cloud startup (sandbox cold boot, repo clone) outlives the request
+  // lifetime cap, so production hands it to the queue consumer; inline mode
+  // (tests, bindings-less setups) keeps synchronous semantics.
+  if (!cloudTurnsRunInline(c.env)) {
+    await enqueueCloudTurn(c.env, {
+      type: 'session.start',
+      sessionId: pending.id,
+      organizationId: auth.organization.id,
+      projectId: auth.project.id,
       runtime,
       runtimeConfig,
       resourceRefs: normalizedResources.resourceRefs,
@@ -1332,13 +1336,23 @@ export async function createSessionForAgent(
       runtimeSecretEnv: options.runtimeSecretEnv ?? [],
       ...(initialPrompt !== undefined ? { initialPrompt } : {}),
     })
-
-  if (c.env.AMA_RUNTIME_MODE !== 'test') {
-    c.executionCtx.waitUntil(startRuntime())
     return c.json(serializeSession(pending), 201)
   }
 
-  await startRuntime()
+  await startSessionRuntimeForRow(c.env, db, auth, {
+    pending,
+    agentSnapshot,
+    environmentSnapshot,
+    runtime,
+    runtimeConfig,
+    resourceRefs: normalizedResources.resourceRefs,
+    runtimeEnv: options.runtimeEnv ?? {},
+    runtimeSecretEnv: options.runtimeSecretEnv ?? [],
+    ...(initialPrompt !== undefined ? { initialPrompt } : {}),
+  })
+  if (c.env.AMA_RUNTIME_MODE !== 'test') {
+    return c.json(serializeSession(pending), 201)
+  }
   const started = await findSession(db, auth, id)
   if (!started) {
     throw new Error('Created session was not persisted')
@@ -1617,14 +1631,38 @@ async function executeCloudSessionTurn(
   }
 }
 
-// Queue consumer entry: re-resolve the session, skip if it is no longer
-// running (stopped/archived while queued), then execute the turn with the
-// consumer's wall-clock budget.
+// Queue consumer entry: re-resolve the session, skip if its status moved on
+// while the message was queued, then run the work with the consumer's
+// wall-clock budget.
 export async function consumeCloudTurnMessage(env: Env, message: CloudTurnMessage): Promise<void> {
   const db = drizzle(env.DB)
   const auth = cloudTurnSystemAuth(message)
   const session = await findSession(db, auth, message.sessionId)
-  if (!session || session.status !== 'running') {
+  if (!session) {
+    return
+  }
+  if (message.type === 'session.start') {
+    if (session.status !== 'pending') {
+      return
+    }
+    const agentSnapshot = parseJson<ReturnType<typeof serializeAgentVersion>>(session.agentSnapshot)
+    if (!agentSnapshot) {
+      throw new Error('Session agent snapshot is required for cloud startup')
+    }
+    await startSessionRuntimeForRow(env, db, auth, {
+      pending: session,
+      agentSnapshot,
+      environmentSnapshot: parseJson<NormalizedEnvironmentSnapshot>(session.environmentSnapshot),
+      runtime: message.runtime as RuntimeName,
+      runtimeConfig: message.runtimeConfig,
+      resourceRefs: message.resourceRefs as never,
+      runtimeEnv: message.runtimeEnv,
+      runtimeSecretEnv: message.runtimeSecretEnv,
+      ...(message.initialPrompt !== undefined ? { initialPrompt: message.initialPrompt } : {}),
+    })
+    return
+  }
+  if (session.status !== 'running') {
     return
   }
   await executeCloudSessionTurn(env, db, auth, session, message.prompt, message.auditAction)
