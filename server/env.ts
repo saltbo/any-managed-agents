@@ -11,8 +11,6 @@ export interface Env {
   CLOUD_TURNS?: Queue<unknown>
   AMA_DEFAULT_MODEL?: string
   AMA_RUNTIME_MODE?: string
-  AMA_PI_BRIDGE_COMMAND?: string
-  AMA_PI_BRIDGE_PORT?: string
   AMA_WORKERS_AI_ACCOUNT_ID?: string
   AMA_WORKERS_AI_API_KEY?: string
   AMA_WORKERS_AI_API_TOKEN?: string

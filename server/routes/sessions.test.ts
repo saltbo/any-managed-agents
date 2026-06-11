@@ -1851,7 +1851,7 @@ describe('[CF] /api/sessions', () => {
     })
   })
 
-  it('queues self-hosted external runtime sessions and requires exact runner model support on lease claim', async () => {
+  it('queues self-hosted external runtime sessions and leases to any runner serving the runtime', async () => {
     const authorization = await signIn()
     const model = 'gpt-5.3-codex'
     const { providerId } = await createProviderModel(authorization, model)
@@ -1899,11 +1899,14 @@ describe('[CF] /api/sessions', () => {
       }),
     })
     expect(wrongHeartbeatRes.status).toBe(200)
+    // Wildcard-model runtimes lease at the runtime level: a runner serving
+    // codex takes the work regardless of its declared model ids — the host
+    // CLI owns the model universe and fails the lease if it cannot serve it.
     const wrongLeaseRes = await jsonFetch(`/api/runners/${wrongRunner.id}/leases`, authorization, {
       method: 'POST',
       body: JSON.stringify({}),
     })
-    expect(wrongLeaseRes.status).toBe(204)
+    expect(wrongLeaseRes.status).toBe(201)
 
     await jsonFetch(`/api/runners/${exactRunner.id}/heartbeats`, authorization, {
       method: 'POST',
@@ -1912,10 +1915,11 @@ describe('[CF] /api/sessions', () => {
         capabilities: [runtimeProviderModelCapability('codex', '*', model)],
       }),
     })
+    // The single work item is already leased; the second runner finds none.
     const exactLeaseRes = await jsonFetch(`/api/runners/${exactRunner.id}/leases`, authorization, {
       method: 'POST',
       body: JSON.stringify({}),
     })
-    expect(exactLeaseRes.status).toBe(201)
+    expect(exactLeaseRes.status).toBe(204)
   })
 })

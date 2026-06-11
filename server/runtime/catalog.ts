@@ -9,6 +9,10 @@ type RuntimeCatalogEntry = {
   providerModels: Array<{ provider: string; model: string }>
 }
 
+// Self-hosted CLI runtimes accept any model ('*'): the host CLI owns the
+// model universe and a lease fails naturally if the host cannot serve it.
+// Pinning a single id here rejected legitimate models (e.g. opus on
+// claude-code) at session creation. Cloud stays pinned to platform models.
 export const RUNTIME_CATALOG: readonly RuntimeCatalogEntry[] = [
   {
     runtime: 'ama',
@@ -18,17 +22,17 @@ export const RUNTIME_CATALOG: readonly RuntimeCatalogEntry[] = [
   {
     runtime: 'claude-code',
     hostingModes: ['self_hosted'],
-    providerModels: [{ provider: '*', model: 'claude-sonnet-4-6' }],
+    providerModels: [{ provider: '*', model: '*' }],
   },
   {
     runtime: 'codex',
     hostingModes: ['self_hosted'],
-    providerModels: [{ provider: '*', model: 'gpt-5.3-codex' }],
+    providerModels: [{ provider: '*', model: '*' }],
   },
   {
     runtime: 'copilot',
     hostingModes: ['self_hosted'],
-    providerModels: [{ provider: '*', model: 'copilot-cli' }],
+    providerModels: [{ provider: '*', model: '*' }],
   },
 ]
 
@@ -50,6 +54,11 @@ export function runtimeRequiredRunnerCapability(runtime: RuntimeName, provider: 
     return runtime
   }
   const entry = RUNTIME_CATALOG.find((item) => item.runtime === runtime)
+  // Wildcard-model runtimes match at the runtime level: the host CLI decides
+  // which models it serves, so work must not demand a per-model capability.
+  if (entry?.providerModels.some((candidate) => candidate.model === '*')) {
+    return runtime
+  }
   const wildcard = entry?.providerModels.find((candidate) => candidate.provider === '*' && candidate.model === model)
   return runtimeProviderModelCapability(runtime, wildcard ? '*' : provider, model)
 }
@@ -67,6 +76,12 @@ export function runnerSupportsRuntimeProviderModel(
         capability.startsWith(`${RUNTIME_PROVIDER_MODEL_CAPABILITY_PREFIX}:${runtime}:`),
       )
     )
+  }
+  // A runner that serves the runtime is assumed to host any of its models for
+  // wildcard-model runtimes; specific declarations still match directly.
+  const entry = RUNTIME_CATALOG.find((item) => item.runtime === runtime)
+  if (entry?.providerModels.some((candidate) => candidate.model === '*') && capabilities.includes(runtime)) {
+    return true
   }
   return (
     capabilities.includes(runtimeProviderModelCapability(runtime, provider, model)) ||
@@ -92,7 +107,9 @@ export function runtimeCatalogSupportsProviderModel(
   }
   return Boolean(
     entry.providerModels.some(
-      (capability) => (capability.provider === '*' || capability.provider === provider) && capability.model === model,
+      (capability) =>
+        (capability.provider === '*' || capability.provider === provider) &&
+        (capability.model === '*' || capability.model === model),
     ),
   )
 }

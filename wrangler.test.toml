@@ -11,7 +11,6 @@ run_worker_first = ["/api/*", "/runtime/*"]
 [vars]
 AMA_DEFAULT_MODEL = "@cf/moonshotai/kimi-k2.6"
 AMA_RUNTIME_MODE = "test"
-AMA_PI_BRIDGE_PORT = "8788"
 OIDC_ISSUER = "https://oidc.test"
 OIDC_CLIENT_ID = "ama-test"
 OIDC_RUNNER_CLIENT_ID = "ama-runner-test"
