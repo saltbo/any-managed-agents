@@ -113,7 +113,7 @@ describe('tool-executor', () => {
       error: null,
     })
     expect(getSandboxMock).toHaveBeenCalledWith({}, 'sandbox_123', { keepAlive: true, normalizeId: true })
-    expect(sandboxMock.exec).toHaveBeenCalledWith('git status', { cwd: '/workspace' })
+    expect(sandboxMock.exec).toHaveBeenCalledWith('git status', { cwd: '/workspace', timeout: 600_000 })
   })
 
   it('reads and writes relative workspace files through Cloudflare Sandbox', async () => {
