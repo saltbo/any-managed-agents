@@ -38,18 +38,20 @@ export function EnvironmentDetailView({
           <>
             <StatusBadge value={environment.status} />
             <StatusBadge value={`v${environment.version}`} />
-            <ConfirmAction
-              title="Archive environment?"
-              description={`Archive ${environment.name}. New sessions cannot use this environment.`}
-              confirmLabel="Archive environment"
-              destructive
-              onConfirm={() => onArchive(environment.id)}
-            >
-              <Button type="button" variant="outline">
-                <Archive data-icon="inline-start" />
-                Archive
-              </Button>
-            </ConfirmAction>
+            {environment.status !== 'archived' ? (
+              <ConfirmAction
+                title="Archive environment?"
+                description={`Archive ${environment.name}. New sessions cannot use this environment.`}
+                confirmLabel="Archive environment"
+                destructive
+                onConfirm={() => onArchive(environment.id)}
+              >
+                <Button type="button" variant="outline">
+                  <Archive data-icon="inline-start" />
+                  Archive
+                </Button>
+              </ConfirmAction>
+            ) : null}
           </>
         }
       >
