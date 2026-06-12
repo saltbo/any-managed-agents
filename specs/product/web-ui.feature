@@ -9,7 +9,7 @@ Feature: Web console
     Then the sidebar shows agents, sessions, providers, vaults, usage, audit, and settings
     And the current organization and project are visible
 
-  @planned
+  @implemented
   Scenario: Create an agent from the console
     Given a signed-in user has access to a project
     When the user completes the agent creation flow

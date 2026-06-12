@@ -12,10 +12,12 @@ import { CreateSessionSheet } from '@/features/sessions/CreateSessionSheet'
 import { type Agent, api } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 import { AgentDetailView } from './AgentDetailView'
+import { useAgentActions } from './use-agent-actions'
 
 export function AgentDetailPage() {
   const { agentId } = useParams()
   const queryClient = useQueryClient()
+  const agentActions = useAgentActions()
   const [editing, setEditing] = useState(false)
   const [creatingSession, setCreatingSession] = useState(false)
   const [form, setForm] = useState<AgentFormState | null>(null)
@@ -79,9 +81,11 @@ export function AgentDetailPage() {
                 <Pencil data-icon="inline-start" />
                 Edit agent
               </Button>
-              <Button type="button" onClick={() => setCreatingSession(true)}>
-                Create session
-              </Button>
+              {agent.status !== 'archived' ? (
+                <Button type="button" onClick={() => setCreatingSession(true)}>
+                  Create session
+                </Button>
+              ) : null}
             </div>
           ) : null
         }
@@ -90,6 +94,7 @@ export function AgentDetailPage() {
         agent={agent}
         versions={versionsQuery.data?.data ?? []}
         sessions={sessionsQuery.data?.data ?? []}
+        onArchive={agentActions.archiveAgent}
       />
       <CreateSessionSheet
         open={creatingSession}
