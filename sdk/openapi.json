@@ -6072,6 +6072,10 @@
             "minLength": 1,
             "maxLength": 16000,
             "example": "Research Canadian banking bonus offers and summarize current opportunities."
+          },
+          "providerAccessOverride": {
+            "type": "boolean",
+            "example": false
           }
         },
         "required": [
@@ -8878,6 +8882,74 @@
           },
           "404": {
             "description": "Provider not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/providers/{providerId}/models/discovery": {
+      "post": {
+        "operationId": "discoverProviderModels",
+        "tags": [
+          "Providers"
+        ],
+        "summary": "Discover provider models",
+        "description": "Refreshes the model catalog from the provider. Failures return a normalized provider error without credential material and leave the stored provider configuration readable.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "workers-ai"
+            },
+            "required": true,
+            "name": "providerId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Discovered provider models",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderModelListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Provider not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Provider discovery failed",
             "content": {
               "application/json": {
                 "schema": {

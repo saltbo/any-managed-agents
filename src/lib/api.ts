@@ -361,6 +361,27 @@ export interface GovernancePolicy {
   updatedAt: string
 }
 
+export interface ProviderAccessRule {
+  id: string
+  providerId: string
+  modelId: string
+  teamId: string | null
+  effect: 'allow' | 'deny'
+  reason: string | null
+  metadata: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ProviderAccessRuleInput {
+  providerId?: string
+  modelId?: string
+  teamId?: string
+  effect: 'allow' | 'deny'
+  reason?: string
+  metadata?: Record<string, unknown>
+}
+
 export interface UsageSummaryGroup {
   key: Record<string, unknown>
   records: number
@@ -699,6 +720,14 @@ export const api = {
         param: { connectionId: id },
         query: { confirm: 'true' },
       }),
+    ),
+  listProviderAccessRules: () =>
+    rpcRequest<ListResponse<ProviderAccessRule>>(rpc.api.governance['provider-access-rules'].$get()),
+  createProviderAccessRule: (input: ProviderAccessRuleInput) =>
+    rpcRequest<ProviderAccessRule>(
+      rpc.api.governance['provider-access-rules'].$post(
+        jsonArg<(typeof rpc.api.governance)['provider-access-rules']['$post']>(input),
+      ),
     ),
   readGovernancePolicy: () => rpcRequest<GovernancePolicy>(rpc.api.governance.policy.$get()),
   updateGovernancePolicy: (input: Partial<GovernancePolicy>) =>

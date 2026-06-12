@@ -64,6 +64,8 @@ describe('route schema and handler alignment', () => {
       'environmentId',
       'initialPrompt',
       'metadata',
+      // Explicit admin override for provider-access denials.
+      'providerAccessOverride',
       'reason',
       'resourceRefs',
       'result',
@@ -80,6 +82,7 @@ describe('route schema and handler alignment', () => {
       'environmentId',
       'initialPrompt',
       'metadata',
+      'providerAccessOverride',
       'resourceRefs',
       'runtime',
       'runtimeConfig',

@@ -36,7 +36,7 @@ Feature: Web console
     And the debug view shows runtime events with structured details
     And the composer sends normal chat messages instead of a task form
 
-  @planned
+  @implemented
   Scenario: Configure providers and policies
     When the user edits provider access or policy settings
     Then the UI validates the change before saving

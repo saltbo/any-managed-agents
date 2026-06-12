@@ -10,6 +10,7 @@ import { EnvironmentsPage } from '@/features/environments/EnvironmentsPage'
 import { McpConnectorPage } from '@/features/mcp/McpConnectorPage'
 import { McpPage } from '@/features/mcp/McpPage'
 import { ProviderDetailPage } from '@/features/providers/ProviderDetailPage'
+import { ProviderPolicyPage } from '@/features/providers/ProviderPolicyPage'
 import { ProvidersPage } from '@/features/providers/ProvidersPage'
 import { QuickstartPage } from '@/features/quickstart/QuickstartPage'
 import { SessionDetailPage } from '@/features/sessions/SessionDetailPage'
@@ -39,6 +40,7 @@ export function createAppRouter() {
         { path: 'sessions', element: <SessionsPage /> },
         { path: 'sessions/:sessionId', element: <SessionDetailPage /> },
         { path: 'providers', element: <ProvidersPage /> },
+        { path: 'providers/policy', element: <ProviderPolicyPage /> },
         { path: 'providers/:providerId', element: <ProviderDetailPage /> },
         { path: 'vaults', element: <VaultsPage /> },
         { path: 'vaults/:vaultId', element: <VaultDetailPage /> },

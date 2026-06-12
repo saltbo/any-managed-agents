@@ -174,6 +174,12 @@ export declare const operations: readonly [{
     readonly tags: readonly ["MCP"];
 }, {
     readonly method: "POST";
+    readonly path: "/api/providers/{providerId}/models/discovery";
+    readonly operationId: "discoverProviderModels";
+    readonly summary: "Discover provider models";
+    readonly tags: readonly ["Providers"];
+}, {
+    readonly method: "POST";
     readonly path: "/api/governance/evaluations";
     readonly operationId: "evaluateGovernancePolicy";
     readonly summary: "Evaluate governance policy";

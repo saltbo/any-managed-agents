@@ -189,6 +189,13 @@ function canonicalPayload(
       code: event.code ?? error.code,
       signal: event.signal,
       details: error.details ?? event.details,
+      // Normalized provider error envelope: stable category enum plus retry
+      // metadata, attached by the provider adapter seam.
+      ...(typeof event.category === 'string' ? { category: event.category } : {}),
+      ...(typeof event.retryable === 'boolean' ? { retryable: event.retryable } : {}),
+      ...(numberField(event, 'retryAfterSeconds') !== null ? { retryAfterSeconds: event.retryAfterSeconds } : {}),
+      ...(typeof event.provider === 'string' ? { provider: event.provider } : {}),
+      ...(typeof event.model === 'string' ? { model: event.model } : {}),
     }
   }
 

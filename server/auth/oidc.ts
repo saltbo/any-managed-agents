@@ -19,6 +19,10 @@ export interface UserInfoClaims {
   organization_name?: string
   roles: string[]
   permissions: string[]
+  // Team identifiers asserted by the OIDC provider (top-level `teams` claim
+  // or `authorization.teams`). AMA keeps no local team tables; provider
+  // access rules reference these identifiers directly.
+  teams: string[]
   external_tenant_id?: string
   tenant_id?: string
   ama_project_id?: string
@@ -41,6 +45,7 @@ interface IntrospectionClaims {
   organization_name?: string
   roles?: unknown
   permissions?: unknown
+  teams?: unknown
   external_tenant_id?: string
   tenant_id?: string
   ama_project_id?: string
@@ -48,6 +53,7 @@ interface IntrospectionClaims {
   authorization?: {
     roles?: unknown
     permissions?: unknown
+    teams?: unknown
   }
 }
 
@@ -297,6 +303,7 @@ function normalizeClaims(env: Env, claims: Record<string, unknown> & { sub: stri
   const permissions = stringArray(claims.permissions).length
     ? stringArray(claims.permissions)
     : stringArray(authorization?.permissions)
+  const teams = stringArray(claims.teams).length ? stringArray(claims.teams) : stringArray(authorization?.teams)
   const clientId = stringClaim(claims.client_id) ?? stringClaim(claims.azp)
   const runnerScoped = isRunnerTokenClaim(env, clientId, claims)
   return {
@@ -318,11 +325,33 @@ function normalizeClaims(env: Env, claims: Record<string, unknown> & { sub: stri
     ...optionalClaim('ama_environment_id', claims.ama_environment_id),
     roles: roles.length ? roles : runnerScoped ? ['runner'] : ['owner'],
     permissions: permissions.length ? permissions : runnerScoped ? [] : ['*'],
+    teams,
   }
 }
 
-function e2eClaims(env: Env, runId: string, clientId: string | undefined): UserInfoClaims {
-  const safeRunId = runId.replaceAll(/[^A-Za-z0-9_-]/g, '_') || newId('run')
+// E2E claim synthesis (gated to AMA_E2E_TEST_AUTH). The token payload after
+// the `e2e:`/`e2e-runner:` prefix is `<runId>[;org=<orgRunId>][;teams=a,b][;roles=r1,r2]`:
+// `org` joins the synthesized user into another run's organization, and
+// `teams`/`roles` populate the corresponding OIDC claims so team-scoped
+// policy and role-gated overrides are testable without a real IdP.
+function e2eClaims(env: Env, spec: string, clientId: string | undefined): UserInfoClaims {
+  const [rawRunId = '', ...directiveParts] = spec.split(';')
+  const directives = new Map<string, string>()
+  for (const part of directiveParts) {
+    const separator = part.indexOf('=')
+    if (separator > 0) {
+      directives.set(part.slice(0, separator), part.slice(separator + 1))
+    }
+  }
+  const sanitize = (value: string) => value.replaceAll(/[^A-Za-z0-9_-]/g, '_')
+  const sanitizeList = (value: string | undefined) =>
+    (value ?? '')
+      .split(',')
+      .map((item) => sanitize(item.trim()))
+      .filter(Boolean)
+  const safeRunId = sanitize(rawRunId) || newId('run')
+  const safeOrgRunId = sanitize(directives.get('org') ?? '') || safeRunId
+  const roles = sanitizeList(directives.get('roles'))
   const scope = 'openid profile email offline_access'
   const runnerScoped = isRunnerTokenClaim(env, clientId)
   return {
@@ -331,10 +360,11 @@ function e2eClaims(env: Env, runId: string, clientId: string | undefined): UserI
     name: `E2E User ${safeRunId}`,
     ...(clientId ? { client_id: clientId, azp: clientId } : {}),
     scope,
-    org_id: `org_e2e_${safeRunId}`,
-    org_name: `E2E Organization ${safeRunId}`,
-    roles: runnerScoped ? ['runner'] : ['owner'],
+    org_id: `org_e2e_${safeOrgRunId}`,
+    org_name: `E2E Organization ${safeOrgRunId}`,
+    roles: runnerScoped ? ['runner'] : roles.length ? roles : ['owner'],
     permissions: runnerScoped ? [] : ['*'],
+    teams: sanitizeList(directives.get('teams')),
   }
 }
 
@@ -351,6 +381,7 @@ function e2eFederatedRunnerClaims(value: string): UserInfoClaims {
     ...(environmentId ? { ama_environment_id: environmentId } : {}),
     roles: ['runner'],
     permissions: [],
+    teams: [],
   }
 }
 

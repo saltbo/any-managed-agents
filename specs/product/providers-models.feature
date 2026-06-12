@@ -5,7 +5,7 @@ Feature: Model providers
   Background:
     Given a project has provider access configured
 
-  @planned
+  @implemented
   Scenario: Use Workers AI as a first-class provider
     When an agent selects a Workers AI model
     Then the runtime calls the Cloudflare Workers AI binding
@@ -17,31 +17,31 @@ Feature: Model providers
     Then the platform stores provider metadata in D1
     And credentials are stored in Cloudflare Secrets
 
-  @planned
+  @implemented
   Scenario: Route through provider adapters
     When a session requests any configured provider
     Then the runtime uses the provider adapter for that provider
     And usage, errors, and policy decisions are normalized across providers
 
-  @planned
+  @implemented
   Scenario: Enforce provider policy
     Given a team is allowed to use only selected providers and models
     When an agent requests a blocked provider or model
     Then the request is rejected before a model call is started
 
-  @planned
+  @implemented
   Scenario: Track model usage and cost
     When a provider returns token or usage metadata
     Then the platform records usage by organization, project, agent, session, provider, and model
 
-  @planned
+  @implemented
   Scenario: Normalize provider error categories
     When any provider returns authentication, rate limit, overload, invalid model, safety, or network errors
     Then the runtime records a normalized error type
     And user-facing messages are safe and actionable
     And retryable errors include retry metadata when available
 
-  @planned
+  @implemented
   Scenario: Use provider adapters without changing session protocol
     Given an agent uses any supported provider
     When a session sends a runtime message

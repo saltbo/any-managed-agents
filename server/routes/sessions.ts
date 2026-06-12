@@ -42,7 +42,7 @@ import {
 } from '../openapi'
 import {
   evaluateMcpToolPolicy,
-  evaluateProviderPolicy,
+  evaluateProviderPolicyForSession,
   evaluateSandboxRuntimePolicy,
   policyBlocksSandboxOperation,
 } from '../policy'
@@ -300,6 +300,9 @@ const CreateSessionSchema = z
       .max(16000)
       .optional()
       .openapi({ example: 'Research Canadian banking bonus offers and summarize current opportunities.' }),
+    // Explicit admin override for provider-access denials. Honored only for
+    // admin-role callers and always audited with an override marker.
+    providerAccessOverride: z.boolean().optional().openapi({ example: false }),
   })
   .strict()
   .openapi('CreateSessionRequest')
@@ -1101,6 +1104,7 @@ export async function createSessionForAgent(
     runtimeEnv?: Record<string, string>
     runtimeSecretEnv?: Array<z.infer<typeof RuntimeSecretEnvSchema>>
     initialPrompt?: string
+    providerAccessOverride?: boolean
   },
 ) {
   if (
@@ -1144,9 +1148,12 @@ export async function createSessionForAgent(
     throw new Error('Agent current version is required')
   }
   const initialPrompt = await sessionInitialPrompt(db, auth.project.id, agent, options.initialPrompt)
-  const policyDecision = await evaluateProviderPolicy(db, auth, {
+  // Provider access is evaluated before any workspace, sandbox, or lease
+  // work so denied requests never reach provider or runtime resources.
+  const { decision: policyDecision, override: policyOverride } = await evaluateProviderPolicyForSession(db, auth, {
     providerId: agentVersion.provider,
     modelId: agentVersion.model,
+    adminOverride: options.providerAccessOverride === true,
   })
   if (!policyDecision.allowed) {
     await recordAudit(db, {
@@ -1169,6 +1176,25 @@ export async function createSessionForAgent(
             ? agentVersion.model
             : agentVersion.provider,
       ruleId: policyDecision.rule,
+    })
+  }
+  if (policyOverride) {
+    // Admin override marker: the denied decision and the override flag are
+    // both auditable even though the session proceeds.
+    await recordAudit(db, {
+      auth,
+      action: 'session.create',
+      resourceType: 'session',
+      outcome: 'success',
+      requestId: requestId(c),
+      policyCategory: 'override',
+      metadata: {
+        agentId,
+        providerId: agentVersion.provider,
+        modelId: agentVersion.model,
+        providerAccessOverride: true,
+        overriddenDecision: policyOverride,
+      },
     })
   }
 
@@ -2765,6 +2791,7 @@ const routes = app
       runtimeEnv,
       runtimeSecretEnv,
       initialPrompt,
+      providerAccessOverride,
     } = c.req.valid('json')
     const db = drizzle(c.env.DB)
     const auth = await requireAuth(c, db)
@@ -2781,6 +2808,7 @@ const routes = app
       ...(runtimeEnv !== undefined ? { runtimeEnv } : {}),
       ...(runtimeSecretEnv !== undefined ? { runtimeSecretEnv } : {}),
       ...(initialPrompt !== undefined ? { initialPrompt } : {}),
+      ...(providerAccessOverride !== undefined ? { providerAccessOverride } : {}),
     })
   })
   .openapi(listSessionsRoute, async (c) => {

@@ -14,7 +14,7 @@ Feature: Usage summary
     Then totals and grouped breakdowns update consistently
     And empty ranges show an explicit empty state
 
-  @planned
+  @implemented
   Scenario: Attribute usage to runtime events
     Given a session records provider calls and tool calls
     When usage is summarized

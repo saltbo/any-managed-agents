@@ -217,10 +217,13 @@ Then('sessions can be searched, filtered, sorted, opened, stopped, and archived'
   await page.getByRole('combobox').filter({ hasText: 'Recently updated' }).click()
   await page.getByRole('option', { name: 'Recently started' }).click()
   await expect(page).toHaveURL(/sort=started-desc/)
-  // Open the session; stop/archive affordances live on the opened session.
+  // Open the session; stop/archive affordances live on the opened session,
+  // behind the header Actions menu.
   await page.getByRole('link', { name: title }).first().click()
   await expect(page).toHaveURL(/\/sessions\//)
-  await expect(page.getByRole('button', { name: /Stop session|Archive/ }).first()).toBeVisible()
+  await page.getByRole('button', { name: 'Actions' }).click()
+  await expect(page.getByRole('menuitem', { name: /Stop session|Archive session/ }).first()).toBeVisible()
+  await page.keyboard.press('Escape')
 })
 
 // ─── sessions-list-bulk-archive: Bulk archive sessions ───

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
+import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/console/components'
 import { useClientPagination } from '@/console/use-client-pagination'
@@ -25,10 +26,15 @@ export function ProvidersPage() {
         title="Providers"
         description="Manage model provider configuration, default routing, credentials, and catalog readiness."
         actions={
-          <Button type="button" onClick={() => setCreating(true)}>
-            <ShieldCheck data-icon="inline-start" />
-            Create provider
-          </Button>
+          <>
+            <Button variant="outline" asChild>
+              <Link to="/providers/policy">Access policy</Link>
+            </Button>
+            <Button type="button" onClick={() => setCreating(true)}>
+              <ShieldCheck data-icon="inline-start" />
+              Create provider
+            </Button>
+          </>
         }
       />
       <ProvidersView providers={pagination.items} pagination={pagination} onArchive={actions.archiveProvider} />

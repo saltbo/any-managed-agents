@@ -14,6 +14,12 @@ import {
   paginateRows,
   parseListCursor,
 } from '../openapi'
+import {
+  type DiscoveredProviderModel,
+  normalizeProviderError,
+  parseProviderModelCatalog,
+  providerFamily,
+} from '../providers/adapters'
 
 const app = createApiRouter()
 
@@ -199,6 +205,50 @@ async function defaultProviderRows(projectId: string, timestamp: string) {
   return row
 }
 
+const FAMILY_DEFAULT_BASE_URLS: Record<string, string | undefined> = {
+  openai: 'https://api.openai.com/v1',
+  anthropic: 'https://api.anthropic.com/v1',
+  ollama: 'http://127.0.0.1:11434',
+}
+
+const DISCOVERY_TIMEOUT_MS = 10_000
+
+function workersAiCatalog(defaultModel: string | undefined): DiscoveredProviderModel[] {
+  return [
+    {
+      modelId: defaultModel ?? '@cf/moonshotai/kimi-k2.6',
+      displayName: 'Workers AI default model',
+      capabilities: ['text'],
+      contextWindow: null,
+      pricing: {},
+      availability: 'available',
+      metadata: { source: 'workers-ai-binding' },
+    },
+  ]
+}
+
+// Fetches the provider's model list. Discovery never sends or echoes stored
+// credential references; failures bubble raw and are normalized by the
+// caller so responses stay credential-free.
+async function fetchProviderModelCatalog(provider: Pick<ProviderRow, 'type' | 'baseUrl'>) {
+  const family = providerFamily(provider.type)
+  const baseUrl = (provider.baseUrl ?? FAMILY_DEFAULT_BASE_URLS[family])?.replace(/\/$/, '')
+  if (!baseUrl) {
+    throw new Error('invalid request: provider base URL is required for model discovery')
+  }
+  const url = family === 'ollama' ? `${baseUrl}/api/tags` : `${baseUrl}/models`
+  const response = await fetch(url, {
+    headers: { accept: 'application/json' },
+    signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
+  })
+  if (!response.ok) {
+    throw Object.assign(new Error(`provider model discovery returned HTTP ${response.status}`), {
+      status: response.status,
+    })
+  }
+  return parseProviderModelCatalog(family, await response.json())
+}
+
 const listRoute = createRoute({
   method: 'get',
   path: '/',
@@ -293,6 +343,30 @@ const listModelsRoute = createRoute({
     },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
     404: { description: 'Provider not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
+  },
+})
+
+const discoverModelsRoute = createRoute({
+  method: 'post',
+  path: '/{providerId}/models/discovery',
+  operationId: 'discoverProviderModels',
+  tags: ['Providers'],
+  summary: 'Discover provider models',
+  description:
+    'Refreshes the model catalog from the provider. Failures return a normalized provider error without credential material and leave the stored provider configuration readable.',
+  ...AuthenticatedOperation,
+  request: { params: ParamsSchema },
+  responses: {
+    200: {
+      description: 'Discovered provider models',
+      content: { 'application/json': { schema: ProviderModelListResponseSchema } },
+    },
+    401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    404: { description: 'Provider not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    502: {
+      description: 'Provider discovery failed',
+      content: { 'application/json': { schema: ErrorResponseSchema } },
+    },
   },
 })
 
@@ -514,6 +588,129 @@ const routes = app
           ]
         : rows
     const page = paginateRows(data, data.length || 1)
+    return c.json({ data: page.data.map(serializeModel), pagination: page.pagination }, 200)
+  })
+  .openapi(discoverModelsRoute, async (c) => {
+    const { providerId } = c.req.valid('param')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) return auth
+    const provider = await findProvider(db, auth.project.id, providerId)
+    if (!provider && providerId !== 'workers-ai') return errorResponse(c, 404, 'not_found', 'Provider not found')
+    const timestamp = now()
+    let discovered: DiscoveredProviderModel[]
+    try {
+      discovered =
+        !provider || provider.type === 'workers-ai'
+          ? workersAiCatalog(c.env.AMA_DEFAULT_MODEL)
+          : await fetchProviderModelCatalog(provider)
+    } catch (error) {
+      // Normalized failure path: the stored configuration stays readable and
+      // the response carries only the stable category, never raw provider
+      // payloads or credential references.
+      const normalized = normalizeProviderError(providerFamily(provider?.type), error)
+      const lastError = {
+        type: 'provider_error',
+        category: normalized.category,
+        message: normalized.message,
+        retryable: normalized.retryable,
+        ...(normalized.retryAfterSeconds !== undefined ? { retryAfterSeconds: normalized.retryAfterSeconds } : {}),
+        occurredAt: timestamp,
+      }
+      if (provider) {
+        await db
+          .update(providerConfigs)
+          .set({ modelCatalogStatus: 'error', lastError: stringify(lastError), updatedAt: timestamp })
+          .where(and(eq(providerConfigs.id, provider.id), eq(providerConfigs.projectId, auth.project.id)))
+      }
+      await recordAudit(db, {
+        auth,
+        action: 'provider.models.discover',
+        resourceType: 'provider',
+        resourceId: provider?.id ?? providerId,
+        outcome: 'failure',
+        requestId: requestId(c),
+        metadata: { category: normalized.category, retryable: normalized.retryable },
+      })
+      return errorResponse(c, 502, 'provider_error', normalized.message, {
+        category: normalized.category,
+        retryable: normalized.retryable,
+        ...(normalized.retryAfterSeconds !== undefined ? { retryAfterSeconds: normalized.retryAfterSeconds } : {}),
+      })
+    }
+    const rows: ProviderModelRow[] = []
+    for (const model of discovered) {
+      if (!provider) {
+        // Platform-default Workers AI has no provider row to attach catalog
+        // rows to; report the discovered catalog without persisting.
+        rows.push({
+          id: 'model_workers_ai_default',
+          organizationId: auth.organization.id,
+          projectId: auth.project.id,
+          providerId: 'workers-ai',
+          modelId: model.modelId,
+          displayName: model.displayName,
+          capabilities: stringify(model.capabilities),
+          contextWindow: model.contextWindow,
+          pricing: stringify(model.pricing),
+          availability: model.availability,
+          metadata: stringify(model.metadata),
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        })
+        continue
+      }
+      const existing = await db
+        .select()
+        .from(providerModels)
+        .where(
+          and(
+            eq(providerModels.projectId, auth.project.id),
+            eq(providerModels.providerId, provider.id),
+            eq(providerModels.modelId, model.modelId),
+          ),
+        )
+        .get()
+      const values = {
+        organizationId: auth.organization.id,
+        projectId: auth.project.id,
+        providerId: provider.id,
+        modelId: model.modelId,
+        displayName: model.displayName,
+        capabilities: stringify(model.capabilities),
+        contextWindow: model.contextWindow,
+        pricing: stringify(model.pricing),
+        availability: model.availability,
+        metadata: stringify(model.metadata),
+        updatedAt: timestamp,
+      }
+      const row = existing ? { ...existing, ...values } : { id: newId('model'), ...values, createdAt: timestamp }
+      if (existing) {
+        await db
+          .update(providerModels)
+          .set(values)
+          .where(and(eq(providerModels.id, existing.id), eq(providerModels.projectId, auth.project.id)))
+      } else {
+        await db.insert(providerModels).values(row)
+      }
+      rows.push(row)
+    }
+    if (provider) {
+      await db
+        .update(providerConfigs)
+        .set({ modelCatalogStatus: 'ready', lastError: null, updatedAt: timestamp })
+        .where(and(eq(providerConfigs.id, provider.id), eq(providerConfigs.projectId, auth.project.id)))
+      await recordAudit(db, {
+        auth,
+        action: 'provider.models.discover',
+        resourceType: 'provider',
+        resourceId: provider.id,
+        outcome: 'success',
+        requestId: requestId(c),
+        metadata: { discoveredModels: rows.length },
+      })
+    }
+    const page = paginateRows(rows, rows.length || 1)
     return c.json({ data: page.data.map(serializeModel), pagination: page.pagination }, 200)
   })
   .openapi(upsertModelRoute, async (c) => {

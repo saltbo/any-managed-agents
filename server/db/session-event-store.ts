@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, max } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
 import { type CanonicalAmaSessionEvent, canonicalEventCorrelation } from '../../shared/session-events'
+import { recordProviderSignalsForSessionEvent } from '../providers/usage-recorder'
 import { redactSensitiveValue } from '../redaction'
 import { sessionEvents } from './schema'
 
@@ -99,6 +100,10 @@ export async function insertCanonicalSessionEvent(
         metadata: JSON.stringify(redactSensitiveValue(canonicalEvent.metadata)),
         createdAt: new Date().toISOString(),
       })
+      // Provider-domain accounting (usage records, provider error health)
+      // hangs off the same insert so every ingest path — cloud runtime,
+      // runner leases, runner channels — records usage exactly once.
+      await recordProviderSignalsForSessionEvent(db, scope, eventId, canonicalEvent)
       return eventId
     } catch (error) {
       if (attempt === 4 || !String(error).includes('UNIQUE')) {

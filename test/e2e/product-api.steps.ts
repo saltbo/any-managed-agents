@@ -678,25 +678,6 @@ When('an operator marks one provider as default', async function (this: ProductW
   })
 })
 
-When('model discovery succeeds', async function (this: ProductWorld) {
-  const state = await ensureState(this)
-  this.e2e.providerModel = await createProviderModel(state, state.provider, {
-    modelId: 'gateway-model',
-    displayName: 'Gateway Model',
-    capabilities: ['text'],
-    contextWindow: 128000,
-    pricing: { inputMicrosPerToken: 1 },
-  })
-})
-
-When('model discovery fails or the provider is unreachable', async function (this: ProductWorld) {
-  const state = await ensureState(this)
-  this.e2e.provider = await apiJson<Json>(state.page.request, `/api/providers/${state.provider?.id}`, {
-    method: 'PATCH',
-    data: { modelCatalogStatus: 'runtime.error', lastError: { type: 'network_error', credential: 'raw-secret-value' } },
-  })
-})
-
 When('an operator disables the provider', async function (this: ProductWorld) {
   const state = await ensureState(this)
   this.e2e.provider = await apiJson<Json>(state.page.request, `/api/providers/${state.provider?.id}`, {
@@ -1940,6 +1921,11 @@ Then(
   'future agent and session creation enforce those rules before runtime startup',
   async function (this: ProductWorld) {
     const state = await ensureAgentAndEnvironment(this)
+    // Access rules scoped to a team bind that team's members (OIDC `teams`
+    // claims), so the enforcement attempt runs as a member of the team the
+    // admin targeted with the deny rule.
+    const orgRunId = (state.accessToken ?? '').replace(/^e2e:/, '').split(';')[0]
+    const memberToken = `e2e:${orgRunId}-team-e2e-member;org=${orgRunId};teams=team_e2e`
     const response = await apiResponse(state.page.request, '/api/sessions', {
       method: 'POST',
       data: {
@@ -1948,6 +1934,7 @@ Then(
         runtime: state.sessionRuntime ?? 'ama',
         title: `${state.runId} access denied`,
       },
+      headers: { authorization: `Bearer ${memberToken}` },
     })
     assert.equal(response.status(), 403)
     const body = await response.json()

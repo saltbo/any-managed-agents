@@ -40,6 +40,7 @@ var Operations = []Operation{
 	{Method: "DELETE", Path: "/api/providers/{providerId}", OperationID: "deleteProvider", Summary: "Delete a provider", Tags: []string{"Providers"}},
 	{Method: "DELETE", Path: "/api/vaults/{vaultId}/credentials/{credentialId}/versions/{versionId}", OperationID: "deleteVaultCredentialVersion", Summary: "Delete unused vault credential version metadata", Tags: []string{"Vaults"}},
 	{Method: "DELETE", Path: "/api/mcp/connections/{connectionId}", OperationID: "disconnectMcpConnection", Summary: "Disconnect MCP connection", Tags: []string{"MCP"}},
+	{Method: "POST", Path: "/api/providers/{providerId}/models/discovery", OperationID: "discoverProviderModels", Summary: "Discover provider models", Tags: []string{"Providers"}},
 	{Method: "POST", Path: "/api/governance/evaluations", OperationID: "evaluateGovernancePolicy", Summary: "Evaluate governance policy", Tags: []string{"Governance"}},
 	{Method: "GET", Path: "/api/audit-records/export", OperationID: "exportAuditRecords", Summary: "Export audit records", Tags: []string{"Audit"}},
 	{Method: "GET", Path: "/api/sessions/{sessionId}/events/export", OperationID: "exportSessionEvents", Summary: "Export session events as NDJSON", Tags: []string{"Sessions"}},

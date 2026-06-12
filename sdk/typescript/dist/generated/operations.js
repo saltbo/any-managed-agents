@@ -263,6 +263,15 @@ export const operations = [
     },
     {
         "method": "POST",
+        "path": "/api/providers/{providerId}/models/discovery",
+        "operationId": "discoverProviderModels",
+        "summary": "Discover provider models",
+        "tags": [
+            "Providers"
+        ]
+    },
+    {
+        "method": "POST",
         "path": "/api/governance/evaluations",
         "operationId": "evaluateGovernancePolicy",
         "summary": "Evaluate governance policy",

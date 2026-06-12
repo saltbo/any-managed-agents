@@ -46,6 +46,7 @@ export const queryKeys = {
   },
   governance: {
     policy: ['governance', 'policy'] as const,
+    accessRules: ['governance', 'access-rules'] as const,
   },
   usage: {
     summary: ['usage', 'summary'] as const,

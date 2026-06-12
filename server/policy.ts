@@ -422,13 +422,30 @@ export async function evaluateProviderPolicy(
     .select()
     .from(providerAccessRules)
     .where(and(eq(providerAccessRules.projectId, auth.project.id), or(...providerPredicates), or(...modelPredicates)))
-  const deniedAccessRule = accessRules.find((rule) => rule.effect === 'deny')
+  // Team membership comes from OIDC claims (`teams`); AMA stores no team
+  // tables. Team-scoped deny rules only bind members of that team, and any
+  // team-scoped allow rule turns the matched provider/model into a
+  // team-restricted resource that requires membership in an allowed team.
+  const memberTeams = auth.teams ?? []
+  const deniedAccessRule = accessRules.find(
+    (rule) => rule.effect === 'deny' && (!rule.teamId || memberTeams.includes(rule.teamId)),
+  )
   if (deniedAccessRule) {
     return {
       allowed: false,
       category: 'provider',
       rule: deniedAccessRule.id,
       message: deniedAccessRule.reason ?? 'Provider or model is denied by governance policy.',
+    }
+  }
+  const teamAllowRules = accessRules.filter((rule) => rule.effect === 'allow' && rule.teamId)
+  if (teamAllowRules.length > 0 && !teamAllowRules.some((rule) => rule.teamId && memberTeams.includes(rule.teamId))) {
+    const restrictingRule = teamAllowRules[0]
+    return {
+      allowed: false,
+      category: 'provider',
+      rule: restrictingRule?.id ?? null,
+      message: restrictingRule?.reason ?? 'Provider is restricted to approved teams.',
     }
   }
 
@@ -492,6 +509,50 @@ export async function evaluateProviderPolicy(
   }
 
   return { allowed: true, category: 'provider', rule: null, message: 'Allowed by effective policy.' }
+}
+
+// Roles allowed to override a provider-access denial. Override must be an
+// explicit per-request flag; it is never implied by the role alone.
+const PROVIDER_OVERRIDE_ROLES = ['admin', 'owner'] as const
+
+export function canOverrideProviderPolicy(auth: Pick<AuthContext, 'roles'>) {
+  return auth.roles.some((role) => (PROVIDER_OVERRIDE_ROLES as readonly string[]).includes(role))
+}
+
+export interface ProviderPolicySessionDecision {
+  decision: PolicyDecision
+  // The denied decision an admin explicitly overrode; callers must audit it.
+  override: PolicyDecision | null
+}
+
+// Session-creation entrypoint for provider policy: evaluates the effective
+// policy (including OIDC-team-scoped access rules) and honors an explicit
+// admin override request only for admin-role callers.
+export async function evaluateProviderPolicyForSession(
+  db: PolicyDb,
+  auth: AuthContext,
+  values: {
+    providerId: string
+    modelId: string | null
+    adminOverride?: boolean
+  },
+): Promise<ProviderPolicySessionDecision> {
+  const decision = await evaluateProviderPolicy(db, auth, {
+    providerId: values.providerId,
+    modelId: values.modelId,
+  })
+  if (decision.allowed || values.adminOverride !== true || !canOverrideProviderPolicy(auth)) {
+    return { decision, override: null }
+  }
+  return {
+    decision: {
+      allowed: true,
+      category: 'override',
+      rule: decision.rule,
+      message: 'Allowed by explicit admin policy override.',
+    },
+    override: decision,
+  }
 }
 
 export async function evaluateMcpToolPolicy(

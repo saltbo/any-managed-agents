@@ -36,7 +36,7 @@ Feature: Providers
     Then every other provider in the same project is no longer default
     And future agents without explicit provider selection use the new default
 
-  @planned
+  @implemented
   Scenario: Discover provider models safely
     Given a provider is configured
     When model discovery succeeds

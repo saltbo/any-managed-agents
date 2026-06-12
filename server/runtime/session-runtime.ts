@@ -18,6 +18,12 @@ import {
   type Usage,
 } from '@earendil-works/pi-ai'
 import type { Env } from '../env'
+import {
+  extractProviderUsage,
+  type NormalizedProviderError,
+  normalizeProviderError,
+  providerFamily,
+} from '../providers/adapters'
 import { toolExecutor } from './tool-executor'
 
 export type SessionRuntimeStartInput = {
@@ -104,6 +110,16 @@ export class RuntimeTurnCancelledError extends Error {
   constructor(message = 'Session runtime is no longer active') {
     super(message)
     this.name = 'RuntimeTurnCancelledError'
+  }
+}
+
+// A provider/model call failed: carries the adapter-normalized error so the
+// canonical runtime.error event and the session status only ever expose the
+// safe category and message, never the raw provider payload.
+export class ProviderCallError extends Error {
+  constructor(readonly normalized: NormalizedProviderError) {
+    super(normalized.message)
+    this.name = 'ProviderCallError'
   }
 }
 
@@ -449,23 +465,19 @@ function openAiTools(context: Context) {
   }))
 }
 
-function usageFromProvider(raw: Record<string, unknown> | null): Usage {
-  const usage = raw?.usage && typeof raw.usage === 'object' ? (raw.usage as Record<string, unknown>) : {}
-  const input = numberValue(usage.prompt_tokens) ?? numberValue(usage.input_tokens) ?? 0
-  const output = numberValue(usage.completion_tokens) ?? numberValue(usage.output_tokens) ?? 0
-  const totalTokens = numberValue(usage.total_tokens) ?? input + output
+function usageFromProvider(provider: string, raw: Record<string, unknown> | null): Usage {
+  const usage = extractProviderUsage(providerFamily(provider), raw)
+  if (!usage) {
+    return ZERO_USAGE
+  }
   return {
-    input,
-    output,
-    cacheRead: numberValue(usage.cache_read_input_tokens) ?? 0,
-    cacheWrite: numberValue(usage.cache_creation_input_tokens) ?? 0,
-    totalTokens,
+    input: usage.promptTokens,
+    output: usage.completionTokens,
+    cacheRead: usage.cacheReadTokens,
+    cacheWrite: usage.cacheWriteTokens,
+    totalTokens: usage.totalTokens,
     cost: ZERO_USAGE.cost,
   }
-}
-
-function numberValue(value: unknown) {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
 function assistantMessage(
@@ -573,7 +585,7 @@ function providerAssistantMessage(model: Model<string>, raw: unknown) {
     model,
     content.length ? content : [{ type: 'text', text: '' }],
     toolCalls.length ? 'toolUse' : 'stop',
-    usageFromProvider(record),
+    usageFromProvider(model.provider, record),
   )
 }
 
@@ -614,6 +626,45 @@ function testPromptToolCall(prompt: string): ToolCall | null {
     return { type: 'toolCall', id: 'call_git_status', name: 'sandbox.exec', arguments: { command: 'git status' } }
   }
   return null
+}
+
+// Test-mode provider failure simulation: prompts of the form
+// "simulate provider <category> error" throw a raw, provider-shaped error so
+// the real adapter normalization path is exercised end to end. The raw
+// payload deliberately embeds marker text that must never surface.
+const SIMULATED_PROVIDER_ERROR_RE =
+  /simulate provider (auth|quota|rate limit|model unavailable|invalid request|network|unknown) error/i
+
+function simulatedProviderFailure(prompt: string): unknown | null {
+  const match = SIMULATED_PROVIDER_ERROR_RE.exec(prompt)
+  if (!match?.[1]) {
+    return null
+  }
+  const marker = 'raw-provider-error-detail'
+  switch (match[1].toLowerCase()) {
+    case 'auth':
+      return Object.assign(new Error(`401 invalid api key sk-${marker}`), { status: 401, code: 'invalid_api_key' })
+    case 'quota':
+      return Object.assign(new Error(`429 insufficient_quota ${marker}`), { status: 429, code: 'insufficient_quota' })
+    case 'rate limit':
+      return Object.assign(new Error(`429 too many requests ${marker}`), {
+        status: 429,
+        code: 'rate_limit_exceeded',
+        retryAfterSeconds: 7,
+      })
+    case 'model unavailable':
+      return Object.assign(new Error(`404 model_not_found ${marker}`), { status: 404, code: 'model_not_found' })
+    case 'invalid request':
+      return Object.assign(new Error(`400 invalid_request_error ${marker}`), {
+        status: 400,
+        code: 'invalid_request_error',
+      })
+    case 'network':
+      return new TypeError(`fetch failed ${marker}`)
+    default:
+      return new Error(`provider call collapsed without diagnostics ${marker}`)
+  }
+
 }
 
 function testAssistantMessage(model: Model<string>, context: Context) {
@@ -669,11 +720,45 @@ async function ensureTurnActive(signal: AbortSignal, ensureActive?: () => Promis
   }
 }
 
+// Provider boundary: everything inside is a provider-specific call; failures
+// are normalized through the provider adapter before they leave this seam.
+async function callProviderModel(env: Env, model: Model<string>, context: Context, signal?: AbortSignal) {
+  try {
+    if (env.AMA_RUNTIME_MODE === 'test') {
+      const latestUser = [...context.messages].reverse().find((message) => message.role === 'user')
+      const prompt = latestUser && latestUser.role === 'user' ? textContent(latestUser.content) : ''
+      const simulated = simulatedProviderFailure(prompt)
+      if (simulated) {
+        throw simulated
+      }
+      return testAssistantMessage(model, context)
+    }
+    return providerAssistantMessage(
+      model,
+      await env.AI.run(
+        model.id,
+        {
+          model: model.id,
+          messages: openAiMessages(context),
+          tools: openAiTools(context),
+        },
+        signal ? { signal } : undefined,
+      ),
+    )
+  } catch (error) {
+    if (isRuntimeTurnCancelled(error) || error instanceof ProviderCallError) {
+      throw error
+    }
+    throw new ProviderCallError(normalizeProviderError(providerFamily(model.provider), error))
+  }
+}
+
 function createRuntimeStreamFn(
   env: Env,
   values: {
     ensureActive?: () => Promise<void>
     markCancelled: () => void
+    onProviderError?: (normalized: NormalizedProviderError) => void
     // Checked before each model call: pausing between completed turns lets a
     // continuation pick the run up under a fresh execution budget.
     shouldPause?: () => boolean
@@ -703,31 +788,21 @@ function createRuntimeStreamFn(
         if (env.AMA_RUNTIME_MODE === 'test' && /wait for cancellation/i.test(prompt)) {
           await new Promise((resolve) => setTimeout(resolve, 100))
         }
-        const message =
-          env.AMA_RUNTIME_MODE === 'test'
-            ? testAssistantMessage(model, context)
-            : providerAssistantMessage(
-                model,
-                await env.AI.run(
-                  model.id,
-                  {
-                    model: model.id,
-                    messages: openAiMessages(context),
-                    tools: openAiTools(context),
-                  },
-                  options?.signal ? { signal: options.signal } : undefined,
-                ),
-              )
+        const message = await callProviderModel(env, model, context, options?.signal)
         await ensureTurnActive(options?.signal ?? new AbortController().signal, values.ensureActive)
         emitAssistantMessage(stream, message)
       } catch (error) {
         if (isRuntimeTurnCancelled(error)) {
           values.markCancelled()
         }
+        const aborted = options?.signal?.aborted || isRuntimeTurnCancelled(error)
+        if (!aborted && error instanceof ProviderCallError) {
+          values.onProviderError?.(error.normalized)
+        }
         const failed = assistantMessage(
           model,
           [],
-          options?.signal?.aborted || isRuntimeTurnCancelled(error) ? 'aborted' : 'error',
+          aborted ? 'aborted' : 'error',
           ZERO_USAGE,
           error instanceof Error ? error.message : 'Model request failed',
         )
@@ -924,6 +999,7 @@ export async function runSessionTurn(env: Env, input: SessionTurnInput): Promise
   let cancelled = false
   let paused = false
   let failureMessage: string | null = null
+  let providerError: NormalizedProviderError | null = null
   const agent = new Agent({
     initialState: {
       systemPrompt: runtimeSystemPrompt(input.agentSnapshot),
@@ -941,6 +1017,9 @@ export async function runSessionTurn(env: Env, input: SessionTurnInput): Promise
     streamFn: createRuntimeStreamFn(env, {
       markCancelled: () => {
         cancelled = true
+      },
+      onProviderError: (normalized) => {
+        providerError = normalized
       },
       ...(input.shouldPause
         ? {
@@ -990,6 +1069,27 @@ export async function runSessionTurn(env: Env, input: SessionTurnInput): Promise
           source: 'ama-cloud-runtime',
           piCorePackage: '@earendil-works/pi-agent-core',
         })
+      }
+      // Surface adapter-normalized provider failures as canonical
+      // runtime.error events: stable category, safe message, retry metadata.
+      if (event.message.role === 'assistant' && event.message.stopReason === 'error' && providerError) {
+        const normalized: NormalizedProviderError = providerError
+        providerError = null
+        await input.onEvent(
+          {
+            type: 'error',
+            message: normalized.message,
+            category: normalized.category,
+            retryable: normalized.retryable,
+            ...(normalized.retryAfterSeconds !== undefined ? { retryAfterSeconds: normalized.retryAfterSeconds } : {}),
+            provider,
+            model: modelId,
+          },
+          {
+            source: 'ama-cloud-runtime',
+            piCorePackage: '@earendil-works/pi-agent-core',
+          },
+        )
       }
     }
   })

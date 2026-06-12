@@ -24,6 +24,7 @@ interface SessionPayload {
   org_name?: string
   roles: string[]
   permissions: string[]
+  teams?: string[]
   iat: number
   exp: number
 }
@@ -42,6 +43,7 @@ export async function createSessionCookie(env: Env, claims: UserInfoClaims): Pro
     ...(claims.org_name ? { org_name: claims.org_name } : {}),
     roles: claims.roles,
     permissions: claims.permissions,
+    teams: claims.teams,
     iat: now,
     exp: now + SESSION_EXPIRY_SECONDS,
   }
@@ -92,6 +94,7 @@ export async function resolveSessionClaims(c: Context<{ Bindings: Env }>): Promi
     ...(payload.org_name ? { org_name: payload.org_name } : {}),
     roles: payload.roles,
     permissions: payload.permissions,
+    teams: payload.teams ?? [],
   }
 }
 
@@ -113,6 +116,9 @@ export interface AuthContext {
   }
   roles: string[]
   permissions: string[]
+  // OIDC-asserted team memberships; optional because system-synthesized auth
+  // contexts (queue consumers, schedulers) carry no identity claims.
+  teams?: string[]
   oidc: {
     subject: string
     clientId: string | null
@@ -130,6 +136,7 @@ export interface AuthIdentity {
   organization: AuthContext['organization']
   roles: string[]
   permissions: string[]
+  teams?: string[]
   oidc: AuthContext['oidc']
 }
 
@@ -219,6 +226,7 @@ function authIdentityFromClaims(claims: Awaited<ReturnType<typeof getBearerClaim
     },
     roles: claims.roles,
     permissions: claims.permissions,
+    teams: claims.teams,
     oidc: {
       subject: claims.sub,
       clientId: claims.client_id ?? claims.azp ?? null,
