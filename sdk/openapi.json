@@ -10604,6 +10604,16 @@
                 }
               }
             }
+          },
+          "502": {
+            "description": "MCP upstream error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }

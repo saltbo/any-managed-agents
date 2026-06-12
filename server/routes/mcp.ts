@@ -1,5 +1,6 @@
+import { type Schema, Validator } from '@cfworker/json-schema'
 import { createRoute, z } from '@hono/zod-openapi'
-import { and, desc, eq, isNull, like, lt, or } from 'drizzle-orm'
+import { and, desc, eq, isNull, like, lt, max, or } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
 import { recordAudit, requestId } from '../audit'
@@ -8,6 +9,7 @@ import {
   mcpCatalogEntries,
   mcpConnections,
   mcpConnectionTools,
+  sessionEvents,
   sessions,
   vaultCredentials,
   vaultCredentialVersions,
@@ -23,6 +25,16 @@ import {
   parseListCursor,
 } from '../openapi'
 import { evaluateMcpToolPolicy, resolveEffectivePolicy } from '../policy'
+import { redactSensitiveValue } from '../redaction'
+import {
+  callMcpServerTool,
+  categorizeMcpClientFailure,
+  listMcpServerTools,
+  McpClientError,
+  type McpClientErrorCategory,
+  type McpClientTarget,
+} from '../runtime/mcp-client'
+import { resolveRuntimeSecretEnv } from '../runtime/secret-env'
 
 const app = createApiRouter()
 
@@ -480,22 +492,170 @@ async function replaceConnectionTools(db: Db, auth: AuthContext, connection: Con
   )
 }
 
-function normalizedMcpError(value: unknown) {
-  const input = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
-  const type = input.type
-  const errorType =
-    type === 'unauthorized'
-      ? 'mcp_unauthorized'
-      : type === 'not_found'
-        ? 'mcp_not_found'
-        : type === 'timeout'
-          ? 'mcp_timeout'
-          : type === 'invalid_schema'
-            ? 'mcp_invalid_schema'
-            : type === 'network'
-              ? 'mcp_network_error'
-              : 'mcp_upstream_error'
-  return { type: errorType, message: 'MCP tool call failed.' }
+// Stable error surface for connector failures. Raw connector error text never
+// reaches API responses, audit metadata, or session events.
+const NORMALIZED_MCP_ERRORS: Record<McpClientErrorCategory, { type: string; message: string }> = {
+  unauthorized: { type: 'mcp_unauthorized', message: 'MCP server rejected the connection credential.' },
+  not_found: { type: 'mcp_not_found', message: 'MCP server or tool was not found.' },
+  timeout: { type: 'mcp_timeout', message: 'MCP server did not respond before the configured timeout.' },
+  invalid_schema: { type: 'mcp_invalid_schema', message: 'MCP server rejected the tool input schema.' },
+  network: { type: 'mcp_network_error', message: 'MCP server could not be reached.' },
+  upstream: { type: 'mcp_upstream_error', message: 'MCP tool call failed.' },
+}
+
+function normalizedMcpError(error: unknown) {
+  return NORMALIZED_MCP_ERRORS[categorizeMcpClientFailure(error)]
+}
+
+const DEFAULT_MCP_REQUEST_TIMEOUT_MS = 20_000
+
+function connectionRequestTimeoutMs(connection: ConnectionRow) {
+  const metadata = parseJson<Record<string, unknown>>(connection.metadata, {})
+  const value = metadata.requestTimeoutMs
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.min(Math.max(Math.trunc(value), 100), 60_000)
+  }
+  return DEFAULT_MCP_REQUEST_TIMEOUT_MS
+}
+
+// Resolves the connection credential to an Authorization header value. The
+// credential's active version wins over the version pinned at connect time so
+// rotated credentials take effect without reconnecting.
+async function resolveConnectionAuthorization(env: Env, db: Db, auth: AuthContext, connection: ConnectionRow) {
+  let versionId = connection.credentialVersionId
+  if (connection.credentialId) {
+    const credential = await db
+      .select({ activeVersionId: vaultCredentials.activeVersionId })
+      .from(vaultCredentials)
+      .where(
+        and(
+          eq(vaultCredentials.id, connection.credentialId),
+          eq(vaultCredentials.organizationId, auth.organization.id),
+          or(eq(vaultCredentials.projectId, auth.project.id), isNull(vaultCredentials.projectId)),
+        ),
+      )
+      .get()
+    versionId = credential?.activeVersionId ?? versionId
+  }
+  if (!versionId) {
+    return null
+  }
+  let resolved: Record<string, string>
+  try {
+    resolved = await resolveRuntimeSecretEnv(
+      env,
+      db,
+      { organizationId: auth.organization.id, projectId: auth.project.id },
+      [{ name: 'credential', ref: versionId }],
+    )
+  } catch (error) {
+    throw new McpClientError('unauthorized', error)
+  }
+  const value = resolved.credential
+  return typeof value === 'string' ? `Bearer ${value}` : null
+}
+
+async function mcpClientTarget(
+  env: Env,
+  db: Db,
+  auth: AuthContext,
+  connection: ConnectionRow,
+  endpointUrl: string,
+): Promise<McpClientTarget> {
+  return {
+    endpointUrl,
+    authorization: await resolveConnectionAuthorization(env, db, auth, connection),
+    timeoutMs: connectionRequestTimeoutMs(connection),
+  }
+}
+
+// Canonical session event append with the same sequence-collision retry the
+// runtime event paths use; MCP policy checks, calls, and results stay
+// inspectable on the session after completion.
+async function appendMcpSessionEvent(
+  db: Db,
+  values: {
+    auth: AuthContext
+    sessionId: string
+    type: 'policy.decision' | 'tool_execution_start' | 'tool_execution_end'
+    payload: Record<string, unknown>
+    parentEventId?: string | null
+    correlationId?: string | null
+  },
+) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const eventId = newId('event')
+    const latest = await db
+      .select({ sequence: max(sessionEvents.sequence) })
+      .from(sessionEvents)
+      .where(eq(sessionEvents.sessionId, values.sessionId))
+      .get()
+    try {
+      await db.insert(sessionEvents).values({
+        id: eventId,
+        organizationId: values.auth.organization.id,
+        projectId: values.auth.project.id,
+        sessionId: values.sessionId,
+        sequence: (latest?.sequence ?? 0) + 1,
+        type: values.type,
+        visibility: 'runtime',
+        role: null,
+        parentEventId: values.parentEventId ?? null,
+        correlationId: values.correlationId ?? null,
+        payload: stringify(redactSensitiveValue(values.payload)),
+        metadata: stringify({ source: 'mcp-client' }),
+        createdAt: now(),
+      })
+      return eventId
+    } catch (error) {
+      if (attempt === 4 || !String(error).includes('UNIQUE')) {
+        throw error
+      }
+    }
+  }
+  throw new Error('Unable to append MCP session event')
+}
+
+// Tool input is validated against the schema the MCP server declared (synced
+// at listing time, or catalog metadata before the first sync). Spec-conformant
+// MCP servers report input validation failures as opaque in-band tool errors,
+// so the control plane validates at its own boundary to keep the stable
+// invalid_schema category.
+function validateToolInput(tool: ToolRow, input: Record<string, unknown>) {
+  const schema = parseJson<Record<string, unknown>>(tool.inputSchema, {})
+  if (Object.keys(schema).length === 0) return
+  const result = new Validator(schema as Schema, '2020-12', false).validate(input)
+  if (!result.valid) {
+    throw new McpClientError('invalid_schema', result.errors)
+  }
+}
+
+async function syncConnectionToolsFromServer(
+  db: Db,
+  auth: AuthContext,
+  connection: ConnectionRow,
+  tools: Awaited<ReturnType<typeof listMcpServerTools>>,
+) {
+  const timestamp = now()
+  await db.delete(mcpConnectionTools).where(eq(mcpConnectionTools.connectionId, connection.id))
+  if (tools.length === 0) return
+  await db.insert(mcpConnectionTools).values(
+    tools.map((tool) => ({
+      id: newId('mcptool'),
+      connectionId: connection.id,
+      organizationId: auth.organization.id,
+      projectId: auth.project.id,
+      connectorId: connection.connectorId,
+      name: tool.name,
+      description: tool.description,
+      inputSchema: stringify(tool.inputSchema),
+      approvalMode: connection.approvalMode,
+      policyMetadata: stringify({ source: 'mcp_server' }),
+      status: 'available',
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    })),
+  )
 }
 
 const listConnectorsRoute = createRoute({
@@ -634,6 +794,7 @@ const listToolsRoute = createRoute({
       description: 'MCP connection unavailable',
       content: { 'application/json': { schema: ErrorResponseSchema } },
     },
+    502: { description: 'MCP upstream error', content: { 'application/json': { schema: ErrorResponseSchema } } },
   },
 })
 
@@ -966,6 +1127,20 @@ const routes = app
     const connection = await findConnection(db, auth, c.req.valid('param').connectionId)
     if (!connection) return errorResponse(c, 404, 'not_found', 'MCP connection not found')
     if (connection.status !== 'connected') return errorResponse(c, 409, 'conflict', 'MCP connection is not connected')
+    // Connections with a configured endpoint list tools from the live MCP
+    // server through the MCP client; the synced rows become the policy surface
+    // for subsequent tool calls. Endpoint-less connections keep serving the
+    // catalog tool metadata captured at connect time.
+    if (connection.endpointUrl) {
+      try {
+        const target = await mcpClientTarget(c.env, db, auth, connection, connection.endpointUrl)
+        const serverTools = await listMcpServerTools(target)
+        await syncConnectionToolsFromServer(db, auth, connection, serverTools)
+      } catch (error) {
+        const normalized = normalizedMcpError(error)
+        return errorResponse(c, 502, 'mcp_error', normalized.message, { mcpError: normalized })
+      }
+    }
     const rows = await db
       .select()
       .from(mcpConnectionTools)
@@ -986,7 +1161,6 @@ const routes = app
     )
   })
   .openapi(callToolRoute, async (c) => {
-    const started = Date.now()
     const body = c.req.valid('json')
     const { connectionId, toolName } = c.req.valid('param')
     const db = drizzle(c.env.DB)
@@ -1009,12 +1183,30 @@ const routes = app
       .from(mcpConnectionTools)
       .where(and(eq(mcpConnectionTools.connectionId, connection.id), eq(mcpConnectionTools.name, toolName)))
       .get()
-    if (!tool || tool.status !== 'available') return errorResponse(c, 404, 'not_found', 'MCP tool not found')
+    if (tool?.status !== 'available') return errorResponse(c, 404, 'not_found', 'MCP tool not found')
 
+    const toolCallId = newId('mcpcall')
+    const input = body.input ?? {}
     const decision = await evaluateMcpToolPolicy(db, auth, {
       connectorId: connection.connectorId,
       toolName,
       session,
+    })
+    await appendMcpSessionEvent(db, {
+      auth,
+      sessionId: session.id,
+      type: 'policy.decision',
+      correlationId: toolCallId,
+      payload: {
+        allowed: decision.allowed,
+        category: decision.category,
+        ruleId: decision.rule,
+        resourceType: decision.category === 'tool' ? 'tool' : 'mcp_connector',
+        resourceId: decision.category === 'tool' ? toolName : connection.connectorId,
+        operation: 'mcp_tool_call',
+        connectorId: connection.connectorId,
+        toolName,
+      },
     })
     if (!decision.allowed) {
       await recordAudit(db, {
@@ -1037,9 +1229,7 @@ const routes = app
       })
     }
 
-    const simulatedError = body.input?.simulateError
-    if (simulatedError) {
-      const error = normalizedMcpError(simulatedError)
+    if (!connection.endpointUrl) {
       await recordAudit(db, {
         auth,
         action: 'mcp_tool.call',
@@ -1048,19 +1238,89 @@ const routes = app
         outcome: 'failure',
         requestId: requestId(c),
         sessionId: session.id,
-        metadata: { connectorId: connection.connectorId, toolName, error },
+        metadata: { connectorId: connection.connectorId, toolName, reason: 'endpoint_not_configured' },
       })
-      return errorResponse(c, 502, 'mcp_error', error.message, { mcpError: error })
+      return errorResponse(c, 409, 'conflict', 'MCP connection endpoint is not configured.')
     }
 
-    const output = { ok: true, connectorId: connection.connectorId, toolName }
+    const startEventId = await appendMcpSessionEvent(db, {
+      auth,
+      sessionId: session.id,
+      type: 'tool_execution_start',
+      correlationId: toolCallId,
+      payload: { toolCallId, toolName, connectorId: connection.connectorId, input },
+    })
+
+    const started = Date.now()
+    let callResult: Awaited<ReturnType<typeof callMcpServerTool>>
+    try {
+      validateToolInput(tool, input)
+      const target = await mcpClientTarget(c.env, db, auth, connection, connection.endpointUrl)
+      callResult = await callMcpServerTool(target, { toolName, input })
+      if (callResult.isError) {
+        throw new McpClientError('upstream', callResult)
+      }
+    } catch (error) {
+      const normalized = normalizedMcpError(error)
+      const durationMs = Date.now() - started
+      await appendMcpSessionEvent(db, {
+        auth,
+        sessionId: session.id,
+        type: 'tool_execution_end',
+        parentEventId: startEventId,
+        correlationId: toolCallId,
+        payload: {
+          toolCallId,
+          toolName,
+          connectorId: connection.connectorId,
+          isError: true,
+          durationMs,
+          error: normalized,
+        },
+      })
+      await recordAudit(db, {
+        auth,
+        action: 'mcp_tool.call',
+        resourceType: 'mcp_tool',
+        resourceId: tool.id,
+        outcome: 'failure',
+        requestId: requestId(c),
+        sessionId: session.id,
+        metadata: { connectorId: connection.connectorId, toolName, durationMs, error: normalized },
+      })
+      return errorResponse(c, 502, 'mcp_error', normalized.message, { mcpError: normalized })
+    }
+
+    const durationMs = Date.now() - started
+    const output: Record<string, unknown> = {
+      content: callResult.content,
+      ...(callResult.structuredContent ? { structuredContent: callResult.structuredContent } : {}),
+    }
     const result = {
       connectorId: connection.connectorId,
       toolName,
       status: 'success' as const,
       output,
-      durationMs: Date.now() - started,
+      durationMs,
     }
+    await appendMcpSessionEvent(db, {
+      auth,
+      sessionId: session.id,
+      type: 'tool_execution_end',
+      parentEventId: startEventId,
+      correlationId: toolCallId,
+      payload: {
+        toolCallId,
+        toolName,
+        connectorId: connection.connectorId,
+        isError: false,
+        durationMs,
+        outputSummary: {
+          contentItems: callResult.content.length,
+          hasStructuredContent: !!callResult.structuredContent,
+        },
+      },
+    })
     await recordAudit(db, {
       auth,
       action: 'mcp_tool.call',
@@ -1069,7 +1329,14 @@ const routes = app
       outcome: 'success',
       requestId: requestId(c),
       sessionId: session.id,
-      metadata: { ...result, inputSummary: Object.keys(body.input ?? {}) },
+      metadata: {
+        connectorId: connection.connectorId,
+        toolName,
+        status: 'success',
+        durationMs,
+        inputSummary: Object.keys(input),
+        outputSummary: { contentItems: callResult.content.length },
+      },
     })
     return c.json(result, 200)
   })

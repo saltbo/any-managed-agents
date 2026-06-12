@@ -13,6 +13,95 @@ async function jsonFetch(path: string, authorization: string, init: RequestInit 
   })
 }
 
+const MCP_FIXTURE_ENDPOINT = 'https://mcp.fixture.test/mcp'
+
+interface McpFixtureCall {
+  method: string
+  toolName?: string
+  authorization: string | null
+}
+
+// Streamable-HTTP MCP server stub on the worker's outbound fetch. The MCP
+// client in the route under test performs real JSON-RPC initialize/list/call
+// round trips against it. Cloudflare secrets-store writes stay stubbed the
+// same way setupOidcProvider does.
+function stubMcpFixture(options: {
+  acceptedToken: () => string
+  failure?: () => 'network' | null
+  tools?: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }>
+}) {
+  const calls: McpFixtureCall[] = []
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(input instanceof Request ? input.url : input.toString())
+      if (url.hostname === 'api.cloudflare.com' && url.pathname.includes('/secrets_store/stores/')) {
+        if (init?.method === 'POST') {
+          const secrets = JSON.parse(String(init.body)) as Array<{ name: string }>
+          return Response.json({ success: true, result: secrets.map((secret) => ({ id: `secret_${secret.name}` })) })
+        }
+        if (init?.method === 'DELETE') {
+          return Response.json({ success: true, result: null })
+        }
+      }
+      if (url.hostname !== 'mcp.fixture.test') {
+        return new Response('not found', { status: 404 })
+      }
+      if (options.failure?.() === 'network') {
+        throw new TypeError('fetch failed: raw-connection-refused-detail')
+      }
+      if ((init?.method ?? 'GET') !== 'POST') {
+        return new Response('method not allowed', { status: 405 })
+      }
+      const headers = new Headers(init?.headers as HeadersInit)
+      const authorization = headers.get('authorization')
+      const body = JSON.parse(String(init?.body)) as {
+        id?: number | string
+        method: string
+        params?: { name?: string; protocolVersion?: string }
+      }
+      calls.push({ method: body.method, ...(body.params?.name ? { toolName: body.params.name } : {}), authorization })
+      if (authorization !== `Bearer ${options.acceptedToken()}`) {
+        return new Response('raw-fixture-unauthorized-detail', { status: 401 })
+      }
+      const respond = (result: unknown) => Response.json({ jsonrpc: '2.0', id: body.id ?? null, result })
+      if (body.method === 'initialize') {
+        return respond({
+          protocolVersion: body.params?.protocolVersion ?? '2025-06-18',
+          capabilities: { tools: {} },
+          serverInfo: { name: 'mcp-fixture', version: '1.0.0' },
+        })
+      }
+      if (body.method === 'notifications/initialized') {
+        return new Response(null, { status: 202 })
+      }
+      if (body.method === 'tools/list') {
+        return respond({
+          tools: options.tools ?? [
+            {
+              name: 'repo.read',
+              description: 'Read repository metadata and files.',
+              inputSchema: { type: 'object', properties: { repo: { type: 'string' } } },
+            },
+          ],
+        })
+      }
+      if (body.method === 'tools/call') {
+        return respond({
+          content: [{ type: 'text', text: `fixture:${body.params?.name}` }],
+          structuredContent: { ok: true },
+        })
+      }
+      return Response.json({
+        jsonrpc: '2.0',
+        id: body.id ?? null,
+        error: { code: -32601, message: 'raw-fixture-method-missing' },
+      })
+    }),
+  )
+  return calls
+}
+
 async function createCredential(authorization: string) {
   const vaultRes = await jsonFetch('/api/vaults', authorization, {
     method: 'POST',
@@ -430,9 +519,15 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
   it('allows approved tool calls, respects rotated and revoked credentials, and normalizes MCP errors', async () => {
     const authorization = await signInUser('runtime_allow')
     const credential = await createCredential(authorization)
+    let acceptedToken = 'raw-github-token'
+    const fixtureCalls = stubMcpFixture({ acceptedToken: () => acceptedToken })
     const connectRes = await jsonFetch('/api/mcp/connections', authorization, {
       method: 'POST',
-      body: JSON.stringify({ connectorId: 'github', credentialId: credential.id }),
+      body: JSON.stringify({
+        connectorId: 'github',
+        credentialId: credential.id,
+        endpointUrl: MCP_FIXTURE_ENDPOINT,
+      }),
     })
     expect(connectRes.status).toBe(201)
     const connection = (await connectRes.json()) as { id: string }
@@ -447,7 +542,10 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
       status: 'success',
       connectorId: 'github',
       toolName: 'repo.read',
+      output: { content: [{ type: 'text', text: 'fixture:repo.read' }] },
     })
+    const firstCall = fixtureCalls.find((call) => call.method === 'tools/call')
+    expect(firstCall).toMatchObject({ toolName: 'repo.read', authorization: 'Bearer raw-github-token' })
 
     const vaultIdRes = await jsonFetch('/api/vaults', authorization)
     const vaultList = (await vaultIdRes.json()) as { data: Array<{ id: string }> }
@@ -458,6 +556,7 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
       body: JSON.stringify({ provider: 'cloudflare-secrets', secretValue: 'rotated-github-token' }),
     })
     expect(rotateRes.status).toBe(201)
+    acceptedToken = 'rotated-github-token'
 
     const rotatedCallRes = await jsonFetch(
       `/api/mcp/connections/${connection.id}/tools/repo.read/calls`,
@@ -468,18 +567,22 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
       },
     )
     expect(rotatedCallRes.status).toBe(200)
+    const rotatedCall = fixtureCalls.filter((call) => call.method === 'tools/call').at(-1)
+    expect(rotatedCall).toMatchObject({ authorization: 'Bearer rotated-github-token' })
 
+    acceptedToken = 'token-the-connection-does-not-hold'
     const errorRes = await jsonFetch(`/api/mcp/connections/${connection.id}/tools/repo.read/calls`, authorization, {
       method: 'POST',
-      body: JSON.stringify({
-        sessionId: session.id,
-        input: { simulateError: { type: 'timeout', token: 'raw-token' } },
-      }),
+      body: JSON.stringify({ sessionId: session.id, input: { repo: 'saltbo/any-managed-agents' } }),
     })
     expect(errorRes.status).toBe(502)
     const normalized = await errorRes.json()
-    expect(normalized).toMatchObject({ error: { type: 'mcp_error', details: { mcpError: { type: 'mcp_timeout' } } } })
-    expect(JSON.stringify(normalized)).not.toContain('raw-token')
+    expect(normalized).toMatchObject({
+      error: { type: 'mcp_error', details: { mcpError: { type: 'mcp_unauthorized' } } },
+    })
+    expect(JSON.stringify(normalized)).not.toContain('raw-fixture-unauthorized-detail')
+    expect(JSON.stringify(normalized)).not.toContain('rotated-github-token')
+    acceptedToken = 'rotated-github-token'
 
     const revokeRes = await jsonFetch(`/api/vaults/${vaultId}/credentials/${credential.id}`, authorization, {
       method: 'PATCH',
@@ -499,6 +602,140 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
     await expect(revokedCallRes.json()).resolves.toMatchObject({
       error: { type: 'policy_denied', message: 'MCP connector credential is revoked or unavailable.' },
     })
+  })
+
+  it('lists tools from the live MCP server and rejects calls on connections without endpoints', async () => {
+    const authorization = await signInUser('runtime_live_tools')
+    const credential = await createCredential(authorization)
+    const fixtureCalls = stubMcpFixture({
+      acceptedToken: () => 'raw-github-token',
+      tools: [
+        {
+          name: 'echo',
+          description: 'Echo text back.',
+          inputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
+        },
+      ],
+    })
+    const connectRes = await jsonFetch('/api/mcp/connections', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ connectorId: 'github', credentialId: credential.id }),
+    })
+    expect(connectRes.status).toBe(201)
+    const connection = (await connectRes.json()) as { id: string }
+    const session = await createSession(authorization)
+
+    // Without an endpoint the connection serves catalog metadata and cannot
+    // execute calls.
+    const catalogToolsRes = await jsonFetch(`/api/mcp/connections/${connection.id}/tools`, authorization)
+    expect(catalogToolsRes.status).toBe(200)
+    await expect(catalogToolsRes.json()).resolves.toMatchObject({
+      data: [expect.objectContaining({ name: 'repo.read' })],
+    })
+    const noEndpointCallRes = await jsonFetch(
+      `/api/mcp/connections/${connection.id}/tools/repo.read/calls`,
+      authorization,
+      {
+        method: 'POST',
+        body: JSON.stringify({ sessionId: session.id, input: { repo: 'saltbo/any-managed-agents' } }),
+      },
+    )
+    expect(noEndpointCallRes.status).toBe(409)
+    await expect(noEndpointCallRes.json()).resolves.toMatchObject({
+      error: { type: 'conflict', message: 'MCP connection endpoint is not configured.' },
+    })
+    expect(fixtureCalls).toHaveLength(0)
+
+    const patchRes = await jsonFetch(`/api/mcp/connections/${connection.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ endpointUrl: MCP_FIXTURE_ENDPOINT }),
+    })
+    expect(patchRes.status).toBe(200)
+
+    const liveToolsRes = await jsonFetch(`/api/mcp/connections/${connection.id}/tools`, authorization)
+    expect(liveToolsRes.status).toBe(200)
+    const liveTools = (await liveToolsRes.json()) as { data: Array<{ name: string; inputSchema: unknown }> }
+    expect(liveTools.data).toEqual([
+      expect.objectContaining({
+        name: 'echo',
+        description: 'Echo text back.',
+        inputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
+      }),
+    ])
+    expect(fixtureCalls.find((call) => call.method === 'tools/list')).toMatchObject({
+      authorization: 'Bearer raw-github-token',
+    })
+  })
+
+  it('records canonical session events for MCP calls and normalizes transport failures', async () => {
+    const authorization = await signInUser('runtime_events')
+    const credential = await createCredential(authorization)
+    let failure: 'network' | null = null
+    stubMcpFixture({ acceptedToken: () => 'raw-github-token', failure: () => failure })
+    const connectRes = await jsonFetch('/api/mcp/connections', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        connectorId: 'github',
+        credentialId: credential.id,
+        endpointUrl: MCP_FIXTURE_ENDPOINT,
+      }),
+    })
+    expect(connectRes.status).toBe(201)
+    const connection = (await connectRes.json()) as { id: string }
+    const session = await createSession(authorization)
+
+    const callRes = await jsonFetch(`/api/mcp/connections/${connection.id}/tools/repo.read/calls`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ sessionId: session.id, input: { repo: 'saltbo/any-managed-agents' } }),
+    })
+    expect(callRes.status).toBe(200)
+
+    failure = 'network'
+    const failedCallRes = await jsonFetch(
+      `/api/mcp/connections/${connection.id}/tools/repo.read/calls`,
+      authorization,
+      {
+        method: 'POST',
+        body: JSON.stringify({ sessionId: session.id, input: { repo: 'saltbo/any-managed-agents' } }),
+      },
+    )
+    expect(failedCallRes.status).toBe(502)
+    const failedBody = await failedCallRes.json()
+    expect(failedBody).toMatchObject({
+      error: { type: 'mcp_error', details: { mcpError: { type: 'mcp_network_error' } } },
+    })
+    expect(JSON.stringify(failedBody)).not.toContain('raw-connection-refused-detail')
+
+    const eventsRes = await jsonFetch(`/api/sessions/${session.id}/events?limit=50`, authorization)
+    expect(eventsRes.status).toBe(200)
+    const events = (await eventsRes.json()) as {
+      data: Array<{
+        id: string
+        type: string
+        parentEventId: string | null
+        correlationId: string | null
+        payload: Record<string, unknown>
+      }>
+    }
+    const policyEvents = events.data.filter((event) => event.type === 'policy.decision')
+    expect(policyEvents.length).toBeGreaterThanOrEqual(2)
+    expect(policyEvents[0]?.payload).toMatchObject({ allowed: true, operation: 'mcp_tool_call', toolName: 'repo.read' })
+    const startEvents = events.data.filter((event) => event.type === 'tool_execution_start')
+    const endEvents = events.data.filter((event) => event.type === 'tool_execution_end')
+    expect(startEvents).toHaveLength(2)
+    expect(endEvents).toHaveLength(2)
+    const successEnd = endEvents.find((event) => event.payload.isError === false)
+    const failureEnd = endEvents.find((event) => event.payload.isError === true)
+    expect(successEnd?.payload).toMatchObject({ toolName: 'repo.read', connectorId: 'github' })
+    expect(typeof successEnd?.payload.durationMs).toBe('number')
+    expect(failureEnd?.payload).toMatchObject({ error: { type: 'mcp_network_error' } })
+    for (const endEvent of endEvents) {
+      const pairedStart = startEvents.find((startEvent) => startEvent.id === endEvent.parentEventId)
+      expect(pairedStart).toBeTruthy()
+      expect(pairedStart?.correlationId).toBe(endEvent.correlationId)
+    }
+    expect(JSON.stringify(events)).not.toContain('raw-github-token')
+    expect(JSON.stringify(events)).not.toContain('raw-connection-refused-detail')
   })
 
   it('applies environment MCP connector restrictions during tool calls', async () => {
@@ -555,9 +792,14 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
   it('allows organization-scoped vault credentials for project MCP calls', async () => {
     const authorization = await signInUser('org_credential')
     const credential = await createOrganizationCredential(authorization)
+    const fixtureCalls = stubMcpFixture({ acceptedToken: () => 'org-github-token' })
     const connectRes = await jsonFetch('/api/mcp/connections', authorization, {
       method: 'POST',
-      body: JSON.stringify({ connectorId: 'github', credentialId: credential.id }),
+      body: JSON.stringify({
+        connectorId: 'github',
+        credentialId: credential.id,
+        endpointUrl: MCP_FIXTURE_ENDPOINT,
+      }),
     })
     expect(connectRes.status).toBe(201)
     const connection = (await connectRes.json()) as { id: string; hasCredential: boolean }
@@ -569,5 +811,8 @@ describe('[CF] MCP catalog, connections, policy, and runtime integration', () =>
       body: JSON.stringify({ sessionId: session.id, input: { repo: 'saltbo/any-managed-agents' } }),
     })
     expect(callRes.status).toBe(200)
+    expect(fixtureCalls.find((call) => call.method === 'tools/call')).toMatchObject({
+      authorization: 'Bearer org-github-token',
+    })
   })
 })

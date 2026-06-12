@@ -14,6 +14,9 @@ importers:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.2.141
         version: 0.2.141(@cfworker/json-schema@4.1.1)(zod@4.4.3)
+      '@cfworker/json-schema':
+        specifier: ^4.1.1
+        version: 4.1.1
       '@cloudflare/sandbox':
         specifier: ^0.10.1
         version: 0.10.3
@@ -41,6 +44,9 @@ importers:
       '@hono/zod-validator':
         specifier: ^0.7.6
         version: 0.7.6(hono@4.12.23)(zod@4.4.3)
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.29.0
+        version: 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
       '@openai/codex-sdk':
         specifier: ^0.118.0
         version: 0.118.0

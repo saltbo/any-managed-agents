@@ -2,7 +2,7 @@
 Feature: MCP engine end-to-end
   MCP calls work through approved runtime policy.
 
-  @planned
+  @implemented
   Scenario: Execute an approved MCP call
     Given an agent has access to an approved MCP connector
     When the agent calls the connector during a session

@@ -2,12 +2,12 @@
 Feature: MCP client
   The MCP client handles connector lifecycle and errors.
 
-  @planned
+  @implemented
   Scenario: Handle MCP transport failure
     When an MCP transport fails
     Then the session records a structured tool error and continues or terminates according to policy
 
-  @planned
+  @implemented
   Scenario: List tools from a connected MCP server
     Given a connector is connected with an approved credential
     When the platform lists MCP tools for that connector
@@ -15,7 +15,7 @@ Feature: MCP client
     And returns tool name, description, and input schema
     And the response is scoped to the current organization and project policy
 
-  @planned
+  @implemented
   Scenario: Call an MCP tool from a session
     Given a session agent is allowed to use an MCP tool
     When the selected session runtime requests the tool
@@ -23,7 +23,7 @@ Feature: MCP client
     And tool input, output summary, duration, and safe errors are recorded as session events
     And secret values are redacted from events and logs
 
-  @planned
+  @implemented
   Scenario: Normalize MCP client errors
     Given an MCP server returns unauthorized, not found, timeout, invalid schema, or network errors
     When the MCP client handles the failure
