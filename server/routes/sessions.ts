@@ -2227,6 +2227,10 @@ async function stopSelfHostedSession(
   reason: string,
 ) {
   const stoppedAt = now()
+  // Tell the owning runner to abort the live runtime handle over the accepted
+  // session channel before tearing down leases; an inactive channel is fine —
+  // queued work below is cancelled either way.
+  await dispatchRunnerSessionCommand(c.env, session.id, { type: 'stop', reason })
   const activeWorkItems = await db
     .select({ id: runnerWorkItems.id, runnerId: runnerWorkItems.runnerId, leaseId: runnerWorkItems.leaseId })
     .from(runnerWorkItems)

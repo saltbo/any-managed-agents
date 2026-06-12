@@ -160,6 +160,11 @@ func (a SDKBridgeRuntimeAdapter) Run(ctx context.Context, request RuntimeRequest
 			return stdin.WriteJSON(bridgeSendControl(requestID, message))
 		})
 	}
+	if request.RegisterStopSender != nil {
+		request.RegisterStopSender(func(_ string) error {
+			return stdin.WriteJSON(bridgeAbortControl(requestID))
+		})
+	}
 
 	var result ama.JSON
 	readErr := readBridgeMessages(stdoutScanner, requestID, writeSerialized, request.OnResumeToken, &result)
@@ -311,6 +316,10 @@ func (s *bridgeStdin) Close() error {
 
 func bridgeSendControl(requestID string, message string) ama.JSON {
 	return ama.JSON{"type": "send", "requestId": requestID, "message": message}
+}
+
+func bridgeAbortControl(requestID string) ama.JSON {
+	return ama.JSON{"type": "abort", "requestId": requestID}
 }
 
 func streamBridgeStderr(reader io.Reader, output *bytes.Buffer, runtimeName string, write RuntimeEventWriter) error {

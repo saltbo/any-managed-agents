@@ -31,6 +31,9 @@ type RuntimeRequest struct {
 	// into the live runtime. Adapters that support mid-run input call it once
 	// the runtime is ready to receive prompts.
 	RegisterPromptSender func(send func(message string) error)
+	// RegisterStopSender hands the runner a function that aborts the live
+	// runtime handle when AMA sends a stop command over the session channel.
+	RegisterStopSender func(send func(reason string) error)
 }
 
 type RuntimeEventWriter func(eventType string, payload ama.JSON) error

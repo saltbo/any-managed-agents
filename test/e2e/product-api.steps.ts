@@ -21,9 +21,9 @@ import type { AmaWorld } from './world'
 
 type Json = Record<string, unknown>
 
-const DEFAULT_AMA_RUNNER_CAPABILITY = 'runtime-provider-model:ama:workers-ai:@cf/moonshotai/kimi-k2.6'
-const CODEX_E2E_MODEL = 'gpt-5.3-codex'
-const CLAUDE_CODE_E2E_MODEL = 'claude-sonnet-4-6'
+export const DEFAULT_AMA_RUNNER_CAPABILITY = 'runtime-provider-model:ama:workers-ai:@cf/moonshotai/kimi-k2.6'
+export const CODEX_E2E_MODEL = 'gpt-5.3-codex'
+export const CLAUDE_CODE_E2E_MODEL = 'claude-sonnet-4-6'
 const COPILOT_E2E_MODEL = 'copilot-cli'
 
 interface ListResponse<T> {
@@ -31,7 +31,7 @@ interface ListResponse<T> {
   pagination: { hasMore: boolean; firstId: string | null; lastId: string | null }
 }
 
-interface E2EState {
+export interface E2EState {
   page: Page
   auth?: Json
   runId: string
@@ -1491,7 +1491,7 @@ When('the user stops the session', async function (this: ProductWorld) {
 When('the user reconnects to the session', async function (this: ProductWorld) {
   const state = await ensureState(this)
   state.latestSession = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}/reconnect`, {
-    method: 'POST',
+    method: 'GET',
   })
 })
 
@@ -4450,10 +4450,11 @@ Then(
   'session metadata, runtime endpoint, environment and runtime snapshot, and status are available',
   function (this: ProductWorld) {
     const session = required(this.e2e?.latestSession, 'session')
-    assert.ok(session.metadata)
-    assert.ok(session.sandboxId)
-    assert.ok(session.runtimeEndpointPath)
-    assert.ok(session.status)
+    assert.equal(session.runtimeEndpointPath, `/runtime/sessions/${session.id}/rpc`)
+    assert.ok(session.environmentSnapshot, 'environment snapshot is available after reconnect')
+    assert.ok(session.agentSnapshot, 'agent runtime snapshot is available after reconnect')
+    assert.ok(typeof session.status === 'string' && String(session.status).length > 0)
+    assert.ok(session.title !== undefined, 'session metadata is available after reconnect')
   },
 )
 
@@ -4874,7 +4875,7 @@ async function setupClaimedSelfHostedSession(world: ProductWorld) {
   return state
 }
 
-async function startProductAmaRunner(state: E2EState) {
+export async function startProductAmaRunner(state: E2EState) {
   await stopProductAmaRunner(state)
   const origin = await ensureLocalApp()
   const token = await state.page.evaluate(() => window.localStorage.getItem('ama:e2e-access-token'))
@@ -4940,7 +4941,7 @@ async function startProductAmaRunner(state: E2EState) {
   state.runnerWorkDir = workDir
 }
 
-function bridgeTestRuntimeConfig() {
+export function bridgeTestRuntimeConfig() {
   return {
     e2eBridgeTest: true,
     mode: 'deterministic-bridge-test',
@@ -4980,7 +4981,7 @@ async function stopProductAmaRunner(state?: E2EState) {
   }
 }
 
-async function waitForSessionStatus(state: E2EState, status: string) {
+export async function waitForSessionStatus(state: E2EState, status: string) {
   for (let attempt = 0; attempt < 60; attempt += 1) {
     const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
     if (session.status === status) {
@@ -5073,7 +5074,7 @@ async function closeRunnerChannels(state?: E2EState) {
   await delay(50)
 }
 
-async function waitForSessionEventText(state: E2EState, text: string) {
+export async function waitForSessionEventText(state: E2EState, text: string) {
   let latestEvents: ListResponse<Json> | null = null
   for (let attempt = 0; attempt < 30; attempt += 1) {
     const events = await sessionEventsViaFetch(state)
@@ -5090,7 +5091,7 @@ async function waitForSessionEventText(state: E2EState, text: string) {
   )
 }
 
-async function waitForSessionEvent(state: E2EState, predicate: (event: Json) => boolean, label: string) {
+export async function waitForSessionEvent(state: E2EState, predicate: (event: Json) => boolean, label: string) {
   let latestEvents: ListResponse<Json> | null = null
   for (let attempt = 0; attempt < 30; attempt += 1) {
     const events = await sessionEventsViaFetch(state)
@@ -5249,7 +5250,7 @@ async function emptyResponse(
   }
 }
 
-function objectValue(value: unknown) {
+export function objectValue(value: unknown) {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Json) : {}
 }
 
@@ -5257,7 +5258,7 @@ function arrayValue(value: unknown) {
   return Array.isArray(value) ? value : []
 }
 
-function runtimeProviderModelCapability(runtime: string, provider: string, model: string) {
+export function runtimeProviderModelCapability(runtime: string, provider: string, model: string) {
   return `runtime-provider-model:${runtime}:${provider}:${model}`
 }
 

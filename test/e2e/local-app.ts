@@ -37,8 +37,22 @@ export async function authenticateE2EPage(page: Page) {
   if (page.url() === 'about:blank') {
     await page.goto('/')
   }
-  await page.evaluate((token) => window.localStorage.setItem('ama:e2e-access-token', token), accessToken)
-  await page.evaluate((id) => window.localStorage.setItem('ama:selected-project-id', id), projectId)
+  // The app may issue a client-side redirect right after load; a navigation
+  // mid-evaluate destroys the execution context, so retry once on a settled page.
+  const seedLocalStorage = () =>
+    page.evaluate(
+      ([token, id]) => {
+        window.localStorage.setItem('ama:e2e-access-token', token)
+        window.localStorage.setItem('ama:selected-project-id', id)
+      },
+      [accessToken, projectId] as [string, string],
+    )
+  try {
+    await seedLocalStorage()
+  } catch {
+    await page.waitForLoadState('load')
+    await seedLocalStorage()
+  }
   const tokenRunId = accessToken.startsWith('e2e:')
     ? accessToken.slice('e2e:'.length)
     : userId.replace(/^user_e2e_/, '')

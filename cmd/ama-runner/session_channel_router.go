@@ -47,6 +47,8 @@ type sessionChannelRouter struct {
 	mu             sync.Mutex
 	sendPrompt     func(message string) error
 	pendingPrompts []string
+	sendStop       func(reason string) error
+	pendingStop    *string
 
 	acks chan json.RawMessage
 	// readErr is written by run() strictly before it closes acks, and read
@@ -93,6 +95,11 @@ func (r *sessionChannelRouter) run(ctx context.Context) {
 				"sessionId", message.SessionID, "leaseId", message.LeaseID, "runnerId", message.RunnerID)
 			continue
 		}
+		if message.Command.Type == "stop" {
+			slog.Info("runner received stop command; aborting runtime handle", "sessionId", r.sessionID, "reason", message.Command.Reason)
+			r.deliverStop(message.Command.Reason)
+			continue
+		}
 		if message.Command.Type != "prompt" || message.Command.Message == "" {
 			slog.Warn("runner session command is not a live prompt; dropping", "commandType", message.Command.Type)
 			continue
@@ -112,6 +119,36 @@ func (r *sessionChannelRouter) deliverPrompt(message string) {
 	r.mu.Unlock()
 	if err := send(message); err != nil {
 		slog.Warn("runner failed to forward prompt to live runtime", "sessionId", r.sessionID, "error", err)
+	}
+}
+
+func (r *sessionChannelRouter) deliverStop(reason string) {
+	r.mu.Lock()
+	send := r.sendStop
+	if send == nil {
+		r.pendingStop = &reason
+		r.mu.Unlock()
+		return
+	}
+	r.mu.Unlock()
+	if err := send(reason); err != nil {
+		slog.Warn("runner failed to abort live runtime", "sessionId", r.sessionID, "error", err)
+	}
+}
+
+// registerStopSender is handed to the runtime adapter as
+// RuntimeRequest.RegisterStopSender; a stop that arrived before the runtime
+// was ready aborts immediately on registration.
+func (r *sessionChannelRouter) registerStopSender(send func(reason string) error) {
+	r.mu.Lock()
+	pending := r.pendingStop
+	r.pendingStop = nil
+	r.sendStop = send
+	r.mu.Unlock()
+	if pending != nil {
+		if err := send(*pending); err != nil {
+			slog.Warn("runner failed to abort live runtime for buffered stop", "sessionId", r.sessionID, "error", err)
+		}
 	}
 }
 

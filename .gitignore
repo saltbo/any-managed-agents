@@ -24,6 +24,7 @@ skills-lock.json
 
 # agent definitions (managed by daemon)
 .claude/agents/
+.claude/worktrees/
 .codex/agents/
 .gemini/agents/
 cmd/ama-runner/ama-runner

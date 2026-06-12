@@ -35,10 +35,19 @@ async function run(request: Extract<RuntimeBridgeInput, { type: 'run' }>) {
   active.set(request.requestId, state)
   try {
     if (process.env.AMA_RUNTIME_BRIDGE_TEST_MODE === '1' && request.runtimeConfig?.e2eBridgeTest === true) {
-      for (const event of deterministicBridgeTestEvents(request)) {
+      if (request.runtimeConfig?.e2eBridgeLive !== true) {
+        for (const event of deterministicBridgeTestEvents(request)) {
+          write({ type: 'event', requestId: request.requestId, event: assertAmaRuntimeEvent(event) })
+        }
+        write({ type: 'result', requestId: request.requestId, result: { resumeToken: `e2e-${request.sessionId}` } })
+        return
+      }
+      const handle = liveBridgeTestHandle(request)
+      state.handle = handle
+      for await (const event of handle.events) {
         write({ type: 'event', requestId: request.requestId, event: assertAmaRuntimeEvent(event) })
       }
-      write({ type: 'result', requestId: request.requestId, result: { resumeToken: `e2e-${request.sessionId}` } })
+      write({ type: 'result', requestId: request.requestId, result: { resumeToken: `e2e-live-${request.sessionId}` } })
       return
     }
     const provider = getProvider(request.runtime)
@@ -62,6 +71,49 @@ async function run(request: Extract<RuntimeBridgeInput, { type: 'run' }>) {
   } finally {
     state.done = true
     active.delete(request.requestId)
+  }
+}
+
+// Interactive deterministic runtime for e2e: stays alive after the initial
+// prompt so live follow-up prompts and aborts exercise the real handle paths.
+function liveBridgeTestHandle(request: Extract<RuntimeBridgeInput, { type: 'run' }>): RuntimeProviderHandle {
+  const marker = `${request.runtime}-bridge-live`
+  const queue: AmaRuntimeEvent[] = [
+    runtimeEvent('turn_start', { marker, stage: `${marker}-started`, status: 'running' }),
+    runtimeEvent('message_end', { message: textMessage('assistant', `${marker} received:${request.prompt}`) }),
+  ]
+  let ended = false
+  let wake: (() => void) | null = null
+  const push = (...events: AmaRuntimeEvent[]) => {
+    queue.push(...events)
+    wake?.()
+  }
+  const end = () => {
+    ended = true
+    wake?.()
+  }
+  return {
+    events: (async function* () {
+      while (true) {
+        while (queue.length > 0) {
+          const next = queue.shift()
+          if (next) yield next
+        }
+        if (ended) return
+        await new Promise<void>((resolve) => {
+          wake = resolve
+        })
+        wake = null
+      }
+    })(),
+    async send(message: string) {
+      push(runtimeEvent('message_end', { message: textMessage('assistant', `${marker} live-received:${message}`) }))
+    },
+    async abort() {
+      push(runtimeEvent('turn_end', { marker, stage: `${marker}-aborted`, status: 'aborted' }))
+      end()
+    },
+    getResumeToken: () => `e2e-live-${request.sessionId}`,
   }
 }
 

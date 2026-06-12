@@ -206,6 +206,7 @@ type RunnerSessionCommand struct {
 	Type    string               `json:"type"`
 	Path    string               `json:"path"`
 	Message string               `json:"message"`
+	Reason  string               `json:"reason"`
 	Body    RunnerRuntimeRequest `json:"body"`
 }
 
@@ -657,6 +658,10 @@ func (d *RunnerDaemon) runAMASession(execution sessionRuntimeExecution) error {
 			}
 			return err
 		}
+		if message.Command.Type == "stop" {
+			slog.Info("runner received stop command; ending session loop", "sessionId", execution.Payload.SessionID, "reason", message.Command.Reason)
+			return nil
+		}
 		if err := d.handleSessionCommand(execution.LeaseContext, execution.Channel, message.Command); err != nil {
 			if finishErr := d.finishFailed(context.Background(), execution.Lease, err, nil); finishErr != nil {
 				return finishErr
@@ -721,6 +726,7 @@ func (d *RunnerDaemon) runExternalSession(execution sessionRuntimeExecution) err
 		WorkDir:              workspace.Cwd,
 		OnResumeToken:        execution.ResumeTokens.Set,
 		RegisterPromptSender: router.registerPromptSender,
+		RegisterStopSender:   router.registerStopSender,
 	}, func(eventType string, eventPayload ama.JSON) error {
 		writeMu.Lock()
 		defer writeMu.Unlock()

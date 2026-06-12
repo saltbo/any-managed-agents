@@ -5,7 +5,7 @@ Feature: Agent sessions
   Background:
     Given a project has an active agent definition
 
-  @planned
+  @implemented
   Scenario: Create a session from an agent and environment
     When the user creates a session with an agent and environment
     Then the platform stores a session record in D1
@@ -13,7 +13,7 @@ Feature: Agent sessions
     And the session uses a snapshot of the selected environment
     And the session records the validated hostingMode, runtime, provider, model, runtime endpoint, and status
 
-  @planned
+  @implemented
   Scenario: Validate runtime provider and model support
     Given an agent selects a provider and model
     And an environment selects a hostingMode and runtime
@@ -22,7 +22,7 @@ Feature: Agent sessions
     And the error envelope identifies the unsupported runtime, provider, and model
     And no runtime fallback or model substitution occurs
 
-  @planned
+  @implemented
   Scenario: Connect to a session through AMA runtime endpoints
     Given a session exists
     When the client connects through an external SDK session helper or direct runtime client
@@ -40,13 +40,13 @@ Feature: Agent sessions
     And the session status becomes stopped
     And lifecycle events record the stop
 
-  @planned
+  @implemented
   Scenario: Resume an idle session
     Given a session is idle
     When the user reconnects to the session
     Then session metadata, runtime endpoint, environment and runtime snapshot, and status are available
 
-  @planned
+  @implemented
   Scenario: Send live commands to a self-hosted runtime session
     Given a self-hosted session has an accepted runner channel and a live runtime handle
     When a client sends a follow-up message through the AMA session endpoint
@@ -54,7 +54,7 @@ Feature: Agent sessions
     And the runner delivers the message to the selected runtime handle
     And AMA persists the resulting runtime activity as canonical session events
 
-  @planned
+  @implemented
   Scenario: Stop a self-hosted runtime session through AMA
     Given a self-hosted session has an accepted runner channel and a live runtime handle
     When a client stops the session through the AMA session endpoint
@@ -70,7 +70,7 @@ Feature: Agent sessions
     And the runtime continues from the safe resume point without creating a duplicate session history
     And AMA records resumed lifecycle events and later runtime activity in the same session event stream
 
-  @planned
+  @implemented
   Scenario: Keep runtime process details behind AMA endpoints
     Given a session is running in any supported runtime
     When the client sends commands or subscribes to events
