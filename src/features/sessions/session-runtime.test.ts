@@ -31,6 +31,7 @@ const canonicalEventPayloads = {
   agent_end: { type: 'agent_end', messages: [] },
   turn_start: { type: 'turn_start' },
   turn_end: { type: 'turn_end', message: { role: 'assistant', timestamp: 2, content: 'Done' }, toolResults: [] },
+  session_stop: { type: 'session_stop', reason: 'user_requested' },
   message_start: { type: 'message_start', message: { role: 'assistant', timestamp: 1, content: '' } },
   message_update: {
     type: 'message_update',

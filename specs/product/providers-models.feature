@@ -11,7 +11,7 @@ Feature: Model providers
     Then the runtime calls the Cloudflare Workers AI binding
     And usage is attributed to the project and session
 
-  @planned
+  @implemented
   Scenario: Configure model providers
     When an operator adds Workers AI, Anthropic, OpenAI, OpenAI-compatible, Ollama, or another supported provider
     Then the platform stores provider metadata in D1

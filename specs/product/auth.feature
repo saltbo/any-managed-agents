@@ -2,7 +2,7 @@
 Feature: Authentication
   The platform integrates with OIDC provider and applies tenant context.
 
-  @planned
+  @implemented
   Scenario: Resolve authenticated context
     Given OIDC provider can issue a valid user session
     When the user requests their auth context
