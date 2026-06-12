@@ -1,3 +1,4 @@
+import { Link } from 'react-router'
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { EmptyState, StatusBadge, TablePagination, TableSurface } from '@/console/components'
 import { formatDate } from '@/console/format'
@@ -30,7 +31,11 @@ export function AuditView({
       <TableBody>
         {records.map((record) => (
           <TableRow key={record.id}>
-            <TableCell className="min-w-56 font-medium">{record.action}</TableCell>
+            <TableCell className="min-w-56 font-medium">
+              <Link to={`/audit/${record.id}`} className="hover:underline">
+                {record.action}
+              </Link>
+            </TableCell>
             <TableCell>
               <StatusBadge value={record.outcome} />
             </TableCell>
