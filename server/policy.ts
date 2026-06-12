@@ -100,6 +100,73 @@ function hostAllowed(allowedHosts: string[], host: string | null | undefined) {
   return allowedHosts.map(normalizeHost).some((allowedHost) => allowedHost === '*' || allowedHost === normalizedHost)
 }
 
+function hostFromUrl(value: unknown) {
+  if (typeof value !== 'string') {
+    return null
+  }
+  try {
+    return new URL(value).hostname || null
+  } catch {
+    return null
+  }
+}
+
+export type SandboxRuntimeOperation =
+  | { operation: 'command'; command: string | null; resourceType: 'sandbox_command'; resourceId: string }
+  | { operation: 'network'; host: string | null; resourceType: 'sandbox_network'; resourceId: string }
+
+// Maps a cloud runtime tool invocation to the sandbox policy operation it
+// performs. sandbox.exec runs a workspace command; sandbox.fetch performs an
+// outbound network operation from the sandbox.
+export function sandboxOperationForRuntimeTool(
+  toolName: string,
+  input: Record<string, unknown>,
+): SandboxRuntimeOperation | null {
+  if (toolName === 'sandbox.exec') {
+    const command = typeof input.command === 'string' ? input.command : null
+    return {
+      operation: 'command',
+      command,
+      resourceType: 'sandbox_command',
+      resourceId: command?.trim().split(/\s+/)[0] ?? toolName,
+    }
+  }
+  if (toolName === 'sandbox.fetch') {
+    const host = typeof input.host === 'string' ? input.host : hostFromUrl(input.url)
+    return { operation: 'network', host, resourceType: 'sandbox_network', resourceId: host ?? toolName }
+  }
+  return null
+}
+
+// Policy gate for the sandbox executor seam: evaluates command and network
+// tool calls against governance sandbox policy and the session environment
+// network policy. Returns null when the tool is not a sandbox operation or the
+// operation is allowed.
+export async function policyBlocksSandboxOperation(
+  db: PolicyDb,
+  auth: AuthContext,
+  values: {
+    session: { id: string; agentSnapshot: string | null; environmentSnapshot: string | null } | null
+    toolName: string
+    input: Record<string, unknown>
+  },
+): Promise<{ decision: PolicyDecision; operation: SandboxRuntimeOperation } | null> {
+  const operation = sandboxOperationForRuntimeTool(values.toolName, values.input)
+  if (!operation) {
+    return null
+  }
+  const decision = await evaluateSandboxRuntimePolicy(db, auth, {
+    session: values.session,
+    operation: operation.operation,
+    command: operation.operation === 'command' ? operation.command : null,
+    host: operation.operation === 'network' ? operation.host : null,
+  })
+  if (decision.allowed) {
+    return null
+  }
+  return { decision, operation }
+}
+
 function sessionAllowsTool(session: { agentSnapshot: string | null } | null, connectorId: string, toolName: string) {
   if (!session?.agentSnapshot) {
     return true

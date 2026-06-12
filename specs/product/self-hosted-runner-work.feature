@@ -51,7 +51,7 @@ Feature: Self-hosted runner work queue
     Then AMA returns retryable work to the available queue
     And the session exposes a safe waiting status
 
-  @planned
+  @implemented
   Scenario: Report runtime inventory and diagnostics from runner heartbeat
     Given an operator has authenticated ama-runner with AMA
     When ama-runner sends a heartbeat
@@ -60,7 +60,7 @@ Feature: Self-hosted runner work queue
     And statuses distinguish ready, missing executable, unauthenticated, unauthorized, limited, and unhealthy runtimes
     And AMA stores only safe metadata and never stores provider tokens or local credential values
 
-  @planned
+  @implemented
   Scenario: Lease work only to runners with ready runtime inventory
     Given a self-hosted session requires a runtime, provider, and model
     When runners heartbeat runtime inventory for the project

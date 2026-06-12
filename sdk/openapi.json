@@ -2742,6 +2742,13 @@
             },
             "example": []
           },
+          "runtimeInventory": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunnerRuntimeInventory"
+            },
+            "example": []
+          },
           "metadata": {
             "type": "object",
             "additionalProperties": {
@@ -2777,6 +2784,7 @@
           "currentLoad",
           "maxConcurrent",
           "runtimeUsage",
+          "runtimeInventory",
           "metadata",
           "lastHeartbeatAt",
           "createdAt",
@@ -2823,6 +2831,44 @@
           "utilization",
           "resetsAt"
         ]
+      },
+      "RunnerRuntimeInventory": {
+        "type": "object",
+        "properties": {
+          "runtime": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60,
+            "example": "codex"
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 120,
+            "example": "0.42.0"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "missing",
+              "unauthenticated",
+              "unauthorized",
+              "limited",
+              "unhealthy"
+            ],
+            "example": "ready"
+          },
+          "detail": {
+            "type": "string",
+            "maxLength": 400,
+            "example": "host CLI enumerated 2 models"
+          }
+        },
+        "required": [
+          "runtime",
+          "status"
+        ],
+        "additionalProperties": false
       },
       "CreateRunnerRequest": {
         "type": "object",
@@ -3120,6 +3166,13 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/RuntimeUsage"
+            },
+            "maxItems": 20
+          },
+          "runtimeInventory": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunnerRuntimeInventory"
             },
             "maxItems": 20
           },

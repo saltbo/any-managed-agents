@@ -1248,10 +1248,10 @@ func testDaemon(client *fakeControlPlane, adapter SandboxAdapter) RunnerDaemon {
 		Channels: client,
 		Adapter:  adapter,
 		LookPath: lookPathFinding("claude", "codex", "copilot"),
-		// Model enumeration spawns the embedded bridge; tests stay hermetic by
+		// Runtime probing spawns the embedded bridge; tests stay hermetic by
 		// failing enumeration so capabilities use the pinned fallback models.
-		DetectModels: func(context.Context, string) []string { return nil },
-		RunnerID:     "runner_1",
+		DetectRuntime: func(context.Context, string) runtimeProbe { return runtimeProbe{} },
+		RunnerID:      "runner_1",
 	}
 }
 
@@ -1401,12 +1401,17 @@ func TestHeartbeatAdvertisesEnumeratedHostModelsAndCachesPerProcess(t *testing.T
 	daemon := testDaemon(client, &fakeAdapter{})
 	daemon.LookPath = lookPathFinding("codex")
 	detectCalls := map[string]int{}
-	daemon.DetectModels = func(_ context.Context, runtimeName string) []string {
+	daemon.DetectRuntime = func(_ context.Context, runtimeName string) runtimeProbe {
 		detectCalls[runtimeName]++
 		if runtimeName == "codex" {
-			return []string{"gpt-5.3-codex", "gpt-5.3-codex-mini"}
+			return runtimeProbe{
+				Models:  []string{"gpt-5.3-codex", "gpt-5.3-codex-mini"},
+				Status:  "ready",
+				Version: "0.42.0",
+				Detail:  "host CLI enumerated 2 models",
+			}
 		}
-		return nil
+		return runtimeProbe{}
 	}
 	for range 2 {
 		if err := daemon.heartbeat(context.Background()); err != nil {
@@ -1423,6 +1428,41 @@ func TestHeartbeatAdvertisesEnumeratedHostModelsAndCachesPerProcess(t *testing.T
 	}
 	if detectCalls["codex"] != 1 {
 		t.Fatalf("expected model enumeration to be cached per process, got %d calls", detectCalls["codex"])
+	}
+}
+
+func TestHeartbeatReportsRuntimeInventoryWithStatusAndDiagnostics(t *testing.T) {
+	client := &fakeControlPlane{}
+	daemon := testDaemon(client, &fakeAdapter{})
+	daemon.LookPath = lookPathFinding("codex", "claude")
+	daemon.DetectRuntime = func(_ context.Context, runtimeName string) runtimeProbe {
+		if runtimeName == "codex" {
+			return runtimeProbe{Models: []string{"gpt-5.3-codex"}, Status: "ready", Version: "0.42.0", Detail: "host CLI enumerated 1 models"}
+		}
+		return runtimeProbe{Status: "unauthenticated", Detail: "host CLI exposed no models; authenticate the runtime CLI"}
+	}
+	if err := daemon.heartbeat(context.Background()); err != nil {
+		t.Fatalf("expected heartbeat success, got %v", err)
+	}
+	inventory := client.heartbeats[0].RuntimeInventory
+	byRuntime := map[string]ama.RuntimeInventory{}
+	for _, entry := range inventory {
+		byRuntime[entry.Runtime] = entry
+	}
+	if got := byRuntime["ama"]; got.Status != "ready" || got.Version != runnerVersion {
+		t.Fatalf("expected embedded ama runtime to be ready with runner version, got %#v", got)
+	}
+	if got := byRuntime["codex"]; got.Status != "ready" || got.Version != "0.42.0" || got.Detail == "" {
+		t.Fatalf("expected ready codex inventory with version and detail, got %#v", got)
+	}
+	if got := byRuntime["claude-code"]; got.Status != "unauthenticated" || got.Detail == "" {
+		t.Fatalf("expected unauthenticated claude-code inventory, got %#v", got)
+	}
+	if got := byRuntime["copilot"]; got.Status != "missing" || got.Detail == "" {
+		t.Fatalf("expected missing copilot inventory, got %#v", got)
+	}
+	if data := mustJSON(t, inventory); strings.Contains(data, "raw-secret") {
+		t.Fatalf("expected inventory to carry only safe metadata, got %s", data)
 	}
 }
 

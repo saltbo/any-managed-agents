@@ -68,6 +68,25 @@ const RuntimeUsageSchema = z
   })
   .openapi('RuntimeUsage')
 
+const RUNTIME_INVENTORY_STATUSES = [
+  'ready',
+  'missing',
+  'unauthenticated',
+  'unauthorized',
+  'limited',
+  'unhealthy',
+] as const
+
+const RuntimeInventorySchema = z
+  .object({
+    runtime: z.string().min(1).max(60).openapi({ example: 'codex' }),
+    version: z.string().max(120).optional().openapi({ example: '0.42.0' }),
+    status: z.enum(RUNTIME_INVENTORY_STATUSES).openapi({ example: 'ready' }),
+    detail: z.string().max(400).optional().openapi({ example: 'host CLI enumerated 2 models' }),
+  })
+  .strict()
+  .openapi('RunnerRuntimeInventory')
+
 const RunnerSchema = z
   .object({
     id: z.string().openapi({ example: 'runner_abc123' }),
@@ -81,6 +100,7 @@ const RunnerSchema = z
     currentLoad: z.number().int().openapi({ example: 0 }),
     maxConcurrent: z.number().int().openapi({ example: 2 }),
     runtimeUsage: z.array(RuntimeUsageSchema).openapi({ example: [] }),
+    runtimeInventory: z.array(RuntimeInventorySchema).openapi({ example: [] }),
     metadata: JsonObjectSchema.openapi({ example: { pool: 'default' } }),
     lastHeartbeatAt: z.string().datetime().nullable(),
     createdAt: z.string().datetime(),
@@ -174,6 +194,7 @@ const HeartbeatSchema = z
       .openapi({ example: ['node', 'git'] }),
     currentLoad: z.number().int().min(0).max(1000).optional().openapi({ example: 1 }),
     runtimeUsage: z.array(RuntimeUsageSchema).max(20).optional(),
+    runtimeInventory: z.array(RuntimeInventorySchema).max(20).optional(),
     metadata: JsonObjectSchema.optional().openapi({ example: { hostname: 'runner-1' } }),
   })
   .strict()
@@ -303,6 +324,7 @@ function serializeRunner(row: RunnerRow) {
     currentLoad: row.currentLoad,
     maxConcurrent: row.maxConcurrent,
     runtimeUsage: parseRawJson<z.infer<typeof RuntimeUsageSchema>[]>(row.runtimeUsage) ?? [],
+    runtimeInventory: parseRawJson<z.infer<typeof RuntimeInventorySchema>[]>(row.runtimeInventory) ?? [],
     metadata: parseJson<Record<string, unknown>>(row.metadata) ?? {},
     lastHeartbeatAt: row.lastHeartbeatAt,
     createdAt: row.createdAt,
@@ -368,6 +390,28 @@ function runnerCapabilityEligibility(capabilities: string[]) {
       (capability) => sql`json_extract(${runnerWorkItems.payload}, '$.requiredRunnerCapability') = ${capability}`,
     ),
     ...transitionalRuntimeClauses,
+  )
+}
+
+// Lease readiness gate: once a runner reports runtime inventory, runtime
+// session work is leased only when the required runtime has a ready inventory
+// entry. Missing, unauthenticated, unauthorized, limited, and unhealthy
+// runtimes cannot claim that work. Runners that have not reported inventory
+// yet are transitional and fall back to capability matching alone.
+function runnerRuntimeReadinessEligibility(inventory: Array<{ runtime: string; status: string }>) {
+  if (inventory.length === 0) {
+    return undefined
+  }
+  const readyRuntimes = [
+    ...new Set(inventory.filter((entry) => entry.status === 'ready').map((entry) => entry.runtime)),
+  ]
+  const noRuntimeRequirement = sql`json_extract(${runnerWorkItems.payload}, '$.requiredRunnerCapability') IS NULL`
+  return or(
+    noRuntimeRequirement,
+    ...readyRuntimes.flatMap((runtime) => [
+      sql`json_extract(${runnerWorkItems.payload}, '$.requiredRunnerCapability') = ${runtime}`,
+      sql`json_extract(${runnerWorkItems.payload}, '$.requiredRunnerCapability') LIKE ${`${RUNTIME_PROVIDER_MODEL_CAPABILITY_PREFIX}:${runtime}:%`}`,
+    ]),
   )
 }
 
@@ -1294,6 +1338,7 @@ const routes = app
       currentLoad: 0,
       maxConcurrent: body.maxConcurrent ?? 1,
       runtimeUsage: '[]',
+      runtimeInventory: '[]',
       metadata: stringify(body.metadata ?? {}),
       lastHeartbeatAt: null,
       createdAt: timestamp,
@@ -1483,7 +1528,7 @@ const routes = app
     if (runner.status === 'disabled') {
       return errorResponse(c, 409, 'conflict', 'Disabled runners cannot heartbeat until re-enabled by an operator')
     }
-    if (hasSecretMaterial(body.metadata)) {
+    if (hasSecretMaterial(body.metadata) || hasSecretMaterial(body.runtimeInventory)) {
       return errorResponse(c, 400, 'validation_error', 'Runner heartbeat metadata must not contain raw secret material')
     }
     const timestamp = now()
@@ -1491,6 +1536,10 @@ const routes = app
     const capabilities = body.capabilities ? stringify(body.capabilities) : runner.capabilities
     const currentLoad = body.currentLoad ?? runner.currentLoad
     const runtimeUsage = body.runtimeUsage ? stringify(body.runtimeUsage) : runner.runtimeUsage
+    // Inventory entries are stored as safe metadata only: stringify() redacts
+    // token-like values so provider tokens or local credential values never
+    // reach D1 even if a runner misreports them in diagnostic detail.
+    const runtimeInventory = body.runtimeInventory ? stringify(body.runtimeInventory) : runner.runtimeInventory
     await db.insert(runnerHeartbeats).values({
       id: newId('heartbeat'),
       runnerId,
@@ -1509,6 +1558,7 @@ const routes = app
         capabilities,
         currentLoad,
         runtimeUsage,
+        runtimeInventory,
         metadata: body.metadata ? stringify(body.metadata) : runner.metadata,
         lastHeartbeatAt: timestamp,
         updatedAt: timestamp,
@@ -1560,6 +1610,7 @@ const routes = app
       return c.body(null, 204)
     }
     const runnerCapabilities = parseJson<string[]>(runner.capabilities) ?? []
+    const runnerInventory = parseRawJson<Array<{ runtime: string; status: string }>>(runner.runtimeInventory) ?? []
     const workItem = await db
       .select()
       .from(runnerWorkItems)
@@ -1572,6 +1623,7 @@ const routes = app
             ? or(eq(runnerWorkItems.environmentId, runner.environmentId), isNull(runnerWorkItems.environmentId))
             : undefined,
           runnerCapabilityEligibility(runnerCapabilities),
+          runnerRuntimeReadinessEligibility(runnerInventory),
         ),
       )
       .orderBy(desc(runnerWorkItems.priority), asc(runnerWorkItems.createdAt), asc(runnerWorkItems.id))

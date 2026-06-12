@@ -10,7 +10,12 @@ import { insertCanonicalSessionEvent } from './db/session-event-store'
 import type { Env } from './env'
 import { errorResponse } from './errors'
 import { ApiSecuritySchemes, createApiRouter } from './openapi'
-import { evaluateMcpToolPolicy, evaluateSandboxRuntimePolicy, type PolicyDecision } from './policy'
+import {
+  evaluateMcpToolPolicy,
+  evaluateSandboxRuntimePolicy,
+  type PolicyDecision,
+  policyBlocksSandboxOperation,
+} from './policy'
 import { redactSensitiveValue } from './redaction'
 import agents from './routes/agents'
 import audit from './routes/audit'
@@ -378,32 +383,34 @@ async function recordRuntimeMessageOutcome(
     resolveToolResult: (input) => approvalGate.resolveToolResult(input),
     approveToolCall: async ({ toolCallId, toolName, input }) => {
       await ensureActive()
-      if (toolName === 'sandbox.exec') {
-        const command = typeof input.command === 'string' ? input.command : null
-        const decision = await evaluateSandboxRuntimePolicy(db, auth, {
-          session: {
-            id: session.id,
-            agentSnapshot: session.agentSnapshot,
-            environmentSnapshot: session.environmentSnapshot,
-          },
-          operation: 'command',
-          command,
-        })
-        if (!decision.allowed) {
-          await ensureActive()
-          await denyRuntimePolicy(db, auth, {
-            sessionId: session.id,
-            decision,
-            action: 'runtime_sandbox.operation',
-            resourceType: 'sandbox_command',
-            resourceId: command?.trim().split(/\s+/)[0] ?? 'sandbox.exec',
-            payload: { operation: 'command', command },
-          })
-        }
+      // Sandbox executor seam: command and outbound network tool calls are
+      // gated by sandbox and environment network policy before execution.
+      const blocked = await policyBlocksSandboxOperation(db, auth, {
+        session: {
+          id: session.id,
+          agentSnapshot: session.agentSnapshot,
+          environmentSnapshot: session.environmentSnapshot,
+        },
+        toolName,
+        input,
+      })
+      if (blocked) {
         await ensureActive()
-        if (!decision.allowed) {
-          return { allowed: false, reason: decision.message }
-        }
+        await denyRuntimePolicy(db, auth, {
+          sessionId: session.id,
+          decision: blocked.decision,
+          action: 'runtime_sandbox.operation',
+          resourceType: blocked.operation.resourceType,
+          resourceId: blocked.operation.resourceId,
+          payload: {
+            operation: blocked.operation.operation,
+            ...(blocked.operation.operation === 'command'
+              ? { command: blocked.operation.command }
+              : { host: blocked.operation.host }),
+          },
+        })
+        await ensureActive()
+        return { allowed: false, reason: blocked.decision.message }
       }
       const approvalDecision = await approvalGate.gate({ toolCallId, toolName, input })
       if (approvalDecision) {

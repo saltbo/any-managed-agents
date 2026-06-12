@@ -18,7 +18,7 @@ Feature: Execution environments
     Then new sessions for that agent inherit an environment snapshot
     And sandbox creation uses the environment snapshot
 
-  @planned
+  @implemented
   Scenario: Restrict environment networking
     Given an environment allows only selected outbound hosts
     When a sandbox process attempts outbound network access

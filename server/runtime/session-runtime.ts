@@ -577,6 +577,45 @@ function providerAssistantMessage(model: Model<string>, raw: unknown) {
   )
 }
 
+function testToolCallMessage(model: Model<string>, toolCall: ToolCall) {
+  return assistantMessage(model, [toolCall], 'toolUse', {
+    ...ZERO_USAGE,
+    input: 10,
+    output: 4,
+    totalTokens: 14,
+  })
+}
+
+// Deterministic tool-call grammar for AMA_RUNTIME_MODE=test prompts, so e2e
+// scenarios can drive specific sandbox operations through the real agent loop.
+function testPromptToolCall(prompt: string): ToolCall | null {
+  const write = prompt.match(/write the file (\S+) with content (.+)$/i)
+  if (write?.[1] && write[2]) {
+    return {
+      type: 'toolCall',
+      id: 'call_write_file',
+      name: 'sandbox.write',
+      arguments: { path: write[1], content: write[2].trim() },
+    }
+  }
+  const read = prompt.match(/read the file (\S+)/i)
+  if (read?.[1]) {
+    return { type: 'toolCall', id: 'call_read_file', name: 'sandbox.read', arguments: { path: read[1] } }
+  }
+  const url = prompt.match(/https?:\/\/[^\s"']+/)
+  if (url && /fetch|download|outbound/i.test(prompt)) {
+    return { type: 'toolCall', id: 'call_fetch_url', name: 'sandbox.fetch', arguments: { url: url[0] } }
+  }
+  const command = prompt.match(/run the sandbox command "([^"]+)"/i)
+  if (command?.[1]) {
+    return { type: 'toolCall', id: 'call_sandbox_command', name: 'sandbox.exec', arguments: { command: command[1] } }
+  }
+  if (/status|inspect|whoami|command|sandbox/i.test(prompt)) {
+    return { type: 'toolCall', id: 'call_git_status', name: 'sandbox.exec', arguments: { command: 'git status' } }
+  }
+  return null
+}
+
 function testAssistantMessage(model: Model<string>, context: Context) {
   const latestMessage = context.messages.at(-1)
   if (latestMessage?.role === 'toolResult') {
@@ -608,13 +647,9 @@ function testAssistantMessage(model: Model<string>, context: Context) {
       },
     )
   }
-  if (/status|inspect|whoami|command|sandbox/i.test(prompt)) {
-    return assistantMessage(
-      model,
-      [{ type: 'toolCall', id: 'call_git_status', name: 'sandbox.exec', arguments: { command: 'git status' } }],
-      'toolUse',
-      { ...ZERO_USAGE, input: 10, output: 4, totalTokens: 14 },
-    )
+  const toolCall = testPromptToolCall(prompt)
+  if (toolCall) {
+    return testToolCallMessage(model, toolCall)
   }
   return assistantMessage(model, [{ type: 'text', text: `AMA runtime processed: ${prompt}` }], 'stop', {
     ...ZERO_USAGE,
@@ -728,7 +763,7 @@ function runtimeTools(
 ) {
   const executor = toolExecutor(env)
   const tool = (
-    name: 'sandbox.exec' | 'sandbox.read' | 'sandbox.write',
+    name: 'sandbox.exec' | 'sandbox.read' | 'sandbox.write' | 'sandbox.fetch',
     label: string,
     description: string,
     parameters: AgentTool['parameters'],
@@ -771,7 +806,7 @@ function runtimeTools(
         }
         return {
           content: [{ type: 'text', text: stringifyToolOutput(result.output) }],
-          details: result.output,
+          details: { ...result.output, durationMs: result.durationMs },
         }
       },
     }) satisfies AgentTool
@@ -803,6 +838,12 @@ function runtimeTools(
       'Write file',
       'Write a UTF-8 file under the session workspace.',
       Type.Object({ path: Type.String(), content: Type.String() }),
+    ),
+    tool(
+      'sandbox.fetch',
+      'Fetch URL',
+      'Fetch an HTTP(S) URL over the sandbox network, subject to the session network policy.',
+      Type.Object({ url: Type.String() }),
     ),
   ].filter((candidate) => allowsTool(candidate.name))
 }

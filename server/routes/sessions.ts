@@ -40,7 +40,12 @@ import {
   paginateSequenceRows,
   parseListCursor,
 } from '../openapi'
-import { evaluateMcpToolPolicy, evaluateProviderPolicy, evaluateSandboxRuntimePolicy } from '../policy'
+import {
+  evaluateMcpToolPolicy,
+  evaluateProviderPolicy,
+  evaluateSandboxRuntimePolicy,
+  policyBlocksSandboxOperation,
+} from '../policy'
 import { redactSensitiveValue } from '../redaction'
 import {
   runnerSupportsRuntimeProviderModel,
@@ -1600,49 +1605,51 @@ async function executeCloudSessionTurn(
       resolveToolResult: (input) => approvalGate.resolveToolResult(input),
       approveToolCall: async ({ toolCallId, toolName, input }) => {
         await ensureActive()
-        if (toolName === 'sandbox.exec') {
-          const command = typeof input.command === 'string' ? input.command : null
-          const decision = await evaluateSandboxRuntimePolicy(db, auth, {
-            session: {
-              id: session.id,
-              agentSnapshot: session.agentSnapshot,
-              environmentSnapshot: session.environmentSnapshot,
-            },
-            operation: 'command',
-            command,
-          })
-          if (!decision.allowed) {
-            await ensureActive()
-            await appendRuntimeEvent(db, {
-              auth,
-              sessionId: session.id,
-              event: {
-                type: 'policy_denied',
-                category: decision.category,
-                ruleId: decision.rule,
-                resourceType: 'sandbox_command',
-                resourceId: command?.trim().split(/\s+/)[0] ?? 'sandbox.exec',
-                decision,
-                operation: 'command',
-                command,
-              },
-              metadata: { source: 'policy' },
-            })
-            await recordAudit(db, {
-              auth,
-              action: 'runtime_sandbox.operation',
-              resourceType: 'sandbox_command',
-              resourceId: command?.trim().split(/\s+/)[0] ?? 'sandbox.exec',
-              outcome: 'denied',
-              sessionId: session.id,
-              policyCategory: decision.category,
-              metadata: { operation: 'command', command, decision },
-            })
-          }
+        // Sandbox executor seam: command and outbound network tool calls are
+        // gated by governance sandbox policy and the session environment
+        // network policy before they reach the executor.
+        const blocked = await policyBlocksSandboxOperation(db, auth, {
+          session: {
+            id: session.id,
+            agentSnapshot: session.agentSnapshot,
+            environmentSnapshot: session.environmentSnapshot,
+          },
+          toolName,
+          input,
+        })
+        if (blocked) {
+          const operationFields =
+            blocked.operation.operation === 'command'
+              ? { command: blocked.operation.command }
+              : { host: blocked.operation.host }
           await ensureActive()
-          if (!decision.allowed) {
-            return { allowed: false, reason: decision.message }
-          }
+          await appendRuntimeEvent(db, {
+            auth,
+            sessionId: session.id,
+            event: {
+              type: 'policy_denied',
+              category: blocked.decision.category,
+              ruleId: blocked.decision.rule,
+              resourceType: blocked.operation.resourceType,
+              resourceId: blocked.operation.resourceId,
+              decision: blocked.decision,
+              operation: blocked.operation.operation,
+              ...operationFields,
+            },
+            metadata: { source: 'policy' },
+          })
+          await recordAudit(db, {
+            auth,
+            action: 'runtime_sandbox.operation',
+            resourceType: blocked.operation.resourceType,
+            resourceId: blocked.operation.resourceId,
+            outcome: 'denied',
+            sessionId: session.id,
+            policyCategory: blocked.decision.category,
+            metadata: { operation: blocked.operation.operation, ...operationFields, decision: blocked.decision },
+          })
+          await ensureActive()
+          return { allowed: false, reason: blocked.decision.message }
         }
         const approvalDecision = await approvalGate.gate({ toolCallId, toolName, input })
         if (approvalDecision) {

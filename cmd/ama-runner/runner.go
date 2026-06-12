@@ -44,9 +44,10 @@ type RunnerDaemon struct {
 	RuntimeAdapter RuntimeAdapter
 	// LookPath resolves runtime CLI binaries on PATH; defaults to exec.LookPath.
 	LookPath func(string) (string, error)
-	// DetectModels enumerates the host CLI's model ids for a runtime; defaults
-	// to spawning the embedded runtime bridge (detectRuntimeModels).
-	DetectModels           func(ctx context.Context, runtimeName string) []string
+	// DetectRuntime probes the host CLI for a runtime: enumerated model ids
+	// plus availability status, version, and safe diagnostic detail; defaults
+	// to spawning the embedded runtime bridge (detectRuntimeProbe).
+	DetectRuntime          func(ctx context.Context, runtimeName string) runtimeProbe
 	RunnerID               string
 	mu                     sync.Mutex
 	activeLeases           int
@@ -54,8 +55,9 @@ type RunnerDaemon struct {
 	runtimeUsage           []ama.RuntimeUsage
 	capabilityMu           sync.Mutex
 	advertisedCapabilities []string
-	modelMu                sync.Mutex
-	runtimeModels          map[string][]string
+	advertisedInventory    []ama.RuntimeInventory
+	probeMu                sync.Mutex
+	runtimeProbes          map[string]runtimeProbe
 }
 
 func (d *RunnerDaemon) lookPath() func(string) (string, error) {
@@ -66,13 +68,17 @@ func (d *RunnerDaemon) lookPath() func(string) (string, error) {
 }
 
 // refreshCapabilities re-detects which runtime CLIs are installed on the host
-// so a CLI installed mid-run is picked up by the next heartbeat.
+// so a CLI installed mid-run is picked up by the next heartbeat. The same pass
+// rebuilds the runtime inventory the heartbeat reports.
 func (d *RunnerDaemon) refreshCapabilities() []string {
 	available := detectAvailableRuntimes(d.lookPath())
-	capabilities := runnerCapabilities(available, d.runtimeModelsFor(available))
+	probes := d.runtimeProbesFor(available)
+	capabilities := runnerCapabilities(available, modelsFromProbes(probes))
+	inventory := runnerRuntimeInventory(available, probes)
 	d.capabilityMu.Lock()
 	changed := !slices.Equal(d.advertisedCapabilities, capabilities)
 	d.advertisedCapabilities = capabilities
+	d.advertisedInventory = inventory
 	d.capabilityMu.Unlock()
 	if changed && len(available) == 0 {
 		slog.Warn("no runtime CLIs detected on PATH; runner advertises no external runtimes and will receive no runtime work",
@@ -81,36 +87,80 @@ func (d *RunnerDaemon) refreshCapabilities() []string {
 	return capabilities
 }
 
-// runtimeModelsFor returns the enumerated host model ids per detected runtime.
-// Enumeration spawns the bridge and can take seconds, so results — including
-// failures, which leave the runtime on its pinned fallback model — are cached
-// for the process lifetime. A CLI installed mid-run is enumerated on the next
-// capability refresh because it has no cache entry yet.
-func (d *RunnerDaemon) runtimeModelsFor(availableRuntimes []string) map[string][]string {
-	detect := d.DetectModels
+// runtimeProbesFor returns the host probe per detected runtime. Probing spawns
+// the bridge and can take seconds, so results — including failures, which
+// leave the runtime on its pinned fallback model — are cached for the process
+// lifetime. A CLI installed mid-run is probed on the next capability refresh
+// because it has no cache entry yet.
+func (d *RunnerDaemon) runtimeProbesFor(availableRuntimes []string) map[string]runtimeProbe {
+	detect := d.DetectRuntime
 	if detect == nil {
-		detect = detectRuntimeModels
+		detect = detectRuntimeProbe
 	}
-	d.modelMu.Lock()
-	defer d.modelMu.Unlock()
-	if d.runtimeModels == nil {
-		d.runtimeModels = map[string][]string{}
+	d.probeMu.Lock()
+	defer d.probeMu.Unlock()
+	if d.runtimeProbes == nil {
+		d.runtimeProbes = map[string]runtimeProbe{}
 	}
 	for _, runtimeName := range availableRuntimes {
-		if _, cached := d.runtimeModels[runtimeName]; cached {
+		if _, cached := d.runtimeProbes[runtimeName]; cached {
 			continue
 		}
-		models := detect(context.Background(), runtimeName)
-		if len(models) == 0 {
+		probe := detect(context.Background(), runtimeName)
+		if len(probe.Models) == 0 {
 			slog.Warn("host model enumeration failed; advertising the pinned fallback model", "runtime", runtimeName)
 		}
-		d.runtimeModels[runtimeName] = models
+		d.runtimeProbes[runtimeName] = probe
 	}
-	models := make(map[string][]string, len(d.runtimeModels))
-	for runtimeName, ids := range d.runtimeModels {
-		models[runtimeName] = ids
+	probes := make(map[string]runtimeProbe, len(d.runtimeProbes))
+	for runtimeName, probe := range d.runtimeProbes {
+		probes[runtimeName] = probe
+	}
+	return probes
+}
+
+func modelsFromProbes(probes map[string]runtimeProbe) map[string][]string {
+	models := make(map[string][]string, len(probes))
+	for runtimeName, probe := range probes {
+		models[runtimeName] = probe.Models
 	}
 	return models
+}
+
+// runnerRuntimeInventory reports availability for every runtime the runner can
+// host: the embedded ama runtime is always ready, runtimes whose CLI is not on
+// PATH are missing, and detected CLIs carry the bridge probe's status, version,
+// and safe diagnostic detail.
+func runnerRuntimeInventory(availableRuntimes []string, probes map[string]runtimeProbe) []ama.RuntimeInventory {
+	inventory := []ama.RuntimeInventory{
+		{Runtime: "ama", Version: runnerVersion, Status: "ready", Detail: "embedded ama runtime"},
+	}
+	for _, cli := range runtimeCLIBinaries() {
+		if !slices.Contains(availableRuntimes, cli.Runtime) {
+			inventory = append(inventory, ama.RuntimeInventory{
+				Runtime: cli.Runtime,
+				Status:  "missing",
+				Detail:  cli.Binary + " CLI not found on PATH",
+			})
+			continue
+		}
+		probe := probes[cli.Runtime]
+		status := probe.Status
+		if status == "" {
+			status = "unhealthy"
+		}
+		detail := probe.Detail
+		if detail == "" {
+			detail = "host runtime probe returned no diagnostics"
+		}
+		inventory = append(inventory, ama.RuntimeInventory{
+			Runtime: cli.Runtime,
+			Version: probe.Version,
+			Status:  status,
+			Detail:  detail,
+		})
+	}
+	return inventory
 }
 
 func (d *RunnerDaemon) currentCapabilities() []string {
@@ -121,6 +171,12 @@ func (d *RunnerDaemon) currentCapabilities() []string {
 		return d.refreshCapabilities()
 	}
 	return capabilities
+}
+
+func (d *RunnerDaemon) currentRuntimeInventory() []ama.RuntimeInventory {
+	d.capabilityMu.Lock()
+	defer d.capabilityMu.Unlock()
+	return d.advertisedInventory
 }
 
 const runtimeUsageRefreshInterval = 5 * time.Minute
@@ -440,11 +496,13 @@ func (d *RunnerDaemon) heartbeat(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	capabilities := d.refreshCapabilities()
 	_, err = d.Client.CreateRunnerHeartbeat(ctx, d.RunnerID, ama.RunnerHeartbeatRequest{
-		Status:       "active",
-		Capabilities: d.refreshCapabilities(),
-		CurrentLoad:  &load,
-		RuntimeUsage: d.getRuntimeUsage(),
+		Status:           "active",
+		Capabilities:     capabilities,
+		CurrentLoad:      &load,
+		RuntimeUsage:     d.getRuntimeUsage(),
+		RuntimeInventory: d.currentRuntimeInventory(),
 		Metadata: ama.JSON{
 			"sandboxAdapter":  d.Config.SandboxAdapter,
 			"machineId":       machineID,

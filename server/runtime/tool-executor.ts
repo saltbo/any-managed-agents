@@ -56,6 +56,14 @@ function textFromInput(input: Record<string, unknown>) {
   return content
 }
 
+function urlFromInput(input: Record<string, unknown>) {
+  const url = input.url
+  if (typeof url !== 'string' || !/^https?:\/\//.test(url)) {
+    throw new Error('sandbox.fetch requires an http(s) url')
+  }
+  return url
+}
+
 function sandboxExecOutput(value: unknown) {
   if (!value || typeof value !== 'object') {
     return { stdout: String(value ?? ''), stderr: '', exitCode: 0 }
@@ -75,6 +83,13 @@ async function getSandboxBinding() {
 
 // Parity with the self-hosted runner's per-command default (10 minutes).
 const SANDBOX_EXEC_TIMEOUT_MS = 10 * 60_000
+// Outbound fetches are bounded much tighter than commands: a stalled host
+// must not consume the turn budget.
+const SANDBOX_FETCH_TIMEOUT_MS = 90_000
+
+function shellQuote(value: string) {
+  return `'${value.replaceAll("'", `'\\''`)}'`
+}
 
 export class CloudflareSandboxToolExecutor implements ToolExecutor {
   constructor(private readonly env: Env) {}
@@ -123,27 +138,119 @@ export class CloudflareSandboxToolExecutor implements ToolExecutor {
       await sandbox.writeFile(filePathFromInput(input.input), textFromInput(input.input), { encoding: 'utf-8' })
       return { ok: true }
     }
+    if (input.toolName === 'sandbox.fetch') {
+      // Outbound network access happens from inside the sandbox so it is
+      // subject to the sandbox network namespace, after the policy gate has
+      // already approved the host.
+      return sandboxExecOutput(
+        await sandbox.exec(`curl -fsS --max-time 60 ${shellQuote(urlFromInput(input.input))}`, {
+          cwd: input.cwd ?? '/workspace',
+          timeout: SANDBOX_FETCH_TIMEOUT_MS,
+        }),
+      )
+    }
     throw new Error(`Unsupported sandbox tool: ${input.toolName}`)
+  }
+}
+
+// Per-sandbox simulated filesystem for AMA_RUNTIME_MODE=test: writes are
+// readable back within the same sandbox, and stopping the sandbox destroys
+// its state — mirroring the one-sandbox-per-session lifecycle.
+const simulatedSandboxFiles = new Map<string, Map<string, string>>()
+
+function simulatedSandboxFs(sandboxId: string) {
+  let files = simulatedSandboxFiles.get(sandboxId)
+  if (!files) {
+    files = new Map()
+    simulatedSandboxFiles.set(sandboxId, files)
+  }
+  return files
+}
+
+function simulatedExecOutput(command: string) {
+  const echo = command.match(/^echo\s+(.+)$/)
+  return {
+    stdout: echo?.[1] ?? `simulated sandbox exec: ${command}`,
+    stderr: '',
+    exitCode: 0,
   }
 }
 
 export class TestToolExecutor implements ToolExecutor {
   async execute(input: ToolExecutionInput): Promise<ToolExecutionResult> {
-    if (input.toolName !== 'sandbox.exec' && input.toolName !== 'sandbox.read' && input.toolName !== 'sandbox.write') {
+    if (
+      input.toolName !== 'sandbox.exec' &&
+      input.toolName !== 'sandbox.read' &&
+      input.toolName !== 'sandbox.write' &&
+      input.toolName !== 'sandbox.fetch'
+    ) {
       throw new Error(`Unsupported sandbox tool: ${input.toolName}`)
     }
+    const startedAt = Date.now()
+    const providedOutput =
+      input.input.output && typeof input.input.output === 'object'
+        ? (input.input.output as Record<string, unknown>)
+        : null
+    const output = providedOutput ?? this.simulate(input)
     return {
       toolCallId: input.toolCallId,
       toolName: input.toolName,
-      output:
-        input.input.output && typeof input.input.output === 'object'
-          ? (input.input.output as Record<string, unknown>)
-          : {},
+      output,
       error:
         input.input.error && typeof input.input.error === 'object'
           ? (input.input.error as Record<string, unknown>)
           : null,
-      durationMs: typeof input.input.durationMs === 'number' ? input.input.durationMs : 0,
+      durationMs:
+        typeof input.input.durationMs === 'number'
+          ? input.input.durationMs
+          : providedOutput || Object.keys(output).length === 0
+            ? 0
+            : Math.max(1, Date.now() - startedAt),
+    }
+  }
+
+  async stop(sandboxId: string) {
+    simulatedSandboxFiles.delete(sandboxId)
+  }
+
+  // Deterministic sandbox behavior for callers that submit real tool inputs
+  // instead of pre-baked outputs: commands produce bounded stdio, file writes
+  // are readable back per sandbox, and fetches resolve without leaving the
+  // test process.
+  private simulate(input: ToolExecutionInput): Record<string, unknown> {
+    if (input.toolName === 'sandbox.exec') {
+      return typeof input.input.command === 'string' ? simulatedExecOutput(input.input.command) : {}
+    }
+    if (input.toolName === 'sandbox.write') {
+      if (typeof input.input.path !== 'string') {
+        return {}
+      }
+      const path = filePathFromInput(input.input)
+      const content = textFromInput(input.input)
+      simulatedSandboxFs(input.sandboxId).set(path, content)
+      return { ok: true, path, bytes: content.length }
+    }
+    if (input.toolName === 'sandbox.read') {
+      if (typeof input.input.path !== 'string') {
+        return {}
+      }
+      const path = filePathFromInput(input.input)
+      const content = simulatedSandboxFs(input.sandboxId).get(path)
+      if (content === undefined) {
+        throw new Error(`Sandbox file not found: ${path}`)
+      }
+      return { content, path }
+    }
+    if (typeof input.input.url !== 'string' && typeof input.input.host !== 'string') {
+      return {}
+    }
+    const url = typeof input.input.url === 'string' ? urlFromInput(input.input) : null
+    const host = typeof input.input.host === 'string' ? input.input.host : url ? new URL(url).hostname : null
+    return {
+      status: 200,
+      host,
+      ...(url ? { url } : {}),
+      content: `simulated fetch ${host ?? 'unknown-host'} ok`,
     }
   }
 }

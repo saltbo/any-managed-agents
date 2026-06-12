@@ -26,6 +26,17 @@ type RuntimeUsage struct {
 	Windows []RuntimeUsageWindow `json:"windows"`
 }
 
+// RuntimeInventory reports one host runtime's availability: its version when
+// known, a readiness status (ready, missing, unauthenticated, unauthorized,
+// limited, unhealthy), and a safe diagnostic detail. It must never carry
+// provider tokens or local credential values.
+type RuntimeInventory struct {
+	Runtime string `json:"runtime"`
+	Version string `json:"version,omitempty"`
+	Status  string `json:"status"`
+	Detail  string `json:"detail,omitempty"`
+}
+
 type Runner struct {
 	ID              string         `json:"id"`
 	Name            string         `json:"name"`
@@ -47,11 +58,12 @@ type CreateRunnerRequest struct {
 }
 
 type RunnerHeartbeatRequest struct {
-	Status       string         `json:"status,omitempty"`
-	Capabilities []string       `json:"capabilities,omitempty"`
-	CurrentLoad  *int           `json:"currentLoad,omitempty"`
-	RuntimeUsage []RuntimeUsage `json:"runtimeUsage,omitempty"`
-	Metadata     JSON           `json:"metadata,omitempty"`
+	Status           string             `json:"status,omitempty"`
+	Capabilities     []string           `json:"capabilities,omitempty"`
+	CurrentLoad      *int               `json:"currentLoad,omitempty"`
+	RuntimeUsage     []RuntimeUsage     `json:"runtimeUsage,omitempty"`
+	RuntimeInventory []RuntimeInventory `json:"runtimeInventory,omitempty"`
+	Metadata         JSON               `json:"metadata,omitempty"`
 }
 
 type ClaimRunnerLeaseRequest struct {

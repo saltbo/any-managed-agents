@@ -192,22 +192,52 @@ const TEST_MODE_RUNTIME_MODELS: Record<string, string[]> = {
   copilot: ['copilot-cli'],
 }
 
+// Classifies a host runtime probe failure into a safe inventory status. The
+// raw error message stays on the host: only the classification and a generic
+// detail leave the bridge, so credentials never ride along.
+function probeFailureStatus(message: string): 'unauthenticated' | 'unauthorized' | 'limited' | 'unhealthy' {
+  if (/unauthoriz|forbidden|\b403\b/i.test(message)) return 'unauthorized'
+  if (/unauthent|credential|login|sign[ -]?in|api key|\b401\b/i.test(message)) return 'unauthenticated'
+  if (/rate.?limit|quota|too many requests|\b429\b/i.test(message)) return 'limited'
+  return 'unhealthy'
+}
+
 async function detectModels(request: Extract<RuntimeBridgeInput, { type: 'detectModels' }>) {
   try {
     if (process.env.AMA_RUNTIME_BRIDGE_TEST_MODE === '1') {
       write({
         type: 'result',
         requestId: request.requestId,
-        result: { models: TEST_MODE_RUNTIME_MODELS[request.runtime] ?? null },
+        result: {
+          models: TEST_MODE_RUNTIME_MODELS[request.runtime] ?? null,
+          status: 'ready',
+          version: 'bridge-test',
+          detail: 'deterministic bridge test runtime',
+        },
       })
       return
     }
     const provider = getProvider(request.runtime)
     const models = provider.listModels ? await provider.listModels({ env: request.env }) : null
-    write({ type: 'result', requestId: request.requestId, result: { models: models ?? null } })
+    write({
+      type: 'result',
+      requestId: request.requestId,
+      result:
+        models && models.length > 0
+          ? { models, status: 'ready', detail: `host CLI enumerated ${models.length} models` }
+          : {
+              models: null,
+              status: 'unauthenticated',
+              detail: 'host CLI exposed no models; authenticate the runtime CLI',
+            },
+    })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    write({ type: 'error', requestId: request.requestId, error: bridgeError(message, 'runtime_models_error') })
+    write({
+      type: 'result',
+      requestId: request.requestId,
+      result: { models: null, status: probeFailureStatus(message), detail: 'host model enumeration failed' },
+    })
   }
 }
 

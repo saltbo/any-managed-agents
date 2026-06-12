@@ -62,7 +62,7 @@ Feature: Environments API
     And created date filters only return environments in the requested range
     And results are scoped to the signed-in project
 
-  @planned
+  @implemented
   Scenario: Apply environment network policy to a sandbox session
     Given an environment allows only selected outbound hosts
     When a session sandbox attempts network access
