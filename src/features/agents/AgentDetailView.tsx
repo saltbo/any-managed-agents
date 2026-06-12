@@ -1,7 +1,9 @@
+import { Archive } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { DetailSection, EmptyState, Meta, MetaGrid } from '@/console/components'
+import { ConfirmAction, DetailSection, EmptyState, Meta, MetaGrid, StatusBadge } from '@/console/components'
 import { formatDate, stringifyJson } from '@/console/format'
 import { JsonBlock } from '@/features/console/json-block'
 import { RelatedResourcesTable } from '@/features/console/related-resources-table'
@@ -11,23 +13,34 @@ export function AgentDetailView({
   agent,
   versions,
   sessions,
+  onArchive,
 }: {
   agent: Agent | null
   versions: AgentVersion[]
   sessions: Session[]
+  onArchive?: (id: string) => void
 }) {
   if (!agent) return <EmptyState title="Agent not found" body="The requested agent is not in the current project." />
-  return <AgentDetailContent agent={agent} versions={versions} sessions={sessions} />
+  return (
+    <AgentDetailContent
+      agent={agent}
+      versions={versions}
+      sessions={sessions}
+      {...(onArchive !== undefined ? { onArchive } : {})}
+    />
+  )
 }
 
 function AgentDetailContent({
   agent,
   versions,
   sessions,
+  onArchive,
 }: {
   agent: Agent
   versions: AgentVersion[]
   sessions: Session[]
+  onArchive?: (id: string) => void
 }) {
   const [selectedVersionId, setSelectedVersionId] = useState('')
 
@@ -68,20 +81,37 @@ function AgentDetailContent({
             title="Agent model configuration"
             description="Immutable provider, model, and tool settings captured by the selected agent version."
             actions={
-              versions.length > 0 ? (
-                <Select value={currentVersion.id} onValueChange={setSelectedVersionId}>
-                  <SelectTrigger className="w-44">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {versions.map((version) => (
-                      <SelectItem key={version.id} value={version.id}>
-                        v{version.version}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : null
+              <>
+                <StatusBadge value={agent.status} />
+                {versions.length > 0 ? (
+                  <Select value={currentVersion.id} onValueChange={setSelectedVersionId}>
+                    <SelectTrigger className="w-44">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {versions.map((version) => (
+                        <SelectItem key={version.id} value={version.id}>
+                          v{version.version}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : null}
+                {onArchive && agent.status !== 'archived' ? (
+                  <ConfirmAction
+                    title="Archive agent?"
+                    description={`Archive ${agent.name}. Existing sessions are not deleted, but this agent will no longer accept new sessions.`}
+                    confirmLabel="Archive agent"
+                    destructive
+                    onConfirm={() => onArchive(agent.id)}
+                  >
+                    <Button type="button" variant="outline">
+                      <Archive data-icon="inline-start" />
+                      Archive
+                    </Button>
+                  </ConfirmAction>
+                ) : null}
+              </>
             }
           >
             <div className="grid gap-4">
