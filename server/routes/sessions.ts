@@ -668,6 +668,14 @@ function sessionRuntimeFromMetadata(metadata: Record<string, unknown>): RuntimeN
   return parsed.data
 }
 
+// Read-path variant: sessions created before runtime ownership moved onto the
+// session row carry no runtime in metadata; they all ran the cloud ama
+// runtime. Listing/serialization must not 500 on those historic rows.
+function sessionRuntimeForDisplay(metadata: Record<string, unknown>): RuntimeName {
+  const parsed = RuntimeSchema.safeParse(metadata.runtime)
+  return parsed.success ? parsed.data : 'ama'
+}
+
 function sessionRuntimeConfig(metadata: Record<string, unknown>) {
   return objectValue(metadata.runtimeConfig)
 }
@@ -691,7 +699,7 @@ function serializeSession(row: SessionRow) {
   const metadata = parseJson<Record<string, unknown>>(row.metadata) ?? {}
   const modelConfig = parseJson<Record<string, unknown>>(row.modelConfig) ?? {}
   const hostingMode = environmentHostingMode(environmentSnapshot)
-  const runtime = sessionRuntimeFromMetadata(metadata)
+  const runtime = sessionRuntimeForDisplay(metadata)
   const provider = row.modelProvider ?? agentSnapshot.provider
   const model = sessionModel(modelConfig, agentSnapshot)
 
