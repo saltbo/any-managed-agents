@@ -54,13 +54,25 @@ export function runtimeRequiredRunnerCapability(runtime: RuntimeName, provider: 
     return runtime
   }
   const entry = RUNTIME_CATALOG.find((item) => item.runtime === runtime)
-  // Wildcard-model runtimes match at the runtime level: the host CLI decides
-  // which models it serves, so work must not demand a per-model capability.
-  if (entry?.providerModels.some((candidate) => candidate.model === '*')) {
-    return runtime
-  }
-  const wildcard = entry?.providerModels.find((candidate) => candidate.provider === '*' && candidate.model === model)
+  // Wildcard-provider entries (including wildcard-model ones) normalize the
+  // provider segment to '*': runners enumerate host models without knowing
+  // platform provider ids, so they declare '*' as the provider.
+  const wildcard = entry?.providerModels.find(
+    (candidate) => candidate.provider === '*' && (candidate.model === '*' || candidate.model === model),
+  )
   return runtimeProviderModelCapability(runtime, wildcard ? '*' : provider, model)
+}
+
+// TRANSITIONAL: runners deployed before host model enumeration declare the
+// bare runtime name plus a single hardcoded model, so the specific model
+// capability may be missing even though the host CLI serves the model. For
+// wildcard-model runtimes the bare runtime capability therefore still counts
+// as model support. Removable once the runner fleet advertises enumerated
+// per-model capabilities.
+export function transitionalRuntimeLevelRuntimes(): RuntimeName[] {
+  return RUNTIME_CATALOG.filter((entry) => entry.providerModels.some((candidate) => candidate.model === '*')).map(
+    (entry) => entry.runtime,
+  )
 }
 
 export function runnerSupportsRuntimeProviderModel(
@@ -77,16 +89,14 @@ export function runnerSupportsRuntimeProviderModel(
       )
     )
   }
-  // A runner that serves the runtime is assumed to host any of its models for
-  // wildcard-model runtimes; specific declarations still match directly.
-  const entry = RUNTIME_CATALOG.find((item) => item.runtime === runtime)
-  if (entry?.providerModels.some((candidate) => candidate.model === '*') && capabilities.includes(runtime)) {
-    return true
-  }
-  return (
+  if (
     capabilities.includes(runtimeProviderModelCapability(runtime, provider, model)) ||
     capabilities.includes(runtimeProviderModelCapability(runtime, '*', model))
-  )
+  ) {
+    return true
+  }
+  // TRANSITIONAL fallback — see transitionalRuntimeLevelRuntimes.
+  return transitionalRuntimeLevelRuntimes().includes(runtime) && capabilities.includes(runtime)
 }
 
 export function runtimeCatalogSupportsProviderModel(

@@ -28,6 +28,7 @@ import {
   parseListCursor,
 } from '../openapi'
 import { redactSensitiveValue } from '../redaction'
+import { transitionalRuntimeLevelRuntimes } from '../runtime/catalog'
 import { resolveRuntimeSecretEnv } from '../runtime/secret-env'
 
 const app = createApiRouter()
@@ -348,11 +349,23 @@ function runnerCapabilityEligibility(capabilities: string[]) {
       }
     }
   }
+  // TRANSITIONAL: runners deployed before host model enumeration declare the
+  // bare runtime name plus a single hardcoded model. A declared bare runtime
+  // capability still claims model-specific session work for wildcard-model
+  // runtimes so those runners don't strand work. Removable once the runner
+  // fleet advertises enumerated per-model capabilities.
+  const transitionalRuntimeClauses = transitionalRuntimeLevelRuntimes()
+    .filter((runtime) => capabilities.includes(runtime))
+    .map(
+      (runtime) =>
+        sql`json_extract(${runnerWorkItems.payload}, '$.requiredRunnerCapability') LIKE ${`${RUNTIME_PROVIDER_MODEL_CAPABILITY_PREFIX}:${runtime}:%`}`,
+    )
   return or(
     unscopedNonSessionWork,
     ...[...eligibleCapabilities].map(
       (capability) => sql`json_extract(${runnerWorkItems.payload}, '$.requiredRunnerCapability') = ${capability}`,
     ),
+    ...transitionalRuntimeClauses,
   )
 }
 

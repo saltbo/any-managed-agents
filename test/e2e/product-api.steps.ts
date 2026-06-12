@@ -3763,7 +3763,10 @@ Then('AMA queues the session work with a codex runtime capability requirement', 
   const session = required(state.latestSession, 'session')
   state.list = await apiJson<ListResponse<Json>>(state.page.request, `/api/runners/work-items?sessionId=${session.id}`)
   assert.equal(state.list.data.length, 1)
-  assert.equal(objectValue(state.list.data[0]?.payload).requiredRunnerCapability, 'codex')
+  assert.equal(
+    objectValue(state.list.data[0]?.payload).requiredRunnerCapability,
+    runtimeProviderModelCapability('codex', '*', CODEX_E2E_MODEL),
+  )
 })
 
 Then('runners that do not advertise the codex runtime cannot lease the work', async function (this: ProductWorld) {
