@@ -3,7 +3,7 @@ Feature: External products use AMA as the runtime substrate
   Products such as Agent Kanban own product workflow, but use AMA as the
   lower-level agent definition, environment, session, runner, and event layer.
 
-  @planned
+  @implemented
   Scenario: External product manages standard AMA resources through the SDK
     Given an external product owns its workflow identifiers and product state
     When the product creates or updates AMA agent definitions, environments, and resources through the OpenAPI SDK
@@ -12,7 +12,7 @@ Feature: External products use AMA as the runtime substrate
     And the product keeps any mapping between product records and AMA ids in its own storage
     And AMA does not require the product to expose board, task, review, or PR concepts
 
-  @planned
+  @implemented
   Scenario: External product starts work by creating an AMA session
     Given an external product has selected a standard AMA agent definition
     And the external product has selected a standard AMA environment
@@ -24,7 +24,7 @@ Feature: External products use AMA as the runtime substrate
     And the external product can store the returned AMA ids in its own product records
     And the external product can render progress from AMA session status and canonical events
 
-  @planned
+  @implemented
   Scenario: External product controls a running session only through AMA endpoints
     Given an external product created an AMA session
     When the external product sends a follow-up message, stop request, or resume request
