@@ -47,6 +47,7 @@ import {
   runtimeRequiredRunnerCapability,
   runtimeSupportsLivePrompts,
 } from '../runtime/catalog'
+import { insertCanonicalSessionEvent } from '../db/session-event-store'
 import { runtimeDriver, runtimeDriverName, runtimeMetadata } from '../runtime/drivers'
 import { safeRuntimeError } from '../runtime/runtime-error'
 import { resolveRuntimeSecretEnv } from '../runtime/secret-env'
@@ -1981,37 +1982,15 @@ async function appendRuntimeEvent(
     values.event,
     values.metadata ?? { source: 'runtime' },
   )
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const eventId = newId('event')
-    const latest = await db
-      .select({ sequence: max(sessionEvents.sequence) })
-      .from(sessionEvents)
-      .where(eq(sessionEvents.sessionId, values.sessionId))
-      .get()
-    try {
-      await db.insert(sessionEvents).values({
-        id: eventId,
-        organizationId: values.auth.organization.id,
-        projectId: values.auth.project.id,
-        sessionId: values.sessionId,
-        sequence: (latest?.sequence ?? 0) + 1,
-        type: canonicalEvent.type,
-        visibility: canonicalEvent.visibility,
-        role: canonicalEvent.role,
-        parentEventId: null,
-        correlationId: null,
-        payload: stringify(redactSensitiveValue(canonicalEvent.payload)),
-        metadata: stringify(redactSensitiveValue(canonicalEvent.metadata)),
-        createdAt: now(),
-      })
-      return eventId
-    } catch (error) {
-      if (attempt === 4 || !String(error).includes('UNIQUE')) {
-        throw error
-      }
-    }
-  }
-  throw new Error('Unable to append runtime event')
+  return await insertCanonicalSessionEvent(
+    db,
+    {
+      organizationId: values.auth.organization.id,
+      projectId: values.auth.project.id,
+      sessionId: values.sessionId,
+    },
+    canonicalEvent,
+  )
 }
 
 export function runtimeErrorMessage(payload: Record<string, unknown>) {

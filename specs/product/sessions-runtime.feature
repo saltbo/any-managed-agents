@@ -62,7 +62,7 @@ Feature: Agent sessions
     And the runner aborts the selected runtime handle
     And AMA records lifecycle events and a terminal stopped or error status
 
-  @planned
+  @implemented
   Scenario: Resume a session from the latest safe checkpoint
     Given a session has a stored safe resume point
     When a client resumes the session through AMA

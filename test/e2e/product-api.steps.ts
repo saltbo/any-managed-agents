@@ -4932,6 +4932,9 @@ export async function startProductAmaRunner(state: E2EState) {
         AMA_RUNNER_OPERATOR_SECRET: 'raw-secret-value',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
+      // Own process group: `go run` does not forward signals to its child, so
+      // graceful-shutdown tests signal the whole group.
+      detached: true,
     },
   ) as AmaRunnerProcess
   child.runnerOutput = []
@@ -4961,11 +4964,27 @@ async function stopProductAmaRunner(state?: E2EState) {
   const child = state.runnerProcess
   state.runnerProcess = undefined
   if (child && child.exitCode === null) {
-    child.kill('SIGTERM')
+    try {
+      if (child.pid) {
+        process.kill(-child.pid, 'SIGTERM')
+      } else {
+        child.kill('SIGTERM')
+      }
+    } catch {
+      child.kill('SIGTERM')
+    }
     await new Promise<void>((resolve) => {
       const timeout = setTimeout(() => {
         if (child.exitCode === null) {
-          child.kill('SIGKILL')
+          try {
+            if (child.pid) {
+              process.kill(-child.pid, 'SIGKILL')
+            } else {
+              child.kill('SIGKILL')
+            }
+          } catch {
+            child.kill('SIGKILL')
+          }
         }
         resolve()
       }, 5_000)

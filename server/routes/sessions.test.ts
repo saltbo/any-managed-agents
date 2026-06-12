@@ -348,16 +348,16 @@ describe('[CF] /api/sessions', () => {
       (event) => event.type === 'tool_execution_end' && event.payload.toolCallId === 'call_git_status',
     )
     expect(toolCallEvent).toMatchObject({
-      correlationId: null,
-      parentEventId: null,
+      correlationId: 'tool:call_git_status',
       payload: expect.objectContaining({
         args: { command: 'git status' },
       }),
     })
+    expect(toolCallEvent?.parentEventId).toMatch(/^event_/)
     expect(toolResultEvent).toMatchObject({
-      correlationId: null,
-      parentEventId: null,
+      correlationId: 'tool:call_git_status',
     })
+    expect(toolResultEvent?.parentEventId).toBe(toolCallEvent?.parentEventId)
     expect(JSON.stringify(events.data)).not.toContain('raw-secret')
     expect(JSON.stringify(events.data)).toContain('Previous user prompt: Inspect repository status')
     expect(JSON.stringify(events.data)).not.toContain('raw-github-token')

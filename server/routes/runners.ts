@@ -4,6 +4,7 @@ import { drizzle } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
 import { canonicalAmaSessionEventFromRuntimeEvent } from '../../shared/session-events'
 import { recordAudit, requestId } from '../audit'
+import { insertCanonicalSessionEvent } from '../db/session-event-store'
 import { type AuthContext, isRunnerOidcAuth, requireAuth } from '../auth/session'
 import {
   environments,
@@ -760,35 +761,15 @@ async function appendSessionRunnerEvent(
     { type: event.type, ...event.payload },
     { source: 'self-hosted-runner', ...(event.metadata ?? {}) },
   )
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const latest = await db
-      .select({ sequence: max(sessionEvents.sequence) })
-      .from(sessionEvents)
-      .where(eq(sessionEvents.sessionId, sessionId))
-      .get()
-    try {
-      await db.insert(sessionEvents).values({
-        id: newId('event'),
-        organizationId: auth.organization.id,
-        projectId: auth.project.id,
-        sessionId,
-        sequence: (latest?.sequence ?? 0) + 1,
-        type: canonicalEvent.type,
-        visibility: canonicalEvent.visibility,
-        role: canonicalEvent.role,
-        parentEventId: null,
-        correlationId: null,
-        payload: stringify(redactSensitiveValue(canonicalEvent.payload)),
-        metadata: stringify(redactSensitiveValue(canonicalEvent.metadata)),
-        createdAt: now(),
-      })
-      return
-    } catch (error) {
-      if (attempt === 4 || !String(error).includes('UNIQUE')) {
-        throw error
-      }
-    }
-  }
+  await insertCanonicalSessionEvent(
+    db,
+    {
+      organizationId: auth.organization.id,
+      projectId: auth.project.id,
+      sessionId,
+    },
+    canonicalEvent,
+  )
 }
 
 function workItemRuntimeMetadata(workItem: WorkItemRow) {
@@ -1760,6 +1741,16 @@ const routes = app
         .update(runnerWorkLeases)
         .set({ expiresAt, renewedAt: timestamp, updatedAt: timestamp })
         .where(and(eq(runnerWorkLeases.id, leaseId), eq(runnerWorkLeases.status, 'active')))
+      if (renewedPayload !== null && workItem.sessionId) {
+        // A fresh runtime resume token marks a safe resume point. Record it as
+        // a canonical lifecycle event carrying only the safe work-item
+        // reference — the raw provider token stays inside the work payload.
+        await appendSessionRunnerEvent(db, auth, workItem.sessionId, {
+          type: 'session_checkpoint',
+          payload: { resumeTokenRef: `work-item:${workItem.id}`, scope: 'runtime-resume-token' },
+          metadata: workItemRuntimeMetadata(workItem),
+        })
+      }
     } else if (body.status === 'interrupted') {
       // The runner stopped mid-flight (e.g. graceful shutdown). End the lease but
       // keep the work recoverable so a restarted runner resumes the session.
@@ -1774,12 +1765,30 @@ const routes = app
       }
       await releaseRunnerLoad(db, auth.project.id, runnerId, timestamp)
       const interruptedPayload = payloadWithResumeToken(workItem, body.resumeToken)
-      await requeueWorkItemForRecovery(
+      if (interruptedPayload !== null && workItem.sessionId) {
+        await appendSessionRunnerEvent(db, auth, workItem.sessionId, {
+          type: 'session_checkpoint',
+          payload: { resumeTokenRef: `work-item:${workItem.id}`, scope: 'runtime-resume-token' },
+          metadata: workItemRuntimeMetadata(workItem),
+        })
+      }
+      const recovery = await requeueWorkItemForRecovery(
         db,
         auth.project.id,
         interruptedPayload !== null ? { ...workItem, payload: interruptedPayload } : workItem,
         timestamp,
       )
+      if (recovery === 'requeued' && workItem.sessionId) {
+        const recoveredPayload = parseJson<Record<string, unknown>>(interruptedPayload ?? workItem.payload)
+        await appendSessionRunnerEvent(db, auth, workItem.sessionId, {
+          type: 'session_resume',
+          payload: {
+            fromCheckpoint: recoveredPayload?.resumeToken ? `work-item:${workItem.id}` : null,
+            reason: 'runner-recovery',
+          },
+          metadata: workItemRuntimeMetadata(workItem),
+        })
+      }
     } else {
       const result = body.result ? stringify(body.result) : null
       const error = body.error ? stringify(body.error) : null

@@ -22,7 +22,7 @@ Feature: Session events
     Then the response returns a deterministic page
     And hasMore, firstId, lastId, and sequence boundaries allow stable pagination
 
-  @planned
+  @implemented
   Scenario: Redact sensitive event payloads
     Given a provider, tool, MCP connector, vault, or sandbox process emits sensitive values
     When the event is stored or streamed
@@ -37,7 +37,7 @@ Feature: Session events
     And UI, API, and session-state views read only canonical session events
     And runtime-specific details appear only as safe metadata
 
-  @planned
+  @implemented
   Scenario: Preserve event hierarchy for product consumers
     Given a runtime emits nested turns, messages, tool calls, permission requests, and substeps
     When AMA stores the session events
@@ -46,7 +46,7 @@ Feature: Session events
     And child events reference their parent event, tool call, or span where nesting exists
     And product clients can reconstruct transcript, tool progress, runtime diagnostics, usage, and errors without raw runtime events
 
-  @planned
+  @implemented
   Scenario: Record runtime checkpoints and resume tokens as canonical events
     Given a runtime creates a checkpoint, thread id, session id, or resume token
     When AMA receives the runtime update

@@ -3,6 +3,7 @@ import { drizzle } from 'drizzle-orm/d1'
 import { canonicalAmaSessionEventFromRuntimeEvent } from '../../shared/session-events'
 import { runnerSessionChannels, runnerWorkItems, runnerWorkLeases, sessionEvents, sessions } from '../db/schema'
 import type { Env } from '../env'
+import { insertCanonicalSessionEvent } from '../db/session-event-store'
 import { redactSensitiveValue } from '../redaction'
 
 type ChannelState = {
@@ -309,35 +310,15 @@ async function appendSessionEvent(
       workItemId: state.workItemId,
     },
   )
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const latest = await db
-      .select({ sequence: max(sessionEvents.sequence) })
-      .from(sessionEvents)
-      .where(eq(sessionEvents.sessionId, state.sessionId))
-      .get()
-    try {
-      await db.insert(sessionEvents).values({
-        id: `event_${crypto.randomUUID().replaceAll('-', '')}`,
-        organizationId: state.organizationId,
-        projectId: state.projectId,
-        sessionId: state.sessionId,
-        sequence: (latest?.sequence ?? 0) + 1,
-        type: canonicalEvent.type,
-        visibility: canonicalEvent.visibility,
-        role: canonicalEvent.role,
-        parentEventId: null,
-        correlationId: null,
-        payload: JSON.stringify(redactSensitiveValue(canonicalEvent.payload)),
-        metadata: JSON.stringify(redactSensitiveValue(canonicalEvent.metadata)),
-        createdAt: new Date().toISOString(),
-      })
-      return
-    } catch (error) {
-      if (attempt === 4 || !String(error).includes('UNIQUE')) {
-        throw error
-      }
-    }
-  }
+  await insertCanonicalSessionEvent(
+    db,
+    {
+      organizationId: state.organizationId,
+      projectId: state.projectId,
+      sessionId: state.sessionId,
+    },
+    canonicalEvent,
+  )
 }
 
 function safeChannelError(error: unknown) {

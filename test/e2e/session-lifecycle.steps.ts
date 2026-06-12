@@ -114,41 +114,46 @@ Then(
 
 // ─── Connect to a session through AMA runtime endpoints ───
 
+// Shared by session-events-protocol.steps.ts: one full runtime turn through
+// the AMA WebSocket endpoint, returning every event pushed over the wire.
+export async function runWsRuntimeTurn(e2e: E2EState, message: string, commandId = 'ws_turn_cmd'): Promise<string[]> {
+  const origin = await ensureLocalApp()
+  const sessionId = String(e2e.latestSession?.id)
+  const token = await e2e.page.evaluate(() => window.localStorage.getItem('ama:e2e-access-token'))
+  assert.ok(token, 'access token required for the runtime WebSocket')
+  const wsUrl = `${origin.replace('http', 'ws')}/runtime/sessions/${sessionId}/ws?access_token=${encodeURIComponent(token)}`
+  const received: string[] = []
+  const socket = new WebSocket(wsUrl)
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('runtime WebSocket round-trip timed out')), 30_000)
+    socket.addEventListener('message', (event) => {
+      const data = String(event.data)
+      received.push(data)
+      const parsed = JSON.parse(data) as { type?: string }
+      if (parsed.type === 'agent_end') {
+        clearTimeout(timer)
+        socket.close()
+        resolve()
+      }
+    })
+    socket.addEventListener('open', () => {
+      socket.send(JSON.stringify({ type: 'prompt', id: commandId, message }))
+    })
+    socket.addEventListener('error', () => {
+      clearTimeout(timer)
+      reject(new Error('runtime WebSocket errored'))
+    })
+  })
+  return received
+}
+
 When(
   'the client connects through an external SDK session helper or direct runtime client',
   async function (this: LifecycleWorld) {
     const e2e = state(this)
     const origin = await ensureLocalApp()
-    const sessionId = String(e2e.latestSession?.id)
-    const token = await e2e.page.evaluate(() => window.localStorage.getItem('ama:e2e-access-token'))
-    assert.ok(token, 'access token required for the runtime WebSocket')
-    // Direct runtime client: open the AMA-owned WebSocket and run one command
-    // round-trip, collecting everything the runtime pushes back.
-    const wsUrl = `${origin.replace('http', 'ws')}/runtime/sessions/${sessionId}/ws?access_token=${encodeURIComponent(token)}`
-    this.wsUrl = wsUrl
-    const received: string[] = []
-    this.wsMessages = received
-    const socket = new WebSocket(wsUrl)
-    await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('runtime WebSocket round-trip timed out')), 30_000)
-      socket.addEventListener('message', (event) => {
-        const data = String(event.data)
-        received.push(data)
-        const parsed = JSON.parse(data) as { type?: string }
-        if (parsed.type === 'agent_end') {
-          clearTimeout(timer)
-          socket.close()
-          resolve()
-        }
-      })
-      socket.addEventListener('open', () => {
-        socket.send(JSON.stringify({ type: 'prompt', id: 'lifecycle_ws_cmd', message: 'lifecycle ws round-trip' }))
-      })
-      socket.addEventListener('error', () => {
-        clearTimeout(timer)
-        reject(new Error('runtime WebSocket errored'))
-      })
-    })
+    this.wsUrl = `${origin.replace('http', 'ws')}/runtime/sessions/${e2e.latestSession?.id}/ws`
+    this.wsMessages = await runWsRuntimeTurn(e2e, 'lifecycle ws round-trip', 'lifecycle_ws_cmd')
   },
 )
 
@@ -206,11 +211,11 @@ Then('the helper does not define an incompatible replacement runtime protocol', 
 
 // ─── Self-hosted live runtime: follow-up messages and stop ───
 
-Given(
-  'a self-hosted session has an accepted runner channel and a live runtime handle',
-  { timeout: 240_000 },
-  async function (this: LifecycleWorld) {
-    const e2e = (await ensureSignedIn(this)) as unknown as E2EState
+// Shared by session-events-protocol.steps.ts: a real self-hosted run whose
+// live bridge handle stays open for prompts, checkpoints, and aborts.
+export async function setupLiveSelfHostedSession(world: LifecycleWorld): Promise<E2EState> {
+  const e2e = (await ensureSignedIn(world)) as unknown as E2EState
+  {
     e2e.environment = await createEnvironment(e2e as never, {
       name: `${e2e.runId} live claude-code env`,
       hostingMode: 'self_hosted',
@@ -257,6 +262,15 @@ Given(
     await waitForSessionStatus(e2e, 'running')
     // The live bridge echoes the initial prompt once the runtime handle is up.
     await waitForSessionEventText(e2e, 'claude-code-bridge-live received:live handle initial prompt')
+  }
+  return e2e
+}
+
+Given(
+  'a self-hosted session has an accepted runner channel and a live runtime handle',
+  { timeout: 240_000 },
+  async function (this: LifecycleWorld) {
+    await setupLiveSelfHostedSession(this)
   },
 )
 

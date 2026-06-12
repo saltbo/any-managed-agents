@@ -4,6 +4,8 @@ export const AMA_SESSION_EVENT_DEFINITIONS = {
   turn_start: { category: 'lifecycle', label: 'Turn started' },
   turn_end: { category: 'lifecycle', label: 'Turn completed' },
   session_stop: { category: 'lifecycle', label: 'Session stopped' },
+  session_checkpoint: { category: 'lifecycle', label: 'Checkpoint recorded' },
+  session_resume: { category: 'lifecycle', label: 'Session resumed' },
   message_start: { category: 'transcript', label: 'Message started' },
   message_update: { category: 'transcript', label: 'Message updated' },
   message_end: { category: 'transcript', label: 'Message completed' },
@@ -45,6 +47,25 @@ export type CanonicalAmaSessionEvent = {
 
 export function isAmaSessionEventType(value: string): value is AmaSessionEventType {
   return Object.hasOwn(AMA_SESSION_EVENT_DEFINITIONS, value)
+}
+
+// Stable correlation identifier shared by related canonical events: the
+// message_* trio shares `message:<id>` and tool_execution_* pairs share
+// `tool:<tool call id>`, so product consumers can pair calls with results
+// and reconstruct transcript threads without raw runtime events.
+export function canonicalEventCorrelation(type: AmaSessionEventType, payload: Record<string, unknown>): string | null {
+  const category = AMA_SESSION_EVENT_DEFINITIONS[type].category
+  if (category === 'tool') {
+    const toolCall = objectValue(payload.toolCall)
+    const id = stringField(toolCall, 'id') ?? stringField(payload, 'toolCallId') ?? stringField(payload, 'id')
+    return id ? `tool:${id}` : null
+  }
+  if (category === 'transcript') {
+    const message = objectValue(payload.message)
+    const id = stringField(payload, 'id') ?? stringField(message, 'id')
+    return id ? `message:${id}` : null
+  }
+  return null
 }
 
 export function amaSessionEventCategory(type: string): AmaSessionEventFilterCategory {

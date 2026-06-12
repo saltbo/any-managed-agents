@@ -10,6 +10,7 @@ import type { Env } from './env'
 import { errorResponse } from './errors'
 import { ApiSecuritySchemes, createApiRouter } from './openapi'
 import { evaluateMcpToolPolicy, evaluateSandboxRuntimePolicy, type PolicyDecision } from './policy'
+import { insertCanonicalSessionEvent } from './db/session-event-store'
 import { redactSensitiveValue } from './redaction'
 import agents from './routes/agents'
 import audit from './routes/audit'
@@ -66,37 +67,15 @@ async function appendRuntimeEvent(
     values.event,
     values.metadata ?? { source: 'runtime' },
   )
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const eventId = newId('event')
-    const latest = await db
-      .select({ sequence: max(sessionEvents.sequence) })
-      .from(sessionEvents)
-      .where(eq(sessionEvents.sessionId, values.sessionId))
-      .get()
-    try {
-      await db.insert(sessionEvents).values({
-        id: eventId,
-        organizationId: values.auth.organization.id,
-        projectId: values.auth.project.id,
-        sessionId: values.sessionId,
-        sequence: (latest?.sequence ?? 0) + 1,
-        type: canonicalEvent.type,
-        visibility: canonicalEvent.visibility,
-        role: canonicalEvent.role,
-        parentEventId: null,
-        correlationId: null,
-        payload: JSON.stringify(redactRuntimeValue(canonicalEvent.payload)),
-        metadata: JSON.stringify(redactRuntimeValue(canonicalEvent.metadata)),
-        createdAt: new Date().toISOString(),
-      })
-      return eventId
-    } catch (error) {
-      if (attempt === 4 || !String(error).includes('UNIQUE')) {
-        throw error
-      }
-    }
-  }
-  throw new Error('Unable to append runtime event')
+  return await insertCanonicalSessionEvent(
+    db,
+    {
+      organizationId: values.auth.organization.id,
+      projectId: values.auth.project.id,
+      sessionId: values.sessionId,
+    },
+    canonicalEvent,
+  )
 }
 
 async function assertRuntimeSessionRunning(db: ReturnType<typeof drizzle>, auth: AuthContext, sessionId: string) {

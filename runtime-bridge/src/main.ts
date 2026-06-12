@@ -44,10 +44,15 @@ async function run(request: Extract<RuntimeBridgeInput, { type: 'run' }>) {
       }
       const handle = liveBridgeTestHandle(request)
       state.handle = handle
+      const emitLiveResumeToken = createResumeTokenWatcher(handle, (resumeToken) => {
+        write({ type: 'resumeToken', requestId: request.requestId, resumeToken })
+      })
+      emitLiveResumeToken()
       for await (const event of handle.events) {
         write({ type: 'event', requestId: request.requestId, event: assertAmaRuntimeEvent(event) })
+        emitLiveResumeToken()
       }
-      write({ type: 'result', requestId: request.requestId, result: { resumeToken: `e2e-live-${request.sessionId}` } })
+      write({ type: 'result', requestId: request.requestId, result: { resumeToken: handle.getResumeToken?.() } })
       return
     }
     const provider = getProvider(request.runtime)
@@ -78,9 +83,14 @@ async function run(request: Extract<RuntimeBridgeInput, { type: 'run' }>) {
 // prompt so live follow-up prompts and aborts exercise the real handle paths.
 function liveBridgeTestHandle(request: Extract<RuntimeBridgeInput, { type: 'run' }>): RuntimeProviderHandle {
   const marker = `${request.runtime}-bridge-live`
+  // A resumed run continues the conversation instead of replaying the initial
+  // prompt — the distinct marker lets acceptance prove no duplicate history.
+  const initialMessage = request.resume
+    ? `${marker} resumed-with-token:${request.resumeToken ? 'yes' : 'none'}`
+    : `${marker} received:${request.prompt}`
   const queue: AmaRuntimeEvent[] = [
     runtimeEvent('turn_start', { marker, stage: `${marker}-started`, status: 'running' }),
-    runtimeEvent('message_end', { message: textMessage('assistant', `${marker} received:${request.prompt}`) }),
+    runtimeEvent('message_end', { message: textMessage('assistant', initialMessage) }),
   ]
   let ended = false
   let wake: (() => void) | null = null
