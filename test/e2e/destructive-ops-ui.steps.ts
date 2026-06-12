@@ -38,8 +38,12 @@ When('the user chooses archive and confirms the destructive action', async funct
   // falling back to the destructive workflow page.
   const page = this.activeResourcePage ?? this.destructiveWorkflow?.page
   assert.ok(page, 'A page must be open before confirming archive')
-  // Click the Archive button — it appears in the detail view actions
-  await page.getByRole('button', { name: 'Archive' }).click()
+  // The Archive action renders only once the resource query settles on an active
+  // resource — anchor on the status badge first so the click never races the load.
+  await expect(page.getByText('active', { exact: true }).first()).toBeVisible()
+  const archiveButton = page.getByRole('button', { name: 'Archive' }).first()
+  await expect(archiveButton).toBeVisible()
+  await archiveButton.click()
   // The shared ConfirmAction dialog opens
   const dialog = page.getByRole('alertdialog')
   await expect(dialog).toBeVisible()
