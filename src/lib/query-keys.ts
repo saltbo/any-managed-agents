@@ -40,7 +40,8 @@ export const queryKeys = {
   },
   mcp: {
     all: ['mcp'] as const,
-    connectors: ['mcp', 'connectors'] as const,
+    connectors: (filters: Record<string, string> = {}) => ['mcp', 'connectors', filters] as const,
+    connector: (connectorId: string) => ['mcp', 'connectors', 'detail', connectorId] as const,
     connections: ['mcp', 'connections'] as const,
   },
   governance: {

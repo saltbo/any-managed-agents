@@ -150,6 +150,7 @@ function agent(overrides: Partial<Agent> = {}): Agent {
     handoffPolicy: {},
     memoryPolicy: { enabled: false },
     allowedTools: ['read', 'write'],
+    tools: [],
     mcpConnectors: [],
     metadata: {},
     status: 'active',
@@ -184,6 +185,7 @@ function session(overrides: Partial<Session> = {}): Session {
       handoffPolicy: {},
       memoryPolicy: { enabled: false },
       allowedTools: ['read', 'write'],
+      tools: [],
       mcpConnectors: [],
       metadata: {},
       createdAt: now,
@@ -807,7 +809,9 @@ describe('App', () => {
 
     fireEvent.click(primaryNav().getByRole('link', { name: 'MCP' }))
     expect(await screen.findByText('MCP connectors')).toBeTruthy()
-    expect(screen.getByText(/repo.read/)).toBeTruthy()
+    expect(screen.getByText('source-control')).toBeTruthy()
+    expect(screen.getByText('repo')).toBeTruthy()
+    expect(screen.getByText(/Setup: credential/)).toBeTruthy()
 
     fireEvent.click(primaryNav().getByRole('link', { name: 'Usage' }))
     expect(await screen.findByText('Usage summary')).toBeTruthy()
@@ -1173,6 +1177,7 @@ const agentFixture = {
   systemPrompt: 'Do the work',
   skills: ['ama@coding-agent'],
   allowedTools: ['read', 'write'],
+  tools: [],
   mcpConnectors: [],
   metadata: {},
   status: 'active',
@@ -1200,6 +1205,7 @@ const sessionFixture = {
     systemPrompt: 'Do the work',
     skills: ['ama@coding-agent'],
     allowedTools: ['read', 'write'],
+    tools: [],
     mcpConnectors: [],
     metadata: {},
     createdAt: '2026-05-23T00:00:00.000Z',

@@ -1,0 +1,149 @@
+import { useQuery } from '@tanstack/react-query'
+import { Link, useParams } from 'react-router'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { ConfirmAction, DetailSection, EmptyState, Meta, MetaGrid, PageHeader, StatusBadge } from '@/console/components'
+import { ApiError, api, type McpConnector } from '@/lib/api'
+import { queryKeys } from '@/lib/query-keys'
+import { connectorDisabledReason } from './McpView'
+import { useMcpActions } from './use-mcp-actions'
+
+export function McpConnectorPage() {
+  const { connectorId } = useParams()
+  const actions = useMcpActions()
+  const connectorQuery = useQuery({
+    queryKey: queryKeys.mcp.connector(connectorId ?? ''),
+    queryFn: () => api.readMcpConnector(connectorId as string),
+    enabled: Boolean(connectorId),
+  })
+  const connectionsQuery = useQuery({
+    queryKey: queryKeys.mcp.connections,
+    queryFn: api.listMcpConnections,
+  })
+  const connector = connectorQuery.data ?? null
+  const connection =
+    connectionsQuery.data?.data.find(
+      (candidate) => candidate.connectorId === connectorId && candidate.status !== 'disconnected',
+    ) ?? null
+
+  if (connectorQuery.error instanceof ApiError && connectorQuery.error.status === 404) {
+    return (
+      <EmptyState
+        title="Connector not found"
+        body={`No MCP connector named "${connectorId}" exists in the catalog.`}
+        action={
+          <Link to="/mcp" className={buttonVariants({ variant: 'outline' })}>
+            Back to MCP discovery
+          </Link>
+        }
+      />
+    )
+  }
+  if (connectorQuery.error) {
+    return (
+      <EmptyState
+        title="Connector unavailable"
+        body={connectorQuery.error instanceof Error ? connectorQuery.error.message : String(connectorQuery.error)}
+      />
+    )
+  }
+  if (connectorQuery.isPending || !connector) {
+    return <EmptyState title="Loading connector" body="Reading connector catalog entry and connection state." />
+  }
+
+  const disabledReason = connectorDisabledReason(connector)
+  return (
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        eyebrow="MCP connector"
+        title={connector.name}
+        titleAccessory={
+          <>
+            <StatusBadge value={connector.policyStatus} detail={disabledReason} />
+            <StatusBadge value={connector.connectionStatus} />
+          </>
+        }
+        description={connector.description}
+        actions={
+          connection ? (
+            <ConfirmAction
+              title="Disconnect MCP connector?"
+              description={`Disconnect ${connector.connectorId}. Runtime tool calls through this connection will stop.`}
+              confirmLabel="Disconnect"
+              destructive
+              onConfirm={() => actions.disconnectMcpConnection(connection.id)}
+            >
+              <Button type="button" variant="outline">
+                Disconnect
+              </Button>
+            </ConfirmAction>
+          ) : (
+            <Button
+              type="button"
+              disabled={Boolean(disabledReason) || actions.connectMcpConnectorPending}
+              onClick={() => actions.connectMcpConnector({ connectorId: connector.connectorId })}
+            >
+              Connect
+            </Button>
+          )
+        }
+      />
+      {disabledReason ? <p className="text-sm text-destructive">{disabledReason}</p> : null}
+      <DetailSection title="Connector profile" description={connector.connectorId}>
+        <MetaGrid>
+          <Meta label="Category" value={connector.category} />
+          <Meta label="Trust level" value={connector.trustLevel} />
+          <Meta label="Capabilities" value={connector.capabilities.join(', ') || 'None'} />
+          <Meta label="Supported auth modes" value={connector.supportedAuthModes.join(', ') || 'None'} />
+          <Meta label="Required credential type" value={requiredCredentialType(connector)} />
+          <Meta label="Catalog status" value={connector.status} />
+        </MetaGrid>
+      </DetailSection>
+      <DetailSection
+        title="Setup instructions"
+        description="Credentials stay in a project vault; the catalog never asks for raw secret values."
+      >
+        <ol className="list-decimal space-y-1 pl-5 text-sm">
+          {setupInstructions(connector).map((instruction) => (
+            <li key={instruction}>{instruction}</li>
+          ))}
+        </ol>
+      </DetailSection>
+      <DetailSection title="Tools" description="Tool contracts captured from the catalog or the live MCP server.">
+        {connector.tools.length === 0 ? (
+          <p className="text-sm text-muted-foreground">This connector does not declare catalog tools.</p>
+        ) : (
+          <MetaGrid>
+            {connector.tools.map((tool) => (
+              <Meta
+                key={tool.name}
+                label={tool.name}
+                value={`${tool.description ?? 'No description'} (approval: ${tool.approvalMode})`}
+              />
+            ))}
+          </MetaGrid>
+        )}
+      </DetailSection>
+    </div>
+  )
+}
+
+function requiredCredentialType(connector: McpConnector) {
+  if (!connector.supportedAuthModes.includes('vault_credential')) {
+    return 'None'
+  }
+  return connector.setupRequirements.join(', ') || 'vault_credential'
+}
+
+function setupInstructions(connector: McpConnector) {
+  const instructions: string[] = []
+  if (connector.supportedAuthModes.includes('vault_credential')) {
+    for (const requirement of connector.setupRequirements) {
+      instructions.push(`Store a ${requirement} credential in a project vault.`)
+    }
+    instructions.push('Connect the connector with the vault credential reference.')
+  } else {
+    instructions.push('Connect the connector; no credential is required.')
+  }
+  instructions.push('Allow the connector for agents and environments that should call its tools.')
+  return instructions
+}

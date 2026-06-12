@@ -588,6 +588,12 @@
               "web.search"
             ]
           },
+          "tools": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentToolAttachment"
+            }
+          },
           "mcpConnectors": {
             "type": "array",
             "items": {
@@ -656,6 +662,7 @@
           "handoffPolicy",
           "memoryPolicy",
           "allowedTools",
+          "tools",
           "mcpConnectors",
           "metadata",
           "status",
@@ -664,6 +671,60 @@
           "version",
           "createdAt",
           "updatedAt"
+        ]
+      },
+      "AgentToolAttachment": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "repo.read"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "example": "Read repository metadata and files."
+          },
+          "inputSchema": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "type": "object",
+              "properties": {
+                "repo": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "approvalMode": {
+            "type": "string",
+            "enum": [
+              "none",
+              "per_call",
+              "always_required",
+              "project_policy"
+            ],
+            "example": "project_policy"
+          },
+          "policyMetadata": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "sensitivity": "low"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "inputSchema",
+          "approvalMode",
+          "policyMetadata"
         ]
       },
       "CreateAgentRequest": {
@@ -791,6 +852,13 @@
               "web.search"
             ]
           },
+          "tools": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentToolAttachmentInput"
+            },
+            "maxItems": 100
+          },
           "mcpConnectors": {
             "type": "array",
             "items": {
@@ -810,6 +878,60 @@
             },
             "example": {
               "owner": "platform"
+            }
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "AgentToolAttachmentInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "example": "repo.read"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 1000,
+            "example": "Read repository metadata and files."
+          },
+          "inputSchema": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "type": "object",
+              "properties": {
+                "repo": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "approvalMode": {
+            "type": "string",
+            "enum": [
+              "none",
+              "per_call",
+              "always_required",
+              "project_policy"
+            ],
+            "example": "project_policy"
+          },
+          "policyMetadata": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "sensitivity": "low"
             }
           }
         },
@@ -942,6 +1064,13 @@
             "example": [
               "web.search"
             ]
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentToolAttachmentInput"
+            },
+            "maxItems": 100
           },
           "mcpConnectors": {
             "type": "array",
@@ -1099,6 +1228,12 @@
               "web.search"
             ]
           },
+          "tools": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentToolAttachment"
+            }
+          },
           "mcpConnectors": {
             "type": "array",
             "items": {
@@ -1139,6 +1274,7 @@
           "handoffPolicy",
           "memoryPolicy",
           "allowedTools",
+          "tools",
           "mcpConnectors",
           "metadata",
           "createdAt"

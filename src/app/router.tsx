@@ -7,6 +7,7 @@ import { AuthCallbackPage } from '@/features/auth/AuthCallbackPage'
 import { ConsoleLayout } from '@/features/console/ConsoleLayout'
 import { EnvironmentDetailPage } from '@/features/environments/EnvironmentDetailPage'
 import { EnvironmentsPage } from '@/features/environments/EnvironmentsPage'
+import { McpConnectorPage } from '@/features/mcp/McpConnectorPage'
 import { McpPage } from '@/features/mcp/McpPage'
 import { ProviderDetailPage } from '@/features/providers/ProviderDetailPage'
 import { ProvidersPage } from '@/features/providers/ProvidersPage'
@@ -42,6 +43,7 @@ export function createAppRouter() {
         { path: 'vaults', element: <VaultsPage /> },
         { path: 'vaults/:vaultId', element: <VaultDetailPage /> },
         { path: 'mcp', element: <McpPage /> },
+        { path: 'mcp/:connectorId', element: <McpConnectorPage /> },
         { path: 'usage', element: <UsagePage /> },
         { path: 'audit', element: <AuditPage /> },
         { path: 'settings', element: <SettingsPage /> },

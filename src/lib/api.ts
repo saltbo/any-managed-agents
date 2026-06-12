@@ -65,6 +65,22 @@ export interface Environment {
   updatedAt: string
 }
 
+export interface AgentToolAttachment {
+  name: string
+  description: string | null
+  inputSchema: Record<string, unknown>
+  approvalMode: 'none' | 'per_call' | 'always_required' | 'project_policy'
+  policyMetadata: Record<string, unknown>
+}
+
+export interface AgentToolAttachmentInput {
+  name: string
+  description?: string | null
+  inputSchema?: Record<string, unknown>
+  approvalMode?: AgentToolAttachment['approvalMode']
+  policyMetadata?: Record<string, unknown>
+}
+
 export interface Agent {
   id: string
   projectId: string
@@ -80,6 +96,7 @@ export interface Agent {
   handoffPolicy: Record<string, unknown>
   memoryPolicy: Record<string, unknown>
   allowedTools: string[]
+  tools: AgentToolAttachment[]
   mcpConnectors: string[]
   metadata: Record<string, unknown>
   status: 'active' | 'archived'
@@ -105,6 +122,7 @@ export interface AgentVersion {
   handoffPolicy: Record<string, unknown>
   memoryPolicy: Record<string, unknown>
   allowedTools: string[]
+  tools: AgentToolAttachment[]
   mcpConnectors: string[]
   metadata: Record<string, unknown>
   createdAt: string
@@ -296,6 +314,20 @@ export interface McpConnector {
   updatedAt: string
 }
 
+export interface McpConnectorListOptions {
+  search?: string
+  category?: string
+  trustLevel?: string
+  capability?: string
+}
+
+export interface McpConnectInput {
+  connectorId: string
+  endpointUrl?: string
+  credentialId?: string
+  credentialVersionId?: string
+}
+
 export interface McpConnection {
   id: string
   organizationId: string
@@ -430,6 +462,7 @@ export interface AgentInput {
   handoffPolicy?: Record<string, unknown>
   memoryPolicy?: Record<string, unknown>
   allowedTools?: string[]
+  tools?: AgentToolAttachmentInput[]
   mcpConnectors?: string[]
   metadata?: Record<string, unknown>
 }
@@ -651,7 +684,14 @@ export const api = {
         json: { status: 'revoked', ...(revokeReason ? { revokeReason } : {}) },
       }),
     ),
-  listMcpConnectors: () => rpcRequest<ListResponse<McpConnector>>(rpc.api.mcp.connectors.$get({ query: {} })),
+  listMcpConnectors: (options: McpConnectorListOptions = {}) =>
+    rpcRequest<ListResponse<McpConnector>>(
+      rpc.api.mcp.connectors.$get(queryArg<typeof rpc.api.mcp.connectors.$get>(options)),
+    ),
+  readMcpConnector: (connectorId: string) =>
+    rpcRequest<McpConnector>(rpc.api.mcp.connectors[':connectorId'].$get({ param: { connectorId } })),
+  connectMcpConnector: (input: McpConnectInput) =>
+    rpcRequest<McpConnection>(rpc.api.mcp.connections.$post(jsonArg<typeof rpc.api.mcp.connections.$post>(input))),
   listMcpConnections: () => rpcRequest<ListResponse<McpConnection>>(rpc.api.mcp.connections.$get({ query: {} })),
   disconnectMcpConnection: (id: string) =>
     rpcRequest<void>(

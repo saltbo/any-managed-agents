@@ -592,6 +592,101 @@ describe('[CF] /api/agents', () => {
     expect(crossProjectRead.status).toBe(404)
   })
 
+  it('stores the tool attachment contract on agent versions and rejects policy-blocked tools', async () => {
+    const authorization = await signIn()
+    const policyRes = await jsonFetch('/api/governance/policy', authorization, {
+      method: 'PUT',
+      body: JSON.stringify({ toolPolicy: { blockedTools: ['repo.delete'] } }),
+    })
+    expect(policyRes.status).toBe(200)
+
+    const governanceBlockedRes = await jsonFetch('/api/agents', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Governance blocked tools', tools: [{ name: 'repo.delete' }] }),
+    })
+    expect(governanceBlockedRes.status).toBe(400)
+    await expect(governanceBlockedRes.json()).resolves.toMatchObject({
+      error: { details: { fields: { tools: 'Tool is blocked by policy: repo.delete' } } },
+    })
+
+    const platformBlockedRes = await jsonFetch('/api/agents', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Platform blocked tools', tools: [{ name: 'secrets.read' }] }),
+    })
+    expect(platformBlockedRes.status).toBe(400)
+
+    const duplicateRes = await jsonFetch('/api/agents', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Duplicate tools', tools: [{ name: 'web.search' }, { name: 'web.search' }] }),
+    })
+    expect(duplicateRes.status).toBe(400)
+
+    const createRes = await jsonFetch('/api/agents', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Tooled agent',
+        tools: [
+          {
+            name: 'web.search',
+            description: 'Search the public web.',
+            inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
+            approvalMode: 'per_call',
+            policyMetadata: { sensitivity: 'low' },
+          },
+          { name: 'repo.read' },
+        ],
+      }),
+    })
+    expect(createRes.status).toBe(201)
+    const agent = (await createRes.json()) as { id: string; tools: unknown[] }
+    expect(agent.tools).toHaveLength(2)
+
+    const versionsRes = await jsonFetch(`/api/agents/${agent.id}/versions`, authorization)
+    expect(versionsRes.status).toBe(200)
+    const versions = (await versionsRes.json()) as { data: Array<{ tools: unknown[] }> }
+    expect(versions.data[0]?.tools).toEqual([
+      {
+        name: 'web.search',
+        description: 'Search the public web.',
+        inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
+        approvalMode: 'per_call',
+        policyMetadata: { sensitivity: 'low' },
+      },
+      {
+        name: 'repo.read',
+        description: null,
+        inputSchema: {},
+        approvalMode: 'project_policy',
+        policyMetadata: {},
+      },
+    ])
+
+    // Updating tools writes a new immutable version with the same contract.
+    const updateRes = await jsonFetch(`/api/agents/${agent.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ tools: [{ name: 'repo.read', approvalMode: 'always_required' }] }),
+    })
+    expect(updateRes.status).toBe(200)
+    const updatedVersionsRes = await jsonFetch(`/api/agents/${agent.id}/versions`, authorization)
+    const updatedVersions = (await updatedVersionsRes.json()) as { data: Array<{ tools: Array<{ name: string }> }> }
+    expect(updatedVersions.data).toHaveLength(2)
+    expect(updatedVersions.data[0]?.tools).toEqual([
+      {
+        name: 'repo.read',
+        description: null,
+        inputSchema: {},
+        approvalMode: 'always_required',
+        policyMetadata: {},
+      },
+    ])
+
+    const updateBlockedRes = await jsonFetch(`/api/agents/${agent.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ tools: [{ name: 'repo.delete' }] }),
+    })
+    expect(updateBlockedRes.status).toBe(400)
+  })
+
   it('resolves handoff candidates by role or capability inside the same project', async () => {
     const authorization = await signIn()
 

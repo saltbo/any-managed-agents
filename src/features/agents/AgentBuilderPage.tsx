@@ -67,7 +67,7 @@ export function AgentBuilderPage() {
     queryFn: () => api.listProviders(),
   })
   const connectorsQuery = useQuery({
-    queryKey: queryKeys.mcp.connectors,
+    queryKey: queryKeys.mcp.connectors(),
     queryFn: () => api.listMcpConnectors(),
   })
   const environmentsQuery = useQuery({

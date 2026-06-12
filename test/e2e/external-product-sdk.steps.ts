@@ -52,6 +52,7 @@ const STANDARD_AGENT_FIELDS = new Set([
   'handoffPolicy',
   'memoryPolicy',
   'allowedTools',
+  'tools',
   'mcpConnectors',
   'metadata',
   'status',

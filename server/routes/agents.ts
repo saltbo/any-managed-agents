@@ -20,12 +20,14 @@ import {
   paginateRows,
   parseListCursor,
 } from '../openapi'
+import { resolveEffectivePolicy } from '../policy'
 
 const app = createApiRouter()
 
 const DEFAULT_PROVIDER = 'workers-ai'
 const DEFAULT_MODEL = '@cf/moonshotai/kimi-k2.6'
 const BLOCKED_TOOLS = new Set(['secrets.read', 'filesystem.host', 'network.raw'])
+const TOOL_APPROVAL_MODES = ['none', 'per_call', 'always_required', 'project_policy'] as const
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
 const HandoffPolicySchema = JsonObjectSchema.openapi({
@@ -34,6 +36,31 @@ const HandoffPolicySchema = JsonObjectSchema.openapi({
 const MemoryPolicySchema = JsonObjectSchema.openapi({
   example: { enabled: true, mode: 'notebook', scope: 'project_agent' },
 })
+
+const AgentToolAttachmentSchema = z
+  .object({
+    name: z.string().openapi({ example: 'repo.read' }),
+    description: z.string().nullable().openapi({ example: 'Read repository metadata and files.' }),
+    inputSchema: JsonObjectSchema.openapi({ example: { type: 'object', properties: { repo: { type: 'string' } } } }),
+    approvalMode: z.enum(TOOL_APPROVAL_MODES).openapi({ example: 'project_policy' }),
+    policyMetadata: JsonObjectSchema.openapi({ example: { sensitivity: 'low' } }),
+  })
+  .openapi('AgentToolAttachment')
+
+const AgentToolAttachmentInputSchema = z
+  .object({
+    name: z.string().min(1).max(120).openapi({ example: 'repo.read' }),
+    description: z.string().max(1000).nullable().optional().openapi({ example: 'Read repository metadata and files.' }),
+    inputSchema: JsonObjectSchema.optional().openapi({
+      example: { type: 'object', properties: { repo: { type: 'string' } } },
+    }),
+    approvalMode: z.enum(TOOL_APPROVAL_MODES).optional().openapi({ example: 'project_policy' }),
+    policyMetadata: JsonObjectSchema.optional().openapi({ example: { sensitivity: 'low' } }),
+  })
+  .strict()
+  .openapi('AgentToolAttachmentInput')
+
+type AgentToolAttachment = z.infer<typeof AgentToolAttachmentSchema>
 
 const AgentSchema = z
   .object({
@@ -52,6 +79,7 @@ const AgentSchema = z
     handoffPolicy: HandoffPolicySchema,
     memoryPolicy: MemoryPolicySchema,
     allowedTools: z.array(z.string()).openapi({ example: ['web.search'] }),
+    tools: z.array(AgentToolAttachmentSchema),
     mcpConnectors: z.array(z.string()).openapi({ example: ['github'] }),
     metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
     status: z.enum(['active', 'archived']).openapi({ example: 'active' }),
@@ -80,6 +108,7 @@ const AgentVersionSchema = z
     handoffPolicy: HandoffPolicySchema,
     memoryPolicy: MemoryPolicySchema,
     allowedTools: z.array(z.string()).openapi({ example: ['web.search'] }),
+    tools: z.array(AgentToolAttachmentSchema),
     mcpConnectors: z.array(z.string()).openapi({ example: ['github'] }),
     metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
     createdAt: z.string().datetime().openapi({ example: '2026-05-22T00:00:00.000Z' }),
@@ -117,6 +146,7 @@ const AgentPayloadSchema = z
       .max(100)
       .optional()
       .openapi({ example: ['web.search'] }),
+    tools: z.array(AgentToolAttachmentInputSchema).max(100).optional(),
     mcpConnectors: z
       .array(z.string().min(1).max(120))
       .max(50)
@@ -297,6 +327,51 @@ function validateAllowedTools(allowedTools: string[]) {
   return secret ? { allowedTools: 'Secret material must be stored in a vault.' } : null
 }
 
+function normalizeToolAttachments(tools: z.infer<typeof AgentToolAttachmentInputSchema>[]): AgentToolAttachment[] {
+  return tools.map((tool) => ({
+    name: tool.name,
+    description: tool.description ?? null,
+    inputSchema: tool.inputSchema ?? {},
+    approvalMode: tool.approvalMode ?? 'project_policy',
+    policyMetadata: tool.policyMetadata ?? {},
+  }))
+}
+
+function stringList(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+}
+
+function governanceBlocksTool(toolPolicy: Record<string, unknown>, toolName: string) {
+  const blocked = stringList(toolPolicy.blockedTools)
+  if (blocked.includes('*') || blocked.includes(toolName)) {
+    return true
+  }
+  const allowed = stringList(toolPolicy.allowedTools)
+  if (allowed.length > 0 && !allowed.includes('*') && !allowed.includes(toolName)) {
+    return true
+  }
+  return toolPolicy.defaultEffect === 'deny'
+}
+
+// Tool attachments are validated against governance tool policy at save time so
+// a policy-blocked tool never reaches an agent version snapshot.
+function validateToolAttachments(tools: AgentToolAttachment[], toolPolicy: Record<string, unknown>) {
+  const names = new Set<string>()
+  for (const tool of tools) {
+    if (names.has(tool.name)) {
+      return { tools: `Tool is attached more than once: ${tool.name}` }
+    }
+    names.add(tool.name)
+    if (BLOCKED_TOOLS.has(tool.name) || governanceBlocksTool(toolPolicy, tool.name)) {
+      return { tools: `Tool is blocked by policy: ${tool.name}` }
+    }
+    if (hasSecretMaterial(tool)) {
+      return { tools: 'Secret material must be stored in a vault.' }
+    }
+  }
+  return null
+}
+
 function secretKey(key: string) {
   const normalized = key.toLowerCase().replaceAll(/[^a-z0-9]/g, '')
   return (
@@ -403,6 +478,7 @@ function serializeAgent(row: AgentRow, version: AgentVersionRow | null) {
     handoffPolicy: parseJson<Record<string, unknown>>(row.handoffPolicy),
     memoryPolicy: parseJson<Record<string, unknown>>(row.memoryPolicy),
     allowedTools: parseJson<string[]>(row.allowedTools),
+    tools: parseJson<AgentToolAttachment[]>(row.tools),
     mcpConnectors: parseJson<string[]>(row.mcpConnectors),
     metadata: parseJson<Record<string, unknown>>(row.metadata),
     status: row.status as 'active' | 'archived',
@@ -431,6 +507,7 @@ function serializeAgentVersion(row: AgentVersionRow) {
     handoffPolicy: parseJson<Record<string, unknown>>(row.handoffPolicy),
     memoryPolicy: parseJson<Record<string, unknown>>(row.memoryPolicy),
     allowedTools: parseJson<string[]>(row.allowedTools),
+    tools: parseJson<AgentToolAttachment[]>(row.tools),
     mcpConnectors: parseJson<string[]>(row.mcpConnectors),
     metadata: parseJson<Record<string, unknown>>(row.metadata),
     createdAt: row.createdAt,
@@ -463,6 +540,7 @@ async function createAgentVersion(
     handoffPolicy: Record<string, unknown>
     memoryPolicy: Record<string, unknown>
     allowedTools: string[]
+    tools: AgentToolAttachment[]
     mcpConnectors: string[]
     metadata: Record<string, unknown>
     createdAt: string
@@ -495,6 +573,7 @@ async function createAgentVersion(
     handoffPolicy: stringify(values.handoffPolicy),
     memoryPolicy: stringify(values.memoryPolicy),
     allowedTools: stringify(values.allowedTools),
+    tools: stringify(values.tools),
     mcpConnectors: stringify(values.mcpConnectors),
     metadata: stringify(values.metadata),
     createdAt: values.createdAt,
@@ -784,8 +863,10 @@ const routes = app
     const handoffPolicy = body.handoffPolicy ?? {}
     const memoryPolicy = body.memoryPolicy ?? { enabled: false }
     const allowedTools = body.allowedTools ?? []
+    const tools = normalizeToolAttachments(body.tools ?? [])
     const mcpConnectors = body.mcpConnectors ?? []
     const metadata = body.metadata ?? {}
+    const effectiveToolPolicy = tools.length > 0 ? (await resolveEffectivePolicy(db, auth)).toolPolicy : {}
     const validation =
       (model
         ? await validateConfiguredProviderModel(db, auth.project.id, provider, model, c.env.AMA_DEFAULT_MODEL)
@@ -794,6 +875,7 @@ const routes = app
       (hasSecretMaterial(subagents) ? { subagents: 'Secret material must be stored in a vault.' } : null) ??
       validateCapabilityTags(capabilityTags) ??
       validateAllowedTools(allowedTools) ??
+      validateToolAttachments(tools, effectiveToolPolicy) ??
       (await validateMcpConnectors(db, auth.project.id, mcpConnectors)) ??
       (hasSecretMaterial(handoffPolicy) ? { handoffPolicy: 'Secret material must be stored in a vault.' } : null) ??
       (hasSecretMaterial(memoryPolicy) ? { memoryPolicy: 'Secret material must be stored in a vault.' } : null) ??
@@ -819,6 +901,7 @@ const routes = app
       handoffPolicy: stringify(handoffPolicy),
       memoryPolicy: stringify(memoryPolicy),
       allowedTools: stringify(allowedTools),
+      tools: stringify(tools),
       mcpConnectors: stringify(mcpConnectors),
       metadata: stringify(metadata),
       status: 'active',
@@ -837,6 +920,7 @@ const routes = app
       handoffPolicy,
       memoryPolicy,
       allowedTools,
+      tools,
       mcpConnectors,
       metadata,
       createdAt: timestamp,
@@ -890,6 +974,7 @@ const routes = app
       handoffPolicy: body.handoffPolicy ?? parseJson<Record<string, unknown>>(agent.handoffPolicy),
       memoryPolicy: body.memoryPolicy ?? parseJson<Record<string, unknown>>(agent.memoryPolicy),
       allowedTools: body.allowedTools ?? parseJson<string[]>(agent.allowedTools),
+      tools: body.tools ? normalizeToolAttachments(body.tools) : parseJson<AgentToolAttachment[]>(agent.tools),
       mcpConnectors: body.mcpConnectors ?? parseJson<string[]>(agent.mcpConnectors),
       metadata: mergeMetadata(parseJson<Record<string, unknown>>(agent.metadata), body.metadata),
     }
@@ -901,6 +986,10 @@ const routes = app
       (hasSecretMaterial(next.subagents) ? { subagents: 'Secret material must be stored in a vault.' } : null) ??
       validateCapabilityTags(next.capabilityTags) ??
       validateAllowedTools(next.allowedTools) ??
+      validateToolAttachments(
+        next.tools,
+        next.tools.length > 0 ? (await resolveEffectivePolicy(db, auth)).toolPolicy : {},
+      ) ??
       (await validateMcpConnectors(db, auth.project.id, next.mcpConnectors)) ??
       (hasSecretMaterial(next.handoffPolicy)
         ? { handoffPolicy: 'Secret material must be stored in a vault.' }
@@ -924,6 +1013,7 @@ const routes = app
       body.handoffPolicy !== undefined ||
       body.memoryPolicy !== undefined ||
       body.allowedTools !== undefined ||
+      body.tools !== undefined ||
       body.mcpConnectors !== undefined ||
       body.metadata !== undefined
     const version = runtimeChanged
@@ -938,6 +1028,7 @@ const routes = app
       handoffPolicy: stringify(next.handoffPolicy),
       memoryPolicy: stringify(next.memoryPolicy),
       allowedTools: stringify(next.allowedTools),
+      tools: stringify(next.tools),
       mcpConnectors: stringify(next.mcpConnectors),
       metadata: stringify(next.metadata),
       currentVersionId: version?.id ?? agent.currentVersionId,

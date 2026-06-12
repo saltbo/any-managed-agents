@@ -112,13 +112,15 @@ describe('resource list UI contracts', () => {
     const connectors = [connector()]
     const connections = [connection()]
     render(
-      <McpView
-        connectors={connectors}
-        connectorPagination={pagination(connectors)}
-        connections={connections}
-        connectionPagination={pagination(connections)}
-        onDisconnect={vi.fn()}
-      />,
+      <MemoryRouter>
+        <McpView
+          connectors={connectors}
+          connectorPagination={pagination(connectors)}
+          connections={connections}
+          connectionPagination={pagination(connections)}
+          onDisconnect={vi.fn()}
+        />
+      </MemoryRouter>,
     )
 
     const connectorCell = screen.getByText('GitHub').closest('td')
