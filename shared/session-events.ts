@@ -178,6 +178,10 @@ function canonicalPayload(
       operation: event.operation,
       command: event.command,
       host: event.host,
+      // MCP denials identify the connector and tool the same way sandbox
+      // denials identify the command or host.
+      connectorId: event.connectorId,
+      toolName: event.toolName,
       decision: event.decision,
     }
   }

@@ -1486,11 +1486,12 @@ describe('[CF] /api/sessions', () => {
     })
     expect(runtimeRes.status).toBe(500)
 
+    // A governance denial fails the turn but leaves the session usable.
     const readRes = await jsonFetch(`/api/sessions/${session.id}`, authorization)
     await expect(readRes.json()).resolves.toMatchObject({
       id: session.id,
-      status: 'error',
-      statusReason: 'Sandbox command is blocked by policy.',
+      status: 'idle',
+      statusReason: 'policy-denied',
     })
 
     const eventsRes = await jsonFetch(`/api/sessions/${session.id}/events`, authorization)

@@ -288,22 +288,150 @@ export async function toolPolicyRequiresApproval(db: PolicyDb, auth: AuthContext
   return includesWildcard(stringArray(effective.toolPolicy.requireApprovalTools), toolName)
 }
 
-export async function resolveEffectivePolicy(db: PolicyDb, auth: AuthContext) {
-  const policy = await db
+// ─── Policy hierarchy resolution ──────────────────────────────────────────────
+//
+// Effective governance policy merges organization → team → project scope rows
+// with deterministic most-restrictive semantics (documented in
+// docs/product/decisions.md). Team rows apply only when the caller's
+// OIDC-asserted team memberships include the row's team id.
+
+const RESTRICTIVE_NETWORK_VALUES = new Set(['disabled', 'deny', 'offline'])
+
+function isAllowListKey(key: string) {
+  return key.startsWith('allowed')
+}
+
+function isUnionListKey(key: string) {
+  return key.startsWith('blocked') || key.startsWith('denied') || key.startsWith('requireApproval')
+}
+
+function intersectAllowLists(current: string[], next: string[]) {
+  if (current.includes('*')) {
+    return next
+  }
+  if (next.includes('*')) {
+    return current
+  }
+  return current.filter((item) => next.includes(item))
+}
+
+// Merges one policy object (toolPolicy/mcpPolicy/sandboxPolicy/budgetPolicy)
+// across hierarchy levels ordered organization → team → project:
+// blocked/denied/requireApproval lists union, allow lists intersect ('*' is
+// identity), defaultEffect 'deny' is sticky, booleans AND (false is sticky),
+// restrictive network/status strings are sticky, numbers take the minimum,
+// nested objects shallow-merge with the most specific level last, and any
+// other scalar takes the most specific level's value.
+function mergePolicyObjects(levels: Record<string, unknown>[]) {
+  const merged: Record<string, unknown> = {}
+  for (const level of levels) {
+    for (const [key, value] of Object.entries(level)) {
+      if (!(key in merged)) {
+        merged[key] = value
+        continue
+      }
+      const current = merged[key]
+      if (Array.isArray(current) && Array.isArray(value)) {
+        if (isUnionListKey(key)) {
+          merged[key] = [...new Set([...stringArray(current), ...stringArray(value)])]
+          continue
+        }
+        if (isAllowListKey(key)) {
+          merged[key] = intersectAllowLists(stringArray(current), stringArray(value))
+          continue
+        }
+        merged[key] = value
+        continue
+      }
+      if (key === 'defaultEffect') {
+        merged[key] = current === 'deny' || value === 'deny' ? 'deny' : value
+        continue
+      }
+      if (typeof current === 'boolean' && typeof value === 'boolean') {
+        merged[key] = current && value
+        continue
+      }
+      if (typeof current === 'number' && typeof value === 'number') {
+        merged[key] = Math.min(current, value)
+        continue
+      }
+      if (typeof current === 'string' && RESTRICTIVE_NETWORK_VALUES.has(current)) {
+        continue
+      }
+      if (current && value && typeof current === 'object' && typeof value === 'object' && !Array.isArray(value)) {
+        merged[key] = { ...(current as Record<string, unknown>), ...(value as Record<string, unknown>) }
+        continue
+      }
+      merged[key] = value
+    }
+  }
+  return merged
+}
+
+type GovernancePolicyRow = typeof governancePolicies.$inferSelect
+
+export interface EffectivePolicySource {
+  scope: 'organization' | 'team' | 'project'
+  id: string
+  teamId: string | null
+}
+
+// Loads the applicable hierarchy rows: every organization-scope row for the
+// caller's organization, team-scope rows matching the caller's OIDC team
+// memberships, and the project-scope row. One row per scope/team (latest
+// updatedAt wins) keeps the merge deterministic.
+async function applicablePolicyRows(db: PolicyDb, auth: AuthContext) {
+  const rows = await db
     .select()
     .from(governancePolicies)
-    .where(and(eq(governancePolicies.projectId, auth.project.id), eq(governancePolicies.scope, 'project')))
+    .where(
+      or(
+        and(eq(governancePolicies.scope, 'project'), eq(governancePolicies.projectId, auth.project.id)),
+        and(eq(governancePolicies.scope, 'organization'), eq(governancePolicies.organizationId, auth.organization.id)),
+        and(eq(governancePolicies.scope, 'team'), eq(governancePolicies.organizationId, auth.organization.id)),
+      ),
+    )
     .orderBy(desc(governancePolicies.updatedAt))
-    .get()
+  const memberTeams = auth.teams ?? []
+  const byKey = new Map<string, GovernancePolicyRow>()
+  for (const row of rows) {
+    if (row.scope === 'team' && (!row.teamId || !memberTeams.includes(row.teamId))) {
+      continue
+    }
+    const key = `${row.scope}:${row.teamId ?? ''}`
+    if (!byKey.has(key)) {
+      byKey.set(key, row)
+    }
+  }
+  const organization = byKey.get('organization:') ?? null
+  const teams = [...byKey.values()]
+    .filter((row) => row.scope === 'team')
+    .sort((left, right) => (left.teamId ?? '').localeCompare(right.teamId ?? ''))
+  const project = byKey.get('project:') ?? null
+  return { organization, teams, project }
+}
+
+export async function resolveEffectivePolicy(db: PolicyDb, auth: AuthContext) {
+  const { organization, teams, project } = await applicablePolicyRows(db, auth)
+  const levels = [organization, ...teams, project].filter((row): row is GovernancePolicyRow => row !== null)
   const accessRules = await db
     .select()
     .from(providerAccessRules)
     .where(eq(providerAccessRules.projectId, auth.project.id))
 
+  const sources: EffectivePolicySource[] = levels.map((row) => ({
+    scope: row.scope as EffectivePolicySource['scope'],
+    id: row.id,
+    teamId: row.teamId,
+  }))
+  const mostSpecific = levels.at(-1)
   return {
-    source: policy ? { type: 'project', id: policy.id } : { type: 'platform_default', id: 'workers-ai-default' },
-    providerRules: policy ? parseJson<Rule[]>(policy.providerRules, []) : [],
-    modelRules: policy ? parseJson<Rule[]>(policy.modelRules, []) : [],
+    source: mostSpecific
+      ? { type: mostSpecific.scope, id: mostSpecific.id }
+      : { type: 'platform_default', id: 'workers-ai-default' },
+    sources,
+    providerRules: levels.flatMap((row) => parseJson<Rule[]>(row.providerRules, [])),
+    modelRules: levels.flatMap((row) => parseJson<Rule[]>(row.modelRules, [])),
     accessRules: accessRules.map((rule) => ({
       id: rule.id,
       providerId: rule.providerId ?? '*',
@@ -312,10 +440,10 @@ export async function resolveEffectivePolicy(db: PolicyDb, auth: AuthContext) {
       effect: rule.effect,
       reason: rule.reason,
     })),
-    toolPolicy: policy ? parseJson<Record<string, unknown>>(policy.toolPolicy, {}) : {},
-    mcpPolicy: policy ? parseJson<Record<string, unknown>>(policy.mcpPolicy, {}) : {},
-    sandboxPolicy: policy ? parseJson<Record<string, unknown>>(policy.sandboxPolicy, {}) : {},
-    budgetPolicy: policy ? parseJson<BudgetPolicy>(policy.budgetPolicy, {}) : {},
+    toolPolicy: mergePolicyObjects(levels.map((row) => parseJson<Record<string, unknown>>(row.toolPolicy, {}))),
+    mcpPolicy: mergePolicyObjects(levels.map((row) => parseJson<Record<string, unknown>>(row.mcpPolicy, {}))),
+    sandboxPolicy: mergePolicyObjects(levels.map((row) => parseJson<Record<string, unknown>>(row.sandboxPolicy, {}))),
+    budgetPolicy: mergePolicyObjects(levels.map((row) => parseJson<BudgetPolicy>(row.budgetPolicy, {}))),
   }
 }
 
@@ -494,17 +622,32 @@ export async function evaluateProviderPolicy(
     }
   }
 
-  const activeBudget = await db
+  const activeBudgets = await db
     .select()
     .from(budgets)
     .where(and(eq(budgets.projectId, auth.project.id), eq(budgets.status, 'active')))
-    .get()
-  if (activeBudget?.limitType === 'tokens' && totalTokens >= activeBudget.limitValue) {
-    return {
-      allowed: false,
-      category: 'budget',
-      rule: activeBudget.id,
-      message: 'Usage budget is exhausted.',
+  for (const budget of activeBudgets) {
+    if (budget.providerId && budget.providerId !== values.providerId && budget.providerId !== provider?.id) {
+      continue
+    }
+    if (budget.modelId && (values.modelId === null || budget.modelId !== values.modelId)) {
+      continue
+    }
+    const windowPrefix = budget.window === 'day' ? new Date().toISOString().slice(0, 10) : month
+    const windowUsage = usage.filter((record) => record.createdAt.startsWith(windowPrefix))
+    const consumed =
+      budget.limitType === 'cost_micros'
+        ? windowUsage.reduce((sum, record) => sum + record.costMicros, 0)
+        : budget.limitType === 'sessions'
+          ? new Set(windowUsage.map((record) => record.sessionId).filter(Boolean)).size
+          : windowUsage.reduce((sum, record) => sum + record.totalTokens, 0)
+    if (consumed >= budget.limitValue) {
+      return {
+        allowed: false,
+        category: 'budget',
+        rule: budget.id,
+        message: `Usage budget is exhausted: the ${budget.window} ${budget.limitType} limit of ${budget.limitValue} is spent.`,
+      }
     }
   }
 

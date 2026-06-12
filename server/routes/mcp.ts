@@ -282,6 +282,11 @@ const DEFAULT_CONNECTORS = [
   },
 ] as const
 
+// Connector ids the platform catalog ships with, exported so governance
+// config validation can recognize catalog connectors before the lazily
+// seeded catalog rows exist.
+export const PLATFORM_CONNECTOR_IDS: readonly string[] = DEFAULT_CONNECTORS.map((connector) => connector.connectorId)
+
 function newId(prefix: string) {
   return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
 }

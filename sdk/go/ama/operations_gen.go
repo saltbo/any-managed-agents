@@ -11,6 +11,7 @@ type Operation struct {
 }
 
 var Operations = []Operation{
+	{Method: "POST", Path: "/api/governance/config", OperationID: "applyGovernanceConfig", Summary: "Apply declarative governance config atomically", Tags: []string{"Governance"}},
 	{Method: "DELETE", Path: "/api/agents/{agentId}", OperationID: "archiveAgent", Summary: "Archive an agent", Tags: []string{"Agents"}},
 	{Method: "DELETE", Path: "/api/environments/{environmentId}", OperationID: "archiveEnvironment", Summary: "Archive an environment", Tags: []string{"Environments"}},
 	{Method: "DELETE", Path: "/api/scheduled-agent-triggers/{triggerId}", OperationID: "archiveScheduledAgentTrigger", Summary: "Archive a scheduled agent trigger", Tags: []string{"Scheduled agent triggers"}},
@@ -72,6 +73,7 @@ var Operations = []Operation{
 	{Method: "GET", Path: "/api/vaults/{vaultId}/credentials", OperationID: "listVaultCredentials", Summary: "List vault credential metadata", Tags: []string{"Vaults"}},
 	{Method: "GET", Path: "/api/vaults/{vaultId}/credentials/{credentialId}/versions", OperationID: "listVaultCredentialVersions", Summary: "List vault credential versions", Tags: []string{"Vaults"}},
 	{Method: "GET", Path: "/api/vaults", OperationID: "listVaults", Summary: "List vaults", Tags: []string{"Vaults"}},
+	{Method: "POST", Path: "/api/governance/config/preview", OperationID: "previewGovernanceConfig", Summary: "Preview declarative governance config impact", Tags: []string{"Governance"}},
 	{Method: "GET", Path: "/api/agents/{agentId}", OperationID: "readAgent", Summary: "Read an agent", Tags: []string{"Agents"}},
 	{Method: "GET", Path: "/api/agents/{agentId}/memory", OperationID: "readAgentMemory", Summary: "Read agent memory", Tags: []string{"Agents"}},
 	{Method: "GET", Path: "/api/governance/effective-policy", OperationID: "readEffectiveGovernancePolicy", Summary: "Read effective governance policy", Tags: []string{"Governance"}},
@@ -103,4 +105,5 @@ var Operations = []Operation{
 	{Method: "PATCH", Path: "/api/vaults/{vaultId}", OperationID: "updateVault", Summary: "Update a vault", Tags: []string{"Vaults"}},
 	{Method: "PATCH", Path: "/api/vaults/{vaultId}/credentials/{credentialId}", OperationID: "updateVaultCredential", Summary: "Update or revoke vault credential metadata", Tags: []string{"Vaults"}},
 	{Method: "POST", Path: "/api/providers/{providerId}/models", OperationID: "upsertProviderModel", Summary: "Upsert provider model metadata", Tags: []string{"Providers"}},
+	{Method: "POST", Path: "/api/governance/config/validate", OperationID: "validateGovernanceConfig", Summary: "Validate declarative governance config", Tags: []string{"Governance"}},
 }

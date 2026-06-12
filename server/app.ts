@@ -36,7 +36,9 @@ import vaults from './routes/vaults'
 import { safeRuntimeError } from './runtime/runtime-error'
 import {
   executeRuntimeToolCalls,
+  isRuntimePolicyDenied,
   isRuntimeTurnCancelled,
+  RuntimePolicyDeniedError,
   RuntimeTurnCancelledError,
   runSessionTurn,
   runtimeMessagesFromEvents,
@@ -359,66 +361,80 @@ async function recordRuntimeMessageOutcome(
     sessionMetadata: session.metadata ? (JSON.parse(session.metadata) as Record<string, unknown>) : {},
     appendEvent: (event, metadata) => appendRuntimeEvent(db, { auth, sessionId: session.id, event, metadata }),
   })
-  const result = await runSessionTurn(env, {
-    sessionId: session.id,
-    sandboxId: session.sandboxId ?? '',
-    provider: session.modelProvider ?? 'workers-ai',
-    model: String(modelConfig.model ?? '@cf/moonshotai/kimi-k2.6'),
-    agentSnapshot,
-    prompt,
-    messages,
-    ensureActive,
-    onEvent: async (event, metadata) => {
-      if (approvalGate.shouldSuppressEvent(event)) {
-        return
-      }
-      await ensureActive()
-      await appendRuntimeEvent(db, {
-        auth,
-        sessionId: session.id,
-        event,
-        ...(metadata ? { metadata } : {}),
-      })
-    },
-    resolveToolResult: (input) => approvalGate.resolveToolResult(input),
-    approveToolCall: async ({ toolCallId, toolName, input }) => {
-      await ensureActive()
-      // Sandbox executor seam: command and outbound network tool calls are
-      // gated by sandbox and environment network policy before execution.
-      const blocked = await policyBlocksSandboxOperation(db, auth, {
-        session: {
-          id: session.id,
-          agentSnapshot: session.agentSnapshot,
-          environmentSnapshot: session.environmentSnapshot,
-        },
-        toolName,
-        input,
-      })
-      if (blocked) {
+  // The agent loop may wrap the denial thrown inside tool execution, so the
+  // approval callback records the denial and the catch below rethrows typed.
+  let policyDeniedToolCall = false
+  const runTurn = () =>
+    runSessionTurn(env, {
+      sessionId: session.id,
+      sandboxId: session.sandboxId ?? '',
+      provider: session.modelProvider ?? 'workers-ai',
+      model: String(modelConfig.model ?? '@cf/moonshotai/kimi-k2.6'),
+      agentSnapshot,
+      prompt,
+      messages,
+      ensureActive,
+      onEvent: async (event, metadata) => {
+        if (approvalGate.shouldSuppressEvent(event)) {
+          return
+        }
         await ensureActive()
-        await denyRuntimePolicy(db, auth, {
+        await appendRuntimeEvent(db, {
+          auth,
           sessionId: session.id,
-          decision: blocked.decision,
-          action: 'runtime_sandbox.operation',
-          resourceType: blocked.operation.resourceType,
-          resourceId: blocked.operation.resourceId,
-          payload: {
-            operation: blocked.operation.operation,
-            ...(blocked.operation.operation === 'command'
-              ? { command: blocked.operation.command }
-              : { host: blocked.operation.host }),
-          },
+          event,
+          ...(metadata ? { metadata } : {}),
         })
+      },
+      resolveToolResult: (input) => approvalGate.resolveToolResult(input),
+      approveToolCall: async ({ toolCallId, toolName, input }) => {
         await ensureActive()
-        return { allowed: false, reason: blocked.decision.message }
-      }
-      const approvalDecision = await approvalGate.gate({ toolCallId, toolName, input })
-      if (approvalDecision) {
-        return approvalDecision
-      }
-      return { allowed: true }
-    },
-  })
+        // Sandbox executor seam: command and outbound network tool calls are
+        // gated by sandbox and environment network policy before execution.
+        const blocked = await policyBlocksSandboxOperation(db, auth, {
+          session: {
+            id: session.id,
+            agentSnapshot: session.agentSnapshot,
+            environmentSnapshot: session.environmentSnapshot,
+          },
+          toolName,
+          input,
+        })
+        if (blocked) {
+          await ensureActive()
+          await denyRuntimePolicy(db, auth, {
+            sessionId: session.id,
+            decision: blocked.decision,
+            action: 'runtime_sandbox.operation',
+            resourceType: blocked.operation.resourceType,
+            resourceId: blocked.operation.resourceId,
+            payload: {
+              operation: blocked.operation.operation,
+              ...(blocked.operation.operation === 'command'
+                ? { command: blocked.operation.command }
+                : { host: blocked.operation.host }),
+            },
+          })
+          await ensureActive()
+          policyDeniedToolCall = true
+          return { allowed: false, reason: blocked.decision.message }
+        }
+        const approvalDecision = await approvalGate.gate({ toolCallId, toolName, input })
+        if (approvalDecision) {
+          return approvalDecision
+        }
+        return { allowed: true }
+      },
+    })
+  let result: Awaited<ReturnType<typeof runTurn>>
+  try {
+    result = await runTurn()
+  } catch (error) {
+    if (policyDeniedToolCall && !isRuntimeTurnCancelled(error)) {
+      throw new RuntimePolicyDeniedError(safeRuntimeError(error).message)
+    }
+    throw error
+  }
   if (result.status === 'idle') {
     await db
       .update(sessions)
@@ -443,9 +459,14 @@ async function markRuntimeExecutionFailed(
     event: { type: 'error', message: runtimeError.message, code: runtimeError.code },
     metadata: { source: 'ama-cloud-runtime' },
   })
+  // A governance denial fails the turn but is an expected product outcome:
+  // the session returns to idle so the operator can continue with allowed work.
+  const failedStatus = isRuntimePolicyDenied(error)
+    ? { status: 'idle' as const, statusReason: 'policy-denied' }
+    : { status: 'error' as const, statusReason: runtimeError.message }
   await db
     .update(sessions)
-    .set({ status: 'error', statusReason: runtimeError.message, updatedAt: new Date().toISOString() })
+    .set({ ...failedStatus, updatedAt: new Date().toISOString() })
     .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id), eq(sessions.status, 'running')))
   return runtimeError
 }

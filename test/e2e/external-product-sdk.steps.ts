@@ -287,9 +287,17 @@ Then(
 Then(
   'AMA does not require the product to expose board, task, review, or PR concepts',
   function (this: ExternalProductWorld) {
-    const workflowOperations = operations.filter((operation) =>
-      /board|task|review|pull[-_]?request/i.test(`${operation.path} ${operation.operationId}`),
-    )
+    // Match whole words (split on camelCase and non-letter boundaries) so
+    // e.g. previewGovernanceConfig does not trip the "review" guard.
+    const workflowWords = new Set(['board', 'boards', 'task', 'tasks', 'review', 'reviews'])
+    const workflowOperations = operations.filter((operation) => {
+      const surface = `${operation.path} ${operation.operationId}`
+      const words = surface
+        .split(/[^A-Za-z]+/)
+        .flatMap((segment) => segment.split(/(?=[A-Z])/))
+        .map((word) => word.toLowerCase())
+      return words.some((word) => workflowWords.has(word)) || /pull[-_]?request/i.test(surface)
+    })
     assert.deepEqual(
       workflowOperations.map((operation) => operation.operationId),
       [],

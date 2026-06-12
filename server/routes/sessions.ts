@@ -57,6 +57,7 @@ import { runtimeDriver, runtimeDriverName, runtimeMetadata } from '../runtime/dr
 import { safeRuntimeError } from '../runtime/runtime-error'
 import { resolveRuntimeSecretEnv } from '../runtime/secret-env'
 import {
+  isRuntimePolicyDenied,
   isRuntimeTurnCancelled,
   RuntimeTurnCancelledError,
   runSessionTurn,
@@ -1581,6 +1582,9 @@ async function executeCloudSessionTurn(
   auditAction: 'session.initial_prompt' | 'session.command',
 ): Promise<CloudTurnOutcome> {
   let approvalGateRef: ReturnType<typeof createToolApprovalGate> | null = null
+  // The agent loop may wrap the denial thrown inside tool execution, so the
+  // approval callback records the denial for the catch below.
+  let policyDeniedToolCall = false
   try {
     const agentSnapshot = parseAgentSnapshot(session.agentSnapshot)
     if (!agentSnapshot) {
@@ -1675,6 +1679,7 @@ async function executeCloudSessionTurn(
             metadata: { operation: blocked.operation.operation, ...operationFields, decision: blocked.decision },
           })
           await ensureActive()
+          policyDeniedToolCall = true
           return { allowed: false, reason: blocked.decision.message }
         }
         const approvalDecision = await approvalGate.gate({ toolCallId, toolName, input })
@@ -1731,6 +1736,16 @@ async function executeCloudSessionTurn(
       return { ok: false, cancelled: true }
     }
     const safeError = safeRuntimeError(error)
+    if (policyDeniedToolCall || isRuntimePolicyDenied(error)) {
+      // A governance denial fails the turn but leaves the session usable.
+      await db
+        .update(sessions)
+        .set({ status: 'idle', statusReason: 'policy-denied', updatedAt: now() })
+        .where(
+          and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id), eq(sessions.status, 'running')),
+        )
+      return { ok: false, cancelled: false, error: safeError }
+    }
     await markInitialPromptFailed(db, auth, session, safeError.message)
     return { ok: false, cancelled: false, error: safeError }
   }

@@ -643,6 +643,9 @@ export const governancePolicies = sqliteTable(
       .notNull()
       .references(() => projects.id),
     scope: text('scope').notNull().default('project'),
+    // Team-scope policy rows bind to an OIDC-asserted team id; null for
+    // organization- and project-scope rows.
+    teamId: text('team_id'),
     providerRules: text('provider_rules').notNull().default('[]'),
     modelRules: text('model_rules').notNull().default('[]'),
     toolPolicy: text('tool_policy').notNull().default('{}'),
@@ -653,7 +656,10 @@ export const governancePolicies = sqliteTable(
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
   },
-  (table) => [index('idx_governance_policies_project_scope').on(table.projectId, table.scope, table.updatedAt)],
+  (table) => [
+    index('idx_governance_policies_project_scope').on(table.projectId, table.scope, table.updatedAt),
+    index('idx_governance_policies_org_scope').on(table.organizationId, table.scope, table.teamId, table.updatedAt),
+  ],
 )
 
 export const budgets = sqliteTable(

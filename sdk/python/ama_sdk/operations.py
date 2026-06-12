@@ -2,6 +2,15 @@
 
 OPERATIONS = [
   {
+    "method": "POST",
+    "path": "/api/governance/config",
+    "operationId": "applyGovernanceConfig",
+    "summary": "Apply declarative governance config atomically",
+    "tags": [
+      "Governance"
+    ]
+  },
+  {
     "method": "DELETE",
     "path": "/api/agents/{agentId}",
     "operationId": "archiveAgent",
@@ -551,6 +560,15 @@ OPERATIONS = [
     ]
   },
   {
+    "method": "POST",
+    "path": "/api/governance/config/preview",
+    "operationId": "previewGovernanceConfig",
+    "summary": "Preview declarative governance config impact",
+    "tags": [
+      "Governance"
+    ]
+  },
+  {
     "method": "GET",
     "path": "/api/agents/{agentId}",
     "operationId": "readAgent",
@@ -827,6 +845,15 @@ OPERATIONS = [
     "summary": "Upsert provider model metadata",
     "tags": [
       "Providers"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/governance/config/validate",
+    "operationId": "validateGovernanceConfig",
+    "summary": "Validate declarative governance config",
+    "tags": [
+      "Governance"
     ]
   }
 ]
