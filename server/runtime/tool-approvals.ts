@@ -1,0 +1,163 @@
+import { and, eq } from 'drizzle-orm'
+import type { drizzle } from 'drizzle-orm/d1'
+import { recordAudit } from '../audit'
+import type { AuthContext } from '../auth/session'
+import { sessions } from '../db/schema'
+import { toolPolicyRequiresApproval } from '../policy'
+import { redactSensitiveValue } from '../redaction'
+import type { RuntimeToolPolicyDecision, RuntimeToolPolicyInput } from './session-runtime'
+
+type Db = ReturnType<typeof drizzle>
+
+// ── Session tool approvals ───────────────────────────────────────────────────
+// A sensitive tool call pauses the run: the pending approval lives on the
+// session metadata, the session sits idle with a requires-action reason, and
+// recorded decision grants drive the continuation turn. Both cloud turn
+// drivers (the sessions command path and the runtime endpoint path) share
+// this gate so approval semantics cannot drift between surfaces.
+
+export interface PendingSessionApproval {
+  id: string
+  toolCallId: string
+  toolName: string
+  input: Record<string, unknown>
+  requestedAt: string
+  relatedEventIds: string[]
+}
+
+export interface SessionApprovalGrants {
+  approved?: Record<string, boolean>
+  denied?: Record<string, string>
+  results?: Record<string, Record<string, unknown>>
+}
+
+export function sessionApprovalState(metadata: Record<string, unknown>) {
+  const pending = metadata.pendingApproval as PendingSessionApproval | undefined
+  const grants = (metadata.approvalGrants as SessionApprovalGrants | undefined) ?? {}
+  return { pending: pending ?? null, grants }
+}
+
+export async function writeSessionApprovalState(
+  db: Db,
+  auth: AuthContext,
+  sessionId: string,
+  update: (metadata: Record<string, unknown>) => Record<string, unknown>,
+) {
+  const row = await db
+    .select({ metadata: sessions.metadata })
+    .from(sessions)
+    .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, auth.project.id)))
+    .get()
+  const metadata = row?.metadata ? (JSON.parse(row.metadata) as Record<string, unknown>) : {}
+  const next = update(metadata)
+  await db
+    .update(sessions)
+    .set({ metadata: JSON.stringify(next), updatedAt: new Date().toISOString() })
+    .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, auth.project.id)))
+  return next
+}
+
+export interface ToolApprovalGate {
+  // Approval-aware policy decision; null means "no approval opinion, proceed".
+  gate: (input: RuntimeToolPolicyInput) => Promise<RuntimeToolPolicyDecision | null>
+  // Caller-provided custom tool result recorded by an approval decision.
+  resolveToolResult: (input: RuntimeToolPolicyInput) => Promise<Record<string, unknown> | null>
+  // Drops the synthetic failure events of a freshly-paused tool call so the
+  // continuation re-drives it from clean history.
+  shouldSuppressEvent: (event: Record<string, unknown>) => boolean
+  // True once this turn paused for an approval.
+  requiresAction: () => boolean
+}
+
+export function createToolApprovalGate(values: {
+  db: Db
+  auth: AuthContext
+  sessionId: string
+  sessionMetadata: Record<string, unknown>
+  appendEvent: (event: Record<string, unknown>, metadata: Record<string, unknown>) => Promise<string>
+}): ToolApprovalGate {
+  const { db, auth, sessionId } = values
+  const { grants } = sessionApprovalState(values.sessionMetadata)
+  let pendingToolCallId: string | null = null
+
+  return {
+    requiresAction: () => pendingToolCallId !== null,
+
+    async resolveToolResult({ toolCallId }) {
+      return grants.results?.[toolCallId] ?? null
+    },
+
+    shouldSuppressEvent(event) {
+      if (!pendingToolCallId) {
+        return false
+      }
+      const toolCall = event.toolCall as Record<string, unknown> | undefined
+      const message = event.message as Record<string, unknown> | undefined
+      const eventToolCallId =
+        typeof event.toolCallId === 'string'
+          ? event.toolCallId
+          : typeof toolCall?.id === 'string'
+            ? toolCall.id
+            : typeof message?.toolCallId === 'string'
+              ? message.toolCallId
+              : null
+      return eventToolCallId === pendingToolCallId
+    },
+
+    async gate({ toolCallId, toolName, input }) {
+      const denialReason = grants.denied?.[toolCallId]
+      if (denialReason !== undefined) {
+        return { allowed: false, reason: denialReason || 'Tool call denied by the user' }
+      }
+      if (grants.approved?.[toolCallId] || grants.results?.[toolCallId]) {
+        return { allowed: true }
+      }
+      if (!(await toolPolicyRequiresApproval(db, auth, toolName))) {
+        return null
+      }
+      const approvalId = `approval_${crypto.randomUUID().replaceAll('-', '')}`
+      const requestEventId = await values.appendEvent(
+        {
+          type: 'policy.decision',
+          allowed: false,
+          category: 'approval',
+          ruleId: 'toolPolicy.requireApprovalTools',
+          resourceType: 'tool',
+          resourceId: toolName,
+          operation: 'tool_approval_request',
+          decision: { approvalId, toolCallId, status: 'pending' },
+        },
+        { source: 'policy' },
+      )
+      await recordAudit(db, {
+        auth,
+        action: 'session.tool_approval_requested',
+        resourceType: 'tool',
+        resourceId: toolName,
+        outcome: 'denied',
+        sessionId,
+        policyCategory: 'approval',
+        metadata: { approvalId, toolCallId },
+      })
+      await writeSessionApprovalState(db, auth, sessionId, (metadata) => ({
+        ...metadata,
+        pendingApproval: {
+          id: approvalId,
+          toolCallId,
+          toolName,
+          input: redactSensitiveValue(input) as Record<string, unknown>,
+          requestedAt: new Date().toISOString(),
+          relatedEventIds: [requestEventId],
+        } satisfies PendingSessionApproval,
+      }))
+      pendingToolCallId = toolCallId
+      // Park the session: idle with a requires-action reason ends the turn
+      // cooperatively on the next liveness check.
+      await db
+        .update(sessions)
+        .set({ status: 'idle', statusReason: 'requires-action', updatedAt: new Date().toISOString() })
+        .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, auth.project.id)))
+      return { allowed: false, reason: 'Tool call requires user approval' }
+    },
+  }
+}

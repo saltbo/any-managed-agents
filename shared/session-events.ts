@@ -170,7 +170,7 @@ function canonicalPayload(
 
   if (type === 'policy.decision') {
     return {
-      allowed: false,
+      allowed: event.allowed === true,
       category: event.category,
       ruleId: event.ruleId,
       resourceType: event.resourceType,

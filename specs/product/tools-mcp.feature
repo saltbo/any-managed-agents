@@ -15,7 +15,7 @@ Feature: Tools and MCP
     When the user browses available MCP connectors
     Then connectors can be searched and filtered by capability, trust level, and policy status
 
-  @planned
+  @implemented
   Scenario: Require approval for sensitive tools
     Given a tool requires human approval
     When the agent requests that tool

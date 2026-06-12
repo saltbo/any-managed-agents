@@ -226,6 +226,15 @@ export const operations = [
         ]
     },
     {
+        "method": "POST",
+        "path": "/api/sessions/{sessionId}/approvals/{approvalId}",
+        "operationId": "decideSessionApproval",
+        "summary": "Approve or deny a pending tool call",
+        "tags": [
+            "Sessions"
+        ]
+    },
+    {
         "method": "DELETE",
         "path": "/api/providers/{providerId}",
         "operationId": "deleteProvider",
@@ -466,6 +475,15 @@ export const operations = [
         "summary": "List scheduled trigger runs",
         "tags": [
             "Scheduled agent triggers"
+        ]
+    },
+    {
+        "method": "GET",
+        "path": "/api/sessions/{sessionId}/approvals",
+        "operationId": "listSessionApprovals",
+        "summary": "List pending tool approvals for a session",
+        "tags": [
+            "Sessions"
         ]
     },
     {

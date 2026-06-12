@@ -268,7 +268,7 @@ async function validateConfiguredProviderModel(
     .from(providerConfigs)
     .where(and(eq(providerConfigs.id, provider), eq(providerConfigs.projectId, projectId)))
     .get()
-  if (!configured || configured.status !== 'active') {
+  if (configured?.status !== 'active') {
     return { provider: 'Provider is disabled or unavailable for this project.' }
   }
   const knownModels = await db

@@ -59,10 +59,14 @@ describe('route schema and handler alignment', () => {
 
     expect([...new Set(bodyFields(routeSources.sessions).filter((field) => field !== 'message'))]).toEqual([
       'agentId',
+      // Approval decisions are session write operations too.
+      'decision',
       'environmentId',
       'initialPrompt',
       'metadata',
+      'reason',
       'resourceRefs',
+      'result',
       'runtime',
       'runtimeConfig',
       'runtimeEnv',

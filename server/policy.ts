@@ -213,6 +213,14 @@ function policyBlocksTool(toolPolicy: Record<string, unknown>, toolName: string)
   return null
 }
 
+// Sensitive sandbox tools can demand a human decision before they execute.
+// Symmetric with mcpPolicy.requireApprovalTools, but scoped to the governance
+// toolPolicy that gates the cloud sandbox toolset.
+export async function toolPolicyRequiresApproval(db: PolicyDb, auth: AuthContext, toolName: string) {
+  const effective = await resolveEffectivePolicy(db, auth)
+  return includesWildcard(stringArray(effective.toolPolicy.requireApprovalTools), toolName)
+}
+
 export async function resolveEffectivePolicy(db: PolicyDb, auth: AuthContext) {
   const policy = await db
     .select()
@@ -444,7 +452,7 @@ export async function evaluateMcpToolPolicy(
     .from(mcpConnections)
     .where(and(eq(mcpConnections.projectId, auth.project.id), eq(mcpConnections.connectorId, values.connectorId)))
     .get()
-  if (!connection || connection.status !== 'connected') {
+  if (connection?.status !== 'connected') {
     return {
       allowed: false,
       category: 'mcp',
@@ -472,7 +480,7 @@ export async function evaluateMcpToolPolicy(
       ),
     )
     .get()
-  if (!tool || tool.status !== 'available') {
+  if (tool?.status !== 'available') {
     return {
       allowed: false,
       category: 'tool',
@@ -508,8 +516,7 @@ export async function evaluateMcpToolPolicy(
       )
       .get()
     if (
-      !version ||
-      version.status !== 'active' ||
+      version?.status !== 'active' ||
       credential?.status === 'revoked' ||
       (credential && version.credentialId !== credential.id)
     ) {

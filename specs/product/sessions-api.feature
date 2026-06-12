@@ -74,7 +74,7 @@ Feature: Sessions API
     And event list endpoints support pagination, order, and event type filters
     And transcript views can omit debug-only events without losing the raw debug history
 
-  @planned
+  @implemented
   Scenario: Require user action for approvals and custom tools
     Given a running session reaches a tool approval or custom tool call
     When the runtime requires user action

@@ -354,14 +354,6 @@ function e2eFederatedRunnerClaims(value: string): UserInfoClaims {
   }
 }
 
-async function runOidc<T>(operation: () => Promise<T>) {
-  try {
-    return await operation()
-  } catch (err) {
-    throw toOidcError(err)
-  }
-}
-
 function toOidcError(err: unknown) {
   if (err instanceof OidcError) {
     return err

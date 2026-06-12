@@ -298,7 +298,7 @@ async function assertActiveAgentAndEnvironment(db: Db, projectId: string, agentI
     .from(environments)
     .where(and(eq(environments.id, environmentId), eq(environments.projectId, projectId)))
     .get()
-  if (!environment || environment.status !== 'active' || !environment.currentVersionId) {
+  if (environment?.status !== 'active' || !environment.currentVersionId) {
     return { status: 409 as const, message: 'Selected environment is archived or unavailable' }
   }
   return null

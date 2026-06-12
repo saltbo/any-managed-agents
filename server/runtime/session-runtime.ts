@@ -95,6 +95,9 @@ export type SessionTurnInput = {
   ensureActive?: () => Promise<void>
   onEvent: (event: Record<string, unknown>, metadata?: Record<string, unknown>) => Promise<void>
   approveToolCall?: (input: RuntimeToolPolicyInput) => Promise<RuntimeToolPolicyDecision>
+  // Supplies a caller-provided tool result (e.g. an approved custom tool
+  // outcome) instead of executing the tool in the sandbox.
+  resolveToolResult?: (input: RuntimeToolPolicyInput) => Promise<Record<string, unknown> | null>
 }
 
 export class RuntimeTurnCancelledError extends Error {
@@ -720,6 +723,7 @@ function runtimeTools(
     agentSnapshot: Record<string, unknown>
     ensureActive?: () => Promise<void>
     approveToolCall?: SessionTurnInput['approveToolCall']
+    resolveToolResult?: SessionTurnInput['resolveToolResult']
   },
 ) {
   const executor = toolExecutor(env)
@@ -743,6 +747,13 @@ function runtimeTools(
           throw new Error(decision.reason ?? `Tool call blocked by AMA policy: ${name}`)
         }
         await ensureTurnActive(signal ?? new AbortController().signal, values.ensureActive)
+        const providedResult = await values.resolveToolResult?.({ toolCallId, toolName: name, input })
+        if (providedResult) {
+          return {
+            content: [{ type: 'text', text: stringifyToolOutput(providedResult) }],
+            details: providedResult,
+          }
+        }
         const result = await executor.execute(
           {
             sessionId: values.sessionId,
@@ -881,6 +892,7 @@ export async function runSessionTurn(env: Env, input: SessionTurnInput): Promise
         sandboxId: input.sandboxId,
         agentSnapshot: input.agentSnapshot,
         approveToolCall: input.approveToolCall,
+        resolveToolResult: input.resolveToolResult,
         ...(input.ensureActive ? { ensureActive: input.ensureActive } : {}),
       }),
       messages: input.messages ?? [],

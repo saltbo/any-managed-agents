@@ -59,6 +59,13 @@ import {
   runtimeMessagesFromEvents,
   stopSessionRuntime as stopCloudSessionRuntime,
 } from '../runtime/session-runtime'
+import {
+  createToolApprovalGate,
+  type SessionApprovalGrants,
+  sessionApprovalState,
+  writeSessionApprovalState,
+} from '../runtime/tool-approvals'
+import { toolExecutor } from '../runtime/tool-executor'
 import { type CloudTurnMessage, cloudTurnsRunInline, enqueueCloudTurn } from '../runtime/turn-queue'
 import {
   type EnvironmentHostingMode,
@@ -1520,7 +1527,7 @@ async function startSessionRuntimeForRow(
 }
 
 type CloudTurnOutcome =
-  | { ok: true }
+  | { ok: true; requiresAction?: boolean }
   | { ok: false; cancelled: true }
   | { ok: false; cancelled: false; error: ReturnType<typeof safeRuntimeError> }
 
@@ -1542,6 +1549,7 @@ async function executeCloudSessionTurn(
   work: { prompt?: string; continuation?: boolean },
   auditAction: 'session.initial_prompt' | 'session.command',
 ): Promise<CloudTurnOutcome> {
+  let approvalGateRef: ReturnType<typeof createToolApprovalGate> | null = null
   try {
     const agentSnapshot = parseAgentSnapshot(session.agentSnapshot)
     if (!agentSnapshot) {
@@ -1552,6 +1560,15 @@ async function executeCloudSessionTurn(
     const ensureActive = async () => {
       await assertRuntimeSessionRunning(db, auth, session.id)
     }
+    const sessionMetadata = parseJson<Record<string, unknown>>(session.metadata) ?? {}
+    const approvalGate = createToolApprovalGate({
+      db,
+      auth,
+      sessionId: session.id,
+      sessionMetadata,
+      appendEvent: (event, metadata) => appendRuntimeEvent(db, { auth, sessionId: session.id, event, metadata }),
+    })
+    approvalGateRef = approvalGate
     const startedAt = Date.now()
     const result = await runSessionTurn(env, {
       sessionId: session.id,
@@ -1566,6 +1583,12 @@ async function executeCloudSessionTurn(
       ...(cloudTurnsRunInline(env) ? {} : { shouldPause: () => Date.now() - startedAt > CLOUD_TURN_SOFT_BUDGET_MS }),
       ensureActive,
       onEvent: async (event, metadata) => {
+        // A tool call paused for approval never executed: drop its synthetic
+        // failure events so the continuation re-drives the same tool call
+        // from clean history.
+        if (approvalGate.shouldSuppressEvent(event)) {
+          return
+        }
         await ensureActive()
         await appendRuntimeEvent(db, {
           auth,
@@ -1574,7 +1597,8 @@ async function executeCloudSessionTurn(
           ...(metadata ? { metadata } : {}),
         })
       },
-      approveToolCall: async ({ toolName, input }) => {
+      resolveToolResult: (input) => approvalGate.resolveToolResult(input),
+      approveToolCall: async ({ toolCallId, toolName, input }) => {
         await ensureActive()
         if (toolName === 'sandbox.exec') {
           const command = typeof input.command === 'string' ? input.command : null
@@ -1616,7 +1640,13 @@ async function executeCloudSessionTurn(
             })
           }
           await ensureActive()
-          return { allowed: decision.allowed, reason: decision.message }
+          if (!decision.allowed) {
+            return { allowed: false, reason: decision.message }
+          }
+        }
+        const approvalDecision = await approvalGate.gate({ toolCallId, toolName, input })
+        if (approvalDecision) {
+          return approvalDecision
         }
         return { allowed: true }
       },
@@ -1662,6 +1692,9 @@ async function executeCloudSessionTurn(
     return { ok: true }
   } catch (error) {
     if (isRuntimeTurnCancelled(error)) {
+      if (approvalGateRef?.requiresAction()) {
+        return { ok: true, requiresAction: true }
+      }
       return { ok: false, cancelled: true }
     }
     const safeError = safeRuntimeError(error)
@@ -2473,6 +2506,78 @@ const archiveSessionRoute = createRoute({
   },
 })
 
+const SessionApprovalSchema = z
+  .object({
+    id: z.string().openapi({ example: 'approval_abc123' }),
+    toolCallId: z.string().openapi({ example: 'call_git_status' }),
+    toolName: z.string().openapi({ example: 'sandbox.exec' }),
+    input: JsonObjectSchema,
+    requestedAt: z.string().openapi({ example: '2026-06-12T12:00:00.000Z' }),
+    relatedEventIds: z.array(z.string()).openapi({ example: ['event_abc123'] }),
+  })
+  .openapi('SessionApproval')
+
+const SessionApprovalListResponseSchema = z
+  .object({ data: z.array(SessionApprovalSchema) })
+  .openapi('SessionApprovalListResponse')
+
+const SessionApprovalDecisionSchema = z
+  .object({
+    decision: z.enum(['approve', 'deny']).openapi({ example: 'approve' }),
+    reason: z.string().max(500).optional().openapi({ example: 'Looks safe' }),
+    result: JsonObjectSchema.optional().openapi({
+      description: 'Caller-provided custom tool result recorded instead of executing the tool',
+    }),
+  })
+  .openapi('SessionApprovalDecisionRequest')
+
+const listSessionApprovalsRoute = createRoute({
+  method: 'get',
+  path: '/{sessionId}/approvals',
+  operationId: 'listSessionApprovals',
+  tags: ['Sessions'],
+  summary: 'List pending tool approvals for a session',
+  ...AuthenticatedOperation,
+  request: { params: ParamsSchema },
+  responses: {
+    200: {
+      description: 'Pending approvals',
+      content: { 'application/json': { schema: SessionApprovalListResponseSchema } },
+    },
+    401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    404: { description: 'Session not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
+  },
+})
+
+const decideSessionApprovalRoute = createRoute({
+  method: 'post',
+  path: '/{sessionId}/approvals/{approvalId}',
+  operationId: 'decideSessionApproval',
+  tags: ['Sessions'],
+  summary: 'Approve or deny a pending tool call',
+  description:
+    'Records the human decision for a paused tool call. Approval resumes the runtime and executes the tool (or records the provided custom result); denial resumes the runtime with the denial.',
+  ...AuthenticatedOperation,
+  request: {
+    params: ParamsSchema.extend({
+      approvalId: z
+        .string()
+        .min(1)
+        .openapi({ param: { name: 'approvalId', in: 'path' }, example: 'approval_abc123' }),
+    }),
+    body: { required: true, content: { 'application/json': { schema: SessionApprovalDecisionSchema } } },
+  },
+  responses: {
+    200: { description: 'Decision recorded', content: { 'application/json': { schema: SessionSchema } } },
+    401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    404: {
+      description: 'Session or pending approval not found',
+      content: { 'application/json': { schema: ErrorResponseSchema } },
+    },
+    409: { description: 'Approval already decided', content: { 'application/json': { schema: ErrorResponseSchema } } },
+  },
+})
+
 const reconnectSessionRoute = createRoute({
   method: 'get',
   path: '/{sessionId}/reconnect',
@@ -2803,6 +2908,173 @@ const routes = app
       return errorResponse(c, 404, 'not_found', 'Session not found')
     }
     return await archiveSession(c, db, auth, session)
+  })
+  .openapi(listSessionApprovalsRoute, async (c) => {
+    const { sessionId } = c.req.valid('param')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+    const session = await findSession(db, auth, sessionId)
+    if (!session) {
+      return errorResponse(c, 404, 'not_found', 'Session not found')
+    }
+    const { pending } = sessionApprovalState(parseJson<Record<string, unknown>>(session.metadata) ?? {})
+    return c.json({ data: pending ? [pending] : [] }, 200)
+  })
+  .openapi(decideSessionApprovalRoute, async (c) => {
+    const { sessionId, approvalId } = c.req.valid('param')
+    const body = c.req.valid('json')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+    const session = await findSession(db, auth, sessionId)
+    if (!session) {
+      return errorResponse(c, 404, 'not_found', 'Session not found')
+    }
+    const { pending } = sessionApprovalState(parseJson<Record<string, unknown>>(session.metadata) ?? {})
+    if (!pending) {
+      return errorResponse(c, 404, 'not_found', 'No pending approval for the session')
+    }
+    if (pending.id !== approvalId) {
+      return errorResponse(c, 409, 'conflict', 'Approval is no longer pending')
+    }
+
+    const approved = body.decision === 'approve'
+    const decisionEventId = await appendRuntimeEvent(db, {
+      auth,
+      sessionId: session.id,
+      event: {
+        type: 'policy.decision',
+        allowed: approved,
+        category: 'approval',
+        ruleId: 'toolPolicy.requireApprovalTools',
+        resourceType: 'tool',
+        resourceId: pending.toolName,
+        operation: 'tool_approval_decision',
+        decision: {
+          approvalId: pending.id,
+          toolCallId: pending.toolCallId,
+          status: approved ? 'approved' : 'denied',
+          ...(body.reason ? { reason: body.reason } : {}),
+          ...(body.result ? { customResult: true } : {}),
+        },
+      },
+      metadata: { source: 'policy', relatedEventIds: pending.relatedEventIds },
+    })
+    await recordAudit(db, {
+      auth,
+      action: approved ? 'session.tool_approval_approved' : 'session.tool_approval_denied',
+      resourceType: 'tool',
+      resourceId: pending.toolName,
+      outcome: approved ? 'success' : 'denied',
+      sessionId: session.id,
+      policyCategory: 'approval',
+      metadata: { approvalId: pending.id, toolCallId: pending.toolCallId, decisionEventId },
+    })
+    await writeSessionApprovalState(db, auth, session.id, (metadata) => {
+      const grants = ((metadata.approvalGrants as SessionApprovalGrants | undefined) ?? {}) as SessionApprovalGrants
+      const { pendingApproval: _pendingApproval, ...rest } = metadata
+      return {
+        ...rest,
+        approvalGrants: {
+          ...grants,
+          ...(approved && !body.result ? { approved: { ...grants.approved, [pending.toolCallId]: true } } : {}),
+          ...(approved && body.result ? { results: { ...grants.results, [pending.toolCallId]: body.result } } : {}),
+          ...(!approved
+            ? { denied: { ...grants.denied, [pending.toolCallId]: body.reason ?? 'Tool call denied by the user' } }
+            : {}),
+        },
+      }
+    })
+    // Complete the paused tool call so the runtime history ends on a tool
+    // result the loop can continue from: execute the approved tool (or adopt
+    // the caller-provided result), and record a denial result otherwise.
+    let resultOutput: Record<string, unknown>
+    let resultIsError = false
+    if (approved && body.result) {
+      resultOutput = body.result
+    } else if (approved) {
+      const executed = await toolExecutor(c.env).execute({
+        sessionId: session.id,
+        sandboxId: session.sandboxId ?? '',
+        toolCallId: pending.toolCallId,
+        toolName: pending.toolName,
+        input: pending.input,
+        cwd: '/workspace',
+      })
+      if (executed.error) {
+        resultOutput = executed.error as Record<string, unknown>
+        resultIsError = true
+      } else {
+        resultOutput = executed.output
+      }
+    } else {
+      resultOutput = { denied: true, reason: body.reason ?? 'Tool call denied by the user' }
+      resultIsError = true
+    }
+    const resultText =
+      typeof resultOutput.stdout === 'string' || typeof resultOutput.stderr === 'string'
+        ? [resultOutput.stdout, resultOutput.stderr]
+            .filter((value): value is string => typeof value === 'string' && value.length > 0)
+            .join('\n')
+        : JSON.stringify(resultOutput)
+    await appendRuntimeEvent(db, {
+      auth,
+      sessionId: session.id,
+      event: {
+        type: 'tool_execution_end',
+        toolCallId: pending.toolCallId,
+        toolName: pending.toolName,
+        result: { content: [{ type: 'text', text: resultText }], details: resultOutput },
+        isError: resultIsError,
+        approval: { id: pending.id, decision: body.decision, ...(body.result ? { custom: true } : {}) },
+      },
+      metadata: { source: 'approval' },
+    })
+    await appendRuntimeEvent(db, {
+      auth,
+      sessionId: session.id,
+      event: {
+        type: 'message_end',
+        message: {
+          role: 'toolResult',
+          toolCallId: pending.toolCallId,
+          toolName: pending.toolName,
+          content: [{ type: 'text', text: resultText }],
+          details: resultOutput,
+          isError: resultIsError,
+          timestamp: Date.now(),
+        },
+      },
+      metadata: { source: 'approval' },
+    })
+    // Resume the run: the continuation picks the history up from the
+    // recorded tool result.
+    await db
+      .update(sessions)
+      .set({ status: 'running', statusReason: null, updatedAt: now() })
+      .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
+    const resumed = await findSession(db, auth, session.id)
+    if (!resumed) {
+      throw new Error('Session row is required after approval decision')
+    }
+    if (cloudTurnsRunInline(c.env)) {
+      await executeCloudSessionTurn(c.env, db, auth, resumed, { continuation: true }, 'session.command')
+    } else {
+      await enqueueCloudTurn(c.env, {
+        type: 'session.step',
+        sessionId: session.id,
+        organizationId: auth.organization.id,
+        projectId: auth.project.id,
+        auditAction: 'session.command',
+      })
+    }
+    const final = await findSession(db, auth, session.id)
+    return c.json(serializeSession(final ?? resumed), 200)
   })
   .openapi(reconnectSessionRoute, async (c) => {
     const { sessionId } = c.req.valid('param')

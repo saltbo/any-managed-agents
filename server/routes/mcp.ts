@@ -437,7 +437,7 @@ async function resolveCredential(db: Db, auth: AuthContext, credentialId?: strin
         )
         .get()
     : null
-  if (credentialId && (!credential || credential.status !== 'active')) {
+  if (credentialId && credential?.status !== 'active') {
     throw new Error('Credential is revoked or unavailable.')
   }
   const effectiveVersionId = versionId ?? credential?.activeVersionId
@@ -455,7 +455,7 @@ async function resolveCredential(db: Db, auth: AuthContext, credentialId?: strin
       ),
     )
     .get()
-  if (!version || version.status !== 'active') {
+  if (version?.status !== 'active') {
     throw new Error('Credential version is revoked or unavailable.')
   }
   if (credential && version.credentialId !== credential.id) {

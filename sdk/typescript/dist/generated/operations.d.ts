@@ -149,6 +149,12 @@ export declare const operations: readonly [{
     readonly summary: "Create vault credential metadata";
     readonly tags: readonly ["Vaults"];
 }, {
+    readonly method: "POST";
+    readonly path: "/api/sessions/{sessionId}/approvals/{approvalId}";
+    readonly operationId: "decideSessionApproval";
+    readonly summary: "Approve or deny a pending tool call";
+    readonly tags: readonly ["Sessions"];
+}, {
     readonly method: "DELETE";
     readonly path: "/api/providers/{providerId}";
     readonly operationId: "deleteProvider";
@@ -310,6 +316,12 @@ export declare const operations: readonly [{
     readonly operationId: "listScheduledTriggerRuns";
     readonly summary: "List scheduled trigger runs";
     readonly tags: readonly ["Scheduled agent triggers"];
+}, {
+    readonly method: "GET";
+    readonly path: "/api/sessions/{sessionId}/approvals";
+    readonly operationId: "listSessionApprovals";
+    readonly summary: "List pending tool approvals for a session";
+    readonly tags: readonly ["Sessions"];
 }, {
     readonly method: "GET";
     readonly path: "/api/sessions/{sessionId}/events";

@@ -36,6 +36,7 @@ import {
   runSessionTurn,
   runtimeMessagesFromEvents,
 } from './runtime/session-runtime'
+import { createToolApprovalGate } from './runtime/tool-approvals'
 
 function newId(prefix: string) {
   return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
@@ -346,6 +347,13 @@ async function recordRuntimeMessageOutcome(
   const ensureActive = async () => {
     await assertRuntimeSessionRunning(db, auth, session.id)
   }
+  const approvalGate = createToolApprovalGate({
+    db,
+    auth,
+    sessionId: session.id,
+    sessionMetadata: session.metadata ? (JSON.parse(session.metadata) as Record<string, unknown>) : {},
+    appendEvent: (event, metadata) => appendRuntimeEvent(db, { auth, sessionId: session.id, event, metadata }),
+  })
   const result = await runSessionTurn(env, {
     sessionId: session.id,
     sandboxId: session.sandboxId ?? '',
@@ -356,6 +364,9 @@ async function recordRuntimeMessageOutcome(
     messages,
     ensureActive,
     onEvent: async (event, metadata) => {
+      if (approvalGate.shouldSuppressEvent(event)) {
+        return
+      }
       await ensureActive()
       await appendRuntimeEvent(db, {
         auth,
@@ -364,7 +375,8 @@ async function recordRuntimeMessageOutcome(
         ...(metadata ? { metadata } : {}),
       })
     },
-    approveToolCall: async ({ toolName, input }) => {
+    resolveToolResult: (input) => approvalGate.resolveToolResult(input),
+    approveToolCall: async ({ toolCallId, toolName, input }) => {
       await ensureActive()
       if (toolName === 'sandbox.exec') {
         const command = typeof input.command === 'string' ? input.command : null
@@ -389,7 +401,13 @@ async function recordRuntimeMessageOutcome(
           })
         }
         await ensureActive()
-        return { allowed: decision.allowed, reason: decision.message }
+        if (!decision.allowed) {
+          return { allowed: false, reason: decision.message }
+        }
+      }
+      const approvalDecision = await approvalGate.gate({ toolCallId, toolName, input })
+      if (approvalDecision) {
+        return approvalDecision
       }
       return { allowed: true }
     },

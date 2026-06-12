@@ -5988,6 +5988,92 @@
         ],
         "additionalProperties": false
       },
+      "SessionApprovalListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SessionApproval"
+            }
+          }
+        },
+        "required": [
+          "data"
+        ]
+      },
+      "SessionApproval": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "approval_abc123"
+          },
+          "toolCallId": {
+            "type": "string",
+            "example": "call_git_status"
+          },
+          "toolName": {
+            "type": "string",
+            "example": "sandbox.exec"
+          },
+          "input": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          },
+          "requestedAt": {
+            "type": "string",
+            "example": "2026-06-12T12:00:00.000Z"
+          },
+          "relatedEventIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "event_abc123"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "toolCallId",
+          "toolName",
+          "input",
+          "requestedAt",
+          "relatedEventIds"
+        ]
+      },
+      "SessionApprovalDecisionRequest": {
+        "type": "object",
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "deny"
+            ],
+            "example": "approve"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "example": "Looks safe"
+          },
+          "result": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "description": "Caller-provided custom tool result recorded instead of executing the tool"
+          }
+        },
+        "required": [
+          "decision"
+        ]
+      },
       "SessionEventListResponse": {
         "type": "object",
         "properties": {
@@ -12374,6 +12460,151 @@
           },
           "500": {
             "description": "Runtime error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{sessionId}/approvals": {
+      "get": {
+        "operationId": "listSessionApprovals",
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "List pending tool approvals for a session",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "session_abc123"
+            },
+            "required": true,
+            "name": "sessionId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pending approvals",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionApprovalListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sessions/{sessionId}/approvals/{approvalId}": {
+      "post": {
+        "operationId": "decideSessionApproval",
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Approve or deny a pending tool call",
+        "description": "Records the human decision for a paused tool call. Approval resumes the runtime and executes the tool (or records the provided custom result); denial resumes the runtime with the denial.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "session_abc123"
+            },
+            "required": true,
+            "name": "sessionId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "example": "approval_abc123"
+            },
+            "required": true,
+            "name": "approvalId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionApprovalDecisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Decision recorded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session or pending approval not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Approval already decided",
             "content": {
               "application/json": {
                 "schema": {
