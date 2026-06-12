@@ -5,18 +5,18 @@ Feature: Usage and audit
   Background:
     Given an organization has active sessions
 
-  @planned
+  @implemented
   Scenario: Summarize usage
     When the operator views usage
     Then usage is grouped by organization, project, provider, model, agent, and session
     And the summary includes time range filters
 
-  @planned
+  @implemented
   Scenario: Record audit events
     When a user changes agents, providers, vaults, governance, or sessions
     Then the platform records actor, action, resource, timestamp, and safe metadata
 
-  @planned
+  @implemented
   Scenario: Inspect policy denials
     When a request is denied by governance policy
     Then the audit log includes the policy rule and resource reference
