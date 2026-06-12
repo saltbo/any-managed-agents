@@ -70,19 +70,6 @@ function toolExecutionEvents(events: ListResponse<Json>) {
   return events.data.filter((event) => String(event.type).startsWith('tool_execution'))
 }
 
-// ─── tools-mcp feature background ───
-
-Given('a project has tool and MCP policies', async function (this: ApprovalsWorld) {
-  const e2e = await ensureSignedIn(this)
-  await apiJson<Json>(e2e.page.request, '/api/governance/policy', {
-    method: 'PUT',
-    data: {
-      toolPolicy: { requireApprovalTools: ['sandbox.exec'] },
-      mcpPolicy: { blockedConnectors: [] },
-    },
-  })
-})
-
 // ─── tools-mcp: Require approval for sensitive tools ───
 
 Given('a tool requires human approval', async function (this: ApprovalsWorld) {
