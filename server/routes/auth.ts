@@ -104,6 +104,10 @@ const createSessionRoute = createRoute({
       description: 'Invalid or expired OIDC token',
       content: { 'application/json': { schema: ErrorResponseSchema } },
     },
+    403: {
+      description: 'Request origin is not in the allowed origins list',
+      content: { 'application/json': { schema: ErrorResponseSchema } },
+    },
   },
 })
 
@@ -130,6 +134,13 @@ const getLoginOptionsRoute = createRoute({
 
 const routes = app
   .openapi(createSessionRoute, async (c) => {
+    // Reject cross-origin token submissions when an origin allowlist is configured.
+    const requestOrigin = c.req.header('origin')
+    const allowedOrigins = c.env.AMA_ALLOWED_ORIGINS?.split(',').map((o) => o.trim()) ?? []
+    if (requestOrigin && allowedOrigins.length > 0 && !allowedOrigins.includes(requestOrigin)) {
+      return errorResponse(c, 403, 'forbidden', 'Request origin is not allowed') as never
+    }
+
     const { accessToken } = c.req.valid('json')
 
     let claims: Awaited<ReturnType<typeof getBearerClaims>>

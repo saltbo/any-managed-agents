@@ -105,12 +105,11 @@ Then(
     assert.ok(this.authState.sessionOrganization?.id, 'Organization id must be present')
     assert.ok(this.authState.sessionProject?.id, 'Project id must be present')
 
-    // When AMA_SESSION_SECRET is configured the server sets an httpOnly cookie.
+    // AMA_SESSION_SECRET is required in the e2e config — the cookie must always be set.
     const setCookie = this.authState.sessionCookie
-    if (setCookie) {
-      assert.ok(setCookie.includes('ama_session='), 'Cookie must be named ama_session')
-      assert.ok(setCookie.toLowerCase().includes('httponly'), 'Cookie must be HttpOnly')
-    }
+    assert.ok(setCookie, 'Set-Cookie header must be present (AMA_SESSION_SECRET must be configured)')
+    assert.ok(setCookie.includes('ama_session='), 'Cookie must be named ama_session')
+    assert.ok(setCookie.toLowerCase().includes('httponly'), 'Cookie must be HttpOnly')
   },
 )
 

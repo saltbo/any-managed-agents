@@ -6708,6 +6708,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Request origin is not in the allowed origins list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }

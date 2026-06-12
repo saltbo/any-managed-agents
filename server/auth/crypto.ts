@@ -41,13 +41,11 @@ export async function hmacSha256(secret: string, value: string) {
 }
 
 export function constantTimeEqual(left: string, right: string) {
-  if (left.length !== right.length) {
-    return false
-  }
-
-  let diff = 0
-  for (let i = 0; i < left.length; i += 1) {
-    diff |= left.charCodeAt(i) ^ right.charCodeAt(i)
+  // XOR over the longer length to avoid leaking length information via short-circuit.
+  const maxLen = Math.max(left.length, right.length)
+  let diff = left.length ^ right.length
+  for (let i = 0; i < maxLen; i += 1) {
+    diff |= (left.charCodeAt(i) || 0) ^ (right.charCodeAt(i) || 0)
   }
   return diff === 0
 }

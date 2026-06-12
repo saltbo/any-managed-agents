@@ -143,6 +143,7 @@ AMA_E2E_TEST_AUTH = "true"
 AMA_RUNTIME_MODE = "test"
 AMA_LOCAL_SECRET_STORE = "test"
 AMA_APPROVED_EXTERNAL_VAULT_PREFIXES = "vault://ama/e2e/"
+AMA_SESSION_SECRET = "e2e-local-test-session-secret-not-for-production"
 
 [env.e2e.triggers]
 crons = []
