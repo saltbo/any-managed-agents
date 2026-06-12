@@ -72,6 +72,172 @@
           "timestamp"
         ]
       },
+      "AuthSession": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/AuthUser"
+          },
+          "organization": {
+            "$ref": "#/components/schemas/AuthOrganization"
+          },
+          "project": {
+            "$ref": "#/components/schemas/AuthProject"
+          }
+        },
+        "required": [
+          "user",
+          "organization",
+          "project"
+        ]
+      },
+      "AuthUser": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "user_abc123"
+          },
+          "email": {
+            "type": "string",
+            "example": "user@example.com"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true,
+            "example": "Ada Lovelace"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name"
+        ]
+      },
+      "AuthOrganization": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "org_abc123"
+          },
+          "name": {
+            "type": "string",
+            "example": "Example Org"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      },
+      "AuthProject": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "project_abc123"
+          },
+          "name": {
+            "type": "string",
+            "example": "Default project"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "example": "validation_error"
+              },
+              "message": {
+                "type": "string",
+                "example": "Invalid request"
+              },
+              "issues": {
+                "type": "array",
+                "items": {
+                  "nullable": true
+                }
+              },
+              "details": {
+                "type": "object",
+                "additionalProperties": {
+                  "nullable": true
+                }
+              }
+            },
+            "required": [
+              "type",
+              "message"
+            ]
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "CreateAuthSessionRequest": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "minLength": 1,
+            "example": "eyJhbGciOiJFZERTQSJ9..."
+          }
+        },
+        "required": [
+          "accessToken"
+        ]
+      },
+      "LoginOptionsResponse": {
+        "type": "object",
+        "properties": {
+          "methods": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LoginOption"
+            }
+          }
+        },
+        "required": [
+          "methods"
+        ]
+      },
+      "LoginOption": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "oidc"
+            ],
+            "example": "oidc"
+          },
+          "issuer": {
+            "type": "string",
+            "format": "uri",
+            "example": "https://id.example.com/api/auth"
+          },
+          "clientId": {
+            "type": "string",
+            "example": "client_abc123"
+          }
+        },
+        "required": [
+          "type",
+          "issuer",
+          "clientId"
+        ]
+      },
       "ProjectListResponse": {
         "type": "object",
         "properties": {
@@ -165,43 +331,6 @@
           "hasMore",
           "firstId",
           "lastId"
-        ]
-      },
-      "ErrorResponse": {
-        "type": "object",
-        "properties": {
-          "error": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "example": "validation_error"
-              },
-              "message": {
-                "type": "string",
-                "example": "Invalid request"
-              },
-              "issues": {
-                "type": "array",
-                "items": {
-                  "nullable": true
-                }
-              },
-              "details": {
-                "type": "object",
-                "additionalProperties": {
-                  "nullable": true
-                }
-              }
-            },
-            "required": [
-              "type",
-              "message"
-            ]
-          }
-        },
-        "required": [
-          "error"
         ]
       },
       "CreateProjectRequest": {
@@ -6535,6 +6664,91 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/session": {
+      "post": {
+        "operationId": "createAuthSession",
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Complete OIDC sign-in and create an httpOnly session cookie",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAuthSessionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Session created. Sets an httpOnly session cookie.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSession"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or expired OIDC token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Request origin is not in the allowed origins list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login-options": {
+      "get": {
+        "operationId": "getLoginOptions",
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Discover available login methods for an organization",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 240,
+              "example": "example-org"
+            },
+            "required": false,
+            "name": "organization",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Available login methods for the organization",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginOptionsResponse"
                 }
               }
             }

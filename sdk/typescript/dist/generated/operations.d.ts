@@ -54,6 +54,12 @@ export declare const operations: readonly [{
     readonly tags: readonly ["Agents"];
 }, {
     readonly method: "POST";
+    readonly path: "/api/auth/session";
+    readonly operationId: "createAuthSession";
+    readonly summary: "Complete OIDC sign-in and create an httpOnly session cookie";
+    readonly tags: readonly ["Auth"];
+}, {
+    readonly method: "POST";
     readonly path: "/api/governance/budgets";
     readonly operationId: "createBudget";
     readonly summary: "Create budget";
@@ -184,6 +190,12 @@ export declare const operations: readonly [{
     readonly operationId: "getHealth";
     readonly summary: "Get Worker health";
     readonly tags: readonly ["System"];
+}, {
+    readonly method: "GET";
+    readonly path: "/api/auth/login-options";
+    readonly operationId: "getLoginOptions";
+    readonly summary: "Discover available login methods for an organization";
+    readonly tags: readonly ["Auth"];
 }, {
     readonly method: "GET";
     readonly path: "/api/agents";

@@ -22,9 +22,10 @@ interface OpenApiDocument {
 }
 
 const METHODS = new Set(['get', 'post', 'put', 'patch', 'delete'])
-const PUBLIC_PATHS = new Set(['/api/health'])
+const PUBLIC_PATHS = new Set(['/api/health', '/api/auth/session', '/api/auth/login-options'])
 const EXPECTED_RESTISH_OPERATIONS = {
   System: ['getHealth'],
+  Auth: ['createAuthSession', 'getLoginOptions'],
   Agents: ['listAgents', 'createAgent'],
   Environments: ['listEnvironments', 'createEnvironment'],
   Sessions: ['listSessions', 'createSession'],
@@ -71,7 +72,9 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.servers).toEqual([{ url: '/' }])
     expect(doc.paths).toHaveProperty('/api/health')
     expect(doc.paths).toHaveProperty('/api/projects')
-    expect(Object.keys(doc.paths).filter((path) => path.startsWith('/api/auth'))).toEqual([])
+    expect(doc.paths).toHaveProperty('/api/auth/session')
+    expect(doc.paths).toHaveProperty('/api/auth/login-options')
+    expect(doc.paths).not.toHaveProperty('/api/auth/config')
     expect(doc.paths).toHaveProperty('/api/agents')
     expect(doc.paths).toHaveProperty('/api/agents/{agentId}')
     expect(doc.paths).toHaveProperty('/api/agents/{agentId}/versions')

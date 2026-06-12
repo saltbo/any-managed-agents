@@ -114,6 +114,19 @@ export async function completeSignIn() {
   const manager = await getOidcManager()
   const user = await manager.signinRedirectCallback()
   userPromise = Promise.resolve(user)
+
+  // Create server-side httpOnly session cookie from the validated access token.
+  const sessionResponse = await fetch('/api/auth/session', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ accessToken: user.access_token }),
+  })
+  if (!sessionResponse.ok) {
+    const body = (await sessionResponse.json().catch(() => ({}))) as { error?: { message?: string } }
+    throw new Error(body.error?.message ?? 'Failed to create session')
+  }
+
   const state = user.state as { returnTo?: string } | undefined
   const returnTo = state?.returnTo
   return returnTo?.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/'
