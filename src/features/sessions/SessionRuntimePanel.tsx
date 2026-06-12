@@ -14,7 +14,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { EmptyState, StatusBadge } from '@/console/components'
 import { formatTime, stringifyJson } from '@/console/format'
 import type { SessionEvent } from '@/lib/api'
+import { SessionToolTrace } from './SessionToolTrace'
 import type { SessionRuntimeState } from './session-runtime'
+import { buildSessionToolTrace } from './session-tool-trace'
 
 const EVENT_FILTERS = AMA_SESSION_EVENT_CATEGORIES
 type EventFilter = 'all' | (typeof EVENT_FILTERS)[number]
@@ -53,6 +55,7 @@ export function SessionRuntimePanel({
   const filteredDebugEvents =
     eventType === 'all' ? debugEvents : debugEvents.filter((event) => amaSessionEventCategory(event.type) === eventType)
   const eventExport = stringifyJson([...persistedEvents].sort((a, b) => a.sequence - b.sequence))
+  const toolTrace = useMemo(() => buildSessionToolTrace(persistedEvents), [persistedEvents])
   const transcriptItems = useMemo(
     () =>
       [
@@ -90,6 +93,7 @@ export function SessionRuntimePanel({
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <TabsList className="h-9">
             <TabsTrigger value="transcript">Transcript</TabsTrigger>
+            <TabsTrigger value="tools">Tools</TabsTrigger>
             <TabsTrigger value="debug">Debug</TabsTrigger>
           </TabsList>
           <Separator orientation="vertical" className="hidden h-8 lg:block" />
@@ -175,6 +179,12 @@ export function SessionRuntimePanel({
             onSubmit={sendMessage}
             onAbort={onAbort}
           />
+        </div>
+      </TabsContent>
+
+      <TabsContent value="tools" className="mt-0 min-h-0 flex-1 overflow-y-auto px-4 py-5 lg:px-6">
+        <div className="mx-auto w-full max-w-5xl">
+          <SessionToolTrace entries={toolTrace} />
         </div>
       </TabsContent>
 

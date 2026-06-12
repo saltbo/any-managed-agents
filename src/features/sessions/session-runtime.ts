@@ -223,7 +223,9 @@ function mergePersistedEvents(state: SessionRuntimeState, events: SessionEvent[]
   )
   const tools = runtimeEvents
     .filter(({ stored, payload }) => isToolEvent(sessionEventType(stored, payload)))
-    .map(({ stored, payload }) => toolFromSessionEvent(payload, stored.createdAt, sessionEventType(stored, payload)))
+    .map(({ stored, payload }) =>
+      toolFromSessionEvent(payload, stored.createdAt, sessionEventType(stored, payload), stored.correlationId),
+    )
     .filter((tool): tool is SessionRuntimeToolTrace => Boolean(tool))
     .reduce<SessionRuntimeToolTrace[]>((next, tool) => upsertTool(next, tool), [])
   const debugEvents = runtimeEvents.map(
@@ -369,9 +371,13 @@ function toolFromSessionEvent(
   event: Record<string, unknown>,
   at: string,
   eventType: string,
+  correlationId?: string | null,
 ): SessionRuntimeToolTrace | null {
   const toolCall = objectValue(event.toolCall ?? event)
+  // Persisted events carry the canonical `tool:<tool call id>` correlation;
+  // payload fields only back live socket events that have no stored id yet.
   const callId =
+    (correlationId?.startsWith('tool:') ? correlationId.slice('tool:'.length) : null) ??
     stringField(toolCall, 'id') ??
     stringField(toolCall, 'toolCallId') ??
     stringField(event, 'toolCallId') ??
@@ -455,10 +461,18 @@ function upsertTool(tools: SessionRuntimeToolTrace[], tool: SessionRuntimeToolTr
     input: tool.input ?? existing.input,
     output: hasToolValue(tool.output) ? tool.output : existing.output,
     error: tool.error ?? existing.error,
-    durationMs: tool.durationMs ?? existing.durationMs,
+    durationMs:
+      tool.durationMs ??
+      existing.durationMs ??
+      (tool.eventType === 'tool_execution_end' ? elapsedMs(existing.createdAt, tool.updatedAt) : null),
     createdAt: existing.createdAt,
   }
   return next
+}
+
+function elapsedMs(start: string, end: string) {
+  const elapsed = Date.parse(end) - Date.parse(start)
+  return Number.isFinite(elapsed) ? Math.max(0, elapsed) : null
 }
 
 function findLastToolIndex(tools: SessionRuntimeToolTrace[], predicate: (tool: SessionRuntimeToolTrace) => boolean) {

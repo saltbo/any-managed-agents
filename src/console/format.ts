@@ -29,6 +29,12 @@ export function formatDuration(start: string | null, end: string | null) {
   return `${hours}h ${minutes % 60}m`
 }
 
+export function formatMillis(value: number) {
+  const millis = Math.max(0, Math.round(value))
+  if (millis < 1000) return `${millis}ms`
+  return `${(millis / 1000).toFixed(1)}s`
+}
+
 export function parsePackages(value: string) {
   return value
     .split('\n')

@@ -23,8 +23,13 @@ export function useSessionRuntimeSession({
   const refreshTimerRef = useRef<number | null>(null)
   const reconnectTimerRef = useRef<number | null>(null)
   const sessionIdRef = useRef<string | null>(null)
+  // Persisted events stay inspectable for any session; the live socket only
+  // connects while the runtime is actually active.
   const endpoint = useMemo(
-    () => (session?.runtimeEndpointPath ? runtimeWebSocketUrl(session.runtimeEndpointPath) : null),
+    () =>
+      session && (session.status === 'idle' || session.status === 'running') && session.runtimeEndpointPath
+        ? runtimeWebSocketUrl(session.runtimeEndpointPath)
+        : null,
     [session],
   )
 

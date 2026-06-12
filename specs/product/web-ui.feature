@@ -27,7 +27,7 @@ Feature: Web console
     When the browser user sends a message through the session composer
     Then the transcript renders the runtime response without mocked APIs
 
-  @planned
+  @implemented
   Scenario: Inspect a session transcript
     Given a session has messages, tool calls, and sandbox events
     When the user opens the session detail page

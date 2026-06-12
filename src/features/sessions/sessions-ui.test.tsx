@@ -507,6 +507,110 @@ describe('sessions UI contracts', () => {
     expect(screen.getByText(/payload_runtime.error/)).toBeTruthy()
   })
 
+  it('renders the tool trace tab with paired, failed, and orphaned executions from persisted events', async () => {
+    const persistedEvents = [
+      buildPersistedEvent({
+        id: 'event_tool_start',
+        sequence: 2,
+        type: 'tool_execution_start',
+        parentEventId: 'event_turn',
+        correlationId: 'tool:call_ok',
+        payload: { toolCallId: 'call_ok', toolName: 'sandbox.exec', args: { command: 'git status' } },
+        createdAt: '2026-05-23T00:00:00.000Z',
+      }),
+      buildPersistedEvent({
+        id: 'event_tool_end',
+        sequence: 3,
+        type: 'tool_execution_end',
+        parentEventId: 'event_turn',
+        correlationId: 'tool:call_ok',
+        payload: {
+          toolCallId: 'call_ok',
+          toolName: 'sandbox.exec',
+          result: { content: [{ type: 'text', text: 'clean tree' }] },
+          isError: false,
+        },
+        createdAt: '2026-05-23T00:00:01.250Z',
+      }),
+      buildPersistedEvent({
+        id: 'event_tool_fail_start',
+        sequence: 4,
+        type: 'tool_execution_start',
+        parentEventId: 'event_turn',
+        correlationId: 'tool:call_fail',
+        payload: { toolCallId: 'call_fail', toolName: 'sandbox.write', args: { path: 'x', apiKey: '[REDACTED]' } },
+        createdAt: '2026-05-23T00:00:02.000Z',
+      }),
+      buildPersistedEvent({
+        id: 'event_tool_fail_end',
+        sequence: 5,
+        type: 'tool_execution_end',
+        parentEventId: 'event_turn',
+        correlationId: 'tool:call_fail',
+        payload: {
+          toolCallId: 'call_fail',
+          toolName: 'sandbox.write',
+          result: { content: [{ type: 'text', text: 'write denied' }] },
+          isError: true,
+        },
+        createdAt: '2026-05-23T00:00:02.040Z',
+      }),
+      buildPersistedEvent({
+        id: 'event_tool_orphan',
+        sequence: 6,
+        type: 'tool_execution_end',
+        parentEventId: 'event_turn',
+        correlationId: 'tool:call_orphan',
+        payload: {
+          toolCallId: 'call_orphan',
+          toolName: 'sandbox.read',
+          result: { content: [{ type: 'text', text: 'orphan output' }] },
+          isError: false,
+        },
+        createdAt: '2026-05-23T00:00:03.000Z',
+      }),
+    ]
+
+    render(
+      <SessionRuntimePanel
+        runtime={buildRuntimeState({ messages: [], tools: [], debugEvents: [], error: null })}
+        persistedEvents={persistedEvents}
+        message=""
+        setMessage={vi.fn()}
+        onSend={vi.fn()}
+        onAbort={vi.fn()}
+        onRefreshEvents={vi.fn()}
+        canSend
+      />,
+    )
+
+    const toolsTab = screen.getByRole('tab', { name: 'Tools' })
+    fireEvent.pointerDown(toolsTab, { button: 0, ctrlKey: false })
+    fireEvent.mouseDown(toolsTab)
+    fireEvent.mouseUp(toolsTab)
+    fireEvent.click(toolsTab)
+    await waitFor(() => expect(toolsTab.getAttribute('aria-selected')).toBe('true'))
+
+    const completedEntry = screen.getByText('sandbox.exec').closest('details') as HTMLDetailsElement
+    expect(completedEntry.getAttribute('data-status')).toBe('completed')
+    expect(within(completedEntry).getByText('approved')).toBeTruthy()
+    expect(within(completedEntry).getByText('1.3s')).toBeTruthy()
+    expect(within(completedEntry).getByText('clean tree')).toBeTruthy()
+
+    const failedEntry = screen.getByText('sandbox.write').closest('details') as HTMLDetailsElement
+    expect(failedEntry.getAttribute('data-status')).toBe('failed')
+    expect(failedEntry.className).toContain('destructive')
+    expect(completedEntry.className).not.toContain('destructive')
+    expect(within(failedEntry).getByText('failed')).toBeTruthy()
+    expect(within(failedEntry).getAllByText('write denied').length).toBeGreaterThan(0)
+    expect(within(failedEntry).getByText(/"apiKey": "\[REDACTED\]"/)).toBeTruthy()
+
+    const orphanEntry = screen.getByText('sandbox.read').closest('details') as HTMLDetailsElement
+    expect(
+      within(orphanEntry).getByText('Result without a recorded tool call. Showing the result data that was received.'),
+    ).toBeTruthy()
+  })
+
   it('renders transcript and debug empty states', async () => {
     render(
       <SessionRuntimePanel

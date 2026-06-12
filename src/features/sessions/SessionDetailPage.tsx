@@ -43,7 +43,7 @@ export function SessionDetailPage() {
     void queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all })
   }, [queryClient, sessionId])
   const runtime = useSessionRuntimeSession({
-    session: session && (session.status === 'idle' || session.status === 'running') ? session : null,
+    session,
     events: eventsQuery.data?.data ?? EMPTY_EVENTS,
     onEventsChanged: refreshEvents,
   })
