@@ -1,6 +1,6 @@
 import { and, eq, isNull, or } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
-import { vaultCredentialVersions } from '../db/schema'
+import { vaultCredentials, vaultCredentialVersions } from '../db/schema'
 import type { Env } from '../env'
 import { decryptSecretValue } from '../vaultCrypto'
 
@@ -8,8 +8,15 @@ type Db = ReturnType<typeof drizzle>
 
 export type RuntimeSecretEnvItem = { name?: unknown; ref?: unknown }
 
-// Resolves vault credential-version refs into plain env values. Both dispatch
-// paths use this: self-hosted lease materialization and cloud session startup.
+// Resolves vault credential-version refs into the runtime secret env. Both
+// dispatch paths use this seam: self-hosted lease materialization and cloud
+// session startup. Resolution semantics per provider:
+// - ama-managed and cloudflare-secrets versions decrypt the stored ciphertext.
+// - external-vault versions pass the safe reference through; the runtime
+//   resolves it via its approved vault binding, so the control plane never
+//   holds the raw value.
+// Resolved values exist only in the runtime dispatch; they are never written
+// to D1, session events, audit records, or logs.
 export async function resolveRuntimeSecretEnv(
   env: Env,
   db: Db,
@@ -30,37 +37,41 @@ export async function resolveRuntimeSecretEnv(
     }
     const version = await db
       .select({
+        status: vaultCredentialVersions.status,
+        credentialStatus: vaultCredentials.status,
         metadata: vaultCredentialVersions.metadata,
         externalVaultPath: vaultCredentialVersions.externalVaultPath,
+        secretRef: vaultCredentialVersions.secretRef,
       })
       .from(vaultCredentialVersions)
+      .innerJoin(vaultCredentials, eq(vaultCredentialVersions.credentialId, vaultCredentials.id))
       .where(
         and(
           eq(vaultCredentialVersions.id, ref),
           eq(vaultCredentialVersions.organizationId, scope.organizationId),
           or(eq(vaultCredentialVersions.projectId, scope.projectId), isNull(vaultCredentialVersions.projectId)),
-          eq(vaultCredentialVersions.status, 'active'),
         ),
       )
       .get()
-    if (version?.externalVaultPath) {
-      // External-vault credentials stay references: the runtime resolves them
-      // through its approved vault binding, so the control plane never holds
-      // the raw value and must not fail the dispatch.
+    if (!version) {
+      throw new Error(`Runtime credential reference ${ref} cannot be resolved`)
+    }
+    if (version.status === 'revoked' || version.credentialStatus === 'revoked') {
+      throw new Error(`Runtime credential reference ${ref} is revoked by vault policy`)
+    }
+    if (version.status === 'deleted') {
+      throw new Error(`Runtime credential reference ${ref} cannot be resolved`)
+    }
+    if (version.externalVaultPath) {
+      resolved[name] = version.secretRef
       continue
     }
-    const metadata = version ? parseMetadata(version.metadata) : null
+    const metadata = parseMetadata(version.metadata)
     const value = await decryptSecretValue(env, metadata?.encryptedSecretValue)
-    if (typeof value === 'string') {
-      resolved[name] = value
-      continue
+    if (typeof value !== 'string') {
+      throw new Error(`Runtime credential reference ${ref} cannot be resolved`)
     }
-    const legacyValue = metadata?.localSecretValue
-    if (typeof legacyValue === 'string') {
-      resolved[name] = legacyValue
-      continue
-    }
-    throw new Error(`Runtime secret ${ref} cannot be resolved`)
+    resolved[name] = value
   }
   return resolved
 }

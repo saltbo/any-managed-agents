@@ -8,7 +8,7 @@ import { AuditView } from './AuditView'
 export function AuditPage() {
   const auditQuery = useQuery({
     queryKey: queryKeys.audit.records,
-    queryFn: api.listAuditRecords,
+    queryFn: () => api.listAuditRecords(),
   })
   const records = auditQuery.data?.data ?? []
   const pagination = useClientPagination(records)

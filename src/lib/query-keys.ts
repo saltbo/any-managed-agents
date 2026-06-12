@@ -36,6 +36,7 @@ export const queryKeys = {
     detail: (id: string) => ['vaults', 'detail', id] as const,
     credentials: (id: string, includeArchived = false) =>
       ['vaults', 'detail', id, 'credentials', { includeArchived }] as const,
+    audit: (id: string) => ['vaults', 'detail', id, 'audit'] as const,
   },
   mcp: {
     all: ['mcp'] as const,

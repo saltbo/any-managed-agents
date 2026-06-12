@@ -2,13 +2,13 @@
 Feature: Vaults
   Vaults provide scoped access to credentials.
 
-  @planned
+  @implemented
   Scenario: Resolve credential for runtime
     Given a session is allowed to use a vault credential
     When runtime needs the credential
     Then it resolves a safe secret reference without exposing the value to clients
 
-  @planned
+  @implemented
   Scenario: Store credentials encrypted at rest
     Given the platform encryption key is configured
     When a user stores a credential in a vault
@@ -17,14 +17,14 @@ Feature: Vaults
     And tampered ciphertext cannot be decrypted successfully
     And plaintext is never written to D1, logs, events, or audit metadata
 
-  @planned
+  @implemented
   Scenario: Scope vault credentials to organization and project
     Given two projects exist in different organizations
     When one project stores a credential
     Then users in the other organization cannot list, resolve, rotate, or use that credential
     And cross-project access in the same organization requires explicit policy
 
-  @planned
+  @implemented
   Scenario: Rotate a credential without breaking historical auditability
     Given a credential has version 1
     When a user rotates the credential
@@ -32,7 +32,7 @@ Feature: Vaults
     And historical sessions keep safe references to the version they used
     And the old value is no longer returned or exposed
 
-  @planned
+  @implemented
   Scenario: Revoke a credential
     Given a credential is active
     When a user revokes it

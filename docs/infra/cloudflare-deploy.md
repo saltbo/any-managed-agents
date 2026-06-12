@@ -71,6 +71,21 @@ Required settings:
 Do not store raw provider credentials in D1, session events, UI state, or logs.
 The database may store metadata and secret references only.
 
+## Vault credential encryption
+
+Vault credential storage encrypts managed secret values (the `ama-managed` and
+`cloudflare-secrets` providers) with AES-GCM before anything reaches D1.
+
+Required settings:
+
+- `AMA_VAULT_ENCRYPTION_KEY`: store as a Wrangler secret with at least 32
+  characters. Credential creation and rotation fail fast when it is missing;
+  there is no fallback to `AMA_SESSION_SECRET`.
+
+Rotating this key invalidates existing ciphertext, so plan a credential
+rotation pass when the key changes. Tampered or foreign ciphertext is rejected
+with a safe error during runtime resolution.
+
 ## Self-hosted runners
 
 Self-hosted runners service environments with `hostingMode: "self_hosted"` and

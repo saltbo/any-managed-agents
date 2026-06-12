@@ -298,14 +298,6 @@ async function storeSecretMaterial(env: Env, reference: ReturnType<typeof secret
   if (!values.secretValue) {
     throw new Error(`secretValue is required for ${reference.provider} credentials`)
   }
-  if (env.AMA_LOCAL_SECRET_STORE === 'test') {
-    return {
-      ...(reference.provider === 'cloudflare-secrets'
-        ? { cloudflareSecretId: await storeCloudflareSecret(env, reference.referenceName, values.secretValue) }
-        : {}),
-      localSecretValue: values.secretValue,
-    }
-  }
   const encryptedSecretValue = await encryptSecretValue(env, values.secretValue)
   if (reference.provider === 'ama-managed') {
     return { encryptedSecretValue }
@@ -313,7 +305,6 @@ async function storeSecretMaterial(env: Env, reference: ReturnType<typeof secret
   return {
     cloudflareSecretId: await storeCloudflareSecret(env, reference.referenceName, values.secretValue),
     encryptedSecretValue,
-    ...(env.AMA_LOCAL_SECRET_STORE === 'test' ? { localSecretValue: values.secretValue } : {}),
   }
 }
 
@@ -402,6 +393,18 @@ function serializeVault(row: VaultRow) {
   }
 }
 
+// Stored secret material (ciphertext, legacy local values) lives only in the
+// D1 row. It must never leave through API responses or audit snapshots.
+const STORED_SECRET_METADATA_KEYS = ['encryptedSecretValue', 'localSecretValue'] as const
+
+function safeVersionMetadata(raw: string) {
+  const metadata = parseJson<Record<string, unknown>>(raw)
+  for (const key of STORED_SECRET_METADATA_KEYS) {
+    delete metadata[key]
+  }
+  return metadata
+}
+
 function serializeVersion(row: CredentialVersionRow) {
   return {
     id: row.id,
@@ -416,7 +419,7 @@ function serializeVersion(row: CredentialVersionRow) {
     referenceName: row.referenceName,
     status: row.status as 'active' | 'superseded' | 'revoked' | 'deleted',
     hasSecret: row.hasSecret,
-    metadata: parseJson<Record<string, unknown>>(row.metadata),
+    metadata: safeVersionMetadata(row.metadata),
     createdAt: row.createdAt,
     supersededAt: row.supersededAt,
     revokedAt: row.revokedAt,

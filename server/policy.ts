@@ -244,6 +244,48 @@ export async function resolveEffectivePolicy(db: PolicyDb, auth: AuthContext) {
   }
 }
 
+// Providers may bind their credential through a vault credential-version
+// reference (version id, secretRef, or reference name). A revoked credential
+// must fail provider policy evaluation, not only runtime resolution.
+async function providerCredentialRevocation(
+  db: PolicyDb,
+  auth: AuthContext,
+  provider: { id: string; credentialSecretRef: string | null },
+): Promise<PolicyDecision | null> {
+  if (!provider.credentialSecretRef) {
+    return null
+  }
+  const ref = provider.credentialSecretRef
+  const version = await db
+    .select()
+    .from(vaultCredentialVersions)
+    .where(
+      and(
+        eq(vaultCredentialVersions.organizationId, auth.organization.id),
+        or(eq(vaultCredentialVersions.projectId, auth.project.id), isNull(vaultCredentialVersions.projectId)),
+        or(
+          eq(vaultCredentialVersions.id, ref),
+          eq(vaultCredentialVersions.secretRef, ref),
+          eq(vaultCredentialVersions.referenceName, ref),
+        ),
+      ),
+    )
+    .get()
+  if (!version) {
+    return null
+  }
+  const credential = await db.select().from(vaultCredentials).where(eq(vaultCredentials.id, version.credentialId)).get()
+  if (version.status === 'revoked' || version.status === 'deleted' || credential?.status === 'revoked') {
+    return {
+      allowed: false,
+      category: 'provider',
+      rule: provider.id,
+      message: 'Provider credential is revoked or unavailable.',
+    }
+  }
+  return null
+}
+
 export async function evaluateProviderPolicy(
   db: PolicyDb,
   auth: AuthContext,
@@ -280,6 +322,12 @@ export async function evaluateProviderPolicy(
       category: 'provider',
       rule: values.providerId,
       message: 'Provider is not configured for this project.',
+    }
+  }
+  if (provider) {
+    const revocation = await providerCredentialRevocation(db, auth, provider)
+    if (revocation) {
+      return revocation
     }
   }
 

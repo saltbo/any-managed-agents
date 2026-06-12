@@ -28,7 +28,14 @@ export async function decryptSecretValue(env: Env, encrypted: unknown): Promise<
   const key = await vaultEncryptionKey(env)
   const iv = base64UrlDecode(encrypted.iv)
   const ciphertext = base64UrlDecode(encrypted.ciphertext)
-  const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext)
+  let plaintext: ArrayBuffer
+  try {
+    plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext)
+  } catch {
+    // AES-GCM authentication failed. Surface a safe error without echoing
+    // ciphertext, key material, or platform error internals.
+    throw new Error('Vault ciphertext failed authenticated decryption')
+  }
   return new TextDecoder().decode(plaintext)
 }
 
@@ -46,9 +53,9 @@ function isEncryptedSecretValue(value: unknown): value is EncryptedSecretValue {
 }
 
 async function vaultEncryptionKey(env: Env) {
-  const secret = env.AMA_VAULT_ENCRYPTION_KEY ?? env.AMA_SESSION_SECRET
+  const secret = env.AMA_VAULT_ENCRYPTION_KEY
   if (!secret || secret.length < 32) {
-    throw new Error('AMA_VAULT_ENCRYPTION_KEY or AMA_SESSION_SECRET with at least 32 characters is required')
+    throw new Error('AMA_VAULT_ENCRYPTION_KEY with at least 32 characters is required for vault credential storage')
   }
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(secret))
   return await crypto.subtle.importKey('raw', digest, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt'])

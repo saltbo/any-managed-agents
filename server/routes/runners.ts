@@ -29,6 +29,7 @@ import {
 } from '../openapi'
 import { redactSensitiveValue } from '../redaction'
 import { transitionalRuntimeLevelRuntimes } from '../runtime/catalog'
+import { safeRuntimeError } from '../runtime/runtime-error'
 import { resolveRuntimeSecretEnv } from '../runtime/secret-env'
 
 const app = createApiRouter()
@@ -1647,7 +1648,39 @@ const routes = app
     if (!leasedWorkItem) {
       throw new Error('Leased work item row is required')
     }
-    const responseWorkItem = await materializeLeaseWorkItemForRunner(c.env, db, auth, leasedWorkItem)
+    let responseWorkItem: WorkItemRow
+    try {
+      responseWorkItem = await materializeLeaseWorkItemForRunner(c.env, db, auth, leasedWorkItem)
+    } catch (error) {
+      // Secret resolution failed (for example a revoked credential version).
+      // Fail the work item and session with a policy-safe error instead of
+      // handing the runner an unstartable lease.
+      const safeError = safeRuntimeError(error)
+      const failedAt = now()
+      await db
+        .update(runnerWorkLeases)
+        .set({ status: 'failed', error: stringify(safeError), updatedAt: failedAt })
+        .where(eq(runnerWorkLeases.id, lease.id))
+      await db
+        .update(runnerWorkItems)
+        .set({
+          status: 'failed',
+          runnerId: null,
+          leaseId: null,
+          leaseExpiresAt: null,
+          error: stringify({ message: safeError.message }),
+          updatedAt: failedAt,
+        })
+        .where(eq(runnerWorkItems.id, leasedWorkItem.id))
+      if (leasedWorkItem.sessionId) {
+        await db
+          .update(sessions)
+          .set({ status: 'error', statusReason: safeError.message, updatedAt: failedAt })
+          .where(and(eq(sessions.id, leasedWorkItem.sessionId), eq(sessions.projectId, auth.project.id)))
+      }
+      await releaseRunnerLoad(db, auth.project.id, runnerId, failedAt)
+      return errorResponse(c, 409, 'conflict', safeError.message)
+    }
     return c.json(serializeLeaseForRunner(lease, responseWorkItem), 201)
   })
   .openapi(updateLeaseRoute, async (c) => {

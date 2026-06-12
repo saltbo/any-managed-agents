@@ -2,13 +2,13 @@
 Feature: Vault detail
   Users inspect vault metadata without exposing secrets.
 
-  @planned
+  @implemented
   Scenario: View vault detail
     Given a vault exists
     When the user opens vault detail
     Then credential names, versions, usage references, and audit history are visible without raw secret values
 
-  @planned
+  @implemented
   Scenario: Render vault loading, empty, and archived states
     Given the vault detail request is loading
     Then the page shows a loading state using shared UI primitives
@@ -18,7 +18,7 @@ Feature: Vault detail
     Then destructive and create actions are hidden or disabled
     And credential metadata remains readable for audit
 
-  @planned
+  @implemented
   Scenario: Add a credential from vault detail
     Given the vault is active
     When the user opens the add credential dialog
@@ -28,7 +28,7 @@ Feature: Vault detail
     When the user saves
     Then the dialog closes, the credential list refetches, and the secret value is not rendered
 
-  @planned
+  @implemented
   Scenario: Rotate and revoke credentials from vault detail
     Given a credential exists
     When the user rotates it

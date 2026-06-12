@@ -232,7 +232,7 @@ export interface VaultCredentialVersion {
   organizationId: string
   projectId: string | null
   version: number
-  provider: 'cloudflare-secrets' | 'external-vault'
+  provider: 'ama-managed' | 'cloudflare-secrets' | 'external-vault'
   secretRef: string
   externalVaultPath: string | null
   referenceName: string
@@ -442,6 +442,29 @@ export interface VaultInput {
   scope?: 'project' | 'organization'
 }
 
+export interface VaultCredentialSecretInput {
+  provider?: 'ama-managed' | 'cloudflare-secrets' | 'external-vault'
+  secretValue?: string
+  externalVaultPath?: string
+  referenceName?: string
+  metadata?: Record<string, unknown>
+}
+
+export interface VaultCredentialInput {
+  name: string
+  type: string
+  connectorBinding?: { connectorId?: string; name?: string }
+  metadata?: Record<string, unknown>
+  secret: VaultCredentialSecretInput
+}
+
+export interface AuditRecordListOptions {
+  resourceType?: string
+  resourceId?: string
+  action?: string
+  limit?: number
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -587,6 +610,29 @@ export const api = {
         paramQueryArg<(typeof rpc.api.vaults)[':vaultId']['credentials']['$get']>({ vaultId: id }, options),
       ),
     ),
+  createVaultCredential: (vaultId: string, input: VaultCredentialInput) =>
+    rpcRequest<VaultCredential>(
+      rpc.api.vaults[':vaultId'].credentials.$post({
+        param: { vaultId },
+        json: input as RpcJson<(typeof rpc.api.vaults)[':vaultId']['credentials']['$post']>,
+      }),
+    ),
+  rotateVaultCredential: (vaultId: string, credentialId: string, secret: VaultCredentialSecretInput) =>
+    rpcRequest<VaultCredential>(
+      rpc.api.vaults[':vaultId'].credentials[':credentialId'].versions.$post({
+        param: { vaultId, credentialId },
+        json: secret as RpcJson<
+          (typeof rpc.api.vaults)[':vaultId']['credentials'][':credentialId']['versions']['$post']
+        >,
+      }),
+    ),
+  revokeVaultCredential: (vaultId: string, credentialId: string, revokeReason?: string) =>
+    rpcRequest<VaultCredential>(
+      rpc.api.vaults[':vaultId'].credentials[':credentialId'].$patch({
+        param: { vaultId, credentialId },
+        json: { status: 'revoked', ...(revokeReason ? { revokeReason } : {}) },
+      }),
+    ),
   listMcpConnectors: () => rpcRequest<ListResponse<McpConnector>>(rpc.api.mcp.connectors.$get({ query: {} })),
   listMcpConnections: () => rpcRequest<ListResponse<McpConnection>>(rpc.api.mcp.connections.$get({ query: {} })),
   disconnectMcpConnection: (id: string) =>
@@ -602,5 +648,8 @@ export const api = {
       rpc.api.governance.policy.$put({ json: input as RpcJson<typeof rpc.api.governance.policy.$put> }),
     ),
   readUsageSummary: () => rpcRequest<UsageSummary>(rpc.api.usage.summary.$get({ query: {} })),
-  listAuditRecords: () => rpcRequest<ListResponse<AuditRecord>>(rpc.api['audit-records'].$get({ query: {} })),
+  listAuditRecords: (options: AuditRecordListOptions = {}) =>
+    rpcRequest<ListResponse<AuditRecord>>(
+      rpc.api['audit-records'].$get(queryArg<(typeof rpc.api)['audit-records']['$get']>(options)),
+    ),
 }
