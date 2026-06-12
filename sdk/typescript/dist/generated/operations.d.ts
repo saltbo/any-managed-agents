@@ -198,6 +198,12 @@ export declare const operations: readonly [{
     readonly tags: readonly ["Auth"];
 }, {
     readonly method: "GET";
+    readonly path: "/api/agents/{agentId}/handoff-candidates";
+    readonly operationId: "listAgentHandoffCandidates";
+    readonly summary: "List handoff candidate agents";
+    readonly tags: readonly ["Agents"];
+}, {
+    readonly method: "GET";
     readonly path: "/api/agents";
     readonly operationId: "listAgents";
     readonly summary: "List agents";

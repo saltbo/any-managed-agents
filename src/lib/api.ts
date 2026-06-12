@@ -75,6 +75,10 @@ export interface Agent {
   model: string
   systemPrompt: string | null
   skills: string[]
+  role: string | null
+  capabilityTags: string[]
+  handoffPolicy: Record<string, unknown>
+  memoryPolicy: Record<string, unknown>
   allowedTools: string[]
   mcpConnectors: string[]
   metadata: Record<string, unknown>
@@ -96,6 +100,10 @@ export interface AgentVersion {
   model: string
   systemPrompt: string | null
   skills: string[]
+  role: string | null
+  capabilityTags: string[]
+  handoffPolicy: Record<string, unknown>
+  memoryPolicy: Record<string, unknown>
   allowedTools: string[]
   mcpConnectors: string[]
   metadata: Record<string, unknown>
@@ -274,7 +282,12 @@ export interface McpConnector {
   capabilities: string[]
   supportedAuthModes: string[]
   setupRequirements: string[]
-  tools: Array<{ name: string; description: string | null; approvalMode: string }>
+  tools: Array<{
+    name: string
+    description: string | null
+    approvalMode: string
+    inputSchema?: Record<string, unknown>
+  }>
   metadata: Record<string, unknown>
   status: 'available' | 'unavailable'
   policyStatus: 'allowed' | 'blocked' | 'approval_required'
@@ -412,6 +425,10 @@ export interface AgentInput {
   model?: string
   systemPrompt?: string
   skills?: string[]
+  role?: string | null
+  capabilityTags?: string[]
+  handoffPolicy?: Record<string, unknown>
+  memoryPolicy?: Record<string, unknown>
   allowedTools?: string[]
   mcpConnectors?: string[]
   metadata?: Record<string, unknown>
@@ -423,6 +440,7 @@ export interface SessionInput {
   runtime: RuntimeName
   runtimeConfig?: Record<string, unknown>
   title?: string
+  initialPrompt?: string
   metadata?: Record<string, unknown>
   resourceRefs?: SessionResourceRef[]
   vaultRefs?: Record<string, unknown>[]

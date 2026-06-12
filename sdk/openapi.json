@@ -1144,6 +1144,66 @@
           "createdAt"
         ]
       },
+      "AgentHandoffCandidateListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentHandoffCandidate"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/ListPagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ]
+      },
+      "AgentHandoffCandidate": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "agent_def456"
+          },
+          "name": {
+            "type": "string",
+            "example": "Implementation worker"
+          },
+          "role": {
+            "type": "string",
+            "nullable": true,
+            "example": "worker"
+          },
+          "capabilityTags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "implementation"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "archived"
+            ],
+            "example": "active"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "role",
+          "capabilityTags",
+          "status"
+        ]
+      },
       "AgentMemory": {
         "type": "object",
         "properties": {
@@ -7373,6 +7433,96 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AgentVersionListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{agentId}/handoff-candidates": {
+      "get": {
+        "operationId": "listAgentHandoffCandidates",
+        "tags": [
+          "Agents"
+        ],
+        "summary": "List handoff candidate agents",
+        "description": "Resolves active agents in the same project that match the requested role or capability, or the agent handoff policy targets. AMA only resolves candidates; the requesting product decides how a handoff affects its own workflow records.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "agent_abc123"
+            },
+            "required": true,
+            "name": "agentId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "example": "worker"
+            },
+            "required": false,
+            "name": "role",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80,
+              "example": "implementation"
+            },
+            "required": false,
+            "name": "capability",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Handoff candidates",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentHandoffCandidateListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }

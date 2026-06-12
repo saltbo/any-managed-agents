@@ -139,6 +139,23 @@ const AgentParamsSchema = z.object({
 const ListQuerySchema = listQuerySchema(['active', 'archived'])
 const AgentListResponseSchema = listResponseSchema('AgentListResponse', AgentSchema)
 const AgentVersionListResponseSchema = listResponseSchema('AgentVersionListResponse', AgentVersionSchema)
+const HandoffCandidateQuerySchema = z.object({
+  role: z.string().trim().min(1).max(80).optional().openapi({ example: 'worker' }),
+  capability: z.string().trim().min(1).max(80).optional().openapi({ example: 'implementation' }),
+})
+const AgentHandoffCandidateSchema = z
+  .object({
+    id: z.string().openapi({ example: 'agent_def456' }),
+    name: z.string().openapi({ example: 'Implementation worker' }),
+    role: z.string().nullable().openapi({ example: 'worker' }),
+    capabilityTags: z.array(z.string()).openapi({ example: ['implementation'] }),
+    status: z.enum(['active', 'archived']).openapi({ example: 'active' }),
+  })
+  .openapi('AgentHandoffCandidate')
+const AgentHandoffCandidateListResponseSchema = listResponseSchema(
+  'AgentHandoffCandidateListResponse',
+  AgentHandoffCandidateSchema,
+)
 const AgentMemorySchema = z
   .object({
     agentId: z.string().openapi({ example: 'agent_abc123' }),
@@ -512,6 +529,41 @@ function memoryEnabled(agent: AgentRow) {
   return memoryPolicy.enabled === true
 }
 
+interface HandoffTarget {
+  role?: string
+  capability?: string
+}
+
+function policyHandoffTargets(handoffPolicy: Record<string, unknown>): HandoffTarget[] {
+  const targets = Array.isArray(handoffPolicy.targets) ? handoffPolicy.targets : []
+  return targets
+    .filter((target): target is Record<string, unknown> => Boolean(target) && typeof target === 'object')
+    .map((target) => ({
+      ...(typeof target.role === 'string' && target.role ? { role: target.role } : {}),
+      ...(typeof target.capability === 'string' && target.capability ? { capability: target.capability } : {}),
+    }))
+    .filter((target) => target.role !== undefined || target.capability !== undefined)
+}
+
+function matchesHandoffTarget(targets: HandoffTarget[], candidate: AgentRow) {
+  const capabilityTags = parseJson<string[]>(candidate.capabilityTags)
+  return targets.some(
+    (target) =>
+      (target.role !== undefined && candidate.role === target.role) ||
+      (target.capability !== undefined && capabilityTags.includes(target.capability)),
+  )
+}
+
+function serializeHandoffCandidate(row: AgentRow) {
+  return {
+    id: row.id,
+    name: row.name,
+    role: row.role,
+    capabilityTags: parseJson<string[]>(row.capabilityTags),
+    status: row.status as 'active' | 'archived',
+  }
+}
+
 const listAgentsRoute = createRoute({
   method: 'get',
   path: '/',
@@ -608,6 +660,27 @@ const listAgentVersionsRoute = createRoute({
       description: 'Agent versions',
       content: { 'application/json': { schema: AgentVersionListResponseSchema } },
     },
+    401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    404: { description: 'Agent not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
+  },
+})
+
+const listAgentHandoffCandidatesRoute = createRoute({
+  method: 'get',
+  path: '/{agentId}/handoff-candidates',
+  operationId: 'listAgentHandoffCandidates',
+  tags: ['Agents'],
+  summary: 'List handoff candidate agents',
+  description:
+    'Resolves active agents in the same project that match the requested role or capability, or the agent handoff policy targets. AMA only resolves candidates; the requesting product decides how a handoff affects its own workflow records.',
+  ...AuthenticatedOperation,
+  request: { params: AgentParamsSchema, query: HandoffCandidateQuerySchema },
+  responses: {
+    200: {
+      description: 'Handoff candidates',
+      content: { 'application/json': { schema: AgentHandoffCandidateListResponseSchema } },
+    },
+    400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
     404: { description: 'Agent not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
   },
@@ -934,6 +1007,59 @@ const routes = app
           hasMore: false,
           firstId: rows[0]?.id ?? null,
           lastId: rows.at(-1)?.id ?? null,
+        },
+      },
+      200,
+    )
+  })
+  .openapi(listAgentHandoffCandidatesRoute, async (c) => {
+    const { agentId } = c.req.valid('param')
+    const { role, capability } = c.req.valid('query')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+
+    const agent = await findAgent(db, agentId, auth.project.id)
+    if (!agent) {
+      return c.json({ error: { type: 'not_found', message: 'Agent not found' } }, 404)
+    }
+
+    const requestedTarget = {
+      ...(role !== undefined ? { role } : {}),
+      ...(capability !== undefined ? { capability } : {}),
+    }
+    const targets =
+      requestedTarget.role !== undefined || requestedTarget.capability !== undefined
+        ? [requestedTarget]
+        : policyHandoffTargets(parseJson<Record<string, unknown>>(agent.handoffPolicy))
+    if (targets.length === 0) {
+      return c.json(
+        domainValidation('No handoff target requested', {
+          target: 'Request a role or capability, or configure handoff policy targets on the agent.',
+        }),
+        400,
+      )
+    }
+
+    const rows = await db
+      .select()
+      .from(agentDefinitions)
+      .where(and(eq(agentDefinitions.projectId, auth.project.id), eq(agentDefinitions.status, 'active')))
+      .orderBy(desc(agentDefinitions.createdAt), desc(agentDefinitions.id))
+    const candidates = rows
+      .filter((row) => row.id !== agentId && matchesHandoffTarget(targets, row))
+      .map(serializeHandoffCandidate)
+    return c.json(
+      {
+        data: candidates,
+        pagination: {
+          limit: candidates.length,
+          nextCursor: null,
+          hasMore: false,
+          firstId: candidates[0]?.id ?? null,
+          lastId: candidates.at(-1)?.id ?? null,
         },
       },
       200,

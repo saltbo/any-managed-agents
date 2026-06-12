@@ -300,6 +300,15 @@ OPERATIONS = [
   },
   {
     "method": "GET",
+    "path": "/api/agents/{agentId}/handoff-candidates",
+    "operationId": "listAgentHandoffCandidates",
+    "summary": "List handoff candidate agents",
+    "tags": [
+      "Agents"
+    ]
+  },
+  {
+    "method": "GET",
     "path": "/api/agents",
     "operationId": "listAgents",
     "summary": "List agents",

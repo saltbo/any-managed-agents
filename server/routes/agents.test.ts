@@ -591,4 +591,76 @@ describe('[CF] /api/agents', () => {
     const crossProjectRead = await jsonFetch(`/api/agents/${agent.id}`, otherCookie)
     expect(crossProjectRead.status).toBe(404)
   })
+
+  it('resolves handoff candidates by role or capability inside the same project', async () => {
+    const authorization = await signIn()
+
+    const maintainerRes = await jsonFetch('/api/agents', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Maintainer agent',
+        role: 'maintainer',
+        handoffPolicy: { targets: [{ role: 'worker' }, { capability: 'implementation' }] },
+      }),
+    })
+    expect(maintainerRes.status).toBe(201)
+    const maintainer = (await maintainerRes.json()) as { id: string }
+
+    const workerRes = await jsonFetch('/api/agents', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Worker agent', role: 'worker', capabilityTags: ['implementation'] }),
+    })
+    expect(workerRes.status).toBe(201)
+    const worker = (await workerRes.json()) as { id: string }
+
+    const reviewerRes = await jsonFetch('/api/agents', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Reviewer agent', role: 'reviewer' }),
+    })
+    expect(reviewerRes.status).toBe(201)
+    const reviewer = (await reviewerRes.json()) as { id: string }
+
+    const otherAuthorization = await signIn({ ...defaultClaims(), sub: 'user_other_project' })
+    const foreignWorkerRes = await jsonFetch('/api/agents', otherAuthorization, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Foreign worker agent', role: 'worker' }),
+    })
+    expect(foreignWorkerRes.status).toBe(201)
+
+    const policyResolvedRes = await jsonFetch(`/api/agents/${maintainer.id}/handoff-candidates`, authorization)
+    expect(policyResolvedRes.status).toBe(200)
+    const policyResolved = (await policyResolvedRes.json()) as { data: Array<{ id: string }> }
+    expect(policyResolved.data.map((candidate) => candidate.id)).toEqual([worker.id])
+
+    const queryResolvedRes = await jsonFetch(
+      `/api/agents/${reviewer.id}/handoff-candidates?capability=implementation`,
+      authorization,
+    )
+    expect(queryResolvedRes.status).toBe(200)
+    const queryResolved = (await queryResolvedRes.json()) as {
+      data: Array<{ id: string; role: string | null; capabilityTags: string[] }>
+    }
+    expect(queryResolved.data).toEqual([
+      { id: worker.id, name: 'Worker agent', role: 'worker', capabilityTags: ['implementation'], status: 'active' },
+    ])
+  })
+
+  it('rejects handoff resolution without a requested target or policy targets', async () => {
+    const authorization = await signIn()
+    const agentRes = await jsonFetch('/api/agents', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'No-target agent' }),
+    })
+    expect(agentRes.status).toBe(201)
+    const agent = (await agentRes.json()) as { id: string }
+
+    const res = await jsonFetch(`/api/agents/${agent.id}/handoff-candidates`, authorization)
+    expect(res.status).toBe(400)
+    await expect(res.json()).resolves.toMatchObject({
+      error: { type: 'validation_error', details: { fields: { target: expect.any(String) } } },
+    })
+
+    const missingRes = await jsonFetch('/api/agents/agent_missing/handoff-candidates?role=worker', authorization)
+    expect(missingRes.status).toBe(404)
+  })
 })

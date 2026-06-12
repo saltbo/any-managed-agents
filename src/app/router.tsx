@@ -1,4 +1,5 @@
 import { createBrowserRouter, Navigate } from 'react-router'
+import { AgentBuilderPage } from '@/features/agents/AgentBuilderPage'
 import { AgentDetailPage } from '@/features/agents/AgentDetailPage'
 import { AgentsPage } from '@/features/agents/AgentsPage'
 import { AuditPage } from '@/features/audit/AuditPage'
@@ -30,6 +31,7 @@ export function createAppRouter() {
         { index: true, element: <Navigate to="/quickstart" replace /> },
         { path: 'quickstart', element: <QuickstartPage /> },
         { path: 'agents', element: <AgentsPage /> },
+        { path: 'agents/new', element: <AgentBuilderPage /> },
         { path: 'agents/:agentId', element: <AgentDetailPage /> },
         { path: 'environments', element: <EnvironmentsPage /> },
         { path: 'environments/:environmentId', element: <EnvironmentDetailPage /> },

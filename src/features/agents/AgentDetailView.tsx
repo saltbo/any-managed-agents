@@ -62,6 +62,10 @@ function AgentDetailContent({
         model: agent.model,
         systemPrompt: agent.systemPrompt,
         skills: agent.skills,
+        role: agent.role,
+        capabilityTags: agent.capabilityTags,
+        handoffPolicy: agent.handoffPolicy,
+        memoryPolicy: agent.memoryPolicy,
         allowedTools: agent.allowedTools,
         mcpConnectors: agent.mcpConnectors,
         metadata: agent.metadata,
@@ -123,6 +127,10 @@ function AgentDetailContent({
                 <Meta label="Skills" value={currentVersion.skills.join(', ') || 'None'} />
                 <Meta label="Allowed tools" value={currentVersion.allowedTools.join(', ') || 'None'} />
                 <Meta label="MCP connectors" value={currentVersion.mcpConnectors.join(', ') || 'None'} />
+                <Meta label="Role" value={currentVersion.role ?? 'None'} />
+                <Meta label="Capability tags" value={currentVersion.capabilityTags.join(', ') || 'None'} />
+                <Meta label="Handoff policy" value={stringifyJson(currentVersion.handoffPolicy)} />
+                <Meta label="Memory policy" value={stringifyJson(currentVersion.memoryPolicy)} />
                 <Meta label="Metadata" value={stringifyJson(currentVersion.metadata)} />
               </MetaGrid>
               <JsonBlock

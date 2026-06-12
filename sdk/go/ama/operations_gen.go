@@ -44,6 +44,7 @@ var Operations = []Operation{
 	{Method: "GET", Path: "/api/sessions/{sessionId}/events/export", OperationID: "exportSessionEvents", Summary: "Export session events as NDJSON", Tags: []string{"Sessions"}},
 	{Method: "GET", Path: "/api/health", OperationID: "getHealth", Summary: "Get Worker health", Tags: []string{"System"}},
 	{Method: "GET", Path: "/api/auth/login-options", OperationID: "getLoginOptions", Summary: "Discover available login methods for an organization", Tags: []string{"Auth"}},
+	{Method: "GET", Path: "/api/agents/{agentId}/handoff-candidates", OperationID: "listAgentHandoffCandidates", Summary: "List handoff candidate agents", Tags: []string{"Agents"}},
 	{Method: "GET", Path: "/api/agents", OperationID: "listAgents", Summary: "List agents", Tags: []string{"Agents"}},
 	{Method: "GET", Path: "/api/agents/{agentId}/versions", OperationID: "listAgentVersions", Summary: "List agent versions", Tags: []string{"Agents"}},
 	{Method: "GET", Path: "/api/audit-records", OperationID: "listAuditRecords", Summary: "List audit records", Tags: []string{"Audit"}},

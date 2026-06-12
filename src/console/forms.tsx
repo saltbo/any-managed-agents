@@ -1,7 +1,7 @@
 import { Bot, Boxes, Cloud, MessageSquare, Server } from 'lucide-react'
 import type { FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
-import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
@@ -386,44 +386,60 @@ export function VaultForm({
   )
 }
 
-function TextField({
+export function TextField({
   label,
   description,
   value,
   onChange,
+  error,
 }: {
   label: string
   description?: string
   value: string
   onChange: (value: string) => void
+  error?: string | undefined
 }) {
   const id = `field-${label.toLowerCase().replaceAll(' ', '-')}`
   return (
-    <Field>
+    <Field data-invalid={error ? true : undefined}>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <Input id={id} value={value} onChange={(event) => onChange(event.target.value)} />
+      <Input
+        id={id}
+        value={value}
+        aria-invalid={error ? true : undefined}
+        onChange={(event) => onChange(event.target.value)}
+      />
       {description ? <FieldDescription>{description}</FieldDescription> : null}
+      {error ? <FieldError>{error}</FieldError> : null}
     </Field>
   )
 }
 
-function TextAreaField({
+export function TextAreaField({
   label,
   description,
   value,
   onChange,
+  error,
 }: {
   label: string
   description?: string
   value: string
   onChange: (value: string) => void
+  error?: string | undefined
 }) {
   const id = `field-${label.toLowerCase().replaceAll(' ', '-')}`
   return (
-    <Field>
+    <Field data-invalid={error ? true : undefined}>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <Textarea id={id} value={value} onChange={(event) => onChange(event.target.value)} />
+      <Textarea
+        id={id}
+        value={value}
+        aria-invalid={error ? true : undefined}
+        onChange={(event) => onChange(event.target.value)}
+      />
       {description ? <FieldDescription>{description}</FieldDescription> : null}
+      {error ? <FieldError>{error}</FieldError> : null}
     </Field>
   )
 }

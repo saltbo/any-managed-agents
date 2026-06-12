@@ -12,7 +12,7 @@ Feature: Agent roles, handoff, and memory
     And sessions created from the agent include those fields in the immutable agent snapshot
     And the fields are available through OpenAPI and generated SDKs
 
-  @planned
+  @implemented
   Scenario: Handoff policy is generic and product-agnostic
     Given an agent definition can hand work to another agent by role or capability
     When a runtime session requests a handoff target
