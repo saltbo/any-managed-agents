@@ -1,8 +1,99 @@
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
+import { getCookie } from 'hono/cookie'
 import type { Env } from '../env'
 import { errorResponse } from '../errors'
-import { getBearerClaims, OidcError, organizationIdForClaims, upsertProjectForClaims } from './oidc'
+import { base64UrlDecode, base64UrlEncode, constantTimeEqual, hmacSha256 } from './crypto'
+import {
+  getBearerClaims,
+  OidcError,
+  organizationIdForClaims,
+  type UserInfoClaims,
+  upsertProjectForClaims,
+} from './oidc'
+
+export const SESSION_COOKIE_NAME = 'ama_session'
+const SESSION_EXPIRY_SECONDS = 24 * 60 * 60 // 24 hours
+
+interface SessionPayload {
+  sub: string
+  email?: string
+  name?: string
+  picture?: string
+  org_id?: string
+  org_name?: string
+  roles: string[]
+  permissions: string[]
+  iat: number
+  exp: number
+}
+
+export async function createSessionCookie(env: Env, claims: UserInfoClaims): Promise<string | null> {
+  if (!env.AMA_SESSION_SECRET) {
+    return null
+  }
+  const now = Math.floor(Date.now() / 1000)
+  const payload: SessionPayload = {
+    sub: claims.sub,
+    ...(claims.email ? { email: claims.email } : {}),
+    ...(claims.name ? { name: claims.name } : {}),
+    ...(claims.picture ? { picture: claims.picture } : {}),
+    ...(claims.org_id ? { org_id: claims.org_id } : {}),
+    ...(claims.org_name ? { org_name: claims.org_name } : {}),
+    roles: claims.roles,
+    permissions: claims.permissions,
+    iat: now,
+    exp: now + SESSION_EXPIRY_SECONDS,
+  }
+  const encodedPayload = base64UrlEncode(JSON.stringify(payload))
+  const signature = await hmacSha256(env.AMA_SESSION_SECRET, encodedPayload)
+  return `${encodedPayload}.${signature}`
+}
+
+export function sessionCookieHeader(value: string, secure: boolean): string {
+  const secureFlag = secure ? '; Secure' : ''
+  return `${SESSION_COOKIE_NAME}=${value}; HttpOnly; SameSite=Lax; Path=/${secureFlag}; Max-Age=${SESSION_EXPIRY_SECONDS}`
+}
+
+export async function resolveSessionClaims(c: Context<{ Bindings: Env }>): Promise<UserInfoClaims | null> {
+  if (!c.env.AMA_SESSION_SECRET) {
+    return null
+  }
+  const cookieValue = getCookie(c, SESSION_COOKIE_NAME)
+  if (!cookieValue) {
+    return null
+  }
+  const dotIndex = cookieValue.lastIndexOf('.')
+  if (dotIndex < 0) {
+    return null
+  }
+  const encodedPayload = cookieValue.slice(0, dotIndex)
+  const providedSignature = cookieValue.slice(dotIndex + 1)
+  const expectedSignature = await hmacSha256(c.env.AMA_SESSION_SECRET, encodedPayload)
+  if (!constantTimeEqual(providedSignature, expectedSignature)) {
+    return null
+  }
+  let payload: SessionPayload
+  try {
+    payload = JSON.parse(new TextDecoder().decode(base64UrlDecode(encodedPayload))) as SessionPayload
+  } catch {
+    return null
+  }
+  const now = Math.floor(Date.now() / 1000)
+  if (!payload.sub || !payload.exp || payload.exp < now) {
+    return null
+  }
+  return {
+    sub: payload.sub,
+    ...(payload.email ? { email: payload.email } : {}),
+    ...(payload.name ? { name: payload.name } : {}),
+    ...(payload.picture ? { picture: payload.picture } : {}),
+    ...(payload.org_id ? { org_id: payload.org_id } : {}),
+    ...(payload.org_name ? { org_name: payload.org_name } : {}),
+    roles: payload.roles,
+    permissions: payload.permissions,
+  }
+}
 
 export interface AuthContext {
   user: {
@@ -65,33 +156,53 @@ export async function resolveAuthContext(
   c: Context<{ Bindings: Env }>,
   db: DrizzleD1Database,
 ): Promise<AuthContext | null> {
+  const requestedProjectId = c.req.raw.headers.get('x-ama-project-id') ?? undefined
+
   const token = bearerToken(c.req.raw.headers, c.req.url)
-  if (!token) {
-    return null
+  if (token) {
+    const claims = await getBearerClaims(c.env, token)
+    const identity = authIdentityFromClaims(claims)
+    const project = await upsertProjectForClaims(db, claims, new Date().toISOString(), requestedProjectId)
+    return {
+      ...identity,
+      organization: {
+        ...identity.organization,
+        id: project.organizationId ?? identity.organization.id,
+      },
+      project,
+    }
   }
 
-  const claims = await getBearerClaims(c.env, token)
-  const identity = authIdentityFromClaims(claims)
-  const requestedProjectId = c.req.raw.headers.get('x-ama-project-id') ?? undefined
-  const project = await upsertProjectForClaims(db, claims, new Date().toISOString(), requestedProjectId)
-  return {
-    ...identity,
-    organization: {
-      ...identity.organization,
-      id: project.organizationId ?? identity.organization.id,
-    },
-    project,
+  const sessionClaims = await resolveSessionClaims(c)
+  if (sessionClaims) {
+    const identity = authIdentityFromClaims(sessionClaims)
+    const project = await upsertProjectForClaims(db, sessionClaims, new Date().toISOString(), requestedProjectId)
+    return {
+      ...identity,
+      organization: {
+        ...identity.organization,
+        id: project.organizationId ?? identity.organization.id,
+      },
+      project,
+    }
   }
+
+  return null
 }
 
 export async function resolveAuthIdentity(c: Context<{ Bindings: Env }>): Promise<AuthIdentity | null> {
   const token = bearerToken(c.req.raw.headers, c.req.url)
-  if (!token) {
-    return null
+  if (token) {
+    const claims = await getBearerClaims(c.env, token)
+    return authIdentityFromClaims(claims)
   }
 
-  const claims = await getBearerClaims(c.env, token)
-  return authIdentityFromClaims(claims)
+  const sessionClaims = await resolveSessionClaims(c)
+  if (sessionClaims) {
+    return authIdentityFromClaims(sessionClaims)
+  }
+
+  return null
 }
 
 function authIdentityFromClaims(claims: Awaited<ReturnType<typeof getBearerClaims>>): AuthIdentity {

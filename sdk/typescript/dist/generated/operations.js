@@ -83,6 +83,15 @@ export const operations = [
     },
     {
         "method": "POST",
+        "path": "/api/auth/session",
+        "operationId": "createAuthSession",
+        "summary": "Complete OIDC sign-in and create an httpOnly session cookie",
+        "tags": [
+            "Auth"
+        ]
+    },
+    {
+        "method": "POST",
         "path": "/api/governance/budgets",
         "operationId": "createBudget",
         "summary": "Create budget",
@@ -277,6 +286,15 @@ export const operations = [
         "summary": "Get Worker health",
         "tags": [
             "System"
+        ]
+    },
+    {
+        "method": "GET",
+        "path": "/api/auth/login-options",
+        "operationId": "getLoginOptions",
+        "summary": "Discover available login methods for an organization",
+        "tags": [
+            "Auth"
         ]
     },
     {

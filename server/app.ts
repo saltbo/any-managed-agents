@@ -13,6 +13,7 @@ import { evaluateMcpToolPolicy, evaluateSandboxRuntimePolicy, type PolicyDecisio
 import { redactSensitiveValue } from './redaction'
 import agents from './routes/agents'
 import audit from './routes/audit'
+import auth from './routes/auth'
 import e2e from './routes/e2e'
 import environments from './routes/environments'
 import governance from './routes/governance'
@@ -605,6 +606,7 @@ export function createApp() {
   const routes = app
     .route('/api/health', health)
     .route('/api/e2e', e2e)
+    .route('/api/auth', auth)
     .route('/api/projects', projects)
     .route('/api/agents', agents)
     .route('/api/environments', environments)
