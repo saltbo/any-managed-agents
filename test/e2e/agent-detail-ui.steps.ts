@@ -90,6 +90,9 @@ Given('an agent is active', { timeout: 120_000 }, async function (this: AgentDet
   if (!workflow.agentId) {
     await createTestAgent(workflow)
   }
+  // Navigate to the agent detail page so archive/edit steps can find the action buttons
+  await workflow.page.goto(`/agents/${workflow.agentId}`)
+  await expect(workflow.page.getByText('Agent model configuration')).toBeVisible()
   // Expose active resource context for the shared archive step in destructive-ops-ui.steps.ts
   this.activeResourcePage = workflow.page
   this.activeResourceType = 'agent'
@@ -109,10 +112,10 @@ Then(
   async function (this: AgentDetailWorld) {
     const page = (this.agentDetailWorkflow as AgentDetailWorkflow).page
     await expect(page.getByText('Agent model configuration')).toBeVisible()
-    await expect(page.getByText('Provider')).toBeVisible()
-    await expect(page.getByText('Model')).toBeVisible()
-    await expect(page.getByText('Skills')).toBeVisible()
-    await expect(page.getByText('Allowed tools')).toBeVisible()
+    await expect(page.getByText('Provider').first()).toBeVisible()
+    await expect(page.getByText('Model').first()).toBeVisible()
+    await expect(page.getByText('Skills').first()).toBeVisible()
+    await expect(page.getByText('Allowed tools').first()).toBeVisible()
     // Archive state visible via StatusBadge (active/archived)
     await expect(page.getByText('active').first()).toBeVisible()
   },
@@ -122,23 +125,23 @@ Then('the header shows name, status, and timestamps', async function (this: Agen
   const workflow = this.agentDetailWorkflow as AgentDetailWorkflow
   const page = workflow.page
   // Page header shows agent name (runId agent)
-  await expect(page.getByText(new RegExp(workflow.runId))).toBeVisible()
+  await expect(page.getByText(new RegExp(workflow.runId)).first()).toBeVisible()
   // Status badge is visible
   await expect(page.getByText('active').first()).toBeVisible()
   // Timestamps shown in description (Created / Updated)
-  await expect(page.getByText(/Created/)).toBeVisible()
+  await expect(page.getByText(/Created/).first()).toBeVisible()
 })
 
 Then(
   'the configuration view shows instructions, provider, model, skills, tools, MCP connectors, and metadata without exposing secrets or sandbox policy',
   async function (this: AgentDetailWorld) {
     const page = (this.agentDetailWorkflow as AgentDetailWorkflow).page
-    await expect(page.getByText('Provider')).toBeVisible()
-    await expect(page.getByText('Model')).toBeVisible()
-    await expect(page.getByText('Skills')).toBeVisible()
-    await expect(page.getByText('Allowed tools')).toBeVisible()
-    await expect(page.getByText('MCP connectors')).toBeVisible()
-    await expect(page.getByText('Metadata')).toBeVisible()
+    await expect(page.getByText('Provider').first()).toBeVisible()
+    await expect(page.getByText('Model').first()).toBeVisible()
+    await expect(page.getByText('Skills').first()).toBeVisible()
+    await expect(page.getByText('Allowed tools').first()).toBeVisible()
+    await expect(page.getByText('MCP connectors').first()).toBeVisible()
+    await expect(page.getByText('Metadata').first()).toBeVisible()
     // No sandbox policy section
     await expect(page.getByText('Sandbox policy')).toHaveCount(0)
   },
@@ -151,7 +154,7 @@ Then(
     // Version selector is visible with at least v1
     await expect(page.getByText(/v\d+/).first()).toBeVisible()
     // Version details: Version, Created, Provider, Model
-    await expect(page.getByText('Version')).toBeVisible()
+    await expect(page.getByText('Version').first()).toBeVisible()
     await expect(page.getByText('Created').first()).toBeVisible()
   },
 )

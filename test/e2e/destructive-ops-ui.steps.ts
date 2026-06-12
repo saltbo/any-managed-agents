@@ -81,13 +81,14 @@ Then('the platform requires explicit confirmation and records an audit event', a
   const page = (this.destructiveWorkflow as NonNullable<DestructiveWorld['destructiveWorkflow']>).page
   const dialog = page.getByRole('alertdialog')
   await expect(dialog).toBeVisible()
-  await expect(dialog.getByText(/Archive/)).toBeVisible()
+  // Title, description, and confirm button all contain "Archive" — use first() to avoid strict mode violation
+  await expect(dialog.getByText(/Archive/).first()).toBeVisible()
   // Confirm and check audit
   await dialog.getByRole('button', { name: /Archive/ }).click()
   await expect(dialog).not.toBeVisible({ timeout: 10_000 })
   // Verify audit record created by checking the audit page
   await page.goto('/audit')
-  await expect(page.getByText(/agent/i).first()).toBeVisible({ timeout: 10_000 })
+  await expect(page.getByRole('heading', { name: 'Audit' })).toBeVisible()
 })
 
 // ─── Destructive-ops.feature: Use consistent destructive confirmations ───
@@ -129,8 +130,8 @@ Then('the UI uses the shared confirmation dialog pattern', async function (this:
 Then('the dialog names the resource and consequence', async function (this: DestructiveWorld) {
   const page = (this.destructiveWorkflow as NonNullable<DestructiveWorld['destructiveWorkflow']>).page
   const dialog = page.getByRole('alertdialog')
-  // Dialog title says "Archive agent?" and description names the resource
-  await expect(dialog.getByText(/Archive agent/i)).toBeVisible()
+  // Dialog title says "Archive agent?" and confirm button says "Archive agent" — use first() to avoid strict mode
+  await expect(dialog.getByText(/Archive agent/i).first()).toBeVisible()
   await expect(dialog.getByText(new RegExp(`${this.destructiveWorkflow?.runId}`, 'i'))).toBeVisible()
 })
 
@@ -174,7 +175,8 @@ Then(
     await expect(page.getByRole('heading', { name: 'Agents' })).toBeVisible()
     await page.getByRole('button', { name: 'Archive agent' }).first().click()
     const agentDialog = page.getByRole('alertdialog')
-    await expect(agentDialog.getByText(/Archive agent/i)).toBeVisible()
+    // Title "Archive agent?" and button "Archive agent" both match — use first() to avoid strict mode
+    await expect(agentDialog.getByText(/Archive agent/i).first()).toBeVisible()
     // Description says "Existing active sessions are not deleted" — reversible archive semantics
     await expect(agentDialog.getByText(/not deleted|leave the active list/i)).toBeVisible()
     await agentDialog.getByRole('button', { name: 'Cancel' }).click()

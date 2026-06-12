@@ -94,6 +94,9 @@ Given('an environment is active', { timeout: 120_000 }, async function (this: En
   if (!workflow.environmentId) {
     await createTestEnvironment(workflow)
   }
+  // Navigate to the environment detail page so archive steps can find the action buttons
+  await workflow.page.goto(`/environments/${workflow.environmentId}`)
+  await expect(workflow.page.getByText('Environment profile')).toBeVisible()
   // Expose active resource context for the shared archive step in destructive-ops-ui.steps.ts
   this.activeResourcePage = workflow.page
   this.activeResourceType = 'environment'
@@ -132,10 +135,10 @@ Then(
   async function (this: EnvDetailWorld) {
     const page = (this.envDetailWorkflow as EnvDetailWorkflow).page
     await expect(page.getByText('Environment profile')).toBeVisible()
-    await expect(page.getByText('Packages')).toBeVisible()
-    await expect(page.getByText('Variables')).toBeVisible()
-    await expect(page.getByText('Network policy')).toBeVisible()
-    await expect(page.getByText('Sessions using this environment')).toBeVisible()
+    await expect(page.getByText('Packages').first()).toBeVisible()
+    await expect(page.getByText('Variables').first()).toBeVisible()
+    await expect(page.getByText('Network policy').first()).toBeVisible()
+    await expect(page.getByText('Sessions using this environment').first()).toBeVisible()
   },
 )
 

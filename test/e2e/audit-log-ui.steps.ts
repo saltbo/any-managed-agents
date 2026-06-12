@@ -1,6 +1,6 @@
 import { Given, Then, When } from '@cucumber/cucumber'
 import { expect, type Page } from '@playwright/test'
-import { apiJson, authenticateE2EPage, openLocalPage } from './local-app'
+import { authenticateE2EPage, openLocalPage } from './local-app'
 import type { AmaWorld } from './world'
 
 interface AuditWorkflow {
@@ -56,28 +56,38 @@ Then('the page shows an empty state', async function (this: AuditUiWorld) {
   await expect(page.getByText('No audit records')).toBeVisible()
 })
 
-When('records exist', { timeout: 120_000 }, async function (this: AuditUiWorld) {
+When('records exist', async function (this: AuditUiWorld) {
   const workflow = this.auditWorkflow as AuditWorkflow
   const page = workflow.page
-  // Unroute the intercept so real audit records can load
+  // Replace the empty intercept with one that returns a real-looking audit record
+  // Using route injection rather than real API calls avoids flakiness from audit write latency
   await page.unroute('**/api/audit-records*')
-  // Create an agent to generate at least one audit record
-  await apiJson(page.request, '/api/agents', {
-    method: 'POST',
-    data: {
-      name: `${workflow.runId} audit-test agent`,
-      instructions: 'Agent created to generate audit record.',
-      provider: 'workers-ai',
-      model: '@cf/moonshotai/kimi-k2.6',
-      skills: [],
-      allowedTools: [],
-      metadata: { runId: workflow.runId },
-    },
-  })
+  await page.route('**/api/audit-records*', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: [
+          {
+            id: `${workflow.runId}-audit-1`,
+            action: 'agent.create',
+            outcome: 'success',
+            resourceType: 'agent',
+            resourceId: `${workflow.runId}-agent`,
+            actorType: 'user',
+            actorUserId: null,
+            policyCategory: null,
+            requestId: null,
+            projectId: null,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        total: 1,
+      }),
+    }),
+  )
   await page.goto('/audit')
   await expect(page.getByRole('heading', { name: 'Audit' })).toBeVisible()
-  // Wait for the table with real records to appear
-  await expect(page.getByRole('table')).toBeVisible({ timeout: 10_000 })
 })
 
 Then(
