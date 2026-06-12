@@ -1,7 +1,7 @@
 // @ts-nocheck
 import assert from 'node:assert/strict'
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
-import { mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -1389,13 +1389,13 @@ When(
   },
 )
 
-When('no runner advertises the exact runtime provider and model', async function (this: ProductWorld) {
+When('no runner advertises the codex runtime', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const wrongCapability = `runtime-provider-model:codex:${state.provider?.id}:${CODEX_E2E_MODEL}-mini`
+  const wrongCapability = `runtime-provider-model:claude-code:*:${CLAUDE_CODE_E2E_MODEL}`
   state.otherProvider = await apiJson<Json>(state.page.request, '/api/runners', {
     method: 'POST',
     data: {
-      name: `${state.runId} wrong codex runner`,
+      name: `${state.runId} wrong runtime runner`,
       environmentId: state.environment?.id,
       capabilities: [wrongCapability],
     },
@@ -1417,20 +1417,20 @@ When('no runner advertises the exact runtime provider and model', async function
   state.response = (await response.json()) as Json
 })
 
-When('a runner advertises the exact runtime provider and model', async function (this: ProductWorld) {
+When('a runner advertises the codex runtime', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const capability = `runtime-provider-model:codex:${state.provider?.id}:${CODEX_E2E_MODEL}`
+  const capabilities = ['codex', `runtime-provider-model:codex:*:${CODEX_E2E_MODEL}`]
   state.runner = await apiJson<Json>(state.page.request, '/api/runners', {
     method: 'POST',
     data: {
-      name: `${state.runId} exact codex runner`,
+      name: `${state.runId} codex runtime runner`,
       environmentId: state.environment?.id,
-      capabilities: [capability],
+      capabilities,
     },
   })
   state.runner = await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/heartbeats`, {
     method: 'POST',
-    data: { status: 'active', currentLoad: 0, capabilities: [capability] },
+    data: { status: 'active', currentLoad: 0, capabilities },
   })
 })
 
@@ -3758,24 +3758,15 @@ Then('no runtime fallback or model substitution occurs', async function (this: P
   )
 })
 
-Then(
-  'AMA offers the session work only to runners that advertise the same runtime, provider, and model',
-  async function (this: ProductWorld) {
-    const state = await ensureState(this)
-    const session = required(state.latestSession, 'session')
-    state.list = await apiJson<ListResponse<Json>>(
-      state.page.request,
-      `/api/runners/work-items?sessionId=${session.id}`,
-    )
-    assert.equal(state.list.data.length, 1)
-    assert.equal(
-      objectValue(state.list.data[0]?.payload).requiredRunnerCapability,
-      `runtime-provider-model:codex:*:${CODEX_E2E_MODEL}`,
-    )
-  },
-)
+Then('AMA queues the session work with a codex runtime capability requirement', async function (this: ProductWorld) {
+  const state = await ensureState(this)
+  const session = required(state.latestSession, 'session')
+  state.list = await apiJson<ListResponse<Json>>(state.page.request, `/api/runners/work-items?sessionId=${session.id}`)
+  assert.equal(state.list.data.length, 1)
+  assert.equal(objectValue(state.list.data[0]?.payload).requiredRunnerCapability, 'codex')
+})
 
-Then('runners that lack the exact combination cannot lease the work', async function (this: ProductWorld) {
+Then('runners that do not advertise the codex runtime cannot lease the work', async function (this: ProductWorld) {
   const state = await ensureState(this)
   const wrongRunner = required(state.otherProvider, 'wrong runner')
   const response = await apiResponse(state.page.request, `/api/runners/${wrongRunner.id}/leases`, {
@@ -4890,6 +4881,14 @@ async function startProductAmaRunner(state: E2EState) {
   state.runnerOrigin = origin
   state.accessToken = token
   const workDir = realpathSync(mkdtempSync(join(tmpdir(), 'ama-product-runner-')))
+  // ama-runner only advertises external runtimes whose CLI binaries are on
+  // PATH. The bridge runs in deterministic test mode and never invokes them,
+  // so stub binaries make capability detection host-independent.
+  const stubBinDir = join(workDir, 'stub-bin')
+  mkdirSync(stubBinDir)
+  for (const binary of ['claude', 'codex', 'copilot']) {
+    writeFileSync(join(stubBinDir, binary), '#!/bin/sh\nexit 0\n', { mode: 0o755 })
+  }
   const child = spawn(
     'go',
     [
@@ -4918,7 +4917,7 @@ async function startProductAmaRunner(state: E2EState) {
     {
       cwd: 'cmd/ama-runner',
       env: {
-        PATH: process.env.PATH,
+        PATH: `${stubBinDir}:${process.env.PATH}`,
         HOME: process.env.HOME,
         VOLTA_HOME: process.env.VOLTA_HOME,
         NODE_PATH: process.env.NODE_PATH,
