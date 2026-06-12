@@ -198,6 +198,12 @@ export declare const operations: readonly [{
     readonly tags: readonly ["Sessions"];
 }, {
     readonly method: "GET";
+    readonly path: "/api/usage/export";
+    readonly operationId: "exportUsageSummary";
+    readonly summary: "Export usage summaries";
+    readonly tags: readonly ["Usage"];
+}, {
+    readonly method: "GET";
     readonly path: "/api/health";
     readonly operationId: "getHealth";
     readonly summary: "Get Worker health";
@@ -376,6 +382,12 @@ export declare const operations: readonly [{
     readonly operationId: "readAgentMemory";
     readonly summary: "Read agent memory";
     readonly tags: readonly ["Agents"];
+}, {
+    readonly method: "GET";
+    readonly path: "/api/audit-records/{recordId}";
+    readonly operationId: "readAuditRecord";
+    readonly summary: "Read an audit record";
+    readonly tags: readonly ["Audit"];
 }, {
     readonly method: "GET";
     readonly path: "/api/governance/effective-policy";

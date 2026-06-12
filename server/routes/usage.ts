@@ -110,6 +110,12 @@ const QuerySchema = z.object({
     .optional()
     .openapi({ param: { name: 'cursor', in: 'query' } }),
 })
+const ExportQuerySchema = QuerySchema.omit({ limit: true, cursor: true }).extend({
+  format: z
+    .enum(['json', 'csv'])
+    .optional()
+    .openapi({ param: { name: 'format', in: 'query' }, example: 'csv' }),
+})
 const UsageListResponseSchema = listResponseSchema('UsageRecordListResponse', UsageRecordSchema)
 
 type UsageRow = typeof usageRecords.$inferSelect
@@ -165,6 +171,103 @@ function filters(query: z.infer<typeof QuerySchema>, projectId: string) {
   ].filter((filter) => filter !== undefined)
 }
 
+const DEFAULT_GROUP_BY = 'organization,project,provider,model,agent,session'
+const SUMMARY_METRIC_COLUMNS = [
+  'records',
+  'promptTokens',
+  'completionTokens',
+  'totalTokens',
+  'durationMs',
+  'costMicros',
+  'currency',
+] as const
+
+function parseGroupedFields(groupBy: string | undefined) {
+  return (groupBy ?? DEFAULT_GROUP_BY)
+    .split(',')
+    .map((field) => field.trim())
+    .filter(Boolean)
+}
+
+function summarize(rows: UsageRow[], groupedFields: string[]) {
+  const groups = new Map<string, z.infer<typeof UsageSummaryGroupSchema>>()
+  const totals: z.infer<typeof UsageSummaryGroupSchema> = {
+    key: {},
+    records: 0,
+    promptTokens: 0,
+    completionTokens: 0,
+    totalTokens: 0,
+    durationMs: 0,
+    costMicros: 0,
+    currency: 'USD',
+  }
+  for (const row of rows) {
+    const item = serializeUsage(row)
+    const key = Object.fromEntries(
+      groupedFields.map((field) => [
+        field,
+        field === 'organization'
+          ? item.organizationId
+          : field === 'project'
+            ? item.projectId
+            : field === 'provider'
+              ? item.providerType
+              : field === 'model'
+                ? item.modelId
+                : field === 'agent'
+                  ? item.agentId
+                  : field === 'session'
+                    ? item.sessionId
+                    : field === 'status'
+                      ? item.status
+                      : null,
+      ]),
+    )
+    const keyString = JSON.stringify(key)
+    const group =
+      groups.get(keyString) ??
+      ({
+        key,
+        records: 0,
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        durationMs: 0,
+        costMicros: 0,
+        currency: item.currency,
+      } satisfies z.infer<typeof UsageSummaryGroupSchema>)
+    for (const target of [group, totals]) {
+      target.records += 1
+      target.promptTokens += item.promptTokens
+      target.completionTokens += item.completionTokens
+      target.totalTokens += item.totalTokens
+      target.durationMs += item.durationMs
+      target.costMicros += item.costMicros
+      target.currency = item.currency
+    }
+    groups.set(keyString, group)
+  }
+  return {
+    totals,
+    groups: [...groups.values()].sort((a, b) => JSON.stringify(a.key).localeCompare(JSON.stringify(b.key))),
+  }
+}
+
+function csvCell(value: string) {
+  return /[",\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value
+}
+
+function summaryCsv(groupedFields: string[], summary: ReturnType<typeof summarize>) {
+  const header = [...groupedFields, ...SUMMARY_METRIC_COLUMNS]
+  const lines = summary.groups.map((group) =>
+    [
+      ...groupedFields.map((field) => csvCell(String(group.key[field] ?? ''))),
+      ...SUMMARY_METRIC_COLUMNS.map((column) => csvCell(String(group[column]))),
+    ].join(','),
+  )
+  return [header.join(','), ...lines].join('\n')
+}
+
 const listRoute = createRoute({
   method: 'get',
   path: '/',
@@ -190,6 +293,29 @@ const summaryRoute = createRoute({
   request: { query: QuerySchema },
   responses: {
     200: { description: 'Usage summary', content: { 'application/json': { schema: UsageSummarySchema } } },
+    400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+  },
+})
+
+const exportRoute = createRoute({
+  method: 'get',
+  path: '/export',
+  operationId: 'exportUsageSummary',
+  tags: ['Usage'],
+  summary: 'Export usage summaries',
+  description:
+    'Exports the grouped usage summary for the requested filters as JSON or CSV. The export honors the same filters and grouping as the usage summary.',
+  ...AuthenticatedOperation,
+  request: { query: ExportQuerySchema },
+  responses: {
+    200: {
+      description: 'Usage export',
+      content: {
+        'application/json': { schema: UsageSummarySchema },
+        'text/csv': { schema: z.string().openapi({ example: 'provider,model,records,totalTokens' }) },
+      },
+    },
     400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
   },
@@ -232,74 +358,23 @@ const routes = app
       })
     }
     const rows = await db.select().from(usageRecords).where(where)
-    const groupedFields = (query.groupBy ?? 'organization,project,provider,model,agent,session')
-      .split(',')
-      .map((field) => field.trim())
-      .filter(Boolean)
-    const groups = new Map<string, z.infer<typeof UsageSummaryGroupSchema>>()
-    const totals: z.infer<typeof UsageSummaryGroupSchema> = {
-      key: {},
-      records: 0,
-      promptTokens: 0,
-      completionTokens: 0,
-      totalTokens: 0,
-      durationMs: 0,
-      costMicros: 0,
-      currency: 'USD',
+    return c.json(summarize(rows, parseGroupedFields(query.groupBy)), 200)
+  })
+  .openapi(exportRoute, async (c) => {
+    const query = c.req.valid('query')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) return auth
+    const where = and(...filters(query, auth.project.id))
+    const rows = await db.select().from(usageRecords).where(where)
+    const groupedFields = parseGroupedFields(query.groupBy)
+    const summary = summarize(rows, groupedFields)
+    const format = query.format ?? 'json'
+    c.header('content-disposition', `attachment; filename="usage-export.${format}"`)
+    if (format === 'csv') {
+      return c.text(summaryCsv(groupedFields, summary), 200, { 'content-type': 'text/csv; charset=utf-8' })
     }
-    for (const row of rows) {
-      const item = serializeUsage(row)
-      const key = Object.fromEntries(
-        groupedFields.map((field) => [
-          field,
-          field === 'organization'
-            ? item.organizationId
-            : field === 'project'
-              ? item.projectId
-              : field === 'provider'
-                ? item.providerType
-                : field === 'model'
-                  ? item.modelId
-                  : field === 'agent'
-                    ? item.agentId
-                    : field === 'session'
-                      ? item.sessionId
-                      : field === 'status'
-                        ? item.status
-                        : null,
-        ]),
-      )
-      const keyString = JSON.stringify(key)
-      const group =
-        groups.get(keyString) ??
-        ({
-          key,
-          records: 0,
-          promptTokens: 0,
-          completionTokens: 0,
-          totalTokens: 0,
-          durationMs: 0,
-          costMicros: 0,
-          currency: item.currency,
-        } satisfies z.infer<typeof UsageSummaryGroupSchema>)
-      for (const target of [group, totals]) {
-        target.records += 1
-        target.promptTokens += item.promptTokens
-        target.completionTokens += item.completionTokens
-        target.totalTokens += item.totalTokens
-        target.durationMs += item.durationMs
-        target.costMicros += item.costMicros
-        target.currency = item.currency
-      }
-      groups.set(keyString, group)
-    }
-    return c.json(
-      {
-        totals,
-        groups: [...groups.values()].sort((a, b) => JSON.stringify(a.key).localeCompare(JSON.stringify(b.key))),
-      },
-      200,
-    )
+    return c.json(summary, 200)
   })
 
 export default routes
