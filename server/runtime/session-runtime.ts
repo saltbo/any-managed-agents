@@ -113,6 +113,22 @@ export class RuntimeTurnCancelledError extends Error {
   }
 }
 
+// A tool call was denied by AMA policy. The turn fails, but the session stays
+// usable: a governance denial is an expected product outcome, not a runtime
+// fault, so callers park the session back to idle instead of error.
+export class RuntimePolicyDeniedError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'RuntimePolicyDeniedError'
+  }
+}
+
+export function isRuntimePolicyDenied(error: unknown): error is RuntimePolicyDeniedError {
+  return (
+    error instanceof RuntimePolicyDeniedError || (error instanceof Error && error.name === 'RuntimePolicyDeniedError')
+  )
+}
+
 // A provider/model call failed: carries the adapter-normalized error so the
 // canonical runtime.error event and the session status only ever expose the
 // safe category and message, never the raw provider payload.
@@ -679,6 +695,12 @@ function testAssistantMessage(model: Model<string>, context: Context) {
   }
   const latestUser = [...context.messages].reverse().find((message) => message.role === 'user')
   const prompt = latestUser && latestUser.role === 'user' ? textContent(latestUser.content) : ''
+  // The explicit tool-call grammar wins over the fuzzy previous-prompt echo:
+  // a quoted sandbox command may legitimately contain words like "history".
+  const explicitToolCall = testPromptToolCall(prompt)
+  if (explicitToolCall) {
+    return testToolCallMessage(model, explicitToolCall)
+  }
   if (/previous prompt|prior prompt|history/i.test(prompt)) {
     const previousUser = [...context.messages]
       .reverse()
@@ -853,7 +875,7 @@ function runtimeTools(
         await ensureTurnActive(signal ?? new AbortController().signal, values.ensureActive)
         const decision = await values.approveToolCall?.({ toolCallId, toolName: name, input })
         if (decision && !decision.allowed) {
-          throw new Error(decision.reason ?? `Tool call blocked by AMA policy: ${name}`)
+          throw new RuntimePolicyDeniedError(decision.reason ?? `Tool call blocked by AMA policy: ${name}`)
         }
         await ensureTurnActive(signal ?? new AbortController().signal, values.ensureActive)
         const providedResult = await values.resolveToolResult?.({ toolCallId, toolName: name, input })

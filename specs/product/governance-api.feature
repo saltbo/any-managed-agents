@@ -15,7 +15,7 @@ Feature: Governance API
     And future agent and session creation enforce those rules before runtime startup
     And policy changes are audited with actor, resource, and safe diff metadata
 
-  @planned
+  @implemented
   Scenario: Manage tool, MCP, and sandbox policy
     Given an organization admin is authenticated
     When the admin updates allowed tools, MCP connectors, approval modes, sandbox networking, or command restrictions

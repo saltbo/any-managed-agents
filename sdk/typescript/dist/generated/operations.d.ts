@@ -1,4 +1,10 @@
 export declare const operations: readonly [{
+    readonly method: "POST";
+    readonly path: "/api/governance/config";
+    readonly operationId: "applyGovernanceConfig";
+    readonly summary: "Apply declarative governance config atomically";
+    readonly tags: readonly ["Governance"];
+}, {
     readonly method: "DELETE";
     readonly path: "/api/agents/{agentId}";
     readonly operationId: "archiveAgent";
@@ -371,6 +377,12 @@ export declare const operations: readonly [{
     readonly summary: "List vaults";
     readonly tags: readonly ["Vaults"];
 }, {
+    readonly method: "POST";
+    readonly path: "/api/governance/config/preview";
+    readonly operationId: "previewGovernanceConfig";
+    readonly summary: "Preview declarative governance config impact";
+    readonly tags: readonly ["Governance"];
+}, {
     readonly method: "GET";
     readonly path: "/api/agents/{agentId}";
     readonly operationId: "readAgent";
@@ -562,5 +574,11 @@ export declare const operations: readonly [{
     readonly operationId: "upsertProviderModel";
     readonly summary: "Upsert provider model metadata";
     readonly tags: readonly ["Providers"];
+}, {
+    readonly method: "POST";
+    readonly path: "/api/governance/config/validate";
+    readonly operationId: "validateGovernanceConfig";
+    readonly summary: "Validate declarative governance config";
+    readonly tags: readonly ["Governance"];
 }];
 export type AmaOperationId = (typeof operations)[number]['operationId'];

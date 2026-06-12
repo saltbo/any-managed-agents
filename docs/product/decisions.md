@@ -65,6 +65,23 @@ These decisions define the intended end state for Any Managed Agents.
 - All configured providers should be supported through provider adapters.
 - Provider behavior should be normalized for usage, policy, errors, and audit records.
 
+## Governance Policy Hierarchy
+
+- Governance policy rows exist at `organization`, `team`, and `project` scope. Team scope binds to an OIDC-asserted team id; AMA keeps no local team tables, so a team-scope policy applies to a request only when the caller's OIDC `teams` claim includes that team id.
+- Effective policy is a deterministic most-restrictive merge ordered organization → team(s, sorted by team id) → project. One row per scope/team participates (latest `updatedAt` wins).
+- Merge rules:
+  - `providerRules` and `modelRules` concatenate across scopes; any applicable deny rule denies (deny overrides allow).
+  - `blocked*`, `denied*`, and `requireApproval*` lists union across scopes.
+  - `allowed*` lists intersect across scopes that define them; `'*'` is the intersection identity. A scope that does not define an allow list does not constrain it.
+  - `defaultEffect: 'deny'` at any scope is sticky.
+  - Boolean flags AND across scopes (`false` at any scope is sticky, e.g. `sandboxPolicy.enabled`).
+  - Restrictive string states (`disabled`, `deny`, `offline`, e.g. `sandboxPolicy.network`) are sticky once set by a broader scope.
+  - Numeric limits (budget policy values) take the minimum across scopes.
+  - Nested objects (e.g. `connectorApprovalModes`) shallow-merge with the most specific scope last; any other scalar takes the most specific scope's value.
+- Declarative governance configuration is applied through `POST /api/governance/config` (with `/validate` and `/preview` companions). Validation rejects unknown providers, teams, projects, tools, and MCP connectors and invalid budgets with field-level errors; nothing partial applies. Sections present in the document are authoritative for their scope (declared provider access rules and budgets replace the project's existing set); omitted sections are left unchanged. Apply is atomic across governance policies, provider access rules, and budgets, and the audit record carries the config version and a safe summary.
+- A team referenced by the configuration is known when it is declared in the document's `teams` section or asserted by the submitting operator's OIDC `teams` claim.
+- Historical sessions keep their immutable agent and environment snapshots and their recorded events after policy changes; new runtime work on any session is evaluated against the current effective policy.
+
 ## Secrets
 
 - Secret values are stored in Cloudflare Secrets.

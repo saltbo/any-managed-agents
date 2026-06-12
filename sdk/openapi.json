@@ -3632,6 +3632,15 @@
               "nullable": true
             }
           },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {
+                "nullable": true
+              }
+            }
+          },
           "providerRules": {
             "type": "array",
             "items": {
@@ -3726,6 +3735,7 @@
         },
         "required": [
           "source",
+          "sources",
           "providerRules",
           "modelRules",
           "accessRules",
@@ -4042,6 +4052,434 @@
           "limitType",
           "limitValue",
           "window"
+        ]
+      },
+      "GovernanceConfigValidationResult": {
+        "type": "object",
+        "properties": {
+          "valid": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "configVersion": {
+            "type": "integer"
+          },
+          "summary": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          }
+        },
+        "required": [
+          "valid",
+          "configVersion",
+          "summary"
+        ]
+      },
+      "GovernanceConfigDocument": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "maxLength": 120,
+            "example": "2026-06-rollout-1"
+          },
+          "projectId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "organization": {
+            "$ref": "#/components/schemas/GovernanceConfigPolicyLevel"
+          },
+          "teams": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GovernanceConfigTeamLevel"
+            },
+            "maxItems": 50
+          },
+          "project": {
+            "$ref": "#/components/schemas/GovernanceConfigPolicyLevel"
+          },
+          "providerAccessRules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GovernanceConfigAccessRule"
+            },
+            "maxItems": 200
+          },
+          "budgets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GovernanceConfigBudget"
+            },
+            "maxItems": 100
+          }
+        },
+        "additionalProperties": false
+      },
+      "GovernanceConfigPolicyLevel": {
+        "type": "object",
+        "properties": {
+          "providerRules": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "providerId": {
+                  "type": "string"
+                },
+                "modelId": {
+                  "type": "string"
+                },
+                "effect": {
+                  "type": "string",
+                  "enum": [
+                    "allow",
+                    "deny"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "maxLength": 500
+                }
+              },
+              "required": [
+                "effect"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 200
+          },
+          "modelRules": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "providerId": {
+                  "type": "string"
+                },
+                "modelId": {
+                  "type": "string"
+                },
+                "effect": {
+                  "type": "string",
+                  "enum": [
+                    "allow",
+                    "deny"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "maxLength": 500
+                }
+              },
+              "required": [
+                "effect"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 500
+          },
+          "toolPolicy": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          },
+          "mcpPolicy": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          },
+          "sandboxPolicy": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          },
+          "budgetPolicy": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "GovernanceConfigTeamLevel": {
+        "type": "object",
+        "properties": {
+          "teamId": {
+            "type": "string",
+            "minLength": 1,
+            "example": "team_platform"
+          },
+          "providerRules": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "providerId": {
+                  "type": "string"
+                },
+                "modelId": {
+                  "type": "string"
+                },
+                "effect": {
+                  "type": "string",
+                  "enum": [
+                    "allow",
+                    "deny"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "maxLength": 500
+                }
+              },
+              "required": [
+                "effect"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 200
+          },
+          "modelRules": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "providerId": {
+                  "type": "string"
+                },
+                "modelId": {
+                  "type": "string"
+                },
+                "effect": {
+                  "type": "string",
+                  "enum": [
+                    "allow",
+                    "deny"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "maxLength": 500
+                }
+              },
+              "required": [
+                "effect"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 500
+          },
+          "toolPolicy": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          },
+          "mcpPolicy": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          },
+          "sandboxPolicy": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          },
+          "budgetPolicy": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          }
+        },
+        "required": [
+          "teamId"
+        ],
+        "additionalProperties": false
+      },
+      "GovernanceConfigAccessRule": {
+        "type": "object",
+        "properties": {
+          "providerId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "modelId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "teamId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "effect": {
+            "type": "string",
+            "enum": [
+              "allow",
+              "deny"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "effect"
+        ],
+        "additionalProperties": false
+      },
+      "GovernanceConfigBudget": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "project",
+              "provider",
+              "model"
+            ]
+          },
+          "providerId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "modelId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "limitType": {
+            "type": "string",
+            "enum": [
+              "tokens",
+              "cost_micros",
+              "sessions"
+            ]
+          },
+          "limitValue": {
+            "type": "integer"
+          },
+          "window": {
+            "type": "string",
+            "enum": [
+              "day",
+              "month"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "disabled"
+            ]
+          }
+        },
+        "required": [
+          "scope",
+          "limitType",
+          "limitValue",
+          "window"
+        ],
+        "additionalProperties": false
+      },
+      "GovernanceConfigApplyResult": {
+        "type": "object",
+        "properties": {
+          "applied": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "configVersion": {
+            "type": "integer"
+          },
+          "summary": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          }
+        },
+        "required": [
+          "applied",
+          "configVersion",
+          "summary"
+        ]
+      },
+      "GovernanceConfigPreviewResult": {
+        "type": "object",
+        "properties": {
+          "configVersion": {
+            "type": "integer"
+          },
+          "mutatesPolicy": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          },
+          "impact": {
+            "type": "object",
+            "properties": {
+              "affectedAgents": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "nullable": true
+                  }
+                }
+              },
+              "affectedEnvironments": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "nullable": true
+                  }
+                }
+              },
+              "affectedProviders": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "sessionCreationPaths": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "nullable": true
+                  }
+                }
+              }
+            },
+            "required": [
+              "affectedAgents",
+              "affectedEnvironments",
+              "affectedProviders",
+              "sessionCreationPaths"
+            ]
+          }
+        },
+        "required": [
+          "configVersion",
+          "mutatesPolicy",
+          "impact"
         ]
       },
       "McpConnectorListResponse": {
@@ -10317,6 +10755,174 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Budget"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/governance/config/validate": {
+      "post": {
+        "operationId": "validateGovernanceConfig",
+        "tags": [
+          "Governance"
+        ],
+        "summary": "Validate declarative governance config",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GovernanceConfigDocument"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Config is valid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernanceConfigValidationResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/governance/config": {
+      "post": {
+        "operationId": "applyGovernanceConfig",
+        "tags": [
+          "Governance"
+        ],
+        "summary": "Apply declarative governance config atomically",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GovernanceConfigDocument"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Config applied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernanceConfigApplyResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/governance/config/preview": {
+      "post": {
+        "operationId": "previewGovernanceConfig",
+        "tags": [
+          "Governance"
+        ],
+        "summary": "Preview declarative governance config impact",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GovernanceConfigDocument"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Config impact preview",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GovernanceConfigPreviewResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }

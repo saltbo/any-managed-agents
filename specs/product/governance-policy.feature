@@ -5,33 +5,33 @@ Feature: Governance and policy
   Background:
     Given an organization has teams and projects
 
-  @planned
+  @implemented
   Scenario: Resolve policy hierarchy
     When a session starts
     Then organization policy, team policy, project policy, and agent policy are resolved
     And the most restrictive applicable rule is enforced
 
-  @planned
+  @implemented
   Scenario: Enforce model budget
     Given a project has a monthly model budget
     When a session would exceed the budget
     Then the model call is rejected before provider execution
     And a governance event is recorded
 
-  @planned
+  @implemented
   Scenario: Enforce sandbox restrictions
     Given a project disables sandbox network access
     When the agent requests a networked sandbox operation
     Then the runtime denies the operation
     And explains which policy blocked it
 
-  @planned
+  @implemented
   Scenario: Load governance from configuration
     When an operator provides a governance config
     Then the platform validates the config
     And applies it without requiring source code changes
 
-  @planned
+  @implemented
   Scenario: Explain policy denials to operators
     Given a request is denied by provider, tool, MCP, sandbox, or budget policy
     When the user inspects the failure
@@ -39,7 +39,7 @@ Feature: Governance and policy
     And the UI can link to the effective policy view
     And no secret or raw credential values are included
 
-  @planned
+  @implemented
   Scenario: Preserve historical sessions after policy changes
     Given a session was created under an older policy
     When governance policy changes
