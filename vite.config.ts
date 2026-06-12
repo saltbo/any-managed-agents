@@ -58,6 +58,8 @@ export default defineConfig(() => ({
   },
   server: {
     port: appPort,
+    // The e2e harness assigns each run its own port; never silently drift to another one.
+    strictPort: process.env.E2E_APP_PORT !== undefined,
     ...(process.env.E2E_BASE_URL ? { allowedHosts: true as const } : {}),
   },
 }))

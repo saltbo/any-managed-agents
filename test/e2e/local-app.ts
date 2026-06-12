@@ -67,17 +67,22 @@ export async function ensureLocalApp() {
   process.env.CLOUDFLARE_ENV = process.env.CLOUDFLARE_ENV ?? 'e2e'
   process.env.AMA_E2E_TEST_AUTH = 'true'
   process.env.AMA_RUNTIME_MODE = 'test'
-  process.env.E2E_APP_PORT = process.env.E2E_APP_PORT ?? '5173'
 
-  const port = Number(process.env.E2E_APP_PORT)
+  // Each run gets its own ephemeral port unless E2E_APP_PORT pins one explicitly.
+  // Reusing a fixed port silently attaches the suite to whatever e2e server is
+  // already listening there — including one serving a different worktree's code.
+  const explicitPort = process.env.E2E_APP_PORT
+  const port = explicitPort ? Number(explicitPort) : await findFreePort()
+  process.env.E2E_APP_PORT = String(port)
+
   const origin = `http://localhost:${port}`
   if (await isHttpReady(origin)) {
-    if (await isE2EReady(origin)) {
+    if (explicitPort && (await isE2EReady(origin))) {
       baseURL = origin
       ownsDevServer = false
       return baseURL
     }
-    throw new Error(`Port ${port} is already in use by a server that is not configured for local e2e auth.`)
+    throw new Error(`Port ${port} is already in use by a server this run does not own.`)
   }
 
   devServerOutput = ''
@@ -232,6 +237,22 @@ async function waitForDevServer(origin: string) {
     await delay(1_000)
   }
   throw new Error(`Local e2e dev server did not become ready:\n${devServerOutput}`)
+}
+
+async function findFreePort() {
+  const { createServer } = await import('node:net')
+  return await new Promise<number>((resolve, reject) => {
+    const probe = createServer()
+    probe.once('error', reject)
+    probe.listen(0, '127.0.0.1', () => {
+      const address = probe.address()
+      if (address === null || typeof address === 'string') {
+        probe.close(() => reject(new Error('Could not allocate a free e2e port')))
+        return
+      }
+      probe.close(() => resolve(address.port))
+    })
+  })
 }
 
 async function isHttpReady(origin: string) {
