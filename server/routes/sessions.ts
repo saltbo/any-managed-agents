@@ -2220,6 +2220,13 @@ async function stopSelfHostedSession(
   session: SessionRow,
   reason: string,
 ) {
+  // Notify runner to abort via the active session channel BEFORE cancelling the
+  // lease so the channel ownership check in the DO still passes. If the channel
+  // is inactive (runner already gone, DO evicted) the dispatch returns false and
+  // the stop proceeds unconditionally — lease/work-item cancellation is the
+  // authoritative stop mechanism in all cases.
+  await dispatchRunnerSessionCommand(c.env, session.id, { type: 'stop', reason })
+
   const stoppedAt = now()
   const activeWorkItems = await db
     .select({ id: runnerWorkItems.id, runnerId: runnerWorkItems.runnerId, leaseId: runnerWorkItems.leaseId })

@@ -1490,9 +1490,7 @@ When('the user stops the session', async function (this: ProductWorld) {
 
 When('the user reconnects to the session', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  state.latestSession = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}/reconnect`, {
-    method: 'POST',
-  })
+  state.latestSession = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}/reconnect`)
 })
 
 When('the user archives the session', async function (this: ProductWorld) {
