@@ -258,12 +258,14 @@ type RunnerChannelMessage struct {
 }
 
 type RunnerSessionCommand struct {
-	ID      string               `json:"id"`
-	Type    string               `json:"type"`
-	Path    string               `json:"path"`
-	Message string               `json:"message"`
-	Reason  string               `json:"reason"`
-	Body    RunnerRuntimeRequest `json:"body"`
+	ID           string               `json:"id"`
+	Type         string               `json:"type"`
+	Path         string               `json:"path"`
+	Message      string               `json:"message"`
+	Reason       string               `json:"reason"`
+	PermissionID string               `json:"permissionId"`
+	Allowed      bool                 `json:"allowed"`
+	Body         RunnerRuntimeRequest `json:"body"`
 }
 
 type RunnerRuntimeRequest struct {
@@ -771,20 +773,21 @@ func (d *RunnerDaemon) runExternalSession(execution sessionRuntimeExecution) err
 	defer cancelDeadline()
 	var writeMu sync.Mutex
 	result, runErr := adapter.Run(runCtx, RuntimeRequest{
-		SessionID:            payload.SessionID,
-		Runtime:              payload.Runtime,
-		RuntimeConfig:        payload.RuntimeConfig,
-		RuntimeEnv:           payload.RuntimeEnv,
-		Provider:             payload.Provider,
-		Model:                payload.Model,
-		AgentSnapshot:        payload.AgentSnapshot,
-		InitialPrompt:        initialPrompt(payload),
-		Resume:               payload.Resume,
-		ResumeToken:          payload.ResumeToken,
-		WorkDir:              workspace.Cwd,
-		OnResumeToken:        execution.ResumeTokens.Set,
-		RegisterPromptSender: router.registerPromptSender,
-		RegisterStopSender:   router.registerStopSender,
+		SessionID:                payload.SessionID,
+		Runtime:                  payload.Runtime,
+		RuntimeConfig:            payload.RuntimeConfig,
+		RuntimeEnv:               payload.RuntimeEnv,
+		Provider:                 payload.Provider,
+		Model:                    payload.Model,
+		AgentSnapshot:            payload.AgentSnapshot,
+		InitialPrompt:            initialPrompt(payload),
+		Resume:                   payload.Resume,
+		ResumeToken:              payload.ResumeToken,
+		WorkDir:                  workspace.Cwd,
+		OnResumeToken:            execution.ResumeTokens.Set,
+		RegisterPromptSender:     router.registerPromptSender,
+		RegisterStopSender:       router.registerStopSender,
+		RegisterPermissionSender: router.registerPermissionSender,
 	}, func(eventType string, eventPayload ama.JSON) error {
 		writeMu.Lock()
 		defer writeMu.Unlock()

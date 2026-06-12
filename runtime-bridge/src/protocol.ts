@@ -17,9 +17,12 @@ export type RuntimeBridgeRequest = {
 }
 
 export type RuntimeBridgeControl = {
-  type: 'abort' | 'send'
+  type: 'abort' | 'send' | 'permissionDecision'
   requestId: string
   message?: string
+  permissionId?: string
+  allowed?: boolean
+  reason?: string
 }
 
 export type RuntimeBridgeUsageRequest = {
@@ -69,6 +72,7 @@ export type RuntimeProviderHandle = {
   abort(): Promise<void>
   send(message: string): Promise<void>
   getResumeToken?(): string | undefined
+  resolvePermission?(permissionId: string, allowed: boolean, reason?: string): Promise<void>
 }
 
 export type RuntimeProviderRequest = RuntimeBridgeRequest

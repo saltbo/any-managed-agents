@@ -795,6 +795,38 @@ async function expireStaleLeases(db: Db, auth: AuthContext) {
   }
 }
 
+// Official-runtime auth/authz failures surface as stable, displayable status
+// reasons derived from the canonical runtime.error code the runner streamed —
+// never from raw provider error text.
+const RUNTIME_AUTH_STATUS_REASONS: Record<string, string> = {
+  runtime_auth_missing_login: 'runtime-auth-missing-login',
+  runtime_auth_unauthorized: 'runtime-auth-unauthorized',
+  runtime_auth_product_disabled: 'runtime-auth-product-disabled',
+  runtime_auth_expired: 'runtime-auth-expired',
+}
+
+async function runtimeFailureStatusReason(db: Db, sessionId: string | null): Promise<string | null> {
+  if (!sessionId) {
+    return null
+  }
+  const errorEvents = await db
+    .select({ payload: sessionEvents.payload })
+    .from(sessionEvents)
+    .where(and(eq(sessionEvents.sessionId, sessionId), eq(sessionEvents.type, 'runtime.error')))
+    .orderBy(desc(sessionEvents.sequence))
+    .limit(20)
+    .all()
+  for (const row of errorEvents) {
+    const payload = parseJson<Record<string, unknown>>(row.payload)
+    const code = typeof payload?.code === 'string' ? payload.code : null
+    const reason = code ? RUNTIME_AUTH_STATUS_REASONS[code] : undefined
+    if (reason) {
+      return reason
+    }
+  }
+  return null
+}
+
 async function appendSessionRunnerEvent(
   db: Db,
   auth: AuthContext,
@@ -1884,6 +1916,7 @@ const routes = app
             ),
           )
           .get()
+        const failureReason = body.status === 'failed' ? await runtimeFailureStatusReason(db, workItem.sessionId) : null
         const sessionUpdate =
           body.status === 'cancelled'
             ? {
@@ -1894,7 +1927,7 @@ const routes = app
               }
             : {
                 status: body.status === 'completed' ? 'idle' : 'error',
-                statusReason: body.status === 'completed' ? null : 'runner-failed',
+                statusReason: body.status === 'completed' ? null : (failureReason ?? 'runner-failed'),
                 updatedAt: timestamp,
               }
         const pendingWithoutAcceptedChannel = and(

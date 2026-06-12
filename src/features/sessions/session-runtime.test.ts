@@ -67,6 +67,13 @@ const canonicalEventPayloads = {
   },
   'usage.recorded': { type: 'usage.recorded', promptTokens: 1, completionTokens: 2, totalTokens: 3 },
   'policy.decision': { type: 'policy.decision', allowed: false, category: 'tool' },
+  'permission.request': {
+    type: 'permission.request',
+    permissionId: 'perm_session_1',
+    action: 'shell',
+    command: 'printf permission-ok',
+    runtime: 'claude-code',
+  },
   'runtime.error': { type: 'runtime.error', message: 'Runtime failed' },
   'runtime.metadata': { type: 'runtime.metadata', data: { status: 'idle' } },
   'runtime.output': { type: 'runtime.output', stream: 'stderr', content: 'Bridge failed' },

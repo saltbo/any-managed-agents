@@ -34,6 +34,9 @@ type RuntimeRequest struct {
 	// RegisterStopSender hands the runner a function that aborts the live
 	// runtime handle when AMA sends a stop command over the session channel.
 	RegisterStopSender func(send func(reason string) error)
+	// RegisterPermissionSender hands the runner a function that forwards an
+	// AMA permission decision to the live runtime handle.
+	RegisterPermissionSender func(send func(permissionId string, allowed bool, reason string) error)
 }
 
 type RuntimeEventWriter func(eventType string, payload ama.JSON) error

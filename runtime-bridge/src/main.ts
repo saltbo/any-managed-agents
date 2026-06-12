@@ -35,6 +35,25 @@ async function run(request: Extract<RuntimeBridgeInput, { type: 'run' }>) {
   active.set(request.requestId, state)
   try {
     if (process.env.AMA_RUNTIME_BRIDGE_TEST_MODE === '1' && request.runtimeConfig?.e2eBridgeTest === true) {
+      const authFailure = request.runtimeConfig?.e2eBridgeAuthFailure
+      if (typeof authFailure === 'string' && authFailure) {
+        // Deterministic stand-in for the official runtime reporting an
+        // authentication or authorization failure on startup.
+        const code = RUNTIME_AUTH_ERROR_CODES[authFailure] ?? 'runtime_auth_unauthorized'
+        write({
+          type: 'event',
+          requestId: request.requestId,
+          event: assertAmaRuntimeEvent(
+            runtimeError(`${request.runtime} authentication failed: ${authFailure.replaceAll('_', ' ')}`, code),
+          ),
+        })
+        write({
+          type: 'error',
+          requestId: request.requestId,
+          error: bridgeError(`${request.runtime} runtime is not authenticated`, code),
+        })
+        return
+      }
       if (request.runtimeConfig?.e2eBridgeLive !== true) {
         for (const event of deterministicBridgeTestEvents(request)) {
           write({ type: 'event', requestId: request.requestId, event: assertAmaRuntimeEvent(event) })
@@ -81,6 +100,16 @@ async function run(request: Extract<RuntimeBridgeInput, { type: 'run' }>) {
 
 // Interactive deterministic runtime for e2e: stays alive after the initial
 // prompt so live follow-up prompts and aborts exercise the real handle paths.
+// Stable, safe error codes for official-runtime auth/authz failures. The
+// canonical events and session status reasons derive from these — raw
+// provider errors and credential material never leave the bridge.
+const RUNTIME_AUTH_ERROR_CODES: Record<string, string> = {
+  missing_login: 'runtime_auth_missing_login',
+  unauthorized: 'runtime_auth_unauthorized',
+  product_disabled: 'runtime_auth_product_disabled',
+  expired: 'runtime_auth_expired',
+}
+
 function liveBridgeTestHandle(request: Extract<RuntimeBridgeInput, { type: 'run' }>): RuntimeProviderHandle {
   const marker = `${request.runtime}-bridge-live`
   // A resumed run continues the conversation instead of replaying the initial
@@ -92,6 +121,19 @@ function liveBridgeTestHandle(request: Extract<RuntimeBridgeInput, { type: 'run'
     runtimeEvent('turn_start', { marker, stage: `${marker}-started`, status: 'running' }),
     runtimeEvent('message_end', { message: textMessage('assistant', initialMessage) }),
   ]
+  const permission = request.runtimeConfig?.e2eBridgePermission as
+    | { action?: string; command?: string }
+    | undefined
+  if (permission && typeof permission === 'object') {
+    queue.push(
+      runtimeEvent('permission.request', {
+        permissionId: `perm_${request.sessionId}`,
+        action: permission.action ?? 'shell',
+        command: permission.command ?? 'printf permission-ok',
+        runtime: request.runtime,
+      }),
+    )
+  }
   let ended = false
   let wake: (() => void) | null = null
   const push = (...events: AmaRuntimeEvent[]) => {
@@ -122,6 +164,28 @@ function liveBridgeTestHandle(request: Extract<RuntimeBridgeInput, { type: 'run'
     async abort() {
       push(runtimeEvent('turn_end', { marker, stage: `${marker}-aborted`, status: 'aborted' }))
       end()
+    },
+    async resolvePermission(permissionId: string, allowed: boolean, reason?: string) {
+      if (!allowed) {
+        push(
+          runtimeEvent('message_end', {
+            message: textMessage('assistant', `${marker} permission-denied:${reason ?? 'denied'}`),
+          }),
+        )
+        return
+      }
+      const toolCallId = `${permissionId}_tool`
+      push(
+        toolStart(toolCallId, 'sandbox.exec', { command: 'printf permission-ok' }),
+        toolEnd(
+          toolCallId,
+          'sandbox.exec',
+          { command: 'printf permission-ok' },
+          { stdout: 'permission-ok', stderr: '', exitCode: 0 },
+          false,
+        ),
+        runtimeEvent('message_end', { message: textMessage('assistant', `${marker} permission-approved`) }),
+      )
     },
     getResumeToken: () => `e2e-live-${request.sessionId}`,
   }
@@ -249,6 +313,10 @@ async function control(message: Exclude<RuntimeBridgeInput, { type: 'run' | 'fet
   }
   if (message.type === 'abort') {
     await state.handle.abort()
+    return
+  }
+  if (message.type === 'permissionDecision') {
+    await state.handle.resolvePermission?.(message.permissionId ?? '', message.allowed === true, message.reason)
     return
   }
   try {

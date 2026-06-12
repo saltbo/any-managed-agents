@@ -4,6 +4,7 @@ import { canonicalAmaSessionEventFromRuntimeEvent } from '../../shared/session-e
 import { runnerSessionChannels, runnerWorkItems, runnerWorkLeases, sessions } from '../db/schema'
 import { insertCanonicalSessionEvent } from '../db/session-event-store'
 import type { Env } from '../env'
+import { evaluateSandboxRuntimePolicy } from '../policy'
 import { redactSensitiveValue } from '../redaction'
 
 type ChannelState = {
@@ -121,6 +122,9 @@ export class RunnerSessionChannelObject implements DurableObject {
       if (eventId && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'runner.event.accepted', eventId }))
       }
+      if (type === 'permission.request') {
+        await this.decidePermissionRequest(state, payload as Record<string, unknown>, socket)
+      }
     } catch (error) {
       if (socket.readyState === WebSocket.OPEN) {
         socket.send(
@@ -131,6 +135,71 @@ export class RunnerSessionChannelObject implements DurableObject {
           }),
         )
       }
+    }
+  }
+
+  // An official-runtime permission request is decided by AMA session policy
+  // before the action runs: the decision is recorded as a canonical policy
+  // event and sent back to the owning runner over the same channel.
+  private async decidePermissionRequest(state: ChannelState, payload: Record<string, unknown>, socket: WebSocket) {
+    const db = drizzle(this.env.DB)
+    const auth = channelSystemAuth(state)
+    const session = await db
+      .select({
+        id: sessions.id,
+        agentSnapshot: sessions.agentSnapshot,
+        environmentSnapshot: sessions.environmentSnapshot,
+      })
+      .from(sessions)
+      .where(and(eq(sessions.id, state.sessionId), eq(sessions.projectId, state.projectId)))
+      .get()
+    if (!session) {
+      return
+    }
+    const permissionId = typeof payload.permissionId === 'string' ? payload.permissionId : 'permission'
+    const command = typeof payload.command === 'string' ? payload.command : null
+    const decision = await evaluateSandboxRuntimePolicy(db, auth, {
+      session: {
+        id: session.id,
+        agentSnapshot: session.agentSnapshot,
+        environmentSnapshot: session.environmentSnapshot,
+      },
+      operation: 'command',
+      command,
+    })
+    await this.appendRunnerEvent(state, {
+      type: 'policy.decision',
+      payload: {
+        allowed: decision.allowed,
+        category: decision.category ?? 'sandbox',
+        ruleId: decision.rule,
+        resourceType: 'runtime_permission',
+        resourceId: typeof payload.action === 'string' ? payload.action : 'action',
+        operation: 'runtime_permission_decision',
+        decision: {
+          permissionId,
+          allowed: decision.allowed,
+          ...(decision.message ? { reason: decision.message } : {}),
+        },
+      },
+      metadata: { source: 'policy' },
+    })
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(
+        JSON.stringify({
+          type: 'session.command',
+          sessionId: state.sessionId,
+          runnerId: state.runnerId,
+          leaseId: state.leaseId,
+          workItemId: state.workItemId,
+          command: {
+            type: 'permission_decision',
+            permissionId,
+            allowed: decision.allowed,
+            reason: decision.message ?? '',
+          },
+        }),
+      )
     }
   }
 
@@ -319,6 +388,28 @@ async function appendSessionEvent(
     },
     canonicalEvent,
   )
+}
+
+// Channel-scoped system identity for policy evaluation and event audit on
+// runner-ingested permission requests.
+function channelSystemAuth(state: ChannelState) {
+  return {
+    user: { id: 'system:runner-channel', email: '', name: 'AMA runner channel', avatarUrl: null },
+    organization: { id: state.organizationId, name: state.organizationId },
+    project: { id: state.projectId, name: state.projectId },
+    roles: ['system'],
+    permissions: ['*'],
+    oidc: {
+      subject: 'system:runner-channel',
+      clientId: null,
+      scope: null,
+      issuer: null,
+      externalTenantId: null,
+      runnerId: state.runnerId,
+      runnerProjectId: state.projectId,
+      runnerEnvironmentId: null,
+    },
+  }
 }
 
 function safeChannelError(error: unknown) {

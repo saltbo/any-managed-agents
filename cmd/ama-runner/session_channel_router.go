@@ -44,11 +44,13 @@ type sessionChannelRouter struct {
 	leaseID   string
 	runnerID  string
 
-	mu             sync.Mutex
-	sendPrompt     func(message string) error
-	pendingPrompts []string
-	sendStop       func(reason string) error
-	pendingStop    *string
+	mu                 sync.Mutex
+	sendPrompt         func(message string) error
+	pendingPrompts     []string
+	sendStop           func(reason string) error
+	pendingStop        *string
+	sendPermission     func(permissionId string, allowed bool, reason string) error
+	pendingPermissions []RunnerSessionCommand
 
 	acks chan json.RawMessage
 	// readErr is written by run() strictly before it closes acks, and read
@@ -95,6 +97,10 @@ func (r *sessionChannelRouter) run(ctx context.Context) {
 				"sessionId", message.SessionID, "leaseId", message.LeaseID, "runnerId", message.RunnerID)
 			continue
 		}
+		if message.Command.Type == "permission_decision" {
+			r.deliverPermission(message.Command)
+			continue
+		}
 		if message.Command.Type == "stop" {
 			slog.Info("runner received stop command; aborting runtime handle", "sessionId", r.sessionID, "reason", message.Command.Reason)
 			r.deliverStop(message.Command.Reason)
@@ -119,6 +125,35 @@ func (r *sessionChannelRouter) deliverPrompt(message string) {
 	r.mu.Unlock()
 	if err := send(message); err != nil {
 		slog.Warn("runner failed to forward prompt to live runtime", "sessionId", r.sessionID, "error", err)
+	}
+}
+
+func (r *sessionChannelRouter) deliverPermission(command RunnerSessionCommand) {
+	r.mu.Lock()
+	send := r.sendPermission
+	if send == nil {
+		r.pendingPermissions = append(r.pendingPermissions, command)
+		r.mu.Unlock()
+		return
+	}
+	r.mu.Unlock()
+	if err := send(command.PermissionID, command.Allowed, command.Reason); err != nil {
+		slog.Warn("runner failed to forward permission decision to live runtime", "sessionId", r.sessionID, "error", err)
+	}
+}
+
+// registerPermissionSender mirrors registerPromptSender for AMA permission
+// decisions; buffered decisions flush on registration.
+func (r *sessionChannelRouter) registerPermissionSender(send func(permissionId string, allowed bool, reason string) error) {
+	r.mu.Lock()
+	pending := r.pendingPermissions
+	r.pendingPermissions = nil
+	r.sendPermission = send
+	r.mu.Unlock()
+	for _, command := range pending {
+		if err := send(command.PermissionID, command.Allowed, command.Reason); err != nil {
+			slog.Warn("runner failed to forward buffered permission decision", "sessionId", r.sessionID, "error", err)
+		}
 	}
 }
 

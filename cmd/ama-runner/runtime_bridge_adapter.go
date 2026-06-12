@@ -165,6 +165,17 @@ func (a SDKBridgeRuntimeAdapter) Run(ctx context.Context, request RuntimeRequest
 			return stdin.WriteJSON(bridgeAbortControl(requestID))
 		})
 	}
+	if request.RegisterPermissionSender != nil {
+		request.RegisterPermissionSender(func(permissionId string, allowed bool, reason string) error {
+			return stdin.WriteJSON(ama.JSON{
+				"type":         "permissionDecision",
+				"requestId":    requestID,
+				"permissionId": permissionId,
+				"allowed":      allowed,
+				"reason":       reason,
+			})
+		})
+	}
 
 	var result ama.JSON
 	readErr := readBridgeMessages(stdoutScanner, requestID, writeSerialized, request.OnResumeToken, &result)
@@ -178,6 +189,11 @@ func (a SDKBridgeRuntimeAdapter) Run(ctx context.Context, request RuntimeRequest
 	}
 	if readErr != nil {
 		final["error"] = readErr.Error()
+		// A bridge-reported runtime error is a failed run even when the bridge
+		// process itself exits cleanly.
+		if exitCode(waitErr) == 0 {
+			final["exitCode"] = 1
+		}
 		return final, readErr
 	}
 	if stderrErr != nil && bridgePipeClosedAfterResult(stderrErr, result) {

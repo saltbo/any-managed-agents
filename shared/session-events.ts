@@ -14,6 +14,7 @@ export const AMA_SESSION_EVENT_DEFINITIONS = {
   tool_execution_end: { category: 'tool', label: 'Tool execution completed' },
   'usage.recorded': { category: 'usage', label: 'Usage recorded' },
   'policy.decision': { category: 'policy', label: 'Policy decision' },
+  'permission.request': { category: 'policy', label: 'Permission requested' },
   'runtime.error': { category: 'error', label: 'Runtime error' },
   'runtime.metadata': { category: 'metadata', label: 'Runtime metadata' },
   'runtime.output': { category: 'output', label: 'Runtime output' },
