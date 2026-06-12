@@ -34,7 +34,21 @@ export default defineConfig(() => ({
     outDir: 'dist',
     emptyOutDir: true,
   },
-  plugins: [react(), tailwindcss(), cloudflare({ remoteBindings: process.env.CLOUDFLARE_ENV !== 'e2e' })],
+  plugins: [
+    react(),
+    tailwindcss(),
+    cloudflare({
+      remoteBindings: cloudflareEnv !== 'e2e',
+      // e2e runs AMA_RUNTIME_MODE=test with mocked sandboxes; skip the Docker container image build.
+      ...(cloudflareEnv === 'e2e'
+        ? {
+            config: (config) => {
+              config.dev.enable_containers = false
+            },
+          }
+        : {}),
+    }),
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
