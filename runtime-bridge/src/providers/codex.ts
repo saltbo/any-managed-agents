@@ -168,7 +168,14 @@ export const codexProvider: RuntimeProvider = {
     let resumeToken = request.resumeToken
     const abortController = new AbortController()
     const codexPathOverride = resolveCodexPath()
-    const codex = new Codex({ env: sdkEnv(request), ...(codexPathOverride ? { codexPathOverride } : {}) })
+    const codex = new Codex({
+      env: sdkEnv(request),
+      // Managed sessions must not inherit the host user's personal Codex Apps
+      // connectors (e.g. the GitHub connector creates PRs as the host user
+      // instead of with the session's GH_TOKEN credential).
+      config: { features: { apps: false } },
+      ...(codexPathOverride ? { codexPathOverride } : {}),
+    })
     const model = resolveModel(request)
     const threadOptions = {
       workingDirectory: request.cwd,
