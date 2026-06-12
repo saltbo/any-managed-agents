@@ -175,6 +175,22 @@ export const copilotProvider: RuntimeProvider = {
     }
   },
 
+  // Enumerate the models the host Copilot login can serve via the SDK's
+  // listModels() (same path as the AK CLI reference).
+  async listModels({ env }): Promise<string[] | null> {
+    const home =
+      typeof env.AMA_RUNTIME_BRIDGE_HOST_HOME === 'string' && env.AMA_RUNTIME_BRIDGE_HOST_HOME ? env.AMA_RUNTIME_BRIDGE_HOST_HOME : undefined
+    const clientEnv = { ...(process.env as Record<string, string>), ...(home ? { HOME: home } : {}) }
+    const client = new CopilotClient({ env: clientEnv, useLoggedInUser: true })
+    await client.start()
+    try {
+      const models = await client.listModels()
+      return models.length > 0 ? models.map((model) => model.id) : null
+    } finally {
+      await client.stop().catch(() => {})
+    }
+  },
+
   async fetchUsage({ env }): Promise<RuntimeUsageWindow[] | null> {
     const home =
       typeof env.AMA_RUNTIME_BRIDGE_HOST_HOME === 'string' && env.AMA_RUNTIME_BRIDGE_HOST_HOME ? env.AMA_RUNTIME_BRIDGE_HOST_HOME : undefined

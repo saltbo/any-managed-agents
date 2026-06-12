@@ -121,7 +121,35 @@ async function fetchUsage(request: Extract<RuntimeBridgeInput, { type: 'fetchUsa
   }
 }
 
-async function control(message: Exclude<RuntimeBridgeInput, { type: 'run' | 'fetchUsage' }>) {
+// Deterministic per-runtime model ids for e2e runs: enumeration must not hit
+// the real SDKs there, and these match the runner's pinned fallback models so
+// test-mode capabilities equal production-fallback capabilities.
+const TEST_MODE_RUNTIME_MODELS: Record<string, string[]> = {
+  codex: ['gpt-5.3-codex'],
+  'claude-code': ['claude-sonnet-4-6'],
+  copilot: ['copilot-cli'],
+}
+
+async function detectModels(request: Extract<RuntimeBridgeInput, { type: 'detectModels' }>) {
+  try {
+    if (process.env.AMA_RUNTIME_BRIDGE_TEST_MODE === '1') {
+      write({
+        type: 'result',
+        requestId: request.requestId,
+        result: { models: TEST_MODE_RUNTIME_MODELS[request.runtime] ?? null },
+      })
+      return
+    }
+    const provider = getProvider(request.runtime)
+    const models = provider.listModels ? await provider.listModels({ env: request.env }) : null
+    write({ type: 'result', requestId: request.requestId, result: { models: models ?? null } })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    write({ type: 'error', requestId: request.requestId, error: bridgeError(message, 'runtime_models_error') })
+  }
+}
+
+async function control(message: Exclude<RuntimeBridgeInput, { type: 'run' | 'fetchUsage' | 'detectModels' }>) {
   const state = active.get(message.requestId)
   if (!state?.handle) {
     write({ type: 'error', requestId: message.requestId, error: bridgeError('No active runtime request', 'no_active_request') })
@@ -154,6 +182,8 @@ lines.on('line', (line) => {
         await run(message)
       } else if (message.type === 'fetchUsage') {
         await fetchUsage(message)
+      } else if (message.type === 'detectModels') {
+        await detectModels(message)
       } else {
         await control(message)
       }

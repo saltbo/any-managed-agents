@@ -1248,7 +1248,10 @@ func testDaemon(client *fakeControlPlane, adapter SandboxAdapter) RunnerDaemon {
 		Channels: client,
 		Adapter:  adapter,
 		LookPath: lookPathFinding("claude", "codex", "copilot"),
-		RunnerID: "runner_1",
+		// Model enumeration spawns the embedded bridge; tests stay hermetic by
+		// failing enumeration so capabilities use the pinned fallback models.
+		DetectModels: func(context.Context, string) []string { return nil },
+		RunnerID:     "runner_1",
 	}
 }
 
@@ -1390,6 +1393,36 @@ func TestHeartbeatRefreshesRuntimeCapabilitiesFromPath(t *testing.T) {
 	second := client.heartbeats[1].Capabilities
 	if !containsString(second, "claude-code") || !containsString(second, "runtime-provider-model:claude-code:*:claude-sonnet-4-6") {
 		t.Fatalf("expected claude-code capabilities after installing the CLI, got %v", second)
+	}
+}
+
+func TestHeartbeatAdvertisesEnumeratedHostModelsAndCachesPerProcess(t *testing.T) {
+	client := &fakeControlPlane{}
+	daemon := testDaemon(client, &fakeAdapter{})
+	daemon.LookPath = lookPathFinding("codex")
+	detectCalls := map[string]int{}
+	daemon.DetectModels = func(_ context.Context, runtimeName string) []string {
+		detectCalls[runtimeName]++
+		if runtimeName == "codex" {
+			return []string{"gpt-5.3-codex", "gpt-5.3-codex-mini"}
+		}
+		return nil
+	}
+	for range 2 {
+		if err := daemon.heartbeat(context.Background()); err != nil {
+			t.Fatalf("expected heartbeat success, got %v", err)
+		}
+	}
+	for _, heartbeat := range client.heartbeats {
+		capabilities := heartbeat.Capabilities
+		if !containsString(capabilities, "codex") ||
+			!containsString(capabilities, "runtime-provider-model:codex:*:gpt-5.3-codex") ||
+			!containsString(capabilities, "runtime-provider-model:codex:*:gpt-5.3-codex-mini") {
+			t.Fatalf("expected enumerated codex model capabilities, got %v", capabilities)
+		}
+	}
+	if detectCalls["codex"] != 1 {
+		t.Fatalf("expected model enumeration to be cached per process, got %d calls", detectCalls["codex"])
 	}
 }
 

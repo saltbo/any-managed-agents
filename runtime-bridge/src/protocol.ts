@@ -29,7 +29,18 @@ export type RuntimeBridgeUsageRequest = {
   env: Record<string, string>
 }
 
-export type RuntimeBridgeInput = RuntimeBridgeRequest | RuntimeBridgeControl | RuntimeBridgeUsageRequest
+export type RuntimeBridgeModelsRequest = {
+  type: 'detectModels'
+  requestId: string
+  runtime: 'codex' | 'claude-code' | 'copilot'
+  env: Record<string, string>
+}
+
+export type RuntimeBridgeInput =
+  | RuntimeBridgeRequest
+  | RuntimeBridgeControl
+  | RuntimeBridgeUsageRequest
+  | RuntimeBridgeModelsRequest
 
 /** A provider quota/rate-limit window (host account utilization), per runtime. */
 export type RuntimeUsageWindow = {
@@ -71,6 +82,12 @@ export type RuntimeProvider = {
    * runtime has no credentials or the plan exposes no limited quota.
    */
   fetchUsage?(input: { env: Record<string, string> }): Promise<RuntimeUsageWindow[] | null>
+  /**
+   * Enumerate the model ids the host CLI account can serve for this runtime.
+   * Returns null when the host has no credentials or the model universe is
+   * unknown; the runner then advertises its pinned fallback model.
+   */
+  listModels?(input: { env: Record<string, string> }): Promise<string[] | null>
 }
 
 export function bridgeError(message: string, code?: string, details?: unknown) {

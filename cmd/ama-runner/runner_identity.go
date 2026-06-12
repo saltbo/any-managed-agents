@@ -165,27 +165,42 @@ func saveRunnerState(path string, state runnerState) error {
 	return os.WriteFile(path, data, 0o600)
 }
 
+// runtimeFallbackModels pins one known model per runtime. It is used only
+// when host model enumeration fails, so the runner degrades to its old
+// single-model declaration instead of advertising a runtime with no models.
+func runtimeFallbackModels() map[string]string {
+	return map[string]string{
+		"codex":       "gpt-5.3-codex",
+		"claude-code": "claude-sonnet-4-6",
+		"copilot":     "copilot-cli",
+	}
+}
+
 // runnerCapabilities builds the advertised capability strings from the
-// runtimes whose CLI binaries were detected on the host. The string format is
-// load-bearing: the AK server matches on the bare runtime names and on
-// "runtime-provider-model:<runtime>:..." prefixes.
-func runnerCapabilities(availableRuntimes []string) []string {
+// runtimes whose CLI binaries were detected on the host and the model ids
+// enumerated from each host CLI. The string format is load-bearing: the AK
+// server matches on the bare runtime names and on
+// "runtime-provider-model:<runtime>:*:<model>" entries.
+func runnerCapabilities(availableRuntimes []string, modelsByRuntime map[string][]string) []string {
 	capabilities := []string{
 		"sandbox.exec",
 		"ama",
 		"runtime-provider-model:ama:workers-ai:@cf/moonshotai/kimi-k2.6",
 	}
-	providerModels := map[string]string{
-		"codex":       "runtime-provider-model:codex:*:gpt-5.3-codex",
-		"claude-code": "runtime-provider-model:claude-code:*:claude-sonnet-4-6",
-		"copilot":     "runtime-provider-model:copilot:*:copilot-cli",
-	}
+	fallbackModels := runtimeFallbackModels()
 	for _, runtimeName := range availableRuntimes {
-		providerModel, ok := providerModels[runtimeName]
+		fallbackModel, ok := fallbackModels[runtimeName]
 		if !ok {
 			continue
 		}
-		capabilities = append(capabilities, runtimeName, providerModel)
+		models := modelsByRuntime[runtimeName]
+		if len(models) == 0 {
+			models = []string{fallbackModel}
+		}
+		capabilities = append(capabilities, runtimeName)
+		for _, model := range models {
+			capabilities = append(capabilities, "runtime-provider-model:"+runtimeName+":*:"+model)
+		}
 	}
 	return capabilities
 }

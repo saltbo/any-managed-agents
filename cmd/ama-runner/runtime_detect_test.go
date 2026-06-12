@@ -27,8 +27,8 @@ func TestDetectAvailableRuntimesChecksCLIBinariesOnPath(t *testing.T) {
 	}
 }
 
-func TestRunnerCapabilitiesKeepCapabilityStringFormat(t *testing.T) {
-	got := runnerCapabilities([]string{"claude-code", "codex", "copilot"})
+func TestRunnerCapabilitiesFallBackToPinnedModelWhenEnumerationFails(t *testing.T) {
+	got := runnerCapabilities([]string{"claude-code", "codex", "copilot"}, nil)
 	want := []string{
 		"sandbox.exec",
 		"ama",
@@ -45,9 +45,32 @@ func TestRunnerCapabilitiesKeepCapabilityStringFormat(t *testing.T) {
 	}
 }
 
+func TestRunnerCapabilitiesDeclareOneCapabilityPerEnumeratedModel(t *testing.T) {
+	got := runnerCapabilities([]string{"codex", "claude-code"}, map[string][]string{
+		"codex":       {"gpt-5.3-codex", "gpt-5.3-codex-mini"},
+		"claude-code": {"claude-opus-4-5"},
+	})
+	want := []string{
+		"sandbox.exec",
+		"ama",
+		"runtime-provider-model:ama:workers-ai:@cf/moonshotai/kimi-k2.6",
+		"codex",
+		"runtime-provider-model:codex:*:gpt-5.3-codex",
+		"runtime-provider-model:codex:*:gpt-5.3-codex-mini",
+		"claude-code",
+		"runtime-provider-model:claude-code:*:claude-opus-4-5",
+	}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("expected capabilities %v, got %v", want, got)
+	}
+}
+
 func TestRunnerCapabilitiesExcludeUndetectedRuntimes(t *testing.T) {
-	got := runnerCapabilities([]string{"codex"})
-	for _, unexpected := range []string{"claude-code", "copilot"} {
+	got := runnerCapabilities([]string{"codex"}, map[string][]string{
+		"codex":       {"gpt-5.3-codex"},
+		"claude-code": {"claude-opus-4-5"},
+	})
+	for _, unexpected := range []string{"claude-code", "copilot", "runtime-provider-model:claude-code:*:claude-opus-4-5"} {
 		if containsString(got, unexpected) {
 			t.Fatalf("expected %q to be excluded, got %v", unexpected, got)
 		}

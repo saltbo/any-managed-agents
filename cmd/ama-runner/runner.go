@@ -43,7 +43,10 @@ type RunnerDaemon struct {
 	Adapter        SandboxAdapter
 	RuntimeAdapter RuntimeAdapter
 	// LookPath resolves runtime CLI binaries on PATH; defaults to exec.LookPath.
-	LookPath               func(string) (string, error)
+	LookPath func(string) (string, error)
+	// DetectModels enumerates the host CLI's model ids for a runtime; defaults
+	// to spawning the embedded runtime bridge (detectRuntimeModels).
+	DetectModels           func(ctx context.Context, runtimeName string) []string
 	RunnerID               string
 	mu                     sync.Mutex
 	activeLeases           int
@@ -51,6 +54,8 @@ type RunnerDaemon struct {
 	runtimeUsage           []ama.RuntimeUsage
 	capabilityMu           sync.Mutex
 	advertisedCapabilities []string
+	modelMu                sync.Mutex
+	runtimeModels          map[string][]string
 }
 
 func (d *RunnerDaemon) lookPath() func(string) (string, error) {
@@ -64,7 +69,7 @@ func (d *RunnerDaemon) lookPath() func(string) (string, error) {
 // so a CLI installed mid-run is picked up by the next heartbeat.
 func (d *RunnerDaemon) refreshCapabilities() []string {
 	available := detectAvailableRuntimes(d.lookPath())
-	capabilities := runnerCapabilities(available)
+	capabilities := runnerCapabilities(available, d.runtimeModelsFor(available))
 	d.capabilityMu.Lock()
 	changed := !slices.Equal(d.advertisedCapabilities, capabilities)
 	d.advertisedCapabilities = capabilities
@@ -74,6 +79,38 @@ func (d *RunnerDaemon) refreshCapabilities() []string {
 			"binaries", []string{"claude", "codex", "copilot"})
 	}
 	return capabilities
+}
+
+// runtimeModelsFor returns the enumerated host model ids per detected runtime.
+// Enumeration spawns the bridge and can take seconds, so results — including
+// failures, which leave the runtime on its pinned fallback model — are cached
+// for the process lifetime. A CLI installed mid-run is enumerated on the next
+// capability refresh because it has no cache entry yet.
+func (d *RunnerDaemon) runtimeModelsFor(availableRuntimes []string) map[string][]string {
+	detect := d.DetectModels
+	if detect == nil {
+		detect = detectRuntimeModels
+	}
+	d.modelMu.Lock()
+	defer d.modelMu.Unlock()
+	if d.runtimeModels == nil {
+		d.runtimeModels = map[string][]string{}
+	}
+	for _, runtimeName := range availableRuntimes {
+		if _, cached := d.runtimeModels[runtimeName]; cached {
+			continue
+		}
+		models := detect(context.Background(), runtimeName)
+		if len(models) == 0 {
+			slog.Warn("host model enumeration failed; advertising the pinned fallback model", "runtime", runtimeName)
+		}
+		d.runtimeModels[runtimeName] = models
+	}
+	models := make(map[string][]string, len(d.runtimeModels))
+	for runtimeName, ids := range d.runtimeModels {
+		models[runtimeName] = ids
+	}
+	return models
 }
 
 func (d *RunnerDaemon) currentCapabilities() []string {

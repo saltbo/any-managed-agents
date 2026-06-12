@@ -202,6 +202,26 @@ export const codexProvider: RuntimeProvider = {
     }
   },
 
+  // Enumerate the models the host Codex login can serve from the CLI's own
+  // models cache (~/.codex/models_cache.json, populated when Codex runs).
+  // There is no SDK listing call; the cache is the host's model universe.
+  async listModels({ env }): Promise<string[] | null> {
+    const home = homeFromEnv(env) ?? process.env.HOME
+    if (!home) return null
+    let raw: string
+    try {
+      raw = readFileSync(join(home, '.codex', 'models_cache.json'), 'utf8')
+    } catch {
+      return null
+    }
+    const data = JSON.parse(raw) as { models?: Array<{ slug?: string; visibility?: string; priority?: number }> }
+    const models = (data.models ?? [])
+      .filter((model) => typeof model.slug === 'string' && model.slug && model.visibility !== 'hide')
+      .sort((left, right) => (left.priority ?? 0) - (right.priority ?? 0))
+      .map((model) => model.slug as string)
+    return models.length > 0 ? models : null
+  },
+
   async fetchUsage({ env }): Promise<RuntimeUsageWindow[] | null> {
     const token = codexAccessToken(homeFromEnv(env))
     if (!token) return null

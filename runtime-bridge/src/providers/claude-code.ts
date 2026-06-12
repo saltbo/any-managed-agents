@@ -244,6 +244,35 @@ export const claudeCodeProvider: RuntimeProvider = {
     })
   },
 
+  // Enumerate the models the host Claude Code login can serve via the SDK's
+  // supportedModels() on an idle query (same path as the AK CLI reference).
+  async listModels({ env }): Promise<string[] | null> {
+    const home =
+      typeof env.AMA_RUNTIME_BRIDGE_HOST_HOME === 'string' && env.AMA_RUNTIME_BRIDGE_HOST_HOME ? env.AMA_RUNTIME_BRIDGE_HOST_HOME : undefined
+    const queryEnv = { ...(process.env as Record<string, string>) }
+    if (!queryEnv.CLAUDE_CODE_OAUTH_TOKEN && !queryEnv.ANTHROPIC_API_KEY) {
+      const token = readClaudeOAuthToken(home ?? queryEnv.HOME)
+      if (token) queryEnv.CLAUDE_CODE_OAUTH_TOKEN = token
+    }
+    const claudePath = resolveClaudePath()
+    const q = query({
+      prompt: '',
+      options: {
+        cwd: process.cwd(),
+        env: queryEnv,
+        permissionMode: 'bypassPermissions',
+        allowDangerouslySkipPermissions: true,
+        ...(claudePath ? { pathToClaudeCodeExecutable: claudePath } : {}),
+      },
+    })
+    try {
+      const models = await q.supportedModels()
+      return models.length > 0 ? models.map((model) => model.value) : null
+    } finally {
+      q.close()
+    }
+  },
+
   async fetchUsage({ env }): Promise<RuntimeUsageWindow[] | null> {
     const home =
       typeof env.AMA_RUNTIME_BRIDGE_HOST_HOME === 'string' && env.AMA_RUNTIME_BRIDGE_HOST_HOME ? env.AMA_RUNTIME_BRIDGE_HOST_HOME : undefined
