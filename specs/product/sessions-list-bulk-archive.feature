@@ -2,7 +2,7 @@
 Feature: Sessions list bulk archive
   Users archive multiple sessions from the sessions list.
 
-  @planned
+  @implemented
   Scenario: Bulk archive sessions
     Given multiple sessions are selected
     When the user archives them

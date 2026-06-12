@@ -18,7 +18,7 @@ Feature: Environment detail
     And network policy clearly distinguishes unrestricted and limited access
     And related sessions show historical runs that selected the environment
 
-  @planned
+  @implemented
   Scenario: Edit an environment from detail
     Given an environment is active
     When the user edits packages, variables, secret references, network policy, resource limits, runtime config, or metadata

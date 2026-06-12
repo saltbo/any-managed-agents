@@ -2,7 +2,7 @@
 Feature: Environments UI
   Users manage sandbox environments from the web console.
 
-  @planned
+  @implemented
   Scenario: Browse environments
     Given a project has environments
     When the user opens the environments page

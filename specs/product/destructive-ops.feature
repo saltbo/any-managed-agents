@@ -20,7 +20,7 @@ Feature: Destructive operations
     Then the product labels whether it is reversible archive, credential revoke, session stop, or permanent delete
     And permanent delete is available only when the resource has no required historical references
 
-  @planned
+  @implemented
   Scenario: Stop batch destructive operations on first failure
     Given a user performs a batch archive or revoke operation
     When one item fails

@@ -2,7 +2,7 @@
 Feature: Agents UI
   Users manage project agents from the web console.
 
-  @planned
+  @implemented
   Scenario: Browse and filter agents
     Given a project has agents
     When the user opens the agents page

@@ -2,7 +2,7 @@
 Feature: Sessions UI
   Users browse and inspect sessions.
 
-  @planned
+  @implemented
   Scenario: Browse sessions
     Given a project has sessions
     When the user opens the sessions page

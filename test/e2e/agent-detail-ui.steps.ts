@@ -178,6 +178,15 @@ When('the user edits runtime configuration and saves', async function (this: Age
 // Then: Asserts the edit sheet stayed open with a validation indication,
 // then fills valid data and completes the save.
 Then('validation errors appear next to their fields', async function (this: AgentDetailWorld) {
+  // Shared by the agent and environment edit scenarios: whichever detail
+  // workflow is active owns the open sheet.
+  const envWorkflow = (this as { envDetailWorkflow?: { page: Page } }).envDetailWorkflow
+  if (!this.agentDetailWorkflow && envWorkflow) {
+    const sheet = envWorkflow.page.getByRole('dialog')
+    await expect(sheet).toBeVisible()
+    await expect(sheet.getByText('Name is required')).toBeVisible()
+    return
+  }
   const workflow = this.agentDetailWorkflow as AgentDetailWorkflow
   const page = workflow.page
   const sheet = page.getByRole('dialog')

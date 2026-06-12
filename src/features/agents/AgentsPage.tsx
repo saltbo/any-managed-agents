@@ -1,10 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { Bot, Wand2 } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { PageHeader } from '@/console/components'
 import { useClientPagination } from '@/console/use-client-pagination'
+import { matchesSearch, useUrlFilter } from '@/console/use-list-filters'
 import { CreateSessionSheet } from '@/features/sessions/CreateSessionSheet'
 import { api } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
@@ -16,11 +19,26 @@ export function AgentsPage() {
   const [creatingAgent, setCreatingAgent] = useState(false)
   const [sessionAgentId, setSessionAgentId] = useState<string | undefined>()
   const actions = useAgentActions()
+  const [search, setSearch] = useUrlFilter('search')
+  const [status, setStatus] = useUrlFilter('status', 'all')
+  const [provider, setProvider] = useUrlFilter('provider', 'all')
+  const includeArchived = status === 'archived'
   const agentsQuery = useQuery({
-    queryKey: queryKeys.agents.list(false),
-    queryFn: () => api.listAgents(),
+    queryKey: queryKeys.agents.list(includeArchived),
+    queryFn: () => api.listAgents({ includeArchived }),
   })
-  const agents = agentsQuery.data?.data ?? []
+  const allAgents = useMemo(() => agentsQuery.data?.data ?? [], [agentsQuery.data?.data])
+  const providers = useMemo(() => [...new Set(allAgents.map((agent) => agent.provider))].sort(), [allAgents])
+  const agents = useMemo(
+    () =>
+      allAgents.filter(
+        (agent) =>
+          matchesSearch(search, agent.name, agent.description) &&
+          (status === 'all' || agent.status === status) &&
+          (provider === 'all' || agent.provider === provider),
+      ),
+    [allAgents, search, status, provider],
+  )
   const pagination = useClientPagination(agents)
   return (
     <div className="flex flex-col gap-4">
@@ -42,6 +60,39 @@ export function AgentsPage() {
           </div>
         }
       />
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          type="search"
+          placeholder="Search agents"
+          aria-label="Search agents"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          className="w-full sm:w-64"
+        />
+        <Select value={status} onValueChange={setStatus}>
+          <SelectTrigger className="w-full sm:w-40" aria-label="Filter by status">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="active">active</SelectItem>
+            <SelectItem value="archived">archived</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={provider} onValueChange={setProvider}>
+          <SelectTrigger className="w-full sm:w-48" aria-label="Filter by provider">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All providers</SelectItem>
+            {providers.map((value) => (
+              <SelectItem key={value} value={value}>
+                {value}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
       <AgentsView
         agents={pagination.items}
         pagination={pagination}

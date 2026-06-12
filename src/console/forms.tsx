@@ -21,15 +21,22 @@ export function EnvironmentForm({
   value,
   setValue,
   onSubmit,
+  errors,
 }: {
   value: EnvironmentFormState
   setValue: (value: EnvironmentFormState) => void
   onSubmit: (event: FormEvent) => void
+  errors?: { name?: string }
 }) {
   return (
     <form className="flex flex-col gap-4" onSubmit={onSubmit}>
       <FieldGroup>
-        <TextField label="Name" value={value.name} onChange={(name) => setValue({ ...value, name })} />
+        <TextField
+          label="Name"
+          value={value.name}
+          onChange={(name) => setValue({ ...value, name })}
+          {...(errors?.name ? { error: errors.name } : {})}
+        />
         <TextField
           label="Description"
           value={value.description}
