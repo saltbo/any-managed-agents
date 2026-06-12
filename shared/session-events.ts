@@ -3,6 +3,7 @@ export const AMA_SESSION_EVENT_DEFINITIONS = {
   agent_end: { category: 'lifecycle', label: 'Agent completed' },
   turn_start: { category: 'lifecycle', label: 'Turn started' },
   turn_end: { category: 'lifecycle', label: 'Turn completed' },
+  session_stop: { category: 'lifecycle', label: 'Session stopped' },
   message_start: { category: 'transcript', label: 'Message started' },
   message_update: { category: 'transcript', label: 'Message updated' },
   message_end: { category: 'transcript', label: 'Message completed' },

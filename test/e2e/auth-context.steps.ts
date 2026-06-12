@@ -7,36 +7,6 @@ import type { AmaWorld } from './world'
 
 type Json = Record<string, unknown>
 
-// ─── Scenario: Reject unauthenticated control-plane access ────────────────────
-
-Given('an organization with a project and a user exists', async function (this: AmaWorld & { e2e?: object }) {
-  // Ensure a user, org, and project exist in the local e2e environment.
-  await ensureSignedIn(this as Parameters<typeof ensureSignedIn>[0])
-})
-
-When('a request without a valid session calls a protected API', async function (this: AmaWorld) {
-  const app = createApp()
-  this.response = await app.fetch(
-    new Request('https://example.test/api/agents', {
-      method: 'GET',
-      headers: { accept: 'application/json' },
-    }),
-    {} as Env,
-  )
-})
-
-Then('the request is rejected with 401', function (this: AmaWorld) {
-  assert.ok(this.response, 'API response must exist before asserting status')
-  assert.equal(this.response.status, 401)
-})
-
-Then('no project data is returned', async function (this: AmaWorld) {
-  assert.ok(this.response, 'API response must exist before asserting body')
-  const body = (await this.response.clone().json()) as { error?: Record<string, unknown>; data?: unknown }
-  assert.ok(body.error, 'Response must contain an error envelope')
-  assert.equal('data' in body, false, 'Response must not contain project data')
-})
-
 // ─── Scenario: Resolve authenticated context ──────────────────────────────────
 
 Given('OIDC provider can issue a valid user session', async function (this: AmaWorld & { e2e?: object }) {

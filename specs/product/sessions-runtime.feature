@@ -32,7 +32,7 @@ Feature: Agent sessions
     And clients can list or stream persisted session events
     And the helper does not define an incompatible replacement runtime protocol
 
-  @planned
+  @implemented
   Scenario: Stop a running session
     Given a session is running
     When the user stops the session

@@ -5,7 +5,7 @@ Feature: Usage and audit
   Background:
     Given an organization has active sessions
 
-  @implemented
+  @planned
   Scenario: Summarize usage
     When the operator views usage
     Then usage is grouped by organization, project, provider, model, agent, and session

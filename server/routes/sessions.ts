@@ -2206,6 +2206,12 @@ async function stopSession(
     sessionId: session.id,
     metadata: { reason, sandboxId: session.sandboxId, piRuntimeId: session.piRuntimeId },
   })
+  await appendRuntimeEvent(db, {
+    auth,
+    sessionId: session.id,
+    event: { type: 'session_stop', reason },
+    metadata: { source: 'control-plane', sandboxId: session.sandboxId },
+  })
   const stopped = await findSession(db, auth, session.id)
   if (!stopped) {
     throw new Error('Stopped session row is required')
@@ -2285,6 +2291,12 @@ async function stopSelfHostedSession(
     requestId: requestId(c),
     sessionId: session.id,
     metadata: { reason, hostingMode: 'self_hosted', cancelledWorkItems: activeWorkItems.length },
+  })
+  await appendRuntimeEvent(db, {
+    auth,
+    sessionId: session.id,
+    event: { type: 'session_stop', reason },
+    metadata: { source: 'control-plane', hostingMode: 'self_hosted' },
   })
 
   const stopped = await findSession(db, auth, session.id)
