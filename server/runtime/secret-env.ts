@@ -29,7 +29,10 @@ export async function resolveRuntimeSecretEnv(
       continue
     }
     const version = await db
-      .select({ metadata: vaultCredentialVersions.metadata })
+      .select({
+        metadata: vaultCredentialVersions.metadata,
+        externalVaultPath: vaultCredentialVersions.externalVaultPath,
+      })
       .from(vaultCredentialVersions)
       .where(
         and(
@@ -40,6 +43,12 @@ export async function resolveRuntimeSecretEnv(
         ),
       )
       .get()
+    if (version?.externalVaultPath) {
+      // External-vault credentials stay references: the runtime resolves them
+      // through its approved vault binding, so the control plane never holds
+      // the raw value and must not fail the dispatch.
+      continue
+    }
     const metadata = version ? parseMetadata(version.metadata) : null
     const value = await decryptSecretValue(env, metadata?.encryptedSecretValue)
     if (typeof value === 'string') {
