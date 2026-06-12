@@ -651,13 +651,11 @@ async function requeueWorkItemForRecovery(
   }
 
   let payloadJson = workItem.payload
+  let runnerStarted = false
   if (workItem.sessionId) {
+    runnerStarted = await sessionHasRunnerStarted(db, projectId, workItem.sessionId)
     const payload = parseJson<Record<string, unknown>>(workItem.payload)
-    if (
-      payload?.type === 'session.start' &&
-      !payload.resume &&
-      (await sessionHasRunnerStarted(db, projectId, workItem.sessionId))
-    ) {
+    if (payload?.type === 'session.start' && !payload.resume && runnerStarted) {
       // Resume the runtime in place. claude-code resumes from its own session id
       // (the AMA session id), so a null token still continues the conversation;
       // other runtimes fall back to a fresh start when no token was captured.
@@ -679,9 +677,15 @@ async function requeueWorkItemForRecovery(
     })
     .where(eq(runnerWorkItems.id, workItem.id))
   if (workItem.sessionId) {
+    // A runner that never started the session leaves nothing to recover: the
+    // session simply goes back to waiting for a runner.
     await db
       .update(sessions)
-      .set({ status: 'pending', statusReason: 'waiting-for-runner-recovery', updatedAt: timestamp })
+      .set({
+        status: 'pending',
+        statusReason: runnerStarted ? 'waiting-for-runner-recovery' : 'waiting-for-runner',
+        updatedAt: timestamp,
+      })
       .where(and(eq(sessions.id, workItem.sessionId), eq(sessions.projectId, projectId)))
   }
   return 'requeued'
