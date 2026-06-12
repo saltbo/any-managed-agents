@@ -681,7 +681,7 @@ func (d *RunnerDaemon) runExternalSession(execution sessionRuntimeExecution) err
 	router := newSessionChannelRouter(execution.Channel, payload.SessionID, lease.ID, d.RunnerID)
 	go router.run(ctx)
 	channel := router.routedChannel()
-	workspace, err := prepareRuntimeWorkspace(ctx, d.Config.WorkDir, payload.SessionID, payload.ResourceRefs)
+	workspace, err := prepareRuntimeWorkspace(ctx, d.Config.WorkDir, payload.SessionID, payload.ResourceRefs, payload.RuntimeEnv)
 	if err != nil {
 		return err
 	}

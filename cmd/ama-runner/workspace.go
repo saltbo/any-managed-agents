@@ -56,7 +56,7 @@ type mountedResource struct {
 	Status    string `json:"status"`
 }
 
-func prepareRuntimeWorkspace(ctx context.Context, workDir string, sessionID string, resourceRefs []ResourceRef) (PreparedWorkspace, error) {
+func prepareRuntimeWorkspace(ctx context.Context, workDir string, sessionID string, resourceRefs []ResourceRef, runtimeEnv map[string]string) (PreparedWorkspace, error) {
 	root, err := runtimeWorkspace(workDir, sessionID)
 	if err != nil {
 		return PreparedWorkspace{}, err
@@ -85,11 +85,68 @@ func prepareRuntimeWorkspace(ctx context.Context, workDir string, sessionID stri
 		})
 		worktrees = append(worktrees, preparedWorktree{cacheDir: cacheDir, path: localPath})
 	}
+	if err := configureWorkspaceGitCredential(ctx, root, worktrees, workspaceGitHubToken(runtimeEnv)); err != nil {
+		_ = cleanupRuntimeWorkspace(context.Background(), PreparedWorkspace{Root: root, Cwd: cwd, worktrees: worktrees})
+		return PreparedWorkspace{}, err
+	}
 	if err := writeWorkspaceManifest(root, mounted); err != nil {
 		_ = cleanupRuntimeWorkspace(context.Background(), PreparedWorkspace{Root: root, Cwd: cwd, worktrees: worktrees})
 		return PreparedWorkspace{}, err
 	}
 	return PreparedWorkspace{Root: root, Cwd: cwd, worktrees: worktrees}, nil
+}
+
+// workspaceGitHubToken mirrors the cloud workspace token resolution:
+// GH_TOKEN wins, GITHUB_TOKEN is the alternate spelling.
+func workspaceGitHubToken(runtimeEnv map[string]string) string {
+	if token := runtimeEnv["GH_TOKEN"]; token != "" {
+		return token
+	}
+	return runtimeEnv["GITHUB_TOKEN"]
+}
+
+// configureWorkspaceGitCredential gives each mounted worktree a repo-local
+// credential helper backed by a session-scoped store file, so a plain
+// `git push` authenticates with the work item's GH_TOKEN instead of host
+// credentials (parity with the cloud prepareCloudWorkspace). The spawned
+// agent already receives GH_TOKEN via runtimeEnv, which covers gh; this
+// covers git itself. Worktree-scoped config keeps the credential out of the
+// shared repository cache and never touches the host's global config.
+func configureWorkspaceGitCredential(ctx context.Context, sessionRoot string, worktrees []preparedWorktree, token string) error {
+	if token == "" || len(worktrees) == 0 {
+		return nil
+	}
+	credentialsPath := filepath.Join(sessionRoot, ".git-credentials")
+	credential := "https://x-access-token:" + token + "@github.com\n"
+	if err := os.WriteFile(credentialsPath, []byte(credential), 0o600); err != nil {
+		return err
+	}
+	for _, worktree := range worktrees {
+		lock := repositoryCacheLock(worktree.cacheDir)
+		lock.Lock()
+		err := configureWorktreeCredentialHelper(ctx, worktree.path, credentialsPath)
+		lock.Unlock()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func configureWorktreeCredentialHelper(ctx context.Context, worktreePath string, credentialsPath string) error {
+	// extensions.worktreeConfig lives in the shared cache config and only
+	// unlocks per-worktree config files; the credential itself stays scoped
+	// to this session's worktree.
+	if err := git(ctx, worktreePath, "config", "extensions.worktreeConfig", "true"); err != nil {
+		return err
+	}
+	// An empty first helper resets inherited helpers so the session token
+	// wins over any host-level credential helpers.
+	if err := git(ctx, worktreePath, "config", "--worktree", "credential.helper", ""); err != nil {
+		return err
+	}
+	helper := fmt.Sprintf("store --file %q", credentialsPath)
+	return git(ctx, worktreePath, "config", "--worktree", "--add", "credential.helper", helper)
 }
 
 func cleanupRuntimeWorkspace(ctx context.Context, workspace PreparedWorkspace) error {

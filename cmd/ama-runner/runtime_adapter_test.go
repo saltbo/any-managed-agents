@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -207,7 +208,7 @@ func TestPrepareRuntimeWorkspaceMountsGitHubRepositoryWorktree(t *testing.T) {
 		Repo:      "zpan",
 		Ref:       "main",
 		MountPath: "/workspace/repos/saltbo/zpan",
-	}})
+	}}, nil)
 	if err != nil {
 		t.Fatalf("expected workspace preparation success, got %v", err)
 	}
@@ -246,6 +247,83 @@ func TestPrepareRuntimeWorkspaceMountsGitHubRepositoryWorktree(t *testing.T) {
 	}
 }
 
+func TestPrepareRuntimeWorkspaceConfiguresSessionScopedGitCredentialFromGHToken(t *testing.T) {
+	workDir := t.TempDir()
+	sourceDir := filepath.Join(t.TempDir(), "source")
+	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, sourceDir, "init", "-b", "main")
+	runGit(t, sourceDir, "config", "user.email", "runner@example.test")
+	runGit(t, sourceDir, "config", "user.name", "Runner")
+	if err := os.WriteFile(filepath.Join(sourceDir, "README.md"), []byte("zpan\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, sourceDir, "add", "README.md")
+	runGit(t, sourceDir, "commit", "-m", "init")
+	cacheDir := filepath.Join(workDir, "repositories", "saltbo", "zpan")
+	if err := os.MkdirAll(filepath.Dir(cacheDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, filepath.Dir(cacheDir), "clone", sourceDir, cacheDir)
+	resource := ResourceRef{
+		Type:      "github_repository",
+		Owner:     "saltbo",
+		Repo:      "zpan",
+		Ref:       "main",
+		MountPath: "/workspace/repos/saltbo/zpan",
+	}
+
+	workspace, err := prepareRuntimeWorkspace(context.Background(), workDir, "session_1", []ResourceRef{resource}, map[string]string{
+		"GH_TOKEN": "ghs_session_token",
+	})
+	if err != nil {
+		t.Fatalf("expected workspace preparation success, got %v", err)
+	}
+	credentialsPath := filepath.Join(workspace.Root, ".git-credentials")
+	credentials, err := os.ReadFile(credentialsPath)
+	if err != nil {
+		t.Fatalf("expected session credential store, got %v", err)
+	}
+	if string(credentials) != "https://x-access-token:ghs_session_token@github.com\n" {
+		t.Fatalf("expected GH_TOKEN credential line, got %q", string(credentials))
+	}
+	info, err := os.Stat(credentialsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("expected credential store mode 0600, got %v", info.Mode().Perm())
+	}
+	helpers := runGitOutput(t, workspace.Cwd, "config", "--worktree", "--get-all", "credential.helper")
+	if !strings.Contains(helpers, fmt.Sprintf("store --file %q", credentialsPath)) {
+		t.Fatalf("expected worktree credential helper pointing at the session store, got %q", helpers)
+	}
+	if !strings.HasPrefix(helpers, "\n") {
+		t.Fatalf("expected an empty helper entry resetting inherited helpers, got %q", helpers)
+	}
+
+	// A token must stay scoped to its session: a second workspace from the
+	// same repository cache prepared without GH_TOKEN sees no helper.
+	second, err := prepareRuntimeWorkspace(context.Background(), workDir, "session_2", []ResourceRef{resource}, nil)
+	if err != nil {
+		t.Fatalf("expected second workspace preparation success, got %v", err)
+	}
+	leakCheck := exec.Command("git", "config", "--worktree", "--get-all", "credential.helper")
+	leakCheck.Dir = second.Cwd
+	if output, err := leakCheck.CombinedOutput(); err == nil && strings.TrimSpace(string(output)) != "" {
+		t.Fatalf("expected no credential helper leak into other sessions, got %q", string(output))
+	}
+	if _, err := os.Stat(filepath.Join(second.Root, ".git-credentials")); !os.IsNotExist(err) {
+		t.Fatalf("expected no credential store without GH_TOKEN, got err=%v", err)
+	}
+	for _, prepared := range []PreparedWorkspace{workspace, second} {
+		if err := cleanupRuntimeWorkspace(context.Background(), prepared); err != nil {
+			t.Fatalf("expected workspace cleanup success, got %v", err)
+		}
+	}
+}
+
 func TestPrepareRuntimeWorkspaceSerializesSharedRepositoryCache(t *testing.T) {
 	workDir := t.TempDir()
 	sourceDir := filepath.Join(t.TempDir(), "source")
@@ -280,7 +358,7 @@ func TestPrepareRuntimeWorkspaceSerializesSharedRepositoryCache(t *testing.T) {
 		wg.Add(1)
 		go func(sessionID string) {
 			defer wg.Done()
-			workspace, err := prepareRuntimeWorkspace(context.Background(), workDir, sessionID, []ResourceRef{resource})
+			workspace, err := prepareRuntimeWorkspace(context.Background(), workDir, sessionID, []ResourceRef{resource}, nil)
 			if err != nil {
 				errs <- err
 				return
