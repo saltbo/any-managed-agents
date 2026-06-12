@@ -2,7 +2,7 @@
 Feature: Quickstart
   A developer can create and run a managed agent quickly on Cloudflare.
 
-  @planned
+  @implemented
   Scenario: Complete the first-run flow
     Given the developer has deployed the platform on Cloudflare
     When the developer opens the console for the first time
@@ -17,7 +17,7 @@ Feature: Quickstart
     And each completed step shows the API call that was made against the current platform origin
     And incomplete prerequisites are visible before the user starts a runtime session
 
-  @planned
+  @implemented
   Scenario: Create an agent from a template or description
     Given the developer is on the agent step
     When the developer chooses a template or describes the agent goal
@@ -25,7 +25,7 @@ Feature: Quickstart
     And the developer can inspect and edit the draft before creating the agent
     And creating the agent shows the resulting agent id and version
 
-  @planned
+  @implemented
   Scenario: Configure the execution environment in quickstart
     Given an agent was created in quickstart
     When the developer chooses unrestricted networking, limited networking, or a custom environment
@@ -34,7 +34,7 @@ Feature: Quickstart
     And limited networking captures allowed hosts, MCP access, and package-manager access
     And the environment step must be completed before creating a session
 
-  @planned
+  @implemented
   Scenario: Create a session and send the first task
     Given quickstart has an active agent and environment
     When the developer creates a test session with the agent and environment
@@ -46,14 +46,14 @@ Feature: Quickstart
     And session events stream into the preview without a page reload
     And final success or failure remains inspectable in the session detail page
 
-  @planned
+  @implemented
   Scenario: Run the default Workers AI agent
     Given Workers AI is available
     When the developer creates an agent with the default model
     Then the agent can respond through a session runtime in Cloudflare Sandbox
     And no Anthropic credential is required
 
-  @planned
+  @implemented
   Scenario: Add sandbox execution
     Given Cloudflare Sandbox is configured
     When the developer enables sandbox access for the agent
@@ -66,7 +66,7 @@ Feature: Quickstart
     Then the control plane health endpoint responds successfully
     And Cloudflare runtime tests can validate D1 and Durable Object bindings
 
-  @planned
+  @implemented
   Scenario: Show integration options after a successful session
     Given quickstart has created a session
     When the developer opens the integration step

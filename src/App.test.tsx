@@ -710,7 +710,10 @@ describe('App', () => {
     expect(screen.getByText('3. Agent')).toBeTruthy()
     expect(screen.getByText('4. Session')).toBeTruthy()
     expect(screen.getByText('5. Integration')).toBeTruthy()
-    expect(screen.getByText(/restish :\/api\/openapi\.json/)).toBeTruthy()
+    // With no resources yet the guided flow opens on the environment step.
+    expect(screen.getByText('GET /api/openapi.json')).toBeTruthy()
+    expect(screen.getAllByText('pending').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: 'Create environment' })).toBeTruthy()
     fireEvent.click(primaryNav().getByRole('link', { name: 'Agents' }))
     expect(await screen.findByText('No agents')).toBeTruthy()
     expect(screen.queryByText('Acceptance Path')).toBeNull()
