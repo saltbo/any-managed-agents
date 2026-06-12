@@ -39,7 +39,7 @@ Feature: Execution environments
     Then no sandbox instance is required
     And the environment remains available for future sessions
 
-  @planned
+  @implemented
   Scenario: Define runtime hosting separately from agent persona
     When the user creates an execution environment definition
     Then the environment captures hostingMode as cloud or self_hosted

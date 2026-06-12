@@ -2,7 +2,7 @@
 Feature: Session stop
   Users can stop running sessions.
 
-  @planned
+  @implemented
   Scenario: Stop session
     Given a session is running
     When the user stops the session

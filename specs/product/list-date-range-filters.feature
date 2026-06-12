@@ -2,7 +2,7 @@
 Feature: List date range filters
   Resource lists support time-based filtering.
 
-  @planned
+  @implemented
   Scenario: Filter API resources by date range
     Given a list route supports timestamps
     When the API client requests a date range

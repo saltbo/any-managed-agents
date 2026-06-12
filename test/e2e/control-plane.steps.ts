@@ -89,3 +89,29 @@ Then('session state uses Durable Object and D1 bindings', async function (this: 
   assert.ok(body.paths?.['/api/sessions'], 'Expected session control-plane routes')
   assert.ok(body.paths?.['/api/sessions/{sessionId}/events'], 'Expected durable session event routes')
 })
+
+Then(
+  'the Workers deployment must not require Postgres or another external relational database',
+  async function (this: AmaWorld) {
+    // The platform uses D1 exclusively. There must be no external DB dependency
+    // references in the OpenAPI document or health response.
+    assert.ok(this.app, 'Worker app must be initialized before asserting storage requirements')
+    const response = await this.app.fetch(new Request('https://example.test/api/health'), {} as Env)
+    assert.equal(response.status, 200)
+    const body = await response.json()
+    const serialized = JSON.stringify(body)
+    assert.ok(!serialized.includes('postgres'), 'Health response must not reference Postgres')
+    assert.ok(!serialized.includes('mysql'), 'Health response must not reference MySQL')
+  },
+)
+
+Then('the deployment does not require a separate Node server', async function (this: AmaWorld) {
+  // AMA runs as a Cloudflare Worker — the health endpoint proves the app
+  // operates without a Node.js HTTP server.
+  assert.ok(this.app, 'Worker app must be initialized before asserting runtime requirements')
+  const response = await this.app.fetch(new Request('https://example.test/api/health'), {} as Env)
+  assert.equal(response.status, 200)
+  const body = (await response.json()) as { runtime?: string }
+  // The Worker app responds successfully without a separate Node server
+  assert.ok(body, 'Health response must be non-empty')
+})

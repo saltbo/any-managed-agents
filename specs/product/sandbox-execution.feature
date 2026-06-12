@@ -45,7 +45,7 @@ Feature: Sandbox execution
     Then the platform denies the operation
     And records a policy event
 
-  @planned
+  @implemented
   Scenario: Wait for a self-hosted runner
     Given a session uses a self-hosted environment
     When no runner has leased the session work

@@ -1,10 +1,6 @@
 import assert from 'node:assert/strict'
-import { Given, Then } from '@cucumber/cucumber'
+import { Then } from '@cucumber/cucumber'
 import { AMA_SESSION_EVENT_TYPES } from '../../shared/session-events'
-
-Given('a session has events', () => {
-  assert.ok(AMA_SESSION_EVENT_TYPES.length > 0)
-})
 
 Then('browser clients use WebSocket for bidirectional runtime commands and events', () => {
   const url = new URL('/runtime/sessions/session_1/ws', 'http://localhost')

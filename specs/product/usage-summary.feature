@@ -2,12 +2,12 @@
 Feature: Usage summary
   Operators inspect usage and cost.
 
-  @planned
+  @implemented
   Scenario: View usage summary
     When the operator opens usage analytics
     Then usage is grouped by organization, project, provider, model, agent, session, and time range
 
-  @planned
+  @implemented
   Scenario: Filter and group usage analytics
     Given sessions have recorded token, duration, tool, sandbox, and error usage
     When the operator filters by organization, project, provider, model, agent, session, status, or time range
