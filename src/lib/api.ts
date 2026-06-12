@@ -531,10 +531,26 @@ export interface VaultCredentialInput {
 }
 
 export interface AuditRecordListOptions {
+  actorId?: string
+  projectId?: string
   resourceType?: string
   resourceId?: string
   action?: string
+  outcome?: string
+  createdFrom?: string
+  createdTo?: string
   limit?: number
+}
+
+export interface UsageSummaryOptions {
+  provider?: string
+  model?: string
+  agentId?: string
+  sessionId?: string
+  status?: string
+  createdFrom?: string
+  createdTo?: string
+  groupBy?: string
 }
 
 export class ApiError extends Error {
@@ -734,9 +750,16 @@ export const api = {
     rpcRequest<GovernancePolicy>(
       rpc.api.governance.policy.$put({ json: input as RpcJson<typeof rpc.api.governance.policy.$put> }),
     ),
-  readUsageSummary: () => rpcRequest<UsageSummary>(rpc.api.usage.summary.$get({ query: {} })),
+  readUsageSummary: (options: UsageSummaryOptions = {}) =>
+    rpcRequest<UsageSummary>(rpc.api.usage.summary.$get(queryArg<typeof rpc.api.usage.summary.$get>(options))),
   listAuditRecords: (options: AuditRecordListOptions = {}) =>
     rpcRequest<ListResponse<AuditRecord>>(
       rpc.api['audit-records'].$get(queryArg<(typeof rpc.api)['audit-records']['$get']>(options)),
+    ),
+  readAuditRecord: (id: string) =>
+    rpcRequest<AuditRecord>(rpc.api['audit-records'][':recordId'].$get({ param: { recordId: id } })),
+  exportAuditRecords: (options: AuditRecordListOptions = {}) =>
+    rpcRequest<AuditRecord[]>(
+      rpc.api['audit-records'].export.$get(queryArg<(typeof rpc.api)['audit-records']['export']['$get']>(options)),
     ),
 }

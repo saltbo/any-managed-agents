@@ -49,9 +49,10 @@ export const queryKeys = {
     accessRules: ['governance', 'access-rules'] as const,
   },
   usage: {
-    summary: ['usage', 'summary'] as const,
+    summary: (filters: object = {}) => ['usage', 'summary', filters] as const,
   },
   audit: {
-    records: ['audit', 'records'] as const,
+    records: (filters: object = {}) => ['audit', 'records', filters] as const,
+    record: (id: string) => ['audit', 'record', id] as const,
   },
 }

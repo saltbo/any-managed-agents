@@ -168,6 +168,25 @@ const exportRoute = createRoute({
   },
 })
 
+const readRoute = createRoute({
+  method: 'get',
+  path: '/{recordId}',
+  operationId: 'readAuditRecord',
+  tags: ['Audit'],
+  summary: 'Read an audit record',
+  ...AuthenticatedOperation,
+  request: {
+    params: z.object({
+      recordId: z.string().openapi({ param: { name: 'recordId', in: 'path' }, example: 'audit_abc123' }),
+    }),
+  },
+  responses: {
+    200: { description: 'Audit record', content: { 'application/json': { schema: AuditRecordSchema } } },
+    401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    404: { description: 'Audit record not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
+  },
+})
+
 async function readRows(c: Parameters<Parameters<typeof app.openapi>[1]>[0], query: z.infer<typeof QuerySchema>) {
   const db = drizzle(c.env.DB)
   const auth = await requireAuth(c, db)
@@ -201,6 +220,20 @@ const routes = app
     const rows = await readRows(c, { ...query, limit: 100 })
     if (rows instanceof Response) return rows
     return c.json(rows.slice(0, query.limit ?? 100).map(serializeAudit), 200)
+  })
+  .openapi(readRoute, async (c) => {
+    const { recordId } = c.req.valid('param')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) return auth
+    const rows = await db
+      .select()
+      .from(auditRecords)
+      .where(and(eq(auditRecords.id, recordId), eq(auditRecords.organizationId, auth.organization.id)))
+      .limit(1)
+    const row = rows[0]
+    if (!row) return errorResponse(c, 404, 'not_found', 'Audit record not found')
+    return c.json(serializeAudit(row), 200)
   })
 
 export default routes

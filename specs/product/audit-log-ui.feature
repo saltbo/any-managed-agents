@@ -2,7 +2,7 @@
 Feature: Audit log UI
   Operators inspect project and organization audit history.
 
-  @planned
+  @implemented
   Scenario: Filter audit records
     Given audit records exist
     When the operator opens the audit log
@@ -17,14 +17,14 @@ Feature: Audit log UI
     When records exist
     Then each row shows timestamp, actor, action, resource type, resource id, project, and outcome
 
-  @planned
+  @implemented
   Scenario: Inspect an audit record
     Given an audit record exists for a resource change
     When the operator opens the record detail
     Then the detail shows safe before/after metadata, request origin, correlation id, and related resource links
     And secret values and credential material are redacted
 
-  @planned
+  @implemented
   Scenario: Export audit records from the UI
     Given the operator has filtered audit records
     When the operator exports the current view

@@ -2,57 +2,107 @@ import assert from 'node:assert/strict'
 import { Given, Then, When } from '@cucumber/cucumber'
 import { apiJson } from './local-app'
 import {
+  createAgent,
+  createEnvironment,
   createSession,
   ensureAgentAndEnvironment,
   ensureSignedIn,
   type Json,
   type StepsWorld,
   stopSession,
+  waitForSessionEventMatch,
 } from './shared-helpers'
+
+const WORKERS_AI_MODEL = '@cf/moonshotai/kimi-k2.6'
+
+export interface UsageSummaryShape {
+  totals: { records: number; promptTokens: number; completionTokens: number; totalTokens: number }
+  groups: Array<{ key: Record<string, unknown>; records: number; totalTokens: number }>
+}
+
+type UsageWorld = StepsWorld & {
+  usageSummary?: UsageSummaryShape
+  filterResults?: UsageSummaryShape[]
+}
+
+export async function driveRealUsageTurn(world: StepsWorld, label: string, prompt: string) {
+  const state = await ensureSignedIn(world)
+  state.agent = await createAgent(state, {
+    name: `${state.runId} ${label} agent`,
+    provider: 'workers-ai',
+    model: WORKERS_AI_MODEL,
+  })
+  state.environment ??= await createEnvironment(state, { name: `${state.runId} ${label} env` })
+  state.latestSession = await createSession(state, { title: `${state.runId} ${label} session` })
+  await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}/commands`, {
+    method: 'POST',
+    data: { type: 'prompt', message: `${state.runId} ${prompt}` },
+  })
+  await waitForSessionEventMatch(state, (event) => event.type === 'usage.recorded', 'recorded model usage')
+  return state
+}
+
+function assertGroupsAddUpToTotals(summary: UsageSummaryShape, label: string) {
+  const groupedRecords = summary.groups.reduce((sum, group) => sum + group.records, 0)
+  const groupedTokens = summary.groups.reduce((sum, group) => sum + group.totalTokens, 0)
+  assert.equal(groupedRecords, summary.totals.records, `${label}: grouped record counts add up to the totals`)
+  assert.equal(groupedTokens, summary.totals.totalTokens, `${label}: grouped token counts add up to the totals`)
+}
 
 // ─── Background: Given an organization has active sessions ───────────────────
 
-Given('an organization has active sessions', async function (this: StepsWorld) {
+Given('an organization has active sessions', { timeout: 120_000 }, async function (this: StepsWorld) {
   const state = await ensureAgentAndEnvironment(this)
   state.latestSession = await createSession(state)
 })
 
 // ─── Scenario: Summarize usage (usage-audit.feature) ─────────────────────────
 
-When('the operator views usage', async function (this: StepsWorld) {
-  const state = this.e2e
-  assert.ok(state, 'e2e state must exist')
-  // Call the usage summary endpoint with no filters — all usage for the project
-  const summary = await apiJson<Json>(state.page.request, '/api/usage/summary')
-  ;(state as typeof state & { usageSummary?: Json }).usageSummary = summary
+When('the operator views usage', { timeout: 120_000 }, async function (this: UsageWorld) {
+  // Drive a real runtime turn first so the summary reflects recorded usage
+  // instead of an empty-but-valid response shape.
+  const state = await driveRealUsageTurn(this, 'summarize', 'summarize the recorded usage')
+  this.usageSummary = await apiJson<UsageSummaryShape>(state.page.request, '/api/usage/summary')
 })
 
-Then('usage is grouped by organization, project, provider, model, agent, and session', function (this: StepsWorld) {
-  const state = this.e2e as typeof this.e2e & { usageSummary?: Json }
+Then('usage is grouped by organization, project, provider, model, agent, and session', function (this: UsageWorld) {
+  const state = this.e2e
   assert.ok(state, 'e2e state must exist')
-  const summary = state.usageSummary
+  const summary = this.usageSummary
   assert.ok(summary, 'usage summary must have been fetched')
-  // Summary must have totals and groups structure regardless of data volume
-  assert.ok('totals' in summary, 'usage summary must include totals')
-  assert.ok('groups' in summary, 'usage summary must include groups')
-  const totals = summary.totals as Json
-  assert.ok(typeof totals.records === 'number', 'totals.records must be a number')
-  assert.ok(typeof totals.totalTokens === 'number', 'totals.totalTokens must be a number')
-  assert.ok(Array.isArray(summary.groups), 'usage summary groups must be an array')
+  assert.ok(summary.totals.totalTokens > 0, 'the summary aggregates the recorded token usage')
+  const group = summary.groups.find((candidate) => candidate.key.session === state.latestSession?.id)
+  assert.ok(group, 'the summary contains a group for the runtime session')
+  const organization = (state.auth?.organization ?? {}) as Json
+  const project = (state.auth?.project ?? {}) as Json
+  assert.equal(group.key.organization, organization.id, 'the group is keyed by the organization')
+  assert.equal(group.key.project, project.id, 'the group is keyed by the project')
+  assert.equal(group.key.provider, 'workers-ai', 'the group is keyed by the provider')
+  assert.equal(group.key.model, WORKERS_AI_MODEL, 'the group is keyed by the model')
+  assert.equal(group.key.agent, state.agent?.id, 'the group is keyed by the agent')
+  assert.ok(group.totalTokens > 0, 'the session group carries the recorded token usage')
 })
 
-Then('the summary includes time range filters', async function (this: StepsWorld) {
+Then('the summary includes time range filters', async function (this: UsageWorld) {
   const state = this.e2e
-  assert.ok(state, 'e2e state must exist')
-  // Verify that the endpoint accepts createdFrom and createdTo filters
-  const from = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-  const to = new Date().toISOString()
-  const summary = await apiJson<Json>(
+  assert.ok(state && this.usageSummary, 'usage summary must have been fetched')
+  const from = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+  const to = new Date(Date.now() + 60 * 1000).toISOString()
+  const inRange = await apiJson<UsageSummaryShape>(
     state.page.request,
     `/api/usage/summary?createdFrom=${encodeURIComponent(from)}&createdTo=${encodeURIComponent(to)}`,
   )
-  assert.ok('totals' in summary, 'time-filtered usage summary must include totals')
-  assert.ok('groups' in summary, 'time-filtered usage summary must include groups')
+  assert.equal(
+    inRange.totals.totalTokens,
+    this.usageSummary.totals.totalTokens,
+    'a range covering the runtime turn returns the recorded usage',
+  )
+  const futureFrom = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+  const outOfRange = await apiJson<UsageSummaryShape>(
+    state.page.request,
+    `/api/usage/summary?createdFrom=${encodeURIComponent(futureFrom)}`,
+  )
+  assert.equal(outOfRange.totals.records, 0, 'a range after the runtime turn excludes the recorded usage')
 })
 
 // ─── Scenario: Export audit records (usage-audit.feature) ────────────────────
@@ -101,90 +151,82 @@ Then("respects the operator's organization scope", function (this: StepsWorld) {
   assert.ok(!JSON.stringify(exported).includes('raw-secret'), 'audit export must not include raw secret values')
 })
 
-// ─── Scenario: View usage summary (usage-summary.feature) ────────────────────
-
-When('the operator opens usage analytics', async function (this: StepsWorld) {
-  const state = await ensureSignedIn(this)
-  // Ensure there are some sessions for context
-  if (!state.latestSession) {
-    await ensureAgentAndEnvironment(this)
-    state.latestSession = await createSession(state)
-  }
-  const summary = await apiJson<Json>(state.page.request, '/api/usage/summary')
-  ;(state as typeof state & { usageSummary?: Json }).usageSummary = summary
-})
-
-Then(
-  'usage is grouped by organization, project, provider, model, agent, session, and time range',
-  async function (this: StepsWorld) {
-    const state = this.e2e as typeof this.e2e & { usageSummary?: Json }
-    assert.ok(state, 'e2e state must exist')
-    // Verify the default groupBy covers all dimensions
-    const summary = state.usageSummary ?? (await apiJson<Json>(state!.page.request, '/api/usage/summary'))
-    assert.ok('totals' in summary, 'usage summary must include totals')
-    assert.ok('groups' in summary, 'usage summary must include groups')
-    // Verify that groupBy query parameter works for fine-grained grouping
-    const sessionGrouped = await apiJson<Json>(state!.page.request, '/api/usage/summary?groupBy=session,provider,model')
-    assert.ok('totals' in sessionGrouped, 'session-grouped summary must include totals')
-    assert.ok(Array.isArray(sessionGrouped.groups), 'session-grouped summary must include groups array')
-  },
-)
-
 // ─── Scenario: Filter and group usage analytics (usage-summary.feature) ──────
 
-Given('sessions have recorded token, duration, tool, sandbox, and error usage', async function (this: StepsWorld) {
-  // Create a session that generates runtime activity (test mode records usage events)
-  const state = await ensureAgentAndEnvironment(this)
-  state.latestSession = await createSession(state)
-})
+Given(
+  'sessions have recorded token, duration, tool, sandbox, and error usage',
+  { timeout: 120_000 },
+  async function (this: UsageWorld) {
+    // This prompt makes the test runtime issue a sandbox.exec tool call before
+    // answering, so the session records model usage and sandbox tool usage.
+    const state = await driveRealUsageTurn(this, 'filter', 'inspect the sandbox status')
+    await waitForSessionEventMatch(state, (event) => event.type === 'tool_execution_end', 'a completed tool execution')
+  },
+)
 
 When(
   'the operator filters by organization, project, provider, model, agent, session, status, or time range',
-  async function (this: StepsWorld) {
+  async function (this: UsageWorld) {
     const state = this.e2e
     assert.ok(state, 'e2e state must exist')
-    const sessionId = String((state.latestSession as Json).id)
-    const agentId = String((state.agent as Json | undefined)?.id ?? '')
-    // Exercise each supported filter dimension
-    const sessionFiltered = await apiJson<Json>(state.page.request, `/api/usage/summary?sessionId=${sessionId}`)
-    const agentFiltered = agentId
-      ? await apiJson<Json>(state.page.request, `/api/usage/summary?agentId=${agentId}`)
-      : { totals: { records: 0 }, groups: [] }
-    const timeFiltered = await apiJson<Json>(
-      state.page.request,
-      `/api/usage/summary?createdFrom=${encodeURIComponent(new Date(Date.now() - 60_000).toISOString())}`,
-    )
-    ;(state as typeof state & { filterResults?: Json[] }).filterResults = [sessionFiltered, agentFiltered, timeFiltered]
+    const sessionId = String(state.latestSession?.id)
+    const agentId = String(state.agent?.id)
+    const from = encodeURIComponent(new Date(Date.now() - 60 * 60 * 1000).toISOString())
+    const queries = [
+      `sessionId=${sessionId}`,
+      `agentId=${agentId}`,
+      'provider=workers-ai',
+      `model=${encodeURIComponent(WORKERS_AI_MODEL)}`,
+      'status=success',
+      `createdFrom=${from}`,
+    ]
+    this.filterResults = []
+    for (const query of queries) {
+      this.filterResults.push(
+        await apiJson<UsageSummaryShape>(state.page.request, `/api/usage/summary?${query}&groupBy=provider,session`),
+      )
+    }
   },
 )
 
-Then('totals and grouped breakdowns update consistently', function (this: StepsWorld) {
-  const state = this.e2e as typeof this.e2e & { filterResults?: Json[] }
+Then('totals and grouped breakdowns update consistently', function (this: UsageWorld) {
+  const state = this.e2e
   assert.ok(state, 'e2e state must exist')
-  const results = state.filterResults
-  assert.ok(Array.isArray(results) && results.length > 0, 'filter results must exist')
-  for (const result of results) {
-    assert.ok('totals' in result, 'each filtered result must include totals')
-    assert.ok('groups' in result, 'each filtered result must include groups')
-    const totals = result.totals as Json
-    assert.ok(typeof totals.records === 'number', 'totals.records must be a number')
-    assert.ok(typeof totals.totalTokens === 'number', 'totals.totalTokens must be a number')
+  const results = this.filterResults
+  assert.ok(results && results.length === 6, 'each filter dimension produced a summary')
+  const [bySession, byAgent, byProvider, byModel, byStatus, byTime] = results as [
+    UsageSummaryShape,
+    UsageSummaryShape,
+    UsageSummaryShape,
+    UsageSummaryShape,
+    UsageSummaryShape,
+    UsageSummaryShape,
+  ]
+  assert.ok(bySession.totals.records >= 2, 'the session recorded model and tool usage')
+  assert.ok(bySession.totals.totalTokens > 0, 'the session-filtered summary carries recorded tokens')
+  for (const [label, result] of Object.entries({ bySession, byAgent, byProvider, byModel, byStatus, byTime })) {
+    assertGroupsAddUpToTotals(result, label)
   }
+  // Agent, status, and time filters cover the same single-session activity.
+  assert.equal(byAgent.totals.records, bySession.totals.records, 'agent and session filters agree')
+  assert.equal(byStatus.totals.records, bySession.totals.records, 'all recorded usage completed successfully')
+  assert.equal(byTime.totals.records, bySession.totals.records, 'an in-range time filter keeps all usage')
+  // Provider/model filters narrow to model usage and exclude sandbox tool usage.
+  assert.ok(byProvider.totals.records >= 1, 'the provider filter matches the model usage')
+  assert.ok(byProvider.totals.records < bySession.totals.records, 'the provider filter excludes sandbox tool usage')
+  assert.equal(byModel.totals.records, byProvider.totals.records, 'model and provider filters agree')
 })
 
-Then('empty ranges show an explicit empty state', async function (this: StepsWorld) {
+Then('empty ranges show an explicit empty state', async function (this: UsageWorld) {
   const state = this.e2e
   assert.ok(state, 'e2e state must exist')
   // Request a time range far in the future — must return an empty but valid summary
   const futureFrom = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
   const futureTo = new Date(Date.now() + 366 * 24 * 60 * 60 * 1000).toISOString()
-  const empty = await apiJson<Json>(
+  const empty = await apiJson<UsageSummaryShape>(
     state.page.request,
     `/api/usage/summary?createdFrom=${encodeURIComponent(futureFrom)}&createdTo=${encodeURIComponent(futureTo)}`,
   )
-  assert.ok('totals' in empty, 'empty-range summary must include totals')
-  assert.ok('groups' in empty, 'empty-range summary must include groups')
-  const totals = empty.totals as Json
-  assert.equal(totals.records, 0, 'empty range totals.records must be 0')
+  assert.equal(empty.totals.records, 0, 'empty range totals.records must be 0')
   assert.ok(Array.isArray(empty.groups) && empty.groups.length === 0, 'empty range groups must be an empty array')
 })

@@ -300,6 +300,15 @@ OPERATIONS = [
   },
   {
     "method": "GET",
+    "path": "/api/usage/export",
+    "operationId": "exportUsageSummary",
+    "summary": "Export usage summaries",
+    "tags": [
+      "Usage"
+    ]
+  },
+  {
+    "method": "GET",
     "path": "/api/health",
     "operationId": "getHealth",
     "summary": "Get Worker health",
@@ -566,6 +575,15 @@ OPERATIONS = [
     "summary": "Read agent memory",
     "tags": [
       "Agents"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/audit-records/{recordId}",
+    "operationId": "readAuditRecord",
+    "summary": "Read an audit record",
+    "tags": [
+      "Audit"
     ]
   },
   {

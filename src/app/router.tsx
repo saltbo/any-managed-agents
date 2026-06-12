@@ -3,6 +3,7 @@ import { AgentBuilderPage } from '@/features/agents/AgentBuilderPage'
 import { AgentDetailPage } from '@/features/agents/AgentDetailPage'
 import { AgentsPage } from '@/features/agents/AgentsPage'
 import { AuditPage } from '@/features/audit/AuditPage'
+import { AuditRecordPage } from '@/features/audit/AuditRecordPage'
 import { AuthCallbackPage } from '@/features/auth/AuthCallbackPage'
 import { ConsoleLayout } from '@/features/console/ConsoleLayout'
 import { EnvironmentDetailPage } from '@/features/environments/EnvironmentDetailPage'
@@ -48,6 +49,7 @@ export function createAppRouter() {
         { path: 'mcp/:connectorId', element: <McpConnectorPage /> },
         { path: 'usage', element: <UsagePage /> },
         { path: 'audit', element: <AuditPage /> },
+        { path: 'audit/:recordId', element: <AuditRecordPage /> },
         { path: 'settings', element: <SettingsPage /> },
         { path: '*', element: <Navigate to="/quickstart" replace /> },
       ],

@@ -569,10 +569,10 @@ function mockConsoleApi(seed?: {
     if (url === '/api/governance/policy' && method === 'GET') {
       return jsonResponse(state.governancePolicy)
     }
-    if (url === '/api/usage/summary' && method === 'GET') {
+    if (url.startsWith('/api/usage/summary') && method === 'GET') {
       return jsonResponse(state.usageSummary)
     }
-    if (url === '/api/audit-records' && method === 'GET') {
+    if ((url === '/api/audit-records' || url.startsWith('/api/audit-records?')) && method === 'GET') {
       return jsonResponse({ data: state.auditRecords })
     }
     if (url === '/api/environments' && method === 'GET') {
@@ -1106,10 +1106,10 @@ describe('App', () => {
       if (url === '/api/governance/policy') {
         return jsonResponse(governancePolicy())
       }
-      if (url === '/api/usage/summary') {
+      if (url.startsWith('/api/usage/summary')) {
         return jsonResponse(usageSummary())
       }
-      if (url === '/api/audit-records') {
+      if (url === '/api/audit-records' || url.startsWith('/api/audit-records?')) {
         return jsonResponse({ data: [] })
       }
       if (url.startsWith('/api/sessions/session_1/events')) {
