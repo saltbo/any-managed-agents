@@ -1,5 +1,5 @@
 import { createRoute, z } from '@hono/zod-openapi'
-import { and, asc, desc, eq, gt, gte, inArray, isNull, like, lt, lte, max, ne, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, gte, inArray, isNull, like, lt, lte, ne, or, sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
 import {
@@ -26,6 +26,7 @@ import {
   vaultCredentials,
   vaultCredentialVersions,
 } from '../db/schema'
+import { insertCanonicalSessionEvent } from '../db/session-event-store'
 import type { Env } from '../env'
 import { errorResponse } from '../errors'
 import {
@@ -47,7 +48,6 @@ import {
   runtimeRequiredRunnerCapability,
   runtimeSupportsLivePrompts,
 } from '../runtime/catalog'
-import { insertCanonicalSessionEvent } from '../db/session-event-store'
 import { runtimeDriver, runtimeDriverName, runtimeMetadata } from '../runtime/drivers'
 import { safeRuntimeError } from '../runtime/runtime-error'
 import { resolveRuntimeSecretEnv } from '../runtime/secret-env'

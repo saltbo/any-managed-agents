@@ -102,21 +102,18 @@ When('AMA stores the session events', async function (this: EventsWorld) {
   assert.ok(this.storedEvents.data.length > 0, 'the nested turn produced stored events')
 })
 
-Then(
-  'every canonical event has a stable event id and monotonically increasing sequence',
-  function (this: EventsWorld) {
-    const events = this.storedEvents?.data ?? []
-    const ids = events.map((event) => String(event.id))
-    assert.equal(new Set(ids).size, ids.length, 'event ids are unique')
-    for (const id of ids) {
-      assert.match(id, /^event_/, 'event ids are stable platform identifiers')
-    }
-    const sequences = events.map((event) => Number(event.sequence))
-    for (let i = 1; i < sequences.length; i += 1) {
-      assert.ok(sequences[i]! > sequences[i - 1]!, 'sequences increase monotonically')
-    }
-  },
-)
+Then('every canonical event has a stable event id and monotonically increasing sequence', function (this: EventsWorld) {
+  const events = this.storedEvents?.data ?? []
+  const ids = events.map((event) => String(event.id))
+  assert.equal(new Set(ids).size, ids.length, 'event ids are unique')
+  for (const id of ids) {
+    assert.match(id, /^event_/, 'event ids are stable platform identifiers')
+  }
+  const sequences = events.map((event) => Number(event.sequence))
+  for (let i = 1; i < sequences.length; i += 1) {
+    assert.ok(sequences[i]! > sequences[i - 1]!, 'sequences increase monotonically')
+  }
+})
 
 Then('related events share stable turn, message, tool call, and span identifiers', function (this: EventsWorld) {
   const events = this.storedEvents?.data ?? []
@@ -149,28 +146,31 @@ Then('related events share stable turn, message, tool call, and span identifiers
   assert.match([...toolCorrelations][0]!, /^tool:/, 'tool correlation ids are namespaced')
 })
 
-Then('child events reference their parent event, tool call, or span where nesting exists', function (this: EventsWorld) {
-  const events = this.storedEvents?.data ?? []
-  const childTypes = ['message_start', 'message_update', 'message_end', 'tool_execution_start', 'tool_execution_end']
-  let currentTurn: string | null = null
-  let checkedChildren = 0
-  for (const event of events) {
-    if (event.type === 'turn_start') {
-      currentTurn = String(event.id)
-      continue
+Then(
+  'child events reference their parent event, tool call, or span where nesting exists',
+  function (this: EventsWorld) {
+    const events = this.storedEvents?.data ?? []
+    const childTypes = ['message_start', 'message_update', 'message_end', 'tool_execution_start', 'tool_execution_end']
+    let currentTurn: string | null = null
+    let checkedChildren = 0
+    for (const event of events) {
+      if (event.type === 'turn_start') {
+        currentTurn = String(event.id)
+        continue
+      }
+      if (event.type === 'turn_end') {
+        currentTurn = null
+        continue
+      }
+      if (childTypes.includes(String(event.type))) {
+        assert.ok(currentTurn, `${event.type} occurs inside a turn`)
+        assert.equal(event.parentEventId, currentTurn, `${event.type} references its enclosing turn`)
+        checkedChildren += 1
+      }
     }
-    if (event.type === 'turn_end') {
-      currentTurn = null
-      continue
-    }
-    if (childTypes.includes(String(event.type))) {
-      assert.ok(currentTurn, `${event.type} occurs inside a turn`)
-      assert.equal(event.parentEventId, currentTurn, `${event.type} references its enclosing turn`)
-      checkedChildren += 1
-    }
-  }
-  assert.ok(checkedChildren > 0, 'the run produced nested child events')
-})
+    assert.ok(checkedChildren > 0, 'the run produced nested child events')
+  },
+)
 
 Then(
   'product clients can reconstruct transcript, tool progress, runtime diagnostics, usage, and errors without raw runtime events',
@@ -211,12 +211,15 @@ When('AMA receives the runtime update', { timeout: 120_000 }, async function (th
   this.storedEvents = await listEvents(e2e)
 })
 
-Then('AMA stores a canonical checkpoint or runtime metadata event with a safe resume reference', function (this: EventsWorld) {
-  const checkpoint = (this.storedEvents?.data ?? []).find((event) => event.type === 'session_checkpoint') as Json
-  assert.ok(checkpoint, 'session_checkpoint event is stored')
-  const payload = checkpoint.payload as Record<string, unknown>
-  assert.match(String(payload.resumeTokenRef), /^work-item:/, 'the checkpoint carries a safe resume reference')
-})
+Then(
+  'AMA stores a canonical checkpoint or runtime metadata event with a safe resume reference',
+  function (this: EventsWorld) {
+    const checkpoint = (this.storedEvents?.data ?? []).find((event) => event.type === 'session_checkpoint') as Json
+    assert.ok(checkpoint, 'session_checkpoint event is stored')
+    const payload = checkpoint.payload as Record<string, unknown>
+    assert.match(String(payload.resumeTokenRef), /^work-item:/, 'the checkpoint carries a safe resume reference')
+  },
+)
 
 Then('the raw provider token value is redacted when it is sensitive', function (this: EventsWorld) {
   const e2e = state(this)
@@ -280,12 +283,15 @@ When('a client resumes the session through AMA', { timeout: 240_000 }, async fun
   await waitForSessionStatus(e2e, 'running')
 })
 
-Then('AMA sends the resume request to the selected runtime driver or owning runner', async function (this: EventsWorld) {
-  const e2e = state(this)
-  await waitForSessionEvent(e2e, (event) => (event as Json).type === 'session_resume', 'session_resume event')
-  // The runtime actually started in resume mode.
-  await waitForSessionEventText(e2e, 'claude-code-bridge-live resumed-with-token:yes')
-})
+Then(
+  'AMA sends the resume request to the selected runtime driver or owning runner',
+  async function (this: EventsWorld) {
+    const e2e = state(this)
+    await waitForSessionEvent(e2e, (event) => (event as Json).type === 'session_resume', 'session_resume event')
+    // The runtime actually started in resume mode.
+    await waitForSessionEventText(e2e, 'claude-code-bridge-live resumed-with-token:yes')
+  },
+)
 
 Then(
   'the runtime continues from the safe resume point without creating a duplicate session history',

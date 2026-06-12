@@ -1,9 +1,9 @@
-import { and, eq, max } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import { canonicalAmaSessionEventFromRuntimeEvent } from '../../shared/session-events'
-import { runnerSessionChannels, runnerWorkItems, runnerWorkLeases, sessionEvents, sessions } from '../db/schema'
-import type { Env } from '../env'
+import { runnerSessionChannels, runnerWorkItems, runnerWorkLeases, sessions } from '../db/schema'
 import { insertCanonicalSessionEvent } from '../db/session-event-store'
+import type { Env } from '../env'
 import { redactSensitiveValue } from '../redaction'
 
 type ChannelState = {

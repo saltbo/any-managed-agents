@@ -4,7 +4,6 @@ import { drizzle } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
 import { canonicalAmaSessionEventFromRuntimeEvent } from '../../shared/session-events'
 import { recordAudit, requestId } from '../audit'
-import { insertCanonicalSessionEvent } from '../db/session-event-store'
 import { type AuthContext, isRunnerOidcAuth, requireAuth } from '../auth/session'
 import {
   environments,
@@ -17,6 +16,7 @@ import {
   sessions,
   vaultCredentialVersions,
 } from '../db/schema'
+import { insertCanonicalSessionEvent } from '../db/session-event-store'
 import type { Env } from '../env'
 import { errorResponse } from '../errors'
 import {

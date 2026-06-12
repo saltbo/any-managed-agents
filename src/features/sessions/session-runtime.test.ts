@@ -32,7 +32,11 @@ const canonicalEventPayloads = {
   turn_start: { type: 'turn_start' },
   turn_end: { type: 'turn_end', message: { role: 'assistant', timestamp: 2, content: 'Done' }, toolResults: [] },
   session_stop: { type: 'session_stop', reason: 'user_requested' },
-  session_checkpoint: { type: 'session_checkpoint', resumeTokenRef: 'work-item:workitem_1', scope: 'runtime-resume-token' },
+  session_checkpoint: {
+    type: 'session_checkpoint',
+    resumeTokenRef: 'work-item:workitem_1',
+    scope: 'runtime-resume-token',
+  },
   session_resume: { type: 'session_resume', fromCheckpoint: 'work-item:workitem_1', reason: 'runner-recovery' },
   message_start: { type: 'message_start', message: { role: 'assistant', timestamp: 1, content: '' } },
   message_update: {
