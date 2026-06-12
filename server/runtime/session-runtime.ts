@@ -664,7 +664,6 @@ function simulatedProviderFailure(prompt: string): unknown | null {
     default:
       return new Error(`provider call collapsed without diagnostics ${marker}`)
   }
-
 }
 
 function testAssistantMessage(model: Model<string>, context: Context) {

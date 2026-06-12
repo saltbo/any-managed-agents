@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import { Given, Then, When } from '@cucumber/cucumber'
 import { apiJson } from './local-app'
 import {
+  bridgeTestRuntimeConfig,
   CLAUDE_CODE_E2E_MODEL,
   type E2EState,
-  bridgeTestRuntimeConfig,
   runtimeProviderModelCapability,
   startProductAmaRunner,
   waitForSessionEvent,
@@ -84,10 +84,7 @@ async function setupOfficialRuntimeSession(
 }
 
 async function listSessionEvents(e2e: E2EState) {
-  return await apiJson<ListResponse<Json>>(
-    e2e.page.request,
-    `/api/sessions/${e2e.latestSession?.id}/events?limit=200`,
-  )
+  return await apiJson<ListResponse<Json>>(e2e.page.request, `/api/sessions/${e2e.latestSession?.id}/events?limit=200`)
 }
 
 // ─── Surface official runtime authentication and authorization failures ───
@@ -105,10 +102,14 @@ Given(
   },
 )
 
-Given('the owning runner starts the selected official runtime', { timeout: 240_000 }, async function (this: RuntimeErrorsWorld) {
-  const e2e = state(this)
-  await startProductAmaRunner(e2e)
-})
+Given(
+  'the owning runner starts the selected official runtime',
+  { timeout: 240_000 },
+  async function (this: RuntimeErrorsWorld) {
+    const e2e = state(this)
+    await startProductAmaRunner(e2e)
+  },
+)
 
 When(
   'the official runtime reports missing login, unauthorized account, disabled product policy, or expired credentials',
@@ -126,16 +127,19 @@ When(
   },
 )
 
-Then('ama-runner emits a canonical runtime error event with a stable error code', async function (this: RuntimeErrorsWorld) {
-  const e2e = state(this)
-  const events = await listSessionEvents(e2e)
-  const authError = events.data.find(
-    (event) => event.type === 'runtime.error' && JSON.stringify(event.payload).includes('runtime_auth_'),
-  ) as Json
-  assert.ok(authError, 'the canonical auth error event is persisted')
-  const payload = authError.payload as Record<string, unknown>
-  assert.equal(payload.code, 'runtime_auth_missing_login', 'the error carries the stable code')
-})
+Then(
+  'ama-runner emits a canonical runtime error event with a stable error code',
+  async function (this: RuntimeErrorsWorld) {
+    const e2e = state(this)
+    const events = await listSessionEvents(e2e)
+    const authError = events.data.find(
+      (event) => event.type === 'runtime.error' && JSON.stringify(event.payload).includes('runtime_auth_'),
+    ) as Json
+    assert.ok(authError, 'the canonical auth error event is persisted')
+    const payload = authError.payload as Record<string, unknown>
+    assert.equal(payload.code, 'runtime_auth_missing_login', 'the error carries the stable code')
+  },
+)
 
 Then(
   'AMA marks the session with a safe status reason that product clients can display',
@@ -198,16 +202,19 @@ When('ama-runner receives the permission request', { timeout: 180_000 }, async f
   )
 })
 
-Then('ama-runner emits a canonical permission request event with safe action details', async function (this: RuntimeErrorsWorld) {
-  const e2e = state(this)
-  const events = await listSessionEvents(e2e)
-  const request = events.data.find((event) => event.type === 'permission.request') as Json
-  assert.ok(request, 'permission request is part of the canonical stream')
-  const payload = request.payload as Record<string, unknown>
-  assert.equal(payload.action, 'shell')
-  assert.ok(typeof payload.permissionId === 'string' && payload.permissionId, 'a stable permission id is recorded')
-  assert.equal(payload.command, 'printf permission-ok', 'safe action details are recorded')
-})
+Then(
+  'ama-runner emits a canonical permission request event with safe action details',
+  async function (this: RuntimeErrorsWorld) {
+    const e2e = state(this)
+    const events = await listSessionEvents(e2e)
+    const request = events.data.find((event) => event.type === 'permission.request') as Json
+    assert.ok(request, 'permission request is part of the canonical stream')
+    const payload = request.payload as Record<string, unknown>
+    assert.equal(payload.action, 'shell')
+    assert.ok(typeof payload.permissionId === 'string' && payload.permissionId, 'a stable permission id is recorded')
+    assert.equal(payload.command, 'printf permission-ok', 'safe action details are recorded')
+  },
+)
 
 Then(
   'AMA applies the session policy before approving or denying the action',
@@ -219,8 +226,7 @@ Then(
       (event) => {
         const record = event as Json
         return (
-          record.type === 'policy.decision' &&
-          JSON.stringify(record.payload).includes('runtime_permission_decision')
+          record.type === 'policy.decision' && JSON.stringify(record.payload).includes('runtime_permission_decision')
         )
       },
       'canonical permission policy decision',
