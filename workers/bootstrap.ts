@@ -1,6 +1,6 @@
 import { createApp } from '../server/app'
 import type { Env } from '../server/env'
-import { consumeCloudTurnMessage } from '../server/routes/sessions'
+import { consumeCloudTurnMessage } from '../server/runtime/session-orchestration'
 import { markStalledCloudSessions } from '../server/runtime/session-watchdog'
 import type { CloudTurnMessage } from '../server/runtime/turn-queue'
 import { dispatchDueScheduledTriggers } from '../server/schedules/dispatcher'

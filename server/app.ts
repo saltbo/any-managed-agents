@@ -5,11 +5,33 @@ import { cors } from 'hono/cors'
 import { canonicalAmaSessionEventFromRuntimeEvent } from '../shared/session-events'
 import { recordAudit, requestId } from './audit'
 import { type AuthContext, requireAuth } from './auth/session'
+import { createDeps } from './composition'
 import { sessionEvents, sessions } from './db/schema'
 import { insertCanonicalSessionEvent } from './db/session-event-store'
 import type { Env } from './env'
 import { errorResponse } from './errors'
-import { ApiSecuritySchemes, createApiRouter } from './openapi'
+import { registerAccessRuleRoutes } from './http/access-rules'
+import { registerAgentRoutes } from './http/agents'
+import { registerAuditRecordRoutes } from './http/audit-records'
+import { registerAuthRoutes } from './http/auth'
+import { registerBudgetRoutes } from './http/budgets'
+import { registerConnectionRoutes } from './http/connections'
+import { registerConnectorRoutes } from './http/connectors'
+import { registerEffectivePolicyRoutes } from './http/effective-policy'
+import { registerEnvironmentRoutes } from './http/environments'
+import { registerFederatedTenantRoutes } from './http/federated-tenants'
+import { registerLeaseRoutes } from './http/leases'
+import { registerPolicyRoutes } from './http/policies'
+import { registerProjectRoutes } from './http/projects'
+import { registerProviderRoutes } from './http/providers'
+import { registerRunnerRoutes } from './http/runners'
+import { registerSessionRoutes } from './http/sessions'
+import { registerTriggerRoutes } from './http/triggers'
+import { registerUsageRecordRoutes } from './http/usage-records'
+import { registerUsageSummaryRoutes } from './http/usage-summary'
+import { registerVaultRoutes } from './http/vaults'
+import { registerWorkItemRoutes } from './http/work-items'
+import { ApiSecuritySchemes, createDepsApiRouter } from './openapi'
 import {
   evaluateMcpToolPolicy,
   evaluateSandboxRuntimePolicy,
@@ -17,30 +39,10 @@ import {
   policyBlocksSandboxOperation,
 } from './policy'
 import { redactSensitiveValue } from './redaction'
-import accessRules from './routes/access-rules'
-import agents from './routes/agents'
-import audit from './routes/audit'
-import auth from './routes/auth'
-import budgets from './routes/budgets'
-import connections from './routes/connections'
-import connectors from './routes/connectors'
 import e2e from './routes/e2e'
-import effectivePolicy from './routes/effective-policy'
-import environments from './routes/environments'
-import federatedTenants from './routes/federated-tenants'
 import health from './routes/health'
-import leases from './routes/leases'
-import policies from './routes/policies'
-import projects from './routes/projects'
-import providers from './routes/providers'
-import runners, { dispatchRunnerSessionCommand, hasAcceptedRunnerSessionChannel } from './routes/runners'
 import runtimeAi from './routes/runtime-ai'
-import sessionRoutes from './routes/sessions'
-import triggers from './routes/triggers'
-import usageRecords from './routes/usage-records'
-import usageSummary from './routes/usage-summary'
-import vaults from './routes/vaults'
-import workItems from './routes/work-items'
+import { dispatchRunnerSessionCommand, hasAcceptedRunnerSessionChannel } from './runtime/runner-session-command'
 import { safeRuntimeError } from './runtime/runtime-error'
 import {
   executeRuntimeToolCalls,
@@ -618,7 +620,14 @@ async function handleRuntimeWebSocketMessage(
 }
 
 export function createApp() {
-  const app = createApiRouter()
+  const app = createDepsApiRouter()
+
+  // Deps injection registers first: it guards nothing, it only makes the
+  // composition-root Deps object available to every route via c.get('deps').
+  app.use('*', (c, next) => {
+    c.set('deps', createDeps(c.env))
+    return next()
+  })
 
   app.use(
     '/*',
@@ -642,6 +651,34 @@ export function createApp() {
   // protocol-adapter endpoints: their wire shape is dictated by external
   // protocols (ACP tunnel, OpenAI-compatible inference) and is therefore
   // exempt from REST resource modeling (docs/api-v1-design.md §1.8).
+  // agents, environments, providers, vaults, connectors, connections, the
+  // governance resources, and the usage/audit reporting resources are migrated
+  // to the clean-architecture http layer. Each registers its OpenAPI
+  // routes (load-bearing internal order: static before parameter segments) onto
+  // a sub-router mounted at the resource's original chain position, so the
+  // assembled route order and AppType stay identical.
+  const auth = registerAuthRoutes(createDepsApiRouter())
+  const federatedTenants = registerFederatedTenantRoutes(createDepsApiRouter())
+  const projects = registerProjectRoutes(createDepsApiRouter())
+  const triggers = registerTriggerRoutes(createDepsApiRouter())
+  const agents = registerAgentRoutes(createDepsApiRouter())
+  const environments = registerEnvironmentRoutes(createDepsApiRouter())
+  const providers = registerProviderRoutes(createDepsApiRouter())
+  const runners = registerRunnerRoutes(createDepsApiRouter())
+  const workItems = registerWorkItemRoutes(createDepsApiRouter())
+  const leases = registerLeaseRoutes(createDepsApiRouter())
+  const connectors = registerConnectorRoutes(createDepsApiRouter())
+  const connections = registerConnectionRoutes(createDepsApiRouter())
+  const policies = registerPolicyRoutes(createDepsApiRouter())
+  const effectivePolicy = registerEffectivePolicyRoutes(createDepsApiRouter())
+  const accessRules = registerAccessRuleRoutes(createDepsApiRouter())
+  const budgets = registerBudgetRoutes(createDepsApiRouter())
+  const usageRecords = registerUsageRecordRoutes(createDepsApiRouter())
+  const usageSummary = registerUsageSummaryRoutes(createDepsApiRouter())
+  const auditRecords = registerAuditRecordRoutes(createDepsApiRouter())
+  const sessionsRoutes = registerSessionRoutes(createDepsApiRouter())
+  const vaults = registerVaultRoutes(createDepsApiRouter())
+
   const routes = app
     .route('/api/v1/health', health)
     .route('/api/v1/e2e', e2e)
@@ -663,9 +700,9 @@ export function createApp() {
     .route('/api/v1/connections', connections)
     .route('/api/v1/usage-records', usageRecords)
     .route('/api/v1/usage-summary', usageSummary)
-    .route('/api/v1/audit-records', audit)
+    .route('/api/v1/audit-records', auditRecords)
     .route('/api/v1/triggers', triggers)
-    .route('/api/v1/sessions', sessionRoutes)
+    .route('/api/v1/sessions', sessionsRoutes)
     .route('/api/v1/vaults', vaults)
 
   routes.openAPIRegistry.registerComponent('securitySchemes', 'bearerAuth', ApiSecuritySchemes.bearerAuth)
@@ -685,7 +722,7 @@ export function createApp() {
 
   routes.all('/api/v1/runtime/sessions/:sessionId/*', async (c) => {
     const db = drizzle(c.env.DB)
-    const resolvedAuth = await requireAuth(c, db)
+    const resolvedAuth = await requireAuth(c)
     if (resolvedAuth instanceof Response) {
       return resolvedAuth
     }

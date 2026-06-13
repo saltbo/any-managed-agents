@@ -1,0 +1,276 @@
+import type {
+  CreateRunnerInput,
+  ListPageResult,
+  RunnerAuthRecord,
+  RunnerCredentialRef,
+  RunnerHeartbeatFields,
+  RunnerListQuery,
+  RunnerRepo,
+  RuntimeInventoryEntry,
+  RuntimeUsage,
+  UpdateRunnerFields,
+} from '@server/usecases/ports'
+import { and, desc, eq, gte, isNotNull, isNull, like, lt, lte, or, sql } from 'drizzle-orm'
+import type { drizzle } from 'drizzle-orm/d1'
+import { environments, runners, vaultCredentials, vaultCredentialVersions } from '../../db/schema'
+import { redactSensitiveValue } from '../../redaction'
+
+type Db = ReturnType<typeof drizzle>
+type RunnerRow = typeof runners.$inferSelect
+
+function newId(prefix: string) {
+  return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
+}
+
+// Token-like values are redacted before they re-enter a JSON payload bound for
+// D1 or a response, so a misreporting runner never persists raw secrets.
+function parseJson<T>(value: string | null) {
+  return value ? (redactSensitiveValue(JSON.parse(value)) as T) : null
+}
+
+function parseRawJson<T>(value: string | null) {
+  return value ? (JSON.parse(value) as T) : null
+}
+
+function stringify(value: unknown) {
+  return JSON.stringify(redactSensitiveValue(value))
+}
+
+function recordFrom(row: RunnerRow): RunnerAuthRecord {
+  return {
+    id: row.id,
+    organizationId: row.organizationId,
+    projectId: row.projectId,
+    name: row.name,
+    capabilities: parseJson<string[]>(row.capabilities) ?? [],
+    environmentId: row.environmentId,
+    credentialRef: row.credentialId
+      ? { credentialId: row.credentialId, ...(row.credentialVersionId ? { versionId: row.credentialVersionId } : {}) }
+      : null,
+    authMode: row.authMode,
+    state: row.state,
+    currentLoad: row.currentLoad,
+    maxConcurrent: row.maxConcurrent,
+    runtimeUsage: parseRawJson<RuntimeUsage[]>(row.runtimeUsage) ?? [],
+    runtimeInventory: parseRawJson<RuntimeInventoryEntry[]>(row.runtimeInventory) ?? [],
+    metadata: parseJson<Record<string, unknown>>(row.metadata) ?? {},
+    oidcSubject: row.oidcSubject,
+    oidcClientId: row.oidcClientId,
+    lastHeartbeatAt: row.lastHeartbeatAt,
+    archivedAt: row.archivedAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  }
+}
+
+function columnsFromInput(input: CreateRunnerInput) {
+  return {
+    organizationId: input.organizationId,
+    projectId: input.projectId,
+    name: input.name,
+    capabilities: stringify(input.capabilities),
+    environmentId: input.environmentId,
+    credentialId: input.credentialRef?.credentialId ?? null,
+    credentialVersionId: input.credentialRef?.versionId ?? null,
+    authMode: input.authMode,
+    oidcSubject: input.oidcSubject,
+    oidcClientId: input.oidcClientId,
+    maxConcurrent: input.maxConcurrent,
+    metadata: stringify(input.metadata),
+  }
+}
+
+async function findRow(db: Db, projectId: string, runnerId: string): Promise<RunnerRow | null> {
+  return (
+    (await db
+      .select()
+      .from(runners)
+      .where(and(eq(runners.id, runnerId), eq(runners.projectId, projectId)))
+      .get()) ?? null
+  )
+}
+
+export function createRunnerRepo(db: Db): RunnerRepo {
+  return {
+    async list(query: RunnerListQuery): Promise<ListPageResult<RunnerAuthRecord>> {
+      const filters = [
+        eq(runners.projectId, query.projectId),
+        query.runnerId ? eq(runners.id, query.runnerId) : undefined,
+        query.oidcSubject ? eq(runners.oidcSubject, query.oidcSubject) : undefined,
+        query.oidcClientId ? eq(runners.oidcClientId, query.oidcClientId) : undefined,
+        query.archived ? isNotNull(runners.archivedAt) : isNull(runners.archivedAt),
+        query.state ? eq(runners.state, query.state) : undefined,
+        query.environmentId ? eq(runners.environmentId, query.environmentId) : undefined,
+        query.search ? like(runners.name, `%${query.search}%`) : undefined,
+        query.createdFrom ? gte(runners.createdAt, query.createdFrom) : undefined,
+        query.createdTo ? lte(runners.createdAt, query.createdTo) : undefined,
+        query.cursor
+          ? or(
+              lt(runners.createdAt, query.cursor.createdAt),
+              and(eq(runners.createdAt, query.cursor.createdAt), lt(runners.id, query.cursor.id)),
+            )
+          : undefined,
+      ].filter((filter) => filter !== undefined)
+      const rows = await db
+        .select()
+        .from(runners)
+        .where(and(...filters))
+        .orderBy(desc(runners.createdAt), desc(runners.id))
+        .limit(query.limit + 1)
+      const hasMore = rows.length > query.limit
+      return { rows: rows.slice(0, query.limit).map(recordFrom), hasMore }
+    },
+
+    async find(projectId, runnerId) {
+      const row = await findRow(db, projectId, runnerId)
+      return row ? recordFrom(row) : null
+    },
+
+    async findForMachineRegistration(projectId, authMode, oidcSubject, environmentId, machineId) {
+      if (!machineId || (authMode !== 'federated' && authMode !== 'oidc')) {
+        return null
+      }
+      const row = await db
+        .select()
+        .from(runners)
+        .where(
+          and(
+            eq(runners.projectId, projectId),
+            eq(runners.authMode, authMode),
+            eq(runners.oidcSubject, oidcSubject),
+            environmentId ? eq(runners.environmentId, environmentId) : isNull(runners.environmentId),
+            sql`json_extract(${runners.metadata}, '$.machineId') = ${machineId}`,
+          ),
+        )
+        .get()
+      return row ? recordFrom(row) : null
+    },
+
+    async insert(input, timestamp) {
+      const row = {
+        id: newId('runner'),
+        ...columnsFromInput(input),
+        state: 'offline',
+        currentLoad: 0,
+        runtimeUsage: '[]',
+        runtimeInventory: '[]',
+        lastHeartbeatAt: null,
+        archivedAt: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }
+      await db.insert(runners).values(row)
+      const inserted = await findRow(db, input.projectId, row.id)
+      if (!inserted) {
+        throw new Error('Inserted runner row is required')
+      }
+      return recordFrom(inserted)
+    },
+
+    async reregister(projectId, runnerId, input, timestamp) {
+      await db
+        .update(runners)
+        .set({ ...columnsFromInput(input), archivedAt: null, updatedAt: timestamp })
+        .where(and(eq(runners.id, runnerId), eq(runners.projectId, projectId)))
+      const row = await findRow(db, projectId, runnerId)
+      if (!row) {
+        throw new Error('Federated runner registration update did not return a runner')
+      }
+      return recordFrom(row)
+    },
+
+    async update(projectId, runnerId, fields: UpdateRunnerFields, timestamp) {
+      await db
+        .update(runners)
+        .set({
+          name: fields.name,
+          capabilities: stringify(fields.capabilities),
+          state: fields.state,
+          maxConcurrent: fields.maxConcurrent,
+          metadata: stringify(fields.metadata),
+          archivedAt: fields.archivedAt,
+          updatedAt: timestamp,
+        })
+        .where(and(eq(runners.id, runnerId), eq(runners.projectId, projectId)))
+      const row = await findRow(db, projectId, runnerId)
+      if (!row) {
+        throw new Error('Updated runner row is required')
+      }
+      return recordFrom(row)
+    },
+
+    async heartbeat(projectId, runnerId, fields: RunnerHeartbeatFields, timestamp) {
+      // Inventory entries are stored as safe metadata only: stringify() redacts
+      // token-like values so provider tokens or local credential values never
+      // reach D1 even if a runner misreports them in diagnostic detail.
+      await db
+        .update(runners)
+        .set({
+          state: fields.state,
+          capabilities: stringify(fields.capabilities),
+          currentLoad: fields.currentLoad,
+          runtimeUsage: stringify(fields.runtimeUsage),
+          runtimeInventory: stringify(fields.runtimeInventory),
+          metadata: stringify(fields.metadata),
+          lastHeartbeatAt: timestamp,
+          updatedAt: timestamp,
+        })
+        .where(and(eq(runners.id, runnerId), eq(runners.projectId, projectId)))
+      const row = await findRow(db, projectId, runnerId)
+      if (!row) {
+        throw new Error('Heartbeat runner row is required')
+      }
+      return recordFrom(row)
+    },
+
+    async environmentUsable(projectId, environmentId) {
+      const environment = await db
+        .select({ id: environments.id })
+        .from(environments)
+        .where(
+          and(
+            eq(environments.id, environmentId),
+            eq(environments.projectId, projectId),
+            isNull(environments.archivedAt),
+          ),
+        )
+        .get()
+      return Boolean(environment)
+    },
+
+    async credentialRefUsable(organizationId, projectId, ref: RunnerCredentialRef) {
+      const credential = await db
+        .select({ id: vaultCredentials.id })
+        .from(vaultCredentials)
+        .where(
+          and(
+            eq(vaultCredentials.id, ref.credentialId),
+            eq(vaultCredentials.organizationId, organizationId),
+            or(eq(vaultCredentials.projectId, projectId), isNull(vaultCredentials.projectId)),
+            eq(vaultCredentials.state, 'active'),
+          ),
+        )
+        .get()
+      if (!credential) {
+        return { credentialMissing: true, versionMissing: false }
+      }
+      if (ref.versionId) {
+        const version = await db
+          .select({ id: vaultCredentialVersions.id })
+          .from(vaultCredentialVersions)
+          .where(
+            and(
+              eq(vaultCredentialVersions.id, ref.versionId),
+              eq(vaultCredentialVersions.credentialId, ref.credentialId),
+              eq(vaultCredentialVersions.state, 'active'),
+            ),
+          )
+          .get()
+        if (!version) {
+          return { credentialMissing: false, versionMissing: true }
+        }
+      }
+      return { credentialMissing: false, versionMissing: false }
+    },
+  }
+}

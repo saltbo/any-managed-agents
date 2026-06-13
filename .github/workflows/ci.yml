@@ -32,6 +32,7 @@ jobs:
       - run: go install github.com/rest-sh/restish@v0.21.2
       - run: echo "$HOME/go/bin" >> "$GITHUB_PATH"
       - run: pnpm run lint
+      - run: pnpm run lint:arch
       - run: pnpm run typecheck
       - run: pnpm run openapi:check
       - run: pnpm --filter @any-managed-agents/sdk run typecheck
