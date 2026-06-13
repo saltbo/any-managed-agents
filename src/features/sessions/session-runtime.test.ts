@@ -946,6 +946,126 @@ describe('sessionRuntimeReducer — extractText edge cases (line 594)', () => {
   })
 })
 
+describe('sessionRuntimeReducer — mergePersistedEvents filter predicates', () => {
+  // These tests exercise the .filter() callbacks inside mergePersistedEvents
+  // that only run when state.messages/tools/debugEvents are already non-empty.
+  // Coverage target: the anonymous lambdas at lines 254-262 of session-runtime.ts.
+
+  it('deduplicates a message that already exists in state when persisted_events is dispatched twice', () => {
+    const msgEvent = event(1, 'message_end', {
+      type: 'message_end',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'Existing message' }] },
+    })
+    const termEvent = event(2, 'turn_end', { type: 'turn_end' })
+
+    // First dispatch: state gains 1 message, 1 debugEvent
+    const afterFirst = sessionRuntimeReducer(initialSessionRuntimeState, {
+      type: 'persisted_events',
+      events: [msgEvent, termEvent],
+    })
+    expect(afterFirst.messages).toHaveLength(1)
+
+    // Second dispatch with the SAME event: the filter predicate runs against
+    // state.messages (now non-empty) and deduplicates by id/sameRuntimeMessage.
+    const afterSecond = sessionRuntimeReducer(afterFirst, {
+      type: 'persisted_events',
+      events: [msgEvent, termEvent],
+    })
+
+    // Message must not be duplicated.
+    expect(afterSecond.messages).toHaveLength(1)
+    expect(afterSecond.messages[0]?.content).toBe('Existing message')
+  })
+
+  it('deduplicates a tool that already exists in state when persisted_events is dispatched twice', () => {
+    const toolStart = event(1, 'tool_execution_start', {
+      type: 'tool_execution_start',
+      toolCallId: 'tool_dedup',
+      toolName: 'bash',
+      args: { command: 'ls' },
+    })
+    const toolEnd = event(2, 'tool_execution_end', {
+      type: 'tool_execution_end',
+      toolCallId: 'tool_dedup',
+      toolName: 'bash',
+      result: { content: [{ type: 'text', text: 'ok' }] },
+      isError: false,
+    })
+
+    const afterFirst = sessionRuntimeReducer(initialSessionRuntimeState, {
+      type: 'persisted_events',
+      events: [toolStart, toolEnd],
+    })
+    expect(afterFirst.tools).toHaveLength(1)
+
+    // Second dispatch: state.tools.filter(...) predicate runs to avoid duplication.
+    const afterSecond = sessionRuntimeReducer(afterFirst, {
+      type: 'persisted_events',
+      events: [toolStart, toolEnd],
+    })
+
+    expect(afterSecond.tools).toHaveLength(1)
+    expect(afterSecond.tools[0]?.callId).toBe('tool_dedup')
+  })
+
+  it('deduplicates debug events that already exist in state when persisted_events is dispatched twice', () => {
+    const debugEvent = event(1, 'agent_start', { type: 'agent_start' })
+
+    const afterFirst = sessionRuntimeReducer(initialSessionRuntimeState, {
+      type: 'persisted_events',
+      events: [debugEvent],
+    })
+    expect(afterFirst.debugEvents).toHaveLength(1)
+
+    // Second dispatch: state.debugEvents.filter(...) predicate runs to avoid duplication.
+    const afterSecond = sessionRuntimeReducer(afterFirst, {
+      type: 'persisted_events',
+      events: [debugEvent],
+    })
+
+    expect(afterSecond.debugEvents).toHaveLength(1)
+    expect(afterSecond.debugEvents[0]?.type).toBe('agent_start')
+  })
+
+  it('appends new items while deduplicating existing ones in all three collections', () => {
+    const existingMsg = event(1, 'message_end', {
+      type: 'message_end',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'First' }] },
+    })
+    const existingTool = event(2, 'tool_execution_start', {
+      type: 'tool_execution_start',
+      toolCallId: 'tool_existing',
+      toolName: 'bash',
+      args: { command: 'ls' },
+    })
+
+    const afterFirst = sessionRuntimeReducer(initialSessionRuntimeState, {
+      type: 'persisted_events',
+      events: [existingMsg, existingTool],
+    })
+
+    const newMsg = event(10, 'message_end', {
+      type: 'message_end',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'Second' }] },
+    })
+    const newDebug = event(11, 'agent_start', { type: 'agent_start' })
+
+    // Second dispatch: existing events deduplicated, new events appended.
+    const afterSecond = sessionRuntimeReducer(afterFirst, {
+      type: 'persisted_events',
+      events: [existingMsg, existingTool, newMsg, newDebug],
+    })
+
+    // Both messages present, no duplicates.
+    expect(afterSecond.messages.map((m) => m.content)).toEqual(['First', 'Second'])
+    // Tools: same tool deduplicated.
+    expect(afterSecond.tools).toHaveLength(1)
+    // Debug events: new agent_start appended.
+    const types = afterSecond.debugEvents.map((d) => d.type)
+    expect(types.filter((t) => t === 'agent_start')).toHaveLength(1)
+  })
+})
+
 describe('sessionRuntimeReducer — hasToolValue edge cases (lines 632, 635)', () => {
   it('preserves existing output when update result is empty string (hasToolValue("") = false)', () => {
     // Create the tool first via tool_execution_start

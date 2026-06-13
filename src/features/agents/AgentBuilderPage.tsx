@@ -11,6 +11,7 @@ import { archivedLabel } from '@/console/format'
 import { JsonBlock } from '@/features/console/json-block'
 import { initialSessionRuntimeState, sessionRuntimeReducer } from '@/features/sessions/session-runtime'
 import { type Agent, api } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 import {
   BuilderStepper,
@@ -123,7 +124,7 @@ export function AgentBuilderPage() {
       if (mapped.step) goToStep(mapped.step)
       return
     }
-    toast.error(error instanceof Error ? error.message : String(error))
+    toast.error(errorMessage(error))
   }
 
   const startTest = useMutation({

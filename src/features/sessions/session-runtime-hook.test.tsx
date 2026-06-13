@@ -1,6 +1,10 @@
 /**
  * Tests for useSessionRuntimeSession hook.
  *
+ * Uses MSW for the GET /api/v1/sessions/:id/connection endpoint, and a
+ * MockWebSocket to exercise the live runtime socket path. No vi.spyOn/vi.mock
+ * of @/lib/api.
+ *
  * ROOT CAUSE OF OOM: The hook's two useEffects both depend on props that can
  * change reference on every re-render, causing infinite loops:
  *
@@ -20,13 +24,13 @@
  * MockWebSocket.close() is silent so useEffect cleanup doesn't start reconnect.
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useCallback } from 'react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Session, SessionConnection, SessionEvent } from '@/lib/api'
-import * as apiModule from '@/lib/api'
+import type { Session, SessionEvent } from '@/lib/api'
 import * as oidcModule from '@/lib/oidc'
+import { HttpResponse, http, server } from '@/test/msw'
 import { useSessionRuntimeSession } from './use-session-runtime'
 
 // ---------------------------------------------------------------------------
@@ -162,6 +166,19 @@ function buildEvent(overrides: Partial<SessionEvent> = {}): SessionEvent {
   }
 }
 
+// MSW handler for connection endpoint
+function connectionHandler(sessionId = 'session_1') {
+  return http.get(`*/api/v1/sessions/${sessionId}/connection`, () =>
+    HttpResponse.json({
+      sessionId,
+      transport: null,
+      path: `/api/sessions/${sessionId}/runtime/rpc`,
+      state: 'running',
+      stateReason: null,
+    }),
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Test Harness
 //
@@ -218,6 +235,7 @@ function makeCallbackRef(fn: () => void = () => {}): React.MutableRefObject<() =
 }
 
 async function renderLive(sessionState: Session['state'] = 'idle', cbRef = makeCallbackRef()) {
+  server.use(connectionHandler())
   const queryClient = makeQueryClient()
   const result = render(
     <QueryClientProvider client={queryClient}>
@@ -237,18 +255,10 @@ async function renderLive(sessionState: Session['state'] = 'idle', cbRef = makeC
 beforeEach(() => {
   lastSocket = null
   vi.spyOn(oidcModule, 'getStoredAccessToken').mockReturnValue(null)
-  vi.spyOn(apiModule.api, 'readSessionConnection').mockResolvedValue({
-    sessionId: 'session_1',
-    transport: null,
-    path: '/api/sessions/session_1/runtime/rpc',
-    state: 'running',
-    stateReason: null,
-  } satisfies SessionConnection)
   vi.stubGlobal('WebSocket', MockWebSocket)
 })
 
 afterEach(() => {
-  cleanup()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   lastSocket = null
@@ -303,6 +313,7 @@ describe('useSessionRuntimeSession — live session open', () => {
   })
 
   it('connects WebSocket for running session', async () => {
+    server.use(connectionHandler())
     await renderLive('running')
     expect(screen.getByTestId('connection').textContent).toBe('open')
   })
@@ -418,6 +429,7 @@ describe('useSessionRuntimeSession — send commands', () => {
       },
     )
 
+    server.use(connectionHandler())
     const cbRef = makeCallbackRef()
     const queryClient = makeQueryClient()
     render(
@@ -477,6 +489,7 @@ describe('useSessionRuntimeSession — onEventsChanged callbacks', () => {
 
 describe('useSessionRuntimeSession — session change (reset)', () => {
   it('resets state when session id changes (line 42 — sessionIdRef update)', async () => {
+    server.use(connectionHandler('session_1'))
     const cbRef = makeCallbackRef()
     const queryClient = makeQueryClient()
 
@@ -490,7 +503,7 @@ describe('useSessionRuntimeSession — session change (reset)', () => {
       </QueryClientProvider>,
     )
 
-    // Wait for stable state (not connected since mock connection query resolves to session_1 path)
+    // Wait for stable state
     await new Promise((resolve) => setTimeout(resolve, 100))
 
     // Re-render with session_2 — this triggers the sessionIdRef !== check

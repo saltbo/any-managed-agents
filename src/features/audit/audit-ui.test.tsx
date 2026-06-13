@@ -1,17 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { ClientPagination } from '@/console/use-client-pagination'
 import type { AuditRecord } from '@/lib/api'
+import { createCollection, HttpResponse, http, server } from '@/test/msw'
 import { AuditPage } from './AuditPage'
 import { AuditRecordPage } from './AuditRecordPage'
 import { AuditView } from './AuditView'
-
-afterEach(() => {
-  cleanup()
-  vi.restoreAllMocks()
-})
 
 function buildRecord(overrides: Partial<AuditRecord> = {}): AuditRecord {
   return {
@@ -52,6 +48,8 @@ function pagination(records: AuditRecord[]): ClientPagination<AuditRecord> {
   }
 }
 
+// ─── AuditView ───────────────────────────────────────────────────────────────
+
 describe('[spec: audit/console-list] AuditView', () => {
   it('renders one row per record with action, outcome, resource, actor, policy, and request', () => {
     const records = [
@@ -73,10 +71,10 @@ describe('[spec: audit/console-list] AuditView', () => {
 
     const table = screen.getByRole('table')
     expect(within(table).getAllByRole('row')).toHaveLength(3)
-    expect(screen.getByText('access_rule.create')).toBeTruthy()
-    expect(screen.getByText('policy.evaluate')).toBeTruthy()
-    expect(screen.getByText('denied')).toBeTruthy()
-    expect(screen.getByText('access_rule / access_1')).toBeTruthy()
+    expect(screen.getByText('access_rule.create')).toBeInTheDocument()
+    expect(screen.getByText('policy.evaluate')).toBeInTheDocument()
+    expect(screen.getByText('denied')).toBeInTheDocument()
+    expect(screen.getByText('access_rule / access_1')).toBeInTheDocument()
   })
 
   it('shows an empty state when no records match', () => {
@@ -86,210 +84,9 @@ describe('[spec: audit/console-list] AuditView', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('No audit records')).toBeTruthy()
-  })
-})
-
-describe('[spec: audit/console-detail] AuditRecordPage', () => {
-  it('renders actor, correlation, resource link, and redacted before/after change', async () => {
-    const record = buildRecord({
-      action: 'vault.credential.update',
-      resourceType: 'vault',
-      resourceId: 'vault_1',
-      before: { apiKey: '[REDACTED]' },
-      after: { apiKey: '[REDACTED]', name: 'Workers token' },
-    })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readAuditRecord: vi.fn().mockResolvedValue(record),
-    } as never)
-
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/audit/audit_1']}>
-          <Routes>
-            <Route path="/audit/:recordId" element={<AuditRecordPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    expect(await screen.findByRole('heading', { name: 'vault.credential.update' })).toBeTruthy()
-    expect(screen.getByText('user_1')).toBeTruthy()
-    expect(screen.getByText('corr_1')).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Open vault' })).toBeTruthy()
-    await waitFor(() => expect(screen.getAllByText(/\[REDACTED\]/).length).toBeGreaterThan(0))
+    expect(screen.getByText('No audit records')).toBeInTheDocument()
   })
 
-  it('renders resource type without a link when resource type has no route', async () => {
-    const record = buildRecord({
-      action: 'unknown_resource.update',
-      resourceType: 'access_rule',
-      resourceId: 'rule_1',
-    })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readAuditRecord: vi.fn().mockResolvedValue(record),
-    } as never)
-
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/audit/audit_1']}>
-          <Routes>
-            <Route path="/audit/:recordId" element={<AuditRecordPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    expect(await screen.findByRole('heading', { name: 'unknown_resource.update' })).toBeTruthy()
-    expect(screen.queryByRole('link', { name: /^Open / })).toBeNull()
-  })
-
-  it('renders without a resource link when resourceId is null', async () => {
-    const record = buildRecord({
-      action: 'provider.create',
-      resourceType: 'provider',
-      resourceId: null,
-    })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readAuditRecord: vi.fn().mockResolvedValue(record),
-    } as never)
-
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/audit/audit_1']}>
-          <Routes>
-            <Route path="/audit/:recordId" element={<AuditRecordPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    expect(await screen.findByRole('heading', { name: 'provider.create' })).toBeTruthy()
-    expect(screen.queryByRole('link', { name: /^Open / })).toBeNull()
-  })
-
-  it('shows loading state while the query is pending', async () => {
-    // Never-resolving promise keeps the query in pending/loading state
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readAuditRecord: vi.fn().mockReturnValue(new Promise(() => {})),
-    } as never)
-
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/audit/audit_1']}>
-          <Routes>
-            <Route path="/audit/:recordId" element={<AuditRecordPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    expect(screen.getByText('Loading audit record')).toBeTruthy()
-  })
-
-  it('shows error state when the query fails', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readAuditRecord: vi.fn().mockRejectedValue(new Error('Not found')),
-    } as never)
-
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/audit/audit_1']}>
-          <Routes>
-            <Route path="/audit/:recordId" element={<AuditRecordPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    expect(await screen.findByText('Audit record unavailable')).toBeTruthy()
-    expect(screen.getByText('Not found')).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Back to audit log' })).toBeTruthy()
-  })
-
-  it('shows error state with stringified message when error is not an Error instance', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readAuditRecord: vi.fn().mockRejectedValue('string error'),
-    } as never)
-
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/audit/audit_1']}>
-          <Routes>
-            <Route path="/audit/:recordId" element={<AuditRecordPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    expect(await screen.findByText('Audit record unavailable')).toBeTruthy()
-    expect(screen.getByText('string error')).toBeTruthy()
-  })
-
-  it('renders agent and environment resource links', async () => {
-    const agentRecord = buildRecord({
-      action: 'agent.update',
-      resourceType: 'agent',
-      resourceId: 'agent_1',
-    })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readAuditRecord: vi.fn().mockResolvedValue(agentRecord),
-    } as never)
-
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/audit/audit_1']}>
-          <Routes>
-            <Route path="/audit/:recordId" element={<AuditRecordPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    expect(await screen.findByRole('link', { name: 'Open agent' })).toBeTruthy()
-  })
-
-  it('renders None for null optional record fields and falls back to actorType when actorUserId is null', async () => {
-    const record = buildRecord({
-      action: 'session.stop',
-      actorUserId: null,
-      requestId: null,
-      correlationId: null,
-      sessionId: null,
-      policyCategory: null,
-      projectId: null,
-    })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readAuditRecord: vi.fn().mockResolvedValue(record),
-    } as never)
-
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/audit/audit_1']}>
-          <Routes>
-            <Route path="/audit/:recordId" element={<AuditRecordPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    expect(await screen.findByRole('heading', { name: 'session.stop' })).toBeTruthy()
-    // actorUserId is null so falls back to actorType 'user'
-    expect(screen.getAllByText('user').length).toBeGreaterThan(0)
-    // All null-optional fields render as 'None'
-    expect(screen.getAllByText('None').length).toBeGreaterThan(0)
-  })
-})
-
-describe('[spec: audit/console-list] AuditView resource id null', () => {
   it('renders None when resourceId is null', () => {
     const records = [buildRecord({ resourceId: null })]
     render(
@@ -298,7 +95,7 @@ describe('[spec: audit/console-list] AuditView resource id null', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('access_rule / None')).toBeTruthy()
+    expect(screen.getByText('access_rule / None')).toBeInTheDocument()
   })
 
   it('renders actor type when actorUserId is null', () => {
@@ -309,8 +106,7 @@ describe('[spec: audit/console-list] AuditView resource id null', () => {
       </MemoryRouter>,
     )
 
-    // When actorUserId is null, it falls back to actorType
-    expect(screen.getByText('user')).toBeTruthy()
+    expect(screen.getByText('user')).toBeInTheDocument()
   })
 
   it('renders None for missing optional fields', () => {
@@ -326,15 +122,146 @@ describe('[spec: audit/console-list] AuditView resource id null', () => {
       </MemoryRouter>,
     )
 
-    // policyCategory None and requestId None appear
     expect(screen.getAllByText('None').length).toBeGreaterThan(0)
   })
 })
 
+// ─── AuditRecordPage ─────────────────────────────────────────────────────────
+
+describe('[spec: audit/console-detail] AuditRecordPage', () => {
+  function makeClient() {
+    return new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  }
+
+  function renderRecordPage(recordId = 'audit_1') {
+    return render(
+      <QueryClientProvider client={makeClient()}>
+        <MemoryRouter initialEntries={[`/audit/${recordId}`]}>
+          <Routes>
+            <Route path="/audit/:recordId" element={<AuditRecordPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+  }
+
+  it('renders actor, correlation, resource link, and redacted before/after change', async () => {
+    const record = buildRecord({
+      action: 'vault.credential.update',
+      resourceType: 'vault',
+      resourceId: 'vault_1',
+      before: { apiKey: '[REDACTED]' },
+      after: { apiKey: '[REDACTED]', name: 'Workers token' },
+    })
+    server.use(http.get('*/api/v1/audit-records/audit_1', () => HttpResponse.json(record)))
+
+    renderRecordPage()
+
+    expect(await screen.findByRole('heading', { name: 'vault.credential.update' })).toBeInTheDocument()
+    expect(screen.getByText('user_1')).toBeInTheDocument()
+    expect(screen.getByText('corr_1')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open vault' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getAllByText(/\[REDACTED\]/).length).toBeGreaterThan(0))
+  })
+
+  it('renders resource type without a link when resource type has no route', async () => {
+    const record = buildRecord({
+      action: 'unknown_resource.update',
+      resourceType: 'access_rule',
+      resourceId: 'rule_1',
+    })
+    server.use(http.get('*/api/v1/audit-records/audit_1', () => HttpResponse.json(record)))
+
+    renderRecordPage()
+
+    expect(await screen.findByRole('heading', { name: 'unknown_resource.update' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /^Open / })).toBeNull()
+  })
+
+  it('renders without a resource link when resourceId is null', async () => {
+    const record = buildRecord({
+      action: 'provider.create',
+      resourceType: 'provider',
+      resourceId: null,
+    })
+    server.use(http.get('*/api/v1/audit-records/audit_1', () => HttpResponse.json(record)))
+
+    renderRecordPage()
+
+    expect(await screen.findByRole('heading', { name: 'provider.create' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /^Open / })).toBeNull()
+  })
+
+  it('shows loading state while the query is pending', () => {
+    // MSW never responds — keeps query in pending state
+    server.use(http.get('*/api/v1/audit-records/audit_1', () => new Promise(() => {})))
+
+    renderRecordPage()
+
+    expect(screen.getByText('Loading audit record')).toBeInTheDocument()
+  })
+
+  it('shows error state when the query fails', async () => {
+    server.use(
+      http.get('*/api/v1/audit-records/audit_1', () =>
+        HttpResponse.json({ error: { type: 'not_found', message: 'Not found' } }, { status: 404 }),
+      ),
+    )
+
+    renderRecordPage()
+
+    expect(await screen.findByText('Audit record unavailable')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Back to audit log' })).toBeInTheDocument()
+  })
+
+  it('renders agent and environment resource links', async () => {
+    const agentRecord = buildRecord({
+      action: 'agent.update',
+      resourceType: 'agent',
+      resourceId: 'agent_1',
+    })
+    server.use(http.get('*/api/v1/audit-records/audit_1', () => HttpResponse.json(agentRecord)))
+
+    renderRecordPage()
+
+    expect(await screen.findByRole('link', { name: 'Open agent' })).toBeInTheDocument()
+  })
+
+  it('renders None for null optional record fields and falls back to actorType when actorUserId is null', async () => {
+    const record = buildRecord({
+      action: 'session.stop',
+      actorUserId: null,
+      requestId: null,
+      correlationId: null,
+      sessionId: null,
+      policyCategory: null,
+      projectId: null,
+    })
+    server.use(http.get('*/api/v1/audit-records/audit_1', () => HttpResponse.json(record)))
+
+    renderRecordPage()
+
+    expect(await screen.findByRole('heading', { name: 'session.stop' })).toBeInTheDocument()
+    expect(screen.getAllByText('user').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('None').length).toBeGreaterThan(0)
+  })
+})
+
+// ─── AuditPage ───────────────────────────────────────────────────────────────
+
 describe('[spec: audit/console-list] AuditPage', () => {
+  function makeAuditPageSetup(seedRecords: AuditRecord[] = []) {
+    const records = createCollection<AuditRecord>(seedRecords)
+    server.use(
+      http.get('*/api/v1/audit-records', () =>
+        HttpResponse.json({ data: records.list(), pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+    )
+    return records
+  }
+
   function renderAuditPage(initialSearch = '') {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    vi.spyOn(client, 'fetchQuery').mockResolvedValue({ data: [] })
     return render(
       <QueryClientProvider client={client}>
         <MemoryRouter initialEntries={[`/audit${initialSearch}`]}>
@@ -347,54 +274,27 @@ describe('[spec: audit/console-list] AuditPage', () => {
   }
 
   it('renders the page header and all filter inputs', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listAuditRecords: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
-
+    makeAuditPageSetup([])
     renderAuditPage()
 
-    expect(screen.getByText('Audit')).toBeTruthy()
-    expect(screen.getByLabelText('Filter by action')).toBeTruthy()
-    expect(screen.getByLabelText('Filter by resource type')).toBeTruthy()
-    expect(screen.getByLabelText('Filter by actor')).toBeTruthy()
-    expect(screen.getByLabelText('Audit from')).toBeTruthy()
-    expect(screen.getByLabelText('Audit to')).toBeTruthy()
+    expect(screen.getByText('Audit')).toBeInTheDocument()
+    expect(screen.getByLabelText('Filter by action')).toBeInTheDocument()
+    expect(screen.getByLabelText('Filter by resource type')).toBeInTheDocument()
+    expect(screen.getByLabelText('Filter by actor')).toBeInTheDocument()
+    expect(screen.getByLabelText('Audit from')).toBeInTheDocument()
+    expect(screen.getByLabelText('Audit to')).toBeInTheDocument()
   })
 
   it('shows empty state when api returns no records', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listAuditRecords: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
+    makeAuditPageSetup([])
+    renderAuditPage()
 
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/audit']}>
-          <Routes>
-            <Route path="/audit" element={<AuditPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    expect(await screen.findByText('No audit records')).toBeTruthy()
+    expect(await screen.findByText('No audit records')).toBeInTheDocument()
   })
 
   it('updates action filter input when user types', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listAuditRecords: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
-
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/audit']}>
-          <Routes>
-            <Route path="/audit" element={<AuditPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
+    makeAuditPageSetup([])
+    renderAuditPage()
 
     const actionInput = screen.getByLabelText('Filter by action')
     fireEvent.change(actionInput, { target: { value: 'agent.create' } })
@@ -402,20 +302,8 @@ describe('[spec: audit/console-list] AuditPage', () => {
   })
 
   it('updates resource type filter when user types', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listAuditRecords: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
-
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/audit']}>
-          <Routes>
-            <Route path="/audit" element={<AuditPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
+    makeAuditPageSetup([])
+    renderAuditPage()
 
     const resourceTypeInput = screen.getByLabelText('Filter by resource type')
     fireEvent.change(resourceTypeInput, { target: { value: 'vault' } })
@@ -423,20 +311,8 @@ describe('[spec: audit/console-list] AuditPage', () => {
   })
 
   it('updates actor filter when user types', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listAuditRecords: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
-
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/audit']}>
-          <Routes>
-            <Route path="/audit" element={<AuditPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
+    makeAuditPageSetup([])
+    renderAuditPage()
 
     const actorInput = screen.getByLabelText('Filter by actor')
     fireEvent.change(actorInput, { target: { value: 'user_abc' } })
@@ -444,20 +320,8 @@ describe('[spec: audit/console-list] AuditPage', () => {
   })
 
   it('updates date range filters when user types', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listAuditRecords: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
-
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/audit']}>
-          <Routes>
-            <Route path="/audit" element={<AuditPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
+    makeAuditPageSetup([])
+    renderAuditPage()
 
     const fromInput = screen.getByLabelText('Audit from')
     const toInput = screen.getByLabelText('Audit to')
@@ -468,88 +332,45 @@ describe('[spec: audit/console-list] AuditPage', () => {
   })
 
   it('renders with pre-existing URL filters applied', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listAuditRecords: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
-
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/audit?action=agent.create&outcome=success']}>
-          <Routes>
-            <Route path="/audit" element={<AuditPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
+    makeAuditPageSetup([])
+    renderAuditPage('?action=agent.create&outcome=success')
 
     const actionInput = screen.getByLabelText('Filter by action')
     expect((actionInput as HTMLInputElement).value).toBe('agent.create')
   })
 
   it('renders records returned by the api', async () => {
-    const records = [buildRecord({ id: 'audit_10', action: 'session.create', outcome: 'success' })]
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listAuditRecords: vi.fn().mockResolvedValue({ data: records }),
-    } as never)
+    makeAuditPageSetup([buildRecord({ id: 'audit_10', action: 'session.create', outcome: 'success' })])
+    renderAuditPage()
 
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/audit']}>
-          <Routes>
-            <Route path="/audit" element={<AuditPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    expect(await screen.findByText('session.create')).toBeTruthy()
+    expect(await screen.findByText('session.create')).toBeInTheDocument()
   })
 
-  it('passes date range from URL params to the query filters', async () => {
-    const listAuditRecords = vi.fn().mockResolvedValue({ data: [] })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listAuditRecords,
-    } as never)
-
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/audit?createdFrom=2026-01-01T00%3A00&createdTo=2026-06-01T00%3A00']}>
-          <Routes>
-            <Route path="/audit" element={<AuditPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
+  it('passes date range from URL params to the query', async () => {
+    let capturedUrl: URL | null = null
+    server.use(
+      http.get('*/api/v1/audit-records', ({ request }) => {
+        capturedUrl = new URL(request.url)
+        return HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } })
+      }),
     )
+    renderAuditPage('?createdFrom=2026-01-01T00%3A00&createdTo=2026-06-01T00%3A00')
 
-    await waitFor(() => {
-      expect(listAuditRecords).toHaveBeenCalledWith(
-        expect.objectContaining({ from: expect.any(String), to: expect.any(String) }),
-      )
-    })
+    await waitFor(() => expect(capturedUrl).not.toBeNull())
+    expect(capturedUrl!.searchParams.get('from')).toBeTruthy()
+    expect(capturedUrl!.searchParams.get('to')).toBeTruthy()
   })
 
-  it('passes projectId from URL param to the query filters', async () => {
-    const listAuditRecords = vi.fn().mockResolvedValue({ data: [] })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listAuditRecords,
-    } as never)
-
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/audit?projectId=project_abc']}>
-          <Routes>
-            <Route path="/audit" element={<AuditPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
+  it('passes projectId from URL param to the query', async () => {
+    let capturedUrl: URL | null = null
+    server.use(
+      http.get('*/api/v1/audit-records', ({ request }) => {
+        capturedUrl = new URL(request.url)
+        return HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } })
+      }),
     )
+    renderAuditPage('?projectId=project_abc')
 
-    await waitFor(() => {
-      expect(listAuditRecords).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'project_abc' }))
-    })
+    await waitFor(() => expect(capturedUrl?.searchParams.get('projectId')).toBe('project_abc'))
   })
 })

@@ -10,6 +10,7 @@ import { isArchived, parsePackages, parseVariables, stringifyJson } from '@/cons
 import { EnvironmentForm } from '@/console/forms'
 import type { EnvironmentFormState } from '@/console/types'
 import { api, type Environment, type EnvironmentNetworkPolicy } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 import { EnvironmentDetailView } from './EnvironmentDetailView'
 import { useEnvironmentActions } from './use-environment-actions'
@@ -79,7 +80,7 @@ export function EnvironmentDetailPage() {
       setEditing(false)
       void queryClient.invalidateQueries({ queryKey: queryKeys.environments.all })
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : String(error)),
+    onError: (error) => toast.error(errorMessage(error)),
   })
   return (
     <div className="flex flex-col gap-4">

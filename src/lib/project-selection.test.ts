@@ -8,6 +8,7 @@ describe('project-selection', () => {
   })
 
   it('returns null when no project id is set', () => {
+    window.localStorage.clear()
     expect(getSelectedProjectId()).toBeNull()
   })
 

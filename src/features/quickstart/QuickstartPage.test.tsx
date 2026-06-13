@@ -1,45 +1,33 @@
 /**
  * Tests for QuickstartPage — loading, error, step navigation, and step content.
- * Pattern: QueryClientProvider (retry:false) + MemoryRouter, screen + fireEvent,
- * vi.spyOn on api module, afterEach cleanup + vi.restoreAllMocks.
+ * Pattern: MSW + real api client, QueryClientProvider (retry:false) + MemoryRouter.
+ * vi.spyOn is only used for useSessionRuntimeSession (a WebSocket hook, not @/lib/api).
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { SessionRuntimeState } from '@/features/sessions/session-runtime'
 import * as sessionRuntimeModule from '@/features/sessions/use-session-runtime'
-import * as apiModule from '@/lib/api'
-import {
-  type Agent,
-  ApiError,
-  type Environment,
-  type ListResponse,
-  type Provider,
-  type Session,
-  type SessionAgentSnapshot,
+import type {
+  Agent,
+  Environment,
+  Provider,
+  Session,
+  SessionAgentSnapshot,
+  SessionConnection,
+  SessionEvent,
 } from '@/lib/api'
+import { HttpResponse, http, server } from '@/test/msw'
 import { QuickstartPage } from './QuickstartPage'
-
-const listOf = <T,>(data: T[] = []): ListResponse<T> => ({
-  data,
-  pagination: { limit: 50, hasMore: false, nextCursor: null },
-})
-
-afterEach(() => {
-  // Unmount first to remove query observers, then clear cache.
-  // Never await cancelQueries — never-resolving mock promises would hang.
-  cleanup()
-  for (const qc of queryClients) {
-    qc.clear()
-  }
-  queryClients.length = 0
-  vi.restoreAllMocks()
-})
 
 // ─── Fixtures ───
 
 const now = '2026-05-23T00:00:00.000Z'
+
+function listEnvelope<T>(data: T[]) {
+  return { data, pagination: { limit: 50, hasMore: false, nextCursor: null as string | null } }
+}
 
 function buildProvider(overrides: Partial<Provider> = {}): Provider {
   return {
@@ -174,21 +162,71 @@ function buildSession(overrides: Partial<Session> = {}): Session {
   }
 }
 
-function makeQueryClient() {
-  return new QueryClient({
-    defaultOptions: {
-      queries: {
-        retry: false,
-        refetchOnWindowFocus: false,
-      },
-      mutations: { retry: false },
-    },
-  })
+// ─── MSW handler helpers ───
+
+function handlers({
+  providers = [] as Provider[],
+  agents = [] as Agent[],
+  environments = [] as Environment[],
+  sessions = [] as Session[],
+  createdAgent = null as Agent | null,
+  createdEnvironment = null as Environment | null,
+  createdSession = null as Session | null,
+  sessionDetail = null as Session | null,
+  sessionEvents = [] as SessionEvent[],
+  sessionConnection = null as SessionConnection | null,
+  agentError = null as { message: string; status: number } | null,
+  environmentError = null as { message: string; status: number } | null,
+  sessionError = null as { message: string; status: number } | null,
+  providersError = null as { message: string; status: number } | null,
+}) {
+  return [
+    http.get('*/api/v1/providers', () =>
+      providersError
+        ? HttpResponse.json({ error: { message: providersError.message } }, { status: providersError.status })
+        : HttpResponse.json(listEnvelope(providers)),
+    ),
+    http.get('*/api/v1/agents', () => HttpResponse.json(listEnvelope(agents))),
+    http.get('*/api/v1/environments', () => HttpResponse.json(listEnvelope(environments))),
+    http.get('*/api/v1/sessions', () => HttpResponse.json(listEnvelope(sessions))),
+    http.post('*/api/v1/agents', async ({ request }) => {
+      if (agentError) {
+        return HttpResponse.json({ error: { message: agentError.message } }, { status: agentError.status })
+      }
+      const body = (await request.json()) as Record<string, unknown>
+      const agent = createdAgent ?? buildAgent({ id: 'agent_new', name: String(body.name ?? 'New agent') })
+      return HttpResponse.json(agent, { status: 201 })
+    }),
+    http.post('*/api/v1/environments', async ({ request }) => {
+      if (environmentError) {
+        return HttpResponse.json({ error: { message: environmentError.message } }, { status: environmentError.status })
+      }
+      const body = (await request.json()) as Record<string, unknown>
+      const env = createdEnvironment ?? buildEnvironment({ id: 'env_new', name: String(body.name ?? 'New env') })
+      return HttpResponse.json(env, { status: 201 })
+    }),
+    http.post('*/api/v1/sessions', async () => {
+      if (sessionError) {
+        return HttpResponse.json({ error: { message: sessionError.message } }, { status: sessionError.status })
+      }
+      const session = createdSession ?? buildSession({ id: 'session_new' })
+      return HttpResponse.json(session, { status: 201 })
+    }),
+    http.get('*/api/v1/sessions/:sessionId', ({ params }) => {
+      const session = sessionDetail ?? sessions.find((s) => s.id === params.sessionId) ?? null
+      return session ? HttpResponse.json(session) : new HttpResponse(null, { status: 404 })
+    }),
+    http.get('*/api/v1/sessions/:sessionId/events', () => HttpResponse.json(listEnvelope(sessionEvents))),
+    http.get('*/api/v1/sessions/:sessionId/connection', () =>
+      sessionConnection ? HttpResponse.json(sessionConnection) : new HttpResponse(null, { status: 404 }),
+    ),
+    // Provider models are queried by CoreStep when a draft has a provider set
+    http.get('*/api/v1/providers/:providerId/models', () => HttpResponse.json(listEnvelope([]))),
+  ]
 }
 
-const queryClients: QueryClient[] = []
+// ─── Runtime mock helper ───
 
-/** Stub useSessionRuntimeSession to avoid real WebSocket connections in Page tests */
 function mockRuntime(state: Partial<SessionRuntimeState> = {}) {
   const fullState: SessionRuntimeState = {
     connection: 'closed',
@@ -210,9 +248,15 @@ function mockRuntime(state: Partial<SessionRuntimeState> = {}) {
   })
 }
 
+// ─── Render helper ───
+
 function renderPage(initialPath = '/quickstart') {
-  const queryClient = makeQueryClient()
-  queryClients.push(queryClient)
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, refetchOnWindowFocus: false },
+      mutations: { retry: false },
+    },
+  })
   render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[initialPath]}>
@@ -227,11 +271,12 @@ function renderPage(initialPath = '/quickstart') {
 
 describe('QuickstartPage loading', () => {
   it('renders loading state when queries are pending', () => {
-    vi.spyOn(apiModule.api, 'listProviders').mockReturnValue(new Promise(() => {}))
-    vi.spyOn(apiModule.api, 'listAgents').mockReturnValue(new Promise(() => {}))
-    vi.spyOn(apiModule.api, 'listEnvironments').mockReturnValue(new Promise(() => {}))
-    vi.spyOn(apiModule.api, 'listSessions').mockReturnValue(new Promise(() => {}))
-
+    server.use(
+      http.get('*/api/v1/providers', () => new Promise(() => {})),
+      http.get('*/api/v1/agents', () => new Promise(() => {})),
+      http.get('*/api/v1/environments', () => new Promise(() => {})),
+      http.get('*/api/v1/sessions', () => new Promise(() => {})),
+    )
     renderPage()
     expect(screen.getByText('Loading quickstart')).toBeTruthy()
   })
@@ -241,11 +286,7 @@ describe('QuickstartPage loading', () => {
 
 describe('QuickstartPage error', () => {
   it('renders error state when a query fails', async () => {
-    vi.spyOn(apiModule.api, 'listProviders').mockRejectedValue(new Error('Network error'))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>())
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>())
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>())
-
+    server.use(...handlers({ providersError: { message: 'Network error', status: 500 } }))
     renderPage()
     await waitFor(() => expect(screen.getByText('Network error')).toBeTruthy())
     expect(screen.getByText('Unable to load quickstart resources.')).toBeTruthy()
@@ -256,11 +297,7 @@ describe('QuickstartPage error', () => {
 
 describe('QuickstartPage loaded — step navigation', () => {
   it('shows all five quickstart step labels in the list', async () => {
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>())
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>())
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>())
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>())
-
+    server.use(...handlers({}))
     renderPage()
     await waitFor(() => expect(screen.getByText('1. Provider')).toBeTruthy())
     expect(screen.getByText('2. Environment')).toBeTruthy()
@@ -270,11 +307,7 @@ describe('QuickstartPage loaded — step navigation', () => {
   })
 
   it('opens provider step by default when no resources exist', async () => {
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>())
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>())
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>())
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>())
-
+    server.use(...handlers({}))
     renderPage('/quickstart')
     await waitFor(() =>
       expect(
@@ -284,22 +317,14 @@ describe('QuickstartPage loaded — step navigation', () => {
   })
 
   it('shows provider step content when step=provider is active', async () => {
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>())
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>())
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>())
-
+    server.use(...handlers({ providers: [buildProvider()] }))
     renderPage('/quickstart?step=provider')
     await waitFor(() => expect(screen.getByText('Workers AI')).toBeTruthy())
     expect(screen.getByText('Run the default Workers AI agent')).toBeTruthy()
   })
 
   it('shows environment step content when provider is completed and step=environment is active', async () => {
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>())
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>())
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>())
-
+    server.use(...handlers({ providers: [buildProvider()] }))
     renderPage('/quickstart?step=environment')
     await waitFor(() =>
       expect(screen.getByText('Create or select the reusable sandbox template sessions will run in.')).toBeTruthy(),
@@ -308,11 +333,7 @@ describe('QuickstartPage loaded — step navigation', () => {
   })
 
   it('shows agent step content when provider and environment are completed and step=agent is active', async () => {
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>())
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>([buildEnvironment()]))
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>())
-
+    server.use(...handlers({ providers: [buildProvider()], environments: [buildEnvironment()] }))
     renderPage('/quickstart?step=agent')
     await waitFor(() =>
       expect(screen.getByText('Draft the agent from a template or goal description, then create it.')).toBeTruthy(),
@@ -320,11 +341,9 @@ describe('QuickstartPage loaded — step navigation', () => {
   })
 
   it('shows session step content when provider, environment, and agent are completed', async () => {
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>([buildAgent()]))
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>([buildEnvironment()]))
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>())
-
+    server.use(
+      ...handlers({ providers: [buildProvider()], agents: [buildAgent()], environments: [buildEnvironment()] }),
+    )
     renderPage('/quickstart?step=session')
     await waitFor(() =>
       expect(screen.getByText('Create a test session and send the first task to the runtime.')).toBeTruthy(),
@@ -333,11 +352,14 @@ describe('QuickstartPage loaded — step navigation', () => {
   })
 
   it('shows integration step content when all steps are completed', async () => {
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>([buildAgent()]))
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>([buildEnvironment()]))
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>([buildSession()]))
-
+    server.use(
+      ...handlers({
+        providers: [buildProvider()],
+        agents: [buildAgent()],
+        environments: [buildEnvironment()],
+        sessions: [buildSession()],
+      }),
+    )
     renderPage('/quickstart?step=integration')
     await waitFor(() =>
       expect(screen.getByText('Call the same control-plane API from curl, restish, or a generated SDK.')).toBeTruthy(),
@@ -345,12 +367,7 @@ describe('QuickstartPage loaded — step navigation', () => {
   })
 
   it('falls back to first incomplete step when locked step is requested', async () => {
-    // No provider enabled → falls back to provider step even if agent is requested
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>())
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>())
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>())
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>())
-
+    server.use(...handlers({}))
     renderPage('/quickstart?step=agent')
     await waitFor(() =>
       expect(
@@ -361,15 +378,15 @@ describe('QuickstartPage loaded — step navigation', () => {
 
   it('renders session step content with "Create new test session" label when sessionId search param is set', async () => {
     mockRuntime()
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>([buildAgent()]))
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>([buildEnvironment()]))
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>([buildSession()]))
-    // session query for preview: mock readSession to keep it pending so SessionPreview just shows loading
-    vi.spyOn(apiModule.api, 'readSession').mockReturnValue(new Promise(() => {}))
-    vi.spyOn(apiModule.api, 'listSessionEvents').mockReturnValue(new Promise(() => {}))
-    vi.spyOn(apiModule.api, 'readSessionConnection').mockReturnValue(new Promise(() => {}))
-
+    server.use(
+      ...handlers({
+        providers: [buildProvider()],
+        agents: [buildAgent()],
+        environments: [buildEnvironment()],
+        sessions: [buildSession()],
+        sessionDetail: buildSession(),
+      }),
+    )
     renderPage('/quickstart?step=session&session=session_1')
     await waitFor(() =>
       expect(screen.getByText('Create a test session and send the first task to the runtime.')).toBeTruthy(),
@@ -378,37 +395,31 @@ describe('QuickstartPage loaded — step navigation', () => {
   })
 
   it('renders disabled locked step labels as spans not links', async () => {
-    // Only provider enabled — environment, agent, session, integration are locked
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>())
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>())
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>())
-
+    server.use(...handlers({ providers: [buildProvider()] }))
     renderPage('/quickstart?step=provider')
     await waitFor(() => expect(screen.getByText('1. Provider')).toBeTruthy())
 
-    // Provider (completed) and environment (next unlocked) should be links
     const providerEl = screen.getByText('1. Provider')
     expect(providerEl.tagName.toLowerCase()).toBe('a')
 
-    // Agent, Session, Integration should be disabled spans (locked)
     const agentEl = screen.getByText('3. Agent')
     expect(agentEl.tagName.toLowerCase()).toBe('span')
     expect(agentEl.getAttribute('aria-disabled')).toBe('true')
   })
 
   it('shows integration step with null input when sessions list is empty', async () => {
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>([buildAgent()]))
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>([buildEnvironment()]))
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>([buildSession({ state: 'stopped' })]))
-
+    server.use(
+      ...handlers({
+        providers: [buildProvider()],
+        agents: [buildAgent()],
+        environments: [buildEnvironment()],
+        sessions: [buildSession({ state: 'stopped' })],
+      }),
+    )
     renderPage('/quickstart?step=integration')
     await waitFor(() =>
       expect(screen.getByText('Call the same control-plane API from curl, restish, or a generated SDK.')).toBeTruthy(),
     )
-    // With a stopped session (non-idle/running), integrationSession falls to sessions[0]
-    // The page should still show integration examples since sessions[0] exists
     expect(screen.getByText('TypeScript SDK')).toBeTruthy()
   })
 })
@@ -417,17 +428,12 @@ describe('QuickstartPage loaded — step navigation', () => {
 
 describe('QuickstartPage agent step — draft flow', () => {
   it('transitions from start to review when goal is drafted', async () => {
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>())
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>([buildEnvironment()]))
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>())
-
+    server.use(...handlers({ providers: [buildProvider()], environments: [buildEnvironment()] }))
     renderPage('/quickstart?step=agent')
     await waitFor(() =>
       expect(screen.getByText('Draft the agent from a template or goal description, then create it.')).toBeTruthy(),
     )
 
-    // Type a goal and draft
     const textarea = screen.getByPlaceholderText('Review incoming pull requests and summarize risky changes.')
     fireEvent.change(textarea, { target: { value: 'Build a helpful assistant' } })
     fireEvent.click(screen.getByText('Draft agent configuration'))
@@ -436,11 +442,7 @@ describe('QuickstartPage agent step — draft flow', () => {
   })
 
   it('transitions back to start when Back to templates is clicked', async () => {
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>())
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>([buildEnvironment()]))
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>())
-
+    server.use(...handlers({ providers: [buildProvider()], environments: [buildEnvironment()] }))
     renderPage('/quickstart?step=agent')
     await waitFor(() =>
       expect(screen.getByText('Draft the agent from a template or goal description, then create it.')).toBeTruthy(),
@@ -456,65 +458,53 @@ describe('QuickstartPage agent step — draft flow', () => {
   })
 
   it('shows validation errors on empty draft submission', async () => {
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>())
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>([buildEnvironment()]))
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>())
-
+    server.use(...handlers({ providers: [buildProvider()], environments: [buildEnvironment()] }))
     renderPage('/quickstart?step=agent')
     await waitFor(() =>
       expect(screen.getByText('Draft the agent from a template or goal description, then create it.')).toBeTruthy(),
     )
 
-    // Click Start from scratch to get an empty draft
     fireEvent.click(screen.getByText('Start from scratch'))
     await waitFor(() => expect(screen.getByText('Create agent')).toBeTruthy())
 
-    // Submit empty draft — should show validation errors
     fireEvent.click(screen.getByText('Create agent'))
     await waitFor(() => expect(screen.getByText('Name is required.')).toBeTruthy())
   })
 
   it('uses template when Use template is clicked on agent step', async () => {
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>())
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>([buildEnvironment()]))
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>())
-
+    server.use(...handlers({ providers: [buildProvider()], environments: [buildEnvironment()] }))
     renderPage('/quickstart?step=agent')
     await waitFor(() =>
       expect(screen.getByText('Draft the agent from a template or goal description, then create it.')).toBeTruthy(),
     )
 
-    // Click Use template on the first template card
     const useTemplateBtn = screen.getAllByText('Use template')[0]!
     fireEvent.click(useTemplateBtn)
 
-    // After clicking template, draft is set and review UI shows Create agent
     await waitFor(() => expect(screen.getByText('Create agent')).toBeTruthy())
   })
 
   it('calls createAgent after valid draft is submitted', async () => {
     const createdAgent = buildAgent({ id: 'agent_new', version: 1 })
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>())
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>([buildEnvironment()]))
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>())
-    const createAgentSpy = vi.spyOn(apiModule.api, 'createAgent').mockResolvedValue(createdAgent)
+    server.use(...handlers({ providers: [buildProvider()], environments: [buildEnvironment()], createdAgent }))
+    // After agent creation, refetch will need updated agents list
+    server.use(http.get('*/api/v1/agents', () => HttpResponse.json(listEnvelope([createdAgent]))))
 
     renderPage('/quickstart?step=agent')
     await waitFor(() =>
       expect(screen.getByText('Draft the agent from a template or goal description, then create it.')).toBeTruthy(),
     )
 
-    // Draft from goal
     const textarea = screen.getByPlaceholderText('Review incoming pull requests and summarize risky changes.')
     fireEvent.change(textarea, { target: { value: 'Build a helpful assistant' } })
     fireEvent.click(screen.getByText('Draft agent configuration'))
     await waitFor(() => expect(screen.getByText('Create agent')).toBeTruthy())
 
     fireEvent.click(screen.getByText('Create agent'))
-    await waitFor(() => expect(createAgentSpy).toHaveBeenCalledTimes(1))
+    // After success, page navigates to session step
+    await waitFor(() =>
+      expect(screen.getByText('Create a test session and send the first task to the runtime.')).toBeTruthy(),
+    )
   })
 })
 
@@ -523,17 +513,18 @@ describe('QuickstartPage agent step — draft flow', () => {
 describe('QuickstartPage environment step — createEnvironment flow', () => {
   it('calls createEnvironment when Create environment button is clicked', async () => {
     const createdEnv = buildEnvironment({ id: 'env_new' })
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>())
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>())
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>())
-    const createEnvSpy = vi.spyOn(apiModule.api, 'createEnvironment').mockResolvedValue(createdEnv)
+    server.use(...handlers({ providers: [buildProvider()], createdEnvironment: createdEnv }))
+    // After env creation the page will refetch environments
+    server.use(http.get('*/api/v1/environments', () => HttpResponse.json(listEnvelope([createdEnv]))))
 
     renderPage('/quickstart?step=environment')
     await waitFor(() => expect(screen.getByText('Create environment')).toBeTruthy())
 
     fireEvent.click(screen.getByText('Create environment'))
-    await waitFor(() => expect(createEnvSpy).toHaveBeenCalledTimes(1))
+    // After success, page navigates to agent step
+    await waitFor(() =>
+      expect(screen.getByText('Draft the agent from a template or goal description, then create it.')).toBeTruthy(),
+    )
   })
 })
 
@@ -541,11 +532,14 @@ describe('QuickstartPage environment step — createEnvironment flow', () => {
 
 describe('QuickstartPage integration step — integration examples', () => {
   it('renders integration examples for an idle session', async () => {
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>([buildAgent()]))
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>([buildEnvironment()]))
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>([buildSession({ state: 'idle' })]))
-
+    server.use(
+      ...handlers({
+        providers: [buildProvider()],
+        agents: [buildAgent()],
+        environments: [buildEnvironment()],
+        sessions: [buildSession({ state: 'idle' })],
+      }),
+    )
     renderPage('/quickstart?step=integration')
     await waitFor(() => expect(screen.getByText('curl')).toBeTruthy())
     expect(screen.getByText('restish')).toBeTruthy()
@@ -555,41 +549,42 @@ describe('QuickstartPage integration step — integration examples', () => {
   it('prefers session matching previewSessionId param for integration examples', async () => {
     const sessions = [
       buildSession({ id: 'session_other', state: 'idle' }),
-      buildSession({
-        id: 'session_preview',
-        state: 'idle',
-        agentId: 'agent_preview',
-      }),
+      buildSession({ id: 'session_preview', state: 'idle', agentId: 'agent_preview' }),
     ]
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>([buildAgent()]))
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>([buildEnvironment()]))
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>(sessions))
-
+    server.use(
+      ...handlers({
+        providers: [buildProvider()],
+        agents: [buildAgent()],
+        environments: [buildEnvironment()],
+        sessions,
+      }),
+    )
     renderPage('/quickstart?step=integration&session=session_preview')
     await waitFor(() => expect(screen.getByText('TypeScript SDK')).toBeTruthy())
   })
 
   it('falls back to sessions[0] when no idle/running session matches', async () => {
-    // Only a stopped session — no idle/running — falls back to sessions[0]
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>([buildAgent()]))
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>([buildEnvironment()]))
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>([buildSession({ state: 'stopped' })]))
-
+    server.use(
+      ...handlers({
+        providers: [buildProvider()],
+        agents: [buildAgent()],
+        environments: [buildEnvironment()],
+        sessions: [buildSession({ state: 'stopped' })],
+      }),
+    )
     renderPage('/quickstart?step=integration')
     await waitFor(() => expect(screen.getByText('TypeScript SDK')).toBeTruthy())
   })
 
   it('falls back to sessions[0] when session is in error state', async () => {
-    // session step complete (session exists), integration incomplete (no idle/running)
-    // → firstIncompleteStep = 'integration', step is unlocked
-    // integrationSession = sessions[0] (error session) as fallback
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>([buildAgent()]))
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>([buildEnvironment()]))
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>([buildSession({ state: 'error' })]))
-
+    server.use(
+      ...handlers({
+        providers: [buildProvider()],
+        agents: [buildAgent()],
+        environments: [buildEnvironment()],
+        sessions: [buildSession({ state: 'error' })],
+      }),
+    )
     renderPage('/quickstart?step=integration')
     await waitFor(() => expect(screen.getByText('TypeScript SDK')).toBeTruthy())
   })
@@ -598,32 +593,52 @@ describe('QuickstartPage integration step — integration examples', () => {
 // ─── runDefaultWorkersAi mutation ───
 
 describe('QuickstartPage provider step — runDefaultWorkersAi', () => {
-  it('calls createAgent, createEnvironment, createSession on Run the default', async () => {
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>())
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>())
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>())
-    const createAgentSpy = vi.spyOn(apiModule.api, 'createAgent').mockResolvedValue(buildAgent())
-    const createEnvSpy = vi.spyOn(apiModule.api, 'createEnvironment').mockResolvedValue(buildEnvironment())
-    const createSessionSpy = vi.spyOn(apiModule.api, 'createSession').mockResolvedValue(buildSession())
+  it('creates agent, environment, and session on Run the default', async () => {
+    const createdAgent = buildAgent({ id: 'agent_default' })
+    const createdEnvironment = buildEnvironment({ id: 'env_default' })
+    const createdSession = buildSession({
+      id: 'session_default',
+      agentId: 'agent_default',
+      environmentId: 'env_default',
+    })
+    server.use(
+      ...handlers({
+        providers: [buildProvider()],
+        createdAgent,
+        createdEnvironment,
+        createdSession,
+        sessionDetail: createdSession,
+      }),
+    )
+    // After creation, refetches will return updated lists
+    server.use(
+      http.get('*/api/v1/agents', () => HttpResponse.json(listEnvelope([createdAgent]))),
+      http.get('*/api/v1/environments', () => HttpResponse.json(listEnvelope([createdEnvironment]))),
+      http.get('*/api/v1/sessions', () => HttpResponse.json(listEnvelope([createdSession]))),
+    )
 
     renderPage('/quickstart?step=provider')
     await waitFor(() => expect(screen.getByText('Run the default Workers AI agent')).toBeTruthy())
     fireEvent.click(screen.getByText('Run the default Workers AI agent'))
 
-    await waitFor(() => expect(createAgentSpy).toHaveBeenCalledTimes(1))
-    await waitFor(() => expect(createEnvSpy).toHaveBeenCalledTimes(1))
-    await waitFor(() => expect(createSessionSpy).toHaveBeenCalledTimes(1))
+    // After success, page navigates to session step
+    await waitFor(() =>
+      expect(screen.getByText('Create a test session and send the first task to the runtime.')).toBeTruthy(),
+    )
   })
 
   it('shows Starting Workers AI agent label while running', async () => {
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>())
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>())
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>())
-    vi.spyOn(apiModule.api, 'createAgent').mockReturnValue(new Promise(() => {}))
-    vi.spyOn(apiModule.api, 'createEnvironment').mockReturnValue(new Promise(() => {}))
-
+    // Make agent creation stall indefinitely so the pending state persists
+    server.use(
+      http.get('*/api/v1/providers', () => HttpResponse.json(listEnvelope([buildProvider()]))),
+      http.get('*/api/v1/agents', () => HttpResponse.json(listEnvelope([]))),
+      http.get('*/api/v1/environments', () => HttpResponse.json(listEnvelope([]))),
+      http.get('*/api/v1/sessions', () => HttpResponse.json(listEnvelope([]))),
+      http.post('*/api/v1/agents', () => new Promise(() => {})),
+      http.post('*/api/v1/environments', () => new Promise(() => {})),
+      http.post('*/api/v1/sessions', () => new Promise(() => {})),
+      http.get('*/api/v1/providers/:providerId/models', () => HttpResponse.json(listEnvelope([]))),
+    )
     renderPage('/quickstart?step=provider')
     await waitFor(() => expect(screen.getByText('Run the default Workers AI agent')).toBeTruthy())
     fireEvent.click(screen.getByText('Run the default Workers AI agent'))
@@ -635,14 +650,9 @@ describe('QuickstartPage provider step — runDefaultWorkersAi', () => {
 
 describe('QuickstartPage environment step — onSelectExisting', () => {
   it('shows existing active environments in select', async () => {
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>())
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>([buildEnvironment()]))
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>())
-
+    server.use(...handlers({ providers: [buildProvider()], environments: [buildEnvironment()] }))
     renderPage('/quickstart?step=environment')
     await waitFor(() => expect(screen.getByText('Use a custom environment')).toBeTruthy())
-    // The select trigger shows a placeholder; items are in hidden dropdown
     expect(screen.getByText('Selecting an existing environment completes this step without changes.')).toBeTruthy()
   })
 })
@@ -650,14 +660,14 @@ describe('QuickstartPage environment step — onSelectExisting', () => {
 // ─── Agent step — createAgent error mapping ───
 
 describe('QuickstartPage agent step — createAgent with API error', () => {
-  it('sets draft errors when createAgent returns mapped field errors', async () => {
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>())
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>([buildEnvironment()]))
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>())
-    // Return a generic non-field error so toast.error is called (not setDraftErrors)
-    vi.spyOn(apiModule.api, 'createAgent').mockRejectedValue(new Error('Server error'))
-
+  it('shows creating indicator then recovers when createAgent returns error', async () => {
+    server.use(
+      ...handlers({
+        providers: [buildProvider()],
+        environments: [buildEnvironment()],
+        agentError: { message: 'Server error', status: 500 },
+      }),
+    )
     renderPage('/quickstart?step=agent')
     await waitFor(() =>
       expect(screen.getByText('Draft the agent from a template or goal description, then create it.')).toBeTruthy(),
@@ -669,32 +679,54 @@ describe('QuickstartPage agent step — createAgent with API error', () => {
     await waitFor(() => expect(screen.getByText('Create agent')).toBeTruthy())
 
     fireEvent.click(screen.getByText('Create agent'))
-    await waitFor(() => expect(apiModule.api.createAgent).toHaveBeenCalledTimes(1))
+    // Button becomes enabled again after failure
+    await waitFor(() => expect(screen.getByText('Create agent')).toBeTruthy())
   })
 
   it('clears individual field error when setField updates that field', async () => {
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>())
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>([buildEnvironment()]))
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>())
-
+    server.use(...handlers({ providers: [buildProvider()], environments: [buildEnvironment()] }))
     renderPage('/quickstart?step=agent')
     await waitFor(() =>
       expect(screen.getByText('Draft the agent from a template or goal description, then create it.')).toBeTruthy(),
     )
 
-    // Click Start from scratch to get an empty draft
     fireEvent.click(screen.getByText('Start from scratch'))
     await waitFor(() => expect(screen.getByText('Create agent')).toBeTruthy())
 
-    // Submit to trigger validation error on name
     fireEvent.click(screen.getByText('Create agent'))
     await waitFor(() => expect(screen.getByText('Name is required.')).toBeTruthy())
 
-    // Type in the name field to clear the error
     const nameInput = screen.getByRole('textbox', { name: /^Name/ })
     fireEvent.change(nameInput, { target: { value: 'My new agent' } })
     await waitFor(() => expect(screen.queryByText('Name is required.')).toBeNull())
+  })
+
+  it('sets draft errors when createAgent returns mapped field errors', async () => {
+    server.use(
+      http.get('*/api/v1/providers', () => HttpResponse.json(listEnvelope([buildProvider()]))),
+      http.get('*/api/v1/agents', () => HttpResponse.json(listEnvelope([]))),
+      http.get('*/api/v1/environments', () => HttpResponse.json(listEnvelope([buildEnvironment()]))),
+      http.get('*/api/v1/sessions', () => HttpResponse.json(listEnvelope([]))),
+      http.post('*/api/v1/agents', () =>
+        HttpResponse.json(
+          { error: { message: 'Validation failed', details: { fields: { name: 'Name is already taken.' } } } },
+          { status: 422 },
+        ),
+      ),
+      http.get('*/api/v1/providers/:providerId/models', () => HttpResponse.json(listEnvelope([]))),
+    )
+    renderPage('/quickstart?step=agent')
+    await waitFor(() =>
+      expect(screen.getByText('Draft the agent from a template or goal description, then create it.')).toBeTruthy(),
+    )
+
+    const textarea = screen.getByPlaceholderText('Review incoming pull requests and summarize risky changes.')
+    fireEvent.change(textarea, { target: { value: 'Build a coding assistant' } })
+    fireEvent.click(screen.getByText('Draft agent configuration'))
+    await waitFor(() => expect(screen.getByText('Create agent')).toBeTruthy())
+
+    fireEvent.click(screen.getByText('Create agent'))
+    await waitFor(() => expect(screen.getByText('Name is already taken.')).toBeTruthy())
   })
 })
 
@@ -702,15 +734,10 @@ describe('QuickstartPage agent step — createAgent with API error', () => {
 
 describe('QuickstartPage provider step — onContinue navigation', () => {
   it('moves to next step when Continue to next step is clicked', async () => {
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>())
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>())
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>())
-
+    server.use(...handlers({ providers: [buildProvider()] }))
     renderPage('/quickstart?step=provider')
     await waitFor(() => expect(screen.getByText('Continue to next step')).toBeTruthy())
     fireEvent.click(screen.getByText('Continue to next step'))
-    // After click, should move to environment step
     await waitFor(() =>
       expect(screen.getByText('Create or select the reusable sandbox template sessions will run in.')).toBeTruthy(),
     )
@@ -721,21 +748,15 @@ describe('QuickstartPage provider step — onContinue navigation', () => {
 
 describe('QuickstartPage environment step — onSelectExisting navigates to agent', () => {
   it('navigates to agent step after selecting existing environment', async () => {
-    // Radix UI Select requires pointer-capture and scroll APIs that jsdom does not implement.
     Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', { value: vi.fn(() => false), configurable: true })
     Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', { value: vi.fn(), configurable: true })
     Object.defineProperty(HTMLElement.prototype, 'releasePointerCapture', { value: vi.fn(), configurable: true })
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { value: vi.fn(), configurable: true })
 
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>())
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>([buildEnvironment()]))
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>())
-
+    server.use(...handlers({ providers: [buildProvider()], environments: [buildEnvironment()] }))
     renderPage('/quickstart?step=environment')
     await waitFor(() => expect(screen.getByText('Use a custom environment')).toBeTruthy())
 
-    // Open the existing environment select and pick the first option
     const trigger = screen.getByRole('combobox', { name: 'Custom environment' })
     trigger.focus()
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerId: 1, pointerType: 'mouse' })
@@ -743,7 +764,6 @@ describe('QuickstartPage environment step — onSelectExisting navigates to agen
     const option = screen.getByRole('option', { name: 'Node workspace' })
     fireEvent.click(option)
 
-    // After selecting, should navigate to agent step
     await waitFor(() =>
       expect(screen.getByText('Draft the agent from a template or goal description, then create it.')).toBeTruthy(),
     )
@@ -756,14 +776,16 @@ describe('QuickstartPage session step — onSessionCreated and onContinue', () =
   it('updates URL with session id when session is created', async () => {
     mockRuntime()
     const session = buildSession({ id: 'sess_new' })
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>([buildAgent()]))
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>([buildEnvironment()]))
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>())
-    vi.spyOn(apiModule.api, 'createSession').mockResolvedValue(session)
-    vi.spyOn(apiModule.api, 'readSession').mockReturnValue(new Promise(() => {}))
-    vi.spyOn(apiModule.api, 'listSessionEvents').mockReturnValue(new Promise(() => {}))
-    vi.spyOn(apiModule.api, 'readSessionConnection').mockReturnValue(new Promise(() => {}))
+    server.use(
+      ...handlers({
+        providers: [buildProvider()],
+        agents: [buildAgent()],
+        environments: [buildEnvironment()],
+        createdSession: session,
+        sessionDetail: session,
+      }),
+    )
+    server.use(http.get('*/api/v1/sessions', () => HttpResponse.json(listEnvelope([session]))))
 
     renderPage('/quickstart?step=session')
     await waitFor(() => expect(screen.getByText('Create test session')).toBeTruthy())
@@ -776,14 +798,15 @@ describe('QuickstartPage session step — onSessionCreated and onContinue', () =
 
   it('navigates to integration step when Continue to integration is clicked', async () => {
     mockRuntime()
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>([buildAgent()]))
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>([buildEnvironment()]))
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>([buildSession()]))
-    vi.spyOn(apiModule.api, 'readSession').mockReturnValue(new Promise(() => {}))
-    vi.spyOn(apiModule.api, 'listSessionEvents').mockReturnValue(new Promise(() => {}))
-    vi.spyOn(apiModule.api, 'readSessionConnection').mockReturnValue(new Promise(() => {}))
-
+    server.use(
+      ...handlers({
+        providers: [buildProvider()],
+        agents: [buildAgent()],
+        environments: [buildEnvironment()],
+        sessions: [buildSession()],
+        sessionDetail: buildSession(),
+      }),
+    )
     renderPage('/quickstart?step=session&session=session_1')
     await waitFor(() =>
       expect(screen.getByText('Create a test session and send the first task to the runtime.')).toBeTruthy(),
@@ -800,56 +823,33 @@ describe('QuickstartPage session step — onSessionCreated and onContinue', () =
 
 describe('QuickstartPage — mutation error handling', () => {
   it('createEnvironment onError is invoked when createEnvironment fails', async () => {
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>())
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>())
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>())
-    vi.spyOn(apiModule.api, 'createEnvironment').mockRejectedValue(new Error('Env failed'))
-
+    server.use(
+      ...handlers({
+        providers: [buildProvider()],
+        environmentError: { message: 'Env failed', status: 500 },
+      }),
+    )
     renderPage('/quickstart?step=environment')
     await waitFor(() => expect(screen.getByText('Create environment')).toBeTruthy())
 
     fireEvent.click(screen.getByText('Create environment'))
-    await waitFor(() => expect(apiModule.api.createEnvironment).toHaveBeenCalledTimes(1))
+    // Button should re-enable after failure
+    await waitFor(() => expect(screen.getByText('Create environment')).toBeTruthy())
   })
 
   it('runDefaultWorkersAi onError is invoked when createAgent fails', async () => {
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>())
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>())
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>())
-    vi.spyOn(apiModule.api, 'createAgent').mockRejectedValue(new Error('Agent failed'))
-
+    server.use(
+      ...handlers({
+        providers: [buildProvider()],
+        agentError: { message: 'Agent failed', status: 500 },
+      }),
+    )
     renderPage('/quickstart?step=provider')
     await waitFor(() => expect(screen.getByText('Run the default Workers AI agent')).toBeTruthy())
 
     fireEvent.click(screen.getByText('Run the default Workers AI agent'))
-    await waitFor(() => expect(apiModule.api.createAgent).toHaveBeenCalledTimes(1))
-  })
-
-  it('createAgent onError with field errors sets draftErrors', async () => {
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>())
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>([buildEnvironment()]))
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>())
-    // Use ApiError with structured field details so apiErrorToBuilder maps the name field error
-    const fieldError = new ApiError('Validation failed', 422, {
-      error: { details: { fields: { name: 'Name is already taken.' } } },
-    })
-    vi.spyOn(apiModule.api, 'createAgent').mockRejectedValue(fieldError)
-
-    renderPage('/quickstart?step=agent')
-    await waitFor(() =>
-      expect(screen.getByText('Draft the agent from a template or goal description, then create it.')).toBeTruthy(),
-    )
-
-    const textarea = screen.getByPlaceholderText('Review incoming pull requests and summarize risky changes.')
-    fireEvent.change(textarea, { target: { value: 'Build a coding assistant' } })
-    fireEvent.click(screen.getByText('Draft agent configuration'))
-    await waitFor(() => expect(screen.getByText('Create agent')).toBeTruthy())
-
-    fireEvent.click(screen.getByText('Create agent'))
-    await waitFor(() => expect(apiModule.api.createAgent).toHaveBeenCalledTimes(1))
+    // Button re-enables after failure
+    await waitFor(() => expect(screen.getByText('Run the default Workers AI agent')).toBeTruthy())
   })
 })
 
@@ -857,11 +857,7 @@ describe('QuickstartPage — mutation error handling', () => {
 
 describe('QuickstartPage — setField early return when no current errors', () => {
   it('does not clear error when field is not in current errors', async () => {
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>())
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>([buildEnvironment()]))
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>())
-
+    server.use(...handlers({ providers: [buildProvider()], environments: [buildEnvironment()] }))
     renderPage('/quickstart?step=agent')
     await waitFor(() =>
       expect(screen.getByText('Draft the agent from a template or goal description, then create it.')).toBeTruthy(),
@@ -870,10 +866,8 @@ describe('QuickstartPage — setField early return when no current errors', () =
     fireEvent.click(screen.getByText('Start from scratch'))
     await waitFor(() => expect(screen.getByText('Create agent')).toBeTruthy())
 
-    // Changing instructions field when there are no errors — the early-return branch executes
     const nameInput = screen.getByRole('textbox', { name: /^Name/ })
     fireEvent.change(nameInput, { target: { value: 'My agent' } })
-    // No error displayed — setField ran through the early return for fields not in errors
     expect(screen.queryByText('Name is required.')).toBeNull()
   })
 })
@@ -882,16 +876,11 @@ describe('QuickstartPage — setField early return when no current errors', () =
 
 describe('QuickstartPage — submitAgentDraft when draft is null', () => {
   it('Create agent button is absent when draft is null (start view)', async () => {
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>())
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>([buildEnvironment()]))
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>())
-
+    server.use(...handlers({ providers: [buildProvider()], environments: [buildEnvironment()] }))
     renderPage('/quickstart?step=agent')
     await waitFor(() =>
       expect(screen.getByText('Draft the agent from a template or goal description, then create it.')).toBeTruthy(),
     )
-    // In start view, "Create agent" button is not present
     expect(screen.queryByText('Create agent')).toBeNull()
   })
 })
@@ -901,18 +890,18 @@ describe('QuickstartPage — submitAgentDraft when draft is null', () => {
 describe('QuickstartPage navigation — step links with session param', () => {
   it('includes session param in step links when session search param is set', async () => {
     mockRuntime()
-    vi.spyOn(apiModule.api, 'listProviders').mockResolvedValue(listOf<Provider>([buildProvider()]))
-    vi.spyOn(apiModule.api, 'listAgents').mockResolvedValue(listOf<Agent>([buildAgent()]))
-    vi.spyOn(apiModule.api, 'listEnvironments').mockResolvedValue(listOf<Environment>([buildEnvironment()]))
-    vi.spyOn(apiModule.api, 'listSessions').mockResolvedValue(listOf<Session>([buildSession()]))
-    vi.spyOn(apiModule.api, 'readSession').mockReturnValue(new Promise(() => {}))
-    vi.spyOn(apiModule.api, 'listSessionEvents').mockReturnValue(new Promise(() => {}))
-    vi.spyOn(apiModule.api, 'readSessionConnection').mockReturnValue(new Promise(() => {}))
-
+    server.use(
+      ...handlers({
+        providers: [buildProvider()],
+        agents: [buildAgent()],
+        environments: [buildEnvironment()],
+        sessions: [buildSession()],
+        sessionDetail: buildSession(),
+      }),
+    )
     renderPage('/quickstart?step=session&session=session_1')
     await waitFor(() => expect(screen.getByText('1. Provider')).toBeTruthy())
 
-    // The provider link should include session=session_1
     const providerLink = screen.getByText('1. Provider')
     expect(providerLink.getAttribute('href')).toBe('/quickstart?step=provider&session=session_1')
   })

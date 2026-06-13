@@ -4,6 +4,7 @@ import { useParams } from 'react-router'
 import { toast } from 'sonner'
 import { PageHeader } from '@/console/components'
 import { api, type VaultCredential } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 import { AddCredentialSheet } from './AddCredentialSheet'
 import { RotateCredentialSheet } from './RotateCredentialSheet'
@@ -49,7 +50,7 @@ export function VaultDetailPage() {
       toast.success('Credential revoked')
       void queryClient.invalidateQueries({ queryKey: queryKeys.vaults.detail(vaultId ?? '') })
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : String(error)),
+    onError: (error) => toast.error(errorMessage(error)),
     /* v8 ignore stop */
   })
   const vault = vaultQuery.data ?? null

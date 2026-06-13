@@ -1,5 +1,6 @@
 import path from 'node:path'
 import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-pool-workers'
+import react from '@vitejs/plugin-react-swc'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
@@ -22,10 +23,15 @@ export default defineConfig({
         'server/domain/**',
         'server/usecases/**',
         'server/adapters/gateways/**',
-        'shared/**',
         'src/features/**',
         'src/lib/**',
       ],
+      // shared/ is intentionally NOT %-gated: shared/session-events.ts is imported
+      // by BOTH the node unit suite and the jsdom web suite, and v8 instruments it
+      // with different function maps per environment (18 vs 36 functions), so the
+      // multi-project merge can't union them and undercounts a genuinely 100%-
+      // covered file. It is guarded instead by shared/session-events.test.ts in the
+      // unit suite (which runs in test:coverage), failing loudly on any regression.
       exclude: [
         '**/*.test.ts',
         '**/*.test.tsx',
@@ -66,13 +72,16 @@ export default defineConfig({
         },
       },
       {
-        // web (jsdom): the React SPA — client logic, hooks, components.
+        // web (jsdom): the React SPA — client logic, hooks, components driven
+        // through the REAL api client with MSW at the network boundary.
         extends: true,
+        plugins: [react()],
         test: {
           name: 'web',
           environment: 'jsdom',
           globals: true,
           include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+          setupFiles: ['./src/test/setup.ts'],
         },
       },
       {

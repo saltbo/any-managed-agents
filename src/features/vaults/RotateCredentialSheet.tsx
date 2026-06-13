@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import type { VaultCredential } from '@/lib/api'
 import { api } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 
 export function RotateCredentialSheet({
@@ -31,7 +32,7 @@ export function RotateCredentialSheet({
       toast.success('Credential rotated')
       void queryClient.invalidateQueries({ queryKey: queryKeys.vaults.detail(vaultId) })
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : String(error)),
+    onError: (error) => toast.error(errorMessage(error)),
   })
   const submit = (event: FormEvent) => {
     event.preventDefault()

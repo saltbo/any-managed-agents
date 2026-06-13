@@ -10,6 +10,7 @@ import { Meta, MetaGrid, StatusBadge } from '@/console/components'
 import { stringifyJson } from '@/console/format'
 import { useSessionRuntimeSession } from '@/features/sessions/use-session-runtime'
 import { type Agent, api, type Environment } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 import { OpenPageLink } from './QuickstartSteps'
 import { agentHasSandboxExecution, SAFE_EXAMPLE_PROMPT, sandboxAgentInput } from './quickstart-model'
@@ -42,7 +43,7 @@ export function QuickstartSessionStep({
       await queryClient.invalidateQueries({ queryKey: queryKeys.agents.all })
     },
     /* v8 ignore start -- error is always an Error instance in practice */
-    onError: (error) => toast.error(error instanceof Error ? error.message : String(error)),
+    onError: (error) => toast.error(errorMessage(error)),
     /* v8 ignore stop */
   })
 
@@ -64,7 +65,7 @@ export function QuickstartSessionStep({
       onSessionCreated(session.id)
     },
     /* v8 ignore start -- error is always an Error instance in practice */
-    onError: (error) => toast.error(error instanceof Error ? error.message : String(error)),
+    onError: (error) => toast.error(errorMessage(error)),
     /* v8 ignore stop */
   })
 

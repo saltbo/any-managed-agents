@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api, type CreateConnectionInput } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 
 export function useMcpActions() {
@@ -12,7 +13,7 @@ export function useMcpActions() {
       toast.success('MCP connection disconnected')
       void invalidate()
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : String(error)),
+    onError: (error) => toast.error(errorMessage(error)),
   })
   const connectMcpConnector = useMutation({
     mutationFn: api.createConnection,
@@ -20,7 +21,7 @@ export function useMcpActions() {
       toast.success('MCP connector connected')
       void invalidate()
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : String(error)),
+    onError: (error) => toast.error(errorMessage(error)),
   })
 
   return {

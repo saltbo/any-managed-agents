@@ -17,6 +17,7 @@ import {
   toAgentInput,
 } from '@/features/agents/agent-builder-model'
 import { api } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 import { QuickstartSessionStep } from './QuickstartSessionStep'
 import {
@@ -100,7 +101,7 @@ export function QuickstartPage() {
       goToStep('agent')
     },
     /* v8 ignore start -- error is always an Error instance in practice */
-    onError: (error) => toast.error(error instanceof Error ? error.message : String(error)),
+    onError: (error) => toast.error(errorMessage(error)),
     /* v8 ignore stop */
   })
   const createAgent = useMutation({
@@ -117,7 +118,7 @@ export function QuickstartPage() {
         return
       }
       /* v8 ignore start -- error is always an Error instance in practice */
-      toast.error(error instanceof Error ? error.message : String(error))
+      toast.error(errorMessage(error))
       /* v8 ignore stop */
     },
   })
@@ -153,7 +154,7 @@ export function QuickstartPage() {
       goToStep('session', session.id)
     },
     /* v8 ignore start -- error is always an Error instance in practice */
-    onError: (error) => toast.error(error instanceof Error ? error.message : String(error)),
+    onError: (error) => toast.error(errorMessage(error)),
     /* v8 ignore stop */
   })
 
@@ -162,7 +163,7 @@ export function QuickstartPage() {
     return (
       <EmptyState
         /* v8 ignore start -- error is always an Error instance in practice */
-        title={error instanceof Error ? error.message : String(error)}
+        title={errorMessage(error)}
         /* v8 ignore stop */
         body="Unable to load quickstart resources."
       />

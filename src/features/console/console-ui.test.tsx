@@ -1,19 +1,14 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Agent, AuthContext, Project, Session } from '@/lib/api'
-import { ApiError } from '@/lib/api'
+import { HttpResponse, http, server } from '@/test/msw'
 import { ConsoleLayout } from './ConsoleLayout'
 import { ConsoleShell } from './ConsoleShell'
 import { ConsoleContextProvider, useConsoleContext } from './console-context'
 import { JsonBlock } from './json-block'
 import { RelatedResourcesTable } from './related-resources-table'
-
-afterEach(() => {
-  cleanup()
-  vi.restoreAllMocks()
-})
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -96,6 +91,18 @@ function buildSession(overrides: Partial<Session> = {}): Session {
   }
 }
 
+// MSW helper: serve a projects list envelope (the real api client calls GET /api/v1/projects)
+function projectsHandler(projects: Project[]) {
+  return http.get('*/api/v1/projects', () =>
+    HttpResponse.json({ data: projects, pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+  )
+}
+
+// MSW helper: make the projects endpoint return a specific HTTP error status
+function projectsErrorHandler(status: number, message: string) {
+  return http.get('*/api/v1/projects', () => HttpResponse.json({ error: { type: 'error', message } }, { status }))
+}
+
 function renderShell(auth: AuthContext = buildAuth(), projects: Project[] = [buildProject()], extraPath = '/') {
   const client = makeQueryClient()
   render(
@@ -150,7 +157,6 @@ describe('[spec: console/context] ConsoleContextProvider and useConsoleContext',
       return null
     }
 
-    // Suppress the error boundary noise in test output
     const originalError = console.error
     console.error = vi.fn()
     expect(() => render(<Bad />)).toThrow('useConsoleContext must be used inside ConsoleContextProvider')
@@ -190,7 +196,6 @@ describe('[spec: console/json-block] JsonBlock', () => {
 
   it('applies compact styling when compact=true', () => {
     const { container } = render(<JsonBlock value="{}" compact />)
-    // compact uses max-h-48 class
     const scrollable = container.querySelector('.max-h-48')
     expect(scrollable).toBeTruthy()
   })
@@ -279,7 +284,6 @@ describe('[spec: console/related-resources-table] RelatedResourcesTable', () => 
     const link = screen.getAllByRole('link', { name: 'session_1' })[0] as HTMLAnchorElement
     expect(link).toBeTruthy()
     expect(link.getAttribute('href')).toBe('/sessions/session_1')
-    // Session state renders via StatusBadge
     expect(screen.getByText('idle')).toBeTruthy()
   })
 
@@ -327,9 +331,7 @@ describe('[spec: console/related-resources-table] RelatedResourcesTable', () => 
       </MemoryRouter>,
     )
 
-    // session_1 appears in both link text and the subtitle span
     expect(screen.getAllByText('session_1').length).toBeGreaterThan(0)
-    // formatDate returns a non-empty date string
     expect(screen.queryByText('None')).toBeNull()
   })
 
@@ -402,7 +404,6 @@ describe('[spec: console/shell] ConsoleShell', () => {
     const projects = [buildProject({ id: 'p1', name: 'Alpha' }), buildProject({ id: 'p2', name: 'Beta' })]
     const auth = buildAuth({ project: { id: 'p1', name: 'Alpha' } })
     renderShell(auth, projects)
-    // SelectValue renders current project name inside trigger
     expect(screen.getAllByText('Alpha').length).toBeGreaterThan(0)
   })
 
@@ -439,7 +440,6 @@ describe('[spec: console/shell] ConsoleShell', () => {
   })
 
   it('sidebar placement shows ArrowRight icon (isSidebar=true branch)', () => {
-    // UserMenu is rendered twice: sidebar + mobile. isSidebar=true adds ArrowRight.
     const auth = buildAuth({ user: { id: 'u1', email: 'x@y.com', name: 'Test', avatarUrl: null } })
     const { container } = render(
       <QueryClientProvider client={makeQueryClient()}>
@@ -452,9 +452,7 @@ describe('[spec: console/shell] ConsoleShell', () => {
         </MemoryRouter>
       </QueryClientProvider>,
     )
-    // Sidebar container exists
     expect(container.querySelector('.mt-4.border-t.pt-3')).toBeTruthy()
-    // Mobile container exists
     expect(container.querySelector('.fixed.bottom-4')).toBeTruthy()
   })
 
@@ -488,7 +486,6 @@ describe('[spec: console/shell] ConsoleShell', () => {
       </QueryClientProvider>,
     )
 
-    // Open the sidebar user menu dropdown trigger
     const menuTriggers = screen.getAllByRole('button')
     const trigger = menuTriggers[0] as HTMLElement
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerId: 1, pointerType: 'mouse' })
@@ -496,7 +493,6 @@ describe('[spec: console/shell] ConsoleShell', () => {
     fireEvent.click(trigger)
 
     await waitFor(() => expect(screen.getAllByText(/Log out/).length).toBeGreaterThan(0))
-    // Click the Log out item (it may appear in multiple menus since 2 UserMenus are rendered)
     const logoutItems = screen.getAllByText(/Log out/)
     fireEvent.click(logoutItems[0]!)
     await waitFor(() => expect(signOut).toHaveBeenCalled())
@@ -537,7 +533,6 @@ describe('[spec: console/shell] ConsoleShell', () => {
       </QueryClientProvider>,
     )
 
-    // Open the project select and choose Beta
     const select = screen.getByRole('combobox')
     select.focus()
     fireEvent.pointerDown(select, { button: 0, ctrlKey: false, pointerId: 1, pointerType: 'mouse' })
@@ -549,41 +544,22 @@ describe('[spec: console/shell] ConsoleShell', () => {
 })
 
 // ─── ConsoleLayout.tsx ───────────────────────────────────────────────────────
+//
+// ConsoleLayout calls getCurrentUser() (from @/lib/oidc) and api.listProjects()
+// (which hits GET /api/v1/projects). The e2e localStorage token set by setup.ts
+// makes getCurrentUser fast-path to an e2e user, so happy-path tests need no spy.
+// Error/null-user tests spy only on @/lib/oidc (allowed — not @/lib/api).
+// The projects endpoint is handled by MSW — no @/lib/api mock ever.
+//
+// IMPORTANT: the e2e token in localStorage is also used by getAccessToken() for
+// API request headers. Never remove it — only spy on getCurrentUser when you need
+// a different profile. Spies are cleaned up via afterEach(vi.restoreAllMocks).
 
 describe('[spec: console/layout] ConsoleLayout', () => {
-  async function setupLayout({
-    user = { sub: 'user_1', email: 'user@example.com', name: 'Alice', picture: null as string | null },
-    projectsData = [buildProject()],
-    userError = null as Error | null,
-    projectsError = null as Error | null,
-  } = {}) {
-    const getCurrentUser = vi.fn()
-    const listProjects = vi.fn()
+  // Restore all oidc/signIn spies between tests so they don't bleed.
+  afterEach(() => vi.restoreAllMocks())
 
-    if (userError) {
-      getCurrentUser.mockRejectedValue(userError)
-    } else if (user === null) {
-      getCurrentUser.mockResolvedValue(null)
-    } else {
-      getCurrentUser.mockResolvedValue({
-        expired: false,
-        profile: user,
-      })
-    }
-
-    if (projectsError) {
-      listProjects.mockRejectedValue(projectsError)
-    } else {
-      listProjects.mockResolvedValue({ data: projectsData })
-    }
-
-    vi.spyOn(await import('@/lib/oidc'), 'getCurrentUser').mockImplementation(getCurrentUser)
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({ listProjects } as never)
-
-    // Reset project selection so tests are isolated
-    vi.spyOn(await import('@/lib/project-selection'), 'getSelectedProjectId').mockReturnValue(null)
-    vi.spyOn(await import('@/lib/project-selection'), 'setSelectedProjectId').mockReturnValue(undefined)
-
+  function renderLayout() {
     const client = makeQueryClient()
     render(
       <QueryClientProvider client={client}>
@@ -592,150 +568,192 @@ describe('[spec: console/layout] ConsoleLayout', () => {
         </MemoryRouter>
       </QueryClientProvider>,
     )
-    return { getCurrentUser, listProjects }
+    return client
   }
 
-  it('shows loading state while user query is pending', async () => {
-    // Make getCurrentUser hang to keep loading state
-    let resolve!: (v: unknown) => void
-    const hanging = new Promise((res) => {
-      resolve = res
-    })
-    vi.spyOn(await import('@/lib/oidc'), 'getCurrentUser').mockReturnValue(hanging as never)
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({ listProjects: vi.fn() } as never)
-    vi.spyOn(await import('@/lib/project-selection'), 'getSelectedProjectId').mockReturnValue(null)
-    vi.spyOn(await import('@/lib/project-selection'), 'setSelectedProjectId').mockReturnValue(undefined)
+  // Happy path: setup.ts seeds the e2e token → getCurrentUser resolves automatically.
+  it('renders ConsoleShell with nav when authenticated with projects', async () => {
+    server.use(projectsHandler([buildProject()]))
+    renderLayout()
+    await waitFor(() => expect(screen.getAllByText('Any Managed Agents').length).toBeGreaterThan(0))
+    expect(screen.getAllByRole('link', { name: 'Agents' }).length).toBeGreaterThan(0)
+  })
 
-    const client = makeQueryClient()
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter>
-          <ConsoleLayout />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
+  it('shows console unavailable when projects list is empty (no selected project)', async () => {
+    server.use(projectsHandler([]))
+    renderLayout()
+    await waitFor(() => expect(screen.getByText('Console unavailable')).toBeTruthy())
+    expect(screen.getByText('Unable to create or load a project.')).toBeTruthy()
+  })
 
-    expect(screen.getByText('Loading console')).toBeTruthy()
-    resolve(null)
+  it('shows console unavailable when projects query returns 401', async () => {
+    server.use(projectsErrorHandler(401, 'Unauthorized'))
+    renderLayout()
+    await waitFor(() => expect(screen.getByText('Any Managed Agents')).toBeTruthy())
+    expect(screen.getByText(/Sign in through OIDC provider/)).toBeTruthy()
+  })
+
+  it('shows console unavailable when projects query returns non-401 api error', async () => {
+    server.use(projectsErrorHandler(500, 'Server error'))
+    renderLayout()
+    await waitFor(() => expect(screen.getByText('Console unavailable')).toBeTruthy())
+    expect(screen.getByText('Server error')).toBeTruthy()
+  })
+
+  it('shows console unavailable with generic message for network failure on projects', async () => {
+    server.use(http.get('*/api/v1/projects', () => HttpResponse.error()))
+    renderLayout()
+    await waitFor(() => expect(screen.getByText('Console unavailable')).toBeTruthy())
+    expect(screen.getByText('Unable to load the project list.')).toBeTruthy()
   })
 
   it('shows sign-in screen when user is null (not authenticated)', async () => {
-    await setupLayout({ user: null as never })
+    // Spy overrides the e2e fast-path in getCurrentUser; keep the e2e token for
+    // getAccessToken so API headers still work on any conditional project fetch.
+    vi.spyOn(await import('@/lib/oidc'), 'getCurrentUser').mockResolvedValue(null)
+    // projectsQuery is disabled when userQuery returns null, so no handler needed.
+    // Register a fallback so onUnhandledRequest:'error' doesn't fire if timing varies.
+    server.use(projectsHandler([]))
+    renderLayout()
     await waitFor(() => expect(screen.getByText('Any Managed Agents')).toBeTruthy())
     expect(screen.getByText(/Sign in through OIDC provider/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Continue with OIDC provider' })).toBeTruthy()
   })
 
   it('shows sign-in screen when getCurrentUser throws', async () => {
-    await setupLayout({ userError: new Error('Auth failed') })
+    vi.spyOn(await import('@/lib/oidc'), 'getCurrentUser').mockRejectedValue(new Error('Auth failed'))
+    server.use(projectsHandler([]))
+    renderLayout()
     await waitFor(() => expect(screen.getByText('Any Managed Agents')).toBeTruthy())
     expect(screen.getByText(/Sign in through OIDC provider/)).toBeTruthy()
   })
 
-  it('shows console unavailable when projects query returns 401 ApiError', async () => {
-    const apiError = new ApiError('Unauthorized', 401, {})
-    await setupLayout({ projectsError: apiError })
-    await waitFor(() => expect(screen.getByText('Any Managed Agents')).toBeTruthy())
-    expect(screen.getByText(/Sign in through OIDC provider/)).toBeTruthy()
-  })
+  it('shows loading state while user query is pending', async () => {
+    let resolveUser!: (v: unknown) => void
+    const hanging = new Promise((res) => {
+      resolveUser = res
+    })
+    vi.spyOn(await import('@/lib/oidc'), 'getCurrentUser').mockReturnValue(hanging as never)
+    server.use(projectsHandler([]))
+    renderLayout()
 
-  it('shows console unavailable when projects query errors with non-401 ApiError', async () => {
-    const apiError = new ApiError('Server error', 500, {})
-    await setupLayout({ projectsError: apiError })
-    await waitFor(() => expect(screen.getByText('Console unavailable')).toBeTruthy())
-    expect(screen.getByText('Server error')).toBeTruthy()
-  })
-
-  it('shows console unavailable with generic message for non-ApiError projects failure', async () => {
-    await setupLayout({ projectsError: new Error('Network failure') })
-    await waitFor(() => expect(screen.getByText('Console unavailable')).toBeTruthy())
-    expect(screen.getByText('Unable to load the project list.')).toBeTruthy()
-  })
-
-  it('shows console unavailable when projects list is empty (no selected project)', async () => {
-    await setupLayout({ projectsData: [] })
-    await waitFor(() => expect(screen.getByText('Console unavailable')).toBeTruthy())
-    expect(screen.getByText('Unable to create or load a project.')).toBeTruthy()
-  })
-
-  it('renders ConsoleShell with nav when authenticated with projects', async () => {
-    await setupLayout()
-    await waitFor(() => expect(screen.getAllByText('Any Managed Agents').length).toBeGreaterThan(0))
-    // Confirm it's in the shell (not just the sign-in screen)
-    expect(screen.getAllByRole('link', { name: 'Agents' }).length).toBeGreaterThan(0)
+    expect(screen.getByText('Loading console')).toBeTruthy()
+    resolveUser(null)
   })
 
   it('uses org_id from profile as organization id when present', async () => {
-    await setupLayout({
-      user: { sub: 'user_1', email: 'u@example.com', name: 'Alice', picture: null, org_id: 'org_explicit' } as never,
-    })
+    vi.spyOn(await import('@/lib/oidc'), 'getCurrentUser').mockResolvedValue({
+      expired: false,
+      profile: { sub: 'user_1', email: 'u@example.com', name: 'Alice', picture: null, org_id: 'org_explicit' },
+    } as never)
+    server.use(projectsHandler([buildProject()]))
+    renderLayout()
     await waitFor(() => expect(screen.getAllByText('Any Managed Agents').length).toBeGreaterThan(0))
   })
 
   it('falls back to organization_id when org_id is absent', async () => {
-    await setupLayout({
-      user: {
-        sub: 'user_1',
-        email: 'u@example.com',
-        name: 'Alice',
-        picture: null,
-        organization_id: 'org_fallback',
-      } as never,
-    })
+    vi.spyOn(await import('@/lib/oidc'), 'getCurrentUser').mockResolvedValue({
+      expired: false,
+      profile: { sub: 'user_1', email: 'u@example.com', name: 'Alice', picture: null, organization_id: 'org_fb' },
+    } as never)
+    server.use(projectsHandler([buildProject()]))
+    renderLayout()
     await waitFor(() => expect(screen.getAllByText('Any Managed Agents').length).toBeGreaterThan(0))
   })
 
   it('falls back to user:sub when neither org_id nor organization_id present', async () => {
-    await setupLayout({
-      user: { sub: 'user_1', email: 'u@example.com', name: 'Alice', picture: null } as never,
-    })
+    vi.spyOn(await import('@/lib/oidc'), 'getCurrentUser').mockResolvedValue({
+      expired: false,
+      profile: { sub: 'user_1', email: 'u@example.com', name: 'Alice', picture: null },
+    } as never)
+    server.use(projectsHandler([buildProject()]))
+    renderLayout()
     await waitFor(() => expect(screen.getAllByText('Any Managed Agents').length).toBeGreaterThan(0))
   })
 
   it('uses org_name from profile as organization name when present', async () => {
-    await setupLayout({
-      user: { sub: 'u1', email: 'u@x.com', name: 'A', picture: null, org_name: 'My Org' } as never,
-    })
+    vi.spyOn(await import('@/lib/oidc'), 'getCurrentUser').mockResolvedValue({
+      expired: false,
+      profile: { sub: 'u1', email: 'u@x.com', name: 'A', picture: null, org_name: 'My Org' },
+    } as never)
+    server.use(projectsHandler([buildProject()]))
+    renderLayout()
     await waitFor(() => expect(screen.getAllByText('Any Managed Agents').length).toBeGreaterThan(0))
     expect(screen.getAllByText('My Org').length).toBeGreaterThan(0)
   })
 
   it('falls back to organization_name when org_name is absent', async () => {
-    await setupLayout({
-      user: { sub: 'u1', email: 'u@x.com', name: 'A', picture: null, organization_name: 'Fallback Org' } as never,
-    })
+    vi.spyOn(await import('@/lib/oidc'), 'getCurrentUser').mockResolvedValue({
+      expired: false,
+      profile: { sub: 'u1', email: 'u@x.com', name: 'A', picture: null, organization_name: 'Fallback Org' },
+    } as never)
+    server.use(projectsHandler([buildProject()]))
+    renderLayout()
     await waitFor(() => expect(screen.getAllByText('Any Managed Agents').length).toBeGreaterThan(0))
     expect(screen.getAllByText('Fallback Org').length).toBeGreaterThan(0)
   })
 
   it('shows Personal workspace when org_name and organization_name are absent', async () => {
-    await setupLayout({
-      user: { sub: 'u1', email: 'u@x.com', name: null, picture: null } as never,
-    })
+    vi.spyOn(await import('@/lib/oidc'), 'getCurrentUser').mockResolvedValue({
+      expired: false,
+      profile: { sub: 'u1', email: 'u@x.com', name: null, picture: null },
+    } as never)
+    server.use(projectsHandler([buildProject()]))
+    renderLayout()
     await waitFor(() => expect(screen.getAllByText('Any Managed Agents').length).toBeGreaterThan(0))
     expect(screen.getAllByText('Personal workspace').length).toBeGreaterThan(0)
   })
 
   it('uses picture from profile as avatarUrl when present', async () => {
-    await setupLayout({
-      user: { sub: 'u1', email: 'u@x.com', name: 'A', picture: 'https://img.example.com/pic.jpg' } as never,
-    })
+    vi.spyOn(await import('@/lib/oidc'), 'getCurrentUser').mockResolvedValue({
+      expired: false,
+      profile: { sub: 'u1', email: 'u@x.com', name: 'A', picture: 'https://img.example.com/pic.jpg' },
+    } as never)
+    server.use(projectsHandler([buildProject()]))
+    renderLayout()
     await waitFor(() => expect(screen.getAllByText('Any Managed Agents').length).toBeGreaterThan(0))
   })
 
   it('selects first project when no stored project id matches', async () => {
     const projects = [buildProject({ id: 'p1', name: 'First' }), buildProject({ id: 'p2', name: 'Second' })]
-    await setupLayout({ projectsData: projects })
+    // Clear only the stored project id so nothing matches → falls back to projects[0].
+    window.localStorage.removeItem('ama:selected-project-id')
+    server.use(projectsHandler(projects))
+    renderLayout()
     await waitFor(() => expect(screen.getAllByText('Any Managed Agents').length).toBeGreaterThan(0))
-    // First project should be selected (shown in SelectValue)
     expect(screen.getAllByText('First').length).toBeGreaterThan(0)
+  })
+
+  it('falls back to empty string email when profile.email is not a string', async () => {
+    vi.spyOn(await import('@/lib/oidc'), 'getCurrentUser').mockResolvedValue({
+      expired: false,
+      profile: { sub: 'u1', email: 42, name: 'User', picture: null },
+    } as never)
+    server.use(projectsHandler([buildProject()]))
+    renderLayout()
+    await waitFor(() => expect(screen.getAllByText('Any Managed Agents').length).toBeGreaterThan(0))
+    expect(screen.getAllByText('User').length).toBeGreaterThan(0)
+  })
+
+  it('listens for ama:selected-project-changed event without crashing', async () => {
+    const projects = [buildProject({ id: 'p1', name: 'Alpha' }), buildProject({ id: 'p2', name: 'Beta' })]
+    server.use(projectsHandler(projects))
+    renderLayout()
+    await waitFor(() => expect(screen.getAllByText('Any Managed Agents').length).toBeGreaterThan(0))
+
+    expect(() => {
+      window.dispatchEvent(new Event('ama:selected-project-changed'))
+    }).not.toThrow()
+
+    await waitFor(() => expect(screen.getAllByText('Any Managed Agents').length).toBeGreaterThan(0))
   })
 
   it('dispatches signIn when sign-in button is clicked', async () => {
     const signIn = vi.fn().mockResolvedValue(undefined)
     vi.spyOn(await import('@/lib/oidc'), 'signIn').mockImplementation(signIn)
-
-    await setupLayout({ user: null as never })
+    vi.spyOn(await import('@/lib/oidc'), 'getCurrentUser').mockResolvedValue(null)
+    server.use(projectsHandler([]))
+    renderLayout()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Continue with OIDC provider' })).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: 'Continue with OIDC provider' }))
     await waitFor(() => expect(signIn).toHaveBeenCalled())
@@ -760,16 +778,9 @@ describe('[spec: console/layout] ConsoleLayout', () => {
     })
 
     const projects = [buildProject({ id: 'p1', name: 'Alpha' }), buildProject({ id: 'p2', name: 'Beta' })]
-    const setSelectedProjectId = vi.fn()
-    vi.spyOn(await import('@/lib/oidc'), 'getCurrentUser').mockResolvedValue({
-      expired: false,
-      profile: { sub: 'u1', email: 'u@x.com', name: 'User', picture: null },
-    } as never)
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listProjects: vi.fn().mockResolvedValue({ data: projects }),
-    } as never)
-    vi.spyOn(await import('@/lib/project-selection'), 'getSelectedProjectId').mockReturnValue('p1')
-    vi.spyOn(await import('@/lib/project-selection'), 'setSelectedProjectId').mockImplementation(setSelectedProjectId)
+    // Seed the stored project id so p1 is pre-selected; e2e token stays for getAccessToken.
+    window.localStorage.setItem('ama:selected-project-id', 'p1')
+    server.use(projectsHandler(projects))
 
     const client = makeQueryClient()
     render(
@@ -788,29 +799,6 @@ describe('[spec: console/layout] ConsoleLayout', () => {
     fireEvent.mouseDown(select)
     fireEvent.click(await screen.findByRole('option', { name: 'Beta' }))
 
-    await waitFor(() => expect(setSelectedProjectId).toHaveBeenCalledWith('p2'))
-  })
-
-  it('falls back to empty string email when profile.email is not a string', async () => {
-    await setupLayout({
-      user: { sub: 'u1', email: 42 as never, name: 'User', picture: null } as never,
-    })
-    await waitFor(() => expect(screen.getAllByText('Any Managed Agents').length).toBeGreaterThan(0))
-    // Empty email → user menu shows the name (falling back to '' for email)
-    expect(screen.getAllByText('User').length).toBeGreaterThan(0)
-  })
-
-  it('listens for ama:selected-project-changed event without crashing', async () => {
-    const projects = [buildProject({ id: 'p1', name: 'Alpha' }), buildProject({ id: 'p2', name: 'Beta' })]
-    await setupLayout({ projectsData: projects })
-    await waitFor(() => expect(screen.getAllByText('Any Managed Agents').length).toBeGreaterThan(0))
-
-    // Dispatch the event — verifies the listener is registered and does not throw
-    expect(() => {
-      window.dispatchEvent(new Event('ama:selected-project-changed'))
-    }).not.toThrow()
-
-    // Page still renders after the event
-    await waitFor(() => expect(screen.getAllByText('Any Managed Agents').length).toBeGreaterThan(0))
+    await waitFor(() => expect(window.localStorage.getItem('ama:selected-project-id')).toBe('p2'))
   })
 })

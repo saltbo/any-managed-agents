@@ -10,6 +10,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import { Textarea } from '@/components/ui/textarea'
 import { parseJsonObject } from '@/console/format'
 import { api } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 
 interface CredentialFormState {
@@ -59,7 +60,7 @@ export function AddCredentialSheet({
       toast.success('Credential stored')
       void queryClient.invalidateQueries({ queryKey: queryKeys.vaults.detail(vaultId) })
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : String(error)),
+    onError: (error) => toast.error(errorMessage(error)),
   })
   const valid = form.name.trim() !== '' && form.type.trim() !== '' && form.secretValue !== ''
   const submit = (event: FormEvent) => {

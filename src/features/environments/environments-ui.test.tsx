@@ -1,38 +1,19 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { ClientPagination } from '@/console/use-client-pagination'
 import { useClientPagination } from '@/console/use-client-pagination'
 import { EnvironmentDetailView } from '@/features/environments/EnvironmentDetailView'
 import { EnvironmentsView } from '@/features/environments/EnvironmentsView'
 import type { Environment, Session } from '@/lib/api'
+import { createCollection, HttpResponse, http, resourceHandlers, server } from '@/test/msw'
 import { CreateEnvironmentSheet } from './CreateEnvironmentSheet'
 import { EnvironmentDetailPage } from './EnvironmentDetailPage'
 import { EnvironmentsPage } from './EnvironmentsPage'
 import { useEnvironmentActions } from './use-environment-actions'
 
-afterEach(() => {
-  cleanup()
-  vi.restoreAllMocks()
-})
-
-function pagination<T>(items: T[]): ClientPagination<T> {
-  return {
-    items,
-    page: 1,
-    pageCount: 1,
-    pageSize: 10,
-    total: items.length,
-    start: items.length === 0 ? 0 : 1,
-    end: items.length,
-    canPrevious: false,
-    canNext: false,
-    viewportRef: { current: null },
-    previous: vi.fn(),
-    next: vi.fn(),
-  }
-}
+// ─── Fixtures ────────────────────────────────────────────────────────────────
 
 function environment(overrides: Partial<Environment> = {}): Environment {
   return {
@@ -64,11 +45,73 @@ function buildSession(overrides: Partial<Session> = {}): Session {
     id: 'session_1',
     projectId: 'project_1',
     environmentId: 'env_1',
-  } as Session & typeof overrides
+    ...overrides,
+  } as Session
+}
+
+function pagination<T>(items: T[]): ClientPagination<T> {
+  return {
+    items,
+    page: 1,
+    pageCount: 1,
+    pageSize: 10,
+    total: items.length,
+    start: items.length === 0 ? 0 : 1,
+    end: items.length,
+    canPrevious: false,
+    canNext: false,
+    viewportRef: { current: null },
+    previous: vi.fn(),
+    next: vi.fn(),
+  }
 }
 
 function makeQueryClient() {
   return new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+}
+
+// Pointer capture stubs needed by Radix UI dialogs/selects
+function stubPointerEvents() {
+  Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
+    value: vi.fn(() => false),
+    configurable: true,
+  })
+  Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', {
+    value: vi.fn(),
+    configurable: true,
+  })
+  Object.defineProperty(HTMLElement.prototype, 'releasePointerCapture', {
+    value: vi.fn(),
+    configurable: true,
+  })
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    value: vi.fn(),
+    configurable: true,
+  })
+}
+
+// ─── MSW handler factories ────────────────────────────────────────────────────
+
+// Register environment collection handlers for tests that need the full
+// CRUD surface (EnvironmentsPage, EnvironmentDetailPage, CreateEnvironmentSheet).
+function setupEnvironmentHandlers(envs: Environment[] = [], sessions: Session[] = []) {
+  const envCollection = createCollection<Environment>(envs)
+  const sessionCollection = createCollection<Session>(sessions)
+
+  server.use(
+    ...resourceHandlers('environments', envCollection, (body, idx) =>
+      environment({ id: `env_new_${idx}`, name: String(body.name ?? 'New'), ...body }),
+    ),
+    // sessions list — EnvironmentDetailPage reads it
+    http.get('*/api/v1/sessions', () =>
+      HttpResponse.json({
+        data: sessionCollection.list(),
+        pagination: { limit: 50, hasMore: false, nextCursor: null },
+      }),
+    ),
+  )
+
+  return { envCollection, sessionCollection }
 }
 
 // ─── EnvironmentsView ────────────────────────────────────────────────────────
@@ -203,22 +246,7 @@ describe('[spec: environments/console-list] EnvironmentsView', () => {
   })
 
   it('calls onArchive when archive confirm is submitted', async () => {
-    Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
-      value: vi.fn(() => false),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'releasePointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
-      value: vi.fn(),
-      configurable: true,
-    })
+    stubPointerEvents()
 
     const onArchive = vi.fn()
     const environments = [environment()]
@@ -228,12 +256,9 @@ describe('[spec: environments/console-list] EnvironmentsView', () => {
       </MemoryRouter>,
     )
 
-    // The icon button in the table row
     fireEvent.click(screen.getByRole('button', { name: 'Archive environment' }))
     await waitFor(() => expect(screen.getByText('Archive environment?')).toBeTruthy())
-    // The confirm button inside the dialog (hidden=true to find it in the dialog overlay)
     const confirmBtns = screen.getAllByRole('button', { name: 'Archive environment', hidden: true })
-    // Click the last one which is the dialog confirm button
     fireEvent.click(confirmBtns[confirmBtns.length - 1] as HTMLElement)
     await waitFor(() => expect(onArchive).toHaveBeenCalledWith('env_1'))
   })
@@ -261,11 +286,7 @@ describe('[spec: environments/console-list] EnvironmentsView', () => {
 
 describe('[spec: environments/console-detail] EnvironmentDetailView', () => {
   it('shows the profile header and policy facts without raw secret values', () => {
-    const session: Session = {
-      id: 'session_1',
-      projectId: 'project_1',
-      environmentId: 'env_1',
-    } as Session
+    const session = buildSession()
     render(
       <MemoryRouter>
         <EnvironmentDetailView environment={environment()} sessions={[session]} onArchive={vi.fn()} />
@@ -371,8 +392,8 @@ describe('[spec: environments/console-detail] EnvironmentDetailView', () => {
   })
 
   it('filters sessions to only those bound to the current environment', () => {
-    const boundSession = { ...buildSession(), id: 'session_bound', environmentId: 'env_1' } as Session
-    const otherSession = { ...buildSession(), id: 'session_other', environmentId: 'env_other' } as Session
+    const boundSession = buildSession({ id: 'session_bound', environmentId: 'env_1' })
+    const otherSession = buildSession({ id: 'session_other', environmentId: 'env_other' })
     render(
       <MemoryRouter>
         <EnvironmentDetailView
@@ -383,29 +404,12 @@ describe('[spec: environments/console-detail] EnvironmentDetailView', () => {
       </MemoryRouter>,
     )
 
-    // RelatedResourcesTable renders item.id as the link text for sessions
-    // Only boundSession (environmentId === 'env_1') should appear in the table
     expect(screen.getAllByText('session_bound').length).toBeGreaterThan(0)
     expect(screen.queryByText('session_other')).toBeNull()
   })
 
   it('calls onArchive when archive confirm is submitted in detail view', async () => {
-    Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
-      value: vi.fn(() => false),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'releasePointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
-      value: vi.fn(),
-      configurable: true,
-    })
+    stubPointerEvents()
 
     const onArchive = vi.fn()
     render(
@@ -426,6 +430,10 @@ describe('[spec: environments/console-detail] EnvironmentDetailView', () => {
 
 describe('[spec: environments/create-sheet] CreateEnvironmentSheet', () => {
   it('renders the create environment form when open', () => {
+    // POST /environments needed for the mutation; we register it but don't trigger it
+    server.use(
+      http.post('*/api/v1/environments', () => HttpResponse.json(environment({ id: 'env_new' }), { status: 201 })),
+    )
     const client = makeQueryClient()
     render(
       <QueryClientProvider client={client}>
@@ -453,11 +461,16 @@ describe('[spec: environments/create-sheet] CreateEnvironmentSheet', () => {
     expect(screen.queryByText('Create Environment')).toBeNull()
   })
 
-  it('calls api.createEnvironment with restricted network policy on submit', async () => {
-    const createEnvironment = vi.fn().mockResolvedValue({ id: 'env_new' })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      createEnvironment,
-    } as never)
+  it('posts to api and closes sheet on successful environment creation', async () => {
+    server.use(
+      http.post('*/api/v1/environments', async () =>
+        HttpResponse.json(environment({ id: 'env_new' }), { status: 201 }),
+      ),
+      // after success, the mutation invalidates environments — pre-register the list endpoint
+      http.get('*/api/v1/environments', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+    )
 
     const onOpenChange = vi.fn()
     const client = makeQueryClient()
@@ -470,38 +483,20 @@ describe('[spec: environments/create-sheet] CreateEnvironmentSheet', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: /Save environment/i }))
-    await waitFor(() => expect(createEnvironment).toHaveBeenCalled())
-    const arg = createEnvironment.mock.calls[0]?.[0] as Record<string, unknown>
-    expect(arg.name).toBe('Node workspace')
-    expect((arg.networkPolicy as Record<string, unknown>).mode).toBe('restricted')
-  })
-
-  it('calls onOpenChange and resets form on successful environment creation', async () => {
-    const createEnvironment = vi.fn().mockResolvedValue({ id: 'env_new' })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      createEnvironment,
-    } as never)
-
-    const onOpenChange = vi.fn()
-    const client = makeQueryClient()
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter>
-          <CreateEnvironmentSheet open onOpenChange={onOpenChange} />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: /Save environment/i }))
-    await waitFor(() => expect(createEnvironment).toHaveBeenCalled())
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
   })
 
-  it('handles api error on create without crashing (Error instance)', async () => {
-    const createEnvironment = vi.fn().mockRejectedValue(new Error('Server error'))
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      createEnvironment,
-    } as never)
+  it('sends restricted network policy by default on submit', async () => {
+    let capturedBody: Record<string, unknown> | null = null
+    server.use(
+      http.post('*/api/v1/environments', async ({ request }) => {
+        capturedBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(environment({ id: 'env_new' }), { status: 201 })
+      }),
+      http.get('*/api/v1/environments', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+    )
 
     const client = makeQueryClient()
     render(
@@ -513,16 +508,13 @@ describe('[spec: environments/create-sheet] CreateEnvironmentSheet', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: /Save environment/i }))
-    await waitFor(() => expect(createEnvironment).toHaveBeenCalled())
-    // The onError handler fires toast.error — page should still render
-    expect(screen.getByRole('button', { name: /Save environment/i })).toBeTruthy()
+    await waitFor(() => expect(capturedBody).not.toBeNull())
+    expect((capturedBody!.networkPolicy as Record<string, unknown>).mode).toBe('restricted')
+    expect(capturedBody!.name).toBe('Node workspace')
   })
 
-  it('handles api error on create without crashing (non-Error value)', async () => {
-    const createEnvironment = vi.fn().mockRejectedValue('string rejection')
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      createEnvironment,
-    } as never)
+  it('stays open and does not crash when the api returns an error', async () => {
+    server.use(http.post('*/api/v1/environments', () => HttpResponse.json({ error: 'Server error' }, { status: 500 })))
 
     const client = makeQueryClient()
     render(
@@ -534,32 +526,22 @@ describe('[spec: environments/create-sheet] CreateEnvironmentSheet', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: /Save environment/i }))
-    await waitFor(() => expect(createEnvironment).toHaveBeenCalled())
-    expect(screen.getByRole('button', { name: /Save environment/i })).toBeTruthy()
+    await waitFor(() => expect(screen.getByRole('button', { name: /Save environment/i })).toBeTruthy())
   })
 
   it('sends unrestricted network policy when network mode is changed to unrestricted', async () => {
-    Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
-      value: vi.fn(() => false),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'releasePointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
-      value: vi.fn(),
-      configurable: true,
-    })
+    stubPointerEvents()
 
-    const createEnvironment = vi.fn().mockResolvedValue({ id: 'env_new' })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      createEnvironment,
-    } as never)
+    let capturedBody: Record<string, unknown> | null = null
+    server.use(
+      http.post('*/api/v1/environments', async ({ request }) => {
+        capturedBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(environment({ id: 'env_new' }), { status: 201 })
+      }),
+      http.get('*/api/v1/environments', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+    )
 
     const client = makeQueryClient()
     render(
@@ -579,53 +561,61 @@ describe('[spec: environments/create-sheet] CreateEnvironmentSheet', () => {
     fireEvent.click(await screen.findByRole('option', { name: 'Unrestricted' }))
 
     fireEvent.click(screen.getByRole('button', { name: /Save environment/i }))
-    await waitFor(() => expect(createEnvironment).toHaveBeenCalled())
-    const arg = createEnvironment.mock.calls[0]?.[0] as Record<string, unknown>
-    expect((arg.networkPolicy as Record<string, unknown>).mode).toBe('unrestricted')
+    await waitFor(() => expect(capturedBody).not.toBeNull())
+    expect((capturedBody!.networkPolicy as Record<string, unknown>).mode).toBe('unrestricted')
   })
 })
 
 // ─── EnvironmentsPage ────────────────────────────────────────────────────────
 
 describe('[spec: environments/console-page] EnvironmentsPage', () => {
-  async function setupPageWithEnvironments(envs: Environment[]) {
-    const listEnvironments = vi.fn().mockResolvedValue({ data: envs })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listEnvironments,
-      archiveEnvironment: vi.fn().mockResolvedValue({}),
-    } as never)
+  function renderPage(initialPath = '/') {
+    setupEnvironmentHandlers()
     const client = makeQueryClient()
-    render(
+    return render(
       <QueryClientProvider client={client}>
-        <MemoryRouter>
+        <MemoryRouter initialEntries={[initialPath]}>
           <EnvironmentsPage />
         </MemoryRouter>
       </QueryClientProvider>,
     )
-    return { listEnvironments, client }
   }
 
-  it('renders the page header and create environment button', async () => {
-    await setupPageWithEnvironments([])
+  function renderPageWithEnvs(envs: Environment[], initialPath = '/') {
+    setupEnvironmentHandlers(envs)
+    const client = makeQueryClient()
+    return render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={[initialPath]}>
+          <EnvironmentsPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+  }
+
+  it('renders the page header and create environment button', () => {
+    renderPage()
     expect(screen.getByText('Environments')).toBeTruthy()
     expect(screen.getByRole('button', { name: /Create environment/i })).toBeTruthy()
   })
 
-  it('renders search, hosting filter, and status filter controls', async () => {
-    await setupPageWithEnvironments([])
+  it('renders search, hosting filter, and status filter controls', () => {
+    renderPage()
     expect(screen.getByRole('searchbox', { name: 'Search environments' })).toBeTruthy()
     expect(screen.getByRole('combobox', { name: 'Filter by hosting mode' })).toBeTruthy()
     expect(screen.getByRole('combobox', { name: 'Filter by status' })).toBeTruthy()
   })
 
   it('renders environment rows after data loads', async () => {
-    await setupPageWithEnvironments([environment()])
+    renderPageWithEnvs([environment()])
     expect(await screen.findByText('Node workspace')).toBeTruthy()
   })
 
   it('filters environments by search text matching name', async () => {
-    const envs = [environment({ id: 'env_1', name: 'Alpha env' }), environment({ id: 'env_2', name: 'Beta env' })]
-    await setupPageWithEnvironments(envs)
+    renderPageWithEnvs([
+      environment({ id: 'env_1', name: 'Alpha env' }),
+      environment({ id: 'env_2', name: 'Beta env' }),
+    ])
     await screen.findByText('Alpha env')
 
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search environments' }), {
@@ -637,11 +627,10 @@ describe('[spec: environments/console-page] EnvironmentsPage', () => {
   })
 
   it('filters environments by search text matching description', async () => {
-    const envs = [
+    renderPageWithEnvs([
       environment({ id: 'env_1', name: 'Env 1', description: 'alpha workspace' }),
       environment({ id: 'env_2', name: 'Env 2', description: 'beta workspace' }),
-    ]
-    await setupPageWithEnvironments(envs)
+    ])
     await screen.findByText('Env 1')
 
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search environments' }), {
@@ -653,22 +642,28 @@ describe('[spec: environments/console-page] EnvironmentsPage', () => {
   })
 
   it('opens create environment sheet when button is clicked', async () => {
-    await setupPageWithEnvironments([])
+    // CreateEnvironmentSheet renders when open; no actual POST needed
+    server.use(
+      http.post('*/api/v1/environments', () => HttpResponse.json(environment({ id: 'env_new' }), { status: 201 })),
+    )
+    renderPage()
     fireEvent.click(screen.getByRole('button', { name: /Create environment/i }))
     await waitFor(() => expect(screen.getByText('Create Environment')).toBeTruthy())
   })
 
   it('shows empty state when no environments are returned', async () => {
-    await setupPageWithEnvironments([])
+    renderPage()
     await waitFor(() => expect(screen.getByText('No environments')).toBeTruthy())
   })
 
-  it('calls api.listEnvironments with archived=true when status filter is archived', async () => {
-    const listEnvironments = vi.fn().mockResolvedValue({ data: [] })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listEnvironments,
-      archiveEnvironment: vi.fn().mockResolvedValue({}),
-    } as never)
+  it('passes archived=true query when status filter is archived', async () => {
+    let requestedUrl = ''
+    server.use(
+      http.get('*/api/v1/environments', ({ request }) => {
+        requestedUrl = request.url
+        return HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } })
+      }),
+    )
     const client = makeQueryClient()
     render(
       <QueryClientProvider client={client}>
@@ -678,26 +673,16 @@ describe('[spec: environments/console-page] EnvironmentsPage', () => {
       </QueryClientProvider>,
     )
 
-    await waitFor(() => expect(listEnvironments).toHaveBeenCalledWith({ archived: true }))
+    await waitFor(() => expect(requestedUrl).toContain('archived=true'))
   })
 
   it('filters environments by hosting mode when hosting filter is set', async () => {
-    const envs = [
-      environment({ id: 'env_cloud', name: 'Cloud env', hostingMode: 'cloud' }),
-      environment({ id: 'env_self', name: 'Self env', hostingMode: 'self_hosted' }),
-    ]
-    const listEnvironments = vi.fn().mockResolvedValue({ data: envs })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listEnvironments,
-      archiveEnvironment: vi.fn().mockResolvedValue({}),
-    } as never)
-    const client = makeQueryClient()
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/?hosting=cloud']}>
-          <EnvironmentsPage />
-        </MemoryRouter>
-      </QueryClientProvider>,
+    renderPageWithEnvs(
+      [
+        environment({ id: 'env_cloud', name: 'Cloud env', hostingMode: 'cloud' }),
+        environment({ id: 'env_self', name: 'Self env', hostingMode: 'self_hosted' }),
+      ],
+      '/?hosting=cloud',
     )
 
     expect(await screen.findByText('Cloud env')).toBeTruthy()
@@ -710,19 +695,7 @@ describe('[spec: environments/console-page] EnvironmentsPage', () => {
       name: 'Archived env',
       archivedAt: '2026-05-24T00:00:00.000Z',
     })
-    const listEnvironments = vi.fn().mockResolvedValue({ data: [archivedEnv] })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listEnvironments,
-      archiveEnvironment: vi.fn().mockResolvedValue({}),
-    } as never)
-    const client = makeQueryClient()
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/?status=archived']}>
-          <EnvironmentsPage />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
+    renderPageWithEnvs([archivedEnv], '/?status=archived')
 
     expect(await screen.findByText('Archived env')).toBeTruthy()
     expect(screen.getAllByText('archived').length).toBeGreaterThan(0)
@@ -732,17 +705,24 @@ describe('[spec: environments/console-page] EnvironmentsPage', () => {
 // ─── EnvironmentDetailPage ───────────────────────────────────────────────────
 
 describe('[spec: environments/console-detail-page] EnvironmentDetailPage', () => {
-  async function setupDetailPage(env: Environment | null, sessions: Session[] = []) {
-    const readEnvironment = vi.fn().mockResolvedValue(env)
-    const listSessions = vi.fn().mockResolvedValue({ data: sessions })
-    const archiveEnvironment = vi.fn().mockResolvedValue({})
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readEnvironment,
-      listSessions,
-      archiveEnvironment,
-    } as never)
+  function renderDetailPage(env: Environment | null, sessions: Session[] = []) {
+    const envCollection = createCollection<Environment>(env ? [env] : [])
+    const sessionCollection = createCollection<Session>(sessions)
+
+    server.use(
+      ...resourceHandlers('environments', envCollection, (body, idx) =>
+        environment({ id: `env_new_${idx}`, name: String(body.name ?? 'New'), ...body }),
+      ),
+      http.get('*/api/v1/sessions', () =>
+        HttpResponse.json({
+          data: sessionCollection.list(),
+          pagination: { limit: 50, hasMore: false, nextCursor: null },
+        }),
+      ),
+    )
+
     const client = makeQueryClient()
-    render(
+    return render(
       <QueryClientProvider client={client}>
         <MemoryRouter initialEntries={['/environments/env_1']}>
           <Routes>
@@ -751,32 +731,32 @@ describe('[spec: environments/console-detail-page] EnvironmentDetailPage', () =>
         </MemoryRouter>
       </QueryClientProvider>,
     )
-    return { readEnvironment, listSessions, archiveEnvironment }
   }
 
   it('renders the page with environment name in header after load', async () => {
-    await setupDetailPage(environment())
+    renderDetailPage(environment())
     expect(await screen.findByText('Node workspace')).toBeTruthy()
   })
 
-  it('renders Environment detail fallback title when data is loading', async () => {
-    await setupDetailPage(null)
+  it('renders Environment detail fallback title when environment is not found', async () => {
+    renderDetailPage(null)
+    // Page renders with fallback title while data is null
     expect(screen.getByText('Environment detail')).toBeTruthy()
   })
 
   it('shows the edit environment button for an active environment', async () => {
-    await setupDetailPage(environment())
+    renderDetailPage(environment())
     expect(await screen.findByRole('button', { name: /Edit environment/i })).toBeTruthy()
   })
 
   it('does not show the edit environment button for an archived environment', async () => {
-    await setupDetailPage(environment({ archivedAt: '2026-05-24T00:00:00.000Z' }))
+    renderDetailPage(environment({ archivedAt: '2026-05-24T00:00:00.000Z' }))
     await screen.findByText('Node workspace')
     expect(screen.queryByRole('button', { name: /Edit environment/i })).toBeNull()
   })
 
   it('opens the edit sheet when Edit environment is clicked', async () => {
-    await setupDetailPage(environment())
+    renderDetailPage(environment())
     const editBtn = await screen.findByRole('button', { name: /Edit environment/i })
     fireEvent.click(editBtn)
     await waitFor(() =>
@@ -787,7 +767,7 @@ describe('[spec: environments/console-detail-page] EnvironmentDetailPage', () =>
   })
 
   it('pre-fills the edit form with current environment values', async () => {
-    await setupDetailPage(environment())
+    renderDetailPage(environment())
     const editBtn = await screen.findByRole('button', { name: /Edit environment/i })
     fireEvent.click(editBtn)
     await waitFor(() => {
@@ -797,7 +777,7 @@ describe('[spec: environments/console-detail-page] EnvironmentDetailPage', () =>
   })
 
   it('validates that name is required on edit form submit', async () => {
-    await setupDetailPage(environment())
+    renderDetailPage(environment())
     const editBtn = await screen.findByRole('button', { name: /Edit environment/i })
     fireEvent.click(editBtn)
     await waitFor(() => screen.getByDisplayValue('Node workspace'))
@@ -808,14 +788,22 @@ describe('[spec: environments/console-detail-page] EnvironmentDetailPage', () =>
     await waitFor(() => expect(screen.getByText('Name is required')).toBeTruthy())
   })
 
-  it('calls api.updateEnvironment on valid edit form submit', async () => {
-    const updateEnvironment = vi.fn().mockResolvedValue(environment())
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readEnvironment: vi.fn().mockResolvedValue(environment()),
-      listSessions: vi.fn().mockResolvedValue({ data: [] }),
-      archiveEnvironment: vi.fn().mockResolvedValue({}),
-      updateEnvironment,
-    } as never)
+  it('calls PATCH /environments/:id on valid edit form submit', async () => {
+    let patchedBody: Record<string, unknown> | null = null
+    const envCollection = createCollection<Environment>([environment()])
+    server.use(
+      ...resourceHandlers('environments', envCollection, (body, idx) => environment({ id: `env_new_${idx}`, ...body })),
+      http.get('*/api/v1/sessions', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+    )
+    // Override PATCH to capture body
+    server.use(
+      http.patch('*/api/v1/environments/:id', async ({ request }) => {
+        patchedBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(environment())
+      }),
+    )
 
     const client = makeQueryClient()
     render(
@@ -832,11 +820,12 @@ describe('[spec: environments/console-detail-page] EnvironmentDetailPage', () =>
     fireEvent.click(editBtn)
     await waitFor(() => screen.getByDisplayValue('Node workspace'))
     fireEvent.click(screen.getByRole('button', { name: /Save environment/i }))
-    await waitFor(() => expect(updateEnvironment).toHaveBeenCalled())
+    await waitFor(() => expect(patchedBody).not.toBeNull())
+    expect(patchedBody!.name).toBe('Node workspace')
   })
 
   it('clears name error when name is typed after a failed validation', async () => {
-    await setupDetailPage(environment())
+    renderDetailPage(environment())
     const editBtn = await screen.findByRole('button', { name: /Edit environment/i })
     fireEvent.click(editBtn)
     await waitFor(() => screen.getByDisplayValue('Node workspace'))
@@ -850,11 +839,11 @@ describe('[spec: environments/console-detail-page] EnvironmentDetailPage', () =>
     await waitFor(() => expect(screen.queryByText('Name is required')).toBeNull())
   })
 
-  it('prefills edit form with environment name from current environment data', async () => {
+  it('pre-fills edit form with allowed hosts from restricted network policy', async () => {
     const env = environment({
       networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org', 'cdn.example.com'] },
     })
-    await setupDetailPage(env)
+    renderDetailPage(env)
     const editBtn = await screen.findByRole('button', { name: /Edit environment/i })
     fireEvent.click(editBtn)
     await waitFor(() =>
@@ -862,7 +851,6 @@ describe('[spec: environments/console-detail-page] EnvironmentDetailPage', () =>
         screen.getByText('Saving creates a new immutable environment version; existing sessions keep their snapshots.'),
       ).toBeTruthy(),
     )
-    // The form should have the environment name pre-filled
     await waitFor(() => {
       const nameInput = screen.getByDisplayValue('Node workspace')
       expect(nameInput).toBeTruthy()
@@ -871,7 +859,7 @@ describe('[spec: environments/console-detail-page] EnvironmentDetailPage', () =>
 
   it('uses empty allowed hosts string when network policy is not restricted', async () => {
     const env = environment({ networkPolicy: { mode: 'unrestricted' } })
-    await setupDetailPage(env)
+    renderDetailPage(env)
     const editBtn = await screen.findByRole('button', { name: /Edit environment/i })
     fireEvent.click(editBtn)
     await waitFor(() =>
@@ -879,35 +867,32 @@ describe('[spec: environments/console-detail-page] EnvironmentDetailPage', () =>
         screen.getByText('Saving creates a new immutable environment version; existing sessions keep their snapshots.'),
       ).toBeTruthy(),
     )
-    // form renders without the allowed hosts textarea when mode is not restricted
     expect(screen.queryByDisplayValue(/registry/)).toBeNull()
   })
 
-  it('calls api.archiveEnvironment through the detail page archive flow', async () => {
-    Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
-      value: vi.fn(() => false),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'releasePointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
-      value: vi.fn(),
-      configurable: true,
-    })
+  it('archives environment via PATCH when archive flow is completed', async () => {
+    stubPointerEvents()
 
-    const archiveEnvironment = vi.fn().mockResolvedValue({})
-    const readEnvironment = vi.fn().mockResolvedValue(environment())
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readEnvironment,
-      listSessions: vi.fn().mockResolvedValue({ data: [] }),
-      archiveEnvironment,
-    } as never)
+    let archiveBody: Record<string, unknown> | null = null
+    const envCollection = createCollection<Environment>([environment()])
+    server.use(
+      http.get('*/api/v1/environments/:id', ({ params }) => {
+        const record = envCollection.get(String(params.id))
+        return record
+          ? HttpResponse.json(record)
+          : HttpResponse.json({ error: { type: 'not_found', message: 'Not found' } }, { status: 404 })
+      }),
+      http.patch('*/api/v1/environments/:id', async ({ request }) => {
+        archiveBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(environment({ archivedAt: '2026-05-24T00:00:00.000Z' }))
+      }),
+      http.get('*/api/v1/environments', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+      http.get('*/api/v1/sessions', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+    )
 
     const client = makeQueryClient()
     render(
@@ -925,34 +910,20 @@ describe('[spec: environments/console-detail-page] EnvironmentDetailPage', () =>
     await waitFor(() => expect(screen.getByText('Archive environment?')).toBeTruthy())
     const confirmBtns = screen.getAllByRole('button', { name: 'Archive environment', hidden: true })
     fireEvent.click(confirmBtns[confirmBtns.length - 1] as HTMLElement)
-    await waitFor(() => expect(archiveEnvironment).toHaveBeenCalled())
-    expect(archiveEnvironment.mock.calls[0]?.[0]).toBe('env_1')
+    await waitFor(() => expect(archiveBody).not.toBeNull())
+    expect(archiveBody!.archived).toBe(true)
   })
 
-  it('handles api.archiveEnvironment Error rejection without crashing', async () => {
-    Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
-      value: vi.fn(() => false),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'releasePointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
-      value: vi.fn(),
-      configurable: true,
-    })
+  it('handles archive api error without crashing', async () => {
+    stubPointerEvents()
 
-    const archiveEnvironment = vi.fn().mockRejectedValue(new Error('Archive failed'))
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readEnvironment: vi.fn().mockResolvedValue(environment()),
-      listSessions: vi.fn().mockResolvedValue({ data: [] }),
-      archiveEnvironment,
-    } as never)
+    server.use(
+      http.get('*/api/v1/environments/:id', () => HttpResponse.json(environment())),
+      http.patch('*/api/v1/environments/:id', () => HttpResponse.json({ error: 'Archive failed' }, { status: 500 })),
+      http.get('*/api/v1/sessions', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+    )
 
     const client = makeQueryClient()
     render(
@@ -970,54 +941,8 @@ describe('[spec: environments/console-detail-page] EnvironmentDetailPage', () =>
     await waitFor(() => expect(screen.getByText('Archive environment?')).toBeTruthy())
     const confirmBtns = screen.getAllByRole('button', { name: 'Archive environment', hidden: true })
     fireEvent.click(confirmBtns[confirmBtns.length - 1] as HTMLElement)
-    await waitFor(() => expect(archiveEnvironment).toHaveBeenCalled())
-    // page still renders after error
-    expect(screen.getByText('Node workspace')).toBeTruthy()
-  })
-
-  it('handles api.archiveEnvironment non-Error rejection without crashing', async () => {
-    Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
-      value: vi.fn(() => false),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'releasePointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
-      value: vi.fn(),
-      configurable: true,
-    })
-
-    const archiveEnvironment = vi.fn().mockRejectedValue('string error')
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readEnvironment: vi.fn().mockResolvedValue(environment()),
-      listSessions: vi.fn().mockResolvedValue({ data: [] }),
-      archiveEnvironment,
-    } as never)
-
-    const client = makeQueryClient()
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={['/environments/env_1']}>
-          <Routes>
-            <Route path="/environments/:environmentId" element={<EnvironmentDetailPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await screen.findByText('Node workspace')
-    fireEvent.click(screen.getByText('Archive'))
-    await waitFor(() => expect(screen.getByText('Archive environment?')).toBeTruthy())
-    const confirmBtns = screen.getAllByRole('button', { name: 'Archive environment', hidden: true })
-    fireEvent.click(confirmBtns[confirmBtns.length - 1] as HTMLElement)
-    await waitFor(() => expect(archiveEnvironment).toHaveBeenCalled())
-    expect(screen.getByText('Node workspace')).toBeTruthy()
+    // Page still renders after error
+    await waitFor(() => expect(screen.getByText('Node workspace')).toBeTruthy())
   })
 
   it('pre-fills edit form from env with null description, no-version package, and value-type variable', async () => {
@@ -1027,7 +952,7 @@ describe('[spec: environments/console-detail-page] EnvironmentDetailPage', () =>
       variables: { SECRET: { value: 'hidden', description: 'secret val' } as unknown as { description?: string } },
       networkPolicy: { mode: 'unrestricted' },
     })
-    await setupDetailPage(complexEnv)
+    renderDetailPage(complexEnv)
     const editBtn = await screen.findByRole('button', { name: /Edit environment/i })
     fireEvent.click(editBtn)
     await waitFor(() =>
@@ -1035,21 +960,30 @@ describe('[spec: environments/console-detail-page] EnvironmentDetailPage', () =>
         screen.getByText('Saving creates a new immutable environment version; existing sessions keep their snapshots.'),
       ).toBeTruthy(),
     )
-    // Description is empty (null → '')
     const descInput = screen.getByDisplayValue('')
     expect(descInput).toBeTruthy()
-    // Package without version uses 'latest'
     expect(screen.getByDisplayValue('typescript@latest')).toBeTruthy()
   })
 
-  it('calls api.updateEnvironment with unrestricted policy when environment networkMode is unrestricted', async () => {
-    const updateEnvironment = vi.fn().mockResolvedValue(environment())
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readEnvironment: vi.fn().mockResolvedValue(environment({ networkPolicy: { mode: 'unrestricted' } })),
-      listSessions: vi.fn().mockResolvedValue({ data: [] }),
-      archiveEnvironment: vi.fn().mockResolvedValue({}),
-      updateEnvironment,
-    } as never)
+  it('sends unrestricted policy when environment networkMode is unrestricted on update', async () => {
+    let patchedBody: Record<string, unknown> | null = null
+    const envCollection = createCollection<Environment>([environment({ networkPolicy: { mode: 'unrestricted' } })])
+    server.use(
+      http.get('*/api/v1/environments/:id', ({ params }) => {
+        const record = envCollection.get(String(params.id))
+        return record ? HttpResponse.json(record) : HttpResponse.json({}, { status: 404 })
+      }),
+      http.patch('*/api/v1/environments/:id', async ({ request }) => {
+        patchedBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(environment())
+      }),
+      http.get('*/api/v1/environments', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+      http.get('*/api/v1/sessions', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+    )
 
     const client = makeQueryClient()
     render(
@@ -1066,19 +1000,18 @@ describe('[spec: environments/console-detail-page] EnvironmentDetailPage', () =>
     fireEvent.click(editBtn)
     await waitFor(() => screen.getByDisplayValue('Node workspace'))
     fireEvent.click(screen.getByRole('button', { name: /Save environment/i }))
-    await waitFor(() => expect(updateEnvironment).toHaveBeenCalled())
-    const arg = updateEnvironment.mock.calls[0]?.[1] as Record<string, unknown>
-    expect((arg.networkPolicy as Record<string, unknown>).mode).toBe('unrestricted')
+    await waitFor(() => expect(patchedBody).not.toBeNull())
+    expect((patchedBody!.networkPolicy as Record<string, unknown>).mode).toBe('unrestricted')
   })
 
-  it('calls api.updateEnvironment and handles error without crashing', async () => {
-    const updateEnvironment = vi.fn().mockRejectedValue(new Error('Update failed'))
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readEnvironment: vi.fn().mockResolvedValue(environment()),
-      listSessions: vi.fn().mockResolvedValue({ data: [] }),
-      archiveEnvironment: vi.fn().mockResolvedValue({}),
-      updateEnvironment,
-    } as never)
+  it('handles update api error without crashing', async () => {
+    server.use(
+      http.get('*/api/v1/environments/:id', () => HttpResponse.json(environment())),
+      http.patch('*/api/v1/environments/:id', () => HttpResponse.json({ error: 'Update failed' }, { status: 500 })),
+      http.get('*/api/v1/sessions', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+    )
 
     const client = makeQueryClient()
     render(
@@ -1095,9 +1028,8 @@ describe('[spec: environments/console-detail-page] EnvironmentDetailPage', () =>
     fireEvent.click(editBtn)
     await waitFor(() => screen.getByDisplayValue('Node workspace'))
     fireEvent.click(screen.getByRole('button', { name: /Save environment/i }))
-    await waitFor(() => expect(updateEnvironment).toHaveBeenCalled())
-    // The onError fires toast.error, page stays rendered
-    expect(screen.getByRole('button', { name: /Save environment/i })).toBeTruthy()
+    // Page stays rendered after error
+    await waitFor(() => expect(screen.getByRole('button', { name: /Save environment/i })).toBeTruthy())
   })
 })
 
@@ -1111,6 +1043,19 @@ describe('[spec: environments/actions] useEnvironmentActions', () => {
   }
 
   it('exposes archiveEnvironment function and archiveEnvironmentPending boolean as false initially', () => {
+    // The hook calls PATCH and invalidates — register endpoints
+    server.use(
+      http.patch('*/api/v1/environments/:id', () =>
+        HttpResponse.json(environment({ archivedAt: new Date().toISOString() })),
+      ),
+      http.get('*/api/v1/environments', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+      http.get('*/api/v1/sessions', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+    )
+
     const client = makeQueryClient()
     let capturedActions: ReturnType<typeof useEnvironmentActions> | null = null
     render(
@@ -1128,5 +1073,42 @@ describe('[spec: environments/actions] useEnvironmentActions', () => {
     expect(typeof capturedActions!.archiveEnvironment).toBe('function')
     expect(typeof capturedActions!.archiveEnvironmentPending).toBe('boolean')
     expect(capturedActions!.archiveEnvironmentPending).toBe(false)
+  })
+
+  it('calls PATCH /environments/:id with archived: true when archiveEnvironment is invoked', async () => {
+    let patchedUrl = ''
+    let patchedBody: Record<string, unknown> | null = null
+    server.use(
+      http.patch('*/api/v1/environments/:id', async ({ request }) => {
+        patchedUrl = request.url
+        patchedBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(environment({ archivedAt: new Date().toISOString() }))
+      }),
+      http.get('*/api/v1/environments', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+      http.get('*/api/v1/sessions', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+    )
+
+    const client = makeQueryClient()
+    let capturedActions: ReturnType<typeof useEnvironmentActions> | null = null
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <ActionHarness
+            onReady={(a) => {
+              capturedActions = a
+            }}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    capturedActions!.archiveEnvironment('env_1')
+    await waitFor(() => expect(patchedBody).not.toBeNull())
+    expect(patchedBody!.archived).toBe(true)
+    expect(patchedUrl).toContain('env_1')
   })
 })

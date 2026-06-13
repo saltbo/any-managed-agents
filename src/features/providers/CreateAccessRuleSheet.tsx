@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { TextField } from '@/console/forms'
 import { type AccessRuleInput, api } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 
 interface AccessRuleFormState {
@@ -45,7 +46,7 @@ export function CreateAccessRuleSheet({
       toast.success('Access rule saved')
       void queryClient.invalidateQueries({ queryKey: queryKeys.governance.accessRules })
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : String(error)),
+    onError: (error) => toast.error(errorMessage(error)),
   })
 
   const submit = (event: FormEvent) => {

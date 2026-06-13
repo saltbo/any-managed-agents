@@ -10,6 +10,7 @@ import { isArchived } from '@/console/format'
 import { useClientPagination } from '@/console/use-client-pagination'
 import { matchesSearch, useUrlFilter } from '@/console/use-list-filters'
 import { api } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 import { CreateSessionSheet } from './CreateSessionSheet'
 import { SessionsView } from './SessionsView'
@@ -72,7 +73,7 @@ export function SessionsPage() {
         const failed = {
           id,
           title: failedSession?.title ?? id,
-          message: error instanceof Error ? error.message : String(error),
+          message: errorMessage(error),
         }
         const unprocessed = queue.slice(index + 1)
         setBatchOutcome({ archived, failed, unprocessed })

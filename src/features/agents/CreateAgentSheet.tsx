@@ -8,6 +8,7 @@ import { parseJsonObject, parseTools, providerIdPatch } from '@/console/format'
 import { AgentForm } from '@/console/forms'
 import type { AgentFormState } from '@/console/types'
 import { api } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 
 export function CreateAgentSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -32,7 +33,7 @@ export function CreateAgentSheet({ open, onOpenChange }: { open: boolean; onOpen
       toast.success('Agent created')
       void queryClient.invalidateQueries({ queryKey: queryKeys.agents.all })
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : String(error)),
+    onError: (error) => toast.error(errorMessage(error)),
   })
   const submit = (event: FormEvent) => {
     event.preventDefault()

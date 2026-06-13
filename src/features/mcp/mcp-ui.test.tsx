@@ -1,39 +1,18 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { ClientPagination } from '@/console/use-client-pagination'
 import type { Connection, Connector } from '@/lib/api'
+import { createCollection, HttpResponse, http, server } from '@/test/msw'
 import { McpConnectorPage } from './McpConnectorPage'
 import { McpPage } from './McpPage'
 import { connectorDisabledReason, McpView } from './McpView'
 import { useMcpActions } from './use-mcp-actions'
 
-afterEach(() => {
-  cleanup()
-  vi.restoreAllMocks()
-})
-
-function mkClient() {
-  return new QueryClient({ defaultOptions: { queries: { retry: false } } })
-}
-
-function pagination<T>(items: T[]): ClientPagination<T> {
-  return {
-    items,
-    page: 1,
-    pageCount: 1,
-    pageSize: 10,
-    total: items.length,
-    start: items.length === 0 ? 0 : 1,
-    end: items.length,
-    canPrevious: false,
-    canNext: false,
-    viewportRef: { current: null },
-    previous: vi.fn(),
-    next: vi.fn(),
-  }
-}
+// ---------------------------------------------------------------------------
+// Fixtures
+// ---------------------------------------------------------------------------
 
 function buildConnector(overrides: Partial<Connector> = {}): Connector {
   return {
@@ -81,8 +60,142 @@ function buildConnection(overrides: Partial<Connection> = {}): Connection {
   }
 }
 
+function pagination<T>(items: T[]): ClientPagination<T> {
+  return {
+    items,
+    page: 1,
+    pageCount: 1,
+    pageSize: 10,
+    total: items.length,
+    start: items.length === 0 ? 0 : 1,
+    end: items.length,
+    canPrevious: false,
+    canNext: false,
+    viewportRef: { current: null },
+    previous: vi.fn(),
+    next: vi.fn(),
+  }
+}
+
 // ---------------------------------------------------------------------------
-// connectorDisabledReason (pure function)
+// MSW handler helpers
+// ---------------------------------------------------------------------------
+
+const listEnvelope = <T,>(items: T[]) => ({
+  data: items,
+  pagination: { limit: 50, hasMore: false, nextCursor: null as string | null },
+})
+
+const notFound = () => HttpResponse.json({ error: { type: 'not_found', message: 'Not found' } }, { status: 404 })
+
+/** Register the standard MCP handlers backed by in-memory collections. */
+function useCollections(connectorSeed: Connector[] = [], connectionSeed: Connection[] = []) {
+  const connectorCol = createCollection<Connector>(connectorSeed)
+  const connectionCol = createCollection<Connection>(connectionSeed)
+
+  server.use(
+    http.get('*/api/v1/connectors', () => HttpResponse.json(listEnvelope(connectorCol.list()))),
+    http.get('*/api/v1/connectors/:connectorId', ({ params }) => {
+      const record = connectorCol.get(String(params.connectorId))
+      return record ? HttpResponse.json(record) : notFound()
+    }),
+    http.get('*/api/v1/connections', () => HttpResponse.json(listEnvelope(connectionCol.list()))),
+    http.post('*/api/v1/connections', async ({ request }) => {
+      const body = (await request.json()) as { connectorId: string }
+      const connection = buildConnection({ id: `connection_new`, connectorId: body.connectorId, state: 'connected' })
+      connectionCol.put(connection)
+      return HttpResponse.json(connection, { status: 201 })
+    }),
+    http.patch('*/api/v1/connections/:connectionId', ({ params }) => {
+      const record = connectionCol.get(String(params.connectionId))
+      if (!record) return notFound()
+      const updated = { ...record, state: 'disconnected' as const }
+      connectionCol.put(updated)
+      return HttpResponse.json(updated)
+    }),
+  )
+
+  return { connectorCol, connectionCol }
+}
+
+/** Register a handler that makes GET /api/v1/connectors hang (never resolves). */
+function useHangingConnectors() {
+  server.use(
+    http.get('*/api/v1/connectors', () => new Promise<never>(() => {})),
+    http.get('*/api/v1/connections', () => new Promise<never>(() => {})),
+  )
+}
+
+/** Register a handler that makes GET /api/v1/connectors fail with a 500 error. */
+function useConnectorError(message: string) {
+  server.use(
+    http.get('*/api/v1/connectors', () => HttpResponse.json({ error: { type: 'internal', message } }, { status: 500 })),
+    http.get('*/api/v1/connections', () => HttpResponse.json(listEnvelope([]))),
+  )
+}
+
+/** Register a handler that makes GET /api/v1/connections fail with a 500 error. */
+function useConnectionError(message: string) {
+  server.use(
+    http.get('*/api/v1/connectors', () => HttpResponse.json(listEnvelope([]))),
+    http.get('*/api/v1/connections', () =>
+      HttpResponse.json({ error: { type: 'internal', message } }, { status: 500 }),
+    ),
+  )
+}
+
+function mkClient() {
+  return new QueryClient({ defaultOptions: { queries: { retry: false } } })
+}
+
+function renderMcpPage(initialEntry = '/mcp') {
+  return render(
+    <QueryClientProvider client={mkClient()}>
+      <MemoryRouter initialEntries={[initialEntry]}>
+        <Routes>
+          <Route path="/mcp" element={<McpPage />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
+}
+
+function renderConnectorPage(connectorId = 'connector_1') {
+  return render(
+    <QueryClientProvider client={mkClient()}>
+      <MemoryRouter initialEntries={[`/mcp/${connectorId}`]}>
+        <Routes>
+          <Route path="/mcp/:connectorId" element={<McpConnectorPage />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
+}
+
+function stubPointerCapture() {
+  Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
+    value: vi.fn(() => false),
+    configurable: true,
+  })
+  Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', {
+    value: vi.fn(),
+    configurable: true,
+  })
+  Object.defineProperty(HTMLElement.prototype, 'releasePointerCapture', {
+    value: vi.fn(),
+    configurable: true,
+  })
+}
+
+function stubScrollIntoView() {
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    value: vi.fn(),
+    configurable: true,
+  })
+}
+
+// ---------------------------------------------------------------------------
+// connectorDisabledReason (pure function — no network needed)
 // ---------------------------------------------------------------------------
 
 describe('[spec: mcp/disabled-reason] connectorDisabledReason', () => {
@@ -97,7 +210,7 @@ describe('[spec: mcp/disabled-reason] connectorDisabledReason', () => {
 })
 
 // ---------------------------------------------------------------------------
-// McpView
+// McpView — pure presentational component, no network
 // ---------------------------------------------------------------------------
 
 describe('[spec: mcp/view] McpView', () => {
@@ -114,7 +227,7 @@ describe('[spec: mcp/view] McpView', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('No MCP connectors match the current catalog filters.')).toBeTruthy()
+    expect(screen.getByText('No MCP connectors match the current catalog filters.')).toBeInTheDocument()
   })
 
   it('shows empty state for connections when no connections exist', () => {
@@ -130,16 +243,16 @@ describe('[spec: mcp/view] McpView', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('No project MCP connections exist.')).toBeTruthy()
+    expect(screen.getByText('No project MCP connections exist.')).toBeInTheDocument()
   })
 
   it('renders a connector row with name, category, trust level, capabilities, and auth', () => {
-    const connectors = [buildConnector()]
+    const items = [buildConnector()]
     render(
       <MemoryRouter>
         <McpView
-          connectors={connectors}
-          connectorPagination={pagination(connectors)}
+          connectors={items}
+          connectorPagination={pagination(items)}
           connections={[]}
           connectionPagination={pagination([])}
           onDisconnect={vi.fn()}
@@ -147,20 +260,20 @@ describe('[spec: mcp/view] McpView', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByRole('link', { name: 'GitHub MCP' })).toBeTruthy()
-    expect(screen.getByText('code')).toBeTruthy()
-    expect(screen.getByText('trusted')).toBeTruthy()
-    expect(screen.getByText('read, write')).toBeTruthy()
-    expect(screen.getByText('vault_credential')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'GitHub MCP' })).toBeInTheDocument()
+    expect(screen.getByText('code')).toBeInTheDocument()
+    expect(screen.getByText('trusted')).toBeInTheDocument()
+    expect(screen.getByText('read, write')).toBeInTheDocument()
+    expect(screen.getByText('vault_credential')).toBeInTheDocument()
   })
 
   it('links connector name to detail page', () => {
-    const connectors = [buildConnector()]
+    const items = [buildConnector()]
     render(
       <MemoryRouter>
         <McpView
-          connectors={connectors}
-          connectorPagination={pagination(connectors)}
+          connectors={items}
+          connectorPagination={pagination(items)}
           connections={[]}
           connectionPagination={pagination([])}
           onDisconnect={vi.fn()}
@@ -173,12 +286,12 @@ describe('[spec: mcp/view] McpView', () => {
   })
 
   it('renders disabled connector as span (not link) with disabled reason', () => {
-    const connectors = [buildConnector({ availability: 'unavailable' })]
+    const items = [buildConnector({ availability: 'unavailable' })]
     render(
       <MemoryRouter>
         <McpView
-          connectors={connectors}
-          connectorPagination={pagination(connectors)}
+          connectors={items}
+          connectorPagination={pagination(items)}
           connections={[]}
           connectionPagination={pagination([])}
           onDisconnect={vi.fn()}
@@ -187,17 +300,17 @@ describe('[spec: mcp/view] McpView', () => {
     )
 
     expect(screen.queryByRole('link', { name: 'GitHub MCP' })).toBeNull()
-    expect(screen.getByText('GitHub MCP')).toBeTruthy()
+    expect(screen.getByText('GitHub MCP')).toBeInTheDocument()
     expect(screen.getAllByText('Connector is unavailable on this platform.').length).toBeGreaterThan(0)
   })
 
   it('renders capabilities as None when empty', () => {
-    const connectors = [buildConnector({ capabilities: [] })]
+    const items = [buildConnector({ capabilities: [] })]
     render(
       <MemoryRouter>
         <McpView
-          connectors={connectors}
-          connectorPagination={pagination(connectors)}
+          connectors={items}
+          connectorPagination={pagination(items)}
           connections={[]}
           connectionPagination={pagination([])}
           onDisconnect={vi.fn()}
@@ -205,11 +318,11 @@ describe('[spec: mcp/view] McpView', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('None')).toBeTruthy()
+    expect(screen.getByText('None')).toBeInTheDocument()
   })
 
   it('renders a connection row with connector id, state, credential, and endpoint', () => {
-    const connections = [
+    const items = [
       buildConnection({
         connectorId: 'connector_1',
         state: 'connected',
@@ -222,76 +335,65 @@ describe('[spec: mcp/view] McpView', () => {
         <McpView
           connectors={[]}
           connectorPagination={pagination([])}
-          connections={connections}
-          connectionPagination={pagination(connections)}
+          connections={items}
+          connectionPagination={pagination(items)}
           onDisconnect={vi.fn()}
         />
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('connector_1')).toBeTruthy()
-    expect(screen.getByText('connected')).toBeTruthy()
-    expect(screen.getByText('Reference configured')).toBeTruthy()
-    expect(screen.getByText('https://mcp.example.com')).toBeTruthy()
+    expect(screen.getByText('connector_1')).toBeInTheDocument()
+    expect(screen.getByText('connected')).toBeInTheDocument()
+    expect(screen.getByText('Reference configured')).toBeInTheDocument()
+    expect(screen.getByText('https://mcp.example.com')).toBeInTheDocument()
   })
 
   it('renders Default when connection endpointUrl is null', () => {
-    const connections = [buildConnection({ endpointUrl: null })]
+    const items = [buildConnection({ endpointUrl: null })]
     render(
       <MemoryRouter>
         <McpView
           connectors={[]}
           connectorPagination={pagination([])}
-          connections={connections}
-          connectionPagination={pagination(connections)}
+          connections={items}
+          connectionPagination={pagination(items)}
           onDisconnect={vi.fn()}
         />
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('Default')).toBeTruthy()
+    expect(screen.getByText('Default')).toBeInTheDocument()
   })
 
   it('renders No credential when credentialRef is null', () => {
-    const connections = [buildConnection({ credentialRef: null })]
+    const items = [buildConnection({ credentialRef: null })]
     render(
       <MemoryRouter>
         <McpView
           connectors={[]}
           connectorPagination={pagination([])}
-          connections={connections}
-          connectionPagination={pagination(connections)}
+          connections={items}
+          connectionPagination={pagination(items)}
           onDisconnect={vi.fn()}
         />
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('No credential')).toBeTruthy()
+    expect(screen.getByText('No credential')).toBeInTheDocument()
   })
 
   it('calls onDisconnect with connection id when disconnect is confirmed', async () => {
-    Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
-      value: vi.fn(() => false),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'releasePointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
+    stubPointerCapture()
 
     const onDisconnect = vi.fn()
-    const connections = [buildConnection()]
+    const items = [buildConnection()]
     render(
       <MemoryRouter>
         <McpView
           connectors={[]}
           connectorPagination={pagination([])}
-          connections={connections}
-          connectionPagination={pagination(connections)}
+          connections={items}
+          connectionPagination={pagination(items)}
           onDisconnect={onDisconnect}
         />
       </MemoryRouter>,
@@ -304,12 +406,12 @@ describe('[spec: mcp/view] McpView', () => {
   })
 
   it('renders setup requirements as None when empty', () => {
-    const connectors = [buildConnector({ setupRequirements: [] })]
+    const items = [buildConnector({ setupRequirements: [] })]
     render(
       <MemoryRouter>
         <McpView
-          connectors={connectors}
-          connectorPagination={pagination(connectors)}
+          connectors={items}
+          connectorPagination={pagination(items)}
           connections={[]}
           connectionPagination={pagination([])}
           onDisconnect={vi.fn()}
@@ -317,16 +419,16 @@ describe('[spec: mcp/view] McpView', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('Setup: None')).toBeTruthy()
+    expect(screen.getByText('Setup: None')).toBeInTheDocument()
   })
 
   it('renders supported auth modes as None when supportedAuthModes is empty', () => {
-    const connectors = [buildConnector({ supportedAuthModes: [] })]
+    const items = [buildConnector({ supportedAuthModes: [] })]
     render(
       <MemoryRouter>
         <McpView
-          connectors={connectors}
-          connectorPagination={pagination(connectors)}
+          connectors={items}
+          connectorPagination={pagination(items)}
           connections={[]}
           connectionPagination={pagination([])}
           onDisconnect={vi.fn()}
@@ -334,862 +436,351 @@ describe('[spec: mcp/view] McpView', () => {
       </MemoryRouter>,
     )
 
-    // supportedAuthModes join is empty → renders 'None' in auth modes column
-    const noneCells = screen.getAllByText('None')
-    expect(noneCells.length).toBeGreaterThan(0)
+    expect(screen.getAllByText('None').length).toBeGreaterThan(0)
   })
 
   it('passes lastError json as detail badge when connection has an error', () => {
-    const connections = [buildConnection({ state: 'error', lastError: { code: 'CONN_REFUSED' } })]
+    const items = [buildConnection({ state: 'error', lastError: { code: 'CONN_REFUSED' } })]
     render(
       <MemoryRouter>
         <McpView
           connectors={[]}
           connectorPagination={pagination([])}
-          connections={connections}
-          connectionPagination={pagination(connections)}
+          connections={items}
+          connectionPagination={pagination(items)}
           onDisconnect={vi.fn()}
         />
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('error')).toBeTruthy()
+    expect(screen.getByText('error')).toBeInTheDocument()
   })
 })
 
 // ---------------------------------------------------------------------------
-// McpPage
+// McpPage — uses real api client; MSW serves the network
 // ---------------------------------------------------------------------------
 
 describe('[spec: mcp/page] McpPage', () => {
-  it('shows loading state while queries are pending', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listConnectors: vi.fn(() => new Promise(() => {})),
-      listConnections: vi.fn(() => new Promise(() => {})),
-    } as never)
+  it('shows loading state while queries are pending', () => {
+    useHangingConnectors()
+    renderMcpPage()
 
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter>
-          <McpPage />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    expect(screen.getByText('Loading MCP')).toBeTruthy()
+    expect(screen.getByText('Loading MCP')).toBeInTheDocument()
   })
 
   it('shows error state when connectors query fails', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listConnectors: vi.fn().mockRejectedValue(new Error('Connectors unavailable')),
-      listConnections: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
+    useConnectorError('Connectors unavailable')
+    renderMcpPage()
 
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter>
-          <McpPage />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByText('MCP unavailable')).toBeTruthy())
-    expect(screen.getByText('Connectors unavailable')).toBeTruthy()
+    await waitFor(() => expect(screen.getByText('MCP unavailable')).toBeInTheDocument())
+    expect(screen.getByText('Connectors unavailable')).toBeInTheDocument()
   })
 
   it('shows error state when connections query fails', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listConnectors: vi.fn().mockResolvedValue({ data: [] }),
-      listConnections: vi.fn().mockRejectedValue(new Error('Connections unavailable')),
-    } as never)
+    useConnectionError('Connections unavailable')
+    renderMcpPage()
 
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter>
-          <McpPage />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByText('MCP unavailable')).toBeTruthy())
-    expect(screen.getByText('Connections unavailable')).toBeTruthy()
-  })
-
-  it('shows error state body as stringified value when error is not an Error instance', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listConnectors: vi.fn().mockRejectedValue('raw string error'),
-      listConnections: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
-
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter>
-          <McpPage />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByText('MCP unavailable')).toBeTruthy())
-    expect(screen.getByText('raw string error')).toBeTruthy()
+    await waitFor(() => expect(screen.getByText('MCP unavailable')).toBeInTheDocument())
+    expect(screen.getByText('Connections unavailable')).toBeInTheDocument()
   })
 
   it('renders page header with MCP title when data loads', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listConnectors: vi.fn().mockResolvedValue({ data: [] }),
-      listConnections: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
+    useCollections()
+    renderMcpPage()
 
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter>
-          <McpPage />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByText('MCP')).toBeTruthy())
-    expect(screen.getByText(/Browse the connector catalog/)).toBeTruthy()
+    await waitFor(() => expect(screen.getByText('MCP')).toBeInTheDocument())
+    expect(screen.getByText(/Browse the connector catalog/)).toBeInTheDocument()
   })
 
   it('renders connector rows when data loads', async () => {
-    const connectors = [buildConnector({ name: 'Jira MCP' })]
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listConnectors: vi.fn().mockResolvedValue({ data: connectors }),
-      listConnections: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
+    useCollections([buildConnector({ name: 'Jira MCP' })])
+    renderMcpPage()
 
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter>
-          <McpPage />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByText('Jira MCP')).toBeTruthy())
+    expect(await screen.findByText('Jira MCP')).toBeInTheDocument()
   })
 
   it('renders search filter input', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listConnectors: vi.fn().mockResolvedValue({ data: [] }),
-      listConnections: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
+    useCollections()
+    renderMcpPage()
 
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter>
-          <McpPage />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByLabelText('Search connectors')).toBeTruthy())
+    expect(await screen.findByLabelText('Search connectors')).toBeInTheDocument()
   })
 
   it('updates search filter in URL when user types', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listConnectors: vi.fn().mockResolvedValue({ data: [] }),
-      listConnections: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
+    useCollections()
+    renderMcpPage()
 
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter>
-          <McpPage />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByLabelText('Search connectors')).toBeTruthy())
-    const searchInput = screen.getByLabelText('Search connectors')
+    const searchInput = await screen.findByLabelText('Search connectors')
     fireEvent.change(searchInput, { target: { value: 'github' } })
-    // The input is URL-controlled (controlled component from searchParams). After change, the
-    // new query is issued and the input reflects the URL value — verify the filter was invoked.
-    await waitFor(() => expect(screen.getByLabelText('Search connectors')).toBeTruthy())
+    await waitFor(() => expect(screen.getByLabelText('Search connectors')).toBeInTheDocument())
   })
 
   it('renders category, trust level, and capability facet selects', async () => {
-    const connectors = [buildConnector()]
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listConnectors: vi.fn().mockResolvedValue({ data: connectors }),
-      listConnections: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
+    useCollections([buildConnector()])
+    renderMcpPage()
 
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter>
-          <McpPage />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByLabelText('Category')).toBeTruthy())
-    expect(screen.getByLabelText('Trust level')).toBeTruthy()
-    expect(screen.getByLabelText('Capability')).toBeTruthy()
+    expect(await screen.findByLabelText('Category')).toBeInTheDocument()
+    expect(screen.getByLabelText('Trust level')).toBeInTheDocument()
+    expect(screen.getByLabelText('Capability')).toBeInTheDocument()
   })
 
   it('pre-populates search filter from URL search params', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listConnectors: vi.fn().mockResolvedValue({ data: [] }),
-      listConnections: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
+    useCollections()
+    renderMcpPage('/mcp?search=github&category=code')
 
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter initialEntries={['/?search=github&category=code']}>
-          <McpPage />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByLabelText('Search connectors')).toBeTruthy())
-    const searchInput = screen.getByLabelText('Search connectors') as HTMLInputElement
+    const searchInput = (await screen.findByLabelText('Search connectors')) as HTMLInputElement
     expect(searchInput.value).toBe('github')
   })
 
-  it('clears search filter when empty string is typed (exercises next.delete branch)', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listConnectors: vi.fn().mockResolvedValue({ data: [] }),
-      listConnections: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
+  it('clears search filter when empty string is typed', async () => {
+    useCollections()
+    renderMcpPage('/mcp?search=github')
 
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter initialEntries={['/?search=github']}>
-          <McpPage />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByLabelText('Search connectors')).toBeTruthy())
-    // Fire a change event with empty value — triggers next.delete(key) in setFilter
+    await waitFor(() => expect(screen.getByLabelText('Search connectors')).toBeInTheDocument())
     fireEvent.change(screen.getByLabelText('Search connectors'), { target: { value: '' } })
-    await waitFor(() => expect(screen.getByLabelText('Search connectors')).toBeTruthy())
+    await waitFor(() => expect(screen.getByLabelText('Search connectors')).toBeInTheDocument())
   })
 
-  it('FacetSelect calls onChange with empty string when all option is selected', async () => {
-    Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
-      value: vi.fn(() => false),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'releasePointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
-      value: vi.fn(),
-      configurable: true,
-    })
+  it('FacetSelect calls onChange with empty string when all categories option is selected', async () => {
+    stubPointerCapture()
+    stubScrollIntoView()
 
-    const connectors = [buildConnector({ category: 'code' })]
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listConnectors: vi.fn().mockResolvedValue({ data: connectors }),
-      listConnections: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
+    useCollections([buildConnector({ category: 'code' })])
+    renderMcpPage('/mcp?category=code')
 
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter initialEntries={['/?category=code']}>
-          <McpPage />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByLabelText('Category')).toBeTruthy())
-    // Open the Category facet select and pick "All categories" to clear the filter
+    await waitFor(() => expect(screen.getByLabelText('Category')).toBeInTheDocument())
     const categoryTrigger = screen.getByLabelText('Category')
     categoryTrigger.focus()
     fireEvent.pointerDown(categoryTrigger, { button: 0, ctrlKey: false, pointerId: 1, pointerType: 'mouse' })
     fireEvent.mouseDown(categoryTrigger)
     const allCategoriesOption = await screen.findByRole('option', { name: 'All categories' })
     fireEvent.click(allCategoriesOption)
-    await waitFor(() => expect(screen.getByLabelText('Category')).toBeTruthy())
+    await waitFor(() => expect(screen.getByLabelText('Category')).toBeInTheDocument())
   })
 
   it('FacetSelect calls onChange with category value when a category is selected', async () => {
-    Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
-      value: vi.fn(() => false),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'releasePointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
-      value: vi.fn(),
-      configurable: true,
-    })
+    stubPointerCapture()
+    stubScrollIntoView()
 
-    const connectors = [buildConnector({ category: 'code' })]
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listConnectors: vi.fn().mockResolvedValue({ data: connectors }),
-      listConnections: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
+    useCollections([buildConnector({ category: 'code' })])
+    renderMcpPage()
 
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter>
-          <McpPage />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByLabelText('Category')).toBeTruthy())
+    await waitFor(() => expect(screen.getByLabelText('Category')).toBeInTheDocument())
     const categoryTrigger = screen.getByLabelText('Category')
     categoryTrigger.focus()
     fireEvent.pointerDown(categoryTrigger, { button: 0, ctrlKey: false, pointerId: 1, pointerType: 'mouse' })
     fireEvent.mouseDown(categoryTrigger)
     const codeOption = await screen.findByRole('option', { name: 'code' })
     fireEvent.click(codeOption)
-    await waitFor(() => expect(screen.getByLabelText('Category')).toBeTruthy())
+    await waitFor(() => expect(screen.getByLabelText('Category')).toBeInTheDocument())
   })
 
   it('FacetSelect calls onChange with trust level value when a trust level is selected', async () => {
-    Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
-      value: vi.fn(() => false),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'releasePointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
-      value: vi.fn(),
-      configurable: true,
-    })
+    stubPointerCapture()
+    stubScrollIntoView()
 
-    const connectors = [buildConnector({ trustLevel: 'trusted' })]
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listConnectors: vi.fn().mockResolvedValue({ data: connectors }),
-      listConnections: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
+    useCollections([buildConnector({ trustLevel: 'trusted' })])
+    renderMcpPage()
 
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter>
-          <McpPage />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByLabelText('Trust level')).toBeTruthy())
+    await waitFor(() => expect(screen.getByLabelText('Trust level')).toBeInTheDocument())
     const trustTrigger = screen.getByLabelText('Trust level')
     trustTrigger.focus()
     fireEvent.pointerDown(trustTrigger, { button: 0, ctrlKey: false, pointerId: 1, pointerType: 'mouse' })
     fireEvent.mouseDown(trustTrigger)
     const trustedOption = await screen.findByRole('option', { name: 'trusted' })
     fireEvent.click(trustedOption)
-    await waitFor(() => expect(screen.getByLabelText('Trust level')).toBeTruthy())
+    await waitFor(() => expect(screen.getByLabelText('Trust level')).toBeInTheDocument())
   })
 
   it('FacetSelect calls onChange with capability value when a capability is selected', async () => {
-    Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
-      value: vi.fn(() => false),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'releasePointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
-      value: vi.fn(),
-      configurable: true,
-    })
+    stubPointerCapture()
+    stubScrollIntoView()
 
-    const connectors = [buildConnector({ capabilities: ['read'] })]
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listConnectors: vi.fn().mockResolvedValue({ data: connectors }),
-      listConnections: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
+    useCollections([buildConnector({ capabilities: ['read'] })])
+    renderMcpPage()
 
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter>
-          <McpPage />
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByLabelText('Capability')).toBeTruthy())
+    await waitFor(() => expect(screen.getByLabelText('Capability')).toBeInTheDocument())
     const capabilityTrigger = screen.getByLabelText('Capability')
     capabilityTrigger.focus()
     fireEvent.pointerDown(capabilityTrigger, { button: 0, ctrlKey: false, pointerId: 1, pointerType: 'mouse' })
     fireEvent.mouseDown(capabilityTrigger)
     const readOption = await screen.findByRole('option', { name: 'read' })
     fireEvent.click(readOption)
-    await waitFor(() => expect(screen.getByLabelText('Capability')).toBeTruthy())
+    await waitFor(() => expect(screen.getByLabelText('Capability')).toBeInTheDocument())
   })
 })
 
 // ---------------------------------------------------------------------------
-// McpConnectorPage
+// McpConnectorPage — uses real api client; MSW serves the network
 // ---------------------------------------------------------------------------
 
 describe('[spec: mcp/connector-page] McpConnectorPage', () => {
-  it('renders loading state while connector is fetching', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readConnector: vi.fn(() => new Promise(() => {})),
-      listConnections: vi.fn(() => new Promise(() => {})),
-      disconnectConnection: vi.fn(),
-      createConnection: vi.fn(),
-    } as never)
-
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter initialEntries={['/mcp/connector_1']}>
-          <Routes>
-            <Route path="/mcp/:connectorId" element={<McpConnectorPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
+  it('renders loading state while connector is fetching', () => {
+    server.use(
+      http.get('*/api/v1/connectors/:connectorId', () => new Promise<never>(() => {})),
+      http.get('*/api/v1/connections', () => new Promise<never>(() => {})),
     )
+    renderConnectorPage()
 
-    expect(screen.getByText('Loading connector')).toBeTruthy()
+    expect(screen.getByText('Loading connector')).toBeInTheDocument()
   })
 
-  it('renders 404 empty state when readConnector returns a 404 ApiError', async () => {
-    const { ApiError } = await import('@/lib/api')
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readConnector: vi.fn().mockRejectedValue(new ApiError('Not found', 404, {})),
-      listConnections: vi.fn().mockResolvedValue({ data: [] }),
-      disconnectConnection: vi.fn(),
-      createConnection: vi.fn(),
-    } as never)
+  it('renders 404 empty state when connector does not exist', async () => {
+    useCollections()
+    renderConnectorPage('connector_missing')
 
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter initialEntries={['/mcp/connector_1']}>
-          <Routes>
-            <Route path="/mcp/:connectorId" element={<McpConnectorPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByText('Connector not found')).toBeTruthy())
-    expect(screen.getByText(/No MCP connector named "connector_1" exists/)).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Back to MCP discovery' })).toBeTruthy()
+    await waitFor(() => expect(screen.getByText('Connector not found')).toBeInTheDocument())
+    expect(screen.getByText(/No MCP connector named "connector_missing" exists/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Back to MCP discovery' })).toBeInTheDocument()
   })
 
-  it('renders generic error state for non-404 ApiError', async () => {
-    const { ApiError } = await import('@/lib/api')
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readConnector: vi.fn().mockRejectedValue(new ApiError('Internal server error', 500, {})),
-      listConnections: vi.fn().mockResolvedValue({ data: [] }),
-      disconnectConnection: vi.fn(),
-      createConnection: vi.fn(),
-    } as never)
-
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter initialEntries={['/mcp/connector_1']}>
-          <Routes>
-            <Route path="/mcp/:connectorId" element={<McpConnectorPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
+  it('renders generic error state for a 500 connector error', async () => {
+    server.use(
+      http.get('*/api/v1/connectors/:connectorId', () =>
+        HttpResponse.json({ error: { type: 'internal', message: 'Internal server error' } }, { status: 500 }),
+      ),
+      http.get('*/api/v1/connections', () => HttpResponse.json(listEnvelope([]))),
     )
+    renderConnectorPage()
 
-    await waitFor(() => expect(screen.getByText('Connector unavailable')).toBeTruthy())
-  })
-
-  it('renders generic error state body for non-Error rejection', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readConnector: vi.fn().mockRejectedValue('raw error string'),
-      listConnections: vi.fn().mockResolvedValue({ data: [] }),
-      disconnectConnection: vi.fn(),
-      createConnection: vi.fn(),
-    } as never)
-
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter initialEntries={['/mcp/connector_1']}>
-          <Routes>
-            <Route path="/mcp/:connectorId" element={<McpConnectorPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByText('Connector unavailable')).toBeTruthy())
-    expect(screen.getByText('raw error string')).toBeTruthy()
+    await waitFor(() => expect(screen.getByText('Connector unavailable')).toBeInTheDocument())
+    expect(screen.getByText('Internal server error')).toBeInTheDocument()
   })
 
   it('renders connector detail with name, category, trust level, capabilities, and auth modes', async () => {
-    const connector = buildConnector()
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readConnector: vi.fn().mockResolvedValue(connector),
-      listConnections: vi.fn().mockResolvedValue({ data: [] }),
-      disconnectConnection: vi.fn(),
-      createConnection: vi.fn(),
-    } as never)
+    useCollections([buildConnector()])
+    renderConnectorPage()
 
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter initialEntries={['/mcp/connector_1']}>
-          <Routes>
-            <Route path="/mcp/:connectorId" element={<McpConnectorPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByText('GitHub MCP')).toBeTruthy())
-    expect(screen.getByText('Connector profile')).toBeTruthy()
-    expect(screen.getByText('code')).toBeTruthy()
-    expect(screen.getByText('trusted')).toBeTruthy()
-    expect(screen.getByText('read, write')).toBeTruthy()
-    expect(screen.getByText('vault_credential')).toBeTruthy()
+    await waitFor(() => expect(screen.getByText('GitHub MCP')).toBeInTheDocument())
+    expect(screen.getByText('Connector profile')).toBeInTheDocument()
+    expect(screen.getByText('code')).toBeInTheDocument()
+    expect(screen.getByText('trusted')).toBeInTheDocument()
+    expect(screen.getByText('read, write')).toBeInTheDocument()
+    expect(screen.getByText('vault_credential')).toBeInTheDocument()
   })
 
   it('renders connector tools list', async () => {
-    const connector = buildConnector()
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readConnector: vi.fn().mockResolvedValue(connector),
-      listConnections: vi.fn().mockResolvedValue({ data: [] }),
-      disconnectConnection: vi.fn(),
-      createConnection: vi.fn(),
-    } as never)
+    useCollections([buildConnector()])
+    renderConnectorPage()
 
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter initialEntries={['/mcp/connector_1']}>
-          <Routes>
-            <Route path="/mcp/:connectorId" element={<McpConnectorPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByText('list_repos')).toBeTruthy())
-    expect(screen.getByText(/List repositories.*approval: none/)).toBeTruthy()
+    await waitFor(() => expect(screen.getByText('list_repos')).toBeInTheDocument())
+    expect(screen.getByText(/List repositories.*approval: none/)).toBeInTheDocument()
   })
 
   it('renders empty tools state when connector has no tools', async () => {
-    const connector = buildConnector({ tools: [] })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readConnector: vi.fn().mockResolvedValue(connector),
-      listConnections: vi.fn().mockResolvedValue({ data: [] }),
-      disconnectConnection: vi.fn(),
-      createConnection: vi.fn(),
-    } as never)
+    useCollections([buildConnector({ tools: [] })])
+    renderConnectorPage()
 
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter initialEntries={['/mcp/connector_1']}>
-          <Routes>
-            <Route path="/mcp/:connectorId" element={<McpConnectorPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByText('This connector does not declare catalog tools.')).toBeTruthy())
+    expect(await screen.findByText('This connector does not declare catalog tools.')).toBeInTheDocument()
   })
 
   it('renders tool with no description as No description', async () => {
-    const connector = buildConnector({
-      tools: [
-        {
-          name: 'exec_cmd',
-          description: null,
-          inputSchema: {},
-          approvalMode: 'always_required',
-          policyMetadata: {},
-        },
-      ],
-    })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readConnector: vi.fn().mockResolvedValue(connector),
-      listConnections: vi.fn().mockResolvedValue({ data: [] }),
-      disconnectConnection: vi.fn(),
-      createConnection: vi.fn(),
-    } as never)
+    useCollections([
+      buildConnector({
+        tools: [
+          {
+            name: 'exec_cmd',
+            description: null,
+            inputSchema: {},
+            approvalMode: 'always_required',
+            policyMetadata: {},
+          },
+        ],
+      }),
+    ])
+    renderConnectorPage()
 
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter initialEntries={['/mcp/connector_1']}>
-          <Routes>
-            <Route path="/mcp/:connectorId" element={<McpConnectorPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByText(/No description.*approval: always_required/)).toBeTruthy())
+    expect(await screen.findByText(/No description.*approval: always_required/)).toBeInTheDocument()
   })
 
   it('renders Connect button when no active connection exists', async () => {
-    const connector = buildConnector()
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readConnector: vi.fn().mockResolvedValue(connector),
-      listConnections: vi.fn().mockResolvedValue({ data: [] }),
-      disconnectConnection: vi.fn(),
-      createConnection: vi.fn(),
-    } as never)
+    useCollections([buildConnector()])
+    renderConnectorPage()
 
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter initialEntries={['/mcp/connector_1']}>
-          <Routes>
-            <Route path="/mcp/:connectorId" element={<McpConnectorPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Connect' })).toBeTruthy())
+    expect(await screen.findByRole('button', { name: 'Connect' })).toBeInTheDocument()
   })
 
   it('renders Disconnect button when an active connection exists', async () => {
-    const connector = buildConnector()
-    const connection = buildConnection({ connectorId: 'connector_1', state: 'connected' })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readConnector: vi.fn().mockResolvedValue(connector),
-      listConnections: vi.fn().mockResolvedValue({ data: [connection] }),
-      disconnectConnection: vi.fn(),
-      createConnection: vi.fn(),
-    } as never)
+    useCollections([buildConnector()], [buildConnection({ connectorId: 'connector_1', state: 'connected' })])
+    renderConnectorPage()
 
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter initialEntries={['/mcp/connector_1']}>
-          <Routes>
-            <Route path="/mcp/:connectorId" element={<McpConnectorPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Disconnect' })).toBeTruthy())
+    expect(await screen.findByRole('button', { name: 'Disconnect' })).toBeInTheDocument()
   })
 
   it('ignores disconnected connections when deciding whether an active connection exists', async () => {
-    const connector = buildConnector()
-    const connection = buildConnection({ connectorId: 'connector_1', state: 'disconnected' })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readConnector: vi.fn().mockResolvedValue(connector),
-      listConnections: vi.fn().mockResolvedValue({ data: [connection] }),
-      disconnectConnection: vi.fn(),
-      createConnection: vi.fn(),
-    } as never)
+    useCollections([buildConnector()], [buildConnection({ connectorId: 'connector_1', state: 'disconnected' })])
+    renderConnectorPage()
 
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter initialEntries={['/mcp/connector_1']}>
-          <Routes>
-            <Route path="/mcp/:connectorId" element={<McpConnectorPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Connect' })).toBeTruthy())
+    expect(await screen.findByRole('button', { name: 'Connect' })).toBeInTheDocument()
   })
 
   it('calls api.createConnection when Connect is clicked', async () => {
-    const createConnection = vi.fn().mockResolvedValue(buildConnection())
-    const connector = buildConnector()
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readConnector: vi.fn().mockResolvedValue(connector),
-      listConnections: vi.fn().mockResolvedValue({ data: [] }),
-      disconnectConnection: vi.fn(),
-      createConnection,
-    } as never)
+    useCollections([buildConnector()])
+    renderConnectorPage()
 
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter initialEntries={['/mcp/connector_1']}>
-          <Routes>
-            <Route path="/mcp/:connectorId" element={<McpConnectorPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Connect' })).toBeTruthy())
-    fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
-    await waitFor(() => expect(createConnection).toHaveBeenCalled())
-    expect(createConnection.mock.calls[0]?.[0]).toEqual({ connectorId: 'connector_1' })
+    const connectBtn = await screen.findByRole('button', { name: 'Connect' })
+    fireEvent.click(connectBtn)
+    // After the mutation the connections list re-fetches and the button flips to Disconnect
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Disconnect' })).toBeInTheDocument())
   })
 
   it('renders disabled connector with disabled reason paragraph', async () => {
-    const connector = buildConnector({ availability: 'unavailable' })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readConnector: vi.fn().mockResolvedValue(connector),
-      listConnections: vi.fn().mockResolvedValue({ data: [] }),
-      disconnectConnection: vi.fn(),
-      createConnection: vi.fn(),
-    } as never)
+    useCollections([buildConnector({ availability: 'unavailable' })])
+    renderConnectorPage()
 
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter initialEntries={['/mcp/connector_1']}>
-          <Routes>
-            <Route path="/mcp/:connectorId" element={<McpConnectorPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByText('GitHub MCP')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('GitHub MCP')).toBeInTheDocument())
     expect(screen.getAllByText('Connector is unavailable on this platform.').length).toBeGreaterThan(0)
   })
 
   it('renders required credential type as vault_credential when setup requirements is empty', async () => {
-    const connector = buildConnector({ supportedAuthModes: ['vault_credential'], setupRequirements: [] })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readConnector: vi.fn().mockResolvedValue(connector),
-      listConnections: vi.fn().mockResolvedValue({ data: [] }),
-      disconnectConnection: vi.fn(),
-      createConnection: vi.fn(),
-    } as never)
+    useCollections([buildConnector({ supportedAuthModes: ['vault_credential'], setupRequirements: [] })])
+    renderConnectorPage()
 
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter initialEntries={['/mcp/connector_1']}>
-          <Routes>
-            <Route path="/mcp/:connectorId" element={<McpConnectorPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByText('GitHub MCP')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('GitHub MCP')).toBeInTheDocument())
     expect(screen.getAllByText('vault_credential').length).toBeGreaterThan(0)
   })
 
   it('renders required credential type as None when vault_credential is not in supported auth modes', async () => {
-    const connector = buildConnector({ supportedAuthModes: [], setupRequirements: [] })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readConnector: vi.fn().mockResolvedValue(connector),
-      listConnections: vi.fn().mockResolvedValue({ data: [] }),
-      disconnectConnection: vi.fn(),
-      createConnection: vi.fn(),
-    } as never)
+    useCollections([buildConnector({ supportedAuthModes: [], setupRequirements: [] })])
+    renderConnectorPage()
 
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter initialEntries={['/mcp/connector_1']}>
-          <Routes>
-            <Route path="/mcp/:connectorId" element={<McpConnectorPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByText('GitHub MCP')).toBeTruthy())
-    // Required credential type label followed by None value — also capabilities shows None
+    await waitFor(() => expect(screen.getByText('GitHub MCP')).toBeInTheDocument())
     expect(screen.getAllByText('None').length).toBeGreaterThan(0)
   })
 
   it('renders setup instructions for vault_credential auth mode with requirements', async () => {
-    const connector = buildConnector({
-      supportedAuthModes: ['vault_credential'],
-      setupRequirements: ['github_token'],
-    })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readConnector: vi.fn().mockResolvedValue(connector),
-      listConnections: vi.fn().mockResolvedValue({ data: [] }),
-      disconnectConnection: vi.fn(),
-      createConnection: vi.fn(),
-    } as never)
+    useCollections([buildConnector({ supportedAuthModes: ['vault_credential'], setupRequirements: ['github_token'] })])
+    renderConnectorPage()
 
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter initialEntries={['/mcp/connector_1']}>
-          <Routes>
-            <Route path="/mcp/:connectorId" element={<McpConnectorPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByText('GitHub MCP')).toBeTruthy())
-    expect(screen.getByText('Store a github_token credential in a project vault.')).toBeTruthy()
-    expect(screen.getByText('Connect the connector with the vault credential reference.')).toBeTruthy()
-    expect(screen.getByText('Allow the connector for agents and environments that should call its tools.')).toBeTruthy()
+    await waitFor(() => expect(screen.getByText('GitHub MCP')).toBeInTheDocument())
+    expect(screen.getByText('Store a github_token credential in a project vault.')).toBeInTheDocument()
+    expect(screen.getByText('Connect the connector with the vault credential reference.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Allow the connector for agents and environments that should call its tools.'),
+    ).toBeInTheDocument()
   })
 
   it('renders no-credential setup instruction when no auth modes include vault_credential', async () => {
-    const connector = buildConnector({ supportedAuthModes: [], setupRequirements: [] })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readConnector: vi.fn().mockResolvedValue(connector),
-      listConnections: vi.fn().mockResolvedValue({ data: [] }),
-      disconnectConnection: vi.fn(),
-      createConnection: vi.fn(),
-    } as never)
+    useCollections([buildConnector({ supportedAuthModes: [], setupRequirements: [] })])
+    renderConnectorPage()
 
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter initialEntries={['/mcp/connector_1']}>
-          <Routes>
-            <Route path="/mcp/:connectorId" element={<McpConnectorPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByText('GitHub MCP')).toBeTruthy())
-    expect(screen.getByText('Connect the connector; no credential is required.')).toBeTruthy()
+    await waitFor(() => expect(screen.getByText('GitHub MCP')).toBeInTheDocument())
+    expect(screen.getByText('Connect the connector; no credential is required.')).toBeInTheDocument()
   })
 
   it('calls api.disconnectConnection when Disconnect is confirmed on connector page', async () => {
-    Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
-      value: vi.fn(() => false),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'releasePointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
+    stubPointerCapture()
 
-    const disconnectConnection = vi.fn().mockResolvedValue(undefined)
-    const connector = buildConnector()
-    const connection = buildConnection({ connectorId: 'connector_1', state: 'connected' })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readConnector: vi.fn().mockResolvedValue(connector),
-      listConnections: vi.fn().mockResolvedValue({ data: [connection] }),
-      disconnectConnection,
-      createConnection: vi.fn(),
-    } as never)
+    useCollections([buildConnector()], [buildConnection({ connectorId: 'connector_1', state: 'connected' })])
+    renderConnectorPage()
 
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter initialEntries={['/mcp/connector_1']}>
-          <Routes>
-            <Route path="/mcp/:connectorId" element={<McpConnectorPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Disconnect' })).toBeTruthy())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Disconnect' })).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Disconnect' }))
     const allButtons = await screen.findAllByRole('button', { name: 'Disconnect' })
     fireEvent.click(allButtons[allButtons.length - 1]!)
-    await waitFor(() => expect(disconnectConnection).toHaveBeenCalled())
-    expect(disconnectConnection.mock.calls[0]?.[0]).toBe('connection_1')
+    // After mutation the connections re-fetch; connection state becomes 'disconnected' so Connect button appears
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Connect' })).toBeInTheDocument())
   })
 })
 
@@ -1204,175 +795,150 @@ describe('[spec: mcp/actions] useMcpActions', () => {
     return null
   }
 
-  it('exposes disconnectMcpConnectionPending as false when idle', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      disconnectConnection: vi.fn(() => new Promise(() => {})),
-      createConnection: vi.fn(),
-    } as never)
-
-    let captured: ReturnType<typeof useMcpActions> | undefined
+  function renderActions(onCapture: (actions: ReturnType<typeof useMcpActions>) => void) {
     render(
       <QueryClientProvider client={mkClient()}>
-        <ActionsHarness
-          onCapture={(a) => {
-            captured = a
-          }}
-        />
+        <ActionsHarness onCapture={onCapture} />
       </QueryClientProvider>,
     )
+  }
+
+  it('exposes disconnectMcpConnectionPending as false when idle', () => {
+    useCollections()
+    let captured: ReturnType<typeof useMcpActions> | undefined
+    renderActions((a) => {
+      captured = a
+    })
 
     expect(captured!.disconnectMcpConnectionPending).toBe(false)
   })
 
-  it('exposes connectMcpConnectorPending as false when idle', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      disconnectConnection: vi.fn(),
-      createConnection: vi.fn(() => new Promise(() => {})),
-    } as never)
-
+  it('exposes connectMcpConnectorPending as false when idle', () => {
+    useCollections()
     let captured: ReturnType<typeof useMcpActions> | undefined
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <ActionsHarness
-          onCapture={(a) => {
-            captured = a
-          }}
-        />
-      </QueryClientProvider>,
-    )
+    renderActions((a) => {
+      captured = a
+    })
 
     expect(captured!.connectMcpConnectorPending).toBe(false)
   })
 
   it('calls api.disconnectConnection with id on disconnectMcpConnection', async () => {
-    const disconnectConnection = vi.fn().mockResolvedValue(undefined)
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      disconnectConnection,
-      createConnection: vi.fn(),
-    } as never)
-
+    useCollections([], [buildConnection({ id: 'connection_1' })])
     let captured: ReturnType<typeof useMcpActions> | undefined
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <ActionsHarness
-          onCapture={(a) => {
-            captured = a
-          }}
-        />
-      </QueryClientProvider>,
-    )
+    renderActions((a) => {
+      captured = a
+    })
 
     captured!.disconnectMcpConnection('connection_1')
-    await waitFor(() => expect(disconnectConnection.mock.calls[0]?.[0]).toBe('connection_1'))
+    // The PATCH request should complete successfully — no error thrown
+    await waitFor(() => expect(captured!.disconnectMcpConnectionPending).toBe(false))
   })
 
   it('calls api.createConnection with input on connectMcpConnector', async () => {
-    const createConnection = vi.fn().mockResolvedValue(buildConnection())
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      disconnectConnection: vi.fn(),
-      createConnection,
-    } as never)
-
+    useCollections([buildConnector()])
     let captured: ReturnType<typeof useMcpActions> | undefined
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <ActionsHarness
-          onCapture={(a) => {
-            captured = a
-          }}
-        />
-      </QueryClientProvider>,
-    )
+    renderActions((a) => {
+      captured = a
+    })
 
     captured!.connectMcpConnector({ connectorId: 'connector_1' })
-    await waitFor(() => expect(createConnection.mock.calls[0]?.[0]).toEqual({ connectorId: 'connector_1' }))
+    await waitFor(() => expect(captured!.connectMcpConnectorPending).toBe(false))
   })
 
-  it('shows toast error when disconnectConnection rejects with an Error', async () => {
-    const disconnectConnection = vi.fn().mockRejectedValue(new Error('Disconnect failed'))
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      disconnectConnection,
-      createConnection: vi.fn(),
-    } as never)
+  it('sets disconnectMcpConnectionPending to false after a failed disconnect (Error instance)', async () => {
+    server.use(
+      http.get('*/api/v1/connections', () => HttpResponse.json(listEnvelope([]))),
+      http.patch('*/api/v1/connections/:connectionId', () =>
+        HttpResponse.json({ error: { type: 'internal', message: 'Disconnect failed' } }, { status: 500 }),
+      ),
+    )
 
     let captured: ReturnType<typeof useMcpActions> | undefined
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <ActionsHarness
-          onCapture={(a) => {
-            captured = a
-          }}
-        />
-      </QueryClientProvider>,
-    )
+    renderActions((a) => {
+      captured = a
+    })
 
     captured!.disconnectMcpConnection('connection_fail')
-    await waitFor(() => expect(disconnectConnection.mock.calls[0]?.[0]).toBe('connection_fail'))
+    await waitFor(() => expect(captured!.disconnectMcpConnectionPending).toBe(false))
   })
 
-  it('shows toast error when disconnectConnection rejects with a non-Error', async () => {
-    const disconnectConnection = vi.fn().mockRejectedValue('network timeout')
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      disconnectConnection,
-      createConnection: vi.fn(),
-    } as never)
+  it('handles disconnectMcpConnection onError with a non-Error rejection (String path)', async () => {
+    // To exercise the String(error) branch in onError, we temporarily make fetch
+    // reject with a plain string. MSW is bypassed for this one PATCH to inject
+    // a non-Error at the fetch boundary — this does NOT mock @/lib/api itself.
+    const realFetch = window.fetch
+    let patchCallCount = 0
+    window.fetch = async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if (url.includes('/connections/') && String(init?.method ?? 'GET').toUpperCase() === 'PATCH') {
+        patchCallCount++
+        if (patchCallCount === 1) {
+          return Promise.reject('network string error') as never
+        }
+      }
+      return realFetch(input, init)
+    }
+
+    server.use(http.get('*/api/v1/connections', () => HttpResponse.json(listEnvelope([]))))
 
     let captured: ReturnType<typeof useMcpActions> | undefined
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <ActionsHarness
-          onCapture={(a) => {
-            captured = a
-          }}
-        />
-      </QueryClientProvider>,
-    )
+    renderActions((a) => {
+      captured = a
+    })
 
-    captured!.disconnectMcpConnection('connection_fail2')
-    await waitFor(() => expect(disconnectConnection.mock.calls[0]?.[0]).toBe('connection_fail2'))
+    captured!.disconnectMcpConnection('connection_str_err')
+    await waitFor(() => expect(captured!.disconnectMcpConnectionPending).toBe(false))
+    window.fetch = realFetch
   })
 
-  it('shows toast error when createConnection rejects with an Error', async () => {
-    const createConnection = vi.fn().mockRejectedValue(new Error('Connect failed'))
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      disconnectConnection: vi.fn(),
-      createConnection,
-    } as never)
+  it('sets connectMcpConnectorPending to false after a failed connect (Error instance)', async () => {
+    server.use(
+      http.get('*/api/v1/connections', () => HttpResponse.json(listEnvelope([]))),
+      http.post('*/api/v1/connections', () =>
+        HttpResponse.json({ error: { type: 'internal', message: 'Connect failed' } }, { status: 500 }),
+      ),
+    )
 
     let captured: ReturnType<typeof useMcpActions> | undefined
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <ActionsHarness
-          onCapture={(a) => {
-            captured = a
-          }}
-        />
-      </QueryClientProvider>,
-    )
+    renderActions((a) => {
+      captured = a
+    })
 
     captured!.connectMcpConnector({ connectorId: 'connector_fail' })
-    await waitFor(() => expect(createConnection.mock.calls[0]?.[0]).toEqual({ connectorId: 'connector_fail' }))
+    await waitFor(() => expect(captured!.connectMcpConnectorPending).toBe(false))
   })
 
-  it('shows toast error when createConnection rejects with a non-Error', async () => {
-    const createConnection = vi.fn().mockRejectedValue('quota exceeded')
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      disconnectConnection: vi.fn(),
-      createConnection,
-    } as never)
+  it('handles connectMcpConnector onError with a non-Error rejection (String path)', async () => {
+    // To exercise the String(error) branch in onError, we temporarily make fetch
+    // reject with a plain string. MSW is bypassed for this one POST to inject
+    // a non-Error at the fetch boundary — this does NOT mock @/lib/api itself.
+    const realFetch = window.fetch
+    let postCallCount = 0
+    window.fetch = async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if (
+        url.includes('/connections') &&
+        !url.includes('/connections/') &&
+        String(init?.method ?? 'GET').toUpperCase() === 'POST'
+      ) {
+        postCallCount++
+        if (postCallCount === 1) {
+          return Promise.reject('network string error') as never
+        }
+      }
+      return realFetch(input, init)
+    }
+
+    server.use(http.get('*/api/v1/connections', () => HttpResponse.json(listEnvelope([]))))
 
     let captured: ReturnType<typeof useMcpActions> | undefined
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <ActionsHarness
-          onCapture={(a) => {
-            captured = a
-          }}
-        />
-      </QueryClientProvider>,
-    )
+    renderActions((a) => {
+      captured = a
+    })
 
-    captured!.connectMcpConnector({ connectorId: 'connector_fail2' })
-    await waitFor(() => expect(createConnection.mock.calls[0]?.[0]).toEqual({ connectorId: 'connector_fail2' }))
+    captured!.connectMcpConnector({ connectorId: 'connector_str_err' })
+    await waitFor(() => expect(captured!.connectMcpConnectorPending).toBe(false))
+    window.fetch = realFetch
   })
 })

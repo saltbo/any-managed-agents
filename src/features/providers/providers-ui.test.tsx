@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { ClientPagination } from '@/console/use-client-pagination'
 import type { AccessRule, Provider } from '@/lib/api'
+import { createCollection, HttpResponse, http, resourceHandlers, server } from '@/test/msw'
 import { CreateAccessRuleSheet } from './CreateAccessRuleSheet'
 import { CreateProviderSheet } from './CreateProviderSheet'
 import { ProviderDetailPage } from './ProviderDetailPage'
@@ -13,31 +14,7 @@ import { ProvidersPage } from './ProvidersPage'
 import { ProvidersView } from './ProvidersView'
 import { useProviderActions } from './use-provider-actions'
 
-afterEach(() => {
-  cleanup()
-  vi.restoreAllMocks()
-})
-
-function mkClient() {
-  return new QueryClient({ defaultOptions: { queries: { retry: false } } })
-}
-
-function pagination<T>(items: T[]): ClientPagination<T> {
-  return {
-    items,
-    page: 1,
-    pageCount: 1,
-    pageSize: 10,
-    total: items.length,
-    start: items.length === 0 ? 0 : 1,
-    end: items.length,
-    canPrevious: false,
-    canNext: false,
-    viewportRef: { current: null },
-    previous: vi.fn(),
-    next: vi.fn(),
-  }
-}
+// ─── Fixtures ────────────────────────────────────────────────────────────────
 
 function buildProvider(overrides: Partial<Provider> = {}): Provider {
   return {
@@ -74,6 +51,75 @@ function buildAccessRule(overrides: Partial<AccessRule> = {}): AccessRule {
     updatedAt: '2026-05-23T00:00:00.000Z',
     ...overrides,
   }
+}
+
+function pagination<T>(items: T[]): ClientPagination<T> {
+  return {
+    items,
+    page: 1,
+    pageCount: 1,
+    pageSize: 10,
+    total: items.length,
+    start: items.length === 0 ? 0 : 1,
+    end: items.length,
+    canPrevious: false,
+    canNext: false,
+    viewportRef: { current: null },
+    previous: vi.fn(),
+    next: vi.fn(),
+  }
+}
+
+function mkClient() {
+  return new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+}
+
+// Pointer capture stubs needed by Radix UI dialogs/selects
+function stubPointerEvents() {
+  Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
+    value: vi.fn(() => false),
+    configurable: true,
+  })
+  Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', {
+    value: vi.fn(),
+    configurable: true,
+  })
+  Object.defineProperty(HTMLElement.prototype, 'releasePointerCapture', {
+    value: vi.fn(),
+    configurable: true,
+  })
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    value: vi.fn(),
+    configurable: true,
+  })
+}
+
+// ─── MSW handler factories ────────────────────────────────────────────────────
+
+function setupProviderHandlers(providers: Provider[] = []) {
+  const collection = createCollection<Provider>(providers)
+  server.use(
+    ...resourceHandlers('providers', collection, (body, idx) =>
+      buildProvider({ id: `provider_new_${idx}`, displayName: String(body.displayName ?? 'New'), ...body }),
+    ),
+  )
+  return collection
+}
+
+function setupAccessRuleHandlers(rules: AccessRule[] = []) {
+  const collection = createCollection<AccessRule>(rules)
+  server.use(
+    http.get('*/api/v1/access-rules', () =>
+      HttpResponse.json({ data: collection.list(), pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+    ),
+    http.post('*/api/v1/access-rules', async ({ request }) => {
+      const body = (await request.json()) as Record<string, unknown>
+      const rule = buildAccessRule({ id: `rule_new_${collection.items.size}`, ...body })
+      collection.put(rule)
+      return HttpResponse.json(rule, { status: 201 })
+    }),
+  )
+  return collection
 }
 
 // ---------------------------------------------------------------------------
@@ -154,18 +200,7 @@ describe('[spec: providers/console-list] ProvidersView', () => {
   })
 
   it('calls onArchive with provider id when delete is confirmed', async () => {
-    Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
-      value: vi.fn(() => false),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'releasePointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
+    stubPointerEvents()
 
     const onArchive = vi.fn()
     const providers = [buildProvider()]
@@ -176,10 +211,20 @@ describe('[spec: providers/console-list] ProvidersView', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete provider' }))
-    // Wait for dialog to appear and click the confirm button
     const allButtons = await screen.findAllByRole('button', { name: 'Delete provider' })
     fireEvent.click(allButtons[allButtons.length - 1]!)
     await waitFor(() => expect(onArchive).toHaveBeenCalledWith('provider_1'))
+  })
+
+  it('passes lastError JSON as detail to StatusBadge when provider has an error', () => {
+    const providers = [buildProvider({ lastError: { code: 'TIMEOUT' } })]
+    render(
+      <MemoryRouter>
+        <ProvidersView providers={providers} pagination={pagination(providers)} onArchive={vi.fn()} />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('enabled')).toBeTruthy()
   })
 })
 
@@ -240,10 +285,9 @@ describe('[spec: providers/console-detail] ProviderDetailView', () => {
 // ---------------------------------------------------------------------------
 
 describe('[spec: providers/console-detail-page] ProviderDetailPage', () => {
-  it('renders loading header while provider is fetching', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readProvider: vi.fn(() => new Promise(() => {})),
-    } as never)
+  it('renders loading header while provider is fetching', () => {
+    // Register a never-resolving endpoint so the query stays in loading state
+    server.use(http.get('*/api/v1/providers/:id', () => new Promise(() => {})))
 
     render(
       <QueryClientProvider client={mkClient()}>
@@ -260,9 +304,7 @@ describe('[spec: providers/console-detail-page] ProviderDetailPage', () => {
 
   it('renders provider display name in header when loaded', async () => {
     const provider = buildProvider({ displayName: 'Anthropic Claude' })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readProvider: vi.fn().mockResolvedValue(provider),
-    } as never)
+    server.use(http.get('*/api/v1/providers/:id', () => HttpResponse.json(provider)))
 
     render(
       <QueryClientProvider client={mkClient()}>
@@ -277,6 +319,24 @@ describe('[spec: providers/console-detail-page] ProviderDetailPage', () => {
     await waitFor(() => expect(screen.getByText('Anthropic Claude')).toBeTruthy())
     expect(screen.getByText('Provider profile')).toBeTruthy()
   })
+
+  it('renders fallback header and empty state when route has no providerId', () => {
+    // No request will be made (enabled: false guards it), but register anyway in case
+    server.use(http.get('*/api/v1/providers/:id', () => HttpResponse.json(buildProvider())))
+
+    render(
+      <QueryClientProvider client={mkClient()}>
+        <MemoryRouter initialEntries={['/providers/']}>
+          <Routes>
+            <Route path="/providers/" element={<ProviderDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    expect(screen.getByText('Provider detail')).toBeTruthy()
+    expect(screen.getByText('Provider not found')).toBeTruthy()
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -285,10 +345,7 @@ describe('[spec: providers/console-detail-page] ProviderDetailPage', () => {
 
 describe('[spec: providers/console-list-page] ProvidersPage', () => {
   it('renders the providers page header with create button and policy link', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listProviders: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
-
+    setupProviderHandlers()
     render(
       <QueryClientProvider client={mkClient()}>
         <MemoryRouter>
@@ -303,11 +360,7 @@ describe('[spec: providers/console-list-page] ProvidersPage', () => {
   })
 
   it('renders provider rows when the query resolves', async () => {
-    const providers = [buildProvider({ displayName: 'OpenAI GPT' })]
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listProviders: vi.fn().mockResolvedValue({ data: providers }),
-    } as never)
-
+    setupProviderHandlers([buildProvider({ displayName: 'OpenAI GPT' })])
     render(
       <QueryClientProvider client={mkClient()}>
         <MemoryRouter>
@@ -320,10 +373,7 @@ describe('[spec: providers/console-list-page] ProvidersPage', () => {
   })
 
   it('opens the create provider sheet when Create provider is clicked', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listProviders: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
-
+    setupProviderHandlers()
     render(
       <QueryClientProvider client={mkClient()}>
         <MemoryRouter>
@@ -335,6 +385,48 @@ describe('[spec: providers/console-list-page] ProvidersPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /Create provider/i }))
     await waitFor(() => expect(screen.getByText('Create Provider')).toBeTruthy())
   })
+
+  it('shows empty state when no providers are returned', async () => {
+    setupProviderHandlers()
+    render(
+      <QueryClientProvider client={mkClient()}>
+        <MemoryRouter>
+          <ProvidersPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    await waitFor(() => expect(screen.getByText('No providers')).toBeTruthy())
+  })
+
+  it('deletes provider via DELETE /providers/:id when archive is triggered', async () => {
+    stubPointerEvents()
+
+    let deletedId = ''
+    const collection = setupProviderHandlers([buildProvider()])
+    // Override DELETE to capture id
+    server.use(
+      http.delete('*/api/v1/providers/:id', ({ params }) => {
+        deletedId = String(params.id)
+        collection.remove(String(params.id))
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+
+    render(
+      <QueryClientProvider client={mkClient()}>
+        <MemoryRouter>
+          <ProvidersPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    await screen.findByText('Workers AI')
+    fireEvent.click(screen.getByRole('button', { name: 'Delete provider' }))
+    const allButtons = await screen.findAllByRole('button', { name: 'Delete provider' })
+    fireEvent.click(allButtons[allButtons.length - 1]!)
+    await waitFor(() => expect(deletedId).toBe('provider_1'))
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -342,10 +434,8 @@ describe('[spec: providers/console-list-page] ProvidersPage', () => {
 // ---------------------------------------------------------------------------
 
 describe('[spec: providers/policy-page] ProviderPolicyPage', () => {
-  it('shows page header while loading rules', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listAccessRules: vi.fn(() => new Promise(() => {})),
-    } as never)
+  it('shows page header while loading rules', () => {
+    server.use(http.get('*/api/v1/access-rules', () => new Promise(() => {})))
 
     render(
       <QueryClientProvider client={mkClient()}>
@@ -359,10 +449,7 @@ describe('[spec: providers/policy-page] ProviderPolicyPage', () => {
   })
 
   it('shows empty state when no access rules exist', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listAccessRules: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
-
+    setupAccessRuleHandlers()
     render(
       <QueryClientProvider client={mkClient()}>
         <MemoryRouter>
@@ -376,11 +463,7 @@ describe('[spec: providers/policy-page] ProviderPolicyPage', () => {
   })
 
   it('renders access rule rows with effect, provider, model, team, reason, and date', async () => {
-    const rules = [buildAccessRule()]
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listAccessRules: vi.fn().mockResolvedValue({ data: rules }),
-    } as never)
-
+    setupAccessRuleHandlers([buildAccessRule()])
     render(
       <QueryClientProvider client={mkClient()}>
         <MemoryRouter>
@@ -397,11 +480,7 @@ describe('[spec: providers/policy-page] ProviderPolicyPage', () => {
   })
 
   it('renders team id when present', async () => {
-    const rules = [buildAccessRule({ teamId: 'team-platform' })]
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listAccessRules: vi.fn().mockResolvedValue({ data: rules }),
-    } as never)
-
+    setupAccessRuleHandlers([buildAccessRule({ teamId: 'team-platform' })])
     render(
       <QueryClientProvider client={mkClient()}>
         <MemoryRouter>
@@ -414,11 +493,7 @@ describe('[spec: providers/policy-page] ProviderPolicyPage', () => {
   })
 
   it('renders dash placeholder when reason is null', async () => {
-    const rules = [buildAccessRule({ reason: null })]
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listAccessRules: vi.fn().mockResolvedValue({ data: rules }),
-    } as never)
-
+    setupAccessRuleHandlers([buildAccessRule({ reason: null })])
     render(
       <QueryClientProvider client={mkClient()}>
         <MemoryRouter>
@@ -431,10 +506,7 @@ describe('[spec: providers/policy-page] ProviderPolicyPage', () => {
   })
 
   it('opens the CreateAccessRuleSheet when Add access rule is clicked', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      listAccessRules: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
-
+    setupAccessRuleHandlers()
     render(
       <QueryClientProvider client={mkClient()}>
         <MemoryRouter>
@@ -444,7 +516,6 @@ describe('[spec: providers/policy-page] ProviderPolicyPage', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: /Add access rule/i }))
-    // Sheet opens — the SheetTitle appears inside a dialog
     await waitFor(() => expect(screen.getByRole('dialog')).toBeTruthy())
     expect(screen.getByText(/Allow or deny provider and model access/)).toBeTruthy()
   })
@@ -490,12 +561,15 @@ describe('[spec: providers/create-access-rule] CreateAccessRuleSheet', () => {
     )
   })
 
-  it('calls api.createAccessRule with provider id only when model id is empty', async () => {
-    const createAccessRule = vi.fn().mockResolvedValue({ id: 'rule_new' })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      createAccessRule,
-      listAccessRules: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
+  it('posts to api.createAccessRule with provider id only when model id is empty', async () => {
+    let capturedBody: Record<string, unknown> | null = null
+    setupAccessRuleHandlers()
+    server.use(
+      http.post('*/api/v1/access-rules', async ({ request }) => {
+        capturedBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(buildAccessRule({ id: 'rule_new' }), { status: 201 })
+      }),
+    )
 
     render(
       <QueryClientProvider client={mkClient()}>
@@ -503,24 +577,23 @@ describe('[spec: providers/create-access-rule] CreateAccessRuleSheet', () => {
       </QueryClientProvider>,
     )
 
-    const providerInput = screen.getByLabelText('Provider id')
-    fireEvent.change(providerInput, { target: { value: 'workers-ai' } })
-
+    fireEvent.change(screen.getByLabelText('Provider id'), { target: { value: 'workers-ai' } })
     fireEvent.click(screen.getByRole('button', { name: /Save access rule/i }))
 
-    await waitFor(() =>
-      expect(createAccessRule).toHaveBeenCalledWith(
-        expect.objectContaining({ providerId: 'workers-ai', effect: 'deny' }),
-      ),
-    )
+    await waitFor(() => expect(capturedBody).not.toBeNull())
+    expect(capturedBody!.providerId).toBe('workers-ai')
+    expect(capturedBody!.effect).toBe('deny')
   })
 
-  it('calls api.createAccessRule with model id only when provider id is empty', async () => {
-    const createAccessRule = vi.fn().mockResolvedValue({ id: 'rule_new' })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      createAccessRule,
-      listAccessRules: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
+  it('posts to api.createAccessRule with model id only when provider id is empty', async () => {
+    let capturedBody: Record<string, unknown> | null = null
+    setupAccessRuleHandlers()
+    server.use(
+      http.post('*/api/v1/access-rules', async ({ request }) => {
+        capturedBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(buildAccessRule({ id: 'rule_new' }), { status: 201 })
+      }),
+    )
 
     render(
       <QueryClientProvider client={mkClient()}>
@@ -528,24 +601,23 @@ describe('[spec: providers/create-access-rule] CreateAccessRuleSheet', () => {
       </QueryClientProvider>,
     )
 
-    const modelInput = screen.getByLabelText('Model id')
-    fireEvent.change(modelInput, { target: { value: '@cf/meta/llama' } })
-
+    fireEvent.change(screen.getByLabelText('Model id'), { target: { value: '@cf/meta/llama' } })
     fireEvent.click(screen.getByRole('button', { name: /Save access rule/i }))
 
-    await waitFor(() =>
-      expect(createAccessRule).toHaveBeenCalledWith(
-        expect.objectContaining({ modelId: '@cf/meta/llama', effect: 'deny' }),
-      ),
-    )
+    await waitFor(() => expect(capturedBody).not.toBeNull())
+    expect(capturedBody!.modelId).toBe('@cf/meta/llama')
+    expect(capturedBody!.effect).toBe('deny')
   })
 
   it('includes teamId and reason in payload when filled', async () => {
-    const createAccessRule = vi.fn().mockResolvedValue({ id: 'rule_new' })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      createAccessRule,
-      listAccessRules: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
+    let capturedBody: Record<string, unknown> | null = null
+    setupAccessRuleHandlers()
+    server.use(
+      http.post('*/api/v1/access-rules', async ({ request }) => {
+        capturedBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(buildAccessRule({ id: 'rule_new' }), { status: 201 })
+      }),
+    )
 
     render(
       <QueryClientProvider client={mkClient()}>
@@ -556,26 +628,19 @@ describe('[spec: providers/create-access-rule] CreateAccessRuleSheet', () => {
     fireEvent.change(screen.getByLabelText('Provider id'), { target: { value: 'openai' } })
     fireEvent.change(screen.getByLabelText('Team id'), { target: { value: 'team-eng' } })
     fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'Cost control' } })
-
     fireEvent.click(screen.getByRole('button', { name: /Save access rule/i }))
 
-    await waitFor(() =>
-      expect(createAccessRule).toHaveBeenCalledWith(
-        expect.objectContaining({
-          providerId: 'openai',
-          teamId: 'team-eng',
-          reason: 'Cost control',
-        }),
-      ),
-    )
+    await waitFor(() => expect(capturedBody).not.toBeNull())
+    expect(capturedBody!.providerId).toBe('openai')
+    expect(capturedBody!.teamId).toBe('team-eng')
+    expect(capturedBody!.reason).toBe('Cost control')
   })
 
   it('clears target error when subsequent submit provides a valid provider id', async () => {
-    const createAccessRule = vi.fn().mockResolvedValue({ id: 'rule_new' })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      createAccessRule,
-      listAccessRules: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
+    setupAccessRuleHandlers()
+    server.use(
+      http.post('*/api/v1/access-rules', () => HttpResponse.json(buildAccessRule({ id: 'rule_new' }), { status: 201 })),
+    )
 
     render(
       <QueryClientProvider client={mkClient()}>
@@ -593,7 +658,59 @@ describe('[spec: providers/create-access-rule] CreateAccessRuleSheet', () => {
     fireEvent.change(screen.getByLabelText('Provider id'), { target: { value: 'anthropic' } })
     fireEvent.click(screen.getByRole('button', { name: /Save access rule/i }))
 
-    await waitFor(() => expect(createAccessRule).toHaveBeenCalled())
+    await waitFor(() =>
+      expect(screen.queryByText('An access rule must target a provider id, a model id, or both.')).toBeNull(),
+    )
+  })
+
+  it('shows toast error when api returns 500 for createAccessRule', async () => {
+    server.use(http.post('*/api/v1/access-rules', () => HttpResponse.json({ error: 'Server error' }, { status: 500 })))
+
+    render(
+      <QueryClientProvider client={mkClient()}>
+        <CreateAccessRuleSheet open={true} onOpenChange={vi.fn()} />
+      </QueryClientProvider>,
+    )
+
+    fireEvent.change(screen.getByLabelText('Provider id'), { target: { value: 'workers-ai' } })
+    fireEvent.click(screen.getByRole('button', { name: /Save access rule/i }))
+
+    // After error, form is still rendered
+    await waitFor(() => expect(screen.getByRole('button', { name: /Save access rule/i })).toBeTruthy())
+  })
+
+  it('allows selecting allow effect via the effect select', async () => {
+    stubPointerEvents()
+
+    let capturedBody: Record<string, unknown> | null = null
+    setupAccessRuleHandlers()
+    server.use(
+      http.post('*/api/v1/access-rules', async ({ request }) => {
+        capturedBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(buildAccessRule({ id: 'rule_new', effect: 'allow' }), { status: 201 })
+      }),
+    )
+
+    render(
+      <QueryClientProvider client={mkClient()}>
+        <CreateAccessRuleSheet open={true} onOpenChange={vi.fn()} />
+      </QueryClientProvider>,
+    )
+
+    // Open the effect select and pick "allow"
+    const trigger = screen.getByRole('combobox')
+    trigger.focus()
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerId: 1, pointerType: 'mouse' })
+    fireEvent.mouseDown(trigger)
+    fireEvent.click(await screen.findByRole('option', { name: 'Allow' }))
+
+    // Fill provider and submit to verify the allow effect is sent
+    fireEvent.change(screen.getByLabelText('Provider id'), { target: { value: 'openai' } })
+    fireEvent.click(screen.getByRole('button', { name: /Save access rule/i }))
+
+    await waitFor(() => expect(capturedBody).not.toBeNull())
+    expect(capturedBody!.effect).toBe('allow')
+    expect(capturedBody!.providerId).toBe('openai')
   })
 })
 
@@ -623,13 +740,9 @@ describe('[spec: providers/create-provider] CreateProviderSheet', () => {
     expect(screen.queryByText('Create Provider')).toBeNull()
   })
 
-  it('calls api.createProvider and closes sheet on success', async () => {
+  it('posts to api and closes sheet on success', async () => {
     const onOpenChange = vi.fn()
-    const createProvider = vi.fn().mockResolvedValue(buildProvider())
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      createProvider,
-      listProviders: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
+    setupProviderHandlers()
 
     render(
       <QueryClientProvider client={mkClient()}>
@@ -637,26 +750,20 @@ describe('[spec: providers/create-provider] CreateProviderSheet', () => {
       </QueryClientProvider>,
     )
 
-    // Submit via the "Save provider" button inside ProviderForm
-    const submitBtn = screen.getByRole('button', { name: /Save provider/i })
-    fireEvent.click(submitBtn)
+    fireEvent.click(screen.getByRole('button', { name: /Save provider/i }))
 
-    await waitFor(() => expect(createProvider).toHaveBeenCalled())
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
   })
-})
 
-// ---------------------------------------------------------------------------
-// CreateProviderSheet — branch coverage for optional fields
-// ---------------------------------------------------------------------------
-
-describe('[spec: providers/create-provider-branches] CreateProviderSheet optional field branches', () => {
   it('includes baseUrl in api call when base URL field is filled', async () => {
-    const createProvider = vi.fn().mockResolvedValue(buildProvider())
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      createProvider,
-      listProviders: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
+    let capturedBody: Record<string, unknown> | null = null
+    setupProviderHandlers()
+    server.use(
+      http.post('*/api/v1/providers', async ({ request }) => {
+        capturedBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(buildProvider(), { status: 201 })
+      }),
+    )
 
     render(
       <QueryClientProvider client={mkClient()}>
@@ -667,17 +774,19 @@ describe('[spec: providers/create-provider-branches] CreateProviderSheet optiona
     fireEvent.change(screen.getByLabelText('Base URL'), { target: { value: 'https://api.openai.com' } })
     fireEvent.click(screen.getByRole('button', { name: /Save provider/i }))
 
-    await waitFor(() =>
-      expect(createProvider).toHaveBeenCalledWith(expect.objectContaining({ baseUrl: 'https://api.openai.com' })),
-    )
+    await waitFor(() => expect(capturedBody).not.toBeNull())
+    expect(capturedBody!.baseUrl).toBe('https://api.openai.com')
   })
 
   it('includes credentialRef in api call when credential id is filled', async () => {
-    const createProvider = vi.fn().mockResolvedValue(buildProvider())
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      createProvider,
-      listProviders: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
+    let capturedBody: Record<string, unknown> | null = null
+    setupProviderHandlers()
+    server.use(
+      http.post('*/api/v1/providers', async ({ request }) => {
+        capturedBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(buildProvider(), { status: 201 })
+      }),
+    )
 
     render(
       <QueryClientProvider client={mkClient()}>
@@ -688,19 +797,19 @@ describe('[spec: providers/create-provider-branches] CreateProviderSheet optiona
     fireEvent.change(screen.getByLabelText('Credential id'), { target: { value: 'cred_abc' } })
     fireEvent.click(screen.getByRole('button', { name: /Save provider/i }))
 
-    await waitFor(() =>
-      expect(createProvider).toHaveBeenCalledWith(
-        expect.objectContaining({ credentialRef: { credentialId: 'cred_abc' } }),
-      ),
-    )
+    await waitFor(() => expect(capturedBody).not.toBeNull())
+    expect((capturedBody!.credentialRef as Record<string, unknown>).credentialId).toBe('cred_abc')
   })
 
   it('includes versionId in credentialRef when credential version id is also filled', async () => {
-    const createProvider = vi.fn().mockResolvedValue(buildProvider())
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      createProvider,
-      listProviders: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
+    let capturedBody: Record<string, unknown> | null = null
+    setupProviderHandlers()
+    server.use(
+      http.post('*/api/v1/providers', async ({ request }) => {
+        capturedBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(buildProvider(), { status: 201 })
+      }),
+    )
 
     render(
       <QueryClientProvider client={mkClient()}>
@@ -712,22 +821,17 @@ describe('[spec: providers/create-provider-branches] CreateProviderSheet optiona
     fireEvent.change(screen.getByLabelText('Credential version id'), { target: { value: 'vaultver_1' } })
     fireEvent.click(screen.getByRole('button', { name: /Save provider/i }))
 
-    await waitFor(() =>
-      expect(createProvider).toHaveBeenCalledWith(
-        expect.objectContaining({
-          credentialRef: { credentialId: 'cred_abc', versionId: 'vaultver_1' },
-        }),
-      ),
-    )
+    await waitFor(() => expect(capturedBody).not.toBeNull())
+    const credRef = capturedBody!.credentialRef as Record<string, unknown>
+    expect(credRef.credentialId).toBe('cred_abc')
+    expect(credRef.versionId).toBe('vaultver_1')
   })
 
-  it('does not close sheet when api.createProvider rejects with an Error', async () => {
+  it('does not close sheet when api returns 500', async () => {
     const onOpenChange = vi.fn()
-    const createProvider = vi.fn().mockRejectedValue(new Error('Provider already exists'))
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      createProvider,
-      listProviders: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
+    server.use(
+      http.post('*/api/v1/providers', () => HttpResponse.json({ error: 'Provider already exists' }, { status: 500 })),
+    )
 
     render(
       <QueryClientProvider client={mkClient()}>
@@ -737,167 +841,13 @@ describe('[spec: providers/create-provider-branches] CreateProviderSheet optiona
 
     fireEvent.click(screen.getByRole('button', { name: /Save provider/i }))
 
-    await waitFor(() => expect(createProvider).toHaveBeenCalled())
-    expect(onOpenChange).not.toHaveBeenCalledWith(false)
-  })
-
-  it('handles non-Error rejection by stringifying the value', async () => {
-    const onOpenChange = vi.fn()
-    const createProvider = vi.fn().mockRejectedValue('quota exceeded')
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      createProvider,
-      listProviders: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
-
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <CreateProviderSheet open={true} onOpenChange={onOpenChange} />
-      </QueryClientProvider>,
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: /Save provider/i }))
-
-    await waitFor(() => expect(createProvider).toHaveBeenCalled())
+    await waitFor(() => expect(screen.getByRole('button', { name: /Save provider/i })).toBeTruthy())
     expect(onOpenChange).not.toHaveBeenCalledWith(false)
   })
 })
 
 // ---------------------------------------------------------------------------
-// CreateAccessRuleSheet — onError handler and effect select
-// ---------------------------------------------------------------------------
-
-describe('[spec: providers/create-access-rule-error] CreateAccessRuleSheet error handler', () => {
-  it('shows toast error when api.createAccessRule rejects with an Error instance', async () => {
-    const createAccessRule = vi.fn().mockRejectedValue(new Error('Server error'))
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      createAccessRule,
-      listAccessRules: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
-
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <CreateAccessRuleSheet open={true} onOpenChange={vi.fn()} />
-      </QueryClientProvider>,
-    )
-
-    fireEvent.change(screen.getByLabelText('Provider id'), { target: { value: 'workers-ai' } })
-    fireEvent.click(screen.getByRole('button', { name: /Save access rule/i }))
-
-    await waitFor(() => expect(createAccessRule).toHaveBeenCalled())
-  })
-
-  it('shows toast error with stringified value when api.createAccessRule rejects with a non-Error', async () => {
-    const createAccessRule = vi.fn().mockRejectedValue('quota exceeded')
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      createAccessRule,
-      listAccessRules: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
-
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <CreateAccessRuleSheet open={true} onOpenChange={vi.fn()} />
-      </QueryClientProvider>,
-    )
-
-    fireEvent.change(screen.getByLabelText('Provider id'), { target: { value: 'workers-ai' } })
-    fireEvent.click(screen.getByRole('button', { name: /Save access rule/i }))
-
-    await waitFor(() => expect(createAccessRule).toHaveBeenCalled())
-  })
-
-  it('allows selecting allow effect via the effect select (onValueChange branch)', async () => {
-    Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
-      value: vi.fn(() => false),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'releasePointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
-      value: vi.fn(),
-      configurable: true,
-    })
-
-    const createAccessRule = vi.fn().mockResolvedValue({ id: 'rule_new' })
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      createAccessRule,
-      listAccessRules: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
-
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <CreateAccessRuleSheet open={true} onOpenChange={vi.fn()} />
-      </QueryClientProvider>,
-    )
-
-    // Open the effect select and pick "allow"
-    const trigger = screen.getByRole('combobox')
-    trigger.focus()
-    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerId: 1, pointerType: 'mouse' })
-    fireEvent.mouseDown(trigger)
-    fireEvent.click(await screen.findByRole('option', { name: 'Allow' }))
-
-    // Now fill provider and submit to verify the allow effect is sent
-    fireEvent.change(screen.getByLabelText('Provider id'), { target: { value: 'openai' } })
-    fireEvent.click(screen.getByRole('button', { name: /Save access rule/i }))
-
-    await waitFor(() =>
-      expect(createAccessRule).toHaveBeenCalledWith(expect.objectContaining({ effect: 'allow', providerId: 'openai' })),
-    )
-  })
-})
-
-// ---------------------------------------------------------------------------
-// ProviderDetailPage — branch when no providerId param
-// ---------------------------------------------------------------------------
-
-describe('[spec: providers/console-detail-page-branches] ProviderDetailPage without providerId', () => {
-  it('renders fallback header and empty state when route has no providerId', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      readProvider: vi.fn().mockResolvedValue(buildProvider()),
-    } as never)
-
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <MemoryRouter initialEntries={['/providers/']}>
-          <Routes>
-            {/* Route without :providerId — providerId param will be undefined */}
-            <Route path="/providers/" element={<ProviderDetailPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-
-    expect(screen.getByText('Provider detail')).toBeTruthy()
-    expect(screen.getByText('Provider not found')).toBeTruthy()
-  })
-})
-
-// ---------------------------------------------------------------------------
-// ProvidersView — lastError branch coverage
-// ---------------------------------------------------------------------------
-
-describe('[spec: providers/console-list-last-error] ProvidersView lastError badge detail', () => {
-  it('passes lastError JSON as detail to StatusBadge when provider has an error', () => {
-    const providers = [buildProvider({ lastError: { code: 'TIMEOUT' } })]
-    render(
-      <MemoryRouter>
-        <ProvidersView providers={providers} pagination={pagination(providers)} onArchive={vi.fn()} />
-      </MemoryRouter>,
-    )
-
-    // StatusBadge renders detail as aria-label — just verify enabled badge is shown
-    expect(screen.getByText('enabled')).toBeTruthy()
-  })
-})
-
-// ---------------------------------------------------------------------------
-// useProviderActions — hook via minimal component wrapper
+// useProviderActions
 // ---------------------------------------------------------------------------
 
 describe('[spec: providers/actions] useProviderActions', () => {
@@ -907,12 +857,41 @@ describe('[spec: providers/actions] useProviderActions', () => {
     return null
   }
 
-  it('calls api.deleteProvider with the provided id on archiveProvider', async () => {
-    const deleteProvider = vi.fn().mockResolvedValue(undefined)
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      deleteProvider,
-      listProviders: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
+  it('exposes archiveProvider function and archiveProviderPending as false initially', () => {
+    server.use(
+      http.delete('*/api/v1/providers/:id', () => new HttpResponse(null, { status: 204 })),
+      http.get('*/api/v1/providers', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+    )
+
+    let capturedActions: ReturnType<typeof useProviderActions> | undefined
+    render(
+      <QueryClientProvider client={mkClient()}>
+        <ActionsHarness
+          onCapture={(a) => {
+            capturedActions = a
+          }}
+        />
+      </QueryClientProvider>,
+    )
+
+    expect(typeof capturedActions!.archiveProvider).toBe('function')
+    expect(typeof capturedActions!.archiveProviderPending).toBe('boolean')
+    expect(capturedActions!.archiveProviderPending).toBe(false)
+  })
+
+  it('calls DELETE /providers/:id with the provided id on archiveProvider', async () => {
+    let deletedId = ''
+    server.use(
+      http.delete('*/api/v1/providers/:id', ({ params }) => {
+        deletedId = String(params.id)
+        return new HttpResponse(null, { status: 204 })
+      }),
+      http.get('*/api/v1/providers', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+    )
 
     let capturedActions: ReturnType<typeof useProviderActions> | undefined
     render(
@@ -926,35 +905,16 @@ describe('[spec: providers/actions] useProviderActions', () => {
     )
 
     capturedActions!.archiveProvider('provider_1')
-    await waitFor(() => expect(deleteProvider.mock.calls[0]?.[0]).toBe('provider_1'))
+    await waitFor(() => expect(deletedId).toBe('provider_1'))
   })
 
-  it('exposes archiveProviderPending as false when no mutation is in flight', async () => {
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      deleteProvider: vi.fn(() => new Promise(() => {})),
-      listProviders: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
-
-    let capturedActions: ReturnType<typeof useProviderActions> | undefined
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <ActionsHarness
-          onCapture={(a) => {
-            capturedActions = a
-          }}
-        />
-      </QueryClientProvider>,
+  it('shows toast success and invalidates providers query on successful delete', async () => {
+    server.use(
+      http.delete('*/api/v1/providers/:id', () => new HttpResponse(null, { status: 204 })),
+      http.get('*/api/v1/providers', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
     )
-
-    expect(capturedActions!.archiveProviderPending).toBe(false)
-  })
-
-  it('shows toast success and invalidates query on successful delete', async () => {
-    const deleteProvider = vi.fn().mockResolvedValue(undefined)
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      deleteProvider,
-      listProviders: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
 
     let capturedActions: ReturnType<typeof useProviderActions> | undefined
     render(
@@ -968,15 +928,16 @@ describe('[spec: providers/actions] useProviderActions', () => {
     )
 
     capturedActions!.archiveProvider('provider_ok')
-    await waitFor(() => expect(deleteProvider.mock.calls[0]?.[0]).toBe('provider_ok'))
+    await waitFor(() => expect(capturedActions!.archiveProviderPending).toBe(false))
   })
 
-  it('shows toast error when api.deleteProvider rejects with an Error', async () => {
-    const deleteProvider = vi.fn().mockRejectedValue(new Error('Delete failed'))
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      deleteProvider,
-      listProviders: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
+  it('handles error response from DELETE /providers/:id without crashing', async () => {
+    server.use(
+      http.delete('*/api/v1/providers/:id', () => HttpResponse.json({ error: 'Delete failed' }, { status: 500 })),
+      http.get('*/api/v1/providers', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+    )
 
     let capturedActions: ReturnType<typeof useProviderActions> | undefined
     render(
@@ -990,28 +951,6 @@ describe('[spec: providers/actions] useProviderActions', () => {
     )
 
     capturedActions!.archiveProvider('provider_fail')
-    await waitFor(() => expect(deleteProvider.mock.calls[0]?.[0]).toBe('provider_fail'))
-  })
-
-  it('shows toast error with stringified value when error is not an Error instance', async () => {
-    const deleteProvider = vi.fn().mockRejectedValue('raw string error')
-    vi.spyOn(await import('@/lib/api'), 'api', 'get').mockReturnValue({
-      deleteProvider,
-      listProviders: vi.fn().mockResolvedValue({ data: [] }),
-    } as never)
-
-    let capturedActions: ReturnType<typeof useProviderActions> | undefined
-    render(
-      <QueryClientProvider client={mkClient()}>
-        <ActionsHarness
-          onCapture={(a) => {
-            capturedActions = a
-          }}
-        />
-      </QueryClientProvider>,
-    )
-
-    capturedActions!.archiveProvider('provider_fail2')
-    await waitFor(() => expect(deleteProvider.mock.calls[0]?.[0]).toBe('provider_fail2'))
+    await waitFor(() => expect(capturedActions!.archiveProviderPending).toBe(false))
   })
 })

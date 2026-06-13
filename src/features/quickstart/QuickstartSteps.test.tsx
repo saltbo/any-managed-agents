@@ -1,17 +1,17 @@
 /**
  * Tests for QuickstartSteps components.
- * Pattern: MemoryRouter, screen + fireEvent, .toBeTruthy()/.toBe(), afterEach cleanup.
+ * Pattern: MSW + real api client, MemoryRouter, screen + fireEvent, .toBeTruthy()/.toBe().
  * QuickstartAgentStep (draft≠null) renders CoreStep which calls useQuery — wrap in
- * QueryClientProvider (retry:false).
+ * QueryClientProvider (retry:false) and add MSW handler for provider models.
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { AgentBuilderDraft } from '@/features/agents/agent-builder-model'
 import { emptyBuilderDraft } from '@/features/agents/agent-builder-model'
-import type { Environment, ListResponse, Provider, ProviderModel } from '@/lib/api'
-import * as apiModule from '@/lib/api'
+import type { Environment, Provider } from '@/lib/api'
+import { HttpResponse, http, server } from '@/test/msw'
 import {
   OpenPageLink,
   QuickstartAgentStep,
@@ -20,16 +20,6 @@ import {
   QuickstartProviderStep,
 } from './QuickstartSteps'
 import type { QuickstartEnvironmentForm } from './quickstart-model'
-
-const listOf = <T,>(data: T[] = []): ListResponse<T> => ({
-  data,
-  pagination: { limit: 50, hasMore: false, nextCursor: null },
-})
-
-afterEach(() => {
-  cleanup()
-  vi.restoreAllMocks()
-})
 
 function makeQueryClient() {
   return new QueryClient({
@@ -317,7 +307,6 @@ describe('QuickstartEnvironmentStep', () => {
   })
 
   it('calls setForm with restricted networkChoice when networking select changes to restricted', () => {
-    // Radix UI Select requires pointer-capture and scroll APIs that jsdom does not implement.
     Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', { value: vi.fn(() => false), configurable: true })
     Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', { value: vi.fn(), configurable: true })
     Object.defineProperty(HTMLElement.prototype, 'releasePointerCapture', { value: vi.fn(), configurable: true })
@@ -508,9 +497,14 @@ describe('QuickstartAgentStep [draft=null — start view]', () => {
 describe('QuickstartAgentStep [draft≠null — review view]', () => {
   const draft: AgentBuilderDraft = { ...emptyBuilderDraft, name: 'My Agent', instructions: 'Do stuff' }
 
-  // CoreStep inside QuickstartAgentStep calls useQuery (for provider models), so we need QueryClientProvider.
+  // CoreStep inside QuickstartAgentStep calls useQuery (for provider models) —
+  // MSW handles GET /api/v1/providers/:providerId/models.
   function renderWithClient(props: React.ComponentProps<typeof QuickstartAgentStep>) {
-    vi.spyOn(apiModule.api, 'listProviderModels').mockResolvedValue(listOf<ProviderModel>())
+    server.use(
+      http.get('*/api/v1/providers/:providerId/models', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+    )
     const queryClient = makeQueryClient()
     render(
       <QueryClientProvider client={queryClient}>
