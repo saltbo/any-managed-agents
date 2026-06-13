@@ -88,8 +88,18 @@ function fakeDeps(overrides: { repo?: Partial<Deps['environments']> } = {}): Dep
     environments: repo,
     providers: undefined as unknown as Deps['providers'],
     providerCatalog: undefined as unknown as Deps['providerCatalog'],
+    vaults: undefined as unknown as Deps['vaults'],
+    secretStore: undefined as unknown as Deps['secretStore'],
+    connectors: undefined as unknown as Deps['connectors'],
+    connections: undefined as unknown as Deps['connections'],
+    mcp: undefined as unknown as Deps['mcp'],
+    sessionEvents: undefined as unknown as Deps['sessionEvents'],
     audit: { record: async () => {} },
-    policy: { resolveToolPolicy: async () => ({}) },
+    policy: {
+      resolveToolPolicy: async () => ({}),
+      resolveMcpPolicy: async () => ({}),
+      evaluateMcpTool: async () => ({ allowed: true, category: 'mcp', rule: null, message: '' }),
+    },
   }
 }
 

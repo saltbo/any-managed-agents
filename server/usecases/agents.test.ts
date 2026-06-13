@@ -103,8 +103,18 @@ function fakeDeps(
     environments: undefined as unknown as Deps['environments'],
     providers: undefined as unknown as Deps['providers'],
     providerCatalog: undefined as unknown as Deps['providerCatalog'],
+    vaults: undefined as unknown as Deps['vaults'],
+    secretStore: undefined as unknown as Deps['secretStore'],
+    connectors: undefined as unknown as Deps['connectors'],
+    connections: undefined as unknown as Deps['connections'],
+    mcp: undefined as unknown as Deps['mcp'],
+    sessionEvents: undefined as unknown as Deps['sessionEvents'],
     audit: { record: async (_auth, entry) => void auditLog.push(entry) },
-    policy: { resolveToolPolicy: async () => overrides.toolPolicy ?? {} },
+    policy: {
+      resolveToolPolicy: async () => overrides.toolPolicy ?? {},
+      resolveMcpPolicy: async () => ({}),
+      evaluateMcpTool: async () => ({ allowed: true, category: 'mcp', rule: null, message: '' }),
+    },
   }
 }
 
@@ -154,6 +164,8 @@ describe('[spec: agents/create] createAgent', () => {
           resolved += 1
           return {}
         },
+        resolveMcpPolicy: async () => ({}),
+        evaluateMcpTool: async () => ({ allowed: true, category: 'mcp', rule: null, message: '' }),
       },
     }
     await createAgent(deps, auth, { name: 'x', description: null, config: config() })

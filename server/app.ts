@@ -11,8 +11,11 @@ import { insertCanonicalSessionEvent } from './db/session-event-store'
 import type { Env } from './env'
 import { errorResponse } from './errors'
 import { registerAgentRoutes } from './http/agents'
+import { registerConnectionRoutes } from './http/connections'
+import { registerConnectorRoutes } from './http/connectors'
 import { registerEnvironmentRoutes } from './http/environments'
 import { registerProviderRoutes } from './http/providers'
+import { registerVaultRoutes } from './http/vaults'
 import { ApiSecuritySchemes, createDepsApiRouter } from './openapi'
 import {
   evaluateMcpToolPolicy,
@@ -25,8 +28,6 @@ import accessRules from './routes/access-rules'
 import audit from './routes/audit'
 import auth from './routes/auth'
 import budgets from './routes/budgets'
-import connections from './routes/connections'
-import connectors from './routes/connectors'
 import e2e from './routes/e2e'
 import effectivePolicy from './routes/effective-policy'
 import federatedTenants from './routes/federated-tenants'
@@ -40,7 +41,6 @@ import sessionRoutes from './routes/sessions'
 import triggers from './routes/triggers'
 import usageRecords from './routes/usage-records'
 import usageSummary from './routes/usage-summary'
-import vaults from './routes/vaults'
 import workItems from './routes/work-items'
 import { safeRuntimeError } from './runtime/runtime-error'
 import {
@@ -650,14 +650,17 @@ export function createApp() {
   // protocol-adapter endpoints: their wire shape is dictated by external
   // protocols (ACP tunnel, OpenAI-compatible inference) and is therefore
   // exempt from REST resource modeling (docs/api-v1-design.md §1.8).
-  // agents, environments, and providers are migrated to the clean-architecture
-  // http layer. Each registers its OpenAPI routes (load-bearing internal order:
-  // static before parameter segments) onto a sub-router mounted at the
-  // resource's original chain position, so the assembled route order and
-  // AppType stay identical.
+  // agents, environments, providers, vaults, connectors, and connections are
+  // migrated to the clean-architecture http layer. Each registers its OpenAPI
+  // routes (load-bearing internal order: static before parameter segments) onto
+  // a sub-router mounted at the resource's original chain position, so the
+  // assembled route order and AppType stay identical.
   const agents = registerAgentRoutes(createDepsApiRouter())
   const environments = registerEnvironmentRoutes(createDepsApiRouter())
   const providers = registerProviderRoutes(createDepsApiRouter())
+  const connectors = registerConnectorRoutes(createDepsApiRouter())
+  const connections = registerConnectionRoutes(createDepsApiRouter())
+  const vaults = registerVaultRoutes(createDepsApiRouter())
 
   const routes = app
     .route('/api/v1/health', health)
