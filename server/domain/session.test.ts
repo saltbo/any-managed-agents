@@ -11,7 +11,7 @@ import {
   sessionIsTerminal,
 } from './session'
 
-describe('session state rules', () => {
+describe('[spec: sessions/state-rules] session state rules', () => {
   it('accepts prompts only while the runtime is live', () => {
     expect(sessionAcceptsPrompts('idle')).toBe(true)
     expect(sessionAcceptsPrompts('running')).toBe(true)
@@ -40,7 +40,7 @@ describe('hosting mode derivation', () => {
   })
 })
 
-describe('secret material detection', () => {
+describe('[spec: sessions/workspace-safety] secret material detection', () => {
   it('flags secret-looking keys at any depth', () => {
     expect(hasSecretMaterial({ apiKey: 'x' })).toBe(true)
     expect(hasSecretMaterial({ nested: [{ password: 'x' }] })).toBe(true)
@@ -75,7 +75,7 @@ describe('normalizeMountPath', () => {
   })
 })
 
-describe('composeInitialPrompt', () => {
+describe('[spec: sessions/initial-prompt-compose] composeInitialPrompt', () => {
   it('returns the prompt unchanged when there is no memory', () => {
     expect(composeInitialPrompt(null, 'do the task')).toBe('do the task')
     expect(composeInitialPrompt('   ', 'do the task')).toBe('do the task')

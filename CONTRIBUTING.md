@@ -60,16 +60,21 @@ Script responsibilities:
 
 Choose the smallest meaningful check for a narrow change. For broad control-plane, runtime, or release work, run lint, typecheck, unit tests, e2e, and build.
 
-## Executable Specs First
+## Specs First (BDD-lite)
 
-Product behavior starts in Gherkin:
+Product behaviour starts in Gherkin under `spec/` (see `spec/README.md`). The
+`.feature` files are documentation, one per capability; tests trace back to scenarios
+with `[spec: <id>]` breadcrumbs rather than being generated from them.
 
-1. Write or update a scenario in `specs/product/`.
-2. Add or update Cucumber step definitions in `test/e2e/`.
-3. Implement Worker, runtime, D1, or UI behavior.
-4. Run the smallest meaningful verification command.
+1. Write or update a scenario in `spec/<capability>.feature` with a stable id
+   `@<capability>/<slug>` and one layer tag (`@domain`/`@usecase`/`@web`/`@api`/`@e2e`).
+2. Add or update the home test at that layer and put `[spec: <id>]` in its name.
+3. Implement Worker, runtime, D1, or UI behaviour.
+4. Run the smallest meaningful verification command (`test`, `lint:spec`, `test:e2e`).
 
-`@implemented` product scenarios must exercise real local behavior through local Worker routes, local D1/test bindings, browser pages, or local app harnesses. Static shape checks and pure assertions belong in unit or contract tests, not product e2e specs.
+Verify at the cheapest layer that can prove the scenario. Reserve `@e2e` (run by
+`npm run test:e2e`) for genuinely cross-stack journeys. Static shape checks and pure
+assertions belong in unit or integration tests, not e2e.
 
 ## Architecture Map
 
@@ -83,8 +88,8 @@ src/app/           React providers and router setup
 src/features/      Route-level console features
 src/console/       Shared AMA console components and view models
 src/components/ui/ shadcn-generated primitives
-specs/product/     Product behavior in Gherkin
-test/e2e/          Cucumber steps, browser helpers, and local harnesses
+spec/              Product behaviour in Gherkin (BDD-lite, one file per capability)
+test/e2e/          Cucumber steps, browser helpers, and local harnesses (@e2e)
 docs/product/      Product decisions, API boundaries, and implementation notes
 docs/infra/        Cloudflare deployment and infrastructure notes
 ```

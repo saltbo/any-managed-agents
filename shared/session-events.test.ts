@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { canonicalAmaSessionEventFromRuntimeEvent } from './session-events'
 
-describe('canonicalAmaSessionEventFromRuntimeEvent', () => {
+describe('[spec: sessions/events-hierarchy] canonicalAmaSessionEventFromRuntimeEvent', () => {
   it('preserves Pi agent lifecycle, message, and tool events as canonical AMA events', () => {
     expect(canonicalAmaSessionEventFromRuntimeEvent({ type: 'turn_start' })).toMatchObject({
       type: 'turn_start',

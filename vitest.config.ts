@@ -16,25 +16,36 @@ export default defineConfig({
     },
     projects: [
       {
+        // unit (node): server business layers + shared + runtime bridge. The
+        // cheapest suite — pure logic and fake-port use cases, no jsdom, no D1.
         extends: true,
         test: {
-          name: 'web',
-          environment: 'jsdom',
-          globals: true,
+          name: 'unit',
+          environment: 'node',
           include: [
-            'src/**/*.test.ts',
-            'src/**/*.test.tsx',
-            'server/runtime/**/*.test.ts',
-            'server/test/**/*.test.ts',
             'server/domain/**/*.test.ts',
             'server/usecases/**/*.test.ts',
             'server/adapters/**/*.test.ts',
+            'server/auth/**/*.test.ts',
+            'server/runtime/**/*.test.ts',
+            'server/test/**/*.test.ts',
             'shared/**/*.test.ts',
             'runtime-bridge/src/**/*.test.ts',
           ],
         },
       },
       {
+        // web (jsdom): the React SPA — client logic, hooks, components.
+        extends: true,
+        test: {
+          name: 'web',
+          environment: 'jsdom',
+          globals: true,
+          include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+        },
+      },
+      {
+        // integration (workerd + real D1): the assembled server through app.fetch.
         extends: true,
         plugins: [
           cloudflareTest(async () => {
@@ -50,7 +61,7 @@ export default defineConfig({
           }),
         ],
         test: {
-          name: 'workers',
+          name: 'integration',
           include: ['server/http/**/*.test.ts', 'workers/**/*.test.ts'],
           setupFiles: ['./server/test/apply-migrations.ts'],
         },

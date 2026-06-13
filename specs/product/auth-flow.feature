@@ -1,9 +1,0 @@
-@auth
-Feature: Authentication flow
-  Users sign in and receive a session for the control plane and runtime.
-
-  @implemented
-  Scenario: Complete sign in
-    When a user completes the OIDC callback
-    Then the platform creates an httpOnly session and resolves user, organization, and project context
-    And invalid OIDC provider callbacks return the standard OIDC error envelope

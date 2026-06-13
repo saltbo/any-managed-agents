@@ -17,7 +17,7 @@ const validDraft = {
   instructions: 'Review changes carefully.',
 }
 
-describe('agent builder model', () => {
+describe('[spec: agents/builder] [spec: agents/builder-examples] agent builder model', () => {
   it('drafts a configuration from a natural-language goal', () => {
     const draft = draftFromGoal('Review incoming pull requests and summarize risky changes for the team')
     expect(draft.name).toBe('Review incoming pull requests and summarize agent')

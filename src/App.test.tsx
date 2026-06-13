@@ -681,7 +681,7 @@ afterEach(() => {
 })
 
 describe('App', () => {
-  it('shows the OIDC provider login action when the session is missing', async () => {
+  it('shows the OIDC provider login action when the session is missing [spec: auth/login-page] [spec: auth/web-redirect]', async () => {
     window.history.pushState({}, '', '/sessions?status=idle')
     vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
       jsonResponse({ error: { message: 'Authentication required' } }, 401),
@@ -694,7 +694,7 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Continue with OIDC provider' })).toBeTruthy()
   })
 
-  it('drives the v1 console from resource creation through runtime events', async () => {
+  it('drives the v1 console from resource creation through runtime events [spec: agents/console-list]', async () => {
     mockConsoleApi()
     const { sentCommands, socketUrls } = installMockRuntimeWebSocket()
 

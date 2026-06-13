@@ -69,7 +69,7 @@ function expectJsonErrorResponse(operation: OpenApiOperation, status: string) {
 }
 
 describe('[CF] OpenAPI documentation', () => {
-  it('publishes the generated control-plane OpenAPI document', async () => {
+  it('publishes the generated control-plane OpenAPI document [spec: agents/api-openapi]', async () => {
     const doc = await fetchOpenApi()
 
     expect(doc.openapi).toBe('3.0.0')

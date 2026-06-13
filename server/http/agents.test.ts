@@ -104,7 +104,7 @@ describe('[CF] /api/v1/agents', () => {
     }
   })
 
-  it('creates, reads, updates, versions, and archives project-scoped agents', async () => {
+  it('creates, reads, updates, versions, and archives project-scoped agents [spec: agents/api-crud] [spec: agents/api-archive]', async () => {
     const authorization = await signIn()
     await connectMcp(authorization)
 
@@ -294,7 +294,7 @@ describe('[CF] /api/v1/agents', () => {
     expect(unarchivedUpdateRes.status).toBe(200)
   })
 
-  it('lists agents with pagination, search, archived, and date filters within the project', async () => {
+  it('lists agents with pagination, search, archived, and date filters within the project [spec: agents/api-pagination]', async () => {
     const authorization = await signIn()
     const createAlphaRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',

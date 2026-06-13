@@ -192,7 +192,7 @@ function buildRuntimeState(overrides: Partial<SessionRuntimeState> = {}): Sessio
   }
 }
 
-describe('sessions UI contracts', () => {
+describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] sessions UI contracts', () => {
   it('shows Agent-owned provider/model, Environment-owned hosting, and Session-owned runtime in session creation', () => {
     render(
       <SessionForm

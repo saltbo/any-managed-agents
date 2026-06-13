@@ -1,0 +1,115 @@
+# Product specs (BDD-lite)
+
+Behaviour-first product specs in Gherkin `.feature` files. This directory is the
+**single source of truth for `.feature` files** and for **what the product does**,
+independent of implementation. The `.feature` files are documentation: tests trace
+back to scenarios by id, the spec does not generate tests.
+
+## Convention
+
+- **One `.feature` file per capability** (`agents.feature`, `sessions.feature`,
+  `auth.feature`, …). Merge or split the old per-resource files into the capability
+  they belong to.
+- Each scenario carries exactly **two tags**: the stable **id** `@<capability>/<slug>`
+  and the single **layer** that proves it — `@domain` / `@usecase` / `@web` / `@api` /
+  `@e2e`:
+
+  ```gherkin
+  @agents/create @usecase
+  Scenario: Create an agent definition
+    Given a signed-in user with access to a project
+    When the user creates an agent with instructions, provider, model, and tools
+    Then the agent is stored with a current version and project scope
+  ```
+
+- The id **never changes** once written (rename = new id). Ids are trivially
+  greppable — a cleaner mechanism than embedding ids in prose.
+- Pick the **cheapest layer that can prove it**. Old `@api` scenarios usually become
+  `@api` (assembled-server contract) or `@usecase` (business branch); old `@ui`
+  scenarios usually become `@web` (jsdom) or `@e2e` (real browser journey). Reserve
+  `@e2e` for genuinely cross-stack, hermetic journeys. BDD-lite must not turn every
+  scenario into a slow E2E.
+- The old `@implemented` / `@planned` noise tags are gone. A scenario lives here
+  because it is the product's intended behaviour; the `[spec: id]` breadcrumb (below)
+  records whether and where it is proven.
+
+Keep this directory **pure**: only `.feature` files and this README. No test code,
+no step definitions, no runner config.
+
+## Traceability
+
+Each scenario's home test carries `[spec: <id>]` in its `describe`/`it` name, so a
+scenario traces to the test that proves it (and back). The home test lives at the
+layer named by the scenario's layer tag:
+
+| layer tag   | home location                                            |
+| ----------- | -------------------------------------------------------- |
+| `@domain`   | `server/domain/*.test.ts`                                |
+| `@usecase`  | `server/usecases/*.test.ts`                              |
+| `@api`      | `server/http/*.test.ts` (workers pool + real D1)         |
+| `@web`      | `src/**/*.test.ts(x)` (jsdom + MSW)                      |
+| `@e2e`      | `test/e2e/*.steps.ts` (Playwright, real stack)           |
+
+```ts
+describe('[spec: agents/create] createAgent', () => { … })
+```
+
+`pnpm lint:spec` (a governance lint, sibling to `lint:arch`) parses every
+`@<capability>/<slug>` id in `spec/*.feature` and fails if a covered capability has a
+scenario id with no `[spec: …]` breadcrumb anywhere in the test tree. See
+**Enforcement scope** below — it is not a behavioural test and lives only as a script.
+
+## Runner decision (pragmatic adaptation of "no Cucumber runner on docs")
+
+The skill says `.feature` files under `spec/` are documentation with **no Cucumber
+runner**. This project keeps that spirit while preserving a real cross-stack safety
+net:
+
+- `spec/` is the **only** home for `.feature` files. There is **no Cucumber runner
+  over the whole of `spec/`** — most scenarios are proven at the cheapest layer
+  (`@domain`/`@usecase`/`@api`/`@web`) by ordinary vitest tests carrying `[spec: id]`
+  breadcrumbs, not by executing the Gherkin.
+- The existing Playwright + `@cucumber/cucumber` e2e harness (`test/e2e/`,
+  `pnpm test:e2e`) is the cross-stack crown. It now reads its `.feature` files **from
+  `spec/`** and runs only scenarios tagged **`@e2e`** — the genuinely cross-stack,
+  hermetic journeys. This is the `@e2e` layer of the traceability table, executed for
+  real instead of merely traced.
+- The old `specs/product/` and `specs/smoke/` directories were folded into `spec/`
+  and deleted; their behaviour lives on as capability specs plus the layered tests
+  that carry the breadcrumbs.
+
+**Escalation path:** if a non-technical audience ever needs to *run* more of the
+Gherkin, wire [`playwright-bdd`](https://github.com/vitalets/playwright-bdd) (compiles
+`.feature` → Playwright, keeps the native runner). These are already real `.feature`
+files, so that step is mechanical — do not reach for raw `@cucumber/cucumber` over
+all of `spec/`, and do not adopt it preemptively.
+
+## Enforcement scope
+
+`lint:spec` enforces breadcrumb coverage **only for capabilities that have opted in**
+— a capability is enforced once it appears in the `ENFORCED_CAPABILITIES` allowlist in
+`scripts/check-spec-coverage.ts`. The seed capabilities are **agents, sessions,
+auth**. As each remaining capability is migrated into `spec/` with breadcrumbs, add it
+to the allowlist. This keeps the lint from false-failing on capabilities whose specs
+exist but whose breadcrumbs are still being fanned out.
+
+## Migration status
+
+| capability | status   | source `specs/product/*.feature` (merged in) |
+| ---------- | -------- | -------------------------------------------- |
+| agents     | migrated | agents-api, agents-control-plane, agents-ui, agents-update, agent-builder, agent-detail, agent-roles-memory |
+| sessions   | migrated | sessions-api, sessions-events, session-detail-tool-tracing, session-stop, sessions-list-bulk-archive, sessions-ui |
+| auth       | migrated | auth, auth-flow, auth-guard, auth-tenancy, login, login-page, sso-discovery, user-initial-password, web-auth-redirect |
+| providers  | pending  | providers, providers-models, provider-access |
+| environments | pending | environments, environments-api, environments-ui, environment-detail, environments-mcp |
+| vaults     | pending  | vaults, vaults-api, vaults-ui, vault-detail, vault-secrets, encryption |
+| governance | pending  | governance-api, governance-policy |
+| mcp        | pending  | mcp-connections, mcp-client, mcp-client-integration, mcp-discovery, mcp-policy-enforcement, tools-mcp, engine-mcp, engine-mcp-e2e |
+| runtime    | pending  | sessions-runtime, engine-cooperative-cancellation, engine-error-termination |
+| runners    | pending  | external-runtimes, self-hosted-runner-work, sandbox-execution |
+| usage      | pending  | usage-summary, usage-audit |
+| audit      | pending  | audit-auto, audit-log-ui |
+| triggers   | pending  | scheduled-triggers |
+| api-contracts | pending | api-contracts, cli-openapi-contract, control-plane, list-route-pagination, list-date-range-filters, storage-cloudflare-d1, destructive-ops, external-product-integration, events-api |
+| web-console | pending | web-ui, layout, web-api-client-consolidation |
+| quickstart | pending  | quickstart |

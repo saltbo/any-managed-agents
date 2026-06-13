@@ -33,6 +33,7 @@ jobs:
       - run: echo "$HOME/go/bin" >> "$GITHUB_PATH"
       - run: pnpm run lint
       - run: pnpm run lint:arch
+      - run: pnpm run lint:spec
       - run: pnpm run typecheck
       - run: pnpm run openapi:check
       - run: pnpm --filter @any-managed-agents/sdk run typecheck
@@ -41,5 +42,5 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm run test:e2e
       - name: Staging smoke dry-run only
-        run: NODE_OPTIONS='--import tsx' pnpm exec cucumber-js --dry-run --tags '@implemented and not @planned' --import 'test/e2e/**/*.steps.ts' 'specs/smoke/**/*.feature'
+        run: NODE_OPTIONS='--import tsx' pnpm exec cucumber-js --dry-run --tags '@implemented and not @planned' --import 'test/e2e/**/*.steps.ts' 'spec/smoke/**/*.feature'
       - run: pnpm run build
