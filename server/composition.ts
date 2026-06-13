@@ -1,4 +1,3 @@
-import { drizzle } from 'drizzle-orm/d1'
 import { createAuditPort } from './adapters/gateways/audit'
 import { createMcpGateway } from './adapters/gateways/mcp'
 import { createPolicyPort } from './adapters/gateways/policy'
@@ -26,13 +25,14 @@ import { createTriggerRepo } from './adapters/repos/triggers'
 import { createUsageRepo } from './adapters/repos/usage-records'
 import { createVaultRepo } from './adapters/repos/vaults'
 import { createWorkItemRepo } from './adapters/repos/work-items'
+import { createDb } from './db/client'
 import type { Env } from './env'
 import type { Deps } from './usecases/deps'
 
 // The single composition root. Wires adapters into the Deps object. Cheap,
 // plain-object, and request-free so scheduled/queue entrypoints can reuse it.
 export function createDeps(env: Env): Deps {
-  const db = drizzle(env.DB)
+  const db = createDb(env)
   const sessions = createSessionRepo(db)
   return {
     agents: createAgentRepo(db),

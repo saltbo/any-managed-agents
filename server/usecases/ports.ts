@@ -1308,7 +1308,7 @@ export interface AuditReadRepo {
 
 // --- triggers ---
 
-import type { RuntimeName } from '@server/routes/environment-contracts'
+import type { RuntimeName } from '@server/contracts/environment-contracts'
 
 // Field-keyed validation error for trigger orchestration (secret-material
 // rejection). The http layer maps it to a 400.

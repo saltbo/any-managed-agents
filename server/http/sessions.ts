@@ -2,6 +2,11 @@ import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
 import { AMA_SESSION_EVENT_TYPES } from '@shared/session-events'
 import type { Context } from 'hono'
 import { isRunnerOidcAuth, requireAuth, requireSessionEventsAuth } from '../auth/session'
+import {
+  EnvironmentHostingModeSchema,
+  EnvironmentNetworkPolicySchema,
+  RuntimeSchema,
+} from '../contracts/environment-contracts'
 import { type ErrorType, errorResponse } from '../errors'
 import {
   AuthenticatedOperation,
@@ -17,11 +22,6 @@ import {
   SecretEnvEntrySchema,
 } from '../openapi'
 import { redactSensitiveValue } from '../redaction'
-import {
-  EnvironmentHostingModeSchema,
-  EnvironmentNetworkPolicySchema,
-  RuntimeSchema,
-} from '../routes/environment-contracts'
 import { type PendingSessionApproval, sessionApprovalState } from '../runtime/tool-approvals'
 import {
   type SessionApprovalRecord,

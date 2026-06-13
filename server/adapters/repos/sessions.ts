@@ -20,11 +20,11 @@ import {
 } from '@shared/session-events'
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, like, lt, lte, or } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
+import type { RuntimeName } from '../../contracts/environment-contracts'
 import { leases, runners, sessionApprovals, sessionEvents, sessionMessages, sessions, workItems } from '../../db/schema'
 import { insertCanonicalSessionEvent } from '../../db/session-event-store'
 import { hostingModeFromSnapshot } from '../../domain/session'
 import { redactSensitiveValue } from '../../redaction'
-import type { RuntimeName } from '../../routes/environment-contracts'
 import { runtimeMetadata } from '../../runtime/drivers'
 import { runtimeEndpointPath } from '../../runtime/session-runtime'
 

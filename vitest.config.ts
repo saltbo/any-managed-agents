@@ -51,7 +51,7 @@ export default defineConfig({
         ],
         test: {
           name: 'workers',
-          include: ['server/routes/**/*.test.ts', 'server/http/**/*.test.ts', 'workers/**/*.test.ts'],
+          include: ['server/http/**/*.test.ts', 'workers/**/*.test.ts'],
           setupFiles: ['./server/test/apply-migrations.ts'],
         },
       },

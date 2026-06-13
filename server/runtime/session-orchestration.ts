@@ -30,6 +30,7 @@ import {
 } from '../adapters/repos/runtime-orchestration'
 import { recordAudit } from '../audit'
 import type { AuthContext } from '../auth/session'
+import type { RuntimeName } from '../contracts/environment-contracts'
 import {
   composeInitialPrompt,
   hasEmbeddedCredentialUrl,
@@ -43,7 +44,6 @@ import {
   evaluateSandboxRuntimePolicy,
   policyBlocksSandboxOperation,
 } from '../policy'
-import type { RuntimeName } from '../routes/environment-contracts'
 import { runtimeDriver, runtimeDriverName } from './drivers'
 import { PLATFORM_DEFAULT_PROVIDER, providerRuntimeEnv, resolveSessionProviderConfig } from './provider-env'
 import { dispatchRunnerSessionCommand, hasAcceptedRunnerSessionChannel } from './runner-session-command'

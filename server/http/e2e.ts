@@ -1,3 +1,9 @@
+// E2E test fixture (gated by AMA_E2E_TEST_AUTH). It reads the raw persisted
+// vault credential rows — including ciphertext — so encryption-at-rest scenarios
+// can assert real storage behaviour. That storage-level inspection is the
+// fixture's whole reason to exist, so it holds drizzle directly and carries a
+// narrow named exemption in .dependency-cruiser.cjs rather than polluting the
+// production VaultRepo port with a test-only raw-row method.
 import { and, eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import { Hono } from 'hono'

@@ -1,4 +1,4 @@
-import { RuntimeSchema } from '@server/routes/environment-contracts'
+import { RuntimeSchema } from '@server/contracts/environment-contracts'
 import type { ClaimedRun, DueTrigger, TriggerDispatchRepo } from '@server/usecases/ports'
 import { and, asc, eq, isNull, lte } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'

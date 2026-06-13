@@ -1,6 +1,7 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
-import { normalizeEnvironmentNetworkPolicy } from '@server/routes/environment-contracts'
+import { normalizeEnvironmentNetworkPolicy } from '@server/contracts/environment-contracts'
 import { requireAuth } from '../auth/session'
+import { EnvironmentHostingModeSchema, EnvironmentNetworkPolicySchema } from '../contracts/environment-contracts'
 import {
   AuthenticatedOperation,
   CredentialRefSchema,
@@ -11,7 +12,6 @@ import {
   listResponseSchema,
   parseListCursor,
 } from '../openapi'
-import { EnvironmentHostingModeSchema, EnvironmentNetworkPolicySchema } from '../routes/environment-contracts'
 import { createEnvironment, type UpdateEnvironmentPatch, updateEnvironment } from '../usecases/environments'
 import {
   type AuthScope,

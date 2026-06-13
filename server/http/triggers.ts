@@ -1,5 +1,6 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
 import { requireAuth } from '../auth/session'
+import { RuntimeSchema } from '../contracts/environment-contracts'
 import {
   AuthenticatedOperation,
   type DepsEnv,
@@ -10,7 +11,6 @@ import {
   parseListCursor,
   SecretEnvEntrySchema,
 } from '../openapi'
-import { RuntimeSchema } from '../routes/environment-contracts'
 import {
   type AuthScope,
   type SecretEnvEntry,
