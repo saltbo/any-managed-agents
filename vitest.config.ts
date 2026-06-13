@@ -102,8 +102,8 @@ export default defineConfig({
         ],
         test: {
           name: 'integration',
-          include: ['server/http/**/*.test.ts'],
-          setupFiles: ['./server/test/apply-migrations.ts'],
+          include: ['server/integration/**/*.test.ts'],
+          setupFiles: ['./server/integration/apply-migrations.ts'],
         },
       },
     ],

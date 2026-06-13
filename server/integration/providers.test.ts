@@ -4,7 +4,7 @@ import { eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { agents } from '../db/schema'
-import { expectAuthRequired, setupOidcProvider, signInUser } from '../test/auth'
+import { expectAuthRequired, setupOidcProvider, signInUser } from './auth'
 
 async function jsonFetch(path: string, authorization: string | null, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {

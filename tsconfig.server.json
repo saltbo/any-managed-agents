@@ -18,8 +18,8 @@
   },
   "include": ["server", "e2e", "drizzle.config.ts", "vitest*.ts"],
   "exclude": [
-    "server/http/**/*.test.ts",
-    "server/test/apply-migrations.ts",
-    "server/test/auth.ts"
+    "server/integration/**/*.test.ts",
+    "server/integration/apply-migrations.ts",
+    "server/integration/auth.ts"
   ]
 }

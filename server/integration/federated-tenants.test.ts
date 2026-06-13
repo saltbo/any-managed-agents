@@ -1,6 +1,6 @@
 import { SELF } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { expectAuthRequired, setupOidcProvider, signInUser } from '../test/auth'
+import { expectAuthRequired, setupOidcProvider, signInUser } from './auth'
 
 async function jsonFetch(path: string, authorization?: string, init?: { method?: string; body?: unknown }) {
   return SELF.fetch(`https://example.com${path}`, {

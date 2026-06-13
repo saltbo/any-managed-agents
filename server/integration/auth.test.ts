@@ -1,6 +1,6 @@
 import { SELF } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { expectAuthRequired, setupOidcProvider, signIn, signInUser } from '../test/auth'
+import { expectAuthRequired, setupOidcProvider, signIn, signInUser } from './auth'
 
 function accessTokenOf(authorization: string) {
   return authorization.slice('Bearer '.length)

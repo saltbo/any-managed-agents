@@ -1,6 +1,6 @@
 import { SELF } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { setupOidcProvider, signIn } from '../test/auth'
+import { setupOidcProvider, signIn } from './auth'
 
 interface OpenApiOperation {
   operationId?: string

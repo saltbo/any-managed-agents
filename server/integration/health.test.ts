@@ -1,6 +1,6 @@
 import { SELF } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
-import { healthResponse } from './health'
+import { healthResponse } from '../http/health'
 
 describe('[CF] GET /api/v1/health [spec: api-contracts/health]', () => {
   it('returns the Worker health response', async () => {
