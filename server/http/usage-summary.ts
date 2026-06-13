@@ -1,6 +1,5 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
 import { summarizeUsage, USAGE_GROUP_BY_VALUES } from '@server/domain/usage'
-import { drizzle } from 'drizzle-orm/d1'
 import { requireAuth } from '../auth/session'
 import { AuthenticatedOperation, type DepsEnv, ErrorResponseSchema } from '../openapi'
 
@@ -71,7 +70,7 @@ export function registerUsageSummaryRoutes(routes: UsageSummaryRoutes) {
   return routes.openapi(readRoute, async (c) => {
     const query = c.req.valid('query')
     const deps = c.get('deps')
-    const auth = await requireAuth(c, drizzle(c.env.DB))
+    const auth = await requireAuth(c)
     if (auth instanceof Response) {
       return auth
     }

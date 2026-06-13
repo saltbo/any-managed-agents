@@ -6,7 +6,6 @@ import {
   TOOL_AVAILABILITIES,
   TOOL_CALL_STATES,
 } from '@server/domain/connection'
-import { drizzle } from 'drizzle-orm/d1'
 import { requestId } from '../audit'
 import { requireAuth } from '../auth/session'
 import { errorResponse } from '../errors'
@@ -392,7 +391,7 @@ export function registerConnectionRoutes(routes: ConnectionRoutes) {
   return routes
     .openapi(listConnectionsRoute, async (c) => {
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -419,7 +418,7 @@ export function registerConnectionRoutes(routes: ConnectionRoutes) {
     .openapi(createConnectionRoute, async (c) => {
       const body = c.req.valid('json')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -453,7 +452,7 @@ export function registerConnectionRoutes(routes: ConnectionRoutes) {
     })
     .openapi(readConnectionRoute, async (c) => {
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -466,7 +465,7 @@ export function registerConnectionRoutes(routes: ConnectionRoutes) {
     .openapi(updateConnectionRoute, async (c) => {
       const body = c.req.valid('json')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -498,7 +497,7 @@ export function registerConnectionRoutes(routes: ConnectionRoutes) {
     })
     .openapi(listToolsRoute, async (c) => {
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -523,7 +522,7 @@ export function registerConnectionRoutes(routes: ConnectionRoutes) {
     })
     .openapi(listToolCallsRoute, async (c) => {
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -557,7 +556,7 @@ export function registerConnectionRoutes(routes: ConnectionRoutes) {
       const body = c.req.valid('json')
       const { connectionId, toolName } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -583,7 +582,8 @@ export function registerConnectionRoutes(routes: ConnectionRoutes) {
           resourceId: outcome.toolId,
           outcome: 'denied',
           requestId: requestId(c),
-          metadata: { connectorId: connection.connectorId, toolName, decision, sessionId: session.id },
+          sessionId: session.id,
+          metadata: { connectorId: connection.connectorId, toolName, decision },
         })
         const status = decision.category === 'approval' ? 409 : 403
         return errorResponse(c, status, status === 409 ? 'conflict' : 'policy_denied', decision.message, {
@@ -600,11 +600,11 @@ export function registerConnectionRoutes(routes: ConnectionRoutes) {
           resourceId: outcome.toolId,
           outcome: 'failure',
           requestId: requestId(c),
+          sessionId: session.id,
           metadata: {
             connectorId: connection.connectorId,
             toolName,
             reason: 'endpoint_not_configured',
-            sessionId: session.id,
           },
         })
         return errorResponse(c, 409, 'conflict', 'Connection endpoint is not configured.')
@@ -616,12 +616,12 @@ export function registerConnectionRoutes(routes: ConnectionRoutes) {
         resourceId: tool.id,
         outcome: record.state === 'success' ? 'success' : 'failure',
         requestId: requestId(c),
+        sessionId: session.id,
         metadata: {
           connectorId: connection.connectorId,
           toolName,
           state: record.state,
           durationMs: record.durationMs,
-          sessionId: session.id,
           ...(record.state === 'success' ? { inputSummary: Object.keys(record.input) } : { error: record.error }),
         },
       })
@@ -629,7 +629,7 @@ export function registerConnectionRoutes(routes: ConnectionRoutes) {
     })
     .openapi(readToolCallRoute, async (c) => {
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }

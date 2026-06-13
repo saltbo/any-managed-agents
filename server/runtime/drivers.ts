@@ -1,10 +1,10 @@
-import type { Env } from '../env'
 import {
   type RuntimeHostingMode,
   type RuntimeName,
   runtimeCatalogSupportsProviderModel,
   runtimeSupportsHostingMode,
-} from './catalog'
+} from '@server/domain/runtime-catalog'
+import type { Env } from '../env'
 import {
   type SessionRuntimeStartInput,
   type SessionRuntimeStartResult,

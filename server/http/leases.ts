@@ -1,5 +1,4 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
-import { drizzle } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
 import type { AuthContext } from '../auth/session'
 import { isRunnerOidcAuth, requireAuth } from '../auth/session'
@@ -229,7 +228,7 @@ async function connectLeaseSessionChannel(c: Context<DepsEnv>) {
     return errorResponse(c, 400, 'validation_error', 'Lease id is required')
   }
   const deps = c.get('deps')
-  const auth = await requireAuth(c, drizzle(c.env.DB))
+  const auth = await requireAuth(c)
   if (auth instanceof Response) {
     return auth
   }
@@ -299,7 +298,7 @@ export function registerLeaseRoutes(routes: LeaseRoutes) {
     .openapi(createLeaseRoute, async (c) => {
       const body = c.req.valid('json')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -335,7 +334,7 @@ export function registerLeaseRoutes(routes: LeaseRoutes) {
     })
     .openapi(listLeasesRoute, async (c) => {
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -375,7 +374,7 @@ export function registerLeaseRoutes(routes: LeaseRoutes) {
     .openapi(readLeaseRoute, async (c) => {
       const { leaseId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -395,7 +394,7 @@ export function registerLeaseRoutes(routes: LeaseRoutes) {
       const { leaseId } = c.req.valid('param')
       const body = c.req.valid('json')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }

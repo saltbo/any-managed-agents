@@ -52,7 +52,7 @@ const routes = app
       return errorResponse(c, 404, 'not_found', 'Not found')
     }
     const db = drizzle(c.env.DB)
-    const auth = await requireAuth(c, db)
+    const auth = await requireAuth(c)
     if (auth instanceof Response) {
       return auth
     }
@@ -78,7 +78,7 @@ const routes = app
       return errorResponse(c, 404, 'not_found', 'Not found')
     }
     const db = drizzle(c.env.DB)
-    const auth = await requireAuth(c, db)
+    const auth = await requireAuth(c)
     if (auth instanceof Response) {
       return auth
     }
@@ -124,7 +124,7 @@ const routes = app
       return errorResponse(c, 404, 'not_found', 'Not found')
     }
     const db = drizzle(c.env.DB)
-    const auth = await requireAuth(c, db)
+    const auth = await requireAuth(c)
     if (auth instanceof Response) {
       return auth
     }

@@ -1,6 +1,5 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
 import { CONNECTOR_APPROVAL_MODES, CONNECTOR_AVAILABILITIES } from '@server/domain/connector'
-import { drizzle } from 'drizzle-orm/d1'
 import { requireAuth } from '../auth/session'
 import {
   AuthenticatedOperation,
@@ -157,7 +156,7 @@ export function registerConnectorRoutes(routes: ConnectorRoutes) {
   return routes
     .openapi(listConnectorsRoute, async (c) => {
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -188,7 +187,7 @@ export function registerConnectorRoutes(routes: ConnectorRoutes) {
     .openapi(readConnectorRoute, async (c) => {
       const { connectorId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }

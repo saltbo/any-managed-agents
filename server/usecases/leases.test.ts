@@ -1,5 +1,5 @@
+import { runtimeProviderModelCapability } from '@server/domain/runtime-catalog'
 import { describe, expect, it, vi } from 'vitest'
-import { runtimeProviderModelCapability } from '../runtime/catalog'
 import type { Deps } from './deps'
 import { claimLease, materializeWorkItemPayload } from './leases'
 import {

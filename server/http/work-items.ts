@@ -1,5 +1,4 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
-import { drizzle } from 'drizzle-orm/d1'
 import { requireAuth } from '../auth/session'
 import { errorResponse } from '../errors'
 import {
@@ -155,7 +154,7 @@ export function registerWorkItemRoutes(routes: WorkItemRoutes) {
   return routes
     .openapi(listWorkItemsRoute, async (c) => {
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -190,7 +189,7 @@ export function registerWorkItemRoutes(routes: WorkItemRoutes) {
     .openapi(readWorkItemRoute, async (c) => {
       const { workItemId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }

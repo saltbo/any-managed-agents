@@ -1,5 +1,4 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
-import { drizzle } from 'drizzle-orm/d1'
 import { requestId } from '../audit'
 import { type AuthContext, isRunnerOidcAuth, requireAuth } from '../auth/session'
 import { errorResponse } from '../errors'
@@ -349,7 +348,7 @@ export function registerRunnerRoutes(routes: RunnerRoutes) {
     .openapi(createRunnerRoute, async (c) => {
       const body = c.req.valid('json')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -384,7 +383,7 @@ export function registerRunnerRoutes(routes: RunnerRoutes) {
     })
     .openapi(listRunnersRoute, async (c) => {
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -435,7 +434,7 @@ export function registerRunnerRoutes(routes: RunnerRoutes) {
     .openapi(readRunnerRoute, async (c) => {
       const { runnerId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -452,7 +451,7 @@ export function registerRunnerRoutes(routes: RunnerRoutes) {
       const { runnerId } = c.req.valid('param')
       const body = c.req.valid('json')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -480,7 +479,7 @@ export function registerRunnerRoutes(routes: RunnerRoutes) {
     .openapi(readHeartbeatRoute, async (c) => {
       const { runnerId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -497,7 +496,7 @@ export function registerRunnerRoutes(routes: RunnerRoutes) {
       const { runnerId } = c.req.valid('param')
       const body = c.req.valid('json')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }

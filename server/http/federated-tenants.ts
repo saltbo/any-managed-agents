@@ -1,5 +1,4 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
-import { drizzle } from 'drizzle-orm/d1'
 import { requestId } from '../audit'
 import { requireAuth } from '../auth/session'
 import {
@@ -224,7 +223,7 @@ export function registerFederatedTenantRoutes(routes: FederatedTenantRoutes) {
   return routes
     .openapi(listFederatedTenantsRoute, async (c) => {
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -246,7 +245,7 @@ export function registerFederatedTenantRoutes(routes: FederatedTenantRoutes) {
     })
     .openapi(createFederatedTenantRoute, async (c) => {
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -279,7 +278,7 @@ export function registerFederatedTenantRoutes(routes: FederatedTenantRoutes) {
     })
     .openapi(readFederatedTenantRoute, async (c) => {
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -292,7 +291,7 @@ export function registerFederatedTenantRoutes(routes: FederatedTenantRoutes) {
     })
     .openapi(updateFederatedTenantRoute, async (c) => {
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -323,7 +322,7 @@ export function registerFederatedTenantRoutes(routes: FederatedTenantRoutes) {
     })
     .openapi(deleteFederatedTenantRoute, async (c) => {
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }

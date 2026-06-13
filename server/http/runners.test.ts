@@ -1,6 +1,6 @@
 import { SELF } from 'cloudflare:test'
+import { runtimeProviderModelCapability } from '@server/domain/runtime-catalog'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { runtimeProviderModelCapability } from '../runtime/catalog'
 import { expectAuthRequired, setupOidcProvider, signIn, signInUser } from '../test/auth'
 
 const DEFAULT_AMA_RUNNER_CAPABILITY = runtimeProviderModelCapability('ama', 'workers-ai', '@cf/moonshotai/kimi-k2.6')

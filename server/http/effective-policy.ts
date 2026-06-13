@@ -1,5 +1,4 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
-import { drizzle } from 'drizzle-orm/d1'
 import { requestId } from '../audit'
 import { requireAuth } from '../auth/session'
 import { AuthenticatedOperation, type DepsEnv, ErrorResponseSchema } from '../openapi'
@@ -115,7 +114,7 @@ export function registerEffectivePolicyRoutes(routes: EffectivePolicyRoutes) {
   return routes.openapi(readRoute, async (c) => {
     const query = c.req.valid('query')
     const deps = c.get('deps')
-    const auth = await requireAuth(c, drizzle(c.env.DB))
+    const auth = await requireAuth(c)
     if (auth instanceof Response) {
       return auth
     }

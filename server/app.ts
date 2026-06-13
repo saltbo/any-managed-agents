@@ -722,7 +722,7 @@ export function createApp() {
 
   routes.all('/api/v1/runtime/sessions/:sessionId/*', async (c) => {
     const db = drizzle(c.env.DB)
-    const resolvedAuth = await requireAuth(c, db)
+    const resolvedAuth = await requireAuth(c)
     if (resolvedAuth instanceof Response) {
       return resolvedAuth
     }

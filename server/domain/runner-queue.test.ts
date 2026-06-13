@@ -1,5 +1,5 @@
+import { runtimeProviderModelCapability } from '@server/domain/runtime-catalog'
 import { describe, expect, it } from 'vitest'
-import { runtimeProviderModelCapability } from '../runtime/catalog'
 import {
   environmentIdForRegistration,
   hasSecretMaterial,

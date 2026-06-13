@@ -1,5 +1,4 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
-import { drizzle } from 'drizzle-orm/d1'
 import { requestId } from '../audit'
 import { requireAuth } from '../auth/session'
 import { AuthenticatedOperation, type DepsEnv, ErrorResponseSchema, listResponseSchema } from '../openapi'
@@ -160,7 +159,7 @@ export function registerBudgetRoutes(routes: BudgetRoutes) {
   return routes
     .openapi(listRoute, async (c) => {
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -176,7 +175,7 @@ export function registerBudgetRoutes(routes: BudgetRoutes) {
     .openapi(createBudgetRoute, async (c) => {
       const body = c.req.valid('json')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -199,7 +198,7 @@ export function registerBudgetRoutes(routes: BudgetRoutes) {
     .openapi(readRoute, async (c) => {
       const { budgetId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -213,7 +212,7 @@ export function registerBudgetRoutes(routes: BudgetRoutes) {
       const { budgetId } = c.req.valid('param')
       const body = c.req.valid('json')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -237,7 +236,7 @@ export function registerBudgetRoutes(routes: BudgetRoutes) {
     .openapi(deleteRoute, async (c) => {
       const { budgetId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }

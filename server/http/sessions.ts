@@ -1,10 +1,8 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
 import { AMA_SESSION_EVENT_TYPES } from '@shared/session-events'
-import { drizzle } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
 import { requestId } from '../audit'
-import { OidcError } from '../auth/oidc'
-import { type AuthContext, isRunnerOidcAuth, requireAuth, resolveAuthContext } from '../auth/session'
+import { isRunnerOidcAuth, requireAuth, requireSessionEventsAuth } from '../auth/session'
 import { type ErrorType, errorResponse } from '../errors'
 import {
   AuthenticatedOperation,
@@ -583,26 +581,6 @@ function eventsSseResponse(c: Context<DepsEnv>, sessionId: string, query: Events
 // v1 design routes runner event upload through the sessions domain, so this
 // endpoint resolves its own auth context and applies lease ownership as the
 // runner gate.
-async function requireSessionEventsAuth(c: Context<DepsEnv>, db: Parameters<typeof resolveAuthContext>[1]) {
-  let auth: AuthContext | null
-  try {
-    auth = await resolveAuthContext(c, db)
-  } catch (err) {
-    if (err instanceof OidcError) {
-      return errorResponse(c, 401, 'authentication_required', 'Authentication required', {
-        reason: 'missing_or_invalid_bearer_token',
-      })
-    }
-    throw err
-  }
-  if (!auth) {
-    return errorResponse(c, 401, 'authentication_required', 'Authentication required', {
-      reason: 'missing_or_invalid_bearer_token',
-    })
-  }
-  return auth
-}
-
 // ── Routes ───────────────────────────────────────────────────────────────────
 
 const createSessionRoute = createRoute({
@@ -863,7 +841,7 @@ export function registerSessionRoutes(routes: SessionRoutes) {
     .openapi(createSessionRoute, async (c) => {
       const body = c.req.valid('json')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -894,7 +872,7 @@ export function registerSessionRoutes(routes: SessionRoutes) {
     })
     .openapi(listSessionsRoute, async (c) => {
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -928,7 +906,7 @@ export function registerSessionRoutes(routes: SessionRoutes) {
     .openapi(readSessionRoute, async (c) => {
       const { sessionId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -943,7 +921,7 @@ export function registerSessionRoutes(routes: SessionRoutes) {
       const { sessionId } = c.req.valid('param')
       const body = c.req.valid('json')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -970,7 +948,7 @@ export function registerSessionRoutes(routes: SessionRoutes) {
     .openapi(readSessionConnectionRoute, async (c) => {
       const { sessionId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -984,7 +962,7 @@ export function registerSessionRoutes(routes: SessionRoutes) {
       const { sessionId } = c.req.valid('param')
       const { limit = 50, cursor } = c.req.valid('query')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -1017,7 +995,7 @@ export function registerSessionRoutes(routes: SessionRoutes) {
       const { sessionId } = c.req.valid('param')
       const { content } = c.req.valid('json')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -1042,7 +1020,7 @@ export function registerSessionRoutes(routes: SessionRoutes) {
     .openapi(readSessionMessageRoute, async (c) => {
       const { sessionId, messageId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -1060,7 +1038,7 @@ export function registerSessionRoutes(routes: SessionRoutes) {
       const { sessionId } = c.req.valid('param')
       const query = c.req.valid('query')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -1080,9 +1058,8 @@ export function registerSessionRoutes(routes: SessionRoutes) {
     .openapi(createSessionEventsRoute, async (c) => {
       const { sessionId } = c.req.valid('param')
       const { events } = c.req.valid('json')
-      const db = drizzle(c.env.DB)
       const deps = c.get('deps')
-      const auth = await requireSessionEventsAuth(c, db)
+      const auth = await requireSessionEventsAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -1123,7 +1100,7 @@ export function registerSessionRoutes(routes: SessionRoutes) {
     .openapi(listSessionApprovalsRoute, async (c) => {
       const { sessionId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -1142,7 +1119,7 @@ export function registerSessionRoutes(routes: SessionRoutes) {
     .openapi(readSessionApprovalRoute, async (c) => {
       const { sessionId, approvalId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -1164,7 +1141,7 @@ export function registerSessionRoutes(routes: SessionRoutes) {
       const { sessionId, approvalId } = c.req.valid('param')
       const body = c.req.valid('json')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }

@@ -13,6 +13,12 @@
 // codes, SSE) stay in server/http/sessions.ts. Outcomes cross the boundary as
 // discriminated result objects.
 
+import {
+  runnerSupportsRuntimeProviderModel,
+  runtimeCatalogSupportsProviderModel,
+  runtimeRequiredRunnerCapability,
+  runtimeSupportsLivePrompts,
+} from '@server/domain/runtime-catalog'
 import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import { canonicalAmaSessionEventFromRuntimeEvent } from '../../shared/session-events'
@@ -51,12 +57,6 @@ import {
   policyBlocksSandboxOperation,
 } from '../policy'
 import type { RuntimeName } from '../routes/environment-contracts'
-import {
-  runnerSupportsRuntimeProviderModel,
-  runtimeCatalogSupportsProviderModel,
-  runtimeRequiredRunnerCapability,
-  runtimeSupportsLivePrompts,
-} from './catalog'
 import { runtimeDriver, runtimeDriverName } from './drivers'
 import { PLATFORM_DEFAULT_PROVIDER, providerRuntimeEnv, resolveSessionProviderConfig } from './provider-env'
 import { dispatchRunnerSessionCommand, hasAcceptedRunnerSessionChannel } from './runner-session-command'

@@ -1,6 +1,5 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
 import { normalizeEnvironmentNetworkPolicy } from '@server/routes/environment-contracts'
-import { drizzle } from 'drizzle-orm/d1'
 import { requestId } from '../audit'
 import { requireAuth } from '../auth/session'
 import {
@@ -337,7 +336,7 @@ export function registerEnvironmentRoutes(routes: EnvironmentRoutes) {
   return routes
     .openapi(listRoute, async (c) => {
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -370,7 +369,7 @@ export function registerEnvironmentRoutes(routes: EnvironmentRoutes) {
     .openapi(createEnvironmentRoute, async (c) => {
       const body = c.req.valid('json')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -388,7 +387,7 @@ export function registerEnvironmentRoutes(routes: EnvironmentRoutes) {
     .openapi(readRoute, async (c) => {
       const { environmentId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -402,7 +401,7 @@ export function registerEnvironmentRoutes(routes: EnvironmentRoutes) {
       const { environmentId } = c.req.valid('param')
       const body = c.req.valid('json')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -446,7 +445,7 @@ export function registerEnvironmentRoutes(routes: EnvironmentRoutes) {
     .openapi(versionsRoute, async (c) => {
       const { environmentId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -466,7 +465,7 @@ export function registerEnvironmentRoutes(routes: EnvironmentRoutes) {
     .openapi(versionItemRoute, async (c) => {
       const { environmentId, version } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }

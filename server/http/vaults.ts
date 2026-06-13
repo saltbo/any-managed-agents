@@ -6,7 +6,6 @@ import {
   VAULT_SCOPES,
   VERSION_STATES,
 } from '@server/domain/vault'
-import { drizzle } from 'drizzle-orm/d1'
 import { requestId } from '../audit'
 import { requireAuth } from '../auth/session'
 import {
@@ -461,7 +460,7 @@ export function registerVaultRoutes(routes: VaultRoutes) {
   return routes
     .openapi(listRoute, async (c) => {
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -492,7 +491,7 @@ export function registerVaultRoutes(routes: VaultRoutes) {
     .openapi(createVaultRoute, async (c) => {
       const body = c.req.valid('json')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -522,7 +521,7 @@ export function registerVaultRoutes(routes: VaultRoutes) {
     .openapi(readVaultRoute, async (c) => {
       const { vaultId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -536,7 +535,7 @@ export function registerVaultRoutes(routes: VaultRoutes) {
       const { vaultId } = c.req.valid('param')
       const body = c.req.valid('json')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -578,7 +577,7 @@ export function registerVaultRoutes(routes: VaultRoutes) {
     .openapi(listCredentialsRoute, async (c) => {
       const { vaultId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -613,7 +612,7 @@ export function registerVaultRoutes(routes: VaultRoutes) {
       const { vaultId } = c.req.valid('param')
       const body = c.req.valid('json')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -651,7 +650,7 @@ export function registerVaultRoutes(routes: VaultRoutes) {
     .openapi(readCredentialRoute, async (c) => {
       const { vaultId, credentialId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -666,7 +665,7 @@ export function registerVaultRoutes(routes: VaultRoutes) {
       const { vaultId, credentialId } = c.req.valid('param')
       const body = c.req.valid('json')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -706,7 +705,7 @@ export function registerVaultRoutes(routes: VaultRoutes) {
       const { vaultId, credentialId } = c.req.valid('param')
       const { state, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -740,7 +739,7 @@ export function registerVaultRoutes(routes: VaultRoutes) {
       const { vaultId, credentialId } = c.req.valid('param')
       const body = c.req.valid('json')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -775,7 +774,7 @@ export function registerVaultRoutes(routes: VaultRoutes) {
     .openapi(readVersionRoute, async (c) => {
       const { vaultId, credentialId, versionId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -790,7 +789,7 @@ export function registerVaultRoutes(routes: VaultRoutes) {
     .openapi(deleteVersionRoute, async (c) => {
       const { vaultId, credentialId, versionId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }

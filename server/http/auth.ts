@@ -1,13 +1,12 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
-import { drizzle } from 'drizzle-orm/d1'
+import { getBearerClaims, OidcError, organizationIdForClaims, requireOidcConfig } from '../auth/oidc'
 import {
-  getBearerClaims,
-  OidcError,
-  organizationIdForClaims,
-  requireOidcConfig,
-  upsertProjectForClaims,
-} from '../auth/oidc'
-import { createSessionCookie, requireAuth, SESSION_COOKIE_NAME, sessionCookieHeader } from '../auth/session'
+  createSessionCookie,
+  requireAuth,
+  resolveProjectForClaims,
+  SESSION_COOKIE_NAME,
+  sessionCookieHeader,
+} from '../auth/session'
 import { errorResponse } from '../errors'
 import { AuthenticatedOperation, type DepsEnv, ErrorResponseSchema } from '../openapi'
 
@@ -183,8 +182,7 @@ export function registerAuthRoutes(routes: AuthRoutes) {
         throw err
       }
 
-      const db = drizzle(c.env.DB)
-      const project = await upsertProjectForClaims(db, claims, new Date().toISOString())
+      const project = await resolveProjectForClaims(c.env, claims)
       const organizationId = project.organizationId ?? organizationIdForClaims(claims)
 
       const cookieValue = await createSessionCookie(c.env, claims)
@@ -213,8 +211,7 @@ export function registerAuthRoutes(routes: AuthRoutes) {
       )
     })
     .openapi(readCurrentAuthSessionRoute, async (c) => {
-      const db = drizzle(c.env.DB)
-      const auth = await requireAuth(c, db)
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }

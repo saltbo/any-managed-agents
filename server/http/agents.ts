@@ -1,6 +1,5 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
 import { normalizeToolAttachments } from '@server/domain/agent'
-import { drizzle } from 'drizzle-orm/d1'
 import { requestId } from '../audit'
 import { requireAuth } from '../auth/session'
 import {
@@ -450,7 +449,7 @@ export function registerAgentRoutes(routes: AgentRoutes) {
   return routes
     .openapi(listAgentsRoute, async (c) => {
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -483,7 +482,7 @@ export function registerAgentRoutes(routes: AgentRoutes) {
     .openapi(createAgentRoute, async (c) => {
       const body = c.req.valid('json')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -501,7 +500,7 @@ export function registerAgentRoutes(routes: AgentRoutes) {
     .openapi(readAgentRoute, async (c) => {
       const { agentId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -515,7 +514,7 @@ export function registerAgentRoutes(routes: AgentRoutes) {
       const { agentId } = c.req.valid('param')
       const body = c.req.valid('json')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -559,7 +558,7 @@ export function registerAgentRoutes(routes: AgentRoutes) {
     .openapi(listAgentVersionsRoute, async (c) => {
       const { agentId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -579,7 +578,7 @@ export function registerAgentRoutes(routes: AgentRoutes) {
     .openapi(readAgentVersionRoute, async (c) => {
       const { agentId, version } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -597,7 +596,7 @@ export function registerAgentRoutes(routes: AgentRoutes) {
       const { agentId } = c.req.valid('param')
       const { role, capability } = c.req.valid('query')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -621,7 +620,7 @@ export function registerAgentRoutes(routes: AgentRoutes) {
     .openapi(readAgentMemoryRoute, async (c) => {
       const { agentId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -639,7 +638,7 @@ export function registerAgentRoutes(routes: AgentRoutes) {
       const { agentId } = c.req.valid('param')
       const body = c.req.valid('json')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }

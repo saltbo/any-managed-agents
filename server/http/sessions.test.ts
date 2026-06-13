@@ -1,7 +1,7 @@
 import { SELF } from 'cloudflare:test'
 import { env } from 'cloudflare:workers'
+import { runtimeProviderModelCapability } from '@server/domain/runtime-catalog'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { runtimeProviderModelCapability } from '../runtime/catalog'
 import { defaultClaims, setupOidcProvider, signIn } from '../test/auth'
 import { runtimeErrorMessage } from './sessions'
 

@@ -161,6 +161,9 @@ export interface AuditEntry {
   resourceId?: string | null
   outcome: 'success' | 'failure' | 'denied'
   requestId?: string | null
+  // Correlates the audit record with a session (e.g. a tool call denied inside
+  // a session). Persisted to the audit_records.session_id column.
+  sessionId?: string | null
   policyCategory?: string | null
   before?: Record<string, unknown> | null
   after?: Record<string, unknown> | null

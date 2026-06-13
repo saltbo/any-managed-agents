@@ -1,4 +1,7 @@
-import { RUNTIME_PROVIDER_MODEL_CAPABILITY_PREFIX, transitionalRuntimeLevelRuntimes } from '@server/runtime/catalog'
+import {
+  RUNTIME_PROVIDER_MODEL_CAPABILITY_PREFIX,
+  transitionalRuntimeLevelRuntimes,
+} from '@server/domain/runtime-catalog'
 
 function secretKey(key: string) {
   return /secret|token|password|api[_-]?key/i.test(key)

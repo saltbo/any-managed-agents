@@ -1,5 +1,4 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
-import { drizzle } from 'drizzle-orm/d1'
 import { requireAuth } from '../auth/session'
 import {
   AuthenticatedOperation,
@@ -202,7 +201,7 @@ export function registerUsageRecordRoutes(routes: UsageRoutes) {
     .openapi(listRoute, async (c) => {
       const query = c.req.valid('query')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -241,7 +240,7 @@ export function registerUsageRecordRoutes(routes: UsageRoutes) {
     .openapi(readRoute, async (c) => {
       const { recordId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }

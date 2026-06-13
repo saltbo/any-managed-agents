@@ -1,6 +1,5 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
 import { DISCOVERY_TASK_STATES, MODEL_AVAILABILITY, PROVIDER_TYPES } from '@server/domain/provider'
-import { drizzle } from 'drizzle-orm/d1'
 import { redactSecrets, requestId } from '../audit'
 import { requireAuth } from '../auth/session'
 import {
@@ -395,7 +394,7 @@ export function registerProviderRoutes(routes: ProviderRoutes) {
   return routes
     .openapi(listRoute, async (c) => {
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -432,7 +431,7 @@ export function registerProviderRoutes(routes: ProviderRoutes) {
     .openapi(createProviderRoute, async (c) => {
       const body = c.req.valid('json')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -465,7 +464,7 @@ export function registerProviderRoutes(routes: ProviderRoutes) {
     .openapi(readRoute, async (c) => {
       const { providerId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -479,7 +478,7 @@ export function registerProviderRoutes(routes: ProviderRoutes) {
       const { providerId } = c.req.valid('param')
       const body = c.req.valid('json')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -507,7 +506,7 @@ export function registerProviderRoutes(routes: ProviderRoutes) {
     .openapi(deleteRoute, async (c) => {
       const { providerId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -537,7 +536,7 @@ export function registerProviderRoutes(routes: ProviderRoutes) {
     .openapi(listModelsRoute, async (c) => {
       const { providerId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -566,7 +565,7 @@ export function registerProviderRoutes(routes: ProviderRoutes) {
       const { providerId, modelId } = c.req.valid('param')
       const body = c.req.valid('json')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -604,7 +603,7 @@ export function registerProviderRoutes(routes: ProviderRoutes) {
     .openapi(deleteModelRoute, async (c) => {
       const { providerId, modelId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -631,7 +630,7 @@ export function registerProviderRoutes(routes: ProviderRoutes) {
     .openapi(createDiscoveryTaskRoute, async (c) => {
       const { providerId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }
@@ -668,7 +667,7 @@ export function registerProviderRoutes(routes: ProviderRoutes) {
     .openapi(readDiscoveryTaskRoute, async (c) => {
       const { providerId, taskId } = c.req.valid('param')
       const deps = c.get('deps')
-      const auth = await requireAuth(c, drizzle(c.env.DB))
+      const auth = await requireAuth(c)
       if (auth instanceof Response) {
         return auth
       }

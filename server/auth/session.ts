@@ -1,4 +1,5 @@
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
+import { drizzle } from 'drizzle-orm/d1'
 import type { Context, Env as HonoEnv } from 'hono'
 import { getCookie } from 'hono/cookie'
 import type { Env } from '../env'
@@ -212,6 +213,39 @@ export async function resolveAuthContext<E extends HonoEnv>(
   return null
 }
 
+// Auth wall variant for the session-events ingest path: like requireAuth but
+// WITHOUT the runner-token path gate, because lease-holding runners post events
+// to /sessions/{id}/events (a non-runner-token path) and are authorized
+// separately by lease ownership. Resolves its own db (auth module owns
+// persistence) so the http layer stays drizzle-free.
+export async function requireSessionEventsAuth<E extends HonoEnv>(c: AppContext<E>) {
+  const db = drizzle(c.env.DB)
+  let auth: AuthContext | null
+  try {
+    auth = await resolveAuthContext(c, db)
+  } catch (err) {
+    if (err instanceof OidcError) {
+      return errorResponse(c, 401, 'authentication_required', 'Authentication required', {
+        reason: 'missing_or_invalid_bearer_token',
+      })
+    }
+    throw err
+  }
+  if (!auth) {
+    return errorResponse(c, 401, 'authentication_required', 'Authentication required', {
+      reason: 'missing_or_invalid_bearer_token',
+    })
+  }
+  return auth
+}
+
+// Login flow helper: resolves (and upserts) the project for OIDC claims,
+// resolving its own db so the auth http resource stays drizzle-free.
+export async function resolveProjectForClaims(env: Env, claims: UserInfoClaims, requestedProjectId?: string) {
+  const db = drizzle(env.DB)
+  return await upsertProjectForClaims(db, claims, new Date().toISOString(), requestedProjectId)
+}
+
 export async function resolveAuthIdentity<E extends HonoEnv>(c: AppContext<E>): Promise<AuthIdentity | null> {
   const token = bearerToken(c.req.raw.headers, c.req.url)
   if (token) {
@@ -278,7 +312,10 @@ export async function requireAuthIdentity<E extends HonoEnv>(c: AppContext<E>) {
   return auth
 }
 
-export async function requireAuth<E extends HonoEnv>(c: AppContext<E>, db: DrizzleD1Database) {
+export async function requireAuth<E extends HonoEnv>(c: AppContext<E>) {
+  // The auth wall resolves its own persistence so the http layer never touches
+  // drizzle (server/auth is the named cross-layer auth module).
+  const db = drizzle(c.env.DB)
   let auth: AuthContext | null
   try {
     auth = await resolveAuthContext(c, db)
