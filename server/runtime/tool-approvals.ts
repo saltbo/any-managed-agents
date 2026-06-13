@@ -1,13 +1,11 @@
-import { and, eq } from 'drizzle-orm'
-import type { drizzle } from 'drizzle-orm/d1'
+import { createRuntimeOrchestrationRepo } from '../adapters/repos/runtime-orchestration'
 import { recordAudit } from '../audit'
 import type { AuthContext } from '../auth/session'
-import { sessions } from '../db/schema'
 import { toolPolicyRequiresApproval } from '../policy'
 import { redactSensitiveValue } from '../redaction'
 import type { RuntimeToolPolicyDecision, RuntimeToolPolicyInput } from './session-runtime'
 
-type Db = ReturnType<typeof drizzle>
+type Db = Parameters<typeof createRuntimeOrchestrationRepo>[0]
 
 // ── Session tool approvals ───────────────────────────────────────────────────
 // A sensitive tool call pauses the run: the pending approval lives on the
@@ -43,17 +41,14 @@ export async function writeSessionApprovalState(
   sessionId: string,
   update: (metadata: Record<string, unknown>) => Record<string, unknown>,
 ) {
-  const row = await db
-    .select({ metadata: sessions.metadata })
-    .from(sessions)
-    .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, auth.project.id)))
-    .get()
+  const repo = createRuntimeOrchestrationRepo(db)
+  const row = await repo.sessionMetadata(auth.project.id, sessionId)
   const metadata = row?.metadata ? (JSON.parse(row.metadata) as Record<string, unknown>) : {}
   const next = update(metadata)
-  await db
-    .update(sessions)
-    .set({ metadata: JSON.stringify(next), updatedAt: new Date().toISOString() })
-    .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, auth.project.id)))
+  await repo.updateSession(auth.project.id, sessionId, {
+    metadata: JSON.stringify(next),
+    updatedAt: new Date().toISOString(),
+  })
   return next
 }
 
@@ -153,10 +148,11 @@ export function createToolApprovalGate(values: {
       pendingToolCallId = toolCallId
       // Park the session: idle with a requires-action reason ends the turn
       // cooperatively on the next liveness check.
-      await db
-        .update(sessions)
-        .set({ state: 'idle', stateReason: 'requires-action', updatedAt: new Date().toISOString() })
-        .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, auth.project.id)))
+      await createRuntimeOrchestrationRepo(db).updateSession(auth.project.id, sessionId, {
+        state: 'idle',
+        stateReason: 'requires-action',
+        updatedAt: new Date().toISOString(),
+      })
       return { allowed: false, reason: 'Tool call requires user approval' }
     },
   }

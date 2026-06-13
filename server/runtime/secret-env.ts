@@ -1,10 +1,8 @@
-import { and, eq, isNull, or } from 'drizzle-orm'
-import type { drizzle } from 'drizzle-orm/d1'
-import { vaultCredentials, vaultCredentialVersions } from '../db/schema'
+import { createRuntimeOrchestrationRepo } from '../adapters/repos/runtime-orchestration'
 import type { Env } from '../env'
 import { decryptSecretValue } from '../vaultCrypto'
 
-type Db = ReturnType<typeof drizzle>
+type Db = Parameters<typeof createRuntimeOrchestrationRepo>[0]
 
 // Vault credential reference: the only way secrets are referenced anywhere
 // (docs/api-v1-design.md §1.4). No versionId pins the credential's active
@@ -56,23 +54,14 @@ export async function resolveRuntimeSecretEnv(
   if (!Array.isArray(items)) {
     return resolved
   }
+  const repo = createRuntimeOrchestrationRepo(db)
   for (const item of items) {
     const entry = parseSecretEnvEntry(item)
     if (!entry) {
       continue
     }
     const { credentialId } = entry.credentialRef
-    const credential = await db
-      .select({ state: vaultCredentials.state, activeVersionId: vaultCredentials.activeVersionId })
-      .from(vaultCredentials)
-      .where(
-        and(
-          eq(vaultCredentials.id, credentialId),
-          eq(vaultCredentials.organizationId, scope.organizationId),
-          or(eq(vaultCredentials.projectId, scope.projectId), isNull(vaultCredentials.projectId)),
-        ),
-      )
-      .get()
+    const credential = await repo.credentialForResolution(scope.organizationId, scope.projectId, credentialId)
     if (!credential) {
       throw new Error(`Runtime credential reference ${credentialId} cannot be resolved`)
     }
@@ -83,23 +72,12 @@ export async function resolveRuntimeSecretEnv(
     if (!versionId) {
       throw new Error(`Runtime credential reference ${credentialId} cannot be resolved`)
     }
-    const version = await db
-      .select({
-        state: vaultCredentialVersions.state,
-        metadata: vaultCredentialVersions.metadata,
-        externalVaultPath: vaultCredentialVersions.externalVaultPath,
-        secretRef: vaultCredentialVersions.secretRef,
-      })
-      .from(vaultCredentialVersions)
-      .where(
-        and(
-          eq(vaultCredentialVersions.id, versionId),
-          eq(vaultCredentialVersions.credentialId, credentialId),
-          eq(vaultCredentialVersions.organizationId, scope.organizationId),
-          or(eq(vaultCredentialVersions.projectId, scope.projectId), isNull(vaultCredentialVersions.projectId)),
-        ),
-      )
-      .get()
+    const version = await repo.credentialVersionForResolution(
+      scope.organizationId,
+      scope.projectId,
+      credentialId,
+      versionId,
+    )
     // Deleted versions are physically removed, so a missing row is unresolvable.
     if (!version) {
       throw new Error(`Runtime credential reference ${credentialId} cannot be resolved`)

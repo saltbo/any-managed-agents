@@ -1,8 +1,8 @@
-import { and, eq } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/d1'
 import { canonicalAmaSessionEventFromRuntimeEvent } from '../../shared/session-events'
-import { leases, sessionChannels, sessions, workItems } from '../db/schema'
-import { insertCanonicalSessionEvent } from '../db/session-event-store'
+import {
+  createRuntimeOrchestrationRepoFromBinding,
+  type RuntimeOrchestrationRepo,
+} from '../adapters/repos/runtime-orchestration'
 import type { Env } from '../env'
 import { evaluateSandboxRuntimePolicy } from '../policy'
 import { redactSensitiveValue } from '../redaction'
@@ -142,23 +142,15 @@ export class RunnerSessionChannelObject implements DurableObject {
   // before the action runs: the decision is recorded as a canonical policy
   // event and sent back to the owning runner over the same channel.
   private async decidePermissionRequest(state: ChannelState, payload: Record<string, unknown>, socket: WebSocket) {
-    const db = drizzle(this.env.DB)
+    const repo = createRuntimeOrchestrationRepoFromBinding(this.env.DB)
     const auth = channelSystemAuth(state)
-    const session = await db
-      .select({
-        id: sessions.id,
-        agentSnapshot: sessions.agentSnapshot,
-        environmentSnapshot: sessions.environmentSnapshot,
-      })
-      .from(sessions)
-      .where(and(eq(sessions.id, state.sessionId), eq(sessions.projectId, state.projectId)))
-      .get()
+    const session = await repo.channelSession(state.projectId, state.sessionId)
     if (!session) {
       return
     }
     const permissionId = typeof payload.permissionId === 'string' ? payload.permissionId : 'permission'
     const command = typeof payload.command === 'string' ? payload.command : null
-    const decision = await evaluateSandboxRuntimePolicy(db, auth, {
+    const decision = await evaluateSandboxRuntimePolicy(repo.db, auth, {
       session: {
         id: session.id,
         agentSnapshot: session.agentSnapshot,
@@ -207,68 +199,27 @@ export class RunnerSessionChannelObject implements DurableObject {
     state: ChannelState,
     event: { type: string; payload: Record<string, unknown>; metadata?: Record<string, unknown> },
   ) {
-    const db = drizzle(this.env.DB)
+    const repo = createRuntimeOrchestrationRepoFromBinding(this.env.DB)
     const valid = await this.validateActiveOwnership(state)
     if (!valid) {
       await this.deactivateChannel(state, 'stale-ownership', 'stale')
       throw new Error('Runner session channel is no longer active')
     }
-    const workItem = await db
-      .select()
-      .from(workItems)
-      .where(and(eq(workItems.id, state.workItemId), eq(workItems.projectId, state.projectId)))
-      .get()
+    const workItem = await repo.channelWorkItem(state.projectId, state.workItemId)
     if (!workItem) {
       throw new Error('Runner session channel is no longer active')
     }
     const timestamp = new Date().toISOString()
-    await db
-      .update(sessionChannels)
-      .set({ lastSeenAt: timestamp, updatedAt: timestamp })
-      .where(and(eq(sessionChannels.id, state.channelId), eq(sessionChannels.state, 'active')))
-    await appendSessionEvent(db, state, event, workItemRuntimeMetadata(workItem.payload))
+    await repo.touchChannel(state.channelId, timestamp)
+    await appendSessionEvent(repo, state, event, workItemRuntimeMetadata(workItem.payload))
   }
 
   private async validateActiveOwnership(state: ChannelState) {
-    const db = drizzle(this.env.DB)
-    const channel = await db
-      .select()
-      .from(sessionChannels)
-      .where(
-        and(
-          eq(sessionChannels.id, state.channelId),
-          eq(sessionChannels.sessionId, state.sessionId),
-          eq(sessionChannels.workItemId, state.workItemId),
-          eq(sessionChannels.leaseId, state.leaseId),
-          eq(sessionChannels.runnerId, state.runnerId),
-          eq(sessionChannels.projectId, state.projectId),
-          eq(sessionChannels.state, 'active'),
-        ),
-      )
-      .get()
-    const lease = await db
-      .select()
-      .from(leases)
-      .where(
-        and(
-          eq(leases.id, state.leaseId),
-          eq(leases.workItemId, state.workItemId),
-          eq(leases.runnerId, state.runnerId),
-          eq(leases.projectId, state.projectId),
-          eq(leases.state, 'active'),
-        ),
-      )
-      .get()
-    const workItem = await db
-      .select()
-      .from(workItems)
-      .where(and(eq(workItems.id, state.workItemId), eq(workItems.projectId, state.projectId)))
-      .get()
-    const session = await db
-      .select({ state: sessions.state, stateReason: sessions.stateReason })
-      .from(sessions)
-      .where(and(eq(sessions.id, state.sessionId), eq(sessions.projectId, state.projectId)))
-      .get()
+    const repo = createRuntimeOrchestrationRepoFromBinding(this.env.DB)
+    const channel = await repo.channelActiveChannel(state)
+    const lease = await repo.channelActiveLease(state)
+    const workItem = await repo.channelWorkItem(state.projectId, state.workItemId)
+    const session = await repo.channelSessionState(state.projectId, state.sessionId)
     if (
       !channel ||
       !lease ||
@@ -300,26 +251,16 @@ export class RunnerSessionChannelObject implements DurableObject {
     if (socket?.readyState === WebSocket.OPEN) {
       socket.close(channelState === 'stale' ? 4001 : 1000, reason)
     }
-    const db = drizzle(this.env.DB)
+    const repo = createRuntimeOrchestrationRepoFromBinding(this.env.DB)
     const timestamp = new Date().toISOString()
-    await db
-      .update(sessionChannels)
-      .set({ state: channelState, closedAt: timestamp, closeReason: reason, updatedAt: timestamp })
-      .where(and(eq(sessionChannels.id, state.channelId), eq(sessionChannels.state, 'active')))
-    const session = await db
-      .select({ state: sessions.state })
-      .from(sessions)
-      .where(and(eq(sessions.id, state.sessionId), eq(sessions.projectId, state.projectId)))
-      .get()
+    await repo.closeChannel(state.channelId, channelState, reason, timestamp)
+    const session = await repo.channelSessionState(state.projectId, state.sessionId)
     if (session?.state !== 'running') {
       return
     }
-    await db
-      .update(sessions)
-      .set({ state: 'pending', stateReason: 'waiting-for-runner-recovery', updatedAt: timestamp })
-      .where(and(eq(sessions.id, state.sessionId), eq(sessions.projectId, state.projectId)))
+    await repo.requeueSessionForRunnerRecovery(state.projectId, state.sessionId, timestamp)
     await appendSessionEvent(
-      db,
+      repo,
       state,
       { type: 'runner.channel.closed', payload: { reason }, metadata: { source: 'self-hosted-runner-channel' } },
       {},
@@ -362,7 +303,7 @@ function workItemRuntimeMetadata(payloadValue: string) {
 }
 
 async function appendSessionEvent(
-  db: ReturnType<typeof drizzle>,
+  repo: RuntimeOrchestrationRepo,
   state: ChannelState,
   event: { type: string; payload: Record<string, unknown>; metadata?: Record<string, unknown> },
   runtimeMetadata: Record<string, unknown>,
@@ -379,8 +320,7 @@ async function appendSessionEvent(
       workItemId: state.workItemId,
     },
   )
-  await insertCanonicalSessionEvent(
-    db,
+  await repo.appendCanonicalEvent(
     {
       organizationId: state.organizationId,
       projectId: state.projectId,

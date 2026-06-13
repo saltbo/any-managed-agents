@@ -1,6 +1,7 @@
-import { and, eq, inArray, isNotNull, isNull, lt, notLike, or, sql } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/d1'
-import { sessions } from '../db/schema'
+import {
+  createRuntimeOrchestrationRepoFromBinding,
+  type RuntimeOrchestrationRepo,
+} from '../adapters/repos/runtime-orchestration'
 import type { Env } from '../env'
 import { stopSessionRuntime } from './session-runtime'
 
@@ -13,47 +14,21 @@ const STALLED_THRESHOLD_MS = 20 * 60_000
 const TERMINAL_STATES = ['stopped', 'error']
 
 export async function markStalledCloudSessions(env: Env): Promise<void> {
-  const db = drizzle(env.DB)
+  const repo = createRuntimeOrchestrationRepoFromBinding(env.DB)
   const threshold = new Date(Date.now() - STALLED_THRESHOLD_MS).toISOString()
-  await db
-    .update(sessions)
-    .set({
-      state: 'error',
-      stateReason: 'Cloud session stalled: no completion within the wall-clock budget',
-      updatedAt: new Date().toISOString(),
-    })
-    .where(
-      and(
-        or(
-          // a cloud turn lost its consumer mid-run
-          and(eq(sessions.state, 'running'), isNotNull(sessions.sandboxId)),
-          // a cloud startup died before assigning a sandbox; self-hosted
-          // sessions waiting for a runner carry a stateReason and may wait
-          // indefinitely, so they are excluded
-          and(eq(sessions.state, 'pending'), isNull(sessions.stateReason)),
-        ),
-        lt(sessions.updatedAt, threshold),
-      ),
-    )
-  await destroyLeakedSandboxes(env, db)
+  // a cloud turn lost its consumer mid-run, or a cloud startup died before
+  // assigning a sandbox; self-hosted sessions waiting for a runner carry a
+  // stateReason and may wait indefinitely, so they are excluded
+  await repo.markStalledCloudSessions(threshold, new Date().toISOString())
+  await destroyLeakedSandboxes(env, repo)
 }
 
 // Sandboxes of ended sessions occupy container instances (max_instances is a
 // hard cap) when teardown was skipped — e.g. a stop while an exec was hung.
 // Destroy them and stamp the session so each sandbox is cleaned exactly once.
-async function destroyLeakedSandboxes(env: Env, db: ReturnType<typeof drizzle>): Promise<void> {
-  const rows = await db
-    .select({ id: sessions.id, sandboxId: sessions.sandboxId, metadata: sessions.metadata })
-    .from(sessions)
-    .where(
-      and(
-        // archived is lifecycle (archivedAt), not a state value
-        or(inArray(sessions.state, TERMINAL_STATES), isNotNull(sessions.archivedAt)),
-        isNotNull(sessions.sandboxId),
-        notLike(sessions.metadata, '%"sandboxDestroyedAt"%'),
-      ),
-    )
-    .limit(20)
+async function destroyLeakedSandboxes(env: Env, repo: RuntimeOrchestrationRepo): Promise<void> {
+  // archived is lifecycle (archivedAt), not a state value
+  const rows = await repo.leakedSandboxSessions(TERMINAL_STATES, 20)
   for (const row of rows) {
     if (!row.sandboxId) continue
     try {
@@ -63,10 +38,7 @@ async function destroyLeakedSandboxes(env: Env, db: ReturnType<typeof drizzle>):
     }
     const metadata = parseMetadata(row.metadata)
     metadata.sandboxDestroyedAt = new Date().toISOString()
-    await db
-      .update(sessions)
-      .set({ metadata: JSON.stringify(metadata), updatedAt: sql`updated_at` })
-      .where(eq(sessions.id, row.id))
+    await repo.stampSandboxDestroyed(row.id, JSON.stringify(metadata))
   }
 }
 

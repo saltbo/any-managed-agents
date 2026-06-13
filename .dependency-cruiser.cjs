@@ -5,12 +5,9 @@
  * The clean core is domain/ → usecases/ → adapters/ ← http/. Those rules are
  * strict. A handful of env-bound infrastructure modules legitimately touch
  * persistence outside adapters/repos and are named exceptions on the drizzle
- * rule (the skill's "a few stragglers" — here the runtime execution engine is
- * the big one):
+ * rule (the skill's "a few stragglers"):
  *   - server/auth      OIDC/session auth module: owns its tables, is the auth
  *                      wall, spans layers by design.
- *   - server/runtime   the env-bound session/runtime execution engine (sandbox,
- *                      durable objects, drivers); wrapped by gateways.
  *   - server/audit.ts  the audit writer still consumed by app.ts + runtime/ via
  *                      recordAudit; http/ no longer depends on it (requestId
  *                      moved to http/request-context.ts) and the AuditPort
@@ -22,7 +19,7 @@
  *                      protocol endpoint, shared zod contracts, health.
  */
 
-const INFRA = '^server/(auth|runtime|routes)|^server/(audit|composition|app)\\.ts'
+const INFRA = '^server/(auth|routes)|^server/(audit|composition|app)\\.ts'
 
 /** @type {import('dependency-cruiser').IConfiguration} */
 module.exports = {
