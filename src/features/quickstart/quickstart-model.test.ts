@@ -19,7 +19,7 @@ const cloudSession = { state: 'idle' } as Session
 
 const emptyResources = { providers: [], environments: [], agents: [], sessions: [] }
 
-describe('quickstart step sequencing', () => {
+describe('quickstart step sequencing [spec: quickstart/step-sequencing]', () => {
   it('detects completion from real resource state', () => {
     expect(quickstartCompletion(emptyResources)).toEqual({
       provider: false,
@@ -62,7 +62,7 @@ describe('quickstart step sequencing', () => {
   })
 })
 
-describe('quickstart environment input', () => {
+describe('quickstart environment input [spec: quickstart/environment-input]', () => {
   it('creates an unrestricted cloud environment', () => {
     expect(quickstartEnvironmentInput({ ...defaultQuickstartEnvironmentForm, name: ' Env ' })).toMatchObject({
       name: 'Env',
@@ -88,7 +88,7 @@ describe('quickstart environment input', () => {
   })
 })
 
-describe('quickstart sandbox add-on', () => {
+describe('quickstart sandbox add-on [spec: quickstart/sandbox-addon]', () => {
   it('adds sandbox tools and carries skills consistent with the agent schema', () => {
     const agent = { tools: [{ name: 'read' }, { name: 'sandbox.exec' }], skills: [] } as unknown as Agent
     expect(agentHasSandboxExecution(agent)).toBe(true)
@@ -101,7 +101,7 @@ describe('quickstart sandbox add-on', () => {
   })
 })
 
-describe('quickstart integration examples', () => {
+describe('quickstart integration examples [spec: quickstart/integration-examples]', () => {
   const examples = quickstartIntegrationExamples({
     origin: 'https://ama.example.com',
     agentId: 'agent_123',

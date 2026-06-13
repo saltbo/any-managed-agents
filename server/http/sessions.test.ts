@@ -1002,7 +1002,7 @@ describe('[CF] /api/v1/sessions', () => {
     expect(emptyBatchRes.status).toBe(400)
   })
 
-  it('accepts self-hosted sessions when cloud sandbox startup is disabled', async () => {
+  it('accepts self-hosted sessions when cloud sandbox startup is disabled [spec: environments/self-hosted]', async () => {
     const authorization = await signIn()
     const environment = await createEnvironment(authorization, {
       name: 'Self-hosted no sandbox workspace',
@@ -1045,7 +1045,7 @@ describe('[CF] /api/v1/sessions', () => {
     })
   })
 
-  it('keeps a stopped session from writing successful completion events after cancellation [spec: sessions/stop]', async () => {
+  it('keeps a stopped session from writing successful completion events after cancellation [spec: sessions/stop] [spec: runtime/stop]', async () => {
     const authorization = await signIn()
     await connectMcp(authorization, 'github')
     const environment = await createEnvironment(authorization)
@@ -1324,7 +1324,7 @@ describe('[CF] /api/v1/sessions', () => {
     expect(crossProjectReads.map((response) => response.status)).toEqual([404, 404, 404, 404, 404, 404, 404])
   })
 
-  it('blocks disabled sandbox startup before creating a runtime', async () => {
+  it('blocks disabled sandbox startup before creating a runtime [spec: audit/runtime-policy]', async () => {
     const authorization = await signIn()
     await connectMcp(authorization, 'github')
     const environment = await createEnvironment(authorization)
@@ -1585,7 +1585,7 @@ describe('[CF] /api/v1/sessions', () => {
     expect(exactLease).toBeTruthy()
   })
 
-  it('dispatches configured provider base URL and vault credential into the self-hosted runtime env', async () => {
+  it('dispatches configured provider base URL and vault credential into the self-hosted runtime env [spec: providers/dispatch]', async () => {
     const authorization = await signIn()
     const credential = await createVaultCredential(authorization, 'provider-api-key')
 

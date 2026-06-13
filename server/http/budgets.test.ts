@@ -22,7 +22,7 @@ describe('[CF] v1 budgets', () => {
     vi.unstubAllGlobals()
   })
 
-  it('creates budgets defaulting to enabled and manages the item routes', async () => {
+  it('creates budgets defaulting to enabled and manages the item routes [spec: governance/budget-api]', async () => {
     const authorization = await signIn()
 
     const createRes = await jsonFetch('/api/v1/budgets', authorization, {

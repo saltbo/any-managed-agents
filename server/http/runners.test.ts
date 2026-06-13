@@ -53,7 +53,7 @@ describe('[CF] /api/v1/runners', () => {
     await setupOidcProvider()
   })
 
-  it('registers a runner with a vault credential ref and serves the heartbeat singleton', async () => {
+  it('registers a runner with a vault credential ref and serves the heartbeat singleton [spec: runners/heartbeat]', async () => {
     const authorization = await signIn()
     const environment = await createSelfHostedEnvironment(authorization)
     const credential = await createRunnerCredential(authorization)

@@ -38,7 +38,7 @@ function sortedUnique(fields: string[]) {
   return [...new Set(fields)].sort()
 }
 
-describe('route schema and handler alignment', () => {
+describe('route schema and handler alignment [spec: api-contracts/schema-alignment]', () => {
   it('keeps agent write fields aligned across handlers and OpenAPI schemas', async () => {
     const doc = await openApiDoc()
     // 'content' is read for the memory PUT handler; 'archived' is the update-only

@@ -198,6 +198,7 @@ async function createSessionThroughSdk(product: ExternalProductState, body: Json
 }
 
 // ─── Scenario: External product manages standard AMA resources through the SDK ───
+// [spec: projects/external-resources]
 
 Given(
   'an external product owns its workflow identifiers and product state',
@@ -308,6 +309,7 @@ Then(
 )
 
 // ─── Scenario: External product starts work by creating an AMA session ───────
+// [spec: projects/external-session]
 
 Given('an external product has selected a standard AMA agent definition', async function (this: ExternalProductWorld) {
   const product = await ensureExternalProduct(this)
@@ -448,6 +450,7 @@ Then(
 )
 
 // ─── Scenario: External product controls a running session only through AMA endpoints ───
+// [spec: projects/external-control]
 
 Given('an external product created an AMA session', async function (this: ExternalProductWorld) {
   const product = await ensureExternalProduct(this)

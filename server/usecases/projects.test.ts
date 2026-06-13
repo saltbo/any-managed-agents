@@ -31,7 +31,7 @@ function fakeDeps(repo: Partial<Deps['projects']> = {}): Deps {
   return { projects } as unknown as Deps
 }
 
-describe('listProjects', () => {
+describe('listProjects [spec: projects/lifecycle]', () => {
   it('lazily creates the default project on a first empty page', async () => {
     const insert = vi.fn(async () => projectRecord())
     const page = await listProjects(fakeDeps({ insert }), auth, { limit: 50, cursor: null })

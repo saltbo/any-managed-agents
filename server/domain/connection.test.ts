@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { connectionRequestTimeoutMs, connectorPolicyEffect, credentialRef, disconnectedAtFor } from './connection'
 
-describe('[spec: connections/policy] connectorPolicyEffect', () => {
+describe('[spec: connections/policy] [spec: mcp/policy-effect] connectorPolicyEffect', () => {
   it('allows by default', () => {
     expect(connectorPolicyEffect({}, 'github')).toBe('allowed')
   })

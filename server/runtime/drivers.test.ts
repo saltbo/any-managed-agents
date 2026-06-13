@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { runtimeDriver, runtimeDriverName, runtimeMetadata } from './drivers'
 
-describe('runtime drivers', () => {
+describe('[spec: runtime/driver-select] runtime drivers', () => {
   it('selects supported runtime drivers and rejects unknown names', () => {
     expect(runtimeDriver('ama')).toMatchObject({
       runtime: 'ama',

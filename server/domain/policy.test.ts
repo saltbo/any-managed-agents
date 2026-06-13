@@ -85,7 +85,7 @@ describe('validateBudgetScope', () => {
   })
 })
 
-describe('accessRuleView', () => {
+describe('[spec: governance/access-rules] accessRuleView', () => {
   it('drops wildcard scopes and omits an empty reason', () => {
     expect(accessRuleView({ providerId: '*', modelId: '*', effect: 'deny', reason: null })).toEqual({ effect: 'deny' })
     expect(accessRuleView({ providerId: 'p1', modelId: 'm1', effect: 'allow', reason: 'ok' })).toEqual({
@@ -107,7 +107,7 @@ function policyLevel(overrides: Partial<PolicyLevel> & Pick<PolicyLevel, 'id' | 
   }
 }
 
-describe('applicablePolicyLevels', () => {
+describe('[spec: governance/policy-hierarchy] applicablePolicyLevels', () => {
   it('orders org → teams → project and keeps the latest row per scope/team', () => {
     const rows: PolicyLevel[] = [
       policyLevel({ id: 'org_old', scope: 'organization', updatedAt: '2026-01-01' }),
@@ -129,7 +129,7 @@ describe('applicablePolicyLevels', () => {
   })
 })
 
-describe('effectivePolicyFrom', () => {
+describe('[spec: governance/policy-hierarchy] effectivePolicyFrom', () => {
   it('reports the most specific level as the source and the platform default when empty', () => {
     expect(effectivePolicyFrom([], []).source).toEqual({ type: 'platform_default', id: 'workers-ai-default' })
     const levels: PolicyLevel[] = [
@@ -159,7 +159,7 @@ describe('effectivePolicyFrom', () => {
   })
 })
 
-describe('evaluateAccessRules', () => {
+describe('[spec: governance/access-rules] evaluateAccessRules', () => {
   it('denies on a matching deny rule, honoring team scoping', () => {
     expect(evaluateAccessRules([{ id: 'r', effect: 'deny', teamId: null, reason: 'no' }], [])?.rule).toBe('r')
     expect(evaluateAccessRules([{ id: 'r', effect: 'deny', teamId: 'team_a', reason: null }], [])).toBeNull()
@@ -175,7 +175,7 @@ describe('evaluateAccessRules', () => {
   })
 })
 
-describe('evaluateBudgets', () => {
+describe('[spec: governance/model-budget] evaluateBudgets', () => {
   const month = new Date().toISOString().slice(0, 7)
 
   it('denies when a matching budget window is exhausted', () => {
@@ -246,7 +246,7 @@ describe('session/environment tool gating', () => {
   })
 })
 
-describe('sandboxOperationForRuntimeTool', () => {
+describe('[spec: governance/sandbox-restrictions] sandboxOperationForRuntimeTool', () => {
   it('maps sandbox.exec to a command op and sandbox.fetch to a network op', () => {
     expect(sandboxOperationForRuntimeTool('sandbox.exec', { command: 'ls -la' })).toEqual({
       operation: 'command',
@@ -264,7 +264,7 @@ describe('sandboxOperationForRuntimeTool', () => {
   })
 })
 
-describe('evaluateSandboxRuntimeDecision', () => {
+describe('[spec: governance/sandbox-restrictions] evaluateSandboxRuntimeDecision', () => {
   it('denies when sandbox is disabled', () => {
     expect(evaluateSandboxRuntimeDecision({ enabled: false }, null, { operation: 'command', command: 'ls' }).rule).toBe(
       'sandboxPolicy.enabled',

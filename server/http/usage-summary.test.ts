@@ -68,7 +68,7 @@ describe('[CF] v1 usage summary', () => {
     vi.unstubAllGlobals()
   })
 
-  it('aggregates usage deterministically with named totals', async () => {
+  it('aggregates usage deterministically with named totals [spec: usage/summary-api]', async () => {
     const authorization = await signIn()
     const project = await projectContext(authorization)
     const db = drizzle(env.DB)
@@ -121,7 +121,7 @@ describe('[CF] v1 usage summary', () => {
     ])
   })
 
-  it('groups by model and agent and honors from/to filters', async () => {
+  it('groups by model and agent and honors from/to filters [spec: usage/summary-api]', async () => {
     const authorization = await signIn()
     const project = await projectContext(authorization)
     const db = drizzle(env.DB)
@@ -153,7 +153,7 @@ describe('[CF] v1 usage summary', () => {
     expect(agentSummary.groups).toEqual([expect.objectContaining({ key: { agent: 'agent_beta' } })])
   })
 
-  it('defaults to grouping by provider and rejects unknown groupBy values', async () => {
+  it('defaults to grouping by provider and rejects unknown groupBy values [spec: usage/summary-api]', async () => {
     const authorization = await signIn()
 
     const defaultRes = await jsonFetch('/api/v1/usage-summary', authorization)

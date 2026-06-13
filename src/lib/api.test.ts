@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { api } from './api'
 
-describe('shared API client', () => {
+describe('shared API client [spec: web-console/rpc-client]', () => {
   beforeEach(() => {
     window.localStorage.setItem('ama:e2e-access-token', 'e2e:api-test')
     window.localStorage.setItem('ama:selected-project-id', 'project_test')

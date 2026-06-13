@@ -1,0 +1,61 @@
+Feature: Triggers
+  Heartbeat-driven schedules wake agents by creating sessions with initial
+  prompts. A trigger snapshots its agent, environment, runtime, prompt template,
+  and schedule; a local heartbeat dispatcher creates one scheduled session per
+  due occurrence with idempotent run correlation.
+
+  # ── Definition lifecycle (usecase: business rules, cheapest layer) ──
+
+  @triggers/create @usecase
+  Scenario: Create a trigger from usable references
+    Given a signed-in user with an active agent and environment
+    When the user creates a trigger with a prompt template and schedule
+    Then the trigger is stored enabled with a derived next-due time when omitted
+    And a missing agent or archived environment is rejected before storing
+
+  @triggers/lifecycle @usecase
+  Scenario: Update, archive, and restore a trigger
+    Given a trigger exists
+    When the user updates fields, archives, or restores it
+    Then schedule changes are snapshotted and the transition is reported
+    And archived triggers reject field updates until restored
+    And reference changes are re-validated when the agent or environment changes
+
+  @triggers/validation @usecase
+  Scenario: Reject secret material in trigger config
+    When a trigger is created or updated with secret-looking metadata or environment variables
+    Then the request is rejected with field-level validation details
+    And no secret-bearing trigger config is persisted
+
+  # ── API contract (api: assembled server, real D1, pagination, audit) ──
+
+  @triggers/api-crud @api
+  Scenario: Create, list, read, update, pause, archive, restore, and audit triggers over the API
+    Given a signed-in user with an active agent and environment
+    When the user drives the triggers API end to end
+    Then create, paginated list, search, enabled filter, read, update, archive, and restore are supported
+    And trigger create, update, and archive actions are recorded in audit history
+    And triggers never expose status or tenancy fields
+
+  @triggers/dispatch @api
+  Scenario: Heartbeat dispatch creates one scheduled session per due occurrence
+    Given a project has an active agent and active environments
+    When the user creates a due trigger and the heartbeat dispatcher runs twice for the same occurrence
+    Then one scheduled run creates a session with the initial prompt and schedule run metadata
+    And duplicate heartbeat dispatch does not create another session for the same occurrence
+    And the run exposes its session, state, scheduled time, correlation id, and idempotency key
+
+  @triggers/inactive @api
+  Scenario: Inactive triggers do not dispatch
+    Given a project has paused and archived triggers
+    When the heartbeat dispatcher runs
+    Then no sessions are created and the inactive triggers have no run history
+
+  # ── Contract (api: OpenAPI) ──
+
+  @triggers/openapi @api
+  Scenario: Publish trigger routes in OpenAPI
+    Given the Worker app is initialized
+    When the OpenAPI document is requested
+    Then it includes the triggers collection, item, and runs paths
+    And the legacy scheduled-agent-triggers namespace is gone

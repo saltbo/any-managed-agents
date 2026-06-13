@@ -100,16 +100,17 @@ exist but whose breadcrumbs are still being fanned out.
 | agents     | migrated | agents-api, agents-control-plane, agents-ui, agents-update, agent-builder, agent-detail, agent-roles-memory |
 | sessions   | migrated | sessions-api, sessions-events, session-detail-tool-tracing, session-stop, sessions-list-bulk-archive, sessions-ui |
 | auth       | migrated | auth, auth-flow, auth-guard, auth-tenancy, login, login-page, sso-discovery, user-initial-password, web-auth-redirect |
-| providers  | pending  | providers, providers-models, provider-access |
-| environments | pending | environments, environments-api, environments-ui, environment-detail, environments-mcp |
-| vaults     | pending  | vaults, vaults-api, vaults-ui, vault-detail, vault-secrets, encryption |
-| governance | pending  | governance-api, governance-policy |
-| mcp        | pending  | mcp-connections, mcp-client, mcp-client-integration, mcp-discovery, mcp-policy-enforcement, tools-mcp, engine-mcp, engine-mcp-e2e |
-| runtime    | pending  | sessions-runtime, engine-cooperative-cancellation, engine-error-termination |
-| runners    | pending  | external-runtimes, self-hosted-runner-work, sandbox-execution |
-| usage      | pending  | usage-summary, usage-audit |
-| audit      | pending  | audit-auto, audit-log-ui |
-| triggers   | pending  | scheduled-triggers |
-| api-contracts | pending | api-contracts, cli-openapi-contract, control-plane, list-route-pagination, list-date-range-filters, storage-cloudflare-d1, destructive-ops, external-product-integration, events-api |
-| web-console | pending | web-ui, layout, web-api-client-consolidation |
-| quickstart | pending  | quickstart |
+| providers  | migrated | providers, providers-models, provider-access |
+| environments | migrated | environments, environments-api, environments-ui, environment-detail, environments-mcp |
+| vaults     | migrated | vaults, vaults-api, vaults-ui, vault-detail, vault-secrets, encryption |
+| governance | migrated | governance-api, governance-policy |
+| mcp        | migrated | mcp-connections, mcp-client, mcp-client-integration, mcp-discovery, mcp-policy-enforcement, tools-mcp, engine-mcp, engine-mcp-e2e |
+| runtime    | migrated | sessions-runtime, engine-cooperative-cancellation, engine-error-termination |
+| runners    | migrated | external-runtimes, self-hosted-runner-work, sandbox-execution |
+| usage      | migrated | usage-summary, usage-audit |
+| audit      | migrated | audit-auto, audit-log-ui |
+| triggers   | migrated | scheduled-triggers |
+| api-contracts | migrated | api-contracts, cli-openapi-contract, control-plane, list-route-pagination, list-date-range-filters, storage-cloudflare-d1, destructive-ops, external-product-integration, events-api |
+| web-console | migrated | web-ui, layout, web-api-client-consolidation |
+| quickstart | migrated | quickstart |
+| projects   | migrated | external-product-integration |

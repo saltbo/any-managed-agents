@@ -217,7 +217,7 @@ describe('[spec: vaults/credential-rotate] rotateCredential', () => {
   })
 })
 
-describe('[spec: vaults/version-delete] deleteCredentialVersion', () => {
+describe('[spec: vaults/credential-delete] deleteCredentialVersion', () => {
   it('refuses to delete the active version', async () => {
     await expect(
       deleteCredentialVersion(fakeDeps(), credential({ activeVersionId: 'vaultver_2' }), version({ id: 'vaultver_2' })),

@@ -61,7 +61,7 @@ async function connectMcp(authorization: string) {
   expect(connectRes.status).toBe(201)
 }
 
-describe('[CF] /api/v1/environments', () => {
+describe('[CF] /api/v1/environments [spec: environments/api-crud]', () => {
   beforeEach(async () => {
     await setupOidcProvider()
   })
@@ -266,7 +266,7 @@ describe('[CF] /api/v1/environments', () => {
     expect(unarchivedUpdateRes.status).toBe(200)
   })
 
-  it('lists environments with pagination, search, archived, and date filters', async () => {
+  it('lists environments with pagination, search, archived, and date filters [spec: environments/api-pagination]', async () => {
     const authorization = await signIn()
     const alphaRes = await jsonFetch('/api/v1/environments', authorization, {
       method: 'POST',
@@ -398,7 +398,7 @@ describe('[CF] /api/v1/environments', () => {
     })
   })
 
-  it('validates network policy, mcp policy, and secret-free configuration objects', async () => {
+  it('validates network policy, mcp policy, and secret-free configuration objects [spec: environments/api-validation]', async () => {
     const authorization = await signIn()
 
     const invalidNetworkRes = await jsonFetch('/api/v1/environments', authorization, {

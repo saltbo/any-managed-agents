@@ -66,7 +66,7 @@ function fakeDeps(repo: Partial<Deps['triggers']> = {}): Deps {
   return { triggers } as unknown as Deps
 }
 
-describe('createTrigger', () => {
+describe('[spec: triggers/create] createTrigger', () => {
   it('creates a trigger when references are usable', async () => {
     const trigger = await createTrigger(fakeDeps(), auth, {
       agentId: 'agent_1',
@@ -86,7 +86,7 @@ describe('createTrigger', () => {
     expect(trigger.nextDueAt).toEqual(expect.any(String))
   })
 
-  it('rejects secret metadata', async () => {
+  it('rejects secret metadata [spec: triggers/validation]', async () => {
     await expect(
       createTrigger(fakeDeps(), auth, {
         agentId: 'agent_1',
@@ -131,7 +131,7 @@ describe('createTrigger', () => {
   })
 })
 
-describe('updateTrigger', () => {
+describe('[spec: triggers/lifecycle] updateTrigger', () => {
   it('merges field updates and snapshots schedule changes', async () => {
     const result = await updateTrigger(fakeDeps(), auth, triggerRecord(), {
       name: 'Renamed',

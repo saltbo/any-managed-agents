@@ -101,7 +101,7 @@ function fakeDeps(overrides: {
   return { leases, workItems, runtimeSecretEnv } as unknown as Deps
 }
 
-describe('claimLease', () => {
+describe('[spec: runners/claim-eligibility] claimLease', () => {
   it('claims an eligible available work item', async () => {
     const result = await claimLease(fakeDeps({}), auth, runner(), { workItemId: 'work_1', leaseDurationSeconds: 60 })
     expect(result.id).toBe('lease_1')

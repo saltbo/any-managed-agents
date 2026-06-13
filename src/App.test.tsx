@@ -694,7 +694,7 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: 'Continue with OIDC provider' })).toBeTruthy()
   })
 
-  it('drives the v1 console from resource creation through runtime events [spec: agents/console-list]', async () => {
+  it('drives the v1 console from resource creation through runtime events [spec: agents/console-list] [spec: web-console/shell] [spec: quickstart/first-run]', async () => {
     mockConsoleApi()
     const { sentCommands, socketUrls } = installMockRuntimeWebSocket()
 
@@ -772,7 +772,7 @@ describe('App', () => {
     expect(sentCommands).toContainEqual(expect.objectContaining({ type: 'prompt' }))
   })
 
-  it('renders routed resource and detail pages', async () => {
+  it('renders routed resource and detail pages [spec: web-console/routed-pages]', async () => {
     mockConsoleApi({
       environments: [environment()],
       agents: [agent()],
@@ -951,7 +951,7 @@ describe('App', () => {
     ])
   })
 
-  it('shows error, stopped, and archived session states', async () => {
+  it('shows error, stopped, and archived session states [spec: web-console/destructive-ops]', async () => {
     mockConsoleApi({
       environments: [environment()],
       agents: [agent()],

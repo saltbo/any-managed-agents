@@ -69,7 +69,7 @@ function expectJsonErrorResponse(operation: OpenApiOperation, status: string) {
 }
 
 describe('[CF] OpenAPI documentation', () => {
-  it('publishes the generated control-plane OpenAPI document [spec: agents/api-openapi]', async () => {
+  it('publishes the generated control-plane OpenAPI document [spec: agents/api-openapi] [spec: environments/api-openapi] [spec: mcp/openapi] [spec: runners/openapi] [spec: triggers/openapi] [spec: api-contracts/openapi]', async () => {
     const doc = await fetchOpenApi()
 
     expect(doc.openapi).toBe('3.0.0')
@@ -389,7 +389,7 @@ describe('[CF] OpenAPI documentation', () => {
     })
   })
 
-  it('is discoverable as a restish control-plane contract', async () => {
+  it('is discoverable as a restish control-plane contract [spec: api-contracts/error-envelope]', async () => {
     const doc = await fetchOpenApi()
     const discoveredOperations = operations(doc)
     const operationIds = discoveredOperations.map(({ operation }) => operation.operationId)

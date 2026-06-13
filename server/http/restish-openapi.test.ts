@@ -38,7 +38,7 @@ async function openApiOperationIds() {
   )
 }
 
-describe('[CF] restish/OpenAPI control-plane path', () => {
+describe('[CF] restish/OpenAPI control-plane path [spec: api-contracts/restish]', () => {
   beforeEach(async () => {
     await setupOidcProvider()
   })

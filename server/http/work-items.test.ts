@@ -89,7 +89,7 @@ describe('[CF] /api/v1/work-items', () => {
     await setupOidcProvider()
   })
 
-  it('lists queued session work with state filters and redacted payload secrets', async () => {
+  it('lists queued session work with state filters and redacted payload secrets [spec: runners/queue-work] [spec: runners/work-items]', async () => {
     const authorization = await signIn()
     const environment = await createSelfHostedEnvironment(authorization)
     const agent = await createAgent(authorization)

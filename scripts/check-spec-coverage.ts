@@ -10,7 +10,26 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { glob } from 'node:fs/promises'
 
-const ENFORCED_CAPABILITIES = new Set(['agents', 'sessions', 'auth'])
+// Every capability is migrated to BDD-lite; the whole spec/ tree is enforced.
+const ENFORCED_CAPABILITIES = new Set([
+  'agents',
+  'api-contracts',
+  'audit',
+  'auth',
+  'environments',
+  'governance',
+  'mcp',
+  'projects',
+  'providers',
+  'quickstart',
+  'runners',
+  'runtime',
+  'sessions',
+  'triggers',
+  'usage',
+  'vaults',
+  'web-console',
+])
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 const SPEC_GLOB = 'spec/*.feature'

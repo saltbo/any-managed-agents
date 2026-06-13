@@ -23,7 +23,7 @@ describe('providerFamily', () => {
   })
 })
 
-describe('normalizeProviderError', () => {
+describe('[spec: providers/error-normalization] normalizeProviderError', () => {
   it('categorizes credential failures as auth without copying the raw payload', () => {
     const raw = Object.assign(new Error('401 invalid api key sk-raw-credential-fragment'), {
       status: 401,
@@ -123,7 +123,7 @@ describe('computeModelCostMicros', () => {
   })
 })
 
-describe('parseProviderModelCatalog', () => {
+describe('[spec: providers/catalog-parse] parseProviderModelCatalog', () => {
   it('parses OpenAI-compatible model lists with safe catalog fields only', () => {
     const models = parseProviderModelCatalog('openai-compatible', {
       data: [

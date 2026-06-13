@@ -22,7 +22,7 @@ describe('[CF] v1 access rules', () => {
     vi.unstubAllGlobals()
   })
 
-  it('creates wildcard rules when provider and model scopes are omitted', async () => {
+  it('creates wildcard rules when provider and model scopes are omitted [spec: governance/access-rule-api]', async () => {
     const authorization = await signIn()
 
     const createRes = await jsonFetch('/api/v1/access-rules', authorization, {

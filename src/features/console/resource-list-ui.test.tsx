@@ -95,7 +95,7 @@ function connection(overrides: Partial<Connection> = {}): Connection {
   }
 }
 
-describe('resource list UI contracts', () => {
+describe('resource list UI contracts [spec: web-console/resource-lists]', () => {
   it('renders provider rows on one line with tooltip-backed error details', () => {
     const providers = [provider()]
     render(
