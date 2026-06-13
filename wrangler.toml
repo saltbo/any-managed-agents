@@ -1,5 +1,5 @@
 name = "any-managed-agents"
-main = "./workers/bootstrap.ts"
+main = "./server/worker.ts"
 compatibility_date = "2026-05-07"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = true

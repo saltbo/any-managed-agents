@@ -1,6 +1,6 @@
-import { createDeps } from '../composition'
-import type { Env } from '../env'
-import { dispatchDueScheduledTriggers as runDispatch, type ScheduleDispatchResult } from '../usecases/dispatch-triggers'
+import { createDeps } from './composition'
+import type { Env } from './env'
+import { dispatchDueScheduledTriggers as runDispatch, type ScheduleDispatchResult } from './usecases/dispatch-triggers'
 
 export type { ScheduleDispatchResult }
 

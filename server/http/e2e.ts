@@ -12,7 +12,7 @@ import { requireAuth } from '../auth/session'
 import { vaultCredentialVersions } from '../db/schema'
 import type { Env } from '../env'
 import { errorResponse } from '../errors'
-import { dispatchDueScheduledTriggers } from '../schedules/dispatcher'
+import { dispatchDueScheduledTriggers } from '../scheduled-dispatch'
 import { decryptSecretValue } from '../vault-crypto'
 
 const app = new Hono<{ Bindings: Env }>()

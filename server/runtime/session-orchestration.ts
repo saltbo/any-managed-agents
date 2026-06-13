@@ -7,7 +7,7 @@
 // approval-decision continuation. It sits in server/runtime/ alongside the
 // other runtime execution infrastructure (drivers, sandbox/DO bindings, the
 // turn queue) and is consumed by the SessionRuntimeGateway adapter, the queue
-// consumer (workers/bootstrap), and the scheduler dispatcher.
+// consumer (server/worker), and the scheduled-dispatch wrapper.
 //
 // Every public entry here is Response-free: HTTP concerns (Response, status
 // codes, SSE) stay in server/http/sessions.ts. Outcomes cross the boundary as

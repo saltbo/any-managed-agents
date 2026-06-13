@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { createApp } from '../app'
-import type { Env } from '../env'
+import { createApp } from './app'
+import type { Env } from './env'
 
 const routeSources = {
   // agents and environments are migrated to the clean-architecture http layer.

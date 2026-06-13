@@ -59,7 +59,7 @@ export default defineConfig({
             'server/adapters/**/*.test.ts',
             'server/auth/**/*.test.ts',
             'server/runtime/**/*.test.ts',
-            'server/test/**/*.test.ts',
+            'server/*.test.ts',
             'shared/**/*.test.ts',
             'runtime-bridge/src/**/*.test.ts',
           ],
@@ -93,7 +93,7 @@ export default defineConfig({
         ],
         test: {
           name: 'integration',
-          include: ['server/http/**/*.test.ts', 'workers/**/*.test.ts'],
+          include: ['server/http/**/*.test.ts'],
           setupFiles: ['./server/test/apply-migrations.ts'],
         },
       },
