@@ -1,5 +1,4 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
-import { requestId } from '../audit'
 import { type AuthContext, isRunnerOidcAuth, requireAuth } from '../auth/session'
 import { errorResponse } from '../errors'
 import {
@@ -14,6 +13,7 @@ import {
 } from '../openapi'
 import { type AuthScope, type RunnerAuthRecord, RunnerConflictError, RunnerValidationError } from '../usecases/ports'
 import { recordRunnerHeartbeat, registerRunner, updateRunner } from '../usecases/runners'
+import { requestId } from './request-context'
 import { runnerForbidden, runnerOidcContext, runnerOperationAuthorized } from './runner-auth'
 
 type RunnerRoutes = OpenAPIHono<DepsEnv>

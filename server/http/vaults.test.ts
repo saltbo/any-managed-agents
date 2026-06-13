@@ -39,7 +39,7 @@ describe('[CF] /api/v1/vaults', () => {
     })
   })
 
-  it('creates, lists, reads, updates, and archives project-scoped vaults', async () => {
+  it('creates, lists, reads, updates, and archives project-scoped vaults [spec: vaults/api-crud]', async () => {
     const authorization = await signIn()
     const createRes = await jsonFetch('/api/v1/vaults', authorization, {
       method: 'POST',
@@ -411,7 +411,7 @@ describe('[CF] /api/v1/vaults', () => {
     expect(crossProjectCredentialRead.status).toBe(404)
   })
 
-  it('isolates project vaults inside the same organization and shares organization-scoped vaults', async () => {
+  it('isolates project vaults inside the same organization and shares organization-scoped vaults [spec: vaults/api-tenancy]', async () => {
     const authorization = await signIn()
     const projectVaultRes = await jsonFetch('/api/v1/vaults', authorization, {
       method: 'POST',

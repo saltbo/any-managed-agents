@@ -16,6 +16,7 @@ import type {
 } from '@server/usecases/ports'
 import { and, desc, eq, gte, isNotNull, isNull, like, lt, lte, or } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
+import { normalizeEnvironmentNetworkPolicy } from '../../contracts/environment-contracts'
 import {
   connections,
   environments,
@@ -23,7 +24,6 @@ import {
   vaultCredentials,
   vaultCredentialVersions,
 } from '../../db/schema'
-import { normalizeEnvironmentNetworkPolicy } from '../../routes/environment-contracts'
 
 type Db = ReturnType<typeof drizzle>
 type EnvironmentRow = typeof environments.$inferSelect

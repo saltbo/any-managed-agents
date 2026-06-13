@@ -6,7 +6,6 @@ import {
   TOOL_AVAILABILITIES,
   TOOL_CALL_STATES,
 } from '@server/domain/connection'
-import { requestId } from '../audit'
 import { requireAuth } from '../auth/session'
 import { errorResponse } from '../errors'
 import {
@@ -34,6 +33,7 @@ import {
   ConnectionValidationError,
   type ToolCallRecord,
 } from '../usecases/ports'
+import { requestId } from './request-context'
 
 type ConnectionRoutes = OpenAPIHono<DepsEnv>
 

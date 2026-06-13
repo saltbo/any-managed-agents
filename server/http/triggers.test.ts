@@ -99,7 +99,7 @@ describe('[CF] /api/v1/triggers', () => {
     vi.unstubAllGlobals()
   })
 
-  it('creates, lists, reads, updates, pauses, archives, restores, and audits triggers', async () => {
+  it('creates, lists, reads, updates, pauses, archives, restores, and audits triggers [spec: triggers/api-crud]', async () => {
     const authorization = await signIn()
     const agent = await createAgent(authorization)
     const environment = await createEnvironment(authorization)
@@ -323,7 +323,7 @@ describe('[CF] /api/v1/triggers', () => {
     })
   })
 
-  it('creates one session per due trigger occurrence and exposes run resources', async () => {
+  it('creates one session per due trigger occurrence and exposes run resources [spec: triggers/dispatch]', async () => {
     const authorization = await signIn()
     const agent = await createAgent(authorization)
     const environment = await createEnvironment(authorization)
@@ -452,7 +452,7 @@ describe('[CF] /api/v1/triggers', () => {
     await expect(failedRunsRes.json()).resolves.toMatchObject({ data: [] })
   })
 
-  it('does not dispatch paused or archived triggers', async () => {
+  it('does not dispatch paused or archived triggers [spec: triggers/inactive]', async () => {
     const authorization = await signIn()
     const agent = await createAgent(authorization)
     const environment = await createEnvironment(authorization)

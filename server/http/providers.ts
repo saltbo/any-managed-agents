@@ -1,6 +1,5 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
 import { DISCOVERY_TASK_STATES, MODEL_AVAILABILITY, PROVIDER_TYPES } from '@server/domain/provider'
-import { redactSecrets, requestId } from '../audit'
 import { requireAuth } from '../auth/session'
 import {
   AuthenticatedOperation,
@@ -12,6 +11,7 @@ import {
   listResponseSchema,
   parseListCursor,
 } from '../openapi'
+import { redactSensitiveValue } from '../redaction'
 import {
   type AuthScope,
   type ModelDiscoveryTaskRecord,
@@ -28,6 +28,7 @@ import {
   type UpdateProviderPatch,
   updateProvider,
 } from '../usecases/providers'
+import { requestId } from './request-context'
 
 type ProviderRoutes = OpenAPIHono<DepsEnv>
 
@@ -444,7 +445,7 @@ export function registerProviderRoutes(routes: ProviderRoutes) {
           isDefault: body.isDefault ?? false,
           credentialId: body.credentialRef?.credentialId ?? null,
           credentialVersionId: body.credentialRef?.versionId ?? null,
-          metadata: redactSecrets(body.metadata ?? {}) as Record<string, unknown>,
+          metadata: redactSensitiveValue(body.metadata ?? {}) as Record<string, unknown>,
           rateLimits: body.rateLimits ?? {},
           budgetPolicy: body.budgetPolicy ?? {},
         })
@@ -704,7 +705,9 @@ function patchFromBody(body: z.infer<typeof UpdateProviderSchema>): UpdateProvid
     ...(body.isDefault !== undefined ? { isDefault: body.isDefault } : {}),
     ...(body.enabled !== undefined ? { enabled: body.enabled } : {}),
     ...(body.credentialRef !== undefined ? { credential: credentialPatch(body.credentialRef) } : {}),
-    ...(body.metadata !== undefined ? { metadata: redactSecrets(body.metadata) as Record<string, unknown> } : {}),
+    ...(body.metadata !== undefined
+      ? { metadata: redactSensitiveValue(body.metadata) as Record<string, unknown> }
+      : {}),
     ...(body.rateLimits !== undefined ? { rateLimits: body.rateLimits } : {}),
     ...(body.budgetPolicy !== undefined ? { budgetPolicy: body.budgetPolicy } : {}),
   }

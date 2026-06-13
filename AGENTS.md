@@ -21,31 +21,52 @@
 - Web UI code is an internal product entrypoint and should call the control plane through the shared Hono RPC client. External operators, generated SDKs, and restish use the published OpenAPI document.
 - Secret values belong in Cloudflare Secrets or an approved external vault. D1 stores metadata, policy, snapshots, and secret references only.
 
-## Workflow: Executable Specs First
+## Workflow: Spec-Traced, Verified At The Cheapest Layer
 
-1. Write or update a Gherkin scenario in `specs/product/`.
-2. Add or update Cucumber step definitions in `test/e2e/`.
+Specs are BDD-lite (see `spec/README.md`). `spec/*.feature` is the product source of
+truth — documentation, one file per capability — and is NOT a Cucumber runner over
+the whole tree. Tests trace back to scenarios with `[spec: <id>]` breadcrumbs.
+
+1. Write or update a scenario in the capability's `spec/<capability>.feature`. Give it
+   a stable id `@<capability>/<slug>` and one layer tag (`@domain`/`@usecase`/`@web`/
+   `@api`/`@e2e` — the cheapest layer that can prove it).
+2. Add or update the home test at that layer (see the table in `spec/README.md`) and
+   put `[spec: <id>]` in its `describe`/`it` name.
 3. Implement the Worker, Agent, D1, or UI behavior.
 4. Run the smallest meaningful check:
-   - `npm run test:e2e`
+   - `npm run test` (unit + web + integration vitest projects)
    - `npm run typecheck`
-   - `npm run test`
+   - `npm run lint:spec` (every enforced scenario id has a breadcrumb)
+   - `npm run test:e2e` (only `@e2e` scenarios — real cross-stack journeys)
 
-Scenarios should describe business behavior. Selectors, fixtures, and platform details belong in step definitions and helpers.
+Scenarios describe business behaviour. Selectors, fixtures, and platform details
+belong in the home test and its helpers.
 
-If implementation discovers a missing product decision or behavior, stop widening the code change and update the relevant spec or product doc first.
+If implementation discovers a missing product decision, stop widening the code change
+and update the relevant `spec/` scenario or product doc first.
 
-## BDD And Step Definition Rules
+## Spec And Test Layering Rules
 
-- Product specs in `specs/product/` are local end-to-end acceptance tests. `@implemented` product scenarios must run through the local app, local Worker routes, local D1/test bindings, public HTTP APIs, or a real browser page. Do not satisfy a product scenario with only constants, static file reads, schema existence checks, or `assert.ok(true)`.
-- `npm run test:e2e` is the only product-spec runner. It runs `@implemented and not @planned` scenarios against local resources. Do not make product e2e depend on production, staging, real model quota, real user credentials, or direct database access.
-- Staging or production verification belongs in `specs/smoke/` and `npm run test:smoke`. Smoke scenarios may use real FlareAuth, Cloudflare, Workers AI, and deployed runtime resources, but they must not replace local product e2e coverage.
-- Unit tests, pure protocol constants, static documentation checks, lint, typecheck, and build checks do not belong in product Gherkin. Put those in `npm test`, `npm run lint`, `npm run typecheck`, or dedicated scripts.
-- OpenAPI/restish coverage may appear in product e2e only when it talks to a locally running AMA harness or local Worker app. Static OpenAPI shape checks are contract tests, not product behavior, unless paired with an actual local request flow.
-- Restish behavior belongs in Cucumber step definitions and `test/e2e` support code. Do not add standalone `scripts/` test runners for product-spec behavior.
-- Every `@implemented` scenario should have meaningful Given/When/Then causality: setup real local state, perform one user/API/browser action, then assert externally observable behavior. Avoid repeated generic steps that execute the same helper without scenario-specific assertions.
-- `@planned` means accepted product intent that is not yet implemented or not yet covered by local e2e. When a feature ships, update the scenario to `@implemented` in the same change that adds the step coverage.
-- Prefer reusable helpers for setup and cleanup, but keep step names product-specific. A reader should be able to tell what behavior is being verified without opening the helper.
+- `spec/` holds only `.feature` files and its README — no test code, no step
+  definitions. The id `@<capability>/<slug>` never changes once written.
+- Verify at the cheapest layer. Old `@api` scenarios usually map to `@api`
+  (assembled server, real D1) or `@usecase` (fake-port business branch); old `@ui`
+  scenarios map to `@web` (jsdom + MSW) or `@e2e` (real browser). Reserve `@e2e` for
+  genuinely cross-stack, hermetic journeys — do not turn every scenario into a slow
+  E2E.
+- `npm run test:e2e` runs only `@e2e`-tagged scenarios from `spec/`, against local
+  resources. Their step text must match the definitions in `test/e2e/`. Do not make
+  e2e depend on production, staging, real model quota, real user credentials, or
+  direct database access.
+- Staging or production verification lives in `spec/smoke/` and `npm run test:smoke`.
+  Smoke scenarios may use real FlareAuth, Cloudflare, Workers AI, and deployed
+  resources, but must not replace local layered coverage.
+- `npm run lint:spec` is a governance lint (sibling to `lint:arch`): it fails when an
+  enforced capability has a scenario id with no `[spec: id]` breadcrumb. Add a
+  capability to `ENFORCED_CAPABILITIES` in `scripts/check-spec-coverage.ts` once its
+  spec and breadcrumbs land.
+- Do not add standalone `scripts/` test runners for product behaviour. Restish/OpenAPI
+  contract behaviour lives in `server/http/*.test.ts` (integration) or `test/e2e/`.
 
 ## Architecture Map
 
@@ -59,8 +80,8 @@ If implementation discovers a missing product decision or behavior, stop widenin
 - `src/features/console/` - Shared authenticated console shell and context.
 - `src/console/` - Reusable AMA product components, form helpers, formatting, defaults, and view models.
 - `src/components/ui/` - shadcn-generated primitives. Prefer these before writing custom primitives.
-- `specs/product/` - Product behavior in Gherkin. `@planned` scenarios are design intent; unplanned implemented scenarios are executable acceptance.
-- `test/e2e/` - Cucumber step definitions, browser helpers, and local e2e harnesses.
+- `spec/` - Product behaviour in Gherkin (BDD-lite). One `.feature` per capability; tests trace back via `[spec: id]`. See `spec/README.md`.
+- `test/e2e/` - Cucumber step definitions, browser helpers, and local e2e harnesses for `@e2e` scenarios.
 - `docs/product/` - Product decisions, UI/UX standards, API/SDK boundaries, and implementation notes.
 - `docs/infra/` - Cloudflare deployment and infrastructure notes.
 

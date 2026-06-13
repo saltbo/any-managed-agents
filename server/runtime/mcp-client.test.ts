@@ -3,7 +3,7 @@ import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js'
 import { describe, expect, it } from 'vitest'
 import { categorizeMcpClientFailure, McpClientError } from './mcp-client'
 
-describe('categorizeMcpClientFailure', () => {
+describe('[spec: mcp/client-errors] categorizeMcpClientFailure', () => {
   it('maps HTTP transport statuses to stable categories', () => {
     expect(categorizeMcpClientFailure(new StreamableHTTPError(401, 'raw upstream auth detail'))).toBe('unauthorized')
     expect(categorizeMcpClientFailure(new StreamableHTTPError(403, 'raw upstream auth detail'))).toBe('unauthorized')

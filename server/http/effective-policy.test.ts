@@ -28,7 +28,7 @@ describe('[CF] v1 effective policy', () => {
     vi.unstubAllGlobals()
   })
 
-  it('merges policies, access rules, and enabled budgets into the effective policy', async () => {
+  it('merges policies, access rules, and enabled budgets into the effective policy [spec: governance/effective-policy-api]', async () => {
     const authorization = await signIn()
 
     const policyRes = await jsonFetch('/api/v1/policies', authorization, {
@@ -81,7 +81,7 @@ describe('[CF] v1 effective policy', () => {
     expect(effective.decision).toBeUndefined()
   })
 
-  it('attaches a denial decision for providerId+modelId and writes a safe audit record', async () => {
+  it('attaches a denial decision for providerId+modelId and writes a safe audit record [spec: governance/effective-policy-api]', async () => {
     const authorization = await signIn()
 
     const ruleRes = await jsonFetch('/api/v1/access-rules', authorization, {
@@ -161,7 +161,7 @@ describe('[CF] v1 effective policy', () => {
     })
   })
 
-  it('resolves team-scoped policies through ?teamId=', async () => {
+  it('resolves team-scoped policies through ?teamId= [spec: governance/policy-change-current]', async () => {
     const authorization = await signIn()
 
     const teamPolicyRes = await jsonFetch('/api/v1/policies', authorization, {

@@ -23,7 +23,7 @@ async function signInUser(suffix: string) {
   })
 }
 
-describe('[CF] Connector catalog', () => {
+describe('[CF] Connector catalog [spec: mcp/discovery]', () => {
   beforeEach(async () => {
     await setupOidcProvider()
   })

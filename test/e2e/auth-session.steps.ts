@@ -61,7 +61,7 @@ Given('an organization with a project and a user exists', async function (this: 
 })
 
 // ──────────────────────────────────────────────────────────────────────────────
-// auth-flow.feature: Complete sign in
+// [spec: auth/e2e-sign-in] Complete sign in across the real stack
 // ──────────────────────────────────────────────────────────────────────────────
 
 When('a user completes the OIDC callback', async function (this: AuthWorld) {

@@ -1,10 +1,8 @@
-import { and, desc, eq } from 'drizzle-orm'
-import type { drizzle } from 'drizzle-orm/d1'
-import { providers } from '../db/schema'
-import { providerFamily } from '../providers/adapters'
+import { createRuntimeOrchestrationRepo } from '../adapters/repos/runtime-orchestration'
+import { providerFamily } from '../domain/provider-adapter'
 import type { RuntimeSecretEnvEntry } from './secret-env'
 
-type Db = ReturnType<typeof drizzle>
+type Db = Parameters<typeof createRuntimeOrchestrationRepo>[0]
 
 export const PLATFORM_DEFAULT_PROVIDER = 'workers-ai'
 
@@ -55,31 +53,15 @@ export async function resolveSessionProviderConfig(
   if (providerId === PLATFORM_DEFAULT_PROVIDER) {
     return { ok: true, config: null }
   }
-  const selection = {
-    id: providers.id,
-    type: providers.type,
-    baseUrl: providers.baseUrl,
-    enabled: providers.enabled,
-    credentialId: providers.credentialId,
-    credentialVersionId: providers.credentialVersionId,
-  }
+  const repo = createRuntimeOrchestrationRepo(db)
   if (providerId === null) {
-    const row = await db
-      .select(selection)
-      .from(providers)
-      .where(and(eq(providers.projectId, projectId), eq(providers.isDefault, true)))
-      .orderBy(desc(providers.updatedAt))
-      .get()
+    const row = await repo.defaultProviderConfig(projectId)
     if (!row) {
       return { ok: true, config: null }
     }
     return sessionProviderConfig(row)
   }
-  const row = await db
-    .select(selection)
-    .from(providers)
-    .where(and(eq(providers.id, providerId), eq(providers.projectId, projectId)))
-    .get()
+  const row = await repo.namedProviderConfig(projectId, providerId)
   if (!row) {
     return { ok: false, reason: 'not_found' }
   }

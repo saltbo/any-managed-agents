@@ -201,7 +201,7 @@ describe('[CF] /api/v1/sessions', () => {
     vi.unstubAllGlobals()
   })
 
-  it('creates, reads, lists, connects, messages, stops, archives, and records events for a cloud session', async () => {
+  it('creates, reads, lists, connects, messages, stops, archives, and records events for a cloud session [spec: sessions/create] [spec: sessions/prompt] [spec: sessions/stop] [spec: sessions/archive] [spec: sessions/connection] [spec: sessions/events-query] [spec: sessions/events-redaction]', async () => {
     const authorization = await signIn()
     const githubCredential = await connectMcp(authorization, 'github')
     await connectMcp(authorization, 'linear')
@@ -774,7 +774,7 @@ describe('[CF] /api/v1/sessions', () => {
     expect(duplicateMountRes.status).toBe(400)
   })
 
-  it('validates secret environment references without exposing raw secrets', async () => {
+  it('validates secret environment references without exposing raw secrets [spec: sessions/create-explicit-inputs]', async () => {
     const authorization = await signIn()
     const credential = await connectMcp(authorization, 'github')
     const environment = await createEnvironment(authorization)
@@ -869,7 +869,7 @@ describe('[CF] /api/v1/sessions', () => {
     })
   })
 
-  it('serializes stored canonical runtime event rows as AMA session events', async () => {
+  it('serializes stored canonical runtime event rows as AMA session events [spec: sessions/events-canonical]', async () => {
     const authorization = await signIn()
     await connectMcp(authorization, 'github')
     const environment = await createEnvironment(authorization)
@@ -1002,7 +1002,7 @@ describe('[CF] /api/v1/sessions', () => {
     expect(emptyBatchRes.status).toBe(400)
   })
 
-  it('accepts self-hosted sessions when cloud sandbox startup is disabled', async () => {
+  it('accepts self-hosted sessions when cloud sandbox startup is disabled [spec: environments/self-hosted]', async () => {
     const authorization = await signIn()
     const environment = await createEnvironment(authorization, {
       name: 'Self-hosted no sandbox workspace',
@@ -1045,7 +1045,7 @@ describe('[CF] /api/v1/sessions', () => {
     })
   })
 
-  it('keeps a stopped session from writing successful completion events after cancellation', async () => {
+  it('keeps a stopped session from writing successful completion events after cancellation [spec: sessions/stop] [spec: runtime/stop]', async () => {
     const authorization = await signIn()
     await connectMcp(authorization, 'github')
     const environment = await createEnvironment(authorization)
@@ -1100,7 +1100,7 @@ describe('[CF] /api/v1/sessions', () => {
     expect(JSON.stringify(events.data)).not.toContain('AMA runtime processed: Wait for cancellation before completing')
   })
 
-  it('creates a session and dispatches an initial prompt through the API', async () => {
+  it('creates a session and dispatches an initial prompt through the API [spec: sessions/initial-prompt]', async () => {
     const authorization = await signIn()
     await connectMcp(authorization, 'github')
     const environment = await createEnvironment(authorization)
@@ -1177,7 +1177,7 @@ describe('[CF] /api/v1/sessions', () => {
     )
   })
 
-  it('includes enabled agent memory in session initial prompts', async () => {
+  it('includes enabled agent memory in session initial prompts [spec: sessions/initial-prompt]', async () => {
     const authorization = await signIn()
     await connectMcp(authorization, 'github')
     const environment = await createEnvironment(authorization)
@@ -1237,7 +1237,7 @@ describe('[CF] /api/v1/sessions', () => {
     ).toBe('[REDACTED]')
   })
 
-  it('lists sessions with pagination, state, search, and date filters', async () => {
+  it('lists sessions with pagination, state, search, and date filters [spec: sessions/list]', async () => {
     const authorization = await signIn()
     await connectMcp(authorization, 'github')
     const environment = await createEnvironment(authorization)
@@ -1282,7 +1282,7 @@ describe('[CF] /api/v1/sessions', () => {
     expect(dateList.data.map((session) => session.id)).toEqual(expect.arrayContaining([first.id, second.id]))
   })
 
-  it('enforces auth and project tenancy for session lifecycle', async () => {
+  it('enforces auth and project tenancy for session lifecycle [spec: sessions/auth-tenancy]', async () => {
     const unauthenticatedRes = await SELF.fetch('https://example.com/api/v1/sessions')
     expect(unauthenticatedRes.status).toBe(401)
 
@@ -1324,7 +1324,7 @@ describe('[CF] /api/v1/sessions', () => {
     expect(crossProjectReads.map((response) => response.status)).toEqual([404, 404, 404, 404, 404, 404, 404])
   })
 
-  it('blocks disabled sandbox startup before creating a runtime', async () => {
+  it('blocks disabled sandbox startup before creating a runtime [spec: audit/runtime-policy]', async () => {
     const authorization = await signIn()
     await connectMcp(authorization, 'github')
     const environment = await createEnvironment(authorization)
@@ -1495,7 +1495,7 @@ describe('[CF] /api/v1/sessions', () => {
     })
   })
 
-  it('rejects cloud sessions when the session runtime cannot run the exact agent provider model', async () => {
+  it('rejects cloud sessions when the session runtime cannot run the exact agent provider model [spec: sessions/reject-dependencies]', async () => {
     const authorization = await signIn()
     const model = 'gpt-5.3-codex'
     const { providerId } = await createProviderModel(authorization, model)
@@ -1585,7 +1585,7 @@ describe('[CF] /api/v1/sessions', () => {
     expect(exactLease).toBeTruthy()
   })
 
-  it('dispatches configured provider base URL and vault credential into the self-hosted runtime env', async () => {
+  it('dispatches configured provider base URL and vault credential into the self-hosted runtime env [spec: providers/dispatch]', async () => {
     const authorization = await signIn()
     const credential = await createVaultCredential(authorization, 'provider-api-key')
 

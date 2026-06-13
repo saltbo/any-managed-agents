@@ -114,6 +114,7 @@ function fakeDeps(
     usageRecords: undefined as unknown as Deps['usageRecords'],
     auditRecords: undefined as unknown as Deps['auditRecords'],
     triggers: undefined as unknown as Deps['triggers'],
+    triggerDispatch: undefined as unknown as Deps['triggerDispatch'],
     projects: undefined as unknown as Deps['projects'],
     federatedTenants: undefined as unknown as Deps['federatedTenants'],
     runners: undefined as unknown as Deps['runners'],
@@ -216,7 +217,7 @@ describe('[spec: vaults/credential-rotate] rotateCredential', () => {
   })
 })
 
-describe('[spec: vaults/version-delete] deleteCredentialVersion', () => {
+describe('[spec: vaults/credential-delete] deleteCredentialVersion', () => {
   it('refuses to delete the active version', async () => {
     await expect(
       deleteCredentialVersion(fakeDeps(), credential({ activeVersionId: 'vaultver_2' }), version({ id: 'vaultver_2' })),

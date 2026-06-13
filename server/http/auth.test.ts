@@ -26,7 +26,7 @@ describe('[CF] auth v1', () => {
     vi.unstubAllGlobals()
   })
 
-  it('exposes the OIDC discovery config publicly', async () => {
+  it('exposes the OIDC discovery config publicly [spec: auth/sso-discovery]', async () => {
     const res = await SELF.fetch('https://example.com/api/v1/auth/config')
     expect(res.status).toBe(200)
     await expect(res.json()).resolves.toEqual({
@@ -41,7 +41,7 @@ describe('[CF] auth v1', () => {
     expect(body.methods).toHaveLength(1)
   })
 
-  it('creates an auth session from a valid access token', async () => {
+  it('creates an auth session from a valid access token [spec: auth/session-create]', async () => {
     const authorization = await signIn()
     const res = await jsonFetch('/api/v1/auth/sessions', undefined, {
       body: { accessToken: accessTokenOf(authorization) },
@@ -69,7 +69,7 @@ describe('[CF] auth v1', () => {
     expect(body.project).not.toHaveProperty('organizationId')
   })
 
-  it('rejects invalid access tokens with 401', async () => {
+  it('rejects invalid access tokens with 401 [spec: auth/session-reject]', async () => {
     const res = await jsonFetch('/api/v1/auth/sessions', undefined, {
       body: { accessToken: 'invalid-token' },
     })
@@ -100,7 +100,7 @@ describe('[CF] auth v1', () => {
     })
   })
 
-  it('reads the current session context from a bearer token', async () => {
+  it('reads the current session context from a bearer token [spec: auth/session-current]', async () => {
     const authorization = await signIn()
     const res = await jsonFetch('/api/v1/auth/sessions/current', authorization)
     expect(res.status).toBe(200)
@@ -113,13 +113,13 @@ describe('[CF] auth v1', () => {
     expect(body.project).not.toHaveProperty('organizationId')
   })
 
-  it('requires authentication for the current session context', async () => {
+  it('requires authentication for the current session context [spec: auth/guard]', async () => {
     const res = await jsonFetch('/api/v1/auth/sessions/current')
     expect(res.status).toBe(401)
     expectAuthRequired(await res.json())
   })
 
-  it('signs out by expiring the session cookie', async () => {
+  it('signs out by expiring the session cookie [spec: auth/session-current]', async () => {
     const res = await SELF.fetch('https://example.com/api/v1/auth/sessions/current', { method: 'DELETE' })
     expect(res.status).toBe(204)
     const setCookie = res.headers.get('set-cookie')
@@ -144,7 +144,7 @@ describe('[CF] projects v1', () => {
     expectAuthRequired(await res.json())
   })
 
-  it('lists the auto-created default project without exposing organizationId', async () => {
+  it('lists the auto-created default project without exposing organizationId [spec: auth/delegated-bootstrap]', async () => {
     const authorization = await signIn()
     const res = await jsonFetch('/api/v1/projects', authorization)
     expect(res.status).toBe(200)
@@ -187,7 +187,7 @@ describe('[CF] projects v1', () => {
     })
   })
 
-  it('does not read projects across organizations', async () => {
+  it('does not read projects across organizations [spec: auth/tenancy]', async () => {
     const tenantA = await signInUser('proj_tenant_a')
     const createRes = await jsonFetch('/api/v1/projects', tenantA, { body: { name: 'Tenant A project' } })
     const project = (await createRes.json()) as { id: string }

@@ -118,7 +118,7 @@ AMA stores only safe references. Raw tokens, clone URLs with embedded credential
 
 Product behavior should be described in BDD specs before implementation. These specs are primarily for agents and developers, not for end users.
 
-See `specs/product/spec-index.md` for the current product spec map.
+See `spec/README.md` for the BDD-lite convention and the per-capability spec map.
 
 See `docs/product/decisions.md` for fixed product decisions.
 
@@ -138,7 +138,7 @@ Release verification must include:
 - OpenAPI generated from Hono route schemas for auth, agents, environments, and
   sessions.
 - UI coverage for signed-out and signed-in console states.
-- BDD release acceptance scenarios in `specs/product/`.
+- BDD-lite acceptance scenarios in `spec/`, traced to layered tests via `[spec: id]`.
 - `pnpm run lint`, `pnpm run typecheck`, `pnpm test`, `pnpm run test:e2e`,
   and `pnpm run build`.
 

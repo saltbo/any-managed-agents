@@ -68,7 +68,7 @@ describe('[CF] v1 usage records', () => {
     vi.unstubAllGlobals()
   })
 
-  it('lists usage records with provider, session, and time-range filters', async () => {
+  it('lists usage records with provider, session, and time-range filters [spec: usage/records-api]', async () => {
     const authorization = await signIn()
     const project = await projectContext(authorization)
     const db = drizzle(env.DB)
@@ -106,7 +106,7 @@ describe('[CF] v1 usage records', () => {
     expect(rangeList.data).toEqual([expect.objectContaining({ sessionId: 'session_beta' })])
   })
 
-  it('reads a single usage record and 404s unknown ids', async () => {
+  it('reads a single usage record and 404s unknown ids [spec: usage/records-api]', async () => {
     const authorization = await signIn()
     const project = await projectContext(authorization)
     const seeded = usageRow(project, {})
@@ -125,7 +125,7 @@ describe('[CF] v1 usage records', () => {
     expect(missingRes.status).toBe(404)
   })
 
-  it('exports filtered usage records as CSV via Accept: text/csv', async () => {
+  it('exports filtered usage records as CSV via Accept: text/csv [spec: usage/export-api]', async () => {
     const authorization = await signIn()
     const project = await projectContext(authorization)
     const db = drizzle(env.DB)

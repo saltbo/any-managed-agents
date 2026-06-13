@@ -26,7 +26,7 @@ function oidc(overrides: Partial<RunnerOidcContext> = {}): RunnerOidcContext {
   }
 }
 
-describe('runnerCapabilityEligible', () => {
+describe('[spec: runners/eligibility] runnerCapabilityEligible', () => {
   it('claims unscoped non-session work for any runner', () => {
     expect(runnerCapabilityEligible([], { type: 'maintenance' })).toBe(true)
   })
@@ -86,7 +86,7 @@ describe('hasSecretMaterial', () => {
   })
 })
 
-describe('runner registration binding', () => {
+describe('[spec: runners/auth-binding] runner registration binding', () => {
   it('defaults the auth mode from the token binding', () => {
     expect(runnerAuthModeForRegistration(oidc(), undefined)).toBe('oidc')
     expect(runnerAuthModeForRegistration(oidc({ runnerProjectId: 'project_1' }), undefined)).toBe('federated')

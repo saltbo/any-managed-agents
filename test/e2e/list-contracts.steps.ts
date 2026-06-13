@@ -4,6 +4,7 @@ import { apiJson } from './local-app'
 import { createAgent, ensureSignedIn, type Json, type ListResponse, type StepsWorld } from './shared-helpers'
 
 // ─── Scenario: Filter API resources by date range ────────────────────────────
+// [spec: api-contracts/date-filters]
 
 Given('a list route supports timestamps', async function (this: StepsWorld) {
   const state = await ensureSignedIn(this)
@@ -39,6 +40,7 @@ Then('only matching resources are returned', function (this: StepsWorld) {
 })
 
 // ─── Scenario: Page through API resources ────────────────────────────────────
+// [spec: api-contracts/pagination]
 
 Given('more resources exist than fit on one page', async function (this: StepsWorld) {
   const state = await ensureSignedIn(this)

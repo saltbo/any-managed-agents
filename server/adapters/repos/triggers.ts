@@ -1,4 +1,4 @@
-import type { RuntimeName } from '@server/routes/environment-contracts'
+import type { RuntimeName } from '@server/contracts/environment-contracts'
 import type {
   CreateTriggerInput,
   ListPageResult,

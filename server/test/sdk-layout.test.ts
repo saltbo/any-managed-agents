@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
-describe('generated SDK layout', () => {
+describe('generated SDK layout [spec: api-contracts/sdk-layout]', () => {
   it('keeps generated OpenAPI and SDK artifacts aligned with Hono routes', () => {
     expect(() => execFileSync('pnpm', ['run', 'openapi:check'], { encoding: 'utf8' })).not.toThrow()
   })

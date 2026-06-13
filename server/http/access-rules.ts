@@ -1,9 +1,9 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
-import { requestId } from '../audit'
 import { requireAuth } from '../auth/session'
 import { AuthenticatedOperation, type DepsEnv, ErrorResponseSchema, listResponseSchema } from '../openapi'
 import { type UpdateAccessRulePatch, updateAccessRule } from '../usecases/access-rules'
 import type { AccessRuleRecord, AuthScope } from '../usecases/ports'
+import { requestId } from './request-context'
 
 type AccessRuleRoutes = OpenAPIHono<DepsEnv>
 

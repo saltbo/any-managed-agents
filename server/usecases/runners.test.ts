@@ -63,7 +63,7 @@ function fakeDeps(repo: Partial<Deps['runners']> = {}): Deps {
   return { runners } as unknown as Deps
 }
 
-describe('registerRunner', () => {
+describe('[spec: runners/register] registerRunner', () => {
   it('inserts a new runner when references are usable', async () => {
     const result = await registerRunner(fakeDeps(), auth, consoleOidc, {
       name: 'Local runner',

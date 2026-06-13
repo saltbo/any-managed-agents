@@ -18,7 +18,6 @@
   },
   "include": ["server", "workers", "test", "specs", "drizzle.config.ts", "vitest*.ts"],
   "exclude": [
-    "server/routes/**/*.test.ts",
     "server/http/**/*.test.ts",
     "workers/**/*.test.ts",
     "server/test/apply-migrations.ts",

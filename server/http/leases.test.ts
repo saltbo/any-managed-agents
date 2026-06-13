@@ -141,7 +141,7 @@ describe('[CF] /api/v1/leases', () => {
     await setupOidcProvider()
   })
 
-  it('claims a specific work item, opens the channel, renews, and completes the lease', async () => {
+  it('claims a specific work item, opens the channel, renews, and completes the lease [spec: runners/lease-claim]', async () => {
     const authorization = await signIn()
     const environment = await createSelfHostedEnvironment(authorization)
     const agent = await createAgent(authorization)
@@ -301,7 +301,7 @@ describe('[CF] /api/v1/leases', () => {
     })
   })
 
-  it('requeues interrupted work with the freshest resume token', async () => {
+  it('requeues interrupted work with the freshest resume token [spec: runners/lease-recovery]', async () => {
     const authorization = await signIn()
     const environment = await createSelfHostedEnvironment(authorization)
     const agent = await createAgent(authorization)
@@ -352,7 +352,7 @@ describe('[CF] /api/v1/leases', () => {
     })
   })
 
-  it('marks failed work and surfaces the error on the work item and session', async () => {
+  it('marks failed work and surfaces the error on the work item and session [spec: runners/lease-lifecycle]', async () => {
     const authorization = await signIn()
     const environment = await createSelfHostedEnvironment(authorization)
     const agent = await createAgent(authorization)

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_CONNECTORS, PLATFORM_CONNECTOR_IDS, requiresVaultCredential } from './connector'
 
-describe('[spec: connectors/catalog] platform catalog', () => {
+describe('[spec: connectors/catalog] [spec: mcp/catalog] platform catalog', () => {
   it('exposes the seeded connector ids', () => {
     expect(PLATFORM_CONNECTOR_IDS).toEqual(['github', 'linear'])
   })

@@ -31,7 +31,7 @@ describe('[CF] v1 audit records', () => {
     vi.unstubAllGlobals()
   })
 
-  it('lists and filters audit records scoped to the organization', async () => {
+  it('lists and filters audit records scoped to the organization [spec: audit/records-api] [spec: audit/auto-record]', async () => {
     const authorization = await signIn()
     const rule = await createAuditedAccessRule(authorization)
 
@@ -54,7 +54,7 @@ describe('[CF] v1 audit records', () => {
     expect(denied.data).not.toContainEqual(expect.objectContaining({ resourceId: rule.id }))
   })
 
-  it('reads a single audit record and 404s unknown ids', async () => {
+  it('reads a single audit record and 404s unknown ids [spec: audit/records-api]', async () => {
     const authorization = await signIn()
     await createAuditedAccessRule(authorization, { apiKey: 'top-secret-credential' })
 
@@ -74,7 +74,7 @@ describe('[CF] v1 audit records', () => {
     expect(missingRes.status).toBe(404)
   })
 
-  it('exports audit records as CSV with secret-like values redacted', async () => {
+  it('exports audit records as CSV with secret-like values redacted [spec: audit/export-api]', async () => {
     const authorization = await signIn()
     await createAuditedAccessRule(authorization, { apiKey: 'top-secret-credential' })
 

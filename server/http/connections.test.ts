@@ -193,7 +193,7 @@ async function signInUser(suffix: string) {
   })
 }
 
-describe('[CF] Connections, tools, policy, and tool call execution', () => {
+describe('[CF] Connections, tools, policy, and tool call execution [spec: mcp/connect]', () => {
   beforeEach(async () => {
     await setupOidcProvider()
   })
@@ -202,7 +202,7 @@ describe('[CF] Connections, tools, policy, and tool call execution', () => {
     vi.unstubAllGlobals()
   })
 
-  it('rejects connecting connectors excluded by the project allow list', async () => {
+  it('rejects connecting connectors excluded by the project allow list [spec: mcp/policy-enforcement]', async () => {
     const authorization = await signInUser('allow_list')
     await setProjectMcpPolicy(authorization, { allowedConnectors: ['linear'] })
 
@@ -220,7 +220,7 @@ describe('[CF] Connections, tools, policy, and tool call execution', () => {
     })
   })
 
-  it('creates once, conflicts on duplicates, updates via PATCH, and audits without leaking secrets', async () => {
+  it('creates once, conflicts on duplicates, updates via PATCH, and audits without leaking secrets [spec: mcp/connection-lifecycle]', async () => {
     const authorization = await signInUser('lifecycle')
     const credential = await createCredential(authorization)
 
@@ -351,7 +351,7 @@ describe('[CF] Connections, tools, policy, and tool call execution', () => {
     expect(JSON.stringify(audit)).not.toContain(credential.activeVersion.secretRef)
   })
 
-  it('enforces tenant scoping for project connections', async () => {
+  it('enforces tenant scoping for project connections [spec: mcp/tenancy]', async () => {
     const authorization = await signInUser('tenant')
     const credential = await createCredential(authorization)
     const connection = await connectGithub(authorization, credential)
@@ -438,7 +438,7 @@ describe('[CF] Connections, tools, policy, and tool call execution', () => {
     })
   })
 
-  it('executes tool calls as addressable 201 resources and honors rotated and revoked credentials', async () => {
+  it('executes tool calls as addressable 201 resources and honors rotated and revoked credentials [spec: mcp/tool-call] [spec: mcp/credential-refresh]', async () => {
     const authorization = await signInUser('call_execute')
     const credential = await createCredential(authorization)
     let acceptedToken = 'raw-github-token'
@@ -555,7 +555,7 @@ describe('[CF] Connections, tools, policy, and tool call execution', () => {
     })
   })
 
-  it('lists tools from the live MCP server and rejects calls on connections without endpoints', async () => {
+  it('lists tools from the live MCP server and rejects calls on connections without endpoints [spec: mcp/tools]', async () => {
     const authorization = await signInUser('live_tools')
     const credential = await createCredential(authorization)
     const fixtureCalls = stubMcpFixture({

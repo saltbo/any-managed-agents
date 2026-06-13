@@ -3,26 +3,24 @@
  *   pnpm lint:arch  →  depcruise server/ shared/ --config .dependency-cruiser.cjs
  *
  * The clean core is domain/ → usecases/ → adapters/ ← http/. Those rules are
- * strict. A handful of env-bound infrastructure modules legitimately touch
- * persistence outside adapters/repos and are named exceptions on the drizzle
- * rule (the skill's "a few stragglers" — here the runtime execution engine is
- * the big one):
- *   - server/auth      OIDC/session auth module: owns its tables, is the auth
- *                      wall, spans layers by design.
- *   - server/runtime   the env-bound session/runtime execution engine (sandbox,
- *                      durable objects, drivers); wrapped by gateways.
- *   - server/policy.ts cross-cutting policy engine, wrapped by PolicyPort.
- *   - server/audit.ts  the audit writer wrapped by AuditPort.
- *   - server/schedules background trigger dispatcher (cron/queue entry).
- *   - server/providers provider adapter helpers (catalog mapping, usage).
- *   - server/composition.ts the composition root constructs the db.
- *   - server/app.ts    composition consumer + the exempt /runtime data-plane
- *                      proxy (non-REST protocol surface).
- *   - server/routes    leftover exempt surfaces: e2e fixtures, the workers-ai
- *                      protocol endpoint, shared zod contracts, health.
+ * strict. After the clean-arch endgame the drizzle rule has exactly two named
+ * exceptions:
+ *   - server/auth        OIDC/session auth module: owns its tables, is the auth
+ *                        wall, spans layers by design (the skill's accepted
+ *                        auth-module exception).
+ *   - server/http/e2e.ts e2e test fixture (gated by AMA_E2E_TEST_AUTH): reads
+ *                        raw persisted vault rows incl. ciphertext for
+ *                        encryption-at-rest scenarios — storage-level inspection
+ *                        is its whole purpose, so it holds drizzle rather than
+ *                        polluting the VaultRepo port with a test-only method.
+ *
+ * Everything else is drizzle-free: composition.ts wires the db via db/client,
+ * audit.ts delegates to adapters/repos/audit-write, app.ts is a pure assembler,
+ * and the /runtime data-plane proxy lives in server/runtime/ (repo-backed) with
+ * a thin http registration shell.
  */
 
-const INFRA = '^server/(auth|runtime|schedules|providers|routes)|^server/(policy|audit|composition|app)\\.ts'
+const INFRA = '^server/auth|^server/http/e2e\\.ts'
 
 /** @type {import('dependency-cruiser').IConfiguration} */
 module.exports = {

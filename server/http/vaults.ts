@@ -6,7 +6,6 @@ import {
   VAULT_SCOPES,
   VERSION_STATES,
 } from '@server/domain/vault'
-import { requestId } from '../audit'
 import { requireAuth } from '../auth/session'
 import {
   AuthenticatedOperation,
@@ -25,6 +24,7 @@ import {
   VaultVersionReferencedError,
 } from '../usecases/ports'
 import { createCredential, deleteCredentialVersion, rotateCredential } from '../usecases/vaults'
+import { requestId } from './request-context'
 
 type VaultRoutes = OpenAPIHono<DepsEnv>
 

@@ -51,7 +51,7 @@ describe('session-runtime', () => {
     toolExecutorMock.mockClear()
   })
 
-  it('builds AMA runtime endpoint paths from the session id', () => {
+  it('builds AMA runtime endpoint paths from the session id [spec: runtime/endpoints]', () => {
     expect(runtimeEndpointPath('session_123')).toBe('/api/v1/runtime/sessions/session_123/rpc')
   })
 
@@ -190,7 +190,7 @@ describe('session-runtime', () => {
     })
   })
 
-  it('runs a prompt through Pi Core and dispatches model tool calls through the executor', async () => {
+  it('runs a prompt through Pi Core and dispatches model tool calls through the executor [spec: runtime/turn]', async () => {
     mockExecutor.execute.mockResolvedValueOnce({
       toolCallId: 'call_git_status',
       toolName: 'sandbox.exec',
@@ -403,7 +403,7 @@ describe('session-runtime', () => {
     expect(JSON.stringify(events)).toContain('continued')
   })
 
-  it('stops before model completion events are persisted when the DB cancellation gate trips', async () => {
+  it('stops before model completion events are persisted when the DB cancellation gate trips [spec: runtime/cooperative-cancellation]', async () => {
     const events: Record<string, unknown>[] = []
     let active = true
 
@@ -432,7 +432,7 @@ describe('session-runtime', () => {
     expect(JSON.stringify(events)).not.toContain('AMA runtime processed: Alpha durable prompt')
   })
 
-  it('does not dispatch sandbox tools that are absent from a non-empty allow-list', async () => {
+  it('does not dispatch sandbox tools that are absent from a non-empty allow-list [spec: runtime/error-termination] [spec: runtime/sandbox-toolset]', async () => {
     const events: Record<string, unknown>[] = []
 
     await expect(

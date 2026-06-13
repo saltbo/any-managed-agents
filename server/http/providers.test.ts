@@ -42,7 +42,7 @@ async function createProvider(authorization: string, body: Record<string, unknow
   }
 }
 
-describe('[CF] providers v1', () => {
+describe('[CF] providers v1 [spec: providers/api-crud]', () => {
   beforeEach(async () => {
     await setupOidcProvider()
   })
@@ -249,7 +249,7 @@ describe('[CF] providers v1', () => {
     expect(deleteRes.status).toBe(204)
   })
 
-  it('upserts provider models via PUT with full-replacement semantics', async () => {
+  it('upserts provider models via PUT with full-replacement semantics [spec: providers/api-models]', async () => {
     const authorization = await signInUser('providers_model_upsert')
     const provider = await createProvider(authorization, { type: 'openai', displayName: 'Model host' })
 

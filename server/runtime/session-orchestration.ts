@@ -19,30 +19,18 @@ import {
   runtimeRequiredRunnerCapability,
   runtimeSupportsLivePrompts,
 } from '@server/domain/runtime-catalog'
-import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/d1'
 import { canonicalAmaSessionEventFromRuntimeEvent } from '../../shared/session-events'
+import {
+  type AgentRow,
+  type AgentVersionRow,
+  createRuntimeOrchestrationRepo,
+  createRuntimeOrchestrationRepoFromBinding,
+  type EnvironmentVersionRow,
+  type SessionRow,
+} from '../adapters/repos/runtime-orchestration'
 import { recordAudit } from '../audit'
 import type { AuthContext } from '../auth/session'
-import {
-  agentMemories,
-  agents,
-  agentVersions,
-  connections,
-  connectionTools,
-  environments,
-  environmentVersions,
-  leases,
-  providers as providersTable,
-  runners,
-  sessionApprovals,
-  sessionEvents,
-  sessions,
-  vaultCredentials,
-  vaultCredentialVersions,
-  workItems,
-} from '../db/schema'
-import { insertCanonicalSessionEvent } from '../db/session-event-store'
+import type { RuntimeName } from '../contracts/environment-contracts'
 import {
   composeInitialPrompt,
   hasEmbeddedCredentialUrl,
@@ -56,7 +44,6 @@ import {
   evaluateSandboxRuntimePolicy,
   policyBlocksSandboxOperation,
 } from '../policy'
-import type { RuntimeName } from '../routes/environment-contracts'
 import { runtimeDriver, runtimeDriverName } from './drivers'
 import { PLATFORM_DEFAULT_PROVIDER, providerRuntimeEnv, resolveSessionProviderConfig } from './provider-env'
 import { dispatchRunnerSessionCommand, hasAcceptedRunnerSessionChannel } from './runner-session-command'
@@ -81,11 +68,9 @@ import {
 import { toolExecutor } from './tool-executor'
 import { type CloudTurnMessage, cloudTurnsRunInline, enqueueCloudTurn } from './turn-queue'
 
-type Db = ReturnType<typeof drizzle>
-type AgentRow = typeof agents.$inferSelect
-type AgentVersionRow = typeof agentVersions.$inferSelect
-type EnvironmentVersionRow = typeof environmentVersions.$inferSelect
-type SessionRow = typeof sessions.$inferSelect
+type Db = Parameters<typeof createRuntimeOrchestrationRepo>[0]
+
+export type { SessionRow }
 
 type MessageDelivery = 'live' | 'queued'
 type MessageState = 'accepted' | 'delivered' | 'failed'
@@ -284,40 +269,19 @@ async function validateResourceCredentialRefs(db: Db, auth: AuthContext, resourc
     .filter((resourceRef): resourceRef is GitHubRepositoryResourceRef => resourceRef.type === 'github_repository')
     .map((resourceRef) => resourceRef.credentialRef)
     .filter((credentialRef): credentialRef is string => typeof credentialRef === 'string')
+  const repo = createRuntimeOrchestrationRepo(db)
   for (const credentialRef of new Set(credentialRefs)) {
     if (credentialRef.startsWith('vaultver_')) {
-      const version = await db
-        .select({ id: vaultCredentialVersions.id })
-        .from(vaultCredentialVersions)
-        .where(
-          and(
-            eq(vaultCredentialVersions.id, credentialRef),
-            eq(vaultCredentialVersions.organizationId, auth.organization.id),
-            or(eq(vaultCredentialVersions.projectId, auth.project.id), isNull(vaultCredentialVersions.projectId)),
-            eq(vaultCredentialVersions.state, 'active'),
-          ),
-        )
-        .get()
-      if (!version) {
+      const exists = await repo.activeCredentialVersionExists(auth.organization.id, auth.project.id, credentialRef)
+      if (!exists) {
         return {
           credentialRef: 'Credential version must exist, be active, and belong to this project or organization.',
         }
       }
       continue
     }
-    const credential = await db
-      .select({ id: vaultCredentials.id })
-      .from(vaultCredentials)
-      .where(
-        and(
-          eq(vaultCredentials.id, credentialRef),
-          eq(vaultCredentials.organizationId, auth.organization.id),
-          or(eq(vaultCredentials.projectId, auth.project.id), isNull(vaultCredentials.projectId)),
-          eq(vaultCredentials.state, 'active'),
-        ),
-      )
-      .get()
-    if (!credential) {
+    const exists = await repo.activeCredentialExists(auth.organization.id, auth.project.id, credentialRef)
+    if (!exists) {
       return { credentialRef: 'Credential must exist, be active, and belong to this project or organization.' }
     }
   }
@@ -329,6 +293,7 @@ async function resolveSecretEnvEntries(
   auth: AuthContext,
   secretEnv: SecretEnvEntry[],
 ): Promise<{ entries: ResolvedSecretEnvEntry[] } | { fields: Record<string, string> }> {
+  const repo = createRuntimeOrchestrationRepo(db)
   const entries: ResolvedSecretEnvEntry[] = []
   const names = new Set<string>()
   for (const [index, entry] of secretEnv.entries()) {
@@ -340,18 +305,11 @@ async function resolveSecretEnvEntries(
       return { fields: { [`${field}.name`]: 'Secret environment variable names must be unique.' } }
     }
     names.add(entry.name)
-    const credential = await db
-      .select({ id: vaultCredentials.id, activeVersionId: vaultCredentials.activeVersionId })
-      .from(vaultCredentials)
-      .where(
-        and(
-          eq(vaultCredentials.id, entry.credentialRef.credentialId),
-          eq(vaultCredentials.organizationId, auth.organization.id),
-          or(eq(vaultCredentials.projectId, auth.project.id), isNull(vaultCredentials.projectId)),
-          eq(vaultCredentials.state, 'active'),
-        ),
-      )
-      .get()
+    const credential = await repo.activeCredentialForSecretEnv(
+      auth.organization.id,
+      auth.project.id,
+      entry.credentialRef.credentialId,
+    )
     if (!credential) {
       return {
         fields: {
@@ -364,18 +322,7 @@ async function resolveSecretEnvEntries(
     if (!versionId) {
       return { fields: { [`${field}.credentialRef.credentialId`]: 'Credential has no active version to resolve.' } }
     }
-    const version = await db
-      .select({ id: vaultCredentialVersions.id })
-      .from(vaultCredentialVersions)
-      .where(
-        and(
-          eq(vaultCredentialVersions.id, versionId),
-          eq(vaultCredentialVersions.credentialId, credential.id),
-          eq(vaultCredentialVersions.state, 'active'),
-        ),
-      )
-      .get()
-    if (!version) {
+    if (!(await repo.activeVersionForCredentialExists(credential.id, versionId))) {
       return {
         fields: {
           [`${field}.credentialRef.versionId`]:
@@ -391,26 +338,14 @@ async function resolveSecretEnvEntries(
 // ── Session reads ───────────────────────────────────────────────────────────
 
 async function findSession(db: Db, auth: AuthContext, sessionId: string) {
-  return (
-    (await db
-      .select()
-      .from(sessions)
-      .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, auth.project.id)))
-      .get()) ?? null
-  )
+  return createRuntimeOrchestrationRepo(db).findSession(auth.project.id, sessionId)
 }
 
 async function currentAgentVersion(db: Db, agent: AgentRow) {
   if (!agent.currentVersionId) {
     return null
   }
-  return (
-    (await db
-      .select()
-      .from(agentVersions)
-      .where(and(eq(agentVersions.id, agent.currentVersionId), eq(agentVersions.agentId, agent.id)))
-      .get()) ?? null
-  )
+  return createRuntimeOrchestrationRepo(db).findAgentVersion(agent.id, agent.currentVersionId)
 }
 
 async function sessionInitialPrompt(db: Db, projectId: string, agent: AgentRow, initialPrompt: string | undefined) {
@@ -418,27 +353,14 @@ async function sessionInitialPrompt(db: Db, projectId: string, agent: AgentRow, 
   if (memoryPolicy.enabled !== true) {
     return initialPrompt
   }
-  const memory = await db
-    .select({ content: agentMemories.content })
-    .from(agentMemories)
-    .where(and(eq(agentMemories.agentId, agent.id), eq(agentMemories.projectId, projectId)))
-    .get()
-  return composeInitialPrompt(memory?.content ?? null, initialPrompt)
+  const content = await createRuntimeOrchestrationRepo(db).agentMemoryContent(projectId, agent.id)
+  return composeInitialPrompt(content, initialPrompt)
 }
 
 async function resolveSessionProviderId(db: Db, projectId: string, providerId: string | null) {
+  const repo = createRuntimeOrchestrationRepo(db)
   if (!providerId) {
-    const configuredDefault = await db
-      .select({ id: providersTable.id, type: providersTable.type })
-      .from(providersTable)
-      .where(
-        and(
-          eq(providersTable.projectId, projectId),
-          eq(providersTable.isDefault, true),
-          eq(providersTable.enabled, true),
-        ),
-      )
-      .get()
+    const configuredDefault = await repo.configuredDefaultProvider(projectId)
     if (!configuredDefault) {
       return PLATFORM_DEFAULT_PROVIDER
     }
@@ -447,11 +369,7 @@ async function resolveSessionProviderId(db: Db, projectId: string, providerId: s
   if (providerId === PLATFORM_DEFAULT_PROVIDER) {
     return PLATFORM_DEFAULT_PROVIDER
   }
-  const configured = await db
-    .select({ type: providersTable.type })
-    .from(providersTable)
-    .where(and(eq(providersTable.id, providerId), eq(providersTable.projectId, projectId)))
-    .get()
+  const configured = await repo.providerType(projectId, providerId)
   return configured?.type === PLATFORM_DEFAULT_PROVIDER ? PLATFORM_DEFAULT_PROVIDER : providerId
 }
 
@@ -472,20 +390,14 @@ async function validateRuntimeProviderModel(
     if (!runtimeCatalogSupportsProviderModel(hostingMode, runtime, provider, model)) {
       return false
     }
-    const activeRunners = await db
-      .select({ capabilities: runners.capabilities })
-      .from(runners)
-      .where(
-        and(
-          eq(runners.projectId, auth.project.id),
-          eq(runners.environmentId, environmentId),
-          eq(runners.state, 'active'),
-        ),
-      )
+    const activeRunnerCapabilities = await createRuntimeOrchestrationRepo(db).activeRunnerCapabilities(
+      auth.project.id,
+      environmentId,
+    )
     return (
-      activeRunners.some((runner) =>
-        runnerSupportsRuntimeProviderModel(parseJson<string[]>(runner.capabilities) ?? [], runtime, provider, model),
-      ) || activeRunners.length === 0
+      activeRunnerCapabilities.some((capabilities) =>
+        runnerSupportsRuntimeProviderModel(parseJson<string[]>(capabilities) ?? [], runtime, provider, model),
+      ) || activeRunnerCapabilities.length === 0
     )
   }
   return driver.supportsCloudProviderModel(provider, model)
@@ -509,10 +421,8 @@ async function resolveMcpSnapshot(
   agentSnapshot: SerializedAgentVersion,
   environmentSnapshot: NormalizedEnvironmentSnapshot | null,
 ) {
-  const connectedConnections = await db
-    .select()
-    .from(connections)
-    .where(and(eq(connections.projectId, auth.project.id), eq(connections.state, 'connected')))
+  const repo = createRuntimeOrchestrationRepo(db)
+  const connectedConnections = await repo.connectedConnections(auth.project.id)
   const agentConnectors = agentSnapshot.mcpConnectors
   const scopedConnections =
     agentConnectors.length === 0
@@ -526,10 +436,7 @@ async function resolveMcpSnapshot(
     environmentSnapshot: environmentSnapshot ? stringify(environmentSnapshot) : null,
   }
   for (const connection of scopedConnections) {
-    const tools = await db
-      .select()
-      .from(connectionTools)
-      .where(and(eq(connectionTools.connectionId, connection.id), eq(connectionTools.availability, 'available')))
+    const tools = await repo.availableConnectionTools(connection.id)
     const allowedTools = []
     for (const tool of tools) {
       const decision = await evaluateMcpToolPolicy(db, auth, {
@@ -604,7 +511,7 @@ async function enqueueSelfHostedSessionWork(
         ? runtimeRequiredRunnerCapability(values.runtime, values.agentSnapshot.providerId, values.agentSnapshot.model)
         : null,
   }
-  await db.insert(workItems).values({
+  await createRuntimeOrchestrationRepo(db).insertWorkItem({
     id: newId('work'),
     organizationId: auth.organization.id,
     projectId: auth.project.id,
@@ -628,12 +535,7 @@ async function enqueueSelfHostedSessionWork(
 }
 
 async function latestRunnerResumeToken(db: Db, auth: AuthContext, sessionId: string) {
-  const rows = await db
-    .select({ state: workItems.state, payload: workItems.payload, result: workItems.result })
-    .from(workItems)
-    .where(and(eq(workItems.projectId, auth.project.id), eq(workItems.sessionId, sessionId)))
-    .orderBy(desc(workItems.updatedAt))
-    .limit(5)
+  const rows = await createRuntimeOrchestrationRepo(db).recentSessionWorkItems(auth.project.id, sessionId, 5)
   for (const row of rows) {
     if (row.state === 'succeeded') {
       const result = parseJson<Record<string, unknown>>(row.result)
@@ -694,11 +596,8 @@ export async function createSessionForAgent(
     }
   }
 
-  const agent = await db
-    .select()
-    .from(agents)
-    .where(and(eq(agents.id, agentId), eq(agents.projectId, auth.project.id)))
-    .get()
+  const repo = createRuntimeOrchestrationRepo(db)
+  const agent = await repo.findAgent(auth.project.id, agentId)
   if (!agent) {
     return { ok: false, error: { status: 404, code: 'not_found', message: 'Agent not found' } }
   }
@@ -797,34 +696,14 @@ export async function createSessionForAgent(
   }
   const providerSecretEntries = providerSecretResolution.entries
 
-  const environment = await db
-    .select()
-    .from(environments)
-    .where(
-      and(
-        eq(environments.id, environmentId),
-        eq(environments.projectId, auth.project.id),
-        isNull(environments.archivedAt),
-      ),
-    )
-    .get()
+  const environment = await repo.findEnvironment(auth.project.id, environmentId)
   if (!environment?.currentVersionId) {
     return {
       ok: false,
       error: { status: 409, code: 'conflict', message: 'Selected environment is archived or unavailable' },
     }
   }
-  const environmentVersion =
-    (await db
-      .select()
-      .from(environmentVersions)
-      .where(
-        and(
-          eq(environmentVersions.id, environment.currentVersionId),
-          eq(environmentVersions.projectId, auth.project.id),
-        ),
-      )
-      .get()) ?? null
+  const environmentVersion = await repo.findEnvironmentVersion(auth.project.id, environment.currentVersionId)
   if (!environmentVersion) {
     return {
       ok: false,
@@ -977,7 +856,7 @@ export async function createSessionForAgent(
     createdAt: timestamp,
     updatedAt: timestamp,
   } satisfies SessionRow
-  await db.insert(sessions).values(pending)
+  await repo.insertSession(pending)
   await recordAudit(db, {
     auth,
     action: 'session.create',
@@ -1121,10 +1000,7 @@ async function startSessionRuntimeForRow(
       startedAt,
       updatedAt: startedAt,
     }
-    await db
-      .update(sessions)
-      .set(started)
-      .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, auth.project.id), eq(sessions.state, 'pending')))
+    await createRuntimeOrchestrationRepo(db).updateSessionWhenState(auth.project.id, sessionId, 'pending', started)
     await recordAudit(db, {
       auth,
       action: 'session.runtime.start',
@@ -1157,10 +1033,7 @@ async function startSessionRuntimeForRow(
       }),
       updatedAt: failedAt,
     }
-    await db
-      .update(sessions)
-      .set(failed)
-      .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, auth.project.id), eq(sessions.state, 'pending')))
+    await createRuntimeOrchestrationRepo(db).updateSessionWhenState(auth.project.id, sessionId, 'pending', failed)
     await recordAudit(db, {
       auth,
       action: 'session.runtime.start',
@@ -1284,17 +1157,16 @@ async function executeCloudSessionTurn(
       },
     })
     if (result.status === 'idle') {
-      await db
-        .update(sessions)
-        .set({ state: 'idle', updatedAt: now() })
-        .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id), eq(sessions.state, 'running')))
+      await createRuntimeOrchestrationRepo(db).updateSessionWhenState(auth.project.id, session.id, 'running', {
+        state: 'idle',
+        updatedAt: now(),
+      })
     }
 
     if (result.status === 'paused') {
-      await db
-        .update(sessions)
-        .set({ updatedAt: now() })
-        .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id), eq(sessions.state, 'running')))
+      await createRuntimeOrchestrationRepo(db).updateSessionWhenState(auth.project.id, session.id, 'running', {
+        updatedAt: now(),
+      })
       await enqueueCloudTurn(env, {
         type: 'session.step',
         sessionId: session.id,
@@ -1325,10 +1197,11 @@ async function executeCloudSessionTurn(
     }
     const safeError = safeRuntimeError(error)
     if (policyDeniedToolCall || isRuntimePolicyDenied(error)) {
-      await db
-        .update(sessions)
-        .set({ state: 'idle', stateReason: 'policy-denied', updatedAt: now() })
-        .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id), eq(sessions.state, 'running')))
+      await createRuntimeOrchestrationRepo(db).updateSessionWhenState(auth.project.id, session.id, 'running', {
+        state: 'idle',
+        stateReason: 'policy-denied',
+        updatedAt: now(),
+      })
       return { ok: false, cancelled: false, error: safeError }
     }
     await markInitialPromptFailed(db, auth, session, safeError.message)
@@ -1337,7 +1210,7 @@ async function executeCloudSessionTurn(
 }
 
 export async function consumeCloudTurnMessage(env: Env, message: CloudTurnMessage): Promise<void> {
-  const db = drizzle(env.DB)
+  const db = createRuntimeOrchestrationRepoFromBinding(env.DB).db
   const auth = cloudTurnSystemAuth(message)
   const session = await findSession(db, auth, message.sessionId)
   if (!session) {
@@ -1372,12 +1245,12 @@ export async function consumeCloudTurnMessage(env: Env, message: CloudTurnMessag
     return
   }
   if (session.state === 'idle') {
-    const reclaimed = await db
-      .update(sessions)
-      .set({ state: 'running', stateReason: null, updatedAt: now() })
-      .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id), eq(sessions.state, 'idle')))
-      .returning({ id: sessions.id })
-      .get()
+    const reclaimed = await createRuntimeOrchestrationRepo(db).updateSessionWhenState(
+      auth.project.id,
+      session.id,
+      'idle',
+      { state: 'running', stateReason: null, updatedAt: now() },
+    )
     if (!reclaimed) {
       return
     }
@@ -1409,18 +1282,12 @@ function cloudTurnSystemAuth(message: CloudTurnMessage): AuthContext {
 
 async function dispatchInitialPrompt(env: Env, db: Db, auth: AuthContext, session: SessionRow, initialPrompt: string) {
   const submittedAt = now()
-  const started = await db
-    .update(sessions)
-    .set({ state: 'running', stateReason: null, updatedAt: submittedAt })
-    .where(
-      and(
-        eq(sessions.id, session.id),
-        eq(sessions.projectId, auth.project.id),
-        or(eq(sessions.state, 'idle'), eq(sessions.state, 'running')),
-      ),
-    )
-    .returning({ id: sessions.id })
-    .get()
+  const started = await createRuntimeOrchestrationRepo(db).updateSessionWhenState(
+    auth.project.id,
+    session.id,
+    ['idle', 'running'],
+    { state: 'running', stateReason: null, updatedAt: submittedAt },
+  )
   if (!started) {
     throw new Error('Session runtime is no longer active')
   }
@@ -1483,18 +1350,12 @@ export async function dispatchSessionPrompt(
   }
 
   const submittedAt = now()
-  const started = await db
-    .update(sessions)
-    .set({ state: 'running', stateReason: null, updatedAt: submittedAt })
-    .where(
-      and(
-        eq(sessions.id, session.id),
-        eq(sessions.projectId, auth.project.id),
-        or(eq(sessions.state, 'idle'), eq(sessions.state, 'running')),
-      ),
-    )
-    .returning({ id: sessions.id })
-    .get()
+  const started = await createRuntimeOrchestrationRepo(db).updateSessionWhenState(
+    auth.project.id,
+    session.id,
+    ['idle', 'running'],
+    { state: 'running', stateReason: null, updatedAt: submittedAt },
+  )
   if (!started) {
     return { ok: false, status: 409, message: 'Session runtime is no longer active' }
   }
@@ -1535,18 +1396,12 @@ async function queueSelfHostedSessionPrompt(
     parseJson<ReturnType<typeof serializeEnvironmentVersion>>(session.environmentSnapshot),
   )
   const submittedAt = now()
-  const queued = await db
-    .update(sessions)
-    .set({ state: 'pending', stateReason: 'waiting-for-runner', updatedAt: submittedAt })
-    .where(
-      and(
-        eq(sessions.id, session.id),
-        eq(sessions.projectId, auth.project.id),
-        or(eq(sessions.state, 'idle'), eq(sessions.state, 'running')),
-      ),
-    )
-    .returning({ id: sessions.id })
-    .get()
+  const queued = await createRuntimeOrchestrationRepo(db).updateSessionWhenState(
+    auth.project.id,
+    session.id,
+    ['idle', 'running'],
+    { state: 'pending', stateReason: 'waiting-for-runner', updatedAt: submittedAt },
+  )
   if (!queued) {
     return { ok: false, status: 409, message: 'Session runtime is no longer active' }
   }
@@ -1568,23 +1423,14 @@ async function queueSelfHostedSessionPrompt(
 }
 
 async function assertRuntimeSessionRunning(db: Db, auth: AuthContext, sessionId: string) {
-  const active = await db
-    .select({ state: sessions.state })
-    .from(sessions)
-    .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, auth.project.id)))
-    .get()
+  const active = await createRuntimeOrchestrationRepo(db).sessionState(auth.project.id, sessionId)
   if (active?.state !== 'running') {
     throw new RuntimeTurnCancelledError()
   }
 }
 
 async function loadRuntimeMessages(db: Db, sessionId: string) {
-  const rows = await db
-    .select({ type: sessionEvents.type, payload: sessionEvents.payload })
-    .from(sessionEvents)
-    .where(eq(sessionEvents.sessionId, sessionId))
-    .orderBy(asc(sessionEvents.sequence))
-    .all()
+  const rows = await createRuntimeOrchestrationRepo(db).sessionEventStream(sessionId)
   return runtimeMessagesFromEvents(rows)
 }
 
@@ -1596,10 +1442,11 @@ async function markInitialPromptFailed(
   status?: number,
 ) {
   const failedAt = now()
-  await db
-    .update(sessions)
-    .set({ state: 'error', stateReason: message, updatedAt: failedAt })
-    .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id), eq(sessions.state, 'running')))
+  await createRuntimeOrchestrationRepo(db).updateSessionWhenState(auth.project.id, session.id, 'running', {
+    state: 'error',
+    stateReason: message,
+    updatedAt: failedAt,
+  })
   await recordAudit(db, {
     auth,
     action: 'session.initial_prompt',
@@ -1619,8 +1466,7 @@ export async function appendRuntimeEvent(
     values.event,
     values.metadata ?? { source: 'runtime' },
   )
-  return await insertCanonicalSessionEvent(
-    db,
+  return await createRuntimeOrchestrationRepo(db).appendCanonicalEvent(
     { organizationId: values.auth.organization.id, projectId: values.auth.project.id, sessionId: values.sessionId },
     canonicalEvent,
   )
@@ -1676,21 +1522,20 @@ async function stopSessionRow(
     return await stopSelfHostedSession(env, db, auth, session, requestId, reason)
   }
 
+  const repo = createRuntimeOrchestrationRepo(db)
   const stoppingAt = now()
-  await db
-    .update(sessions)
-    .set({ state: 'stopped', updatedAt: stoppingAt })
-    .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
+  await repo.updateSession(auth.project.id, session.id, { state: 'stopped', updatedAt: stoppingAt })
 
   try {
     await stopCloudSessionRuntime(env, session.sandboxId)
   } catch (error) {
     const safeError = safeRuntimeError(error)
     const failedAt = now()
-    await db
-      .update(sessions)
-      .set({ state: 'error', stateReason: safeError.message, updatedAt: failedAt })
-      .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
+    await repo.updateSession(auth.project.id, session.id, {
+      state: 'error',
+      stateReason: safeError.message,
+      updatedAt: failedAt,
+    })
     await recordAudit(db, {
       auth,
       action: 'session.stop',
@@ -1713,10 +1558,7 @@ async function stopSessionRow(
   }
 
   const stoppedAt = now()
-  await db
-    .update(sessions)
-    .set({ state: 'stopped', stoppedAt, updatedAt: stoppedAt })
-    .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
+  await repo.updateSession(auth.project.id, session.id, { state: 'stopped', stoppedAt, updatedAt: stoppedAt })
   await recordAudit(db, {
     auth,
     action: 'session.stop',
@@ -1748,18 +1590,10 @@ async function stopSelfHostedSession(
   requestId: string | null,
   reason: string,
 ): Promise<StopSessionResult> {
+  const repo = createRuntimeOrchestrationRepo(db)
   const stoppedAt = now()
   await dispatchRunnerSessionCommand(env, session.id, { type: 'stop', reason })
-  const activeWorkItems = await db
-    .select({ id: workItems.id, runnerId: workItems.runnerId, leaseId: workItems.leaseId })
-    .from(workItems)
-    .where(
-      and(
-        eq(workItems.projectId, auth.project.id),
-        eq(workItems.sessionId, session.id),
-        inArray(workItems.state, ['available', 'leased']),
-      ),
-    )
+  const activeWorkItems = await repo.activeSessionWorkItems(auth.project.id, session.id)
 
   if (activeWorkItems.length) {
     const workItemIds = activeWorkItems.map((item) => item.id)
@@ -1768,38 +1602,28 @@ async function stopSelfHostedSession(
       ...new Set(activeWorkItems.map((item) => item.runnerId).filter((id): id is string => Boolean(id))),
     ]
 
-    await db
-      .update(workItems)
-      .set({
-        state: 'cancelled',
-        leaseExpiresAt: null,
-        error: stringify({ message: `Session stopped: ${reason}` }),
-        updatedAt: stoppedAt,
-      })
-      .where(and(eq(workItems.projectId, auth.project.id), inArray(workItems.id, workItemIds)))
+    await repo.cancelWorkItems(
+      auth.project.id,
+      workItemIds,
+      stringify({ message: `Session stopped: ${reason}` }),
+      stoppedAt,
+    )
 
     if (leaseIds.length) {
-      await db
-        .update(leases)
-        .set({ state: 'cancelled', updatedAt: stoppedAt })
-        .where(and(eq(leases.projectId, auth.project.id), inArray(leases.id, leaseIds)))
+      await repo.cancelLeases(auth.project.id, leaseIds, stoppedAt)
     }
 
     for (const runnerId of runnerIds) {
-      await db
-        .update(runners)
-        .set({
-          currentLoad: sql`case when ${runners.currentLoad} > 0 then ${runners.currentLoad} - 1 else 0 end`,
-          updatedAt: stoppedAt,
-        })
-        .where(and(eq(runners.id, runnerId), eq(runners.projectId, auth.project.id)))
+      await repo.decrementRunnerLoad(auth.project.id, runnerId, stoppedAt)
     }
   }
 
-  await db
-    .update(sessions)
-    .set({ state: 'stopped', stateReason: 'runner-cancelled', stoppedAt, updatedAt: stoppedAt })
-    .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
+  await repo.updateSession(auth.project.id, session.id, {
+    state: 'stopped',
+    stateReason: 'runner-cancelled',
+    stoppedAt,
+    updatedAt: stoppedAt,
+  })
 
   await recordAudit(db, {
     auth,
@@ -1844,10 +1668,10 @@ export async function archiveSession(
   }
 
   const archivedAt = now()
-  await db
-    .update(sessions)
-    .set({ archivedAt, updatedAt: archivedAt })
-    .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
+  await createRuntimeOrchestrationRepo(db).updateSession(auth.project.id, session.id, {
+    archivedAt,
+    updatedAt: archivedAt,
+  })
   await recordAudit(db, {
     auth,
     action: 'session.archive',
@@ -1872,10 +1696,10 @@ export async function unarchiveSession(
   requestId: string | null,
 ): Promise<SessionRow> {
   const timestamp = now()
-  await db
-    .update(sessions)
-    .set({ archivedAt: null, updatedAt: timestamp })
-    .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, auth.project.id)))
+  await createRuntimeOrchestrationRepo(db).updateSession(auth.project.id, sessionId, {
+    archivedAt: null,
+    updatedAt: timestamp,
+  })
   await recordAudit(db, {
     auth,
     action: 'session.unarchive',
@@ -1896,21 +1720,7 @@ export async function unarchiveSession(
 // Mark pending sessions whose cloud runtime startup window elapsed as errored.
 export async function markExpiredPendingSessions(db: Db, auth: AuthContext) {
   const expiredBefore = new Date(Date.now() - RUNTIME_START_TIMEOUT_MS).toISOString()
-  const timestamp = now()
-  await db
-    .update(sessions)
-    .set({ state: 'error', stateReason: 'Session runtime startup timed out', updatedAt: timestamp })
-    .where(
-      and(
-        eq(sessions.projectId, auth.project.id),
-        eq(sessions.state, 'pending'),
-        or(
-          isNull(sessions.stateReason),
-          and(ne(sessions.stateReason, 'requires-runner'), ne(sessions.stateReason, 'waiting-for-runner')),
-        ),
-        sql`${sessions.createdAt} < ${expiredBefore}`,
-      ),
-    )
+  await createRuntimeOrchestrationRepo(db).markExpiredPendingSessions(auth.project.id, expiredBefore, now())
 }
 
 // ── Approval decision continuation ──────────────────────────────────────────
@@ -1950,19 +1760,10 @@ export async function decideSessionApproval(
   if (!session) {
     return { ok: false, error: { status: 404, code: 'not_found', message: 'Session not found' } }
   }
+  const repo = createRuntimeOrchestrationRepo(db)
   const { pending } = sessionApprovalState(parseJson<Record<string, unknown>>(session.metadata) ?? {})
   if (!pending) {
-    const alreadyDecided = await db
-      .select()
-      .from(sessionApprovals)
-      .where(
-        and(
-          eq(sessionApprovals.id, approvalId),
-          eq(sessionApprovals.sessionId, session.id),
-          eq(sessionApprovals.projectId, auth.project.id),
-        ),
-      )
-      .get()
+    const alreadyDecided = await repo.findApproval(auth.project.id, session.id, approvalId)
     if (alreadyDecided) {
       return { ok: false, error: { status: 409, code: 'conflict', message: 'Approval is already decided' } }
     }
@@ -2038,20 +1839,7 @@ export async function decideSessionApproval(
     createdAt: decidedAt,
     updatedAt: decidedAt,
   }
-  await db
-    .insert(sessionApprovals)
-    .values(approvalRow)
-    .onConflictDoUpdate({
-      target: [sessionApprovals.sessionId, sessionApprovals.toolCallId],
-      set: {
-        state: approvalRow.state,
-        reason: approvalRow.reason,
-        result: approvalRow.result,
-        decidedByUserId: approvalRow.decidedByUserId,
-        decidedAt,
-        updatedAt: decidedAt,
-      },
-    })
+  await repo.upsertApproval(approvalRow, decidedAt)
   let resultOutput: Record<string, unknown>
   let resultIsError = false
   if (approved && body.result) {
@@ -2111,10 +1899,7 @@ export async function decideSessionApproval(
     },
     metadata: { source: 'approval' },
   })
-  await db
-    .update(sessions)
-    .set({ state: 'running', stateReason: null, updatedAt: now() })
-    .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id)))
+  await repo.updateSession(auth.project.id, session.id, { state: 'running', stateReason: null, updatedAt: now() })
   const resumed = await findSession(db, auth, session.id)
   if (!resumed) {
     throw new Error('Session row is required after approval decision')

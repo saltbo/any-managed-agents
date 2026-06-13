@@ -1,4 +1,3 @@
-import { drizzle } from 'drizzle-orm/d1'
 import { createAuditPort } from './adapters/gateways/audit'
 import { createMcpGateway } from './adapters/gateways/mcp'
 import { createPolicyPort } from './adapters/gateways/policy'
@@ -21,17 +20,19 @@ import { createProjectRepo } from './adapters/repos/projects'
 import { createProviderRepo } from './adapters/repos/providers'
 import { createRunnerRepo } from './adapters/repos/runners'
 import { createSessionRepo } from './adapters/repos/sessions'
+import { createTriggerDispatchRepo } from './adapters/repos/trigger-dispatch'
 import { createTriggerRepo } from './adapters/repos/triggers'
 import { createUsageRepo } from './adapters/repos/usage-records'
 import { createVaultRepo } from './adapters/repos/vaults'
 import { createWorkItemRepo } from './adapters/repos/work-items'
+import { createDb } from './db/client'
 import type { Env } from './env'
 import type { Deps } from './usecases/deps'
 
 // The single composition root. Wires adapters into the Deps object. Cheap,
 // plain-object, and request-free so scheduled/queue entrypoints can reuse it.
 export function createDeps(env: Env): Deps {
-  const db = drizzle(env.DB)
+  const db = createDb(env)
   const sessions = createSessionRepo(db)
   return {
     agents: createAgentRepo(db),
@@ -52,6 +53,7 @@ export function createDeps(env: Env): Deps {
     usageRecords: createUsageRepo(db),
     auditRecords: createAuditReadRepo(db),
     triggers: createTriggerRepo(db),
+    triggerDispatch: createTriggerDispatchRepo(db),
     projects: createProjectRepo(db),
     federatedTenants: createFederatedTenantRepo(db),
     runners: createRunnerRepo(db),
