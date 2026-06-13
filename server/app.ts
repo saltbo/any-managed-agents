@@ -10,10 +10,14 @@ import { sessionEvents, sessions } from './db/schema'
 import { insertCanonicalSessionEvent } from './db/session-event-store'
 import type { Env } from './env'
 import { errorResponse } from './errors'
+import { registerAccessRuleRoutes } from './http/access-rules'
 import { registerAgentRoutes } from './http/agents'
+import { registerBudgetRoutes } from './http/budgets'
 import { registerConnectionRoutes } from './http/connections'
 import { registerConnectorRoutes } from './http/connectors'
+import { registerEffectivePolicyRoutes } from './http/effective-policy'
 import { registerEnvironmentRoutes } from './http/environments'
+import { registerPolicyRoutes } from './http/policies'
 import { registerProviderRoutes } from './http/providers'
 import { registerVaultRoutes } from './http/vaults'
 import { ApiSecuritySchemes, createDepsApiRouter } from './openapi'
@@ -24,16 +28,12 @@ import {
   policyBlocksSandboxOperation,
 } from './policy'
 import { redactSensitiveValue } from './redaction'
-import accessRules from './routes/access-rules'
 import audit from './routes/audit'
 import auth from './routes/auth'
-import budgets from './routes/budgets'
 import e2e from './routes/e2e'
-import effectivePolicy from './routes/effective-policy'
 import federatedTenants from './routes/federated-tenants'
 import health from './routes/health'
 import leases from './routes/leases'
-import policies from './routes/policies'
 import projects from './routes/projects'
 import runners, { dispatchRunnerSessionCommand, hasAcceptedRunnerSessionChannel } from './routes/runners'
 import runtimeAi from './routes/runtime-ai'
@@ -660,6 +660,10 @@ export function createApp() {
   const providers = registerProviderRoutes(createDepsApiRouter())
   const connectors = registerConnectorRoutes(createDepsApiRouter())
   const connections = registerConnectionRoutes(createDepsApiRouter())
+  const policies = registerPolicyRoutes(createDepsApiRouter())
+  const effectivePolicy = registerEffectivePolicyRoutes(createDepsApiRouter())
+  const accessRules = registerAccessRuleRoutes(createDepsApiRouter())
+  const budgets = registerBudgetRoutes(createDepsApiRouter())
   const vaults = registerVaultRoutes(createDepsApiRouter())
 
   const routes = app

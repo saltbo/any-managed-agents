@@ -161,6 +161,7 @@ export interface AuditEntry {
   resourceId?: string | null
   outcome: 'success' | 'failure' | 'denied'
   requestId?: string | null
+  policyCategory?: string | null
   before?: Record<string, unknown> | null
   after?: Record<string, unknown> | null
   metadata?: Record<string, unknown>
@@ -183,7 +184,10 @@ export interface PolicyDecisionResult {
 
 // Effective-policy boundary. Agents need the merged tool policy that gates which
 // tools an agent version may attach; connections need the merged MCP policy (to
-// gate connector creation) and full MCP tool-call evaluation.
+// gate connector creation) and full MCP tool-call evaluation. The
+// effective-policy resource reads the full merged policy and evaluates a
+// provider/model decision. The DB-mixed hierarchy resolution and provider
+// evaluation stay in server/policy.ts behind this port.
 export interface PolicyPort {
   resolveToolPolicy(auth: AuthScope): Promise<Record<string, unknown>>
   resolveMcpPolicy(auth: AuthScope): Promise<Record<string, unknown>>
@@ -195,6 +199,8 @@ export interface PolicyPort {
       session: { id: string; agentSnapshot: string | null; environmentSnapshot: string | null }
     },
   ): Promise<PolicyDecisionResult>
+  resolveEffective(auth: AuthScope): Promise<EffectivePolicyResult>
+  evaluateProvider(auth: AuthScope, values: { providerId: string; modelId: string }): Promise<PolicyDecisionResult>
 }
 
 // --- environments ---
@@ -942,6 +948,186 @@ export interface SessionEventPort {
     parentEventId?: string | null
     correlationId?: string | null
   }): Promise<string>
+}
+
+// --- governance: policies, access rules, budgets ---
+
+import type { BudgetScope, PolicyScopeLevel } from '@server/domain/policy'
+
+// Field-keyed validation error for governance CRUD orchestration (scope rules,
+// immutability). The http layer maps it to a 400 with the same shape the domain
+// produces.
+export class GovernanceValidationError extends Error {
+  readonly fields: Record<string, string>
+  constructor(message: string, fields: Record<string, string>) {
+    super(message)
+    this.name = 'GovernanceValidationError'
+    this.fields = fields
+  }
+}
+
+// Thrown when a scoped policy already exists for the requested scope. The http
+// layer maps it to 409.
+export class PolicyScopeConflictError extends Error {
+  readonly policyId: string
+  constructor(policyId: string, message = 'A policy already exists for this scope') {
+    super(message)
+    this.name = 'PolicyScopeConflictError'
+    this.policyId = policyId
+  }
+}
+
+export interface PolicyScope {
+  level: PolicyScopeLevel
+  teamId?: string
+}
+
+export interface PolicyRecord {
+  id: string
+  projectId: string
+  scope: PolicyScope
+  toolPolicy: Record<string, unknown>
+  mcpPolicy: Record<string, unknown>
+  sandboxPolicy: Record<string, unknown>
+  metadata: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreatePolicyInput {
+  organizationId: string
+  projectId: string
+  scope: PolicyScope
+  toolPolicy: Record<string, unknown>
+  mcpPolicy: Record<string, unknown>
+  sandboxPolicy: Record<string, unknown>
+  metadata: Record<string, unknown>
+}
+
+export interface ReplacePolicyFields {
+  toolPolicy: Record<string, unknown>
+  mcpPolicy: Record<string, unknown>
+  sandboxPolicy: Record<string, unknown>
+  metadata: Record<string, unknown>
+}
+
+// DB boundary for scoped governance policy documents. The only implementation
+// lives in adapters/repos. Repos return parsed records — no JSON strings.
+export interface PolicyRepo {
+  list(projectId: string): Promise<PolicyRecord[]>
+  find(projectId: string, policyId: string): Promise<PolicyRecord | null>
+  findByScope(projectId: string, scope: PolicyScope): Promise<PolicyRecord | null>
+  insert(input: CreatePolicyInput, timestamp: string): Promise<PolicyRecord>
+  replace(projectId: string, policyId: string, fields: ReplacePolicyFields, updatedAt: string): Promise<PolicyRecord>
+  delete(projectId: string, policyId: string): Promise<void>
+}
+
+export interface AccessRuleRecord {
+  id: string
+  providerId: string
+  modelId: string
+  teamId: string | null
+  effect: 'allow' | 'deny'
+  reason: string | null
+  metadata: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateAccessRuleInput {
+  organizationId: string
+  projectId: string
+  providerId: string
+  modelId: string
+  teamId: string | null
+  effect: 'allow' | 'deny'
+  reason: string | null
+  metadata: Record<string, unknown>
+}
+
+export interface UpdateAccessRuleFields {
+  effect: 'allow' | 'deny'
+  reason: string | null
+  metadata: Record<string, unknown>
+}
+
+// DB boundary for provider/model access rules. The only implementation lives in
+// adapters/repos.
+export interface AccessRuleRepo {
+  list(projectId: string): Promise<AccessRuleRecord[]>
+  find(projectId: string, ruleId: string): Promise<AccessRuleRecord | null>
+  insert(input: CreateAccessRuleInput, timestamp: string): Promise<AccessRuleRecord>
+  update(
+    projectId: string,
+    ruleId: string,
+    fields: UpdateAccessRuleFields,
+    updatedAt: string,
+  ): Promise<AccessRuleRecord>
+  delete(projectId: string, ruleId: string): Promise<void>
+}
+
+export interface BudgetRecord {
+  id: string
+  scope: BudgetScope
+  providerId: string | null
+  modelId: string | null
+  limitType: 'tokens' | 'cost_micros' | 'sessions'
+  limitValue: number
+  window: 'day' | 'month'
+  enabled: boolean
+  metadata: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateBudgetInput {
+  organizationId: string
+  projectId: string
+  scope: BudgetScope
+  providerId: string | null
+  modelId: string | null
+  limitType: 'tokens' | 'cost_micros' | 'sessions'
+  limitValue: number
+  window: 'day' | 'month'
+  enabled: boolean
+  metadata: Record<string, unknown>
+}
+
+export interface UpdateBudgetFields {
+  limitValue: number
+  window: 'day' | 'month'
+  enabled: boolean
+  metadata: Record<string, unknown>
+}
+
+// DB boundary for usage budgets. The only implementation lives in
+// adapters/repos.
+export interface BudgetRepo {
+  list(projectId: string): Promise<BudgetRecord[]>
+  listEnabled(projectId: string): Promise<BudgetRecord[]>
+  find(projectId: string, budgetId: string): Promise<BudgetRecord | null>
+  insert(input: CreateBudgetInput, timestamp: string): Promise<BudgetRecord>
+  update(projectId: string, budgetId: string, fields: UpdateBudgetFields, updatedAt: string): Promise<BudgetRecord>
+  delete(projectId: string, budgetId: string): Promise<void>
+}
+
+// The merged effective governance policy (org → team → project) the
+// effective-policy resource reads. Mirrors resolveEffectivePolicy's projection;
+// the heavy hierarchy resolution stays in server/policy.ts behind this port.
+export interface EffectivePolicyResult {
+  source: { type: string; id: string }
+  sources: { scope: string; id: string; teamId: string | null }[]
+  accessRules: {
+    id: string
+    providerId: string
+    modelId: string
+    teamId: string | null
+    effect: string
+    reason: string | null
+  }[]
+  toolPolicy: Record<string, unknown>
+  mcpPolicy: Record<string, unknown>
+  sandboxPolicy: Record<string, unknown>
 }
 
 export type { AgentToolAttachment, ConnectorCatalogTool, SecretMaterial }

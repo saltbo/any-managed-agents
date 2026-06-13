@@ -1,11 +1,14 @@
 import type {
+  AccessRuleRepo,
   AgentRepo,
   AuditPort,
+  BudgetRepo,
   ConnectionRepo,
   ConnectorRepo,
   EnvironmentRepo,
   McpGateway,
   PolicyPort,
+  PolicyRepo,
   ProviderCatalogGateway,
   ProviderRepo,
   SecretStoreGateway,
@@ -24,6 +27,9 @@ export interface Deps {
   secretStore: SecretStoreGateway
   connectors: ConnectorRepo
   connections: ConnectionRepo
+  policies: PolicyRepo
+  accessRules: AccessRuleRepo
+  budgets: BudgetRepo
   mcp: McpGateway
   sessionEvents: SessionEventPort
   audit: AuditPort

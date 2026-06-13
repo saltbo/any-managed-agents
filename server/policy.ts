@@ -1,3 +1,4 @@
+import { mergePolicyObjects } from '@server/domain/policy'
 import { and, desc, eq, isNull, or } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
 import type { AuthContext } from './auth/session'
@@ -300,82 +301,10 @@ export async function toolPolicyRequiresApproval(db: PolicyDb, auth: AuthContext
 // ─── Policy hierarchy resolution ──────────────────────────────────────────────
 //
 // Effective governance policy merges organization → team → project scope rows
-// with deterministic most-restrictive semantics (documented in
-// docs/product/decisions.md). Team rows apply only when the caller's
-// OIDC-asserted team memberships include the row's team id.
-
-const RESTRICTIVE_NETWORK_VALUES = new Set(['disabled', 'deny', 'offline'])
-
-function isAllowListKey(key: string) {
-  return key.startsWith('allowed')
-}
-
-function isUnionListKey(key: string) {
-  return key.startsWith('blocked') || key.startsWith('denied') || key.startsWith('requireApproval')
-}
-
-function intersectAllowLists(current: string[], next: string[]) {
-  if (current.includes('*')) {
-    return next
-  }
-  if (next.includes('*')) {
-    return current
-  }
-  return current.filter((item) => next.includes(item))
-}
-
-// Merges one policy object (toolPolicy/mcpPolicy/sandboxPolicy/budgetPolicy)
-// across hierarchy levels ordered organization → team → project:
-// blocked/denied/requireApproval lists union, allow lists intersect ('*' is
-// identity), defaultEffect 'deny' is sticky, booleans AND (false is sticky),
-// restrictive network/status strings are sticky, numbers take the minimum,
-// nested objects shallow-merge with the most specific level last, and any
-// other scalar takes the most specific level's value.
-function mergePolicyObjects(levels: Record<string, unknown>[]) {
-  const merged: Record<string, unknown> = {}
-  for (const level of levels) {
-    for (const [key, value] of Object.entries(level)) {
-      if (!(key in merged)) {
-        merged[key] = value
-        continue
-      }
-      const current = merged[key]
-      if (Array.isArray(current) && Array.isArray(value)) {
-        if (isUnionListKey(key)) {
-          merged[key] = [...new Set([...stringArray(current), ...stringArray(value)])]
-          continue
-        }
-        if (isAllowListKey(key)) {
-          merged[key] = intersectAllowLists(stringArray(current), stringArray(value))
-          continue
-        }
-        merged[key] = value
-        continue
-      }
-      if (key === 'defaultEffect') {
-        merged[key] = current === 'deny' || value === 'deny' ? 'deny' : value
-        continue
-      }
-      if (typeof current === 'boolean' && typeof value === 'boolean') {
-        merged[key] = current && value
-        continue
-      }
-      if (typeof current === 'number' && typeof value === 'number') {
-        merged[key] = Math.min(current, value)
-        continue
-      }
-      if (typeof current === 'string' && RESTRICTIVE_NETWORK_VALUES.has(current)) {
-        continue
-      }
-      if (current && value && typeof current === 'object' && typeof value === 'object' && !Array.isArray(value)) {
-        merged[key] = { ...(current as Record<string, unknown>), ...(value as Record<string, unknown>) }
-        continue
-      }
-      merged[key] = value
-    }
-  }
-  return merged
-}
+// with deterministic most-restrictive semantics (mergePolicyObjects lives in
+// domain/policy.ts; documented in docs/product/decisions.md). Team rows apply
+// only when the caller's OIDC-asserted team memberships include the row's team
+// id.
 
 type PolicyRow = typeof policies.$inferSelect
 

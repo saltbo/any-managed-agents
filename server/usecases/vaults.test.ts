@@ -107,6 +107,9 @@ function fakeDeps(
     secretStore,
     connectors: undefined as unknown as Deps['connectors'],
     connections: undefined as unknown as Deps['connections'],
+    policies: undefined as unknown as Deps['policies'],
+    accessRules: undefined as unknown as Deps['accessRules'],
+    budgets: undefined as unknown as Deps['budgets'],
     mcp: undefined as unknown as Deps['mcp'],
     sessionEvents: undefined as unknown as Deps['sessionEvents'],
     audit: { record: async () => {} },
@@ -114,6 +117,15 @@ function fakeDeps(
       resolveToolPolicy: async () => ({}),
       resolveMcpPolicy: async () => ({}),
       evaluateMcpTool: async () => ({ allowed: true, category: 'mcp', rule: null, message: '' }),
+      resolveEffective: async () => ({
+        source: { type: 'platform_default', id: 'workers-ai-default' },
+        sources: [],
+        accessRules: [],
+        toolPolicy: {},
+        mcpPolicy: {},
+        sandboxPolicy: {},
+      }),
+      evaluateProvider: async () => ({ allowed: true, category: 'provider', rule: null, message: '' }),
     },
   }
 }

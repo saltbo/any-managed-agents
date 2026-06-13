@@ -1,0 +1,89 @@
+import { describe, expect, it } from 'vitest'
+import type { Deps } from './deps'
+import { readEffectivePolicy } from './effective-policy'
+import type { AuditEntry, AuthScope, BudgetRecord, EffectivePolicyResult, PolicyDecisionResult } from './ports'
+
+const auth: AuthScope = {
+  organization: { id: 'org_1', name: 'Org' },
+  project: { id: 'project_1', name: 'Project' },
+  user: { id: 'user_1' },
+  roles: [],
+  permissions: [],
+}
+
+const effective: EffectivePolicyResult = {
+  source: { type: 'project', id: 'policy_1' },
+  sources: [{ scope: 'project', id: 'policy_1', teamId: null }],
+  accessRules: [
+    { id: 'rule_provider', providerId: 'workers-ai', modelId: '*', teamId: null, effect: 'deny', reason: 'paused' },
+    { id: 'rule_model', providerId: '*', modelId: 'm1', teamId: null, effect: 'allow', reason: null },
+  ],
+  toolPolicy: { blockedTools: ['sandbox.exec'] },
+  mcpPolicy: {},
+  sandboxPolicy: {},
+}
+
+function budgetRecord(): BudgetRecord {
+  return {
+    id: 'budget_1',
+    scope: 'project',
+    providerId: null,
+    modelId: null,
+    limitType: 'tokens',
+    limitValue: 1000,
+    window: 'month',
+    enabled: true,
+    metadata: {},
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  }
+}
+
+function fakeDeps(
+  overrides: { decision?: PolicyDecisionResult; audit?: AuditEntry[]; scopedTeams?: (string[] | undefined)[] } = {},
+): Deps {
+  return {
+    budgets: { listEnabled: async () => [budgetRecord()] },
+    audit: { record: async (_auth: AuthScope, entry: AuditEntry) => void overrides.audit?.push(entry) },
+    policy: {
+      resolveEffective: async (scoped: AuthScope) => {
+        overrides.scopedTeams?.push(scoped.teams)
+        return effective
+      },
+      evaluateProvider: async () =>
+        overrides.decision ?? { allowed: true, category: 'provider', rule: null, message: 'ok' },
+    },
+  } as unknown as Deps
+}
+
+describe('[spec: governance/effective-policy] readEffectivePolicy', () => {
+  it('splits access rules into provider and model views and lists enabled budgets', async () => {
+    const result = await readEffectivePolicy(fakeDeps(), auth, {})
+    expect(result.providerRules).toEqual([{ providerId: 'workers-ai', effect: 'deny', reason: 'paused' }])
+    expect(result.modelRules).toEqual([{ modelId: 'm1', effect: 'allow' }])
+    expect(result.budgets).toHaveLength(1)
+    expect(result.decision).toBeUndefined()
+  })
+
+  it('attaches a decision and audits the evaluation when provider+model are given', async () => {
+    const audit: AuditEntry[] = []
+    const decision: PolicyDecisionResult = {
+      allowed: false,
+      category: 'provider',
+      rule: 'rule_provider',
+      message: 'no',
+    }
+    const deps = fakeDeps({ decision, audit })
+    const result = await readEffectivePolicy(deps, auth, { providerId: 'workers-ai', modelId: 'm1' })
+    expect(result.decision).toEqual(decision)
+    expect(audit).toContainEqual(
+      expect.objectContaining({ action: 'policy.evaluate', outcome: 'denied', policyCategory: 'provider' }),
+    )
+  })
+
+  it('resolves the policy as a member of the requested team', async () => {
+    const scopedTeams: (string[] | undefined)[] = []
+    await readEffectivePolicy(fakeDeps({ scopedTeams }), auth, { teamId: 'team_platform' })
+    expect(scopedTeams).toEqual([['team_platform']])
+  })
+})

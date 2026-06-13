@@ -17,6 +17,7 @@ export function createAuditPort(db: Db): AuditPort {
         resourceId: entry.resourceId ?? null,
         outcome: entry.outcome,
         requestId: entry.requestId ?? null,
+        ...(entry.policyCategory !== undefined ? { policyCategory: entry.policyCategory } : {}),
         ...(entry.before !== undefined ? { before: entry.before } : {}),
         ...(entry.after !== undefined ? { after: entry.after } : {}),
         ...(entry.metadata !== undefined ? { metadata: entry.metadata } : {}),
