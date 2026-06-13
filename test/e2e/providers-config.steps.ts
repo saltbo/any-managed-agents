@@ -1,7 +1,16 @@
 import assert from 'node:assert/strict'
-import { Then, When } from '@cucumber/cucumber'
+import { Given, Then, When } from '@cucumber/cucumber'
 import { apiJson } from './local-app'
-import { createProvider, createProviderModel, ensureSignedIn, type Json, type StepsWorld } from './shared-helpers'
+import {
+  createAgent,
+  createEnvironment,
+  createProvider,
+  createProviderModel,
+  ensureSignedIn,
+  type Json,
+  type ListResponse,
+  type StepsWorld,
+} from './shared-helpers'
 
 // ─── Scenario: Configure model providers ─────────────────────────────────────
 
@@ -51,6 +60,141 @@ Then('the platform stores provider metadata in D1', async function (this: StepsW
   assert.ok(typeof providerRecord.type === 'string', 'provider must have a type')
   assert.ok(typeof providerRecord.displayName === 'string', 'provider must have a displayName')
 })
+
+// ─── Scenario: Dispatch configured provider connection details to the session runtime ───
+
+type DispatchWorld = StepsWorld & {
+  dispatchModel?: string
+  dispatchCredentialVersionId?: string
+  dispatchWorkPayload?: Json
+}
+
+const DISPATCH_BASE_URL = 'https://models.example.test/v1'
+const DISPATCH_SECRET_VALUE = 'raw-dispatch-provider-key'
+
+Given('a configured provider with a base URL and a vault credential reference', async function (this: DispatchWorld) {
+  const state = await ensureSignedIn(this)
+  const vault = await apiJson<Json>(state.page.request, '/api/vaults', {
+    method: 'POST',
+    data: { name: `${state.runId} provider vault` },
+  })
+  const credential = await apiJson<Json>(state.page.request, `/api/vaults/${vault.id}/credentials`, {
+    method: 'POST',
+    data: {
+      name: `${state.runId} provider key`,
+      type: 'api_key',
+      secret: { provider: 'cloudflare-secrets', secretValue: DISPATCH_SECRET_VALUE },
+    },
+  })
+  this.dispatchCredentialVersionId = String(credential.activeVersionId)
+  state.provider = await createProvider(state, {
+    type: 'openai-compatible',
+    displayName: `${state.runId} dispatchable gateway`,
+    baseUrl: DISPATCH_BASE_URL,
+    credentialSecretRef: this.dispatchCredentialVersionId,
+  })
+})
+
+Given('an agent selects that configured provider and one of its models', async function (this: DispatchWorld) {
+  const state = this.e2e
+  assert.ok(state?.provider, 'a configured provider must exist')
+  this.dispatchModel = 'gpt-5.3-codex'
+  await createProviderModel(state, state.provider, {
+    modelId: this.dispatchModel,
+    displayName: 'GPT 5.3 Codex',
+    capabilities: ['text'],
+  })
+  state.agent = await createAgent(state, {
+    name: `${state.runId} dispatch agent`,
+    provider: state.provider.id,
+    model: this.dispatchModel,
+  })
+})
+
+When('the user creates a self-hosted session for that agent', async function (this: DispatchWorld) {
+  const state = this.e2e
+  assert.ok(state?.agent, 'an agent must exist')
+  state.environment = await createEnvironment(state, {
+    name: `${state.runId} dispatch env`,
+    hostingMode: 'self_hosted',
+    networkPolicy: { mode: 'unrestricted' },
+  })
+  state.latestSession = await apiJson<Json>(state.page.request, '/api/sessions', {
+    method: 'POST',
+    data: {
+      agentId: state.agent.id,
+      environmentId: state.environment.id,
+      runtime: 'codex',
+      title: `${state.runId} dispatch session`,
+    },
+  })
+})
+
+Then(
+  'the queued runner work carries the provider base URL in the runtime environment',
+  async function (this: DispatchWorld) {
+    const state = this.e2e
+    assert.ok(state?.latestSession, 'a session must exist')
+    const workItems = await apiJson<ListResponse<Json>>(
+      state.page.request,
+      `/api/runners/work-items?sessionId=${state.latestSession.id}`,
+    )
+    const workItem = workItems.data.find((item) => item.type === 'session.start')
+    assert.ok(workItem, 'queued session.start work must exist')
+    this.dispatchWorkPayload = workItem.payload as Json
+    const runtimeEnv = this.dispatchWorkPayload.runtimeEnv as Json
+    assert.equal(runtimeEnv.OPENAI_BASE_URL, DISPATCH_BASE_URL, 'the provider base URL reaches the runtime env')
+  },
+)
+
+Then(
+  'the queued runner work carries the provider credential only as a vault reference',
+  function (this: DispatchWorld) {
+    assert.ok(this.dispatchWorkPayload, 'the queued work payload must have been inspected')
+    // The operator-facing work item view redacts secret env entries entirely;
+    // the raw credential value must never appear in the queued payload.
+    const serialized = JSON.stringify(this.dispatchWorkPayload)
+    assert.ok(!serialized.includes(DISPATCH_SECRET_VALUE), 'the queued work payload never contains the raw credential')
+    const runtimeEnv = this.dispatchWorkPayload.runtimeEnv as Json
+    assert.equal(runtimeEnv.OPENAI_API_KEY, undefined, 'the queued runtime env carries no credential value')
+  },
+)
+
+Then(
+  'the provider credential value is materialized only when a runner leases the work',
+  async function (this: DispatchWorld) {
+    const state = this.e2e
+    assert.ok(state?.environment && this.dispatchModel, 'the dispatch session context must exist')
+    const capability = `runtime-provider-model:codex:*:${this.dispatchModel}`
+    const runner = await apiJson<Json>(state.page.request, '/api/runners', {
+      method: 'POST',
+      data: { name: `${state.runId} dispatch runner`, environmentId: state.environment.id, capabilities: [capability] },
+    })
+    await apiJson<Json>(state.page.request, `/api/runners/${runner.id}/heartbeats`, {
+      method: 'POST',
+      data: { status: 'active', capabilities: [capability] },
+    })
+    const lease = await apiJson<Json>(state.page.request, `/api/runners/${runner.id}/leases`, {
+      method: 'POST',
+      data: {},
+    })
+    const workItem = lease.workItem as Json
+    const payload = workItem.payload as Json
+    const runtimeEnv = payload.runtimeEnv as Json
+    assert.equal(
+      runtimeEnv.OPENAI_API_KEY,
+      DISPATCH_SECRET_VALUE,
+      'the leased work env carries the resolved credential',
+    )
+    assert.equal(runtimeEnv.OPENAI_BASE_URL, DISPATCH_BASE_URL, 'the leased work env keeps the provider base URL')
+    const secretEnv = payload.runtimeSecretEnv as Array<{ name: string; ref: string }>
+    assert.deepEqual(
+      secretEnv.filter((item) => item.name === 'OPENAI_API_KEY'),
+      [{ name: 'OPENAI_API_KEY', ref: this.dispatchCredentialVersionId }],
+      'the runner-facing payload carries the provider credential as a vault credential version reference',
+    )
+  },
+)
 
 Then('credentials are stored in Cloudflare Secrets', function (this: StepsWorld) {
   // In the AMA control plane, raw credential values are never stored in D1 —

@@ -54,6 +54,7 @@ import {
   runtimeSupportsLivePrompts,
 } from '../runtime/catalog'
 import { runtimeDriver, runtimeDriverName, runtimeMetadata } from '../runtime/drivers'
+import { providerRuntimeEnv, resolveSessionProviderConfig } from '../runtime/provider-env'
 import { safeRuntimeError } from '../runtime/runtime-error'
 import { resolveRuntimeSecretEnv } from '../runtime/secret-env'
 import {
@@ -1199,6 +1200,29 @@ export async function createSessionForAgent(
     })
   }
 
+  // Configured providers dispatch their connection details (base URL, vault
+  // credential ref) into the session runtime env; a missing or disabled
+  // provider blocks the session before any runtime resources are claimed.
+  const providerResolution = await resolveSessionProviderConfig(db, auth.project.id, agentVersion.provider)
+  if (!providerResolution.ok) {
+    return errorResponse(c, 409, 'conflict', 'Agent provider is not configured or unavailable for this project', {
+      resourceType: 'provider',
+      resourceId: agentVersion.provider,
+      reason: providerResolution.reason,
+    })
+  }
+  const providerEnv = providerRuntimeEnv(providerResolution.config)
+  const providerCredentialError = await validateRuntimeSecretEnvRefs(db, auth, providerEnv.secretEnv)
+  if (providerCredentialError) {
+    return errorResponse(
+      c,
+      409,
+      'conflict',
+      'Provider credential reference is not an active vault credential version',
+      { resourceType: 'provider', resourceId: agentVersion.provider },
+    )
+  }
+
   const environment = await db
     .select()
     .from(environments)
@@ -1239,6 +1263,23 @@ export async function createSessionForAgent(
       fields: runtimeSecretEnvError,
     })
   }
+
+  // Session-explicit env wins over provider-derived env, so callers can still
+  // override a provider credential or base URL for a single session.
+  const sessionRuntimeEnv = options.runtimeEnv ?? {}
+  const sessionRuntimeSecretEnv = options.runtimeSecretEnv ?? []
+  const explicitEnvNames = new Set([
+    ...Object.keys(sessionRuntimeEnv),
+    ...sessionRuntimeSecretEnv.map((item) => item.name),
+  ])
+  const runtimeEnv = {
+    ...Object.fromEntries(Object.entries(providerEnv.env).filter(([name]) => !explicitEnvNames.has(name))),
+    ...sessionRuntimeEnv,
+  }
+  const runtimeSecretEnv = [
+    ...providerEnv.secretEnv.filter((item) => !explicitEnvNames.has(item.name)),
+    ...sessionRuntimeSecretEnv,
+  ]
 
   const timestamp = now()
   // Session ids are bare UUIDs so runtimes (e.g. Claude Code) can use them
@@ -1312,8 +1353,8 @@ export async function createSessionForAgent(
     title: options.title ?? null,
     resourceRefs: stringify(normalizedResources.resourceRefs),
     vaultRefs: stringify(options.vaultRefs ?? []),
-    runtimeEnv: stringify(options.runtimeEnv ?? {}),
-    runtimeSecretEnv: stringify(options.runtimeSecretEnv ?? []),
+    runtimeEnv: stringify(runtimeEnv),
+    runtimeSecretEnv: stringify(runtimeSecretEnv),
     projectId: auth.project.id,
     durableObjectName: `org_${auth.organization.id}:project_${auth.project.id}:session_${id}`,
     sandboxId,
@@ -1361,8 +1402,8 @@ export async function createSessionForAgent(
       runtime,
       runtimeConfig,
       resourceRefs: normalizedResources.resourceRefs,
-      runtimeEnv: options.runtimeEnv ?? {},
-      runtimeSecretEnv: options.runtimeSecretEnv ?? [],
+      runtimeEnv,
+      runtimeSecretEnv,
       ...(initialPrompt !== undefined ? { initialPrompt } : {}),
     })
     return c.json(serializeSession(pending), 201)
@@ -1380,8 +1421,8 @@ export async function createSessionForAgent(
       runtime,
       runtimeConfig,
       resourceRefs: normalizedResources.resourceRefs,
-      runtimeEnv: options.runtimeEnv ?? {},
-      runtimeSecretEnv: options.runtimeSecretEnv ?? [],
+      runtimeEnv,
+      runtimeSecretEnv,
       ...(initialPrompt !== undefined ? { initialPrompt } : {}),
     })
     return c.json(serializeSession(pending), 201)
@@ -1394,8 +1435,8 @@ export async function createSessionForAgent(
     runtime,
     runtimeConfig,
     resourceRefs: normalizedResources.resourceRefs,
-    runtimeEnv: options.runtimeEnv ?? {},
-    runtimeSecretEnv: options.runtimeSecretEnv ?? [],
+    runtimeEnv,
+    runtimeSecretEnv,
     ...(initialPrompt !== undefined ? { initialPrompt } : {}),
   })
   if (c.env.AMA_RUNTIME_MODE !== 'test') {

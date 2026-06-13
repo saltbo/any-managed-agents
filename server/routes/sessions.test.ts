@@ -1923,6 +1923,131 @@ describe('[CF] /api/sessions', () => {
     expect(exactLeaseRes.status).toBe(201)
   })
 
+  it('dispatches configured provider base URL and vault credential into the self-hosted runtime env', async () => {
+    const authorization = await signIn()
+    const vaultRes = await jsonFetch('/api/vaults', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Provider credentials' }),
+    })
+    expect(vaultRes.status).toBe(201)
+    const vault = (await vaultRes.json()) as { id: string }
+    const credentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'OpenAI compatible key',
+        type: 'api_key',
+        secret: { provider: 'cloudflare-secrets', secretValue: 'raw-provider-api-key' },
+      }),
+    })
+    expect(credentialRes.status).toBe(201)
+    const credential = (await credentialRes.json()) as { activeVersionId: string }
+
+    const model = 'gpt-5.3-codex'
+    const providerRes = await jsonFetch('/api/providers', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'openai-compatible',
+        displayName: 'Dispatchable gateway',
+        baseUrl: 'https://models.example.test/v1',
+        credentialSecretRef: credential.activeVersionId,
+      }),
+    })
+    expect(providerRes.status).toBe(201)
+    const provider = (await providerRes.json()) as { id: string }
+    const modelRes = await jsonFetch(`/api/providers/${provider.id}/models`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ modelId: model, displayName: model, capabilities: ['text'] }),
+    })
+    expect(modelRes.status).toBe(201)
+
+    const environment = await createEnvironment(authorization, { hostingMode: 'self_hosted', mcpPolicy: {} })
+    const agent = await createAgent(authorization, { provider: provider.id, model, mcpConnectors: [] })
+    const createRes = await jsonFetch('/api/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'codex' }),
+    })
+    expect(createRes.status).toBe(201)
+    const session = (await createRes.json()) as { id: string }
+
+    const workRow = await env.DB.prepare('SELECT payload FROM runner_work_items WHERE session_id = ?')
+      .bind(session.id)
+      .first<{ payload: string }>()
+    expect(workRow).toBeTruthy()
+    const payload = JSON.parse(workRow!.payload) as {
+      runtimeEnv: Record<string, string>
+      runtimeSecretEnv: Array<{ name: string; ref: string }>
+    }
+    expect(payload.runtimeEnv.OPENAI_BASE_URL).toBe('https://models.example.test/v1')
+    expect(payload.runtimeEnv).not.toHaveProperty('OPENAI_API_KEY')
+    expect(payload.runtimeSecretEnv).toEqual([{ name: 'OPENAI_API_KEY', ref: credential.activeVersionId }])
+
+    const capability = runtimeProviderModelCapability('codex', '*', model)
+    const runnerRes = await jsonFetch('/api/runners', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Provider env runner', environmentId: environment.id, capabilities: [capability] }),
+    })
+    expect(runnerRes.status).toBe(201)
+    const runner = (await runnerRes.json()) as { id: string }
+    await jsonFetch(`/api/runners/${runner.id}/heartbeats`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ status: 'active', capabilities: [capability] }),
+    })
+    const leaseRes = await jsonFetch(`/api/runners/${runner.id}/leases`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
+    expect(leaseRes.status).toBe(201)
+    const lease = (await leaseRes.json()) as { workItem: { payload: { runtimeEnv: Record<string, string> } } }
+    expect(lease.workItem.payload.runtimeEnv.OPENAI_API_KEY).toBe('raw-provider-api-key')
+    expect(lease.workItem.payload.runtimeEnv.OPENAI_BASE_URL).toBe('https://models.example.test/v1')
+  })
+
+  it('rejects sessions when the agent provider was disabled after the agent was saved', async () => {
+    const authorization = await signIn()
+    const model = 'gpt-5.3-codex'
+    const { providerId } = await createProviderModel(authorization, model)
+    const environment = await createEnvironment(authorization, { hostingMode: 'self_hosted', mcpPolicy: {} })
+    const agent = await createAgent(authorization, { provider: providerId, model, mcpConnectors: [] })
+
+    const disableRes = await jsonFetch(`/api/providers/${providerId}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'disabled' }),
+    })
+    expect(disableRes.status).toBe(200)
+
+    const createRes = await jsonFetch('/api/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'codex' }),
+    })
+    expect(createRes.status).toBe(403)
+    await expect(createRes.json()).resolves.toMatchObject({
+      error: {
+        type: 'policy_denied',
+        message: 'Provider is disabled for this project.',
+      },
+    })
+  })
+
+  it('rejects ama runtime sessions for configured external providers even without a pinned model', async () => {
+    const authorization = await signIn()
+    const { providerId } = await createProviderModel(authorization, 'gpt-5.3-codex')
+    const environment = await createEnvironment(authorization, { mcpPolicy: {} })
+    const agent = await createAgent(authorization, { provider: providerId, mcpConnectors: [] })
+
+    const createRes = await jsonFetch('/api/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
+    })
+    expect(createRes.status).toBe(409)
+    await expect(createRes.json()).resolves.toMatchObject({
+      error: {
+        type: 'conflict',
+        message: 'Unsupported runtime provider/model combination',
+        details: { resourceType: 'runtime_catalog', runtime: 'ama', provider: providerId },
+      },
+    })
+  })
+
   it('leases model-specific work to runners that only declare the bare runtime capability', async () => {
     // TRANSITIONAL coverage: runners deployed before host model enumeration
     // declare the bare runtime plus one hardcoded model. They must keep

@@ -475,7 +475,7 @@ export interface AgentInput {
   description?: string
   instructions?: string
   provider?: string
-  model?: string
+  model?: string | null
   systemPrompt?: string
   skills?: string[]
   role?: string | null

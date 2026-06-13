@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query'
 import { Bot, Boxes, Cloud, MessageSquare, Server } from 'lucide-react'
 import type { FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
@@ -5,7 +6,8 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/c
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import type { Agent, Environment, ProviderInputType } from '@/lib/api'
+import { type Agent, api, type Environment, type ProviderInputType } from '@/lib/api'
+import { queryKeys } from '@/lib/query-keys'
 import type { AgentFormState, EnvironmentFormState, ProviderFormState, SessionFormState, VaultFormState } from './types'
 
 const PROVIDER_TYPES: ProviderInputType[] = [
@@ -144,8 +146,7 @@ export function AgentForm({
           value={value.instructions}
           onChange={(instructions) => setValue({ ...value, instructions })}
         />
-        <TextField label="Provider" value={value.provider} onChange={(provider) => setValue({ ...value, provider })} />
-        <TextField label="Model" value={value.model} onChange={(model) => setValue({ ...value, model })} />
+        <AgentProviderModelFields value={value} setValue={setValue} />
         <TextAreaField
           label="Skills"
           description="One stable skill reference per line, such as source@skill."
@@ -176,6 +177,88 @@ export function AgentForm({
         {submitLabel}
       </Button>
     </form>
+  )
+}
+
+const PLATFORM_PROVIDER_ID = 'workers-ai'
+const NO_MODEL_VALUE = '__no-model__'
+
+// Provider and model choices come from the configured provider catalog, so an
+// agent can only reference providers whose connection details the runtime can
+// actually dispatch. Workers AI is always offered as the platform default.
+function AgentProviderModelFields({
+  value,
+  setValue,
+}: {
+  value: AgentFormState
+  setValue: (value: AgentFormState) => void
+}) {
+  const providersQuery = useQuery({
+    queryKey: queryKeys.providers.list(),
+    queryFn: () => api.listProviders(),
+  })
+  const configuredProviders = (providersQuery.data?.data ?? []).filter(
+    (provider) => provider.status === 'active' && provider.type !== PLATFORM_PROVIDER_ID,
+  )
+  const knownProviderIds = new Set([PLATFORM_PROVIDER_ID, ...configuredProviders.map((provider) => provider.id)])
+  const modelsQuery = useQuery({
+    queryKey: queryKeys.providers.models(value.provider),
+    queryFn: () => api.listProviderModels(value.provider),
+    enabled: Boolean(value.provider),
+  })
+  const modelIds = (modelsQuery.data?.data ?? [])
+    .filter((model) => model.availability === 'available')
+    .map((model) => model.modelId)
+  return (
+    <>
+      <Field>
+        <FieldLabel htmlFor="field-provider">Provider</FieldLabel>
+        <Select value={value.provider} onValueChange={(provider) => setValue({ ...value, provider, model: '' })}>
+          <SelectTrigger id="field-provider">
+            <SelectValue placeholder="Select a provider" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={PLATFORM_PROVIDER_ID}>Workers AI (platform)</SelectItem>
+            {configuredProviders.map((provider) => (
+              <SelectItem key={provider.id} value={provider.id}>
+                {provider.displayName} ({provider.type})
+              </SelectItem>
+            ))}
+            {value.provider && !knownProviderIds.has(value.provider) ? (
+              <SelectItem value={value.provider}>{value.provider}</SelectItem>
+            ) : null}
+          </SelectContent>
+        </Select>
+        <FieldDescription>
+          Sessions dispatch the configured provider base URL and vault credential to the runtime.
+        </FieldDescription>
+      </Field>
+      <Field>
+        <FieldLabel htmlFor="field-model">Model</FieldLabel>
+        <Select
+          value={value.model || NO_MODEL_VALUE}
+          onValueChange={(model) => setValue({ ...value, model: model === NO_MODEL_VALUE ? '' : model })}
+        >
+          <SelectTrigger id="field-model">
+            <SelectValue placeholder="Select a model" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NO_MODEL_VALUE}>No pinned model</SelectItem>
+            {modelIds.map((modelId) => (
+              <SelectItem key={modelId} value={modelId}>
+                {modelId}
+              </SelectItem>
+            ))}
+            {value.model && !modelIds.includes(value.model) ? (
+              <SelectItem value={value.model}>{value.model}</SelectItem>
+            ) : null}
+          </SelectContent>
+        </Select>
+        <FieldDescription>
+          Models come from the provider catalog. Leave unpinned to let the runtime decide.
+        </FieldDescription>
+      </Field>
+    </>
   )
 }
 
@@ -337,7 +420,7 @@ export function ProviderForm({
         />
         <TextField
           label="Credential secret ref"
-          description="Secret references point at approved vaults or Cloudflare Secrets. Raw secret values are never accepted here."
+          description="Use a vault credential version id (vaultver_…) so sessions can dispatch the credential to the runtime. Raw secret values are never accepted here."
           value={value.credentialSecretRef}
           onChange={(credentialSecretRef) => setValue({ ...value, credentialSecretRef })}
         />

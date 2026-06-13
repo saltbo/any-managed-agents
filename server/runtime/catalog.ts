@@ -109,11 +109,14 @@ export function runtimeCatalogSupportsProviderModel(
   if (!entry?.hostingModes.includes(hostingMode)) {
     return false
   }
-  if (!model) {
-    return true
-  }
   if (entry.providerModels.length === 0) {
     return true
+  }
+  // Provider support is checked even when no model is pinned: a runtime that
+  // only serves the platform provider (ama → workers-ai) must not accept a
+  // configured external provider just because the agent left the model open.
+  if (!model) {
+    return entry.providerModels.some((capability) => capability.provider === '*' || capability.provider === provider)
   }
   return Boolean(
     entry.providerModels.some(

@@ -95,9 +95,11 @@ async function recordModelUsage(
   }
   const session = await sessionAttribution(db, scope)
   const provider = stringField(payload, 'provider') ?? session?.modelProvider ?? 'workers-ai'
-  const family = providerFamily(provider)
   const modelId = stringField(payload, 'model') ?? 'unknown'
   const config = await resolveProviderConfig(db, scope.projectId, provider)
+  // Configured provider ids carry no family information themselves; the
+  // configured type is the authoritative family for attribution.
+  const family = providerFamily(config?.type ?? provider)
   const pricing = config ? await modelPricing(db, scope.projectId, config.id, modelId) : null
   const pricedCostMicros = pricing ? computeModelCostMicros(pricing, { promptTokens, completionTokens }) : null
   const costMicros = eventCostMicros ?? pricedCostMicros

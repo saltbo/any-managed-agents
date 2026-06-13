@@ -21,7 +21,7 @@ export function CreateAgentSheet({ open, onOpenChange }: { open: boolean; onOpen
         instructions: form.instructions,
         systemPrompt: form.instructions,
         provider: form.provider,
-        model: form.model,
+        model: form.model || null,
         skills: parseTools(form.skills),
         allowedTools: parseTools(form.allowedTools),
         mcpConnectors: parseTools(form.mcpConnectors),

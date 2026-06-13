@@ -71,7 +71,11 @@ const ProviderPayloadSchema = z.object({
   displayName: z.string().min(1).max(120).openapi({ example: 'Workers AI' }),
   baseUrl: z.string().url().optional().openapi({ example: 'https://api.example.com/v1' }),
   isDefault: z.boolean().optional().openapi({ example: true }),
-  credentialSecretRef: z.string().min(1).max(240).optional().openapi({ example: 'secret://providers/openai' }),
+  credentialSecretRef: z.string().min(1).max(240).optional().openapi({
+    example: 'vaultver_abc123',
+    description:
+      'Reference to the provider credential. A vault credential version id (vaultver_…) is dispatched to session runtimes as the provider API key; other reference schemes are stored as inert metadata.',
+  }),
   metadata: JsonObjectSchema.optional().openapi({ example: { accountId: 'cf-account-ref' } }),
   rateLimits: JsonObjectSchema.optional().openapi({ example: { requestsPerMinute: 120 } }),
   budgetPolicy: JsonObjectSchema.optional().openapi({ example: { monthlyCostMicros: 1000000 } }),

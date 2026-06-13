@@ -2403,7 +2403,8 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 240,
-            "example": "secret://providers/openai"
+            "example": "vaultver_abc123",
+            "description": "Reference to the provider credential. A vault credential version id (vaultver_…) is dispatched to session runtimes as the provider API key; other reference schemes are stored as inert metadata."
           },
           "metadata": {
             "type": "object",
@@ -2472,7 +2473,8 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 240,
-            "example": "secret://providers/openai"
+            "example": "vaultver_abc123",
+            "description": "Reference to the provider credential. A vault credential version id (vaultver_…) is dispatched to session runtimes as the provider API key; other reference schemes are stored as inert metadata."
           },
           "metadata": {
             "type": "object",

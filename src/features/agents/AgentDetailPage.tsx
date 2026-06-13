@@ -44,7 +44,7 @@ export function AgentDetailPage() {
         instructions: input.instructions,
         systemPrompt: input.instructions,
         provider: input.provider,
-        model: input.model,
+        model: input.model || null,
         skills: parseTools(input.skills),
         allowedTools: parseTools(input.allowedTools),
         mcpConnectors: parseTools(input.mcpConnectors),

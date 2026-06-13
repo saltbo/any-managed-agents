@@ -24,6 +24,15 @@ Feature: Model providers
     And usage, errors, and policy decisions are normalized across providers
 
   @implemented
+  Scenario: Dispatch configured provider connection details to the session runtime
+    Given a configured provider with a base URL and a vault credential reference
+    And an agent selects that configured provider and one of its models
+    When the user creates a self-hosted session for that agent
+    Then the queued runner work carries the provider base URL in the runtime environment
+    And the queued runner work carries the provider credential only as a vault reference
+    And the provider credential value is materialized only when a runner leases the work
+
+  @implemented
   Scenario: Enforce provider policy
     Given a team is allowed to use only selected providers and models
     When an agent requests a blocked provider or model
