@@ -1,5 +1,5 @@
 import type { drizzle } from 'drizzle-orm/d1'
-import type { Context } from 'hono'
+import type { Context, Env as HonoEnv } from 'hono'
 import type { AuthContext } from './auth/session'
 import { auditRecords } from './db/schema'
 import type { Env } from './env'
@@ -19,7 +19,10 @@ export function redactSecrets(value: unknown): unknown {
   return redactSensitiveValue(value)
 }
 
-export function requestId(c: Context<{ Bindings: Env }>) {
+// Generic over the caller's Hono env so routes with or without extra context
+// Variables (e.g. injected Deps) can call requestId — Context Variables are
+// invariant, so a fixed param would reject one shape.
+export function requestId<E extends HonoEnv>(c: Context<E & { Bindings: Env }>) {
   return c.req.header('x-request-id') ?? c.req.header('cf-ray') ?? newId('req')
 }
 

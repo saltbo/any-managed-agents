@@ -6,6 +6,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@server': path.resolve(__dirname, './server'),
       '@shared': path.resolve(__dirname, './shared'),
     },
   },
@@ -25,6 +26,9 @@ export default defineConfig({
             'src/**/*.test.tsx',
             'server/runtime/**/*.test.ts',
             'server/test/**/*.test.ts',
+            'server/domain/**/*.test.ts',
+            'server/usecases/**/*.test.ts',
+            'server/adapters/**/*.test.ts',
             'shared/**/*.test.ts',
             'runtime-bridge/src/**/*.test.ts',
           ],
@@ -47,7 +51,7 @@ export default defineConfig({
         ],
         test: {
           name: 'workers',
-          include: ['server/routes/**/*.test.ts', 'workers/**/*.test.ts'],
+          include: ['server/routes/**/*.test.ts', 'server/http/**/*.test.ts', 'workers/**/*.test.ts'],
           setupFiles: ['./server/test/apply-migrations.ts'],
         },
       },

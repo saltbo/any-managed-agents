@@ -5,7 +5,8 @@ import { createApp } from '../app'
 import type { Env } from '../env'
 
 const routeSources = {
-  agents: readFileSync('server/routes/agents.ts', 'utf8'),
+  // agents is migrated to the clean-architecture http layer.
+  agents: readFileSync('server/http/agents.ts', 'utf8'),
   environments: readFileSync('server/routes/environments.ts', 'utf8'),
   sessions: readFileSync('server/routes/sessions.ts', 'utf8'),
 }
@@ -40,8 +41,11 @@ function sortedUnique(fields: string[]) {
 describe('route schema and handler alignment', () => {
   it('keeps agent write fields aligned across handlers and OpenAPI schemas', async () => {
     const doc = await openApiDoc()
-    // 'content' is read for the memory PUT handler, not the agent write schema.
-    const handled = sortedUnique(bodyFields(routeSources.agents).filter((field) => field !== 'content'))
+    // 'content' is read for the memory PUT handler; 'archived' is the update-only
+    // lifecycle transition — neither belongs to the agent create write schema.
+    const handled = sortedUnique(
+      bodyFields(routeSources.agents).filter((field) => field !== 'content' && field !== 'archived'),
+    )
     const createFields = schemaFields(doc, 'CreateAgentRequest')
     const updateFields = schemaFields(doc, 'UpdateAgentRequest')
 

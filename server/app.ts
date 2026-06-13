@@ -5,11 +5,13 @@ import { cors } from 'hono/cors'
 import { canonicalAmaSessionEventFromRuntimeEvent } from '../shared/session-events'
 import { recordAudit, requestId } from './audit'
 import { type AuthContext, requireAuth } from './auth/session'
+import { createDeps } from './composition'
 import { sessionEvents, sessions } from './db/schema'
 import { insertCanonicalSessionEvent } from './db/session-event-store'
 import type { Env } from './env'
 import { errorResponse } from './errors'
-import { ApiSecuritySchemes, createApiRouter } from './openapi'
+import { registerAgentRoutes } from './http/agents'
+import { ApiSecuritySchemes, createDepsApiRouter } from './openapi'
 import {
   evaluateMcpToolPolicy,
   evaluateSandboxRuntimePolicy,
@@ -18,7 +20,6 @@ import {
 } from './policy'
 import { redactSensitiveValue } from './redaction'
 import accessRules from './routes/access-rules'
-import agents from './routes/agents'
 import audit from './routes/audit'
 import auth from './routes/auth'
 import budgets from './routes/budgets'
@@ -618,7 +619,14 @@ async function handleRuntimeWebSocketMessage(
 }
 
 export function createApp() {
-  const app = createApiRouter()
+  const app = createDepsApiRouter()
+
+  // Deps injection registers first: it guards nothing, it only makes the
+  // composition-root Deps object available to every route via c.get('deps').
+  app.use('*', (c, next) => {
+    c.set('deps', createDeps(c.env))
+    return next()
+  })
 
   app.use(
     '/*',
@@ -642,6 +650,12 @@ export function createApp() {
   // protocol-adapter endpoints: their wire shape is dictated by external
   // protocols (ACP tunnel, OpenAI-compatible inference) and is therefore
   // exempt from REST resource modeling (docs/api-v1-design.md §1.8).
+  // agents is migrated to the clean-architecture http layer. It registers its
+  // OpenAPI routes (load-bearing internal order: static before parameter
+  // segments) onto a sub-router mounted at the resource's original chain
+  // position, so the assembled route order and AppType stay identical.
+  const agents = registerAgentRoutes(createDepsApiRouter())
+
   const routes = app
     .route('/api/v1/health', health)
     .route('/api/v1/e2e', e2e)

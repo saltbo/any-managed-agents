@@ -1,5 +1,5 @@
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
-import type { Context } from 'hono'
+import type { Context, Env as HonoEnv } from 'hono'
 import { getCookie } from 'hono/cookie'
 import type { Env } from '../env'
 import { errorResponse } from '../errors'
@@ -11,6 +11,12 @@ import {
   type UserInfoClaims,
   upsertProjectForClaims,
 } from './oidc'
+
+// Routes may or may not carry extra context Variables (e.g. an injected Deps
+// object). Context's Variables are invariant, so a fixed param would reject one
+// shape or the other. These helpers only read env/request, so the param is
+// generic over the caller's full Hono env (with Bindings pinned to ours).
+type AppContext<E extends HonoEnv = { Bindings: Env }> = Context<E & { Bindings: Env }>
 
 export const SESSION_COOKIE_NAME = 'ama_session'
 const SESSION_EXPIRY_SECONDS = 24 * 60 * 60 // 24 hours
@@ -57,7 +63,7 @@ export function sessionCookieHeader(value: string, secure: boolean): string {
   return `${SESSION_COOKIE_NAME}=${value}; HttpOnly; SameSite=Lax; Path=/${secureFlag}; Max-Age=${SESSION_EXPIRY_SECONDS}`
 }
 
-export async function resolveSessionClaims(c: Context<{ Bindings: Env }>): Promise<UserInfoClaims | null> {
+export async function resolveSessionClaims<E extends HonoEnv>(c: AppContext<E>): Promise<UserInfoClaims | null> {
   if (!c.env.AMA_SESSION_SECRET) {
     return null
   }
@@ -168,8 +174,8 @@ function bearerToken(headers: Headers, url: string) {
   return token && token.length > 0 ? token : null
 }
 
-export async function resolveAuthContext(
-  c: Context<{ Bindings: Env }>,
+export async function resolveAuthContext<E extends HonoEnv>(
+  c: AppContext<E>,
   db: DrizzleD1Database,
 ): Promise<AuthContext | null> {
   const requestedProjectId = c.req.raw.headers.get('x-ama-project-id') ?? undefined
@@ -206,7 +212,7 @@ export async function resolveAuthContext(
   return null
 }
 
-export async function resolveAuthIdentity(c: Context<{ Bindings: Env }>): Promise<AuthIdentity | null> {
+export async function resolveAuthIdentity<E extends HonoEnv>(c: AppContext<E>): Promise<AuthIdentity | null> {
   const token = bearerToken(c.req.raw.headers, c.req.url)
   if (token) {
     const claims = await getBearerClaims(c.env, token)
@@ -249,7 +255,7 @@ function authIdentityFromClaims(claims: Awaited<ReturnType<typeof getBearerClaim
   }
 }
 
-export async function requireAuthIdentity(c: Context<{ Bindings: Env }>) {
+export async function requireAuthIdentity<E extends HonoEnv>(c: AppContext<E>) {
   let auth: AuthIdentity | null
   try {
     auth = await resolveAuthIdentity(c)
@@ -272,7 +278,7 @@ export async function requireAuthIdentity(c: Context<{ Bindings: Env }>) {
   return auth
 }
 
-export async function requireAuth(c: Context<{ Bindings: Env }>, db: DrizzleD1Database) {
+export async function requireAuth<E extends HonoEnv>(c: AppContext<E>, db: DrizzleD1Database) {
   let auth: AuthContext | null
   try {
     auth = await resolveAuthContext(c, db)
