@@ -2,6 +2,7 @@ import type {
   AccessRuleRepo,
   AgentRepo,
   AuditPort,
+  AuditReadRepo,
   BudgetRepo,
   ConnectionRepo,
   ConnectorRepo,
@@ -13,6 +14,7 @@ import type {
   ProviderRepo,
   SecretStoreGateway,
   SessionEventPort,
+  UsageRepo,
   VaultRepo,
 } from './ports'
 
@@ -34,4 +36,6 @@ export interface Deps {
   sessionEvents: SessionEventPort
   audit: AuditPort
   policy: PolicyPort
+  usageRecords: UsageRepo
+  auditRecords: AuditReadRepo
 }

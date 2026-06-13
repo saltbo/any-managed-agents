@@ -12,6 +12,7 @@ import type { Env } from './env'
 import { errorResponse } from './errors'
 import { registerAccessRuleRoutes } from './http/access-rules'
 import { registerAgentRoutes } from './http/agents'
+import { registerAuditRecordRoutes } from './http/audit-records'
 import { registerBudgetRoutes } from './http/budgets'
 import { registerConnectionRoutes } from './http/connections'
 import { registerConnectorRoutes } from './http/connectors'
@@ -19,6 +20,8 @@ import { registerEffectivePolicyRoutes } from './http/effective-policy'
 import { registerEnvironmentRoutes } from './http/environments'
 import { registerPolicyRoutes } from './http/policies'
 import { registerProviderRoutes } from './http/providers'
+import { registerUsageRecordRoutes } from './http/usage-records'
+import { registerUsageSummaryRoutes } from './http/usage-summary'
 import { registerVaultRoutes } from './http/vaults'
 import { ApiSecuritySchemes, createDepsApiRouter } from './openapi'
 import {
@@ -28,7 +31,6 @@ import {
   policyBlocksSandboxOperation,
 } from './policy'
 import { redactSensitiveValue } from './redaction'
-import audit from './routes/audit'
 import auth from './routes/auth'
 import e2e from './routes/e2e'
 import federatedTenants from './routes/federated-tenants'
@@ -39,8 +41,6 @@ import runners, { dispatchRunnerSessionCommand, hasAcceptedRunnerSessionChannel 
 import runtimeAi from './routes/runtime-ai'
 import sessionRoutes from './routes/sessions'
 import triggers from './routes/triggers'
-import usageRecords from './routes/usage-records'
-import usageSummary from './routes/usage-summary'
 import workItems from './routes/work-items'
 import { safeRuntimeError } from './runtime/runtime-error'
 import {
@@ -650,8 +650,9 @@ export function createApp() {
   // protocol-adapter endpoints: their wire shape is dictated by external
   // protocols (ACP tunnel, OpenAI-compatible inference) and is therefore
   // exempt from REST resource modeling (docs/api-v1-design.md §1.8).
-  // agents, environments, providers, vaults, connectors, and connections are
-  // migrated to the clean-architecture http layer. Each registers its OpenAPI
+  // agents, environments, providers, vaults, connectors, connections, the
+  // governance resources, and the usage/audit reporting resources are migrated
+  // to the clean-architecture http layer. Each registers its OpenAPI
   // routes (load-bearing internal order: static before parameter segments) onto
   // a sub-router mounted at the resource's original chain position, so the
   // assembled route order and AppType stay identical.
@@ -664,6 +665,9 @@ export function createApp() {
   const effectivePolicy = registerEffectivePolicyRoutes(createDepsApiRouter())
   const accessRules = registerAccessRuleRoutes(createDepsApiRouter())
   const budgets = registerBudgetRoutes(createDepsApiRouter())
+  const usageRecords = registerUsageRecordRoutes(createDepsApiRouter())
+  const usageSummary = registerUsageSummaryRoutes(createDepsApiRouter())
+  const auditRecords = registerAuditRecordRoutes(createDepsApiRouter())
   const vaults = registerVaultRoutes(createDepsApiRouter())
 
   const routes = app
@@ -687,7 +691,7 @@ export function createApp() {
     .route('/api/v1/connections', connections)
     .route('/api/v1/usage-records', usageRecords)
     .route('/api/v1/usage-summary', usageSummary)
-    .route('/api/v1/audit-records', audit)
+    .route('/api/v1/audit-records', auditRecords)
     .route('/api/v1/triggers', triggers)
     .route('/api/v1/sessions', sessionRoutes)
     .route('/api/v1/vaults', vaults)

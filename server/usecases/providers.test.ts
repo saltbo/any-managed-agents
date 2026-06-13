@@ -109,6 +109,8 @@ function fakeDeps(
     accessRules: undefined as unknown as Deps['accessRules'],
     budgets: undefined as unknown as Deps['budgets'],
     mcp: undefined as unknown as Deps['mcp'],
+    usageRecords: undefined as unknown as Deps['usageRecords'],
+    auditRecords: undefined as unknown as Deps['auditRecords'],
     sessionEvents: undefined as unknown as Deps['sessionEvents'],
     audit: { record: async () => {} },
     policy: {

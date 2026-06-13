@@ -1130,4 +1130,104 @@ export interface EffectivePolicyResult {
   sandboxPolicy: Record<string, unknown>
 }
 
+// --- usage records + summary (read-only reporting) ---
+
+import type { UsageMeasurement } from '@server/domain/usage'
+
+export interface UsageRecord {
+  id: string
+  projectId: string
+  agentId: string | null
+  agentVersionId: string | null
+  sessionId: string | null
+  sessionEventId: string | null
+  correlationId: string | null
+  providerId: string | null
+  providerType: string
+  modelId: string
+  status: string
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+  durationMs: number
+  costMicros: number
+  currency: string
+  usageType: string
+  metadata: Record<string, unknown>
+  createdAt: string
+}
+
+export interface UsageListQuery {
+  projectId: string
+  providerId?: string
+  modelId?: string
+  agentId?: string
+  sessionId?: string
+  from?: string
+  to?: string
+  limit: number
+  cursor: { createdAt: string; id: string } | null
+}
+
+export interface UsageSummaryQuery {
+  projectId: string
+  from?: string
+  to?: string
+}
+
+// DB boundary for usage records. Read-only: rows are written by the runtime
+// metering path, this port only lists/reads/aggregates. The only implementation
+// lives in adapters/repos. `list` returns the full filtered, ordered set (the
+// route paginates or serializes to CSV); `summaryRows` returns the bare
+// measurement projection the domain summarizer folds over.
+export interface UsageRepo {
+  list(query: UsageListQuery): Promise<UsageRecord[]>
+  find(projectId: string, recordId: string): Promise<UsageRecord | null>
+  summaryRows(query: UsageSummaryQuery): Promise<UsageMeasurement[]>
+}
+
+// --- audit records (read side) ---
+
+export interface AuditRecord {
+  id: string
+  projectId: string | null
+  actorUserId: string | null
+  actorType: string
+  action: string
+  resourceType: string
+  resourceId: string | null
+  outcome: string
+  requestId: string | null
+  correlationId: string | null
+  sessionId: string | null
+  policyCategory: string | null
+  metadata: Record<string, unknown>
+  before: Record<string, unknown>
+  after: Record<string, unknown>
+  createdAt: string
+}
+
+export interface AuditListQuery {
+  organizationId: string
+  actorId?: string
+  projectId?: string
+  action?: string
+  resourceType?: string
+  resourceId?: string
+  outcome?: string
+  from?: string
+  to?: string
+  limit: number
+  cursor: { createdAt: string; id: string } | null
+}
+
+// DB boundary for reading audit records. Distinct from AuditPort (the write
+// boundary other resources use to record governance mutations): this is the
+// audit *resource* reading its own log. The repo redacts secret material from
+// metadata/before/after at this boundary so raw secrets never leave the DB.
+export interface AuditReadRepo {
+  list(query: AuditListQuery): Promise<AuditRecord[]>
+  find(organizationId: string, recordId: string): Promise<AuditRecord | null>
+}
+
 export type { AgentToolAttachment, ConnectorCatalogTool, SecretMaterial }

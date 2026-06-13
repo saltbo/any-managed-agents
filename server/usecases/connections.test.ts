@@ -138,6 +138,8 @@ function fakeDeps(
     budgets: undefined as unknown as Deps['budgets'],
     mcp,
     sessionEvents: { append: async () => 'event_1', ...overrides.sessionEvents },
+    usageRecords: undefined as unknown as Deps['usageRecords'],
+    auditRecords: undefined as unknown as Deps['auditRecords'],
     audit: { record: async () => {} },
     policy: {
       resolveToolPolicy: async () => ({}),

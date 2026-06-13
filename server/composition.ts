@@ -7,12 +7,14 @@ import { createSecretStoreGateway } from './adapters/gateways/secret-store'
 import { createSessionEventPort } from './adapters/gateways/session-events'
 import { createAccessRuleRepo } from './adapters/repos/access-rules'
 import { createAgentRepo } from './adapters/repos/agents'
+import { createAuditReadRepo } from './adapters/repos/audit-records'
 import { createBudgetRepo } from './adapters/repos/budgets'
 import { createConnectionRepo } from './adapters/repos/connections'
 import { createConnectorRepo } from './adapters/repos/connectors'
 import { createEnvironmentRepo } from './adapters/repos/environments'
 import { createPolicyRepo } from './adapters/repos/policies'
 import { createProviderRepo } from './adapters/repos/providers'
+import { createUsageRepo } from './adapters/repos/usage-records'
 import { createVaultRepo } from './adapters/repos/vaults'
 import type { Env } from './env'
 import type { Deps } from './usecases/deps'
@@ -37,5 +39,7 @@ export function createDeps(env: Env): Deps {
     sessionEvents: createSessionEventPort(db),
     audit: createAuditPort(db),
     policy: createPolicyPort(db),
+    usageRecords: createUsageRepo(db),
+    auditRecords: createAuditReadRepo(db),
   }
 }
