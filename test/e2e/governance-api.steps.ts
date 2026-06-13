@@ -31,7 +31,7 @@ function objectValue(value: unknown): Json {
 }
 
 async function runPrompt(e2e: E2EState, message: string) {
-  const response = await apiResponse(e2e.page.request, `/runtime/sessions/${e2e.latestSession?.id}/rpc`, {
+  const response = await apiResponse(e2e.page.request, `/api/v1/runtime/sessions/${e2e.latestSession?.id}/rpc`, {
     method: 'POST',
     data: { type: 'prompt', message },
   })
@@ -66,9 +66,10 @@ When(
   async function (this: GovernanceApiWorld) {
     const e2e = state(this)
     this.allowedHost = `api-${e2e.runId}.example.com`
-    await apiJson<Json>(e2e.page.request, '/api/governance/policy', {
-      method: 'PUT',
+    await apiJson<Json>(e2e.page.request, '/api/v1/policies', {
+      method: 'POST',
       data: {
+        scope: { level: 'project' },
         toolPolicy: { allowedTools: ['*'] },
         mcpPolicy: { allowedConnectors: ['linear'], connectorApprovalModes: { linear: 'require_approval' } },
         sandboxPolicy: {
@@ -110,7 +111,7 @@ Then(
 
     const mcpCall = await apiResponse(
       e2e.page.request,
-      `/runtime/sessions/${e2e.latestSession?.id}/mcp/github/tools/repo.read/calls`,
+      `/api/v1/runtime/sessions/${e2e.latestSession?.id}/mcp/github/tools/repo.read/calls`,
       { method: 'POST', data: { input: { repo: 'saltbo/any-managed-agents' } } },
     )
     this.mcpCallStatus = mcpCall.status()

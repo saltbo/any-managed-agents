@@ -42,7 +42,7 @@ function orgRunIdOf(state: E2EState) {
 }
 
 async function createAccessRule(state: E2EState, data: Json) {
-  return await apiJson<Json>(state.page.request, '/api/governance/provider-access-rules', {
+  return await apiJson<Json>(state.page.request, '/api/v1/access-rules', {
     method: 'POST',
     data,
   })
@@ -51,7 +51,6 @@ async function createAccessRule(state: E2EState, data: Json) {
 async function ensureWorkersAiAgentAndEnvironment(state: E2EState) {
   state.agent ??= await createAgent(state, {
     name: `${state.runId} access agent`,
-    provider: 'workers-ai',
     model: WORKERS_AI_MODEL,
   })
   state.environment ??= await createEnvironment(state, { name: `${state.runId} access env` })
@@ -62,7 +61,7 @@ async function attemptSessionCreate(
   headers: Record<string, string> | undefined,
   data: Json = {},
 ): Promise<SessionAttempt> {
-  const response = await apiResponse(state.page.request, '/api/sessions', {
+  const response = await apiResponse(state.page.request, '/api/v1/sessions', {
     method: 'POST',
     data: {
       agentId: state.agent?.id,
@@ -84,7 +83,7 @@ function attemptError(attempt: SessionAttempt | undefined) {
 }
 
 async function assertNoSessionForAgent(state: E2EState) {
-  const sessions = await apiJson<ListResponse<Json>>(state.page.request, '/api/sessions?limit=100')
+  const sessions = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/sessions?limit=100')
   assert.ok(
     !sessions.data.some((session) => session.agentId === state.agent?.id),
     'no session row exists for the denied request',
@@ -92,18 +91,18 @@ async function assertNoSessionForAgent(state: E2EState) {
 }
 
 async function assertNoUsageForProject(state: E2EState) {
-  const usage = await apiJson<ListResponse<Json>>(state.page.request, '/api/usage?limit=100')
+  const usage = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/usage-records?limit=100')
   assert.equal(usage.data.length, 0, 'no model usage was recorded for the denied request')
 }
 
 async function waitForOwnedSessionStatus(state: E2EState, sessionId: string, expected: string) {
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    const session = await apiJson<Json>(state.page.request, `/api/sessions/${sessionId}`)
-    if (session.status === expected) {
+    const session = await apiJson<Json>(state.page.request, `/api/v1/sessions/${sessionId}`)
+    if (session.state === expected) {
       return session
     }
-    if (session.status === 'error') {
-      throw new Error(`Session ${sessionId} failed to start: ${session.statusReason ?? 'unknown error'}`)
+    if (session.state === 'error') {
+      throw new Error(`Session ${sessionId} failed to start: ${session.stateReason ?? 'unknown error'}`)
     }
     await delay(1_000)
   }
@@ -214,7 +213,7 @@ Then(
     assert.ok(state, 'e2e state must exist')
     const records = await apiJson<ListResponse<Json>>(
       state.page.request,
-      '/api/audit-records?action=session.create&outcome=denied&limit=100',
+      '/api/v1/audit-records?action=session.create&outcome=denied&limit=100',
     )
     const denial = records.data.find((record) => {
       const metadata = (record.metadata ?? {}) as Json
@@ -258,7 +257,7 @@ Then('the session may start if every other policy check passes', async function 
   assert.equal(this.attempt.status, 201, 'the team member may create the session')
   const sessionId = String(this.attempt.body.id)
   const session = await waitForOwnedSessionStatus(state, sessionId, 'idle')
-  assert.equal(session.status, 'idle', 'the session started and reached an operational status')
+  assert.equal(session.state, 'idle', 'the session started and reached an operational state')
 })
 
 // ─── Scenario: Admin override remains auditable ──────────────────────────────
@@ -296,7 +295,7 @@ Then('the audit log records that override policy was used', async function (this
   assert.ok(state, 'e2e state must exist')
   const records = await apiJson<ListResponse<Json>>(
     state.page.request,
-    '/api/audit-records?action=session.create&outcome=success&limit=100',
+    '/api/v1/audit-records?action=session.create&outcome=success&limit=100',
   )
   const override = records.data.find((record) => {
     const metadata = (record.metadata ?? {}) as Json

@@ -62,7 +62,7 @@ async function goToTestStep(page: Page) {
 async function findAgentByName(page: Page, name: string) {
   // D1 rejects long LIKE patterns ("pattern too complex"), so filter the
   // project-scoped list instead of using the search query parameter.
-  const list = await apiJson<ListResponse<Json>>(page.request, '/api/agents?limit=100')
+  const list = await apiJson<ListResponse<Json>>(page.request, '/api/v1/agents?limit=100')
   return list.data.find((agent) => agent.name === name)
 }
 
@@ -131,7 +131,8 @@ Then('the builder shows schemas, approval mode, and policy status', async functi
   await expect(page.getByText('GitHub', { exact: true })).toBeVisible()
   await expect(page.getByText('repo.read').first()).toBeVisible()
   await expect(page.getByText(/Approval mode: project_policy/).first()).toBeVisible()
-  await expect(page.getByText('allowed', { exact: true }).first()).toBeVisible()
+  // The connector exposes its catalog policy status as an availability badge.
+  await expect(page.getByText('available', { exact: true }).first()).toBeVisible()
   await expect(page.getByText(/Schema: \{.*"repo".*\}/).first()).toBeVisible()
 })
 
@@ -142,7 +143,7 @@ Then('blocked tools cannot be saved for the agent', async function (this: Builde
   await nextStep(page, 'roles')
   await nextStep(page, 'test')
   const publishResponse = page.waitForResponse(
-    (response) => response.url().includes('/api/agents') && response.request().method() === 'POST',
+    (response) => response.url().includes('/api/v1/agents') && response.request().method() === 'POST',
     { timeout: 30_000 },
   )
   await page.getByRole('button', { name: 'Publish agent' }).click()
@@ -197,7 +198,7 @@ Then('the resulting agent version can request Cloudflare Sandbox execution', asy
     hostingMode: 'cloud',
   })
   const created = await createSession(state, { title: `${state.runId} sandbox session` })
-  const session = await apiJson<Json>(page.request, `/api/sessions/${created.id}`)
+  const session = await apiJson<Json>(page.request, `/api/v1/sessions/${created.id}`)
   const runtimeMetadata = session.runtimeMetadata as Json
   assert.equal(runtimeMetadata.hostingMode, 'cloud', 'session from the agent runs in the cloud sandbox hosting mode')
 })
@@ -232,7 +233,7 @@ Then('the draft runs in an isolated session', async function (this: BuilderWorld
   const draftAgent = await findAgentByName(page, this.builderAgentName as string)
   assert.ok(draftAgent, 'testing saved the draft agent definition')
   assert.equal((draftAgent.metadata as Json).builderDraft, true, 'tested agent is marked as a builder draft')
-  const sessions = await apiJson<ListResponse<Json>>(page.request, '/api/sessions?limit=50')
+  const sessions = await apiJson<ListResponse<Json>>(page.request, '/api/v1/sessions?limit=50')
   const draftSession = sessions.data.find((session) => session.agentId === draftAgent.id)
   assert.ok(draftSession, 'the draft ran in its own session')
 })
@@ -248,7 +249,7 @@ Then('publishing creates a versioned agent definition', async function (this: Bu
   assert.ok(Number(agent.version) >= 2, 'publishing created a new agent version after the draft test')
   assert.ok(agent.currentVersionId, 'publishing activated a current version')
   assert.equal((agent.metadata as Json).builderDraft, undefined, 'publishing cleared the draft marker')
-  const versions = await apiJson<ListResponse<Json>>(page.request, `/api/agents/${agent.id}/versions`)
+  const versions = await apiJson<ListResponse<Json>>(page.request, `/api/v1/agents/${agent.id}/versions`)
   assert.ok(versions.data.length >= 2, 'draft and published versions are both retained')
 })
 
@@ -328,7 +329,7 @@ Then(
     const origin = new URL(page.url()).origin
     const examples = this.apiExamplesText as string
     assert.ok(examples.includes('curl -X POST'), 'shows the create-agent curl call')
-    assert.ok(examples.includes(`${origin}/api/agents`), 'examples target this platform origin')
+    assert.ok(examples.includes(`${origin}/api/v1/agents`), 'examples target this platform origin')
     const agent = await findAgentByName(page, this.builderAgentName as string)
     assert.ok(agent, 'published agent exists')
     assert.ok(examples.includes(String(agent.id)), 'examples reference the created agent id')
@@ -337,7 +338,7 @@ Then(
 
 Then('examples use AMA control-plane routes, not upstream vendor API URLs', async function (this: BuilderWorld) {
   const examples = this.apiExamplesText as string
-  assert.ok(examples.includes('/api/agents'), 'examples call the AMA control plane')
+  assert.ok(examples.includes('/api/v1/agents'), 'examples call the AMA control plane')
   assert.ok(examples.includes('restish'), 'examples include restish workflows')
   assert.ok(!/\b(?:api\.)?(?:openai|anthropic)\.com\b/.test(examples), 'examples never target vendor API hosts')
 })
@@ -355,7 +356,7 @@ Then('examples never include raw secrets', async function (this: BuilderWorld) {
 
 Given('an agent definition can hand work to another agent by role or capability', async function (this: BuilderWorld) {
   const state = await ensureSignedIn(this)
-  const maintainer = await apiJson<Json>(state.page.request, '/api/agents', {
+  const maintainer = await apiJson<Json>(state.page.request, '/api/v1/agents', {
     method: 'POST',
     data: {
       name: `${state.runId} handoff maintainer`,
@@ -363,18 +364,18 @@ Given('an agent definition can hand work to another agent by role or capability'
       handoffPolicy: { targets: [{ role: 'worker' }, { capability: 'implementation' }] },
     },
   })
-  const worker = await apiJson<Json>(state.page.request, '/api/agents', {
+  const worker = await apiJson<Json>(state.page.request, '/api/v1/agents', {
     method: 'POST',
     data: { name: `${state.runId} handoff worker`, role: 'worker', capabilityTags: ['implementation'] },
   })
-  const reviewer = await apiJson<Json>(state.page.request, '/api/agents', {
+  const reviewer = await apiJson<Json>(state.page.request, '/api/v1/agents', {
     method: 'POST',
     data: { name: `${state.runId} handoff reviewer`, role: 'reviewer' },
   })
   // A matching agent in a different project must never resolve as a candidate.
   const foreignPage = await openLocalPage()
   await authenticateE2EPage(foreignPage)
-  const foreignWorker = await apiJson<Json>(foreignPage.request, '/api/agents', {
+  const foreignWorker = await apiJson<Json>(foreignPage.request, '/api/v1/agents', {
     method: 'POST',
     data: { name: `${state.runId} foreign worker`, role: 'worker', capabilityTags: ['implementation'] },
   })
@@ -388,15 +389,15 @@ When('a runtime session requests a handoff target', async function (this: Builde
   const handoff = this.handoff as HandoffState
   state.environment ??= await createEnvironment(state, { name: `${state.runId} handoff env` })
   const session = await createSession(state, { title: `${state.runId} handoff session` })
-  handoff.sessionBefore = await apiJson<Json>(state.page.request, `/api/sessions/${session.id}`)
-  handoff.workerBefore = await apiJson<Json>(state.page.request, `/api/agents/${handoff.worker.id}`)
+  handoff.sessionBefore = await apiJson<Json>(state.page.request, `/api/v1/sessions/${session.id}`)
+  handoff.workerBefore = await apiJson<Json>(state.page.request, `/api/v1/agents/${handoff.worker.id}`)
   handoff.resolved = await apiJson<ListResponse<Json>>(
     state.page.request,
-    `/api/agents/${handoff.maintainer.id}/handoff-candidates`,
+    `/api/v1/agents/${handoff.maintainer.id}/handoff-candidates`,
   )
   handoff.resolvedByRole = await apiJson<ListResponse<Json>>(
     state.page.request,
-    `/api/agents/${handoff.maintainer.id}/handoff-candidates?role=worker`,
+    `/api/v1/agents/${handoff.maintainer.id}/handoff-candidates?role=worker`,
   )
 })
 
@@ -416,7 +417,7 @@ Then('AMA does not require any product-specific task, board, review, or issue mo
   for (const candidate of (handoff.resolved as ListResponse<Json>).data) {
     assert.deepEqual(
       Object.keys(candidate).sort(),
-      ['capabilityTags', 'id', 'name', 'role', 'status'],
+      ['capabilityTags', 'id', 'name', 'role'],
       'candidates expose only generic agent definition fields',
     )
   }
@@ -430,11 +431,11 @@ Then(
     // Resolution is read-only: AMA records no workflow state of its own, so the
     // session and the candidate agent are untouched after resolving targets.
     const sessionBefore = handoff.sessionBefore as Json
-    const sessionAfter = await apiJson<Json>(state.page.request, `/api/sessions/${sessionBefore.id}`)
-    assert.equal(sessionAfter.status, sessionBefore.status, 'resolution does not move the session lifecycle')
+    const sessionAfter = await apiJson<Json>(state.page.request, `/api/v1/sessions/${sessionBefore.id}`)
+    assert.equal(sessionAfter.state, sessionBefore.state, 'resolution does not move the session lifecycle')
     assert.equal(sessionAfter.updatedAt, sessionBefore.updatedAt, 'resolution does not mutate the session record')
     const workerBefore = handoff.workerBefore as Json
-    const workerAfter = await apiJson<Json>(state.page.request, `/api/agents/${workerBefore.id}`)
+    const workerAfter = await apiJson<Json>(state.page.request, `/api/v1/agents/${workerBefore.id}`)
     assert.equal(workerAfter.updatedAt, workerBefore.updatedAt, 'resolution does not mutate the candidate agent')
   },
 )

@@ -21,7 +21,7 @@ When('the API client requests a date range', async function (this: StepsWorld) {
   // Request records from just before agent creation to now
   const from = new Date(new Date(agentCreatedAt).getTime() - 5_000).toISOString()
   const to = new Date(new Date(agentCreatedAt).getTime() + 60_000).toISOString()
-  const url = `/api/audit-records?createdFrom=${encodeURIComponent(from)}&createdTo=${encodeURIComponent(to)}&limit=20`
+  const url = `/api/v1/audit-records?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&limit=20`
   state.list = await apiJson<ListResponse<Json>>(state.page.request, url)
 })
 
@@ -55,7 +55,7 @@ When('the API client requests the next page', async function (this: StepsWorld) 
   type PaginationWithCursor = ListResponse<Json>['pagination'] & { nextCursor?: string | null }
   const firstPage = await apiJson<{ data: Json[]; pagination: PaginationWithCursor }>(
     state.page.request,
-    '/api/agents?limit=1',
+    '/api/v1/agents?limit=1',
   )
   assert.ok(firstPage.data.length > 0, 'first page must have at least one agent')
   // Use the nextCursor from the first page to fetch the next page
@@ -63,7 +63,7 @@ When('the API client requests the next page', async function (this: StepsWorld) 
   assert.ok(cursor, 'first page must include a nextCursor for next-page navigation')
   const nextPage = await apiJson<ListResponse<Json>>(
     state.page.request,
-    `/api/agents?limit=1&cursor=${encodeURIComponent(cursor)}`,
+    `/api/v1/agents?limit=1&cursor=${encodeURIComponent(cursor)}`,
   )
   // Store both pages for the Then step
   state.list = nextPage
@@ -79,8 +79,8 @@ Then('the API uses stable cursor metadata', function (this: StepsWorld) {
   const pagination = nextPage.pagination
   assert.ok(pagination, 'next page must include pagination metadata')
   assert.equal(typeof pagination.hasMore, 'boolean', 'pagination must include hasMore')
-  assert.ok('firstId' in pagination, 'pagination must include firstId')
-  assert.ok('lastId' in pagination, 'pagination must include lastId')
+  assert.ok('limit' in pagination, 'pagination must include limit')
+  assert.ok('nextCursor' in pagination, 'pagination must include nextCursor')
   // Verify stable cursor: records on page 2 must differ from page 1
   const firstPage = (state as typeof state & { firstPage?: ListResponse<Json> }).firstPage
   if (firstPage && nextPage.data.length > 0) {

@@ -19,10 +19,11 @@ interface AuthSessionState {
   sessionCookie?: string | undefined
   tenantAToken?: string
   tenantASession?: Record<string, unknown>
+  tenantAConnectionPath?: string
   createdSession?: Record<string, unknown>
   createdAgent?: Record<string, unknown>
-  loginOptionsResponse?: Response
-  loginOptionsBody?: { methods: Array<{ type: string; issuer?: string; clientId?: string }> } | undefined
+  authConfigResponse?: Response
+  authConfigBody?: { methods: Array<{ type: string; issuer?: string; clientId?: string }> } | undefined
 }
 
 type AuthWorld = AmaWorld & { authState?: AuthSessionState | undefined }
@@ -49,12 +50,12 @@ Given('an organization with a project and a user exists', async function (this: 
   const e2eToken = `e2e:${runId}`
 
   // Bootstrap the org+project in D1 via the session endpoint.
-  const res = await fetch(`${origin}/api/auth/session`, {
+  const res = await fetch(`${origin}/api/v1/auth/sessions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ accessToken: e2eToken }),
   })
-  assert.equal(res.status, 200, `Background setup: expected 200 from /api/auth/session, got ${res.status}`)
+  assert.equal(res.status, 201, `Background setup: expected 201 from /api/v1/auth/sessions, got ${res.status}`)
 
   this.authState = { runId, e2eToken }
 })
@@ -68,7 +69,7 @@ When('a user completes the OIDC callback', async function (this: AuthWorld) {
   const runId = `auth-flow-${Date.now()}-${Math.random().toString(16).slice(2)}`
   const e2eToken = `e2e:${runId}`
 
-  const res = await fetch(`${origin}/api/auth/session`, {
+  const res = await fetch(`${origin}/api/v1/auth/sessions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ accessToken: e2eToken }),
@@ -98,7 +99,7 @@ Then(
   'the platform creates an httpOnly session and resolves user, organization, and project context',
   async function (this: AuthWorld) {
     assert.ok(this.authState?.sessionResponse, 'Session response must exist')
-    assert.equal(this.authState.sessionResponse.status, 200, 'Expected 200 from /api/auth/session')
+    assert.equal(this.authState.sessionResponse.status, 201, 'Expected 201 from /api/v1/auth/sessions')
 
     assert.ok(this.authState.sessionUser?.id, 'User id must be present')
     assert.ok(this.authState.sessionUser?.email, 'User email must be present')
@@ -115,7 +116,7 @@ Then(
 
 Then('invalid OIDC provider callbacks return the standard OIDC error envelope', async function (this: AuthWorld) {
   const origin = await ensureLocalApp()
-  const res = await fetch(`${origin}/api/auth/session`, {
+  const res = await fetch(`${origin}/api/v1/auth/sessions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ accessToken: 'invalid-token-that-cannot-be-validated' }),
@@ -135,7 +136,7 @@ When('credentials are valid', async function (this: AuthWorld) {
   const runId = `login-e2e-${Date.now()}-${Math.random().toString(16).slice(2)}`
   const e2eToken = `e2e:${runId}`
 
-  const res = await fetch(`${origin}/api/auth/session`, {
+  const res = await fetch(`${origin}/api/v1/auth/sessions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ accessToken: e2eToken }),
@@ -159,7 +160,7 @@ Then(
   'the platform creates an httpOnly session and returns the default organization and project',
   async function (this: AuthWorld) {
     assert.ok(this.authState?.sessionResponse, 'Session response must exist')
-    assert.equal(this.authState.sessionResponse.status, 200, 'Expected 200 from /api/auth/session')
+    assert.equal(this.authState.sessionResponse.status, 201, 'Expected 201 from /api/v1/auth/sessions')
     assert.ok(this.authState.sessionOrganization?.id, 'Organization id must be present')
     assert.ok(this.authState.sessionProject?.id, 'Project id must be present')
     assert.equal(this.authState.sessionProject.name, 'Default project', 'Default project name expected')
@@ -173,7 +174,7 @@ Then(
 When('the user signs in through OIDC provider', async function (this: AuthWorld) {
   assert.ok(this.authState, 'Auth state must be initialized by background step')
   const origin = await ensureLocalApp()
-  const res = await fetch(`${origin}/api/auth/session`, {
+  const res = await fetch(`${origin}/api/v1/auth/sessions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ accessToken: this.authState.e2eToken }),
@@ -193,7 +194,7 @@ When('the user signs in through OIDC provider', async function (this: AuthWorld)
 
 Then('the platform accepts the OIDC session', function (this: AuthWorld) {
   assert.ok(this.authState?.sessionResponse, 'Session response must exist')
-  assert.equal(this.authState.sessionResponse.status, 200, 'Expected 200 from /api/auth/session')
+  assert.equal(this.authState.sessionResponse.status, 201, 'Expected 201 from /api/v1/auth/sessions')
 })
 
 Then('subsequent control-plane requests resolve the user, organization, and project', async function (this: AuthWorld) {
@@ -203,7 +204,7 @@ Then('subsequent control-plane requests resolve the user, organization, and proj
 
   // Verify the bearer token for the same claims can call the projects API.
   const origin = await ensureLocalApp()
-  const projectsRes = await fetch(`${origin}/api/projects`, {
+  const projectsRes = await fetch(`${origin}/api/v1/projects`, {
     headers: { authorization: `Bearer ${this.authState.e2eToken}` },
   })
   assert.equal(projectsRes.status, 200, 'Projects API must return 200')
@@ -218,7 +219,7 @@ Then('subsequent control-plane requests resolve the user, organization, and proj
 
 When('a request without a valid session calls a protected API', async function (this: AuthWorld) {
   const origin = await ensureLocalApp()
-  const res = await fetch(`${origin}/api/agents`)
+  const res = await fetch(`${origin}/api/v1/agents`)
   const text = await res.text()
   this.authState = {
     runId: 'unauth',
@@ -249,32 +250,41 @@ Given('a session belongs to a project', async function (this: AuthWorld) {
   const origin = await ensureLocalApp()
   const tenantAToken = `Bearer ${this.authState.e2eToken}`
 
-  const agentRes = await fetch(`${origin}/api/agents`, {
+  const agentRes = await fetch(`${origin}/api/v1/agents`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: tenantAToken },
     body: JSON.stringify({ name: `${this.authState.runId} tenancy-agent` }),
   })
-  assert.equal(agentRes.status, 201, `Expected 201 from POST /api/agents, got ${agentRes.status}`)
+  assert.equal(agentRes.status, 201, `Expected 201 from POST /api/v1/agents, got ${agentRes.status}`)
   const agent = (await agentRes.json()) as { id: string; projectId: string }
 
-  const envRes = await fetch(`${origin}/api/environments`, {
+  const envRes = await fetch(`${origin}/api/v1/environments`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: tenantAToken },
     body: JSON.stringify({ name: `${this.authState.runId} tenancy-env` }),
   })
-  assert.equal(envRes.status, 201, `Expected 201 from POST /api/environments, got ${envRes.status}`)
+  assert.equal(envRes.status, 201, `Expected 201 from POST /api/v1/environments, got ${envRes.status}`)
   const environment = (await envRes.json()) as { id: string }
 
-  const sessionRes = await fetch(`${origin}/api/sessions`, {
+  const sessionRes = await fetch(`${origin}/api/v1/sessions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: tenantAToken },
     body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
   })
-  assert.equal(sessionRes.status, 201, `Expected 201 from POST /api/sessions, got ${sessionRes.status}`)
-  const session = (await sessionRes.json()) as { id: string; runtimeEndpointPath: string }
+  assert.equal(sessionRes.status, 201, `Expected 201 from POST /api/v1/sessions, got ${sessionRes.status}`)
+  const session = (await sessionRes.json()) as { id: string }
+
+  // The runtime endpoint path moved off the session record onto the dedicated
+  // connection resource (GET /sessions/{id}/connection).
+  const connectionRes = await fetch(`${origin}/api/v1/sessions/${session.id}/connection`, {
+    headers: { authorization: tenantAToken },
+  })
+  assert.equal(connectionRes.status, 200, `Expected 200 from GET session connection, got ${connectionRes.status}`)
+  const connection = (await connectionRes.json()) as { path: string }
 
   this.authState.tenantAToken = tenantAToken
   this.authState.tenantASession = session as unknown as Record<string, unknown>
+  this.authState.tenantAConnectionPath = connection.path
 })
 
 When('the user connects through the AMA runtime proxy', function (this: AuthWorld) {
@@ -285,8 +295,8 @@ When('the user connects through the AMA runtime proxy', function (this: AuthWorl
 
 Then('the AMA runtime proxy resolves the project and user context', async function (this: AuthWorld) {
   const origin = await ensureLocalApp()
-  const session = this.authState!.tenantASession as { runtimeEndpointPath: string }
-  const res = await fetch(`${origin}${session.runtimeEndpointPath}`, {
+  const connectionPath = this.authState!.tenantAConnectionPath!
+  const res = await fetch(`${origin}${connectionPath}`, {
     method: 'POST',
     headers: { authorization: this.authState!.tenantAToken! },
   })
@@ -302,13 +312,13 @@ Then(
   async function (this: AuthWorld) {
     assert.ok(this.authState?.tenantASession, 'Tenant A session must exist')
     const origin = await ensureLocalApp()
-    const session = this.authState.tenantASession as { runtimeEndpointPath: string }
+    const connectionPath = this.authState.tenantAConnectionPath!
 
     // Tenant B uses a different run ID → different org in e2e claims
     const tenantBRunId = `tenant-b-${Date.now()}`
     const tenantBToken = `Bearer e2e:${tenantBRunId}`
 
-    const res = await fetch(`${origin}${session.runtimeEndpointPath}`, {
+    const res = await fetch(`${origin}${connectionPath}`, {
       method: 'POST',
       headers: { authorization: tenantBToken },
     })
@@ -325,7 +335,7 @@ When('the platform creates agent runtime state', async function (this: AuthWorld
   const origin = await ensureLocalApp()
   const token = `Bearer ${this.authState.e2eToken}`
 
-  const agentRes = await fetch(`${origin}/api/agents`, {
+  const agentRes = await fetch(`${origin}/api/v1/agents`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: token },
     body: JSON.stringify({ name: `${this.authState.runId} scope-agent` }),
@@ -333,7 +343,7 @@ When('the platform creates agent runtime state', async function (this: AuthWorld
   assert.equal(agentRes.status, 201)
   const agent = (await agentRes.json()) as { id: string; projectId: string }
 
-  const envRes = await fetch(`${origin}/api/environments`, {
+  const envRes = await fetch(`${origin}/api/v1/environments`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: token },
     body: JSON.stringify({ name: `${this.authState.runId} scope-env` }),
@@ -341,7 +351,7 @@ When('the platform creates agent runtime state', async function (this: AuthWorld
   assert.equal(envRes.status, 201)
   const environment = (await envRes.json()) as { id: string }
 
-  const sessionRes = await fetch(`${origin}/api/sessions`, {
+  const sessionRes = await fetch(`${origin}/api/v1/sessions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: token },
     body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
@@ -349,39 +359,48 @@ When('the platform creates agent runtime state', async function (this: AuthWorld
   assert.equal(sessionRes.status, 201)
   const session = (await sessionRes.json()) as {
     id: string
-    durableObjectName: string
+    agentId: string
     projectId: string
   }
   this.authState.createdAgent = agent as unknown as Record<string, unknown>
   this.authState.createdSession = session as unknown as Record<string, unknown>
 })
 
+// v1 dropped the internal `durableObjectName`/`organizationId` fields from the
+// session schema (design §1.7). Tenant scoping is now observable through the
+// project-scoped identifiers the contract still exposes.
 Then('Durable Object names include organization, project, and session scope', function (this: AuthWorld) {
   const session = this.authState?.createdSession as {
     id: string
-    durableObjectName: string
+    agentId: string
     projectId: string
   }
-  assert.ok(session?.durableObjectName, 'durableObjectName must be present')
-  const name = session.durableObjectName
-  assert.ok(name.includes('org_'), `DO name must include org scope, got: ${name}`)
-  assert.ok(name.includes('project_'), `DO name must include project scope, got: ${name}`)
-  assert.ok(name.includes('session_'), `DO name must include session scope, got: ${name}`)
-  assert.ok(name.includes(`:project_${session.projectId}:`), `DO name must embed the project id, got: ${name}`)
+  const agent = this.authState?.createdAgent as { id: string; projectId: string }
+  // v1 session ids are bare UUIDs (so runtimes can adopt them 1:1); tenant scope
+  // is carried by the project-scoped identifiers, not by the id string itself.
+  assert.match(
+    String(session?.id),
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    `session id must be a session-scoped identifier, got: ${session?.id}`,
+  )
+  assert.ok(session.projectId, 'session must resolve a project scope')
+  assert.equal(session.projectId, agent.projectId, 'session and agent resolve the same project scope')
+  assert.equal(session.agentId, agent.id, 'session is bound to the in-tenant agent')
 })
 
 Then('identifiers must not expose secrets or provider credentials', function (this: AuthWorld) {
-  const session = this.authState?.createdSession as { durableObjectName: string }
-  assert.ok(session?.durableObjectName, 'durableObjectName must be present')
-  const doName = session.durableObjectName
-  // Only alphanumeric, underscore, colon (segment separator), hyphen (in IDs)
-  assert.match(
-    doName,
-    /^[A-Za-z0-9_:-]+$/,
-    `DO name contains unexpected characters that may indicate secret exposure: ${doName}`,
+  const session = this.authState?.createdSession as Record<string, unknown>
+  assert.ok(session?.id, 'session id must be present')
+  // The session schema no longer leaks internal or organization identifiers.
+  assert.equal('durableObjectName' in session, false, 'session must not expose the internal durable object name')
+  assert.equal('organizationId' in session, false, 'session must not expose an organization identifier')
+  const serialized = JSON.stringify(session)
+  // No base64 padding / path separators / query chars that appear in tokens or URLs.
+  assert.doesNotMatch(
+    serialized,
+    /secret:\/\/|Bearer\s|[A-Za-z0-9]{40,}/,
+    'identifiers must not carry secret-like values',
   )
-  // No base64 padding / path separators / query chars that appear in tokens or URLs
-  assert.doesNotMatch(doName, /[./=+]/, `DO name must not contain secret-like characters: ${doName}`)
 })
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -390,26 +409,26 @@ Then('identifiers must not expose secrets or provider credentials', function (th
 
 When('a user enters an organization identifier', async function (this: AuthWorld) {
   const origin = await ensureLocalApp()
-  const res = await fetch(`${origin}/api/auth/login-options?organization=example-org`)
+  const res = await fetch(`${origin}/api/v1/auth/config?organization=example-org`)
   const body = res.ok
     ? ((await res.json()) as { methods: Array<{ type: string; issuer?: string; clientId?: string }> })
     : undefined
   const state: AuthSessionState = {
     runId: 'sso-discovery',
     e2eToken: '',
-    loginOptionsResponse: res,
-    ...(body ? { loginOptionsBody: body } : {}),
+    authConfigResponse: res,
+    ...(body ? { authConfigBody: body } : {}),
   }
   this.authState = state
 })
 
 Then('the platform returns available password, SSO, or provider login options', function (this: AuthWorld) {
-  assert.ok(this.authState?.loginOptionsResponse, 'Login options response must exist')
-  assert.equal(this.authState.loginOptionsResponse.status, 200, 'Expected 200 from /api/auth/login-options')
-  assert.ok(this.authState.loginOptionsBody, 'Login options body must be present')
-  assert.ok(Array.isArray(this.authState.loginOptionsBody.methods), 'methods must be an array')
+  assert.ok(this.authState?.authConfigResponse, 'Auth config response must exist')
+  assert.equal(this.authState.authConfigResponse.status, 200, 'Expected 200 from /api/v1/auth/config')
+  assert.ok(this.authState.authConfigBody, 'Auth config body must be present')
+  assert.ok(Array.isArray(this.authState.authConfigBody.methods), 'methods must be an array')
 
-  const firstMethod = this.authState.loginOptionsBody.methods.at(0)
+  const firstMethod = this.authState.authConfigBody.methods.at(0)
   if (firstMethod) {
     assert.equal(firstMethod.type, 'oidc', 'Method type must be oidc (no local password option)')
     assert.ok(firstMethod.issuer, 'Issuer must be present')

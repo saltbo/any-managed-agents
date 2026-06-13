@@ -51,12 +51,11 @@ function requireQuickstartFlow(world: QuickstartWorld) {
 }
 
 async function createFlowAgent(state: QuickstartFlowState, data: Json = {}) {
-  const agent = await apiJson<Json>(state.page.request, '/api/agents', {
+  const agent = await apiJson<Json>(state.page.request, '/api/v1/agents', {
     method: 'POST',
     data: {
       name: `${state.runId} agent`,
       instructions: 'Respond concisely through the local deterministic runtime.',
-      provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
       ...data,
     },
@@ -66,7 +65,7 @@ async function createFlowAgent(state: QuickstartFlowState, data: Json = {}) {
 }
 
 async function createFlowEnvironment(state: QuickstartFlowState, data: Json = {}) {
-  const environment = await apiJson<Json>(state.page.request, '/api/environments', {
+  const environment = await apiJson<Json>(state.page.request, '/api/v1/environments', {
     method: 'POST',
     data: {
       name: `${state.runId} environment`,
@@ -82,7 +81,7 @@ async function createFlowEnvironment(state: QuickstartFlowState, data: Json = {}
 
 async function waitForPersistedEventText(state: QuickstartFlowState, sessionId: string, pattern: RegExp) {
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    const events = await apiJson<{ data: Json[] }>(state.page.request, `/api/sessions/${sessionId}/events?limit=200`)
+    const events = await apiJson<{ data: Json[] }>(state.page.request, `/api/v1/sessions/${sessionId}/events?limit=200`)
     if (pattern.test(JSON.stringify(events.data))) {
       return events.data
     }
@@ -95,7 +94,9 @@ async function createSessionThroughQuickstart(state: QuickstartFlowState) {
   const page = state.page
   const sessionResponse = page.waitForResponse(
     (response) =>
-      response.url().endsWith('/api/sessions') && response.request().method() === 'POST' && response.status() === 201,
+      response.url().endsWith('/api/v1/sessions') &&
+      response.request().method() === 'POST' &&
+      response.status() === 201,
     { timeout: 60_000 },
   )
   await page.getByRole('button', { name: /Create (new )?test session/ }).click()
@@ -132,7 +133,7 @@ async function assertNoHorizontalOverflow(page: Page) {
 
 Given('the developer has deployed the platform on Cloudflare', STEP_TIMEOUT, async function (this: QuickstartWorld) {
   const state = await ensureQuickstartFlow(this)
-  const health = await apiJson<Json>(state.page.request, '/api/health')
+  const health = await apiJson<Json>(state.page.request, '/api/v1/health')
   assert.equal(health.status, 'ok', 'the deployed control plane must report healthy')
 })
 
@@ -167,7 +168,7 @@ Then(
     await page.getByRole('link', { name: '2. Environment' }).click()
     await page.getByLabel('Environment name').fill(`${state.runId} flow environment`)
     const environmentResponse = page.waitForResponse(
-      (response) => response.url().endsWith('/api/environments') && response.request().method() === 'POST',
+      (response) => response.url().endsWith('/api/v1/environments') && response.request().method() === 'POST',
       { timeout: 30_000 },
     )
     await page.getByRole('button', { name: 'Create environment' }).click()
@@ -178,7 +179,7 @@ Then(
     await page.getByRole('button', { name: 'Use template' }).first().click()
     await page.getByLabel('Name', { exact: true }).fill(`${state.runId} flow agent`)
     const agentResponse = page.waitForResponse(
-      (response) => response.url().endsWith('/api/agents') && response.request().method() === 'POST',
+      (response) => response.url().endsWith('/api/v1/agents') && response.request().method() === 'POST',
       { timeout: 30_000 },
     )
     await page.getByRole('button', { name: 'Create agent' }).click()
@@ -229,7 +230,9 @@ Then(
     const page = requireQuickstartFlow(this).page
     await expect(page.getByLabel('Name', { exact: true })).toHaveValue(/Review incoming pull requests/)
     await expect(page.getByLabel('Instructions', { exact: true })).toHaveValue(/summarize risky changes/)
-    await expect(page.getByLabel('Model', { exact: true })).toHaveValue(/.+/)
+    // Model is selected from the provider catalog (a shadcn Select combobox), so
+    // the drafted model is read from the trigger's displayed value, not an input.
+    await expect(page.getByLabel('Model', { exact: true })).toContainText(/.+/)
     await expect(page.getByLabel('Allowed tools', { exact: true })).toHaveValue('read\nwrite\nshell')
     await expect(page.getByText('MCP connectors', { exact: true })).toBeVisible()
     await expect(page.getByText('None drafted', { exact: true })).toBeVisible()
@@ -244,7 +247,7 @@ Then(
     const editedName = `${state.runId} drafted agent`
     await state.page.getByLabel('Name', { exact: true }).fill(editedName)
     await expect(state.page.getByLabel('Name', { exact: true })).toHaveValue(editedName)
-    const agents = await apiJson<{ data: Json[] }>(state.page.request, '/api/agents?limit=100')
+    const agents = await apiJson<{ data: Json[] }>(state.page.request, '/api/v1/agents?limit=100')
     assert.ok(
       !agents.data.some((agent) => agent.name === editedName),
       'nothing is saved until the developer creates the agent',
@@ -259,7 +262,7 @@ Then(
     const state = requireQuickstartFlow(this)
     const page = state.page
     const agentResponse = page.waitForResponse(
-      (response) => response.url().endsWith('/api/agents') && response.request().method() === 'POST',
+      (response) => response.url().endsWith('/api/v1/agents') && response.request().method() === 'POST',
       { timeout: 30_000 },
     )
     await page.getByRole('button', { name: 'Create agent' }).click()
@@ -304,7 +307,7 @@ When(
     await page.getByRole('checkbox', { name: 'Allow MCP connector access' }).click()
 
     const environmentResponse = page.waitForResponse(
-      (response) => response.url().endsWith('/api/environments') && response.request().method() === 'POST',
+      (response) => response.url().endsWith('/api/v1/environments') && response.request().method() === 'POST',
       { timeout: 30_000 },
     )
     await page.getByRole('button', { name: 'Create environment' }).click()
@@ -339,7 +342,7 @@ Then(
   STEP_TIMEOUT,
   async function (this: QuickstartWorld) {
     const state = requireQuickstartFlow(this)
-    const environment = await apiJson<Json>(state.page.request, `/api/environments/${state.environmentId}`)
+    const environment = await apiJson<Json>(state.page.request, `/api/v1/environments/${state.environmentId}`)
     assert.deepEqual(environment.networkPolicy, {
       mode: 'restricted',
       allowedHosts: ['registry.npmjs.org', 'api.github.com'],
@@ -390,7 +393,7 @@ Then(
   async function (this: QuickstartWorld) {
     const state = requireQuickstartFlow(this)
     await expect(state.page.getByText(state.sessionId, { exact: true })).toBeVisible({ timeout: 30_000 })
-    await expect(state.page.getByText(new RegExp(`/runtime/sessions/${state.sessionId}`))).toBeVisible({
+    await expect(state.page.getByText(new RegExp(`/api/v1/runtime/sessions/${state.sessionId}`))).toBeVisible({
       timeout: 30_000,
     })
   },
@@ -461,10 +464,10 @@ Then(
 
 Given('Workers AI is available', STEP_TIMEOUT, async function (this: QuickstartWorld) {
   const state = await ensureQuickstartFlow(this)
-  const providers = await apiJson<{ data: Json[] }>(state.page.request, '/api/providers')
+  const providers = await apiJson<{ data: Json[] }>(state.page.request, '/api/v1/providers')
   const workersAi = providers.data.find((provider) => provider.type === 'workers-ai')
   assert.ok(workersAi, 'the workers-ai provider must be seeded')
-  assert.equal(workersAi.status, 'active')
+  assert.equal(workersAi.enabled, true)
 })
 
 When('the developer creates an agent with the default model', STEP_TIMEOUT, async function (this: QuickstartWorld) {
@@ -474,7 +477,9 @@ When('the developer creates an agent with the default model', STEP_TIMEOUT, asyn
   await expect(page.getByText('No credential required')).toBeVisible({ timeout: 30_000 })
   const sessionResponse = page.waitForResponse(
     (response) =>
-      response.url().endsWith('/api/sessions') && response.request().method() === 'POST' && response.status() === 201,
+      response.url().endsWith('/api/v1/sessions') &&
+      response.request().method() === 'POST' &&
+      response.status() === 201,
     { timeout: 60_000 },
   )
   await page.getByRole('button', { name: 'Run the default Workers AI agent' }).click()
@@ -491,18 +496,18 @@ Then(
     await expect(state.page).toHaveURL(new RegExp(`step=session&session=${state.sessionId}`), { timeout: 15_000 })
     await waitForPersistedEventText(state, state.sessionId, /AMA runtime processed: /)
     await expect(state.page.getByText(/AMA runtime processed: /).first()).toBeVisible({ timeout: 60_000 })
-    const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.sessionId}`)
+    const session = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.sessionId}`)
     const runtimeMetadata = session.runtimeMetadata as Json
     assert.equal(runtimeMetadata.hostingMode, 'cloud', 'the starter session runs in the cloud sandbox hosting mode')
+    assert.equal(runtimeMetadata.provider, 'workers-ai')
     const agentSnapshot = session.agentSnapshot as Json
-    assert.equal(agentSnapshot.provider, 'workers-ai')
     assert.equal(agentSnapshot.model, '@cf/moonshotai/kimi-k2.6')
   },
 )
 
 Then('no Anthropic credential is required', STEP_TIMEOUT, async function (this: QuickstartWorld) {
   const state = requireQuickstartFlow(this)
-  const providers = await apiJson<{ data: Json[] }>(state.page.request, '/api/providers')
+  const providers = await apiJson<{ data: Json[] }>(state.page.request, '/api/v1/providers')
   const workersAi = providers.data.find((provider) => provider.type === 'workers-ai')
   assert.ok(workersAi, 'the workers-ai provider must exist')
   assert.equal(workersAi.credentialStatus, 'not_required')
@@ -516,7 +521,7 @@ Then('no Anthropic credential is required', STEP_TIMEOUT, async function (this: 
 
 Given('Cloudflare Sandbox is configured', STEP_TIMEOUT, async function (this: QuickstartWorld) {
   const state = await ensureQuickstartFlow(this)
-  await createFlowAgent(state, { name: `${state.runId} sandbox agent`, allowedTools: ['read'] })
+  await createFlowAgent(state, { name: `${state.runId} sandbox agent`, tools: [{ name: 'read' }] })
   await createFlowEnvironment(state, { name: `${state.runId} sandbox environment` })
   await state.page.goto('/quickstart?step=session')
   await expect(state.page.getByRole('button', { name: 'Add sandbox execution' })).toBeVisible({ timeout: 30_000 })
@@ -526,14 +531,15 @@ When('the developer enables sandbox access for the agent', STEP_TIMEOUT, async f
   const state = requireQuickstartFlow(this)
   const page = state.page
   const agentResponse = page.waitForResponse(
-    (response) => response.url().endsWith(`/api/agents/${state.agentId}`) && response.request().method() === 'PATCH',
+    (response) => response.url().endsWith(`/api/v1/agents/${state.agentId}`) && response.request().method() === 'PATCH',
     { timeout: 30_000 },
   )
   await page.getByRole('button', { name: 'Add sandbox execution' }).click()
   const response = await agentResponse
   assert.equal(response.status(), 200)
   const agent = (await response.json()) as Json
-  assert.deepEqual(agent.allowedTools, ['read', 'sandbox.exec', 'sandbox.read', 'sandbox.write'])
+  const toolNames = (agent.tools as Array<{ name: string }>).map((tool) => tool.name)
+  assert.deepEqual(toolNames, ['read', 'sandbox.exec', 'sandbox.read', 'sandbox.write'])
   assert.deepEqual(agent.skills, ['ama@coding-agent'])
   await expect(page.getByRole('button', { name: 'Sandbox execution enabled' })).toBeVisible({ timeout: 15_000 })
 })
@@ -548,11 +554,11 @@ Then(
     const events = await waitForPersistedEventText(state, state.sessionId, /sandbox\.exec/)
     const eventsText = JSON.stringify(events)
     assert.ok(eventsText.includes('git status'), 'the approved command ran through the sandbox executor')
-    const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.sessionId}`)
-    assert.ok(
-      ((session.agentSnapshot as Json).allowedTools as string[]).includes('sandbox.exec'),
-      'the session snapshot carries the sandbox tool policy',
+    const session = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.sessionId}`)
+    const snapshotToolNames = ((session.agentSnapshot as Json).tools as Array<{ name: string }>).map(
+      (tool) => tool.name,
     )
+    assert.ok(snapshotToolNames.includes('sandbox.exec'), 'the session snapshot carries the sandbox tool policy')
   },
 )
 
@@ -570,7 +576,7 @@ Given('quickstart has created a session', STEP_TIMEOUT, async function (this: Qu
   const state = await ensureQuickstartFlow(this)
   await createFlowAgent(state)
   await createFlowEnvironment(state)
-  const session = await apiJson<Json>(state.page.request, '/api/sessions', {
+  const session = await apiJson<Json>(state.page.request, '/api/v1/sessions', {
     method: 'POST',
     data: {
       agentId: state.agentId,
@@ -612,8 +618,8 @@ Then(
   async function (this: QuickstartWorld) {
     const state = requireQuickstartFlow(this)
     const origin = new URL(state.page.url()).origin
-    assert.ok(state.exampleText.includes(`${origin}/api/sessions`), 'examples target this platform origin')
-    assert.ok(state.exampleText.includes(`${origin}/api/openapi.json`), 'examples reference the OpenAPI contract')
+    assert.ok(state.exampleText.includes(`${origin}/api/v1/sessions`), 'examples target this platform origin')
+    assert.ok(state.exampleText.includes(`${origin}/api/v1/openapi.json`), 'examples reference the OpenAPI contract')
     assert.ok(state.exampleText.includes(state.sessionId), 'examples reference the created session id')
     assert.ok(state.exampleText.includes(state.agentId), 'examples reference the created agent id')
   },
@@ -624,14 +630,18 @@ Then(
   STEP_TIMEOUT,
   async function (this: QuickstartWorld) {
     const state = requireQuickstartFlow(this)
-    const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.sessionId}`)
-    const runtimeEndpointPath = String(session.runtimeEndpointPath)
-    assert.ok(runtimeEndpointPath.startsWith('/'), 'the session exposes an AMA runtime endpoint path')
-    assert.ok(state.exampleText.includes(runtimeEndpointPath), 'live traffic examples use the AMA session endpoint')
+    // The session's runtime connection is an AMA-owned path (proxy mount), never
+    // an upstream vendor URL — this is what "live session traffic" reconnects to.
+    const connection = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.sessionId}/connection`)
+    const runtimeEndpointPath = String(connection.path)
+    assert.ok(runtimeEndpointPath.startsWith('/api/v1/'), 'the session exposes an AMA runtime endpoint path')
+    // Live session traffic in the integration examples flows through the AMA
+    // session endpoints (create + stream events), not any upstream vendor host.
     assert.ok(
-      state.exampleText.includes(`/api/sessions/${state.sessionId}/events`),
-      'event reads stay on AMA endpoints',
+      state.exampleText.includes(`/api/v1/sessions/${state.sessionId}/events`),
+      'live traffic examples use the AMA session events endpoint',
     )
+    assert.ok(state.exampleText.includes('/api/v1/sessions'), 'examples drive sessions through AMA session endpoints')
   },
 )
 

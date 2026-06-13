@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 import { EmptyState, PageHeader, StatusBadge } from '@/console/components'
-import { isArchived } from '@/console/format'
+import { isArchived, providerIdPatch } from '@/console/format'
 import {
   type AgentBuilderDraft,
   apiErrorToBuilder,
@@ -121,7 +121,7 @@ export function QuickstartPage() {
         name: 'Workers AI starter agent',
         description: 'Zero-credential starter agent on the platform default Workers AI model.',
         instructions: 'You are the Workers AI starter agent. Respond helpfully and stay inside the session workspace.',
-        providerId: DEFAULT_BUILDER_PROVIDER,
+        ...providerIdPatch(DEFAULT_BUILDER_PROVIDER),
         model: DEFAULT_BUILDER_MODEL,
       })
       const environment = await api.createEnvironment(

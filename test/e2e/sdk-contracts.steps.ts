@@ -34,9 +34,9 @@ Then(
     for (const required of ['Agents', 'Environments', 'Sessions', 'Providers', 'Vaults', 'Usage', 'Audit']) {
       assert.ok(tags.has(required), `SDK operations must include ${required} tag; found: ${[...tags].join(', ')}`)
     }
-    // Governance operations use a different tag convention — verify at least one exists
-    const governanceOps = operations.filter((op) => op.path.startsWith('/api/governance'))
-    assert.ok(governanceOps.length > 0, 'SDK must include governance resource operations')
+    // Governance operations are flattened under /api/v1/policies, /access-rules,
+    // and /budgets — they share the Governance tag rather than a path prefix.
+    assert.ok(tags.has('Governance'), 'SDK must include governance resource operations')
   },
 )
 
@@ -45,7 +45,7 @@ Then(
   async function (this: AmaWorld) {
     // The generated operations.ts must match the operations served by the live app
     const app = createApp()
-    const response = await app.fetch(new Request('https://example.test/api/openapi.json'), {} as Env)
+    const response = await app.fetch(new Request('https://example.test/api/v1/openapi.json'), {} as Env)
     assert.equal(response.status, 200)
     const doc = (await response.json()) as OpenApiDocument
     const liveOperationIds = new Set(
@@ -78,7 +78,7 @@ When(
   'an operator automates agent, session, provider, vault, governance, usage, or audit management',
   async function (this: AmaWorld) {
     const app = createApp()
-    const response = await app.fetch(new Request('https://example.test/api/openapi.json'), {} as Env)
+    const response = await app.fetch(new Request('https://example.test/api/v1/openapi.json'), {} as Env)
     this.openApiDocument = (await response.json()) as Json
   },
 )
@@ -88,7 +88,7 @@ Then('automation uses an external Any Managed Agents SDK or the control-plane AP
   assert.ok(doc, 'OpenAPI document must be available')
   const paths = Object.keys(doc.paths ?? {})
   // Control-plane paths are under /api/ — verify they exist
-  const controlPlanePaths = paths.filter((p) => p.startsWith('/api/'))
+  const controlPlanePaths = paths.filter((p) => p.startsWith('/api/v1/'))
   assert.ok(controlPlanePaths.length > 0, 'OpenAPI must expose control-plane /api/ paths')
 })
 
@@ -110,7 +110,7 @@ Then('runtime session interaction still uses AMA runtime endpoints', function (t
 
 When('an operator wants command-line access to the control plane', async function (this: AmaWorld) {
   const app = createApp()
-  const response = await app.fetch(new Request('https://example.test/api/openapi.json'), {} as Env)
+  const response = await app.fetch(new Request('https://example.test/api/v1/openapi.json'), {} as Env)
   this.openApiDocument = (await response.json()) as Json
 })
 

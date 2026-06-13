@@ -5,7 +5,15 @@ import { useParams } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { PageHeader, StatusBadge } from '@/console/components'
-import { archivedLabel, formatDate, isArchived, parseJsonObject, parseTools, stringifyJson } from '@/console/format'
+import {
+  archivedLabel,
+  formatDate,
+  isArchived,
+  parseJsonObject,
+  parseTools,
+  providerIdPatch,
+  stringifyJson,
+} from '@/console/format'
 import { AgentForm } from '@/console/forms'
 import type { AgentFormState } from '@/console/types'
 import { CreateSessionSheet } from '@/features/sessions/CreateSessionSheet'
@@ -42,7 +50,7 @@ export function AgentDetailPage() {
         name: input.name,
         description: input.description,
         instructions: input.instructions,
-        providerId: input.provider,
+        ...providerIdPatch(input.provider),
         model: input.model || null,
         skills: parseTools(input.skills),
         tools: parseTools(input.allowedTools).map((name) => ({ name })),

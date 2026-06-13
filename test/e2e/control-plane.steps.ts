@@ -60,21 +60,21 @@ When(
   'the platform stores projects, agents, sessions, providers, policies, vault metadata, usage, or audit records',
   async function (this: AmaWorld) {
     this.app = createApp()
-    this.response = await this.app.fetch(new Request('https://example.test/api/openapi.json'), {} as Env)
+    this.response = await this.app.fetch(new Request('https://example.test/api/v1/openapi.json'), {} as Env)
   },
 )
 
 Then('the data is persisted through Cloudflare D1', async function (this: AmaWorld) {
   assert.ok(this.response, 'OpenAPI response must be available before asserting storage-backed resources')
   const body = (await this.response.clone().json()) as { paths?: Record<string, unknown> }
-  for (const path of ['/api/agents', '/api/environments', '/api/sessions', '/api/vaults']) {
+  for (const path of ['/api/v1/agents', '/api/v1/environments', '/api/v1/sessions', '/api/v1/vaults']) {
     assert.ok(body.paths?.[path], `Expected D1-backed resource path ${path}`)
   }
 })
 
 When('the platform runs in Cloudflare', async function (this: AmaWorld) {
   this.app = createApp()
-  this.response = await this.app.fetch(new Request('https://example.test/api/health'), {} as Env)
+  this.response = await this.app.fetch(new Request('https://example.test/api/v1/health'), {} as Env)
 })
 
 Then('control-plane requests use Worker routing', function (this: AmaWorld) {
@@ -84,10 +84,10 @@ Then('control-plane requests use Worker routing', function (this: AmaWorld) {
 
 Then('session state uses Durable Object and D1 bindings', async function (this: AmaWorld) {
   assert.ok(this.app, 'Worker app must be initialized before asserting session routes')
-  const response = await this.app.fetch(new Request('https://example.test/api/openapi.json'), {} as Env)
+  const response = await this.app.fetch(new Request('https://example.test/api/v1/openapi.json'), {} as Env)
   const body = (await response.json()) as { paths?: Record<string, unknown> }
-  assert.ok(body.paths?.['/api/sessions'], 'Expected session control-plane routes')
-  assert.ok(body.paths?.['/api/sessions/{sessionId}/events'], 'Expected durable session event routes')
+  assert.ok(body.paths?.['/api/v1/sessions'], 'Expected session control-plane routes')
+  assert.ok(body.paths?.['/api/v1/sessions/{sessionId}/events'], 'Expected durable session event routes')
 })
 
 Then(
@@ -96,7 +96,7 @@ Then(
     // The platform uses D1 exclusively. There must be no external DB dependency
     // references in the OpenAPI document or health response.
     assert.ok(this.app, 'Worker app must be initialized before asserting storage requirements')
-    const response = await this.app.fetch(new Request('https://example.test/api/health'), {} as Env)
+    const response = await this.app.fetch(new Request('https://example.test/api/v1/health'), {} as Env)
     assert.equal(response.status, 200)
     const body = await response.json()
     const serialized = JSON.stringify(body)
@@ -109,7 +109,7 @@ Then('the deployment does not require a separate Node server', async function (t
   // AMA runs as a Cloudflare Worker — the health endpoint proves the app
   // operates without a Node.js HTTP server.
   assert.ok(this.app, 'Worker app must be initialized before asserting runtime requirements')
-  const response = await this.app.fetch(new Request('https://example.test/api/health'), {} as Env)
+  const response = await this.app.fetch(new Request('https://example.test/api/v1/health'), {} as Env)
   assert.equal(response.status, 200)
   const body = (await response.json()) as { runtime?: string }
   // The Worker app responds successfully without a separate Node server

@@ -9,7 +9,7 @@ type Json = Record<string, unknown>
 
 interface SdkListResponse {
   data: Json[]
-  pagination: { hasMore: boolean; firstId: string | null; lastId: string | null }
+  pagination: { limit: number; hasMore: boolean; nextCursor: string | null }
 }
 
 // The external product owns these identifiers; AMA must never learn them
@@ -42,20 +42,17 @@ const STANDARD_AGENT_FIELDS = new Set([
   'name',
   'description',
   'instructions',
-  'provider',
+  'providerId',
   'model',
-  'systemPrompt',
   'skills',
   'subagents',
   'role',
   'capabilityTags',
   'handoffPolicy',
   'memoryPolicy',
-  'allowedTools',
   'tools',
   'mcpConnectors',
   'metadata',
-  'status',
   'archivedAt',
   'currentVersionId',
   'version',
@@ -70,7 +67,7 @@ const STANDARD_ENVIRONMENT_FIELDS = new Set([
   'description',
   'packages',
   'variables',
-  'secretRefs',
+  'credentialRefs',
   'hostingMode',
   'networkPolicy',
   'mcpPolicy',
@@ -78,7 +75,6 @@ const STANDARD_ENVIRONMENT_FIELDS = new Set([
   'resourceLimits',
   'runtimeConfig',
   'metadata',
-  'status',
   'archivedAt',
   'currentVersionId',
   'version',
@@ -92,12 +88,12 @@ async function ensureExternalProduct(world: ExternalProductWorld): Promise<Exter
   const runId = `extprod-${Date.now()}-${Math.random().toString(16).slice(2)}`
   // The only raw HTTP call in this file: minting the local e2e bearer token.
   // Every product interaction afterwards goes through the generated SDK client.
-  const tokenResponse = await fetch(`${origin}/api/e2e/auth/token`, {
+  const tokenResponse = await fetch(`${origin}/api/v1/e2e/auth/token`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ runId }),
   })
-  assert.equal(tokenResponse.status, 201, `POST /api/e2e/auth/token returned ${tokenResponse.status}`)
+  assert.equal(tokenResponse.status, 201, `POST /api/v1/e2e/auth/token returned ${tokenResponse.status}`)
   const token = (await tokenResponse.json()) as { accessToken: string; projectId: string }
   const state: ExternalProductState = {
     client: new AmaClient({ origin, accessToken: token.accessToken, projectId: token.projectId }),
@@ -136,7 +132,7 @@ async function createAgentThroughSdk(product: ExternalProductState) {
     body: {
       name: `${product.runId} external agent`,
       instructions: 'Work items arrive from an external product over the AMA SDK.',
-      provider: 'workers-ai',
+      // Omit providerId to resolve the project's default provider (platform Workers AI).
       model: '@cf/moonshotai/kimi-k2.6',
       metadata: externalMetadata(product.externalRefs),
     },
@@ -167,9 +163,9 @@ async function listSessionEventsThroughSdk(product: ExternalProductState, sessio
 async function waitForIdleSession(product: ExternalProductState, sessionId: string) {
   for (let attempt = 0; attempt < 60; attempt += 1) {
     const session = await readSessionThroughSdk(product, sessionId)
-    if (session.status === 'idle') return session
-    if (session.status === 'error') {
-      throw new Error(`Session startup failed: ${session.statusReason ?? 'unknown error'}`)
+    if (session.state === 'idle') return session
+    if (session.state === 'error') {
+      throw new Error(`Session startup failed: ${session.stateReason ?? 'unknown error'}`)
     }
     await delay(1_000)
   }
@@ -290,8 +286,13 @@ Then(
     // Match whole words (split on camelCase and non-letter boundaries) so
     // e.g. previewGovernanceConfig does not trip the "review" guard.
     const workflowWords = new Set(['board', 'boards', 'task', 'tasks', 'review', 'reviews'])
+    // The async-task REST pattern (POST /…-tasks → 201 + GET status, design §1.2.7)
+    // is a standard platform resource, not a product-workflow concept; the word
+    // "task" there names a job resource (e.g. model-discovery-tasks).
+    const asyncTaskResource = /[a-z]+-tasks(\/|\b)/i
     const workflowOperations = operations.filter((operation) => {
       const surface = `${operation.path} ${operation.operationId}`
+      if (asyncTaskResource.test(operation.path)) return false
       const words = surface
         .split(/[^A-Za-z]+/)
         .flatMap((segment) => segment.split(/(?=[A-Z])/))
@@ -373,7 +374,7 @@ Then(
     assert.equal(runtimeMetadata.hostingMode, 'cloud', 'the validated hosting mode is recorded')
     assert.ok(runtimeMetadata.provider, 'the validated provider is recorded')
     assert.ok(runtimeMetadata.model, 'the validated model is recorded')
-    assert.notEqual(session.status, 'error', 'validation succeeded before runtime work started')
+    assert.notEqual(session.state, 'error', 'validation succeeded before runtime work started')
   },
 )
 
@@ -385,18 +386,23 @@ Then(
     assert.ok(typeof created.id === 'string' && created.id.length > 0, 'session creation returned an id')
     const fetched = await readSessionThroughSdk(product, String(created.id))
     assert.equal(fetched.id, created.id, 'the session id is stable across reads')
-    assert.ok(typeof fetched.status === 'string' && fetched.status.length > 0, 'a status is returned')
-    assert.ok('statusReason' in fetched, 'a status reason field is returned')
+    assert.ok(typeof fetched.state === 'string' && fetched.state.length > 0, 'a state is returned')
+    assert.ok('stateReason' in fetched, 'a state reason field is returned')
     assert.equal(objectValue(fetched.runtimeMetadata).runtime, 'ama', 'the runtime is returned')
+    // The runtime endpoint is advertised on the session connection resource now,
+    // not as a session field.
+    const connection = await product.client.request<Json>('readSessionConnection', {
+      path: { sessionId: String(created.id) },
+    })
     assert.equal(
-      fetched.runtimeEndpointPath,
-      `/runtime/sessions/${created.id}/rpc`,
-      'the session advertises the AMA runtime endpoint',
+      connection.path,
+      `/api/v1/runtime/sessions/${created.id}/rpc`,
+      'the session connection advertises the AMA runtime endpoint',
     )
     // The canonical event endpoint is part of the SDK contract and serves this session.
     const eventsOperation = operations.find((operation) => operation.operationId === 'listSessionEvents')
     assert.ok(eventsOperation, 'the SDK exposes the canonical session event endpoint')
-    assert.equal(eventsOperation.path, '/api/sessions/{sessionId}/events')
+    assert.equal(eventsOperation.path, '/api/v1/sessions/{sessionId}/events')
     const events = await listSessionEventsThroughSdk(product, String(created.id))
     assert.ok(Array.isArray(events.data), 'the event endpoint serves events for the returned session id')
   },
@@ -422,7 +428,7 @@ Then(
     const product = state(this)
     const sessionId = String(objectValue(product.session).id)
     const session = await readSessionThroughSdk(product, sessionId)
-    assert.ok(typeof session.status === 'string' && session.status.length > 0, 'status is renderable')
+    assert.ok(typeof session.state === 'string' && session.state.length > 0, 'state is renderable')
     // The initial prompt ran through the runtime, so canonical progress events exist.
     const events = await waitForSessionEventText(product, sessionId, `work item for ${product.runId}`)
     assert.ok(events.data.length > 0, 'canonical events exist for progress rendering')
@@ -472,14 +478,19 @@ Then(
   'AMA routes the command to the selected runtime or owning self-hosted runner',
   function (this: ExternalProductWorld) {
     const product = state(this)
-    const response = objectValue(product.commandResponse)
-    assert.equal(response.accepted, true, 'AMA accepted the follow-up command')
-    assert.equal(response.runtime, 'ama-cloud', 'AMA routed the command to the selected ama runtime')
-    assert.equal(response.sessionId, objectValue(product.session).id)
+    // The follow-up is now an addressable SessionMessage resource: AMA accepts it
+    // and routes delivery to the selected runtime through its own channel.
+    const message = objectValue(product.commandResponse)
+    assert.ok(typeof message.id === 'string' && message.id.length > 0, 'AMA returns an addressable message id')
+    assert.equal(message.sessionId, objectValue(product.session).id, 'the message is bound to the session')
+    assert.equal(message.type, 'prompt', 'the follow-up is recorded as a prompt message')
+    assert.ok(['live', 'queued'].includes(String(message.delivery)), 'AMA records an internal delivery channel')
     assert.ok(
-      typeof response.path === 'string' && !response.path.includes('://'),
-      'the routing path is an AMA-relative path, not a foreign endpoint',
+      ['accepted', 'delivered'].includes(String(message.state)),
+      'AMA accepts the follow-up command for delivery',
     )
+    // Nothing in the routing record exposes a foreign or absolute endpoint.
+    assert.ok(!JSON.stringify(message).includes('://'), 'routing stays on AMA-relative channels')
   },
 )
 
@@ -500,7 +511,7 @@ Then('AMA records the command result as canonical session events', async functio
     'the stop request is recorded as a canonical session_stop event',
   )
   const session = await readSessionThroughSdk(product, sessionId)
-  assert.equal(session.status, 'stopped', 'the stop command reached the runtime')
+  assert.equal(session.state, 'stopped', 'the stop command reached the runtime')
 })
 
 Then(
@@ -509,7 +520,7 @@ Then(
     const product = state(this)
     // The SDK operation inventory only describes AMA control-plane endpoints.
     for (const operation of operations) {
-      assert.ok(operation.path.startsWith('/api/'), `SDK operation ${operation.operationId} must target /api/`)
+      assert.ok(operation.path.startsWith('/api/v1/'), `SDK operation ${operation.operationId} must target /api/`)
       assert.ok(!operation.path.startsWith('/runtime/'), 'SDK must not expose /runtime/ protocol paths')
     }
     // And nothing AMA returned to the product leaks a sandbox-local or

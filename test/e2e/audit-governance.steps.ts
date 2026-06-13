@@ -35,7 +35,7 @@ When(
       type: 'openai',
       displayName: `${state.runId} audited provider`,
     })
-    this.changedProvider = await apiJson<Json>(state.page.request, `/api/providers/${provider.id}`, {
+    this.changedProvider = await apiJson<Json>(state.page.request, `/api/v1/providers/${provider.id}`, {
       method: 'PATCH',
       data: {
         displayName: `${state.runId} audited provider v2`,
@@ -52,7 +52,7 @@ Then(
     assert.ok(state && this.changedProvider, 'a provider change must have happened')
     const records = await apiJson<ListResponse<Json>>(
       state.page.request,
-      `/api/audit-records?action=provider.update&resourceId=${this.changedProvider.id}`,
+      `/api/v1/audit-records?action=provider.update&resourceId=${this.changedProvider.id}`,
     )
     const record = records.data[0]
     assert.ok(record, 'the provider change produced an audit record')
@@ -83,11 +83,11 @@ When('a request is denied by governance policy', { timeout: 120_000 }, async fun
   // Store real credential material first so the audit trail has something
   // secret-shaped that must never leak through denial records or listings.
   this.rawSecretValue = `raw-${state.runId}-secret-token`
-  const vault = await apiJson<Json>(state.page.request, '/api/vaults', {
+  const vault = await apiJson<Json>(state.page.request, '/api/v1/vaults', {
     method: 'POST',
     data: { name: `${state.runId} governance vault` },
   })
-  await apiJson<Json>(state.page.request, `/api/vaults/${vault.id}/credentials`, {
+  await apiJson<Json>(state.page.request, `/api/v1/vaults/${vault.id}/credentials`, {
     method: 'POST',
     data: {
       name: `${state.runId} governance credential`,
@@ -95,7 +95,7 @@ When('a request is denied by governance policy', { timeout: 120_000 }, async fun
       secret: { provider: 'ama-managed', secretValue: this.rawSecretValue },
     },
   })
-  this.denyRule = await apiJson<Json>(state.page.request, '/api/governance/provider-access-rules', {
+  this.denyRule = await apiJson<Json>(state.page.request, '/api/v1/access-rules', {
     method: 'POST',
     data: {
       providerId: 'workers-ai',
@@ -105,10 +105,9 @@ When('a request is denied by governance policy', { timeout: 120_000 }, async fun
   })
   const agent = await createAgent(state, {
     name: `${state.runId} denied agent`,
-    provider: 'workers-ai',
     model: WORKERS_AI_MODEL,
   })
-  const response = await apiResponse(state.page.request, '/api/sessions', {
+  const response = await apiResponse(state.page.request, '/api/v1/sessions', {
     method: 'POST',
     data: {
       agentId: agent.id,
@@ -126,7 +125,7 @@ When('a request is denied by governance policy', { timeout: 120_000 }, async fun
 Then('the audit log includes the policy rule and resource reference', async function (this: AuditGovernanceWorld) {
   const state = this.e2e
   assert.ok(state && this.denyRule, 'a governance denial must have happened')
-  const records = await apiJson<ListResponse<Json>>(state.page.request, '/api/audit-records?outcome=denied')
+  const records = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/audit-records?outcome=denied')
   const record = records.data.find((candidate) => {
     const metadata = (candidate.metadata ?? {}) as Json
     const decision = (metadata.decision ?? {}) as Json
@@ -144,7 +143,7 @@ Then('the audit log includes the policy rule and resource reference', async func
 Then('does not include secret values', async function (this: AuditGovernanceWorld) {
   const state = this.e2e
   assert.ok(state && this.rawSecretValue, 'secret material must have been stored before the denial')
-  const records = await apiJson<ListResponse<Json>>(state.page.request, '/api/audit-records?limit=100')
+  const records = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/audit-records?limit=100')
   const serialized = JSON.stringify(records)
   const credentialRecord = records.data.find((candidate) => candidate.action === 'vault_credential.create')
   assert.ok(credentialRecord, 'the credential write itself is audited')

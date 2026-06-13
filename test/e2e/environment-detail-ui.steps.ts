@@ -8,7 +8,7 @@ interface EnvironmentRecord {
   id: string
   name: string
   version: number
-  status: string
+  archivedAt: string | null
 }
 
 interface EnvDetailWorkflow {
@@ -48,7 +48,7 @@ async function ensureEnvDetailWorkflow(world: EnvDetailWorld): Promise<EnvDetail
 }
 
 async function createTestEnvironment(workflow: EnvDetailWorkflow, overrides?: Record<string, unknown>) {
-  const environment = await apiJson<EnvironmentRecord>(workflow.page.request, '/api/environments', {
+  const environment = await apiJson<EnvironmentRecord>(workflow.page.request, '/api/v1/environments', {
     method: 'POST',
     data: {
       name: `${workflow.runId} environment`,
@@ -58,7 +58,7 @@ async function createTestEnvironment(workflow: EnvDetailWorkflow, overrides?: Re
         { name: 'typescript', version: 'latest' },
       ],
       variables: { NODE_ENV: { description: 'node environment', required: false } },
-      secretRefs: [],
+      credentialRefs: [],
       networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
       packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
       resourceLimits: { memoryMb: 1024, timeoutSeconds: 900 },
@@ -81,7 +81,7 @@ Given(
     const workflow = await ensureEnvDetailWorkflow(this)
     const env = await createTestEnvironment(workflow)
     // Update to create a second version
-    await apiJson(workflow.page.request, `/api/environments/${env.id}`, {
+    await apiJson(workflow.page.request, `/api/v1/environments/${env.id}`, {
       method: 'PATCH',
       data: { description: 'Updated for version 2' },
     })
@@ -162,7 +162,7 @@ Then('package requirements are grouped by ecosystem', async function (this: EnvD
 Then('variables and secret references are displayed without raw secret values', async function (this: EnvDetailWorld) {
   const page = (this.envDetailWorkflow as EnvDetailWorkflow).page
   await expect(page.getByText('Variables')).toBeVisible()
-  await expect(page.getByText('Secret refs')).toBeVisible()
+  await expect(page.getByText('Credential refs')).toBeVisible()
   await expect(page.getByText('secret-value')).toHaveCount(0)
 })
 

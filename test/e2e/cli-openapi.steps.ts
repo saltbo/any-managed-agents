@@ -41,7 +41,7 @@ Given(/^the platform exposes control-plane APIs under \/api$/, function (this: A
   this.app = createApp()
 })
 
-When(/^CI configures restish with \/api\/openapi\.json$/, async function (this: AmaWorld) {
+When(/^CI configures restish with \/api\/v1\/openapi\.json$/, async function (this: AmaWorld) {
   const harness = await ensureRestishHarness(this)
   this.restishDiscovery = await harness.discover()
 })
@@ -63,7 +63,7 @@ When(
   async function (this: AmaWorld) {
     const app = createApp()
     this.response = await app.fetch(
-      new Request('https://example.test/api/agents', {
+      new Request('https://example.test/api/v1/agents', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ name: '' }),
@@ -139,7 +139,7 @@ async function ensureRestishHarness(world: AmaWorld) {
 
 async function requestOpenApiDocument(world: AmaWorld) {
   const app = createApp()
-  const response = await app.fetch(new Request('https://example.test/api/openapi.json'), {} as Env)
+  const response = await app.fetch(new Request('https://example.test/api/v1/openapi.json'), {} as Env)
   assert.equal(response.status, 200)
   world.openApiDocument = (await response.json()) as OpenApiDocument
   assert.match(openApiDocument(world).openapi ?? '', /^3\./)
@@ -159,7 +159,7 @@ function allOperations(world: AmaWorld) {
 }
 
 function assertControlPlaneOperationsHaveMetadata(world: AmaWorld) {
-  const operations = allOperations(world).filter(({ path }) => path.startsWith('/api/'))
+  const operations = allOperations(world).filter(({ path }) => path.startsWith('/api/v1/'))
   assert.ok(operations.length > 0, 'Expected control-plane OpenAPI operations')
   for (const { path, method, op } of operations) {
     assert.ok(op.operationId, `Expected operationId on ${method.toUpperCase()} ${path}`)
@@ -169,7 +169,7 @@ function assertControlPlaneOperationsHaveMetadata(world: AmaWorld) {
       Object.keys(op.responses ?? {}).some((status) => /^2|^3|default$/.test(status)),
       `Expected success/default response on ${method.toUpperCase()} ${path}`,
     )
-    if (!path.includes('/auth/') && path !== '/api/health' && path !== '/api/openapi.json') {
+    if (!path.includes('/auth/') && path !== '/api/v1/health' && path !== '/api/v1/openapi.json') {
       assert.ok(
         op.security?.some((scheme) => 'bearerAuth' in scheme),
         `Expected bearerAuth on ${method.toUpperCase()} ${path}`,

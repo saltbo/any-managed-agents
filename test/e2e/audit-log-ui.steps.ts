@@ -27,8 +27,12 @@ Given('audit records are loading', { timeout: 120_000 }, async function (this: A
   const workflow = await ensureAuditWorkflow(this)
   // Route the audit API to return an empty list so we can later
   // observe both the empty state and the populated state separately.
-  await workflow.page.route('**/api/audit-records*', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: [], total: 0 }) }),
+  await workflow.page.route('**/api/v1/audit-records*', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+    }),
   )
   await workflow.page.goto('/audit')
   await expect(workflow.page.getByRole('heading', { name: 'Audit' })).toBeVisible()
@@ -61,8 +65,8 @@ When('records exist', async function (this: AuditUiWorld) {
   const page = workflow.page
   // Replace the empty intercept with one that returns a real-looking audit record
   // Using route injection rather than real API calls avoids flakiness from audit write latency
-  await page.unroute('**/api/audit-records*')
-  await page.route('**/api/audit-records*', (route) =>
+  await page.unroute('**/api/v1/audit-records*')
+  await page.route('**/api/v1/audit-records*', (route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -82,7 +86,7 @@ When('records exist', async function (this: AuditUiWorld) {
             createdAt: new Date().toISOString(),
           },
         ],
-        total: 1,
+        pagination: { limit: 50, hasMore: false, nextCursor: null },
       }),
     }),
   )

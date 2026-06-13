@@ -51,27 +51,26 @@ function eventPayload(event: Json): Json {
   return payload && typeof payload === 'object' && !Array.isArray(payload) ? (payload as Json) : {}
 }
 
-async function sendPrompt(state: E2EState, message: string) {
-  await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}/commands`, {
+async function sendPrompt(state: E2EState, content: string) {
+  await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}/messages`, {
     method: 'POST',
-    data: { type: 'prompt', message },
+    data: { type: 'prompt', content },
   })
 }
 
-// Failing turns surface the normalized provider error on the command
+// Failing turns surface the normalized provider error on the message
 // response itself; the canonical events are still persisted, so the step
 // tolerates the non-2xx status and inspects the event stream.
-async function sendFailingPrompt(state: E2EState, message: string) {
-  await apiResponse(state.page.request, `/api/sessions/${state.latestSession?.id}/commands`, {
+async function sendFailingPrompt(state: E2EState, content: string) {
+  await apiResponse(state.page.request, `/api/v1/sessions/${state.latestSession?.id}/messages`, {
     method: 'POST',
-    data: { type: 'prompt', message },
+    data: { type: 'prompt', content },
   })
 }
 
 async function createWorkersAiSession(state: E2EState, label: string) {
   state.agent ??= await createAgent(state, {
     name: `${state.runId} ${label} agent`,
-    provider: 'workers-ai',
     model: WORKERS_AI_MODEL,
   })
   state.environment ??= await createEnvironment(state, { name: `${state.runId} ${label} env` })
@@ -96,7 +95,7 @@ async function runFailingTurnAndCollectError(state: E2EState, prompt: string) {
 async function usageRecordsForSession(state: E2EState) {
   return await apiJson<ListResponse<Json>>(
     state.page.request,
-    `/api/usage?sessionId=${state.latestSession?.id}&limit=100`,
+    `/api/v1/usage-records?sessionId=${state.latestSession?.id}&limit=100`,
   )
 }
 
@@ -118,7 +117,7 @@ Then('the runtime calls the Cloudflare Workers AI binding', async function (this
     'runtime turn routed through the Workers AI binding provider',
   )
   assert.equal(payload.model, WORKERS_AI_MODEL, 'runtime turn used the selected Workers AI model')
-  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
+  const session = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}`)
   const runtimeMetadata = session.runtimeMetadata as Json
   assert.equal(runtimeMetadata.provider, 'workers-ai', 'session runtime metadata pins the Workers AI provider')
   assert.equal(runtimeMetadata.model, WORKERS_AI_MODEL, 'session runtime metadata pins the selected model')
@@ -176,10 +175,11 @@ Then('usage, errors, and policy decisions are normalized across providers', asyn
     'runtime errors carry a stable provider error category',
   )
   assert.equal(typeof error.retryable, 'boolean', 'runtime errors carry normalized retry metadata')
-  const decision = await apiJson<Json>(state.page.request, '/api/governance/evaluations', {
-    method: 'POST',
-    data: { providerId: 'workers-ai', modelId: WORKERS_AI_MODEL },
-  })
+  const effective = await apiJson<Json>(
+    state.page.request,
+    `/api/v1/effective-policy?providerId=workers-ai&modelId=${encodeURIComponent(WORKERS_AI_MODEL)}`,
+  )
+  const decision = (effective.decision ?? {}) as Json
   assert.equal(decision.allowed, true, 'policy evaluation returns a normalized decision')
   assert.ok(typeof decision.category === 'string', 'policy decisions carry a category')
   assert.ok(typeof decision.message === 'string', 'policy decisions carry a safe message')
@@ -213,7 +213,8 @@ Then(
     const record = records.data.find((candidate) => candidate.usageType === 'model')
     assert.ok(record, 'a model usage record was written for the turn')
     const auth = (state.auth ?? {}) as Json
-    assert.equal(record.organizationId, (auth.organization as Json | undefined)?.id, 'usage records the organization')
+    // Usage records no longer expose organizationId (projectId already determines
+    // the organization); attribution is verified through projectId downward.
     assert.equal(record.projectId, (auth.project as Json | undefined)?.id, 'usage records the project')
     assert.equal(record.agentId, state.agent?.id, 'usage records the agent')
     assert.equal(record.sessionId, state.latestSession?.id, 'usage records the session')
@@ -235,7 +236,6 @@ When(
     const state = await ensureSignedIn(this)
     state.agent = await createAgent(state, {
       name: `${state.runId} error matrix agent`,
-      provider: 'workers-ai',
       model: WORKERS_AI_MODEL,
     })
     state.environment = await createEnvironment(state, { name: `${state.runId} error matrix env` })
@@ -310,7 +310,7 @@ Then(
     assert.ok(state, 'e2e state must exist')
     const events = await apiJson<ListResponse<Json>>(
       state.page.request,
-      `/api/sessions/${state.latestSession?.id}/events?limit=200`,
+      `/api/v1/sessions/${state.latestSession?.id}/events?limit=200`,
     )
     assert.ok(events.data.length > 0, 'the turn persisted canonical session events')
     const serialized = JSON.stringify(events.data)
@@ -325,15 +325,15 @@ Then(
   async function (this: AdapterWorld) {
     const state = this.e2e
     assert.ok(state, 'e2e state must exist')
-    const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
+    const connection = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}/connection`)
     assert.equal(
-      session.runtimeEndpointPath,
-      `/runtime/sessions/${state.latestSession?.id}/rpc`,
+      connection.path,
+      `/api/v1/runtime/sessions/${state.latestSession?.id}/rpc`,
       'the session advertises only the AMA runtime endpoint',
     )
     const events = await apiJson<ListResponse<Json>>(
       state.page.request,
-      `/api/sessions/${state.latestSession?.id}/events?limit=200`,
+      `/api/v1/sessions/${state.latestSession?.id}/events?limit=200`,
     )
     const canonicalTypes = new Set([
       'agent_start',

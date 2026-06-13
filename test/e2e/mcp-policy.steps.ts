@@ -55,6 +55,25 @@ function policyState(world: McpPolicyWorld): McpPolicyState {
   return world.mcpPolicy
 }
 
+// Project policy is a scoped collection now: upsert the project-scoped policy
+// instead of the removed project-singleton PUT.
+async function setProjectPolicy(e2e: E2EState, body: Json) {
+  const existing = await apiJson<ListResponse<Json>>(e2e.page.request, '/api/v1/policies')
+  const projectPolicy = existing.data.find(
+    (policy) => (policy.scope as Json | undefined)?.level === 'project' && !(policy.scope as Json).teamId,
+  )
+  if (projectPolicy) {
+    return await apiJson<Json>(e2e.page.request, `/api/v1/policies/${projectPolicy.id}`, {
+      method: 'PUT',
+      data: { scope: { level: 'project' }, ...body },
+    })
+  }
+  return await apiJson<Json>(e2e.page.request, '/api/v1/policies', {
+    method: 'POST',
+    data: { scope: { level: 'project' }, ...body },
+  })
+}
+
 async function startFixture(state: McpPolicyState, secretValue: string) {
   state.secretValue = secretValue
   state.fixture = await startMcpFixtureServer([secretValue])
@@ -64,11 +83,11 @@ async function startFixture(state: McpPolicyState, secretValue: string) {
 
 async function connectConnectorToFixture(e2e: E2EState, state: McpPolicyState, connectorId: string) {
   assert.ok(state.fixture, 'fixture must be running')
-  state.vault ??= await apiJson<Json>(e2e.page.request, '/api/vaults', {
+  state.vault ??= await apiJson<Json>(e2e.page.request, '/api/v1/vaults', {
     method: 'POST',
     data: { name: `${e2e.runId} mcp policy vault` },
   })
-  const credential = await apiJson<Json>(e2e.page.request, `/api/vaults/${state.vault.id}/credentials`, {
+  const credential = await apiJson<Json>(e2e.page.request, `/api/v1/vaults/${state.vault.id}/credentials`, {
     method: 'POST',
     data: {
       name: `${e2e.runId} ${connectorId} token`,
@@ -77,18 +96,17 @@ async function connectConnectorToFixture(e2e: E2EState, state: McpPolicyState, c
       secret: { provider: 'cloudflare-secrets', secretValue: state.secretValue },
     },
   })
-  const connection = await apiJson<Json>(e2e.page.request, '/api/mcp/connections', {
+  const connection = await apiJson<Json>(e2e.page.request, '/api/v1/connections', {
     method: 'POST',
     data: {
       connectorId,
-      credentialId: credential.id,
-      credentialVersionId: credential.activeVersionId,
+      credentialRef: { credentialId: credential.id, versionId: credential.activeVersionId },
       endpointUrl: state.fixture.url,
     },
   })
   // Live-sync the connector tools from the fixture MCP server so policy checks
   // run against the real tool surface.
-  await apiJson<ListResponse<Json>>(e2e.page.request, `/api/mcp/connections/${connection.id}/tools`)
+  await apiJson<ListResponse<Json>>(e2e.page.request, `/api/v1/connections/${connection.id}/tools`)
   return connection
 }
 
@@ -98,7 +116,7 @@ async function callConnectionTool(
   toolName: string,
   input: Json,
 ): Promise<ToolCallOutcome> {
-  const response = await apiResponse(e2e.page.request, `/api/mcp/connections/${connectionId}/tools/${toolName}/calls`, {
+  const response = await apiResponse(e2e.page.request, `/api/v1/connections/${connectionId}/tools/${toolName}/calls`, {
     method: 'POST',
     data: { sessionId: e2e.latestSession?.id, input },
   })
@@ -113,12 +131,9 @@ function objectValue(value: unknown): Json {
 
 Given('a project has tool and MCP policies', async function (this: McpPolicyWorld) {
   const e2e = await ensureSignedIn(this)
-  await apiJson<Json>(e2e.page.request, '/api/governance/policy', {
-    method: 'PUT',
-    data: {
-      toolPolicy: { blockedTools: ['repo.delete'] },
-      mcpPolicy: {},
-    },
+  await setProjectPolicy(e2e, {
+    toolPolicy: { blockedTools: ['repo.delete'] },
+    mcpPolicy: {},
   })
 })
 
@@ -129,7 +144,7 @@ When('the user configures tools for an agent', async function (this: McpPolicyWo
   const state = policyState(this)
 
   // A governance-blocked tool is rejected at save time.
-  const blocked = await apiResponse(e2e.page.request, '/api/agents', {
+  const blocked = await apiResponse(e2e.page.request, '/api/v1/agents', {
     method: 'POST',
     data: { name: `${e2e.runId} blocked tool agent`, tools: [{ name: 'repo.delete' }] },
   })
@@ -158,7 +173,10 @@ Then(
     assert.ok(e2e, 'e2e state must exist')
     assert.ok(state.tooledAgent, 'agent must be created')
 
-    const versions = await apiJson<ListResponse<Json>>(e2e.page.request, `/api/agents/${state.tooledAgent.id}/versions`)
+    const versions = await apiJson<ListResponse<Json>>(
+      e2e.page.request,
+      `/api/v1/agents/${state.tooledAgent.id}/versions`,
+    )
     const version = versions.data[0]
     assert.ok(version, 'agent version must exist')
     const tools = version.tools as Json[]
@@ -192,16 +210,11 @@ Then(
 When('the user browses available MCP connectors', async function (this: McpPolicyWorld) {
   const e2e = await ensureSignedIn(this)
   const state = policyState(this)
-  // Block one connector so policy status differentiates catalog entries.
-  await apiJson<Json>(e2e.page.request, '/api/governance/policy', {
-    method: 'PUT',
-    data: { mcpPolicy: { blockedConnectors: ['linear'] } },
-  })
   state.browse = {
-    all: await apiJson<ListResponse<Json>>(e2e.page.request, '/api/mcp/connectors'),
-    byCapability: await apiJson<ListResponse<Json>>(e2e.page.request, '/api/mcp/connectors?capability=repositories'),
-    byTrustLevel: await apiJson<ListResponse<Json>>(e2e.page.request, '/api/mcp/connectors?trustLevel=verified'),
-    bySearch: await apiJson<ListResponse<Json>>(e2e.page.request, '/api/mcp/connectors?search=GitHub'),
+    all: await apiJson<ListResponse<Json>>(e2e.page.request, '/api/v1/connectors'),
+    byCapability: await apiJson<ListResponse<Json>>(e2e.page.request, '/api/v1/connectors?capability=repositories'),
+    byTrustLevel: await apiJson<ListResponse<Json>>(e2e.page.request, '/api/v1/connectors?trustLevel=verified'),
+    bySearch: await apiJson<ListResponse<Json>>(e2e.page.request, '/api/v1/connectors?search=GitHub'),
   }
 })
 
@@ -227,17 +240,15 @@ Then(
       assert.ok(`${row.name} ${row.description}`.toLowerCase().includes('github'))
     }
 
-    // Every entry carries its governance policy status so results can be
-    // narrowed by policy state.
-    const blocked = browse.all.data.filter((row) => row.policyStatus === 'blocked')
-    const allowed = browse.all.data.filter((row) => row.policyStatus === 'allowed')
+    // The static catalog identifies entries by `id`; governance policy status
+    // is no longer projected onto the catalog (it lives on /policies now).
     assert.ok(
-      blocked.some((row) => row.connectorId === 'linear'),
-      'blocked connector must be reported as blocked',
+      browse.all.data.some((row) => row.id === 'github'),
+      'the static catalog lists the github connector by id',
     )
     assert.ok(
-      allowed.some((row) => row.connectorId === 'github'),
-      'allowed connector must be reported as allowed',
+      browse.all.data.some((row) => row.id === 'linear'),
+      'the static catalog lists the linear connector by id',
     )
   },
 )
@@ -250,18 +261,15 @@ Given('an MCP connector is blocked for a project', async function (this: McpPoli
   await startFixture(state, `mcp-policy-secret-${e2e.runId}`)
   state.githubConnection = await connectConnectorToFixture(e2e, state, 'github')
 
-  e2e.agent = await createAgent(e2e, { name: `${e2e.runId} policy agent`, allowedTools: ['mcp:github'] })
+  e2e.agent = await createAgent(e2e, { name: `${e2e.runId} policy agent`, tools: [{ name: 'mcp:github' }] })
   e2e.environment = await createEnvironment(e2e, { name: `${e2e.runId} policy env` })
   e2e.latestSession = await createSession(e2e)
 
   // The connector works through the real MCP client before it is blocked.
   state.allowedCall = await callConnectionTool(e2e, state.githubConnection.id, 'echo', { text: 'allowed by policy' })
-  assert.equal(state.allowedCall.status, 200, `pre-block call failed: ${JSON.stringify(state.allowedCall.body)}`)
+  assert.equal(state.allowedCall.status, 201, `pre-block call failed: ${JSON.stringify(state.allowedCall.body)}`)
 
-  await apiJson<Json>(e2e.page.request, '/api/governance/policy', {
-    method: 'PUT',
-    data: { mcpPolicy: { blockedConnectors: ['github'] } },
-  })
+  await setProjectPolicy(e2e, { mcpPolicy: { blockedConnectors: ['github'] } })
 })
 
 When('an agent attempts to call the connector', async function (this: McpPolicyWorld) {
@@ -275,7 +283,7 @@ When('an agent attempts to call the connector', async function (this: McpPolicyW
 
 Then('the platform rejects the call', function (this: McpPolicyWorld) {
   const state = policyState(this)
-  assert.equal(state.allowedCall?.status, 200, 'the allowed call must pass before the connector is blocked')
+  assert.equal(state.allowedCall?.status, 201, 'the allowed call must pass before the connector is blocked')
   assert.equal(state.deniedCall?.status, 403)
   assert.equal(objectValue(state.deniedCall?.body.error).type, 'policy_denied')
   assert.equal(
@@ -301,10 +309,13 @@ Then('records a policy event', async function (this: McpPolicyWorld) {
   )
   assert.ok(allowed, 'expected the earlier allowed call to record an allowed policy.decision event')
 
-  const audit = await apiJson<ListResponse<Json>>(e2e.page.request, '/api/audit-records?action=mcp_tool.call&limit=50')
+  const audit = await apiJson<ListResponse<Json>>(
+    e2e.page.request,
+    '/api/v1/audit-records?action=connection_tool.call&limit=50',
+  )
   assert.ok(
     audit.data.some((record) => record.outcome === 'denied' && record.sessionId === e2e.latestSession?.id),
-    'expected a denied mcp_tool.call audit record',
+    'expected a denied connection_tool.call audit record',
   )
   assert.ok(
     audit.data.some((record) => record.outcome === 'success' && record.sessionId === e2e.latestSession?.id),
@@ -323,7 +334,7 @@ Given('an environment restricts MCP connectors', async function (this: McpPolicy
 
   e2e.agent = await createAgent(e2e, {
     name: `${e2e.runId} env mcp agent`,
-    allowedTools: ['mcp:github', 'mcp:linear'],
+    tools: [{ name: 'mcp:github' }, { name: 'mcp:linear' }],
   })
   e2e.environment = await createEnvironment(e2e, {
     name: `${e2e.runId} restricted mcp env`,
@@ -346,7 +357,7 @@ Then(
 
     // The environment-allowed connector executes through the real MCP client.
     state.allowedCall = await callConnectionTool(e2e, state.githubConnection?.id, 'echo', { text: 'env allowed' })
-    assert.equal(state.allowedCall.status, 200, `allowed call failed: ${JSON.stringify(state.allowedCall.body)}`)
+    assert.equal(state.allowedCall.status, 201, `allowed call failed: ${JSON.stringify(state.allowedCall.body)}`)
 
     // The agent allows the linear connector, but the environment snapshot
     // bound to the session does not.

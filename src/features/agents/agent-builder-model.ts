@@ -1,4 +1,4 @@
-import { parseTools } from '@/console/format'
+import { parseTools, providerIdPatch } from '@/console/format'
 import { type Agent, type AgentInput, ApiError } from '@/lib/api'
 
 export const BUILDER_STEPS = ['start', 'core', 'tools', 'sandbox', 'roles', 'test', 'done'] as const
@@ -160,7 +160,7 @@ export function toAgentInput(draft: AgentBuilderDraft): AgentInput {
     name: draft.name.trim(),
     ...(description ? { description } : {}),
     instructions: draft.instructions.trim(),
-    providerId: draft.provider.trim(),
+    ...providerIdPatch(draft.provider),
     model: draft.model.trim(),
     skills: draft.sandboxEnabled ? parseTools(draft.skills) : [],
     tools: parseTools(draft.allowedTools).map((name) => ({ name })),

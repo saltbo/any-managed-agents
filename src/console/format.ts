@@ -59,6 +59,18 @@ export function parseVariables(value: string) {
   )
 }
 
+// The console offers "workers-ai" as the platform-default provider option, but
+// the v1 control plane resolves the project default from a null/omitted
+// providerId — "workers-ai" is a provider type, not a provider resource id.
+export const PLATFORM_DEFAULT_PROVIDER = 'workers-ai'
+
+// Spread into an agent create/update body. An omitted providerId lets the
+// control plane resolve the project default at session start.
+export function providerIdPatch(provider: string): { providerId: string } | Record<string, never> {
+  const trimmed = provider.trim()
+  return !trimmed || trimmed === PLATFORM_DEFAULT_PROVIDER ? {} : { providerId: trimmed }
+}
+
 export function parseTools(value: string) {
   return value
     .split('\n')

@@ -26,16 +26,32 @@ function e2eState(world: ApprovalsWorld) {
   return world.e2e as unknown as ApprovalsState & { runId: string }
 }
 
+// Policy is a scoped collection now: upsert the project-scoped policy instead
+// of the removed project-singleton PUT.
+async function setProjectPolicy(e2e: { page: { request: Parameters<typeof apiJson>[0] } }, body: Json) {
+  const existing = await apiJson<{ data: Json[] }>(e2e.page.request, '/api/v1/policies')
+  const projectPolicy = existing.data.find(
+    (policy) => (policy.scope as Json | undefined)?.level === 'project' && !(policy.scope as Json).teamId,
+  )
+  if (projectPolicy) {
+    return await apiJson<Json>(e2e.page.request, `/api/v1/policies/${projectPolicy.id}`, {
+      method: 'PUT',
+      data: { scope: { level: 'project' }, ...body },
+    })
+  }
+  return await apiJson<Json>(e2e.page.request, '/api/v1/policies', {
+    method: 'POST',
+    data: { scope: { level: 'project' }, ...body },
+  })
+}
+
 async function setupApprovalGatedSession(world: ApprovalsWorld) {
   const e2e = await ensureSignedIn(world)
-  // sandbox.exec is declared a sensitive tool through the governance policy.
-  await apiJson<Json>(e2e.page.request, '/api/governance/policy', {
-    method: 'PUT',
-    data: { toolPolicy: { requireApprovalTools: ['sandbox.exec'] } },
-  })
+  // sandbox.exec is declared a sensitive tool through the project-scoped policy.
+  await setProjectPolicy(e2e, { toolPolicy: { requireApprovalTools: ['sandbox.exec'] } })
   e2e.agent = await createAgent(e2e, {
     name: `${e2e.runId} approval agent`,
-    allowedTools: ['sandbox.exec'],
+    tools: [{ name: 'sandbox.exec' }],
   })
   e2e.environment = await createEnvironment(e2e, { name: `${e2e.runId} approval env` })
   e2e.latestSession = await createSession(e2e)
@@ -45,7 +61,7 @@ async function setupApprovalGatedSession(world: ApprovalsWorld) {
 async function requestSensitiveTool(world: ApprovalsWorld) {
   const e2e = e2eState(world)
   // A status prompt drives the real agent loop into a sandbox.exec tool call.
-  await apiJson<Json>(e2e.page.request, `/runtime/sessions/${e2e.latestSession?.id}/rpc`, {
+  await apiJson<Json>(e2e.page.request, `/api/v1/runtime/sessions/${e2e.latestSession?.id}/rpc`, {
     method: 'POST',
     data: { message: 'inspect the sandbox status' },
   })
@@ -53,17 +69,20 @@ async function requestSensitiveTool(world: ApprovalsWorld) {
 
 async function readSession(world: ApprovalsWorld) {
   const e2e = e2eState(world)
-  return await apiJson<Json>(e2e.page.request, `/api/sessions/${e2e.latestSession?.id}`)
+  return await apiJson<Json>(e2e.page.request, `/api/v1/sessions/${e2e.latestSession?.id}`)
 }
 
 async function listApprovals(world: ApprovalsWorld) {
   const e2e = e2eState(world)
-  return await apiJson<{ data: Json[] }>(e2e.page.request, `/api/sessions/${e2e.latestSession?.id}/approvals`)
+  return await apiJson<{ data: Json[] }>(e2e.page.request, `/api/v1/sessions/${e2e.latestSession?.id}/approvals`)
 }
 
 async function listEvents(world: ApprovalsWorld) {
   const e2e = e2eState(world)
-  return await apiJson<ListResponse<Json>>(e2e.page.request, `/api/sessions/${e2e.latestSession?.id}/events?limit=200`)
+  return await apiJson<ListResponse<Json>>(
+    e2e.page.request,
+    `/api/v1/sessions/${e2e.latestSession?.id}/events?limit=200`,
+  )
 }
 
 function toolExecutionEvents(events: ListResponse<Json>) {
@@ -82,8 +101,8 @@ When('the agent requests that tool', async function (this: ApprovalsWorld) {
 
 Then('the session pauses for approval', async function (this: ApprovalsWorld) {
   const session = await readSession(this)
-  assert.equal(session.status, 'idle', 'the paused session is idle')
-  assert.equal(session.statusReason, 'requires-action', 'the pause carries the requires-action reason')
+  assert.equal(session.state, 'idle', 'the paused session is idle')
+  assert.equal(session.stateReason, 'requires-action', 'the pause carries the requires-action reason')
   const approvals = await listApprovals(this)
   assert.equal(approvals.data.length, 1, 'one approval is pending')
   assert.equal(approvals.data[0]?.toolName, 'sandbox.exec')
@@ -103,8 +122,8 @@ Then('the tool does not execute until an authorized user approves it', async fun
   )
 
   const approval = this.pendingApproval as Json
-  await apiJson<Json>(e2e.page.request, `/api/sessions/${e2e.latestSession?.id}/approvals/${approval.id}`, {
-    method: 'POST',
+  await apiJson<Json>(e2e.page.request, `/api/v1/sessions/${e2e.latestSession?.id}/approvals/${approval.id}`, {
+    method: 'PATCH',
     data: { decision: 'approve' },
   })
 
@@ -115,7 +134,7 @@ Then('the tool does not execute until an authorized user approves it', async fun
     'the approved tool executed and recorded its result',
   )
   const session = await readSession(this)
-  assert.equal(session.statusReason, null, 'the requires-action reason clears after approval')
+  assert.equal(session.stateReason, null, 'the requires-action reason clears after approval')
 })
 
 // ─── sessions-api: Require user action for approvals and custom tools ───
@@ -132,8 +151,8 @@ Then(
   'the session becomes idle with a requiresAction reason and related event ids',
   async function (this: ApprovalsWorld) {
     const session = await readSession(this)
-    assert.equal(session.status, 'idle')
-    assert.equal(session.statusReason, 'requires-action')
+    assert.equal(session.state, 'idle')
+    assert.equal(session.stateReason, 'requires-action')
     const approvals = await listApprovals(this)
     assert.equal(approvals.data.length, 1)
     const relatedEventIds = approvals.data[0]?.relatedEventIds as string[]
@@ -156,9 +175,9 @@ When('the user sends a tool approval, denial, or custom tool result', async func
   const approval = this.pendingApproval as Json
   this.decisionResponse = await apiJson<Json>(
     e2e.page.request,
-    `/api/sessions/${e2e.latestSession?.id}/approvals/${approval.id}`,
+    `/api/v1/sessions/${e2e.latestSession?.id}/approvals/${approval.id}`,
     {
-      method: 'POST',
+      method: 'PATCH',
       data: { decision: 'approve', result: { stdout: 'custom tool outcome', exitCode: 0 } },
     },
   )
@@ -169,8 +188,8 @@ Then('the runtime resumes with that result', async function (this: ApprovalsWorl
   const serialized = JSON.stringify(events.data)
   assert.ok(serialized.includes('custom tool outcome'), 'the provided custom result entered the runtime history')
   const session = await readSession(this)
-  assert.equal(session.status, 'idle', 'the resumed turn ran to completion')
-  assert.equal(session.statusReason, null)
+  assert.equal(session.state, 'idle', 'the resumed turn ran to completion')
+  assert.equal(session.stateReason, null)
 })
 
 Then('all approval decisions are recorded as audit-safe events', async function (this: ApprovalsWorld) {
@@ -185,7 +204,7 @@ Then('all approval decisions are recorded as audit-safe events', async function 
 
   const audit = await apiJson<ListResponse<Json>>(
     e2e.page.request,
-    '/api/audit-records?action=session.tool_approval_approved&limit=20',
+    '/api/v1/audit-records?action=session.tool_approval_approved&limit=20',
   )
   assert.ok(
     audit.data.some((record) => record.sessionId === e2e.latestSession?.id),

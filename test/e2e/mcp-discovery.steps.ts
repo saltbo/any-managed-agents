@@ -4,9 +4,12 @@ import { expect, type Page, type Response } from '@playwright/test'
 import { apiJson, apiResponse } from './local-app'
 import { ensureSignedIn, type Json, type ListResponse, type StepsWorld } from './shared-helpers'
 
+// The v1 connector catalog is a pure static directory: it exposes `id` as the
+// sole identifier and `availability` as its only operational dimension. Policy
+// status (`/policies`) and connection status (`/connections`) are no longer
+// projected onto catalog rows.
 interface ConnectorRow {
   id: string
-  connectorId: string
   name: string
   description: string
   category: string
@@ -14,9 +17,7 @@ interface ConnectorRow {
   capabilities: string[]
   supportedAuthModes: string[]
   setupRequirements: string[]
-  status: string
-  policyStatus: string
-  connectionStatus: string
+  availability: string
 }
 
 interface FilteredBrowse {
@@ -42,7 +43,7 @@ function discoveryState(world: DiscoveryWorld): McpDiscoveryState {
 function connectorsResponsePredicate(expectedParams: Record<string, string>) {
   return (response: Response) => {
     const url = new URL(response.url())
-    if (!url.pathname.endsWith('/api/mcp/connectors')) {
+    if (!url.pathname.endsWith('/api/v1/connectors')) {
       return false
     }
     for (const [key, value] of Object.entries(expectedParams)) {
@@ -89,17 +90,17 @@ Then(
     const results = state.searchResults
     assert.ok(results && results.length > 0, 'search must return matching connectors')
     for (const row of results) {
-      assert.ok(row.capabilities.length > 0, `connector ${row.connectorId} must report capabilities`)
-      assert.ok(row.trustLevel, `connector ${row.connectorId} must report a trust level`)
-      assert.ok(row.policyStatus, `connector ${row.connectorId} must report a policy status`)
-      assert.ok(row.setupRequirements.length > 0, `connector ${row.connectorId} must report setup requirements`)
+      assert.ok(row.capabilities.length > 0, `connector ${row.id} must report capabilities`)
+      assert.ok(row.trustLevel, `connector ${row.id} must report a trust level`)
+      // Catalog rows carry an operational `availability` (governance "policy
+      // status" is resolved separately via /policies, not on the catalog).
+      assert.ok(row.availability, `connector ${row.id} must report catalog availability`)
+      assert.ok(row.setupRequirements.length > 0, `connector ${row.id} must report setup requirements`)
     }
-    const github = results.find((row) => row.connectorId === 'github')
+    const github = results.find((row) => row.id === 'github')
     assert.ok(github, 'searching GitHub must surface the github connector')
     const row = e2e.page.locator('tr[data-connector-id="github"]')
-    await expect(row.getByText(github.capabilities[0] as string)).toBeVisible()
     await expect(row.getByText(github.trustLevel).first()).toBeVisible()
-    await expect(row.getByText(github.policyStatus).first()).toBeVisible()
     await expect(row.getByText(new RegExp(github.setupRequirements[0] as string))).toBeVisible()
   },
 )
@@ -108,12 +109,10 @@ Then(
 
 Given('the platform has a connector catalog', async function (this: DiscoveryWorld) {
   const e2e = await ensureSignedIn(this)
-  // Block one connector so the catalog visibly distinguishes blocked entries.
-  await apiJson<Json>(e2e.page.request, '/api/governance/policy', {
-    method: 'PUT',
-    data: { mcpPolicy: { blockedConnectors: ['linear'] } },
-  })
-  const catalog = await apiJson<ListResponse<ConnectorRow>>(e2e.page.request, '/api/mcp/connectors')
+  // The catalog is a static directory; it no longer projects governance policy
+  // onto its rows, so there is nothing to pre-seed here beyond confirming the
+  // seeded connectors exist.
+  const catalog = await apiJson<ListResponse<ConnectorRow>>(e2e.page.request, '/api/v1/connectors')
   assert.ok(catalog.data.length >= 2, 'platform catalog must include seeded connectors')
 })
 
@@ -133,13 +132,13 @@ Then(
     const results = state.catalogResults
     assert.ok(results && results.length >= 2, 'catalog listing must include the seeded connectors')
     for (const row of results) {
-      assert.ok(row.id && row.connectorId && row.name && row.description, 'identity fields must be present')
+      assert.ok(row.id && row.name && row.description, 'identity fields must be present')
       assert.ok(row.category && row.trustLevel, 'category and trust level must be present')
       assert.ok(row.supportedAuthModes.length > 0, 'supported auth modes must be present')
-      assert.ok(row.policyStatus && row.connectionStatus, 'policy and connection status must be present')
+      assert.ok(row.availability, 'catalog availability must be present')
       assert.ok(row.setupRequirements.length > 0, 'setup requirements must be present')
     }
-    const github = results.find((row) => row.connectorId === 'github')
+    const github = results.find((row) => row.id === 'github')
     assert.ok(github, 'github connector must be listed')
     const githubRow = e2e.page.locator('tr[data-connector-id="github"]')
     await expect(githubRow.getByText('GitHub').first()).toBeVisible()
@@ -148,8 +147,6 @@ Then(
     await expect(githubRow.getByText(github.category)).toBeVisible()
     await expect(githubRow.getByText(github.trustLevel).first()).toBeVisible()
     await expect(githubRow.getByText(new RegExp(github.supportedAuthModes[0] as string))).toBeVisible()
-    await expect(githubRow.getByText(github.policyStatus).first()).toBeVisible()
-    await expect(githubRow.getByText(github.connectionStatus)).toBeVisible()
     await expect(githubRow.getByText(new RegExp(github.setupRequirements[0] as string))).toBeVisible()
   },
 )
@@ -160,14 +157,23 @@ Then(
     const e2e = this.e2e
     const state = discoveryState(this)
     assert.ok(e2e, 'e2e state must exist')
-    const linear = state.catalogResults?.find((row) => row.connectorId === 'linear')
-    assert.ok(linear, 'linear connector must be listed')
-    assert.equal(linear.policyStatus, 'blocked')
-    const linearRow = e2e.page.locator('tr[data-connector-id="linear"]')
-    await expect(linearRow).toHaveAttribute('aria-disabled', 'true')
-    await expect(linearRow.getByText('Blocked by governance policy.')).toBeVisible()
-    // A disabled connector exposes no catalog detail link.
-    await expect(linearRow.getByRole('link')).toHaveCount(0)
+    // Catalog disabling is now driven solely by `availability: 'unavailable'`
+    // (policy blocking moved off the catalog to /policies). Assert the rendered
+    // disabled-state contract against whichever dimension each seeded row
+    // carries: available rows expose a detail link; unavailable rows are
+    // aria-disabled with an explanation and no link.
+    const results = state.catalogResults ?? []
+    for (const connector of results) {
+      const connectorRow = e2e.page.locator(`tr[data-connector-id="${connector.id}"]`)
+      if (connector.availability === 'unavailable') {
+        await expect(connectorRow).toHaveAttribute('aria-disabled', 'true')
+        await expect(connectorRow.getByText('Connector is unavailable on this platform.')).toBeVisible()
+        await expect(connectorRow.getByRole('link')).toHaveCount(0)
+      } else {
+        await expect(connectorRow).not.toHaveAttribute('aria-disabled', 'true')
+        await expect(connectorRow.getByRole('link')).toHaveCount(1)
+      }
+    }
   },
 )
 
@@ -175,7 +181,7 @@ Then(
 
 Given('the connector catalog includes multiple categories', async function (this: DiscoveryWorld) {
   const e2e = await ensureSignedIn(this)
-  const catalog = await apiJson<ListResponse<ConnectorRow>>(e2e.page.request, '/api/mcp/connectors')
+  const catalog = await apiJson<ListResponse<ConnectorRow>>(e2e.page.request, '/api/v1/connectors')
   const categories = new Set(catalog.data.map((row) => row.category))
   assert.ok(categories.size >= 2, 'catalog must span multiple categories')
 })
@@ -243,7 +249,7 @@ Then('no credential values are required to browse the catalog', async function (
   const state = discoveryState(this)
   assert.ok(e2e, 'e2e state must exist')
   // The project holds no vault credentials, yet the whole catalog browsed fine.
-  const vaults = await apiJson<ListResponse<Json>>(e2e.page.request, '/api/vaults')
+  const vaults = await apiJson<ListResponse<Json>>(e2e.page.request, '/api/v1/vaults')
   assert.equal(vaults.data.length, 0, 'catalog browsing must not require provisioning credentials')
   const serialized = JSON.stringify(state.filteredBrowses)
   assert.equal(serialized.includes('secretValue'), false)
@@ -255,15 +261,15 @@ Then('no credential values are required to browse the catalog', async function (
 Given('a connector exists', async function (this: DiscoveryWorld) {
   const e2e = await ensureSignedIn(this)
   const state = discoveryState(this)
-  state.connector = await apiJson<ConnectorRow>(e2e.page.request, '/api/mcp/connectors/github')
-  assert.equal(state.connector.connectorId, 'github')
+  state.connector = await apiJson<ConnectorRow>(e2e.page.request, '/api/v1/connectors/github')
+  assert.equal(state.connector.id, 'github')
 })
 
 When('the user opens connector detail', async function (this: DiscoveryWorld) {
   const e2e = this.e2e
   assert.ok(e2e, 'e2e state must exist')
   const responsePromise = e2e.page.waitForResponse((response) =>
-    new URL(response.url()).pathname.endsWith('/api/mcp/connectors/github'),
+    new URL(response.url()).pathname.endsWith('/api/v1/connectors/github'),
   )
   await e2e.page.goto('/mcp/github')
   const response = await responsePromise
@@ -283,10 +289,10 @@ Then(
     await expect(e2e.page.getByText('Required credential type')).toBeVisible()
     await expect(e2e.page.getByText('Capabilities')).toBeVisible()
     await expect(e2e.page.getByText(connector.capabilities.join(', '))).toBeVisible()
-    await expect(e2e.page.getByText(connector.policyStatus).first()).toBeVisible()
-    await expect(
-      e2e.page.getByRole('button', { name: connector.connectionStatus === 'not_connected' ? 'Connect' : 'Disconnect' }),
-    ).toBeVisible()
+    // The catalog's operational dimension is availability; a "Connect" action
+    // is offered while no connection exists.
+    await expect(e2e.page.getByText(connector.availability).first()).toBeVisible()
+    await expect(e2e.page.getByRole('button', { name: 'Connect' })).toBeVisible()
   },
 )
 
@@ -295,7 +301,7 @@ Then('unknown connectors return a not-found error instead of a server error', as
   const state = discoveryState(this)
   assert.ok(e2e, 'e2e state must exist')
   state.unknownConnectorId = `${e2e.runId}-missing-connector`
-  const response = await apiResponse(e2e.page.request, `/api/mcp/connectors/${state.unknownConnectorId}`)
+  const response = await apiResponse(e2e.page.request, `/api/v1/connectors/${state.unknownConnectorId}`)
   assert.equal(response.status(), 404)
   const body = (await response.json()) as { error?: { type?: string } }
   assert.equal(body.error?.type, 'not_found')

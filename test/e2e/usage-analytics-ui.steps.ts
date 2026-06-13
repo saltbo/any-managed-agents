@@ -12,7 +12,7 @@ type UsageUiWorld = StepsWorld & {
 }
 
 function isUsageSummaryResponse(response: Response) {
-  return response.url().includes('/api/usage/summary') && response.request().method() === 'GET'
+  return response.url().includes('/api/v1/usage-summary') && response.request().method() === 'GET'
 }
 
 // ─── Scenario: View usage summary (usage-summary.feature) ────────────────────
@@ -39,36 +39,24 @@ Then(
     assert.ok(summary, 'the usage page summary must have been captured')
     assert.ok(summary.totals.totalTokens > 0, 'the page summary reflects the recorded runtime usage')
 
-    // The default grouping keys every row by all dimensions; the rendered
-    // group cell carries the real ids of the driven runtime turn.
+    // The default grouping keys each row by the provider dimension; the rendered
+    // group cell carries the provider of the driven runtime turn.
     const groupCell = page.locator('tbody tr td').first()
-    const organization = (state.auth?.organization ?? {}) as Record<string, unknown>
-    const project = (state.auth?.project ?? {}) as Record<string, unknown>
-    for (const value of [
-      String(organization.id),
-      String(project.id),
-      'workers-ai',
-      WORKERS_AI_MODEL,
-      String(state.agent?.id),
-      String(state.latestSession?.id),
-    ]) {
-      await expect(groupCell).toContainText(value)
-    }
+    await expect(groupCell).toContainText('workers-ai')
 
-    // Re-grouping by provider and model collapses the key to those fields.
+    // Re-grouping by model collapses the key to the model dimension.
     const regrouped = page.waitForResponse(
-      (response) =>
-        isUsageSummaryResponse(response) && decodeURIComponent(response.url()).includes('groupBy=provider,model'),
+      (response) => isUsageSummaryResponse(response) && decodeURIComponent(response.url()).includes('groupBy=model'),
     )
     await page.getByLabel('Group usage by').click()
-    await page.getByRole('option', { name: 'Provider and model' }).click()
+    await page.getByRole('option', { name: 'Model' }).click()
     await regrouped
     await expect(groupCell).toContainText(WORKERS_AI_MODEL)
-    await expect(groupCell).not.toContainText(String(state.latestSession?.id))
 
     // A future time range excludes the recorded usage and shows the empty state.
+    // The page filter is createdFrom, but the API request carries it as from=.
     const futureFiltered = page.waitForResponse(
-      (response) => isUsageSummaryResponse(response) && response.url().includes('createdFrom='),
+      (response) => isUsageSummaryResponse(response) && response.url().includes('from='),
     )
     await page.getByLabel('Usage from').fill('2099-01-01T00:00')
     await futureFiltered
@@ -76,7 +64,7 @@ Then(
 
     // Clearing the range restores the recorded usage.
     const rangeCleared = page.waitForResponse(
-      (response) => isUsageSummaryResponse(response) && !response.url().includes('createdFrom='),
+      (response) => isUsageSummaryResponse(response) && !response.url().includes('from='),
     )
     await page.getByLabel('Usage from').fill('')
     await rangeCleared

@@ -251,8 +251,8 @@ export async function createRestishOpenApiHarness(): Promise<RestishOpenApiHarne
   const server = createServer(async (request, response) => {
     try {
       const url = new URL(request.url ?? '/', 'http://127.0.0.1')
-      if (url.pathname === '/api/openapi.json/') {
-        url.pathname = '/api/openapi.json'
+      if (url.pathname === '/api/v1/openapi.json/') {
+        url.pathname = '/api/v1/openapi.json'
       }
       const body =
         request.method === 'GET' || request.method === 'HEAD'
@@ -297,7 +297,7 @@ export async function createRestishOpenApiHarness(): Promise<RestishOpenApiHarne
     JSON.stringify({
       $schema: 'https://rest.sh/schemas/apis.json',
       ama: {
-        base: `${origin}/api/openapi.json`,
+        base: `${origin}/api/v1/openapi.json`,
         profiles: {
           default: {
             headers: {},
@@ -311,7 +311,7 @@ export async function createRestishOpenApiHarness(): Promise<RestishOpenApiHarne
     origin,
     async discover() {
       const help = await runRestish(home, ['ama', '--help'])
-      const openApi = (await fetch(`${origin}/api/openapi.json`).then((response) => response.json())) as {
+      const openApi = (await fetch(`${origin}/api/v1/openapi.json`).then((response) => response.json())) as {
         paths?: Record<string, Record<string, { operationId?: string }>>
       }
       const documentedCommands = Object.values(openApi.paths ?? {})

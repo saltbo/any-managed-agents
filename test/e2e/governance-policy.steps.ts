@@ -28,8 +28,6 @@ type PolicyWorld = StepsWorld & {
   sessionAttempt?: Attempt
   blockedHost?: string
   blockedFetchStatus?: number
-  configDocument?: Json
-  validateResult?: Attempt
   denyReason?: string
   accessRule?: Json
   historicalMarker?: string
@@ -57,12 +55,38 @@ function orgRunIdOf(e2e: E2EState) {
   return accessToken.slice('e2e:'.length).split(';')[0]
 }
 
-async function applyConfig(e2e: E2EState, document: Json) {
-  return await apiJson<Json>(e2e.page.request, '/api/governance/config', { method: 'POST', data: document })
+// Scope policies are the single write surface now (declarative config is gone).
+// `scope.level` is organization|team|project; `teamId` is required for team scope.
+async function createScopePolicy(e2e: E2EState, scope: Json, body: Json) {
+  return await apiJson<Json>(e2e.page.request, '/api/v1/policies', {
+    method: 'POST',
+    data: { scope, ...body },
+  })
+}
+
+// Upserts the single project-scope policy and any provider access rules.
+// Replaces the removed declarative `POST /governance/config` apply; scope
+// policies and access rules are the v1 write surfaces.
+async function applyConfig(e2e: E2EState, document: { project?: Json }): Promise<{ applied: boolean }> {
+  const { providerRules, ...levels } = (document.project ?? {}) as Json & { providerRules?: Json[] }
+  for (const rule of providerRules ?? []) {
+    await apiJson<Json>(e2e.page.request, '/api/v1/access-rules', { method: 'POST', data: objectValue(rule) })
+  }
+  const existing = await apiJson<ListResponse<Json>>(e2e.page.request, '/api/v1/policies')
+  const projectPolicy = existing.data.find((policy) => objectValue(policy.scope).level === 'project')
+  if (projectPolicy) {
+    await apiJson<Json>(e2e.page.request, `/api/v1/policies/${projectPolicy.id}`, {
+      method: 'PUT',
+      data: { scope: { level: 'project' }, ...levels },
+    })
+  } else {
+    await createScopePolicy(e2e, { level: 'project' }, levels)
+  }
+  return { applied: true }
 }
 
 async function runPrompt(e2e: E2EState, message: string, headers?: Record<string, string>): Promise<Attempt> {
-  const response = await apiResponse(e2e.page.request, `/runtime/sessions/${e2e.latestSession?.id}/rpc`, {
+  const response = await apiResponse(e2e.page.request, `/api/v1/runtime/sessions/${e2e.latestSession?.id}/rpc`, {
     method: 'POST',
     data: { type: 'prompt', message },
     ...(headers ? { headers } : {}),
@@ -112,7 +136,7 @@ async function waitForSuccessfulCommand(e2e: E2EState, marker: string) {
 }
 
 async function attemptSessionCreate(e2e: E2EState, headers?: Record<string, string>): Promise<Attempt> {
-  const response = await apiResponse(e2e.page.request, '/api/sessions', {
+  const response = await apiResponse(e2e.page.request, '/api/v1/sessions', {
     method: 'POST',
     data: {
       agentId: e2e.agent?.id,
@@ -141,12 +165,10 @@ Given('an organization has teams and projects', async function (this: PolicyWorl
 When('a session starts', { timeout: 180_000 }, async function (this: PolicyWorld) {
   const e2e = state(this)
   assert.ok(this.teamId && this.memberToken, 'background team fixtures must exist')
-  await applyConfig(e2e, {
-    organization: { sandboxPolicy: { blockedCommands: ['rm'] } },
-    teams: [{ teamId: this.teamId, sandboxPolicy: { blockedCommands: ['curl'] } }],
-    project: { sandboxPolicy: { blockedCommands: ['mkfs'] } },
-  })
-  e2e.agent = await createAgent(e2e, { name: `${e2e.runId} hierarchy agent`, allowedTools: ['sandbox.exec'] })
+  await createScopePolicy(e2e, { level: 'organization' }, { sandboxPolicy: { blockedCommands: ['rm'] } })
+  await createScopePolicy(e2e, { level: 'team', teamId: this.teamId }, { sandboxPolicy: { blockedCommands: ['curl'] } })
+  await createScopePolicy(e2e, { level: 'project' }, { sandboxPolicy: { blockedCommands: ['mkfs'] } })
+  e2e.agent = await createAgent(e2e, { name: `${e2e.runId} hierarchy agent`, tools: [{ name: 'sandbox.exec' }] })
   e2e.environment = await createEnvironment(e2e, { name: `${e2e.runId} hierarchy env`, hostingMode: 'cloud' })
   const created = await attemptSessionCreate(e2e, bearerHeaders(this.memberToken))
   assert.equal(created.status, 201, `team member session creation failed: ${JSON.stringify(created.body)}`)
@@ -158,7 +180,7 @@ Then(
   async function (this: PolicyWorld) {
     const e2e = state(this)
     assert.ok(this.memberToken, 'a team member identity must exist')
-    const effective = await apiJson<Json>(e2e.page.request, '/api/governance/effective-policy', {
+    const effective = await apiJson<Json>(e2e.page.request, '/api/v1/effective-policy', {
       headers: bearerHeaders(this.memberToken),
     })
     const sources = (effective.sources ?? []) as Json[]
@@ -172,8 +194,12 @@ Then(
     const blockedCommands = (objectValue(effective.sandboxPolicy).blockedCommands ?? []) as string[]
     assert.deepEqual([...blockedCommands].sort(), ['curl', 'mkfs', 'rm'], 'hierarchy rules merged most-restrictively')
     // Agent policy resolved into the immutable session snapshot.
-    const session = await apiJson<Json>(e2e.page.request, `/api/sessions/${e2e.latestSession?.id}`)
-    assert.deepEqual(objectValue(session.agentSnapshot).allowedTools, ['sandbox.exec'])
+    const session = await apiJson<Json>(e2e.page.request, `/api/v1/sessions/${e2e.latestSession?.id}`)
+    const snapshotTools = (objectValue(session.agentSnapshot).tools ?? []) as Json[]
+    assert.deepEqual(
+      snapshotTools.map((tool) => tool.name),
+      ['sandbox.exec'],
+    )
   },
 )
 
@@ -218,7 +244,6 @@ Given('a project has a monthly model budget', { timeout: 180_000 }, async functi
   const e2e = state(this)
   e2e.agent = await createAgent(e2e, {
     name: `${e2e.runId} budget agent`,
-    provider: 'workers-ai',
     model: WORKERS_AI_MODEL,
   })
   e2e.environment = await createEnvironment(e2e, { name: `${e2e.runId} budget env` })
@@ -228,7 +253,7 @@ Given('a project has a monthly model budget', { timeout: 180_000 }, async functi
   assert.equal(turn.status, 200, 'the funded model turn completes')
   let usageCount = 0
   for (let attempt = 0; attempt < 30; attempt += 1) {
-    const usage = await apiJson<ListResponse<Json>>(e2e.page.request, '/api/usage?limit=100')
+    const usage = await apiJson<ListResponse<Json>>(e2e.page.request, '/api/v1/usage-records?limit=100')
     const modelRecords = usage.data.filter((record) => record.usageType === 'model' && Number(record.totalTokens) > 0)
     usageCount = usage.data.length
     if (modelRecords.length > 0) {
@@ -238,7 +263,7 @@ Given('a project has a monthly model budget', { timeout: 180_000 }, async functi
     assert.notEqual(attempt, 29, 'model usage was never recorded for the funded turn')
   }
   this.usageCountBeforeAttempt = usageCount
-  this.budget = await apiJson<Json>(e2e.page.request, '/api/governance/budgets', {
+  this.budget = await apiJson<Json>(e2e.page.request, '/api/v1/budgets', {
     method: 'POST',
     data: { scope: 'project', limitType: 'tokens', limitValue: 1, window: 'month' },
   })
@@ -260,10 +285,10 @@ Then('the model call is rejected before provider execution', async function (thi
   assert.equal(details.ruleId, this.budget?.id, 'the denial cites the governing budget')
   assert.match(String(error.message), /month tokens limit of 1/, 'the denial explains the exhausted budget')
   // Nothing executed: no new session exists and no new usage was recorded.
-  const sessions = await apiJson<ListResponse<Json>>(e2e.page.request, '/api/sessions?limit=100')
+  const sessions = await apiJson<ListResponse<Json>>(e2e.page.request, '/api/v1/sessions?limit=100')
   const agentSessions = sessions.data.filter((session) => session.agentId === e2e.agent?.id)
   assert.equal(agentSessions.length, 1, 'only the funded session exists')
-  const usage = await apiJson<ListResponse<Json>>(e2e.page.request, '/api/usage?limit=100')
+  const usage = await apiJson<ListResponse<Json>>(e2e.page.request, '/api/v1/usage-records?limit=100')
   assert.equal(usage.data.length, this.usageCountBeforeAttempt, 'the denied request reached no provider')
 })
 
@@ -271,7 +296,7 @@ Then('a governance event is recorded', async function (this: PolicyWorld) {
   const e2e = state(this)
   const records = await apiJson<ListResponse<Json>>(
     e2e.page.request,
-    '/api/audit-records?action=session.create&outcome=denied&limit=50',
+    '/api/v1/audit-records?action=session.create&outcome=denied&limit=50',
   )
   const denial = records.data.find((record) => {
     const metadata = objectValue(record.metadata)
@@ -329,49 +354,6 @@ Then('explains which policy blocked it', { timeout: 60_000 }, async function (th
   )
 })
 
-// ─── Scenario: Load governance from configuration ────────────────────────────
-
-When('an operator provides a governance config', async function (this: PolicyWorld) {
-  const e2e = state(this)
-  this.denyReason = `${e2e.runId} workers-ai paused via config`
-  this.configDocument = {
-    version: `${e2e.runId}-policy-config`,
-    project: { providerRules: [{ providerId: 'workers-ai', effect: 'deny', reason: this.denyReason }] },
-  }
-  const response = await apiResponse(e2e.page.request, '/api/governance/config/validate', {
-    method: 'POST',
-    data: this.configDocument,
-  })
-  this.validateResult = { status: response.status(), body: (await response.json()) as Json }
-})
-
-Then('the platform validates the config', async function (this: PolicyWorld) {
-  const e2e = state(this)
-  assert.ok(this.validateResult, 'the config must have been validated')
-  assert.equal(this.validateResult.status, 200)
-  assert.equal(this.validateResult.body.valid, true)
-  // The same validator rejects an incoherent variant, so validation is real.
-  const invalid = await apiResponse(e2e.page.request, '/api/governance/config/validate', {
-    method: 'POST',
-    data: { project: { providerRules: [{ providerId: `provider-bogus-${e2e.runId}`, effect: 'deny' }] } },
-  })
-  assert.equal(invalid.status(), 400)
-})
-
-Then('applies it without requiring source code changes', async function (this: PolicyWorld) {
-  const e2e = state(this)
-  assert.ok(this.configDocument, 'a config document must exist')
-  const applied = await applyConfig(e2e, this.configDocument)
-  assert.equal(applied.applied, true)
-  const evaluation = await apiResponse(e2e.page.request, '/api/governance/evaluations', {
-    method: 'POST',
-    data: { providerId: 'workers-ai', modelId: WORKERS_AI_MODEL },
-  })
-  assert.equal(evaluation.status(), 403, 'the configured rule now governs policy decisions')
-  const body = (await evaluation.json()) as Json
-  assert.equal(String(objectValue(body.error).message), this.denyReason, 'the configured rule reason is enforced')
-})
-
 // ─── Scenario: Explain policy denials to operators ───────────────────────────
 
 Given(
@@ -380,13 +362,12 @@ Given(
   async function (this: PolicyWorld) {
     const e2e = state(this)
     this.denyReason = `${e2e.runId} provider requires security review`
-    this.accessRule = await apiJson<Json>(e2e.page.request, '/api/governance/provider-access-rules', {
+    this.accessRule = await apiJson<Json>(e2e.page.request, '/api/v1/access-rules', {
       method: 'POST',
       data: { providerId: 'workers-ai', effect: 'deny', reason: this.denyReason },
     })
     e2e.agent = await createAgent(e2e, {
       name: `${e2e.runId} denial agent`,
-      provider: 'workers-ai',
       model: WORKERS_AI_MODEL,
     })
     e2e.environment = await createEnvironment(e2e, { name: `${e2e.runId} denial env` })
@@ -411,7 +392,7 @@ Then('the response identifies the policy category and safe resource reference', 
 Then('the UI can link to the effective policy view', async function (this: PolicyWorld) {
   const e2e = state(this)
   const details = objectValue(objectValue(this.sessionAttempt?.body.error).details)
-  const effective = await apiJson<Json>(e2e.page.request, '/api/governance/effective-policy')
+  const effective = await apiJson<Json>(e2e.page.request, '/api/v1/effective-policy')
   const cited = ((effective.accessRules ?? []) as Json[]).find((rule) => rule.id === details.ruleId)
   assert.ok(cited, 'the cited rule resolves in the effective policy view the UI links to')
   assert.equal(cited.effect, 'deny')
@@ -435,7 +416,7 @@ Given('a session was created under an older policy', { timeout: 180_000 }, async
   const turn = await runPrompt(e2e, `run the sandbox command "echo ${this.historicalMarker}"`)
   assert.equal(turn.status, 200, 'the command executed under the older policy')
   await waitForSuccessfulCommand(e2e, this.historicalMarker)
-  const session = await apiJson<Json>(e2e.page.request, `/api/sessions/${e2e.latestSession?.id}`)
+  const session = await apiJson<Json>(e2e.page.request, `/api/v1/sessions/${e2e.latestSession?.id}`)
   this.historicalSnapshots = {
     agentSnapshot: session.agentSnapshot,
     environmentSnapshot: session.environmentSnapshot,
@@ -451,7 +432,7 @@ When('governance policy changes', async function (this: PolicyWorld) {
 Then('historical session events and snapshots remain readable', async function (this: PolicyWorld) {
   const e2e = state(this)
   assert.ok(this.historicalSnapshots && this.historicalMarker, 'historical fixtures must exist')
-  const session = await apiJson<Json>(e2e.page.request, `/api/sessions/${e2e.latestSession?.id}`)
+  const session = await apiJson<Json>(e2e.page.request, `/api/v1/sessions/${e2e.latestSession?.id}`)
   assert.deepEqual(session.agentSnapshot, this.historicalSnapshots.agentSnapshot, 'the agent snapshot is unchanged')
   assert.deepEqual(
     session.environmentSnapshot,

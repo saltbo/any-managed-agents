@@ -5,7 +5,7 @@ Feature: CLI OpenAPI contract
   @implemented
   Scenario: Validate restish discovery
     Given a local AMA control-plane harness is running
-    When CI configures restish with /api/openapi.json
+    When CI configures restish with /api/v1/openapi.json
     Then restish can discover the core health, environment, agent, and session operations
 
   @implemented

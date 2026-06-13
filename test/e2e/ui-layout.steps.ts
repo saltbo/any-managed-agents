@@ -90,7 +90,7 @@ When(
 
 When('the user opens the login page', async function (this: UiWorld) {
   const page = await openLocalPage()
-  await page.goto('/sessions?status=idle')
+  await page.goto('/sessions?state=idle')
   this.uiWorkflow = {
     page,
     environmentId: '',
@@ -141,11 +141,11 @@ Then(
   'each completed step shows the API call that was made against the current platform origin',
   async function (this: UiWorld) {
     const page = requireUiWorkflow(this).page
-    await expect(page.getByText('GET /api/providers')).toBeVisible()
-    await expect(page.getByText('POST /api/environments')).toBeVisible()
-    await expect(page.getByText('POST /api/agents')).toBeVisible()
-    await expect(page.getByText('POST /api/sessions')).toBeVisible()
-    await expect(page.getByText('GET /api/openapi.json')).toBeVisible()
+    await expect(page.getByText('GET /api/v1/providers')).toBeVisible()
+    await expect(page.getByText('POST /api/v1/environments')).toBeVisible()
+    await expect(page.getByText('POST /api/v1/agents')).toBeVisible()
+    await expect(page.getByText('POST /api/v1/sessions')).toBeVisible()
+    await expect(page.getByText('GET /api/v1/openapi.json')).toBeVisible()
   },
 )
 
@@ -156,7 +156,7 @@ Then('incomplete prerequisites are visible before the user starts a runtime sess
 
 When('the developer checks deployment health', async function (this: UiWorld) {
   const workflow = await ensureUiWorkflow(this)
-  const response = await workflow.page.request.get('/api/health')
+  const response = await workflow.page.request.get('/api/v1/health')
   this.response = response as unknown as Response
   this.openApiDocument = (await response.json()) as Record<string, unknown>
 })
@@ -168,7 +168,7 @@ Then('the control plane health endpoint responds successfully', function (this: 
 
 Then('Cloudflare runtime tests can validate D1 and Durable Object bindings', async function (this: UiWorld) {
   const workflow = requireUiWorkflow(this)
-  const response = await workflow.page.request.get('/api/e2e/ready')
+  const response = await workflow.page.request.get('/api/v1/e2e/ready')
   assert.equal(response.status(), 200)
 })
 
@@ -207,7 +207,9 @@ Then(
 
 Then('each agent row shows name, model, tools, status, version, and updated time', async function (this: UiWorld) {
   const page = requireUiWorkflow(this).page
-  await expect(page.getByRole('cell', { name: /workers-ai/ }).first()).toBeVisible()
+  // Platform-default agents resolve the provider at session start, so the model
+  // cell shows "None / <model>" (a null providerId, not the "workers-ai" type).
+  await expect(page.getByRole('cell', { name: /@cf\/moonshotai\/kimi-k2\.6/ }).first()).toBeVisible()
   await expect(page.getByText('active').first()).toBeVisible()
   await expect(page.getByText('v1').first()).toBeVisible()
   await expect(page.getByText('sandbox.exec').first()).toBeVisible()
@@ -427,8 +429,9 @@ Then(
     await expect(dialog.getByText('Runtime', { exact: true })).toBeVisible()
     await expect(dialog.getByLabel('Title')).toBeVisible()
     await expect(dialog.getByLabel('Metadata')).toBeVisible()
+    // v1 sessions carry resource refs; secret material now flows through
+    // secretEnv/vault credential refs rather than a free-form "vault refs" field.
     await expect(dialog.getByLabel('Resource refs')).toBeVisible()
-    await expect(dialog.getByLabel('Vault refs')).toBeVisible()
   },
 )
 
@@ -526,14 +529,14 @@ When('web UI calls control-plane routes', async function (this: UiWorld) {
   workflow.controlPlaneRequestHeaders = []
   workflow.page.on('request', (request) => {
     const url = new URL(request.url())
-    if (url.pathname === '/api/agents') {
+    if (url.pathname === '/api/v1/agents') {
       workflow.controlPlaneRequestHeaders.push(request.headers())
     }
   })
   await workflow.page.goto('/agents')
   await expect(workflow.page.getByRole('heading', { name: 'Agents' })).toBeVisible()
   await expect
-    .poll(() => workflow.controlPlaneRequestHeaders.length, { message: 'Expected web UI to request /api/agents' })
+    .poll(() => workflow.controlPlaneRequestHeaders.length, { message: 'Expected web UI to request /api/v1/agents' })
     .toBeGreaterThan(0)
 })
 
@@ -550,11 +553,11 @@ Then(
 
 Then('external automation remains described by the OpenAPI document', async function (this: UiWorld) {
   const workflow = requireUiWorkflow(this)
-  const response = await workflow.page.request.get('/api/openapi.json')
+  const response = await workflow.page.request.get('/api/v1/openapi.json')
   assert.equal(response.status(), 200)
   const document = (await response.json()) as { paths?: Record<string, unknown> }
-  assert.ok(document.paths?.['/api/agents'], 'Expected OpenAPI to describe external agents control-plane path')
-  assert.ok(document.paths?.['/api/sessions'], 'Expected OpenAPI to describe external sessions control-plane path')
+  assert.ok(document.paths?.['/api/v1/agents'], 'Expected OpenAPI to describe external agents control-plane path')
+  assert.ok(document.paths?.['/api/v1/sessions'], 'Expected OpenAPI to describe external sessions control-plane path')
 })
 
 Then(
@@ -583,7 +586,7 @@ Given(
   async function (this: UiWorld) {
     const workflow = requireUiWorkflow(this)
     const runId = `local-ui-e2e-${Date.now()}`
-    const environment = await apiJson<Environment>(workflow.page.request, '/api/environments', {
+    const environment = await apiJson<Environment>(workflow.page.request, '/api/v1/environments', {
       method: 'POST',
       data: {
         name: `${runId} environment`,
@@ -596,20 +599,18 @@ Given(
         metadata: { runId },
       },
     })
-    const agent = await apiJson<Agent>(workflow.page.request, '/api/agents', {
+    const agent = await apiJson<Agent>(workflow.page.request, '/api/v1/agents', {
       method: 'POST',
       data: {
         name: `${runId} agent`,
         instructions: 'Reply concisely through the local deterministic Pi runtime.',
-        systemPrompt: 'Reply concisely through the local deterministic Pi runtime.',
-        provider: 'workers-ai',
         model: '@cf/moonshotai/kimi-k2.6',
         skills: ['ama@local-ui'],
-        allowedTools: ['sandbox.exec'],
+        tools: [{ name: 'sandbox.exec' }],
         metadata: { runId },
       },
     })
-    const session = await apiJson<Session>(workflow.page.request, '/api/sessions', {
+    const session = await apiJson<Session>(workflow.page.request, '/api/v1/sessions', {
       method: 'POST',
       data: {
         agentId: agent.id,
@@ -697,7 +698,7 @@ async function waitForPersistedEvents(
   predicate: (events: SessionEvent[]) => boolean,
 ) {
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    const events = (await apiJson<{ data: SessionEvent[] }>(request, `/api/sessions/${sessionId}/events?limit=200`))
+    const events = (await apiJson<{ data: SessionEvent[] }>(request, `/api/v1/sessions/${sessionId}/events?limit=200`))
       .data
     if (predicate(events)) {
       return events
@@ -731,7 +732,7 @@ async function createUiEnvironment(workflow: UiWorkflow) {
   if (workflow.environmentId) {
     return { id: workflow.environmentId, name: `${workflow.runId} environment` }
   }
-  const environment = await apiJson<Environment>(workflow.page.request, '/api/environments', {
+  const environment = await apiJson<Environment>(workflow.page.request, '/api/v1/environments', {
     method: 'POST',
     data: {
       name: `${workflow.runId} environment`,
@@ -753,17 +754,15 @@ async function createUiAgent(workflow: UiWorkflow) {
   if (workflow.agentId) {
     return { id: workflow.agentId, name: `${workflow.runId} agent` }
   }
-  const agent = await apiJson<Agent>(workflow.page.request, '/api/agents', {
+  const agent = await apiJson<Agent>(workflow.page.request, '/api/v1/agents', {
     method: 'POST',
     data: {
       name: `${workflow.runId} agent`,
       description: 'BDD UI agent',
       instructions: 'Reply concisely through the deterministic test runtime.',
-      systemPrompt: 'Reply concisely through the deterministic test runtime.',
-      provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
       skills: ['ama@local-ui'],
-      allowedTools: ['sandbox.exec'],
+      tools: [{ name: 'sandbox.exec' }],
       metadata: { runId: workflow.runId },
     },
   })
@@ -774,7 +773,7 @@ async function createUiAgent(workflow: UiWorkflow) {
 async function createUiSessionGraph(workflow: UiWorkflow) {
   const environment = await createUiEnvironment(workflow)
   const agent = await createUiAgent(workflow)
-  const session = await apiJson<Session>(workflow.page.request, '/api/sessions', {
+  const session = await apiJson<Session>(workflow.page.request, '/api/v1/sessions', {
     method: 'POST',
     data: {
       agentId: agent.id,
@@ -793,7 +792,7 @@ async function createUiVault(workflow: UiWorkflow) {
   if (workflow.vaultId) {
     return { id: workflow.vaultId, name: `${workflow.runId} vault` }
   }
-  const vault = await apiJson<Vault>(workflow.page.request, '/api/vaults', {
+  const vault = await apiJson<Vault>(workflow.page.request, '/api/v1/vaults', {
     method: 'POST',
     data: {
       name: `${workflow.runId} vault`,

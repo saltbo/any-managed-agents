@@ -20,10 +20,10 @@ export async function openLocalPage() {
 export async function authenticateE2EPage(page: Page) {
   const runId = `e2e-${Date.now()}-${Math.random().toString(16).slice(2)}`
   const response = await requestWithLocalAppRecovery(page, () =>
-    page.request.post('/api/e2e/auth/token', { data: { runId } }),
+    page.request.post('/api/v1/e2e/auth/token', { data: { runId } }),
   )
   if (!response.ok()) {
-    throw new Error(`POST /api/e2e/auth/token returned ${response.status()}: ${await response.text()}`)
+    throw new Error(`POST /api/v1/e2e/auth/token returned ${response.status()}: ${await response.text()}`)
   }
   const { accessToken, userId, organizationId, projectId } = (await response.json()) as {
     accessToken: string
@@ -163,23 +163,23 @@ export async function apiResponse(
 export async function waitForSession(
   request: APIRequestContext,
   sessionId: string,
-  expectedStatus: string | ((status: string) => boolean) = 'idle',
+  expectedState: string | ((state: string) => boolean) = 'idle',
 ) {
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    const session = await apiJson<{ id: string; status: string; statusReason: string | null }>(
+    const session = await apiJson<{ id: string; state: string; stateReason: string | null }>(
       request,
-      `/api/sessions/${sessionId}`,
+      `/api/v1/sessions/${sessionId}`,
     )
-    const ok = typeof expectedStatus === 'function' ? expectedStatus(session.status) : session.status === expectedStatus
+    const ok = typeof expectedState === 'function' ? expectedState(session.state) : session.state === expectedState
     if (ok) {
       return session
     }
-    if (session.status === 'error') {
-      throw new Error(`Session startup failed: ${session.statusReason ?? 'unknown error'}`)
+    if (session.state === 'error') {
+      throw new Error(`Session startup failed: ${session.stateReason ?? 'unknown error'}`)
     }
     await delay(1_000)
   }
-  throw new Error(`Session ${sessionId} did not reach the expected status before timeout`)
+  throw new Error(`Session ${sessionId} did not reach the expected state before timeout`)
 }
 
 async function stopDevServer() {
@@ -271,7 +271,7 @@ async function findFreePort() {
 
 async function isHttpReady(origin: string) {
   try {
-    const response = await fetch(`${origin}/api/health`)
+    const response = await fetch(`${origin}/api/v1/health`)
     return response.ok
   } catch {
     return false
@@ -280,7 +280,7 @@ async function isHttpReady(origin: string) {
 
 async function isE2EReady(origin: string) {
   try {
-    const response = await fetch(`${origin}/api/e2e/ready`)
+    const response = await fetch(`${origin}/api/v1/e2e/ready`)
     return response.ok
   } catch {
     return false

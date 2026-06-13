@@ -21,10 +21,8 @@ interface Agent {
 
 interface Session {
   id: string
-  status: string
-  statusReason: string | null
-  sandboxId?: string | null
-  runtimeEndpointPath?: string | null
+  state: string
+  stateReason: string | null
   metadata?: Record<string, unknown>
 }
 
@@ -43,12 +41,12 @@ interface ListResponse<T> {
 
 interface Runner {
   id: string
-  status: string
+  state: string
 }
 
 interface RunnerWorkItem {
   id: string
-  status: string
+  state: string
   payload: Record<string, unknown>
   result?: Record<string, unknown> | null
 }
@@ -208,7 +206,7 @@ async function runStagingSmoke(config: StagingSmokeConfig): Promise<StagingSmoke
 
     let primaryError: unknown
     try {
-      const environment = await apiJson<Environment>(page.request, '/api/environments', {
+      const environment = await apiJson<Environment>(page.request, '/api/v1/environments', {
         method: 'POST',
         data: {
           name: `${config.runId} environment`,
@@ -223,25 +221,23 @@ async function runStagingSmoke(config: StagingSmokeConfig): Promise<StagingSmoke
       })
       created.environmentId = environment.id
 
-      const agent = await apiJson<Agent>(page.request, '/api/agents', {
+      const agent = await apiJson<Agent>(page.request, '/api/v1/agents', {
         method: 'POST',
         data: {
           name: `${config.runId} agent`,
           description: 'Staging smoke agent created through public AMA APIs.',
           instructions:
             'You are running an AMA staging smoke. Reply concisely. Use available tools when asked to run a shell command.',
-          systemPrompt:
-            'You are running an AMA staging smoke. Reply concisely. Use available tools when asked to run a shell command.',
-          provider: process.env.AMA_E2E_PROVIDER ?? 'workers-ai',
+          // providerId omitted to resolve the project default provider.
           model: process.env.AMA_E2E_MODEL ?? '@cf/moonshotai/kimi-k2.6',
           skills: ['ama@staging-smoke'],
-          allowedTools: ['sandbox.exec'],
+          tools: [{ name: 'sandbox.exec' }],
           metadata: { runId: config.runId },
         },
       })
       created.agentId = agent.id
 
-      const session = await apiJson<Session>(page.request, '/api/sessions', {
+      const session = await apiJson<Session>(page.request, '/api/v1/sessions', {
         method: 'POST',
         data: {
           agentId: agent.id,
@@ -308,7 +304,7 @@ async function runStagingSmoke(config: StagingSmokeConfig): Promise<StagingSmoke
       sawDebugUi = true
 
       const persistedEventsBeforeReconnect = await persistedEventSignatures(page.request, readySession.id)
-      await apiJson<Session>(page.request, `/api/sessions/${readySession.id}/reconnect`)
+      await apiJson<Record<string, unknown>>(page.request, `/api/v1/sessions/${readySession.id}/connection`)
       await page.reload()
       await expect(page.getByRole('tab', { name: 'Transcript' })).toBeVisible()
       await assertNoDuplicatePersistedEvents(page.request, readySession.id, persistedEventsBeforeReconnect)
@@ -356,7 +352,7 @@ async function exerciseSelfHostedRunnerMode(
   let runnerProcess: AmaRunnerProcess | null = null
   const runnerWorkDir = mkdtempSync(join(tmpdir(), 'ama-runner-smoke-'))
   try {
-    const environment = await apiJson<Environment>(request, '/api/environments', {
+    const environment = await apiJson<Environment>(request, '/api/v1/environments', {
       method: 'POST',
       data: {
         name: `${config.runId} self-hosted environment`,
@@ -369,36 +365,34 @@ async function exerciseSelfHostedRunnerMode(
     })
     created.environmentId = environment.id
 
-    const agent = await apiJson<Agent>(request, '/api/agents', {
+    const agent = await apiJson<Agent>(request, '/api/v1/agents', {
       method: 'POST',
       data: {
         name: `${config.runId} self-hosted agent`,
         description: 'Staging smoke self-hosted agent created through public AMA APIs.',
         instructions: 'Execute queued self-hosted runner work.',
-        systemPrompt: 'Execute queued self-hosted runner work.',
-        provider: SELF_HOSTED_SMOKE_PROVIDER,
+        // providerId omitted to resolve the project default provider.
         model: SELF_HOSTED_SMOKE_MODEL,
         skills: ['ama@staging-smoke', 'ama@self-hosted-runner'],
-        allowedTools: ['sandbox.exec'],
+        tools: [{ name: 'sandbox.exec' }],
         metadata: { runId: config.runId, smokeMode: 'self-hosted-runner' },
       },
     })
     created.agentId = agent.id
 
     const capabilities = ['node', 'git', 'sandbox.exec', SELF_HOSTED_SMOKE_CAPABILITY]
-    const runner = await apiJson<Runner>(request, '/api/runners', {
+    const runner = await apiJson<Runner>(request, '/api/v1/runners', {
       method: 'POST',
       data: {
         name: `${config.runId} self-hosted runner`,
         environmentId: environment.id,
         capabilities,
-        credentialSecretRef: `cloudflare-secret:${config.runId}-runner-token`,
         metadata: { runId: config.runId, smokeMode: 'self-hosted-runner' },
       },
     })
     created.runnerId = runner.id
 
-    const session = await apiJson<Session>(request, '/api/sessions', {
+    const session = await apiJson<Session>(request, '/api/v1/sessions', {
       method: 'POST',
       data: {
         agentId: agent.id,
@@ -410,10 +404,8 @@ async function exerciseSelfHostedRunnerMode(
       },
     })
     created.sessionId = session.id
-    assert.equal(session.status, 'pending')
-    assert.equal(session.statusReason, 'waiting-for-runner')
-    assert.equal(session.sandboxId, null)
-    assert.equal(session.runtimeEndpointPath, null)
+    assert.equal(session.state, 'pending')
+    assert.equal(session.stateReason, 'waiting-for-runner')
 
     runnerProcess = startAmaRunnerProcess({
       origin: config.origin,
@@ -421,22 +413,19 @@ async function exerciseSelfHostedRunnerMode(
       workDir: runnerWorkDir,
     })
 
-    const workItems = await apiJson<ListResponse<RunnerWorkItem>>(
-      request,
-      `/api/runners/work-items?sessionId=${session.id}`,
-    )
+    const workItems = await apiJson<ListResponse<RunnerWorkItem>>(request, `/api/v1/work-items?sessionId=${session.id}`)
     assert.equal(workItems.data.length, 1)
-    assert.equal(workItems.data[0]?.status, 'available')
+    assert.equal(workItems.data[0]?.state, 'available')
     assert.equal(objectValue(workItems.data[0]?.payload).runtimeDriver, 'ama-self-hosted')
     assert.equal(objectValue(workItems.data[0]?.payload).runtimeOwner, undefined)
 
     const idle = await waitForSelfHostedSession(request, session.id, runnerProcess)
-    assert.equal(idle.status, 'idle')
+    assert.equal(idle.state, 'idle')
     const completedWorkItems = await apiJson<ListResponse<RunnerWorkItem>>(
       request,
-      `/api/runners/work-items?sessionId=${session.id}&includeArchived=true`,
+      `/api/v1/work-items?sessionId=${session.id}`,
     )
-    assert.equal(completedWorkItems.data[0]?.status, 'succeeded')
+    assert.equal(completedWorkItems.data[0]?.state, 'succeeded')
     assert.equal(objectValue(completedWorkItems.data[0]?.result).handled, 'session.start')
     assert.equal(objectValue(completedWorkItems.data[0]?.result).executor, 'process-unsafe')
 
@@ -475,7 +464,7 @@ async function authenticate(page: Page, config: StagingSmokeConfig) {
   await page.waitForURL(
     (url) =>
       url.origin === new URL(config.origin).origin &&
-      !url.pathname.startsWith('/api/auth') &&
+      !url.pathname.startsWith('/api/v1/auth') &&
       !url.pathname.startsWith('/auth/callback'),
     {
       timeout: 60_000,
@@ -485,7 +474,7 @@ async function authenticate(page: Page, config: StagingSmokeConfig) {
 }
 
 async function expectAuthenticated(page: Page) {
-  const response = await page.request.get('/api/projects')
+  const response = await page.request.get('/api/v1/projects')
   if (!response.ok()) {
     throw new Error(`GET /api/projects returned ${response.status()}: ${await response.text()}`)
   }
@@ -592,12 +581,12 @@ async function waitForSelfHostedSession(
   runnerProcess: AmaRunnerProcess,
 ) {
   for (let attempt = 0; attempt < 120; attempt += 1) {
-    const session = await apiJson<Session>(request, `/api/sessions/${sessionId}`)
-    if (session.status === 'idle') {
+    const session = await apiJson<Session>(request, `/api/v1/sessions/${sessionId}`)
+    if (session.state === 'idle') {
       return session
     }
-    if (session.status === 'error') {
-      throw new Error(`Self-hosted session failed: ${session.statusReason ?? 'unknown error'}`)
+    if (session.state === 'error') {
+      throw new Error(`Self-hosted session failed: ${session.stateReason ?? 'unknown error'}`)
     }
     if (runnerProcess.exitCode !== null) {
       throw new Error(`ama-runner exited before session became idle:\n${runnerProcess.smokeOutput.join('')}`)
@@ -644,12 +633,12 @@ async function apiJson<T>(
 
 async function waitForSession(request: APIRequestContext, sessionId: string) {
   for (let attempt = 0; attempt < 180; attempt += 1) {
-    const session = await apiJson<Session>(request, `/api/sessions/${sessionId}`)
-    if (session.status === 'idle') {
+    const session = await apiJson<Session>(request, `/api/v1/sessions/${sessionId}`)
+    if (session.state === 'idle') {
       return session
     }
-    if (session.status === 'error') {
-      throw new Error(`Session startup failed: ${session.statusReason ?? 'unknown error'}`)
+    if (session.state === 'error') {
+      throw new Error(`Session startup failed: ${session.stateReason ?? 'unknown error'}`)
     }
     await delay(2_000)
   }
@@ -691,7 +680,7 @@ async function sendAndExpectAssistantTurn(page: Page, sessionId: string, message
 
 async function latestEventSequence(request: APIRequestContext, sessionId: string) {
   const events = (
-    await apiJson<ListResponse<SessionEvent>>(request, `/api/sessions/${sessionId}/events?order=desc&limit=1`)
+    await apiJson<ListResponse<SessionEvent>>(request, `/api/v1/sessions/${sessionId}/events?order=desc&limit=1`)
   ).data
   return Math.max(0, ...events.map((event) => event.sequence))
 }
@@ -751,7 +740,7 @@ async function waitForPersistedEvents(
     events = (
       await apiJson<ListResponse<SessionEvent>>(
         request,
-        `/api/sessions/${sessionId}/events?limit=200${cursor > 0 ? `&cursor=${cursor}` : ''}`,
+        `/api/v1/sessions/${sessionId}/events?limit=200${cursor > 0 ? `&cursor=${cursor}` : ''}`,
       )
     ).data
     if (predicate(events)) {
@@ -804,7 +793,7 @@ async function assertNoDuplicatePersistedEvents(
 }
 
 async function persistedEventSignatures(request: APIRequestContext, sessionId: string) {
-  const events = (await apiJson<ListResponse<SessionEvent>>(request, `/api/sessions/${sessionId}/events?limit=200`))
+  const events = (await apiJson<ListResponse<SessionEvent>>(request, `/api/v1/sessions/${sessionId}/events?limit=200`))
     .data
   return events.map((event) => `${event.type}:${event.visibility}:${stableStringify(event.payload)}`)
 }
@@ -816,13 +805,13 @@ async function cleanup(
 ) {
   const errors: string[] = []
   if (created.sessionId) {
-    await archiveCreatedResource(request, `/api/sessions/${created.sessionId}`, errors)
+    await archiveCreatedResource(request, `/api/v1/sessions/${created.sessionId}`, errors)
   }
   if (created.agentId) {
-    await archiveCreatedResource(request, `/api/agents/${created.agentId}`, errors)
+    await archiveCreatedResource(request, `/api/v1/agents/${created.agentId}`, errors)
   }
   if (created.environmentId) {
-    await archiveCreatedResource(request, `/api/environments/${created.environmentId}`, errors)
+    await archiveCreatedResource(request, `/api/v1/environments/${created.environmentId}`, errors)
   }
   if (errors.length > 0) {
     const cleanupError = new Error(`Staging smoke cleanup failed:\n${errors.join('\n')}`)
@@ -841,8 +830,8 @@ async function cleanupSelfHostedRunnerMode(
   const errors: string[] = []
   if (created.runnerId) {
     try {
-      const response = await request.patch(`/api/runners/${created.runnerId}`, {
-        data: { status: 'disabled', metadata: { archivedBy: 'staging-smoke' } },
+      const response = await request.patch(`/api/v1/runners/${created.runnerId}`, {
+        data: { archived: true, metadata: { archivedBy: 'staging-smoke' } },
       })
       if (!response.ok()) {
         errors.push(`PATCH /api/runners/${created.runnerId} returned ${response.status()}: ${await response.text()}`)
@@ -854,13 +843,13 @@ async function cleanupSelfHostedRunnerMode(
     }
   }
   if (created.sessionId) {
-    await archiveCreatedResource(request, `/api/sessions/${created.sessionId}`, errors)
+    await archiveCreatedResource(request, `/api/v1/sessions/${created.sessionId}`, errors)
   }
   if (created.agentId) {
-    await archiveCreatedResource(request, `/api/agents/${created.agentId}`, errors)
+    await archiveCreatedResource(request, `/api/v1/agents/${created.agentId}`, errors)
   }
   if (created.environmentId) {
-    await archiveCreatedResource(request, `/api/environments/${created.environmentId}`, errors)
+    await archiveCreatedResource(request, `/api/v1/environments/${created.environmentId}`, errors)
   }
   if (errors.length > 0) {
     const cleanupError = new Error(`Self-hosted staging smoke cleanup failed:\n${errors.join('\n')}`)
@@ -873,12 +862,13 @@ async function cleanupSelfHostedRunnerMode(
 
 async function archiveCreatedResource(request: APIRequestContext, path: string, errors: string[]) {
   try {
-    const response = await request.delete(path)
+    // Archive is PATCH {archived:true} now; DELETE is reserved for true deletes.
+    const response = await request.patch(path, { data: { archived: true } })
     if (!response.ok()) {
-      errors.push(`DELETE ${path} returned ${response.status()}: ${await response.text()}`)
+      errors.push(`PATCH ${path} {archived:true} returned ${response.status()}: ${await response.text()}`)
     }
   } catch (error) {
-    errors.push(`DELETE ${path} failed: ${error instanceof Error ? error.message : String(error)}`)
+    errors.push(`PATCH ${path} {archived:true} failed: ${error instanceof Error ? error.message : String(error)}`)
   }
 }
 

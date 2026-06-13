@@ -39,7 +39,7 @@ This repository publishes the OpenAPI contract for product resources. Generated 
 - `vault-secrets.feature` - Cloudflare Secrets references, redaction, rotation, and access control
 - `vault-detail.feature`, `vaults.feature`, `vaults-api.feature`, `vaults-ui.feature` - vault coverage
 - `governance-policy.feature` - policy hierarchy, budgets, and enforcement
-- `governance-api.feature`, `governance-config.feature` - governance coverage
+- `governance-api.feature` - governance coverage
 - `usage-audit.feature` - usage reporting and audit records
 - `audit-auto.feature`, `audit-log-ui.feature`, `usage-summary.feature` - audit and usage coverage
 - `api-contracts.feature`, `cli-openapi-contract.feature`, `web-api-client-consolidation.feature` - API and restish OpenAPI contract coverage

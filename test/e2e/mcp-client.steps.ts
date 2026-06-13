@@ -70,11 +70,11 @@ async function createConnectorCredential(
   connectorId: string,
   secretValue: string,
 ) {
-  state.vault ??= await apiJson<Json>(e2e.page.request, '/api/vaults', {
+  state.vault ??= await apiJson<Json>(e2e.page.request, '/api/v1/vaults', {
     method: 'POST',
     data: { name: `${e2e.runId} mcp vault` },
   })
-  return await apiJson<Json>(e2e.page.request, `/api/vaults/${state.vault.id}/credentials`, {
+  return await apiJson<Json>(e2e.page.request, `/api/v1/vaults/${state.vault.id}/credentials`, {
     method: 'POST',
     data: {
       name: `${e2e.runId} ${connectorId} token`,
@@ -86,8 +86,21 @@ async function createConnectorCredential(
   })
 }
 
+// Connection create takes a unified credentialRef; the helper bridges the old
+// {credentialId, credentialVersionId} call sites onto the v1 shape.
 async function connectConnector(e2e: E2EState, values: Json) {
-  return await apiJson<Json>(e2e.page.request, '/api/mcp/connections', { method: 'POST', data: values })
+  const { credentialId, credentialVersionId, ...rest } = values as {
+    credentialId?: string
+    credentialVersionId?: string
+  } & Json
+  const body: Json = { ...rest }
+  if (credentialId !== undefined) {
+    body.credentialRef = {
+      credentialId,
+      ...(credentialVersionId !== undefined ? { versionId: credentialVersionId } : {}),
+    }
+  }
+  return await apiJson<Json>(e2e.page.request, '/api/v1/connections', { method: 'POST', data: body })
 }
 
 async function callConnectionTool(
@@ -97,7 +110,7 @@ async function callConnectionTool(
   sessionId: unknown,
   input: Json,
 ) {
-  const response = await apiResponse(e2e.page.request, `/api/mcp/connections/${connectionId}/tools/${toolName}/calls`, {
+  const response = await apiResponse(e2e.page.request, `/api/v1/connections/${connectionId}/tools/${toolName}/calls`, {
     method: 'POST',
     data: { sessionId, input },
   })
@@ -105,12 +118,38 @@ async function callConnectionTool(
 }
 
 async function listConnectionTools(e2e: E2EState, connectionId: unknown) {
-  return await apiJson<ListResponse<Json>>(e2e.page.request, `/api/mcp/connections/${connectionId}/tools`)
+  return await apiJson<ListResponse<Json>>(e2e.page.request, `/api/v1/connections/${connectionId}/tools`)
 }
 
-async function createMcpSession(world: McpWorld, allowedTools: string[]) {
+// Policies are a scoped collection now: POST creates, but a project policy can
+// only exist once (409 on the second POST), so subsequent updates replace the
+// existing policy by id.
+async function upsertProjectMcpPolicy(e2e: E2EState, body: Json) {
+  const response = await apiResponse(e2e.page.request, '/api/v1/policies', {
+    method: 'POST',
+    data: { scope: { level: 'project' }, ...body },
+  })
+  if (response.status() === 201) {
+    return (await response.json()) as Json
+  }
+  if (response.status() !== 409) {
+    throw new Error(`POST /api/v1/policies returned ${response.status()}: ${await response.text()}`)
+  }
+  const existing = await apiJson<ListResponse<Json>>(e2e.page.request, '/api/v1/policies')
+  const projectPolicy = existing.data.find((policy) => objectValue(policy.scope).level === 'project')
+  assert.ok(projectPolicy, 'expected an existing project-scoped policy to replace')
+  return await apiJson<Json>(e2e.page.request, `/api/v1/policies/${projectPolicy.id}`, {
+    method: 'PUT',
+    data: { scope: { level: 'project' }, ...body },
+  })
+}
+
+async function createMcpSession(world: McpWorld, toolNames: string[]) {
   const e2e = await ensureSignedIn(world)
-  e2e.agent = await createAgent(e2e, { name: `${e2e.runId} mcp agent`, allowedTools })
+  e2e.agent = await createAgent(e2e, {
+    name: `${e2e.runId} mcp agent`,
+    tools: toolNames.map((name) => ({ name })),
+  })
   e2e.environment ??= await createEnvironment(e2e, { name: `${e2e.runId} mcp env` })
   e2e.latestSession = await createSession(e2e)
   return e2e
@@ -135,8 +174,10 @@ function objectValue(value: unknown): Json {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Json) : {}
 }
 
+// A recorded tool call reports connector failures on its own error field; the
+// HTTP layer only surfaces control-plane errors (policy, validation, auth).
 function mcpErrorType(body: Json) {
-  return String(objectValue(objectValue(objectValue(body.error).details).mcpError).type)
+  return String(objectValue(body.error).type)
 }
 
 // ─── Scenario: Handle MCP transport failure (mcp-client.feature) ─────────────
@@ -166,9 +207,11 @@ Then(
     const e2e = this.e2e
     const state = mcpState(this)
     assert.ok(e2e, 'e2e state must exist')
-    assert.equal(state.callStatus, 502)
-    assert.equal(objectValue(state.callBody?.error).type, 'mcp_error')
-    assert.equal(mcpErrorType(state.callBody ?? {}), 'mcp_network_error')
+    // The tool call is executed and recorded, so it is addressable: 201 with a
+    // ToolCall whose state reports the structured connector failure.
+    assert.equal(state.callStatus, 201)
+    assert.equal(state.callBody?.state, 'error')
+    assert.equal(objectValue(state.callBody?.error).type, 'mcp_network_error')
 
     const events = await sessionEvents(e2e)
     const start = events.data.find((event) => event.type === 'tool_execution_start')
@@ -182,8 +225,8 @@ Then(
 
     // Tool policy does not require termination for connector failures: the
     // session stays active after the structured error is recorded.
-    const session = await apiJson<Json>(e2e.page.request, `/api/sessions/${e2e.latestSession?.id}`)
-    assert.equal(session.status, 'idle')
+    const session = await apiJson<Json>(e2e.page.request, `/api/v1/sessions/${e2e.latestSession?.id}`)
+    assert.equal(session.state, 'idle')
   },
 )
 
@@ -234,7 +277,7 @@ Then('the response is scoped to the current organization and project policy', as
   const otherPage = await openLocalPage()
   pagesToClose.push(otherPage)
   await authenticateE2EPage(otherPage)
-  const crossTenantRead = await apiResponse(otherPage.request, `/api/mcp/connections/${state.connection?.id}/tools`)
+  const crossTenantRead = await apiResponse(otherPage.request, `/api/v1/connections/${state.connection?.id}/tools`)
   assert.equal(crossTenantRead.status(), 404)
 })
 
@@ -260,8 +303,8 @@ When('the selected session runtime requests the tool', async function (this: Mcp
 
 Then('AMA calls the MCP server through the MCP client', function (this: McpWorld) {
   const state = mcpState(this)
-  assert.equal(state.callStatus, 200)
-  assert.equal(state.callBody?.status, 'success')
+  assert.equal(state.callStatus, 201)
+  assert.equal(state.callBody?.state, 'success')
   const content = objectValue(state.callBody?.output).content
   assert.ok(Array.isArray(content), 'tool output must include MCP content')
   assert.equal(objectValue(content[0]).text, 'echo:hello from the session runtime')
@@ -303,7 +346,7 @@ Then('secret values are redacted from events and logs', async function (this: Mc
   assert.ok(state.secretValue, 'secret value must exist')
   const events = await sessionEvents(e2e)
   assert.equal(JSON.stringify(events).includes(state.secretValue), false)
-  const audit = await apiJson<ListResponse<Json>>(e2e.page.request, '/api/audit-records?limit=100')
+  const audit = await apiJson<ListResponse<Json>>(e2e.page.request, '/api/v1/audit-records?limit=100')
   assert.equal(JSON.stringify(audit).includes(state.secretValue), false)
   assert.equal(JSON.stringify(state.callBody ?? {}).includes(state.secretValue), false)
 })
@@ -347,21 +390,21 @@ When('the MCP client handles the failure', async function (this: McpWorld) {
   await record('unauthorized', state.linearConnection?.id, 'issue.read', { issueId: 'AMA-1' })
   await record('invalid_schema', state.connection?.id, 'add', { a: 'one', b: 'two' })
 
-  await apiJson<Json>(e2e.page.request, `/api/mcp/connections/${state.connection?.id}`, {
+  await apiJson<Json>(e2e.page.request, `/api/v1/connections/${state.connection?.id}`, {
     method: 'PATCH',
     data: { metadata: { requestTimeoutMs: 500 } },
   })
   await record('timeout', state.connection?.id, 'slow', {})
 
   const fixtureOrigin = String(state.fixture?.url).replace(/\/mcp$/, '')
-  await apiJson<Json>(e2e.page.request, `/api/mcp/connections/${state.connection?.id}`, {
+  await apiJson<Json>(e2e.page.request, `/api/v1/connections/${state.connection?.id}`, {
     method: 'PATCH',
     data: { endpointUrl: `${fixtureOrigin}/not-the-mcp-endpoint` },
   })
   await record('not_found', state.connection?.id, 'echo', { text: 'missing endpoint' })
 
   const deadPort = await allocateDeadPort()
-  await apiJson<Json>(e2e.page.request, `/api/mcp/connections/${state.connection?.id}`, {
+  await apiJson<Json>(e2e.page.request, `/api/v1/connections/${state.connection?.id}`, {
     method: 'PATCH',
     data: { endpointUrl: `http://127.0.0.1:${deadPort}/mcp` },
   })
@@ -386,7 +429,9 @@ Then('AMA maps it to a stable error type and HTTP status for control-plane calls
       (entry) => entry.label === label,
     )
     assert.ok(failure, `expected a recorded ${label} failure`)
-    assert.equal(failure.status, 502, `${label} failure must map to HTTP 502`)
+    // Connector failures are recorded tool calls (201); the stable error type
+    // lives on the ToolCall.error, never as a control-plane HTTP error.
+    assert.equal(failure.status, 201, `${label} failure must be recorded as a tool call`)
     assert.equal(failure.mcpErrorType, type)
     assert.equal(
       failure.raw.includes(MCP_FIXTURE_RAW_ERROR_MARKER),
@@ -399,8 +444,8 @@ Then('AMA maps it to a stable error type and HTTP status for control-plane calls
 Then('runtime sessions continue or terminate according to tool policy', async function (this: McpWorld) {
   const e2e = this.e2e
   assert.ok(e2e, 'e2e state must exist')
-  const session = await apiJson<Json>(e2e.page.request, `/api/sessions/${e2e.latestSession?.id}`)
-  assert.equal(session.status, 'idle', 'connector failures must not terminate the session under default policy')
+  const session = await apiJson<Json>(e2e.page.request, `/api/v1/sessions/${e2e.latestSession?.id}`)
+  assert.equal(session.state, 'idle', 'connector failures must not terminate the session under default policy')
   const events = await sessionEvents(e2e)
   const failedEnds = events.data.filter(
     (event) => event.type === 'tool_execution_end' && objectValue(event.payload).isError === true,
@@ -413,10 +458,7 @@ Then('runtime sessions continue or terminate according to tool policy', async fu
 
 Given('a connector is approved for a project', async function (this: McpWorld) {
   const e2e = await ensureSignedIn(this)
-  await apiJson<Json>(e2e.page.request, '/api/governance/policy', {
-    method: 'PUT',
-    data: { mcpPolicy: { allowedConnectors: ['github'] } },
-  })
+  await upsertProjectMcpPolicy(e2e, { mcpPolicy: { allowedConnectors: ['github'] } })
 })
 
 When('the runtime creates an MCP client', async function (this: McpWorld) {
@@ -434,7 +476,7 @@ Then('calls are authenticated, scoped, and recorded as session events', async fu
   const e2e = this.e2e
   const state = mcpState(this)
   assert.ok(e2e, 'e2e state must exist')
-  assert.equal(state.callStatus, 200)
+  assert.equal(state.callStatus, 201)
   const toolCall = state.fixture?.recordedCalls().find((call) => call.method === 'tools/call')
   assert.ok(toolCall, 'fixture must have received the tool call')
   assert.equal(toolCall.authorization, `Bearer ${state.secretValue}`)
@@ -448,7 +490,7 @@ Then('calls are authenticated, scoped, and recorded as session events', async fu
   const otherPage = await openLocalPage()
   pagesToClose.push(otherPage)
   await authenticateE2EPage(otherPage)
-  const crossTenantRead = await apiResponse(otherPage.request, `/api/mcp/connections/${state.connection?.id}`)
+  const crossTenantRead = await apiResponse(otherPage.request, `/api/v1/connections/${state.connection?.id}`)
   assert.equal(crossTenantRead.status(), 404)
 })
 
@@ -457,10 +499,7 @@ Then('calls are authenticated, scoped, and recorded as session events', async fu
 Given('a connector is not approved for the project or environment', async function (this: McpWorld) {
   const e2e = await ensureSignedIn(this)
   await connectGithubToFixture(this, `unapproved-secret-${e2e.runId}`)
-  await apiJson<Json>(e2e.page.request, '/api/governance/policy', {
-    method: 'PUT',
-    data: { mcpPolicy: { allowedConnectors: ['linear'] } },
-  })
+  await upsertProjectMcpPolicy(e2e, { mcpPolicy: { allowedConnectors: ['linear'] } })
 })
 
 When('a session attempts to use the connector', async function (this: McpWorld) {
@@ -494,7 +533,10 @@ Then('records a policy event on the session', async function (this: McpWorld) {
   )
   assert.ok(policy, 'expected a denied policy.decision event on the session')
   assert.equal(objectValue(policy.payload).connectorId, 'github')
-  const audit = await apiJson<ListResponse<Json>>(e2e.page.request, '/api/audit-records?action=mcp_tool.call&limit=20')
+  const audit = await apiJson<ListResponse<Json>>(
+    e2e.page.request,
+    '/api/v1/audit-records?action=connection_tool.call&limit=20',
+  )
   assert.ok(audit.data.some((record) => record.outcome === 'denied' && record.sessionId === e2e.latestSession?.id))
 })
 
@@ -510,13 +552,17 @@ Given('a connector credential has been rotated', async function (this: McpWorld)
   const initialCall = await callConnectionTool(e2e, state.connection?.id, 'echo', e2e.latestSession?.id, {
     text: 'pre-rotation call',
   })
-  assert.equal(initialCall.status, 200)
+  assert.equal(initialCall.status, 201)
 
   state.rotatedSecretValue = `rotated-secret-${e2e.runId}`
-  await apiJson<Json>(e2e.page.request, `/api/vaults/${state.vault?.id}/credentials/${state.credential?.id}/versions`, {
-    method: 'POST',
-    data: { provider: 'cloudflare-secrets', secretValue: state.rotatedSecretValue },
-  })
+  await apiJson<Json>(
+    e2e.page.request,
+    `/api/v1/vaults/${state.vault?.id}/credentials/${state.credential?.id}/versions`,
+    {
+      method: 'POST',
+      data: { provider: 'cloudflare-secrets', secretValue: state.rotatedSecretValue },
+    },
+  )
   state.fixture?.setAcceptedTokens([state.rotatedSecretValue])
 })
 
@@ -534,7 +580,7 @@ Then('the runtime resolves the latest allowed credential version', async functio
   const result = await callConnectionTool(e2e, state.connection?.id, 'echo', state.rotatedSession?.id, {
     text: 'post-rotation call',
   })
-  assert.equal(result.status, 200, `post-rotation call failed: ${JSON.stringify(result.body)}`)
+  assert.equal(result.status, 201, `post-rotation call failed: ${JSON.stringify(result.body)}`)
   const lastToolCall = state.fixture
     ?.recordedCalls()
     .filter((call) => call.method === 'tools/call')
@@ -551,16 +597,16 @@ Then(
     assert.ok(e2e, 'e2e state must exist')
     // The rotation did not force a reconnect: the connection record and the
     // original session are unchanged, and only safe references are stored.
-    const connection = await apiJson<Json>(e2e.page.request, `/api/mcp/connections/${state.connection?.id}`)
-    assert.equal(connection.status, 'connected')
+    const connection = await apiJson<Json>(e2e.page.request, `/api/v1/connections/${state.connection?.id}`)
+    assert.equal(connection.state, 'connected')
     assert.equal(connection.connectedAt, state.originalConnectedAt)
-    assert.equal(connection.hasCredential, true)
+    assert.ok(objectValue(connection.credentialRef).credentialId, 'connection keeps a safe credential reference')
     const serializedConnection = JSON.stringify(connection)
     assert.equal(serializedConnection.includes(String(state.secretValue)), false)
     assert.equal(serializedConnection.includes(String(state.rotatedSecretValue)), false)
 
-    const originalSession = await apiJson<Json>(e2e.page.request, `/api/sessions/${e2e.latestSession?.id}`)
-    assert.equal(originalSession.status, 'idle', 'the original session must keep running across rotation')
+    const originalSession = await apiJson<Json>(e2e.page.request, `/api/v1/sessions/${e2e.latestSession?.id}`)
+    assert.equal(originalSession.state, 'idle', 'the original session must keep running across rotation')
     const events = await sessionEvents(e2e)
     const eventsJson = JSON.stringify(events)
     assert.equal(eventsJson.includes(String(state.secretValue)), false)
@@ -575,10 +621,7 @@ When('an agent attempts an MCP operation', async function (this: McpWorld) {
   const { state } = await connectGithubToFixture(this, `engine-secret-${e2e.runId}`)
   state.tools = await listConnectionTools(e2e, state.connection?.id)
 
-  await apiJson<Json>(e2e.page.request, '/api/governance/policy', {
-    method: 'PUT',
-    data: { mcpPolicy: { allowedConnectors: ['linear'] } },
-  })
+  await upsertProjectMcpPolicy(e2e, { mcpPolicy: { allowedConnectors: ['linear'] } })
   state.fixtureRequestsBeforeAttempt = state.fixture?.requestCount() ?? 0
   const denied = await callConnectionTool(e2e, state.connection?.id, 'echo', e2e.latestSession?.id, {
     text: 'blocked attempt',
@@ -587,10 +630,7 @@ When('an agent attempts an MCP operation', async function (this: McpWorld) {
   state.deniedBody = denied.body
   state.fixtureRequestsAfterDeniedAttempt = state.fixture?.requestCount() ?? 0
 
-  await apiJson<Json>(e2e.page.request, '/api/governance/policy', {
-    method: 'PUT',
-    data: { mcpPolicy: { allowedConnectors: ['github', 'linear'] } },
-  })
+  await upsertProjectMcpPolicy(e2e, { mcpPolicy: { allowedConnectors: ['github', 'linear'] } })
   const allowed = await callConnectionTool(e2e, state.connection?.id, 'echo', e2e.latestSession?.id, {
     text: 'allowed attempt',
   })
@@ -610,13 +650,16 @@ Then('the runtime checks connector policy before executing the call', async func
     'the denied attempt must not reach the MCP server',
   )
 
-  assert.equal(state.allowedStatus, 200)
+  assert.equal(state.allowedStatus, 201)
   assert.ok(
     (state.fixture?.recordedCalls() ?? []).some((call) => call.method === 'tools/call'),
     'the allowed call must reach the MCP server after the policy check passes',
   )
 
-  const audit = await apiJson<ListResponse<Json>>(e2e.page.request, '/api/audit-records?action=mcp_tool.call&limit=20')
+  const audit = await apiJson<ListResponse<Json>>(
+    e2e.page.request,
+    '/api/v1/audit-records?action=connection_tool.call&limit=20',
+  )
   assert.ok(audit.data.some((record) => record.outcome === 'denied'))
   assert.ok(audit.data.some((record) => record.outcome === 'success'))
 })
@@ -625,10 +668,7 @@ Then('the runtime checks connector policy before executing the call', async func
 
 Given('an agent has access to an approved MCP connector', async function (this: McpWorld) {
   const e2e = await ensureSignedIn(this)
-  await apiJson<Json>(e2e.page.request, '/api/governance/policy', {
-    method: 'PUT',
-    data: { mcpPolicy: { allowedConnectors: ['github'] } },
-  })
+  await upsertProjectMcpPolicy(e2e, { mcpPolicy: { allowedConnectors: ['github'] } })
   await createMcpSession(this, ['mcp:github'])
   const { state } = await connectGithubToFixture(this, `engine-e2e-secret-${e2e.runId}`)
   state.tools = await listConnectionTools(e2e, state.connection?.id)
@@ -647,7 +687,7 @@ Then('the result is streamed, recorded, and scoped to the project', async functi
   const e2e = this.e2e
   const state = mcpState(this)
   assert.ok(e2e, 'e2e state must exist')
-  assert.equal(state.callStatus, 200)
+  assert.equal(state.callStatus, 201)
   assert.equal(objectValue(objectValue(state.callBody?.output).structuredContent).sum, 42)
 
   const events = await sessionEvents(e2e)
@@ -660,6 +700,6 @@ Then('the result is streamed, recorded, and scoped to the project', async functi
   const otherPage = await openLocalPage()
   pagesToClose.push(otherPage)
   await authenticateE2EPage(otherPage)
-  const crossTenantEvents = await apiResponse(otherPage.request, `/api/sessions/${e2e.latestSession?.id}/events`)
+  const crossTenantEvents = await apiResponse(otherPage.request, `/api/v1/sessions/${e2e.latestSession?.id}/events`)
   assert.equal(crossTenantEvents.status(), 404)
 })
