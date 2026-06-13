@@ -3,7 +3,7 @@ import type { Env } from '../../env'
 
 const encryptSecretValueMock = vi.fn()
 
-vi.mock('../../vaultCrypto', () => ({
+vi.mock('../../vault-crypto', () => ({
   encryptSecretValue: encryptSecretValueMock,
 }))
 

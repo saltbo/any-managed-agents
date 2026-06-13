@@ -1,7 +1,7 @@
 import type { SecretReference } from '@server/domain/vault'
 import type { SecretMaterial, SecretStoreGateway } from '@server/usecases/ports'
 import type { Env } from '../../env'
-import { encryptSecretValue } from '../../vaultCrypto'
+import { encryptSecretValue } from '../../vault-crypto'
 
 // External secret-store boundary: encrypts secret values and writes/deletes
 // Cloudflare secrets. The only fetch caller for vault secret material. Throws on

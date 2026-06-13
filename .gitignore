@@ -13,6 +13,7 @@ dist/
 !.env.example
 .secrets/
 coverage/
+coverage-*/
 playwright-report/
 test-results/
 .DS_Store

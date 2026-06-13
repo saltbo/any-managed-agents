@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Env } from '../env'
-import { decryptSecretValue, encryptSecretValue } from '../vaultCrypto'
+import { decryptSecretValue, encryptSecretValue } from '../vault-crypto'
 
 const env = { AMA_VAULT_ENCRYPTION_KEY: 'x'.repeat(32) } as unknown as Env
 
