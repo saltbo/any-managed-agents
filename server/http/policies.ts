@@ -8,7 +8,6 @@ import {
   replacePolicy,
 } from '../usecases/policies'
 import {
-  type AuthScope,
   GovernanceValidationError,
   type PolicyRecord,
   type PolicyScope,
@@ -201,7 +200,7 @@ export function registerPolicyRoutes(routes: PolicyRoutes) {
       if (auth instanceof Response) {
         return auth
       }
-      const scope = authScope(auth)
+      const scope = auth
       try {
         const policy = await createPolicy(deps, scope, inputFromBody(body))
         await deps.audit.record(scope, {
@@ -248,7 +247,7 @@ export function registerPolicyRoutes(routes: PolicyRoutes) {
       if (!existing) {
         return c.json(errorBody('not_found', 'Policy not found'), 404)
       }
-      const scope = authScope(auth)
+      const scope = auth
       try {
         const policy = await replacePolicy(deps, scope, existing, replaceInputFromBody(body))
         await deps.audit.record(scope, {
@@ -276,7 +275,7 @@ export function registerPolicyRoutes(routes: PolicyRoutes) {
       if (!existing) {
         return c.json(errorBody('not_found', 'Policy not found'), 404)
       }
-      const scope = authScope(auth)
+      const scope = auth
       await deps.policies.delete(auth.project.id, policyId)
       await deps.audit.record(scope, {
         action: 'policy.delete',
@@ -291,10 +290,6 @@ export function registerPolicyRoutes(routes: PolicyRoutes) {
 }
 
 // --- helpers ---
-
-function authScope(auth: Awaited<ReturnType<typeof requireAuth>> & object): AuthScope {
-  return auth as unknown as AuthScope
-}
 
 // teamId is only present for team scope; drop the key entirely otherwise so the
 // exactOptional PolicyScope shape never carries an explicit undefined.

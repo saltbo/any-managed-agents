@@ -1,7 +1,6 @@
 import type { SessionEventPort } from '@server/usecases/ports'
 import { eq, max } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
-import type { AuthContext } from '../../auth/session'
 import { sessionEvents } from '../../db/schema'
 import { redactSensitiveValue } from '../../redaction'
 
@@ -21,7 +20,7 @@ function stringify(value: unknown) {
 export function createSessionEventPort(db: Db): SessionEventPort {
   return {
     async append(values) {
-      const auth = values.auth as AuthContext
+      const auth = values.auth
       for (let attempt = 0; attempt < 5; attempt += 1) {
         const eventId = newId('event')
         const latest = await db

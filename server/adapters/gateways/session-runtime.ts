@@ -1,5 +1,4 @@
 import type {
-  AuthScope,
   PromptDispatchResult,
   SessionApprovalRecord,
   SessionRecord,
@@ -9,7 +8,6 @@ import type {
   SessionRuntimeOutcome,
 } from '@server/usecases/ports'
 import type { drizzle } from 'drizzle-orm/d1'
-import type { AuthContext } from '../../auth/session'
 import type { Env } from '../../env'
 import {
   archiveSession as archiveSessionRuntime,
@@ -24,10 +22,6 @@ import {
 } from '../../runtime/session-orchestration'
 
 type Db = ReturnType<typeof drizzle>
-
-function asAuthContext(auth: AuthScope): AuthContext {
-  return auth as unknown as AuthContext
-}
 
 function mapError(error: RuntimeError): SessionRuntimeError {
   return error
@@ -50,7 +44,7 @@ export function createSessionRuntimeGateway(env: Env, db: Db, repo: SessionRepo)
       const result = await createSessionForAgent(
         env,
         db,
-        asAuthContext(auth),
+        auth,
         input.agentId,
         input.environmentId,
         input.options as CreateSessionOptions,
@@ -63,7 +57,7 @@ export function createSessionRuntimeGateway(env: Env, db: Db, repo: SessionRepo)
     },
 
     async stopSession(auth, session, requestId, reason) {
-      const result = await stopSessionRuntime(env, db, asAuthContext(auth), session.id, requestId, reason)
+      const result = await stopSessionRuntime(env, db, auth, session.id, requestId, reason)
       if (!result.ok) {
         return { ok: false, error: mapError(result.error) }
       }
@@ -71,7 +65,7 @@ export function createSessionRuntimeGateway(env: Env, db: Db, repo: SessionRepo)
     },
 
     async archiveSession(auth, session, requestId) {
-      const result = await archiveSessionRuntime(env, db, asAuthContext(auth), session.id, requestId)
+      const result = await archiveSessionRuntime(env, db, auth, session.id, requestId)
       if (!result.ok) {
         return { ok: false, error: mapError(result.error) }
       }
@@ -79,12 +73,12 @@ export function createSessionRuntimeGateway(env: Env, db: Db, repo: SessionRepo)
     },
 
     async unarchiveSession(auth, session, requestId): Promise<SessionRecord> {
-      await unarchiveSessionRuntime(db, asAuthContext(auth), session.id, requestId)
+      await unarchiveSessionRuntime(db, auth, session.id, requestId)
       return await reread(auth.project.id, session.id)
     },
 
     async dispatchPrompt(auth, session, content): Promise<PromptDispatchResult> {
-      const outcome = await dispatchSessionPrompt(env, db, asAuthContext(auth), session.id, content)
+      const outcome = await dispatchSessionPrompt(env, db, auth, session.id, content)
       if (!outcome.ok) {
         return {
           ok: false,
@@ -97,7 +91,7 @@ export function createSessionRuntimeGateway(env: Env, db: Db, repo: SessionRepo)
     },
 
     async decideApproval(auth, session, approvalId, body): Promise<SessionRuntimeOutcome<SessionApprovalRecord>> {
-      const result = await decideSessionApproval(env, db, asAuthContext(auth), session.id, approvalId, body)
+      const result = await decideSessionApproval(env, db, auth, session.id, approvalId, body)
       if (!result.ok) {
         return { ok: false, error: mapError(result.error) }
       }
@@ -111,7 +105,7 @@ export function createSessionRuntimeGateway(env: Env, db: Db, repo: SessionRepo)
     },
 
     async markExpiredPending(auth): Promise<void> {
-      await markExpiredPendingSessions(db, asAuthContext(auth))
+      await markExpiredPendingSessions(db, auth)
     },
   }
 }

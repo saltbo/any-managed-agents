@@ -13,7 +13,6 @@ import {
 } from '../openapi'
 import { redactSensitiveValue } from '../redaction'
 import {
-  type AuthScope,
   type ModelDiscoveryTaskRecord,
   type ProviderModelRecord,
   type ProviderRecord,
@@ -436,7 +435,7 @@ export function registerProviderRoutes(routes: ProviderRoutes) {
       if (auth instanceof Response) {
         return auth
       }
-      const scope = authScope(auth)
+      const scope = auth
       try {
         const provider = await createProvider(deps, scope, {
           type: body.type,
@@ -487,7 +486,7 @@ export function registerProviderRoutes(routes: ProviderRoutes) {
       if (!provider) {
         return c.json(errorBody('not_found', 'Provider not found'), 404)
       }
-      const scope = authScope(auth)
+      const scope = auth
       try {
         const updated = await updateProvider(deps, scope, provider, patchFromBody(body))
         await deps.audit.record(scope, {
@@ -515,7 +514,7 @@ export function registerProviderRoutes(routes: ProviderRoutes) {
       if (!provider) {
         return c.json(errorBody('not_found', 'Provider not found'), 404)
       }
-      const scope = authScope(auth)
+      const scope = auth
       try {
         await deleteProvider(deps, scope, provider)
       } catch (error) {
@@ -574,7 +573,7 @@ export function registerProviderRoutes(routes: ProviderRoutes) {
       if (!provider) {
         return c.json(errorBody('not_found', 'Provider not found'), 404)
       }
-      const scope = authScope(auth)
+      const scope = auth
       const { record, created } = await deps.providers.upsertModel(
         {
           organizationId: auth.organization.id,
@@ -616,7 +615,7 @@ export function registerProviderRoutes(routes: ProviderRoutes) {
       if (!existing) {
         return c.json(errorBody('not_found', 'Provider model not found'), 404)
       }
-      const scope = authScope(auth)
+      const scope = auth
       await deps.providers.deleteModel(auth.project.id, existing.id)
       await deps.audit.record(scope, {
         action: 'provider_model.delete',
@@ -641,7 +640,7 @@ export function registerProviderRoutes(routes: ProviderRoutes) {
       if (!provider) {
         return c.json(errorBody('not_found', 'Provider not found'), 404)
       }
-      const scope = authScope(auth)
+      const scope = auth
       const result = await runModelDiscovery(deps, scope, provider, c.env.AMA_DEFAULT_MODEL)
       const location = `/api/v1/providers/${provider.id}/model-discovery-tasks/${result.task.id}`
       if (result.outcome === 'failed') {
@@ -685,10 +684,6 @@ export function registerProviderRoutes(routes: ProviderRoutes) {
 }
 
 // --- helpers ---
-
-function authScope(auth: Awaited<ReturnType<typeof requireAuth>> & object): AuthScope {
-  return auth as unknown as AuthScope
-}
 
 function credentialPatch(ref: z.infer<typeof CredentialRefSchema> | null | undefined): CredentialPatch {
   if (ref === undefined) {

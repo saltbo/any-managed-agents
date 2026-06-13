@@ -1,6 +1,5 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
 import type { Context } from 'hono'
-import type { AuthContext } from '../auth/session'
 import { isRunnerOidcAuth, requireAuth } from '../auth/session'
 import type { Env } from '../env'
 import { errorResponse } from '../errors'
@@ -13,7 +12,7 @@ import {
   parseListCursor,
 } from '../openapi'
 import { claimLease } from '../usecases/leases'
-import { type AuthScope, type LeaseRecord, RunnerConflictError, RunnerValidationError } from '../usecases/ports'
+import { type LeaseRecord, RunnerConflictError, RunnerValidationError } from '../usecases/ports'
 import { runnerForbidden, runnerOperationAuthorized } from './runner-auth'
 
 type LeaseRoutes = OpenAPIHono<DepsEnv>
@@ -93,10 +92,6 @@ const LeaseListQuerySchema = z.object({
 })
 
 const LeaseListResponseSchema = listResponseSchema('LeaseListResponse', LeaseSchema)
-
-function authScope(auth: AuthContext): AuthScope {
-  return auth as unknown as AuthScope
-}
 
 function serializeLease(record: LeaseRecord) {
   return {
@@ -311,7 +306,7 @@ export function registerLeaseRoutes(routes: LeaseRoutes) {
         return runnerForbidden(c)
       }
       try {
-        const lease = await claimLease(deps, authScope(auth), runner, {
+        const lease = await claimLease(deps, auth, runner, {
           workItemId: body.workItemId,
           leaseDurationSeconds: body.leaseDurationSeconds,
         })

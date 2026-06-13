@@ -1,5 +1,5 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
-import { type AuthContext, isRunnerOidcAuth, requireAuth } from '../auth/session'
+import { isRunnerOidcAuth, requireAuth } from '../auth/session'
 import { errorResponse } from '../errors'
 import {
   AuthenticatedOperation,
@@ -11,7 +11,7 @@ import {
   listResponseSchema,
   parseListCursor,
 } from '../openapi'
-import { type AuthScope, type RunnerAuthRecord, RunnerConflictError, RunnerValidationError } from '../usecases/ports'
+import { type RunnerAuthRecord, RunnerConflictError, RunnerValidationError } from '../usecases/ports'
 import { recordRunnerHeartbeat, registerRunner, updateRunner } from '../usecases/runners'
 import { requestId } from './request-context'
 import { runnerForbidden, runnerOidcContext, runnerOperationAuthorized } from './runner-auth'
@@ -211,10 +211,6 @@ function serializeHeartbeat(runner: RunnerAuthRecord) {
   }
 }
 
-function authScope(auth: AuthContext): AuthScope {
-  return auth as unknown as AuthScope
-}
-
 const createRunnerRoute = createRoute({
   method: 'post',
   path: '/',
@@ -359,7 +355,7 @@ export function registerRunnerRoutes(routes: RunnerRoutes) {
               ...(body.credentialRef.versionId ? { versionId: body.credentialRef.versionId } : {}),
             }
           : undefined
-        const { runner, reregistered } = await registerRunner(deps, authScope(auth), runnerOidcContext(c.env, auth), {
+        const { runner, reregistered } = await registerRunner(deps, auth, runnerOidcContext(c.env, auth), {
           name: body.name,
           capabilities: body.capabilities ?? [],
           ...(body.environmentId ? { environmentId: body.environmentId } : { environmentId: undefined }),
@@ -368,7 +364,7 @@ export function registerRunnerRoutes(routes: RunnerRoutes) {
           maxConcurrent: body.maxConcurrent ?? 1,
           metadata: body.metadata ?? {},
         })
-        await deps.audit.record(authScope(auth), {
+        await deps.audit.record(auth, {
           action: reregistered ? 'runner.update' : 'runner.create',
           resourceType: 'runner',
           resourceId: runner.id,

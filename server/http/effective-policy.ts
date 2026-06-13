@@ -2,7 +2,6 @@ import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
 import { requireAuth } from '../auth/session'
 import { AuthenticatedOperation, type DepsEnv, ErrorResponseSchema } from '../openapi'
 import { readEffectivePolicy } from '../usecases/effective-policy'
-import type { AuthScope } from '../usecases/ports'
 import { requestId } from './request-context'
 
 type EffectivePolicyRoutes = OpenAPIHono<DepsEnv>
@@ -132,7 +131,7 @@ export function registerEffectivePolicyRoutes(routes: EffectivePolicyRoutes) {
       )
     }
 
-    const effective = await readEffectivePolicy(deps, authScope(auth), {
+    const effective = await readEffectivePolicy(deps, auth, {
       ...(query.teamId !== undefined ? { teamId: query.teamId } : {}),
       ...(query.providerId !== undefined ? { providerId: query.providerId } : {}),
       ...(query.modelId !== undefined ? { modelId: query.modelId } : {}),
@@ -168,7 +167,3 @@ export function registerEffectivePolicyRoutes(routes: EffectivePolicyRoutes) {
 }
 
 // --- helpers ---
-
-function authScope(auth: Awaited<ReturnType<typeof requireAuth>> & object): AuthScope {
-  return auth as unknown as AuthScope
-}

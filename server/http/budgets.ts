@@ -2,7 +2,7 @@ import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
 import { requireAuth } from '../auth/session'
 import { AuthenticatedOperation, type DepsEnv, ErrorResponseSchema, listResponseSchema } from '../openapi'
 import { type CreateBudgetInputDto, createBudget, type UpdateBudgetPatch, updateBudget } from '../usecases/budgets'
-import { type AuthScope, type BudgetRecord, GovernanceValidationError } from '../usecases/ports'
+import { type BudgetRecord, GovernanceValidationError } from '../usecases/ports'
 import { requestId } from './request-context'
 
 type BudgetRoutes = OpenAPIHono<DepsEnv>
@@ -179,7 +179,7 @@ export function registerBudgetRoutes(routes: BudgetRoutes) {
       if (auth instanceof Response) {
         return auth
       }
-      const scope = authScope(auth)
+      const scope = auth
       try {
         const budget = await createBudget(deps, scope, inputFromBody(body))
         await deps.audit.record(scope, {
@@ -220,7 +220,7 @@ export function registerBudgetRoutes(routes: BudgetRoutes) {
       if (!existing) {
         return c.json(errorBody('not_found', 'Budget not found'), 404)
       }
-      const scope = authScope(auth)
+      const scope = auth
       const budget = await updateBudget(deps, scope, existing, patchFromBody(body))
       await deps.audit.record(scope, {
         action: 'budget.update',
@@ -244,7 +244,7 @@ export function registerBudgetRoutes(routes: BudgetRoutes) {
       if (!existing) {
         return c.json(errorBody('not_found', 'Budget not found'), 404)
       }
-      const scope = authScope(auth)
+      const scope = auth
       await deps.budgets.delete(auth.project.id, budgetId)
       await deps.audit.record(scope, {
         action: 'budget.delete',
@@ -259,10 +259,6 @@ export function registerBudgetRoutes(routes: BudgetRoutes) {
 }
 
 // --- helpers ---
-
-function authScope(auth: Awaited<ReturnType<typeof requireAuth>> & object): AuthScope {
-  return auth as unknown as AuthScope
-}
 
 function inputFromBody(body: z.infer<typeof CreateBudgetSchema>): CreateBudgetInputDto {
   return {

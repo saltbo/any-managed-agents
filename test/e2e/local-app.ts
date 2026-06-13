@@ -149,39 +149,6 @@ export async function apiJson<T>(
   return (text ? JSON.parse(text) : null) as T
 }
 
-export async function apiResponse(
-  request: APIRequestContext,
-  path: string,
-  init: NonNullable<Parameters<APIRequestContext['fetch']>[1]> = {},
-) {
-  return await request.fetch(path, {
-    ...init,
-    headers: { accept: 'application/json', ...(init.headers ?? {}) },
-  })
-}
-
-export async function waitForSession(
-  request: APIRequestContext,
-  sessionId: string,
-  expectedState: string | ((state: string) => boolean) = 'idle',
-) {
-  for (let attempt = 0; attempt < 60; attempt += 1) {
-    const session = await apiJson<{ id: string; state: string; stateReason: string | null }>(
-      request,
-      `/api/v1/sessions/${sessionId}`,
-    )
-    const ok = typeof expectedState === 'function' ? expectedState(session.state) : session.state === expectedState
-    if (ok) {
-      return session
-    }
-    if (session.state === 'error') {
-      throw new Error(`Session startup failed: ${session.stateReason ?? 'unknown error'}`)
-    }
-    await delay(1_000)
-  }
-  throw new Error(`Session ${sessionId} did not reach the expected state before timeout`)
-}
-
 async function stopDevServer() {
   if (!devServer) {
     ownsDevServer = false

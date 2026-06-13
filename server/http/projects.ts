@@ -8,7 +8,7 @@ import {
   listResponseSchema,
   parseListCursor,
 } from '../openapi'
-import type { AuthScope, ProjectRecord } from '../usecases/ports'
+import type { ProjectRecord } from '../usecases/ports'
 import { createProject, listProjects } from '../usecases/projects'
 
 // Mounted at /api/v1/projects (docs/api-v1-design.md §2 Projects).
@@ -139,7 +139,7 @@ export function registerProjectRoutes(routes: ProjectRoutes) {
       } catch {
         return c.json(errorBody('validation_error', 'Invalid list cursor', { cursor: 'Cursor is invalid.' }), 400)
       }
-      const page = await listProjects(deps, authScope(auth), { limit, cursor: parsedCursor })
+      const page = await listProjects(deps, auth, { limit, cursor: parsedCursor })
       const last = page.rows.at(-1)
       const nextCursor = page.hasMore && last ? formatListCursor({ createdAt: last.createdAt, id: last.id }) : null
       return c.json(
@@ -153,7 +153,7 @@ export function registerProjectRoutes(routes: ProjectRoutes) {
         return auth
       }
       const deps = c.get('deps')
-      const project = await createProject(deps, authScope(auth), c.req.valid('json').name)
+      const project = await createProject(deps, auth, c.req.valid('json').name)
       return c.json(serializeProject(project), 201)
     })
     .openapi(readProjectRoute, async (c) => {
@@ -172,9 +172,3 @@ export function registerProjectRoutes(routes: ProjectRoutes) {
 }
 
 // --- helpers ---
-
-// requireAuthIdentity returns an org-scoped identity (no project). The projects
-// usecases only read organization, so a minimal AuthScope satisfies the port.
-function authScope(auth: Awaited<ReturnType<typeof requireAuthIdentity>> & object): AuthScope {
-  return auth as unknown as AuthScope
-}
