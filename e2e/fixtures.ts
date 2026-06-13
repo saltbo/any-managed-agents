@@ -1,4 +1,4 @@
-import { type APIRequestContext, test as base, expect, request } from '@playwright/test'
+import { type APIRequestContext, test as base, expect, type Page, request } from '@playwright/test'
 import { AmaClient } from '../sdk/typescript/src/index'
 
 const BASE = process.env.E2E_BASE_URL ?? `http://localhost:${process.env.E2E_PORT ?? 5173}`
@@ -52,5 +52,19 @@ export const test = base.extend<Fixtures>({
     await use(new AmaClient({ origin: BASE, accessToken: token.accessToken, projectId: token.projectId }))
   },
 })
+
+// Sign the browser in the way the SPA expects: seed the e2e access token + project
+// id into localStorage (the oidc client's e2e fast-path reads them) before the app
+// boots, then navigate. This is the real sign-in seam for browser journeys.
+export async function gotoAuthed(page: Page, token: E2eToken, path: string) {
+  await page.addInitScript(
+    ([accessToken, projectId]) => {
+      window.localStorage.setItem('ama:e2e-access-token', accessToken)
+      window.localStorage.setItem('ama:selected-project-id', projectId)
+    },
+    [token.accessToken, token.projectId] as [string, string],
+  )
+  await page.goto(path)
+}
 
 export { expect }
