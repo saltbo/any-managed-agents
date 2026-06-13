@@ -1,5 +1,5 @@
 import { type APIRequestContext, test as base, expect, request } from '@playwright/test'
-import { AmaClient } from '../../sdk/typescript/src/index'
+import { AmaClient } from '../sdk/typescript/src/index'
 
 const BASE = process.env.E2E_BASE_URL ?? `http://localhost:${process.env.E2E_PORT ?? 5173}`
 

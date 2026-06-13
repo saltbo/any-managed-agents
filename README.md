@@ -90,7 +90,7 @@ The project is moving toward a release where a signed-in user can create an envi
 
 ## Verification
 
-Native Playwright e2e crowns (`test/e2e/*.spec.ts`) run against a local
+Native Playwright e2e crowns (`e2e/*.spec.ts`) run against a local
 Worker/dev server and must not depend on deployed origins or real model quota:
 
 ```bash

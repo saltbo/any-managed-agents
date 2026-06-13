@@ -40,7 +40,7 @@ const TEST_GLOBS = [
   'shared/**/*.test.ts',
   'runtime-bridge/src/**/*.test.ts',
   'workers/**/*.test.ts',
-  'test/e2e/**/*.spec.ts',
+  'e2e/**/*.spec.ts',
 ]
 
 const ID_PATTERN = /@([a-z0-9-]+)\/([a-z0-9-]+)\b/

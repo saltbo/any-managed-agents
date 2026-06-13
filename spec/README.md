@@ -47,8 +47,8 @@ layer named by the scenario's layer tag:
 | `@domain`   | `server/domain/*.test.ts`                                |
 | `@usecase`  | `server/usecases/*.test.ts`                              |
 | `@api`      | `server/http/*.test.ts` (workers pool + real D1)         |
-| `@web`      | `src/**/*.test.ts(x)` (jsdom + MSW)                      |
-| `@e2e`      | `test/e2e/*.steps.ts` (Playwright, real stack)           |
+| `@web`      | `src/**/*.test.ts(x)` (jsdom + vi-mocked api)            |
+| `@e2e`      | `e2e/*.spec.ts` (native Playwright, real stack)          |
 
 ```ts
 describe('[spec: agents/create] createAgent', () => { … })
@@ -59,30 +59,28 @@ describe('[spec: agents/create] createAgent', () => { … })
 scenario id with no `[spec: …]` breadcrumb anywhere in the test tree. See
 **Enforcement scope** below — it is not a behavioural test and lives only as a script.
 
-## Runner decision (pragmatic adaptation of "no Cucumber runner on docs")
+## Runner decision (no Cucumber)
 
-The skill says `.feature` files under `spec/` are documentation with **no Cucumber
-runner**. This project keeps that spirit while preserving a real cross-stack safety
-net:
+Per the skill, `.feature` files under `spec/` are documentation with **no Cucumber
+runner** — Cucumber has been removed entirely (no `@cucumber/cucumber`, no step
+definitions):
 
-- `spec/` is the **only** home for `.feature` files. There is **no Cucumber runner
-  over the whole of `spec/`** — most scenarios are proven at the cheapest layer
-  (`@domain`/`@usecase`/`@api`/`@web`) by ordinary vitest tests carrying `[spec: id]`
-  breadcrumbs, not by executing the Gherkin.
-- The existing Playwright + `@cucumber/cucumber` e2e harness (`test/e2e/`,
-  `pnpm test:e2e`) is the cross-stack crown. It now reads its `.feature` files **from
-  `spec/`** and runs only scenarios tagged **`@e2e`** — the genuinely cross-stack,
-  hermetic journeys. This is the `@e2e` layer of the traceability table, executed for
-  real instead of merely traced.
-- The old `specs/product/` and `specs/smoke/` directories were folded into `spec/`
-  and deleted; their behaviour lives on as capability specs plus the layered tests
-  that carry the breadcrumbs.
+- `spec/` is the **only** home for `.feature` files, and nothing executes the Gherkin.
+  Most scenarios are proven at the cheapest layer (`@domain`/`@usecase`/`@api`/`@web`)
+  by ordinary vitest tests carrying `[spec: id]` breadcrumbs.
+- The cross-stack crown is **native Playwright** in `e2e/*.spec.ts` (`pnpm e2e`,
+  booted by `pnpm e2e:server`). Scenarios tagged **`@e2e`** are the genuinely
+  cross-stack, hermetic journeys — reimplemented as Playwright specs that carry the
+  matching `[spec: id]`, executed for real instead of merely traced.
+- The old `specs/product/`, `specs/smoke/`, and the Cucumber step files were deleted;
+  their behaviour lives on as capability specs plus the layered tests that carry the
+  breadcrumbs.
 
 **Escalation path:** if a non-technical audience ever needs to *run* more of the
 Gherkin, wire [`playwright-bdd`](https://github.com/vitalets/playwright-bdd) (compiles
-`.feature` → Playwright, keeps the native runner). These are already real `.feature`
-files, so that step is mechanical — do not reach for raw `@cucumber/cucumber` over
-all of `spec/`, and do not adopt it preemptively.
+`.feature` → Playwright). These are already real `.feature` files, so that step is
+mechanical — do not reach for raw `@cucumber/cucumber`, and do not adopt it
+preemptively.
 
 ## Enforcement scope
 

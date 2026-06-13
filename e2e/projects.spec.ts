@@ -1,6 +1,6 @@
-import type { AmaClient } from '../../sdk/typescript/src/index'
-import { operations } from '../../sdk/typescript/src/index'
-import { isAmaSessionEventType } from '../../shared/session-events'
+import type { AmaClient } from '../sdk/typescript/src/index'
+import { operations } from '../sdk/typescript/src/index'
+import { isAmaSessionEventType } from '../shared/session-events'
 import { expect, test } from './fixtures'
 
 type Json = Record<string, unknown>

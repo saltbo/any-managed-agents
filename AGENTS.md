@@ -38,7 +38,7 @@ no Cucumber runner. Tests trace back to scenarios with `[spec: <id>]` breadcrumb
    - `npm run test:coverage` (enforced per-file coverage gate)
    - `npm run typecheck`
    - `npm run lint:spec` (every enforced scenario id has a breadcrumb)
-   - `npm run e2e` (native Playwright crowns in `test/e2e/*.spec.ts` — real cross-stack journeys)
+   - `npm run e2e` (native Playwright crowns in `e2e/*.spec.ts` — real cross-stack journeys)
 
 Scenarios describe business behaviour. Selectors, fixtures, and platform details
 belong in the home test and its helpers.
@@ -55,7 +55,7 @@ and update the relevant `spec/` scenario or product doc first.
   scenarios map to `@web` (jsdom + vi-mocked api) or `@e2e` (real browser). Reserve
   `@e2e` for genuinely cross-stack, hermetic journeys — do not turn every scenario
   into a slow E2E.
-- `npm run e2e` runs the native Playwright crowns in `test/e2e/*.spec.ts`
+- `npm run e2e` runs the native Playwright crowns in `e2e/*.spec.ts`
   (`auth.spec.ts`, `api-contracts.spec.ts`, `projects.spec.ts`) against local
   resources; `npm run e2e:server` boots the dev stack for them. Do not make e2e
   depend on production, staging, real model quota, real user credentials, or
@@ -70,7 +70,7 @@ and update the relevant `spec/` scenario or product doc first.
   spec and breadcrumbs land.
 - Do not add standalone `scripts/` test runners for product behaviour. Restish/OpenAPI
   contract behaviour lives in `server/http/*.test.ts` (integration) or the native
-  Playwright crowns in `test/e2e/*.spec.ts`.
+  Playwright crowns in `e2e/*.spec.ts`.
 
 ## Architecture Map
 
@@ -85,7 +85,7 @@ and update the relevant `spec/` scenario or product doc first.
 - `src/console/` - Reusable AMA product components, form helpers, formatting, defaults, and view models.
 - `src/components/ui/` - shadcn-generated primitives. Prefer these before writing custom primitives.
 - `spec/` - Product behaviour in Gherkin (BDD-lite). One `.feature` per capability; tests trace back via `[spec: id]`. See `spec/README.md`.
-- `test/e2e/` - Native Playwright crowns (`*.spec.ts`), fixtures, browser helpers, and local e2e harnesses for `@e2e` scenarios.
+- `e2e/` - Native Playwright crowns (`*.spec.ts`), fixtures, browser helpers, and local e2e harnesses for `@e2e` scenarios.
 - `docs/product/` - Product decisions, UI/UX standards, API/SDK boundaries, and implementation notes.
 - `docs/infra/` - Cloudflare deployment and infrastructure notes.
 

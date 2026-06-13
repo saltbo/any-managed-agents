@@ -56,7 +56,7 @@ Script responsibilities:
 - `npm run typecheck`: server and web TypeScript projects.
 - `npm test`: unit, component, route, and runtime tests.
 - `npm run test:coverage`: `vitest run --project unit --project web --coverage`, the enforced per-file coverage gate.
-- `npm run e2e`: native Playwright cross-stack crowns in `test/e2e/*.spec.ts`, backed by local resources (`npm run e2e:server` boots the dev stack for them).
+- `npm run e2e`: native Playwright cross-stack crowns in `e2e/*.spec.ts`, backed by local resources (`npm run e2e:server` boots the dev stack for them).
 - `npm run build`: production Vite/Worker build.
 
 Choose the smallest meaningful check for a narrow change. For broad control-plane, runtime, or release work, run lint, typecheck, unit tests, coverage, e2e, and build.
@@ -74,7 +74,7 @@ with `[spec: <id>]` breadcrumbs rather than being generated from them.
 4. Run the smallest meaningful verification command (`test`, `test:coverage`, `lint:spec`, `e2e`).
 
 Verify at the cheapest layer that can prove the scenario. Reserve `@e2e` (run by
-`npm run e2e` as native Playwright crowns in `test/e2e/*.spec.ts`) for genuinely
+`npm run e2e` as native Playwright crowns in `e2e/*.spec.ts`) for genuinely
 cross-stack journeys. Static shape checks and pure assertions belong in unit or
 integration tests, not e2e.
 
@@ -91,7 +91,7 @@ src/features/      Route-level console features
 src/console/       Shared AMA console components and view models
 src/components/ui/ shadcn-generated primitives
 spec/              Product behaviour in Gherkin (BDD-lite documentation, one file per capability)
-test/e2e/          Native Playwright crowns (*.spec.ts), fixtures, and local harnesses (@e2e)
+e2e/          Native Playwright crowns (*.spec.ts), fixtures, and local harnesses (@e2e)
 docs/product/      Product decisions, API boundaries, and implementation notes
 docs/infra/        Cloudflare deployment and infrastructure notes
 ```

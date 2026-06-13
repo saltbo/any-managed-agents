@@ -8,7 +8,7 @@ const baseURL = `http://localhost:${PORT}`
 // mints bearer tokens instead of driving a real IdP. Reserved for genuinely
 // cross-stack crown journeys — the pyramid's tip, not full-branch coverage.
 export default defineConfig({
-  testDir: './test/e2e',
+  testDir: './e2e',
   testMatch: '**/*.spec.ts',
   fullyParallel: false,
   workers: 1,
