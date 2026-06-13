@@ -7,13 +7,16 @@ import type {
   ConnectionRepo,
   ConnectorRepo,
   EnvironmentRepo,
+  FederatedTenantRepo,
   McpGateway,
   PolicyPort,
   PolicyRepo,
+  ProjectRepo,
   ProviderCatalogGateway,
   ProviderRepo,
   SecretStoreGateway,
   SessionEventPort,
+  TriggerRepo,
   UsageRepo,
   VaultRepo,
 } from './ports'
@@ -38,4 +41,7 @@ export interface Deps {
   policy: PolicyPort
   usageRecords: UsageRepo
   auditRecords: AuditReadRepo
+  triggers: TriggerRepo
+  projects: ProjectRepo
+  federatedTenants: FederatedTenantRepo
 }

@@ -12,8 +12,11 @@ import { createBudgetRepo } from './adapters/repos/budgets'
 import { createConnectionRepo } from './adapters/repos/connections'
 import { createConnectorRepo } from './adapters/repos/connectors'
 import { createEnvironmentRepo } from './adapters/repos/environments'
+import { createFederatedTenantRepo } from './adapters/repos/federated-tenants'
 import { createPolicyRepo } from './adapters/repos/policies'
+import { createProjectRepo } from './adapters/repos/projects'
 import { createProviderRepo } from './adapters/repos/providers'
+import { createTriggerRepo } from './adapters/repos/triggers'
 import { createUsageRepo } from './adapters/repos/usage-records'
 import { createVaultRepo } from './adapters/repos/vaults'
 import type { Env } from './env'
@@ -41,5 +44,8 @@ export function createDeps(env: Env): Deps {
     policy: createPolicyPort(db),
     usageRecords: createUsageRepo(db),
     auditRecords: createAuditReadRepo(db),
+    triggers: createTriggerRepo(db),
+    projects: createProjectRepo(db),
+    federatedTenants: createFederatedTenantRepo(db),
   }
 }

@@ -140,6 +140,9 @@ function fakeDeps(
     sessionEvents: { append: async () => 'event_1', ...overrides.sessionEvents },
     usageRecords: undefined as unknown as Deps['usageRecords'],
     auditRecords: undefined as unknown as Deps['auditRecords'],
+    triggers: undefined as unknown as Deps['triggers'],
+    projects: undefined as unknown as Deps['projects'],
+    federatedTenants: undefined as unknown as Deps['federatedTenants'],
     audit: { record: async () => {} },
     policy: {
       resolveToolPolicy: async () => ({}),

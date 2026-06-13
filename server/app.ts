@@ -13,13 +13,17 @@ import { errorResponse } from './errors'
 import { registerAccessRuleRoutes } from './http/access-rules'
 import { registerAgentRoutes } from './http/agents'
 import { registerAuditRecordRoutes } from './http/audit-records'
+import { registerAuthRoutes } from './http/auth'
 import { registerBudgetRoutes } from './http/budgets'
 import { registerConnectionRoutes } from './http/connections'
 import { registerConnectorRoutes } from './http/connectors'
 import { registerEffectivePolicyRoutes } from './http/effective-policy'
 import { registerEnvironmentRoutes } from './http/environments'
+import { registerFederatedTenantRoutes } from './http/federated-tenants'
 import { registerPolicyRoutes } from './http/policies'
+import { registerProjectRoutes } from './http/projects'
 import { registerProviderRoutes } from './http/providers'
+import { registerTriggerRoutes } from './http/triggers'
 import { registerUsageRecordRoutes } from './http/usage-records'
 import { registerUsageSummaryRoutes } from './http/usage-summary'
 import { registerVaultRoutes } from './http/vaults'
@@ -31,16 +35,12 @@ import {
   policyBlocksSandboxOperation,
 } from './policy'
 import { redactSensitiveValue } from './redaction'
-import auth from './routes/auth'
 import e2e from './routes/e2e'
-import federatedTenants from './routes/federated-tenants'
 import health from './routes/health'
 import leases from './routes/leases'
-import projects from './routes/projects'
 import runners, { dispatchRunnerSessionCommand, hasAcceptedRunnerSessionChannel } from './routes/runners'
 import runtimeAi from './routes/runtime-ai'
 import sessionRoutes from './routes/sessions'
-import triggers from './routes/triggers'
 import workItems from './routes/work-items'
 import { safeRuntimeError } from './runtime/runtime-error'
 import {
@@ -656,6 +656,10 @@ export function createApp() {
   // routes (load-bearing internal order: static before parameter segments) onto
   // a sub-router mounted at the resource's original chain position, so the
   // assembled route order and AppType stay identical.
+  const auth = registerAuthRoutes(createDepsApiRouter())
+  const federatedTenants = registerFederatedTenantRoutes(createDepsApiRouter())
+  const projects = registerProjectRoutes(createDepsApiRouter())
+  const triggers = registerTriggerRoutes(createDepsApiRouter())
   const agents = registerAgentRoutes(createDepsApiRouter())
   const environments = registerEnvironmentRoutes(createDepsApiRouter())
   const providers = registerProviderRoutes(createDepsApiRouter())

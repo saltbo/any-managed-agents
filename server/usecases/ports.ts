@@ -1230,4 +1230,220 @@ export interface AuditReadRepo {
   find(organizationId: string, recordId: string): Promise<AuditRecord | null>
 }
 
+// --- triggers ---
+
+import type { RuntimeName } from '@server/routes/environment-contracts'
+
+// Field-keyed validation error for trigger orchestration (secret-material
+// rejection). The http layer maps it to a 400.
+export class TriggerValidationError extends Error {
+  readonly fields: Record<string, string>
+  constructor(message: string, fields: Record<string, string>) {
+    super(message)
+    this.name = 'TriggerValidationError'
+    this.fields = fields
+  }
+}
+
+// Thrown when an archived trigger receives field updates, or when the
+// referenced agent/environment is archived/unavailable. `status` selects the
+// http mapping (404 missing, 409 conflict).
+export class TriggerConflictError extends Error {
+  readonly status: 404 | 409
+  constructor(message: string, status: 404 | 409 = 409) {
+    super(message)
+    this.name = 'TriggerConflictError'
+    this.status = status
+  }
+}
+
+export interface TriggerSchedule {
+  intervalSeconds: number
+  windowSeconds: number
+}
+
+export interface SecretEnvEntry {
+  name: string
+  credentialRef: { credentialId: string; versionId?: string }
+}
+
+export interface TriggerConfig {
+  agentId: string
+  environmentId: string
+  runtime: RuntimeName
+  name: string
+  promptTemplate: string
+  resourceRefs: Record<string, unknown>[]
+  env: Record<string, string>
+  secretEnv: SecretEnvEntry[]
+  schedule: TriggerSchedule
+  enabled: boolean
+  nextDueAt: string
+  metadata: Record<string, unknown>
+}
+
+export interface TriggerRecord extends TriggerConfig {
+  id: string
+  projectId: string
+  lastDispatchedAt: string | null
+  lastRunId: string | null
+  createdByUserId: string | null
+  archivedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface TriggerRunRecord {
+  id: string
+  projectId: string
+  triggerId: string
+  scheduledFor: string
+  heartbeatAt: string
+  state: 'claimed' | 'session_created' | 'failed'
+  idempotencyKey: string
+  sessionId: string | null
+  correlationId: string
+  errorMessage: string | null
+  metadata: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
+export interface TriggerListQuery {
+  projectId: string
+  archived: boolean
+  enabled?: boolean
+  search?: string
+  createdFrom?: string
+  createdTo?: string
+  limit: number
+  cursor: { createdAt: string; id: string } | null
+}
+
+export interface TriggerRunListQuery {
+  projectId: string
+  triggerId: string
+  state?: 'claimed' | 'session_created' | 'failed'
+  search?: string
+  createdFrom?: string
+  createdTo?: string
+  limit: number
+  cursor: { createdAt: string; id: string } | null
+}
+
+export interface CreateTriggerInput {
+  organizationId: string
+  projectId: string
+  config: TriggerConfig
+  createdByUserId: string | null
+}
+
+export interface UpdateTriggerFields {
+  config: TriggerConfig
+  archivedAt: string | null
+}
+
+// DB boundary for triggers and their run sub-resource. The only implementation
+// lives in adapters/repos. Repos return parsed records — no JSON strings.
+export interface TriggerRepo {
+  list(query: TriggerListQuery): Promise<ListPageResult<TriggerRecord>>
+  find(projectId: string, triggerId: string): Promise<TriggerRecord | null>
+  insert(input: CreateTriggerInput, timestamp: string): Promise<TriggerRecord>
+  update(projectId: string, triggerId: string, fields: UpdateTriggerFields, updatedAt: string): Promise<TriggerRecord>
+
+  listRuns(query: TriggerRunListQuery): Promise<ListPageResult<TriggerRunRecord>>
+  findRun(projectId: string, triggerId: string, runId: string): Promise<TriggerRunRecord | null>
+
+  // Reference validation against sibling resources, returning a stable status
+  // when the agent/environment is missing (404) or unusable (409).
+  agentUsable(projectId: string, agentId: string): Promise<{ status: 404 | 409; message: string } | null>
+  environmentUsable(projectId: string, environmentId: string): Promise<{ status: 404 | 409; message: string } | null>
+}
+
+// --- projects ---
+
+export interface ProjectRecord {
+  id: string
+  name: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ProjectListQuery {
+  organizationId: string
+  limit: number
+  cursor: { createdAt: string; id: string } | null
+}
+
+// DB boundary for projects. organizationId stays in the DB for tenancy but is
+// never exposed on ProjectRecord. The only implementation lives in
+// adapters/repos.
+export interface ProjectRepo {
+  list(query: ProjectListQuery): Promise<ListPageResult<ProjectRecord>>
+  find(organizationId: string, projectId: string): Promise<ProjectRecord | null>
+  insert(organizationId: string, name: string, timestamp: string): Promise<ProjectRecord>
+}
+
+// --- federated tenants ---
+
+// Thrown when a federated tenant already exists for the (issuer, externalTenant)
+// pair. The http layer maps it to 409.
+export class FederatedTenantConflictError extends Error {
+  constructor(message = 'Federated tenant already exists for this issuer and external tenant') {
+    super(message)
+    this.name = 'FederatedTenantConflictError'
+  }
+}
+
+export interface FederatedTenantRecord {
+  id: string
+  issuer: string
+  externalTenantId: string
+  projectId: string
+  environmentId: string | null
+  capabilities: string[]
+  enabled: boolean
+  metadata: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
+export interface FederatedTenantListQuery {
+  projectId: string
+  limit: number
+  cursor: { createdAt: string; id: string } | null
+}
+
+export interface CreateFederatedTenantInput {
+  issuer: string
+  externalTenantId: string
+  projectId: string
+  environmentId: string | null
+  capabilities: string[]
+  metadata: Record<string, unknown>
+}
+
+export interface UpdateFederatedTenantFields {
+  enabled: boolean
+  capabilities: string[]
+  environmentId: string | null
+  metadata: Record<string, unknown>
+}
+
+// DB boundary for federated tenants. The only implementation lives in
+// adapters/repos.
+export interface FederatedTenantRepo {
+  list(query: FederatedTenantListQuery): Promise<ListPageResult<FederatedTenantRecord>>
+  find(projectId: string, tenantId: string): Promise<FederatedTenantRecord | null>
+  findByIssuerTenant(issuer: string, externalTenantId: string): Promise<{ id: string } | null>
+  insert(input: CreateFederatedTenantInput, timestamp: string): Promise<FederatedTenantRecord>
+  update(
+    projectId: string,
+    tenantId: string,
+    fields: UpdateFederatedTenantFields,
+    updatedAt: string,
+  ): Promise<FederatedTenantRecord>
+  delete(projectId: string, tenantId: string): Promise<void>
+}
+
 export type { AgentToolAttachment, ConnectorCatalogTool, SecretMaterial }
