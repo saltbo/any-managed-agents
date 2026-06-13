@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { TextField } from '@/console/forms'
 import { api, type ProviderAccessRuleInput } from '@/lib/api'
@@ -88,8 +88,10 @@ export function CreateAccessRuleSheet({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="deny">Deny</SelectItem>
-                    <SelectItem value="allow">Allow</SelectItem>
+                    <SelectGroup>
+                      <SelectItem value="deny">Deny</SelectItem>
+                      <SelectItem value="allow">Allow</SelectItem>
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
                 <FieldDescription>

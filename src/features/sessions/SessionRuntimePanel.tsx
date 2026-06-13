@@ -8,7 +8,7 @@ import { PromptInput } from '@/components/ai-elements/prompt-input'
 import { Tool } from '@/components/ai-elements/tool'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { EmptyState, StatusBadge } from '@/console/components'
@@ -102,12 +102,14 @@ export function SessionRuntimePanel({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All events</SelectItem>
-              {EVENT_FILTERS.map((category) => (
-                <SelectItem key={category} value={category}>
-                  {category}
-                </SelectItem>
-              ))}
+              <SelectGroup>
+                <SelectItem value="all">All events</SelectItem>
+                {EVENT_FILTERS.map((category) => (
+                  <SelectItem key={category} value={category}>
+                    {category}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
           <Button type="button" variant="ghost" size="icon" aria-label="Search events">

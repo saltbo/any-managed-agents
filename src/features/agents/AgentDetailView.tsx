@@ -1,7 +1,7 @@
 import { Archive } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ConfirmAction, DetailSection, EmptyState, Meta, MetaGrid, StatusBadge } from '@/console/components'
 import { formatDate, stringifyJson } from '@/console/format'
@@ -93,11 +93,13 @@ function AgentDetailContent({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {versions.map((version) => (
-                        <SelectItem key={version.id} value={version.id}>
-                          v{version.version}
-                        </SelectItem>
-                      ))}
+                      <SelectGroup>
+                        {versions.map((version) => (
+                          <SelectItem key={version.id} value={version.id}>
+                            v{version.version}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
                     </SelectContent>
                   </Select>
                 ) : null}

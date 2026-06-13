@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { PageHeader } from '@/console/components'
 import { useUrlFilter } from '@/console/use-list-filters'
 import { api, type UsageSummaryOptions } from '@/lib/api'
@@ -45,11 +45,13 @@ export function UsagePage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {GROUP_PRESETS.map((preset) => (
-              <SelectItem key={preset.value} value={preset.value}>
-                {preset.label}
-              </SelectItem>
-            ))}
+            <SelectGroup>
+              {GROUP_PRESETS.map((preset) => (
+                <SelectItem key={preset.value} value={preset.value}>
+                  {preset.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
           </SelectContent>
         </Select>
         <Input

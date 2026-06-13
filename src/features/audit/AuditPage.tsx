@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { PageHeader } from '@/console/components'
 import { useClientPagination } from '@/console/use-client-pagination'
 import { useUrlFilter } from '@/console/use-list-filters'
@@ -101,12 +101,14 @@ export function AuditPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All outcomes</SelectItem>
-            {OUTCOMES.map((value) => (
-              <SelectItem key={value} value={value}>
-                {value}
-              </SelectItem>
-            ))}
+            <SelectGroup>
+              <SelectItem value="all">All outcomes</SelectItem>
+              {OUTCOMES.map((value) => (
+                <SelectItem key={value} value={value}>
+                  {value}
+                </SelectItem>
+              ))}
+            </SelectGroup>
           </SelectContent>
         </Select>
         <Input

@@ -3,7 +3,7 @@ import { Link } from 'react-router'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { StatusBadge } from '@/console/components'
 import { TextAreaField, TextField } from '@/console/forms'
 import { CoreStep, StartStep } from '@/features/agents/AgentBuilderSteps'
@@ -110,8 +110,10 @@ export function QuickstartEnvironmentStep({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="unrestricted">Unrestricted networking</SelectItem>
-            <SelectItem value="restricted">Limited networking</SelectItem>
+            <SelectGroup>
+              <SelectItem value="unrestricted">Unrestricted networking</SelectItem>
+              <SelectItem value="restricted">Limited networking</SelectItem>
+            </SelectGroup>
           </SelectContent>
         </Select>
         <FieldDescription>
@@ -160,11 +162,13 @@ export function QuickstartEnvironmentStep({
               <SelectValue placeholder="Select an existing environment" />
             </SelectTrigger>
             <SelectContent>
-              {activeEnvironments.map((environment) => (
-                <SelectItem key={environment.id} value={environment.id}>
-                  {environment.name}
-                </SelectItem>
-              ))}
+              <SelectGroup>
+                {activeEnvironments.map((environment) => (
+                  <SelectItem key={environment.id} value={environment.id}>
+                    {environment.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
           <FieldDescription>Selecting an existing environment completes this step without changes.</FieldDescription>

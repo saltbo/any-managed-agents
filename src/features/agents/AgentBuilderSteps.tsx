@@ -5,7 +5,7 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { StatusBadge } from '@/console/components'
 import { TextAreaField, TextField } from '@/console/forms'
@@ -147,11 +147,13 @@ export function CoreStep({ draft, errors, setField, providers }: StepProps & { p
             <SelectValue placeholder="Select a provider" />
           </SelectTrigger>
           <SelectContent>
-            {providerOptions.map((option) => (
-              <SelectItem key={option.id} value={option.id}>
-                {option.label}
-              </SelectItem>
-            ))}
+            <SelectGroup>
+              {providerOptions.map((option) => (
+                <SelectItem key={option.id} value={option.id}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
           </SelectContent>
         </Select>
         <FieldDescription>Configured project providers appear here next to the platform default.</FieldDescription>
@@ -164,17 +166,21 @@ export function CoreStep({ draft, errors, setField, providers }: StepProps & { p
             <SelectValue placeholder="Select a model" />
           </SelectTrigger>
           <SelectContent>
-            {modelIds.map((modelId) => (
-              <SelectItem key={modelId} value={modelId}>
-                {modelId}
-              </SelectItem>
-            ))}
-            {draft.model && !modelIds.includes(draft.model) ? (
-              <SelectItem value={draft.model}>{draft.model}</SelectItem>
-            ) : null}
+            <SelectGroup>
+              {modelIds.map((modelId) => (
+                <SelectItem key={modelId} value={modelId}>
+                  {modelId}
+                </SelectItem>
+              ))}
+              {draft.model && !modelIds.includes(draft.model) ? (
+                <SelectItem value={draft.model}>{draft.model}</SelectItem>
+              ) : null}
+            </SelectGroup>
           </SelectContent>
         </Select>
-        <FieldDescription>Models come from the provider catalog and are validated when the agent is saved.</FieldDescription>
+        <FieldDescription>
+          Models come from the provider catalog and are validated when the agent is saved.
+        </FieldDescription>
         {errors.model ? <FieldError>{errors.model}</FieldError> : null}
       </Field>
     </div>
@@ -354,11 +360,13 @@ export function TestEnvironmentField({
           <SelectValue placeholder="Select an environment" />
         </SelectTrigger>
         <SelectContent>
-          {activeEnvironments.map((environment) => (
-            <SelectItem key={environment.id} value={environment.id}>
-              {environment.name}
-            </SelectItem>
-          ))}
+          <SelectGroup>
+            {activeEnvironments.map((environment) => (
+              <SelectItem key={environment.id} value={environment.id}>
+                {environment.name}
+              </SelectItem>
+            ))}
+          </SelectGroup>
         </SelectContent>
       </Select>
       <FieldDescription>

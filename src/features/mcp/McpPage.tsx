@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { EmptyState, PageHeader } from '@/console/components'
 import { useClientPagination } from '@/console/use-client-pagination'
 import { api, type McpConnectorListOptions } from '@/lib/api'
@@ -134,12 +134,14 @@ function FacetSelect({
         <SelectValue placeholder={label} />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value={FACET_ALL}>{allLabel}</SelectItem>
-        {options.map((option) => (
-          <SelectItem key={option} value={option}>
-            {option}
-          </SelectItem>
-        ))}
+        <SelectGroup>
+          <SelectItem value={FACET_ALL}>{allLabel}</SelectItem>
+          {options.map((option) => (
+            <SelectItem key={option} value={option}>
+              {option}
+            </SelectItem>
+          ))}
+        </SelectGroup>
       </SelectContent>
     </Select>
   )

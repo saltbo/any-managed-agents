@@ -4,7 +4,7 @@ import type { FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { type Agent, api, type Environment, type ProviderInputType } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
@@ -56,8 +56,10 @@ export function EnvironmentForm({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="cloud">Cloud</SelectItem>
-              <SelectItem value="self_hosted">Self-hosted</SelectItem>
+              <SelectGroup>
+                <SelectItem value="cloud">Cloud</SelectItem>
+                <SelectItem value="self_hosted">Self-hosted</SelectItem>
+              </SelectGroup>
             </SelectContent>
           </Select>
           <FieldDescription>
@@ -76,9 +78,11 @@ export function EnvironmentForm({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="restricted">Restricted</SelectItem>
-              <SelectItem value="unrestricted">Unrestricted</SelectItem>
-              <SelectItem value="offline">Offline</SelectItem>
+              <SelectGroup>
+                <SelectItem value="restricted">Restricted</SelectItem>
+                <SelectItem value="unrestricted">Unrestricted</SelectItem>
+                <SelectItem value="offline">Offline</SelectItem>
+              </SelectGroup>
             </SelectContent>
           </Select>
           <FieldDescription>
@@ -218,15 +222,17 @@ function AgentProviderModelFields({
             <SelectValue placeholder="Select a provider" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={PLATFORM_PROVIDER_ID}>Workers AI (platform)</SelectItem>
-            {configuredProviders.map((provider) => (
-              <SelectItem key={provider.id} value={provider.id}>
-                {provider.displayName} ({provider.type})
-              </SelectItem>
-            ))}
-            {value.provider && !knownProviderIds.has(value.provider) ? (
-              <SelectItem value={value.provider}>{value.provider}</SelectItem>
-            ) : null}
+            <SelectGroup>
+              <SelectItem value={PLATFORM_PROVIDER_ID}>Workers AI (platform)</SelectItem>
+              {configuredProviders.map((provider) => (
+                <SelectItem key={provider.id} value={provider.id}>
+                  {provider.displayName} ({provider.type})
+                </SelectItem>
+              ))}
+              {value.provider && !knownProviderIds.has(value.provider) ? (
+                <SelectItem value={value.provider}>{value.provider}</SelectItem>
+              ) : null}
+            </SelectGroup>
           </SelectContent>
         </Select>
         <FieldDescription>
@@ -243,15 +249,17 @@ function AgentProviderModelFields({
             <SelectValue placeholder="Select a model" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={NO_MODEL_VALUE}>No pinned model</SelectItem>
-            {modelIds.map((modelId) => (
-              <SelectItem key={modelId} value={modelId}>
-                {modelId}
-              </SelectItem>
-            ))}
-            {value.model && !modelIds.includes(value.model) ? (
-              <SelectItem value={value.model}>{value.model}</SelectItem>
-            ) : null}
+            <SelectGroup>
+              <SelectItem value={NO_MODEL_VALUE}>No pinned model</SelectItem>
+              {modelIds.map((modelId) => (
+                <SelectItem key={modelId} value={modelId}>
+                  {modelId}
+                </SelectItem>
+              ))}
+              {value.model && !modelIds.includes(value.model) ? (
+                <SelectItem value={value.model}>{value.model}</SelectItem>
+              ) : null}
+            </SelectGroup>
           </SelectContent>
         </Select>
         <FieldDescription>
@@ -291,11 +299,13 @@ export function SessionForm({
               <SelectValue placeholder="Select an agent" />
             </SelectTrigger>
             <SelectContent>
-              {activeAgents.map((agent) => (
-                <SelectItem key={agent.id} value={agent.id}>
-                  {agent.name}
-                </SelectItem>
-              ))}
+              <SelectGroup>
+                {activeAgents.map((agent) => (
+                  <SelectItem key={agent.id} value={agent.id}>
+                    {agent.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
           <FieldDescription>
@@ -311,11 +321,13 @@ export function SessionForm({
               <SelectValue placeholder="Select an environment" />
             </SelectTrigger>
             <SelectContent>
-              {activeEnvironments.map((environment) => (
-                <SelectItem key={environment.id} value={environment.id}>
-                  {environment.name}
-                </SelectItem>
-              ))}
+              <SelectGroup>
+                {activeEnvironments.map((environment) => (
+                  <SelectItem key={environment.id} value={environment.id}>
+                    {environment.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
           <FieldDescription>
@@ -334,10 +346,12 @@ export function SessionForm({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="ama">AMA</SelectItem>
-              <SelectItem value="claude-code">Claude Code</SelectItem>
-              <SelectItem value="codex">Codex</SelectItem>
-              <SelectItem value="copilot">Copilot</SelectItem>
+              <SelectGroup>
+                <SelectItem value="ama">AMA</SelectItem>
+                <SelectItem value="claude-code">Claude Code</SelectItem>
+                <SelectItem value="codex">Codex</SelectItem>
+                <SelectItem value="copilot">Copilot</SelectItem>
+              </SelectGroup>
             </SelectContent>
           </Select>
           <FieldDescription>Runtime is selected per session.</FieldDescription>
@@ -398,11 +412,13 @@ export function ProviderForm({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {PROVIDER_TYPES.map((type) => (
-                <SelectItem key={type} value={type}>
-                  {type}
-                </SelectItem>
-              ))}
+              <SelectGroup>
+                {PROVIDER_TYPES.map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {type}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
           <FieldDescription>Provider identifiers match the OpenAPI provider contract.</FieldDescription>
@@ -461,8 +477,10 @@ export function VaultForm({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="project">project</SelectItem>
-              <SelectItem value="organization">organization</SelectItem>
+              <SelectGroup>
+                <SelectItem value="project">project</SelectItem>
+                <SelectItem value="organization">organization</SelectItem>
+              </SelectGroup>
             </SelectContent>
           </Select>
           <FieldDescription>Project vaults are the default for runtime credential references.</FieldDescription>

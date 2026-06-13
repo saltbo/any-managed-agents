@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { PageHeader } from '@/console/components'
 import { useClientPagination } from '@/console/use-client-pagination'
 import { matchesSearch, useUrlFilter } from '@/console/use-list-filters'
@@ -74,9 +74,11 @@ export function AgentsPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            <SelectItem value="active">active</SelectItem>
-            <SelectItem value="archived">archived</SelectItem>
+            <SelectGroup>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="active">active</SelectItem>
+              <SelectItem value="archived">archived</SelectItem>
+            </SelectGroup>
           </SelectContent>
         </Select>
         <Select value={provider} onValueChange={setProvider}>
@@ -84,12 +86,14 @@ export function AgentsPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All providers</SelectItem>
-            {providers.map((value) => (
-              <SelectItem key={value} value={value}>
-                {value}
-              </SelectItem>
-            ))}
+            <SelectGroup>
+              <SelectItem value="all">All providers</SelectItem>
+              {providers.map((value) => (
+                <SelectItem key={value} value={value}>
+                  {value}
+                </SelectItem>
+              ))}
+            </SelectGroup>
           </SelectContent>
         </Select>
       </div>

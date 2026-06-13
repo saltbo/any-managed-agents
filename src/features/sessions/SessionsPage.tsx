@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ConfirmAction, EmptyState, PageHeader } from '@/console/components'
 import { useClientPagination } from '@/console/use-client-pagination'
 import { matchesSearch, useUrlFilter } from '@/console/use-list-filters'
@@ -121,12 +121,14 @@ export function SessionsPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            {['pending', 'running', 'idle', 'stopped', 'error', 'archived', 'requires-action'].map((value) => (
-              <SelectItem key={value} value={value}>
-                {value}
-              </SelectItem>
-            ))}
+            <SelectGroup>
+              <SelectItem value="all">All statuses</SelectItem>
+              {['pending', 'running', 'idle', 'stopped', 'error', 'archived', 'requires-action'].map((value) => (
+                <SelectItem key={value} value={value}>
+                  {value}
+                </SelectItem>
+              ))}
+            </SelectGroup>
           </SelectContent>
         </Select>
         <Select value={sort} onValueChange={setSort}>
@@ -134,10 +136,12 @@ export function SessionsPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="updated-desc">Recently updated</SelectItem>
-            <SelectItem value="updated-asc">Oldest updated</SelectItem>
-            <SelectItem value="started-desc">Recently started</SelectItem>
-            <SelectItem value="started-asc">Oldest started</SelectItem>
+            <SelectGroup>
+              <SelectItem value="updated-desc">Recently updated</SelectItem>
+              <SelectItem value="updated-asc">Oldest updated</SelectItem>
+              <SelectItem value="started-desc">Recently started</SelectItem>
+              <SelectItem value="started-asc">Oldest started</SelectItem>
+            </SelectGroup>
           </SelectContent>
         </Select>
         <ConfirmAction

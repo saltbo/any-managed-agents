@@ -23,7 +23,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { MobileNavButton, NavButton } from '@/console/components'
 import { signOut } from '@/lib/oidc'
 import { useConsoleContext } from './console-context'
@@ -54,11 +54,13 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {context.projects.map((project) => (
-                  <SelectItem key={project.id} value={project.id}>
-                    {project.name}
-                  </SelectItem>
-                ))}
+                <SelectGroup>
+                  {context.projects.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {project.name}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
               </SelectContent>
             </Select>
           </div>

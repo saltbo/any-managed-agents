@@ -3,7 +3,7 @@ import { Server } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { PageHeader } from '@/console/components'
 import { useClientPagination } from '@/console/use-client-pagination'
 import { matchesSearch, useUrlFilter } from '@/console/use-list-filters'
@@ -62,9 +62,11 @@ export function EnvironmentsPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All hosting modes</SelectItem>
-            <SelectItem value="cloud">cloud</SelectItem>
-            <SelectItem value="self_hosted">self_hosted</SelectItem>
+            <SelectGroup>
+              <SelectItem value="all">All hosting modes</SelectItem>
+              <SelectItem value="cloud">cloud</SelectItem>
+              <SelectItem value="self_hosted">self_hosted</SelectItem>
+            </SelectGroup>
           </SelectContent>
         </Select>
         <Select value={status} onValueChange={setStatus}>
@@ -72,9 +74,11 @@ export function EnvironmentsPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            <SelectItem value="active">active</SelectItem>
-            <SelectItem value="archived">archived</SelectItem>
+            <SelectGroup>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="active">active</SelectItem>
+              <SelectItem value="archived">archived</SelectItem>
+            </SelectGroup>
           </SelectContent>
         </Select>
       </div>
