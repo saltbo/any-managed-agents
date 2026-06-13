@@ -12,9 +12,10 @@
  *   - server/runtime   the env-bound session/runtime execution engine (sandbox,
  *                      durable objects, drivers); wrapped by gateways.
  *   - server/policy.ts cross-cutting policy engine, wrapped by PolicyPort.
- *   - server/audit.ts  the audit writer wrapped by AuditPort.
- *   - server/schedules background trigger dispatcher (cron/queue entry).
- *   - server/providers provider adapter helpers (catalog mapping, usage).
+ *   - server/audit.ts  the audit writer still consumed by app.ts + runtime/ via
+ *                      recordAudit; http/ no longer depends on it (requestId
+ *                      moved to http/request-context.ts) and the AuditPort
+ *                      gateway owns its own write. Clears once app/runtime move.
  *   - server/composition.ts the composition root constructs the db.
  *   - server/app.ts    composition consumer + the exempt /runtime data-plane
  *                      proxy (non-REST protocol surface).
@@ -22,7 +23,7 @@
  *                      protocol endpoint, shared zod contracts, health.
  */
 
-const INFRA = '^server/(auth|runtime|schedules|providers|routes)|^server/(policy|audit|composition|app)\\.ts'
+const INFRA = '^server/(auth|runtime|routes)|^server/(policy|audit|composition|app)\\.ts'
 
 /** @type {import('dependency-cruiser').IConfiguration} */
 module.exports = {

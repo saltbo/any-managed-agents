@@ -1,6 +1,5 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
 import { normalizeToolAttachments } from '@server/domain/agent'
-import { requestId } from '../audit'
 import { requireAuth } from '../auth/session'
 import {
   AuthenticatedOperation,
@@ -28,6 +27,7 @@ import {
   type AgentVersionRecord,
   type AuthScope,
 } from '../usecases/ports'
+import { requestId } from './request-context'
 
 type AgentRoutes = OpenAPIHono<DepsEnv>
 

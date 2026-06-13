@@ -1,5 +1,4 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
-import { requestId } from '../audit'
 import { requireAuth } from '../auth/session'
 import {
   AuthenticatedOperation,
@@ -11,6 +10,7 @@ import {
 } from '../openapi'
 import { createFederatedTenant, updateFederatedTenant } from '../usecases/federated-tenants'
 import { type AuthScope, FederatedTenantConflictError, type FederatedTenantRecord } from '../usecases/ports'
+import { requestId } from './request-context'
 
 // Mounted at /api/v1/auth/federated-tenants (docs/api-v1-design.md §2 Auth).
 // Federated tenants authorize external platforms (issuer + external tenant)

@@ -1,5 +1,4 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
-import { requestId } from '../audit'
 import { requireAuth } from '../auth/session'
 import {
   AuthenticatedOperation,
@@ -21,6 +20,7 @@ import {
   TriggerValidationError,
 } from '../usecases/ports'
 import { createTrigger, type UpdateTriggerPatch, updateTrigger } from '../usecases/triggers'
+import { requestId } from './request-context'
 
 type TriggerRoutes = OpenAPIHono<DepsEnv>
 

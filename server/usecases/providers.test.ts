@@ -112,6 +112,7 @@ function fakeDeps(
     usageRecords: undefined as unknown as Deps['usageRecords'],
     auditRecords: undefined as unknown as Deps['auditRecords'],
     triggers: undefined as unknown as Deps['triggers'],
+    triggerDispatch: undefined as unknown as Deps['triggerDispatch'],
     projects: undefined as unknown as Deps['projects'],
     federatedTenants: undefined as unknown as Deps['federatedTenants'],
     runners: undefined as unknown as Deps['runners'],

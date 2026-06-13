@@ -8,6 +8,7 @@ import type {
 import type { ConnectorAvailability, ConnectorCatalogEntry, ConnectorCatalogTool } from '@server/domain/connector'
 import type { EnvironmentConfig } from '@server/domain/environment'
 import type { CredentialStatus, DiscoveryTaskState, ModelAvailability, ProviderType } from '@server/domain/provider'
+import type { DiscoveredProviderModel } from '@server/domain/provider-adapter'
 import type {
   CredentialState,
   SecretMaterial,
@@ -16,7 +17,6 @@ import type {
   VaultScope,
   VersionState,
 } from '@server/domain/vault'
-import type { DiscoveredProviderModel } from '@server/providers/adapters'
 
 // A port-level error so the http layer can map orchestration validation
 // failures to a 400 without importing usecases internals or adapters. The
@@ -161,6 +161,9 @@ export interface AuditEntry {
   resourceId?: string | null
   outcome: 'success' | 'failure' | 'denied'
   requestId?: string | null
+  // Correlates the audit record with a broader dispatch flow (e.g. a scheduled
+  // trigger run). Persisted to the audit_records.correlation_id column.
+  correlationId?: string | null
   // Correlates the audit record with a session (e.g. a tool call denied inside
   // a session). Persisted to the audit_records.session_id column.
   sessionId?: string | null
@@ -1361,6 +1364,54 @@ export interface TriggerRepo {
   // when the agent/environment is missing (404) or unusable (409).
   agentUsable(projectId: string, agentId: string): Promise<{ status: 404 | 409; message: string } | null>
   environmentUsable(projectId: string, environmentId: string): Promise<{ status: 404 | 409; message: string } | null>
+}
+
+// --- trigger dispatch (background cron/queue) ---
+
+// The dispatch-relevant projection of a due trigger. Carries only the fields the
+// dispatch orchestration reads — the parsed execution spec plus the scheduling
+// columns needed to advance the next due time. runtime is validated at the repo
+// boundary so the usecase never re-parses raw column strings.
+export interface DueTrigger {
+  id: string
+  organizationId: string
+  projectId: string
+  name: string
+  agentId: string
+  environmentId: string
+  runtime: RuntimeName
+  promptTemplate: string
+  resourceRefs: Record<string, unknown>[]
+  metadata: Record<string, unknown>
+  nextDueAt: string
+  intervalSeconds: number
+}
+
+// A claimed dispatch run: the idempotency-keyed triggerRuns row the dispatch
+// flow advances. Null at claim time means the run was already claimed (the
+// UNIQUE idempotency guard lost the race) and is skipped.
+export interface ClaimedRun {
+  id: string
+  scheduledFor: string
+  correlationId: string
+}
+
+// DB boundary for the background trigger dispatcher (cron/queue entry). The
+// drizzle reads (due triggers), the idempotent run claim (UNIQUE-guarded
+// insert), and the run/trigger state advances all live in adapters/repos; the
+// dispatch-triggers usecase owns the orchestration (claim → session → audit).
+export interface TriggerDispatchRepo {
+  dueTriggers(options: { heartbeatAt: string; projectId?: string; limit: number }): Promise<DueTrigger[]>
+  // Returns null when the idempotency key collides (run already claimed).
+  claimRun(trigger: DueTrigger, heartbeatAt: string): Promise<ClaimedRun | null>
+  projectName(projectId: string): Promise<string | null>
+  markRunFailed(trigger: DueTrigger, run: ClaimedRun, message: string): Promise<void>
+  markRunSessionCreated(
+    trigger: DueTrigger,
+    run: ClaimedRun,
+    sessionId: string,
+    sessionMetadata: Record<string, unknown>,
+  ): Promise<void>
 }
 
 // --- projects ---

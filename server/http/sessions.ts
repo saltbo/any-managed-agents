@@ -1,7 +1,6 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
 import { AMA_SESSION_EVENT_TYPES } from '@shared/session-events'
 import type { Context } from 'hono'
-import { requestId } from '../audit'
 import { isRunnerOidcAuth, requireAuth, requireSessionEventsAuth } from '../auth/session'
 import { type ErrorType, errorResponse } from '../errors'
 import {
@@ -34,6 +33,7 @@ import {
   SessionValidationError,
 } from '../usecases/ports'
 import { sendSessionMessage, type UpdateSessionPatch, updateSession } from '../usecases/sessions'
+import { requestId } from './request-context'
 
 type SessionRoutes = OpenAPIHono<DepsEnv>
 

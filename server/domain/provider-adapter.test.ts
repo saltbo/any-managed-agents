@@ -5,7 +5,7 @@ import {
   normalizeProviderError,
   parseProviderModelCatalog,
   providerFamily,
-} from '../providers/adapters'
+} from './provider-adapter'
 
 describe('providerFamily', () => {
   it('maps runtime and configured provider names onto adapter families', () => {

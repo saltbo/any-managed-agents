@@ -1,7 +1,7 @@
 import { and, desc, eq } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
 import { providers } from '../db/schema'
-import { providerFamily } from '../providers/adapters'
+import { providerFamily } from '../domain/provider-adapter'
 import type { RuntimeSecretEnvEntry } from './secret-env'
 
 type Db = ReturnType<typeof drizzle>

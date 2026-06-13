@@ -21,6 +21,7 @@ import type {
   SessionEventPort,
   SessionRepo,
   SessionRuntimeGateway,
+  TriggerDispatchRepo,
   TriggerRepo,
   UsageRepo,
   VaultRepo,
@@ -48,6 +49,7 @@ export interface Deps {
   usageRecords: UsageRepo
   auditRecords: AuditReadRepo
   triggers: TriggerRepo
+  triggerDispatch: TriggerDispatchRepo
   projects: ProjectRepo
   federatedTenants: FederatedTenantRepo
   runners: RunnerRepo

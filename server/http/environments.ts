@@ -1,6 +1,5 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
 import { normalizeEnvironmentNetworkPolicy } from '@server/routes/environment-contracts'
-import { requestId } from '../audit'
 import { requireAuth } from '../auth/session'
 import {
   AuthenticatedOperation,
@@ -21,6 +20,7 @@ import {
   EnvironmentValidationError,
   type EnvironmentVersionRecord,
 } from '../usecases/ports'
+import { requestId } from './request-context'
 
 type EnvironmentRoutes = OpenAPIHono<DepsEnv>
 

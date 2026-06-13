@@ -1,5 +1,5 @@
 import type { ProviderCatalogGateway } from '@server/usecases/ports'
-import { type DiscoveredProviderModel, parseProviderModelCatalog, providerFamily } from '../../providers/adapters'
+import { type DiscoveredProviderModel, parseProviderModelCatalog, providerFamily } from '../../domain/provider-adapter'
 
 const FAMILY_DEFAULT_BASE_URLS: Record<string, string | undefined> = {
   openai: 'https://api.openai.com/v1',

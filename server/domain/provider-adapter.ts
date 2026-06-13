@@ -1,8 +1,9 @@
-// Provider adapter seam: per provider family error normalization, usage
-// extraction, model-catalog parsing, and pricing math. Adapters keep
-// provider-specific payload shapes out of the session protocol — canonical
-// events and usage records only ever carry normalized values, never raw
-// provider payloads or credential material.
+// Pure provider-family business rules: error normalization, usage extraction,
+// model-catalog parsing, and pricing math. Zero outward imports — the
+// normalization rules that keep provider-specific payload shapes out of the
+// session protocol (canonical events and usage records only ever carry
+// normalized values, never raw provider payloads or credential material) are
+// directly unit-testable.
 
 export const PROVIDER_FAMILIES = ['workers-ai', 'anthropic', 'openai', 'openai-compatible', 'ollama'] as const
 export type ProviderFamily = (typeof PROVIDER_FAMILIES)[number]

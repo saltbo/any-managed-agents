@@ -1,8 +1,8 @@
+import { computeModelCostMicros, isProviderErrorCategory, providerFamily } from '@server/domain/provider-adapter'
 import { and, desc, eq } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
-import type { CanonicalAmaSessionEvent } from '../../shared/session-events'
-import { providerModels, providers, sessions, usageRecords } from '../db/schema'
-import { computeModelCostMicros, isProviderErrorCategory, providerFamily } from './adapters'
+import type { CanonicalAmaSessionEvent } from '../../../shared/session-events'
+import { providerModels, providers, sessions, usageRecords } from '../../db/schema'
 
 type Db = ReturnType<typeof drizzle>
 
@@ -10,6 +10,18 @@ export interface UsageRecordingScope {
   organizationId: string
   projectId: string
   sessionId: string
+}
+
+// Usage-write boundary. Persists provider-domain accounting (model/tool usage
+// rows + provider lastError health) hung off canonical session-event inserts.
+// Write-only: the read/report side is UsageRepo. Constructed by the session-
+// event-store infra, not wired into Deps (no usecase records usage directly).
+export interface UsageWriteRepo {
+  recordProviderSignals(
+    scope: UsageRecordingScope,
+    sessionEventId: string,
+    canonicalEvent: CanonicalAmaSessionEvent,
+  ): Promise<void>
 }
 
 function newId(prefix: string) {
@@ -204,21 +216,20 @@ async function recordProviderError(db: Db, scope: UsageRecordingScope, payload: 
 // usage.recorded events (cloud runtime turns and runner-ingested events share
 // this insert path), tool usage rows from tool executions, and provider
 // lastError health from normalized runtime errors.
-export async function recordProviderSignalsForSessionEvent(
-  db: Db,
-  scope: UsageRecordingScope,
-  sessionEventId: string,
-  canonicalEvent: CanonicalAmaSessionEvent,
-) {
-  if (canonicalEvent.type === 'usage.recorded') {
-    await recordModelUsage(db, scope, sessionEventId, canonicalEvent.payload)
-    return
-  }
-  if (canonicalEvent.type === 'tool_execution_end') {
-    await recordToolUsage(db, scope, sessionEventId, canonicalEvent.payload)
-    return
-  }
-  if (canonicalEvent.type === 'runtime.error') {
-    await recordProviderError(db, scope, canonicalEvent.payload)
+export function createUsageWriteRepo(db: Db): UsageWriteRepo {
+  return {
+    async recordProviderSignals(scope, sessionEventId, canonicalEvent) {
+      if (canonicalEvent.type === 'usage.recorded') {
+        await recordModelUsage(db, scope, sessionEventId, canonicalEvent.payload)
+        return
+      }
+      if (canonicalEvent.type === 'tool_execution_end') {
+        await recordToolUsage(db, scope, sessionEventId, canonicalEvent.payload)
+        return
+      }
+      if (canonicalEvent.type === 'runtime.error') {
+        await recordProviderError(db, scope, canonicalEvent.payload)
+      }
+    },
   }
 }

@@ -21,6 +21,7 @@ import { createProjectRepo } from './adapters/repos/projects'
 import { createProviderRepo } from './adapters/repos/providers'
 import { createRunnerRepo } from './adapters/repos/runners'
 import { createSessionRepo } from './adapters/repos/sessions'
+import { createTriggerDispatchRepo } from './adapters/repos/trigger-dispatch'
 import { createTriggerRepo } from './adapters/repos/triggers'
 import { createUsageRepo } from './adapters/repos/usage-records'
 import { createVaultRepo } from './adapters/repos/vaults'
@@ -52,6 +53,7 @@ export function createDeps(env: Env): Deps {
     usageRecords: createUsageRepo(db),
     auditRecords: createAuditReadRepo(db),
     triggers: createTriggerRepo(db),
+    triggerDispatch: createTriggerDispatchRepo(db),
     projects: createProjectRepo(db),
     federatedTenants: createFederatedTenantRepo(db),
     runners: createRunnerRepo(db),

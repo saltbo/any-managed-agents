@@ -17,13 +17,13 @@ import {
   Type,
   type Usage,
 } from '@earendil-works/pi-ai'
-import type { Env } from '../env'
 import {
   extractProviderUsage,
   type NormalizedProviderError,
   normalizeProviderError,
   providerFamily,
-} from '../providers/adapters'
+} from '../domain/provider-adapter'
+import type { Env } from '../env'
 import type { RuntimeSecretEnvEntry } from './secret-env'
 import { toolExecutor } from './tool-executor'
 

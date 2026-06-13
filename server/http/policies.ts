@@ -1,5 +1,4 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
-import { requestId } from '../audit'
 import { requireAuth } from '../auth/session'
 import { AuthenticatedOperation, type DepsEnv, ErrorResponseSchema, listResponseSchema } from '../openapi'
 import {
@@ -15,6 +14,7 @@ import {
   type PolicyScope,
   PolicyScopeConflictError,
 } from '../usecases/ports'
+import { requestId } from './request-context'
 
 type PolicyRoutes = OpenAPIHono<DepsEnv>
 

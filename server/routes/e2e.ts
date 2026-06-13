@@ -123,7 +123,6 @@ const routes = app
     if (c.env.AMA_E2E_TEST_AUTH !== 'true' || c.env.AMA_RUNTIME_MODE !== 'test') {
       return errorResponse(c, 404, 'not_found', 'Not found')
     }
-    const db = drizzle(c.env.DB)
     const auth = await requireAuth(c)
     if (auth instanceof Response) {
       return auth

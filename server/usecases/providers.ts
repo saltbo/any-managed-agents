@@ -1,5 +1,5 @@
 import { validateProviderBaseUrl } from '@server/domain/provider'
-import { type DiscoveredProviderModel, normalizeProviderError, providerFamily } from '@server/providers/adapters'
+import { type DiscoveredProviderModel, normalizeProviderError, providerFamily } from '@server/domain/provider-adapter'
 import type { Deps } from './deps'
 import {
   type AuthScope,

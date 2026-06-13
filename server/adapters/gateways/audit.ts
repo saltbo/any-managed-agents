@@ -1,27 +1,48 @@
 import type { AuditEntry, AuditPort, AuthScope } from '@server/usecases/ports'
 import type { drizzle } from 'drizzle-orm/d1'
-import { recordAudit } from '../../audit'
-import type { AuthContext } from '../../auth/session'
+import { auditRecords } from '../../db/schema'
+import { redactSensitiveValue } from '../../redaction'
 
 type Db = ReturnType<typeof drizzle>
 
-// AuthScope is the usecase-facing subset of the http AuthContext. recordAudit
-// reads only organization/project/user from it, so the cast is sound.
+function newId(prefix: string) {
+  return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
+}
+
+// The scheduler actor is recorded as a system actor with no user id; every
+// other caller is the authenticated user.
+function defaultActor(auth: AuthScope) {
+  if (auth.user.id === 'system:scheduler') {
+    return { actorType: 'system' as const, actorUserId: null }
+  }
+  return { actorType: 'user' as const, actorUserId: auth.user.id }
+}
+
+// Audit write boundary. Owns the audit_records insert directly (it already holds
+// the db handle); secret material is redacted from the JSON blobs before they
+// land in the row.
 export function createAuditPort(db: Db): AuditPort {
   return {
     async record(auth: AuthScope, entry: AuditEntry) {
-      await recordAudit(db, {
-        auth: auth as AuthContext,
+      const actor = defaultActor(auth)
+      await db.insert(auditRecords).values({
+        id: newId('audit'),
+        organizationId: auth.organization.id,
+        projectId: auth.project.id,
+        actorUserId: actor.actorUserId,
+        actorType: actor.actorType,
         action: entry.action,
         resourceType: entry.resourceType,
         resourceId: entry.resourceId ?? null,
         outcome: entry.outcome,
         requestId: entry.requestId ?? null,
-        ...(entry.sessionId !== undefined ? { sessionId: entry.sessionId } : {}),
-        ...(entry.policyCategory !== undefined ? { policyCategory: entry.policyCategory } : {}),
-        ...(entry.before !== undefined ? { before: entry.before } : {}),
-        ...(entry.after !== undefined ? { after: entry.after } : {}),
-        ...(entry.metadata !== undefined ? { metadata: entry.metadata } : {}),
+        correlationId: entry.correlationId ?? null,
+        sessionId: entry.sessionId ?? null,
+        policyCategory: entry.policyCategory ?? null,
+        metadata: JSON.stringify(redactSensitiveValue(entry.metadata ?? {})),
+        before: JSON.stringify(redactSensitiveValue(entry.before ?? {})),
+        after: JSON.stringify(redactSensitiveValue(entry.after ?? {})),
+        createdAt: new Date().toISOString(),
       })
     },
   }
