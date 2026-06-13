@@ -90,7 +90,8 @@ Then('the builder captures name, description, instructions, and model', async fu
   await expect(page.getByLabel('Description', { exact: true })).toBeVisible()
   await expect(page.getByLabel('Instructions', { exact: true })).toBeVisible()
   await expect(page.getByLabel('Model', { exact: true })).toBeVisible()
-  await expect(page.getByLabel('Model', { exact: true })).toHaveValue(/.+/)
+  // The model field is a catalog-backed select; the trigger shows the drafted model id.
+  await expect(page.getByLabel('Model', { exact: true })).toContainText('@cf/')
 })
 
 Then('required fields are validated before saving', async function (this: BuilderWorld) {
@@ -271,7 +272,7 @@ Then(
     await expect(page).toHaveURL(/step=core/)
     await expect(page.getByLabel('Name', { exact: true })).toHaveValue(/Review incoming pull requests/)
     await expect(page.getByLabel('Instructions', { exact: true })).toHaveValue(/summarize risky changes/)
-    await expect(page.getByLabel('Model', { exact: true })).toHaveValue(/.+/)
+    await expect(page.getByLabel('Model', { exact: true })).toContainText('@cf/')
     await nextStep(page, 'tools')
     await expect(page.getByLabel('Allowed tools', { exact: true })).toHaveValue('read\nwrite\nshell')
     await expect(page.getByText('MCP connectors', { exact: true })).toBeVisible()

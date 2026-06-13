@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query'
 import { Wand2 } from 'lucide-react'
 import { Link } from 'react-router'
 import { Button, buttonVariants } from '@/components/ui/button'
@@ -8,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { StatusBadge } from '@/console/components'
 import { TextAreaField, TextField } from '@/console/forms'
-import type { Environment, McpConnector, Provider } from '@/lib/api'
+import { api, type Environment, type McpConnector, type Provider } from '@/lib/api'
+import { queryKeys } from '@/lib/query-keys'
 import { cn } from '@/lib/utils'
 import {
   AGENT_TEMPLATES,
@@ -107,6 +109,14 @@ export function CoreStep({ draft, errors, setField, providers }: StepProps & { p
       .filter((provider) => provider.status === 'active' && provider.type !== 'workers-ai')
       .map((provider) => ({ id: provider.id, label: `${provider.displayName} (${provider.type})` })),
   ]
+  const modelsQuery = useQuery({
+    queryKey: queryKeys.providers.models(draft.provider),
+    queryFn: () => api.listProviderModels(draft.provider),
+    enabled: Boolean(draft.provider),
+  })
+  const modelIds = (modelsQuery.data?.data ?? [])
+    .filter((model) => model.availability === 'available')
+    .map((model) => model.modelId)
   return (
     <div className="grid gap-4">
       <TextField label="Name" value={draft.name} onChange={(value) => setField('name', value)} error={errors.name} />
@@ -125,9 +135,15 @@ export function CoreStep({ draft, errors, setField, providers }: StepProps & { p
         error={errors.instructions}
       />
       <Field data-invalid={errors.provider ? true : undefined}>
-        <FieldLabel>Provider</FieldLabel>
-        <Select value={draft.provider} onValueChange={(value) => setField('provider', value)}>
-          <SelectTrigger>
+        <FieldLabel htmlFor="builder-provider">Provider</FieldLabel>
+        <Select
+          value={draft.provider}
+          onValueChange={(value) => {
+            setField('provider', value)
+            setField('model', '')
+          }}
+        >
+          <SelectTrigger id="builder-provider">
             <SelectValue placeholder="Select a provider" />
           </SelectTrigger>
           <SelectContent>
@@ -141,13 +157,26 @@ export function CoreStep({ draft, errors, setField, providers }: StepProps & { p
         <FieldDescription>Configured project providers appear here next to the platform default.</FieldDescription>
         {errors.provider ? <FieldError>{errors.provider}</FieldError> : null}
       </Field>
-      <TextField
-        label="Model"
-        description="Model identifier validated against the provider catalog when the agent is saved."
-        value={draft.model}
-        onChange={(value) => setField('model', value)}
-        error={errors.model}
-      />
+      <Field data-invalid={errors.model ? true : undefined}>
+        <FieldLabel htmlFor="builder-model">Model</FieldLabel>
+        <Select {...(draft.model ? { value: draft.model } : {})} onValueChange={(value) => setField('model', value)}>
+          <SelectTrigger id="builder-model">
+            <SelectValue placeholder="Select a model" />
+          </SelectTrigger>
+          <SelectContent>
+            {modelIds.map((modelId) => (
+              <SelectItem key={modelId} value={modelId}>
+                {modelId}
+              </SelectItem>
+            ))}
+            {draft.model && !modelIds.includes(draft.model) ? (
+              <SelectItem value={draft.model}>{draft.model}</SelectItem>
+            ) : null}
+          </SelectContent>
+        </Select>
+        <FieldDescription>Models come from the provider catalog and are validated when the agent is saved.</FieldDescription>
+        {errors.model ? <FieldError>{errors.model}</FieldError> : null}
+      </Field>
     </div>
   )
 }
