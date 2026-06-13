@@ -62,6 +62,20 @@ describe('quickstart step sequencing [spec: quickstart/step-sequencing]', () => 
   })
 })
 
+describe('quickstart step sequencing — all-complete fallback [spec: quickstart/step-sequencing]', () => {
+  it('returns integration when all steps are complete (firstIncompleteStep fallback)', () => {
+    const completion = quickstartCompletion({
+      providers: [{ enabled: true } as import('@/lib/api').Provider],
+      environments: [{ archivedAt: null } as import('@/lib/api').Environment],
+      agents: [{ archivedAt: null } as import('@/lib/api').Agent],
+      sessions: [{ state: 'idle' } as import('@/lib/api').Session],
+    })
+    expect(firstIncompleteStep(completion)).toBe('integration')
+    // resolveQuickstartStep with null falls to firstIncompleteStep → 'integration'
+    expect(resolveQuickstartStep(null, completion)).toBe('integration')
+  })
+})
+
 describe('quickstart environment input [spec: quickstart/environment-input]', () => {
   it('creates an unrestricted cloud environment', () => {
     expect(quickstartEnvironmentInput({ ...defaultQuickstartEnvironmentForm, name: ' Env ' })).toMatchObject({
@@ -69,6 +83,18 @@ describe('quickstart environment input [spec: quickstart/environment-input]', ()
       hostingMode: 'cloud',
       networkPolicy: { mode: 'unrestricted' },
     })
+  })
+
+  it('blocks package-manager registry access when packageManagerAccess is false', () => {
+    const input = quickstartEnvironmentInput({
+      name: 'Blocked env',
+      networkChoice: 'restricted',
+      allowedHosts: '',
+      mcpAccess: true,
+      packageManagerAccess: false,
+    })
+    expect(input.packageManagerPolicy).toEqual({ allowedRegistries: [] })
+    expect(input.mcpPolicy).toEqual({ allowedConnectors: ['*'] })
   })
 
   it('captures allowed hosts, MCP access, and package-manager access for limited networking', () => {
@@ -126,5 +152,17 @@ describe('quickstart integration examples [spec: quickstart/integration-examples
     expect(combined).toContain('$AMA_ACCESS_TOKEN')
     expect(combined).not.toMatch(/Bearer [A-Za-z0-9]/)
     expect(combined).not.toMatch(/\b(?:api\.)?(?:openai|anthropic)\.com\b/)
+  })
+
+  it('falls back to session events URL when runtimePath is null', () => {
+    const examplesNoPath = quickstartIntegrationExamples({
+      origin: 'https://ama.example.com',
+      agentId: 'agent_123',
+      environmentId: 'env_456',
+      sessionId: 'sess_789',
+      runtimePath: null,
+    })
+    expect(examplesNoPath.curl).toContain('/api/v1/sessions/sess_789/events')
+    expect(examplesNoPath.curl).not.toContain('/runtime/')
   })
 })

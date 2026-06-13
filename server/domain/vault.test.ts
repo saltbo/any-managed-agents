@@ -63,6 +63,24 @@ describe('[spec: vaults/secret-reference] stripStoredSecretMetadata', () => {
   })
 })
 
+describe('[spec: vaults/secret-reference] secretReference ama-managed validation', () => {
+  it('requires a secret value for ama-managed credentials', () => {
+    expect(() => secretReference('c', 1, { provider: 'ama-managed' })).toThrow(/secretValue is required/)
+  })
+
+  it('rejects an external path for ama-managed credentials', () => {
+    expect(() =>
+      secretReference('c', 1, { provider: 'ama-managed', secretValue: 'token', externalVaultPath: 'vault://x' }),
+    ).toThrow(/externalVaultPath is not accepted/)
+  })
+
+  it('uses a custom reference name for ama-managed when provided', () => {
+    const ref = secretReference('c', 1, { provider: 'ama-managed', secretValue: 'token', referenceName: 'MY_SECRET' })
+    expect(ref.referenceName).toBe('MY_SECRET')
+    expect(ref.secretRef).toBe('ama-managed:MY_SECRET')
+  })
+})
+
 describe('[spec: vaults/version-delete] credentialRefPinsVersion', () => {
   const version = { credentialId: 'cred_1', id: 'ver_1' }
 

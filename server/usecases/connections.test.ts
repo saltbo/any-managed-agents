@@ -314,6 +314,86 @@ describe('[spec: connections/tool-call] executeToolCall', () => {
       expect(outcome.record.error?.type).toBe('mcp_upstream_error')
     }
   })
+
+  it('emits policy.decision with tool resource type when category is tool', async () => {
+    const events: Array<{ type: string; payload: Record<string, unknown> }> = []
+    const deps = fakeDeps({
+      policy: {
+        evaluateMcpTool: async () => ({ allowed: false, category: 'tool', rule: 'blocked-tool', message: 'blocked' }),
+      },
+      sessionEvents: {
+        append: async (v) => {
+          events.push({ type: v.type, payload: v.payload as Record<string, unknown> })
+          return 'event_1'
+        },
+      },
+    })
+    const outcome = await executeToolCall(deps, auth, connection(), session, tool(), 'repo.read', {})
+    expect(outcome.kind).toBe('denied')
+    const decisionEvent = events.find((e) => e.type === 'policy.decision')
+    expect(decisionEvent?.payload.resourceType).toBe('tool')
+    expect(decisionEvent?.payload.resourceId).toBe('repo.read')
+  })
+
+  it('includes structuredContent in the output when the MCP call returns it', async () => {
+    const deps = fakeDeps({
+      mcp: {
+        callTool: async () => ({
+          content: [{ type: 'text', text: 'result' }],
+          structuredContent: { score: 0.9 },
+          isError: false,
+        }),
+      },
+    })
+    const outcome = await executeToolCall(deps, auth, connection(), session, tool(), 'repo.read', {})
+    expect(outcome.kind).toBe('completed')
+    if (outcome.kind === 'completed') {
+      expect(outcome.record.output).toMatchObject({ structuredContent: { score: 0.9 } })
+    }
+  })
+})
+
+describe('[spec: connections/tools] listConnectionTools — timeout metadata', () => {
+  it('uses a custom requestTimeoutMs from connection metadata when syncing tools', async () => {
+    const targets: { timeoutMs: number }[] = []
+    const deps = fakeDeps({
+      mcp: {
+        listTools: async (target) => {
+          targets.push(target as { timeoutMs: number })
+          return []
+        },
+      },
+      connections: { listTools: async () => [] },
+    })
+    await listConnectionTools(deps, connection({ metadata: { requestTimeoutMs: 5000 } }))
+    expect(targets[0]!.timeoutMs).toBe(5000)
+  })
+})
+
+describe('[spec: connections/create] createConnection — credential error branches', () => {
+  it('wraps a non-Error resolve failure as a ConnectionConflictError', async () => {
+    const deps = fakeDeps({
+      connections: {
+        resolveCredential: async () => {
+          throw 'string error'
+        },
+      },
+    })
+    await expect(createConnection(deps, auth, connector(), input())).rejects.toBeInstanceOf(ConnectionConflictError)
+  })
+
+  it('includes the Error message when resolveCredential throws an Error instance during create', async () => {
+    const deps = fakeDeps({
+      connections: {
+        resolveCredential: async () => {
+          throw new Error('credential lookup failed')
+        },
+      },
+    })
+    const error = await createConnection(deps, auth, connector(), input()).catch((e) => e)
+    expect(error).toBeInstanceOf(ConnectionConflictError)
+    expect(error.message).toContain('credential lookup failed')
+  })
 })
 
 describe('[spec: connections/update] updateConnection', () => {
@@ -331,6 +411,67 @@ describe('[spec: connections/update] updateConnection', () => {
     const updated = await updateConnection(deps, auth, connection(), connector(), { state: 'disconnected' })
     expect(updated.state).toBe('disconnected')
     expect(updated.disconnectedAt).not.toBeNull()
+  })
+
+  it('wraps a non-Error resolve failure during update as a ConnectionConflictError', async () => {
+    const deps = fakeDeps({
+      connections: {
+        resolveCredential: async () => {
+          throw 'string error'
+        },
+      },
+    })
+    await expect(
+      updateConnection(deps, auth, connection(), connector(), { credentialRef: { credentialId: 'cred_new' } }),
+    ).rejects.toBeInstanceOf(ConnectionConflictError)
+  })
+
+  it('includes the Error message when resolveCredential throws an Error instance during update', async () => {
+    const deps = fakeDeps({
+      connections: {
+        resolveCredential: async () => {
+          throw new Error('update credential lookup failed')
+        },
+      },
+    })
+    const error = await updateConnection(deps, auth, connection(), connector(), {
+      credentialRef: { credentialId: 'cred_new' },
+    }).catch((e) => e)
+    expect(error).toBeInstanceOf(ConnectionConflictError)
+    expect(error.message).toContain('update credential lookup failed')
+  })
+
+  it('resolves a new credential when credentialRef is provided in the update patch', async () => {
+    const deps = fakeDeps({
+      connections: {
+        resolveCredential: async () => ({ credentialId: 'cred_new', credentialVersionId: 'ver_new' }),
+        update: async (id, fields) => connection({ id, ...fields }),
+      },
+    })
+    const updated = await updateConnection(deps, auth, connection(), connector(), {
+      credentialRef: { credentialId: 'cred_new' },
+    })
+    expect(updated.credentialId).toBe('cred_new')
+  })
+
+  it('retains existing state when patch does not specify state', async () => {
+    const deps = fakeDeps({ connections: { update: async (id, fields) => connection({ id, ...fields }) } })
+    const updated = await updateConnection(deps, auth, connection({ state: 'connected' }), connector(), {
+      endpointUrl: 'https://new.example/mcp',
+    })
+    expect(updated.state).toBe('connected')
+  })
+
+  it('retains existing endpointUrl when patch does not include endpointUrl', async () => {
+    const deps = fakeDeps({ connections: { update: async (id, fields) => connection({ id, ...fields }) } })
+    const updated = await updateConnection(deps, auth, connection(), connector(), { approvalMode: 'per_call' })
+    expect(updated.endpointUrl).toBe('https://mcp.example/mcp')
+  })
+
+  it('sets endpointUrl to null when explicitly patched to null', async () => {
+    const deps = fakeDeps({ connections: { update: async (id, fields) => connection({ id, ...fields }) } })
+    const updated = await updateConnection(deps, auth, connection(), connector(), { endpointUrl: null })
+    expect(updated.endpointUrl).toBeNull()
   })
 })
 

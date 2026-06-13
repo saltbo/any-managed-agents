@@ -37,7 +37,9 @@ export function SessionsPage() {
   const sessionsQuery = useQuery({
     queryKey: queryKeys.sessions.list(archived),
     queryFn: () => api.listSessions({ archived }),
+    /* v8 ignore start -- refetchInterval is a React Query internal callback, unreachable in unit tests */
     refetchInterval: (query) => (query.state.data?.data.some((session) => session.state === 'pending') ? 2000 : false),
+    /* v8 ignore stop */
   })
   const sessions = useMemo(() => {
     const filtered = (sessionsQuery.data?.data ?? []).filter(

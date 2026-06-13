@@ -1,0 +1,546 @@
+import { describe, expect, it } from 'vitest'
+import type { Deps } from './deps'
+import {
+  type AuthScope,
+  type SessionMessageRecord,
+  type SessionRecord,
+  type SessionRuntimeRow,
+  SessionValidationError,
+} from './ports'
+import { sendSessionMessage, updateSession } from './sessions'
+
+const auth: AuthScope = {
+  organization: { id: 'org_1', name: 'Org' },
+  project: { id: 'project_1', name: 'Project' },
+  user: { id: 'user_1' },
+  roles: [],
+  permissions: [],
+}
+
+function sessionRow(overrides: Partial<SessionRuntimeRow> = {}): SessionRuntimeRow {
+  return {
+    id: 'sess_1',
+    projectId: 'project_1',
+    organizationId: 'org_1',
+    state: 'idle',
+    archivedAt: null,
+    sandboxId: null,
+    metadata: {},
+    ...overrides,
+  }
+}
+
+function sessionRecord(overrides: Partial<SessionRecord> = {}): SessionRecord {
+  return {
+    id: 'sess_1',
+    projectId: 'project_1',
+    agentId: 'agent_1',
+    agentVersionId: 'agentver_1',
+    agentSnapshot: {},
+    environmentId: null,
+    environmentVersionId: null,
+    environmentSnapshot: null,
+    title: null,
+    resourceRefs: [],
+    env: {},
+    secretEnv: [],
+    runtimeMetadata: {
+      hostingMode: 'cloud',
+      runtime: 'cloudflare',
+      runtimeConfig: {},
+      provider: 'workers-ai',
+      model: null,
+      driver: null,
+      backend: null,
+      protocol: null,
+    },
+    state: 'idle',
+    stateReason: null,
+    metadata: {},
+    startedAt: null,
+    stoppedAt: null,
+    archivedAt: null,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
+function messageRecord(overrides: Partial<SessionMessageRecord> = {}): SessionMessageRecord {
+  return {
+    id: 'msg_1',
+    sessionId: 'sess_1',
+    type: 'prompt',
+    content: 'hello',
+    delivery: 'live',
+    state: 'accepted',
+    error: null,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
+function fakeDeps(
+  overrides: { sessions?: Partial<Deps['sessions']>; sessionRuntime?: Partial<Deps['sessionRuntime']> } = {},
+): Deps {
+  const sessions: Deps['sessions'] = {
+    list: async () => ({ rows: [], hasMore: false }),
+    find: async () => sessionRecord(),
+    findRuntimeRow: async () => sessionRow(),
+    readConnection: async () => null,
+    updateFields: async () => sessionRecord(),
+    listMessages: async () => ({ rows: [], hasMore: false }),
+    findMessage: async () => null,
+    insertMessage: async (record): Promise<SessionMessageRecord> =>
+      messageRecord({
+        content: record.content,
+        delivery: record.delivery,
+        state: record.state,
+        createdAt: record.createdAt,
+      }),
+    queryEvents: async () => ({ rows: [], hasMore: false }),
+    insertEvents: async () => 0,
+    listApprovals: async () => [],
+    findApproval: async () => null,
+    activeSessionLeaseForRunner: async () => null,
+    ...overrides.sessions,
+  }
+  const sessionRuntime: Deps['sessionRuntime'] = {
+    createSession: async () => ({ ok: true, value: sessionRecord() }),
+    stopSession: async () => ({ ok: true, value: sessionRecord({ state: 'stopped' }) }),
+    archiveSession: async () => ({ ok: true, value: sessionRecord({ archivedAt: '2026-01-02T00:00:00.000Z' }) }),
+    unarchiveSession: async () => sessionRecord(),
+    dispatchPrompt: async () => ({ ok: true, delivery: 'live', state: 'accepted' }),
+    decideApproval: async () => ({
+      ok: true,
+      value: {
+        id: 'appr_1',
+        sessionId: 'sess_1',
+        toolCallId: 'tc_1',
+        toolName: 'tool',
+        input: {},
+        relatedEventIds: [],
+        state: 'approved',
+        reason: null,
+        result: null,
+        requestedAt: 'T',
+        decidedAt: 'T',
+        createdAt: 'T',
+        updatedAt: 'T',
+      },
+    }),
+    markExpiredPending: async () => {},
+    ...overrides.sessionRuntime,
+  }
+  return {
+    agents: undefined as unknown as Deps['agents'],
+    environments: undefined as unknown as Deps['environments'],
+    providers: undefined as unknown as Deps['providers'],
+    providerCatalog: undefined as unknown as Deps['providerCatalog'],
+    vaults: undefined as unknown as Deps['vaults'],
+    secretStore: undefined as unknown as Deps['secretStore'],
+    connectors: undefined as unknown as Deps['connectors'],
+    connections: undefined as unknown as Deps['connections'],
+    policies: undefined as unknown as Deps['policies'],
+    accessRules: undefined as unknown as Deps['accessRules'],
+    budgets: undefined as unknown as Deps['budgets'],
+    mcp: undefined as unknown as Deps['mcp'],
+    sessionEvents: undefined as unknown as Deps['sessionEvents'],
+    usageRecords: undefined as unknown as Deps['usageRecords'],
+    auditRecords: undefined as unknown as Deps['auditRecords'],
+    triggers: undefined as unknown as Deps['triggers'],
+    triggerDispatch: undefined as unknown as Deps['triggerDispatch'],
+    projects: undefined as unknown as Deps['projects'],
+    federatedTenants: undefined as unknown as Deps['federatedTenants'],
+    runners: undefined as unknown as Deps['runners'],
+    workItems: undefined as unknown as Deps['workItems'],
+    leases: undefined as unknown as Deps['leases'],
+    runtimeSecretEnv: undefined as unknown as Deps['runtimeSecretEnv'],
+    audit: { record: async () => {} },
+    policy: {
+      resolveToolPolicy: async () => ({}),
+      resolveMcpPolicy: async () => ({}),
+      evaluateMcpTool: async () => ({ allowed: true, category: 'mcp', rule: null, message: '' }),
+      resolveEffective: async () => ({
+        source: { type: 'platform_default', id: 'workers-ai-default' },
+        sources: [],
+        accessRules: [],
+        toolPolicy: {},
+        mcpPolicy: {},
+        sandboxPolicy: {},
+      }),
+      evaluateProvider: async () => ({ allowed: true, category: 'provider', rule: null, message: '' }),
+    },
+    sessions,
+    sessionRuntime,
+  }
+}
+
+// ── updateSession ────────────────────────────────────────────────────────────
+
+describe('[spec: sessions/archive] updateSession — archived session', () => {
+  it('unarchives when patch is {archived:false} and nothing else', async () => {
+    let called = false
+    const deps = fakeDeps({
+      sessionRuntime: {
+        unarchiveSession: async () => {
+          called = true
+          return sessionRecord()
+        },
+      },
+    })
+    const result = await updateSession(
+      deps,
+      auth,
+      sessionRow({ archivedAt: '2026-01-02T00:00:00.000Z' }),
+      { archived: false },
+      null,
+    )
+    expect(result.ok).toBe(true)
+    expect(called).toBe(true)
+  })
+
+  it('returns 409 conflict when patching an archived session with any other field', async () => {
+    const result = await updateSession(
+      fakeDeps(),
+      auth,
+      sessionRow({ archivedAt: '2026-01-02T00:00:00.000Z' }),
+      { title: 'New' },
+      null,
+    )
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error.status).toBe(409)
+      expect(result.error.code).toBe('conflict')
+    }
+  })
+
+  it('returns 409 conflict when archived session receives a state patch', async () => {
+    const result = await updateSession(
+      fakeDeps(),
+      auth,
+      sessionRow({ archivedAt: '2026-01-02T00:00:00.000Z' }),
+      { state: 'stopped' },
+      null,
+    )
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error.status).toBe(409)
+    }
+  })
+
+  it('returns 409 conflict when archived:false is combined with another patch field', async () => {
+    const result = await updateSession(
+      fakeDeps(),
+      auth,
+      sessionRow({ archivedAt: '2026-01-02T00:00:00.000Z' }),
+      { archived: false, title: 'oops' },
+      null,
+    )
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error.code).toBe('conflict')
+    }
+  })
+})
+
+describe('[spec: sessions/archive] updateSession — title and metadata edits', () => {
+  it('updates only title when title is provided', async () => {
+    const updated: string[] = []
+    const deps = fakeDeps({
+      sessions: {
+        updateFields: async (_pid, _sid, fields) => {
+          updated.push(JSON.stringify(fields))
+          return sessionRecord({ title: fields.title ?? null })
+        },
+        findRuntimeRow: async () => sessionRow(),
+        find: async () => sessionRecord({ title: 'New title' }),
+      },
+    })
+    const result = await updateSession(deps, auth, sessionRow(), { title: 'New title' }, null)
+    expect(result.ok).toBe(true)
+    expect(updated).toHaveLength(1)
+    expect(JSON.parse(updated[0] ?? '')).toMatchObject({ title: 'New title' })
+  })
+
+  it('skips null title from the fields payload', async () => {
+    const updated: object[] = []
+    const deps = fakeDeps({
+      sessions: {
+        updateFields: async (_pid, _sid, fields) => {
+          updated.push(fields)
+          return sessionRecord()
+        },
+        findRuntimeRow: async () => sessionRow(),
+        find: async () => sessionRecord(),
+      },
+    })
+    await updateSession(deps, auth, sessionRow(), { title: null }, null)
+    expect(updated[0]).not.toHaveProperty('title')
+  })
+
+  it('throws SessionValidationError when metadata contains secret material', async () => {
+    await expect(
+      updateSession(fakeDeps(), auth, sessionRow(), { metadata: { api_key: 'raw-secret' } }, null),
+    ).rejects.toBeInstanceOf(SessionValidationError)
+  })
+
+  it('merges metadata update, removing null-keyed entries', async () => {
+    let mergedMetadata: Record<string, unknown> | undefined
+    const deps = fakeDeps({
+      sessions: {
+        updateFields: async (_pid, _sid, fields) => {
+          mergedMetadata = fields.metadata
+          return sessionRecord({ metadata: fields.metadata ?? {} })
+        },
+        findRuntimeRow: async () => sessionRow({ metadata: { keep: 'yes', remove: 'old' } }),
+        find: async () => sessionRecord(),
+      },
+    })
+    await updateSession(
+      deps,
+      auth,
+      sessionRow({ metadata: { keep: 'yes', remove: 'old' } }),
+      { metadata: { remove: null } },
+      null,
+    )
+    expect(mergedMetadata).toEqual({ keep: 'yes' })
+  })
+
+  it('throws when updateFields returns null', async () => {
+    const deps = fakeDeps({
+      sessions: {
+        updateFields: async () => null,
+      },
+    })
+    await expect(updateSession(deps, auth, sessionRow(), { title: 'X' }, null)).rejects.toThrow(
+      'Updated session row is required',
+    )
+  })
+
+  it('throws when findRuntimeRow returns null after updateFields', async () => {
+    const deps = fakeDeps({
+      sessions: {
+        updateFields: async () => sessionRecord(),
+        findRuntimeRow: async () => null,
+      },
+    })
+    await expect(updateSession(deps, auth, sessionRow(), { title: 'X' }, null)).rejects.toThrow(
+      'Updated session row is required',
+    )
+  })
+})
+
+describe('[spec: sessions/stop] updateSession — stop transition', () => {
+  it('stops a live session and returns the stopped record', async () => {
+    let stopped = false
+    const deps = fakeDeps({
+      sessionRuntime: {
+        stopSession: async () => {
+          stopped = true
+          return { ok: true, value: sessionRecord({ state: 'stopped' }) }
+        },
+      },
+    })
+    const result = await updateSession(deps, auth, sessionRow(), { state: 'stopped' }, 'req_1')
+    expect(result.ok).toBe(true)
+    expect(stopped).toBe(true)
+  })
+
+  it('returns the runtime error when stop fails', async () => {
+    const deps = fakeDeps({
+      sessionRuntime: {
+        stopSession: async () => ({ ok: false, error: { status: 409, code: 'conflict', message: 'Already stopped' } }),
+      },
+    })
+    const result = await updateSession(deps, auth, sessionRow(), { state: 'stopped' }, null)
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error.code).toBe('conflict')
+    }
+  })
+
+  it('archives after stop when both are requested', async () => {
+    let archived = false
+    const deps = fakeDeps({
+      sessionRuntime: {
+        stopSession: async () => ({ ok: true, value: sessionRecord({ state: 'stopped' }) }),
+        archiveSession: async () => {
+          archived = true
+          return { ok: true, value: sessionRecord({ archivedAt: '2026-01-02T00:00:00.000Z' }) }
+        },
+      },
+      sessions: {
+        findRuntimeRow: async () => sessionRow({ state: 'stopped' }),
+      },
+    })
+    const result = await updateSession(deps, auth, sessionRow(), { state: 'stopped', archived: true }, null)
+    expect(result.ok).toBe(true)
+    expect(archived).toBe(true)
+  })
+
+  it('throws when findRuntimeRow returns null after stop+archive', async () => {
+    const deps = fakeDeps({
+      sessionRuntime: {
+        stopSession: async () => ({ ok: true, value: sessionRecord({ state: 'stopped' }) }),
+      },
+      sessions: {
+        findRuntimeRow: async () => null,
+      },
+    })
+    await expect(updateSession(deps, auth, sessionRow(), { state: 'stopped', archived: true }, null)).rejects.toThrow(
+      'Stopped session row is required',
+    )
+  })
+})
+
+describe('[spec: sessions/archive] updateSession — archive without stop', () => {
+  it('archives a live session when archived:true is the only patch', async () => {
+    let archived = false
+    const deps = fakeDeps({
+      sessionRuntime: {
+        archiveSession: async () => {
+          archived = true
+          return { ok: true, value: sessionRecord({ archivedAt: '2026-01-02T00:00:00.000Z' }) }
+        },
+      },
+    })
+    const result = await updateSession(deps, auth, sessionRow(), { archived: true }, null)
+    expect(result.ok).toBe(true)
+    expect(archived).toBe(true)
+  })
+})
+
+describe('[spec: sessions/archive] updateSession — no-op patch', () => {
+  it('returns the current record when the patch carries no fields', async () => {
+    let findCalled = false
+    const deps = fakeDeps({
+      sessions: {
+        find: async () => {
+          findCalled = true
+          return sessionRecord()
+        },
+      },
+    })
+    const result = await updateSession(deps, auth, sessionRow(), {}, null)
+    expect(result.ok).toBe(true)
+    expect(findCalled).toBe(true)
+  })
+
+  it('throws when the final find returns null', async () => {
+    const deps = fakeDeps({
+      sessions: {
+        find: async () => null,
+      },
+    })
+    await expect(updateSession(deps, auth, sessionRow(), {}, null)).rejects.toThrow('Updated session row is required')
+  })
+})
+
+// ── sendSessionMessage ───────────────────────────────────────────────────────
+
+describe('[spec: sessions/prompt] sendSessionMessage', () => {
+  it('returns archived rejection for archived sessions', async () => {
+    const result = await sendSessionMessage(
+      fakeDeps(),
+      auth,
+      sessionRow({ archivedAt: '2026-01-02T00:00:00.000Z' }),
+      'hello',
+    )
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.status).toBe(409)
+      if ('archived' in result) {
+        expect(result.archived).toBe(true)
+      }
+    }
+  })
+
+  it('dispatches prompt and persists message record on success', async () => {
+    let inserted: string | null = null
+    const deps = fakeDeps({
+      sessions: {
+        insertMessage: async (record): Promise<SessionMessageRecord> => {
+          inserted = record.content
+          return messageRecord({ content: record.content })
+        },
+      },
+    })
+    const result = await sendSessionMessage(deps, auth, sessionRow(), 'hi there')
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.message.content).toBe('hi there')
+    }
+    expect(inserted).toBe('hi there')
+  })
+
+  it('returns the runtime error without persisting a message when dispatch fails with 409', async () => {
+    let inserted = false
+    const deps = fakeDeps({
+      sessionRuntime: {
+        dispatchPrompt: async () => ({ ok: false, status: 409, message: 'Session is not accepting prompts' }),
+      },
+      sessions: {
+        insertMessage: async () => {
+          inserted = true
+          return messageRecord()
+        },
+      },
+    })
+    const result = await sendSessionMessage(deps, auth, sessionRow(), 'hello')
+    expect(result.ok).toBe(false)
+    expect(inserted).toBe(false)
+  })
+
+  it('returns the runtime error without persisting when dispatch fails with 500', async () => {
+    const deps = fakeDeps({
+      sessionRuntime: {
+        dispatchPrompt: async () => ({ ok: false, status: 500, message: 'Internal error' }),
+      },
+    })
+    const result = await sendSessionMessage(deps, auth, sessionRow(), 'hello')
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.status).toBe(500)
+    }
+  })
+
+  it('forwards the runtimeError payload when dispatch fails with runtimeError', async () => {
+    const deps = fakeDeps({
+      sessionRuntime: {
+        dispatchPrompt: async () => ({
+          ok: false,
+          status: 500,
+          message: 'Boom',
+          runtimeError: { detail: 'crash' },
+        }),
+      },
+    })
+    const result = await sendSessionMessage(deps, auth, sessionRow(), 'hello')
+    expect(result.ok).toBe(false)
+    if (!result.ok && 'runtimeError' in result) {
+      expect(result.runtimeError).toEqual({ detail: 'crash' })
+    }
+  })
+
+  it('stamps dispatch delivery and state onto the inserted message', async () => {
+    let capturedDelivery: string | null = null
+    let capturedState: string | null = null
+    const deps = fakeDeps({
+      sessionRuntime: {
+        dispatchPrompt: async () => ({ ok: true, delivery: 'queued', state: 'accepted' }),
+      },
+      sessions: {
+        insertMessage: async (record): Promise<SessionMessageRecord> => {
+          capturedDelivery = record.delivery
+          capturedState = record.state
+          return messageRecord({ delivery: record.delivery, state: record.state })
+        },
+      },
+    })
+    await sendSessionMessage(deps, auth, sessionRow(), 'task')
+    expect(capturedDelivery).toBe('queued')
+    expect(capturedState).toBe('accepted')
+  })
+})

@@ -222,4 +222,98 @@ describe('summarizeToolValue', () => {
     expect(summarizeToolValue(undefined)).toBe('None')
     expect(summarizeToolValue('')).toBe('None')
   })
+
+  it('handles numeric values', () => {
+    expect(summarizeToolValue(42)).toBe('42')
+  })
+
+  it('handles boolean values', () => {
+    expect(summarizeToolValue(true)).toBe('true')
+    expect(summarizeToolValue(false)).toBe('false')
+  })
+
+  it('handles null value', () => {
+    expect(summarizeToolValue(null)).toBe('None')
+  })
+
+  it('handles content array with non-text items by returning JSON', () => {
+    expect(summarizeToolValue({ content: [{ type: 'image', url: 'http://example.com/img.png' }] })).toContain('content')
+  })
+})
+
+describe('buildSessionToolTrace — approval edge cases', () => {
+  it('ignores denial that occurs after tool call ended (sequence out of range)', () => {
+    const start = toolStart('call_in_range')
+    const end = toolEnd('call_in_range')
+    // Build a denial with sequence after the tool end event
+    const afterEndDenial = buildEvent({
+      type: 'policy.decision',
+      sequence: end.sequence + 10,
+      payload: { allowed: false, category: 'sandbox_command', command: 'git status' },
+    })
+    const trace = buildSessionToolTrace([start, end, afterEndDenial])
+
+    // Denial is outside the tool call window — should be approved
+    expect(trace[0]?.approval).toBe('approved')
+  })
+
+  it('treats denial with no command as matching any tool call command', () => {
+    const trace = buildSessionToolTrace([
+      toolStart('call_1'),
+      buildEvent({
+        type: 'policy.decision',
+        payload: { allowed: false, category: 'sandbox_command' }, // no command field
+      }),
+      toolEnd('call_1', {
+        payload: { toolCallId: 'call_1', toolName: 'sandbox.exec', result: {}, isError: true },
+      }),
+    ])
+
+    expect(trace[0]?.approval).toBe('denied')
+  })
+
+  it('pairs tool with start having no command against denial with no command', () => {
+    // Tool input has no command field, denial has no command field — both match
+    const startNoCommand = buildEvent({
+      type: 'tool_execution_start',
+      correlationId: 'tool:call_nocmd',
+      payload: { toolCallId: 'call_nocmd', toolName: 'sandbox.exec', args: { path: '/tmp' } },
+    })
+    const trace = buildSessionToolTrace([
+      startNoCommand,
+      buildEvent({
+        type: 'policy.decision',
+        payload: { allowed: false, category: 'sandbox_command' },
+      }),
+      toolEnd('call_nocmd', {
+        payload: { toolCallId: 'call_nocmd', toolName: 'sandbox.exec', result: {}, isError: true },
+      }),
+    ])
+
+    expect(trace[0]?.approval).toBe('denied')
+  })
+
+  it('produces an orphaned failed entry when only an error end event is present', () => {
+    const trace = buildSessionToolTrace([
+      toolEnd('call_orphan_err', {
+        payload: {
+          toolCallId: 'call_orphan_err',
+          toolName: 'sandbox.exec',
+          result: { content: [{ type: 'text', text: 'Permission denied' }] },
+          isError: true,
+        },
+      }),
+    ])
+
+    expect(trace).toHaveLength(1)
+    expect(trace[0]?.orphanedResult).toBe(true)
+    expect(trace[0]?.status).toBe('failed')
+    expect(trace[0]?.errorSummary).toBe('Permission denied')
+  })
+
+  it('falls back to durationMs=null for orphaned entry without payload durationMs', () => {
+    const trace = buildSessionToolTrace([toolEnd('call_no_dur')])
+
+    expect(trace[0]?.durationMs).toBeNull()
+  })
 })

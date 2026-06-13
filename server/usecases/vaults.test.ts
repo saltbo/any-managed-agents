@@ -165,6 +165,22 @@ describe('[spec: vaults/credential-create] createCredential', () => {
     expect(result.credential.activeVersionId).toBe(result.version.id)
   })
 
+  it('merges version metadata even when the secret store returns undefined', async () => {
+    const deps = fakeDeps({
+      secretStore: {
+        store: async () => undefined as unknown as Record<string, unknown>,
+      },
+    })
+    const result = await createCredential(deps, vault(), {
+      name: 'Token',
+      type: 'api_key',
+      connectorBinding: {},
+      metadata: {},
+      secret: { secretValue: 'raw' },
+    })
+    expect(result.credential.activeVersionId).toBeDefined()
+  })
+
   it('maps an invalid secret reference to a VaultSecretError', async () => {
     await expect(
       createCredential(fakeDeps(), vault(), {
@@ -215,6 +231,17 @@ describe('[spec: vaults/credential-rotate] rotateCredential', () => {
     expect(result.version.version).toBe(2)
     expect(supersededOf).toBe('vaultver_1')
   })
+
+  it('maps a secret-store failure during rotation to a VaultSecretError', async () => {
+    const deps = fakeDeps({
+      secretStore: {
+        store: async () => {
+          throw new Error('Cloudflare rotation storage failed')
+        },
+      },
+    })
+    await expect(rotateCredential(deps, credential(), { secretValue: 'raw' })).rejects.toBeInstanceOf(VaultSecretError)
+  })
 })
 
 describe('[spec: vaults/credential-delete] deleteCredentialVersion', () => {
@@ -239,5 +266,46 @@ describe('[spec: vaults/credential-delete] deleteCredentialVersion', () => {
     })
     await deleteCredentialVersion(deps, credential({ activeVersionId: 'vaultver_1' }), version())
     expect(order).toEqual(['secret', 'row'])
+  })
+
+  it('maps a secret-store delete failure to a VaultSecretError', async () => {
+    const deps = fakeDeps({
+      secretStore: {
+        delete: async () => {
+          throw new Error('Cloudflare secret deletion failed')
+        },
+      },
+    })
+    await expect(
+      deleteCredentialVersion(deps, credential({ activeVersionId: 'vaultver_1' }), version()),
+    ).rejects.toBeInstanceOf(VaultSecretError)
+  })
+
+  it('uses a fallback message when the secret-store throws a non-Error during rotation', async () => {
+    const deps = fakeDeps({
+      secretStore: {
+        store: async () => {
+          throw 'string failure'
+        },
+      },
+    })
+    const error = await rotateCredential(deps, credential(), { secretValue: 'raw' }).catch((e) => e)
+    expect(error).toBeInstanceOf(VaultSecretError)
+    expect(error.message).toBe('Invalid secret reference')
+  })
+
+  it('uses a fallback message when the secret-store throws a non-Error during delete', async () => {
+    const deps = fakeDeps({
+      secretStore: {
+        delete: async () => {
+          throw 'string failure'
+        },
+      },
+    })
+    const error = await deleteCredentialVersion(deps, credential({ activeVersionId: 'vaultver_1' }), version()).catch(
+      (e) => e,
+    )
+    expect(error).toBeInstanceOf(VaultSecretError)
+    expect(error.message).toBe('Invalid secret reference')
   })
 })

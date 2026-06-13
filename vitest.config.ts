@@ -11,8 +11,39 @@ export default defineConfig({
     },
   },
   test: {
+    // Coverage gates the layers the fast suites (unit + web) own; the workerd
+    // integration pool can't be v8-instrumented, so http full-flow / repos /
+    // composition / worker / auth-jwks / runtime execution are proven by the
+    // integration + e2e suites and lint:arch, not a %. Business logic (domain +
+    // usecases) must be provable here without the stack — gated at 95%.
     coverage: {
       provider: 'v8',
+      include: [
+        'server/domain/**',
+        'server/usecases/**',
+        'server/adapters/gateways/**',
+        'shared/**',
+        'src/features/**',
+        'src/lib/**',
+      ],
+      exclude: [
+        '**/*.test.ts',
+        '**/*.test.tsx',
+        '**/*.d.ts',
+        '**/index.ts',
+        'src/lib/utils.ts',
+        'src/lib/query-keys.ts',
+      ],
+      thresholds: {
+        perFile: true,
+        statements: 90,
+        branches: 90,
+        functions: 90,
+        lines: 90,
+        'server/domain/**': { statements: 95, branches: 95, functions: 95, lines: 95 },
+        'server/usecases/**': { statements: 95, branches: 95, functions: 95, lines: 95 },
+      },
+      reporter: ['text', 'text-summary'],
     },
     projects: [
       {

@@ -51,7 +51,9 @@ export function createSessionEventPort(db: Db): SessionEventPort {
           }
         }
       }
+      /* v8 ignore start -- reason: unreachable; the for-loop always returns or throws before exhausting 5 iterations */
       throw new Error('Unable to append MCP session event')
+      /* v8 ignore stop */
     },
   }
 }

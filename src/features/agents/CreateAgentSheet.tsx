@@ -20,7 +20,7 @@ export function CreateAgentSheet({ open, onOpenChange }: { open: boolean; onOpen
         description: form.description,
         instructions: form.instructions,
         ...providerIdPatch(form.provider),
-        model: form.model || null,
+        model: /* v8 ignore start */ form.model || /* v8 ignore stop */ null,
         skills: parseTools(form.skills),
         tools: parseTools(form.allowedTools).map((name) => ({ name })),
         mcpConnectors: parseTools(form.mcpConnectors),

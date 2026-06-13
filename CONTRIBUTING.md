@@ -45,7 +45,8 @@ npm run dev
 npm run lint
 npm run typecheck
 npm test
-npm run test:e2e
+npm run test:coverage
+npm run e2e
 npm run build
 ```
 
@@ -54,11 +55,11 @@ Script responsibilities:
 - `npm run lint`: Biome checks for formatting and linting.
 - `npm run typecheck`: server and web TypeScript projects.
 - `npm test`: unit, component, route, and runtime tests.
-- `npm run test:e2e`: local Cucumber product specs backed by local resources.
-- `npm run test:smoke`: deployed staging smoke that may use real Cloudflare, OIDC, runtime, and model quota.
+- `npm run test:coverage`: `vitest run --project unit --project web --coverage`, the enforced per-file coverage gate.
+- `npm run e2e`: native Playwright cross-stack crowns in `test/e2e/*.spec.ts`, backed by local resources (`npm run e2e:server` boots the dev stack for them).
 - `npm run build`: production Vite/Worker build.
 
-Choose the smallest meaningful check for a narrow change. For broad control-plane, runtime, or release work, run lint, typecheck, unit tests, e2e, and build.
+Choose the smallest meaningful check for a narrow change. For broad control-plane, runtime, or release work, run lint, typecheck, unit tests, coverage, e2e, and build.
 
 ## Specs First (BDD-lite)
 
@@ -70,11 +71,12 @@ with `[spec: <id>]` breadcrumbs rather than being generated from them.
    `@<capability>/<slug>` and one layer tag (`@domain`/`@usecase`/`@web`/`@api`/`@e2e`).
 2. Add or update the home test at that layer and put `[spec: <id>]` in its name.
 3. Implement Worker, runtime, D1, or UI behaviour.
-4. Run the smallest meaningful verification command (`test`, `lint:spec`, `test:e2e`).
+4. Run the smallest meaningful verification command (`test`, `test:coverage`, `lint:spec`, `e2e`).
 
 Verify at the cheapest layer that can prove the scenario. Reserve `@e2e` (run by
-`npm run test:e2e`) for genuinely cross-stack journeys. Static shape checks and pure
-assertions belong in unit or integration tests, not e2e.
+`npm run e2e` as native Playwright crowns in `test/e2e/*.spec.ts`) for genuinely
+cross-stack journeys. Static shape checks and pure assertions belong in unit or
+integration tests, not e2e.
 
 ## Architecture Map
 
@@ -88,8 +90,8 @@ src/app/           React providers and router setup
 src/features/      Route-level console features
 src/console/       Shared AMA console components and view models
 src/components/ui/ shadcn-generated primitives
-spec/              Product behaviour in Gherkin (BDD-lite, one file per capability)
-test/e2e/          Cucumber steps, browser helpers, and local harnesses (@e2e)
+spec/              Product behaviour in Gherkin (BDD-lite documentation, one file per capability)
+test/e2e/          Native Playwright crowns (*.spec.ts), fixtures, and local harnesses (@e2e)
 docs/product/      Product decisions, API boundaries, and implementation notes
 docs/infra/        Cloudflare deployment and infrastructure notes
 ```
@@ -147,6 +149,7 @@ Before opening a PR, run the smallest verification command that proves the chang
 npm run lint
 npm run typecheck
 npm test
-npm run test:e2e
+npm run test:coverage
+npm run e2e
 npm run build
 ```

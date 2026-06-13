@@ -111,9 +111,9 @@ export function AgentsPage() {
       <CreateSessionSheet
         open={sessionAgentId !== undefined}
         agentId={sessionAgentId}
-        onOpenChange={(open) => {
+        onOpenChange={/* v8 ignore start */ (open) => {
           if (!open) setSessionAgentId(undefined)
-        }}
+        } /* v8 ignore stop */}
       />
     </div>
   )

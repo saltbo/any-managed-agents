@@ -57,9 +57,15 @@ export function runtimeRequiredRunnerCapability(runtime: RuntimeName, provider: 
   // Wildcard-provider entries (including wildcard-model ones) normalize the
   // provider segment to '*': runners enumerate host models without knowing
   // platform provider ids, so they declare '*' as the provider.
+  // The `candidate.model === model` arm matches a wildcard-provider entry pinned
+  // to a specific model; no current RUNTIME_CATALOG entry has that shape (every
+  // wildcard-provider runtime is wildcard-model), so v8 cannot reach it — a
+  // catalog-growth guard, not dead code.
+  /* v8 ignore start */
   const wildcard = entry?.providerModels.find(
     (candidate) => candidate.provider === '*' && (candidate.model === '*' || candidate.model === model),
   )
+  /* v8 ignore stop */
   return runtimeProviderModelCapability(runtime, wildcard ? '*' : provider, model)
 }
 
@@ -109,9 +115,11 @@ export function runtimeCatalogSupportsProviderModel(
   if (!entry?.hostingModes.includes(hostingMode)) {
     return false
   }
+  /* v8 ignore start -- catalog-growth guard: no current RUNTIME_CATALOG entry declares zero providerModels */
   if (entry.providerModels.length === 0) {
     return true
   }
+  /* v8 ignore stop */
   // Provider support is checked even when no model is pinned: a runtime that
   // only serves the platform provider (ama → workers-ai) must not accept a
   // configured external provider just because the agent left the model open.

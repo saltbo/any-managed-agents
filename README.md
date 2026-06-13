@@ -32,7 +32,7 @@ Claude Managed Agents is purpose-built for Claude. Any Managed Agents is built f
 - Uses an OIDC provider for authentication and tenancy instead of maintaining local user tables.
 - Stores platform metadata in D1 and secret references in Cloudflare-managed secret storage.
 - Provides a React console for authenticated project, agent, environment, and session workflows.
-- Keeps product behavior executable through Gherkin specs, Cucumber steps, and Playwright-backed end-to-end checks.
+- Documents product behavior in Gherkin specs (BDD-lite) and exercises it through native Playwright end-to-end crowns plus vitest coverage gates.
 
 ## AMA vs CMA
 
@@ -90,25 +90,22 @@ The project is moving toward a release where a signed-in user can create an envi
 
 ## Verification
 
-Local product e2e runs against a local Worker/dev server and must not depend on
-deployed origins or real model quota:
+Native Playwright e2e crowns (`test/e2e/*.spec.ts`) run against a local
+Worker/dev server and must not depend on deployed origins or real model quota:
 
 ```bash
-pnpm run test:e2e
+pnpm run e2e
 ```
 
-Staging smoke runs against an explicit deployed staging origin and real
-secret-backed authentication:
+The enforced coverage gate runs in CI and locally:
 
 ```bash
-AMA_STAGING_ORIGIN=https://any-managed-agents-staging.saltbo.workers.dev \
-AMA_E2E_ACCESS_TOKEN="$OIDC_ACCESS_TOKEN" \
-pnpm run test:smoke
+pnpm run test:coverage
 ```
 
-Auth input precedence for staging smoke is explicit:
-`AMA_E2E_ACCESS_TOKEN` first, `AMA_E2E_STORAGE_STATE` second, and
-`AMA_E2E_EMAIL` plus `AMA_E2E_PASSWORD` third.
+Business logic (server/domain + server/usecases) is held to ≥95% per-file
+coverage; everything else included (gateways, shared, src/features, src/lib)
+is held to ≥90% per-file.
 
 ## License
 

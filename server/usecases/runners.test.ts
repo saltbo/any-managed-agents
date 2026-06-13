@@ -144,12 +144,94 @@ describe('[spec: runners/register] registerRunner', () => {
     expect(result.reregistered).toBe(true)
     expect(result.runner.id).toBe('runner_fed')
   })
+
+  it('rejects a federated runner token trying to register as non-federated', async () => {
+    // runnerOidcBindingFields returns a non-null binding error
+    await expect(
+      registerRunner(
+        fakeDeps(),
+        auth,
+        { ...consoleOidc, isRunnerToken: true, runnerProjectId: 'project_1' },
+        {
+          name: 'Bad mode',
+          capabilities: [],
+          environmentId: undefined,
+          credentialRef: undefined,
+          authMode: 'oidc',
+          maxConcurrent: 1,
+          metadata: {},
+        },
+      ),
+    ).rejects.toBeInstanceOf(RunnerValidationError)
+  })
+
+  it('rejects an invalid credential version reference', async () => {
+    await expect(
+      registerRunner(
+        fakeDeps({ credentialRefUsable: async () => ({ credentialMissing: false, versionMissing: true }) }),
+        auth,
+        consoleOidc,
+        {
+          name: 'Runner',
+          capabilities: [],
+          environmentId: undefined,
+          credentialRef: { credentialId: 'cred_1', versionId: 'ver_bad' } as never,
+          authMode: 'bearer',
+          maxConcurrent: 1,
+          metadata: {},
+        },
+      ),
+    ).rejects.toBeInstanceOf(RunnerValidationError)
+  })
+
+  it('conflicts when a reusable row belongs to a different project', async () => {
+    const existing = runnerRecord({
+      id: 'runner_other',
+      projectId: 'project_other',
+      authMode: 'federated',
+      oidcSubject: 'sub_1',
+    })
+    await expect(
+      registerRunner(
+        fakeDeps({ findForMachineRegistration: async () => existing }),
+        auth,
+        { ...consoleOidc, isRunnerToken: true, runnerProjectId: 'project_1' },
+        {
+          name: 'Conflicting runner',
+          capabilities: [],
+          environmentId: undefined,
+          credentialRef: undefined,
+          authMode: 'federated',
+          maxConcurrent: 1,
+          metadata: { machineId: 'mac-2' },
+        },
+      ),
+    ).rejects.toBeInstanceOf(RunnerConflictError)
+  })
 })
 
 describe('updateRunner', () => {
   it('archives via the archived flag', async () => {
     const updated = await updateRunner(fakeDeps(), 'project_1', runnerRecord(), { archived: true })
     expect(updated.archivedAt).toEqual(expect.any(String))
+  })
+
+  it('retains existing archivedAt when archiving an already-archived runner', async () => {
+    const existing = '2026-01-02T00:00:00.000Z'
+    const updated = await updateRunner(fakeDeps(), 'project_1', runnerRecord({ archivedAt: existing }), {
+      archived: true,
+    })
+    expect(updated.archivedAt).toBe(existing)
+  })
+
+  it('unarchives a runner via archived:false', async () => {
+    const updated = await updateRunner(
+      fakeDeps(),
+      'project_1',
+      runnerRecord({ archivedAt: '2026-01-02T00:00:00.000Z' }),
+      { archived: false },
+    )
+    expect(updated.archivedAt).toBeNull()
   })
 
   it('rejects secret material in capabilities', async () => {
@@ -177,5 +259,18 @@ describe('recordRunnerHeartbeat', () => {
     await expect(
       recordRunnerHeartbeat(fakeDeps(), 'project_1', runnerRecord({ state: 'disabled' }), { state: 'active' }),
     ).rejects.toBeInstanceOf(RunnerConflictError)
+  })
+
+  it('rejects secret material in runtimeInventory', async () => {
+    await expect(
+      recordRunnerHeartbeat(fakeDeps(), 'project_1', runnerRecord(), {
+        runtimeInventory: [{ secretToken: 'raw' } as never],
+      }),
+    ).rejects.toBeInstanceOf(RunnerValidationError)
+  })
+
+  it('defaults state to active when no state is provided in the heartbeat', async () => {
+    const updated = await recordRunnerHeartbeat(fakeDeps(), 'project_1', runnerRecord({ state: 'offline' }), {})
+    expect(updated.state).toBe('active')
   })
 })
