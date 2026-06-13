@@ -20,13 +20,16 @@ import { registerConnectorRoutes } from './http/connectors'
 import { registerEffectivePolicyRoutes } from './http/effective-policy'
 import { registerEnvironmentRoutes } from './http/environments'
 import { registerFederatedTenantRoutes } from './http/federated-tenants'
+import { registerLeaseRoutes } from './http/leases'
 import { registerPolicyRoutes } from './http/policies'
 import { registerProjectRoutes } from './http/projects'
 import { registerProviderRoutes } from './http/providers'
+import { registerRunnerRoutes } from './http/runners'
 import { registerTriggerRoutes } from './http/triggers'
 import { registerUsageRecordRoutes } from './http/usage-records'
 import { registerUsageSummaryRoutes } from './http/usage-summary'
 import { registerVaultRoutes } from './http/vaults'
+import { registerWorkItemRoutes } from './http/work-items'
 import { ApiSecuritySchemes, createDepsApiRouter } from './openapi'
 import {
   evaluateMcpToolPolicy,
@@ -37,11 +40,9 @@ import {
 import { redactSensitiveValue } from './redaction'
 import e2e from './routes/e2e'
 import health from './routes/health'
-import leases from './routes/leases'
-import runners, { dispatchRunnerSessionCommand, hasAcceptedRunnerSessionChannel } from './routes/runners'
 import runtimeAi from './routes/runtime-ai'
 import sessionRoutes from './routes/sessions'
-import workItems from './routes/work-items'
+import { dispatchRunnerSessionCommand, hasAcceptedRunnerSessionChannel } from './runtime/runner-session-command'
 import { safeRuntimeError } from './runtime/runtime-error'
 import {
   executeRuntimeToolCalls,
@@ -663,6 +664,9 @@ export function createApp() {
   const agents = registerAgentRoutes(createDepsApiRouter())
   const environments = registerEnvironmentRoutes(createDepsApiRouter())
   const providers = registerProviderRoutes(createDepsApiRouter())
+  const runners = registerRunnerRoutes(createDepsApiRouter())
+  const workItems = registerWorkItemRoutes(createDepsApiRouter())
+  const leases = registerLeaseRoutes(createDepsApiRouter())
   const connectors = registerConnectorRoutes(createDepsApiRouter())
   const connections = registerConnectionRoutes(createDepsApiRouter())
   const policies = registerPolicyRoutes(createDepsApiRouter())

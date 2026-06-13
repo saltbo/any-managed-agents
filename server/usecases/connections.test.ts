@@ -143,6 +143,10 @@ function fakeDeps(
     triggers: undefined as unknown as Deps['triggers'],
     projects: undefined as unknown as Deps['projects'],
     federatedTenants: undefined as unknown as Deps['federatedTenants'],
+    runners: undefined as unknown as Deps['runners'],
+    workItems: undefined as unknown as Deps['workItems'],
+    leases: undefined as unknown as Deps['leases'],
+    runtimeSecretEnv: undefined as unknown as Deps['runtimeSecretEnv'],
     audit: { record: async () => {} },
     policy: {
       resolveToolPolicy: async () => ({}),

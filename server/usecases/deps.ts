@@ -8,17 +8,21 @@ import type {
   ConnectorRepo,
   EnvironmentRepo,
   FederatedTenantRepo,
+  LeaseRepo,
   McpGateway,
   PolicyPort,
   PolicyRepo,
   ProjectRepo,
   ProviderCatalogGateway,
   ProviderRepo,
+  RunnerRepo,
+  RuntimeSecretEnvGateway,
   SecretStoreGateway,
   SessionEventPort,
   TriggerRepo,
   UsageRepo,
   VaultRepo,
+  WorkItemRepo,
 } from './ports'
 
 // Aggregates every port a usecase may reach for. Constructed once per request
@@ -44,4 +48,8 @@ export interface Deps {
   triggers: TriggerRepo
   projects: ProjectRepo
   federatedTenants: FederatedTenantRepo
+  runners: RunnerRepo
+  workItems: WorkItemRepo
+  leases: LeaseRepo
+  runtimeSecretEnv: RuntimeSecretEnvGateway
 }

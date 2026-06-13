@@ -64,6 +64,7 @@ import {
 } from '../runtime/catalog'
 import { runtimeDriver, runtimeDriverName, runtimeMetadata } from '../runtime/drivers'
 import { PLATFORM_DEFAULT_PROVIDER, providerRuntimeEnv, resolveSessionProviderConfig } from '../runtime/provider-env'
+import { dispatchRunnerSessionCommand, hasAcceptedRunnerSessionChannel } from '../runtime/runner-session-command'
 import { safeRuntimeError } from '../runtime/runtime-error'
 import { type RuntimeSecretEnvEntry, resolveRuntimeSecretEnv } from '../runtime/secret-env'
 import {
@@ -93,7 +94,6 @@ import {
   type RuntimeName,
   RuntimeSchema,
 } from './environment-contracts'
-import { dispatchRunnerSessionCommand, hasAcceptedRunnerSessionChannel } from './runners'
 
 const app = createApiRouter()
 

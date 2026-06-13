@@ -1446,4 +1446,343 @@ export interface FederatedTenantRepo {
   delete(projectId: string, tenantId: string): Promise<void>
 }
 
+// --- runners, work items, leases (self-hosted runner queue) ---
+
+// Field-keyed validation error for runner registration orchestration (secret
+// material, OIDC binding, credential/environment references). The http layer
+// maps it to a 400.
+export class RunnerValidationError extends Error {
+  readonly fields: Record<string, string> | undefined
+  constructor(message: string, fields?: Record<string, string>) {
+    super(message)
+    this.name = 'RunnerValidationError'
+    this.fields = fields
+  }
+}
+
+// Thrown when a runner/lease operation conflicts with current state (runner not
+// active, at capacity, work item unavailable, lease no longer active, secret
+// resolution failure). `status` selects the http mapping: a missing referenced
+// resource is 404, everything else is 409.
+export class RunnerConflictError extends Error {
+  readonly status: 404 | 409
+  constructor(message: string, status: 404 | 409 = 409) {
+    super(message)
+    this.name = 'RunnerConflictError'
+    this.status = status
+  }
+}
+
+export interface RunnerCredentialRef {
+  credentialId: string
+  versionId?: string
+}
+
+export interface RuntimeUsageWindow {
+  label: string
+  utilization: number
+  resetsAt: string
+}
+
+export interface RuntimeUsage {
+  runtime: string
+  windows: RuntimeUsageWindow[]
+}
+
+export interface RuntimeInventoryEntry {
+  runtime: string
+  version?: string
+  state: string
+  detail?: string
+}
+
+export interface RunnerRecord {
+  id: string
+  projectId: string
+  name: string
+  capabilities: string[]
+  environmentId: string | null
+  credentialRef: RunnerCredentialRef | null
+  authMode: string
+  state: string
+  currentLoad: number
+  maxConcurrent: number
+  runtimeUsage: RuntimeUsage[]
+  runtimeInventory: RuntimeInventoryEntry[]
+  metadata: Record<string, unknown>
+  lastHeartbeatAt: string | null
+  archivedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+// The full row including tenancy + OIDC binding columns the http layer needs
+// for runner-token authorization. Kept distinct from the wire-facing
+// RunnerRecord so authz claims never leak into a serialized response.
+export interface RunnerAuthRecord extends RunnerRecord {
+  organizationId: string
+  oidcSubject: string | null
+  oidcClientId: string | null
+}
+
+export interface RunnerListQuery {
+  projectId: string
+  archived: boolean
+  state?: string
+  environmentId?: string
+  search?: string
+  createdFrom?: string
+  createdTo?: string
+  // Runner-token scoping: a runner token only sees its own runner(s).
+  runnerId?: string
+  oidcSubject?: string
+  oidcClientId?: string
+  limit: number
+  cursor: { createdAt: string; id: string } | null
+}
+
+export interface CreateRunnerInput {
+  organizationId: string
+  projectId: string
+  name: string
+  capabilities: string[]
+  environmentId: string | null
+  credentialRef: RunnerCredentialRef | null
+  authMode: string
+  oidcSubject: string | null
+  oidcClientId: string | null
+  maxConcurrent: number
+  metadata: Record<string, unknown>
+}
+
+export interface UpdateRunnerFields {
+  name: string
+  capabilities: string[]
+  state: string
+  maxConcurrent: number
+  metadata: Record<string, unknown>
+  archivedAt: string | null
+}
+
+export interface RunnerHeartbeatFields {
+  state: string
+  capabilities: string[]
+  currentLoad: number
+  runtimeUsage: RuntimeUsage[]
+  runtimeInventory: RuntimeInventoryEntry[]
+  metadata: Record<string, unknown>
+}
+
+// DB boundary for self-hosted runners. The only implementation lives in
+// adapters/repos. Repos return parsed records; the auth-bearing find returns the
+// row's OIDC binding columns so the http layer can authorize runner tokens.
+export interface RunnerRepo {
+  list(query: RunnerListQuery): Promise<ListPageResult<RunnerAuthRecord>>
+  find(projectId: string, runnerId: string): Promise<RunnerAuthRecord | null>
+  // Looks up a reusable federated/oidc runner row by machine id for
+  // re-registration; null when no machine binding applies.
+  findForMachineRegistration(
+    projectId: string,
+    authMode: string,
+    oidcSubject: string,
+    environmentId: string | null,
+    machineId: string | null,
+  ): Promise<RunnerAuthRecord | null>
+  insert(input: CreateRunnerInput, timestamp: string): Promise<RunnerAuthRecord>
+  // Federated re-registration: rewrites the existing row and returns it.
+  reregister(
+    projectId: string,
+    runnerId: string,
+    input: CreateRunnerInput,
+    timestamp: string,
+  ): Promise<RunnerAuthRecord>
+  update(projectId: string, runnerId: string, fields: UpdateRunnerFields, timestamp: string): Promise<RunnerAuthRecord>
+  heartbeat(
+    projectId: string,
+    runnerId: string,
+    fields: RunnerHeartbeatFields,
+    timestamp: string,
+  ): Promise<RunnerAuthRecord>
+
+  // Reference validation against sibling resources.
+  environmentUsable(projectId: string, environmentId: string): Promise<boolean>
+  credentialRefUsable(
+    organizationId: string,
+    projectId: string,
+    ref: RunnerCredentialRef,
+  ): Promise<{ credentialMissing: boolean; versionMissing: boolean }>
+}
+
+export interface WorkItemRecord {
+  id: string
+  organizationId: string
+  projectId: string
+  sessionId: string | null
+  environmentId: string | null
+  runnerId: string | null
+  leaseId: string | null
+  type: string
+  state: string
+  priority: number
+  attempts: number
+  maxAttempts: number
+  // Redacted payload (token-like values stripped). The raw payload is only
+  // materialized for the lease-holding runner via `materializePayload`.
+  payload: Record<string, unknown>
+  result: Record<string, unknown> | null
+  error: Record<string, unknown> | null
+  availableAt: string
+  leaseExpiresAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface WorkItemListQuery {
+  projectId: string
+  state?: string
+  sessionId?: string
+  runnerId?: string
+  search?: string
+  createdFrom?: string
+  createdTo?: string
+  limit: number
+  cursor: { createdAt: string; id: string } | null
+}
+
+// DB boundary for the self-hosted work-item queue (read-only view). The only
+// implementation lives in adapters/repos. `find` returns the redacted record;
+// `rawPayload` returns the unredacted payload the lease-holding runner needs (the
+// materialize usecase resolves its secret env). `activeLeaseRunnerId` returns the
+// runner currently holding a still-active lease on the work item, or null.
+export interface WorkItemRepo {
+  list(query: WorkItemListQuery): Promise<ListPageResult<WorkItemRecord>>
+  find(projectId: string, workItemId: string): Promise<WorkItemRecord | null>
+  rawPayload(projectId: string, workItemId: string): Promise<Record<string, unknown> | null>
+  activeLeaseRunnerId(projectId: string, workItemId: string): Promise<string | null>
+}
+
+// The claim-relevant projection of a work item: state machine fields plus the
+// raw (unredacted) payload the eligibility gate reads.
+export interface WorkItemClaimCandidate {
+  state: string
+  availableAt: string
+  environmentId: string | null
+  sessionId: string | null
+  rawPayload: Record<string, unknown>
+}
+
+export interface LeaseRecord {
+  id: string
+  workItemId: string
+  runnerId: string
+  state: string
+  expiresAt: string
+  renewedAt: string | null
+  resumeToken: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface LeaseListQuery {
+  projectId: string
+  runnerId?: string
+  state?: string
+  limit: number
+  cursor: { createdAt: string; id: string } | null
+}
+
+export interface ClaimLeaseInput {
+  organizationId: string
+  projectId: string
+  workItemId: string
+  runnerId: string
+  leaseDurationSeconds: number
+}
+
+export interface FinishLeaseInput {
+  organizationId: string
+  projectId: string
+  leaseId: string
+  // 'active' renews; 'interrupted' requeues for recovery; the rest are terminal.
+  state: 'active' | 'completed' | 'failed' | 'cancelled' | 'interrupted'
+  expiresAt?: string
+  leaseDurationSeconds?: number
+  resumeToken?: string
+  result?: Record<string, unknown>
+  error?: Record<string, unknown>
+}
+
+// DB boundary for runner work leases. The atomic work-item state transitions,
+// runner load accounting, session-state-machine updates, and recovery requeue
+// all live in the repo (they are pure cross-table SQL orchestration). The
+// usecase owns the eligibility gate and claim-time secret resolution.
+// Claim/finish return null when an optimistic guard lost the race so the
+// usecase can map it to a 409.
+export interface LeaseRepo {
+  list(query: LeaseListQuery): Promise<ListPageResult<LeaseRecord>>
+  find(projectId: string, leaseId: string): Promise<LeaseRecord | null>
+  // The claim-relevant projection of a work item (state machine + raw payload).
+  claimCandidate(projectId: string, workItemId: string): Promise<WorkItemClaimCandidate | null>
+  // Expires leases whose deadline has passed and recovers their work items.
+  // Called opportunistically before queue reads/writes.
+  expireStale(projectId: string): Promise<void>
+  // Atomically reserves a runner slot and flips the work item to leased.
+  // Returns the created lease + claimed work item's session id, or a marker for
+  // each lost-race outcome: 'at_capacity' (the runner slot reservation lost) or
+  // 'work_item_lost' (another runner claimed the work item, slot released).
+  claim(
+    input: ClaimLeaseInput,
+    timestamp: string,
+  ): Promise<{ lease: LeaseRecord; sessionId: string | null } | 'at_capacity' | 'work_item_lost'>
+  // Fails an already-claimed lease + work item (claim-time secret failure).
+  failClaim(input: {
+    projectId: string
+    leaseId: string
+    workItemId: string
+    runnerId: string
+    sessionId: string | null
+    reason: string
+  }): Promise<void>
+  // Renews / completes / fails / cancels / interrupts a lease, transitioning the
+  // work item and session. Returns the updated lease or null on a lost guard.
+  finish(input: FinishLeaseInput, timestamp: string): Promise<LeaseRecord | null>
+
+  // Channel acceptance: validates the lease still owns a self-hosted session
+  // waiting for a runner channel, supersedes any active channel, creates the new
+  // channel row, flips the session to running, and records the accepted event.
+  // Returns the channel descriptor on success or a conflict marker the http
+  // layer maps to a status. Runner authorization happens in the http layer
+  // before this is called.
+  prepareSessionChannel(
+    scope: { organizationId: string; projectId: string },
+    leaseId: string,
+    timestamp: string,
+  ): Promise<LeaseChannelPrepared | LeaseChannelConflict>
+  // Rolls the channel + session back when the DO upgrade fails after preparation.
+  rollbackSessionChannel(projectId: string, channelId: string, sessionId: string, timestamp: string): Promise<void>
+}
+
+export interface LeaseChannelPrepared {
+  ok: true
+  channelId: string
+  sessionId: string
+  workItemId: string
+  runnerId: string
+}
+
+export interface LeaseChannelConflict {
+  ok: false
+  status: 404 | 409
+  message: string
+}
+
+// Runtime secret-env boundary: resolves vault credential references into raw
+// secret values for runtime dispatch. Used by the lease claim guard (to fail
+// fast on an unresolvable credential) and work-item payload materialization.
+// Resolved values never touch D1, events, audit, or logs. Throws on an
+// unresolvable reference.
+export interface RuntimeSecretEnvGateway {
+  resolve(scope: { organizationId: string; projectId: string }, items: unknown): Promise<Record<string, string>>
+}
+
 export type { AgentToolAttachment, ConnectorCatalogTool, SecretMaterial }
