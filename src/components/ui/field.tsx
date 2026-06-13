@@ -64,12 +64,14 @@ function Field({
   className,
   orientation = 'vertical',
   ...props
-}: React.ComponentProps<'fieldset'> & VariantProps<typeof fieldVariants>) {
+}: React.ComponentProps<'div'> & VariantProps<typeof fieldVariants>) {
   return (
-    <fieldset
+    // biome-ignore lint/a11y/useSemanticElements: upstream uses div+role=group because fieldset breaks flex layouts
+    <div
+      role="group"
       data-slot="field"
       data-orientation={orientation}
-      className={cn(fieldVariants({ orientation }), 'min-w-0 border-0 p-0', className)}
+      className={cn(fieldVariants({ orientation }), className)}
       {...props}
     />
   )
