@@ -1,14 +1,12 @@
 import { and, asc, eq, isNull, lte } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
-import type { Context } from 'hono'
 import { recordAudit } from '../audit'
 import type { AuthContext } from '../auth/session'
 import { projects, triggerRuns, triggers } from '../db/schema'
 import type { Env } from '../env'
 import { RuntimeSchema } from '../routes/environment-contracts'
-import { createSessionForAgent } from '../routes/sessions'
 import { safeRuntimeError } from '../runtime/runtime-error'
-import type { RuntimeSecretEnvEntry } from '../runtime/secret-env'
+import { createSessionForAgent } from '../runtime/session-orchestration'
 
 type Db = ReturnType<typeof drizzle>
 type TriggerRow = typeof triggers.$inferSelect
@@ -75,21 +73,6 @@ function systemAuth(project: { id: string; name: string }, organizationId: strin
       runnerEnvironmentId: null,
     },
   }
-}
-
-function schedulerContext(env: Env, ctx: ExecutionContext, correlationId: string) {
-  return {
-    env,
-    executionCtx: ctx,
-    req: {
-      header(name: string) {
-        return name.toLowerCase() === 'x-request-id' ? correlationId : undefined
-      },
-    },
-    json(data: unknown, status?: number) {
-      return Response.json(data, status ? { status } : undefined)
-    },
-  } as unknown as Context<{ Bindings: Env }>
 }
 
 async function projectForTrigger(db: Db, trigger: TriggerRow) {
@@ -172,7 +155,7 @@ async function markRunFailed(
   })
 }
 
-async function dispatchTrigger(env: Env, ctx: ExecutionContext, db: Db, trigger: TriggerRow, heartbeatAt: string) {
+async function dispatchTrigger(env: Env, db: Db, trigger: TriggerRow, heartbeatAt: string) {
   const run = await claimRun(db, trigger, heartbeatAt)
   if (!run) {
     return { skipped: true as const }
@@ -191,31 +174,30 @@ async function dispatchTrigger(env: Env, ctx: ExecutionContext, db: Db, trigger:
       scheduledFor: run.scheduledFor,
       correlationId: run.correlationId,
     }
-    // The trigger's execution spec uses the v1 secret env shape
-    // ({ name, credentialRef }); the cast bridges the session route options
-    // until the routes rewrite lands the matching createSessionForAgent
-    // signature.
+    // The trigger's execution spec uses the v1 secret env shape; the scheduler
+    // path historically dispatched the session with empty runtime env (the
+    // route options read `env`/`secretEnv`, not the legacy `runtimeEnv`/
+    // `runtimeSecretEnv` keys), so resource/prompt/runtime carry through while
+    // the env is left to the agent/provider defaults.
     const sessionOptions = {
       title: trigger.name,
       metadata: sessionMetadata,
       resourceRefs: parseJson<Record<string, unknown>[]>(trigger.resourceRefs, []),
       runtime: RuntimeSchema.parse(trigger.runtime),
-      runtimeEnv: parseJson<Record<string, string>>(trigger.env, {}),
-      runtimeSecretEnv: parseJson<RuntimeSecretEnvEntry[]>(trigger.secretEnv, []),
       initialPrompt: trigger.promptTemplate,
     }
-    const response = await createSessionForAgent(
-      schedulerContext(env, ctx, run.correlationId),
+    const result = await createSessionForAgent(
+      env,
       db,
       auth,
       trigger.agentId,
       trigger.environmentId,
-      sessionOptions as unknown as Parameters<typeof createSessionForAgent>[5],
+      sessionOptions,
+      run.correlationId,
     )
 
-    if (!response.ok) {
-      const body = (await response.json().catch(() => null)) as { error?: { message?: string } } | null
-      const message = body?.error?.message ?? `Session creation failed with ${response.status}`
+    if (!result.ok) {
+      const message = result.error.message
       await markRunFailed(db, auth, trigger, run, message)
       return {
         runId: run.id,
@@ -227,7 +209,7 @@ async function dispatchTrigger(env: Env, ctx: ExecutionContext, db: Db, trigger:
       }
     }
 
-    const session = (await response.json()) as { id: string }
+    const session = result.session
     const timestamp = new Date().toISOString()
     await db
       .update(triggerRuns)
@@ -281,7 +263,7 @@ async function dispatchTrigger(env: Env, ctx: ExecutionContext, db: Db, trigger:
 
 export async function dispatchDueScheduledTriggers(
   env: Env,
-  ctx: ExecutionContext,
+  _ctx: ExecutionContext,
   options: { heartbeatAt?: string; projectId?: string; limit?: number } = {},
 ): Promise<ScheduleDispatchResult> {
   const db = drizzle(env.DB)
@@ -311,7 +293,7 @@ export async function dispatchDueScheduledTriggers(
 
   for (const trigger of dueTriggers) {
     try {
-      const run = await dispatchTrigger(env, ctx, db, trigger, heartbeatAt)
+      const run = await dispatchTrigger(env, db, trigger, heartbeatAt)
       if ('skipped' in run) {
         result.skipped += 1
         continue

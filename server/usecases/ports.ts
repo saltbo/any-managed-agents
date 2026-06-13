@@ -1785,4 +1785,292 @@ export interface RuntimeSecretEnvGateway {
   resolve(scope: { organizationId: string; projectId: string }, items: unknown): Promise<Record<string, string>>
 }
 
+// --- sessions ---
+
+// The session DTO that crosses the wire. Internal plumbing columns
+// (durableObjectName, sandboxId, runtimeEndpointPath, organizationId,
+// createdByUserId, piRuntimeId, piProcessId, modelConfig) never reach this
+// record — the repo strips them. runtimeMetadata, hostingMode, runtime, and
+// model are derived inside the repo from the stored snapshot + metadata so the
+// http layer serializes by identity.
+export interface SessionRuntimeMetadata {
+  hostingMode: string
+  runtime: string
+  runtimeConfig: Record<string, unknown>
+  provider: string
+  model: string | null
+  driver: string | null
+  backend: string | null
+  protocol: string | null
+}
+
+export interface SessionRecord {
+  id: string
+  projectId: string
+  agentId: string
+  agentVersionId: string
+  agentSnapshot: Record<string, unknown>
+  environmentId: string | null
+  environmentVersionId: string | null
+  environmentSnapshot: Record<string, unknown> | null
+  title: string | null
+  resourceRefs: Record<string, unknown>[]
+  env: Record<string, string>
+  secretEnv: Array<{ name: string; credentialRef: { credentialId: string; versionId?: string } }>
+  runtimeMetadata: SessionRuntimeMetadata
+  state: string
+  stateReason: string | null
+  metadata: Record<string, unknown>
+  startedAt: string | null
+  stoppedAt: string | null
+  archivedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SessionConnectionRecord {
+  sessionId: string
+  transport: string | null
+  path: string | null
+  state: string
+  stateReason: string | null
+}
+
+export interface SessionMessageRecord {
+  id: string
+  sessionId: string
+  type: 'prompt'
+  content: string
+  delivery: string
+  state: string
+  error: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SessionEventRecord {
+  id: string
+  projectId: string
+  sessionId: string
+  sequence: number
+  type: string
+  visibility: string
+  role: string | null
+  parentEventId: string | null
+  correlationId: string | null
+  payload: Record<string, unknown>
+  metadata: Record<string, unknown>
+  createdAt: string
+}
+
+export interface SessionApprovalRecord {
+  id: string
+  sessionId: string
+  toolCallId: string
+  toolName: string
+  input: Record<string, unknown>
+  relatedEventIds: string[]
+  state: string
+  reason: string | null
+  result: Record<string, unknown> | null
+  requestedAt: string
+  decidedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SessionListQuery {
+  projectId: string
+  archived: boolean
+  state?: string
+  search?: string
+  createdFrom?: string
+  createdTo?: string
+  limit: number
+  cursor: { createdAt: string; id: string } | null
+}
+
+export interface SessionEventQuery {
+  type?: string
+  visibility?: string
+  createdFrom?: string
+  createdTo?: string
+  order: 'asc' | 'desc'
+  cursor?: number
+  limit: number
+}
+
+export interface SessionEventPage {
+  rows: SessionEventRecord[]
+  hasMore: boolean
+}
+
+export interface SessionMessageListQuery {
+  projectId: string
+  sessionId: string
+  limit: number
+  cursor: { createdAt: string; id: string } | null
+}
+
+export interface SessionMessageListPage {
+  rows: SessionMessageRecord[]
+  hasMore: boolean
+}
+
+export interface SessionListPage {
+  rows: SessionRecord[]
+  hasMore: boolean
+}
+
+// The raw session row the runtime gateway needs to act on a session (stop,
+// dispatch, decide). It carries the internal columns the DTO hides. The repo
+// is the only place the row is read; the usecase passes it straight to the
+// gateway and never inspects the internal fields.
+export interface SessionRuntimeRow {
+  id: string
+  projectId: string | null
+  organizationId: string | null
+  state: string
+  archivedAt: string | null
+  sandboxId: string | null
+  metadata: Record<string, unknown>
+}
+
+// DB boundary for the sessions resource. The only place sessions,
+// sessionEvents, sessionMessages, and sessionApprovals tables are read for the
+// REST surface. Returns DTO records with internal columns stripped.
+export interface SessionRepo {
+  list(query: SessionListQuery): Promise<SessionListPage>
+  find(projectId: string, sessionId: string): Promise<SessionRecord | null>
+  // The raw row (with internal columns) for runtime operations. Used by write
+  // paths that hand the session to the runtime gateway.
+  findRuntimeRow(projectId: string, sessionId: string): Promise<SessionRuntimeRow | null>
+  readConnection(projectId: string, sessionId: string): Promise<SessionConnectionRecord | null>
+
+  updateFields(
+    projectId: string,
+    sessionId: string,
+    fields: { title?: string; metadata?: Record<string, unknown> },
+    updatedAt: string,
+  ): Promise<SessionRecord | null>
+
+  listMessages(query: SessionMessageListQuery): Promise<SessionMessageListPage>
+  findMessage(projectId: string, sessionId: string, messageId: string): Promise<SessionMessageRecord | null>
+  insertMessage(record: {
+    organizationId: string
+    projectId: string
+    sessionId: string
+    content: string
+    delivery: string
+    state: string
+    createdAt: string
+  }): Promise<SessionMessageRecord>
+
+  queryEvents(sessionId: string, query: SessionEventQuery): Promise<SessionEventPage>
+  insertEvents(
+    scope: { organizationId: string; projectId: string; sessionId: string },
+    events: Array<{ type: string; payload: Record<string, unknown>; metadata: Record<string, unknown> }>,
+  ): Promise<number>
+
+  listApprovals(projectId: string, sessionId: string): Promise<SessionApprovalRecord[]>
+  findApproval(projectId: string, sessionId: string, approvalId: string): Promise<SessionApprovalRecord | null>
+
+  // Event-ingest runner gate: resolves the active, unexpired lease a runner
+  // identity holds for this session (work item leased to the same runner), or
+  // null. The returned metadata (runner/lease/work-item ids, runtime, provider,
+  // model) is stamped onto ingested events. Returns null when the runner holds
+  // no qualifying lease.
+  activeSessionLeaseForRunner(
+    projectId: string,
+    sessionId: string,
+    runner: { runnerId: string | null; subject: string },
+  ): Promise<{
+    runnerId: string
+    leaseId: string
+    workItemId: string
+    runtime?: string
+    provider?: string
+    model?: string
+  } | null>
+}
+
+// Field-keyed validation error for session orchestration. The http layer maps
+// it to a 400 with the same shape governance/agents produce.
+export class SessionValidationError extends Error {
+  readonly fields: Record<string, string>
+  constructor(message: string, fields: Record<string, string>) {
+    super(message)
+    this.name = 'SessionValidationError'
+    this.fields = fields
+  }
+}
+
+// Error crossing the runtime-gateway boundary. The http layer maps status →
+// response and echoes detail/fields. Mirrors the runtime layer's outcome shape
+// so the gateway adapter forwards it without re-mapping.
+export interface SessionRuntimeError {
+  status: 400 | 403 | 404 | 409 | 500
+  code: string
+  message: string
+  fields?: Record<string, string>
+  detail?: Record<string, unknown>
+}
+
+export type SessionRuntimeOutcome<T> = { ok: true; value: T } | { ok: false; error: SessionRuntimeError }
+
+export type PromptDispatchResult =
+  | { ok: false; status: 409 | 500; message: string; runtimeError?: Record<string, unknown> }
+  | { ok: true; delivery: string; state: string }
+
+// Cross-process runtime boundary for sessions. Wraps the env-bound runtime
+// execution layer (server/runtime/session-orchestration): sandbox/DO startup,
+// the cloud turn loop, runner-channel dispatch, and runtime teardown. All
+// methods are Response-free; the usecase orchestrates around them and the http
+// layer maps results to responses.
+export interface SessionRuntimeGateway {
+  createSession(
+    auth: AuthScope,
+    input: {
+      agentId: string
+      environmentId: string
+      options: SessionCreateOptions
+      requestId: string | null
+    },
+  ): Promise<SessionRuntimeOutcome<SessionRecord>>
+  stopSession(
+    auth: AuthScope,
+    session: SessionRuntimeRow,
+    requestId: string | null,
+    reason?: string,
+  ): Promise<SessionRuntimeOutcome<SessionRecord>>
+  archiveSession(
+    auth: AuthScope,
+    session: SessionRuntimeRow,
+    requestId: string | null,
+  ): Promise<SessionRuntimeOutcome<SessionRecord>>
+  unarchiveSession(auth: AuthScope, session: SessionRuntimeRow, requestId: string | null): Promise<SessionRecord>
+  dispatchPrompt(auth: AuthScope, session: SessionRuntimeRow, content: string): Promise<PromptDispatchResult>
+  decideApproval(
+    auth: AuthScope,
+    session: SessionRuntimeRow,
+    approvalId: string,
+    body: { decision: 'approve' | 'deny'; reason?: string; result?: Record<string, unknown> },
+  ): Promise<SessionRuntimeOutcome<SessionApprovalRecord>>
+  // Sweep pending cloud startups whose window elapsed → error. Called before
+  // list/read so stale rows surface as errored, matching legacy behavior.
+  markExpiredPending(auth: AuthScope): Promise<void>
+}
+
+export interface SessionCreateOptions {
+  title?: string
+  metadata?: Record<string, unknown>
+  resourceRefs?: Record<string, unknown>[]
+  runtime: string
+  runtimeConfig?: Record<string, unknown>
+  env?: Record<string, string>
+  secretEnv?: Array<{ name: string; credentialRef: { credentialId: string; versionId?: string } }>
+  initialPrompt?: string
+  providerAccessOverride?: boolean
+}
+
 export type { AgentToolAttachment, ConnectorCatalogTool, SecretMaterial }

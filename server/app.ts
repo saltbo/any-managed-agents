@@ -25,6 +25,7 @@ import { registerPolicyRoutes } from './http/policies'
 import { registerProjectRoutes } from './http/projects'
 import { registerProviderRoutes } from './http/providers'
 import { registerRunnerRoutes } from './http/runners'
+import { registerSessionRoutes } from './http/sessions'
 import { registerTriggerRoutes } from './http/triggers'
 import { registerUsageRecordRoutes } from './http/usage-records'
 import { registerUsageSummaryRoutes } from './http/usage-summary'
@@ -41,7 +42,6 @@ import { redactSensitiveValue } from './redaction'
 import e2e from './routes/e2e'
 import health from './routes/health'
 import runtimeAi from './routes/runtime-ai'
-import sessionRoutes from './routes/sessions'
 import { dispatchRunnerSessionCommand, hasAcceptedRunnerSessionChannel } from './runtime/runner-session-command'
 import { safeRuntimeError } from './runtime/runtime-error'
 import {
@@ -676,6 +676,7 @@ export function createApp() {
   const usageRecords = registerUsageRecordRoutes(createDepsApiRouter())
   const usageSummary = registerUsageSummaryRoutes(createDepsApiRouter())
   const auditRecords = registerAuditRecordRoutes(createDepsApiRouter())
+  const sessionsRoutes = registerSessionRoutes(createDepsApiRouter())
   const vaults = registerVaultRoutes(createDepsApiRouter())
 
   const routes = app
@@ -701,7 +702,7 @@ export function createApp() {
     .route('/api/v1/usage-summary', usageSummary)
     .route('/api/v1/audit-records', auditRecords)
     .route('/api/v1/triggers', triggers)
-    .route('/api/v1/sessions', sessionRoutes)
+    .route('/api/v1/sessions', sessionsRoutes)
     .route('/api/v1/vaults', vaults)
 
   routes.openAPIRegistry.registerComponent('securitySchemes', 'bearerAuth', ApiSecuritySchemes.bearerAuth)

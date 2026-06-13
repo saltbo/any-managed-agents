@@ -105,6 +105,8 @@ function fakeDeps(overrides: { repo?: Partial<Deps['environments']> } = {}): Dep
     workItems: undefined as unknown as Deps['workItems'],
     leases: undefined as unknown as Deps['leases'],
     runtimeSecretEnv: undefined as unknown as Deps['runtimeSecretEnv'],
+    sessions: undefined as unknown as Deps['sessions'],
+    sessionRuntime: undefined as unknown as Deps['sessionRuntime'],
     sessionEvents: undefined as unknown as Deps['sessionEvents'],
     audit: { record: async () => {} },
     policy: {

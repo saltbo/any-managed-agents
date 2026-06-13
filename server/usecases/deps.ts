@@ -19,6 +19,8 @@ import type {
   RuntimeSecretEnvGateway,
   SecretStoreGateway,
   SessionEventPort,
+  SessionRepo,
+  SessionRuntimeGateway,
   TriggerRepo,
   UsageRepo,
   VaultRepo,
@@ -52,4 +54,6 @@ export interface Deps {
   workItems: WorkItemRepo
   leases: LeaseRepo
   runtimeSecretEnv: RuntimeSecretEnvGateway
+  sessions: SessionRepo
+  sessionRuntime: SessionRuntimeGateway
 }

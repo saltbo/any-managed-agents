@@ -8,7 +8,7 @@ const routeSources = {
   // agents and environments are migrated to the clean-architecture http layer.
   agents: readFileSync('server/http/agents.ts', 'utf8'),
   environments: readFileSync('server/http/environments.ts', 'utf8'),
-  sessions: readFileSync('server/routes/sessions.ts', 'utf8'),
+  sessions: readFileSync('server/http/sessions.ts', 'utf8'),
 }
 
 async function openApiDoc() {

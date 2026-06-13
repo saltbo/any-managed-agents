@@ -6,6 +6,7 @@ import { createProviderCatalogGateway } from './adapters/gateways/provider-catal
 import { createRuntimeSecretEnvGateway } from './adapters/gateways/runtime-secret-env'
 import { createSecretStoreGateway } from './adapters/gateways/secret-store'
 import { createSessionEventPort } from './adapters/gateways/session-events'
+import { createSessionRuntimeGateway } from './adapters/gateways/session-runtime'
 import { createAccessRuleRepo } from './adapters/repos/access-rules'
 import { createAgentRepo } from './adapters/repos/agents'
 import { createAuditReadRepo } from './adapters/repos/audit-records'
@@ -19,6 +20,7 @@ import { createPolicyRepo } from './adapters/repos/policies'
 import { createProjectRepo } from './adapters/repos/projects'
 import { createProviderRepo } from './adapters/repos/providers'
 import { createRunnerRepo } from './adapters/repos/runners'
+import { createSessionRepo } from './adapters/repos/sessions'
 import { createTriggerRepo } from './adapters/repos/triggers'
 import { createUsageRepo } from './adapters/repos/usage-records'
 import { createVaultRepo } from './adapters/repos/vaults'
@@ -30,6 +32,7 @@ import type { Deps } from './usecases/deps'
 // plain-object, and request-free so scheduled/queue entrypoints can reuse it.
 export function createDeps(env: Env): Deps {
   const db = drizzle(env.DB)
+  const sessions = createSessionRepo(db)
   return {
     agents: createAgentRepo(db),
     environments: createEnvironmentRepo(db),
@@ -55,5 +58,7 @@ export function createDeps(env: Env): Deps {
     workItems: createWorkItemRepo(db),
     leases: createLeaseRepo(db),
     runtimeSecretEnv: createRuntimeSecretEnvGateway(env, db),
+    sessions,
+    sessionRuntime: createSessionRuntimeGateway(env, db, sessions),
   }
 }
