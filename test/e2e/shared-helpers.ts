@@ -7,7 +7,7 @@ export type Json = Record<string, unknown>
 
 export interface ListResponse<T> {
   data: T[]
-  pagination: { hasMore: boolean; firstId: string | null; lastId: string | null }
+  pagination: { limit: number; hasMore: boolean; nextCursor: string | null }
 }
 
 export interface E2EState {
@@ -59,7 +59,7 @@ export async function ensureAgentAndEnvironment(world: StepsWorld): Promise<E2ES
 }
 
 export async function createAgent(state: E2EState, data: Json = {}) {
-  return await apiJson<Json>(state.page.request, '/api/agents', {
+  return await apiJson<Json>(state.page.request, '/api/v1/agents', {
     method: 'POST',
     data: {
       name: `${state.runId} agent`,
@@ -72,7 +72,7 @@ export async function createAgent(state: E2EState, data: Json = {}) {
 export async function createEnvironment(state: E2EState, data: Json = {}) {
   const { runtime, ...rest } = data
   if (typeof runtime === 'string') state.sessionRuntime = runtime
-  return await apiJson<Json>(state.page.request, '/api/environments', {
+  return await apiJson<Json>(state.page.request, '/api/v1/environments', {
     method: 'POST',
     data: {
       name: `${state.runId} env`,
@@ -83,7 +83,7 @@ export async function createEnvironment(state: E2EState, data: Json = {}) {
 }
 
 export async function createSession(state: E2EState, data: Json = {}) {
-  const session = await apiJson<Json>(state.page.request, '/api/sessions', {
+  const session = await apiJson<Json>(state.page.request, '/api/v1/sessions', {
     method: 'POST',
     data: {
       agentId: state.agent?.id,
@@ -97,23 +97,29 @@ export async function createSession(state: E2EState, data: Json = {}) {
 }
 
 export async function createProvider(state: E2EState, data: Json = {}) {
-  return await apiJson<Json>(state.page.request, '/api/providers', {
+  return await apiJson<Json>(state.page.request, '/api/v1/providers', {
     method: 'POST',
     data,
   })
 }
 
+// Model upsert moved from POST /models to PUT /models/{modelId}.
 export async function createProviderModel(state: E2EState, provider: Json, data: Json = {}) {
-  return await apiJson<Json>(state.page.request, `/api/providers/${provider?.id}/models`, {
-    method: 'POST',
-    data,
-  })
+  const modelId = String((data as { modelId?: string }).modelId)
+  return await apiJson<Json>(
+    state.page.request,
+    `/api/v1/providers/${provider?.id}/models/${encodeURIComponent(modelId)}`,
+    {
+      method: 'PUT',
+      data,
+    },
+  )
 }
 
 export async function sessionEvents(state: E2EState) {
   return await apiJson<ListResponse<Json>>(
     state.page.request,
-    `/api/sessions/${state.latestSession?.id}/events?limit=200`,
+    `/api/v1/sessions/${state.latestSession?.id}/events?limit=200`,
   )
 }
 
@@ -140,7 +146,7 @@ export async function createSelfHostedSession(state: E2EState) {
     networkPolicy: { mode: 'unrestricted' },
   })
   state.agent ??= await createAgent(state, { name: `${state.runId} self-hosted agent` })
-  const session = await apiJson<Json>(state.page.request, '/api/sessions', {
+  const session = await apiJson<Json>(state.page.request, '/api/v1/sessions', {
     method: 'POST',
     data: {
       agentId: state.agent.id,
@@ -154,7 +160,7 @@ export async function createSelfHostedSession(state: E2EState) {
 }
 
 export async function createAndActivateRunner(state: E2EState) {
-  const runner = await apiJson<Json>(state.page.request, '/api/runners', {
+  const runner = await apiJson<Json>(state.page.request, '/api/v1/runners', {
     method: 'POST',
     data: {
       name: `${state.runId} runner`,
@@ -162,50 +168,60 @@ export async function createAndActivateRunner(state: E2EState) {
       capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
     },
   })
-  const activeRunner = await apiJson<Json>(state.page.request, `/api/runners/${runner.id}/heartbeats`, {
-    method: 'POST',
+  // Heartbeat is now an idempotent PUT singleton; it returns the heartbeat
+  // representation, so keep the runner row (which carries `id`) in state.
+  await apiJson<Json>(state.page.request, `/api/v1/runners/${runner.id}/heartbeat`, {
+    method: 'PUT',
     data: {
-      status: 'active',
+      state: 'active',
       currentLoad: 0,
       capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
     },
   })
-  state.runner = activeRunner
-  return activeRunner
+  state.runner = runner
+  return runner
 }
 
+// Two-step claim: discover an available work item, then create a lease for it.
 export async function claimRunnerLease(state: E2EState) {
   assert.ok(state.runner, 'runner must exist')
-  const lease = await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/leases`, {
+  const sessionId = state.latestSession?.id
+  const query = sessionId ? `?state=available&sessionId=${sessionId}` : '?state=available'
+  const available = await apiJson<ListResponse<Json>>(state.page.request, `/api/v1/work-items${query}`)
+  const workItem = available.data[0]
+  assert.ok(workItem, 'an available work item must exist to claim')
+  const lease = await apiJson<Json>(state.page.request, '/api/v1/leases', {
     method: 'POST',
-    data: { leaseDurationSeconds: 90 },
+    data: { workItemId: workItem.id, runnerId: state.runner.id, leaseDurationSeconds: 90 },
   })
   state.lease = lease
   return lease
 }
 
 export async function stopSession(state: E2EState) {
-  state.latestSession = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}/stop`, {
-    method: 'POST',
+  state.latestSession = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}`, {
+    method: 'PATCH',
+    data: { state: 'stopped' },
   })
   return state.latestSession
 }
 
+// Event ingest is per-session now (was per-lease).
 export async function uploadRunnerEvent(state: E2EState, event: Json) {
-  assert.ok(state.runner, 'runner must exist')
   assert.ok(state.lease, 'lease must exist')
-  return await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/leases/${state.lease.id}/events`, {
+  const sessionId = state.latestSession?.id
+  assert.ok(sessionId, 'session must exist')
+  return await apiJson<Json>(state.page.request, `/api/v1/sessions/${sessionId}/events`, {
     method: 'POST',
     data: { events: [event] },
   })
 }
 
-export async function completeRunnerLease(state: E2EState, status: 'completed' | 'failed' | 'cancelled') {
-  assert.ok(state.runner, 'runner must exist')
+export async function completeRunnerLease(state: E2EState, lifecycle: 'completed' | 'failed' | 'cancelled') {
   assert.ok(state.lease, 'lease must exist')
-  return await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/leases/${state.lease.id}`, {
+  return await apiJson<Json>(state.page.request, `/api/v1/leases/${state.lease.id}`, {
     method: 'PATCH',
-    data: { status },
+    data: { state: lifecycle },
   })
 }
 

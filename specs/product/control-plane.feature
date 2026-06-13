@@ -7,14 +7,14 @@ Feature: Control plane health
   @implemented
   Scenario: Health endpoint returns the product identity
     Given the Worker app is initialized
-    When I request GET "/api/health"
+    When I request GET "/api/v1/health"
     Then the response status should be 200
     And the response JSON field "name" should be "Any Managed Agents"
 
   @implemented
   Scenario: OpenAPI document is generated from control-plane routes
     Given the Worker app is initialized
-    When I request GET "/api/openapi.json"
+    When I request GET "/api/v1/openapi.json"
     Then the response status should be 200
-    And the OpenAPI document should include path "/api/health"
-    And the OpenAPI document should include path "/api/agents"
+    And the OpenAPI document should include path "/api/v1/health"
+    And the OpenAPI document should include path "/api/v1/agents"

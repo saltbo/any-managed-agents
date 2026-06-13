@@ -36,7 +36,7 @@ async function ensureVaultPage(world: VaultDetailWorld): Promise<SharedE2EState>
     world.e2e = { page, runId: `vault-detail-ui-${Date.now()}-${Math.random().toString(16).slice(2)}` }
   }
   const state = world.e2e
-  state.vault ??= await apiJson<Json>(state.page.request, '/api/vaults', {
+  state.vault ??= await apiJson<Json>(state.page.request, '/api/v1/vaults', {
     method: 'POST',
     data: { name: `${state.runId} vault`, description: 'Vault detail UI e2e vault', scope: 'project' },
   })
@@ -44,7 +44,7 @@ async function ensureVaultPage(world: VaultDetailWorld): Promise<SharedE2EState>
 }
 
 async function createManagedCredential(state: SharedE2EState, name: string, secretValue: string) {
-  return await apiJson<Json>(state.page.request, `/api/vaults/${state.vault?.id}/credentials`, {
+  return await apiJson<Json>(state.page.request, `/api/v1/vaults/${state.vault?.id}/credentials`, {
     method: 'POST',
     data: {
       name,
@@ -105,7 +105,7 @@ Given('the vault detail request is loading', { timeout: 120_000 }, async functio
   const gate = new Promise<void>((resolve) => {
     scenario.releaseDetailResponse = resolve
   })
-  await state.page.route(`**/api/vaults/${state.vault?.id}`, async (route) => {
+  await state.page.route(`**/api/v1/vaults/${state.vault?.id}`, async (route) => {
     await gate
     await route.fallback()
   })
@@ -118,7 +118,7 @@ Then('the page shows a loading state using shared UI primitives', async function
   await expect(state.page.getByRole('status', { name: 'Loading vault detail' })).toBeVisible()
   await expect(state.page.locator('[data-slot="skeleton"]').first()).toBeVisible()
   scenario.releaseDetailResponse?.()
-  await state.page.unroute(`**/api/vaults/${state.vault?.id}`)
+  await state.page.unroute(`**/api/v1/vaults/${state.vault?.id}`)
 })
 
 When('the vault has no credentials', async function (this: VaultDetailWorld) {
@@ -143,7 +143,10 @@ When('the vault is archived', async function (this: VaultDetailWorld) {
     `${state.runId} archived credential`,
     scenario.initialSecretValue,
   )
-  await apiJson<void>(state.page.request, `/api/vaults/${state.vault?.id}`, { method: 'DELETE' })
+  await apiJson<void>(state.page.request, `/api/v1/vaults/${state.vault?.id}`, {
+    method: 'PATCH',
+    data: { archived: true },
+  })
   await openVaultDetail(state)
   await expect(state.page.getByText('archived').first()).toBeVisible()
 })
@@ -286,26 +289,27 @@ Then(
 
     // Future runtime resolution is blocked: a new session referencing the
     // revoked credential version is rejected at admission.
+    const credentialId = String(state.credential?.id)
     const versionId = String(state.credential?.activeVersionId)
-    const agent = await apiJson<Json>(state.page.request, '/api/agents', {
+    const agent = await apiJson<Json>(state.page.request, '/api/v1/agents', {
       method: 'POST',
       data: { name: `${state.runId} post-revoke agent`, instructions: 'Vault detail UI revoke check' },
     })
-    const environment = await apiJson<Json>(state.page.request, '/api/environments', {
+    const environment = await apiJson<Json>(state.page.request, '/api/v1/environments', {
       method: 'POST',
       data: { name: `${state.runId} post-revoke env`, runtimeConfig: { image: 'ama-pi-runtime' } },
     })
-    const sessionAttempt = await apiResponse(state.page.request, '/api/sessions', {
+    const sessionAttempt = await apiResponse(state.page.request, '/api/v1/sessions', {
       method: 'POST',
       data: {
         agentId: agent.id,
         environmentId: environment.id,
         runtime: 'ama',
         title: `${state.runId} post-revoke session`,
-        runtimeSecretEnv: [{ name: 'REVOKED_UI_KEY', ref: versionId }],
+        secretEnv: [{ name: 'REVOKED_UI_KEY', credentialRef: { credentialId, versionId } }],
       },
     })
     assert.equal(sessionAttempt.status(), 400, 'revoked credential references must be rejected at admission')
-    assert.match(await sessionAttempt.text(), /active credential version/)
+    assert.match(await sessionAttempt.text(), /be active/)
   },
 )

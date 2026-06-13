@@ -19,7 +19,7 @@ export function SessionDetailPage() {
     queryKey: queryKeys.sessions.detail(sessionId ?? ''),
     queryFn: () => api.readSession(sessionId as string),
     enabled: Boolean(sessionId),
-    refetchInterval: (query) => (query.state.data?.status === 'pending' ? 2000 : false),
+    refetchInterval: (query) => (query.state.data?.state === 'pending' ? 2000 : false),
   })
   const session = sessionQuery.data ?? null
   const agentQuery = useQuery({

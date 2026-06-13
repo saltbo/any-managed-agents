@@ -7,22 +7,22 @@ Feature: Self-hosted runner work queue
   @implemented
   Scenario: Publish runner queue routes in OpenAPI
     Given the Worker app is initialized
-    When I request GET "/api/openapi.json"
-    Then the OpenAPI document should include path "/api/runners"
-    And the OpenAPI path "/api/runners" should include method "get"
-    And the OpenAPI path "/api/runners" should include method "post"
-    And the OpenAPI document should include path "/api/runners/{runnerId}/heartbeats"
-    And the OpenAPI path "/api/runners/{runnerId}/heartbeats" should include method "post"
-    And the OpenAPI document should include path "/api/runners/{runnerId}/leases"
-    And the OpenAPI path "/api/runners/{runnerId}/leases" should include method "post"
-    And the OpenAPI document should include path "/api/runners/{runnerId}/leases/{leaseId}"
-    And the OpenAPI path "/api/runners/{runnerId}/leases/{leaseId}" should include method "patch"
-    And the OpenAPI document should include path "/api/runners/{runnerId}/leases/{leaseId}/events"
-    And the OpenAPI path "/api/runners/{runnerId}/leases/{leaseId}/events" should include method "post"
-    And the OpenAPI document should include path "/api/runners/{runnerId}/leases/{leaseId}/channel"
-    And the OpenAPI path "/api/runners/{runnerId}/leases/{leaseId}/channel" should include method "get"
-    And the OpenAPI document should include path "/api/runners/work-items"
-    And the OpenAPI path "/api/runners/work-items" should include method "get"
+    When I request GET "/api/v1/openapi.json"
+    Then the OpenAPI document should include path "/api/v1/runners"
+    And the OpenAPI path "/api/v1/runners" should include method "get"
+    And the OpenAPI path "/api/v1/runners" should include method "post"
+    And the OpenAPI document should include path "/api/v1/runners/{runnerId}/heartbeat"
+    And the OpenAPI path "/api/v1/runners/{runnerId}/heartbeat" should include method "put"
+    And the OpenAPI document should include path "/api/v1/leases"
+    And the OpenAPI path "/api/v1/leases" should include method "post"
+    And the OpenAPI document should include path "/api/v1/leases/{leaseId}"
+    And the OpenAPI path "/api/v1/leases/{leaseId}" should include method "patch"
+    And the OpenAPI document should include path "/api/v1/sessions/{sessionId}/events"
+    And the OpenAPI path "/api/v1/sessions/{sessionId}/events" should include method "post"
+    And the OpenAPI document should include path "/api/v1/leases/{leaseId}/channel"
+    And the OpenAPI path "/api/v1/leases/{leaseId}/channel" should include method "get"
+    And the OpenAPI document should include path "/api/v1/work-items"
+    And the OpenAPI path "/api/v1/work-items" should include method "get"
 
   @implemented
   Scenario: Lease self-hosted session work to an eligible runner

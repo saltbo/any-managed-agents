@@ -11,15 +11,15 @@ const routeSources = {
 }
 
 async function openApiDoc() {
-  const response = await createApp().fetch(new Request('https://example.test/api/openapi.json'), {} as Env)
+  const response = await createApp().fetch(new Request('https://example.test/api/v1/openapi.json'), {} as Env)
   assert.equal(response.status, 200)
   return (await response.json()) as {
     components?: { schemas?: Record<string, { properties?: Record<string, unknown> }> }
   }
 }
 
-function bodyFields(source: string) {
-  const propertyAccess = [...source.matchAll(/\bbody\.([A-Za-z]\w*)/g)].map((match) => match[1])
+function bodyFields(source: string): string[] {
+  const propertyAccess = [...source.matchAll(/\bbody\.([A-Za-z]\w*)/g)].map((match) => match[1]!)
   const destructured = [...source.matchAll(/const \{([^}]+)\}\s*=\s*c\.req\.valid\('json'\)/gs)].flatMap((match) =>
     match[1]!
       .split(',')
@@ -33,52 +33,66 @@ function schemaFields(doc: Awaited<ReturnType<typeof openApiDoc>>, schemaName: s
   return Object.keys(doc.components?.schemas?.[schemaName]?.properties ?? {}).sort()
 }
 
+function sortedUnique(fields: string[]) {
+  return [...new Set(fields)].sort()
+}
+
 describe('route schema and handler alignment', () => {
   it('keeps agent write fields aligned across handlers and OpenAPI schemas', async () => {
     const doc = await openApiDoc()
-    const handled = [...new Set(bodyFields(routeSources.agents).filter((field) => field !== 'content'))]
+    // 'content' is read for the memory PUT handler, not the agent write schema.
+    const handled = sortedUnique(bodyFields(routeSources.agents).filter((field) => field !== 'content'))
     const createFields = schemaFields(doc, 'CreateAgentRequest')
     const updateFields = schemaFields(doc, 'UpdateAgentRequest')
 
     expect(handled).toEqual(createFields)
-    expect(updateFields).toEqual(createFields)
+    // Update is the create payload plus the lifecycle archive transition (§1.3).
+    expect(updateFields).toEqual(sortedUnique([...createFields, 'archived']))
   })
 
   it('keeps environment write fields aligned across handlers and OpenAPI schemas', async () => {
     const doc = await openApiDoc()
-    const handled = [...new Set(bodyFields(routeSources.environments))]
+    const handled = sortedUnique(bodyFields(routeSources.environments).filter((field) => field !== 'archived'))
     const createFields = schemaFields(doc, 'CreateEnvironmentRequest')
     const updateFields = schemaFields(doc, 'UpdateEnvironmentRequest')
 
     expect(handled).toEqual(createFields)
-    expect(updateFields).toEqual(createFields)
+    expect(updateFields).toEqual(sortedUnique([...createFields, 'archived']))
   })
 
   it('keeps session write fields aligned across handlers and OpenAPI schemas', async () => {
     const doc = await openApiDoc()
 
-    expect([...new Set(bodyFields(routeSources.sessions).filter((field) => field !== 'message'))]).toEqual([
+    // Every body field any session handler reads, across the four session write
+    // operations: create, update, message (content), approval decision, and
+    // batch event ingest (events).
+    expect(sortedUnique(bodyFields(routeSources.sessions))).toEqual([
       'agentId',
-      // Approval decisions are session write operations too.
+      'archived',
+      // POST /sessions/{id}/messages body.content
+      'content',
+      // PATCH /sessions/{id}/approvals/{id} body.decision
       'decision',
+      'env',
       'environmentId',
+      // POST /sessions/{id}/events body.events
+      'events',
       'initialPrompt',
       'metadata',
-      // Explicit admin override for provider-access denials.
       'providerAccessOverride',
       'reason',
       'resourceRefs',
       'result',
       'runtime',
       'runtimeConfig',
-      'runtimeEnv',
-      'runtimeSecretEnv',
-      'status',
+      'secretEnv',
+      'state',
       'title',
-      'vaultRefs',
     ])
+
     expect(schemaFields(doc, 'CreateSessionRequest')).toEqual([
       'agentId',
+      'env',
       'environmentId',
       'initialPrompt',
       'metadata',
@@ -86,12 +100,11 @@ describe('route schema and handler alignment', () => {
       'resourceRefs',
       'runtime',
       'runtimeConfig',
-      'runtimeEnv',
-      'runtimeSecretEnv',
+      'secretEnv',
       'title',
-      'vaultRefs',
     ])
-    expect(schemaFields(doc, 'UpdateSessionRequest')).toEqual(['status'])
-    expect(schemaFields(doc, 'CreateSessionCommandRequest')).toEqual(['message', 'type'])
+    expect(schemaFields(doc, 'UpdateSessionRequest')).toEqual(['archived', 'metadata', 'state', 'title'])
+    expect(schemaFields(doc, 'CreateSessionMessageRequest')).toEqual(['content', 'type'])
+    expect(schemaFields(doc, 'SessionApprovalDecisionRequest')).toEqual(['decision', 'reason', 'result'])
   })
 })

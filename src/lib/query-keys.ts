@@ -38,15 +38,18 @@ export const queryKeys = {
       ['vaults', 'detail', id, 'credentials', { includeArchived }] as const,
     audit: (id: string) => ['vaults', 'detail', id, 'audit'] as const,
   },
-  mcp: {
-    all: ['mcp'] as const,
-    connectors: (filters: Record<string, string> = {}) => ['mcp', 'connectors', filters] as const,
-    connector: (connectorId: string) => ['mcp', 'connectors', 'detail', connectorId] as const,
-    connections: ['mcp', 'connections'] as const,
+  connectors: {
+    all: ['connectors'] as const,
+    list: (filters: Record<string, string> = {}) => ['connectors', 'list', filters] as const,
+    detail: (connectorId: string) => ['connectors', 'detail', connectorId] as const,
+  },
+  connections: {
+    all: ['connections'] as const,
+    list: ['connections', 'list'] as const,
   },
   governance: {
-    policy: ['governance', 'policy'] as const,
     accessRules: ['governance', 'access-rules'] as const,
+    effectivePolicy: ['governance', 'effective-policy'] as const,
   },
   usage: {
     summary: (filters: object = {}) => ['usage', 'summary', filters] as const,

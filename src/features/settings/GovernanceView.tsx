@@ -1,22 +1,23 @@
 import { DetailSection, EmptyState, Meta, MetaGrid } from '@/console/components'
 import { stringifyJson } from '@/console/format'
-import type { GovernancePolicy } from '@/lib/api'
+import type { EffectivePolicy } from '@/lib/api'
 
-export function GovernanceView({ policy }: { policy: GovernancePolicy | null }) {
+export function GovernanceView({ policy }: { policy: EffectivePolicy | null }) {
   if (!policy)
-    return <EmptyState title="No governance policy" body="Project policy will appear after it is configured." />
+    return <EmptyState title="No effective policy" body="Effective project governance will appear once it resolves." />
   return (
     <DetailSection
-      title="Governance settings"
-      description="Project policy for providers, models, tools, MCP, sandbox, and budgets."
+      title="Effective governance"
+      description="Read-only merged policy for providers, models, access rules, tools, MCP, sandbox, and budgets."
     >
       <MetaGrid>
         <Meta label="Provider rules" value={stringifyJson(policy.providerRules)} />
         <Meta label="Model rules" value={stringifyJson(policy.modelRules)} />
+        <Meta label="Access rules" value={stringifyJson(policy.accessRules)} />
         <Meta label="Tool policy" value={stringifyJson(policy.toolPolicy)} />
         <Meta label="MCP policy" value={stringifyJson(policy.mcpPolicy)} />
         <Meta label="Sandbox policy" value={stringifyJson(policy.sandboxPolicy)} />
-        <Meta label="Budget policy" value={stringifyJson(policy.budgetPolicy)} />
+        <Meta label="Budgets" value={stringifyJson(policy.budgets)} />
       </MetaGrid>
     </DetailSection>
   )

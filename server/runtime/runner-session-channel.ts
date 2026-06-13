@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import { canonicalAmaSessionEventFromRuntimeEvent } from '../../shared/session-events'
-import { runnerSessionChannels, runnerWorkItems, runnerWorkLeases, sessions } from '../db/schema'
+import { leases, sessionChannels, sessions, workItems } from '../db/schema'
 import { insertCanonicalSessionEvent } from '../db/session-event-store'
 import type { Env } from '../env'
 import { evaluateSandboxRuntimePolicy } from '../policy'
@@ -215,17 +215,17 @@ export class RunnerSessionChannelObject implements DurableObject {
     }
     const workItem = await db
       .select()
-      .from(runnerWorkItems)
-      .where(and(eq(runnerWorkItems.id, state.workItemId), eq(runnerWorkItems.projectId, state.projectId)))
+      .from(workItems)
+      .where(and(eq(workItems.id, state.workItemId), eq(workItems.projectId, state.projectId)))
       .get()
     if (!workItem) {
       throw new Error('Runner session channel is no longer active')
     }
     const timestamp = new Date().toISOString()
     await db
-      .update(runnerSessionChannels)
+      .update(sessionChannels)
       .set({ lastSeenAt: timestamp, updatedAt: timestamp })
-      .where(and(eq(runnerSessionChannels.id, state.channelId), eq(runnerSessionChannels.status, 'active')))
+      .where(and(eq(sessionChannels.id, state.channelId), eq(sessionChannels.state, 'active')))
     await appendSessionEvent(db, state, event, workItemRuntimeMetadata(workItem.payload))
   }
 
@@ -233,39 +233,39 @@ export class RunnerSessionChannelObject implements DurableObject {
     const db = drizzle(this.env.DB)
     const channel = await db
       .select()
-      .from(runnerSessionChannels)
+      .from(sessionChannels)
       .where(
         and(
-          eq(runnerSessionChannels.id, state.channelId),
-          eq(runnerSessionChannels.sessionId, state.sessionId),
-          eq(runnerSessionChannels.workItemId, state.workItemId),
-          eq(runnerSessionChannels.leaseId, state.leaseId),
-          eq(runnerSessionChannels.runnerId, state.runnerId),
-          eq(runnerSessionChannels.projectId, state.projectId),
-          eq(runnerSessionChannels.status, 'active'),
+          eq(sessionChannels.id, state.channelId),
+          eq(sessionChannels.sessionId, state.sessionId),
+          eq(sessionChannels.workItemId, state.workItemId),
+          eq(sessionChannels.leaseId, state.leaseId),
+          eq(sessionChannels.runnerId, state.runnerId),
+          eq(sessionChannels.projectId, state.projectId),
+          eq(sessionChannels.state, 'active'),
         ),
       )
       .get()
     const lease = await db
       .select()
-      .from(runnerWorkLeases)
+      .from(leases)
       .where(
         and(
-          eq(runnerWorkLeases.id, state.leaseId),
-          eq(runnerWorkLeases.workItemId, state.workItemId),
-          eq(runnerWorkLeases.runnerId, state.runnerId),
-          eq(runnerWorkLeases.projectId, state.projectId),
-          eq(runnerWorkLeases.status, 'active'),
+          eq(leases.id, state.leaseId),
+          eq(leases.workItemId, state.workItemId),
+          eq(leases.runnerId, state.runnerId),
+          eq(leases.projectId, state.projectId),
+          eq(leases.state, 'active'),
         ),
       )
       .get()
     const workItem = await db
       .select()
-      .from(runnerWorkItems)
-      .where(and(eq(runnerWorkItems.id, state.workItemId), eq(runnerWorkItems.projectId, state.projectId)))
+      .from(workItems)
+      .where(and(eq(workItems.id, state.workItemId), eq(workItems.projectId, state.projectId)))
       .get()
     const session = await db
-      .select({ status: sessions.status, statusReason: sessions.statusReason })
+      .select({ state: sessions.state, stateReason: sessions.stateReason })
       .from(sessions)
       .where(and(eq(sessions.id, state.sessionId), eq(sessions.projectId, state.projectId)))
       .get()
@@ -274,12 +274,12 @@ export class RunnerSessionChannelObject implements DurableObject {
       !lease ||
       !workItem ||
       lease.expiresAt <= new Date().toISOString() ||
-      workItem.status !== 'leased' ||
+      workItem.state !== 'leased' ||
       workItem.leaseId !== state.leaseId ||
       workItem.runnerId !== state.runnerId ||
       workItem.sessionId !== state.sessionId ||
-      session?.status !== 'running' ||
-      session.statusReason !== null
+      session?.state !== 'running' ||
+      session.stateReason !== null
     ) {
       return false
     }
@@ -290,7 +290,7 @@ export class RunnerSessionChannelObject implements DurableObject {
     await this.deactivateChannel(state, reason, 'closed')
   }
 
-  private async deactivateChannel(state: ChannelState, reason: string, status: 'closed' | 'stale') {
+  private async deactivateChannel(state: ChannelState, reason: string, channelState: 'closed' | 'stale') {
     if (this.state?.channelId !== state.channelId) {
       return
     }
@@ -298,25 +298,25 @@ export class RunnerSessionChannelObject implements DurableObject {
     this.socket = null
     this.state = null
     if (socket?.readyState === WebSocket.OPEN) {
-      socket.close(status === 'stale' ? 4001 : 1000, reason)
+      socket.close(channelState === 'stale' ? 4001 : 1000, reason)
     }
     const db = drizzle(this.env.DB)
     const timestamp = new Date().toISOString()
     await db
-      .update(runnerSessionChannels)
-      .set({ status, closedAt: timestamp, closeReason: reason, updatedAt: timestamp })
-      .where(and(eq(runnerSessionChannels.id, state.channelId), eq(runnerSessionChannels.status, 'active')))
+      .update(sessionChannels)
+      .set({ state: channelState, closedAt: timestamp, closeReason: reason, updatedAt: timestamp })
+      .where(and(eq(sessionChannels.id, state.channelId), eq(sessionChannels.state, 'active')))
     const session = await db
-      .select({ status: sessions.status })
+      .select({ state: sessions.state })
       .from(sessions)
       .where(and(eq(sessions.id, state.sessionId), eq(sessions.projectId, state.projectId)))
       .get()
-    if (session?.status !== 'running') {
+    if (session?.state !== 'running') {
       return
     }
     await db
       .update(sessions)
-      .set({ status: 'pending', statusReason: 'waiting-for-runner-recovery', updatedAt: timestamp })
+      .set({ state: 'pending', stateReason: 'waiting-for-runner-recovery', updatedAt: timestamp })
       .where(and(eq(sessions.id, state.sessionId), eq(sessions.projectId, state.projectId)))
     await appendSessionEvent(
       db,

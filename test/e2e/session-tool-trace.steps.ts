@@ -21,6 +21,25 @@ import {
 const PROMPT_SECRET_MARKER = 'raw-trace-secret-marker'
 const TOOL_SECRET_MARKER = 'raw-tool-secret-marker'
 
+// Project policy is a scoped collection now: upsert the project-scoped policy
+// instead of the removed project-singleton PUT.
+async function setProjectPolicy(e2e: E2EState, body: Json) {
+  const existing = await apiJson<{ data: Json[] }>(e2e.page.request, '/api/v1/policies')
+  const projectPolicy = existing.data.find(
+    (policy) => (policy.scope as Json | undefined)?.level === 'project' && !(policy.scope as Json).teamId,
+  )
+  if (projectPolicy) {
+    return await apiJson<Json>(e2e.page.request, `/api/v1/policies/${projectPolicy.id}`, {
+      method: 'PUT',
+      data: { scope: { level: 'project' }, ...body },
+    })
+  }
+  return await apiJson<Json>(e2e.page.request, '/api/v1/policies', {
+    method: 'POST',
+    data: { scope: { level: 'project' }, ...body },
+  })
+}
+
 type ToolTraceWorld = StepsWorld & {
   pairedToolCallId?: string
   orphanToolCallId?: string
@@ -75,22 +94,19 @@ async function assertPageTextOmits(page: Page, marker: string) {
 
 Given('a session has tool calls', { timeout: 120_000 }, async function (this: ToolTraceWorld) {
   const e2e = await ensureSignedIn(this)
-  e2e.agent = await createAgent(e2e, { name: `${e2e.runId} tool trace agent`, allowedTools: ['sandbox.exec'] })
+  e2e.agent = await createAgent(e2e, { name: `${e2e.runId} tool trace agent`, tools: [{ name: 'sandbox.exec' }] })
   e2e.environment = await createEnvironment(e2e, { name: `${e2e.runId} tool trace env` })
   e2e.latestSession = await createSession(e2e)
   // A status prompt drives the real agent loop through a sandbox.exec
   // round-trip; the credential-style marker must be redacted before storage.
-  await apiJson<Json>(e2e.page.request, `/runtime/sessions/${e2e.latestSession?.id}/rpc`, {
+  await apiJson<Json>(e2e.page.request, `/api/v1/runtime/sessions/${e2e.latestSession?.id}/rpc`, {
     method: 'POST',
     data: { type: 'prompt', message: `inspect the sandbox status using token=${PROMPT_SECRET_MARKER}` },
   })
   // Block git and drive a second real turn so the same trace also contains a
   // policy-denied, failed tool execution.
-  await apiJson<Json>(e2e.page.request, '/api/governance/policy', {
-    method: 'PUT',
-    data: { sandboxPolicy: { blockedCommands: ['git'] } },
-  })
-  const blocked = await apiResponse(e2e.page.request, `/runtime/sessions/${e2e.latestSession?.id}/rpc`, {
+  await setProjectPolicy(e2e, { sandboxPolicy: { blockedCommands: ['git'] } })
+  const blocked = await apiResponse(e2e.page.request, `/api/v1/runtime/sessions/${e2e.latestSession?.id}/rpc`, {
     method: 'POST',
     data: { type: 'prompt', message: 'check the sandbox status again' },
   })
@@ -344,11 +360,11 @@ Given(
   { timeout: 120_000 },
   async function (this: ToolTraceWorld) {
     const e2e = await ensureSignedIn(this)
-    e2e.agent = await createAgent(e2e, { name: `${e2e.runId} transcript agent`, allowedTools: ['sandbox.exec'] })
+    e2e.agent = await createAgent(e2e, { name: `${e2e.runId} transcript agent`, tools: [{ name: 'sandbox.exec' }] })
     e2e.environment = await createEnvironment(e2e, { name: `${e2e.runId} transcript env` })
     e2e.latestSession = await createSession(e2e)
     this.transcriptPrompt = `inspect the sandbox status for ${e2e.runId}`
-    await apiJson<Json>(e2e.page.request, `/runtime/sessions/${e2e.latestSession?.id}/rpc`, {
+    await apiJson<Json>(e2e.page.request, `/api/v1/runtime/sessions/${e2e.latestSession?.id}/rpc`, {
       method: 'POST',
       data: { type: 'prompt', message: this.transcriptPrompt },
     })

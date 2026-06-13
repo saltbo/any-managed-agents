@@ -49,10 +49,10 @@ Then(
     const runId = e2e.runId ?? `web-ui-create-${Date.now()}`
 
     // Ensure there is an active environment to bind the session
-    const envExists = await apiJson<{ data: { id: string }[] }>(page.request, '/api/environments')
-    let environmentId = envExists.data.find((env) => (env as { status?: string }).status === 'active')?.id
+    const envExists = await apiJson<{ data: { id: string }[] }>(page.request, '/api/v1/environments')
+    let environmentId = envExists.data.find((env) => (env as { archivedAt?: string | null }).archivedAt == null)?.id
     if (!environmentId) {
-      const env = await apiJson<{ id: string }>(page.request, '/api/environments', {
+      const env = await apiJson<{ id: string }>(page.request, '/api/v1/environments', {
         method: 'POST',
         data: {
           name: `${runId} session env`,

@@ -5,7 +5,15 @@ import { useParams } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { PageHeader, StatusBadge } from '@/console/components'
-import { formatDate, parseJsonObject, parseTools, stringifyJson } from '@/console/format'
+import {
+  archivedLabel,
+  formatDate,
+  isArchived,
+  parseJsonObject,
+  parseTools,
+  providerIdPatch,
+  stringifyJson,
+} from '@/console/format'
 import { AgentForm } from '@/console/forms'
 import type { AgentFormState } from '@/console/types'
 import { CreateSessionSheet } from '@/features/sessions/CreateSessionSheet'
@@ -42,11 +50,10 @@ export function AgentDetailPage() {
         name: input.name,
         description: input.description,
         instructions: input.instructions,
-        systemPrompt: input.instructions,
-        provider: input.provider,
+        ...providerIdPatch(input.provider),
         model: input.model || null,
         skills: parseTools(input.skills),
-        allowedTools: parseTools(input.allowedTools),
+        tools: parseTools(input.allowedTools).map((name) => ({ name })),
         mcpConnectors: parseTools(input.mcpConnectors),
         metadata: parseJsonObject(input.metadata, 'Metadata'),
       }),
@@ -68,7 +75,7 @@ export function AgentDetailPage() {
       <PageHeader
         eyebrow="Agent"
         title={agent?.name ?? 'Agent detail'}
-        titleAccessory={agent ? <StatusBadge value={agent.status} /> : null}
+        titleAccessory={agent ? <StatusBadge value={archivedLabel(agent)} /> : null}
         description={
           agent
             ? `${agent.description ?? 'No description'} · Created ${formatDate(agent.createdAt)} · Updated ${formatDate(agent.updatedAt)}`
@@ -81,7 +88,7 @@ export function AgentDetailPage() {
                 <Pencil data-icon="inline-start" />
                 Edit agent
               </Button>
-              {agent.status !== 'archived' ? (
+              {!isArchived(agent) ? (
                 <Button type="button" onClick={() => setCreatingSession(true)}>
                   Create session
                 </Button>
@@ -136,10 +143,10 @@ function agentToForm(agent: Agent): AgentFormState {
     name: agent.name,
     description: agent.description ?? '',
     instructions: agent.instructions ?? '',
-    provider: agent.provider,
-    model: agent.model,
+    provider: agent.providerId ?? '',
+    model: agent.model ?? '',
     skills: agent.skills.join('\n'),
-    allowedTools: agent.allowedTools.join('\n'),
+    allowedTools: agent.tools.map((tool) => tool.name).join('\n'),
     mcpConnectors: agent.mcpConnectors.join('\n'),
     metadata: stringifyJson(agent.metadata),
   }

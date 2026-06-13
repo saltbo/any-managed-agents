@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
 import { Textarea } from '@/components/ui/textarea'
 import { DetailSection, PageHeader, StatusBadge } from '@/console/components'
+import { archivedLabel } from '@/console/format'
 import { JsonBlock } from '@/features/console/json-block'
 import { initialSessionRuntimeState, sessionRuntimeReducer } from '@/features/sessions/session-runtime'
 import { type Agent, api } from '@/lib/api'
@@ -67,8 +68,8 @@ export function AgentBuilderPage() {
     queryFn: () => api.listProviders(),
   })
   const connectorsQuery = useQuery({
-    queryKey: queryKeys.mcp.connectors(),
-    queryFn: () => api.listMcpConnectors(),
+    queryKey: queryKeys.connectors.list(),
+    queryFn: () => api.listConnectors(),
   })
   const environmentsQuery = useQuery({
     queryKey: queryKeys.environments.list(false),
@@ -79,7 +80,7 @@ export function AgentBuilderPage() {
     queryFn: () => api.readSession(testSessionId as string),
     enabled: Boolean(testSessionId),
     refetchInterval: (query) =>
-      query.state.data && ['pending', 'running'].includes(query.state.data.status) ? 750 : false,
+      query.state.data && ['pending', 'running'].includes(query.state.data.state) ? 750 : false,
   })
   const testEventsQuery = useQuery({
     queryKey: queryKeys.sessions.events(testSessionId ?? ''),
@@ -87,8 +88,8 @@ export function AgentBuilderPage() {
     enabled: Boolean(testSessionId),
     refetchInterval: (query) => {
       const hasAssistantMessage = (query.state.data?.data ?? []).some((event) => event.type === 'message_end')
-      const status = testSessionQuery.data?.status
-      const terminal = status !== undefined && !['pending', 'running'].includes(status)
+      const state = testSessionQuery.data?.state
+      const terminal = state !== undefined && !['pending', 'running'].includes(state)
       return terminal && hasAssistantMessage ? false : 1000
     },
   })
@@ -278,7 +279,7 @@ export function AgentBuilderPage() {
                 <div className="grid gap-2 rounded-lg border p-3">
                   <div className="flex flex-wrap items-center gap-2 text-sm">
                     <span className="font-medium">Draft test transcript</span>
-                    <StatusBadge value={testSession.status} detail={testSession.statusReason} />
+                    <StatusBadge value={testSession.state} detail={testSession.stateReason} />
                     <Link className="text-xs text-muted-foreground underline" to={`/sessions/${testSession.id}`}>
                       Open session {testSession.id}
                     </Link>
@@ -303,7 +304,7 @@ export function AgentBuilderPage() {
             <div className="grid gap-4">
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <span className="font-medium">{publishedAgent.name}</span>
-                <StatusBadge value={publishedAgent.status} />
+                <StatusBadge value={archivedLabel(publishedAgent)} />
                 <StatusBadge value={`v${publishedAgent.version}`} />
                 <span className="font-mono text-xs text-muted-foreground">{publishedAgent.id}</span>
               </div>

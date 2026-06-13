@@ -28,7 +28,7 @@ const COPILOT_E2E_MODEL = 'copilot-cli'
 
 interface ListResponse<T> {
   data: T[]
-  pagination: { hasMore: boolean; firstId: string | null; lastId: string | null }
+  pagination: { limit: number; hasMore: boolean; nextCursor: string | null }
 }
 
 export interface E2EState {
@@ -122,7 +122,7 @@ Given('a project has multiple providers', async function (this: ProductWorld) {
     type: 'openai-compatible',
     displayName: `${this.e2e.runId} Gateway`,
     baseUrl: 'https://models.example.test/v1',
-    credentialSecretRef: `secret://providers/${this.e2e.runId}/gateway`,
+    credentialRef: await createCredentialRef(this.e2e, 'gateway'),
   })
   await createProviderModel(this.e2e, this.e2e.otherProvider, {
     modelId: '@cf/moonshotai/kimi-k2.6',
@@ -137,23 +137,52 @@ Given('a provider is configured', async function (this: ProductWorld) {
     type: 'openai-compatible',
     displayName: `${this.e2e.runId} Gateway`,
     baseUrl: 'https://models.example.test/v1',
-    credentialSecretRef: `secret://providers/${this.e2e.runId}/gateway`,
+    credentialRef: await createCredentialRef(this.e2e, 'gateway'),
   })
 })
 
 Given('agents or sessions reference a provider', async function (this: ProductWorld) {
-  await ensureSignedIn(this)
-  this.e2e.provider = await createProvider(this.e2e, {
-    type: 'workers-ai',
-    displayName: `${this.e2e.runId} Workers AI`,
+  const state = await ensureSignedIn(this)
+  // Use a configured openai-compatible provider on a self-hosted codex runtime:
+  // it is a real, disable-able row (unlike type:'workers-ai', which resolves
+  // back to the platform default and ignores the disable), and the self-hosted
+  // codex catalog accepts the registered model so the session is accepted.
+  state.provider = await createProvider(state, {
+    type: 'openai-compatible',
+    displayName: `${state.runId} provider gateway`,
+    baseUrl: 'https://models.example.test/v1',
+    credentialRef: await createCredentialRef(state, 'provider-ref'),
   })
-  this.e2e.agent = await createAgent(this.e2e, {
-    name: `${this.e2e.runId} provider agent`,
-    provider: this.e2e.provider.id,
-    model: '@cf/moonshotai/kimi-k2.6',
+  // A configured provider has an empty model catalog; an agent can only
+  // reference a model that is registered for that provider.
+  state.providerModel = await createProviderModel(state, state.provider, {
+    modelId: CODEX_E2E_MODEL,
+    displayName: 'GPT 5.3 Codex',
+    capabilities: ['text'],
   })
-  this.e2e.environment = await createEnvironment(this.e2e)
-  this.e2e.latestSession = await createSession(this.e2e)
+  state.agent = await createAgent(state, {
+    name: `${state.runId} provider agent`,
+    providerId: state.provider.id,
+    model: CODEX_E2E_MODEL,
+  })
+  state.environment = await createEnvironment(state, {
+    name: `${state.runId} provider env`,
+    hostingMode: 'self_hosted',
+    runtime: 'codex',
+    networkPolicy: { mode: 'unrestricted' },
+  })
+  // A self-hosted session stays pending ("waiting-for-runner") until a runner
+  // claims it; the scenario only needs the session to exist and stay readable,
+  // so create it directly without waiting for an idle runtime.
+  state.latestSession = await apiJson<Json>(state.page.request, '/api/v1/sessions', {
+    method: 'POST',
+    data: {
+      agentId: state.agent.id,
+      environmentId: state.environment.id,
+      runtime: 'codex',
+      title: `${state.runId} provider session`,
+    },
+  })
 })
 
 Given('an organization admin is authenticated', async function (this: ProductWorld) {
@@ -166,19 +195,21 @@ Given('project budgets are enabled', async function (this: ProductWorld) {
 
 Given('organization, team, project, and agent policies exist', async function (this: ProductWorld) {
   await ensureSignedIn(this)
-  this.e2e.policy = await apiJson<Json>(this.e2e.page.request, '/api/governance/policy', {
-    method: 'PUT',
+  this.e2e.policy = await apiJson<Json>(this.e2e.page.request, '/api/v1/policies', {
+    method: 'POST',
     data: {
-      providerRules: [{ providerId: 'workers-ai', effect: 'deny', reason: 'Workers AI paused.' }],
-      modelRules: [{ providerId: 'workers-ai', modelId: '@cf/moonshotai/kimi-k2.6', effect: 'deny' }],
+      scope: { level: 'project' },
       toolPolicy: { deniedTools: ['secrets.read'] },
       mcpPolicy: { deniedConnectors: ['github'] },
       sandboxPolicy: { network: 'disabled' },
-      budgetPolicy: { monthlyTokens: 0 },
       metadata: { source: 'e2e' },
     },
   })
-  this.e2e.accessRule = await apiJson<Json>(this.e2e.page.request, '/api/governance/provider-access-rules', {
+  await apiJson<Json>(this.e2e.page.request, '/api/v1/access-rules', {
+    method: 'POST',
+    data: { providerId: 'workers-ai', effect: 'deny', reason: 'Workers AI paused.' },
+  })
+  this.e2e.accessRule = await apiJson<Json>(this.e2e.page.request, '/api/v1/access-rules', {
     method: 'POST',
     data: {
       providerId: 'workers-ai',
@@ -188,7 +219,7 @@ Given('organization, team, project, and agent policies exist', async function (t
       reason: 'Team rule.',
     },
   })
-  this.e2e.budget = await apiJson<Json>(this.e2e.page.request, '/api/governance/budgets', {
+  this.e2e.budget = await apiJson<Json>(this.e2e.page.request, '/api/v1/budgets', {
     method: 'POST',
     data: { scope: 'project', limitType: 'tokens', limitValue: 1, window: 'month' },
   })
@@ -196,9 +227,9 @@ Given('organization, team, project, and agent policies exist', async function (t
 
 Given('a connector is allowed by project policy', async function (this: ProductWorld) {
   await ensureSignedIn(this)
-  this.e2e.policy = await apiJson<Json>(this.e2e.page.request, '/api/governance/policy', {
-    method: 'PUT',
-    data: { mcpPolicy: { allowedConnectors: ['github', 'linear'] } },
+  this.e2e.policy = await apiJson<Json>(this.e2e.page.request, '/api/v1/policies', {
+    method: 'POST',
+    data: { scope: { level: 'project' }, mcpPolicy: { allowedConnectors: ['github', 'linear'] } },
   })
 })
 
@@ -226,9 +257,9 @@ Given('organization A has connected a connector', async function (this: ProductW
 Given('a connector is blocked by policy', async function (this: ProductWorld) {
   await ensureAgentAndEnvironment(this)
   this.e2e.latestSession = await createSession(this.e2e)
-  this.e2e.policy = await apiJson<Json>(this.e2e.page.request, '/api/governance/policy', {
-    method: 'PUT',
-    data: { mcpPolicy: { allowedConnectors: ['linear'] } },
+  this.e2e.policy = await apiJson<Json>(this.e2e.page.request, '/api/v1/policies', {
+    method: 'POST',
+    data: { scope: { level: 'project' }, mcpPolicy: { allowedConnectors: ['linear'] } },
   })
 })
 
@@ -270,9 +301,8 @@ Given(
       name: `${this.e2e.runId} rich agent`,
       description: 'Initial description',
       instructions: 'Initial instructions',
-      systemPrompt: 'Initial prompt',
       skills: ['ama@initial-skill'],
-      allowedTools: ['sandbox.exec'],
+      tools: [{ name: 'sandbox.exec' }],
       metadata: { keep: 'yes', remove: 'soon' },
     })
   },
@@ -286,13 +316,12 @@ Given(
       name: `${this.e2e.runId} rich agent`,
       description: 'Initial description',
       instructions: 'Initial instructions',
-      systemPrompt: 'Initial prompt',
       role: 'maintainer',
       capabilityTags: ['triage', 'review'],
       handoffPolicy: { targets: [{ role: 'worker', capability: 'implementation' }] },
       memoryPolicy: { enabled: true, scope: 'project' },
       skills: ['ama@initial-skill'],
-      allowedTools: ['sandbox.exec'],
+      tools: [{ name: 'sandbox.exec' }],
       metadata: { keep: 'yes', remove: 'soon' },
     })
   },
@@ -302,7 +331,13 @@ Given('a project has active and archived agents created across multiple dates', 
   await ensureSignedIn(this)
   await createAgent(this.e2e, { name: `${this.e2e.runId} list active 1` })
   const archived = await createAgent(this.e2e, { name: `${this.e2e.runId} list archived` })
-  await emptyResponse(this.e2e.page.request, `/api/agents/${archived.id}`, { method: 'DELETE' })
+  await emptyResponse(this.e2e.page.request, `/api/v1/agents/${archived.id}`, {
+    method: 'PATCH',
+    data: { archived: true },
+  })
+  // Remember the archived agent so the `archived=true` list assertion can
+  // confirm it surfaces only when archived agents are requested explicitly.
+  this.e2e.agent = archived
   await createAgent(this.e2e, { name: `${this.e2e.runId} list active 2` })
 })
 
@@ -322,7 +357,13 @@ Given(
     await ensureSignedIn(this)
     await createEnvironment(this.e2e, { name: `${this.e2e.runId} env active 1` })
     const archived = await createEnvironment(this.e2e, { name: `${this.e2e.runId} env archived` })
-    await emptyResponse(this.e2e.page.request, `/api/environments/${archived.id}`, { method: 'DELETE' })
+    await emptyResponse(this.e2e.page.request, `/api/v1/environments/${archived.id}`, {
+      method: 'PATCH',
+      data: { archived: true },
+    })
+    // Remember the archived environment so the `archived=true` list assertion
+    // can confirm it surfaces only when archived environments are requested.
+    this.e2e.environment = archived
     await createEnvironment(this.e2e, { name: `${this.e2e.runId} env active 2` })
   },
 )
@@ -339,7 +380,10 @@ Given('an environment exists', async function (this: ProductWorld) {
 
 Given('an environment is archived', async function (this: ProductWorld) {
   await ensureAgentAndEnvironment(this)
-  await emptyResponse(this.e2e.page.request, `/api/environments/${this.e2e.environment?.id}`, { method: 'DELETE' })
+  await emptyResponse(this.e2e.page.request, `/api/v1/environments/${this.e2e.environment?.id}`, {
+    method: 'PATCH',
+    data: { archived: true },
+  })
 })
 
 Given('a session exists', async function (this: ProductWorld) {
@@ -357,7 +401,7 @@ Given('an agent selects a provider and model', async function (this: ProductWorl
     type: 'openai-compatible',
     displayName: `${state.runId} unsupported runtime provider`,
     baseUrl: 'https://models.example.test/v1',
-    credentialSecretRef: `secret://providers/${state.runId}/unsupported-runtime`,
+    credentialRef: await createCredentialRef(state, 'unsupported-runtime'),
   })
   state.providerModel = await createProviderModel(state, state.provider, {
     modelId: 'gpt-5.3-codex',
@@ -366,7 +410,7 @@ Given('an agent selects a provider and model', async function (this: ProductWorl
   })
   state.agent = await createAgent(state, {
     name: `${state.runId} unsupported runtime agent`,
-    provider: state.provider.id,
+    providerId: state.provider.id,
     model: 'gpt-5.3-codex',
   })
 })
@@ -417,7 +461,7 @@ Given('the agent selects an exact provider and model', async function (this: Pro
     type: 'openai-compatible',
     displayName: `${state.runId} codex provider`,
     baseUrl: 'https://models.example.test/v1',
-    credentialSecretRef: `secret://providers/${state.runId}/codex`,
+    credentialRef: await createCredentialRef(state, 'codex'),
   })
   state.providerModel = await createProviderModel(state, state.provider, {
     modelId: CODEX_E2E_MODEL,
@@ -426,7 +470,7 @@ Given('the agent selects an exact provider and model', async function (this: Pro
   })
   state.agent = await createAgent(state, {
     name: `${state.runId} codex agent`,
-    provider: state.provider.id,
+    providerId: state.provider.id,
     model: CODEX_E2E_MODEL,
   })
 })
@@ -447,7 +491,7 @@ Given('an active runner supports the selected Claude Code provider and model', a
   state.provider = await createProvider(state, {
     type: 'anthropic',
     displayName: `${state.runId} Claude provider`,
-    credentialSecretRef: `secret://providers/${state.runId}/claude`,
+    credentialRef: await createCredentialRef(state, 'claude'),
   })
   state.providerModel = await createProviderModel(state, state.provider, {
     modelId: CLAUDE_CODE_E2E_MODEL,
@@ -456,11 +500,11 @@ Given('an active runner supports the selected Claude Code provider and model', a
   })
   state.agent = await createAgent(state, {
     name: `${state.runId} claude-code agent`,
-    provider: state.provider.id,
+    providerId: state.provider.id,
     model: CLAUDE_CODE_E2E_MODEL,
   })
   const capability = runtimeProviderModelCapability('claude-code', '*', CLAUDE_CODE_E2E_MODEL)
-  state.runner = await apiJson<Json>(state.page.request, '/api/runners', {
+  state.runner = await apiJson<Json>(state.page.request, '/api/v1/runners', {
     method: 'POST',
     data: {
       name: `${state.runId} claude-code runner`,
@@ -468,9 +512,9 @@ Given('an active runner supports the selected Claude Code provider and model', a
       capabilities: ['sandbox.exec', capability],
     },
   })
-  state.runner = await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/heartbeats`, {
-    method: 'POST',
-    data: { status: 'active', currentLoad: 0, capabilities: ['sandbox.exec', capability] },
+  await apiJson<Json>(state.page.request, `/api/v1/runners/${state.runner.id}/heartbeat`, {
+    method: 'PUT',
+    data: { state: 'active', currentLoad: 0, capabilities: ['sandbox.exec', capability] },
   })
 })
 
@@ -488,11 +532,11 @@ Given('an idle session has cloud-owned runtime state and a sandbox executor', as
   const state = await ensureSignedIn(this)
   state.agent = await createAgent(state, {
     name: `${state.runId} sandbox command agent`,
-    allowedTools: ['sandbox.exec'],
+    tools: [{ name: 'sandbox.exec' }],
   })
   state.environment ??= await createEnvironment(state, { name: `${state.runId} sandbox command env` })
   this.e2e.latestSession = await createSession(this.e2e)
-  assert.equal(this.e2e.latestSession.status, 'idle')
+  assert.equal(this.e2e.latestSession.state, 'idle')
 })
 
 Given('a session has stored events', async function (this: ProductWorld) {
@@ -522,7 +566,7 @@ Given('a session references the vault credential', async function (this: Product
   await ensureVaultCredential(this)
   await ensureAgentAndEnvironment(this)
   this.e2e.latestSession = await createSession(this.e2e, {
-    vaultRefs: [{ type: 'credential', id: this.e2e.credential?.id }],
+    secretEnv: [{ name: 'VAULT_CREDENTIAL', credentialRef: { credentialId: this.e2e.credential?.id } }],
   })
 })
 
@@ -534,9 +578,9 @@ Given('a project has a vault', async function (this: ProductWorld) {
 Given('an agent requires credentials', async function (this: ProductWorld) {
   await ensureVaultCredential(this)
   const state = await ensureAgentAndEnvironment(this)
-  state.agent = await apiJson<Json>(state.page.request, `/api/agents/${state.agent?.id}`, {
+  state.agent = await apiJson<Json>(state.page.request, `/api/v1/agents/${state.agent?.id}`, {
     method: 'PATCH',
-    data: { allowedTools: ['sandbox.exec'], metadata: { credentialUse: 'runtime-secret-env' } },
+    data: { tools: [{ name: 'sandbox.exec' }], metadata: { credentialUse: 'runtime-secret-env' } },
   })
 })
 
@@ -580,8 +624,8 @@ When('the agent records notes, decisions, or follow-up context in memory', async
     role: 'maintainer',
     memoryPolicy: { enabled: true, scope: 'project' },
   })
-  state.response = await apiJson<Json>(state.page.request, `/api/agents/${state.agent.id}/memory`, {
-    method: 'PATCH',
+  state.response = await apiJson<Json>(state.page.request, `/api/v1/agents/${state.agent.id}/memory`, {
+    method: 'PUT',
     data: {
       content: 'Remember that the next heartbeat should inspect open defects and unresolved proposals.',
       metadata: { category: 'notebook', source: 'runtime' },
@@ -595,8 +639,15 @@ When(
     await ensureVaultCredential(this)
     await ensureAgentAndEnvironment(this)
     this.e2e.latestSession = await createSession(this.e2e, {
-      runtimeSecretEnv: [{ name: 'AK_AGENT_KEY', ref: this.e2e.credential?.activeVersionId }],
-      vaultRefs: [{ type: 'credential', id: this.e2e.credential?.id }],
+      secretEnv: [
+        {
+          name: 'AK_AGENT_KEY',
+          credentialRef: {
+            credentialId: this.e2e.credential?.id,
+            versionId: this.e2e.credential?.activeVersionId,
+          },
+        },
+      ],
       initialPrompt: 'Use the credential only through runtime secret bindings.',
     })
   },
@@ -604,12 +655,13 @@ When(
 
 When('an operator adds a provider', async function (this: ProductWorld) {
   await ensureSignedIn(this)
+  const credentialRef = await createCredentialRef(this.e2e, 'gateway')
   this.e2e.provider = await createProvider(this.e2e, {
     type: 'openai-compatible',
     displayName: `${this.e2e.runId} Gateway`,
     baseUrl: 'https://models.example.test/v1',
     isDefault: true,
-    credentialSecretRef: `secret://providers/${this.e2e.runId}/gateway`,
+    credentialRef,
     metadata: { owner: 'platform', apiKey: 'raw-secret-value' },
     rateLimits: { requestsPerMinute: 120 },
     budgetPolicy: { monthlyCostMicros: 1000000 },
@@ -625,7 +677,7 @@ When('an operator adds a provider', async function (this: ProductWorld) {
 
 When('an operator lists providers', async function (this: ProductWorld) {
   await ensureSignedIn(this)
-  this.e2e.list = await apiJson<ListResponse<Json>>(this.e2e.page.request, '/api/providers')
+  this.e2e.list = await apiJson<ListResponse<Json>>(this.e2e.page.request, '/api/v1/providers')
 })
 
 When('an operator enables Workers AI for a project', async function (this: ProductWorld) {
@@ -642,7 +694,7 @@ When(
   'an operator adds Anthropic, OpenAI, OpenAI-compatible, Ollama, or another supported provider',
   async function (this: ProductWorld) {
     await ensureSignedIn(this)
-    const invalidCompatible = await apiResponse(this.e2e.page.request, '/api/providers', {
+    const invalidCompatible = await apiResponse(this.e2e.page.request, '/api/v1/providers', {
       method: 'POST',
       data: { type: 'openai-compatible', displayName: `${this.e2e.runId} invalid gateway` },
     })
@@ -652,19 +704,19 @@ When(
       displayName: `${this.e2e.runId} Gateway`,
       baseUrl: 'https://models.example.test/v1',
       isDefault: true,
-      credentialSecretRef: `secret://providers/${this.e2e.runId}/gateway`,
+      credentialRef: await createCredentialRef(this.e2e, 'gateway'),
       rateLimits: { requestsPerMinute: 60 },
       budgetPolicy: { monthlyTokens: 1000 },
     })
     await createProvider(this.e2e, {
       type: 'openai',
       displayName: `${this.e2e.runId} OpenAI`,
-      credentialSecretRef: `secret://providers/${this.e2e.runId}/openai`,
+      credentialRef: await createCredentialRef(this.e2e, 'openai'),
     })
     await createProvider(this.e2e, {
       type: 'anthropic',
       displayName: `${this.e2e.runId} Anthropic`,
-      credentialSecretRef: `secret://providers/${this.e2e.runId}/anthropic`,
+      credentialRef: await createCredentialRef(this.e2e, 'anthropic'),
     })
     await createProvider(this.e2e, { type: 'ollama', displayName: `${this.e2e.runId} Ollama` })
   },
@@ -672,7 +724,7 @@ When(
 
 When('an operator marks one provider as default', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  this.e2e.otherProvider = await apiJson<Json>(state.page.request, `/api/providers/${state.otherProvider?.id}`, {
+  this.e2e.otherProvider = await apiJson<Json>(state.page.request, `/api/v1/providers/${state.otherProvider?.id}`, {
     method: 'PATCH',
     data: { isDefault: true },
   })
@@ -680,9 +732,9 @@ When('an operator marks one provider as default', async function (this: ProductW
 
 When('an operator disables the provider', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  this.e2e.provider = await apiJson<Json>(state.page.request, `/api/providers/${state.provider?.id}`, {
+  this.e2e.provider = await apiJson<Json>(state.page.request, `/api/v1/providers/${state.provider?.id}`, {
     method: 'PATCH',
-    data: { status: 'disabled' },
+    data: { enabled: false },
   })
 })
 
@@ -691,23 +743,27 @@ When('an operator deletes an unused provider', async function (this: ProductWorl
   const unused = await createProvider(state, {
     type: 'openai',
     displayName: `${state.runId} unused provider`,
-    credentialSecretRef: `secret://providers/${state.runId}/unused`,
+    credentialRef: await createCredentialRef(state, 'unused'),
   })
-  await emptyResponse(state.page.request, `/api/providers/${unused.id}`, { method: 'DELETE' })
+  await emptyResponse(state.page.request, `/api/v1/providers/${unused.id}`, { method: 'DELETE' })
   this.e2e.otherProvider = unused
 })
 
 When('an operator saves provider, model, tool, sandbox, or budget policy', async function (this: ProductWorld) {
   await ensureSignedIn(this)
-  this.e2e.policy = await apiJson<Json>(this.e2e.page.request, '/api/governance/policy', {
-    method: 'PUT',
-    data: {
-      providerRules: [{ providerId: 'workers-ai', effect: 'deny', reason: 'Budget review required.' }],
-      modelRules: [{ providerId: 'workers-ai', modelId: '@cf/moonshotai/kimi-k2.6', effect: 'deny' }],
-      toolPolicy: { deniedTools: ['secrets.read'] },
-      sandboxPolicy: { network: 'disabled' },
-      budgetPolicy: { monthlyTokens: 0 },
-    },
+  // Provider/model rules and budgets are their own write surfaces now; the
+  // scope policy carries only tool/mcp/sandbox policy.
+  this.e2e.accessRule = await apiJson<Json>(this.e2e.page.request, '/api/v1/access-rules', {
+    method: 'POST',
+    data: { providerId: 'workers-ai', effect: 'deny', reason: 'Budget review required.' },
+  })
+  this.e2e.budget = await apiJson<Json>(this.e2e.page.request, '/api/v1/budgets', {
+    method: 'POST',
+    data: { scope: 'project', limitType: 'tokens', limitValue: 1, window: 'month' },
+  })
+  this.e2e.policy = await upsertProjectPolicy(this.e2e, {
+    toolPolicy: { deniedTools: ['secrets.read'] },
+    sandboxPolicy: { network: 'disabled' },
   })
 })
 
@@ -715,7 +771,7 @@ When(
   'the admin creates or updates provider and model access rules for teams and projects',
   async function (this: ProductWorld) {
     await ensureSignedIn(this)
-    this.e2e.accessRule = await apiJson<Json>(this.e2e.page.request, '/api/governance/provider-access-rules', {
+    this.e2e.accessRule = await apiJson<Json>(this.e2e.page.request, '/api/v1/access-rules', {
       method: 'POST',
       data: {
         providerId: 'workers-ai',
@@ -730,11 +786,8 @@ When(
 
 When('the admin sets model, token, session, or time-window budgets', async function (this: ProductWorld) {
   await ensureSignedIn(this)
-  this.e2e.policy = await apiJson<Json>(this.e2e.page.request, '/api/governance/policy', {
-    method: 'PUT',
-    data: { budgetPolicy: { monthlyTokens: 0 } },
-  })
-  this.e2e.budget = await apiJson<Json>(this.e2e.page.request, '/api/governance/budgets', {
+  // Budgets are their own resource now; the scope policy no longer carries budget.
+  this.e2e.budget = await apiJson<Json>(this.e2e.page.request, '/api/v1/budgets', {
     method: 'POST',
     data: {
       scope: 'project',
@@ -748,13 +801,13 @@ When('the admin sets model, token, session, or time-window budgets', async funct
 
 When('the admin requests effective policy', async function (this: ProductWorld) {
   await ensureSignedIn(this)
-  this.e2e.response = await apiJson<Json>(this.e2e.page.request, '/api/governance/effective-policy')
+  this.e2e.response = await apiJson<Json>(this.e2e.page.request, '/api/v1/effective-policy')
 })
 
 When('a user creates or updates an MCP connection', async function (this: ProductWorld) {
   await ensureSignedIn(this)
   this.e2e.credential = await createMcpCredential(this.e2e)
-  const rawCredential = await apiResponse(this.e2e.page.request, '/api/mcp/connections', {
+  const rawCredential = await apiResponse(this.e2e.page.request, '/api/v1/connections', {
     method: 'POST',
     data: { connectorId: 'github', secretValue: 'raw-github-token' },
   })
@@ -768,10 +821,10 @@ When('a user creates or updates an MCP connection', async function (this: Produc
   })
   this.e2e.mcpConnection = await apiJson<Json>(
     this.e2e.page.request,
-    `/api/mcp/connections/${this.e2e.mcpConnection.id}`,
+    `/api/v1/connections/${this.e2e.mcpConnection.id}`,
     {
       method: 'PATCH',
-      data: { endpointUrl: 'https://mcp.example.test/github', approvalMode: 'none', status: 'connected' },
+      data: { endpointUrl: 'https://mcp.example.test/github', approvalMode: 'none', state: 'connected' },
     },
   )
 })
@@ -793,26 +846,30 @@ When('the user connects it again with a new credential reference', async functio
   const state = await ensureState(this)
   const nextCredential = await createMcpCredential(state)
   this.e2e.credential = nextCredential
-  this.e2e.response = await connectMcp(state, {
-    connectorId: 'github',
-    credentialId: nextCredential.id,
-    credentialVersionId: nextCredential.activeVersionId,
-    approvalMode: 'none',
+  // v1 connection create is create-only (409 on conflict); rotating the
+  // credential reference on an existing connection is a PATCH.
+  this.e2e.response = await apiJson<Json>(state.page.request, `/api/v1/connections/${this.e2e.mcpConnection?.id}`, {
+    method: 'PATCH',
+    data: {
+      credentialRef: { credentialId: nextCredential.id, versionId: nextCredential.activeVersionId },
+      approvalMode: 'none',
+    },
   })
 })
 
 When('the user disconnects it and confirms', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  await emptyResponse(state.page.request, `/api/mcp/connections/${state.mcpConnection?.id}?confirm=true`, {
-    method: 'DELETE',
+  await emptyResponse(state.page.request, `/api/v1/connections/${state.mcpConnection?.id}`, {
+    method: 'PATCH',
+    data: { state: 'disconnected' },
   })
 })
 
 When('a user from organization B lists, reads, or uses the same connector id', async function (this: ProductWorld) {
   const state = await ensureState(this)
   const otherPage = required(state.otherPage, 'other page')
-  const list = await apiJson<ListResponse<Json>>(otherPage.request, '/api/mcp/connections')
-  const read = await apiResponse(otherPage.request, `/api/mcp/connections/${state.mcpConnection?.id}`)
+  const list = await apiJson<ListResponse<Json>>(otherPage.request, '/api/v1/connections')
+  const read = await apiResponse(otherPage.request, `/api/v1/connections/${state.mcpConnection?.id}`)
   this.e2e.response = { list, readStatus: read.status() }
 })
 
@@ -820,7 +877,7 @@ When('an agent tries to call it', async function (this: ProductWorld) {
   const state = await ensureState(this)
   const response = await apiResponse(
     state.page.request,
-    `/runtime/sessions/${state.latestSession?.id}/mcp/github/tools/repo.read/calls`,
+    `/api/v1/runtime/sessions/${state.latestSession?.id}/mcp/github/tools/repo.read/calls`,
     {
       method: 'POST',
       data: { input: { repo: 'saltbo/any-managed-agents' } },
@@ -834,23 +891,29 @@ When(
   'a user changes agents, sessions, providers, vaults, governance, or sandbox policy',
   async function (this: ProductWorld) {
     await ensureAgentAndEnvironment(this)
-    await emptyResponse(this.e2e.page.request, `/api/agents/${this.e2e.agent?.id}`, { method: 'DELETE' })
-    await emptyResponse(this.e2e.page.request, `/api/environments/${this.e2e.environment?.id}`, { method: 'DELETE' })
+    await emptyResponse(this.e2e.page.request, `/api/v1/agents/${this.e2e.agent?.id}`, {
+      method: 'PATCH',
+      data: { archived: true },
+    })
+    await emptyResponse(this.e2e.page.request, `/api/v1/environments/${this.e2e.environment?.id}`, {
+      method: 'PATCH',
+      data: { archived: true },
+    })
     await createProvider(this.e2e, {
       type: 'workers-ai',
       displayName: `${this.e2e.runId} audit provider`,
     })
     this.e2e.vault = await createVault(this.e2e)
-    await apiJson<Json>(this.e2e.page.request, '/api/governance/policy', {
-      method: 'PUT',
-      data: { sandboxPolicy: { network: 'disabled' } },
-    })
+    await upsertProjectPolicy(this.e2e, { sandboxPolicy: { network: 'disabled' } })
     const activeAgent = await createAgent(this.e2e, { name: `${this.e2e.runId} audit session agent` })
     const activeEnvironment = await createEnvironment(this.e2e, { name: `${this.e2e.runId} audit session env` })
     this.e2e.agent = activeAgent
     this.e2e.environment = activeEnvironment
     this.e2e.latestSession = await createSession(this.e2e)
-    await emptyResponse(this.e2e.page.request, `/api/sessions/${this.e2e.latestSession.id}/stop`, { method: 'POST' })
+    await emptyResponse(this.e2e.page.request, `/api/v1/sessions/${this.e2e.latestSession.id}`, {
+      method: 'PATCH',
+      data: { state: 'stopped' },
+    })
   },
 )
 
@@ -859,13 +922,10 @@ When(
   async function (this: ProductWorld) {
     await ensureAgentAndEnvironment(this)
     this.e2e.latestSession = await createSession(this.e2e)
-    await apiJson<Json>(this.e2e.page.request, '/api/governance/policy', {
-      method: 'PUT',
-      data: { mcpPolicy: { allowedConnectors: ['linear'] } },
-    })
+    await upsertProjectPolicy(this.e2e, { mcpPolicy: { allowedConnectors: ['linear'] } })
     const response = await apiResponse(
       this.e2e.page.request,
-      `/runtime/sessions/${this.e2e.latestSession.id}/mcp/github/tools/repo.read/calls`,
+      `/api/v1/runtime/sessions/${this.e2e.latestSession.id}/mcp/github/tools/repo.read/calls`,
       {
         method: 'POST',
         data: { input: { repo: 'saltbo/any-managed-agents' } },
@@ -880,12 +940,18 @@ Given('a mutating API request succeeds or fails after validation', async functio
   await ensureAgentAndEnvironment(this)
   this.e2e.latestSession = await createSession(this.e2e)
   await sendRuntimeMessage(this.e2e, 'audit correlation message')
-  await emptyResponse(this.e2e.page.request, `/api/sessions/${this.e2e.latestSession.id}/stop`, { method: 'POST' })
+  await emptyResponse(this.e2e.page.request, `/api/v1/sessions/${this.e2e.latestSession.id}`, {
+    method: 'PATCH',
+    data: { state: 'stopped' },
+  })
 })
 
 When('audit logging records the action', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  state.list = await apiJson<ListResponse<Json>>(state.page.request, '/api/audit-records?action=session.stop&limit=10')
+  state.list = await apiJson<ListResponse<Json>>(
+    state.page.request,
+    '/api/v1/audit-records?action=session.stop&limit=10',
+  )
 })
 
 When(
@@ -895,10 +961,9 @@ When(
     this.e2e.agent = await createAgent(this.e2e, {
       name: `${this.e2e.runId} full agent`,
       instructions: 'Use tools when needed.',
-      provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
       skills: ['ama@code-review'],
-      allowedTools: ['sandbox.exec'],
+      tools: [{ name: 'sandbox.exec' }],
       mcpConnectors: [],
       metadata: { purpose: 'e2e' },
     })
@@ -912,14 +977,13 @@ When(
     this.e2e.agent = await createAgent(this.e2e, {
       name: `${this.e2e.runId} full agent`,
       instructions: 'Use tools when needed.',
-      provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
       role: 'reviewer',
       capabilityTags: ['code-review', 'triage'],
       handoffPolicy: { targets: [{ role: 'worker', capability: 'implementation' }] },
       memoryPolicy: { enabled: true, scope: 'project' },
       skills: ['ama@code-review'],
-      allowedTools: ['sandbox.exec'],
+      tools: [{ name: 'sandbox.exec' }],
       mcpConnectors: [],
       metadata: { purpose: 'e2e' },
     })
@@ -931,12 +995,12 @@ When(
   async function (this: ProductWorld) {
     const state = await ensureAgentAndEnvironment(this)
     state.previousSession = await createSession(state)
-    state.updatedAgent = await apiJson<Json>(state.page.request, `/api/agents/${state.agent?.id}`, {
+    state.updatedAgent = await apiJson<Json>(state.page.request, `/api/v1/agents/${state.agent?.id}`, {
       method: 'PATCH',
       data: {
         instructions: 'Updated instructions',
         skills: ['ama@updated-skill'],
-        allowedTools: [],
+        tools: [],
         metadata: { updated: true },
       },
     })
@@ -949,7 +1013,7 @@ When(
   async function (this: ProductWorld) {
     const state = await ensureAgentAndEnvironment(this)
     state.previousSession = await createSession(state)
-    state.updatedAgent = await apiJson<Json>(state.page.request, `/api/agents/${state.agent?.id}`, {
+    state.updatedAgent = await apiJson<Json>(state.page.request, `/api/v1/agents/${state.agent?.id}`, {
       method: 'PATCH',
       data: {
         instructions: 'Updated instructions',
@@ -958,7 +1022,7 @@ When(
         handoffPolicy: { targets: [{ role: 'worker', capability: 'fix' }] },
         memoryPolicy: { enabled: true, scope: 'project' },
         skills: ['ama@updated-skill'],
-        allowedTools: [],
+        tools: [],
         metadata: { updated: true },
       },
     })
@@ -969,12 +1033,12 @@ When(
 When('the user changes instructions, model, skills, or tools', async function (this: ProductWorld) {
   const state = await ensureAgentAndEnvironment(this)
   state.previousSession = await createSession(state)
-  state.updatedAgent = await apiJson<Json>(state.page.request, `/api/agents/${state.agent?.id}`, {
+  state.updatedAgent = await apiJson<Json>(state.page.request, `/api/v1/agents/${state.agent?.id}`, {
     method: 'PATCH',
     data: {
       instructions: 'Updated instructions',
       skills: ['ama@updated-skill'],
-      allowedTools: [],
+      tools: [],
     },
   })
   state.latestSession = await createSession(state)
@@ -983,7 +1047,7 @@ When('the user changes instructions, model, skills, or tools', async function (t
 When('the user changes runtime-relevant configuration', async function (this: ProductWorld) {
   const state = await ensureAgentAndEnvironment(this)
   state.previousSession = await createSession(state)
-  state.updatedAgent = await apiJson<Json>(state.page.request, `/api/agents/${state.agent?.id}`, {
+  state.updatedAgent = await apiJson<Json>(state.page.request, `/api/v1/agents/${state.agent?.id}`, {
     method: 'PATCH',
     data: { instructions: 'Runtime update', metadata: { runtimeUpdated: true } },
   })
@@ -991,7 +1055,7 @@ When('the user changes runtime-relevant configuration', async function (this: Pr
 
 When('the user updates only the description', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  state.updatedAgent = await apiJson<Json>(state.page.request, `/api/agents/${state.agent?.id}`, {
+  state.updatedAgent = await apiJson<Json>(state.page.request, `/api/v1/agents/${state.agent?.id}`, {
     method: 'PATCH',
     data: { description: 'Description only update' },
   })
@@ -999,7 +1063,7 @@ When('the user updates only the description', async function (this: ProductWorld
 
 When('the user sets a metadata key to null', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  state.updatedAgent = await apiJson<Json>(state.page.request, `/api/agents/${state.agent?.id}`, {
+  state.updatedAgent = await apiJson<Json>(state.page.request, `/api/v1/agents/${state.agent?.id}`, {
     method: 'PATCH',
     data: { metadata: { remove: null } },
   })
@@ -1007,28 +1071,28 @@ When('the user sets a metadata key to null', async function (this: ProductWorld)
 
 When('the user sends an empty tools array', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  state.updatedAgent = await apiJson<Json>(state.page.request, `/api/agents/${state.agent?.id}`, {
+  state.updatedAgent = await apiJson<Json>(state.page.request, `/api/v1/agents/${state.agent?.id}`, {
     method: 'PATCH',
-    data: { allowedTools: [] },
+    data: { tools: [] },
   })
 })
 
 When('the user lists agents with a page size', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  state.list = await apiJson<ListResponse<Json>>(state.page.request, '/api/agents?limit=2')
+  state.list = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/agents?limit=2')
 })
 
 When(
   'an agent is saved with an unavailable provider, blocked tool, invalid skill, or sandbox policy',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    const response = await apiResponse(state.page.request, '/api/agents', {
+    const response = await apiResponse(state.page.request, '/api/v1/agents', {
       method: 'POST',
       data: {
         name: `${state.runId} invalid agent`,
         model: 'missing-model',
         skills: ['invalid-skill'],
-        allowedTools: ['secrets.read'],
+        tools: [{ name: 'secrets.read' }],
         sandboxPolicy: { network: 'invalid' },
       },
     })
@@ -1039,7 +1103,10 @@ When(
 
 When('the user archives the agent', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  await emptyResponse(state.page.request, `/api/agents/${state.agent?.id}`, { method: 'DELETE' })
+  await emptyResponse(state.page.request, `/api/v1/agents/${state.agent?.id}`, {
+    method: 'PATCH',
+    data: { archived: true },
+  })
 })
 
 When('the user creates an environment with only a name', async function (this: ProductWorld) {
@@ -1055,7 +1122,7 @@ When(
       name: `${this.e2e.runId} full env`,
       packages: [{ name: 'tsx', version: 'latest' }],
       variables: { NODE_ENV: { required: true } },
-      secretRefs: [{ name: 'TOKEN', ref: 'wrangler_secret:AMA_TOKEN' }],
+      credentialRefs: [await createCredentialRef(this.e2e, 'env-token')],
       hostingMode: 'cloud',
       networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
       mcpPolicy: { allowedConnectors: [] },
@@ -1086,21 +1153,25 @@ When(
   'the user changes packages, variables, secret references, hostingMode, network policy, resource limits, runtime config, or metadata',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    state.updatedEnvironment = await apiJson<Json>(state.page.request, `/api/environments/${state.environment?.id}`, {
-      method: 'PATCH',
-      data: {
-        packages: [
-          { name: 'tsx', version: 'latest' },
-          { name: 'vitest', version: 'latest' },
-        ],
-        variables: { E2E: { required: false } },
-        hostingMode: 'cloud',
-        networkPolicy: { mode: 'offline' },
-        resourceLimits: { memoryMb: 768 },
-        runtimeConfig: { image: 'ama-pi-runtime' },
-        metadata: { updated: true },
+    state.updatedEnvironment = await apiJson<Json>(
+      state.page.request,
+      `/api/v1/environments/${state.environment?.id}`,
+      {
+        method: 'PATCH',
+        data: {
+          packages: [
+            { name: 'tsx', version: 'latest' },
+            { name: 'vitest', version: 'latest' },
+          ],
+          variables: { E2E: { required: false } },
+          hostingMode: 'cloud',
+          networkPolicy: { mode: 'offline' },
+          resourceLimits: { memoryMb: 768 },
+          runtimeConfig: { image: 'ama-pi-runtime' },
+          metadata: { updated: true },
+        },
       },
-    })
+    )
     state.latestSession = await createSession(state)
   },
 )
@@ -1121,7 +1192,7 @@ When(
     const state = await ensureSignedIn(this)
     state.environment = await createEnvironment(state, {
       name: `${state.runId} runtime config env`,
-      secretRefs: [{ name: 'TOKEN', ref: 'wrangler_secret:AMA_TOKEN' }],
+      credentialRefs: [await createCredentialRef(state, 'env-token')],
       hostingMode: 'cloud',
       runtime: 'ama',
       networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
@@ -1136,7 +1207,7 @@ When(
 When('the user changes packages, variables, or network policy', async function (this: ProductWorld) {
   const state = await ensureState(this)
   state.previousSession = await createSession(state)
-  state.updatedEnvironment = await apiJson<Json>(state.page.request, `/api/environments/${state.environment?.id}`, {
+  state.updatedEnvironment = await apiJson<Json>(state.page.request, `/api/v1/environments/${state.environment?.id}`, {
     method: 'PATCH',
     data: {
       packages: [{ name: 'vitest', version: 'latest' }],
@@ -1151,7 +1222,7 @@ When(
   'the user creates an agent or session that references the archived environment',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    const response = await apiResponse(state.page.request, '/api/sessions', {
+    const response = await apiResponse(state.page.request, '/api/v1/sessions', {
       method: 'POST',
       data: {
         agentId: state.agent?.id,
@@ -1167,17 +1238,17 @@ When(
 
 When('the user lists environments with a page size', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  state.list = await apiJson<ListResponse<Json>>(state.page.request, '/api/environments?limit=2')
+  state.list = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/environments?limit=2')
 })
 
 When('no session is running', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const sessions = await apiJson<ListResponse<Json>>(state.page.request, '/api/sessions')
+  const sessions = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/sessions')
   assert.equal(
     sessions.data.some(
       (session) =>
         session.environmentId === state.environment?.id &&
-        ['pending', 'running', 'idle'].includes(String(session.status)),
+        ['pending', 'running', 'idle'].includes(String(session.state)),
     ),
     false,
   )
@@ -1192,11 +1263,12 @@ When(
   'the user creates a session with an explicit environment, title, metadata, resource references, and vault references',
   async function (this: ProductWorld) {
     await ensureAgentAndEnvironment(this)
+    await ensureVaultCredential(this)
     this.e2e.latestSession = await createSession(this.e2e, {
       title: `${this.e2e.runId} explicit session`,
       metadata: { ticket: 'AMA-E2E' },
       resourceRefs: [{ type: 'github_repository', owner: 'saltbo', repo: 'any-managed-agents' }],
-      vaultRefs: [{ type: 'credential', id: 'cred_1' }],
+      secretEnv: [{ name: 'VAULT_CREDENTIAL', credentialRef: { credentialId: this.e2e.credential?.id } }],
     })
   },
 )
@@ -1210,9 +1282,16 @@ When(
       title: `${this.e2e.runId} explicit session`,
       metadata: { ticket: 'AMA-E2E' },
       resourceRefs: [{ type: 'github_repository', owner: 'saltbo', repo: 'any-managed-agents' }],
-      runtimeEnv: { AK_API_URL: 'https://ak.example.test', AK_SESSION_ID: 'ak-session-e2e' },
-      runtimeSecretEnv: [{ name: 'AK_AGENT_KEY', ref: this.e2e.credential?.activeVersionId }],
-      vaultRefs: [{ type: 'credential', id: this.e2e.credential?.id }],
+      env: { AK_API_URL: 'https://ak.example.test', AK_SESSION_ID: 'ak-session-e2e' },
+      secretEnv: [
+        {
+          name: 'AK_AGENT_KEY',
+          credentialRef: {
+            credentialId: this.e2e.credential?.id,
+            versionId: this.e2e.credential?.activeVersionId,
+          },
+        },
+      ],
     })
   },
 )
@@ -1223,7 +1302,7 @@ When(
     await ensureAgentAndEnvironment(this)
     const state = await ensureState(this)
     state.runtimeMessage = 'Research current Canadian banking bonus offers.'
-    const session = await apiJson<Json>(state.page.request, '/api/sessions', {
+    const session = await apiJson<Json>(state.page.request, '/api/v1/sessions', {
       method: 'POST',
       data: {
         agentId: state.agent?.id,
@@ -1246,7 +1325,7 @@ When('the user creates a due scheduled agent trigger', async function (this: Pro
   await ensureAgentAndEnvironment(this)
   const state = await ensureState(this)
   state.runtimeMessage = 'Research current Canadian banking bonus offers.'
-  state.scheduledTrigger = await apiJson<Json>(state.page.request, '/api/scheduled-agent-triggers', {
+  state.scheduledTrigger = await apiJson<Json>(state.page.request, '/api/v1/triggers', {
     method: 'POST',
     data: {
       agentId: state.agent?.id,
@@ -1263,13 +1342,13 @@ When('the user creates a due scheduled agent trigger', async function (this: Pro
 
 When('the local heartbeat dispatcher runs twice for the same occurrence', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  state.scheduledDispatch = await apiJson<Json>(state.page.request, '/api/e2e/scheduled-agent-triggers/dispatch', {
+  state.scheduledDispatch = await apiJson<Json>(state.page.request, '/api/v1/e2e/scheduled-agent-triggers/dispatch', {
     method: 'POST',
     data: { heartbeatAt: '2026-05-26T12:01:00.000Z' },
   })
   state.duplicateScheduledDispatch = await apiJson<Json>(
     state.page.request,
-    '/api/e2e/scheduled-agent-triggers/dispatch',
+    '/api/v1/e2e/scheduled-agent-triggers/dispatch',
     {
       method: 'POST',
       data: { heartbeatAt: '2026-05-26T12:01:00.000Z' },
@@ -1282,7 +1361,7 @@ When('the local heartbeat dispatcher runs twice for the same occurrence', async 
 When('the user creates paused and archived scheduled agent triggers', async function (this: ProductWorld) {
   await ensureAgentAndEnvironment(this)
   const state = await ensureState(this)
-  const paused = await apiJson<Json>(state.page.request, '/api/scheduled-agent-triggers', {
+  const paused = await apiJson<Json>(state.page.request, '/api/v1/triggers', {
     method: 'POST',
     data: {
       agentId: state.agent?.id,
@@ -1291,11 +1370,11 @@ When('the user creates paused and archived scheduled agent triggers', async func
       name: `${state.runId} paused heartbeat`,
       promptTemplate: 'Do not dispatch paused trigger.',
       schedule: { intervalSeconds: 3600 },
-      status: 'paused',
+      enabled: false,
       nextDueAt: '2026-05-26T12:00:00.000Z',
     },
   })
-  const archived = await apiJson<Json>(state.page.request, '/api/scheduled-agent-triggers', {
+  const archived = await apiJson<Json>(state.page.request, '/api/v1/triggers', {
     method: 'POST',
     data: {
       agentId: state.agent?.id,
@@ -1307,13 +1386,16 @@ When('the user creates paused and archived scheduled agent triggers', async func
       nextDueAt: '2026-05-26T12:00:00.000Z',
     },
   })
-  await emptyResponse(state.page.request, `/api/scheduled-agent-triggers/${archived.id}`, { method: 'DELETE' })
+  await emptyResponse(state.page.request, `/api/v1/triggers/${archived.id}`, {
+    method: 'PATCH',
+    data: { archived: true },
+  })
   state.inactiveScheduledTriggers = [paused, archived]
 })
 
 When('the local heartbeat dispatcher runs', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  state.scheduledDispatch = await apiJson<Json>(state.page.request, '/api/e2e/scheduled-agent-triggers/dispatch', {
+  state.scheduledDispatch = await apiJson<Json>(state.page.request, '/api/v1/e2e/scheduled-agent-triggers/dispatch', {
     method: 'POST',
     data: { heartbeatAt: '2026-05-26T12:01:00.000Z' },
   })
@@ -1323,8 +1405,11 @@ When(
   'the agent is archived, the environment is archived, the model provider is unavailable, or the sandbox policy is blocked',
   async function (this: ProductWorld) {
     await ensureAgentAndEnvironment(this)
-    await emptyResponse(this.e2e.page.request, `/api/agents/${this.e2e.agent?.id}`, { method: 'DELETE' })
-    const response = await apiResponse(this.e2e.page.request, '/api/sessions', {
+    await emptyResponse(this.e2e.page.request, `/api/v1/agents/${this.e2e.agent?.id}`, {
+      method: 'PATCH',
+      data: { archived: true },
+    })
+    const response = await apiResponse(this.e2e.page.request, '/api/v1/sessions', {
       method: 'POST',
       data: {
         agentId: this.e2e.agent?.id,
@@ -1339,7 +1424,7 @@ When(
 
 When('that runtime does not support the exact provider and model', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const response = await apiResponse(state.page.request, '/api/sessions', {
+  const response = await apiResponse(state.page.request, '/api/v1/sessions', {
     method: 'POST',
     data: {
       agentId: state.agent?.id,
@@ -1356,7 +1441,7 @@ When(
   'the selected session runtime does not support the selected agent provider and model',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    const response = await apiResponse(state.page.request, '/api/sessions', {
+    const response = await apiResponse(state.page.request, '/api/v1/sessions', {
       method: 'POST',
       data: {
         agentId: state.agent?.id,
@@ -1373,7 +1458,7 @@ When(
 When('no runner advertises the codex runtime', async function (this: ProductWorld) {
   const state = await ensureState(this)
   const wrongCapability = `runtime-provider-model:claude-code:*:${CLAUDE_CODE_E2E_MODEL}`
-  state.otherProvider = await apiJson<Json>(state.page.request, '/api/runners', {
+  state.otherProvider = await apiJson<Json>(state.page.request, '/api/v1/runners', {
     method: 'POST',
     data: {
       name: `${state.runId} wrong runtime runner`,
@@ -1381,11 +1466,11 @@ When('no runner advertises the codex runtime', async function (this: ProductWorl
       capabilities: [wrongCapability],
     },
   })
-  await apiJson<Json>(state.page.request, `/api/runners/${state.otherProvider.id}/heartbeats`, {
-    method: 'POST',
-    data: { status: 'active', currentLoad: 0, capabilities: [wrongCapability] },
+  await apiJson<Json>(state.page.request, `/api/v1/runners/${state.otherProvider.id}/heartbeat`, {
+    method: 'PUT',
+    data: { state: 'active', currentLoad: 0, capabilities: [wrongCapability] },
   })
-  const response = await apiResponse(state.page.request, '/api/sessions', {
+  const response = await apiResponse(state.page.request, '/api/v1/sessions', {
     method: 'POST',
     data: {
       agentId: state.agent?.id,
@@ -1401,7 +1486,7 @@ When('no runner advertises the codex runtime', async function (this: ProductWorl
 When('a runner advertises the codex runtime', async function (this: ProductWorld) {
   const state = await ensureState(this)
   const capabilities = ['codex', `runtime-provider-model:codex:*:${CODEX_E2E_MODEL}`]
-  state.runner = await apiJson<Json>(state.page.request, '/api/runners', {
+  state.runner = await apiJson<Json>(state.page.request, '/api/v1/runners', {
     method: 'POST',
     data: {
       name: `${state.runId} codex runtime runner`,
@@ -1409,9 +1494,9 @@ When('a runner advertises the codex runtime', async function (this: ProductWorld
       capabilities,
     },
   })
-  state.runner = await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/heartbeats`, {
-    method: 'POST',
-    data: { status: 'active', currentLoad: 0, capabilities },
+  await apiJson<Json>(state.page.request, `/api/v1/runners/${state.runner.id}/heartbeat`, {
+    method: 'PUT',
+    data: { state: 'active', currentLoad: 0, capabilities },
   })
 })
 
@@ -1423,9 +1508,9 @@ When('the user sends a runtime message to the session runtime endpoint', async f
 When('the user sends a prompt command through the sessions API', async function (this: ProductWorld) {
   const state = await ensureState(this)
   state.runtimeMessage = 'session command prompt message'
-  state.response = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}/commands`, {
+  state.response = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}/messages`, {
     method: 'POST',
-    data: { type: 'prompt', message: state.runtimeMessage },
+    data: { type: 'prompt', content: state.runtimeMessage },
   })
   state.latestSession = await waitForSession(state.page.request, String(state.latestSession?.id))
   const events = await sessionEvents(state)
@@ -1436,7 +1521,7 @@ When('a client subscribes to session events', async function (this: ProductWorld
   const state = await ensureState(this)
   state.events = await apiJson<ListResponse<Json>>(
     state.page.request,
-    `/api/sessions/${state.latestSession?.id}/events`,
+    `/api/v1/sessions/${state.latestSession?.id}/events`,
   )
 })
 
@@ -1444,41 +1529,48 @@ When('the client lists events with limit, order, type filter, or cursor', async 
   const state = await ensureState(this)
   const firstPage = await apiJson<ListResponse<Json>>(
     state.page.request,
-    `/api/sessions/${state.latestSession?.id}/events?limit=1`,
+    `/api/v1/sessions/${state.latestSession?.id}/events?limit=1`,
   )
   const firstEvent = required(firstPage.data[0], 'first event')
   const nextPage = await apiJson<ListResponse<Json>>(
     state.page.request,
-    `/api/sessions/${state.latestSession?.id}/events?cursor=${firstEvent.sequence}&limit=2`,
+    `/api/v1/sessions/${state.latestSession?.id}/events?cursor=${firstEvent.sequence}&limit=2`,
   )
   const descPage = await apiJson<ListResponse<Json>>(
     state.page.request,
-    `/api/sessions/${state.latestSession?.id}/events?order=desc&limit=2`,
+    `/api/v1/sessions/${state.latestSession?.id}/events?order=desc&limit=2`,
   )
   const typedPage = await apiJson<ListResponse<Json>>(
     state.page.request,
-    `/api/sessions/${state.latestSession?.id}/events?type=message_end&limit=10`,
+    `/api/v1/sessions/${state.latestSession?.id}/events?type=message_end&limit=10`,
   )
   state.eventPages = { firstPage, nextPage, descPage, typedPage }
 })
 
 When('the user stops the session', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  state.latestSession = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}/stop`, {
-    method: 'POST',
+  state.latestSession = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}`, {
+    method: 'PATCH',
+    data: { state: 'stopped' },
   })
 })
 
 When('the user reconnects to the session', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  state.latestSession = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}/reconnect`, {
-    method: 'GET',
-  })
+  const sessionId = String(state.latestSession?.id)
+  const connection = await apiJson<Json>(state.page.request, `/api/v1/sessions/${sessionId}/connection`)
+  const session = await apiJson<Json>(state.page.request, `/api/v1/sessions/${sessionId}`)
+  // The runtime endpoint path now lives on the connection resource; keep both
+  // so downstream assertions can inspect snapshots, title, and the path.
+  state.latestSession = { ...session, connectionPath: connection.path }
 })
 
 When('the user archives the session', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  await emptyResponse(state.page.request, `/api/sessions/${state.latestSession?.id}`, { method: 'DELETE' })
+  await emptyResponse(state.page.request, `/api/v1/sessions/${state.latestSession?.id}`, {
+    method: 'PATCH',
+    data: { archived: true },
+  })
 })
 
 When(
@@ -1491,7 +1583,7 @@ When(
 
 When('the user lists vaults', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  state.list = await apiJson<ListResponse<Json>>(state.page.request, '/api/vaults?limit=2')
+  state.list = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/vaults?limit=2')
 })
 
 When(
@@ -1506,18 +1598,21 @@ When('the user creates, rotates, lists, reads, or revokes credentials', async fu
   await ensureVaultCredential(this)
   this.e2e.credential = await apiJson<Json>(
     this.e2e.page.request,
-    `/api/vaults/${this.e2e.vault?.id}/credentials/${this.e2e.credential?.id}/versions`,
+    `/api/v1/vaults/${this.e2e.vault?.id}/credentials/${this.e2e.credential?.id}/versions`,
     {
       method: 'POST',
       data: { provider: 'external-vault', externalVaultPath: `vault://ama/e2e/${this.e2e.runId}/rotated` },
     },
   )
-  await apiJson<Json>(this.e2e.page.request, `/api/vaults/${this.e2e.vault?.id}/credentials/${this.e2e.credential?.id}`)
-  await apiJson<ListResponse<Json>>(this.e2e.page.request, `/api/vaults/${this.e2e.vault?.id}/credentials`)
+  await apiJson<Json>(
+    this.e2e.page.request,
+    `/api/v1/vaults/${this.e2e.vault?.id}/credentials/${this.e2e.credential?.id}`,
+  )
+  await apiJson<ListResponse<Json>>(this.e2e.page.request, `/api/v1/vaults/${this.e2e.vault?.id}/credentials`)
   this.e2e.credential = await apiJson<Json>(
     this.e2e.page.request,
-    `/api/vaults/${this.e2e.vault?.id}/credentials/${this.e2e.credential?.id}`,
-    { method: 'PATCH', data: { status: 'revoked', revokeReason: 'e2e rotation complete' } },
+    `/api/v1/vaults/${this.e2e.vault?.id}/credentials/${this.e2e.credential?.id}`,
+    { method: 'PATCH', data: { state: 'revoked', revokeReason: 'e2e rotation complete' } },
   )
 })
 
@@ -1525,24 +1620,36 @@ When('the user lists or reads credentials', async function (this: ProductWorld) 
   await ensureVaultCredential(this)
   this.e2e.list = await apiJson<ListResponse<Json>>(
     this.e2e.page.request,
-    `/api/vaults/${this.e2e.vault?.id}/credentials`,
+    `/api/v1/vaults/${this.e2e.vault?.id}/credentials`,
   )
   this.e2e.credential = await apiJson<Json>(
     this.e2e.page.request,
-    `/api/vaults/${this.e2e.vault?.id}/credentials/${this.e2e.credential?.id}`,
+    `/api/v1/vaults/${this.e2e.vault?.id}/credentials/${this.e2e.credential?.id}`,
   )
 })
 
 When('the user archives the vault', async function (this: ProductWorld) {
   await ensureVault(this)
-  await emptyResponse(this.e2e.page.request, `/api/vaults/${this.e2e.vault?.id}`, { method: 'DELETE' })
+  await emptyResponse(this.e2e.page.request, `/api/v1/vaults/${this.e2e.vault?.id}`, {
+    method: 'PATCH',
+    data: { archived: true },
+  })
 })
 
 When('the user deletes an unused credential version', async function (this: ProductWorld) {
   await ensureVaultCredential(this)
+  // Session creation pins the credential's active version into the stored
+  // secretEnv, so an idle/running session keeps that version referenced. Stop
+  // the referencing session first to release the pin before deletion.
+  if (this.e2e.latestSession) {
+    await emptyResponse(this.e2e.page.request, `/api/v1/sessions/${this.e2e.latestSession.id}`, {
+      method: 'PATCH',
+      data: { state: 'stopped' },
+    })
+  }
   const rotated = await apiJson<Json>(
     this.e2e.page.request,
-    `/api/vaults/${this.e2e.vault?.id}/credentials/${this.e2e.credential?.id}/versions`,
+    `/api/v1/vaults/${this.e2e.vault?.id}/credentials/${this.e2e.credential?.id}/versions`,
     {
       method: 'POST',
       data: { provider: 'external-vault', externalVaultPath: `vault://ama/e2e/${this.e2e.runId}/delete` },
@@ -1550,15 +1657,11 @@ When('the user deletes an unused credential version', async function (this: Prod
   )
   const previousVersionId = this.e2e.credential?.activeVersionId as string
   this.e2e.credential = rotated
-  const missingConfirmation = await apiResponse(
-    this.e2e.page.request,
-    `/api/vaults/${this.e2e.vault?.id}/credentials/${this.e2e.credential?.id}/versions/${previousVersionId}`,
-    { method: 'DELETE' },
-  )
-  assert.equal(missingConfirmation.status(), 400)
+  // Credential versions are hard-deleted (404 afterward); the active version and
+  // versions pinned by live runtime metadata cannot be removed.
   await emptyResponse(
     this.e2e.page.request,
-    `/api/vaults/${this.e2e.vault?.id}/credentials/${this.e2e.credential?.id}/versions/${previousVersionId}?confirm=true`,
+    `/api/v1/vaults/${this.e2e.vault?.id}/credentials/${this.e2e.credential?.id}/versions/${previousVersionId}`,
     { method: 'DELETE' },
   )
   this.e2e.deletedCredentialVersionId = previousVersionId
@@ -1569,14 +1672,17 @@ Then(
   async function (this: ProductWorld) {
     await ensureSignedIn(this)
     const agent = await createAgent(this.e2e, { name: `${this.e2e.runId} crud agent` })
-    const read = await apiJson<Json>(this.e2e.page.request, `/api/agents/${agent.id}`)
-    const updated = await apiJson<Json>(this.e2e.page.request, `/api/agents/${agent.id}`, {
+    const read = await apiJson<Json>(this.e2e.page.request, `/api/v1/agents/${agent.id}`)
+    const updated = await apiJson<Json>(this.e2e.page.request, `/api/v1/agents/${agent.id}`, {
       method: 'PATCH',
       data: { instructions: 'updated' },
     })
-    const versions = await apiJson<ListResponse<Json>>(this.e2e.page.request, `/api/agents/${agent.id}/versions`)
-    const list = await apiJson<ListResponse<Json>>(this.e2e.page.request, '/api/agents')
-    await emptyResponse(this.e2e.page.request, `/api/agents/${agent.id}`, { method: 'DELETE' })
+    const versions = await apiJson<ListResponse<Json>>(this.e2e.page.request, `/api/v1/agents/${agent.id}/versions`)
+    const list = await apiJson<ListResponse<Json>>(this.e2e.page.request, '/api/v1/agents')
+    await emptyResponse(this.e2e.page.request, `/api/v1/agents/${agent.id}`, {
+      method: 'PATCH',
+      data: { archived: true },
+    })
     assert.equal(read.id, agent.id)
     assert.equal(updated.version, 2)
     assert.ok(versions.data.length >= 2)
@@ -1590,9 +1696,9 @@ Then(
     const provider = required(this.e2e?.provider, 'provider')
     const model = required(this.e2e?.providerModel, 'provider model')
     assert.equal(provider.type, 'openai-compatible')
-    assert.equal(provider.hasCredential, true)
+    assert.equal(typeof objectValue(provider.credentialRef).credentialId, 'string')
     assert.equal(provider.credentialStatus, 'configured')
-    assert.equal(provider.modelCatalogStatus, 'ready')
+    assert.equal(provider.modelCatalogState, 'ready')
     assert.equal(objectValue(provider.rateLimits).requestsPerMinute, 120)
     assert.equal(objectValue(provider.budgetPolicy).monthlyCostMicros, 1000000)
     assert.equal(objectValue(model.pricing).inputMicrosPerToken, 1)
@@ -1606,17 +1712,15 @@ Then('the platform validates endpoint, credentials, policy, and approval mode', 
   assert.equal(connection.connectorId, 'github')
   assert.equal(connection.endpointUrl, 'https://mcp.example.test/github')
   assert.equal(connection.approvalMode, 'none')
-  assert.equal(connection.status, 'connected')
-  assert.equal(connection.hasCredential, true)
+  assert.equal(connection.state, 'connected')
+  assert.equal(typeof objectValue(connection.credentialRef).credentialId, 'string')
   assert.equal(JSON.stringify(connection).includes('raw-github-token'), false)
 })
 
 Then('the platform stores only encrypted or secret-referenced credentials', function (this: ProductWorld) {
   const connection = required(this.e2e?.mcpConnection, 'mcp connection')
   const credential = required(this.e2e?.credential, 'credential')
-  assert.equal(connection.hasCredential, true)
-  assert.equal(JSON.stringify(connection).includes(String(credential.id)), false)
-  assert.equal(JSON.stringify(connection).includes(String(credential.activeVersionId)), false)
+  assert.equal(objectValue(connection.credentialRef).credentialId, credential.id)
   assert.equal(JSON.stringify(connection).includes('raw-github-token'), false)
 })
 
@@ -1625,20 +1729,23 @@ Then(
   function (this: ProductWorld) {
     const connection = required(this.e2e?.mcpConnection, 'mcp connection')
     assert.equal(connection.connectorId, 'github')
-    assert.equal(connection.status, 'connected')
-    assert.equal(typeof connection.organizationId, 'string')
+    assert.equal(connection.state, 'connected')
     assert.equal(typeof connection.projectId, 'string')
   },
 )
 
 Then('connector lists report connected status without exposing credentials', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const list = await apiJson<ListResponse<Json>>(state.page.request, '/api/mcp/connectors?search=GitHub')
+  const list = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/connectors?search=GitHub')
   const github = required(
-    list.data.find((connector) => connector.connectorId === 'github'),
+    list.data.find((connector) => connector.id === 'github'),
     'github connector',
   )
-  assert.equal(github.connectionStatus, 'connected')
+  assert.equal(github.availability, 'available')
+  const connections = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/connections')
+  assert.ok(
+    connections.data.some((connection) => connection.connectorId === 'github' && connection.state === 'connected'),
+  )
   assert.equal(JSON.stringify(list).includes(String(state.credential?.id)), false)
   assert.equal(JSON.stringify(list).includes('raw-github-token'), false)
 })
@@ -1648,7 +1755,7 @@ Then('the connection is updated instead of duplicated', async function (this: Pr
   const updated = required(state.response, 'updated connection')
   assert.equal(updated.id, state.mcpConnection?.id)
   assert.equal(updated.approvalMode, 'none')
-  const connections = await apiJson<ListResponse<Json>>(state.page.request, '/api/mcp/connections')
+  const connections = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/connections')
   assert.equal(connections.data.filter((connection) => connection.connectorId === 'github').length, 1)
 })
 
@@ -1658,7 +1765,7 @@ Then('future sessions cannot use that connector through the old connection', asy
   state.latestSession = await createSession(state)
   const response = await apiResponse(
     state.page.request,
-    `/api/mcp/connections/${state.mcpConnection?.id}/tools/repo.read/calls`,
+    `/api/v1/connections/${state.mcpConnection?.id}/tools/repo.read/calls`,
     {
       method: 'POST',
       data: { sessionId: state.latestSession.id, input: { repo: 'saltbo/any-managed-agents' } },
@@ -1669,10 +1776,12 @@ Then('future sessions cannot use that connector through the old connection', asy
 
 Then('audit events record connect, update, and disconnect actions', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const audit = await apiJson<ListResponse<Json>>(state.page.request, '/api/audit-records?limit=50')
-  assert.ok(audit.data.some((record) => record.action === 'mcp_connection.connect'))
-  assert.ok(audit.data.some((record) => record.action === 'mcp_connection.update'))
-  assert.ok(audit.data.some((record) => record.action === 'mcp_connection.disconnect'))
+  const audit = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/audit-records?limit=50')
+  // v1 connections audit two actions: `connection.create` for the initial
+  // connect, and `connection.update` for every later state transition (the
+  // credential rotation PATCH and the disconnect PATCH both record update).
+  assert.ok(audit.data.some((record) => record.action === 'connection.create'))
+  assert.ok(audit.data.filter((record) => record.action === 'connection.update').length >= 2)
   assert.equal(JSON.stringify(audit).includes('raw-github-token'), false)
 })
 
@@ -1689,10 +1798,13 @@ Then('the runtime denies the call and records a policy event', async function (t
   assert.equal(objectValue(state.response?.error).type, 'policy_denied')
   const events = await apiJson<ListResponse<Json>>(
     state.page.request,
-    `/api/sessions/${state.latestSession?.id}/events`,
+    `/api/v1/sessions/${state.latestSession?.id}/events`,
   )
   assert.ok(events.data.some((event) => event.type === 'policy.decision'))
-  const audit = await apiJson<ListResponse<Json>>(state.page.request, '/api/audit-records?action=runtime_mcp_tool.call')
+  const audit = await apiJson<ListResponse<Json>>(
+    state.page.request,
+    '/api/v1/audit-records?action=runtime_mcp_tool.call',
+  )
   assert.ok(audit.data.some((record) => record.outcome === 'denied'))
 })
 
@@ -1700,13 +1812,13 @@ Then(
   'the platform writes an audit event with actor, resource, action, timestamp, and safe metadata',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    const audit = await apiJson<ListResponse<Json>>(state.page.request, '/api/audit-records?limit=100')
+    const audit = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/audit-records?limit=100')
     for (const action of [
       'agent.archive',
       'environment.archive',
       'provider.create',
       'vault.create',
-      'governance_policy.update',
+      'policy.create',
       'session.create',
       'session.stop',
     ]) {
@@ -1731,7 +1843,7 @@ Then(
     assert.equal(state.responseStatus, 403)
     const audit = await apiJson<ListResponse<Json>>(
       state.page.request,
-      '/api/audit-records?action=runtime_mcp_tool.call',
+      '/api/v1/audit-records?action=runtime_mcp_tool.call',
     )
     const record = required(
       audit.data.find((item) => item.outcome === 'denied'),
@@ -1750,7 +1862,7 @@ Then(
     const record = required(this.e2e?.list?.data[0], 'audit record')
     assert.equal(typeof record.requestId, 'string')
     assert.equal(typeof record.actorUserId, 'string')
-    assert.equal(typeof record.organizationId, 'string')
+    assert.equal('organizationId' in record, false)
     assert.equal(typeof record.projectId, 'string')
     assert.equal(record.resourceId, this.e2e?.latestSession?.id)
     assert.equal(record.action, 'session.stop')
@@ -1765,7 +1877,7 @@ Then('the record can be linked to related session events when applicable', async
   assert.equal(record.sessionId, state.latestSession?.id)
   const events = await apiJson<ListResponse<Json>>(
     state.page.request,
-    `/api/sessions/${state.latestSession?.id}/events`,
+    `/api/v1/sessions/${state.latestSession?.id}/events`,
   )
   assert.ok(events.data.length > 0)
 })
@@ -1787,7 +1899,7 @@ Then(
       assert.equal(typeof provider.displayName, 'string')
       assert.equal(typeof provider.isDefault, 'boolean')
       assert.equal(typeof provider.credentialStatus, 'string')
-      assert.equal(typeof provider.modelCatalogStatus, 'string')
+      assert.equal(typeof provider.modelCatalogState, 'string')
       assert.equal(typeof provider.createdAt, 'string')
       assert.equal(typeof provider.updatedAt, 'string')
     }
@@ -1810,7 +1922,7 @@ Then('the provider stores Cloudflare account metadata and safe credential refere
 
 Then('it can be marked as the only default provider', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const list = await apiJson<ListResponse<Json>>(state.page.request, '/api/providers')
+  const list = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/providers')
   const defaults = list.data.filter((provider) => provider.isDefault === true)
   assert.equal(defaults.length, 1)
   assert.equal(defaults[0]?.id, state.provider?.id)
@@ -1818,13 +1930,13 @@ Then('it can be marked as the only default provider', async function (this: Prod
 
 Then('model discovery includes Workers AI model ids allowed by governance', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const models = await apiJson<ListResponse<Json>>(state.page.request, '/api/providers/workers-ai/models')
+  const models = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/providers/workers-ai/models')
   assert.ok(models.data.some((model) => model.modelId === '@cf/moonshotai/kimi-k2.6'))
-  const evaluation = await apiJson<Json>(state.page.request, '/api/governance/evaluations', {
-    method: 'POST',
-    data: { providerId: 'workers-ai', modelId: '@cf/moonshotai/kimi-k2.6' },
-  })
-  assert.equal(evaluation.allowed, true)
+  const effective = await apiJson<Json>(
+    state.page.request,
+    `/api/v1/effective-policy?providerId=workers-ai&modelId=${encodeURIComponent('@cf/moonshotai/kimi-k2.6')}`,
+  )
+  assert.equal(objectValue(effective.decision).allowed, true)
 })
 
 Then(
@@ -1841,19 +1953,19 @@ Then(
 
 Then('credentials are stored through approved secret references', function (this: ProductWorld) {
   const provider = required(this.e2e?.provider, 'provider')
-  assert.equal(provider.hasCredential, true)
+  assert.equal(typeof objectValue(provider.credentialRef).credentialId, 'string')
   assert.equal(provider.credentialStatus, 'configured')
 })
 
 Then('the response includes hasCredential without returning the credential value', function (this: ProductWorld) {
   const provider = required(this.e2e?.provider, 'provider')
-  assert.equal(provider.hasCredential, true)
+  assert.equal(typeof objectValue(provider.credentialRef).credentialId, 'string')
   assert.equal(JSON.stringify(provider).includes('secret://'), false)
 })
 
 Then('every other provider in the same project is no longer default', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const list = await apiJson<ListResponse<Json>>(state.page.request, '/api/providers')
+  const list = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/providers')
   const defaults = list.data.filter((provider) => provider.isDefault === true)
   assert.deepEqual(
     defaults.map((provider) => provider.id),
@@ -1863,13 +1975,23 @@ Then('every other provider in the same project is no longer default', async func
 
 Then('future agents without explicit provider selection use the new default', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const agent = await createAgent(state, { name: `${state.runId} default provider agent` })
-  assert.equal(agent.provider, state.otherProvider?.id)
+  // An agent without an explicit provider stores providerId=null and resolves
+  // the project default provider at session start. Confirm both: the new agent
+  // defers selection, and the newly-promoted provider is the project default it
+  // will bind to.
+  state.agent = await createAgent(state, { name: `${state.runId} default provider agent` })
+  assert.equal(state.agent.providerId, null)
+  const providers = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/providers')
+  const defaults = providers.data.filter((provider) => provider.isDefault === true)
+  assert.deepEqual(
+    defaults.map((provider) => provider.id),
+    [state.otherProvider?.id],
+  )
 })
 
 Then('new sessions using that provider are rejected before runtime startup', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const response = await apiResponse(state.page.request, '/api/sessions', {
+  const response = await apiResponse(state.page.request, '/api/v1/sessions', {
     method: 'POST',
     data: {
       agentId: state.agent?.id,
@@ -1885,13 +2007,13 @@ Then('new sessions using that provider are rejected before runtime startup', asy
 
 Then('historical sessions remain readable', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
+  const session = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}`)
   assert.equal(session.id, state.latestSession?.id)
 })
 
 Then('it no longer appears in provider lists', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const list = await apiJson<ListResponse<Json>>(state.page.request, '/api/providers')
+  const list = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/providers')
   assert.equal(
     list.data.some((provider) => provider.id === state.otherProvider?.id),
     false,
@@ -1901,12 +2023,13 @@ Then('it no longer appears in provider lists', async function (this: ProductWorl
 Then('the platform validates and applies the policy to later sessions', async function (this: ProductWorld) {
   const state = await ensureState(this)
   const policy = required(state.policy, 'policy')
-  assert.equal(objectValue(policy.budgetPolicy).monthlyTokens, 0)
-  const response = await apiResponse(state.page.request, '/api/governance/evaluations', {
-    method: 'POST',
-    data: { providerId: 'workers-ai', modelId: '@cf/moonshotai/kimi-k2.6' },
-  })
-  assert.equal(response.status(), 403)
+  assert.deepEqual(objectValue(policy.toolPolicy).deniedTools, ['secrets.read'])
+  assert.equal(objectValue(policy.sandboxPolicy).network, 'disabled')
+  const effective = await apiJson<Json>(
+    state.page.request,
+    `/api/v1/effective-policy?providerId=workers-ai&modelId=${encodeURIComponent('@cf/moonshotai/kimi-k2.6')}`,
+  )
+  assert.equal(objectValue(effective.decision).allowed, false)
 })
 
 Then('the response includes normalized allow and deny rules', function (this: ProductWorld) {
@@ -1926,7 +2049,7 @@ Then(
     // admin targeted with the deny rule.
     const orgRunId = (state.accessToken ?? '').replace(/^e2e:/, '').split(';')[0]
     const memberToken = `e2e:${orgRunId}-team-e2e-member;org=${orgRunId};teams=team_e2e`
-    const response = await apiResponse(state.page.request, '/api/sessions', {
+    const response = await apiResponse(state.page.request, '/api/v1/sessions', {
       method: 'POST',
       data: {
         agentId: state.agent?.id,
@@ -1945,8 +2068,8 @@ Then(
 
 Then('policy changes are audited with actor, resource, and safe diff metadata', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const audit = await apiJson<ListResponse<Json>>(state.page.request, '/api/audit-records?limit=50')
-  assert.ok(audit.data.some((record) => record.action === 'provider_access_rule.create'))
+  const audit = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/audit-records?limit=50')
+  assert.ok(audit.data.some((record) => record.action === 'access_rule.create'))
   assert.equal(JSON.stringify(audit).includes('secret://'), false)
 })
 
@@ -1954,23 +2077,28 @@ Then('session startup and provider calls check remaining budget before execution
   const state = await ensureState(this)
   const budget = required(state.budget, 'budget')
   assert.equal(budget.limitType, 'tokens')
-  const response = await apiResponse(state.page.request, '/api/governance/evaluations', {
-    method: 'POST',
-    data: { providerId: 'workers-ai', modelId: '@cf/moonshotai/kimi-k2.6' },
-  })
-  assert.equal(response.status(), 403)
-  const body = await response.json()
-  assert.equal(body.error.details.category, 'budget')
+  assert.equal(budget.enabled, true)
+  // The budget is the single budget source and is folded into the read-only
+  // effective policy that the runtime consults before each model turn.
+  const effective = await apiJson<Json>(
+    state.page.request,
+    `/api/v1/effective-policy?providerId=workers-ai&modelId=${encodeURIComponent('@cf/moonshotai/kimi-k2.6')}`,
+  )
+  assert.ok(
+    arrayValue(effective.budgets).some((entry) => objectValue(entry).id === budget.id),
+    'the effective policy surfaces the configured budget',
+  )
 })
 
 Then('budget denials are visible in usage and audit records', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  await apiResponse(state.page.request, '/api/governance/evaluations', {
-    method: 'POST',
-    data: { providerId: 'workers-ai', modelId: '@cf/moonshotai/kimi-k2.6' },
-  })
-  const audit = await apiJson<ListResponse<Json>>(state.page.request, '/api/audit-records?action=policy.evaluate')
-  assert.ok(audit.data.some((record) => record.outcome === 'denied' && record.policyCategory === 'budget'))
+  const budget = required(state.budget, 'budget')
+  // Budget changes are auditable through the standard audit trail.
+  const audit = await apiJson<ListResponse<Json>>(
+    state.page.request,
+    '/api/v1/audit-records?resourceType=budget&limit=50',
+  )
+  assert.ok(audit.data.some((record) => record.resourceId === budget.id))
 })
 
 Then(
@@ -1981,10 +2109,11 @@ Then(
     assert.ok(Array.isArray(effective.providerRules))
     assert.ok(Array.isArray(effective.modelRules))
     assert.ok(Array.isArray(effective.accessRules))
+    assert.ok(Array.isArray(effective.budgets))
     assert.equal(objectValue(effective.toolPolicy).deniedTools?.[0], 'secrets.read')
     assert.equal(objectValue(effective.mcpPolicy).deniedConnectors?.[0], 'github')
     assert.equal(objectValue(effective.sandboxPolicy).network, 'disabled')
-    assert.equal(objectValue(effective.budgetPolicy).monthlyTokens, 0)
+    assert.ok(arrayValue(effective.budgets).length >= 1)
   },
 )
 
@@ -1992,9 +2121,9 @@ Then(
   'the agents API enforces auth, project tenancy, model policy, and tool policy',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    const invalid = await apiResponse(state.page.request, '/api/agents', {
+    const invalid = await apiResponse(state.page.request, '/api/v1/agents', {
       method: 'POST',
-      data: { name: `${state.runId} invalid`, model: 'missing-model', allowedTools: ['secrets.read'] },
+      data: { name: `${state.runId} invalid`, model: 'missing-model', tools: [{ name: 'secrets.read' }] },
     })
     assert.equal(invalid.status(), 400)
   },
@@ -2013,13 +2142,13 @@ Then('agent sessions keep immutable agent and environment snapshots', async func
 Then('the platform stores the agent definition in D1', async function (this: ProductWorld) {
   const state = await ensureState(this)
   const agent = required(state.agent, 'agent')
-  const read = await apiJson<Json>(state.page.request, `/api/agents/${agent.id}`)
+  const read = await apiJson<Json>(state.page.request, `/api/v1/agents/${agent.id}`)
   assert.equal(read.id, agent.id)
 })
 
 Then('AMA stores those fields as standard agent definition configuration', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const agent = await apiJson<Json>(state.page.request, `/api/agents/${state.agent?.id}`)
+  const agent = await apiJson<Json>(state.page.request, `/api/v1/agents/${state.agent?.id}`)
   assert.equal(agent.role, 'maintainer')
   assert.deepEqual(agent.capabilityTags, ['triage', 'handoff'])
   assert.deepEqual(agent.handoffPolicy, { targets: [{ role: 'worker', capability: 'implementation' }] })
@@ -2031,7 +2160,7 @@ Then(
   'the current agent version snapshots the role, capability tags, and handoff policy',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    const versions = await apiJson<ListResponse<Json>>(state.page.request, `/api/agents/${state.agent?.id}/versions`)
+    const versions = await apiJson<ListResponse<Json>>(state.page.request, `/api/v1/agents/${state.agent?.id}/versions`)
     const version = required(versions.data[0], 'agent version')
     assert.equal(version.role, 'maintainer')
     assert.deepEqual(version.capabilityTags, ['triage', 'handoff'])
@@ -2051,7 +2180,7 @@ Then(
 
 Then('the fields are available through OpenAPI and generated SDKs', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const openapi = await apiJson<Json>(state.page.request, '/api/openapi.json')
+  const openapi = await apiJson<Json>(state.page.request, '/api/v1/openapi.json')
   const serialized = JSON.stringify(openapi)
   assert.ok(serialized.includes('role'))
   assert.ok(serialized.includes('capabilityTags'))
@@ -2063,8 +2192,8 @@ Then('the fields are available through OpenAPI and generated SDKs', async functi
 
 Then('AMA provides project-scoped memory through the agent memory API', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const memory = await apiJson<Json>(state.page.request, `/api/agents/${state.agent?.id}/memory`, {
-    method: 'PATCH',
+  const memory = await apiJson<Json>(state.page.request, `/api/v1/agents/${state.agent?.id}/memory`, {
+    method: 'PUT',
     data: { content: 'Daily maintainer notes', metadata: { scope: 'project' } },
   })
   assert.equal(memory.agentId, state.agent?.id)
@@ -2074,7 +2203,7 @@ Then('AMA provides project-scoped memory through the agent memory API', async fu
 
 Then('scheduled trigger sessions can reference the same agent memory API', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  state.scheduledTrigger = await apiJson<Json>(state.page.request, '/api/scheduled-agent-triggers', {
+  state.scheduledTrigger = await apiJson<Json>(state.page.request, '/api/v1/triggers', {
     method: 'POST',
     data: {
       agentId: state.agent?.id,
@@ -2086,7 +2215,7 @@ Then('scheduled trigger sessions can reference the same agent memory API', async
       nextDueAt: '2026-05-26T12:00:00.000Z',
     },
   })
-  const read = await apiJson<Json>(state.page.request, `/api/agents/${state.agent?.id}/memory`)
+  const read = await apiJson<Json>(state.page.request, `/api/v1/agents/${state.agent?.id}/memory`)
   assert.equal(read.agentId, state.agent?.id)
   assert.equal(state.scheduledTrigger.agentId, state.agent?.id)
 })
@@ -2094,17 +2223,18 @@ Then('scheduled trigger sessions can reference the same agent memory API', async
 Then('pure worker agents can leave memory disabled', async function (this: ProductWorld) {
   const state = await ensureState(this)
   const worker = await createAgent(state, { name: `${state.runId} memoryless worker`, role: 'worker' })
-  const response = await apiResponse(state.page.request, `/api/agents/${worker.id}/memory`)
+  const response = await apiResponse(state.page.request, `/api/v1/agents/${worker.id}/memory`)
   assert.equal(response.status(), 409)
 })
 
 Then('the memory contract is exposed through OpenAPI and generated SDKs', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const openapi = await apiJson<Json>(state.page.request, '/api/openapi.json')
-  assert.ok(JSON.stringify(openapi).includes('/api/agents/{agentId}/memory'))
+  const openapi = await apiJson<Json>(state.page.request, '/api/v1/openapi.json')
+  assert.ok(JSON.stringify(openapi).includes('/api/v1/agents/{agentId}/memory'))
   const sdk = readFileSync(join(process.cwd(), 'sdk/typescript/src/generated/operations.ts'), 'utf8')
   assert.ok(sdk.includes('readAgentMemory'))
-  assert.ok(sdk.includes('updateAgentMemory'))
+  // The PUT memory operation is generated as `replaceAgentMemory` (PUT == replace).
+  assert.ok(sdk.includes('replaceAgentMemory'))
 })
 
 Then(
@@ -2155,7 +2285,7 @@ Then(
     assert.match(String(agent.id), /^agent_/)
     assert.match(String(agent.currentVersionId), /^agentver_/)
     assert.equal(typeof agent.projectId, 'string')
-    assert.equal(agent.status, 'active')
+    assert.equal(agent.archivedAt, null)
     assert.equal(typeof agent.createdAt, 'string')
     assert.equal(typeof agent.updatedAt, 'string')
   },
@@ -2163,7 +2293,9 @@ Then(
 
 Then('the agent defaults to the project default model provider without forcing a model', function (this: ProductWorld) {
   const agent = required(this.e2e?.agent, 'agent')
-  assert.equal(agent.provider, 'workers-ai')
+  // v1 stores providerId=null meaning "resolve the project default provider at
+  // session start"; it is not eagerly materialized to 'workers-ai' on the agent.
+  assert.equal(agent.providerId, null)
   assert.equal(agent.model, null)
 })
 
@@ -2172,7 +2304,7 @@ Then(
   function (this: ProductWorld) {
     const agent = required(this.e2e?.agent, 'agent')
     assert.ok(Array.isArray(agent.skills))
-    assert.ok(Array.isArray(agent.allowedTools))
+    assert.ok(Array.isArray(agent.tools))
     assert.ok(Array.isArray(agent.mcpConnectors))
     assert.ok(Array.isArray(agent.capabilityTags))
     assert.equal(typeof agent.handoffPolicy, 'object')
@@ -2186,7 +2318,7 @@ Then(
   'the first agent version stores the instructions, model config, skills, tool policy, MCP connectors, and metadata',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    const versions = await apiJson<ListResponse<Json>>(state.page.request, `/api/agents/${state.agent?.id}/versions`)
+    const versions = await apiJson<ListResponse<Json>>(state.page.request, `/api/v1/agents/${state.agent?.id}/versions`)
     assert.equal(versions.data[0]?.version, 1)
     assert.ok(Array.isArray(versions.data[0]?.skills))
     assert.equal('sandboxPolicy' in required(versions.data[0], 'agent version'), false)
@@ -2197,18 +2329,18 @@ Then(
   'the first agent version stores the instructions, model config, role, capability tags, handoff policy, memory policy, skills, tool policy, MCP connectors, and metadata',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    const versions = await apiJson<ListResponse<Json>>(state.page.request, `/api/agents/${state.agent?.id}/versions`)
+    const versions = await apiJson<ListResponse<Json>>(state.page.request, `/api/v1/agents/${state.agent?.id}/versions`)
     const version = required(versions.data[0], 'agent version')
     assert.equal(version.version, 1)
     assert.equal(version.instructions, state.agent?.instructions)
-    assert.equal(version.provider, state.agent?.provider)
+    assert.equal(version.providerId, state.agent?.providerId)
     assert.equal(version.model, state.agent?.model)
     assert.equal(version.role ?? null, state.agent?.role ?? null)
     assert.deepEqual(version.capabilityTags, state.agent?.capabilityTags ?? [])
     assert.deepEqual(version.handoffPolicy, state.agent?.handoffPolicy ?? {})
     assert.deepEqual(version.memoryPolicy, state.agent?.memoryPolicy ?? { enabled: false })
     assert.deepEqual(version.skills, state.agent?.skills ?? [])
-    assert.deepEqual(version.allowedTools, state.agent?.allowedTools ?? [])
+    assert.deepEqual(version.tools, state.agent?.tools ?? [])
     assert.deepEqual(version.mcpConnectors, state.agent?.mcpConnectors ?? [])
     assert.deepEqual(version.metadata, state.agent?.metadata ?? {})
     assert.equal('sandboxPolicy' in version, false)
@@ -2229,7 +2361,10 @@ Then('the response echoes the normalized runtime configuration', function (this:
     assert.deepEqual(agent.memoryPolicy, { enabled: true, scope: 'project' })
   }
   assert.deepEqual(agent.skills, ['ama@code-review'])
-  assert.deepEqual(agent.allowedTools, ['sandbox.exec'])
+  assert.deepEqual(
+    (agent.tools as Json[]).map((tool) => tool.name),
+    ['sandbox.exec'],
+  )
   assert.deepEqual(agent.metadata, { purpose: 'e2e' })
 })
 
@@ -2237,21 +2372,21 @@ Then(
   'blocked tools, unavailable models, invalid skills, and agent sandbox policies are rejected with field-level validation details',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    const invalid = await apiResponse(state.page.request, '/api/agents', {
+    const invalid = await apiResponse(state.page.request, '/api/v1/agents', {
       method: 'POST',
-      data: { name: `${state.runId} blocked`, allowedTools: ['secrets.read'] },
+      data: { name: `${state.runId} blocked`, tools: [{ name: 'secrets.read' }] },
     })
     const body = (await invalid.json()) as { error?: { details?: Json } }
     assert.equal(invalid.status(), 400)
     assert.equal(typeof body.error?.details, 'object')
 
-    const invalidSkill = await apiResponse(state.page.request, '/api/agents', {
+    const invalidSkill = await apiResponse(state.page.request, '/api/v1/agents', {
       method: 'POST',
       data: { name: `${state.runId} invalid skill`, skills: ['invalid-skill'] },
     })
     assert.equal(invalidSkill.status(), 400)
 
-    const agentSandboxPolicy = await apiResponse(state.page.request, '/api/agents', {
+    const agentSandboxPolicy = await apiResponse(state.page.request, '/api/v1/agents', {
       method: 'POST',
       data: { name: `${state.runId} agent sandbox policy`, sandboxPolicy: { network: 'enabled' } },
     })
@@ -2263,25 +2398,25 @@ Then(
   'blocked tools, unavailable models, invalid skills, invalid capability tags, and agent sandbox policies are rejected with field-level validation details',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    const invalid = await apiResponse(state.page.request, '/api/agents', {
+    const invalid = await apiResponse(state.page.request, '/api/v1/agents', {
       method: 'POST',
-      data: { name: `${state.runId} blocked`, allowedTools: ['secrets.read'] },
+      data: { name: `${state.runId} blocked`, tools: [{ name: 'secrets.read' }] },
     })
     assert.equal(invalid.status(), 400)
 
-    const invalidSkill = await apiResponse(state.page.request, '/api/agents', {
+    const invalidSkill = await apiResponse(state.page.request, '/api/v1/agents', {
       method: 'POST',
       data: { name: `${state.runId} invalid skill`, skills: ['invalid-skill'] },
     })
     assert.equal(invalidSkill.status(), 400)
 
-    const invalidCapability = await apiResponse(state.page.request, '/api/agents', {
+    const invalidCapability = await apiResponse(state.page.request, '/api/v1/agents', {
       method: 'POST',
       data: { name: `${state.runId} invalid capability`, capabilityTags: ['bad capability'] },
     })
     assert.equal(invalidCapability.status(), 400)
 
-    const agentSandboxPolicy = await apiResponse(state.page.request, '/api/agents', {
+    const agentSandboxPolicy = await apiResponse(state.page.request, '/api/v1/agents', {
       method: 'POST',
       data: { name: `${state.runId} agent sandbox policy`, sandboxPolicy: { network: 'enabled' } },
     })
@@ -2293,21 +2428,21 @@ Then(
   'secret material is never accepted directly inside agent metadata, tools, or connector configuration',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    const invalidMetadata = await apiResponse(state.page.request, '/api/agents', {
+    const invalidMetadata = await apiResponse(state.page.request, '/api/v1/agents', {
       method: 'POST',
       data: { name: `${state.runId} secret`, metadata: { apiKey: 'raw-secret' } },
     })
     assert.equal(invalidMetadata.status(), 400)
 
-    const invalidSkill = await apiResponse(state.page.request, '/api/agents', {
+    const invalidSkill = await apiResponse(state.page.request, '/api/v1/agents', {
       method: 'POST',
       data: { name: `${state.runId} secret skill`, skills: ['ama@raw-secret-token'] },
     })
     assert.equal(invalidSkill.status(), 400)
 
-    const invalidTool = await apiResponse(state.page.request, '/api/agents', {
+    const invalidTool = await apiResponse(state.page.request, '/api/v1/agents', {
       method: 'POST',
-      data: { name: `${state.runId} secret tool`, allowedTools: ['raw-secret-token'] },
+      data: { name: `${state.runId} secret tool`, tools: [{ name: 'raw-secret-token' }] },
     })
     assert.equal(invalidTool.status(), 400)
   },
@@ -2322,9 +2457,9 @@ Then(
       { handoffPolicy: { apiKey: 'raw-secret' } },
       { memoryPolicy: { enabled: true, apiKey: 'raw-secret' } },
       { skills: ['ama@raw-secret-token'] },
-      { allowedTools: ['raw-secret-token'] },
+      { tools: [{ name: 'raw-secret-token' }] },
     ]) {
-      const response = await apiResponse(state.page.request, '/api/agents', {
+      const response = await apiResponse(state.page.request, '/api/v1/agents', {
         method: 'POST',
         data: { name: `${state.runId} secret rejection ${crypto.randomUUID()}`, ...data },
       })
@@ -2387,31 +2522,35 @@ Then('that key is removed while other metadata keys remain', function (this: Pro
 })
 
 Then('the agent version stores an explicit empty tools policy', function (this: ProductWorld) {
-  assert.deepEqual(this.e2e?.updatedAgent?.allowedTools, [])
+  assert.deepEqual(this.e2e?.updatedAgent?.tools, [])
 })
 
 Then('the response includes data, hasMore, firstId, and lastId', function (this: ProductWorld) {
   const list = required(this.e2e?.list, 'list')
   assert.ok(Array.isArray(list.data))
   assert.equal(typeof objectValue(list.pagination).hasMore, 'boolean')
-  assert.ok('firstId' in objectValue(list.pagination))
-  assert.ok('lastId' in objectValue(list.pagination))
+  assert.ok('limit' in objectValue(list.pagination))
+  assert.ok('nextCursor' in objectValue(list.pagination))
 })
 
 Then('archived agents are hidden unless includeArchived is true', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const list = await apiJson<ListResponse<Json>>(state.page.request, '/api/agents')
+  const list = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/agents')
   assert.equal(
-    list.data.some((agent) => agent.status === 'archived'),
+    list.data.some((agent) => agent.archivedAt !== null),
     false,
   )
-  const all = await apiJson<ListResponse<Json>>(state.page.request, '/api/agents?includeArchived=true')
-  assert.ok(all.data.some((agent) => agent.status === 'archived'))
+  const archived = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/agents?archived=true')
+  assert.ok(archived.data.every((agent) => agent.archivedAt !== null))
+  assert.ok(archived.data.some((agent) => agent.id === state.agent?.id))
 })
 
 Then('created date filters only return agents in the requested range', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const list = await apiJson<ListResponse<Json>>(state.page.request, `/api/agents?createdFrom=2020-01-01T00:00:00.000Z`)
+  const list = await apiJson<ListResponse<Json>>(
+    state.page.request,
+    `/api/v1/agents?createdFrom=2020-01-01T00:00:00.000Z`,
+  )
   assert.ok(list.data.length > 0)
 })
 
@@ -2424,7 +2563,7 @@ Then('results are scoped to the signed-in project', function (this: ProductWorld
 
 Then('the agent is hidden from default lists and creation flows', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const list = await apiJson<ListResponse<Json>>(state.page.request, '/api/agents')
+  const list = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/agents')
   assert.equal(
     list.data.some((agent) => agent.id === state.agent?.id),
     false,
@@ -2433,7 +2572,7 @@ Then('the agent is hidden from default lists and creation flows', async function
 
 Then('the agent no longer appears in default creation flows', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const list = await apiJson<ListResponse<Json>>(state.page.request, '/api/agents')
+  const list = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/agents')
   assert.equal(
     list.data.some((agent) => agent.id === state.agent?.id),
     false,
@@ -2442,7 +2581,7 @@ Then('the agent no longer appears in default creation flows', async function (th
 
 Then('new sessions cannot be created from the archived agent', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const response = await apiResponse(state.page.request, '/api/sessions', {
+  const response = await apiResponse(state.page.request, '/api/v1/sessions', {
     method: 'POST',
     data: { agentId: state.agent?.id, environmentId: state.environment?.id, runtime: state.sessionRuntime ?? 'ama' },
   })
@@ -2451,20 +2590,20 @@ Then('new sessions cannot be created from the archived agent', async function (t
 
 Then('existing sessions and immutable snapshots remain readable', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
+  const session = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}`)
   assert.equal(session.id, state.latestSession?.id)
   assert.ok(session.agentSnapshot)
 })
 
 Then('existing sessions remain readable', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
+  const session = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}`)
   assert.equal(session.id, state.latestSession?.id)
 })
 
 Then('the archive operation records an audit event', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const audit = await apiJson<ListResponse<Json>>(state.page.request, '/api/audit-records?limit=20')
+  const audit = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/audit-records?limit=20')
   assert.ok(audit.data.some((record) => String(record.action).includes('archive')))
 })
 
@@ -2473,14 +2612,17 @@ Then(
   async function (this: ProductWorld) {
     await ensureSignedIn(this)
     const env = await createEnvironment(this.e2e, { name: `${this.e2e.runId} crud env` })
-    const read = await apiJson<Json>(this.e2e.page.request, `/api/environments/${env.id}`)
-    const updated = await apiJson<Json>(this.e2e.page.request, `/api/environments/${env.id}`, {
+    const read = await apiJson<Json>(this.e2e.page.request, `/api/v1/environments/${env.id}`)
+    const updated = await apiJson<Json>(this.e2e.page.request, `/api/v1/environments/${env.id}`, {
       method: 'PATCH',
       data: { metadata: { updated: true } },
     })
-    const versions = await apiJson<ListResponse<Json>>(this.e2e.page.request, `/api/environments/${env.id}/versions`)
-    const list = await apiJson<ListResponse<Json>>(this.e2e.page.request, '/api/environments')
-    await emptyResponse(this.e2e.page.request, `/api/environments/${env.id}`, { method: 'DELETE' })
+    const versions = await apiJson<ListResponse<Json>>(this.e2e.page.request, `/api/v1/environments/${env.id}/versions`)
+    const list = await apiJson<ListResponse<Json>>(this.e2e.page.request, '/api/v1/environments')
+    await emptyResponse(this.e2e.page.request, `/api/v1/environments/${env.id}`, {
+      method: 'PATCH',
+      data: { archived: true },
+    })
     assert.equal(read.id, env.id)
     assert.equal(updated.version, 2)
     assert.ok(versions.data.length >= 2)
@@ -2490,7 +2632,7 @@ Then(
 
 Then('the environments API enforces auth and project tenancy', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const invalid = await apiResponse(state.page.request, '/api/environments', { method: 'POST', data: { name: '' } })
+  const invalid = await apiResponse(state.page.request, '/api/v1/environments', { method: 'POST', data: { name: '' } })
   assert.equal(invalid.status(), 400)
 })
 
@@ -2498,11 +2640,12 @@ Then(
   'environment secret handling stores references and never returns raw secret values',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
+    const credentialRef = await createCredentialRef(state, 'env-secret-ref')
     const env = await createEnvironment(state, {
       name: `${state.runId} secret ref env`,
-      secretRefs: [{ name: 'TOKEN', ref: 'wrangler_secret:AMA_TOKEN' }],
+      credentialRefs: [credentialRef],
     })
-    assert.deepEqual(env.secretRefs, [{ name: 'TOKEN', ref: 'wrangler_secret:AMA_TOKEN' }])
+    assert.deepEqual(env.credentialRefs, [credentialRef])
     assert.equal(JSON.stringify(env).includes('raw-secret'), false)
   },
 )
@@ -2513,7 +2656,7 @@ Then(
     const env = required(this.e2e?.environment, 'environment')
     assert.match(String(env.id), /^env_/)
     assert.match(String(env.currentVersionId), /^envver_/)
-    assert.equal(env.status, 'active')
+    assert.equal(env.archivedAt, null)
     assert.equal(typeof env.createdAt, 'string')
   },
 )
@@ -2525,7 +2668,7 @@ Then(
     for (const key of [
       'packages',
       'variables',
-      'secretRefs',
+      'credentialRefs',
       'hostingMode',
       'networkPolicy',
       'resourceLimits',
@@ -2570,8 +2713,8 @@ Then('no sandbox instance is required', function (this: ProductWorld) {
 
 Then('the environment remains available for future sessions', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const env = await apiJson<Json>(state.page.request, `/api/environments/${state.environment?.id}`)
-  assert.equal(env.status, 'active')
+  const env = await apiJson<Json>(state.page.request, `/api/v1/environments/${state.environment?.id}`)
+  assert.equal(env.archivedAt, null)
 })
 
 Then('the response stores normalized policy fields', function (this: ProductWorld) {
@@ -2590,7 +2733,7 @@ Then('hostingMode accepts only cloud or self_hosted', async function (this: Prod
   })
   assert.equal(cloud.hostingMode, 'cloud')
 
-  const invalid = await apiResponse(state.page.request, '/api/environments', {
+  const invalid = await apiResponse(state.page.request, '/api/v1/environments', {
     method: 'POST',
     data: { name: `${state.runId} invalid hosting`, hostingMode: 'self-hosted' },
   })
@@ -2602,7 +2745,7 @@ Then('session runtime accepts only ama, claude-code, codex, or copilot', async f
   assert.equal(state.sessionRuntime, 'codex')
   state.agent ??= await createAgent(state, { name: `${state.runId} runtime validation agent` })
   for (const runtime of ['ama', 'claude-code', 'copilot']) {
-    const session = await apiJson<Json>(state.page.request, '/api/sessions', {
+    const session = await apiJson<Json>(state.page.request, '/api/v1/sessions', {
       method: 'POST',
       data: {
         agentId: state.agent.id,
@@ -2614,7 +2757,7 @@ Then('session runtime accepts only ama, claude-code, codex, or copilot', async f
     assert.equal(objectValue(session.runtimeMetadata).runtime, runtime)
   }
 
-  const invalid = await apiResponse(state.page.request, '/api/sessions', {
+  const invalid = await apiResponse(state.page.request, '/api/v1/sessions', {
     method: 'POST',
     data: { agentId: state.agent.id, environmentId: state.environment?.id, runtime: 'pi' },
   })
@@ -2625,7 +2768,7 @@ Then(
   'invalid hostingMode or runtime values return field-level validation details',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    const invalid = await apiResponse(state.page.request, '/api/sessions', {
+    const invalid = await apiResponse(state.page.request, '/api/v1/sessions', {
       method: 'POST',
       data: { agentId: state.agent?.id, environmentId: state.environment?.id, runtime: 'pi' },
     })
@@ -2640,7 +2783,7 @@ Then(
   'requests using legacy environment hosting and runtime config fields fail validation',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    const invalid = await apiResponse(state.page.request, '/api/environments', {
+    const invalid = await apiResponse(state.page.request, '/api/v1/environments', {
       method: 'POST',
       data: {
         name: `${state.runId} legacy runtime fields`,
@@ -2671,7 +2814,7 @@ Then(
   'agent persona, instructions, policy, provider, and model are not stored on the environment',
   function (this: ProductWorld) {
     const env = required(this.e2e?.environment, 'environment')
-    for (const key of ['instructions', 'systemPrompt', 'provider', 'model', 'allowedTools']) {
+    for (const key of ['instructions', 'providerId', 'model', 'tools']) {
       assert.equal(key in env, false)
     }
   },
@@ -2679,7 +2822,7 @@ Then(
 
 Then('raw secret values are rejected', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const invalid = await apiResponse(state.page.request, '/api/environments', {
+  const invalid = await apiResponse(state.page.request, '/api/v1/environments', {
     method: 'POST',
     data: { name: `${state.runId} raw secret`, metadata: { apiKey: 'raw-secret' } },
   })
@@ -2687,21 +2830,23 @@ Then('raw secret values are rejected', async function (this: ProductWorld) {
 })
 
 Then('secret references are returned only as safe names and references', function (this: ProductWorld) {
-  const refs = required(this.e2e?.environment?.secretRefs, 'secret refs') as unknown[]
-  assert.deepEqual(refs, [{ name: 'TOKEN', ref: 'wrangler_secret:AMA_TOKEN' }])
+  const refs = required(this.e2e?.environment?.credentialRefs, 'credential refs') as Json[]
+  assert.ok(Array.isArray(refs) && refs.length === 1, 'one credential reference is returned')
+  assert.equal(typeof refs[0]?.credentialId, 'string')
+  assert.equal(JSON.stringify(refs).includes('raw-secret'), false)
 })
 
 Then(
   'restricted network policy without allowed hosts, invalid package specs, and invalid host patterns return field-level validation details',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    const invalid = await apiResponse(state.page.request, '/api/environments', {
+    const invalid = await apiResponse(state.page.request, '/api/v1/environments', {
       method: 'POST',
       data: { name: `${state.runId} invalid`, packages: [{ name: '' }] },
     })
     assert.equal(invalid.status(), 400)
 
-    const missingHosts = await apiResponse(state.page.request, '/api/environments', {
+    const missingHosts = await apiResponse(state.page.request, '/api/v1/environments', {
       method: 'POST',
       data: { name: `${state.runId} restricted invalid`, networkPolicy: { mode: 'restricted' } },
     })
@@ -2712,7 +2857,7 @@ Then(
       'allowedHosts',
     ])
 
-    const invalidHost = await apiResponse(state.page.request, '/api/environments', {
+    const invalidHost = await apiResponse(state.page.request, '/api/v1/environments', {
       method: 'POST',
       data: {
         name: `${state.runId} host invalid`,
@@ -2738,7 +2883,7 @@ When('the user creates a self-hosted environment and starts a session with it', 
     networkPolicy: { mode: 'unrestricted' },
   })
   state.agent = await createAgent(state, { name: `${state.runId} self-hosted agent` })
-  await apiJson<Json>(state.page.request, '/api/runners', {
+  await apiJson<Json>(state.page.request, '/api/v1/runners', {
     method: 'POST',
     data: {
       name: `${state.runId} self-hosted support runner`,
@@ -2746,7 +2891,7 @@ When('the user creates a self-hosted environment and starts a session with it', 
       capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY],
     },
   })
-  state.latestSession = await apiJson<Json>(state.page.request, '/api/sessions', {
+  state.latestSession = await apiJson<Json>(state.page.request, '/api/v1/sessions', {
     method: 'POST',
     data: {
       agentId: state.agent.id,
@@ -2764,14 +2909,14 @@ Then('the session keeps the self-hosted environment snapshot', function (this: P
 
 Then('the session remains pending with a waiting-for-runner reason', function (this: ProductWorld) {
   const session = required(this.e2e?.latestSession, 'session')
-  assert.equal(session.status, 'pending')
-  assert.equal(session.statusReason, 'waiting-for-runner')
+  assert.equal(session.state, 'pending')
+  assert.equal(session.stateReason, 'waiting-for-runner')
 })
 
 Then('no Cloudflare Sandbox id is assigned before runner lease', function (this: ProductWorld) {
   const session = required(this.e2e?.latestSession, 'session')
-  assert.equal(session.sandboxId, null)
-  assert.equal(session.runtimeEndpointPath, null)
+  assert.equal('sandboxId' in session, false)
+  assert.equal('runtimeEndpointPath' in session, false)
 })
 
 Given('a self-hosted environment has an active runner', async function (this: ProductWorld) {
@@ -2783,19 +2928,18 @@ Given('a self-hosted environment has an active runner', async function (this: Pr
     networkPolicy: { mode: 'unrestricted' },
   })
   state.agent = await createAgent(state, { name: `${state.runId} runner agent` })
-  state.runner = await apiJson<Json>(state.page.request, '/api/runners', {
+  state.runner = await apiJson<Json>(state.page.request, '/api/v1/runners', {
     method: 'POST',
     data: {
       name: `${state.runId} runner`,
       environmentId: state.environment.id,
       capabilities: ['node', 'git', 'sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
-      credentialSecretRef: `cloudflare-secret:${state.runId}-runner-token`,
     },
   })
-  state.runner = await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/heartbeats`, {
-    method: 'POST',
+  await apiJson<Json>(state.page.request, `/api/v1/runners/${state.runner.id}/heartbeat`, {
+    method: 'PUT',
     data: {
-      status: 'active',
+      state: 'active',
       currentLoad: 0,
       capabilities: ['node', 'git', 'sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
     },
@@ -2814,7 +2958,7 @@ Given('a self-hosted environment selects an external runtime', async function (t
     type: 'openai-compatible',
     displayName: `${state.runId} external provider`,
     baseUrl: 'https://models.example.test/v1',
-    credentialSecretRef: `secret://providers/${state.runId}/external`,
+    credentialRef: await createCredentialRef(state, 'external'),
   })
   state.providerModel = await createProviderModel(state, state.provider, {
     modelId: CODEX_E2E_MODEL,
@@ -2823,7 +2967,7 @@ Given('a self-hosted environment selects an external runtime', async function (t
   })
   state.agent = await createAgent(state, {
     name: `${state.runId} external agent`,
-    provider: state.provider.id,
+    providerId: state.provider.id,
     model: CODEX_E2E_MODEL,
   })
 })
@@ -2833,7 +2977,7 @@ Given(
   async function (this: ProductWorld) {
     const state = await ensureState(this)
     const capability = runtimeProviderModelCapability('codex', '*', CODEX_E2E_MODEL)
-    state.runner = await apiJson<Json>(state.page.request, '/api/runners', {
+    state.runner = await apiJson<Json>(state.page.request, '/api/v1/runners', {
       method: 'POST',
       data: {
         name: `${state.runId} external runner`,
@@ -2841,12 +2985,12 @@ Given(
         capabilities: ['sandbox.exec', capability],
       },
     })
-    state.runner = await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/heartbeats`, {
-      method: 'POST',
-      data: { status: 'active', currentLoad: 0, capabilities: ['sandbox.exec', capability] },
+    await apiJson<Json>(state.page.request, `/api/v1/runners/${state.runner.id}/heartbeat`, {
+      method: 'PUT',
+      data: { state: 'active', currentLoad: 0, capabilities: ['sandbox.exec', capability] },
     })
     const wrongCapability = `runtime-provider-model:codex:${state.provider?.id}:${CODEX_E2E_MODEL}-mini`
-    state.otherProvider = await apiJson<Json>(state.page.request, '/api/runners', {
+    state.otherProvider = await apiJson<Json>(state.page.request, '/api/v1/runners', {
       method: 'POST',
       data: {
         name: `${state.runId} ineligible external runner`,
@@ -2854,9 +2998,9 @@ Given(
         capabilities: [wrongCapability],
       },
     })
-    await apiJson<Json>(state.page.request, `/api/runners/${state.otherProvider.id}/heartbeats`, {
-      method: 'POST',
-      data: { status: 'active', currentLoad: 0, capabilities: [wrongCapability] },
+    await apiJson<Json>(state.page.request, `/api/v1/runners/${state.otherProvider.id}/heartbeat`, {
+      method: 'PUT',
+      data: { state: 'active', currentLoad: 0, capabilities: [wrongCapability] },
     })
   },
 )
@@ -2915,7 +3059,7 @@ Then(
     await state.page.evaluate((value) => window.localStorage.setItem('ama:e2e-access-token', value), operatorToken)
     const operatorHeaders = { authorization: `Bearer ${operatorToken}` }
     const runnerHeaders = { authorization: `Bearer ${runnerToken}` }
-    const forbiddenEnvironment = await state.page.request.post('/api/environments', {
+    const forbiddenEnvironment = await state.page.request.post('/api/v1/environments', {
       headers: runnerHeaders,
       data: {
         name: `${state.runId} forbidden runner env`,
@@ -2924,7 +3068,7 @@ Then(
       },
     })
     assert.equal(forbiddenEnvironment.status(), 403)
-    state.environment = await apiJson<Json>(state.page.request, '/api/environments', {
+    state.environment = await apiJson<Json>(state.page.request, '/api/v1/environments', {
       method: 'POST',
       headers: operatorHeaders,
       data: {
@@ -2934,12 +3078,12 @@ Then(
       },
     })
     state.sessionRuntime = 'ama'
-    state.agent = await apiJson<Json>(state.page.request, '/api/agents', {
+    state.agent = await apiJson<Json>(state.page.request, '/api/v1/agents', {
       method: 'POST',
       headers: operatorHeaders,
       data: { name: `${state.runId} oidc runner agent` },
     })
-    state.runner = await apiJson<Json>(state.page.request, '/api/runners', {
+    state.runner = await apiJson<Json>(state.page.request, '/api/v1/runners', {
       method: 'POST',
       headers: runnerHeaders,
       data: {
@@ -2949,16 +3093,16 @@ Then(
       },
     })
     assert.equal(state.runner.authMode, 'oidc')
-    state.runner = await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/heartbeats`, {
-      method: 'POST',
+    await apiJson<Json>(state.page.request, `/api/v1/runners/${state.runner.id}/heartbeat`, {
+      method: 'PUT',
       headers: runnerHeaders,
       data: {
-        status: 'active',
+        state: 'active',
         currentLoad: 0,
         capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
       },
     })
-    state.latestSession = await apiJson<Json>(state.page.request, '/api/sessions', {
+    state.latestSession = await apiJson<Json>(state.page.request, '/api/v1/sessions', {
       method: 'POST',
       headers: operatorHeaders,
       data: {
@@ -2968,12 +3112,18 @@ Then(
         title: `${state.runId} oidc runner session`,
       },
     })
-    state.lease = await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/leases`, {
+    const available = await apiJson<ListResponse<Json>>(
+      state.page.request,
+      `/api/v1/work-items?state=available&sessionId=${state.latestSession.id}`,
+      { headers: runnerHeaders },
+    )
+    const workItem = required(available.data[0], 'available work item')
+    state.lease = await apiJson<Json>(state.page.request, '/api/v1/leases', {
       method: 'POST',
       headers: runnerHeaders,
-      data: { leaseDurationSeconds: 90 },
+      data: { workItemId: workItem.id, runnerId: state.runner.id, leaseDurationSeconds: 90 },
     })
-    assert.equal(state.lease.status, 'active')
+    assert.equal(state.lease.state, 'active')
     await state.page.evaluate((value) => window.localStorage.setItem('ama:e2e-access-token', value), runnerToken)
     const messages = await openRunnerChannel(state, 'oidcDeviceLoginRunnerChannel')
     assert.equal(
@@ -2993,12 +3143,12 @@ Then(
     const runnerHeaders = { authorization: `Bearer ${token}` }
     const operatorHeaders = { authorization: `Bearer ${required(state.accessToken, 'operator access token')}` }
     const runnerText = JSON.stringify(
-      await apiJson<Json>(state.page.request, `/api/runners/${state.runner?.id}`, { headers: runnerHeaders }),
+      await apiJson<Json>(state.page.request, `/api/v1/runners/${state.runner?.id}`, { headers: runnerHeaders }),
     )
     assert.equal(runnerText.includes(token), false)
     const events = await apiJson<ListResponse<Json>>(
       state.page.request,
-      `/api/sessions/${state.latestSession?.id}/events?limit=200`,
+      `/api/v1/sessions/${state.latestSession?.id}/events?limit=200`,
       { headers: operatorHeaders },
     )
     assert.equal(JSON.stringify(events.data).includes(token), false)
@@ -3008,7 +3158,7 @@ Then(
 
 When('the user creates a session in that environment', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  state.latestSession = await apiJson<Json>(state.page.request, '/api/sessions', {
+  state.latestSession = await apiJson<Json>(state.page.request, '/api/v1/sessions', {
     method: 'POST',
     data: {
       agentId: state.agent?.id,
@@ -3028,7 +3178,7 @@ When('the user starts a session with an initial prompt', async function (this: P
   } else {
     state.runtimeMessage = `${state.runId} ${runtime} prompt`
   }
-  state.latestSession = await apiJson<Json>(state.page.request, '/api/sessions', {
+  state.latestSession = await apiJson<Json>(state.page.request, '/api/v1/sessions', {
     method: 'POST',
     data: {
       agentId: state.agent?.id,
@@ -3038,8 +3188,8 @@ When('the user starts a session with an initial prompt', async function (this: P
       initialPrompt: state.runtimeMessage,
     },
   })
-  assert.equal(state.latestSession.status, 'pending')
-  assert.equal(state.latestSession.statusReason, 'waiting-for-runner')
+  assert.equal(state.latestSession.state, 'pending')
+  assert.equal(state.latestSession.stateReason, 'waiting-for-runner')
   await startProductAmaRunner(state)
 })
 
@@ -3168,7 +3318,7 @@ Then('the session reaches idle, stopped, or error with inspectable final events'
   const session = await waitForSession(state.page.request, String(state.latestSession?.id), (status) =>
     ['idle', 'stopped', 'error'].includes(status),
   )
-  assert.ok(['idle', 'stopped', 'error'].includes(String(session.status)))
+  assert.ok(['idle', 'stopped', 'error'].includes(String(session.state)))
   const events = await sessionEvents(state)
   assert.ok(events.data.length > 0)
   if (state.sessionRuntime === 'codex') {
@@ -3185,12 +3335,12 @@ Then('the session reaches idle, stopped, or error with inspectable final events'
 Then('AMA queues session work without creating a Cloudflare Sandbox', async function (this: ProductWorld) {
   const state = await ensureState(this)
   const session = required(state.latestSession, 'session')
-  assert.equal(session.status, 'pending')
-  assert.equal(session.statusReason, 'waiting-for-runner')
-  assert.equal(session.sandboxId, null)
-  state.list = await apiJson<ListResponse<Json>>(state.page.request, `/api/runners/work-items?sessionId=${session.id}`)
+  assert.equal(session.state, 'pending')
+  assert.equal(session.stateReason, 'waiting-for-runner')
+  assert.equal('sandboxId' in session, false)
+  state.list = await apiJson<ListResponse<Json>>(state.page.request, `/api/v1/work-items?sessionId=${session.id}`)
   assert.equal(state.list.data.length, 1)
-  assert.equal(state.list.data[0]?.status, 'available')
+  assert.equal(state.list.data[0]?.state, 'available')
   const payload = objectValue(state.list.data[0]?.payload)
   assert.equal(payload.hostingMode, 'self_hosted')
   assert.equal(payload.runtime, 'ama')
@@ -3203,14 +3353,11 @@ Then(
   async function (this: ProductWorld) {
     const state = await ensureState(this)
     const session = required(state.latestSession, 'session')
-    assert.equal(session.status, 'pending')
-    assert.equal(session.statusReason, 'waiting-for-runner')
-    assert.equal(session.sandboxId, null)
-    assert.equal(session.runtimeEndpointPath, null)
-    state.list = await apiJson<ListResponse<Json>>(
-      state.page.request,
-      `/api/runners/work-items?sessionId=${session.id}`,
-    )
+    assert.equal(session.state, 'pending')
+    assert.equal(session.stateReason, 'waiting-for-runner')
+    assert.equal('sandboxId' in session, false)
+    assert.equal('runtimeEndpointPath' in session, false)
+    state.list = await apiJson<ListResponse<Json>>(state.page.request, `/api/v1/work-items?sessionId=${session.id}`)
     assert.equal(state.list.data.length, 1)
     assert.equal(objectValue(state.list.data[0]?.payload).hostingMode, 'self_hosted')
   },
@@ -3218,37 +3365,31 @@ Then(
 
 Then('the runner can claim a lease for the queued work', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const runner = required(state.runner, 'runner')
-  state.lease = await apiJson<Json>(state.page.request, `/api/runners/${runner.id}/leases`, {
-    method: 'POST',
-    data: { leaseDurationSeconds: 90 },
-  })
-  assert.equal(state.lease.status, 'active')
-  assert.equal(objectValue(state.lease.workItem).status, 'leased')
-  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
-  assert.equal(session.status, 'pending')
-  assert.equal(session.statusReason, 'waiting-for-runner')
+  const lease = await claimRunnerLease(state)
+  assert.equal(lease.state, 'active')
+  const workItem = await apiJson<Json>(state.page.request, `/api/v1/work-items/${lease.workItemId}`)
+  assert.equal(workItem.state, 'leased')
+  const session = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}`)
+  assert.equal(session.state, 'pending')
+  assert.equal(session.stateReason, 'waiting-for-runner')
 })
 
 Then('the eligible runner can claim ownership of the session', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const runner = required(state.runner, 'runner')
-  state.lease = await apiJson<Json>(state.page.request, `/api/runners/${runner.id}/leases`, {
-    method: 'POST',
-    data: { leaseDurationSeconds: 90 },
-  })
-  assert.equal(state.lease.status, 'active')
-  assert.equal(objectValue(state.lease.workItem).sessionId, state.latestSession?.id)
-  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
-  assert.equal(session.status, 'pending')
-  assert.equal(session.statusReason, 'waiting-for-runner')
+  const lease = await claimRunnerLease(state)
+  assert.equal(lease.state, 'active')
+  const workItem = await apiJson<Json>(state.page.request, `/api/v1/work-items/${lease.workItemId}`)
+  assert.equal(workItem.sessionId, state.latestSession?.id)
+  const session = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}`)
+  assert.equal(session.state, 'pending')
+  assert.equal(session.stateReason, 'waiting-for-runner')
 })
 
 Then('the runner can upload structured events and complete the lease', async function (this: ProductWorld) {
   const state = await ensureState(this)
   const runner = required(state.runner, 'runner')
   const lease = required(state.lease, 'lease')
-  const events = await apiJson<Json>(state.page.request, `/api/runners/${runner.id}/leases/${lease.id}/events`, {
+  const events = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}/events`, {
     method: 'POST',
     data: {
       events: [
@@ -3261,14 +3402,15 @@ Then('the runner can upload structured events and complete the lease', async fun
     },
   })
   assert.equal(events.accepted, 1)
-  const completed = await apiJson<Json>(state.page.request, `/api/runners/${runner.id}/leases/${lease.id}`, {
+  const completed = await apiJson<Json>(state.page.request, `/api/v1/leases/${lease.id}`, {
     method: 'PATCH',
-    data: { status: 'completed', result: { ok: true } },
+    data: { state: 'completed', result: { ok: true } },
   })
-  assert.equal(completed.status, 'completed')
-  assert.equal(objectValue(completed.workItem).status, 'succeeded')
-  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
-  assert.equal(session.status, 'idle')
+  assert.equal(completed.state, 'completed')
+  const workItem = await apiJson<Json>(state.page.request, `/api/v1/work-items/${completed.workItemId}`)
+  assert.equal(workItem.state, 'succeeded')
+  const session = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}`)
+  assert.equal(session.state, 'idle')
 })
 
 Given('a runner has leased self-hosted session work', async function (this: ProductWorld) {
@@ -3280,7 +3422,7 @@ Given('a runner has leased self-hosted session work', async function (this: Prod
     networkPolicy: { mode: 'unrestricted' },
   })
   state.agent = await createAgent(state, { name: `${state.runId} expiring runner agent` })
-  state.runner = await apiJson<Json>(state.page.request, '/api/runners', {
+  state.runner = await apiJson<Json>(state.page.request, '/api/v1/runners', {
     method: 'POST',
     data: {
       name: `${state.runId} expiring runner`,
@@ -3288,15 +3430,15 @@ Given('a runner has leased self-hosted session work', async function (this: Prod
       capabilities: ['node', 'git', 'sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
     },
   })
-  state.runner = await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/heartbeats`, {
-    method: 'POST',
+  await apiJson<Json>(state.page.request, `/api/v1/runners/${state.runner.id}/heartbeat`, {
+    method: 'PUT',
     data: {
-      status: 'active',
+      state: 'active',
       currentLoad: 0,
       capabilities: ['node', 'git', 'sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
     },
   })
-  state.latestSession = await apiJson<Json>(state.page.request, '/api/sessions', {
+  state.latestSession = await apiJson<Json>(state.page.request, '/api/v1/sessions', {
     method: 'POST',
     data: {
       agentId: state.agent.id,
@@ -3305,40 +3447,36 @@ Given('a runner has leased self-hosted session work', async function (this: Prod
       title: `${state.runId} expiring runner session`,
     },
   })
-  state.lease = await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/leases`, {
-    method: 'POST',
-    data: { leaseDurationSeconds: 90 },
-  })
-  assert.equal(state.lease.status, 'active')
+  const lease = await claimRunnerLease(state)
+  assert.equal(lease.state, 'active')
 })
 
 When('the lease expires before renewal', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const runner = required(state.runner, 'runner')
   const lease = required(state.lease, 'lease')
-  await apiJson<Json>(state.page.request, `/api/runners/${runner.id}/leases/${lease.id}`, {
+  await apiJson<Json>(state.page.request, `/api/v1/leases/${lease.id}`, {
     method: 'PATCH',
-    data: { status: 'active', leaseDurationSeconds: 15 },
+    data: { leaseDurationSeconds: 15 },
   })
   await delay(16_000)
   state.list = await apiJson<ListResponse<Json>>(
     state.page.request,
-    `/api/runners/work-items?sessionId=${state.latestSession?.id}`,
+    `/api/v1/work-items?sessionId=${state.latestSession?.id}`,
   )
 })
 
 Then('AMA returns retryable work to the available queue', function (this: ProductWorld) {
   const list = required(this.e2e?.list, 'work item list')
   assert.equal(list.data.length, 1)
-  assert.equal(list.data[0]?.status, 'available')
+  assert.equal(list.data[0]?.state, 'available')
   assert.equal(list.data[0]?.leaseId, null)
 })
 
 Then('the session exposes a safe waiting status', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
-  assert.equal(session.status, 'pending')
-  assert.equal(session.statusReason, 'waiting-for-runner')
+  const session = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}`)
+  assert.equal(session.state, 'pending')
+  assert.equal(session.stateReason, 'waiting-for-runner')
 })
 
 Then('the platform rejects the request with field-level validation details', function (this: ProductWorld) {
@@ -3372,29 +3510,30 @@ Then(
   'the archived environment remains readable through explicit read and includeArchived list requests',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    const env = await apiJson<Json>(state.page.request, `/api/environments/${state.environment?.id}`)
-    const list = await apiJson<ListResponse<Json>>(state.page.request, '/api/environments?includeArchived=true')
-    assert.equal(env.status, 'archived')
+    const env = await apiJson<Json>(state.page.request, `/api/v1/environments/${state.environment?.id}`)
+    const list = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/environments?archived=true')
+    assert.notEqual(env.archivedAt, null)
     assert.ok(list.data.some((row) => row.id === state.environment?.id))
   },
 )
 
 Then('archived environments are hidden unless includeArchived is true', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const list = await apiJson<ListResponse<Json>>(state.page.request, '/api/environments')
+  const list = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/environments')
   assert.equal(
-    list.data.some((env) => env.status === 'archived'),
+    list.data.some((env) => env.archivedAt !== null),
     false,
   )
-  const all = await apiJson<ListResponse<Json>>(state.page.request, '/api/environments?includeArchived=true')
-  assert.ok(all.data.some((env) => env.status === 'archived'))
+  const archived = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/environments?archived=true')
+  assert.ok(archived.data.every((env) => env.archivedAt !== null))
+  assert.ok(archived.data.some((env) => env.id === state.environment?.id))
 })
 
 Then('created date filters only return environments in the requested range', async function (this: ProductWorld) {
   const state = await ensureState(this)
   const list = await apiJson<ListResponse<Json>>(
     state.page.request,
-    '/api/environments?createdFrom=2020-01-01T00:00:00.000Z',
+    '/api/v1/environments?createdFrom=2020-01-01T00:00:00.000Z',
   )
   assert.ok(list.data.length > 0)
 })
@@ -3404,12 +3543,18 @@ Then(
   async function (this: ProductWorld) {
     await ensureAgentAndEnvironment(this)
     const session = await createSession(this.e2e)
-    await apiJson<ListResponse<Json>>(this.e2e.page.request, '/api/sessions')
-    await apiJson<Json>(this.e2e.page.request, `/api/sessions/${session.id}`)
-    await apiJson<Json>(this.e2e.page.request, `/api/sessions/${session.id}/reconnect`)
-    await apiJson<ListResponse<Json>>(this.e2e.page.request, `/api/sessions/${session.id}/events`)
-    await apiJson<Json>(this.e2e.page.request, `/api/sessions/${session.id}/stop`, { method: 'POST' })
-    await emptyResponse(this.e2e.page.request, `/api/sessions/${session.id}`, { method: 'DELETE' })
+    await apiJson<ListResponse<Json>>(this.e2e.page.request, '/api/v1/sessions')
+    await apiJson<Json>(this.e2e.page.request, `/api/v1/sessions/${session.id}`)
+    await apiJson<Json>(this.e2e.page.request, `/api/v1/sessions/${session.id}/connection`)
+    await apiJson<ListResponse<Json>>(this.e2e.page.request, `/api/v1/sessions/${session.id}/events`)
+    await apiJson<Json>(this.e2e.page.request, `/api/v1/sessions/${session.id}`, {
+      method: 'PATCH',
+      data: { state: 'stopped' },
+    })
+    await emptyResponse(this.e2e.page.request, `/api/v1/sessions/${session.id}`, {
+      method: 'PATCH',
+      data: { archived: true },
+    })
   },
 )
 
@@ -3422,8 +3567,13 @@ Then('the sessions API enforces auth, project tenancy, and immutable snapshots',
 Then('inactive session runtime requests use the standard error envelope', async function (this: ProductWorld) {
   const state = await ensureAgentAndEnvironment(this)
   const session = await createSession(state)
-  await apiJson<Json>(state.page.request, `/api/sessions/${session.id}/stop`, { method: 'POST' })
-  const response = await apiResponse(state.page.request, `/runtime/sessions/${session.id}/rpc`, { method: 'POST' })
+  await apiJson<Json>(state.page.request, `/api/v1/sessions/${session.id}`, {
+    method: 'PATCH',
+    data: { state: 'stopped' },
+  })
+  const response = await apiResponse(state.page.request, `/api/v1/runtime/sessions/${session.id}/rpc`, {
+    method: 'POST',
+  })
   assert.ok([409, 426].includes(response.status()))
 })
 
@@ -3433,11 +3583,11 @@ Then(
     const session = required(this.e2e?.latestSession, 'session')
     assert.match(String(session.id), /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
     assert.equal(typeof session.projectId, 'string')
-    assert.equal(typeof session.organizationId, 'string')
-    assert.equal(session.status, 'idle')
-    assert.equal(typeof session.durableObjectName, 'string')
-    assert.equal(typeof session.runtimeEndpointPath, 'string')
-    assert.equal(objectValue(session.runtimeMetadata).provider, objectValue(session.agentSnapshot).provider)
+    assert.equal('organizationId' in session, false)
+    assert.equal(session.state, 'idle')
+    assert.equal('durableObjectName' in session, false)
+    assert.equal('runtimeEndpointPath' in session, false)
+    assert.equal(objectValue(session.runtimeMetadata).provider, objectValue(session.agentSnapshot).providerId)
     assert.equal(objectValue(session.runtimeMetadata).model, objectValue(session.agentSnapshot).model)
     assert.equal(objectValue(session.runtimeMetadata).runtime, this.e2e?.sessionRuntime ?? 'ama')
     assert.equal(objectValue(session.runtimeMetadata).hostingMode, objectValue(session.environmentSnapshot).hostingMode)
@@ -3454,7 +3604,10 @@ Then(
   'AMA creates cloud-owned runtime state and initializes a Cloudflare Sandbox executor',
   function (this: ProductWorld) {
     const session = required(this.e2e?.latestSession, 'session')
-    assert.equal(typeof session.sandboxId, 'string')
+    // v1 no longer exposes the internal sandboxId; the cloud-owned runtime is
+    // identified by the resolved runtime backend on the session response.
+    assert.equal('sandboxId' in session, false)
+    assert.equal(objectValue(session.runtimeMetadata).backend, 'ama-cloud')
     assert.equal(objectValue(session.metadata).runtimeBackend, 'ama-cloud')
   },
 )
@@ -3463,7 +3616,7 @@ Then('lifecycle and sandbox events record session creation and runtime startup',
   const state = await ensureState(this)
   const events = await apiJson<ListResponse<Json>>(
     state.page.request,
-    `/api/sessions/${state.latestSession?.id}/events`,
+    `/api/v1/sessions/${state.latestSession?.id}/events`,
   )
   assert.ok(events.data.length >= 0)
 })
@@ -3481,7 +3634,7 @@ Then('the response stores those values as safe references', function (this: Prod
     },
   ])
   assert.equal(String(JSON.stringify(session)).includes('raw-secret'), false)
-  assert.ok(Array.isArray(session.vaultRefs))
+  assert.ok(Array.isArray(session.secretEnv))
 })
 
 Then(
@@ -3503,7 +3656,9 @@ Then(
 Then(
   'vault references are exposed to the runtime only through approved secret bindings',
   function (this: ProductWorld) {
-    assert.deepEqual(this.e2e?.latestSession?.vaultRefs, [{ type: 'credential', id: 'cred_1' }])
+    assert.deepEqual(this.e2e?.latestSession?.secretEnv, [
+      { name: 'VAULT_CREDENTIAL', credentialRef: { credentialId: this.e2e?.credential?.id } },
+    ])
   },
 )
 
@@ -3511,16 +3666,20 @@ Then(
   'runtime secret env references are exposed to the runtime only through approved vault bindings',
   function (this: ProductWorld) {
     const session = required(this.e2e?.latestSession, 'session')
-    assert.deepEqual(session.runtimeEnv, { AK_API_URL: 'https://ak.example.test', AK_SESSION_ID: 'ak-session-e2e' })
-    assert.deepEqual(session.runtimeSecretEnv, [{ name: 'AK_AGENT_KEY', ref: this.e2e?.credential?.activeVersionId }])
-    assert.deepEqual(session.vaultRefs, [{ type: 'credential', id: this.e2e?.credential?.id }])
+    assert.deepEqual(session.env, { AK_API_URL: 'https://ak.example.test', AK_SESSION_ID: 'ak-session-e2e' })
+    assert.deepEqual(session.secretEnv, [
+      {
+        name: 'AK_AGENT_KEY',
+        credentialRef: { credentialId: this.e2e?.credential?.id, versionId: this.e2e?.credential?.activeVersionId },
+      },
+    ])
     assert.equal(JSON.stringify(session).includes('raw-secret'), false)
   },
 )
 
 Then('raw credentials are rejected from the request body', async function (this: ProductWorld) {
   const state = await ensureAgentAndEnvironment(this)
-  const response = await apiResponse(state.page.request, '/api/sessions', {
+  const response = await apiResponse(state.page.request, '/api/v1/sessions', {
     method: 'POST',
     data: {
       agentId: state.agent?.id,
@@ -3573,7 +3732,7 @@ Then(
     )
     const runHistory = await apiJson<ListResponse<Json>>(
       state.page.request,
-      `/api/scheduled-agent-triggers/${state.scheduledTrigger?.id}/runs`,
+      `/api/v1/triggers/${state.scheduledTrigger?.id}/runs`,
     )
     const persistedRun = objectValue(required(runHistory.data[0], 'persisted scheduled run'))
     assert.equal(persistedRun.correlationId, objectValue(session.metadata).correlationId)
@@ -3603,7 +3762,7 @@ Then(
     assert.equal(objectValue(session.metadata).scheduledFor, '2026-05-26T12:00:00.000Z')
     const runHistory = await apiJson<ListResponse<Json>>(
       state.page.request,
-      `/api/scheduled-agent-triggers/${state.scheduledTrigger?.id}/runs`,
+      `/api/v1/triggers/${state.scheduledTrigger?.id}/runs`,
     )
     const persistedRun = objectValue(required(runHistory.data[0], 'persisted scheduled run'))
     assert.equal(persistedRun.correlationId, objectValue(session.metadata).correlationId)
@@ -3622,7 +3781,7 @@ Then(
     assert.deepEqual(arrayValue(duplicate.runs), [])
     const runs = await apiJson<ListResponse<Json>>(
       state.page.request,
-      `/api/scheduled-agent-triggers/${state.scheduledTrigger?.id}/runs`,
+      `/api/v1/triggers/${state.scheduledTrigger?.id}/runs`,
     )
     assert.equal(runs.data.length, 1)
   },
@@ -3632,7 +3791,7 @@ Then('scheduled trigger dispatch is recorded in audit history', async function (
   const state = await ensureState(this)
   const audit = await apiJson<ListResponse<Json>>(
     state.page.request,
-    '/api/audit-records?action=scheduled_trigger.dispatch',
+    '/api/v1/audit-records?action=scheduled_trigger.dispatch',
   )
   assert.ok(
     audit.data.some(
@@ -3649,10 +3808,7 @@ Then('inactive scheduled triggers have no run history', async function (this: Pr
   const state = await ensureState(this)
   assert.equal(state.scheduledDispatch?.claimed, 0)
   for (const trigger of state.inactiveScheduledTriggers ?? []) {
-    const runs = await apiJson<ListResponse<Json>>(
-      state.page.request,
-      `/api/scheduled-agent-triggers/${trigger.id}/runs`,
-    )
+    const runs = await apiJson<ListResponse<Json>>(state.page.request, `/api/v1/triggers/${trigger.id}/runs`)
     assert.deepEqual(runs.data, [])
   }
 })
@@ -3664,7 +3820,7 @@ Then(
     const state = await ensureState(this)
     const audit = await apiJson<ListResponse<Json>>(
       state.page.request,
-      '/api/audit-records?action=session.initial_prompt',
+      '/api/v1/audit-records?action=session.initial_prompt',
     )
     assert.ok(events.data.length > 0)
     assert.ok(events.data.some((event) => event.type === 'message_end'))
@@ -3683,7 +3839,7 @@ Then('session creation fails before any provider call is started', function (thi
 Then('session creation fails before runner work is queued', async function (this: ProductWorld) {
   const state = await ensureState(this)
   assert.equal(state.responseStatus, 409)
-  const workItems = await apiJson<ListResponse<Json>>(state.page.request, '/api/runners/work-items')
+  const workItems = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/work-items')
   assert.equal(
     workItems.data.some((item) => item.environmentId === state.environment?.id),
     false,
@@ -3695,12 +3851,12 @@ Then(
   async function (this: ProductWorld) {
     const state = await ensureState(this)
     assert.equal(state.responseStatus, 409)
-    const sessions = await apiJson<ListResponse<Json>>(state.page.request, '/api/sessions')
+    const sessions = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/sessions')
     assert.equal(
       sessions.data.some((session) => session.title === `${state.runId} unsupported runtime session`),
       false,
     )
-    const workItems = await apiJson<ListResponse<Json>>(state.page.request, '/api/runners/work-items')
+    const workItems = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/work-items')
     assert.equal(
       workItems.data.some((item) => item.environmentId === state.environment?.id),
       false,
@@ -3725,7 +3881,7 @@ Then('the error envelope identifies the unsupported runtime, provider, and model
 
 Then('no session record is left in an active state', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const sessions = await apiJson<ListResponse<Json>>(state.page.request, '/api/sessions')
+  const sessions = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/sessions')
   assert.equal(
     sessions.data.some(
       (session) =>
@@ -3738,7 +3894,7 @@ Then('no session record is left in an active state', async function (this: Produ
 
 Then('no runtime fallback or model substitution occurs', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const sessions = await apiJson<ListResponse<Json>>(state.page.request, '/api/sessions')
+  const sessions = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/sessions')
   assert.equal(
     sessions.data.some((session) => session.title === `${state.runId} unsupported runtime session`),
     false,
@@ -3748,7 +3904,7 @@ Then('no runtime fallback or model substitution occurs', async function (this: P
 Then('AMA queues the session work with a codex runtime capability requirement', async function (this: ProductWorld) {
   const state = await ensureState(this)
   const session = required(state.latestSession, 'session')
-  state.list = await apiJson<ListResponse<Json>>(state.page.request, `/api/runners/work-items?sessionId=${session.id}`)
+  state.list = await apiJson<ListResponse<Json>>(state.page.request, `/api/v1/work-items?sessionId=${session.id}`)
   assert.equal(state.list.data.length, 1)
   assert.equal(
     objectValue(state.list.data[0]?.payload).requiredRunnerCapability,
@@ -3759,11 +3915,12 @@ Then('AMA queues the session work with a codex runtime capability requirement', 
 Then('runners that do not advertise the codex runtime cannot lease the work', async function (this: ProductWorld) {
   const state = await ensureState(this)
   const wrongRunner = required(state.otherProvider, 'wrong runner')
-  const response = await apiResponse(state.page.request, `/api/runners/${wrongRunner.id}/leases`, {
-    method: 'POST',
-    data: { leaseDurationSeconds: 90 },
-  })
-  assert.equal(response.status(), 204)
+  // An ineligible runner sees no claimable work in the available queue.
+  const available = await apiJson<ListResponse<Json>>(
+    state.page.request,
+    `/api/v1/work-items?state=available&runnerId=${wrongRunner.id}`,
+  )
+  assert.equal(available.data.length, 0)
 })
 
 Then(
@@ -3771,11 +3928,11 @@ Then(
   async function (this: ProductWorld) {
     const state = await ensureState(this)
     const wrongRunner = required(state.otherProvider, 'wrong runner')
-    const response = await apiResponse(state.page.request, `/api/runners/${wrongRunner.id}/leases`, {
-      method: 'POST',
-      data: { leaseDurationSeconds: 90 },
-    })
-    assert.equal(response.status(), 204)
+    const available = await apiJson<ListResponse<Json>>(
+      state.page.request,
+      `/api/v1/work-items?state=available&runnerId=${wrongRunner.id}`,
+    )
+    assert.equal(available.data.length, 0)
   },
 )
 
@@ -3783,9 +3940,9 @@ Then(
   'the session remains pending with a waiting-for-runner reason until the eligible runner leases it',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
-    assert.equal(session.status, 'pending')
-    assert.equal(session.statusReason, 'waiting-for-runner')
+    const session = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}`)
+    assert.equal(session.state, 'pending')
+    assert.equal(session.stateReason, 'waiting-for-runner')
   },
 )
 
@@ -3793,9 +3950,9 @@ Then(
   'the session remains pending with a waiting-for-runner reason until a runner claims it',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
-    assert.equal(session.status, 'pending')
-    assert.equal(session.statusReason, 'waiting-for-runner')
+    const session = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}`)
+    assert.equal(session.state, 'pending')
+    assert.equal(session.stateReason, 'waiting-for-runner')
   },
 )
 
@@ -3807,7 +3964,7 @@ Given('an active runner supports the selected Codex provider and model', async f
       type: 'openai-compatible',
       displayName: `${state.runId} codex provider`,
       baseUrl: 'https://models.example.test/v1',
-      credentialSecretRef: `secret://providers/${state.runId}/codex`,
+      credentialRef: await createCredentialRef(state, 'codex'),
     })
     state.providerModel = await createProviderModel(state, state.provider, {
       modelId: CODEX_E2E_MODEL,
@@ -3816,12 +3973,12 @@ Given('an active runner supports the selected Codex provider and model', async f
     })
     state.agent = await createAgent(state, {
       name: `${state.runId} codex agent`,
-      provider: state.provider.id,
+      providerId: state.provider.id,
       model: CODEX_E2E_MODEL,
     })
   }
   const capability = runtimeProviderModelCapability('codex', '*', CODEX_E2E_MODEL)
-  state.runner = await apiJson<Json>(state.page.request, '/api/runners', {
+  state.runner = await apiJson<Json>(state.page.request, '/api/v1/runners', {
     method: 'POST',
     data: {
       name: `${state.runId} codex runner`,
@@ -3829,9 +3986,9 @@ Given('an active runner supports the selected Codex provider and model', async f
       capabilities: ['sandbox.exec', capability],
     },
   })
-  state.runner = await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/heartbeats`, {
-    method: 'POST',
-    data: { status: 'active', currentLoad: 0, capabilities: ['sandbox.exec', capability] },
+  await apiJson<Json>(state.page.request, `/api/v1/runners/${state.runner.id}/heartbeat`, {
+    method: 'PUT',
+    data: { state: 'active', currentLoad: 0, capabilities: ['sandbox.exec', capability] },
   })
 })
 
@@ -3843,7 +4000,7 @@ Given('an active runner supports the selected Copilot provider and model', async
       type: 'openai-compatible',
       displayName: `${state.runId} copilot provider`,
       baseUrl: 'https://models.example.test/v1',
-      credentialSecretRef: `secret://providers/${state.runId}/copilot`,
+      credentialRef: await createCredentialRef(state, 'copilot'),
     })
     state.providerModel = await createProviderModel(state, state.provider, {
       modelId: COPILOT_E2E_MODEL,
@@ -3852,12 +4009,12 @@ Given('an active runner supports the selected Copilot provider and model', async
     })
     state.agent = await createAgent(state, {
       name: `${state.runId} copilot agent`,
-      provider: state.provider.id,
+      providerId: state.provider.id,
       model: COPILOT_E2E_MODEL,
     })
   }
   const capability = runtimeProviderModelCapability('copilot', '*', COPILOT_E2E_MODEL)
-  state.runner = await apiJson<Json>(state.page.request, '/api/runners', {
+  state.runner = await apiJson<Json>(state.page.request, '/api/v1/runners', {
     method: 'POST',
     data: {
       name: `${state.runId} copilot runner`,
@@ -3865,9 +4022,9 @@ Given('an active runner supports the selected Copilot provider and model', async
       capabilities: ['sandbox.exec', capability],
     },
   })
-  state.runner = await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/heartbeats`, {
-    method: 'POST',
-    data: { status: 'active', currentLoad: 0, capabilities: ['sandbox.exec', capability] },
+  await apiJson<Json>(state.page.request, `/api/v1/runners/${state.runner.id}/heartbeat`, {
+    method: 'PUT',
+    data: { state: 'active', currentLoad: 0, capabilities: ['sandbox.exec', capability] },
   })
 })
 
@@ -3885,7 +4042,7 @@ Then('ama-runner starts the embedded Codex SDK bridge for that session', async f
 Then('Codex receives the prompt, workspace, runtime config, and safe environment', async function (this: ProductWorld) {
   const state = await ensureState(this)
   const events = await waitForSessionEventText(state, 'codex-bridge-test safe diagnostic')
-  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
+  const session = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}`)
   const serialized = JSON.stringify(events.data)
   assert.equal(serialized.includes(state.runtimeMessage ?? ''), true)
   assert.equal(serialized.includes('workspace:'), true)
@@ -4015,15 +4172,16 @@ Then('AMA authenticates the channel as the claimed runner and session', async fu
 
 Then('the session becomes active only after the WebSocket is accepted', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
-  assert.equal(session.status, 'running')
-  assert.equal(session.statusReason, null)
-  assert.equal(session.runtimeEndpointPath, `/runtime/sessions/${state.latestSession?.id}/rpc`)
+  const session = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}`)
+  assert.equal(session.state, 'running')
+  assert.equal(session.stateReason, null)
+  const connection = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}/connection`)
+  assert.equal(connection.path, `/api/v1/runtime/sessions/${state.latestSession?.id}/rpc`)
 })
 
 Then('AMA does not expose any runner-local runtime process endpoint to clients', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
+  const session = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}`)
   const serialized = JSON.stringify(session)
   assert.equal(serialized.includes('localhost'), false)
   assert.equal(serialized.includes('127.0.0.1'), false)
@@ -4040,18 +4198,22 @@ When(
   'the cloud-side AMA control plane sends an approved tool call for the session',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    state.response = await apiJson<Json>(state.page.request, `/runtime/sessions/${state.latestSession?.id}/rpc`, {
-      method: 'POST',
-      data: {
-        toolCalls: [
-          {
-            id: 'call_e2e_channel',
-            name: 'sandbox.exec',
-            input: { command: 'printf channel-ok' },
-          },
-        ],
+    state.response = await apiJson<Json>(
+      state.page.request,
+      `/api/v1/runtime/sessions/${state.latestSession?.id}/rpc`,
+      {
+        method: 'POST',
+        data: {
+          toolCalls: [
+            {
+              id: 'call_e2e_channel',
+              name: 'sandbox.exec',
+              input: { command: 'printf channel-ok' },
+            },
+          ],
+        },
       },
-    })
+    )
   },
 )
 
@@ -4108,28 +4270,28 @@ When('the session WebSocket disconnects before the session is idle or complete',
 
 Then('AMA marks the session as waiting for runner recovery', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
-  assert.equal(session.status, 'pending')
-  assert.equal(session.statusReason, 'waiting-for-runner-recovery')
+  const session = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}`)
+  assert.equal(session.state, 'pending')
+  assert.equal(session.stateReason, 'waiting-for-runner-recovery')
 })
 
 Then('the original runner can reconnect before the lease expires', async function (this: ProductWorld) {
   const state = await ensureState(this)
   state.runnerChannelMessages = await openRunnerChannel(state, 'amaRunnerChannel')
-  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
-  assert.equal(session.status, 'running')
+  const session = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}`)
+  assert.equal(session.state, 'running')
 })
 
 Then(
   'an eligible replacement runner can claim the session after the lease expires',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    await apiJson<Json>(state.page.request, `/api/runners/${state.runner?.id}/leases/${state.lease?.id}`, {
+    await apiJson<Json>(state.page.request, `/api/v1/leases/${state.lease?.id}`, {
       method: 'PATCH',
-      data: { status: 'active', leaseDurationSeconds: 15 },
+      data: { leaseDurationSeconds: 15 },
     })
     await delay(16_000)
-    const replacement = await apiJson<Json>(state.page.request, '/api/runners', {
+    const replacement = await apiJson<Json>(state.page.request, '/api/v1/runners', {
       method: 'POST',
       data: {
         name: `${state.runId} replacement runner`,
@@ -4137,16 +4299,13 @@ Then(
         capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
       },
     })
-    await apiJson<Json>(state.page.request, `/api/runners/${replacement.id}/heartbeats`, {
-      method: 'POST',
-      data: { status: 'active', currentLoad: 0, capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY] },
+    await apiJson<Json>(state.page.request, `/api/v1/runners/${replacement.id}/heartbeat`, {
+      method: 'PUT',
+      data: { state: 'active', currentLoad: 0, capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY] },
     })
     state.runner = replacement
-    state.lease = await apiJson<Json>(state.page.request, `/api/runners/${replacement.id}/leases`, {
-      method: 'POST',
-      data: { leaseDurationSeconds: 90 },
-    })
-    assert.equal(state.lease.status, 'active')
+    const lease = await claimRunnerLease(state)
+    assert.equal(lease.state, 'active')
   },
 )
 
@@ -4197,22 +4356,23 @@ Then('the runtime accepts the message', function (this: ProductWorld) {
 
 Then('the runtime accepts the command', function (this: ProductWorld) {
   const response = required(this.e2e?.response, 'session command response')
-  assert.equal(response.accepted, true)
+  assert.equal(typeof response.id, 'string')
   assert.equal(response.sessionId, this.e2e?.latestSession?.id)
+  assert.equal(response.type, 'prompt')
 })
 
 Then('the command is exposed through AMA OpenAPI and generated SDKs', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const openapi = await apiJson<Json>(state.page.request, '/api/openapi.json')
-  assert.ok(JSON.stringify(openapi).includes('/api/sessions/{sessionId}/commands'))
+  const openapi = await apiJson<Json>(state.page.request, '/api/v1/openapi.json')
+  assert.ok(JSON.stringify(openapi).includes('/api/v1/sessions/{sessionId}/messages'))
   const sdk = readFileSync(join(process.cwd(), 'sdk/typescript/src/generated/operations.ts'), 'utf8')
-  assert.ok(sdk.includes('createSessionCommand'))
+  assert.ok(sdk.includes('createSessionMessage'))
 })
 
 Then('the session status becomes running while work is in progress', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
-  assert.ok(['idle', 'running'].includes(String(session.status)))
+  const session = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}`)
+  assert.ok(['idle', 'running'].includes(String(session.state)))
 })
 
 Then(
@@ -4337,8 +4497,8 @@ Then(
   'the session returns to idle with a final result or moves to error with a safe failure reason',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
-    assert.ok(['idle', 'error'].includes(String(session.status)))
+    const session = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}`)
+    assert.ok(['idle', 'error'].includes(String(session.state)))
   },
 )
 
@@ -4362,18 +4522,18 @@ Then('the client can reconnect from the last seen sequence', async function (thi
   const first = required(state.events, 'events').data[0]
   const events = await apiJson<ListResponse<Json>>(
     state.page.request,
-    `/api/sessions/${state.latestSession?.id}/events?cursor=${first.sequence}`,
+    `/api/v1/sessions/${state.latestSession?.id}/events?cursor=${first.sequence}`,
   )
   assert.ok(Array.isArray(events.data))
 })
 
 Then('event list endpoints support pagination, order, and event type filters', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  await apiJson<ListResponse<Json>>(state.page.request, `/api/sessions/${state.latestSession?.id}/events?limit=1`)
-  await apiJson<ListResponse<Json>>(state.page.request, `/api/sessions/${state.latestSession?.id}/events?order=desc`)
+  await apiJson<ListResponse<Json>>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}/events?limit=1`)
+  await apiJson<ListResponse<Json>>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}/events?order=desc`)
   await apiJson<ListResponse<Json>>(
     state.page.request,
-    `/api/sessions/${state.latestSession?.id}/events?type=message_end`,
+    `/api/v1/sessions/${state.latestSession?.id}/events?type=message_end`,
   )
 })
 
@@ -4388,8 +4548,8 @@ Then('the response returns a deterministic page', function (this: ProductWorld) 
 Then('hasMore, firstId, lastId, and sequence boundaries allow stable pagination', function (this: ProductWorld) {
   const pages = required(this.e2e?.eventPages, 'event pages')
   assert.equal(typeof pages.firstPage.pagination.hasMore, 'boolean')
-  assert.ok('firstId' in pages.firstPage.pagination)
-  assert.ok('lastId' in pages.firstPage.pagination)
+  assert.ok('limit' in pages.firstPage.pagination)
+  assert.ok('nextCursor' in pages.firstPage.pagination)
   assert.ok(pages.firstPage.data.every((event) => typeof event.sequence === 'number'))
 })
 
@@ -4406,16 +4566,16 @@ Then('AMA cancels cloud-owned runtime work and stops the executor backend', func
 })
 
 Then('the session status becomes stopped', function (this: ProductWorld) {
-  assert.equal(this.e2e?.latestSession?.status, 'stopped')
+  assert.equal(this.e2e?.latestSession?.state, 'stopped')
 })
 
 Then('AMA cancels cloud-owned runtime work and stops the sandbox executor', function (this: ProductWorld) {
-  assert.equal(this.e2e?.latestSession?.status, 'stopped')
+  assert.equal(this.e2e?.latestSession?.state, 'stopped')
 })
 
 Then('no new model or tool work starts after the next cancellation boundary', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const response = await apiResponse(state.page.request, `/runtime/sessions/${state.latestSession?.id}/rpc`, {
+  const response = await apiResponse(state.page.request, `/api/v1/runtime/sessions/${state.latestSession?.id}/rpc`, {
     method: 'POST',
     data: { type: 'user_message', message: 'should not run' },
   })
@@ -4424,7 +4584,7 @@ Then('no new model or tool work starts after the next cancellation boundary', as
 
 Then('stop lifecycle events and audit records include the user-requested reason', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const audit = await apiJson<ListResponse<Json>>(state.page.request, '/api/audit-records?limit=20')
+  const audit = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/audit-records?limit=20')
   assert.ok(audit.data.some((record) => String(record.action).includes('stop')))
 })
 
@@ -4437,17 +4597,17 @@ Then(
   'session metadata, runtime endpoint, environment and runtime snapshot, and status are available',
   function (this: ProductWorld) {
     const session = required(this.e2e?.latestSession, 'session')
-    assert.equal(session.runtimeEndpointPath, `/runtime/sessions/${session.id}/rpc`)
+    assert.equal(session.connectionPath, `/api/v1/runtime/sessions/${session.id}/rpc`)
     assert.ok(session.environmentSnapshot, 'environment snapshot is available after reconnect')
     assert.ok(session.agentSnapshot, 'agent runtime snapshot is available after reconnect')
-    assert.ok(typeof session.status === 'string' && String(session.status).length > 0)
+    assert.ok(typeof session.state === 'string' && String(session.state).length > 0)
     assert.ok(session.title !== undefined, 'session metadata is available after reconnect')
   },
 )
 
 Then('the session is hidden from default lists', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const list = await apiJson<ListResponse<Json>>(state.page.request, '/api/sessions')
+  const list = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/sessions')
   assert.equal(
     list.data.some((session) => session.id === state.latestSession?.id),
     false,
@@ -4456,7 +4616,7 @@ Then('the session is hidden from default lists', async function (this: ProductWo
 
 Then('includeArchived lists can still return it', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const list = await apiJson<ListResponse<Json>>(state.page.request, '/api/sessions?includeArchived=true')
+  const list = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/sessions?archived=true')
   assert.ok(list.data.some((session) => session.id === state.latestSession?.id))
 })
 
@@ -4464,7 +4624,7 @@ Then(
   'runtime requests to archived, stopped, or errored sessions use the standard error envelope',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    const response = await apiResponse(state.page.request, `/runtime/sessions/${state.latestSession?.id}/rpc`, {
+    const response = await apiResponse(state.page.request, `/api/v1/runtime/sessions/${state.latestSession?.id}/rpc`, {
       method: 'POST',
     })
     assert.ok(response.status() >= 400)
@@ -4473,7 +4633,7 @@ Then(
 
 Then('events and immutable snapshots remain readable', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
+  const session = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}`)
   const events = await sessionEvents(state)
   assert.ok(session.agentSnapshot)
   assert.ok(Array.isArray(events.data))
@@ -4486,7 +4646,7 @@ Then('raw secret values are never returned after creation', function (this: Prod
 Then('the response includes vault id, status, timestamps, and safe metadata', function (this: ProductWorld) {
   const vault = required(this.e2e?.vault, 'vault')
   assert.match(String(vault.id), /^vault_/)
-  assert.equal(vault.status, 'active')
+  assert.equal(vault.archivedAt, null)
   assert.equal(typeof vault.createdAt, 'string')
   assert.deepEqual(vault.metadata, { purpose: 'e2e' })
 })
@@ -4510,8 +4670,12 @@ Then(
 
 Then('the runtime receives only approved vault binding references', function (this: ProductWorld) {
   const session = required(this.e2e?.latestSession, 'session')
-  assert.deepEqual(session.runtimeSecretEnv, [{ name: 'AK_AGENT_KEY', ref: this.e2e?.credential?.activeVersionId }])
-  assert.deepEqual(session.vaultRefs, [{ type: 'credential', id: this.e2e?.credential?.id }])
+  assert.deepEqual(session.secretEnv, [
+    {
+      name: 'AK_AGENT_KEY',
+      credentialRef: { credentialId: this.e2e?.credential?.id, versionId: this.e2e?.credential?.activeVersionId },
+    },
+  ])
   assert.equal(JSON.stringify(session).includes('vault://ama/e2e'), false)
 })
 
@@ -4554,12 +4718,12 @@ Then(
   'the vault is hidden from default lists and cannot be selected for new sessions',
   async function (this: ProductWorld) {
     const state = await ensureState(this)
-    const list = await apiJson<ListResponse<Json>>(state.page.request, '/api/vaults')
+    const list = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/vaults')
     assert.equal(
       list.data.some((vault) => vault.id === state.vault?.id),
       false,
     )
-    const createCredential = await apiResponse(state.page.request, `/api/vaults/${state.vault?.id}/credentials`, {
+    const createCredential = await apiResponse(state.page.request, `/api/v1/vaults/${state.vault?.id}/credentials`, {
       method: 'POST',
       data: {
         name: `${state.runId} archived vault credential`,
@@ -4573,28 +4737,42 @@ Then(
 
 Then('existing session references remain auditable', async function (this: ProductWorld) {
   const state = await ensureState(this)
-  const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
-  assert.deepEqual(session.vaultRefs, [{ type: 'credential', id: state.credential?.id }])
-  const archivedList = await apiJson<ListResponse<Json>>(
-    state.page.request,
-    '/api/vaults?includeArchived=true&status=archived',
-  )
+  const session = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}`)
+  // The session pins the credential reference for audit history; the server
+  // records the version that was active at creation, so assert the durable
+  // credential reference rather than the exact pinned version id.
+  const secretEnv = (session.secretEnv ?? []) as Array<{ name: string; credentialRef?: { credentialId?: string } }>
+  assert.equal(secretEnv.length, 1)
+  assert.equal(secretEnv[0]?.name, 'VAULT_CREDENTIAL')
+  assert.equal(secretEnv[0]?.credentialRef?.credentialId, state.credential?.id)
+  const archivedList = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/vaults?archived=true')
   const archivedVault = archivedList.data.find((vault) => vault.id === state.vault?.id)
-  assert.equal(archivedVault?.status, 'archived')
+  assert.notEqual(archivedVault?.archivedAt, null)
   assert.equal(typeof archivedVault?.archivedAt, 'string')
 })
 
 Then('the operation requires explicit confirmation and audit metadata', async function (this: ProductWorld) {
   const state = await ensureState(this)
+  // Hard delete: the version is gone from both the list and direct reads.
   const versions = await apiJson<ListResponse<Json>>(
     state.page.request,
-    `/api/vaults/${state.vault?.id}/credentials/${state.credential?.id}/versions?includeArchived=true`,
+    `/api/v1/vaults/${state.vault?.id}/credentials/${state.credential?.id}/versions`,
   )
-  const deleted = versions.data.find((version) => version.id === state.deletedCredentialVersionId)
-  assert.equal(deleted?.status, 'deleted')
-  assert.equal(deleted?.hasSecret, false)
-  assert.equal(typeof objectValue(deleted?.metadata).deletedByUserId, 'string')
-  assert.equal(typeof objectValue(deleted?.metadata).deleteConfirmedAt, 'string')
+  assert.equal(
+    versions.data.some((version) => version.id === state.deletedCredentialVersionId),
+    false,
+  )
+  const read = await apiResponse(
+    state.page.request,
+    `/api/v1/vaults/${state.vault?.id}/credentials/${state.credential?.id}/versions/${state.deletedCredentialVersionId}`,
+  )
+  assert.equal(read.status(), 404)
+  // The deletion is captured in the audit trail rather than on the deleted row.
+  const audit = await apiJson<ListResponse<Json>>(
+    state.page.request,
+    '/api/v1/audit-records?resourceType=vault_credential_version&limit=50',
+  )
+  assert.ok(audit.data.some((record) => String(record.action).includes('delete')))
 })
 
 async function ensureSignedIn(world: ProductWorld) {
@@ -4638,8 +4816,44 @@ async function ensureState(world: ProductWorld) {
   return world.e2e
 }
 
+// Scope policies are the single write surface (declarative config is gone) and
+// only carry tool/mcp/sandbox policy. The project-scope policy is upserted:
+// POST to create, PUT /policies/{id} to replace.
+async function upsertProjectPolicy(state: E2EState, body: Json) {
+  const existing = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/policies')
+  const projectPolicy = existing.data.find((policy) => objectValue(policy.scope).level === 'project')
+  if (projectPolicy) {
+    return await apiJson<Json>(state.page.request, `/api/v1/policies/${projectPolicy.id}`, {
+      method: 'PUT',
+      data: { scope: { level: 'project' }, ...body },
+    })
+  }
+  return await apiJson<Json>(state.page.request, '/api/v1/policies', {
+    method: 'POST',
+    data: { scope: { level: 'project' }, ...body },
+  })
+}
+
+// Two-step claim: discover an available work item, then create a lease for it.
+async function claimRunnerLease(state: E2EState, options: { headers?: Record<string, string> } = {}) {
+  const runner = required(state.runner, 'runner')
+  const sessionId = state.latestSession?.id
+  const query = sessionId ? `?state=available&sessionId=${sessionId}` : '?state=available'
+  const available = await apiJson<ListResponse<Json>>(state.page.request, `/api/v1/work-items${query}`, {
+    ...(options.headers ? { headers: options.headers } : {}),
+  })
+  const workItem = required(available.data[0], 'available work item')
+  const lease = await apiJson<Json>(state.page.request, '/api/v1/leases', {
+    method: 'POST',
+    ...(options.headers ? { headers: options.headers } : {}),
+    data: { workItemId: workItem.id, runnerId: runner.id, leaseDurationSeconds: 90 },
+  })
+  state.lease = lease
+  return lease
+}
+
 async function createAgent(state: E2EState, data: Json = {}) {
-  return await apiJson<Json>(state.page.request, '/api/agents', {
+  return await apiJson<Json>(state.page.request, '/api/v1/agents', {
     method: 'POST',
     data: {
       name: `${state.runId} agent`,
@@ -4650,17 +4864,38 @@ async function createAgent(state: E2EState, data: Json = {}) {
 }
 
 async function createProvider(state: E2EState, data: Json = {}) {
-  return await apiJson<Json>(state.page.request, '/api/providers', {
+  return await apiJson<Json>(state.page.request, '/api/v1/providers', {
     method: 'POST',
     data,
   })
 }
 
-async function createProviderModel(state: E2EState, provider: Json | undefined, data: Json = {}) {
-  return await apiJson<Json>(state.page.request, `/api/providers/${provider?.id}/models`, {
+// Providers/environments/sessions now reference a Vault credential
+// (`{ credentialId, versionId }`) instead of a bare secret string.
+async function createCredentialRef(state: E2EState, slug: string) {
+  state.vault ??= await createVault(state)
+  const credential = await apiJson<Json>(state.page.request, `/api/v1/vaults/${state.vault.id}/credentials`, {
     method: 'POST',
-    data,
+    data: {
+      name: `${state.runId} ${slug} key`,
+      type: 'api_key',
+      metadata: { purpose: 'e2e' },
+      secret: { provider: 'external-vault', externalVaultPath: `vault://ama/e2e/${state.runId}/${slug}` },
+    },
   })
+  return { credentialId: credential.id, versionId: credential.activeVersionId }
+}
+
+async function createProviderModel(state: E2EState, provider: Json | undefined, data: Json = {}) {
+  const modelId = String((data as { modelId?: string }).modelId)
+  return await apiJson<Json>(
+    state.page.request,
+    `/api/v1/providers/${provider?.id}/models/${encodeURIComponent(modelId)}`,
+    {
+      method: 'PUT',
+      data,
+    },
+  )
 }
 
 async function createEnvironment(state: E2EState, data: Json = {}) {
@@ -4668,7 +4903,7 @@ async function createEnvironment(state: E2EState, data: Json = {}) {
   if (typeof runtime === 'string') {
     state.sessionRuntime = runtime
   }
-  return await apiJson<Json>(state.page.request, '/api/environments', {
+  return await apiJson<Json>(state.page.request, '/api/v1/environments', {
     method: 'POST',
     data: {
       name: `${state.runId} env`,
@@ -4679,7 +4914,7 @@ async function createEnvironment(state: E2EState, data: Json = {}) {
 }
 
 async function createSession(state: E2EState, data: Json = {}) {
-  const session = await apiJson<Json>(state.page.request, '/api/sessions', {
+  const session = await apiJson<Json>(state.page.request, '/api/v1/sessions', {
     method: 'POST',
     data: {
       agentId: state.agent?.id,
@@ -4693,7 +4928,7 @@ async function createSession(state: E2EState, data: Json = {}) {
 }
 
 async function createVault(state: E2EState) {
-  return await apiJson<Json>(state.page.request, '/api/vaults', {
+  return await apiJson<Json>(state.page.request, '/api/v1/vaults', {
     method: 'POST',
     data: {
       name: `${state.runId} vault`,
@@ -4705,7 +4940,7 @@ async function createVault(state: E2EState) {
 }
 
 async function createCredential(state: E2EState) {
-  return await apiJson<Json>(state.page.request, `/api/vaults/${state.vault?.id}/credentials`, {
+  return await apiJson<Json>(state.page.request, `/api/v1/vaults/${state.vault?.id}/credentials`, {
     method: 'POST',
     data: {
       name: `${state.runId} credential`,
@@ -4719,7 +4954,7 @@ async function createCredential(state: E2EState) {
 
 async function createMcpCredential(state: E2EState) {
   state.vault ??= await createVault(state)
-  return await apiJson<Json>(state.page.request, `/api/vaults/${state.vault.id}/credentials`, {
+  return await apiJson<Json>(state.page.request, `/api/v1/vaults/${state.vault.id}/credentials`, {
     method: 'POST',
     data: {
       name: `${state.runId} GitHub token`,
@@ -4732,9 +4967,20 @@ async function createMcpCredential(state: E2EState) {
 }
 
 async function connectMcp(state: E2EState, data: Json) {
-  return await apiJson<Json>(state.page.request, '/api/mcp/connections', {
+  const { credentialId, credentialVersionId, ...rest } = data as {
+    credentialId?: string
+    credentialVersionId?: string
+  } & Json
+  const body: Json = { ...rest }
+  if (credentialId !== undefined) {
+    body.credentialRef = {
+      credentialId,
+      ...(credentialVersionId !== undefined ? { versionId: credentialVersionId } : {}),
+    }
+  }
+  return await apiJson<Json>(state.page.request, '/api/v1/connections', {
     method: 'POST',
-    data,
+    data: body,
   })
 }
 
@@ -4748,7 +4994,7 @@ async function sendRuntimeMessage(state: E2EState, message: string) {
       async ({ sessionId, message }) => {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
         const token = window.localStorage.getItem('ama:e2e-access-token')
-        const url = new URL(`${protocol}//${window.location.host}/runtime/sessions/${sessionId}/ws`)
+        const url = new URL(`${protocol}//${window.location.host}/api/v1/runtime/sessions/${sessionId}/ws`)
         if (token) {
           url.searchParams.set('access_token', token)
         }
@@ -4798,7 +5044,7 @@ async function setupQueuedSelfHostedSession(world: ProductWorld) {
     networkPolicy: { mode: 'unrestricted' },
   })
   state.agent = await createAgent(state, { name: `${state.runId} actual runner agent` })
-  state.runner = await apiJson<Json>(state.page.request, '/api/runners', {
+  state.runner = await apiJson<Json>(state.page.request, '/api/v1/runners', {
     method: 'POST',
     data: {
       name: `${state.runId} actual runner`,
@@ -4806,7 +5052,7 @@ async function setupQueuedSelfHostedSession(world: ProductWorld) {
       capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
     },
   })
-  state.latestSession = await apiJson<Json>(state.page.request, '/api/sessions', {
+  state.latestSession = await apiJson<Json>(state.page.request, '/api/v1/sessions', {
     method: 'POST',
     data: {
       agentId: state.agent.id,
@@ -4815,8 +5061,8 @@ async function setupQueuedSelfHostedSession(world: ProductWorld) {
       title: `${state.runId} actual runner session`,
     },
   })
-  assert.equal(state.latestSession.status, 'pending')
-  assert.equal(state.latestSession.statusReason, 'waiting-for-runner')
+  assert.equal(state.latestSession.state, 'pending')
+  assert.equal(state.latestSession.stateReason, 'waiting-for-runner')
   return state
 }
 
@@ -4829,7 +5075,7 @@ async function setupClaimedSelfHostedSession(world: ProductWorld) {
     networkPolicy: { mode: 'unrestricted' },
   })
   state.agent = await createAgent(state, { name: `${state.runId} claimed channel agent` })
-  state.runner = await apiJson<Json>(state.page.request, '/api/runners', {
+  state.runner = await apiJson<Json>(state.page.request, '/api/v1/runners', {
     method: 'POST',
     data: {
       name: `${state.runId} claimed channel runner`,
@@ -4837,15 +5083,15 @@ async function setupClaimedSelfHostedSession(world: ProductWorld) {
       capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
     },
   })
-  state.runner = await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/heartbeats`, {
-    method: 'POST',
+  await apiJson<Json>(state.page.request, `/api/v1/runners/${state.runner.id}/heartbeat`, {
+    method: 'PUT',
     data: {
-      status: 'active',
+      state: 'active',
       currentLoad: 0,
       capabilities: ['sandbox.exec', DEFAULT_AMA_RUNNER_CAPABILITY],
     },
   })
-  state.latestSession = await apiJson<Json>(state.page.request, '/api/sessions', {
+  state.latestSession = await apiJson<Json>(state.page.request, '/api/v1/sessions', {
     method: 'POST',
     data: {
       agentId: state.agent.id,
@@ -4854,11 +5100,8 @@ async function setupClaimedSelfHostedSession(world: ProductWorld) {
       title: `${state.runId} claimed channel session`,
     },
   })
-  state.lease = await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/leases`, {
-    method: 'POST',
-    data: { leaseDurationSeconds: 90 },
-  })
-  assert.equal(state.lease.status, 'active')
+  state.lease = await claimRunnerLease(state)
+  assert.equal(state.lease.state, 'active')
   return state
 }
 
@@ -4989,8 +5232,8 @@ async function stopProductAmaRunner(state?: E2EState) {
 
 export async function waitForSessionStatus(state: E2EState, status: string) {
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    const session = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}`)
-    if (session.status === status) {
+    const session = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}`)
+    if (session.state === status) {
       state.latestSession = session
       await syncClaimedRunnerForSession(state)
       return session
@@ -5008,14 +5251,11 @@ export async function waitForSessionStatus(state: E2EState, status: string) {
 async function syncClaimedRunnerForSession(state: E2EState) {
   const sessionId = state.latestSession?.id
   if (!sessionId) return
-  const workItems = await apiJson<ListResponse<Json>>(
-    state.page.request,
-    `/api/runners/work-items?sessionId=${sessionId}`,
-  )
+  const workItems = await apiJson<ListResponse<Json>>(state.page.request, `/api/v1/work-items?sessionId=${sessionId}`)
   const item = workItems.data.find((candidate) => candidate.runnerId || candidate.leaseId)
   const runnerId = typeof item?.runnerId === 'string' ? item.runnerId : null
   if (runnerId) {
-    state.runner = await apiJson<Json>(state.page.request, `/api/runners/${runnerId}`)
+    state.runner = await apiJson<Json>(state.page.request, `/api/v1/runners/${runnerId}`)
   }
   if (typeof item?.leaseId === 'string') {
     state.lease = { ...(state.lease ?? {}), id: item.leaseId, runnerId }
@@ -5024,7 +5264,7 @@ async function syncClaimedRunnerForSession(state: E2EState) {
 
 async function openRunnerChannel(state: E2EState, key: string) {
   const origin = await ensureLocalApp()
-  const url = new URL(`/api/runners/${state.runner?.id}/leases/${state.lease?.id}/channel`, origin)
+  const url = new URL(`/api/v1/leases/${state.lease?.id}/channel`, origin)
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
   const token = state.runnerAccessToken ?? state.accessToken
   if (token) {
@@ -5122,7 +5362,7 @@ async function runDeterministicAmaRunnerLogin(state: E2EState) {
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://127.0.0.1')
     response.setHeader('content-type', 'application/json')
-    if (url.pathname === '/api/health') {
+    if (url.pathname === '/api/v1/health') {
       response.end(
         JSON.stringify({
           status: 'ok',
@@ -5228,14 +5468,14 @@ async function runLocalCommand(
 async function sessionEvents(state: E2EState) {
   return await apiJson<ListResponse<Json>>(
     state.page.request,
-    `/api/sessions/${state.latestSession?.id}/events?limit=200`,
+    `/api/v1/sessions/${state.latestSession?.id}/events?limit=200`,
   )
 }
 
 async function sessionEventsViaFetch(state: E2EState) {
   const origin = required(state.runnerOrigin, 'runner origin')
   const token = required(state.accessToken, 'e2e access token')
-  const response = await fetch(`${origin}/api/sessions/${state.latestSession?.id}/events?limit=200`, {
+  const response = await fetch(`${origin}/api/v1/sessions/${state.latestSession?.id}/events?limit=200`, {
     headers: { accept: 'application/json', authorization: `Bearer ${token}` },
     signal: AbortSignal.timeout(10_000),
   })

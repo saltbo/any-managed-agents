@@ -11,8 +11,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	ama "github.com/saltbo/any-managed-agents/sdk/go/ama"
 )
 
 func TestRunFailsOnInvalidConfig(t *testing.T) {
@@ -41,7 +39,7 @@ func TestRunLoginDiscoversDeviceFlowAndStoresToken(t *testing.T) {
 	var output bytes.Buffer
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/health":
+		case "/api/v1/health":
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"status":         "ok",
 				"name":           "Any Managed Agents",
@@ -102,12 +100,12 @@ func TestRunWithContextWiresSDKDaemonAndStops(t *testing.T) {
 	heartbeatCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/api/health":
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/health":
 			_, _ = w.Write([]byte(`{"status":"ok","name":"Any Managed Agents","runtime":"cloudflare-workers","oidcIssuer":"https://issuer.example.test","runnerClientId":"runner-client","runnerScopes":"openid profile email offline_access"}`))
-		case r.Method == http.MethodPost && r.URL.Path == "/api/runners":
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/runners":
 			w.WriteHeader(http.StatusCreated)
-			_, _ = w.Write([]byte(`{"id":"runner_1","name":"runner","capabilities":["sandbox.exec"],"status":"offline","currentLoad":0,"maxConcurrent":1}`))
-		case r.Method == http.MethodPost && r.URL.Path == "/api/runners/runner_1/heartbeats":
+			_, _ = w.Write([]byte(`{"id":"runner_1","name":"runner","capabilities":["sandbox.exec"],"state":"offline","currentLoad":0,"maxConcurrent":1}`))
+		case r.Method == http.MethodPut && r.URL.Path == "/api/v1/runners/runner_1/heartbeat":
 			heartbeatCount += 1
 			if heartbeatCount == 1 {
 				go func() {
@@ -115,9 +113,9 @@ func TestRunWithContextWiresSDKDaemonAndStops(t *testing.T) {
 					cancel()
 				}()
 			}
-			_, _ = w.Write([]byte(`{"id":"runner_1","name":"runner","capabilities":["sandbox.exec"],"status":"active","currentLoad":0,"maxConcurrent":1}`))
-		case r.Method == http.MethodPost && r.URL.Path == "/api/runners/runner_1/leases":
-			w.WriteHeader(http.StatusNoContent)
+			_, _ = w.Write([]byte(`{"runnerId":"runner_1","state":"active","currentLoad":0,"runtimeUsage":[],"runtimeInventory":[],"lastHeartbeatAt":null}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/work-items":
+			_, _ = w.Write([]byte(`{"data":[],"pagination":{"limit":50,"hasMore":false,"nextCursor":null}}`))
 		default:
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
 		}
@@ -140,9 +138,9 @@ func TestRunWithContextWiresSDKDaemonAndStops(t *testing.T) {
 	}
 }
 
-func TestSDKRunnerSessionChannelOpenerReturnsURLValidationErrors(t *testing.T) {
-	opener := sdkRunnerSessionChannelOpener{client: &ama.Client{Origin: "ftp://ama.example.test"}}
-	_, err := opener.OpenRunnerSessionChannel(context.Background(), "runner_1", "lease_1")
+func TestV1RunnerSessionChannelOpenerReturnsURLValidationErrors(t *testing.T) {
+	opener := v1RunnerSessionChannelOpener{origin: "ftp://ama.example.test"}
+	_, err := opener.OpenRunnerSessionChannel(context.Background(), "lease_1")
 	if err == nil || !strings.Contains(err.Error(), "http or https") {
 		t.Fatalf("expected URL validation error, got %v", err)
 	}

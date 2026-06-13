@@ -69,7 +69,6 @@ export function AuditRecordPage() {
           <Meta label="Correlation id" value={record.correlationId ?? 'None'} />
           <Meta label="Session" value={record.sessionId ?? 'None'} />
           <Meta label="Policy category" value={record.policyCategory ?? 'None'} />
-          <Meta label="Organization" value={record.organizationId} />
           <Meta label="Project" value={record.projectId ?? 'None'} />
         </MetaGrid>
       </DetailSection>

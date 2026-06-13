@@ -8,8 +8,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	ama "github.com/saltbo/any-managed-agents/sdk/go/ama"
 )
 
 const tokenRefreshSkew = 2 * time.Minute
@@ -79,7 +77,7 @@ func (s *RunnerTokenSource) refreshLocked(ctx context.Context) (string, error) {
 	if strings.TrimSpace(s.saved.RefreshToken) == "" {
 		return "", fmt.Errorf("saved AMA runner token is expired; run ama-runner login again")
 	}
-	healthClient := &ama.Client{
+	healthClient := &v1ControlPlane{
 		Origin:     s.Config.Origin,
 		HTTPClient: s.HTTPClient,
 	}

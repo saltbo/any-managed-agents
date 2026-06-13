@@ -4,6 +4,28 @@ import type { AppType } from '../../server/app'
 import { getAccessToken } from './oidc'
 import { getSelectedProjectId } from './project-selection'
 
+export interface AuthUser {
+  id: string
+  email: string
+  name: string | null
+}
+
+export interface AuthOrganization {
+  id: string
+  name: string
+}
+
+export interface AuthProject {
+  id: string
+  name: string
+}
+
+export interface AuthSession {
+  user: AuthUser
+  organization: AuthOrganization
+  project: AuthProject
+}
+
 export interface AuthContext {
   user: { id: string; email: string; name: string | null; avatarUrl: string | null }
   organization: { id: string; name: string }
@@ -12,9 +34,18 @@ export interface AuthContext {
   permissions: string[]
 }
 
+export interface AuthMethod {
+  type: 'oidc'
+  issuer: string
+  clientId: string
+}
+
+export interface AuthConfig {
+  methods: AuthMethod[]
+}
+
 export interface Project {
   id: string
-  organizationId: string
   name: string
   createdAt: string
   updatedAt: string
@@ -30,9 +61,9 @@ export interface EnvironmentVariable {
   required?: boolean
 }
 
-export interface SecretRef {
-  name: string
-  ref: string
+export interface CredentialRef {
+  credentialId: string
+  versionId?: string
 }
 
 export type EnvironmentHostingMode = 'cloud' | 'self_hosted'
@@ -49,7 +80,7 @@ export interface Environment {
   description: string | null
   packages: EnvironmentPackage[]
   variables: Record<string, EnvironmentVariable>
-  secretRefs: SecretRef[]
+  credentialRefs: CredentialRef[]
   hostingMode: EnvironmentHostingMode
   networkPolicy: EnvironmentNetworkPolicy
   mcpPolicy: Record<string, unknown>
@@ -57,7 +88,6 @@ export interface Environment {
   resourceLimits: Record<string, unknown>
   runtimeConfig: Record<string, unknown>
   metadata: Record<string, unknown>
-  status: 'active' | 'archived'
   archivedAt: string | null
   currentVersionId: string | null
   version: number
@@ -87,19 +117,17 @@ export interface Agent {
   name: string
   description: string | null
   instructions: string | null
-  provider: string
-  model: string
-  systemPrompt: string | null
+  providerId: string | null
+  model: string | null
   skills: string[]
+  subagents: Record<string, unknown>[]
   role: string | null
   capabilityTags: string[]
   handoffPolicy: Record<string, unknown>
   memoryPolicy: Record<string, unknown>
-  allowedTools: string[]
   tools: AgentToolAttachment[]
   mcpConnectors: string[]
   metadata: Record<string, unknown>
-  status: 'active' | 'archived'
   archivedAt: string | null
   currentVersionId: string | null
   version: number
@@ -113,62 +141,119 @@ export interface AgentVersion {
   projectId: string
   version: number
   instructions: string | null
-  provider: string
-  model: string
-  systemPrompt: string | null
+  providerId: string | null
+  model: string | null
   skills: string[]
+  subagents: Record<string, unknown>[]
   role: string | null
   capabilityTags: string[]
   handoffPolicy: Record<string, unknown>
   memoryPolicy: Record<string, unknown>
-  allowedTools: string[]
   tools: AgentToolAttachment[]
   mcpConnectors: string[]
   metadata: Record<string, unknown>
   createdAt: string
 }
 
-export interface EnvironmentVersion
-  extends Omit<
-    Environment,
-    'name' | 'description' | 'status' | 'archivedAt' | 'currentVersionId' | 'version' | 'updatedAt'
-  > {
-  environmentId: string
-  version: number
+export interface AgentMemory {
+  agentId: string
+  projectId: string
+  content: string
+  metadata: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
 }
 
-export type SessionStatus = 'pending' | 'running' | 'idle' | 'stopped' | 'error' | 'archived' | 'requires-action'
+export interface EnvironmentVersion {
+  id: string
+  environmentId: string
+  projectId: string
+  version: number
+  packages: EnvironmentPackage[]
+  variables: Record<string, EnvironmentVariable>
+  credentialRefs: CredentialRef[]
+  hostingMode: EnvironmentHostingMode
+  networkPolicy: EnvironmentNetworkPolicy
+  mcpPolicy: Record<string, unknown>
+  packageManagerPolicy: Record<string, unknown>
+  resourceLimits: Record<string, unknown>
+  runtimeConfig: Record<string, unknown>
+  metadata: Record<string, unknown>
+  createdAt: string
+}
+
+export type SessionState = 'pending' | 'running' | 'idle' | 'stopped' | 'error'
+
+export interface SecretEnvEntry {
+  name: string
+  credentialRef: CredentialRef
+}
 
 export interface SessionRuntimeMetadata {
   hostingMode: EnvironmentHostingMode
   runtime: RuntimeName
   runtimeConfig: Record<string, unknown>
   provider: string
-  model: string
+  model: string | null
   driver: string | null
   backend: string | null
   protocol: string | null
 }
 
+export interface SessionAgentSnapshot {
+  id: string
+  agentId: string
+  projectId: string
+  version: number
+  instructions: string | null
+  providerId: string
+  model: string | null
+  skills: string[]
+  subagents: Record<string, unknown>[]
+  role: string | null
+  capabilityTags: string[]
+  handoffPolicy: Record<string, unknown>
+  memoryPolicy: Record<string, unknown>
+  tools: Record<string, unknown>[]
+  mcpConnectors: string[]
+  metadata: Record<string, unknown>
+  createdAt: string
+}
+
+export interface SessionEnvironmentSnapshot {
+  id: string
+  environmentId: string
+  projectId: string
+  version: number
+  packages: EnvironmentPackage[]
+  variables: Record<string, EnvironmentVariable>
+  credentialRefs: CredentialRef[]
+  hostingMode: EnvironmentHostingMode
+  networkPolicy: EnvironmentNetworkPolicy
+  mcpPolicy: Record<string, unknown>
+  packageManagerPolicy: Record<string, unknown>
+  resourceLimits: Record<string, unknown>
+  runtimeConfig: Record<string, unknown>
+  metadata: Record<string, unknown>
+  createdAt: string
+}
+
 export interface Session {
   id: string
-  organizationId: string
   projectId: string
   agentId: string
   agentVersionId: string
-  agentSnapshot: AgentVersion
+  agentSnapshot: SessionAgentSnapshot
   environmentId: string | null
   environmentVersionId: string | null
-  environmentSnapshot: EnvironmentVersion | null
+  environmentSnapshot: SessionEnvironmentSnapshot | null
   title: string | null
   resourceRefs: SessionResourceRef[]
-  vaultRefs: Record<string, unknown>[]
-  durableObjectName: string
-  sandboxId: string | null
-  runtimeEndpointPath: string | null
+  env: Record<string, unknown>
+  secretEnv: SecretEnvEntry[]
   runtimeMetadata: SessionRuntimeMetadata
-  status: SessionStatus
-  statusReason: string | null
+  state: SessionState
+  stateReason: string | null
   metadata: Record<string, unknown>
   startedAt: string | null
   stoppedAt: string | null
@@ -177,9 +262,50 @@ export interface Session {
   updatedAt: string
 }
 
+export interface SessionConnection {
+  sessionId: string
+  transport: string | null
+  path: string | null
+  state: SessionState
+  stateReason: string | null
+}
+
+export interface SessionMessage {
+  id: string
+  sessionId: string
+  type: 'prompt'
+  content: string
+  delivery: 'live' | 'queued'
+  state: 'accepted' | 'delivered' | 'failed'
+  error: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SessionApproval {
+  id: string
+  sessionId: string
+  toolCallId: string
+  toolName: string
+  input: Record<string, unknown>
+  relatedEventIds: string[]
+  state: 'pending' | 'approved' | 'denied'
+  reason: string | null
+  result: Record<string, unknown> | null
+  requestedAt: string
+  decidedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SessionApprovalDecisionInput {
+  decision: 'approve' | 'deny'
+  reason?: string
+  result?: Record<string, unknown>
+}
+
 export interface SessionEvent {
   id: string
-  organizationId: string
   projectId: string
   sessionId: string
   sequence: number
@@ -204,20 +330,22 @@ export type GitHubRepositoryResourceRef = {
 
 export type SessionResourceRef = GitHubRepositoryResourceRef | Record<string, unknown>
 
+export type ProviderType = 'workers-ai' | 'anthropic' | 'openai' | 'openai-compatible' | 'ollama' | 'other'
+
 export interface Provider {
   id: string
   projectId: string
-  type: string
+  type: ProviderType
   displayName: string
   baseUrl: string | null
   isDefault: boolean
-  status: 'active' | 'disabled' | 'deleted'
-  hasCredential: boolean
+  enabled: boolean
+  credentialRef: CredentialRef | null
   credentialStatus: 'not_required' | 'configured' | 'missing'
   metadata: Record<string, unknown>
   rateLimits: Record<string, unknown>
   budgetPolicy: Record<string, unknown>
-  modelCatalogStatus: string
+  modelCatalogState: string
   lastError: Record<string, unknown> | null
   createdAt: string
   updatedAt: string
@@ -237,15 +365,23 @@ export interface ProviderModel {
   updatedAt: string
 }
 
+export interface ModelDiscoveryTask {
+  id: string
+  providerId: string
+  state: 'pending' | 'running' | 'succeeded' | 'failed'
+  discoveredCount: number | null
+  error: Record<string, unknown> | null
+  createdAt: string
+  updatedAt: string
+}
+
 export interface Vault {
   id: string
-  organizationId: string
   projectId: string | null
   name: string
   description: string | null
   scope: 'project' | 'organization'
   metadata: Record<string, unknown>
-  status: 'active' | 'archived'
   archivedAt: string | null
   createdAt: string
   updatedAt: string
@@ -255,32 +391,29 @@ export interface VaultCredentialVersion {
   id: string
   credentialId: string
   vaultId: string
-  organizationId: string
   projectId: string | null
   version: number
   provider: 'ama-managed' | 'cloudflare-secrets' | 'external-vault'
   secretRef: string
   externalVaultPath: string | null
   referenceName: string
-  status: 'active' | 'superseded' | 'revoked' | 'deleted'
+  state: 'active' | 'superseded' | 'revoked'
   hasSecret: boolean
   metadata: Record<string, unknown>
   createdAt: string
   supersededAt: string | null
   revokedAt: string | null
-  deletedAt: string | null
 }
 
 export interface VaultCredential {
   id: string
   vaultId: string
-  organizationId: string
   projectId: string | null
   name: string
   type: string
   connectorBinding: Record<string, unknown>
   metadata: Record<string, unknown>
-  status: 'active' | 'revoked'
+  state: 'active' | 'revoked'
   activeVersionId: string | null
   activeVersion: VaultCredentialVersion | null
   revokedAt: string | null
@@ -290,9 +423,16 @@ export interface VaultCredential {
   updatedAt: string
 }
 
-export interface McpConnector {
+export interface ConnectorTool {
+  name: string
+  description: string | null
+  inputSchema: Record<string, unknown>
+  approvalMode: 'none' | 'per_call' | 'always_required' | 'project_policy'
+  policyMetadata: Record<string, unknown>
+}
+
+export interface Connector {
   id: string
-  connectorId: string
   name: string
   description: string
   category: string
@@ -300,43 +440,36 @@ export interface McpConnector {
   capabilities: string[]
   supportedAuthModes: string[]
   setupRequirements: string[]
-  tools: Array<{
-    name: string
-    description: string | null
-    approvalMode: string
-    inputSchema?: Record<string, unknown>
-  }>
+  tools: ConnectorTool[]
   metadata: Record<string, unknown>
-  status: 'available' | 'unavailable'
-  policyStatus: 'allowed' | 'blocked' | 'approval_required'
-  connectionStatus: string
+  availability: 'available' | 'unavailable'
   createdAt: string
   updatedAt: string
 }
 
-export interface McpConnectorListOptions {
+export interface ConnectorListOptions {
   search?: string
   category?: string
   trustLevel?: string
   capability?: string
 }
 
-export interface McpConnectInput {
+export interface CreateConnectionInput {
   connectorId: string
   endpointUrl?: string
-  credentialId?: string
-  credentialVersionId?: string
+  credentialRef?: CredentialRef
+  approvalMode?: ConnectorTool['approvalMode']
+  metadata?: Record<string, unknown>
 }
 
-export interface McpConnection {
+export interface Connection {
   id: string
-  organizationId: string
   projectId: string
   connectorId: string
-  hasCredential: boolean
+  credentialRef: CredentialRef | null
   endpointUrl: string | null
-  approvalMode: string
-  status: 'connected' | 'disabled' | 'disconnected' | 'error'
+  approvalMode: 'none' | 'per_call' | 'always_required' | 'project_policy'
+  state: 'connected' | 'disabled' | 'disconnected' | 'error'
   lastError: Record<string, unknown> | null
   metadata: Record<string, unknown>
   connectedAt: string
@@ -345,23 +478,72 @@ export interface McpConnection {
   updatedAt: string
 }
 
-export interface GovernancePolicy {
+export interface PolicyScope {
+  level: 'organization' | 'team' | 'project'
+  teamId?: string
+}
+
+export interface Policy {
   id: string
-  organizationId: string
   projectId: string
-  scope: 'project'
-  providerRules: Array<Record<string, unknown>>
-  modelRules: Array<Record<string, unknown>>
+  scope: PolicyScope
   toolPolicy: Record<string, unknown>
   mcpPolicy: Record<string, unknown>
   sandboxPolicy: Record<string, unknown>
-  budgetPolicy: Record<string, unknown>
   metadata: Record<string, unknown>
   createdAt: string
   updatedAt: string
 }
 
-export interface ProviderAccessRule {
+export interface PolicyDecision {
+  allowed: boolean
+  category: string
+  rule: string | null
+  message: string
+}
+
+export interface EffectiveRule {
+  providerId?: string
+  modelId?: string
+  effect: 'allow' | 'deny'
+  reason?: string
+}
+
+export interface EffectiveAccessRule {
+  id: string
+  providerId: string
+  modelId: string
+  teamId: string | null
+  effect: string
+  reason: string | null
+}
+
+export interface EffectiveBudget {
+  id: string
+  scope: string
+  providerId: string | null
+  modelId: string | null
+  limitType: string
+  limitValue: number
+  window: string
+  enabled: boolean
+  metadata: Record<string, unknown>
+}
+
+export interface EffectivePolicy {
+  source: Record<string, unknown>
+  sources: Record<string, unknown>[]
+  providerRules: EffectiveRule[]
+  modelRules: EffectiveRule[]
+  accessRules: EffectiveAccessRule[]
+  toolPolicy: Record<string, unknown>
+  mcpPolicy: Record<string, unknown>
+  sandboxPolicy: Record<string, unknown>
+  budgets: EffectiveBudget[]
+  decision?: PolicyDecision
+}
+
+export interface AccessRule {
   id: string
   providerId: string
   modelId: string
@@ -373,7 +555,7 @@ export interface ProviderAccessRule {
   updatedAt: string
 }
 
-export interface ProviderAccessRuleInput {
+export interface AccessRuleInput {
   providerId?: string
   modelId?: string
   teamId?: string
@@ -382,8 +564,21 @@ export interface ProviderAccessRuleInput {
   metadata?: Record<string, unknown>
 }
 
-export interface UsageSummaryGroup {
-  key: Record<string, unknown>
+export interface Budget {
+  id: string
+  scope: 'project' | 'provider' | 'model'
+  providerId: string | null
+  modelId: string | null
+  limitType: 'tokens' | 'cost_micros' | 'sessions'
+  limitValue: number
+  window: 'day' | 'month'
+  enabled: boolean
+  metadata: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
+export interface UsageSummaryTotals {
   records: number
   promptTokens: number
   completionTokens: number
@@ -393,14 +588,41 @@ export interface UsageSummaryGroup {
   currency: string
 }
 
+export interface UsageSummaryGroup extends UsageSummaryTotals {
+  key: Record<string, string | null>
+}
+
 export interface UsageSummary {
-  totals: UsageSummaryGroup
+  groupBy: 'provider' | 'model' | 'agent'
+  totals: UsageSummaryTotals
   groups: UsageSummaryGroup[]
+}
+
+export interface UsageRecord {
+  id: string
+  projectId: string
+  agentId: string | null
+  agentVersionId: string | null
+  sessionId: string | null
+  sessionEventId: string | null
+  correlationId: string | null
+  providerId: string | null
+  providerType: string
+  modelId: string
+  status: string
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+  durationMs: number
+  costMicros: number
+  currency: string
+  usageType: string
+  metadata: Record<string, unknown>
+  createdAt: string
 }
 
 export interface AuditRecord {
   id: string
-  organizationId: string
   projectId: string | null
   actorUserId: string | null
   actorType: string
@@ -418,14 +640,23 @@ export interface AuditRecord {
   createdAt: string
 }
 
+export interface FederatedTenant {
+  id: string
+  issuer: string
+  externalTenantId: string
+  projectId: string
+  environmentId: string | null
+  capabilities: string[]
+  enabled: boolean
+  metadata: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
 export interface ListPagination {
   limit: number
   nextCursor: string | null
   hasMore: boolean
-  firstId: string | null
-  lastId: string | null
-  firstSequence?: number | null
-  lastSequence?: number | null
 }
 
 export interface ListResponse<T> {
@@ -434,16 +665,26 @@ export interface ListResponse<T> {
 }
 
 export interface ListOptions {
-  includeArchived?: boolean
+  archived?: boolean
   search?: string
-  status?: string
   createdFrom?: string
   createdTo?: string
   limit?: number
   cursor?: string
 }
 
-export type ProviderInputType = 'workers-ai' | 'anthropic' | 'openai' | 'openai-compatible' | 'ollama' | 'other'
+export interface SessionListOptions extends ListOptions {
+  state?: string
+}
+
+export interface VaultCredentialListOptions {
+  search?: string
+  state?: string
+  createdFrom?: string
+  createdTo?: string
+  limit?: number
+  cursor?: string
+}
 
 export interface SessionEventListOptions {
   cursor?: number
@@ -460,7 +701,7 @@ export interface EnvironmentInput {
   description?: string
   packages?: EnvironmentPackage[]
   variables?: Record<string, EnvironmentVariable>
-  secretRefs?: SecretRef[]
+  credentialRefs?: CredentialRef[]
   hostingMode?: EnvironmentHostingMode
   networkPolicy?: EnvironmentNetworkPolicy
   mcpPolicy?: Record<string, unknown>
@@ -474,15 +715,14 @@ export interface AgentInput {
   name: string
   description?: string
   instructions?: string
-  provider?: string
+  providerId?: string
   model?: string | null
-  systemPrompt?: string
   skills?: string[]
+  subagents?: Record<string, unknown>[]
   role?: string | null
   capabilityTags?: string[]
   handoffPolicy?: Record<string, unknown>
   memoryPolicy?: Record<string, unknown>
-  allowedTools?: string[]
   tools?: AgentToolAttachmentInput[]
   mcpConnectors?: string[]
   metadata?: Record<string, unknown>
@@ -497,15 +737,19 @@ export interface SessionInput {
   initialPrompt?: string
   metadata?: Record<string, unknown>
   resourceRefs?: SessionResourceRef[]
-  vaultRefs?: Record<string, unknown>[]
+  env?: Record<string, string>
+  secretEnv?: SecretEnvEntry[]
 }
 
 export interface ProviderInput {
-  type: ProviderInputType
+  type: ProviderType
   displayName: string
   baseUrl?: string
   isDefault?: boolean
-  credentialSecretRef?: string
+  credentialRef?: CredentialRef | null
+  metadata?: Record<string, unknown>
+  rateLimits?: Record<string, unknown>
+  budgetPolicy?: Record<string, unknown>
 }
 
 export interface VaultInput {
@@ -537,20 +781,22 @@ export interface AuditRecordListOptions {
   resourceId?: string
   action?: string
   outcome?: string
-  createdFrom?: string
-  createdTo?: string
+  from?: string
+  to?: string
   limit?: number
+  cursor?: string
 }
 
 export interface UsageSummaryOptions {
-  provider?: string
-  model?: string
-  agentId?: string
-  sessionId?: string
-  status?: string
-  createdFrom?: string
-  createdTo?: string
   groupBy?: string
+  from?: string
+  to?: string
+}
+
+export interface EffectivePolicyOptions {
+  teamId?: string
+  providerId?: string
+  modelId?: string
 }
 
 export class ApiError extends Error {
@@ -576,6 +822,8 @@ const rpc = hc<AppType>('/', {
     }
   },
 })
+
+const v1 = rpc.api.v1
 
 type RpcResponse = Pick<Response, 'headers' | 'json' | 'ok' | 'status' | 'statusText' | 'text'>
 type RpcArg<T> = T extends (args: infer A, ...rest: never[]) => unknown ? A : never
@@ -623,143 +871,171 @@ function jsonArg<T>(json: RpcJson<T>) {
 }
 
 export const api = {
-  listProjects: () => rpcRequest<ListResponse<Project>>(rpc.api.projects.$get()),
-  createProject: (input: { name: string }) => rpcRequest<Project>(rpc.api.projects.$post({ json: input })),
+  readAuthConfig: (organization?: string) =>
+    rpcRequest<AuthConfig>(v1.auth.config.$get({ query: organization ? { organization } : {} })),
+  readCurrentSession: () => rpcRequest<AuthSession>(v1.auth.sessions.current.$get()),
+  deleteCurrentSession: () => rpcRequest<void>(v1.auth.sessions.current.$delete()),
+  listProjects: () => rpcRequest<ListResponse<Project>>(v1.projects.$get({ query: {} })),
+  createProject: (input: { name: string }) => rpcRequest<Project>(v1.projects.$post({ json: input })),
   listAgents: (options: ListOptions = {}) =>
-    rpcRequest<ListResponse<Agent>>(rpc.api.agents.$get(queryArg<typeof rpc.api.agents.$get>(options))),
-  readAgent: (id: string) => rpcRequest<Agent>(rpc.api.agents[':agentId'].$get({ param: { agentId: id } })),
-  createAgent: (input: AgentInput) =>
-    rpcRequest<Agent>(rpc.api.agents.$post(jsonArg<typeof rpc.api.agents.$post>(input))),
-  updateAgent: (id: string, input: Partial<AgentInput>) =>
+    rpcRequest<ListResponse<Agent>>(v1.agents.$get(queryArg<typeof v1.agents.$get>(options))),
+  readAgent: (id: string) => rpcRequest<Agent>(v1.agents[':agentId'].$get({ param: { agentId: id } })),
+  createAgent: (input: AgentInput) => rpcRequest<Agent>(v1.agents.$post(jsonArg<typeof v1.agents.$post>(input))),
+  updateAgent: (id: string, input: Partial<AgentInput> & { archived?: boolean }) =>
     rpcRequest<Agent>(
-      rpc.api.agents[':agentId'].$patch({
+      v1.agents[':agentId'].$patch({
         param: { agentId: id },
-        json: input as RpcJson<(typeof rpc.api.agents)[':agentId']['$patch']>,
+        json: input as RpcJson<(typeof v1.agents)[':agentId']['$patch']>,
       }),
     ),
-  archiveAgent: (id: string) => rpcRequest<void>(rpc.api.agents[':agentId'].$delete({ param: { agentId: id } })),
+  archiveAgent: (id: string) =>
+    rpcRequest<Agent>(v1.agents[':agentId'].$patch({ param: { agentId: id }, json: { archived: true } })),
   listAgentVersions: (id: string) =>
-    rpcRequest<ListResponse<AgentVersion>>(rpc.api.agents[':agentId'].versions.$get({ param: { agentId: id } })),
+    rpcRequest<ListResponse<AgentVersion>>(v1.agents[':agentId'].versions.$get({ param: { agentId: id } })),
+  readAgentMemory: (id: string) =>
+    rpcRequest<AgentMemory>(v1.agents[':agentId'].memory.$get({ param: { agentId: id } })),
+  replaceAgentMemory: (id: string, input: { content: string; metadata?: Record<string, unknown> }) =>
+    rpcRequest<AgentMemory>(v1.agents[':agentId'].memory.$put({ param: { agentId: id }, json: input })),
   listEnvironments: (options: ListOptions = {}) =>
-    rpcRequest<ListResponse<Environment>>(
-      rpc.api.environments.$get(queryArg<typeof rpc.api.environments.$get>(options)),
-    ),
+    rpcRequest<ListResponse<Environment>>(v1.environments.$get(queryArg<typeof v1.environments.$get>(options))),
   readEnvironment: (id: string) =>
-    rpcRequest<Environment>(rpc.api.environments[':environmentId'].$get({ param: { environmentId: id } })),
-  createEnvironment: (input: EnvironmentInput) => rpcRequest<Environment>(rpc.api.environments.$post({ json: input })),
-  updateEnvironment: (id: string, input: Partial<EnvironmentInput>) =>
+    rpcRequest<Environment>(v1.environments[':environmentId'].$get({ param: { environmentId: id } })),
+  createEnvironment: (input: EnvironmentInput) => rpcRequest<Environment>(v1.environments.$post({ json: input })),
+  updateEnvironment: (id: string, input: Partial<EnvironmentInput> & { archived?: boolean }) =>
     rpcRequest<Environment>(
-      rpc.api.environments[':environmentId'].$patch({ param: { environmentId: id }, json: input }),
+      v1.environments[':environmentId'].$patch({
+        param: { environmentId: id },
+        json: input as RpcJson<(typeof v1.environments)[':environmentId']['$patch']>,
+      }),
     ),
   archiveEnvironment: (id: string) =>
-    rpcRequest<void>(rpc.api.environments[':environmentId'].$delete({ param: { environmentId: id } })),
+    rpcRequest<Environment>(
+      v1.environments[':environmentId'].$patch({ param: { environmentId: id }, json: { archived: true } }),
+    ),
   listEnvironmentVersions: (id: string) =>
     rpcRequest<ListResponse<EnvironmentVersion>>(
-      rpc.api.environments[':environmentId'].versions.$get({
-        param: { environmentId: id },
-      }),
+      v1.environments[':environmentId'].versions.$get({ param: { environmentId: id } }),
     ),
-  listSessions: (options: ListOptions = {}) =>
-    rpcRequest<ListResponse<Session>>(rpc.api.sessions.$get(queryArg<typeof rpc.api.sessions.$get>(options))),
-  createSession: (input: SessionInput) => rpcRequest<Session>(rpc.api.sessions.$post({ json: input })),
-  readSession: (id: string) => rpcRequest<Session>(rpc.api.sessions[':sessionId'].$get({ param: { sessionId: id } })),
-  reconnectSession: (id: string) =>
-    rpcRequest<Session>(rpc.api.sessions[':sessionId'].reconnect.$get({ param: { sessionId: id } })),
+  listSessions: (options: SessionListOptions = {}) =>
+    rpcRequest<ListResponse<Session>>(v1.sessions.$get(queryArg<typeof v1.sessions.$get>(options))),
+  createSession: (input: SessionInput) =>
+    rpcRequest<Session>(v1.sessions.$post(jsonArg<typeof v1.sessions.$post>(input))),
+  readSession: (id: string) => rpcRequest<Session>(v1.sessions[':sessionId'].$get({ param: { sessionId: id } })),
+  readSessionConnection: (id: string) =>
+    rpcRequest<SessionConnection>(v1.sessions[':sessionId'].connection.$get({ param: { sessionId: id } })),
   stopSession: (id: string) =>
-    rpcRequest<Session>(rpc.api.sessions[':sessionId'].stop.$post({ param: { sessionId: id }, query: {} })),
+    rpcRequest<Session>(v1.sessions[':sessionId'].$patch({ param: { sessionId: id }, json: { state: 'stopped' } })),
   archiveSession: (id: string) =>
-    rpcRequest<void>(rpc.api.sessions[':sessionId'].$delete({ param: { sessionId: id } })),
+    rpcRequest<Session>(v1.sessions[':sessionId'].$patch({ param: { sessionId: id }, json: { archived: true } })),
+  sendSessionMessage: (id: string, content: string) =>
+    rpcRequest<SessionMessage>(
+      v1.sessions[':sessionId'].messages.$post({ param: { sessionId: id }, json: { type: 'prompt', content } }),
+    ),
   listSessionEvents: (id: string, options: SessionEventListOptions = {}) =>
     rpcRequest<ListResponse<SessionEvent>>(
-      rpc.api.sessions[':sessionId'].events.$get(
-        paramQueryArg<(typeof rpc.api.sessions)[':sessionId']['events']['$get']>({ sessionId: id }, options),
+      v1.sessions[':sessionId'].events.$get(
+        paramQueryArg<(typeof v1.sessions)[':sessionId']['events']['$get']>({ sessionId: id }, options),
       ),
     ),
+  listSessionApprovals: (id: string) =>
+    rpcRequest<ListResponse<SessionApproval>>(v1.sessions[':sessionId'].approvals.$get({ param: { sessionId: id } })),
+  decideSessionApproval: (id: string, approvalId: string, input: SessionApprovalDecisionInput) =>
+    rpcRequest<SessionApproval>(
+      v1.sessions[':sessionId'].approvals[':approvalId'].$patch({
+        param: { sessionId: id, approvalId },
+        json: input,
+      }),
+    ),
   listProviders: (options: ListOptions = {}) =>
-    rpcRequest<ListResponse<Provider>>(rpc.api.providers.$get(queryArg<typeof rpc.api.providers.$get>(options))),
-  readProvider: (id: string) =>
-    rpcRequest<Provider>(rpc.api.providers[':providerId'].$get({ param: { providerId: id } })),
+    rpcRequest<ListResponse<Provider>>(v1.providers.$get(queryArg<typeof v1.providers.$get>(options))),
+  readProvider: (id: string) => rpcRequest<Provider>(v1.providers[':providerId'].$get({ param: { providerId: id } })),
   createProvider: (input: ProviderInput) =>
-    rpcRequest<Provider>(rpc.api.providers.$post(jsonArg<typeof rpc.api.providers.$post>(input))),
-  archiveProvider: (id: string) =>
-    rpcRequest<void>(rpc.api.providers[':providerId'].$delete({ param: { providerId: id } })),
+    rpcRequest<Provider>(v1.providers.$post(jsonArg<typeof v1.providers.$post>(input))),
+  deleteProvider: (id: string) => rpcRequest<void>(v1.providers[':providerId'].$delete({ param: { providerId: id } })),
   listProviderModels: (id: string) =>
-    rpcRequest<ListResponse<ProviderModel>>(
-      rpc.api.providers[':providerId'].models.$get({ param: { providerId: id } }),
+    rpcRequest<ListResponse<ProviderModel>>(v1.providers[':providerId'].models.$get({ param: { providerId: id } })),
+  upsertProviderModel: (id: string, modelId: string, input: { displayName: string } & Record<string, unknown>) =>
+    rpcRequest<ProviderModel>(
+      v1.providers[':providerId'].models[':modelId'].$put({
+        param: { providerId: id, modelId },
+        json: input as RpcJson<(typeof v1.providers)[':providerId']['models'][':modelId']['$put']>,
+      }),
+    ),
+  startModelDiscovery: (id: string) =>
+    rpcRequest<ModelDiscoveryTask>(
+      v1.providers[':providerId']['model-discovery-tasks'].$post({ param: { providerId: id } }),
     ),
   listVaults: (options: ListOptions = {}) =>
-    rpcRequest<ListResponse<Vault>>(rpc.api.vaults.$get(queryArg<typeof rpc.api.vaults.$get>(options))),
-  readVault: (id: string) => rpcRequest<Vault>(rpc.api.vaults[':vaultId'].$get({ param: { vaultId: id } })),
-  createVault: (input: VaultInput) => rpcRequest<Vault>(rpc.api.vaults.$post({ json: input })),
-  archiveVault: (id: string) => rpcRequest<void>(rpc.api.vaults[':vaultId'].$delete({ param: { vaultId: id } })),
-  listVaultCredentials: (id: string, options: ListOptions = {}) =>
+    rpcRequest<ListResponse<Vault>>(v1.vaults.$get(queryArg<typeof v1.vaults.$get>(options))),
+  readVault: (id: string) => rpcRequest<Vault>(v1.vaults[':vaultId'].$get({ param: { vaultId: id } })),
+  createVault: (input: VaultInput) => rpcRequest<Vault>(v1.vaults.$post({ json: input })),
+  archiveVault: (id: string) =>
+    rpcRequest<Vault>(v1.vaults[':vaultId'].$patch({ param: { vaultId: id }, json: { archived: true } })),
+  listVaultCredentials: (id: string, options: VaultCredentialListOptions = {}) =>
     rpcRequest<ListResponse<VaultCredential>>(
-      rpc.api.vaults[':vaultId'].credentials.$get(
-        paramQueryArg<(typeof rpc.api.vaults)[':vaultId']['credentials']['$get']>({ vaultId: id }, options),
+      v1.vaults[':vaultId'].credentials.$get(
+        paramQueryArg<(typeof v1.vaults)[':vaultId']['credentials']['$get']>({ vaultId: id }, options),
       ),
     ),
   createVaultCredential: (vaultId: string, input: VaultCredentialInput) =>
     rpcRequest<VaultCredential>(
-      rpc.api.vaults[':vaultId'].credentials.$post({
+      v1.vaults[':vaultId'].credentials.$post({
         param: { vaultId },
-        json: input as RpcJson<(typeof rpc.api.vaults)[':vaultId']['credentials']['$post']>,
+        json: input as RpcJson<(typeof v1.vaults)[':vaultId']['credentials']['$post']>,
       }),
     ),
   rotateVaultCredential: (vaultId: string, credentialId: string, secret: VaultCredentialSecretInput) =>
-    rpcRequest<VaultCredential>(
-      rpc.api.vaults[':vaultId'].credentials[':credentialId'].versions.$post({
+    rpcRequest<VaultCredentialVersion>(
+      v1.vaults[':vaultId'].credentials[':credentialId'].versions.$post({
         param: { vaultId, credentialId },
-        json: secret as RpcJson<
-          (typeof rpc.api.vaults)[':vaultId']['credentials'][':credentialId']['versions']['$post']
-        >,
+        json: secret as RpcJson<(typeof v1.vaults)[':vaultId']['credentials'][':credentialId']['versions']['$post']>,
       }),
     ),
   revokeVaultCredential: (vaultId: string, credentialId: string, revokeReason?: string) =>
     rpcRequest<VaultCredential>(
-      rpc.api.vaults[':vaultId'].credentials[':credentialId'].$patch({
+      v1.vaults[':vaultId'].credentials[':credentialId'].$patch({
         param: { vaultId, credentialId },
-        json: { status: 'revoked', ...(revokeReason ? { revokeReason } : {}) },
+        json: { state: 'revoked', ...(revokeReason ? { revokeReason } : {}) },
       }),
     ),
-  listMcpConnectors: (options: McpConnectorListOptions = {}) =>
-    rpcRequest<ListResponse<McpConnector>>(
-      rpc.api.mcp.connectors.$get(queryArg<typeof rpc.api.mcp.connectors.$get>(options)),
-    ),
-  readMcpConnector: (connectorId: string) =>
-    rpcRequest<McpConnector>(rpc.api.mcp.connectors[':connectorId'].$get({ param: { connectorId } })),
-  connectMcpConnector: (input: McpConnectInput) =>
-    rpcRequest<McpConnection>(rpc.api.mcp.connections.$post(jsonArg<typeof rpc.api.mcp.connections.$post>(input))),
-  listMcpConnections: () => rpcRequest<ListResponse<McpConnection>>(rpc.api.mcp.connections.$get({ query: {} })),
-  disconnectMcpConnection: (id: string) =>
-    rpcRequest<void>(
-      rpc.api.mcp.connections[':connectionId'].$delete({
+  listConnectors: (options: ConnectorListOptions = {}) =>
+    rpcRequest<ListResponse<Connector>>(v1.connectors.$get(queryArg<typeof v1.connectors.$get>(options))),
+  readConnector: (connectorId: string) =>
+    rpcRequest<Connector>(v1.connectors[':connectorId'].$get({ param: { connectorId } })),
+  createConnection: (input: CreateConnectionInput) =>
+    rpcRequest<Connection>(v1.connections.$post(jsonArg<typeof v1.connections.$post>(input))),
+  listConnections: () => rpcRequest<ListResponse<Connection>>(v1.connections.$get({ query: {} })),
+  disconnectConnection: (id: string) =>
+    rpcRequest<Connection>(
+      v1.connections[':connectionId'].$patch({
         param: { connectionId: id },
-        query: { confirm: 'true' },
+        json: { state: 'disconnected' },
       }),
     ),
-  listProviderAccessRules: () =>
-    rpcRequest<ListResponse<ProviderAccessRule>>(rpc.api.governance['provider-access-rules'].$get()),
-  createProviderAccessRule: (input: ProviderAccessRuleInput) =>
-    rpcRequest<ProviderAccessRule>(
-      rpc.api.governance['provider-access-rules'].$post(
-        jsonArg<(typeof rpc.api.governance)['provider-access-rules']['$post']>(input),
-      ),
+  listAccessRules: () =>
+    rpcRequest<ListResponse<AccessRule>>(v1['access-rules'].$get(queryArg<(typeof v1)['access-rules']['$get']>({}))),
+  createAccessRule: (input: AccessRuleInput) =>
+    rpcRequest<AccessRule>(v1['access-rules'].$post(jsonArg<(typeof v1)['access-rules']['$post']>(input))),
+  listPolicies: () => rpcRequest<ListResponse<Policy>>(v1.policies.$get(queryArg<typeof v1.policies.$get>({}))),
+  readEffectivePolicy: (options: EffectivePolicyOptions = {}) =>
+    rpcRequest<EffectivePolicy>(
+      v1['effective-policy'].$get(queryArg<(typeof v1)['effective-policy']['$get']>(options)),
     ),
-  readGovernancePolicy: () => rpcRequest<GovernancePolicy>(rpc.api.governance.policy.$get()),
-  updateGovernancePolicy: (input: Partial<GovernancePolicy>) =>
-    rpcRequest<GovernancePolicy>(
-      rpc.api.governance.policy.$put({ json: input as RpcJson<typeof rpc.api.governance.policy.$put> }),
-    ),
+  listBudgets: () => rpcRequest<ListResponse<Budget>>(v1.budgets.$get(queryArg<typeof v1.budgets.$get>({}))),
   readUsageSummary: (options: UsageSummaryOptions = {}) =>
-    rpcRequest<UsageSummary>(rpc.api.usage.summary.$get(queryArg<typeof rpc.api.usage.summary.$get>(options))),
+    rpcRequest<UsageSummary>(v1['usage-summary'].$get(queryArg<(typeof v1)['usage-summary']['$get']>(options))),
+  listUsageRecords: (options: Record<string, unknown> = {}) =>
+    rpcRequest<ListResponse<UsageRecord>>(
+      v1['usage-records'].$get(queryArg<(typeof v1)['usage-records']['$get']>(options)),
+    ),
   listAuditRecords: (options: AuditRecordListOptions = {}) =>
     rpcRequest<ListResponse<AuditRecord>>(
-      rpc.api['audit-records'].$get(queryArg<(typeof rpc.api)['audit-records']['$get']>(options)),
+      v1['audit-records'].$get(queryArg<(typeof v1)['audit-records']['$get']>(options)),
     ),
   readAuditRecord: (id: string) =>
-    rpcRequest<AuditRecord>(rpc.api['audit-records'][':recordId'].$get({ param: { recordId: id } })),
-  exportAuditRecords: (options: AuditRecordListOptions = {}) =>
-    rpcRequest<AuditRecord[]>(
-      rpc.api['audit-records'].export.$get(queryArg<(typeof rpc.api)['audit-records']['export']['$get']>(options)),
+    rpcRequest<AuditRecord>(v1['audit-records'][':recordId'].$get({ param: { recordId: id } })),
+  listFederatedTenants: () =>
+    rpcRequest<ListResponse<FederatedTenant>>(
+      v1.auth['federated-tenants'].$get(queryArg<(typeof v1.auth)['federated-tenants']['$get']>({})),
     ),
 }

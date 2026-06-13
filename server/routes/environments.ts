@@ -1,11 +1,12 @@
 import { createRoute, z } from '@hono/zod-openapi'
-import { and, desc, eq, gte, isNull, like, lt, lte, or } from 'drizzle-orm'
+import { and, desc, eq, gte, isNotNull, isNull, like, lt, lte, or } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import { recordAudit, requestId } from '../audit'
 import { requireAuth } from '../auth/session'
-import { environments, environmentVersions, mcpConnections, vaultCredentialVersions } from '../db/schema'
+import { connections, environments, environmentVersions, vaultCredentials, vaultCredentialVersions } from '../db/schema'
 import {
   AuthenticatedOperation,
+  CredentialRefSchema,
   createApiRouter,
   ErrorResponseSchema,
   listQuerySchema,
@@ -31,10 +32,6 @@ const PackageSchema = z.object({
 const VariableSchema = z.object({
   description: z.string().max(500).optional(),
   required: z.boolean().optional(),
-})
-const SecretRefSchema = z.object({
-  name: z.string().min(1).max(120),
-  ref: z.string().min(1).max(240),
 })
 const HostingModeSchema = EnvironmentHostingModeSchema
 const NetworkPolicySchema = EnvironmentNetworkPolicySchema
@@ -66,7 +63,9 @@ const EnvironmentSchema = z
     description: z.string().nullable().openapi({ example: 'Default Node.js environment.' }),
     packages: z.array(PackageSchema).openapi({ example: [{ name: 'tsx', version: 'latest' }] }),
     variables: z.record(z.string(), VariableSchema).openapi({ example: { NODE_ENV: { description: 'Runtime mode' } } }),
-    secretRefs: z.array(SecretRefSchema).openapi({ example: [{ name: 'NPM_TOKEN', ref: 'vault_secret_123' }] }),
+    credentialRefs: z.array(CredentialRefSchema).openapi({
+      example: [{ credentialId: 'cred_abc123', versionId: 'credver_abc123' }],
+    }),
     hostingMode: HostingModeSchema.openapi({ example: 'cloud' }),
     networkPolicy: NetworkPolicySchema.openapi({
       example: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
@@ -76,7 +75,6 @@ const EnvironmentSchema = z
     resourceLimits: JsonObjectSchema.openapi({ example: { memoryMb: 512 } }),
     runtimeConfig: JsonObjectSchema.openapi({ example: { image: 'node:24' } }),
     metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
-    status: z.enum(['active', 'archived']).openapi({ example: 'active' }),
     archivedAt: z.string().datetime().nullable().openapi({ example: null }),
     currentVersionId: z.string().nullable().openapi({ example: 'envver_abc123' }),
     version: z.number().int().openapi({ example: 1 }),
@@ -93,7 +91,9 @@ const EnvironmentVersionSchema = z
     version: z.number().int().openapi({ example: 1 }),
     packages: z.array(PackageSchema).openapi({ example: [{ name: 'tsx' }] }),
     variables: z.record(z.string(), VariableSchema).openapi({ example: { NODE_ENV: { required: true } } }),
-    secretRefs: z.array(SecretRefSchema).openapi({ example: [{ name: 'NPM_TOKEN', ref: 'vault_secret_123' }] }),
+    credentialRefs: z.array(CredentialRefSchema).openapi({
+      example: [{ credentialId: 'cred_abc123', versionId: 'credver_abc123' }],
+    }),
     hostingMode: HostingModeSchema.openapi({ example: 'cloud' }),
     networkPolicy: NetworkPolicySchema.openapi({
       example: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
@@ -110,7 +110,7 @@ const EnvironmentVersionSchema = z
 const EnvironmentPayloadSchema = z
   .object({
     name: z.string().min(1).max(120).openapi({ example: 'Node workspace' }),
-    description: z.string().max(1000).optional().openapi({ example: 'Default Node.js environment.' }),
+    description: z.string().max(1000).nullable().optional().openapi({ example: 'Default Node.js environment.' }),
     packages: z
       .array(PackageSchema)
       .max(200)
@@ -120,11 +120,11 @@ const EnvironmentPayloadSchema = z
       .record(z.string(), VariableSchema)
       .optional()
       .openapi({ example: { NODE_ENV: { required: true } } }),
-    secretRefs: z
-      .array(SecretRefSchema)
+    credentialRefs: z
+      .array(CredentialRefSchema)
       .max(100)
       .optional()
-      .openapi({ example: [{ name: 'NPM_TOKEN', ref: 'vault_secret_123' }] }),
+      .openapi({ example: [{ credentialId: 'cred_abc123', versionId: 'credver_abc123' }] }),
     hostingMode: HostingModeSchema.optional().openapi({ example: 'cloud' }),
     networkPolicy: NetworkPolicySchema.optional().openapi({
       example: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
@@ -139,7 +139,15 @@ const EnvironmentPayloadSchema = z
   })
   .strict()
 const CreateEnvironmentSchema = EnvironmentPayloadSchema.openapi('CreateEnvironmentRequest')
-const UpdateEnvironmentSchema = EnvironmentPayloadSchema.partial().openapi('UpdateEnvironmentRequest')
+const UpdateEnvironmentSchema = EnvironmentPayloadSchema.partial()
+  .extend({
+    archived: z.boolean().optional().openapi({
+      description: 'Lifecycle transition: true archives the environment, false unarchives it.',
+      example: false,
+    }),
+  })
+  .strict()
+  .openapi('UpdateEnvironmentRequest')
 
 const EnvironmentParamsSchema = z.object({
   environmentId: z.string().openapi({
@@ -147,7 +155,17 @@ const EnvironmentParamsSchema = z.object({
     example: 'env_abc123',
   }),
 })
-const ListQuerySchema = listQuerySchema(['active', 'archived'])
+const EnvironmentVersionParamsSchema = EnvironmentParamsSchema.extend({
+  version: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .openapi({
+      param: { name: 'version', in: 'path' },
+      example: 1,
+    }),
+})
+const ListQuerySchema = listQuerySchema()
 const EnvironmentListResponseSchema = listResponseSchema('EnvironmentListResponse', EnvironmentSchema)
 const EnvironmentVersionListResponseSchema = listResponseSchema(
   'EnvironmentVersionListResponse',
@@ -158,7 +176,7 @@ type EnvironmentRow = typeof environments.$inferSelect
 type EnvironmentVersionRow = typeof environmentVersions.$inferSelect
 type Package = z.infer<typeof PackageSchema>
 type Variable = z.infer<typeof VariableSchema>
-type SecretRef = z.infer<typeof SecretRefSchema>
+type CredentialRef = z.infer<typeof CredentialRefSchema>
 
 function newId(prefix: string) {
   return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
@@ -209,52 +227,46 @@ function hasSecretMaterial(value: unknown): boolean {
   })
 }
 
-function isExternalSecretReference(ref: string) {
-  return (
-    ref.startsWith('cloudflare-secret:') ||
-    ref.startsWith('wrangler_secret:') ||
-    ref.startsWith('vault://') ||
-    ref.startsWith('secret://')
-  )
-}
-
-async function validateSecretRefs(
+// Credential references must resolve to a live vault credential visible to the
+// caller. A pinned version must belong to that credential and still be usable
+// (active or superseded; revoked versions are rejected).
+async function validateCredentialRefs(
   db: ReturnType<typeof drizzle>,
   organizationId: string,
   projectId: string,
-  secretRefs: SecretRef[],
+  credentialRefs: CredentialRef[],
 ) {
-  for (const [index, secretRef] of secretRefs.entries()) {
-    const secretRefField = `secretRefs[${index}]`
-    if (!secretRef.ref.startsWith('vaultver_')) {
-      if (isExternalSecretReference(secretRef.ref)) {
-        continue
-      }
-      return { [secretRefField]: 'Secret reference must use an approved reference format.' }
-    }
-    if (secretRef.ref !== secretRef.ref.trim()) {
-      return { [secretRefField]: 'Secret reference must use an approved reference format.' }
-    }
-    if (secretRef.ref.length < 'vaultver_'.length + 1) {
-      return { [secretRefField]: 'Secret reference must use an approved reference format.' }
-    }
-    if (!/^vaultver_[A-Za-z0-9_]+$/.test(secretRef.ref)) {
-      return { [secretRefField]: 'Secret reference must use an approved reference format.' }
-    }
-    const version = await db
-      .select({ id: vaultCredentialVersions.id })
-      .from(vaultCredentialVersions)
+  for (const [index, ref] of credentialRefs.entries()) {
+    const field = `credentialRefs[${index}]`
+    const credential = await db
+      .select({ id: vaultCredentials.id, state: vaultCredentials.state })
+      .from(vaultCredentials)
       .where(
         and(
-          eq(vaultCredentialVersions.id, secretRef.ref),
-          eq(vaultCredentialVersions.organizationId, organizationId),
-          or(eq(vaultCredentialVersions.projectId, projectId), isNull(vaultCredentialVersions.projectId)),
-          or(eq(vaultCredentialVersions.status, 'active'), eq(vaultCredentialVersions.status, 'superseded')),
+          eq(vaultCredentials.id, ref.credentialId),
+          eq(vaultCredentials.organizationId, organizationId),
+          or(eq(vaultCredentials.projectId, projectId), isNull(vaultCredentials.projectId)),
         ),
       )
       .get()
-    if (!version) {
-      return { [secretRefField]: 'Secret reference is not an active credential version.' }
+    if (credential?.state !== 'active') {
+      return { [field]: 'Credential reference is not an active vault credential.' }
+    }
+    if (ref.versionId) {
+      const version = await db
+        .select({ id: vaultCredentialVersions.id })
+        .from(vaultCredentialVersions)
+        .where(
+          and(
+            eq(vaultCredentialVersions.id, ref.versionId),
+            eq(vaultCredentialVersions.credentialId, ref.credentialId),
+            or(eq(vaultCredentialVersions.state, 'active'), eq(vaultCredentialVersions.state, 'superseded')),
+          ),
+        )
+        .get()
+      if (!version) {
+        return { [field]: 'Credential version is not usable for this credential.' }
+      }
     }
   }
   return null
@@ -279,13 +291,13 @@ async function validateMcpPolicy(
       continue
     }
     const connection = await db
-      .select({ id: mcpConnections.id })
-      .from(mcpConnections)
+      .select({ id: connections.id })
+      .from(connections)
       .where(
         and(
-          eq(mcpConnections.projectId, projectId),
-          eq(mcpConnections.connectorId, connectorId),
-          eq(mcpConnections.status, 'connected'),
+          eq(connections.projectId, projectId),
+          eq(connections.connectorId, connectorId),
+          eq(connections.state, 'connected'),
         ),
       )
       .get()
@@ -325,7 +337,7 @@ function serializeVersion(row: EnvironmentVersionRow) {
     version: row.version,
     packages: parseJson<Package[]>(row.packages),
     variables: parseJson<Record<string, Variable>>(row.variables),
-    secretRefs: parseJson<SecretRef[]>(row.secretRefs),
+    credentialRefs: parseJson<CredentialRef[]>(row.credentialRefs),
     hostingMode: row.hostingMode as EnvironmentHostingMode,
     networkPolicy: normalizeNetworkPolicy(parseJson<unknown>(row.networkPolicy)),
     mcpPolicy: parseJson<Record<string, unknown>>(row.mcpPolicy),
@@ -345,7 +357,7 @@ function serializeEnvironment(row: EnvironmentRow, version: EnvironmentVersionRo
     description: row.description,
     packages: parseJson<Package[]>(row.packages),
     variables: parseJson<Record<string, Variable>>(row.variables),
-    secretRefs: parseJson<SecretRef[]>(row.secretRefs),
+    credentialRefs: parseJson<CredentialRef[]>(row.credentialRefs),
     hostingMode: row.hostingMode as EnvironmentHostingMode,
     networkPolicy: normalizeNetworkPolicy(parseJson<unknown>(row.networkPolicy)),
     mcpPolicy: parseJson<Record<string, unknown>>(row.mcpPolicy),
@@ -353,7 +365,6 @@ function serializeEnvironment(row: EnvironmentRow, version: EnvironmentVersionRo
     resourceLimits: parseJson<Record<string, unknown>>(row.resourceLimits),
     runtimeConfig: parseJson<Record<string, unknown>>(row.runtimeConfig),
     metadata: parseJson<Record<string, unknown>>(row.metadata),
-    status: row.status as 'active' | 'archived',
     archivedAt: row.archivedAt,
     currentVersionId: row.currentVersionId,
     version: version?.version ?? 0,
@@ -394,7 +405,7 @@ async function createVersion(
   values: {
     packages: Package[]
     variables: Record<string, Variable>
-    secretRefs: SecretRef[]
+    credentialRefs: CredentialRef[]
     hostingMode: EnvironmentHostingMode
     networkPolicy: NetworkPolicy
     mcpPolicy: Record<string, unknown>
@@ -419,7 +430,7 @@ async function createVersion(
     version: (latest?.version ?? 0) + 1,
     packages: stringify(values.packages),
     variables: stringify(values.variables),
-    secretRefs: stringify(values.secretRefs),
+    credentialRefs: stringify(values.credentialRefs),
     hostingMode: values.hostingMode,
     networkPolicy: stringify(values.networkPolicy),
     mcpPolicy: stringify(values.mcpPolicy),
@@ -487,6 +498,8 @@ const updateRoute = createRoute({
   operationId: 'updateEnvironment',
   tags: ['Environments'],
   summary: 'Update an environment',
+  description:
+    'Partial update. Lifecycle transitions use the archived flag: {archived: true} archives, {archived: false} unarchives. Field updates on an archived environment are rejected with 409.',
   ...AuthenticatedOperation,
   request: {
     params: EnvironmentParamsSchema,
@@ -496,23 +509,8 @@ const updateRoute = createRoute({
     200: { description: 'Updated environment', content: { 'application/json': { schema: EnvironmentSchema } } },
     400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    404: { description: 'Environment not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
     409: { description: 'Archived environment', content: { 'application/json': { schema: ErrorResponseSchema } } },
-    404: { description: 'Environment not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
-  },
-})
-
-const archiveRoute = createRoute({
-  method: 'delete',
-  path: '/{environmentId}',
-  operationId: 'archiveEnvironment',
-  tags: ['Environments'],
-  summary: 'Archive an environment',
-  ...AuthenticatedOperation,
-  request: { params: EnvironmentParamsSchema },
-  responses: {
-    204: { description: 'Environment archived' },
-    401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
-    404: { description: 'Environment not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
   },
 })
 
@@ -534,6 +532,25 @@ const versionsRoute = createRoute({
   },
 })
 
+const versionItemRoute = createRoute({
+  method: 'get',
+  path: '/{environmentId}/versions/{version}',
+  operationId: 'readEnvironmentVersion',
+  tags: ['Environments'],
+  summary: 'Read an environment version',
+  ...AuthenticatedOperation,
+  request: { params: EnvironmentVersionParamsSchema },
+  responses: {
+    200: { description: 'Environment version', content: { 'application/json': { schema: EnvironmentVersionSchema } } },
+    400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    404: {
+      description: 'Environment or version not found',
+      content: { 'application/json': { schema: ErrorResponseSchema } },
+    },
+  },
+})
+
 const routes = app
   .openapi(listRoute, async (c) => {
     const db = drizzle(c.env.DB)
@@ -542,26 +559,16 @@ const routes = app
       return auth
     }
 
-    const { includeArchived, status, search, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
+    const { archived, search, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
     let parsedCursor: ReturnType<typeof parseListCursor> | null = null
     try {
       parsedCursor = cursor ? parseListCursor(cursor) : null
     } catch {
-      return c.json(
-        {
-          error: {
-            type: 'validation_error',
-            message: 'Invalid list cursor',
-            details: { fields: { cursor: 'Cursor is invalid.' } },
-          },
-        },
-        400,
-      )
+      return c.json(domainValidation('Invalid list cursor', { cursor: 'Cursor is invalid.' }), 400)
     }
-    const statusFilter = status ?? (includeArchived === 'true' ? undefined : 'active')
     const filters = [
       eq(environments.projectId, auth.project.id),
-      statusFilter ? eq(environments.status, statusFilter) : undefined,
+      archived === 'true' ? isNotNull(environments.archivedAt) : isNull(environments.archivedAt),
       search ? like(environments.name, `%${search}%`) : undefined,
       createdFrom ? gte(environments.createdAt, createdFrom) : undefined,
       createdTo ? lte(environments.createdAt, createdTo) : undefined,
@@ -596,7 +603,7 @@ const routes = app
     const values = {
       packages: body.packages ?? [],
       variables: body.variables ?? {},
-      secretRefs: body.secretRefs ?? [],
+      credentialRefs: body.credentialRefs ?? [],
       hostingMode: body.hostingMode ?? 'cloud',
       networkPolicy: body.networkPolicy ?? { mode: 'unrestricted' },
       mcpPolicy: body.mcpPolicy ?? {},
@@ -606,7 +613,7 @@ const routes = app
       metadata: body.metadata ?? {},
     }
     const validation =
-      (await validateSecretRefs(db, auth.organization.id, auth.project.id, values.secretRefs)) ??
+      (await validateCredentialRefs(db, auth.organization.id, auth.project.id, values.credentialRefs)) ??
       (await validateMcpPolicy(db, auth.project.id, values.mcpPolicy)) ??
       validateSecretFreeObjects(values)
     if (validation) {
@@ -619,7 +626,7 @@ const routes = app
       description: body.description ?? null,
       packages: stringify(values.packages),
       variables: stringify(values.variables),
-      secretRefs: stringify(values.secretRefs),
+      credentialRefs: stringify(values.credentialRefs),
       hostingMode: values.hostingMode,
       networkPolicy: stringify(values.networkPolicy),
       mcpPolicy: stringify(values.mcpPolicy),
@@ -627,7 +634,6 @@ const routes = app
       resourceLimits: stringify(values.resourceLimits),
       runtimeConfig: stringify(values.runtimeConfig),
       metadata: stringify(values.metadata),
-      status: 'active',
       archivedAt: null,
       currentVersionId: null,
       createdAt: timestamp,
@@ -665,27 +671,54 @@ const routes = app
     if (!environment) {
       return c.json({ error: { type: 'not_found', message: 'Environment not found' } }, 404)
     }
-    if (environment.status === 'archived') {
-      return c.json({ error: { type: 'conflict', message: 'Archived environments cannot be updated' } }, 409)
+
+    const { archived, ...fields } = body
+    const hasFieldUpdates = Object.keys(fields).length > 0
+
+    if (environment.archivedAt) {
+      if (hasFieldUpdates) {
+        return c.json({ error: { type: 'conflict', message: 'Archived environments cannot be updated' } }, 409)
+      }
+      if (archived === false) {
+        const timestamp = now()
+        await db
+          .update(environments)
+          .set({ archivedAt: null, updatedAt: timestamp })
+          .where(and(eq(environments.id, environmentId), eq(environments.projectId, auth.project.id)))
+        await recordAudit(db, {
+          auth,
+          action: 'environment.unarchive',
+          resourceType: 'environment',
+          resourceId: environmentId,
+          outcome: 'success',
+          requestId: requestId(c),
+          before: { archivedAt: environment.archivedAt },
+          after: { archivedAt: null },
+        })
+        const unarchived = { ...environment, archivedAt: null, updatedAt: timestamp }
+        return c.json(serializeEnvironment(unarchived, await currentVersion(db, unarchived)), 200)
+      }
+      // archived: true (idempotent) or an empty patch leaves the environment as is.
+      return c.json(serializeEnvironment(environment, await currentVersion(db, environment)), 200)
     }
 
     const next = {
-      name: body.name ?? environment.name,
-      description: body.description ?? environment.description,
-      packages: body.packages ?? parseJson<Package[]>(environment.packages),
-      variables: body.variables ?? parseJson<Record<string, Variable>>(environment.variables),
-      secretRefs: body.secretRefs ?? parseJson<SecretRef[]>(environment.secretRefs),
-      hostingMode: body.hostingMode ?? (environment.hostingMode as EnvironmentHostingMode),
-      networkPolicy: body.networkPolicy ?? normalizeNetworkPolicy(parseJson<unknown>(environment.networkPolicy)),
-      mcpPolicy: body.mcpPolicy ?? parseJson<Record<string, unknown>>(environment.mcpPolicy),
+      name: fields.name ?? environment.name,
+      description: fields.description !== undefined ? fields.description : environment.description,
+      packages: fields.packages ?? parseJson<Package[]>(environment.packages),
+      variables: fields.variables ?? parseJson<Record<string, Variable>>(environment.variables),
+      credentialRefs: fields.credentialRefs ?? parseJson<CredentialRef[]>(environment.credentialRefs),
+      hostingMode: fields.hostingMode ?? (environment.hostingMode as EnvironmentHostingMode),
+      networkPolicy: fields.networkPolicy ?? normalizeNetworkPolicy(parseJson<unknown>(environment.networkPolicy)),
+      mcpPolicy: fields.mcpPolicy ?? parseJson<Record<string, unknown>>(environment.mcpPolicy),
       packageManagerPolicy:
-        body.packageManagerPolicy ?? parseJson<Record<string, unknown>>(environment.packageManagerPolicy),
-      resourceLimits: body.resourceLimits ?? parseJson<Record<string, unknown>>(environment.resourceLimits),
-      runtimeConfig: body.runtimeConfig ?? parseJson<Record<string, unknown>>(environment.runtimeConfig),
-      metadata: body.metadata ?? parseJson<Record<string, unknown>>(environment.metadata),
+        fields.packageManagerPolicy ?? parseJson<Record<string, unknown>>(environment.packageManagerPolicy),
+      resourceLimits: fields.resourceLimits ?? parseJson<Record<string, unknown>>(environment.resourceLimits),
+      runtimeConfig: fields.runtimeConfig ?? parseJson<Record<string, unknown>>(environment.runtimeConfig),
+      metadata: fields.metadata ?? parseJson<Record<string, unknown>>(environment.metadata),
     }
     const validation =
-      (await validateSecretRefs(db, auth.organization.id, auth.project.id, next.secretRefs)) ??
+      (await validateCredentialRefs(db, auth.organization.id, auth.project.id, next.credentialRefs)) ??
       (await validateMcpPolicy(db, auth.project.id, next.mcpPolicy)) ??
       validateSecretFreeObjects(next)
     if (validation) {
@@ -693,24 +726,25 @@ const routes = app
     }
     const timestamp = now()
     const runtimeChanged =
-      body.packages !== undefined ||
-      body.variables !== undefined ||
-      body.secretRefs !== undefined ||
-      body.hostingMode !== undefined ||
-      body.networkPolicy !== undefined ||
-      body.mcpPolicy !== undefined ||
-      body.packageManagerPolicy !== undefined ||
-      body.resourceLimits !== undefined ||
-      body.runtimeConfig !== undefined ||
-      body.metadata !== undefined
+      fields.packages !== undefined ||
+      fields.variables !== undefined ||
+      fields.credentialRefs !== undefined ||
+      fields.hostingMode !== undefined ||
+      fields.networkPolicy !== undefined ||
+      fields.mcpPolicy !== undefined ||
+      fields.packageManagerPolicy !== undefined ||
+      fields.resourceLimits !== undefined ||
+      fields.runtimeConfig !== undefined ||
+      fields.metadata !== undefined
     const version = runtimeChanged
       ? await createVersion(db, environment, { ...next, createdAt: timestamp })
       : await currentVersion(db, environment)
+    const archivedAt = archived === true ? timestamp : environment.archivedAt
     const updated = {
       ...next,
       packages: stringify(next.packages),
       variables: stringify(next.variables),
-      secretRefs: stringify(next.secretRefs),
+      credentialRefs: stringify(next.credentialRefs),
       hostingMode: next.hostingMode,
       networkPolicy: stringify(next.networkPolicy),
       mcpPolicy: stringify(next.mcpPolicy),
@@ -718,6 +752,7 @@ const routes = app
       resourceLimits: stringify(next.resourceLimits),
       runtimeConfig: stringify(next.runtimeConfig),
       metadata: stringify(next.metadata),
+      archivedAt,
       currentVersionId: version?.id ?? environment.currentVersionId,
       updatedAt: timestamp,
     }
@@ -725,37 +760,19 @@ const routes = app
       .update(environments)
       .set(updated)
       .where(and(eq(environments.id, environmentId), eq(environments.projectId, auth.project.id)))
+    if (archived === true) {
+      await recordAudit(db, {
+        auth,
+        action: 'environment.archive',
+        resourceType: 'environment',
+        resourceId: environmentId,
+        outcome: 'success',
+        requestId: requestId(c),
+        before: serializeEnvironment(environment, await currentVersion(db, environment)),
+        after: { archivedAt: timestamp },
+      })
+    }
     return c.json(serializeEnvironment({ ...environment, ...updated }, version), 200)
-  })
-  .openapi(archiveRoute, async (c) => {
-    const { environmentId } = c.req.valid('param')
-    const db = drizzle(c.env.DB)
-    const auth = await requireAuth(c, db)
-    if (auth instanceof Response) {
-      return auth
-    }
-
-    const environment = await findEnvironment(db, environmentId, auth.project.id)
-    if (!environment) {
-      return c.json({ error: { type: 'not_found', message: 'Environment not found' } }, 404)
-    }
-
-    const timestamp = now()
-    await db
-      .update(environments)
-      .set({ status: 'archived', archivedAt: timestamp, updatedAt: timestamp })
-      .where(and(eq(environments.id, environmentId), eq(environments.projectId, auth.project.id)))
-    await recordAudit(db, {
-      auth,
-      action: 'environment.archive',
-      resourceType: 'environment',
-      resourceId: environmentId,
-      outcome: 'success',
-      requestId: requestId(c),
-      before: serializeEnvironment(environment, await currentVersion(db, environment)),
-      after: { status: 'archived', archivedAt: timestamp },
-    })
-    return c.body(null, 204)
   })
   .openapi(versionsRoute, async (c) => {
     const { environmentId } = c.req.valid('param')
@@ -780,16 +797,39 @@ const routes = app
     return c.json(
       {
         data: rows.map(serializeVersion),
-        pagination: {
-          limit: rows.length,
-          nextCursor: null,
-          hasMore: false,
-          firstId: rows[0]?.id ?? null,
-          lastId: rows.at(-1)?.id ?? null,
-        },
+        pagination: { limit: rows.length, nextCursor: null, hasMore: false },
       },
       200,
     )
+  })
+  .openapi(versionItemRoute, async (c) => {
+    const { environmentId, version } = c.req.valid('param')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+
+    const environment = await findEnvironment(db, environmentId, auth.project.id)
+    if (!environment) {
+      return c.json({ error: { type: 'not_found', message: 'Environment not found' } }, 404)
+    }
+
+    const row = await db
+      .select()
+      .from(environmentVersions)
+      .where(
+        and(
+          eq(environmentVersions.environmentId, environmentId),
+          eq(environmentVersions.projectId, auth.project.id),
+          eq(environmentVersions.version, version),
+        ),
+      )
+      .get()
+    if (!row) {
+      return c.json({ error: { type: 'not_found', message: 'Environment version not found' } }, 404)
+    }
+    return c.json(serializeVersion(row), 200)
   })
 
 export default routes

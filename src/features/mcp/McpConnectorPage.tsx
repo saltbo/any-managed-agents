@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { ConfirmAction, DetailSection, EmptyState, Meta, MetaGrid, PageHeader, StatusBadge } from '@/console/components'
-import { ApiError, api, type McpConnector } from '@/lib/api'
+import { ApiError, api, type Connector } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 import { connectorDisabledReason } from './McpView'
 import { useMcpActions } from './use-mcp-actions'
@@ -11,18 +11,18 @@ export function McpConnectorPage() {
   const { connectorId } = useParams()
   const actions = useMcpActions()
   const connectorQuery = useQuery({
-    queryKey: queryKeys.mcp.connector(connectorId ?? ''),
-    queryFn: () => api.readMcpConnector(connectorId as string),
+    queryKey: queryKeys.connectors.detail(connectorId ?? ''),
+    queryFn: () => api.readConnector(connectorId as string),
     enabled: Boolean(connectorId),
   })
   const connectionsQuery = useQuery({
-    queryKey: queryKeys.mcp.connections,
-    queryFn: api.listMcpConnections,
+    queryKey: queryKeys.connections.list,
+    queryFn: api.listConnections,
   })
   const connector = connectorQuery.data ?? null
   const connection =
     connectionsQuery.data?.data.find(
-      (candidate) => candidate.connectorId === connectorId && candidate.status !== 'disconnected',
+      (candidate) => candidate.connectorId === connectorId && candidate.state !== 'disconnected',
     ) ?? null
 
   if (connectorQuery.error instanceof ApiError && connectorQuery.error.status === 404) {
@@ -56,18 +56,13 @@ export function McpConnectorPage() {
       <PageHeader
         eyebrow="MCP connector"
         title={connector.name}
-        titleAccessory={
-          <>
-            <StatusBadge value={connector.policyStatus} detail={disabledReason} />
-            <StatusBadge value={connector.connectionStatus} />
-          </>
-        }
+        titleAccessory={<StatusBadge value={connector.availability} detail={disabledReason} />}
         description={connector.description}
         actions={
           connection ? (
             <ConfirmAction
               title="Disconnect MCP connector?"
-              description={`Disconnect ${connector.connectorId}. Runtime tool calls through this connection will stop.`}
+              description={`Disconnect ${connector.id}. Runtime tool calls through this connection will stop.`}
               confirmLabel="Disconnect"
               destructive
               onConfirm={() => actions.disconnectMcpConnection(connection.id)}
@@ -80,7 +75,7 @@ export function McpConnectorPage() {
             <Button
               type="button"
               disabled={Boolean(disabledReason) || actions.connectMcpConnectorPending}
-              onClick={() => actions.connectMcpConnector({ connectorId: connector.connectorId })}
+              onClick={() => actions.connectMcpConnector({ connectorId: connector.id })}
             >
               Connect
             </Button>
@@ -88,14 +83,14 @@ export function McpConnectorPage() {
         }
       />
       {disabledReason ? <p className="text-sm text-destructive">{disabledReason}</p> : null}
-      <DetailSection title="Connector profile" description={connector.connectorId}>
+      <DetailSection title="Connector profile" description={connector.id}>
         <MetaGrid>
           <Meta label="Category" value={connector.category} />
           <Meta label="Trust level" value={connector.trustLevel} />
           <Meta label="Capabilities" value={connector.capabilities.join(', ') || 'None'} />
           <Meta label="Supported auth modes" value={connector.supportedAuthModes.join(', ') || 'None'} />
           <Meta label="Required credential type" value={requiredCredentialType(connector)} />
-          <Meta label="Catalog status" value={connector.status} />
+          <Meta label="Catalog status" value={connector.availability} />
         </MetaGrid>
       </DetailSection>
       <DetailSection
@@ -127,14 +122,14 @@ export function McpConnectorPage() {
   )
 }
 
-function requiredCredentialType(connector: McpConnector) {
+function requiredCredentialType(connector: Connector) {
   if (!connector.supportedAuthModes.includes('vault_credential')) {
     return 'None'
   }
   return connector.setupRequirements.join(', ') || 'vault_credential'
 }
 
-function setupInstructions(connector: McpConnector) {
+function setupInstructions(connector: Connector) {
   const instructions: string[] = []
   if (connector.supportedAuthModes.includes('vault_credential')) {
     for (const requirement of connector.setupRequirements) {

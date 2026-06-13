@@ -6,9 +6,38 @@ import { decryptSecretValue } from '../vaultCrypto'
 
 type Db = ReturnType<typeof drizzle>
 
-export type RuntimeSecretEnvItem = { name?: unknown; ref?: unknown }
+// Vault credential reference: the only way secrets are referenced anywhere
+// (docs/api-v1-design.md §1.4). No versionId pins the credential's active
+// version.
+export interface RuntimeCredentialRef {
+  credentialId: string
+  versionId?: string
+}
 
-// Resolves vault credential-version refs into the runtime secret env. Both
+export interface RuntimeSecretEnvEntry {
+  name: string
+  credentialRef: RuntimeCredentialRef
+}
+
+function parseSecretEnvEntry(item: unknown): RuntimeSecretEnvEntry | null {
+  if (!item || typeof item !== 'object') {
+    return null
+  }
+  const { name, credentialRef } = item as { name?: unknown; credentialRef?: unknown }
+  if (typeof name !== 'string' || !credentialRef || typeof credentialRef !== 'object') {
+    return null
+  }
+  const { credentialId, versionId } = credentialRef as { credentialId?: unknown; versionId?: unknown }
+  if (typeof credentialId !== 'string') {
+    return null
+  }
+  return {
+    name,
+    credentialRef: { credentialId, ...(typeof versionId === 'string' ? { versionId } : {}) },
+  }
+}
+
+// Resolves vault credential references into the runtime secret env. Both
 // dispatch paths use this seam: self-hosted lease materialization and cloud
 // session startup. Resolution semantics per provider:
 // - ama-managed and cloudflare-secrets versions decrypt the stored ciphertext.
@@ -28,50 +57,66 @@ export async function resolveRuntimeSecretEnv(
     return resolved
   }
   for (const item of items) {
-    if (!item || typeof item !== 'object') {
+    const entry = parseSecretEnvEntry(item)
+    if (!entry) {
       continue
     }
-    const { name, ref } = item as RuntimeSecretEnvItem
-    if (typeof name !== 'string' || typeof ref !== 'string') {
-      continue
+    const { credentialId } = entry.credentialRef
+    const credential = await db
+      .select({ state: vaultCredentials.state, activeVersionId: vaultCredentials.activeVersionId })
+      .from(vaultCredentials)
+      .where(
+        and(
+          eq(vaultCredentials.id, credentialId),
+          eq(vaultCredentials.organizationId, scope.organizationId),
+          or(eq(vaultCredentials.projectId, scope.projectId), isNull(vaultCredentials.projectId)),
+        ),
+      )
+      .get()
+    if (!credential) {
+      throw new Error(`Runtime credential reference ${credentialId} cannot be resolved`)
+    }
+    if (credential.state === 'revoked') {
+      throw new Error(`Runtime credential reference ${credentialId} is revoked by vault policy`)
+    }
+    const versionId = entry.credentialRef.versionId ?? credential.activeVersionId
+    if (!versionId) {
+      throw new Error(`Runtime credential reference ${credentialId} cannot be resolved`)
     }
     const version = await db
       .select({
-        status: vaultCredentialVersions.status,
-        credentialStatus: vaultCredentials.status,
+        state: vaultCredentialVersions.state,
         metadata: vaultCredentialVersions.metadata,
         externalVaultPath: vaultCredentialVersions.externalVaultPath,
         secretRef: vaultCredentialVersions.secretRef,
       })
       .from(vaultCredentialVersions)
-      .innerJoin(vaultCredentials, eq(vaultCredentialVersions.credentialId, vaultCredentials.id))
       .where(
         and(
-          eq(vaultCredentialVersions.id, ref),
+          eq(vaultCredentialVersions.id, versionId),
+          eq(vaultCredentialVersions.credentialId, credentialId),
           eq(vaultCredentialVersions.organizationId, scope.organizationId),
           or(eq(vaultCredentialVersions.projectId, scope.projectId), isNull(vaultCredentialVersions.projectId)),
         ),
       )
       .get()
+    // Deleted versions are physically removed, so a missing row is unresolvable.
     if (!version) {
-      throw new Error(`Runtime credential reference ${ref} cannot be resolved`)
+      throw new Error(`Runtime credential reference ${credentialId} cannot be resolved`)
     }
-    if (version.status === 'revoked' || version.credentialStatus === 'revoked') {
-      throw new Error(`Runtime credential reference ${ref} is revoked by vault policy`)
-    }
-    if (version.status === 'deleted') {
-      throw new Error(`Runtime credential reference ${ref} cannot be resolved`)
+    if (version.state === 'revoked') {
+      throw new Error(`Runtime credential reference ${credentialId} is revoked by vault policy`)
     }
     if (version.externalVaultPath) {
-      resolved[name] = version.secretRef
+      resolved[entry.name] = version.secretRef
       continue
     }
     const metadata = parseMetadata(version.metadata)
     const value = await decryptSecretValue(env, metadata?.encryptedSecretValue)
     if (typeof value !== 'string') {
-      throw new Error(`Runtime credential reference ${ref} cannot be resolved`)
+      throw new Error(`Runtime credential reference ${credentialId} cannot be resolved`)
     }
-    resolved[name] = value
+    resolved[entry.name] = value
   }
   return resolved
 }

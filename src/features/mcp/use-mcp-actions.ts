@@ -1,13 +1,13 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { api, type McpConnectInput } from '@/lib/api'
+import { api, type CreateConnectionInput } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 
 export function useMcpActions() {
   const queryClient = useQueryClient()
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: queryKeys.mcp.all })
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: queryKeys.connections.all })
   const disconnectMcpConnection = useMutation({
-    mutationFn: api.disconnectMcpConnection,
+    mutationFn: api.disconnectConnection,
     onSuccess: () => {
       toast.success('MCP connection disconnected')
       void invalidate()
@@ -15,7 +15,7 @@ export function useMcpActions() {
     onError: (error) => toast.error(error instanceof Error ? error.message : String(error)),
   })
   const connectMcpConnector = useMutation({
-    mutationFn: api.connectMcpConnector,
+    mutationFn: api.createConnection,
     onSuccess: () => {
       toast.success('MCP connector connected')
       void invalidate()
@@ -26,7 +26,7 @@ export function useMcpActions() {
   return {
     disconnectMcpConnection: (id: string) => disconnectMcpConnection.mutate(id),
     disconnectMcpConnectionPending: disconnectMcpConnection.isPending,
-    connectMcpConnector: (input: McpConnectInput) => connectMcpConnector.mutate(input),
+    connectMcpConnector: (input: CreateConnectionInput) => connectMcpConnector.mutate(input),
     connectMcpConnectorPending: connectMcpConnector.isPending,
   }
 }

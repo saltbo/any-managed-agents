@@ -21,7 +21,7 @@ export function VaultDetailPage() {
   })
   const credentialsQuery = useQuery({
     queryKey: queryKeys.vaults.credentials(vaultId ?? '', true),
-    queryFn: () => api.listVaultCredentials(vaultId as string, { includeArchived: true }),
+    queryFn: () => api.listVaultCredentials(vaultId as string),
     enabled: Boolean(vaultId),
   })
   const auditQuery = useQuery({

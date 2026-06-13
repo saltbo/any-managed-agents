@@ -11,7 +11,7 @@ import {
 } from './shared-helpers'
 
 const WORKERS_AI_MODEL = '@cf/moonshotai/kimi-k2.6'
-const ACCESS_RULES_API = '/api/governance/provider-access-rules'
+const ACCESS_RULES_API = '/api/v1/access-rules'
 
 type PolicyUiWorld = StepsWorld & {
   validationMessageSeen?: boolean
@@ -72,11 +72,10 @@ Then('the saved policy affects later sessions', async function (this: PolicyUiWo
   assert.ok(state, 'e2e state must exist')
   const agent = await createAgent(state, {
     name: `${state.runId} policy ui agent`,
-    provider: 'workers-ai',
     model: WORKERS_AI_MODEL,
   })
   const environment = await createEnvironment(state, { name: `${state.runId} policy ui env` })
-  const response = await apiResponse(state.page.request, '/api/sessions', {
+  const response = await apiResponse(state.page.request, '/api/v1/sessions', {
     method: 'POST',
     data: {
       agentId: agent.id,

@@ -37,7 +37,7 @@ func TestRunOnceDispatchesCopilotRuntimeThroughAdapter(t *testing.T) {
 	if runtimeAdapter.request.RuntimeConfig["approvalMode"] != "auto" {
 		t.Fatalf("expected runtime config to reach adapter, got %#v", runtimeAdapter.request.RuntimeConfig)
 	}
-	if len(client.updates) == 0 || client.updates[len(client.updates)-1].Status != "completed" {
+	if len(client.updates) == 0 || client.updates[len(client.updates)-1].State != "completed" {
 		t.Fatalf("expected completed copilot lease update, got %#v", client.updates)
 	}
 	if client.updates[len(client.updates)-1].Result["providerThreadId"] != "copilot_thread_1" {
@@ -94,7 +94,7 @@ func TestRunOnceFailsCopilotLeaseOnRuntimeAdapterFailure(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "copilot SDK bridge failed") {
 		t.Fatalf("expected copilot failure to be returned, got %v", err)
 	}
-	if len(client.updates) == 0 || client.updates[len(client.updates)-1].Status != "failed" {
+	if len(client.updates) == 0 || client.updates[len(client.updates)-1].State != "failed" {
 		t.Fatalf("expected failed copilot lease update, got %#v", client.updates)
 	}
 	serializedEvents := mustJSON(t, channel.writtenMessages())
@@ -119,7 +119,7 @@ func TestCopilotSessionStartedRejectionFailsBeforeRuntimeAdapter(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "start rejected") {
 		t.Fatalf("expected session started channel rejection, got %v", err)
 	}
-	if len(client.updates) != 1 || client.updates[0].Status != "failed" {
+	if len(client.updates) != 1 || client.updates[0].State != "failed" {
 		t.Fatalf("expected failed lease update, got %#v", client.updates)
 	}
 	if len(channel.writtenEvents()) != 1 || channel.writtenEvents()[0] != "runner.session.started" {
@@ -130,14 +130,14 @@ func TestCopilotSessionStartedRejectionFailsBeforeRuntimeAdapter(t *testing.T) {
 	}
 }
 
-func copilotSessionStartLease(prompt string) *ama.RunnerWorkLease {
+func copilotSessionStartLease(prompt string) *fakeWork {
 	lease := sessionStartLease()
-	lease.WorkItem.Payload["runtime"] = "copilot"
-	lease.WorkItem.Payload["runtimeConfig"] = map[string]any{"approvalMode": "auto"}
-	lease.WorkItem.Payload["provider"] = "provider_copilot"
-	lease.WorkItem.Payload["model"] = "copilot-cli"
-	lease.WorkItem.Payload["runtimeDriver"] = "copilot-self-hosted"
-	lease.WorkItem.Payload["requiredRunnerCapability"] = "runtime-provider-model:copilot:*:copilot-cli"
-	lease.WorkItem.Payload["initialPrompt"] = prompt
+	lease.workItem.Payload["runtime"] = "copilot"
+	lease.workItem.Payload["runtimeConfig"] = map[string]any{"approvalMode": "auto"}
+	lease.workItem.Payload["provider"] = "provider_copilot"
+	lease.workItem.Payload["model"] = "copilot-cli"
+	lease.workItem.Payload["runtimeDriver"] = "copilot-self-hosted"
+	lease.workItem.Payload["requiredRunnerCapability"] = "runtime-provider-model:copilot:*:copilot-cli"
+	lease.workItem.Payload["initialPrompt"] = prompt
 	return lease
 }

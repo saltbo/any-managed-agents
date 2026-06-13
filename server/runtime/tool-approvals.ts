@@ -155,7 +155,7 @@ export function createToolApprovalGate(values: {
       // cooperatively on the next liveness check.
       await db
         .update(sessions)
-        .set({ status: 'idle', statusReason: 'requires-action', updatedAt: new Date().toISOString() })
+        .set({ state: 'idle', stateReason: 'requires-action', updatedAt: new Date().toISOString() })
         .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, auth.project.id)))
       return { allowed: false, reason: 'Tool call requires user approval' }
     },

@@ -51,7 +51,7 @@ export function ProvidersView({
             <TableCell>
               <div className="flex gap-1">
                 <StatusBadge
-                  value={provider.status}
+                  value={provider.enabled ? 'enabled' : 'disabled'}
                   detail={provider.lastError ? stringifyJson(provider.lastError) : null}
                 />
                 {provider.isDefault ? <StatusBadge value="default" /> : null}
@@ -60,7 +60,7 @@ export function ProvidersView({
             <TableCell>
               <StatusBadge value={provider.credentialStatus} />
             </TableCell>
-            <TableCell>{provider.modelCatalogStatus}</TableCell>
+            <TableCell>{provider.modelCatalogState}</TableCell>
             <TableCell className="max-w-64 truncate">{provider.baseUrl ?? 'Platform default'}</TableCell>
             <TableCell>{formatDate(provider.updatedAt)}</TableCell>
             <TableCell>

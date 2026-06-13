@@ -28,7 +28,7 @@ When('the client requests events from the API', async function (this: StepsWorld
   assert.ok(state, 'e2e state must exist')
   state.events = await apiJson<ListResponse<Json>>(
     state.page.request,
-    `/api/sessions/${state.latestSession?.id}/events`,
+    `/api/v1/sessions/${state.latestSession?.id}/events`,
   )
 })
 

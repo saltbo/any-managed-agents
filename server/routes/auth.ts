@@ -7,9 +7,11 @@ import {
   requireOidcConfig,
   upsertProjectForClaims,
 } from '../auth/oidc'
-import { createSessionCookie, sessionCookieHeader } from '../auth/session'
+import { createSessionCookie, requireAuth, SESSION_COOKIE_NAME, sessionCookieHeader } from '../auth/session'
 import { errorResponse } from '../errors'
-import { createApiRouter, ErrorResponseSchema } from '../openapi'
+import { AuthenticatedOperation, createApiRouter, ErrorResponseSchema } from '../openapi'
+
+// Mounted at /api/v1/auth (docs/api-v1-design.md §2 Auth).
 
 const app = createApiRouter()
 
@@ -17,7 +19,33 @@ const app = createApiRouter()
 // Schemas
 // ──────────────────────────────────────────────────────────────────────────────
 
-const CreateSessionRequestSchema = z
+const AuthMethodSchema = z
+  .object({
+    type: z.literal('oidc').openapi({ example: 'oidc' }),
+    issuer: z.string().url().openapi({ example: 'https://id.example.com/api/auth' }),
+    clientId: z.string().openapi({ example: 'client_abc123' }),
+  })
+  .openapi('AuthMethod')
+
+const AuthConfigSchema = z
+  .object({
+    methods: z.array(AuthMethodSchema),
+  })
+  .openapi('AuthConfig')
+
+const AuthConfigQuerySchema = z.object({
+  organization: z
+    .string()
+    .min(1)
+    .max(240)
+    .optional()
+    .openapi({
+      param: { name: 'organization', in: 'query' },
+      example: 'example-org',
+    }),
+})
+
+const CreateAuthSessionRequestSchema = z
   .object({
     accessToken: z.string().min(1).openapi({ example: 'eyJhbGciOiJFZERTQSJ9...' }),
   })
@@ -45,7 +73,7 @@ const AuthProjectSchema = z
   })
   .openapi('AuthProject')
 
-const CreateSessionResponseSchema = z
+const AuthSessionSchema = z
   .object({
     user: AuthUserSchema,
     organization: AuthOrganizationSchema,
@@ -53,52 +81,43 @@ const CreateSessionResponseSchema = z
   })
   .openapi('AuthSession')
 
-const LoginOptionSchema = z
-  .object({
-    type: z.literal('oidc').openapi({ example: 'oidc' }),
-    issuer: z.string().url().openapi({ example: 'https://id.example.com/api/auth' }),
-    clientId: z.string().openapi({ example: 'client_abc123' }),
-  })
-  .openapi('LoginOption')
-
-const LoginOptionsResponseSchema = z
-  .object({
-    methods: z.array(LoginOptionSchema),
-  })
-  .openapi('LoginOptionsResponse')
-
-const LoginOptionsQuerySchema = z.object({
-  organization: z
-    .string()
-    .min(1)
-    .max(240)
-    .optional()
-    .openapi({
-      param: { name: 'organization', in: 'query' },
-      example: 'example-org',
-    }),
-})
-
 // ──────────────────────────────────────────────────────────────────────────────
 // Route definitions
 // ──────────────────────────────────────────────────────────────────────────────
 
-const createSessionRoute = createRoute({
+const readAuthConfigRoute = createRoute({
+  method: 'get',
+  path: '/config',
+  operationId: 'readAuthConfig',
+  tags: ['Auth'],
+  summary: 'Discover available sign-in methods for an organization',
+  request: {
+    query: AuthConfigQuerySchema,
+  },
+  responses: {
+    200: {
+      description: 'Available sign-in methods',
+      content: { 'application/json': { schema: AuthConfigSchema } },
+    },
+  },
+})
+
+const createAuthSessionRoute = createRoute({
   method: 'post',
-  path: '/session',
+  path: '/sessions',
   operationId: 'createAuthSession',
   tags: ['Auth'],
   summary: 'Complete OIDC sign-in and create an httpOnly session cookie',
   request: {
     body: {
       required: true,
-      content: { 'application/json': { schema: CreateSessionRequestSchema } },
+      content: { 'application/json': { schema: CreateAuthSessionRequestSchema } },
     },
   },
   responses: {
-    200: {
+    201: {
       description: 'Session created. Sets an httpOnly session cookie.',
-      content: { 'application/json': { schema: CreateSessionResponseSchema } },
+      content: { 'application/json': { schema: AuthSessionSchema } },
     },
     401: {
       description: 'Invalid or expired OIDC token',
@@ -111,20 +130,33 @@ const createSessionRoute = createRoute({
   },
 })
 
-const getLoginOptionsRoute = createRoute({
+const readCurrentAuthSessionRoute = createRoute({
   method: 'get',
-  path: '/login-options',
-  operationId: 'getLoginOptions',
+  path: '/sessions/current',
+  operationId: 'readCurrentAuthSession',
   tags: ['Auth'],
-  summary: 'Discover available login methods for an organization',
-  request: {
-    query: LoginOptionsQuerySchema,
-  },
+  summary: 'Read the authenticated session context',
+  ...AuthenticatedOperation,
   responses: {
     200: {
-      description: 'Available login methods for the organization',
-      content: { 'application/json': { schema: LoginOptionsResponseSchema } },
+      description: 'Current session context',
+      content: { 'application/json': { schema: AuthSessionSchema } },
     },
+    401: {
+      description: 'Authentication required',
+      content: { 'application/json': { schema: ErrorResponseSchema } },
+    },
+  },
+})
+
+const deleteCurrentAuthSessionRoute = createRoute({
+  method: 'delete',
+  path: '/sessions/current',
+  operationId: 'deleteCurrentAuthSession',
+  tags: ['Auth'],
+  summary: 'Sign out and clear the session cookie',
+  responses: {
+    204: { description: 'Session cleared. Expires the httpOnly session cookie.' },
   },
 })
 
@@ -132,8 +164,23 @@ const getLoginOptionsRoute = createRoute({
 // Handlers
 // ──────────────────────────────────────────────────────────────────────────────
 
+function clearedSessionCookieHeader(secure: boolean): string {
+  const secureFlag = secure ? '; Secure' : ''
+  return `${SESSION_COOKIE_NAME}=; HttpOnly; SameSite=Lax; Path=/${secureFlag}; Max-Age=0`
+}
+
 const routes = app
-  .openapi(createSessionRoute, async (c) => {
+  .openapi(readAuthConfigRoute, (c) => {
+    let methods: Array<{ type: 'oidc'; issuer: string; clientId: string }> = []
+    try {
+      const { issuer, clientId } = requireOidcConfig(c.env)
+      methods = [{ type: 'oidc' as const, issuer, clientId }]
+    } catch {
+      methods = []
+    }
+    return c.json({ methods }, 200)
+  })
+  .openapi(createAuthSessionRoute, async (c) => {
     // Reject cross-origin token submissions when an origin allowlist is configured.
     const requestOrigin = c.req.header('origin')
     const allowedOrigins = c.env.AMA_ALLOWED_ORIGINS?.split(',').map((o) => o.trim()) ?? []
@@ -181,18 +228,41 @@ const routes = app
           name: project.name,
         },
       },
+      201,
+    )
+  })
+  .openapi(readCurrentAuthSessionRoute, async (c) => {
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+
+    return c.json(
+      {
+        user: {
+          id: auth.user.id,
+          email: auth.user.email,
+          name: auth.user.name,
+        },
+        organization: {
+          id: auth.organization.id,
+          name: auth.organization.name,
+        },
+        project: {
+          id: auth.project.id,
+          name: auth.project.name,
+        },
+      },
       200,
     )
   })
-  .openapi(getLoginOptionsRoute, (c) => {
-    let methods: Array<{ type: 'oidc'; issuer: string; clientId: string }> = []
-    try {
-      const { issuer, clientId } = requireOidcConfig(c.env)
-      methods = [{ type: 'oidc' as const, issuer, clientId }]
-    } catch {
-      methods = []
-    }
-    return c.json({ methods }, 200)
+  .openapi(deleteCurrentAuthSessionRoute, (c) => {
+    // Idempotent sign-out: always expire the cookie, even when the session is
+    // already gone, so stale clients can recover.
+    const isSecure = new URL(c.req.url).protocol === 'https:'
+    c.header('Set-Cookie', clearedSessionCookieHeader(isSecure))
+    return c.body(null, 204)
   })
 
 export default routes

@@ -17,22 +17,30 @@ import {
   policyBlocksSandboxOperation,
 } from './policy'
 import { redactSensitiveValue } from './redaction'
+import accessRules from './routes/access-rules'
 import agents from './routes/agents'
 import audit from './routes/audit'
 import auth from './routes/auth'
+import budgets from './routes/budgets'
+import connections from './routes/connections'
+import connectors from './routes/connectors'
 import e2e from './routes/e2e'
+import effectivePolicy from './routes/effective-policy'
 import environments from './routes/environments'
-import governance from './routes/governance'
+import federatedTenants from './routes/federated-tenants'
 import health from './routes/health'
-import mcp from './routes/mcp'
+import leases from './routes/leases'
+import policies from './routes/policies'
 import projects from './routes/projects'
 import providers from './routes/providers'
 import runners, { dispatchRunnerSessionCommand, hasAcceptedRunnerSessionChannel } from './routes/runners'
 import runtimeAi from './routes/runtime-ai'
-import schedules from './routes/schedules'
 import sessionRoutes from './routes/sessions'
-import usage from './routes/usage'
+import triggers from './routes/triggers'
+import usageRecords from './routes/usage-records'
+import usageSummary from './routes/usage-summary'
 import vaults from './routes/vaults'
+import workItems from './routes/work-items'
 import { safeRuntimeError } from './runtime/runtime-error'
 import {
   executeRuntimeToolCalls,
@@ -88,11 +96,11 @@ async function appendRuntimeEvent(
 
 async function assertRuntimeSessionRunning(db: ReturnType<typeof drizzle>, auth: AuthContext, sessionId: string) {
   const active = await db
-    .select({ status: sessions.status })
+    .select({ state: sessions.state })
     .from(sessions)
     .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, auth.project.id)))
     .get()
-  if (active?.status !== 'running') {
+  if (active?.state !== 'running') {
     throw new RuntimeTurnCancelledError()
   }
 }
@@ -280,12 +288,12 @@ async function recordRuntimeMessageSubmission(
   const correlationId = newId('message')
   const updated = await db
     .update(sessions)
-    .set({ status: 'running', statusReason: null, updatedAt: timestamp })
+    .set({ state: 'running', stateReason: null, updatedAt: timestamp })
     .where(
       and(
         eq(sessions.id, session.id),
         eq(sessions.projectId, auth.project.id),
-        or(eq(sessions.status, 'idle'), eq(sessions.status, 'running')),
+        or(eq(sessions.state, 'idle'), eq(sessions.state, 'running')),
       ),
     )
     .returning({ id: sessions.id })
@@ -438,8 +446,8 @@ async function recordRuntimeMessageOutcome(
   if (result.status === 'idle') {
     await db
       .update(sessions)
-      .set({ status: 'idle', updatedAt: new Date().toISOString() })
-      .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id), eq(sessions.status, 'running')))
+      .set({ state: 'idle', updatedAt: new Date().toISOString() })
+      .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id), eq(sessions.state, 'running')))
   }
 }
 
@@ -461,13 +469,13 @@ async function markRuntimeExecutionFailed(
   })
   // A governance denial fails the turn but is an expected product outcome:
   // the session returns to idle so the operator can continue with allowed work.
-  const failedStatus = isRuntimePolicyDenied(error)
-    ? { status: 'idle' as const, statusReason: 'policy-denied' }
-    : { status: 'error' as const, statusReason: runtimeError.message }
+  const failedState = isRuntimePolicyDenied(error)
+    ? { state: 'idle' as const, stateReason: 'policy-denied' }
+    : { state: 'error' as const, stateReason: runtimeError.message }
   await db
     .update(sessions)
-    .set({ ...failedStatus, updatedAt: new Date().toISOString() })
-    .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id), eq(sessions.status, 'running')))
+    .set({ ...failedState, updatedAt: new Date().toISOString() })
+    .where(and(eq(sessions.id, session.id), eq(sessions.projectId, auth.project.id), eq(sessions.state, 'running')))
   return runtimeError
 }
 
@@ -499,7 +507,7 @@ async function handleTestRuntimeWebSocket(
   if (command.type === 'get_state') {
     sendRuntimeJson(socket, {
       type: 'session_info_changed',
-      status: session.status,
+      status: session.state,
       sessionId: session.id,
       sandboxId: session.sandboxId,
     })
@@ -604,7 +612,7 @@ async function handleRuntimeWebSocketMessage(
   sendRuntimeJson(socket, {
     type: command.type === 'get_state' ? 'session_info_changed' : 'agent_end',
     sessionId: session.id,
-    status: command.type === 'get_state' ? session.status : 'idle',
+    status: command.type === 'get_state' ? session.state : 'idle',
     willRetry: false,
   })
 }
@@ -622,46 +630,60 @@ export function createApp() {
         }
         return allowedOrigins.split(',').includes(origin) ? origin : null
       },
-      allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       allowHeaders: ['Content-Type', 'Authorization', 'X-AMA-Project-ID'],
       credentials: true,
     }),
   )
 
+  // Every control-plane resource lives under /api/v1. Auth and its federation
+  // config are the one namespaced area (the IdP boundary; also disambiguates
+  // login sessions from agent /sessions). The two /api/v1/runtime routes are
+  // protocol-adapter endpoints: their wire shape is dictated by external
+  // protocols (ACP tunnel, OpenAI-compatible inference) and is therefore
+  // exempt from REST resource modeling (docs/api-v1-design.md §1.8).
   const routes = app
-    .route('/api/health', health)
-    .route('/api/e2e', e2e)
-    .route('/api/auth', auth)
-    .route('/api/projects', projects)
-    .route('/api/agents', agents)
-    .route('/api/environments', environments)
-    .route('/api/providers', providers)
-    .route('/api/runtime', runtimeAi)
-    .route('/api/runners', runners)
-    .route('/api/governance', governance)
-    .route('/api/mcp', mcp)
-    .route('/api/usage', usage)
-    .route('/api/audit-records', audit)
-    .route('/api/scheduled-agent-triggers', schedules)
-    .route('/api/sessions', sessionRoutes)
-    .route('/api/vaults', vaults)
+    .route('/api/v1/health', health)
+    .route('/api/v1/e2e', e2e)
+    .route('/api/v1/auth/federated-tenants', federatedTenants)
+    .route('/api/v1/auth', auth)
+    .route('/api/v1/projects', projects)
+    .route('/api/v1/agents', agents)
+    .route('/api/v1/environments', environments)
+    .route('/api/v1/providers', providers)
+    .route('/api/v1/runtime', runtimeAi)
+    .route('/api/v1/runners', runners)
+    .route('/api/v1/work-items', workItems)
+    .route('/api/v1/leases', leases)
+    .route('/api/v1/policies', policies)
+    .route('/api/v1/effective-policy', effectivePolicy)
+    .route('/api/v1/access-rules', accessRules)
+    .route('/api/v1/budgets', budgets)
+    .route('/api/v1/connectors', connectors)
+    .route('/api/v1/connections', connections)
+    .route('/api/v1/usage-records', usageRecords)
+    .route('/api/v1/usage-summary', usageSummary)
+    .route('/api/v1/audit-records', audit)
+    .route('/api/v1/triggers', triggers)
+    .route('/api/v1/sessions', sessionRoutes)
+    .route('/api/v1/vaults', vaults)
 
   routes.openAPIRegistry.registerComponent('securitySchemes', 'bearerAuth', ApiSecuritySchemes.bearerAuth)
 
-  routes.doc('/api/openapi.json', {
+  routes.doc('/api/v1/openapi.json', {
     openapi: '3.0.0',
     info: {
       title: 'Any Managed Agents API',
-      version: '0.1.0',
+      version: '1.0.0',
       description:
-        'Control-plane API for Any Managed Agents. Command-line automation uses restish or direct HTTP against this OpenAPI document; runtime traffic flows through AMA runtime proxy endpoints and canonical session events.',
+        'Control-plane API for Any Managed Agents. Every resource lives under /api/v1 and follows REST conventions. Command-line automation uses restish or direct HTTP against this OpenAPI document; runtime traffic flows through the /api/v1/runtime protocol-adapter endpoints and canonical session events.',
     },
     servers: [{ url: '/' }],
   })
 
-  routes.get('/api/docs', swaggerUI({ url: '/api/openapi.json' }))
+  routes.get('/api/v1/docs', swaggerUI({ url: '/api/v1/openapi.json' }))
 
-  routes.all('/runtime/sessions/:sessionId/*', async (c) => {
+  routes.all('/api/v1/runtime/sessions/:sessionId/*', async (c) => {
     const db = drizzle(c.env.DB)
     const resolvedAuth = await requireAuth(c, db)
     if (resolvedAuth instanceof Response) {
@@ -677,10 +699,10 @@ export function createApp() {
     if (!session) {
       return errorResponse(c, 404, 'not_found', 'Session not found')
     }
-    if (session.status !== 'idle' && session.status !== 'running') {
+    if (session.state !== 'idle' && session.state !== 'running') {
       return errorResponse(c, 409, 'conflict', 'Session runtime is not active')
     }
-    const path = c.req.path.replace(`/runtime/sessions/${sessionId}`, '')
+    const path = c.req.path.replace(`/api/v1/runtime/sessions/${sessionId}`, '')
     if (!session.sandboxId) {
       if (path === '/rpc' && c.req.method === 'POST' && (await hasAcceptedRunnerSessionChannel(c.env, session.id))) {
         const body = await c.req.raw

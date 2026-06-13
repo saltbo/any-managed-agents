@@ -33,7 +33,6 @@ When(
       type: 'openai-compatible',
       displayName: `${state.runId} OpenAI-Compatible`,
       baseUrl: 'https://models.example.test/v1',
-      credentialSecretRef: `secret://providers/${state.runId}/openai-compatible`,
     })
     await createProviderModel(state, openaiCompatible, {
       modelId: 'gpt-5.3-codex',
@@ -47,7 +46,7 @@ Then('the platform stores provider metadata in D1', async function (this: StepsW
   const state = this.e2e
   assert.ok(state, 'e2e state must exist')
   // Verify the created providers are listed via the API (backed by D1)
-  const list = await apiJson<{ data: Json[] }>(state.page.request, '/api/providers?limit=20')
+  const list = await apiJson<{ data: Json[] }>(state.page.request, '/api/v1/providers?limit=20')
   assert.ok(Array.isArray(list.data), 'providers list must be an array')
   const runIdProviders = list.data.filter((p) => String(p.displayName).includes(state.runId))
   assert.ok(
@@ -65,7 +64,9 @@ Then('the platform stores provider metadata in D1', async function (this: StepsW
 
 type DispatchWorld = StepsWorld & {
   dispatchModel?: string
+  dispatchCredentialId?: string
   dispatchCredentialVersionId?: string
+  dispatchWorkItemId?: string
   dispatchWorkPayload?: Json
 }
 
@@ -74,11 +75,11 @@ const DISPATCH_SECRET_VALUE = 'raw-dispatch-provider-key'
 
 Given('a configured provider with a base URL and a vault credential reference', async function (this: DispatchWorld) {
   const state = await ensureSignedIn(this)
-  const vault = await apiJson<Json>(state.page.request, '/api/vaults', {
+  const vault = await apiJson<Json>(state.page.request, '/api/v1/vaults', {
     method: 'POST',
     data: { name: `${state.runId} provider vault` },
   })
-  const credential = await apiJson<Json>(state.page.request, `/api/vaults/${vault.id}/credentials`, {
+  const credential = await apiJson<Json>(state.page.request, `/api/v1/vaults/${vault.id}/credentials`, {
     method: 'POST',
     data: {
       name: `${state.runId} provider key`,
@@ -86,12 +87,13 @@ Given('a configured provider with a base URL and a vault credential reference', 
       secret: { provider: 'cloudflare-secrets', secretValue: DISPATCH_SECRET_VALUE },
     },
   })
+  this.dispatchCredentialId = String(credential.id)
   this.dispatchCredentialVersionId = String(credential.activeVersionId)
   state.provider = await createProvider(state, {
     type: 'openai-compatible',
     displayName: `${state.runId} dispatchable gateway`,
     baseUrl: DISPATCH_BASE_URL,
-    credentialSecretRef: this.dispatchCredentialVersionId,
+    credentialRef: { credentialId: this.dispatchCredentialId },
   })
 })
 
@@ -106,7 +108,7 @@ Given('an agent selects that configured provider and one of its models', async f
   })
   state.agent = await createAgent(state, {
     name: `${state.runId} dispatch agent`,
-    provider: state.provider.id,
+    providerId: state.provider.id,
     model: this.dispatchModel,
   })
 })
@@ -119,7 +121,7 @@ When('the user creates a self-hosted session for that agent', async function (th
     hostingMode: 'self_hosted',
     networkPolicy: { mode: 'unrestricted' },
   })
-  state.latestSession = await apiJson<Json>(state.page.request, '/api/sessions', {
+  state.latestSession = await apiJson<Json>(state.page.request, '/api/v1/sessions', {
     method: 'POST',
     data: {
       agentId: state.agent.id,
@@ -137,10 +139,11 @@ Then(
     assert.ok(state?.latestSession, 'a session must exist')
     const workItems = await apiJson<ListResponse<Json>>(
       state.page.request,
-      `/api/runners/work-items?sessionId=${state.latestSession.id}`,
+      `/api/v1/work-items?sessionId=${state.latestSession.id}`,
     )
     const workItem = workItems.data.find((item) => item.type === 'session.start')
     assert.ok(workItem, 'queued session.start work must exist')
+    this.dispatchWorkItemId = String(workItem.id)
     this.dispatchWorkPayload = workItem.payload as Json
     const runtimeEnv = this.dispatchWorkPayload.runtimeEnv as Json
     assert.equal(runtimeEnv.OPENAI_BASE_URL, DISPATCH_BASE_URL, 'the provider base URL reaches the runtime env')
@@ -165,20 +168,24 @@ Then(
   async function (this: DispatchWorld) {
     const state = this.e2e
     assert.ok(state?.environment && this.dispatchModel, 'the dispatch session context must exist')
+    assert.ok(this.dispatchWorkItemId, 'the queued work item must have been discovered')
     const capability = `runtime-provider-model:codex:*:${this.dispatchModel}`
-    const runner = await apiJson<Json>(state.page.request, '/api/runners', {
+    const runner = await apiJson<Json>(state.page.request, '/api/v1/runners', {
       method: 'POST',
       data: { name: `${state.runId} dispatch runner`, environmentId: state.environment.id, capabilities: [capability] },
     })
-    await apiJson<Json>(state.page.request, `/api/runners/${runner.id}/heartbeats`, {
-      method: 'POST',
-      data: { status: 'active', capabilities: [capability] },
+    await apiJson<Json>(state.page.request, `/api/v1/runners/${runner.id}/heartbeat`, {
+      method: 'PUT',
+      data: { state: 'active', capabilities: [capability] },
     })
-    const lease = await apiJson<Json>(state.page.request, `/api/runners/${runner.id}/leases`, {
+    // Create the lease for the discovered work item, then read the materialized
+    // payload back from GET /work-items/{id}: lease creation returns the lease
+    // only, and secret env is resolved into runtimeEnv for the owning runner.
+    await apiJson<Json>(state.page.request, '/api/v1/leases', {
       method: 'POST',
-      data: {},
+      data: { workItemId: this.dispatchWorkItemId, runnerId: runner.id },
     })
-    const workItem = lease.workItem as Json
+    const workItem = await apiJson<Json>(state.page.request, `/api/v1/work-items/${this.dispatchWorkItemId}`)
     const payload = workItem.payload as Json
     const runtimeEnv = payload.runtimeEnv as Json
     assert.equal(
@@ -187,29 +194,35 @@ Then(
       'the leased work env carries the resolved credential',
     )
     assert.equal(runtimeEnv.OPENAI_BASE_URL, DISPATCH_BASE_URL, 'the leased work env keeps the provider base URL')
-    const secretEnv = payload.runtimeSecretEnv as Array<{ name: string; ref: string }>
+    const secretEnv = payload.runtimeSecretEnv as Array<{ name: string; credentialRef: Json }>
     assert.deepEqual(
       secretEnv.filter((item) => item.name === 'OPENAI_API_KEY'),
-      [{ name: 'OPENAI_API_KEY', ref: this.dispatchCredentialVersionId }],
-      'the runner-facing payload carries the provider credential as a vault credential version reference',
+      [
+        {
+          name: 'OPENAI_API_KEY',
+          credentialRef: { credentialId: this.dispatchCredentialId, versionId: this.dispatchCredentialVersionId },
+        },
+      ],
+      'the runner-facing payload carries the provider credential as a vault credential reference',
     )
   },
 )
 
 Then('credentials are stored in Cloudflare Secrets', function (this: StepsWorld) {
   // In the AMA control plane, raw credential values are never stored in D1 —
-  // they are stored as references (secretRef) pointing to Cloudflare Secrets.
-  // The provider response must not include raw credential values.
+  // they are exposed only as vault credential references. The provider response
+  // must not include raw credential values.
   const provider = this.e2e?.provider as Json | undefined
   assert.ok(provider, 'provider must have been created')
   // The provider record itself must not leak secret values
   const serialized = JSON.stringify(provider)
   assert.ok(!serialized.includes('raw-secret'), 'provider response must not include raw secret values')
-  // credentialSecretRef fields are reference paths (e.g. secret://...) not values
-  if (provider.credentialSecretRef !== undefined && provider.credentialSecretRef !== null) {
+  // credentialRef is a vault reference object ({ credentialId, versionId? }), never a raw value.
+  if (provider.credentialRef !== undefined && provider.credentialRef !== null) {
+    const credentialRef = provider.credentialRef as Json
     assert.ok(
-      String(provider.credentialSecretRef).startsWith('secret://'),
-      'credentialSecretRef must be a reference path, not a raw secret value',
+      typeof credentialRef.credentialId === 'string' && credentialRef.credentialId.length > 0,
+      'credentialRef must be a vault credential reference, not a raw secret value',
     )
   }
 })

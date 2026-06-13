@@ -52,7 +52,7 @@ describe('session-runtime', () => {
   })
 
   it('builds AMA runtime endpoint paths from the session id', () => {
-    expect(runtimeEndpointPath('session_123')).toBe('/runtime/sessions/session_123/rpc')
+    expect(runtimeEndpointPath('session_123')).toBe('/api/v1/runtime/sessions/session_123/rpc')
   })
 
   it('extracts only object tool calls from runtime command bodies', () => {
@@ -126,7 +126,7 @@ describe('session-runtime', () => {
       }),
     ).resolves.toMatchObject({
       sandboxId: 'sandbox_123',
-      runtimeEndpointPath: '/runtime/sessions/session_123/rpc',
+      runtimeEndpointPath: '/api/v1/runtime/sessions/session_123/rpc',
       metadata: expect.objectContaining({
         runtimeMode: 'test',
         runtimeDriver: 'ama-cloud',
@@ -205,7 +205,7 @@ describe('session-runtime', () => {
       sandboxId: 'sandbox_123',
       provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
-      agentSnapshot: { instructions: 'Inspect before answering.', allowedTools: ['sandbox.exec'] },
+      agentSnapshot: { instructions: 'Inspect before answering.', tools: [{ name: 'sandbox.exec' }] },
       prompt: 'Inspect repository status',
       onEvent: async (event) => {
         events.push(event)
@@ -245,7 +245,7 @@ describe('session-runtime', () => {
       sandboxId: 'sandbox_123',
       provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
-      agentSnapshot: { instructions: 'Remember prior turns.', allowedTools: ['sandbox.exec'] },
+      agentSnapshot: { instructions: 'Remember prior turns.', tools: [{ name: 'sandbox.exec' }] },
       prompt: 'Alpha durable prompt',
       onEvent: async (event) => {
         firstTurnEvents.push(event)
@@ -258,7 +258,7 @@ describe('session-runtime', () => {
       sandboxId: 'sandbox_123',
       provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
-      agentSnapshot: { instructions: 'Remember prior turns.', allowedTools: ['sandbox.exec'] },
+      agentSnapshot: { instructions: 'Remember prior turns.', tools: [{ name: 'sandbox.exec' }] },
       prompt: 'What was my previous prompt?',
       messages: runtimeMessagesFromEvents(firstTurnEvents.map((event) => ({ payload: event }))),
       onEvent: async (event) => {
@@ -284,7 +284,7 @@ describe('session-runtime', () => {
       sandboxId: 'sandbox_123',
       provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
-      agentSnapshot: { instructions: 'Inspect before answering.', allowedTools: ['sandbox.exec'] },
+      agentSnapshot: { instructions: 'Inspect before answering.', tools: [{ name: 'sandbox.exec' }] },
       prompt: 'Inspect repository status',
       shouldPause: () => true,
       onEvent: async (event) => {
@@ -304,7 +304,7 @@ describe('session-runtime', () => {
       sandboxId: 'sandbox_123',
       provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
-      agentSnapshot: { instructions: 'Inspect before answering.', allowedTools: ['sandbox.exec'] },
+      agentSnapshot: { instructions: 'Inspect before answering.', tools: [{ name: 'sandbox.exec' }] },
       continuation: true,
       messages: runtimeMessagesFromEvents(firstEvents.map((event) => ({ payload: event }))),
       onEvent: async (event) => {
@@ -383,7 +383,7 @@ describe('session-runtime', () => {
       sandboxId: 'sandbox_123',
       provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
-      agentSnapshot: { instructions: 'Continue from history.', allowedTools: [] },
+      agentSnapshot: { instructions: 'Continue from history.', tools: [] },
       messages: runtimeMessagesFromEvents([
         { type: 'message_end', payload: { message: { role: 'assistant', content: 'Acknowledged.' } } },
       ]),
@@ -412,7 +412,7 @@ describe('session-runtime', () => {
       sandboxId: 'sandbox_123',
       provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
-      agentSnapshot: { instructions: 'Stop cleanly.', allowedTools: ['sandbox.exec'] },
+      agentSnapshot: { instructions: 'Stop cleanly.', tools: [{ name: 'sandbox.exec' }] },
       prompt: 'Alpha durable prompt',
       ensureActive: async () => {
         if (!active) {
@@ -441,7 +441,7 @@ describe('session-runtime', () => {
         sandboxId: 'sandbox_123',
         provider: 'workers-ai',
         model: '@cf/moonshotai/kimi-k2.6',
-        agentSnapshot: { instructions: 'Inspect before answering.', allowedTools: ['sandbox.read'] },
+        agentSnapshot: { instructions: 'Inspect before answering.', tools: [{ name: 'sandbox.read' }] },
         prompt: 'Inspect repository status',
         onEvent: async (event) => {
           events.push(event)
@@ -474,7 +474,7 @@ describe('session-runtime', () => {
       sandboxId: 'sandbox_123',
       provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
-      agentSnapshot: { instructions: 'Inspect before answering.', allowedTools: [] },
+      agentSnapshot: { instructions: 'Inspect before answering.', tools: [] },
       prompt: 'Inspect repository status',
       onEvent: async () => {},
     })
@@ -496,7 +496,7 @@ describe('session-runtime', () => {
         environmentSnapshot: { runtimeConfig: { image: 'ama-tool-executor' } },
         mcpSnapshot: { connectors: ['github'] },
         runtimeEnv: { AK_API_URL: 'https://ak.example.com', AK_AGENT_ID: 'agent_123' },
-        runtimeSecretEnv: [{ name: 'AK_AGENT_KEY', ref: 'vaultver_abc123' }],
+        runtimeSecretEnv: [{ name: 'AK_AGENT_KEY', credentialRef: { credentialId: 'cred_abc123' } }],
         resourceRefs: [
           {
             type: 'github_repository',
@@ -509,7 +509,7 @@ describe('session-runtime', () => {
       }),
     ).resolves.toMatchObject({
       sandboxId: 'sandbox_123',
-      runtimeEndpointPath: '/runtime/sessions/session_123/rpc',
+      runtimeEndpointPath: '/api/v1/runtime/sessions/session_123/rpc',
       metadata: expect.objectContaining({
         runtimeMode: 'live',
         runtimeDriver: 'ama-cloud',
@@ -525,7 +525,9 @@ describe('session-runtime', () => {
     expect(mockSandbox.exec).toHaveBeenCalledWith('mkdir -p /workspace/.ama')
     expect(mockSandbox.writeFile).toHaveBeenCalledWith(
       '/workspace/.ama/session.json',
-      expect.stringContaining('"runtimeSecretEnv":[{"name":"AK_AGENT_KEY","ref":"vaultver_abc123"}]'),
+      expect.stringContaining(
+        '"runtimeSecretEnv":[{"name":"AK_AGENT_KEY","credentialRef":{"credentialId":"cred_abc123"}}]',
+      ),
       { encoding: 'utf-8' },
     )
     expect(mockSandbox.setEnvVars).toHaveBeenCalledWith({
@@ -565,7 +567,7 @@ describe('session-runtime', () => {
     )
     expect(mockSandbox.writeFile).toHaveBeenCalledWith(
       '/workspace/.ama/runtime-secret-env.json',
-      JSON.stringify([{ name: 'AK_AGENT_KEY', ref: 'vaultver_abc123' }]),
+      JSON.stringify([{ name: 'AK_AGENT_KEY', credentialRef: { credentialId: 'cred_abc123' } }]),
       { encoding: 'utf-8' },
     )
   })

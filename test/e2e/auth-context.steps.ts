@@ -29,7 +29,7 @@ When(
     // Also verify that an unauthenticated request is rejected (for the And step below)
     const app = createApp()
     this.unauthResponse = await app.fetch(
-      new Request('https://example.test/api/projects', {
+      new Request('https://example.test/api/v1/projects', {
         headers: { accept: 'application/json' },
       }),
       {} as Env,
@@ -75,7 +75,7 @@ When('AMA starts without local users or organizations', async function (this: Am
   // accepts only OIDC-issued claims. Verify this by checking the health
   // endpoint and confirming there is no local user management route.
   const app = createApp()
-  this.response = await app.fetch(new Request('https://example.test/api/openapi.json'), {} as Env)
+  this.response = await app.fetch(new Request('https://example.test/api/v1/openapi.json'), {} as Env)
 })
 
 Then(
@@ -85,7 +85,7 @@ Then(
     const doc = (await this.response.clone().json()) as { paths?: Record<string, unknown> }
     // No local user management routes exist — OIDC owns identity
     const paths = Object.keys(doc.paths ?? {})
-    assert.ok(!paths.some((p) => p.startsWith('/api/users')), 'AMA must not own a /api/users route')
+    assert.ok(!paths.some((p) => p.startsWith('/api/v1/users')), 'AMA must not own a /api/v1/users route')
     assert.ok(!paths.some((p) => p.includes('password')), 'AMA must not expose password management')
   },
 )
@@ -94,7 +94,7 @@ Then('AMA accepts only OIDC identity claims for product access', async function 
   // Without a bearer token from OIDC, all protected routes return 401
   const app = createApp()
   const response = await app.fetch(
-    new Request('https://example.test/api/agents', {
+    new Request('https://example.test/api/v1/agents', {
       headers: { accept: 'application/json' },
     }),
     {} as Env,

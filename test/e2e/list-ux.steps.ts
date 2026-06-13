@@ -54,12 +54,12 @@ async function bulkState(world: ListUxWorld): Promise<BulkState> {
 
 async function createBulkSessions(state: BulkState, count: number) {
   if (!state.agentId) {
-    const agent = await apiJson<Json>(state.page.request, '/api/agents', {
+    const agent = await apiJson<Json>(state.page.request, '/api/v1/agents', {
       method: 'POST',
-      data: { name: `${state.runId} bulk agent`, provider: 'workers-ai' },
+      data: { name: `${state.runId} bulk agent` },
     })
     state.agentId = String(agent.id)
-    const environment = await apiJson<Json>(state.page.request, '/api/environments', {
+    const environment = await apiJson<Json>(state.page.request, '/api/v1/environments', {
       method: 'POST',
       data: { name: `${state.runId} bulk env` },
     })
@@ -67,7 +67,7 @@ async function createBulkSessions(state: BulkState, count: number) {
   }
   const ids: string[] = []
   for (let index = 0; index < count; index += 1) {
-    const session = await apiJson<Json>(state.page.request, '/api/sessions', {
+    const session = await apiJson<Json>(state.page.request, '/api/v1/sessions', {
       method: 'POST',
       data: {
         agentId: state.agentId,
@@ -93,9 +93,12 @@ Then(
     await page.getByLabel('Search agents').fill(agentName)
     await expect(page).toHaveURL(/search=/)
     await expect(page.getByText(agentName)).toBeVisible()
-    // Provider filter keeps the workers-ai agent visible.
+    // The provider filter lists providers referenced by existing agents.
+    // Platform-default agents resolve their provider at session start (null
+    // providerId), so the only standing option is "All providers", which keeps
+    // the agent visible.
     await page.getByLabel('Filter by provider').click()
-    await page.getByRole('option', { name: 'workers-ai' }).click()
+    await page.getByRole('option', { name: 'All providers' }).click()
     await expect(page.getByText(agentName)).toBeVisible()
     // Status filter to archived hides the active agent; back to active shows it.
     await page.getByLabel('Filter by status').click()
@@ -143,11 +146,11 @@ When(
     assert.ok(workflow?.environmentId, 'environment detail workflow must be initialized')
     const page = workflow.page
     // A session pinned to the current version proves snapshot immutability later.
-    const agent = await apiJson<Json>(page.request, '/api/agents', {
+    const agent = await apiJson<Json>(page.request, '/api/v1/agents', {
       method: 'POST',
-      data: { name: `${workflow.runId} env-edit agent`, provider: 'workers-ai' },
+      data: { name: `${workflow.runId} env-edit agent` },
     })
-    const session = await apiJson<Json>(page.request, '/api/sessions', {
+    const session = await apiJson<Json>(page.request, '/api/v1/sessions', {
       method: 'POST',
       data: {
         agentId: agent.id,
@@ -157,7 +160,7 @@ When(
       },
     })
     this.envEditSessionId = String(session.id)
-    this.envEditSnapshot = (await apiJson<Json>(page.request, `/api/sessions/${session.id}`))
+    this.envEditSnapshot = (await apiJson<Json>(page.request, `/api/v1/sessions/${session.id}`))
       .environmentSnapshot as Json
 
     await page.goto(`/environments/${workflow.environmentId}`)
@@ -180,7 +183,7 @@ Then('successful save creates a new environment version', async function (this: 
   await sheet.getByLabel(/Packages/).fill('tsx@latest\nvitest@latest')
   await sheet.getByLabel(/Variables/).fill('NODE_ENV=test')
   const saveResponse = page.waitForResponse(
-    (response) => response.url().includes('/api/environments/') && response.request().method() === 'PATCH',
+    (response) => response.url().includes('/api/v1/environments/') && response.request().method() === 'PATCH',
     { timeout: 30_000 },
   )
   await sheet.getByRole('button', { name: /Save environment|Create environment/ }).click()
@@ -188,7 +191,7 @@ Then('successful save creates a new environment version', async function (this: 
   assert.equal(response.status(), 200, `environment update must succeed: ${await response.text()}`)
   const versions = await apiJson<ListResponse<Json>>(
     page.request,
-    `/api/environments/${workflow.environmentId}/versions`,
+    `/api/v1/environments/${workflow.environmentId}/versions`,
   )
   assert.ok(versions.data.length >= 2, 'editing creates a new immutable environment version')
 })
@@ -196,7 +199,7 @@ Then('successful save creates a new environment version', async function (this: 
 Then('existing sessions keep their original environment snapshots', async function (this: ListUxWorld) {
   const workflow = this.envDetailWorkflow
   assert.ok(workflow && this.envEditSessionId, 'the pre-edit session must exist')
-  const session = await apiJson<Json>(workflow.page.request, `/api/sessions/${this.envEditSessionId}`)
+  const session = await apiJson<Json>(workflow.page.request, `/api/v1/sessions/${this.envEditSessionId}`)
   assert.deepEqual(
     session.environmentSnapshot,
     this.envEditSnapshot,
@@ -257,7 +260,7 @@ Then(
   async function (this: ListUxWorld) {
     const state = await bulkState(this)
     const page = state.page
-    const defaultList = await apiJson<ListResponse<Json>>(page.request, '/api/sessions?limit=100')
+    const defaultList = await apiJson<ListResponse<Json>>(page.request, '/api/v1/sessions?limit=100')
     for (const id of state.sessionIds ?? []) {
       assert.ok(
         !defaultList.data.some((session) => session.id === id),
@@ -280,8 +283,10 @@ Given('a user performs a batch archive or revoke operation', { timeout: 120_000 
   const failingId = state.sessionIds?.[1]
   assert.ok(failingId, 'three sessions must exist')
   state.failingSessionId = failingId
-  await page.route(`**/api/sessions/${failingId}`, async (route) => {
-    if (route.request().method() === 'DELETE') {
+  // v1 archives a session via PATCH /api/v1/sessions/{id} {archived:true};
+  // reject that single request to exercise the UI's mid-batch halt semantics.
+  await page.route(`**/api/v1/sessions/${failingId}`, async (route) => {
+    if (route.request().method() === 'PATCH') {
       await route.fulfill({
         status: 500,
         contentType: 'application/json',
@@ -312,13 +317,13 @@ When('one item fails', async function (this: ListUxWorld) {
 Then('later items are not processed', async function (this: ListUxWorld) {
   const state = await bulkState(this)
   const ids = state.sessionIds ?? []
-  const all = await apiJson<ListResponse<Json>>(state.page.request, '/api/sessions?includeArchived=true&limit=100')
-  const statusOf = (id: string) => all.data.find((session) => session.id === id)?.status
+  const archived = await apiJson<ListResponse<Json>>(state.page.request, '/api/v1/sessions?archived=true&limit=100')
+  const isArchived = (id: string) => archived.data.some((session) => session.id === id)
   // The list renders newest-first, so the batch processed session 3 first,
   // failed on the injected session 2, and never reached session 1.
-  assert.equal(statusOf(ids[2] ?? ''), 'archived', 'the item before the failure archived')
-  assert.notEqual(statusOf(ids[1] ?? ''), 'archived', 'the failed item is not archived')
-  assert.notEqual(statusOf(ids[0] ?? ''), 'archived', 'items after the failure are not processed')
+  assert.equal(isArchived(ids[2] ?? ''), true, 'the item before the failure archived')
+  assert.equal(isArchived(ids[1] ?? ''), false, 'the failed item is not archived')
+  assert.equal(isArchived(ids[0] ?? ''), false, 'items after the failure are not processed')
 })
 
 Then('the UI reports which items succeeded and which item failed', async function (this: ListUxWorld) {

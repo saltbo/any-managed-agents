@@ -57,7 +57,7 @@ describe('agent builder model', () => {
     })
     expect(input).toMatchObject({
       name: 'Review agent',
-      systemPrompt: 'Review changes carefully.',
+      instructions: 'Review changes carefully.',
       skills: ['ama@coding-agent'],
       role: 'maintainer',
       capabilityTags: ['triage'],
@@ -77,7 +77,7 @@ describe('agent builder model', () => {
       error: {
         type: 'validation_error',
         message: 'Invalid agent configuration',
-        details: { fields: { allowedTools: 'Tool is blocked by policy: secrets.read', name: 'Name is required.' } },
+        details: { fields: { tools: 'Tool is blocked by policy: secrets.read', name: 'Name is required.' } },
       },
     })
     expect(apiErrorToBuilder(error)).toEqual({
@@ -93,10 +93,10 @@ describe('agent builder model', () => {
       name: 'Review agent',
       description: null,
       instructions: 'Review changes.',
-      provider: 'workers-ai',
+      providerId: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
       skills: [],
-      allowedTools: ['read'],
+      tools: [{ name: 'read' }],
       mcpConnectors: [],
       role: 'maintainer',
       capabilityTags: [],
@@ -104,8 +104,8 @@ describe('agent builder model', () => {
       memoryPolicy: { enabled: false },
     } as unknown as Agent
     const examples = agentApiExamples('https://ama.example.com', agent)
-    expect(examples.curl).toContain('https://ama.example.com/api/agents')
-    expect(examples.restish).toContain('https://ama.example.com/api/agents/agent_123')
+    expect(examples.curl).toContain('https://ama.example.com/api/v1/agents')
+    expect(examples.restish).toContain('https://ama.example.com/api/v1/agents/agent_123')
     expect(examples.curl).toContain('$AMA_ACCESS_TOKEN')
     expect(examples.curl).not.toMatch(/api\.(openai|anthropic)\.com/)
     expect(`${examples.curl}${examples.restish}`).not.toMatch(/Bearer [A-Za-z0-9]/)

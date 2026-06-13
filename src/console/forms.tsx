@@ -6,18 +6,12 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/c
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { type Agent, api, type Environment, type ProviderInputType } from '@/lib/api'
+import { type Agent, api, type Environment, type ProviderType } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
+import { isArchived } from './format'
 import type { AgentFormState, EnvironmentFormState, ProviderFormState, SessionFormState, VaultFormState } from './types'
 
-const PROVIDER_TYPES: ProviderInputType[] = [
-  'workers-ai',
-  'anthropic',
-  'openai',
-  'openai-compatible',
-  'ollama',
-  'other',
-]
+const PROVIDER_TYPES: ProviderType[] = ['workers-ai', 'anthropic', 'openai', 'openai-compatible', 'ollama', 'other']
 
 export function EnvironmentForm({
   value,
@@ -202,7 +196,7 @@ function AgentProviderModelFields({
     queryFn: () => api.listProviders(),
   })
   const configuredProviders = (providersQuery.data?.data ?? []).filter(
-    (provider) => provider.status === 'active' && provider.type !== PLATFORM_PROVIDER_ID,
+    (provider) => provider.enabled && provider.type !== PLATFORM_PROVIDER_ID,
   )
   const knownProviderIds = new Set([PLATFORM_PROVIDER_ID, ...configuredProviders.map((provider) => provider.id)])
   const modelsQuery = useQuery({
@@ -283,8 +277,8 @@ export function SessionForm({
   environments: Environment[]
   onSubmit: (event: FormEvent) => void
 }) {
-  const activeAgents = agents.filter((agent) => agent.status === 'active')
-  const activeEnvironments = environments.filter((environment) => environment.status === 'active')
+  const activeAgents = agents.filter((agent) => !isArchived(agent))
+  const activeEnvironments = environments.filter((environment) => !isArchived(environment))
   const selectedAgent = activeAgents.find((agent) => agent.id === value.agentId)
   const selectedEnvironment = activeEnvironments.find((environment) => environment.id === value.environmentId)
   const canSubmit = Boolean(value.agentId && value.environmentId)
@@ -310,7 +304,7 @@ export function SessionForm({
           </Select>
           <FieldDescription>
             {selectedAgent
-              ? `Agent provider/model: ${selectedAgent.provider} / ${selectedAgent.model}`
+              ? `Agent provider/model: ${selectedAgent.providerId ?? 'None'} / ${selectedAgent.model ?? 'None'}`
               : 'The session will run the current version of this agent.'}
           </FieldDescription>
         </Field>
@@ -374,12 +368,6 @@ export function SessionForm({
           value={value.resourceRefs}
           onChange={(resourceRefs) => setValue({ ...value, resourceRefs })}
         />
-        <TextAreaField
-          label="Vault refs"
-          description="JSON array of vault or credential reference objects. Do not paste raw secrets."
-          value={value.vaultRefs}
-          onChange={(vaultRefs) => setValue({ ...value, vaultRefs })}
-        />
       </FieldGroup>
       <Button type="submit" disabled={!canSubmit}>
         <MessageSquare data-icon="inline-start" />
@@ -407,7 +395,7 @@ export function ProviderForm({
       <FieldGroup>
         <Field>
           <FieldLabel>Provider type</FieldLabel>
-          <Select value={value.type} onValueChange={(type) => setValue({ ...value, type: type as ProviderInputType })}>
+          <Select value={value.type} onValueChange={(type) => setValue({ ...value, type: type as ProviderType })}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
@@ -435,10 +423,16 @@ export function ProviderForm({
           onChange={(baseUrl) => setValue({ ...value, baseUrl })}
         />
         <TextField
-          label="Credential secret ref"
-          description="Use a vault credential version id (vaultver_…) so sessions can dispatch the credential to the runtime. Raw secret values are never accepted here."
-          value={value.credentialSecretRef}
-          onChange={(credentialSecretRef) => setValue({ ...value, credentialSecretRef })}
+          label="Credential id"
+          description="Vault credential id (cred_…) so sessions can dispatch the credential to the runtime. Raw secret values are never accepted here."
+          value={value.credentialId}
+          onChange={(credentialId) => setValue({ ...value, credentialId })}
+        />
+        <TextField
+          label="Credential version id"
+          description="Optional pinned credential version id (vaultver_…). Leave empty to use the active version."
+          value={value.credentialVersionId}
+          onChange={(credentialVersionId) => setValue({ ...value, credentialVersionId })}
         />
       </FieldGroup>
       <Button type="submit">

@@ -1,4 +1,5 @@
 import type { Env } from '../env'
+import type { RuntimeSecretEnvEntry } from './secret-env'
 
 // Cloud session work runs from a queue consumer instead of HTTP waitUntil:
 // a turn that shells out (installs, builds, sleeps) or a sandbox cold boot
@@ -33,7 +34,7 @@ export type CloudSessionStartMessage = {
   runtimeConfig: Record<string, unknown>
   resourceRefs: Array<Record<string, unknown>>
   runtimeEnv: Record<string, string>
-  runtimeSecretEnv: Array<{ name: string; ref: string }>
+  runtimeSecretEnv: RuntimeSecretEnvEntry[]
   initialPrompt?: string
 }
 

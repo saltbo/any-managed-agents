@@ -3,7 +3,7 @@ import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ConfirmAction, EmptyState, StatusBadge, TablePagination, TableSurface } from '@/console/components'
-import { formatDate } from '@/console/format'
+import { archivedLabel, formatDate } from '@/console/format'
 import type { ClientPagination } from '@/console/use-client-pagination'
 import type { Environment } from '@/lib/api'
 
@@ -59,7 +59,7 @@ export function EnvironmentsView({
             </TableCell>
             <TableCell>
               <div className="flex gap-1">
-                <StatusBadge value={environment.status} />
+                <StatusBadge value={archivedLabel(environment)} />
                 <StatusBadge value={`v${environment.version}`} />
               </div>
             </TableCell>

@@ -27,7 +27,7 @@ describe('shared API client', () => {
       return new Response(
         JSON.stringify({
           data: [],
-          pagination: { limit: 25, nextCursor: null, hasMore: false, firstId: null, lastId: null },
+          pagination: { limit: 25, nextCursor: null, hasMore: false },
         }),
         { headers: { 'content-type': 'application/json' } },
       )
@@ -35,9 +35,8 @@ describe('shared API client', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await api.listAgents({
-      includeArchived: true,
+      archived: true,
       search: 'research',
-      status: 'active',
       createdFrom: '2026-05-01T00:00:00.000Z',
       createdTo: '2026-05-31T23:59:59.999Z',
       limit: 25,
@@ -45,7 +44,7 @@ describe('shared API client', () => {
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/agents?includeArchived=true&search=research&status=active&createdFrom=2026-05-01T00%3A00%3A00.000Z&createdTo=2026-05-31T23%3A59%3A59.999Z&limit=25&cursor=cursor_value',
+      '/api/v1/agents?archived=true&search=research&createdFrom=2026-05-01T00%3A00%3A00.000Z&createdTo=2026-05-31T23%3A59%3A59.999Z&limit=25&cursor=cursor_value',
       expect.objectContaining({
         body: undefined,
         credentials: 'include',
@@ -64,17 +63,17 @@ describe('shared API client', () => {
       return new Response(
         JSON.stringify({
           data: [],
-          pagination: { limit: 50, nextCursor: null, hasMore: false, firstId: null, lastId: null },
+          pagination: { limit: 50, nextCursor: null, hasMore: false },
         }),
         { headers: { 'content-type': 'application/json' } },
       )
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    await api.listSessions({ includeArchived: true })
+    await api.listSessions({ archived: true })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/sessions?includeArchived=true',
+      '/api/v1/sessions?archived=true',
       expect.objectContaining({
         body: undefined,
         credentials: 'include',

@@ -32,6 +32,25 @@ function state(world: RuntimeErrorsWorld): E2EState {
   return world.e2e as unknown as E2EState
 }
 
+// Provider credentials are unified onto the Vault: mint a vault credential and
+// return a `credentialRef` for the provider create body.
+async function createProviderCredentialRef(e2e: E2EState, slug: string) {
+  e2e.vault ??= await apiJson<Json>(e2e.page.request, '/api/v1/vaults', {
+    method: 'POST',
+    data: { name: `${e2e.runId} runtime-errors vault` },
+  })
+  const credential = await apiJson<Json>(e2e.page.request, `/api/v1/vaults/${(e2e.vault as Json).id}/credentials`, {
+    method: 'POST',
+    data: {
+      name: `${e2e.runId} ${slug} provider key`,
+      type: 'api_key',
+      metadata: { purpose: 'runtime-errors-e2e' },
+      secret: { provider: 'external-vault', externalVaultPath: `vault://ama/e2e/${e2e.runId}/${slug}` },
+    },
+  })
+  return { credentialId: credential.id, versionId: credential.activeVersionId }
+}
+
 async function setupOfficialRuntimeSession(
   world: RuntimeErrorsWorld,
   runtimeConfigExtras: Record<string, unknown>,
@@ -48,7 +67,7 @@ async function setupOfficialRuntimeSession(
   e2e.provider = await createProvider(e2e as never, {
     type: 'anthropic',
     displayName: `${e2e.runId} official runtime provider`,
-    credentialSecretRef: `secret://providers/${e2e.runId}/official-runtime`,
+    credentialRef: await createProviderCredentialRef(e2e, 'official-runtime'),
   })
   e2e.providerModel = await createProviderModel(e2e as never, e2e.provider as Json, {
     modelId: CLAUDE_CODE_E2E_MODEL,
@@ -57,11 +76,11 @@ async function setupOfficialRuntimeSession(
   })
   e2e.agent = await createAgent(e2e as never, {
     name: `${e2e.runId} official runtime agent`,
-    provider: (e2e.provider as Json).id,
+    providerId: (e2e.provider as Json).id,
     model: CLAUDE_CODE_E2E_MODEL,
   })
   const capability = runtimeProviderModelCapability('claude-code', '*', CLAUDE_CODE_E2E_MODEL)
-  e2e.runner = await apiJson<Json>(e2e.page.request, '/api/runners', {
+  e2e.runner = await apiJson<Json>(e2e.page.request, '/api/v1/runners', {
     method: 'POST',
     data: {
       name: `${e2e.runId} official runtime runner`,
@@ -69,7 +88,7 @@ async function setupOfficialRuntimeSession(
       capabilities: ['sandbox.exec', capability],
     },
   })
-  e2e.latestSession = await apiJson<Json>(e2e.page.request, '/api/sessions', {
+  e2e.latestSession = await apiJson<Json>(e2e.page.request, '/api/v1/sessions', {
     method: 'POST',
     data: {
       agentId: (e2e.agent as Json).id,
@@ -79,12 +98,15 @@ async function setupOfficialRuntimeSession(
       initialPrompt,
     },
   })
-  assert.equal((e2e.latestSession as Json).statusReason, 'waiting-for-runner')
+  assert.equal((e2e.latestSession as Json).stateReason, 'waiting-for-runner')
   return e2e
 }
 
 async function listSessionEvents(e2e: E2EState) {
-  return await apiJson<ListResponse<Json>>(e2e.page.request, `/api/sessions/${e2e.latestSession?.id}/events?limit=200`)
+  return await apiJson<ListResponse<Json>>(
+    e2e.page.request,
+    `/api/v1/sessions/${e2e.latestSession?.id}/events?limit=200`,
+  )
 }
 
 // ─── Surface official runtime authentication and authorization failures ───
@@ -147,14 +169,14 @@ Then(
   async function (this: RuntimeErrorsWorld) {
     const e2e = state(this)
     for (let attempt = 0; attempt < 60; attempt += 1) {
-      const session = await apiJson<Json>(e2e.page.request, `/api/sessions/${e2e.latestSession?.id}`)
-      if (session.status === 'error' && session.statusReason === 'runtime-auth-missing-login') {
+      const session = await apiJson<Json>(e2e.page.request, `/api/v1/sessions/${e2e.latestSession?.id}`)
+      if (session.state === 'error' && session.stateReason === 'runtime-auth-missing-login') {
         return
       }
       await delay(1_000)
     }
-    const session = await apiJson<Json>(e2e.page.request, `/api/sessions/${e2e.latestSession?.id}`)
-    throw new Error(`Expected error/runtime-auth-missing-login, got ${session.status}/${session.statusReason}`)
+    const session = await apiJson<Json>(e2e.page.request, `/api/v1/sessions/${e2e.latestSession?.id}`)
+    throw new Error(`Expected error/runtime-auth-missing-login, got ${session.state}/${session.stateReason}`)
   },
 )
 
@@ -163,8 +185,8 @@ Then(
   async function (this: RuntimeErrorsWorld) {
     const e2e = state(this)
     const events = await listSessionEvents(e2e)
-    const session = await apiJson<Json>(e2e.page.request, `/api/sessions/${e2e.latestSession?.id}`)
-    const runner = await apiJson<Json>(e2e.page.request, `/api/runners/${(e2e.runner as Json).id}`)
+    const session = await apiJson<Json>(e2e.page.request, `/api/v1/sessions/${e2e.latestSession?.id}`)
+    const runner = await apiJson<Json>(e2e.page.request, `/api/v1/runners/${(e2e.runner as Json).id}`)
     for (const surface of [JSON.stringify(events.data), JSON.stringify(session), JSON.stringify(runner)]) {
       assert.ok(!surface.includes('raw-secret'), 'no raw credential material leaks')
       assert.ok(!/Bearer [A-Za-z0-9._-]{8,}/.test(surface), 'no bearer tokens leak')

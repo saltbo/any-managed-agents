@@ -36,6 +36,7 @@ interface VaultFlowState {
   rotatedCredential?: Json
   outsiderResponses?: Array<{ status: number; body: string }>
   lease?: Json
+  leaseWorkItemId?: string
   leaseDenialStatus?: number
   leaseDenialBody?: string
   pendingSession?: Json
@@ -61,7 +62,7 @@ async function ensureSignedIn(world: VaultWorld): Promise<SharedE2EState> {
 
 async function ensureVault(world: VaultWorld): Promise<SharedE2EState> {
   const state = await ensureSignedIn(world)
-  state.vault ??= await apiJson<Json>(state.page.request, '/api/vaults', {
+  state.vault ??= await apiJson<Json>(state.page.request, '/api/v1/vaults', {
     method: 'POST',
     data: { name: `${state.runId} vault`, description: 'Vault runtime e2e vault', scope: 'project' },
   })
@@ -76,7 +77,7 @@ function newRawValue(state: SharedE2EState, label: string) {
 }
 
 async function createManagedCredential(state: SharedE2EState, name: string, rawValue: string) {
-  return await apiJson<Json>(state.page.request, `/api/vaults/${state.vault?.id}/credentials`, {
+  return await apiJson<Json>(state.page.request, `/api/v1/vaults/${state.vault?.id}/credentials`, {
     method: 'POST',
     data: {
       name,
@@ -95,11 +96,11 @@ function activeVersionId(credential: Json | undefined) {
 }
 
 async function ensureCloudAgentAndEnvironment(state: SharedE2EState) {
-  state.agent ??= await apiJson<Json>(state.page.request, '/api/agents', {
+  state.agent ??= await apiJson<Json>(state.page.request, '/api/v1/agents', {
     method: 'POST',
     data: { name: `${state.runId} agent`, instructions: 'Vault runtime e2e agent' },
   })
-  state.environment ??= await apiJson<Json>(state.page.request, '/api/environments', {
+  state.environment ??= await apiJson<Json>(state.page.request, '/api/v1/environments', {
     method: 'POST',
     data: { name: `${state.runId} env`, runtimeConfig: { image: 'ama-pi-runtime' } },
   })
@@ -110,26 +111,27 @@ async function createSessionWithSecretRef(
   options: { envName: string; ref: string; title: string },
 ) {
   await ensureCloudAgentAndEnvironment(state)
-  const session = await apiJson<Json>(state.page.request, '/api/sessions', {
+  const session = await apiJson<Json>(state.page.request, '/api/v1/sessions', {
     method: 'POST',
     data: {
       agentId: state.agent?.id,
       environmentId: state.environment?.id,
       runtime: 'ama',
       title: options.title,
-      runtimeSecretEnv: [{ name: options.envName, ref: options.ref }],
-      vaultRefs: [{ type: 'credential', id: state.credential?.id }],
+      secretEnv: [
+        { name: options.envName, credentialRef: { credentialId: state.credential?.id, versionId: options.ref } },
+      ],
     },
   })
   return session
 }
 
 async function setupSelfHostedRunnerSession(state: SharedE2EState, world: VaultWorld, envName: string) {
-  state.agent = await apiJson<Json>(state.page.request, '/api/agents', {
+  state.agent = await apiJson<Json>(state.page.request, '/api/v1/agents', {
     method: 'POST',
     data: { name: `${state.runId} runner agent`, instructions: 'Vault runtime e2e runner agent' },
   })
-  state.environment = await apiJson<Json>(state.page.request, '/api/environments', {
+  state.environment = await apiJson<Json>(state.page.request, '/api/v1/environments', {
     method: 'POST',
     data: {
       name: `${state.runId} runner env`,
@@ -138,7 +140,7 @@ async function setupSelfHostedRunnerSession(state: SharedE2EState, world: VaultW
       runtimeConfig: { image: 'ama-pi-runtime' },
     },
   })
-  state.runner = await apiJson<Json>(state.page.request, '/api/runners', {
+  state.runner = await apiJson<Json>(state.page.request, '/api/v1/runners', {
     method: 'POST',
     data: {
       name: `${state.runId} runner`,
@@ -146,19 +148,25 @@ async function setupSelfHostedRunnerSession(state: SharedE2EState, world: VaultW
       capabilities: ['node', 'git', 'sandbox.exec', AMA_RUNNER_CAPABILITY],
     },
   })
-  state.runner = await apiJson<Json>(state.page.request, `/api/runners/${state.runner.id}/heartbeats`, {
-    method: 'POST',
-    data: { status: 'active', currentLoad: 0, capabilities: ['node', 'git', 'sandbox.exec', AMA_RUNNER_CAPABILITY] },
+  // Heartbeat is the idempotent PUT singleton; it returns a heartbeat
+  // representation (no `id`), so keep the runner row captured above.
+  await apiJson<Json>(state.page.request, `/api/v1/runners/${state.runner.id}/heartbeat`, {
+    method: 'PUT',
+    data: { state: 'active', currentLoad: 0, capabilities: ['node', 'git', 'sandbox.exec', AMA_RUNNER_CAPABILITY] },
   })
-  const session = await apiJson<Json>(state.page.request, '/api/sessions', {
+  const session = await apiJson<Json>(state.page.request, '/api/v1/sessions', {
     method: 'POST',
     data: {
       agentId: state.agent.id,
       environmentId: state.environment.id,
       runtime: 'ama',
       title: `${state.runId} runner session`,
-      runtimeSecretEnv: [{ name: envName, ref: activeVersionId(state.credential) }],
-      vaultRefs: [{ type: 'credential', id: state.credential?.id }],
+      secretEnv: [
+        {
+          name: envName,
+          credentialRef: { credentialId: state.credential?.id, versionId: activeVersionId(state.credential) },
+        },
+      ],
     },
   })
   flow(world).pendingSession = session
@@ -169,12 +177,12 @@ async function setupSelfHostedRunnerSession(state: SharedE2EState, world: VaultW
 async function versionStorage(state: SharedE2EState, versionId: string) {
   return await apiJson<{ encryptionKeyConfigured: boolean; row: Json }>(
     state.page.request,
-    `/api/e2e/vault-credential-versions/${versionId}/storage`,
+    `/api/v1/e2e/vault-credential-versions/${versionId}/storage`,
   )
 }
 
 async function auditRecords(state: SharedE2EState, query: string) {
-  return await apiJson<ListResponse<Json>>(state.page.request, `/api/audit-records?${query}`)
+  return await apiJson<ListResponse<Json>>(state.page.request, `/api/v1/audit-records?${query}`)
 }
 
 // ─── vault-secrets.feature: Store provider credentials ───
@@ -183,7 +191,7 @@ When('the user stores an API key or provider token', async function (this: Vault
   const state = await ensureVault(this)
   const rawValue = newRawValue(state, 'store')
   flow(this).rawValue = rawValue
-  state.credential = await apiJson<Json>(state.page.request, `/api/vaults/${state.vault?.id}/credentials`, {
+  state.credential = await apiJson<Json>(state.page.request, `/api/v1/vaults/${state.vault?.id}/credentials`, {
     method: 'POST',
     data: {
       name: `${state.runId} provider key`,
@@ -223,12 +231,12 @@ Then('API responses never include the raw secret value', async function (this: V
   assert.equal(JSON.stringify(state.credential).includes(rawValue), false)
   const read = await apiJson<Json>(
     state.page.request,
-    `/api/vaults/${state.vault?.id}/credentials/${state.credential?.id}`,
+    `/api/v1/vaults/${state.vault?.id}/credentials/${state.credential?.id}`,
   )
   assert.equal(JSON.stringify(read).includes(rawValue), false)
   const versions = await apiJson<ListResponse<Json>>(
     state.page.request,
-    `/api/vaults/${state.vault?.id}/credentials/${state.credential?.id}/versions?includeArchived=true`,
+    `/api/v1/vaults/${state.vault?.id}/credentials/${state.credential?.id}/versions`,
   )
   assert.equal(JSON.stringify(versions).includes(rawValue), false)
 })
@@ -244,7 +252,7 @@ When('the user rotates a credential', async function (this: VaultWorld) {
   scenario.firstVersionId = activeVersionId(state.credential)
   state.credential = await apiJson<Json>(
     state.page.request,
-    `/api/vaults/${state.vault?.id}/credentials/${state.credential?.id}/versions`,
+    `/api/v1/vaults/${state.vault?.id}/credentials/${state.credential?.id}/versions`,
     { method: 'POST', data: { provider: 'ama-managed', secretValue: scenario.rotatedValue } },
   )
   scenario.secondVersionId = activeVersionId(state.credential)
@@ -260,9 +268,14 @@ Then('new sessions use the new credential version', async function (this: VaultW
     title: `${state.runId} post-rotation session`,
   })
   const session = await waitForSession(state.page.request, String(created.id))
-  const refs = (session as unknown as Json).runtimeSecretEnv as Array<Json> | undefined
+  const refs = (session as unknown as Json).secretEnv as Array<Json> | undefined
   const sessionJson = JSON.stringify(session)
-  assert.deepEqual(refs, [{ name: 'ROTATED_PROVIDER_KEY', ref: scenario.secondVersionId }])
+  assert.deepEqual(refs, [
+    {
+      name: 'ROTATED_PROVIDER_KEY',
+      credentialRef: { credentialId: state.credential?.id, versionId: scenario.secondVersionId },
+    },
+  ])
   assert.equal(sessionJson.includes(String(scenario.rawValue)), false)
   assert.equal(sessionJson.includes(String(scenario.rotatedValue)), false)
 })
@@ -293,9 +306,9 @@ When('a user outside the project requests a vault or credential', async function
   await authenticateE2EPage(outsiderPage)
   const responses = []
   for (const path of [
-    `/api/vaults/${state.vault?.id}`,
-    `/api/vaults/${state.vault?.id}/credentials`,
-    `/api/vaults/${state.vault?.id}/credentials/${state.credential?.id}`,
+    `/api/v1/vaults/${state.vault?.id}`,
+    `/api/v1/vaults/${state.vault?.id}/credentials`,
+    `/api/v1/vaults/${state.vault?.id}/credentials/${state.credential?.id}`,
   ]) {
     const response = await apiResponse(outsiderPage.request, path)
     responses.push({ status: response.status(), body: await response.text() })
@@ -336,9 +349,19 @@ Given('a session is allowed to use a vault credential', async function (this: Va
 
 When('runtime needs the credential', async function (this: VaultWorld) {
   const state = await ensureVault(this)
-  flow(this).lease = await apiJson<Json>(state.page.request, `/api/runners/${state.runner?.id}/leases`, {
+  const scenario = flow(this)
+  const sessionId = String((scenario.pendingSession as Json).id)
+  // Two-step claim: discover the session's available work item, then lease it.
+  const available = await apiJson<ListResponse<Json>>(
+    state.page.request,
+    `/api/v1/work-items?state=available&sessionId=${sessionId}`,
+  )
+  const workItem = available.data[0]
+  assert.ok(workItem, 'the session must have an available work item to lease')
+  scenario.leaseWorkItemId = String(workItem.id)
+  scenario.lease = await apiJson<Json>(state.page.request, '/api/v1/leases', {
     method: 'POST',
-    data: { leaseDurationSeconds: 90 },
+    data: { workItemId: workItem.id, runnerId: state.runner?.id, leaseDurationSeconds: 90 },
   })
 })
 
@@ -346,8 +369,9 @@ Then('it resolves a safe secret reference without exposing the value to clients'
   const state = await ensureVault(this)
   const scenario = flow(this)
   const rawValue = String(scenario.rawValue)
-  const lease = scenario.lease as Json
-  const workItem = lease.workItem as Json
+  // Lease creation returns the lease only; the materialized payload (secret env
+  // resolved into runtimeEnv) is read back from GET /work-items/{id}.
+  const workItem = await apiJson<Json>(state.page.request, `/api/v1/work-items/${scenario.leaseWorkItemId}`)
   const payload = workItem.payload as { runtimeEnv?: Record<string, string> }
   assert.equal(
     payload.runtimeEnv?.RUNTIME_PROVIDER_KEY,
@@ -356,17 +380,19 @@ Then('it resolves a safe secret reference without exposing the value to clients'
   )
 
   const sessionId = String((scenario.pendingSession as Json).id)
-  const session = await apiJson<Json>(state.page.request, `/api/sessions/${sessionId}`)
-  assert.deepEqual(session.runtimeSecretEnv, [{ name: 'RUNTIME_PROVIDER_KEY', ref: activeVersionId(state.credential) }])
+  const session = await apiJson<Json>(state.page.request, `/api/v1/sessions/${sessionId}`)
+  assert.deepEqual(session.secretEnv, [
+    {
+      name: 'RUNTIME_PROVIDER_KEY',
+      credentialRef: { credentialId: state.credential?.id, versionId: activeVersionId(state.credential) },
+    },
+  ])
   assert.equal(JSON.stringify(session).includes(rawValue), false, 'session API must expose references only')
 
-  const workItems = await apiJson<ListResponse<Json>>(
-    state.page.request,
-    `/api/runners/work-items?sessionId=${sessionId}`,
-  )
+  const workItems = await apiJson<ListResponse<Json>>(state.page.request, `/api/v1/work-items?sessionId=${sessionId}`)
   assert.equal(JSON.stringify(workItems).includes(rawValue), false, 'persisted work items must store references only')
 
-  const events = await apiJson<ListResponse<Json>>(state.page.request, `/api/sessions/${sessionId}/events`)
+  const events = await apiJson<ListResponse<Json>>(state.page.request, `/api/v1/sessions/${sessionId}/events`)
   assert.equal(JSON.stringify(events).includes(rawValue), false, 'session events must never carry the raw value')
 })
 
@@ -400,7 +426,7 @@ Then('the persisted value is encrypted with authenticated encryption', async fun
   assert.equal(typeof metadata.encryptedSecretValue?.ciphertext, 'string')
   const check = await apiJson<Json>(
     state.page.request,
-    `/api/e2e/vault-credential-versions/${scenario.firstVersionId}/encryption-check`,
+    `/api/v1/e2e/vault-credential-versions/${scenario.firstVersionId}/encryption-check`,
     { method: 'POST', data: { expectedValue: scenario.encryptionPlaintext } },
   )
   assert.equal(check.decrypts, true)
@@ -424,7 +450,7 @@ Then('tampered ciphertext cannot be decrypted successfully', async function (thi
   const scenario = flow(this)
   const check = await apiJson<Json>(
     state.page.request,
-    `/api/e2e/vault-credential-versions/${scenario.firstVersionId}/encryption-check`,
+    `/api/v1/e2e/vault-credential-versions/${scenario.firstVersionId}/encryption-check`,
     { method: 'POST', data: {} },
   )
   assert.equal(check.tamperRejected, true, 'tampered ciphertext must fail authenticated decryption')
@@ -442,7 +468,7 @@ Then('plaintext is never written to D1, logs, events, or audit metadata', async 
   assert.equal(JSON.stringify(records).includes(plaintext), false, 'audit metadata must not contain plaintext')
   const credentials = await apiJson<ListResponse<Json>>(
     state.page.request,
-    `/api/vaults/${state.vault?.id}/credentials?includeArchived=true`,
+    `/api/v1/vaults/${state.vault?.id}/credentials`,
   )
   assert.equal(JSON.stringify(credentials).includes(plaintext), false, 'API responses must not contain plaintext')
 })
@@ -481,43 +507,48 @@ Then(
     const otherOrgPage = this.vaultScope?.otherOrgPage
     assert.ok(otherOrgPage, 'other organization page must exist')
 
-    const list = await apiResponse(otherOrgPage.request, `/api/vaults/${state.vault?.id}/credentials`)
+    const list = await apiResponse(otherOrgPage.request, `/api/v1/vaults/${state.vault?.id}/credentials`)
     assert.equal(list.status(), 404)
     const read = await apiResponse(
       otherOrgPage.request,
-      `/api/vaults/${state.vault?.id}/credentials/${state.credential?.id}`,
+      `/api/v1/vaults/${state.vault?.id}/credentials/${state.credential?.id}`,
     )
     assert.equal(read.status(), 404)
     const rotate = await apiResponse(
       otherOrgPage.request,
-      `/api/vaults/${state.vault?.id}/credentials/${state.credential?.id}/versions`,
+      `/api/v1/vaults/${state.vault?.id}/credentials/${state.credential?.id}/versions`,
       { method: 'POST', data: { provider: 'ama-managed', secretValue: newRawValue(state, 'cross-org') } },
     )
     assert.equal(rotate.status(), 404)
 
     // "Use" means runtime binding: a session in the other organization cannot
     // reference the credential version, so admission rejects it outright.
-    const agent = await apiJson<Json>(otherOrgPage.request, '/api/agents', {
+    const agent = await apiJson<Json>(otherOrgPage.request, '/api/v1/agents', {
       method: 'POST',
       data: { name: `${state.runId} other org agent`, instructions: 'Cross-org scope check' },
     })
-    const environment = await apiJson<Json>(otherOrgPage.request, '/api/environments', {
+    const environment = await apiJson<Json>(otherOrgPage.request, '/api/v1/environments', {
       method: 'POST',
       data: { name: `${state.runId} other org env`, runtimeConfig: { image: 'ama-pi-runtime' } },
     })
-    const sessionAttempt = await apiResponse(otherOrgPage.request, '/api/sessions', {
+    const sessionAttempt = await apiResponse(otherOrgPage.request, '/api/v1/sessions', {
       method: 'POST',
       data: {
         agentId: agent.id,
         environmentId: environment.id,
         runtime: 'ama',
         title: `${state.runId} cross-org session`,
-        runtimeSecretEnv: [{ name: 'FORBIDDEN_KEY', ref: activeVersionId(state.credential) }],
+        secretEnv: [
+          {
+            name: 'FORBIDDEN_KEY',
+            credentialRef: { credentialId: state.credential?.id, versionId: activeVersionId(state.credential) },
+          },
+        ],
       },
     })
     assert.equal(sessionAttempt.status(), 400, 'foreign credential references must be rejected at admission')
     const body = await sessionAttempt.text()
-    assert.match(body, /active credential version/)
+    assert.match(body, /must exist, be active/)
     assert.equal(body.includes(String(flow(this).rawValue)), false)
     assert.equal(body.includes(String(state.credential?.name)), false)
   },
@@ -525,24 +556,24 @@ Then(
 
 Then('cross-project access in the same organization requires explicit policy', async function (this: ScopeWorld) {
   const state = await ensureVault(this)
-  const sibling = await apiJson<Json>(state.page.request, '/api/projects', {
+  const sibling = await apiJson<Json>(state.page.request, '/api/v1/projects', {
     method: 'POST',
     data: { name: `${state.runId} sibling project` },
   })
   const siblingHeaders = { 'x-ama-project-id': String(sibling.id) }
 
   // Project-scoped vaults stay invisible to sibling projects in the same org.
-  const projectScopedRead = await apiResponse(state.page.request, `/api/vaults/${state.vault?.id}`, {
+  const projectScopedRead = await apiResponse(state.page.request, `/api/v1/vaults/${state.vault?.id}`, {
     headers: siblingHeaders,
   })
   assert.equal(projectScopedRead.status(), 404)
 
   // Sharing requires the explicit organization scope policy on the vault.
-  const orgVault = await apiJson<Json>(state.page.request, '/api/vaults', {
+  const orgVault = await apiJson<Json>(state.page.request, '/api/v1/vaults', {
     method: 'POST',
     data: { name: `${state.runId} org vault`, scope: 'organization' },
   })
-  const orgScopedRead = await apiJson<Json>(state.page.request, `/api/vaults/${orgVault.id}`, {
+  const orgScopedRead = await apiJson<Json>(state.page.request, `/api/v1/vaults/${orgVault.id}`, {
     headers: siblingHeaders,
   })
   assert.equal(orgScopedRead.scope, 'organization')
@@ -571,7 +602,7 @@ When('a user rotates the credential', async function (this: VaultWorld) {
   scenario.rotatedValue = newRawValue(state, 'history-v2')
   scenario.rotatedCredential = await apiJson<Json>(
     state.page.request,
-    `/api/vaults/${state.vault?.id}/credentials/${state.credential?.id}/versions`,
+    `/api/v1/vaults/${state.vault?.id}/credentials/${state.credential?.id}/versions`,
     { method: 'POST', data: { provider: 'ama-managed', secretValue: scenario.rotatedValue } },
   )
   state.credential = scenario.rotatedCredential
@@ -589,16 +620,25 @@ Then('version 2 becomes the active version for future sessions', async function 
     title: `${state.runId} future session`,
   })
   const session = await waitForSession(state.page.request, String(created.id))
-  assert.deepEqual((session as unknown as Json).runtimeSecretEnv, [
-    { name: 'HISTORICAL_PROVIDER_KEY', ref: scenario.secondVersionId },
+  assert.deepEqual((session as unknown as Json).secretEnv, [
+    {
+      name: 'HISTORICAL_PROVIDER_KEY',
+      credentialRef: { credentialId: state.credential?.id, versionId: scenario.secondVersionId },
+    },
   ])
 })
 
 Then('historical sessions keep safe references to the version they used', async function (this: VaultWorld) {
   const state = await ensureVault(this)
   const scenario = flow(this)
-  const historical = await apiJson<Json>(state.page.request, `/api/sessions/${(scenario.historicalSession as Json).id}`)
-  assert.deepEqual(historical.runtimeSecretEnv, [{ name: 'HISTORICAL_PROVIDER_KEY', ref: scenario.firstVersionId }])
+  const historicalId = (scenario.historicalSession as Json).id
+  const historical = await apiJson<Json>(state.page.request, `/api/v1/sessions/${historicalId}`)
+  assert.deepEqual(historical.secretEnv, [
+    {
+      name: 'HISTORICAL_PROVIDER_KEY',
+      credentialRef: { credentialId: state.credential?.id, versionId: scenario.firstVersionId },
+    },
+  ])
   assert.equal(JSON.stringify(historical).includes(String(scenario.rawValue)), false)
 })
 
@@ -607,10 +647,10 @@ Then('the old value is no longer returned or exposed', async function (this: Vau
   const scenario = flow(this)
   const versions = await apiJson<ListResponse<Json>>(
     state.page.request,
-    `/api/vaults/${state.vault?.id}/credentials/${state.credential?.id}/versions?includeArchived=true`,
+    `/api/v1/vaults/${state.vault?.id}/credentials/${state.credential?.id}/versions`,
   )
   const firstVersion = versions.data.find((version) => version.id === scenario.firstVersionId)
-  assert.equal(firstVersion?.status, 'superseded')
+  assert.equal(firstVersion?.state, 'superseded')
   const serialized = JSON.stringify(versions)
   assert.equal(serialized.includes(String(scenario.rawValue)), false)
   assert.equal(serialized.includes(String(scenario.rotatedValue)), false)
@@ -623,7 +663,7 @@ Given('a credential is active', async function (this: VaultWorld) {
   const scenario = flow(this)
   scenario.rawValue = newRawValue(state, 'revoke')
   state.credential = await createManagedCredential(state, `${state.runId} revocable credential`, scenario.rawValue)
-  assert.equal(state.credential.status, 'active')
+  assert.equal(state.credential.state, 'active')
   scenario.firstVersionId = activeVersionId(state.credential)
   await setupSelfHostedRunnerSession(state, this, 'REVOCABLE_PROVIDER_KEY')
 })
@@ -632,10 +672,10 @@ When('a user revokes it', async function (this: VaultWorld) {
   const state = await ensureVault(this)
   state.credential = await apiJson<Json>(
     state.page.request,
-    `/api/vaults/${state.vault?.id}/credentials/${state.credential?.id}`,
-    { method: 'PATCH', data: { status: 'revoked', revokeReason: 'Rotated out by vault e2e' } },
+    `/api/v1/vaults/${state.vault?.id}/credentials/${state.credential?.id}`,
+    { method: 'PATCH', data: { state: 'revoked', revokeReason: 'Rotated out by vault e2e' } },
   )
-  assert.equal(state.credential.status, 'revoked')
+  assert.equal(state.credential.state, 'revoked')
 })
 
 Then('future sessions cannot resolve it', async function (this: VaultWorld) {
@@ -643,27 +683,32 @@ Then('future sessions cannot resolve it', async function (this: VaultWorld) {
   const scenario = flow(this)
   // New sessions cannot even bind the revoked reference: admission rejects it
   // before any runtime starts.
-  const agent = await apiJson<Json>(state.page.request, '/api/agents', {
+  const agent = await apiJson<Json>(state.page.request, '/api/v1/agents', {
     method: 'POST',
     data: { name: `${state.runId} post-revoke agent`, instructions: 'Vault revocation e2e agent' },
   })
-  const environment = await apiJson<Json>(state.page.request, '/api/environments', {
+  const environment = await apiJson<Json>(state.page.request, '/api/v1/environments', {
     method: 'POST',
     data: { name: `${state.runId} post-revoke env`, runtimeConfig: { image: 'ama-pi-runtime' } },
   })
-  const sessionAttempt = await apiResponse(state.page.request, '/api/sessions', {
+  const sessionAttempt = await apiResponse(state.page.request, '/api/v1/sessions', {
     method: 'POST',
     data: {
       agentId: agent.id,
       environmentId: environment.id,
       runtime: 'ama',
       title: `${state.runId} post-revoke session`,
-      runtimeSecretEnv: [{ name: 'REVOCABLE_PROVIDER_KEY', ref: String(scenario.firstVersionId) }],
+      secretEnv: [
+        {
+          name: 'REVOCABLE_PROVIDER_KEY',
+          credentialRef: { credentialId: state.credential?.id, versionId: String(scenario.firstVersionId) },
+        },
+      ],
     },
   })
   assert.equal(sessionAttempt.status(), 400, 'revoked credential references must be rejected at admission')
   const body = await sessionAttempt.text()
-  assert.match(body, /active credential version/)
+  assert.match(body, /must exist, be active/)
   assert.equal(body.includes(String(scenario.rawValue)), false)
 })
 
@@ -672,18 +717,27 @@ Then(
   async function (this: VaultWorld) {
     const state = await ensureVault(this)
     const scenario = flow(this)
-    const claim = await apiResponse(state.page.request, `/api/runners/${state.runner?.id}/leases`, {
+    const sessionId = String((scenario.pendingSession as Json).id)
+    // Two-step claim: the work item is still available, but leasing it fails
+    // when the revoked credential reference cannot be materialized.
+    const available = await apiJson<ListResponse<Json>>(
+      state.page.request,
+      `/api/v1/work-items?state=available&sessionId=${sessionId}`,
+    )
+    const workItem = available.data[0]
+    assert.ok(workItem, 'the running session still has a work item to lease')
+    const claim = await apiResponse(state.page.request, '/api/v1/leases', {
       method: 'POST',
-      data: { leaseDurationSeconds: 90 },
+      data: { workItemId: workItem.id, runnerId: state.runner?.id, leaseDurationSeconds: 90 },
     })
     assert.equal(claim.status(), 409, 'revoked credentials must fail lease materialization')
     const body = await claim.text()
     assert.match(body, /revoked/)
     assert.equal(body.includes(String(scenario.rawValue)), false)
 
-    const session = await apiJson<Json>(state.page.request, `/api/sessions/${(scenario.pendingSession as Json).id}`)
-    assert.equal(session.status, 'error')
-    assert.match(String(session.statusReason), /revoked/)
+    const session = await apiJson<Json>(state.page.request, `/api/v1/sessions/${sessionId}`)
+    assert.equal(session.state, 'error')
+    assert.match(String(session.stateReason), /revoked/)
     assert.equal(JSON.stringify(session).includes(String(scenario.rawValue)), false)
   },
 )
@@ -712,12 +766,12 @@ Then('raw values are never returned by APIs, events, logs, or UI views', async f
 
   const credential = await apiJson<Json>(
     state.page.request,
-    `/api/vaults/${state.vault?.id}/credentials/${state.credential?.id}`,
+    `/api/v1/vaults/${state.vault?.id}/credentials/${state.credential?.id}`,
   )
   assert.equal(JSON.stringify(credential).includes(rawValue), false)
   const versions = await apiJson<ListResponse<Json>>(
     state.page.request,
-    `/api/vaults/${state.vault?.id}/credentials/${state.credential?.id}/versions?includeArchived=true`,
+    `/api/v1/vaults/${state.vault?.id}/credentials/${state.credential?.id}/versions`,
   )
   assert.equal(JSON.stringify(versions).includes(rawValue), false)
   const records = await auditRecords(state, 'resourceType=vault_credential')

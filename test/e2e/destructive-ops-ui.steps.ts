@@ -61,15 +61,14 @@ When(
   async function (this: DestructiveWorld) {
     const workflow = await ensureDestructiveWorkflow(this)
     // Create an agent to archive as the representative sensitive resource
-    const agent = await apiJson<{ id: string; name: string }>(workflow.page.request, '/api/agents', {
+    const agent = await apiJson<{ id: string; name: string }>(workflow.page.request, '/api/v1/agents', {
       method: 'POST',
       data: {
         name: `${workflow.runId} confirm-destructive agent`,
         instructions: 'Test agent for destructive op confirmation.',
-        provider: 'workers-ai',
         model: '@cf/moonshotai/kimi-k2.6',
         skills: [],
-        allowedTools: [],
+        tools: [],
         metadata: { runId: workflow.runId },
       },
     })
@@ -103,15 +102,14 @@ When(
   async function (this: DestructiveWorld) {
     const workflow = await ensureDestructiveWorkflow(this)
     // Create an agent to trigger the archive dialog
-    const agent = await apiJson<{ id: string }>(workflow.page.request, '/api/agents', {
+    const agent = await apiJson<{ id: string }>(workflow.page.request, '/api/v1/agents', {
       method: 'POST',
       data: {
         name: `${workflow.runId} consistent-dialog agent`,
         instructions: 'Agent for consistent dialog test.',
-        provider: 'workers-ai',
         model: '@cf/moonshotai/kimi-k2.6',
         skills: [],
-        allowedTools: [],
+        tools: [],
         metadata: { runId: workflow.runId },
       },
     })
@@ -153,15 +151,14 @@ Then('cancel leaves the resource unchanged', async function (this: DestructiveWo
 When('a destructive operation is offered', { timeout: 120_000 }, async function (this: DestructiveWorld) {
   const workflow = await ensureDestructiveWorkflow(this)
   // Create an agent and an environment to check label semantics across resource types
-  const agent = await apiJson<{ id: string }>(workflow.page.request, '/api/agents', {
+  const agent = await apiJson<{ id: string }>(workflow.page.request, '/api/v1/agents', {
     method: 'POST',
     data: {
       name: `${workflow.runId} distinguish agent`,
       instructions: 'Agent for distinction test.',
-      provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
       skills: [],
-      allowedTools: [],
+      tools: [],
       metadata: { runId: workflow.runId },
     },
   })

@@ -34,7 +34,6 @@ When('the user creates an execution environment definition', async function (thi
   // Also create an agent for the "And provider, model..." step
   state.agent = await createAgent(state, {
     name: `${state.runId} persona agent`,
-    provider: 'workers-ai',
     model: '@cf/moonshotai/kimi-k2.6',
     instructions: 'Environment hosting persona test',
   })
@@ -83,7 +82,11 @@ Then(
 Then('provider, model, persona, instructions, and policy remain on the agent', function (this: StepsWorld) {
   const agent = this.e2e?.agent as Json | undefined
   assert.ok(agent, 'agent must have been created')
-  assert.equal(agent.provider, 'workers-ai')
+  // Provider selection lives on the agent: providerId is null here because the
+  // agent uses the project default provider (resolved at session start), while
+  // the model is pinned explicitly on the agent.
+  assert.ok('providerId' in agent, 'provider selection belongs to the agent')
+  assert.equal(agent.providerId, null)
   assert.equal(agent.model, '@cf/moonshotai/kimi-k2.6')
   assert.ok(typeof agent.instructions === 'string', 'agent must have instructions')
   // These fields belong on the agent, not the environment
@@ -117,13 +120,15 @@ Then('AMA keeps the session pending with a waiting-for-runner reason', async fun
   const state = this.e2e
   assert.ok(state, 'e2e state must exist')
   const session = state.latestSession as Json
-  assert.equal(session.status, 'pending')
-  assert.equal(session.statusReason, 'waiting-for-runner')
+  assert.equal(session.state, 'pending')
+  assert.equal(session.stateReason, 'waiting-for-runner')
 })
 
 Then('AMA does not create a Cloudflare Sandbox for that session', function (this: StepsWorld) {
   const session = this.e2e?.latestSession as Json | undefined
   assert.ok(session, 'session must exist')
-  // A self-hosted session must not have a sandbox assigned before a runner claims it
-  assert.equal(session.sandboxId, null)
+  // A self-hosted session must not start runtime work before a runner claims it:
+  // it stays pending and never transitions to running. The sandbox itself is an
+  // internal implementation detail no longer surfaced on the API schema.
+  assert.equal(session.state, 'pending')
 })

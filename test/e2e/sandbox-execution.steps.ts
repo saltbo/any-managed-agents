@@ -52,7 +52,7 @@ async function setupCloudSandboxSession(world: SandboxWorld, label: string) {
 // Drives one real agent turn through the AMA runtime endpoint. The test-mode
 // prompt grammar maps the message onto a concrete sandbox tool call.
 async function runRuntimePrompt(e2e: E2EState, message: string) {
-  return await apiJson<Json>(e2e.page.request, `/runtime/sessions/${e2e.latestSession?.id}/rpc`, {
+  return await apiJson<Json>(e2e.page.request, `/api/v1/runtime/sessions/${e2e.latestSession?.id}/rpc`, {
     method: 'POST',
     data: { type: 'prompt', message },
   })
@@ -80,7 +80,19 @@ async function findPolicyDecisionEvents(e2e: E2EState) {
 }
 
 async function auditRecords(e2e: E2EState, action: string) {
-  return await apiJson<ListResponse<Json>>(e2e.page.request, `/api/audit-records?action=${action}&limit=50`)
+  return await apiJson<ListResponse<Json>>(e2e.page.request, `/api/v1/audit-records?action=${action}&limit=50`)
+}
+
+// Scoped policies are addressable resources: upsert the project-scope policy by
+// replacing it when one already exists, otherwise create it.
+async function upsertProjectPolicy(e2e: E2EState, body: Json) {
+  const existing = await apiJson<ListResponse<Json>>(e2e.page.request, '/api/v1/policies?limit=100')
+  const projectPolicy = existing.data.find((policy) => objectValue(policy.scope).level === 'project')
+  const data = { scope: { level: 'project' }, ...body }
+  if (projectPolicy) {
+    return await apiJson<Json>(e2e.page.request, `/api/v1/policies/${projectPolicy.id}`, { method: 'PUT', data })
+  }
+  return await apiJson<Json>(e2e.page.request, '/api/v1/policies', { method: 'POST', data })
 }
 
 // ─── sandbox-execution: Create a sandbox for a session ───────────────────────
@@ -91,58 +103,90 @@ When('the agent needs isolated execution', { timeout: 120_000 }, async function 
 
 Then('AMA creates a Cloudflare Sandbox for a cloud hosting mode session', async function (this: SandboxWorld) {
   const e2e = state(this)
-  const session = await apiJson<Json>(e2e.page.request, `/api/sessions/${e2e.latestSession?.id}`)
+  const session = await apiJson<Json>(e2e.page.request, `/api/v1/sessions/${e2e.latestSession?.id}`)
   e2e.latestSession = session
   assert.equal(objectValue(session.environmentSnapshot).hostingMode, 'cloud')
-  assert.ok(typeof session.sandboxId === 'string' && session.sandboxId.length > 0, 'session owns a sandbox id')
+  // The v1 Session response no longer exposes the sandbox implementation detail.
+  // A cloud-owned sandbox is observable through the running session lifecycle and
+  // the cloud runtime metadata that drives execution.
+  assert.ok(['pending', 'running', 'idle'].includes(String(session.state)), 'the session is live')
+  const runtimeMetadata = objectValue(session.runtimeMetadata)
+  assert.equal(runtimeMetadata.hostingMode, 'cloud', 'runtime metadata reports the cloud sandbox host')
+  assert.equal(runtimeMetadata.driver, 'ama-cloud', 'a cloud sandbox executor drives the session')
+  assert.equal(runtimeMetadata.backend, 'ama-cloud')
   const audit = await auditRecords(e2e, 'session.runtime.start')
   const startRecord = audit.data.find((record) => record.sessionId === session.id && record.outcome === 'success')
   assert.ok(startRecord, 'sandbox runtime startup is audited for the session')
-  assert.equal(objectValue(startRecord.metadata).sandboxId, session.sandboxId, 'audit records the created sandbox')
+  // The audit metadata is an internal record and still names the sandbox it created.
+  assert.ok(typeof objectValue(startRecord.metadata).sandboxId === 'string', 'audit records the created sandbox')
 })
 
 Then('the sandbox is associated with the organization, project, and session', async function (this: SandboxWorld) {
   const e2e = state(this)
   const session = objectValue(e2e.latestSession)
-  assert.equal(session.organizationId, objectValue(objectValue(e2e.auth).organization).id)
+  // The v1 session no longer exposes organizationId/sandboxId; tenant scope is
+  // carried by projectId (which determines the organization), and the sandbox
+  // binding is observable through the audited runtime startup for this session.
   assert.equal(session.projectId, objectValue(objectValue(e2e.auth).project).id)
-  assert.ok(session.sandboxId, 'the sandbox is bound to the session record')
+  const audit = await auditRecords(e2e, 'session.runtime.start')
+  const startRecord = audit.data.find((record) => record.sessionId === session.id && record.outcome === 'success')
+  assert.ok(startRecord, 'the sandbox runtime startup is bound to this session')
+  assert.equal(
+    startRecord.projectId,
+    objectValue(objectValue(e2e.auth).project).id,
+    'the sandbox is bound to the project',
+  )
+  assert.ok(
+    typeof objectValue(startRecord.metadata).sandboxId === 'string',
+    'the sandbox is bound to the session through its runtime startup',
+  )
 })
 
 Then('the sandbox is created from the session environment snapshot', async function (this: SandboxWorld) {
   const e2e = state(this)
-  const before = await apiJson<Json>(e2e.page.request, `/api/sessions/${e2e.latestSession?.id}`)
+  const before = await apiJson<Json>(e2e.page.request, `/api/v1/sessions/${e2e.latestSession?.id}`)
   const snapshot = objectValue(before.environmentSnapshot)
   assert.equal(snapshot.environmentId, objectValue(e2e.environment).id, 'snapshot points at the selected environment')
   assert.equal(objectValue(before.runtimeMetadata).hostingMode, snapshot.hostingMode)
   // Mutating the environment after sandbox creation must not move the
   // snapshot the sandbox was created from.
-  await apiJson<Json>(e2e.page.request, `/api/environments/${objectValue(e2e.environment).id}`, {
+  await apiJson<Json>(e2e.page.request, `/api/v1/environments/${objectValue(e2e.environment).id}`, {
     method: 'PATCH',
     data: { description: 'Changed after sandbox creation — the session snapshot must not follow.' },
   })
-  const after = await apiJson<Json>(e2e.page.request, `/api/sessions/${e2e.latestSession?.id}`)
+  const after = await apiJson<Json>(e2e.page.request, `/api/v1/sessions/${e2e.latestSession?.id}`)
   assert.deepEqual(after.environmentSnapshot, before.environmentSnapshot, 'sandbox keeps its environment snapshot')
 })
 
 Then('the sandbox is owned by exactly one session', { timeout: 120_000 }, async function (this: SandboxWorld) {
   const e2e = state(this)
+  const firstSessionId = objectValue(e2e.latestSession).id
   this.secondSession = await createSession(e2e, { title: `${e2e.runId} second sandbox session` })
-  assert.ok(this.secondSession.sandboxId, 'the second session owns its own sandbox')
-  assert.notEqual(
-    this.secondSession.sandboxId,
-    objectValue(e2e.latestSession).sandboxId,
-    'each session owns a distinct sandbox',
+  // The sandbox is an internal detail; one-sandbox-per-session is observable as a
+  // distinct, independently cloud-hosted session — each session owns its runtime.
+  assert.notEqual(this.secondSession.id, firstSessionId, 'each session is a distinct runtime owner')
+  const secondMeta = objectValue(this.secondSession.runtimeMetadata)
+  assert.equal(secondMeta.hostingMode, 'cloud', 'the second session owns its own cloud sandbox runtime')
+  // Each session's runtime startup is audited separately: one startup per session.
+  const audit = await auditRecords(e2e, 'session.runtime.start')
+  const firstStarts = audit.data.filter((record) => record.sessionId === firstSessionId && record.outcome === 'success')
+  assert.equal(firstStarts.length, 1, 'exactly one runtime startup is bound to the first session')
+  const firstSandboxId = objectValue(firstStarts[0]?.metadata).sandboxId
+  const secondStart = audit.data.find(
+    (record) => record.sessionId === this.secondSession?.id && record.outcome === 'success',
   )
-  const sessions = await apiJson<ListResponse<Json>>(e2e.page.request, '/api/sessions?limit=100')
-  const owners = sessions.data.filter((session) => session.sandboxId === objectValue(e2e.latestSession).sandboxId)
-  assert.equal(owners.length, 1, 'exactly one session owns the sandbox')
+  assert.notEqual(
+    objectValue(secondStart?.metadata).sandboxId,
+    firstSandboxId,
+    'each session is created with its own distinct sandbox',
+  )
 })
 
 Then('clients do not connect directly to a sandbox-owned runtime process', async function (this: SandboxWorld) {
   const e2e = state(this)
-  const session = await apiJson<Json>(e2e.page.request, `/api/sessions/${e2e.latestSession?.id}`)
-  assert.equal(session.runtimeEndpointPath, `/runtime/sessions/${session.id}/rpc`, 'runtime traffic uses AMA endpoints')
+  const session = await apiJson<Json>(e2e.page.request, `/api/v1/sessions/${e2e.latestSession?.id}`)
+  const connection = await apiJson<Json>(e2e.page.request, `/api/v1/sessions/${session.id}/connection`)
+  assert.equal(connection.path, `/api/v1/runtime/sessions/${session.id}/rpc`, 'runtime traffic uses AMA endpoints')
   const serialized = JSON.stringify(session)
   assert.equal(serialized.includes('localhost'), false)
   assert.equal(serialized.includes('127.0.0.1'), false)
@@ -269,22 +313,25 @@ When('the session stops, completes, or fails', { timeout: 120_000 }, async funct
   const e2e = await setupCloudSandboxSession(this, 'sandbox end')
   // Touch the sandbox so its termination ends real workspace state.
   await runRuntimePrompt(e2e, `run the sandbox command "echo sandbox-end-${e2e.runId}"`)
-  e2e.latestSession = await apiJson<Json>(e2e.page.request, `/api/sessions/${e2e.latestSession?.id}/stop`, {
-    method: 'POST',
+  e2e.latestSession = await apiJson<Json>(e2e.page.request, `/api/v1/sessions/${e2e.latestSession?.id}`, {
+    method: 'PATCH',
+    data: { state: 'stopped' },
   })
 })
 
 Then('the sandbox is terminated with the session', { timeout: 60_000 }, async function (this: SandboxWorld) {
   const e2e = state(this)
-  const session = await apiJson<Json>(e2e.page.request, `/api/sessions/${e2e.latestSession?.id}`)
-  assert.equal(session.status, 'stopped')
+  const session = await apiJson<Json>(e2e.page.request, `/api/v1/sessions/${e2e.latestSession?.id}`)
+  assert.equal(session.state, 'stopped')
   assert.ok(session.stoppedAt, 'the stop time is recorded')
   const events = await sessionEvents(e2e)
   const stopEvent = events.data.find((event) => event.type === 'session_stop')
   assert.ok(stopEvent, 'the lifecycle stream records the sandbox-owning session stop')
-  assert.equal(objectValue(stopEvent.metadata).sandboxId, session.sandboxId, 'the stop event names the sandbox')
+  // The session response no longer exposes sandboxId; the internal stop event still
+  // names the sandbox it tore down, which is the observable termination signal.
+  assert.ok(typeof objectValue(stopEvent.metadata).sandboxId === 'string', 'the stop event names the sandbox')
   // The terminated sandbox accepts no further runtime work.
-  const blocked = await apiResponse(e2e.page.request, `/runtime/sessions/${session.id}/rpc`, {
+  const blocked = await apiResponse(e2e.page.request, `/api/v1/runtime/sessions/${session.id}/rpc`, {
     method: 'POST',
     data: { type: 'prompt', message: `run the sandbox command "echo after-stop-${e2e.runId}"` },
   })
@@ -293,17 +340,36 @@ Then('the sandbox is terminated with the session', { timeout: 60_000 }, async fu
 
 Then('the sandbox is not reused by another session', { timeout: 120_000 }, async function (this: SandboxWorld) {
   const e2e = state(this)
-  const stoppedSandboxId = objectValue(e2e.latestSession).sandboxId
+  const stoppedSessionId = objectValue(e2e.latestSession).id
+  // The terminated session's sandbox is read from its internal stop event, since
+  // sandboxId is no longer on the session response.
+  const stoppedEvents = await sessionEvents(e2e)
+  const stoppedSandboxId = objectValue(
+    stoppedEvents.data.find((event) => event.type === 'session_stop')?.metadata,
+  ).sandboxId
   assert.ok(stoppedSandboxId, 'the stopped session owned a sandbox')
   const created = await createSession(e2e, { title: `${e2e.runId} post-stop session` })
-  const nextSession = await apiJson<Json>(e2e.page.request, `/api/sessions/${created.id}`)
-  assert.ok(nextSession.sandboxId, 'the next session gets a sandbox')
-  assert.notEqual(nextSession.sandboxId, stoppedSandboxId, 'a stopped sandbox is never handed to another session')
-  const sessions = await apiJson<ListResponse<Json>>(e2e.page.request, '/api/sessions?limit=100')
-  const owners = sessions.data.filter((session) => session.sandboxId === stoppedSandboxId)
+  const nextSession = await apiJson<Json>(e2e.page.request, `/api/v1/sessions/${created.id}`)
+  assert.equal(
+    objectValue(nextSession.runtimeMetadata).hostingMode,
+    'cloud',
+    'the next session gets its own cloud sandbox',
+  )
+  // The new session's sandbox comes from its own audited runtime startup and is
+  // never the terminated session's sandbox.
+  const audit = await auditRecords(e2e, 'session.runtime.start')
+  const nextStart = audit.data.find((record) => record.sessionId === created.id && record.outcome === 'success')
+  const nextSandboxId = objectValue(nextStart?.metadata).sandboxId
+  assert.ok(nextSandboxId, 'the next session gets a sandbox')
+  assert.notEqual(nextSandboxId, stoppedSandboxId, 'a stopped sandbox is never handed to another session')
+  // Only the terminated session is bound to its sandbox — across all startup
+  // records, that sandbox id appears once, for the original session.
+  const owners = audit.data.filter(
+    (record) => objectValue(record.metadata).sandboxId === stoppedSandboxId && record.outcome === 'success',
+  )
   assert.deepEqual(
-    owners.map((session) => session.id),
-    [objectValue(e2e.latestSession).id],
+    owners.map((record) => record.sessionId),
+    [stoppedSessionId],
     'the terminated sandbox stays bound to its original session only',
   )
 })
@@ -323,7 +389,7 @@ When('a sandbox process starts a local service', { timeout: 120_000 }, async fun
 
 Then('the platform does not expose a public port or preview URL for that service', async function (this: SandboxWorld) {
   const e2e = state(this)
-  const session = await apiJson<Json>(e2e.page.request, `/api/sessions/${e2e.latestSession?.id}`)
+  const session = await apiJson<Json>(e2e.page.request, `/api/v1/sessions/${e2e.latestSession?.id}`)
   for (const key of ['previewUrl', 'previewUrls', 'publicUrl', 'exposedPorts', 'ports', 'portMappings']) {
     assert.equal(key in session, false, `session surface must not expose ${key}`)
   }
@@ -335,10 +401,11 @@ Then('the platform does not expose a public port or preview URL for that service
 
 Then('access remains internal to the session runtime', async function (this: SandboxWorld) {
   const e2e = state(this)
-  const session = await apiJson<Json>(e2e.page.request, `/api/sessions/${e2e.latestSession?.id}`)
+  const session = await apiJson<Json>(e2e.page.request, `/api/v1/sessions/${e2e.latestSession?.id}`)
+  const connection = await apiJson<Json>(e2e.page.request, `/api/v1/sessions/${session.id}/connection`)
   assert.equal(
-    session.runtimeEndpointPath,
-    `/runtime/sessions/${session.id}/rpc`,
+    connection.path,
+    `/api/v1/runtime/sessions/${session.id}/rpc`,
     'the AMA runtime endpoint is the only session execution surface',
   )
   const events = await sessionEvents(e2e)
@@ -354,10 +421,7 @@ Given(
   { timeout: 120_000 },
   async function (this: SandboxWorld) {
     const e2e = await ensureSignedIn(this)
-    await apiJson<Json>(e2e.page.request, '/api/governance/policy', {
-      method: 'PUT',
-      data: { sandboxPolicy: { blockedCommands: ['rm'] } },
-    })
+    await upsertProjectPolicy(e2e, { sandboxPolicy: { blockedCommands: ['rm'] } })
     await setupCloudSandboxSession(this, 'sandbox policy')
   },
 )
@@ -365,7 +429,7 @@ Given(
 When('the agent attempts a blocked sandbox operation', { timeout: 60_000 }, async function (this: SandboxWorld) {
   const e2e = state(this)
   this.blockedCommand = 'rm -rf /workspace'
-  const response = await apiResponse(e2e.page.request, `/runtime/sessions/${e2e.latestSession?.id}/rpc`, {
+  const response = await apiResponse(e2e.page.request, `/api/v1/runtime/sessions/${e2e.latestSession?.id}/rpc`, {
     method: 'POST',
     data: { type: 'prompt', message: `run the sandbox command "${this.blockedCommand}"` },
   })
@@ -423,7 +487,7 @@ async function attemptRestrictedNetworkAccess(world: SandboxWorld, blockedQuery:
   const e2e = state(world)
   assert.ok(world.allowedHost && world.blockedHost, 'network policy hosts must be set')
   await runRuntimePrompt(e2e, `fetch https://${world.allowedHost}/status`)
-  const blocked = await apiResponse(e2e.page.request, `/runtime/sessions/${e2e.latestSession?.id}/rpc`, {
+  const blocked = await apiResponse(e2e.page.request, `/api/v1/runtime/sessions/${e2e.latestSession?.id}/rpc`, {
     method: 'POST',
     data: { type: 'prompt', message: `fetch https://${world.blockedHost}/${blockedQuery}` },
   })

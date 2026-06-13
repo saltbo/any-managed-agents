@@ -1,3 +1,4 @@
+import { isArchived } from '@/console/format'
 import type { Agent, AgentInput, Environment, EnvironmentInput, Provider, Session } from '@/lib/api'
 
 export const QUICKSTART_STEPS = ['provider', 'environment', 'agent', 'session', 'integration'] as const
@@ -12,11 +13,11 @@ export const QUICKSTART_STEP_TITLES: Record<QuickstartStep, string> = {
 }
 
 export const QUICKSTART_STEP_CALLS: Record<QuickstartStep, string> = {
-  provider: 'GET /api/providers',
-  environment: 'POST /api/environments',
-  agent: 'POST /api/agents',
-  session: 'POST /api/sessions',
-  integration: 'GET /api/openapi.json',
+  provider: 'GET /api/v1/providers',
+  environment: 'POST /api/v1/environments',
+  agent: 'POST /api/v1/agents',
+  session: 'POST /api/v1/sessions',
+  integration: 'GET /api/v1/openapi.json',
 }
 
 // Keep this prompt free of runtime trigger words such as "command", "status",
@@ -35,11 +36,11 @@ export type QuickstartCompletion = Record<QuickstartStep, boolean>
 
 export function quickstartCompletion(resources: QuickstartResources): QuickstartCompletion {
   return {
-    provider: resources.providers.some((provider) => provider.status === 'active'),
-    environment: resources.environments.some((environment) => environment.status === 'active'),
-    agent: resources.agents.some((agent) => agent.status === 'active'),
+    provider: resources.providers.some((provider) => provider.enabled),
+    environment: resources.environments.some((environment) => !isArchived(environment)),
+    agent: resources.agents.some((agent) => !isArchived(agent)),
     session: resources.sessions.length > 0,
-    integration: resources.sessions.some((session) => session.runtimeEndpointPath !== null),
+    integration: resources.sessions.some((session) => session.state === 'idle' || session.state === 'running'),
   }
 }
 
@@ -111,14 +112,15 @@ export const SANDBOX_TOOLS = ['sandbox.exec', 'sandbox.read', 'sandbox.write'] a
 export const DEFAULT_SANDBOX_SKILL = 'ama@coding-agent'
 
 export function agentHasSandboxExecution(agent: Agent) {
-  return (
-    agent.allowedTools.length === 0 || agent.allowedTools.includes('*') || agent.allowedTools.includes('sandbox.exec')
-  )
+  const names = agent.tools.map((tool) => tool.name)
+  return names.length === 0 || names.includes('*') || names.includes('sandbox.exec')
 }
 
 export function sandboxAgentInput(agent: Agent): Partial<AgentInput> {
+  const existing = agent.tools.map((tool) => tool.name)
+  const merged = [...new Set([...existing, ...SANDBOX_TOOLS])]
   return {
-    allowedTools: [...new Set([...agent.allowedTools, ...SANDBOX_TOOLS])],
+    tools: merged.map((name) => ({ name })),
     skills: agent.skills.length > 0 ? agent.skills : [DEFAULT_SANDBOX_SKILL],
   }
 }
@@ -130,7 +132,7 @@ export interface QuickstartIntegrationInput {
   agentId: string
   environmentId: string | null
   sessionId: string
-  runtimeEndpointPath: string | null
+  runtimePath: string | null
 }
 
 export function quickstartIntegrationExamples(input: QuickstartIntegrationInput) {
@@ -141,21 +143,21 @@ export function quickstartIntegrationExamples(input: QuickstartIntegrationInput)
     runtime: 'ama',
     initialPrompt: SAFE_EXAMPLE_PROMPT,
   })
-  const liveSessionUrl = input.runtimeEndpointPath
-    ? `${input.origin}${input.runtimeEndpointPath}`
-    : `${input.origin}/api/sessions/${input.sessionId}/events/stream`
+  const liveSessionUrl = input.runtimePath
+    ? `${input.origin}${input.runtimePath}`
+    : `${input.origin}/api/v1/sessions/${input.sessionId}/events`
   const curl = [
-    `curl -X POST "${input.origin}/api/sessions" \\`,
+    `curl -X POST "${input.origin}/api/v1/sessions" \\`,
     `  ${authHeader} \\`,
     '  -H "Content-Type: application/json" \\',
     `  -d '${sessionBody}'`,
-    `curl "${input.origin}/api/sessions/${input.sessionId}/events" ${authHeader}`,
+    `curl "${input.origin}/api/v1/sessions/${input.sessionId}/events" ${authHeader}`,
     `curl "${liveSessionUrl}" ${authHeader}`,
   ].join('\n')
   const restish = [
-    `restish ${input.origin}/api/openapi.json`,
-    `printf '%s\\n' '${sessionBody}' | restish post ${input.origin}/api/sessions ${authHeader}`,
-    `restish get ${input.origin}/api/sessions/${input.sessionId} ${authHeader}`,
+    `restish ${input.origin}/api/v1/openapi.json`,
+    `printf '%s\\n' '${sessionBody}' | restish post ${input.origin}/api/v1/sessions ${authHeader}`,
+    `restish get ${input.origin}/api/v1/sessions/${input.sessionId} ${authHeader}`,
   ].join('\n')
   const sdk = [
     "import { AmaClient } from '@any-managed-agents/sdk'",

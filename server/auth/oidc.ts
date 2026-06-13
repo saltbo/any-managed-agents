@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
 import * as client from 'openid-client'
-import { externalProjectBindings, projects } from '../db/schema'
+import { federatedTenants, projects } from '../db/schema'
 import type { Env } from '../env'
 
 export interface UserInfoClaims {
@@ -274,20 +274,20 @@ export function organizationIdForClaims(claims: UserInfoClaims) {
 async function projectForFederatedClaims(db: DrizzleD1Database, claims: UserInfoClaims) {
   const externalTenantId = claims.external_tenant_id ?? claims.tenant_id
   if (claims.iss && externalTenantId) {
-    const binding = await db
-      .select({ project: projects, binding: externalProjectBindings })
-      .from(externalProjectBindings)
-      .innerJoin(projects, eq(projects.id, externalProjectBindings.projectId))
+    const tenant = await db
+      .select({ project: projects, tenant: federatedTenants })
+      .from(federatedTenants)
+      .innerJoin(projects, eq(projects.id, federatedTenants.projectId))
       .where(
         and(
-          eq(externalProjectBindings.issuer, claims.iss),
-          eq(externalProjectBindings.externalTenantId, externalTenantId),
-          eq(externalProjectBindings.enabled, true),
+          eq(federatedTenants.issuer, claims.iss),
+          eq(federatedTenants.externalTenantId, externalTenantId),
+          eq(federatedTenants.enabled, true),
         ),
       )
       .get()
-    return binding
-      ? { id: binding.project.id, name: binding.project.name, organizationId: binding.project.organizationId }
+    return tenant
+      ? { id: tenant.project.id, name: tenant.project.name, organizationId: tenant.project.organizationId }
       : null
   }
   if (!claims.iss && claims.ama_project_id) {

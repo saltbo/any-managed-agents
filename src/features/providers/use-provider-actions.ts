@@ -6,7 +6,7 @@ import { queryKeys } from '@/lib/query-keys'
 export function useProviderActions() {
   const queryClient = useQueryClient()
   const archiveProvider = useMutation({
-    mutationFn: api.archiveProvider,
+    mutationFn: api.deleteProvider,
     onSuccess: () => {
       toast.success('Provider deleted')
       void queryClient.invalidateQueries({ queryKey: queryKeys.providers.all })

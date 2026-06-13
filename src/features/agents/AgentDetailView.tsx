@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ConfirmAction, DetailSection, EmptyState, Meta, MetaGrid, StatusBadge } from '@/console/components'
-import { formatDate, stringifyJson } from '@/console/format'
+import { archivedLabel, formatDate, isArchived, stringifyJson } from '@/console/format'
 import { JsonBlock } from '@/features/console/json-block'
 import { RelatedResourcesTable } from '@/features/console/related-resources-table'
 import type { Agent, AgentVersion, Session } from '@/lib/api'
@@ -58,15 +58,15 @@ function AgentDetailContent({
         projectId: agent.projectId,
         version: agent.version,
         instructions: agent.instructions,
-        provider: agent.provider,
+        providerId: agent.providerId,
         model: agent.model,
-        systemPrompt: agent.systemPrompt,
         skills: agent.skills,
+        subagents: agent.subagents,
         role: agent.role,
         capabilityTags: agent.capabilityTags,
         handoffPolicy: agent.handoffPolicy,
         memoryPolicy: agent.memoryPolicy,
-        allowedTools: agent.allowedTools,
+        tools: agent.tools,
         mcpConnectors: agent.mcpConnectors,
         metadata: agent.metadata,
         createdAt: agent.updatedAt,
@@ -86,7 +86,7 @@ function AgentDetailContent({
             description="Immutable provider, model, and tool settings captured by the selected agent version."
             actions={
               <>
-                <StatusBadge value={agent.status} />
+                <StatusBadge value={archivedLabel(agent)} />
                 {versions.length > 0 ? (
                   <Select value={currentVersion.id} onValueChange={setSelectedVersionId}>
                     <SelectTrigger className="w-44">
@@ -103,7 +103,7 @@ function AgentDetailContent({
                     </SelectContent>
                   </Select>
                 ) : null}
-                {onArchive && agent.status !== 'archived' ? (
+                {onArchive && !isArchived(agent) ? (
                   <ConfirmAction
                     title="Archive agent?"
                     description={`Archive ${agent.name}. Existing sessions are not deleted, but this agent will no longer accept new sessions.`}
@@ -124,10 +124,13 @@ function AgentDetailContent({
               <MetaGrid>
                 <Meta label="Version" value={`v${currentVersion.version}`} />
                 <Meta label="Created" value={formatDate(currentVersion.createdAt)} />
-                <Meta label="Provider" value={currentVersion.provider} />
-                <Meta label="Model" value={currentVersion.model} />
+                <Meta label="Provider" value={currentVersion.providerId ?? 'None'} />
+                <Meta label="Model" value={currentVersion.model ?? 'None'} />
                 <Meta label="Skills" value={currentVersion.skills.join(', ') || 'None'} />
-                <Meta label="Allowed tools" value={currentVersion.allowedTools.join(', ') || 'None'} />
+                <Meta
+                  label="Allowed tools"
+                  value={currentVersion.tools.map((tool) => tool.name).join(', ') || 'None'}
+                />
                 <Meta label="MCP connectors" value={currentVersion.mcpConnectors.join(', ') || 'None'} />
                 <Meta label="Role" value={currentVersion.role ?? 'None'} />
                 <Meta label="Capability tags" value={currentVersion.capabilityTags.join(', ') || 'None'} />
@@ -138,8 +141,7 @@ function AgentDetailContent({
               <JsonBlock
                 value={stringifyJson({
                   instructions: currentVersion.instructions,
-                  systemPrompt: currentVersion.systemPrompt,
-                  provider: currentVersion.provider,
+                  providerId: currentVersion.providerId,
                   model: currentVersion.model,
                 })}
               />

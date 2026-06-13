@@ -20,7 +20,6 @@ afterEach(() => {
 function buildSession(overrides: Partial<Session> = {}): Session {
   return {
     id: 'session_1',
-    organizationId: 'org_1',
     projectId: 'project_1',
     agentId: 'agent_1',
     agentVersionId: 'agentver_1',
@@ -30,16 +29,15 @@ function buildSession(overrides: Partial<Session> = {}): Session {
       projectId: 'project_1',
       version: 1,
       instructions: 'Do the work',
-      provider: 'workers-ai',
+      providerId: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
-      systemPrompt: 'Coding agent',
       skills: ['ama@coding-agent'],
+      subagents: [],
       role: null,
       capabilityTags: [],
       handoffPolicy: {},
       memoryPolicy: { enabled: false },
-      allowedTools: ['read', 'write'],
-      tools: [],
+      tools: [{ name: 'read' }, { name: 'write' }],
       mcpConnectors: [],
       metadata: {},
       createdAt: '2026-05-23T00:00:00.000Z',
@@ -52,7 +50,7 @@ function buildSession(overrides: Partial<Session> = {}): Session {
       projectId: 'project_1',
       packages: [{ name: 'tsx', version: 'latest' }],
       variables: {},
-      secretRefs: [],
+      credentialRefs: [],
       hostingMode: 'cloud',
       networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
       mcpPolicy: {},
@@ -65,10 +63,8 @@ function buildSession(overrides: Partial<Session> = {}): Session {
     },
     title: 'First run workflow',
     resourceRefs: [],
-    vaultRefs: [],
-    durableObjectName: 'session_1',
-    sandboxId: 'sandbox_1',
-    runtimeEndpointPath: '/runtime/sessions/session_1/rpc',
+    env: {},
+    secretEnv: [],
     runtimeMetadata: {
       hostingMode: 'cloud',
       runtime: 'ama',
@@ -79,8 +75,8 @@ function buildSession(overrides: Partial<Session> = {}): Session {
       backend: 'ama-cloud',
       protocol: 'ama-runtime-rpc',
     },
-    status: 'idle',
-    statusReason: null,
+    state: 'idle',
+    stateReason: null,
     metadata: {},
     startedAt: '2026-05-23T00:00:00.000Z',
     stoppedAt: null,
@@ -98,19 +94,20 @@ function buildAgent(overrides: Partial<Agent> = {}): Agent {
     name: 'Coding agent',
     description: null,
     instructions: 'Do the work',
-    provider: 'workers-ai',
+    providerId: 'workers-ai',
     model: '@cf/moonshotai/kimi-k2.6',
-    systemPrompt: 'Coding agent',
     skills: ['ama@coding-agent'],
+    subagents: [],
     role: null,
     capabilityTags: [],
     handoffPolicy: {},
     memoryPolicy: { enabled: false },
-    allowedTools: ['read', 'write'],
-    tools: [],
+    tools: [
+      { name: 'read', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} },
+      { name: 'write', description: null, inputSchema: {}, approvalMode: 'none', policyMetadata: {} },
+    ],
     mcpConnectors: [],
     metadata: {},
-    status: 'active',
     archivedAt: null,
     currentVersionId: 'agentver_1',
     version: 1,
@@ -128,7 +125,7 @@ function buildEnvironment(overrides: Partial<Environment> = {}): Environment {
     description: null,
     packages: [{ name: 'tsx', version: 'latest' }],
     variables: {},
-    secretRefs: [],
+    credentialRefs: [],
     hostingMode: 'cloud',
     networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
     mcpPolicy: {},
@@ -136,7 +133,6 @@ function buildEnvironment(overrides: Partial<Environment> = {}): Environment {
     resourceLimits: { memoryMb: 1024 },
     runtimeConfig: { image: 'node:24' },
     metadata: {},
-    status: 'active',
     archivedAt: null,
     currentVersionId: 'envver_1',
     version: 1,
@@ -149,7 +145,6 @@ function buildEnvironment(overrides: Partial<Environment> = {}): Environment {
 function buildPersistedEvent(overrides: Partial<SessionEvent> = {}): SessionEvent {
   return {
     id: 'event_1',
-    organizationId: 'org_1',
     projectId: 'project_1',
     sessionId: 'session_1',
     sequence: 1,
@@ -208,7 +203,6 @@ describe('sessions UI contracts', () => {
           title: '',
           metadata: '{}',
           resourceRefs: '[]',
-          vaultRefs: '[]',
         }}
         setValue={vi.fn()}
         agents={[buildAgent()]}
@@ -248,8 +242,8 @@ describe('sessions UI contracts', () => {
       buildSession({
         id: `session_${index + 1}`,
         title: `Session ${index + 1}`,
-        status: index === 0 ? 'error' : 'idle',
-        statusReason: index === 0 ? 'Runtime crashed' : null,
+        state: index === 0 ? 'error' : 'idle',
+        stateReason: index === 0 ? 'Runtime crashed' : null,
       }),
     )
     function Harness() {
@@ -289,7 +283,7 @@ describe('sessions UI contracts', () => {
   })
 
   it('renders one table row for one error session', () => {
-    const session = buildSession({ status: 'error', statusReason: 'Runtime crashed' })
+    const session = buildSession({ state: 'error', stateReason: 'Runtime crashed' })
     render(
       <MemoryRouter>
         <SessionsView
@@ -372,8 +366,8 @@ describe('sessions UI contracts', () => {
 
   it('renders session detail facts from agent and environment snapshots instead of legacy model fields', () => {
     const session = buildSession({
-      status: 'pending',
-      statusReason: 'waiting-for-runner',
+      state: 'pending',
+      stateReason: 'waiting-for-runner',
       environmentSnapshot: {
         ...buildSession().environmentSnapshot!,
         hostingMode: 'self_hosted',

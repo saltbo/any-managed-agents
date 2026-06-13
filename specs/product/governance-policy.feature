@@ -26,12 +26,6 @@ Feature: Governance and policy
     And explains which policy blocked it
 
   @implemented
-  Scenario: Load governance from configuration
-    When an operator provides a governance config
-    Then the platform validates the config
-    And applies it without requiring source code changes
-
-  @implemented
   Scenario: Explain policy denials to operators
     Given a request is denied by provider, tool, MCP, sandbox, or budget policy
     When the user inspects the failure

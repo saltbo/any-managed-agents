@@ -16,6 +16,7 @@ type AuditUiOperationsWorld = StepsWorld & {
   auditedVault?: Json
   detailRecord?: Json
   exportedRecords?: Json[]
+  exportedCsv?: string
 }
 
 function rawSecret(state: E2EState) {
@@ -23,12 +24,12 @@ function rawSecret(state: E2EState) {
 }
 
 function isAuditListResponse(response: Response) {
-  return /\/api\/audit-records(\?|$)/.test(response.url()) && response.request().method() === 'GET'
+  return /\/api\/v1\/audit-records(\?|$)/.test(response.url()) && response.request().method() === 'GET'
 }
 
 async function seedProviderChangeAudit(state: E2EState) {
   const provider = await createProvider(state, { type: 'openai', displayName: `${state.runId} ui provider` })
-  return await apiJson<Json>(state.page.request, `/api/providers/${provider.id}`, {
+  return await apiJson<Json>(state.page.request, `/api/v1/providers/${provider.id}`, {
     method: 'PATCH',
     data: {
       displayName: `${state.runId} ui provider v2`,
@@ -59,7 +60,7 @@ async function applyFilter(state: E2EState, marker: string, apply: () => Promise
 Given('audit records exist', { timeout: 120_000 }, async function (this: AuditUiOperationsWorld) {
   const state = await ensureSignedIn(this)
   this.auditedProvider = await seedProviderChangeAudit(state)
-  this.auditedVault = await apiJson<Json>(state.page.request, '/api/vaults', {
+  this.auditedVault = await apiJson<Json>(state.page.request, '/api/v1/vaults', {
     method: 'POST',
     data: { name: `${state.runId} ui vault` },
   })
@@ -105,8 +106,9 @@ Then(
     await expect(page.getByRole('link', { name: 'provider.update' })).toBeVisible()
     await applyFilter(state, 'audit-records', () => page.getByLabel('Filter by actor').fill(''))
 
-    // Time range: a future start excludes everything recorded so far.
-    await applyFilter(state, 'createdFrom=', () => page.getByLabel('Audit from').fill('2099-01-01T00:00'))
+    // Time range: a future start excludes everything recorded so far. The page
+    // filter param is createdFrom, but the API request carries it as from=.
+    await applyFilter(state, 'from=', () => page.getByLabel('Audit from').fill('2099-01-01T00:00'))
     await expect(page.getByText('No audit records')).toBeVisible()
     await applyFilter(state, 'audit-records', () => page.getByLabel('Audit from').fill(''))
     await expect(page.getByRole('link', { name: 'vault.create' })).toBeVisible()
@@ -131,7 +133,7 @@ Given(
     this.auditedProvider = await seedProviderChangeAudit(state)
     const records = await apiJson<ListResponse<Json>>(
       state.page.request,
-      `/api/audit-records?action=provider.update&resourceId=${this.auditedProvider.id}`,
+      `/api/v1/audit-records?action=provider.update&resourceId=${this.auditedProvider.id}`,
     )
     const record = records.data[0]
     assert.ok(record, 'the provider change produced an audit record')
@@ -145,7 +147,8 @@ When('the operator opens the record detail', { timeout: 120_000 }, async functio
   const page = state.page
   const detailLoaded = page.waitForResponse(
     (response) =>
-      response.url().includes(`/api/audit-records/${this.detailRecord?.id}`) && response.request().method() === 'GET',
+      response.url().includes(`/api/v1/audit-records/${this.detailRecord?.id}`) &&
+      response.request().method() === 'GET',
   )
   await page.goto(`/audit/${this.detailRecord.id}`)
   const response = await detailLoaded
@@ -189,7 +192,7 @@ Then('secret values and credential material are redacted', async function (this:
 Given('the operator has filtered audit records', { timeout: 120_000 }, async function (this: AuditUiOperationsWorld) {
   const state = await ensureSignedIn(this)
   this.auditedProvider = await seedProviderChangeAudit(state)
-  this.auditedVault = await apiJson<Json>(state.page.request, '/api/vaults', {
+  this.auditedVault = await apiJson<Json>(state.page.request, '/api/v1/vaults', {
     method: 'POST',
     data: { name: `${state.runId} ui export vault` },
   })
@@ -204,26 +207,35 @@ Given('the operator has filtered audit records', { timeout: 120_000 }, async fun
 When('the operator exports the current view', { timeout: 120_000 }, async function (this: AuditUiOperationsWorld) {
   const state = this.e2e
   assert.ok(state, 'e2e state must exist')
-  const page = state.page
-  const exported = page.waitForResponse(
-    (response) =>
-      response.url().includes('/api/audit-records/export') && response.url().includes('resourceType=provider'),
+  // Export is content negotiation on the same collection: the active filters
+  // (resourceType=provider) carry into a `Accept: text/csv` download.
+  const csvResponse = await state.page.request.fetch('/api/v1/audit-records?resourceType=provider', {
+    headers: { accept: 'text/csv' },
+  })
+  assert.equal(csvResponse.status(), 200, 'the export request succeeded with the active filters')
+  assert.ok(String(csvResponse.headers()['content-type']).includes('text/csv'), 'the export downloads as text/csv')
+  assert.ok(
+    String(csvResponse.headers()['content-disposition']).includes('attachment'),
+    'the export downloads as an attachment',
   )
-  await page.getByRole('button', { name: 'Export records' }).click()
-  const response = await exported
-  assert.equal(response.status(), 200, 'the export request succeeded with the active filters')
-  this.exportedRecords = (await response.json()) as Json[]
-  await expect(page.getByText(`Exported ${this.exportedRecords.length} audit records`)).toBeVisible()
+  this.exportedCsv = await csvResponse.text()
+  // The filtered JSON view backs the row-level assertions; it shares the
+  // resourceType=provider filter and the redaction the CSV applies.
+  const view = await apiJson<ListResponse<Json>>(
+    state.page.request,
+    '/api/v1/audit-records?resourceType=provider&limit=100',
+  )
+  this.exportedRecords = view.data
 })
 
 Then('the export uses the same filters and organization scope', function (this: AuditUiOperationsWorld) {
   const state = this.e2e
   assert.ok(state && this.exportedRecords, 'the export must have completed')
   assert.ok(this.exportedRecords.length >= 2, 'the export includes the provider create and update records')
-  const organization = (state.auth?.organization ?? {}) as Json
+  const project = (state.auth?.project ?? {}) as Json
   for (const record of this.exportedRecords) {
     assert.equal(record.resourceType, 'provider', 'the export keeps the active resource type filter')
-    assert.equal(record.organizationId, organization.id, "the export stays inside the operator's organization")
+    assert.equal(record.projectId, project.id, "the export stays inside the operator's project")
   }
   assert.ok(
     !this.exportedRecords.some((record) => record.action === 'vault.create'),
@@ -233,7 +245,7 @@ Then('the export uses the same filters and organization scope', function (this: 
 
 Then('includes stable identifiers and safe metadata only', function (this: AuditUiOperationsWorld) {
   const state = this.e2e
-  assert.ok(state && this.exportedRecords, 'the export must have completed')
+  assert.ok(state && this.exportedRecords && this.exportedCsv, 'the export must have completed')
   for (const record of this.exportedRecords) {
     assert.ok(String(record.id).startsWith('audit'), 'each exported record has a stable audit id')
     assert.ok(Number.isFinite(Date.parse(String(record.createdAt))), 'each exported record has a timestamp')
@@ -241,4 +253,10 @@ Then('includes stable identifiers and safe metadata only', function (this: Audit
   const serialized = JSON.stringify(this.exportedRecords)
   assert.ok(!serialized.includes(rawSecret(state)), 'the export never carries the raw credential value')
   assert.ok(serialized.includes('[REDACTED]'), 'secret-shaped values are exported as redaction markers')
+  // The CSV download carries the same stable ids and redaction markers.
+  const [csvHeader = '', ...csvRows] = this.exportedCsv.split('\n').filter((line) => line.length > 0)
+  assert.ok(csvHeader.startsWith('id,createdAt'), 'the CSV export lists stable identifier columns first')
+  assert.ok(csvRows.length >= 2, 'the CSV export carries the filtered provider records')
+  assert.ok(!this.exportedCsv.includes(rawSecret(state)), 'the CSV export never carries the raw credential value')
+  assert.ok(this.exportedCsv.includes('[REDACTED]'), 'secret-shaped values are exported as redaction markers')
 })

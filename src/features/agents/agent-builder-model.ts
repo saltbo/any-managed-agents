@@ -1,4 +1,4 @@
-import { parseTools } from '@/console/format'
+import { parseTools, providerIdPatch } from '@/console/format'
 import { type Agent, type AgentInput, ApiError } from '@/lib/api'
 
 export const BUILDER_STEPS = ['start', 'core', 'tools', 'sandbox', 'roles', 'test', 'done'] as const
@@ -160,11 +160,10 @@ export function toAgentInput(draft: AgentBuilderDraft): AgentInput {
     name: draft.name.trim(),
     ...(description ? { description } : {}),
     instructions: draft.instructions.trim(),
-    systemPrompt: draft.instructions.trim(),
-    provider: draft.provider.trim(),
+    ...providerIdPatch(draft.provider),
     model: draft.model.trim(),
     skills: draft.sandboxEnabled ? parseTools(draft.skills) : [],
-    allowedTools: parseTools(draft.allowedTools),
+    tools: parseTools(draft.allowedTools).map((name) => ({ name })),
     mcpConnectors: draft.mcpConnectors,
     role: draft.role.trim() || null,
     capabilityTags: parseTools(draft.capabilityTags),
@@ -177,10 +176,9 @@ const SERVER_FIELD_MAP: Record<string, { field: keyof AgentBuilderDraft; step: B
   name: { field: 'name', step: 'core' },
   description: { field: 'description', step: 'core' },
   instructions: { field: 'instructions', step: 'core' },
-  systemPrompt: { field: 'instructions', step: 'core' },
-  provider: { field: 'provider', step: 'core' },
+  providerId: { field: 'provider', step: 'core' },
   model: { field: 'model', step: 'core' },
-  allowedTools: { field: 'allowedTools', step: 'tools' },
+  tools: { field: 'allowedTools', step: 'tools' },
   mcpConnectors: { field: 'mcpConnectors', step: 'tools' },
   skills: { field: 'skills', step: 'sandbox' },
   role: { field: 'role', step: 'roles' },
@@ -215,10 +213,10 @@ export function agentApiExamples(origin: string, agent: Agent) {
     name: agent.name,
     ...(agent.description ? { description: agent.description } : {}),
     ...(agent.instructions ? { instructions: agent.instructions } : {}),
-    provider: agent.provider,
+    providerId: agent.providerId,
     model: agent.model,
     skills: agent.skills,
-    allowedTools: agent.allowedTools,
+    tools: agent.tools.map((tool) => ({ name: tool.name })),
     mcpConnectors: agent.mcpConnectors,
     ...(agent.role ? { role: agent.role } : {}),
     capabilityTags: agent.capabilityTags,
@@ -226,14 +224,14 @@ export function agentApiExamples(origin: string, agent: Agent) {
     memoryPolicy: agent.memoryPolicy,
   })
   const curl = [
-    `curl -X POST "${origin}/api/agents" \\`,
+    `curl -X POST "${origin}/api/v1/agents" \\`,
     '  -H "Authorization: Bearer $AMA_ACCESS_TOKEN" \\',
     '  -H "Content-Type: application/json" \\',
     `  -d '${body}'`,
   ].join('\n')
   const restish = [
-    `printf '%s\\n' '${body}' | restish post ${origin}/api/agents -H "Authorization: Bearer $AMA_ACCESS_TOKEN"`,
-    `restish get ${origin}/api/agents/${agent.id} -H "Authorization: Bearer $AMA_ACCESS_TOKEN"`,
+    `printf '%s\\n' '${body}' | restish post ${origin}/api/v1/agents -H "Authorization: Bearer $AMA_ACCESS_TOKEN"`,
+    `restish get ${origin}/api/v1/agents/${agent.id} -H "Authorization: Bearer $AMA_ACCESS_TOKEN"`,
   ].join('\n')
   return { curl, restish }
 }

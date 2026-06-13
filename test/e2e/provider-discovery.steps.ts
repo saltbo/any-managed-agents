@@ -1,14 +1,35 @@
 import assert from 'node:assert/strict'
 import { createServer, type Server } from 'node:http'
 import { Then, When } from '@cucumber/cucumber'
-import { apiJson, apiResponse } from './local-app'
-import { createProvider, ensureSignedIn, type Json, type ListResponse, type StepsWorld } from './shared-helpers'
+import { apiJson, delay } from './local-app'
+import {
+  createProvider,
+  type E2EState,
+  ensureSignedIn,
+  type Json,
+  type ListResponse,
+  type StepsWorld,
+} from './shared-helpers'
 
 type DiscoveryWorld = StepsWorld & {
   discoveredProvider?: Json
-  discoveredModels?: ListResponse<Json>
-  discoveryFailure?: { status: number; body: Json }
+  discoveryTask?: Json
+  discoveryFailureTask?: Json
   unreachableProvider?: Json
+}
+
+async function waitForDiscoveryTask(state: E2EState, providerId: string, taskId: string, expected: string) {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const task = await apiJson<Json>(
+      state.page.request,
+      `/api/v1/providers/${providerId}/model-discovery-tasks/${taskId}`,
+    )
+    if (task.state === expected) {
+      return task
+    }
+    await delay(500)
+  }
+  throw new Error(`model discovery task ${taskId} did not reach ${expected}`)
 }
 
 // Minimal OpenAI-compatible model-list endpoint so discovery exercises a
@@ -55,12 +76,18 @@ When('model discovery succeeds', async function (this: DiscoveryWorld) {
       type: 'openai-compatible',
       displayName: `${state.runId} discoverable gateway`,
       baseUrl: fixture.baseUrl,
-      credentialSecretRef: `secret://providers/${state.runId}/discoverable`,
+      credentialRef: { credentialId: `cred-${state.runId}-discoverable` },
     })
-    this.discoveredModels = await apiJson<ListResponse<Json>>(
+    const task = await apiJson<Json>(
       state.page.request,
-      `/api/providers/${this.discoveredProvider.id}/models/discovery`,
+      `/api/v1/providers/${this.discoveredProvider.id}/model-discovery-tasks`,
       { method: 'POST' },
+    )
+    this.discoveryTask = await waitForDiscoveryTask(
+      state,
+      String(this.discoveredProvider.id),
+      String(task.id),
+      'succeeded',
     )
   } finally {
     fixture.server.close()
@@ -74,7 +101,7 @@ Then(
     assert.ok(state && this.discoveredProvider, 'discovery must have run against a provider')
     const catalog = await apiJson<ListResponse<Json>>(
       state.page.request,
-      `/api/providers/${this.discoveredProvider.id}/models`,
+      `/api/v1/providers/${this.discoveredProvider.id}/models`,
     )
     const model = catalog.data.find((row) => row.modelId === `${state.runId}-catalog-model`)
     assert.ok(model, 'the discovered model is persisted in the provider catalog')
@@ -87,8 +114,8 @@ Then(
       'the catalog stores pricing hints',
     )
     assert.equal(model.availability, 'available', 'the catalog stores availability')
-    const provider = await apiJson<Json>(state.page.request, `/api/providers/${this.discoveredProvider.id}`)
-    assert.equal(provider.modelCatalogStatus, 'ready', 'successful discovery marks the catalog ready')
+    const provider = await apiJson<Json>(state.page.request, `/api/v1/providers/${this.discoveredProvider.id}`)
+    assert.equal(provider.modelCatalogState, 'ready', 'successful discovery marks the catalog ready')
   },
 )
 
@@ -97,26 +124,30 @@ When('model discovery fails or the provider is unreachable', async function (thi
   // The configured provider from the Given points at an unresolvable host.
   assert.ok(state.provider, 'a configured provider must exist')
   this.unreachableProvider = state.provider
-  const response = await apiResponse(
+  // Discovery is an async task resource: the POST is accepted (201) and the
+  // provider failure surfaces in the task state, not the create response.
+  const task = await apiJson<Json>(
     state.page.request,
-    `/api/providers/${this.unreachableProvider.id}/models/discovery`,
+    `/api/v1/providers/${this.unreachableProvider.id}/model-discovery-tasks`,
     { method: 'POST' },
   )
-  const text = await response.text()
-  this.discoveryFailure = { status: response.status(), body: (text ? JSON.parse(text) : {}) as Json }
+  this.discoveryFailureTask = await waitForDiscoveryTask(
+    state,
+    String(this.unreachableProvider.id),
+    String(task.id),
+    'failed',
+  )
 })
 
 Then('the API returns a safe provider error without leaking credentials', function (this: DiscoveryWorld) {
-  assert.ok(this.discoveryFailure, 'a discovery failure must have been captured')
-  assert.equal(this.discoveryFailure.status, 502, 'failed discovery returns a provider error status')
-  const error = (this.discoveryFailure.body.error ?? {}) as Json
+  assert.ok(this.discoveryFailureTask, 'a failed discovery task must have been captured')
+  const error = (this.discoveryFailureTask.error ?? {}) as Json
   assert.equal(error.type, 'provider_error', 'the failure uses the structured provider error envelope')
-  const details = (error.details ?? {}) as Json
   assert.ok(
-    ['network', 'unknown'].includes(String(details.category)),
+    ['network', 'unknown'].includes(String(error.category)),
     'the failure carries a stable provider error category',
   )
-  const serialized = JSON.stringify(this.discoveryFailure.body)
+  const serialized = JSON.stringify(this.discoveryFailureTask)
   assert.ok(!serialized.includes('secret://'), 'the failure response never includes credential references')
   assert.ok(!serialized.includes('credentialSecretRef'), 'the failure response never includes credential fields')
 })
@@ -124,10 +155,10 @@ Then('the API returns a safe provider error without leaking credentials', functi
 Then('existing provider configuration remains readable', async function (this: DiscoveryWorld) {
   const state = this.e2e
   assert.ok(state && this.unreachableProvider, 'the unreachable provider must exist')
-  const provider = await apiJson<Json>(state.page.request, `/api/providers/${this.unreachableProvider.id}`)
+  const provider = await apiJson<Json>(state.page.request, `/api/v1/providers/${this.unreachableProvider.id}`)
   assert.equal(provider.id, this.unreachableProvider.id, 'the provider is still readable after failed discovery')
   assert.equal(provider.type, 'openai-compatible', 'the stored configuration is unchanged')
-  assert.equal(provider.modelCatalogStatus, 'error', 'the catalog status reflects the failed discovery')
+  assert.equal(provider.modelCatalogState, 'error', 'the catalog state reflects the failed discovery')
   const lastError = (provider.lastError ?? {}) as Json
   assert.ok(typeof lastError.category === 'string', 'the stored provider health carries the normalized category')
   assert.ok(!JSON.stringify(lastError).includes('secret://'), 'stored provider health never embeds credentials')

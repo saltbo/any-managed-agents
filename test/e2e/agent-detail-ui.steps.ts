@@ -8,7 +8,7 @@ interface AgentRecord {
   id: string
   name: string
   version: number
-  status: string
+  archivedAt: string | null
 }
 
 interface AgentDetailWorkflow {
@@ -39,17 +39,15 @@ async function ensureAgentDetailWorkflow(world: AgentDetailWorld): Promise<Agent
 }
 
 async function createTestAgent(workflow: AgentDetailWorkflow, overrides?: Record<string, unknown>) {
-  const agent = await apiJson<AgentRecord>(workflow.page.request, '/api/agents', {
+  const agent = await apiJson<AgentRecord>(workflow.page.request, '/api/v1/agents', {
     method: 'POST',
     data: {
       name: `${workflow.runId} agent`,
       description: 'Agent detail UI e2e test agent',
       instructions: 'Reply concisely in the test.',
-      systemPrompt: 'Reply concisely in the test.',
-      provider: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
       skills: ['ama@local-ui'],
-      allowedTools: ['sandbox.exec'],
+      tools: [{ name: 'sandbox.exec' }],
       metadata: { runId: workflow.runId },
       ...overrides,
     },
@@ -72,12 +70,12 @@ Given(
     const workflow = await ensureAgentDetailWorkflow(this)
     const agent = await createTestAgent(workflow, {
       skills: ['ama@local-ui', 'ama@test'],
-      allowedTools: ['sandbox.exec', 'sandbox.read'],
+      tools: [{ name: 'sandbox.exec' }, { name: 'sandbox.read' }],
       mcpConnectors: [],
       metadata: { runId: workflow.runId, env: 'e2e' },
     })
     // Update agent to create a second version
-    await apiJson(workflow.page.request, `/api/agents/${agent.id}`, {
+    await apiJson(workflow.page.request, `/api/v1/agents/${agent.id}`, {
       method: 'PATCH',
       data: { description: 'Updated for version 2' },
     })
@@ -206,7 +204,7 @@ Then('successful save creates a new version', async function (this: AgentDetailW
   await sheet.getByRole('button', { name: 'Save changes' }).click()
   await expect(sheet).not.toBeVisible({ timeout: 10_000 })
   // Verify version bumped via API — more reliable than UI text matching
-  const agentData = await apiJson<AgentRecord>(page.request, `/api/agents/${workflow.agentId}`)
+  const agentData = await apiJson<AgentRecord>(page.request, `/api/v1/agents/${workflow.agentId}`)
   assert.ok(agentData.version >= 2, `Expected agent version >= 2 after edit, got ${agentData.version}`)
 })
 

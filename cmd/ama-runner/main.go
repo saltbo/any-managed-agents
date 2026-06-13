@@ -51,7 +51,7 @@ func runWithContext(ctx context.Context, args []string, getenv func(string) stri
 			Tokens: tokens,
 		},
 	}
-	client := &ama.Client{
+	client := &v1ControlPlane{
 		Origin:     config.Origin,
 		ProjectID:  config.ProjectID,
 		HTTPClient: authHTTPClient,
@@ -59,7 +59,7 @@ func runWithContext(ctx context.Context, args []string, getenv func(string) stri
 	daemon := RunnerDaemon{
 		Config:   config,
 		Client:   client,
-		Channels: sdkRunnerSessionChannelOpener{client: client, tokens: tokens},
+		Channels: v1RunnerSessionChannelOpener{origin: config.Origin, projectID: config.ProjectID, tokens: tokens},
 		Adapter:  ProcessAdapter{CommandTimeout: config.CommandTimeout, ShutdownGraceInterval: config.ShutdownGraceInterval},
 	}
 	return daemon.Start(ctx)
@@ -70,15 +70,16 @@ func runLogin(ctx context.Context, args []string, getenv func(string) string, st
 	if err != nil {
 		return err
 	}
-	client := &ama.Client{
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	client := &v1ControlPlane{
 		Origin:     command.Origin,
-		HTTPClient: &http.Client{Timeout: 30 * time.Second},
+		HTTPClient: httpClient,
 	}
 	health, err := client.CheckHealth(ctx)
 	if err != nil {
 		return err
 	}
-	authClient := DeviceAuthClient{HTTPClient: client.HTTPClient}
+	authClient := DeviceAuthClient{HTTPClient: httpClient}
 	result, err := LoginWithDeviceAuthorization(ctx, authClient, DeviceLoginOptions{
 		Origin:       command.Origin,
 		Issuer:       health.OIDCIssuer,
@@ -95,33 +96,35 @@ func runLogin(ctx context.Context, args []string, getenv func(string) string, st
 	return nil
 }
 
-type sdkRunnerSessionChannelOpener struct {
-	client *ama.Client
-	tokens *RunnerTokenSource
+type v1RunnerSessionChannelOpener struct {
+	origin    string
+	projectID string
+	tokens    *RunnerTokenSource
 }
 
-func (o sdkRunnerSessionChannelOpener) OpenRunnerSessionChannel(
+// OpenRunnerSessionChannel dials the v1 lease channel
+// (GET /api/v1/leases/{leaseId}/channel). The server derives the runner from
+// the lease, so runnerId is no longer part of the request.
+func (o v1RunnerSessionChannelOpener) OpenRunnerSessionChannel(
 	ctx context.Context,
-	runnerID string,
 	leaseID string,
 ) (RunnerSessionChannel, error) {
-	if o.tokens == nil {
-		return o.client.OpenRunnerSessionChannel(ctx, runnerID, leaseID)
-	}
-	endpoint, err := o.client.RunnerSessionChannelURL(runnerID, leaseID)
-	if err != nil {
-		return nil, err
-	}
-	token, err := o.tokens.AccessToken(ctx)
+	endpoint, err := v1LeaseChannelURL(o.origin, leaseID)
 	if err != nil {
 		return nil, err
 	}
 	headers := http.Header{}
-	if token != "" {
-		headers.Set("authorization", "Bearer "+token)
+	if o.tokens != nil {
+		token, err := o.tokens.AccessToken(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if token != "" {
+			headers.Set("authorization", "Bearer "+token)
+		}
 	}
-	if o.client.ProjectID != "" {
-		headers.Set("x-ama-project-id", o.client.ProjectID)
+	if o.projectID != "" {
+		headers.Set("x-ama-project-id", o.projectID)
 	}
 	conn, _, err := websocket.Dial(ctx, endpoint, &websocket.DialOptions{HTTPHeader: headers})
 	if err != nil {

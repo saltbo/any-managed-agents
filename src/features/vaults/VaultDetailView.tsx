@@ -11,7 +11,7 @@ import {
   StatusBadge,
   TableSurface,
 } from '@/console/components'
-import { formatDate, stringifyJson } from '@/console/format'
+import { archivedLabel, formatDate, isArchived, stringifyJson } from '@/console/format'
 import type { AuditRecord, Vault, VaultCredential } from '@/lib/api'
 
 export function VaultDetailView({
@@ -40,7 +40,7 @@ export function VaultDetailView({
     )
   }
   if (!vault) return <EmptyState title="Vault not found" body="The requested vault is not in this project." />
-  const vaultActive = vault.status === 'active'
+  const vaultActive = !isArchived(vault)
   return (
     <div className="grid gap-4">
       <DetailSection
@@ -48,7 +48,7 @@ export function VaultDetailView({
         description={vault.description ?? 'No description'}
         actions={
           <>
-            <StatusBadge value={vault.status} />
+            <StatusBadge value={archivedLabel(vault)} />
             <StatusBadge value={vault.scope} />
           </>
         }
@@ -106,7 +106,7 @@ export function VaultDetailView({
                   <TableCell className="font-medium">{credential.name}</TableCell>
                   <TableCell>{credential.type}</TableCell>
                   <TableCell>
-                    <StatusBadge value={credential.status} />
+                    <StatusBadge value={credential.state} />
                   </TableCell>
                   <TableCell>{credential.activeVersion ? `v${credential.activeVersion.version}` : 'None'}</TableCell>
                   <TableCell className="max-w-64 truncate">
@@ -116,7 +116,7 @@ export function VaultDetailView({
                   {vaultActive ? (
                     <TableCell>
                       <div className="flex justify-end gap-2">
-                        {credential.status === 'active' ? (
+                        {credential.state === 'active' ? (
                           <>
                             <Button
                               type="button"

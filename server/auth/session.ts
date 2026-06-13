@@ -149,6 +149,15 @@ export function isRunnerOidcAuth(env: Env, auth: Pick<AuthContext, 'oidc'>) {
   )
 }
 
+// Runner tokens are scoped to the runner work loop: registration/heartbeat,
+// the work queue, and leases. Session event upload is gated separately by lease
+// ownership (see requireSessionEventsAuth).
+const RUNNER_TOKEN_PATH_PREFIXES = ['/api/v1/runners', '/api/v1/work-items', '/api/v1/leases']
+
+function isRunnerTokenPath(pathname: string) {
+  return RUNNER_TOKEN_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+}
+
 function bearerToken(headers: Headers, url: string) {
   const value = headers.get('authorization')
   if (value) {
@@ -257,7 +266,7 @@ export async function requireAuthIdentity(c: Context<{ Bindings: Env }>) {
       reason: 'missing_or_invalid_bearer_token',
     })
   }
-  if (isRunnerOidcAuth(c.env, auth) && !new URL(c.req.url).pathname.startsWith('/api/runners')) {
+  if (isRunnerOidcAuth(c.env, auth) && !isRunnerTokenPath(new URL(c.req.url).pathname)) {
     return errorResponse(c, 403, 'forbidden', 'Runner token is not authorized for this resource') as never
   }
   return auth
@@ -280,7 +289,7 @@ export async function requireAuth(c: Context<{ Bindings: Env }>, db: DrizzleD1Da
       reason: 'missing_or_invalid_bearer_token',
     })
   }
-  if (isRunnerOidcAuth(c.env, auth) && !new URL(c.req.url).pathname.startsWith('/api/runners')) {
+  if (isRunnerOidcAuth(c.env, auth) && !isRunnerTokenPath(new URL(c.req.url).pathname)) {
     return errorResponse(c, 403, 'forbidden', 'Runner token is not authorized for this resource') as never
   }
   return auth

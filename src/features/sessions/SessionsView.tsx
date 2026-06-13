@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ConfirmAction, EmptyState, StatusBadge, TablePagination, TableSurface } from '@/console/components'
-import { formatDate, formatDuration } from '@/console/format'
+import { formatDate, formatDuration, isArchived } from '@/console/format'
 import type { ClientPagination } from '@/console/use-client-pagination'
 import type { Session } from '@/lib/api'
 
@@ -20,7 +20,7 @@ export function SessionsView({
   setSelectedIds: (ids: string[]) => void
   onArchive: (id: string) => void
 }) {
-  const selectableIds = sessions.filter((session) => session.status !== 'archived').map((session) => session.id)
+  const selectableIds = sessions.filter((session) => !isArchived(session)).map((session) => session.id)
   const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.includes(id))
   const toggleAll = (checked: boolean) => {
     setSelectedIds(checked ? selectableIds : [])
@@ -77,7 +77,7 @@ export function SessionsView({
             <TableCell>
               <Checkbox
                 checked={selectedIds.includes(session.id)}
-                disabled={session.status === 'archived'}
+                disabled={isArchived(session)}
                 aria-label={`Select ${session.title ?? session.id}`}
                 onCheckedChange={(checked) => toggleOne(session.id, checked === true)}
               />
@@ -88,18 +88,18 @@ export function SessionsView({
                   {session.title ?? session.id}
                 </Link>
                 <span className="truncate text-xs text-muted-foreground">
-                  {`${session.id} · ${session.agentSnapshot.provider} / ${session.agentSnapshot.model}`}
+                  {`${session.id} · ${session.agentSnapshot.providerId} / ${session.agentSnapshot.model ?? 'None'}`}
                 </span>
               </div>
             </TableCell>
             <TableCell className="min-w-0">
-              <StatusBadge value={session.status} detail={session.status === 'error' ? session.statusReason : null} />
+              <StatusBadge value={session.state} detail={session.state === 'error' ? session.stateReason : null} />
             </TableCell>
             <TableCell className="min-w-0">
-              <span className="block truncate">{`${session.agentSnapshot.systemPrompt ?? session.agentId} · ${session.agentId}`}</span>
+              <span className="block truncate">{`${session.agentSnapshot.instructions ?? session.agentId} · ${session.agentId}`}</span>
             </TableCell>
             <TableCell className="min-w-0">
-              <span className="block truncate">{`${session.agentSnapshot.provider} / ${session.agentSnapshot.model}`}</span>
+              <span className="block truncate">{`${session.agentSnapshot.providerId} / ${session.agentSnapshot.model ?? 'None'}`}</span>
             </TableCell>
             <TableCell className="min-w-0">
               <span className="block truncate">
@@ -120,7 +120,7 @@ export function SessionsView({
                 <Button type="button" variant="outline" size="sm" asChild>
                   <Link to={`/sessions/${session.id}`}>Open</Link>
                 </Button>
-                {session.status !== 'archived' ? (
+                {!isArchived(session) ? (
                   <ConfirmAction
                     title="Archive session?"
                     description="Archive the selected session from active operations while preserving persisted events."

@@ -30,7 +30,10 @@ function state(world: EventsWorld): E2EState {
 }
 
 async function listEvents(e2e: E2EState, query = 'limit=200') {
-  return await apiJson<ListResponse<Json>>(e2e.page.request, `/api/sessions/${e2e.latestSession?.id}/events?${query}`)
+  return await apiJson<ListResponse<Json>>(
+    e2e.page.request,
+    `/api/v1/sessions/${e2e.latestSession?.id}/events?${query}`,
+  )
 }
 
 // ─── Redact sensitive event payloads ───
@@ -39,14 +42,14 @@ Given(
   'a provider, tool, MCP connector, vault, or sandbox process emits sensitive values',
   async function (this: EventsWorld) {
     const e2e = await ensureSignedIn(this)
-    e2e.agent = await createAgent(e2e, { name: `${e2e.runId} redaction agent`, allowedTools: ['sandbox.exec'] })
+    e2e.agent = await createAgent(e2e, { name: `${e2e.runId} redaction agent`, tools: [{ name: 'sandbox.exec' }] })
     e2e.environment = await createEnvironment(e2e, { name: `${e2e.runId} redaction env` })
     e2e.latestSession = await createSession(e2e)
     // A runtime turn whose transcript carries credential material — a
     // stand-in for any provider/tool/vault/sandbox leak. Redaction must strip
     // the value before anything reaches D1.
     const e2eState = state(this)
-    await apiJson<Json>(e2eState.page.request, `/runtime/sessions/${e2eState.latestSession?.id}/rpc`, {
+    await apiJson<Json>(e2eState.page.request, `/api/v1/runtime/sessions/${e2eState.latestSession?.id}/rpc`, {
       method: 'POST',
       data: { message: 'use credential raw-secret-token to authenticate' },
     })
@@ -84,13 +87,13 @@ Given(
   'a runtime emits nested turns, messages, tool calls, permission requests, and substeps',
   async function (this: EventsWorld) {
     const e2e = await ensureSignedIn(this)
-    e2e.agent = await createAgent(e2e, { name: `${e2e.runId} hierarchy agent`, allowedTools: ['sandbox.exec'] })
+    e2e.agent = await createAgent(e2e, { name: `${e2e.runId} hierarchy agent`, tools: [{ name: 'sandbox.exec' }] })
     e2e.environment = await createEnvironment(e2e, { name: `${e2e.runId} hierarchy env` })
     e2e.latestSession = await createSession(e2e)
     // A status prompt drives the real agent loop through a tool round-trip,
     // persisting the nested turn → message → tool tree.
     const e2eState = state(this)
-    await apiJson<Json>(e2eState.page.request, `/runtime/sessions/${e2eState.latestSession?.id}/rpc`, {
+    await apiJson<Json>(e2eState.page.request, `/api/v1/runtime/sessions/${e2eState.latestSession?.id}/rpc`, {
       method: 'POST',
       data: { message: 'inspect the sandbox status' },
     })
@@ -265,8 +268,8 @@ Given('a session has a stored safe resume point', { timeout: 300_000 }, async fu
   assert.ok(runner.pid, 'runner pid required')
   process.kill(-runner.pid, 'SIGTERM')
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    const session = await apiJson<Json>(e2e.page.request, `/api/sessions/${e2e.latestSession?.id}`)
-    if (session.status === 'pending' && session.statusReason === 'waiting-for-runner-recovery') {
+    const session = await apiJson<Json>(e2e.page.request, `/api/v1/sessions/${e2e.latestSession?.id}`)
+    if (session.state === 'pending' && session.stateReason === 'waiting-for-runner-recovery') {
       return
     }
     await delay(1_000)
@@ -276,9 +279,10 @@ Given('a session has a stored safe resume point', { timeout: 300_000 }, async fu
 
 When('a client resumes the session through AMA', { timeout: 240_000 }, async function (this: EventsWorld) {
   const e2e = state(this)
-  // The client observes the session through the AMA reconnect endpoint; AMA
-  // dispatches the queued resume to the next eligible runner.
-  e2e.latestSession = await apiJson<Json>(e2e.page.request, `/api/sessions/${e2e.latestSession?.id}/reconnect`)
+  // The client observes the session's runtime connection; AMA dispatches the
+  // queued resume to the next eligible runner.
+  await apiJson<Json>(e2e.page.request, `/api/v1/sessions/${e2e.latestSession?.id}/connection`)
+  e2e.latestSession = await apiJson<Json>(e2e.page.request, `/api/v1/sessions/${e2e.latestSession?.id}`)
   await startProductAmaRunner(e2e)
   await waitForSessionStatus(e2e, 'running')
 })

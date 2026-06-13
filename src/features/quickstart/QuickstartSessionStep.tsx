@@ -118,17 +118,22 @@ function QuickstartSessionPreview({ sessionId }: { sessionId: string }) {
     queryKey: queryKeys.sessions.detail(sessionId),
     queryFn: () => api.readSession(sessionId),
     refetchInterval: (query) =>
-      query.state.data && ['pending', 'running'].includes(query.state.data.status) ? 750 : false,
+      query.state.data && ['pending', 'running'].includes(query.state.data.state) ? 750 : false,
   })
   const eventsQuery = useQuery({
     queryKey: queryKeys.sessions.events(sessionId),
     queryFn: () => api.listSessionEvents(sessionId, { limit: 200, order: 'asc' }),
     refetchInterval: (query) => {
       const hasAssistantMessage = (query.state.data?.data ?? []).some((event) => event.type === 'message_end')
-      const status = sessionQuery.data?.status
-      const terminal = status !== undefined && !['pending', 'running'].includes(status)
+      const state = sessionQuery.data?.state
+      const terminal = state !== undefined && !['pending', 'running'].includes(state)
       return terminal && hasAssistantMessage ? false : 1000
     },
+  })
+  const connectionQuery = useQuery({
+    queryKey: ['sessions', 'detail', sessionId, 'connection'],
+    queryFn: () => api.readSessionConnection(sessionId),
+    enabled: sessionQuery.data?.state === 'idle' || sessionQuery.data?.state === 'running',
   })
   const onEventsChanged = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.sessions.events(sessionId) })
@@ -161,12 +166,12 @@ function QuickstartSessionPreview({ sessionId }: { sessionId: string }) {
     <div className="grid gap-3 rounded-lg border p-3">
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span className="font-medium">Session preview</span>
-        <StatusBadge value={session.status} detail={session.statusReason} />
+        <StatusBadge value={session.state} detail={session.stateReason} />
         <OpenPageLink to={`/sessions/${session.id}`} label="Open session detail" />
       </div>
       <MetaGrid>
         <Meta label="Session id" value={session.id} />
-        <Meta label="Runtime endpoint" value={session.runtimeEndpointPath ?? 'Pending runtime endpoint'} />
+        <Meta label="Runtime endpoint" value={connectionQuery.data?.path ?? 'Pending runtime endpoint'} />
       </MetaGrid>
       <Tabs defaultValue="transcript">
         <TabsList>

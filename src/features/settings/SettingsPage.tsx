@@ -6,8 +6,8 @@ import { GovernanceView } from './GovernanceView'
 
 export function SettingsPage() {
   const policyQuery = useQuery({
-    queryKey: queryKeys.governance.policy,
-    queryFn: api.readGovernancePolicy,
+    queryKey: queryKeys.governance.effectivePolicy,
+    queryFn: () => api.readEffectivePolicy(),
   })
   return (
     <div className="flex flex-col gap-4">

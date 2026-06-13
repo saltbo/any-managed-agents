@@ -20,14 +20,16 @@ import (
 type ControlPlane interface {
 	CheckHealth(ctx context.Context) (*ama.Health, error)
 	CreateRunner(ctx context.Context, body ama.CreateRunnerRequest) (*ama.Runner, error)
-	CreateRunnerHeartbeat(ctx context.Context, runnerID string, body ama.RunnerHeartbeatRequest) (*ama.Runner, error)
-	CreateRunnerLease(ctx context.Context, runnerID string, body ama.ClaimRunnerLeaseRequest) (*ama.RunnerWorkLease, error)
-	UpdateRunnerLease(ctx context.Context, runnerID string, leaseID string, body ama.UpdateRunnerLeaseRequest) (*ama.RunnerWorkLease, error)
-	CreateRunnerLeaseEvents(ctx context.Context, runnerID string, leaseID string, body ama.UploadRunnerLeaseEventsRequest) error
+	PutRunnerHeartbeat(ctx context.Context, runnerID string, body PutRunnerHeartbeatRequest) error
+	ListAvailableWorkItems(ctx context.Context) ([]WorkItem, error)
+	ReadWorkItem(ctx context.Context, workItemID string) (*WorkItem, error)
+	CreateLease(ctx context.Context, body CreateLeaseRequest) (*Lease, error)
+	UpdateLease(ctx context.Context, leaseID string, body UpdateLeaseRequest) (*Lease, error)
+	CreateSessionEvents(ctx context.Context, sessionID string, events []SessionEvent) error
 }
 
 type RunnerSessionChannelOpener interface {
-	OpenRunnerSessionChannel(ctx context.Context, runnerID string, leaseID string) (RunnerSessionChannel, error)
+	OpenRunnerSessionChannel(ctx context.Context, leaseID string) (RunnerSessionChannel, error)
 }
 
 type RunnerSessionChannel interface {
@@ -55,7 +57,7 @@ type RunnerDaemon struct {
 	runtimeUsage           []ama.RuntimeUsage
 	capabilityMu           sync.Mutex
 	advertisedCapabilities []string
-	advertisedInventory    []ama.RuntimeInventory
+	advertisedInventory    []v1RuntimeInventory
 	probeMu                sync.Mutex
 	runtimeProbes          map[string]runtimeProbe
 }
@@ -131,32 +133,32 @@ func modelsFromProbes(probes map[string]runtimeProbe) map[string][]string {
 // host: the embedded ama runtime is always ready, runtimes whose CLI is not on
 // PATH are missing, and detected CLIs carry the bridge probe's status, version,
 // and safe diagnostic detail.
-func runnerRuntimeInventory(availableRuntimes []string, probes map[string]runtimeProbe) []ama.RuntimeInventory {
-	inventory := []ama.RuntimeInventory{
-		{Runtime: "ama", Version: runnerVersion, Status: "ready", Detail: "embedded ama runtime"},
+func runnerRuntimeInventory(availableRuntimes []string, probes map[string]runtimeProbe) []v1RuntimeInventory {
+	inventory := []v1RuntimeInventory{
+		{Runtime: "ama", Version: runnerVersion, State: "ready", Detail: "embedded ama runtime"},
 	}
 	for _, cli := range runtimeCLIBinaries() {
 		if !slices.Contains(availableRuntimes, cli.Runtime) {
-			inventory = append(inventory, ama.RuntimeInventory{
+			inventory = append(inventory, v1RuntimeInventory{
 				Runtime: cli.Runtime,
-				Status:  "missing",
+				State:   "missing",
 				Detail:  cli.Binary + " CLI not found on PATH",
 			})
 			continue
 		}
 		probe := probes[cli.Runtime]
-		status := probe.Status
-		if status == "" {
-			status = "unhealthy"
+		state := probe.Status
+		if state == "" {
+			state = "unhealthy"
 		}
 		detail := probe.Detail
 		if detail == "" {
 			detail = "host runtime probe returned no diagnostics"
 		}
-		inventory = append(inventory, ama.RuntimeInventory{
+		inventory = append(inventory, v1RuntimeInventory{
 			Runtime: cli.Runtime,
 			Version: probe.Version,
-			Status:  status,
+			State:   state,
 			Detail:  detail,
 		})
 	}
@@ -173,7 +175,7 @@ func (d *RunnerDaemon) currentCapabilities() []string {
 	return capabilities
 }
 
-func (d *RunnerDaemon) currentRuntimeInventory() []ama.RuntimeInventory {
+func (d *RunnerDaemon) currentRuntimeInventory() []v1RuntimeInventory {
 	d.capabilityMu.Lock()
 	defer d.capabilityMu.Unlock()
 	return d.advertisedInventory
@@ -411,13 +413,43 @@ func (d *RunnerDaemon) RunOnce(ctx context.Context) error {
 }
 
 func (d *RunnerDaemon) runOneLease(ctx context.Context) error {
-	lease, err := d.Client.CreateRunnerLease(ctx, d.RunnerID, ama.ClaimRunnerLeaseRequest{
-		LeaseDurationSeconds: d.Config.LeaseDurationSeconds,
-	})
+	lease, workItem, err := d.claimLease(ctx)
 	if err != nil || lease == nil {
 		return err
 	}
-	return d.executeLease(ctx, lease)
+	return d.executeLease(ctx, lease, workItem)
+}
+
+// claimLease implements the v1 two-step claim: read the available work queue,
+// then POST a lease for one item. There is no longer a "no work" 204 — an empty
+// queue returns (nil, nil, nil). Claim races (409) and vanished items (404) skip
+// to the next candidate so contention does not surface as a runner error.
+func (d *RunnerDaemon) claimLease(ctx context.Context) (*Lease, *WorkItem, error) {
+	available, err := d.Client.ListAvailableWorkItems(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, candidate := range available {
+		lease, err := d.Client.CreateLease(ctx, CreateLeaseRequest{
+			WorkItemID:           candidate.ID,
+			RunnerID:             d.RunnerID,
+			LeaseDurationSeconds: d.Config.LeaseDurationSeconds,
+		})
+		if err != nil {
+			if isClaimRaceError(err) {
+				continue
+			}
+			return nil, nil, err
+		}
+		// The lease no longer embeds the work item; fetch the payload (with
+		// resolved secret env) as the active lease holder.
+		workItem, err := d.Client.ReadWorkItem(ctx, lease.WorkItemID)
+		if err != nil {
+			return nil, nil, err
+		}
+		return lease, workItem, nil
+	}
+	return nil, nil, nil
 }
 
 func (d *RunnerDaemon) tryAcquireLeaseSlot() bool {
@@ -499,8 +531,8 @@ func (d *RunnerDaemon) heartbeat(ctx context.Context) error {
 		return err
 	}
 	capabilities := d.refreshCapabilities()
-	_, err = d.Client.CreateRunnerHeartbeat(ctx, d.RunnerID, ama.RunnerHeartbeatRequest{
-		Status:           "active",
+	return d.Client.PutRunnerHeartbeat(ctx, d.RunnerID, PutRunnerHeartbeatRequest{
+		State:            "active",
 		Capabilities:     capabilities,
 		CurrentLoad:      &load,
 		RuntimeUsage:     d.getRuntimeUsage(),
@@ -515,20 +547,18 @@ func (d *RunnerDaemon) heartbeat(ctx context.Context) error {
 			"unsafe":          true,
 		},
 	})
-	return err
 }
 
 func (d *RunnerDaemon) sendOfflineHeartbeat(ctx context.Context) error {
 	load := 0
-	_, err := d.Client.CreateRunnerHeartbeat(ctx, d.RunnerID, ama.RunnerHeartbeatRequest{
-		Status:      "offline",
+	return d.Client.PutRunnerHeartbeat(ctx, d.RunnerID, PutRunnerHeartbeatRequest{
+		State:       "offline",
 		CurrentLoad: &load,
 	})
-	return err
 }
 
-func (d *RunnerDaemon) executeLease(ctx context.Context, lease *ama.RunnerWorkLease) error {
-	payload, err := parseWorkPayload(lease.WorkItem.Payload)
+func (d *RunnerDaemon) executeLease(ctx context.Context, lease *Lease, workItem *WorkItem) error {
+	payload, err := parseWorkPayload(workItem.Payload)
 	if err != nil {
 		if finishErr := d.finishFailed(ctx, lease, err, nil); finishErr != nil {
 			return finishErr
@@ -544,7 +574,8 @@ func (d *RunnerDaemon) executeLease(ctx context.Context, lease *ama.RunnerWorkLe
 	if !d.supportsRequiredCapability(payload.RequiredRunnerCapability) {
 		return d.finishFailed(ctx, lease, fmt.Errorf("runner does not advertise required capability %q", payload.RequiredRunnerCapability), nil)
 	}
-	if err := d.uploadEvent(ctx, lease, "tool_execution_start", ama.JSON{
+	sessionID := workItem.SessionID
+	if err := d.uploadEvent(ctx, sessionID, "tool_execution_start", ama.JSON{
 		"toolCallId": payload.ToolCallID,
 		"toolName":   payload.ToolName,
 		"args":       payload.Input,
@@ -573,14 +604,14 @@ func (d *RunnerDaemon) executeLease(ctx context.Context, lease *ama.RunnerWorkLe
 	}
 
 	if ctx.Err() != nil {
-		_, err := d.Client.UpdateRunnerLease(context.Background(), d.RunnerID, lease.ID, ama.UpdateRunnerLeaseRequest{
-			Status: "cancelled",
-			Error:  ama.JSON{"message": ctx.Err().Error()},
+		_, err := d.Client.UpdateLease(context.Background(), lease.ID, UpdateLeaseRequest{
+			State: "cancelled",
+			Error: ama.JSON{"message": ctx.Err().Error()},
 		})
 		return err
 	}
 	if execErr != nil {
-		_ = d.uploadEvent(context.Background(), lease, "tool_execution_end", ama.JSON{
+		_ = d.uploadEvent(context.Background(), sessionID, "tool_execution_end", ama.JSON{
 			"toolCallId": payload.ToolCallID,
 			"toolName":   payload.ToolName,
 			"error":      execErr.Error(),
@@ -589,7 +620,7 @@ func (d *RunnerDaemon) executeLease(ctx context.Context, lease *ama.RunnerWorkLe
 		})
 		return d.finishFailed(context.Background(), lease, execErr, result.Output)
 	}
-	if err := d.uploadEvent(ctx, lease, "tool_execution_end", ama.JSON{
+	if err := d.uploadEvent(ctx, sessionID, "tool_execution_end", ama.JSON{
 		"toolCallId": payload.ToolCallID,
 		"toolName":   payload.ToolName,
 		"result":     result.Output,
@@ -597,8 +628,8 @@ func (d *RunnerDaemon) executeLease(ctx context.Context, lease *ama.RunnerWorkLe
 	}); err != nil {
 		return err
 	}
-	_, err = d.Client.UpdateRunnerLease(ctx, d.RunnerID, lease.ID, ama.UpdateRunnerLeaseRequest{
-		Status: "completed",
+	_, err = d.Client.UpdateLease(ctx, lease.ID, UpdateLeaseRequest{
+		State: "completed",
 		Result: ama.JSON{
 			"toolCallId": payload.ToolCallID,
 			"toolName":   payload.ToolName,
@@ -608,7 +639,7 @@ func (d *RunnerDaemon) executeLease(ctx context.Context, lease *ama.RunnerWorkLe
 	return err
 }
 
-func (d *RunnerDaemon) completeSessionStart(ctx context.Context, lease *ama.RunnerWorkLease, payload WorkPayload) error {
+func (d *RunnerDaemon) completeSessionStart(ctx context.Context, lease *Lease, payload WorkPayload) error {
 	handler, err := sessionRuntimeHandlerFor(payload.Runtime)
 	if err != nil {
 		if finishErr := d.finishFailed(ctx, lease, err, nil); finishErr != nil {
@@ -797,8 +828,8 @@ func (d *RunnerDaemon) runExternalSession(execution sessionRuntimeExecution) err
 		if successfulRuntimeResult(result) {
 			completedResult := cloneJSON(result)
 			completedResult["completionWarning"] = runErr.Error()
-			_, err := d.Client.UpdateRunnerLease(ctx, d.RunnerID, lease.ID, ama.UpdateRunnerLeaseRequest{
-				Status: "completed",
+			_, err := d.Client.UpdateLease(ctx, lease.ID, UpdateLeaseRequest{
+				State:  "completed",
 				Result: completedResult,
 			})
 			return err
@@ -833,8 +864,8 @@ func (d *RunnerDaemon) runExternalSession(execution sessionRuntimeExecution) err
 		}
 		return runErr
 	}
-	_, updateErr := d.Client.UpdateRunnerLease(ctx, d.RunnerID, lease.ID, ama.UpdateRunnerLeaseRequest{
-		Status: "completed",
+	_, updateErr := d.Client.UpdateLease(ctx, lease.ID, UpdateLeaseRequest{
+		State:  "completed",
 		Result: result,
 	})
 	return updateErr
@@ -881,7 +912,7 @@ func (d *RunnerDaemon) openRunnerSessionChannel(ctx context.Context, leaseID str
 	if d.Channels == nil {
 		return nil, fmt.Errorf("runner session channel client is not configured")
 	}
-	return d.Channels.OpenRunnerSessionChannel(ctx, d.RunnerID, leaseID)
+	return d.Channels.OpenRunnerSessionChannel(ctx, leaseID)
 }
 
 func (d *RunnerDaemon) waitForChannelAccepted(ctx context.Context, channel RunnerSessionChannel, sessionID string) error {
@@ -1008,7 +1039,7 @@ func (d *RunnerDaemon) writeAcknowledgedChannelEvent(ctx context.Context, channe
 	}
 }
 
-func (d *RunnerDaemon) renewLease(ctx context.Context, lease *ama.RunnerWorkLease, cancel context.CancelFunc, errors chan<- error, resumeTokens *resumeTokenBox) {
+func (d *RunnerDaemon) renewLease(ctx context.Context, lease *Lease, cancel context.CancelFunc, errors chan<- error, resumeTokens *resumeTokenBox) {
 	ticker := time.NewTicker(d.Config.RenewInterval)
 	defer ticker.Stop()
 	for {
@@ -1016,8 +1047,8 @@ func (d *RunnerDaemon) renewLease(ctx context.Context, lease *ama.RunnerWorkLeas
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			_, err := d.Client.UpdateRunnerLease(ctx, d.RunnerID, lease.ID, ama.UpdateRunnerLeaseRequest{
-				Status:               "active",
+			_, err := d.Client.UpdateLease(ctx, lease.ID, UpdateLeaseRequest{
+				State:                "active",
 				LeaseDurationSeconds: d.Config.LeaseDurationSeconds,
 				ResumeToken:          resumeTokens.Get(),
 			})
@@ -1033,21 +1064,32 @@ func (d *RunnerDaemon) renewLease(ctx context.Context, lease *ama.RunnerWorkLeas
 	}
 }
 
-func (d *RunnerDaemon) uploadEvent(ctx context.Context, lease *ama.RunnerWorkLease, eventType string, payload ama.JSON) error {
-	return d.Client.CreateRunnerLeaseEvents(ctx, d.RunnerID, lease.ID, ama.UploadRunnerLeaseEventsRequest{
-		Events: []ama.RunnerLeaseEvent{{Type: eventType, Payload: payload}},
-	})
+// uploadEvent reports a runner event for a session. Tool-execution work that is
+// not attached to a session has no session events endpoint to target, so the
+// upload is skipped rather than failing the work.
+func (d *RunnerDaemon) uploadEvent(ctx context.Context, sessionID string, eventType string, payload ama.JSON) error {
+	if sessionID == "" {
+		return nil
+	}
+	return d.Client.CreateSessionEvents(ctx, sessionID, []SessionEvent{{
+		Type:    eventType,
+		Payload: payload,
+		Metadata: ama.JSON{
+			"runnerId": d.RunnerID,
+			"executor": d.Config.SandboxAdapter,
+		},
+	}})
 }
 
-func (d *RunnerDaemon) finishFailed(ctx context.Context, lease *ama.RunnerWorkLease, failure error, output ama.JSON) error {
-	body := ama.UpdateRunnerLeaseRequest{
-		Status: "failed",
-		Error:  ama.JSON{"message": failure.Error()},
+func (d *RunnerDaemon) finishFailed(ctx context.Context, lease *Lease, failure error, output ama.JSON) error {
+	body := UpdateLeaseRequest{
+		State: "failed",
+		Error: ama.JSON{"message": failure.Error()},
 	}
 	if output != nil {
 		body.Result = ama.JSON{"output": output}
 	}
-	_, err := d.Client.UpdateRunnerLease(ctx, d.RunnerID, lease.ID, body)
+	_, err := d.Client.UpdateLease(ctx, lease.ID, body)
 	return err
 }
 
@@ -1055,9 +1097,9 @@ func (d *RunnerDaemon) finishFailed(ctx context.Context, lease *ama.RunnerWorkLe
 // keeps the session recoverable. Used when the runner stops mid-flight (graceful
 // shutdown) rather than the runtime itself failing. The latest resume token is
 // attached so the recovery rewrite can resume the runtime where it left off.
-func (d *RunnerDaemon) finishInterrupted(ctx context.Context, lease *ama.RunnerWorkLease, resumeTokens *resumeTokenBox) error {
-	_, err := d.Client.UpdateRunnerLease(ctx, d.RunnerID, lease.ID, ama.UpdateRunnerLeaseRequest{
-		Status:      "interrupted",
+func (d *RunnerDaemon) finishInterrupted(ctx context.Context, lease *Lease, resumeTokens *resumeTokenBox) error {
+	_, err := d.Client.UpdateLease(ctx, lease.ID, UpdateLeaseRequest{
+		State:       "interrupted",
 		ResumeToken: resumeTokens.Get(),
 	})
 	return err

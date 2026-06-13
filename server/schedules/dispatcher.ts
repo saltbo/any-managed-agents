@@ -1,16 +1,17 @@
-import { and, asc, eq, lte } from 'drizzle-orm'
+import { and, asc, eq, isNull, lte } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import type { Context } from 'hono'
 import { recordAudit } from '../audit'
 import type { AuthContext } from '../auth/session'
-import { projects, scheduledAgentTriggers, scheduledTriggerRuns } from '../db/schema'
+import { projects, triggerRuns, triggers } from '../db/schema'
 import type { Env } from '../env'
 import { RuntimeSchema } from '../routes/environment-contracts'
 import { createSessionForAgent } from '../routes/sessions'
 import { safeRuntimeError } from '../runtime/runtime-error'
+import type { RuntimeSecretEnvEntry } from '../runtime/secret-env'
 
 type Db = ReturnType<typeof drizzle>
-type TriggerRow = typeof scheduledAgentTriggers.$inferSelect
+type TriggerRow = typeof triggers.$inferSelect
 
 export interface ScheduleDispatchResult {
   heartbeatAt: string
@@ -105,14 +106,14 @@ async function claimRun(db: Db, trigger: TriggerRow, heartbeatAt: string) {
   const idempotencyKey = `${trigger.id}:${scheduledFor}`
   const timestamp = new Date().toISOString()
   try {
-    await db.insert(scheduledTriggerRuns).values({
+    await db.insert(triggerRuns).values({
       id: runId,
       organizationId: trigger.organizationId,
       projectId: trigger.projectId,
       triggerId: trigger.id,
       scheduledFor,
       heartbeatAt,
-      status: 'claimed',
+      state: 'claimed',
       idempotencyKey,
       sessionId: null,
       correlationId: `schedule:${idempotencyKey}`,
@@ -144,22 +145,22 @@ async function markRunFailed(
 ) {
   const timestamp = new Date().toISOString()
   await db
-    .update(scheduledTriggerRuns)
+    .update(triggerRuns)
     .set({
-      status: 'failed',
+      state: 'failed',
       errorMessage: message,
       updatedAt: timestamp,
     })
-    .where(eq(scheduledTriggerRuns.id, run.id))
+    .where(eq(triggerRuns.id, run.id))
   await db
-    .update(scheduledAgentTriggers)
+    .update(triggers)
     .set({
       nextDueAt: nextDueAt(trigger),
       lastDispatchedAt: timestamp,
       lastRunId: run.id,
       updatedAt: timestamp,
     })
-    .where(eq(scheduledAgentTriggers.id, trigger.id))
+    .where(eq(triggers.id, trigger.id))
   await recordAudit(db, {
     auth,
     action: 'scheduled_trigger.dispatch',
@@ -190,21 +191,26 @@ async function dispatchTrigger(env: Env, ctx: ExecutionContext, db: Db, trigger:
       scheduledFor: run.scheduledFor,
       correlationId: run.correlationId,
     }
+    // The trigger's execution spec uses the v1 secret env shape
+    // ({ name, credentialRef }); the cast bridges the session route options
+    // until the routes rewrite lands the matching createSessionForAgent
+    // signature.
+    const sessionOptions = {
+      title: trigger.name,
+      metadata: sessionMetadata,
+      resourceRefs: parseJson<Record<string, unknown>[]>(trigger.resourceRefs, []),
+      runtime: RuntimeSchema.parse(trigger.runtime),
+      runtimeEnv: parseJson<Record<string, string>>(trigger.env, {}),
+      runtimeSecretEnv: parseJson<RuntimeSecretEnvEntry[]>(trigger.secretEnv, []),
+      initialPrompt: trigger.promptTemplate,
+    }
     const response = await createSessionForAgent(
       schedulerContext(env, ctx, run.correlationId),
       db,
       auth,
       trigger.agentId,
       trigger.environmentId,
-      {
-        title: trigger.name,
-        metadata: sessionMetadata,
-        resourceRefs: parseJson<Record<string, unknown>[]>(trigger.resourceRefs, []),
-        runtime: RuntimeSchema.parse(trigger.runtime),
-        runtimeEnv: parseJson<Record<string, string>>(trigger.runtimeEnv, {}),
-        runtimeSecretEnv: parseJson<Array<{ name: string; ref: string }>>(trigger.runtimeSecretEnv, []),
-        initialPrompt: trigger.promptTemplate,
-      },
+      sessionOptions as unknown as Parameters<typeof createSessionForAgent>[5],
     )
 
     if (!response.ok) {
@@ -224,23 +230,23 @@ async function dispatchTrigger(env: Env, ctx: ExecutionContext, db: Db, trigger:
     const session = (await response.json()) as { id: string }
     const timestamp = new Date().toISOString()
     await db
-      .update(scheduledTriggerRuns)
+      .update(triggerRuns)
       .set({
-        status: 'session_created',
+        state: 'session_created',
         sessionId: session.id,
         metadata: stringify({ sessionMetadata }),
         updatedAt: timestamp,
       })
-      .where(eq(scheduledTriggerRuns.id, run.id))
+      .where(eq(triggerRuns.id, run.id))
     await db
-      .update(scheduledAgentTriggers)
+      .update(triggers)
       .set({
         nextDueAt: nextDueAt(trigger),
         lastDispatchedAt: timestamp,
         lastRunId: run.id,
         updatedAt: timestamp,
       })
-      .where(eq(scheduledAgentTriggers.id, trigger.id))
+      .where(eq(triggers.id, trigger.id))
     await recordAudit(db, {
       auth,
       action: 'scheduled_trigger.dispatch',
@@ -281,15 +287,17 @@ export async function dispatchDueScheduledTriggers(
   const db = drizzle(env.DB)
   const heartbeatAt = options.heartbeatAt ?? new Date().toISOString()
   const filters = [
-    eq(scheduledAgentTriggers.status, 'active'),
-    lte(scheduledAgentTriggers.nextDueAt, heartbeatAt),
-    options.projectId ? eq(scheduledAgentTriggers.projectId, options.projectId) : undefined,
+    // active = enabled and not archived (status enum replaced per api-v1)
+    eq(triggers.enabled, true),
+    isNull(triggers.archivedAt),
+    lte(triggers.nextDueAt, heartbeatAt),
+    options.projectId ? eq(triggers.projectId, options.projectId) : undefined,
   ].filter((filter) => filter !== undefined)
-  const triggers = await db
+  const dueTriggers = await db
     .select()
-    .from(scheduledAgentTriggers)
+    .from(triggers)
     .where(and(...filters))
-    .orderBy(asc(scheduledAgentTriggers.nextDueAt), asc(scheduledAgentTriggers.id))
+    .orderBy(asc(triggers.nextDueAt), asc(triggers.id))
     .limit(options.limit ?? 50)
 
   const result: ScheduleDispatchResult = {
@@ -301,7 +309,7 @@ export async function dispatchDueScheduledTriggers(
     runs: [],
   }
 
-  for (const trigger of triggers) {
+  for (const trigger of dueTriggers) {
     try {
       const run = await dispatchTrigger(env, ctx, db, trigger, heartbeatAt)
       if ('skipped' in run) {

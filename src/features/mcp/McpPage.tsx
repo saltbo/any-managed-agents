@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { EmptyState, PageHeader } from '@/console/components'
 import { useClientPagination } from '@/console/use-client-pagination'
-import { api, type McpConnectorListOptions } from '@/lib/api'
+import { api, type ConnectorListOptions } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 import { McpView } from './McpView'
 import { useMcpActions } from './use-mcp-actions'
@@ -15,7 +15,7 @@ type FilterKey = (typeof FILTER_KEYS)[number]
 export function McpPage() {
   const actions = useMcpActions()
   const [searchParams, setSearchParams] = useSearchParams()
-  const filters: McpConnectorListOptions = {}
+  const filters: ConnectorListOptions = {}
   for (const key of FILTER_KEYS) {
     const value = searchParams.get(key)
     if (value) {
@@ -23,18 +23,18 @@ export function McpPage() {
     }
   }
   const connectorsQuery = useQuery({
-    queryKey: queryKeys.mcp.connectors(filters as Record<string, string>),
-    queryFn: () => api.listMcpConnectors(filters),
+    queryKey: queryKeys.connectors.list(filters as Record<string, string>),
+    queryFn: () => api.listConnectors(filters),
   })
   // Unfiltered catalog backs the filter options so narrowing one facet does not
   // erase the remaining choices.
   const facetsQuery = useQuery({
-    queryKey: queryKeys.mcp.connectors(),
-    queryFn: () => api.listMcpConnectors(),
+    queryKey: queryKeys.connectors.list(),
+    queryFn: () => api.listConnectors(),
   })
   const connectionsQuery = useQuery({
-    queryKey: queryKeys.mcp.connections,
-    queryFn: api.listMcpConnections,
+    queryKey: queryKeys.connections.list,
+    queryFn: api.listConnections,
   })
   const connectors = useClientPagination(connectorsQuery.data?.data ?? [])
   const connections = useClientPagination(connectionsQuery.data?.data ?? [])

@@ -3,7 +3,7 @@ import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ConfirmAction, EmptyState, StatusBadge, TablePagination, TableSurface } from '@/console/components'
-import { formatDate } from '@/console/format'
+import { archivedLabel, formatDate } from '@/console/format'
 import type { ClientPagination } from '@/console/use-client-pagination'
 import type { Vault } from '@/lib/api'
 
@@ -46,7 +46,7 @@ export function VaultsView({
               </div>
             </TableCell>
             <TableCell>
-              <StatusBadge value={vault.status} />
+              <StatusBadge value={archivedLabel(vault)} />
             </TableCell>
             <TableCell>
               <StatusBadge value={vault.scope} />

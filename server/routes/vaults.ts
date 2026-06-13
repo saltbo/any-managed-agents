@@ -1,5 +1,5 @@
 import { createRoute, z } from '@hono/zod-openapi'
-import { and, desc, eq, gte, like, lt, lte, or } from 'drizzle-orm'
+import { and, desc, eq, gte, isNotNull, isNull, like, lt, lte, or } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import { recordAudit, requestId } from '../audit'
 import { requireAuth } from '../auth/session'
@@ -18,7 +18,9 @@ import { encryptSecretValue } from '../vaultCrypto'
 
 const app = createApiRouter()
 
-const ACTIVE_SESSION_STATUSES = ['idle', 'running'] as const
+const ACTIVE_SESSION_STATES = ['idle', 'running'] as const
+const CREDENTIAL_STATES = ['active', 'revoked'] as const
+const VERSION_STATES = ['active', 'superseded', 'revoked'] as const
 const JsonObjectSchema = z.record(z.string(), z.unknown())
 const SecretProviderSchema = z.enum(['ama-managed', 'cloudflare-secrets', 'external-vault'])
 
@@ -32,14 +34,12 @@ const ConnectorBindingSchema = z
 const VaultSchema = z
   .object({
     id: z.string().openapi({ example: 'vault_abc123' }),
-    organizationId: z.string().openapi({ example: 'org_abc123' }),
     projectId: z.string().nullable().openapi({ example: 'project_abc123' }),
     name: z.string().openapi({ example: 'Provider credentials' }),
     description: z.string().nullable().openapi({ example: 'Credentials used by runtime sessions.' }),
     scope: z.enum(['project', 'organization']).openapi({ example: 'project' }),
     metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
-    status: z.enum(['active', 'archived']).openapi({ example: 'active' }),
-    archivedAt: z.string().datetime().nullable().openapi({ example: '2026-05-24T00:00:00.000Z' }),
+    archivedAt: z.string().datetime().nullable().openapi({ example: null }),
     createdAt: z.string().datetime().openapi({ example: '2026-05-24T00:00:00.000Z' }),
     updatedAt: z.string().datetime().openapi({ example: '2026-05-24T00:00:00.000Z' }),
   })
@@ -50,20 +50,18 @@ const CredentialVersionSchema = z
     id: z.string().openapi({ example: 'vaultver_abc123' }),
     credentialId: z.string().openapi({ example: 'vaultcred_abc123' }),
     vaultId: z.string().openapi({ example: 'vault_abc123' }),
-    organizationId: z.string().openapi({ example: 'org_abc123' }),
     projectId: z.string().nullable().openapi({ example: 'project_abc123' }),
     version: z.number().int().openapi({ example: 2 }),
     provider: SecretProviderSchema.openapi({ example: 'cloudflare-secrets' }),
     secretRef: z.string().openapi({ example: 'cloudflare-secret:AMA_PROJECT_ABC123_TOKEN_V2' }),
     externalVaultPath: z.string().nullable().openapi({ example: 'vault://team/provider/token' }),
     referenceName: z.string().openapi({ example: 'AMA_PROJECT_ABC123_TOKEN_V2' }),
-    status: z.enum(['active', 'superseded', 'revoked', 'deleted']).openapi({ example: 'active' }),
+    state: z.enum(VERSION_STATES).openapi({ example: 'active' }),
     hasSecret: z.boolean().openapi({ example: true }),
     metadata: JsonObjectSchema.openapi({ example: { rotatedBy: 'operator' } }),
     createdAt: z.string().datetime().openapi({ example: '2026-05-24T00:00:00.000Z' }),
     supersededAt: z.string().datetime().nullable().openapi({ example: '2026-05-24T01:00:00.000Z' }),
     revokedAt: z.string().datetime().nullable().openapi({ example: null }),
-    deletedAt: z.string().datetime().nullable().openapi({ example: null }),
   })
   .openapi('VaultCredentialVersion')
 
@@ -71,13 +69,12 @@ const CredentialSchema = z
   .object({
     id: z.string().openapi({ example: 'vaultcred_abc123' }),
     vaultId: z.string().openapi({ example: 'vault_abc123' }),
-    organizationId: z.string().openapi({ example: 'org_abc123' }),
     projectId: z.string().nullable().openapi({ example: 'project_abc123' }),
     name: z.string().openapi({ example: 'Workers AI token' }),
     type: z.string().openapi({ example: 'api_key' }),
     connectorBinding: ConnectorBindingSchema.openapi({ example: { connectorId: 'workers-ai', name: 'apiKey' } }),
     metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
-    status: z.enum(['active', 'revoked']).openapi({ example: 'active' }),
+    state: z.enum(CREDENTIAL_STATES).openapi({ example: 'active' }),
     activeVersionId: z.string().nullable().openapi({ example: 'vaultver_abc123' }),
     activeVersion: CredentialVersionSchema.nullable(),
     revokedAt: z.string().datetime().nullable().openapi({ example: null }),
@@ -97,7 +94,11 @@ const CreateVaultSchema = z
   })
   .openapi('CreateVaultRequest')
 
-const UpdateVaultSchema = CreateVaultSchema.partial().openapi('UpdateVaultRequest')
+const UpdateVaultSchema = CreateVaultSchema.partial()
+  .extend({
+    archived: z.boolean().optional().openapi({ example: true }),
+  })
+  .openapi('UpdateVaultRequest')
 
 const SecretMaterialSchema = z
   .object({
@@ -121,11 +122,11 @@ const CreateCredentialSchema = z
   })
   .openapi('CreateVaultCredentialRequest')
 
-const RotateCredentialSchema = SecretMaterialSchema.openapi('RotateVaultCredentialRequest')
+const CreateCredentialVersionSchema = SecretMaterialSchema.openapi('CreateVaultCredentialVersionRequest')
 
 const UpdateCredentialSchema = z
   .object({
-    status: z.enum(['revoked']).optional().openapi({ example: 'revoked' }),
+    state: z.enum(['revoked']).optional().openapi({ example: 'revoked' }),
     revokeReason: z.string().max(500).optional().openapi({ example: 'Replaced by scoped credential.' }),
     metadata: JsonObjectSchema.optional().openapi({ example: { owner: 'platform' } }),
   })
@@ -144,13 +145,21 @@ const VersionParamsSchema = CredentialParamsSchema.extend({
   versionId: z.string().openapi({ param: { name: 'versionId', in: 'path' }, example: 'vaultver_abc123' }),
 })
 
-const DeleteVersionQuerySchema = z.object({
-  confirm: z.enum(['true']).openapi({ param: { name: 'confirm', in: 'query' }, example: 'true' }),
-})
+const credentialStateQuery = z
+  .enum(CREDENTIAL_STATES)
+  .optional()
+  .openapi({ param: { name: 'state', in: 'query' }, example: 'active' })
 
-const VaultListQuerySchema = listQuerySchema(['active', 'archived'])
-const CredentialListQuerySchema = listQuerySchema(['active', 'revoked'])
-const CredentialVersionListQuerySchema = listQuerySchema(['active', 'superseded', 'revoked', 'deleted'])
+const versionStateQuery = z
+  .enum(VERSION_STATES)
+  .optional()
+  .openapi({ param: { name: 'state', in: 'query' }, example: 'active' })
+
+const VaultListQuerySchema = listQuerySchema()
+const CredentialListQuerySchema = listQuerySchema().omit({ archived: true }).extend({ state: credentialStateQuery })
+const CredentialVersionListQuerySchema = listQuerySchema()
+  .omit({ archived: true, search: true })
+  .extend({ state: versionStateQuery })
 const VaultListResponseSchema = listResponseSchema('VaultListResponse', VaultSchema)
 const CredentialListResponseSchema = listResponseSchema('VaultCredentialListResponse', CredentialSchema)
 const CredentialVersionListResponseSchema = listResponseSchema(
@@ -351,7 +360,19 @@ function versionMetadata(reference: ReturnType<typeof secretReference>, stored: 
   })
 }
 
-function parseSecretRefs(value: string | null) {
+// Credential references are { credentialId, versionId? } objects everywhere in
+// v1 (docs/api-v1-design.md §1.4). A reference without versionId resolves to
+// the credential's active version, which can never be deleted, so only pinned
+// references block deleting a specific version.
+function credentialRefPinsVersion(ref: unknown, version: CredentialVersionRow) {
+  if (!ref || typeof ref !== 'object') {
+    return false
+  }
+  const record = ref as { credentialId?: unknown; versionId?: unknown }
+  return record.credentialId === version.credentialId && record.versionId === version.id
+}
+
+function parseRefArray(value: string | null) {
   if (!value) {
     return []
   }
@@ -359,34 +380,14 @@ function parseSecretRefs(value: string | null) {
   return Array.isArray(parsed) ? parsed : []
 }
 
-function secretRefMatches(ref: unknown, version: CredentialVersionRow) {
-  if (typeof ref === 'string') {
-    return ref === version.id || ref === version.secretRef || ref === version.referenceName
-  }
-  if (!ref || typeof ref !== 'object') {
-    return false
-  }
-  const record = ref as Record<string, unknown>
-  const values = [
-    record.ref,
-    record.credentialVersionId,
-    record.credentialVersionRef,
-    record.secretRef,
-    record.referenceName,
-  ]
-  return values.some((value) => value === version.id || value === version.secretRef || value === version.referenceName)
-}
-
 function serializeVault(row: VaultRow) {
   return {
     id: row.id,
-    organizationId: row.organizationId,
     projectId: row.projectId,
     name: row.name,
     description: row.description,
     scope: row.scope as 'project' | 'organization',
     metadata: parseJson<Record<string, unknown>>(row.metadata),
-    status: row.status as 'active' | 'archived',
     archivedAt: row.archivedAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -410,36 +411,33 @@ function serializeVersion(row: CredentialVersionRow) {
     id: row.id,
     credentialId: row.credentialId,
     vaultId: row.vaultId,
-    organizationId: row.organizationId,
     projectId: row.projectId,
     version: row.version,
     provider: row.provider as z.infer<typeof SecretProviderSchema>,
     secretRef: row.secretRef,
     externalVaultPath: row.externalVaultPath,
     referenceName: row.referenceName,
-    status: row.status as 'active' | 'superseded' | 'revoked' | 'deleted',
+    state: row.state as (typeof VERSION_STATES)[number],
     hasSecret: row.hasSecret,
     metadata: safeVersionMetadata(row.metadata),
     createdAt: row.createdAt,
     supersededAt: row.supersededAt,
     revokedAt: row.revokedAt,
-    deletedAt: row.deletedAt,
   }
 }
 
-function serializeCredential(row: CredentialRow, activeVersion: CredentialVersionRow | null) {
+function serializeCredential(row: CredentialRow, activeVersionRow: CredentialVersionRow | null) {
   return {
     id: row.id,
     vaultId: row.vaultId,
-    organizationId: row.organizationId,
     projectId: row.projectId,
     name: row.name,
     type: row.type,
     connectorBinding: parseJson<z.infer<typeof ConnectorBindingSchema>>(row.connectorBinding),
     metadata: parseJson<Record<string, unknown>>(row.metadata),
-    status: row.status as 'active' | 'revoked',
+    state: row.state as (typeof CREDENTIAL_STATES)[number],
     activeVersionId: row.activeVersionId,
-    activeVersion: activeVersion ? serializeVersion(activeVersion) : null,
+    activeVersion: activeVersionRow ? serializeVersion(activeVersionRow) : null,
     revokedAt: row.revokedAt,
     revokedByUserId: row.revokedByUserId,
     revokeReason: row.revokeReason,
@@ -475,22 +473,19 @@ async function findCredential(db: ReturnType<typeof drizzle>, vault: VaultRow, c
     .get()
 }
 
+async function findVersion(db: ReturnType<typeof drizzle>, credential: CredentialRow, versionId: string) {
+  return await db
+    .select()
+    .from(vaultCredentialVersions)
+    .where(and(eq(vaultCredentialVersions.id, versionId), eq(vaultCredentialVersions.credentialId, credential.id)))
+    .get()
+}
+
 async function activeVersion(db: ReturnType<typeof drizzle>, credential: CredentialRow) {
   if (!credential.activeVersionId) {
     return null
   }
-  return (
-    (await db
-      .select()
-      .from(vaultCredentialVersions)
-      .where(
-        and(
-          eq(vaultCredentialVersions.id, credential.activeVersionId),
-          eq(vaultCredentialVersions.credentialId, credential.id),
-        ),
-      )
-      .get()) ?? null
-  )
+  return (await findVersion(db, credential, credential.activeVersionId)) ?? null
 }
 
 async function latestVersionNumber(db: ReturnType<typeof drizzle>, credentialId: string) {
@@ -505,17 +500,19 @@ async function latestVersionNumber(db: ReturnType<typeof drizzle>, credentialId:
 }
 
 async function versionHasActiveReferences(db: ReturnType<typeof drizzle>, version: CredentialVersionRow) {
-  const environmentFilters = [eq(environments.status, 'active'), eq(projects.organizationId, version.organizationId)]
+  const environmentFilters = [isNull(environments.archivedAt), eq(projects.organizationId, version.organizationId)]
   if (version.projectId) {
     environmentFilters.push(eq(environments.projectId, version.projectId))
   }
   const environmentReferences = await db
-    .select({ secretRefs: environments.secretRefs })
+    .select({ credentialRefs: environments.credentialRefs })
     .from(environments)
     .innerJoin(projects, eq(environments.projectId, projects.id))
     .where(and(...environmentFilters))
   if (
-    environmentReferences.some((row) => parseSecretRefs(row.secretRefs).some((ref) => secretRefMatches(ref, version)))
+    environmentReferences.some((row) =>
+      parseRefArray(row.credentialRefs).some((ref) => credentialRefPinsVersion(ref, version)),
+    )
   ) {
     return true
   }
@@ -523,17 +520,25 @@ async function versionHasActiveReferences(db: ReturnType<typeof drizzle>, versio
   const sessionFilters = [
     eq(sessions.organizationId, version.organizationId),
     version.projectId ? eq(sessions.projectId, version.projectId) : undefined,
-    or(eq(sessions.status, ACTIVE_SESSION_STATUSES[0]), eq(sessions.status, ACTIVE_SESSION_STATUSES[1])),
+    or(eq(sessions.state, ACTIVE_SESSION_STATES[0]), eq(sessions.state, ACTIVE_SESSION_STATES[1])),
   ].filter((filter) => filter !== undefined)
   const sessionReferences = await db
-    .select({ environmentSnapshot: sessions.environmentSnapshot })
+    .select({ secretEnv: sessions.secretEnv, environmentSnapshot: sessions.environmentSnapshot })
     .from(sessions)
     .where(and(...sessionFilters))
   return sessionReferences.some((row) => {
+    const secretEnvPins = parseRefArray(row.secretEnv).some((entry) => {
+      const credentialRef =
+        entry && typeof entry === 'object' ? (entry as { credentialRef?: unknown }).credentialRef : null
+      return credentialRefPinsVersion(credentialRef, version)
+    })
+    if (secretEnvPins) {
+      return true
+    }
     const snapshot = row.environmentSnapshot
-      ? (JSON.parse(row.environmentSnapshot) as { secretRefs?: unknown[] })
+      ? (JSON.parse(row.environmentSnapshot) as { credentialRefs?: unknown[] })
       : null
-    return snapshot?.secretRefs?.some((ref) => secretRefMatches(ref, version)) ?? false
+    return snapshot?.credentialRefs?.some((ref) => credentialRefPinsVersion(ref, version)) ?? false
   })
 }
 
@@ -596,7 +601,8 @@ const updateVaultRoute = createRoute({
   path: '/{vaultId}',
   operationId: 'updateVault',
   tags: ['Vaults'],
-  summary: 'Update a vault',
+  summary: 'Update or archive a vault',
+  description: 'Partial update. Archive with `archived: true`; restore with `archived: false`.',
   ...AuthenticatedOperation,
   request: {
     params: VaultParamsSchema,
@@ -608,21 +614,6 @@ const updateVaultRoute = createRoute({
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
     404: { description: 'Vault not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
     409: { description: 'Vault scope conflict', content: { 'application/json': { schema: ErrorResponseSchema } } },
-  },
-})
-
-const archiveVaultRoute = createRoute({
-  method: 'delete',
-  path: '/{vaultId}',
-  operationId: 'archiveVault',
-  tags: ['Vaults'],
-  summary: 'Archive a vault',
-  ...AuthenticatedOperation,
-  request: { params: VaultParamsSchema },
-  responses: {
-    204: { description: 'Vault archived' },
-    401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
-    404: { description: 'Vault not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
   },
 })
 
@@ -686,6 +677,7 @@ const updateCredentialRoute = createRoute({
   operationId: 'updateVaultCredential',
   tags: ['Vaults'],
   summary: 'Update or revoke vault credential metadata',
+  description: "Revoke with `state: 'revoked'` and an optional `revokeReason`.",
   ...AuthenticatedOperation,
   request: {
     params: CredentialParamsSchema,
@@ -718,16 +710,16 @@ const listVersionsRoute = createRoute({
   },
 })
 
-const rotateCredentialRoute = createRoute({
+const createVersionRoute = createRoute({
   method: 'post',
   path: '/{vaultId}/credentials/{credentialId}/versions',
-  operationId: 'rotateVaultCredential',
+  operationId: 'createVaultCredentialVersion',
   tags: ['Vaults'],
-  summary: 'Rotate vault credential',
+  summary: 'Rotate a vault credential by creating a new version',
   ...AuthenticatedOperation,
   request: {
     params: CredentialParamsSchema,
-    body: { required: true, content: { 'application/json': { schema: RotateCredentialSchema } } },
+    body: { required: true, content: { 'application/json': { schema: CreateCredentialVersionSchema } } },
   },
   responses: {
     201: { description: 'Created credential version', content: { 'application/json': { schema: CredentialSchema } } },
@@ -738,14 +730,33 @@ const rotateCredentialRoute = createRoute({
   },
 })
 
+const readVersionRoute = createRoute({
+  method: 'get',
+  path: '/{vaultId}/credentials/{credentialId}/versions/{versionId}',
+  operationId: 'readVaultCredentialVersion',
+  tags: ['Vaults'],
+  summary: 'Read a vault credential version',
+  ...AuthenticatedOperation,
+  request: { params: VersionParamsSchema },
+  responses: {
+    200: { description: 'Credential version', content: { 'application/json': { schema: CredentialVersionSchema } } },
+    401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    404: {
+      description: 'Credential version not found',
+      content: { 'application/json': { schema: ErrorResponseSchema } },
+    },
+  },
+})
+
 const deleteVersionRoute = createRoute({
   method: 'delete',
   path: '/{vaultId}/credentials/{credentialId}/versions/{versionId}',
   operationId: 'deleteVaultCredentialVersion',
   tags: ['Vaults'],
-  summary: 'Delete unused vault credential version metadata',
+  summary: 'Delete an unused vault credential version',
+  description: 'Hard delete. The active version and versions pinned by live runtime metadata cannot be deleted.',
   ...AuthenticatedOperation,
-  request: { params: VersionParamsSchema, query: DeleteVersionQuerySchema },
+  request: { params: VersionParamsSchema },
   responses: {
     204: { description: 'Credential version deleted' },
     400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
@@ -769,7 +780,7 @@ const routes = app
       return auth
     }
 
-    const { includeArchived, status, search, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
+    const { archived, search, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
     let parsedCursor: ReturnType<typeof parseListCursor> | null = null
     try {
       parsedCursor = cursor ? parseListCursor(cursor) : null
@@ -777,10 +788,9 @@ const routes = app
       return c.json(domainValidation('Invalid list cursor', { cursor: 'Cursor is invalid.' }), 400)
     }
 
-    const statusFilter = status ?? (includeArchived === 'true' ? undefined : 'active')
     const filters = [
       vaultVisibilityFilter(auth),
-      statusFilter ? eq(vaults.status, statusFilter) : undefined,
+      archived === 'true' ? isNotNull(vaults.archivedAt) : isNull(vaults.archivedAt),
       search ? like(vaults.name, `%${search}%`) : undefined,
       createdFrom ? gte(vaults.createdAt, createdFrom) : undefined,
       createdTo ? lte(vaults.createdAt, createdTo) : undefined,
@@ -818,7 +828,6 @@ const routes = app
       description: body.description ?? null,
       scope,
       metadata: stringify(body.metadata ?? {}),
-      status: 'active',
       archivedAt: null,
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -879,19 +888,23 @@ const routes = app
         )
       }
     }
+    const timestamp = now()
+    const archivedAt =
+      body.archived === true ? (vault.archivedAt ?? timestamp) : body.archived === false ? null : vault.archivedAt
     const updated = {
       name: body.name ?? vault.name,
       description: body.description ?? vault.description,
       scope,
       projectId: scope === 'project' ? auth.project.id : null,
       metadata: stringify(body.metadata ?? parseJson<Record<string, unknown>>(vault.metadata)),
-      updatedAt: now(),
+      archivedAt,
+      updatedAt: timestamp,
     }
     await db.update(vaults).set(updated).where(eq(vaults.id, vault.id))
     const serialized = serializeVault({ ...vault, ...updated })
     await recordAudit(db, {
       auth,
-      action: 'vault.update',
+      action: body.archived === true && vault.archivedAt === null ? 'vault.archive' : 'vault.update',
       resourceType: 'vault',
       resourceId: vault.id,
       outcome: 'success',
@@ -900,36 +913,6 @@ const routes = app
       after: serialized,
     })
     return c.json(serialized, 200)
-  })
-  .openapi(archiveVaultRoute, async (c) => {
-    const { vaultId } = c.req.valid('param')
-    const db = drizzle(c.env.DB)
-    const auth = await requireAuth(c, db)
-    if (auth instanceof Response) {
-      return auth
-    }
-
-    const vault = await findVault(db, vaultId, auth)
-    if (!vault) {
-      return c.json({ error: { type: 'not_found', message: 'Vault not found' } }, 404)
-    }
-
-    const timestamp = now()
-    await db
-      .update(vaults)
-      .set({ status: 'archived', archivedAt: timestamp, updatedAt: timestamp })
-      .where(eq(vaults.id, vault.id))
-    await recordAudit(db, {
-      auth,
-      action: 'vault.archive',
-      resourceType: 'vault',
-      resourceId: vault.id,
-      outcome: 'success',
-      requestId: requestId(c),
-      before: serializeVault(vault),
-      after: serializeVault({ ...vault, status: 'archived', archivedAt: timestamp, updatedAt: timestamp }),
-    })
-    return c.body(null, 204)
   })
   .openapi(listCredentialsRoute, async (c) => {
     const { vaultId } = c.req.valid('param')
@@ -944,7 +927,7 @@ const routes = app
       return c.json({ error: { type: 'not_found', message: 'Vault not found' } }, 404)
     }
 
-    const { includeArchived, status, search, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
+    const { state, search, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
     let parsedCursor: ReturnType<typeof parseListCursor> | null = null
     try {
       parsedCursor = cursor ? parseListCursor(cursor) : null
@@ -952,10 +935,9 @@ const routes = app
       return c.json(domainValidation('Invalid list cursor', { cursor: 'Cursor is invalid.' }), 400)
     }
 
-    const statusFilter = status ?? (includeArchived === 'true' ? undefined : 'active')
     const filters = [
       eq(vaultCredentials.vaultId, vault.id),
-      statusFilter ? eq(vaultCredentials.status, statusFilter) : undefined,
+      state ? eq(vaultCredentials.state, state) : undefined,
       search ? like(vaultCredentials.name, `%${search}%`) : undefined,
       createdFrom ? gte(vaultCredentials.createdAt, createdFrom) : undefined,
       createdTo ? lte(vaultCredentials.createdAt, createdTo) : undefined,
@@ -989,7 +971,7 @@ const routes = app
     if (!vault) {
       return c.json({ error: { type: 'not_found', message: 'Vault not found' } }, 404)
     }
-    if (vault.status !== 'active') {
+    if (vault.archivedAt !== null) {
       return c.json({ error: { type: 'conflict', message: 'Vault is archived' } }, 409)
     }
 
@@ -1010,7 +992,7 @@ const routes = app
       type: body.type,
       connectorBinding: stringify(body.connectorBinding ?? {}),
       metadata: stringify(body.metadata ?? {}),
-      status: 'active',
+      state: 'active',
       activeVersionId: null,
       revokedAt: null,
       revokedByUserId: null,
@@ -1033,11 +1015,10 @@ const routes = app
       version: 1,
       ...firstSecretRef,
       metadata: versionMetadata(firstSecretRef, storedSecretMetadata),
-      status: 'active',
+      state: 'active',
       createdAt: timestamp,
       supersededAt: null,
       revokedAt: null,
-      deletedAt: null,
     }
     await db.batch([
       db.insert(vaultCredentials).values(credential),
@@ -1088,30 +1069,30 @@ const routes = app
     }
 
     const timestamp = now()
+    const revoking = body.state === 'revoked'
     const updated = {
       metadata: stringify(body.metadata ?? parseJson<Record<string, unknown>>(credential.metadata)),
-      status: body.status ?? (credential.status as 'active' | 'revoked'),
-      activeVersionId: body.status === 'revoked' ? null : credential.activeVersionId,
-      revokedAt: body.status === 'revoked' ? timestamp : credential.revokedAt,
-      revokedByUserId: body.status === 'revoked' ? auth.user.id : credential.revokedByUserId,
-      revokeReason: body.status === 'revoked' ? (body.revokeReason ?? null) : credential.revokeReason,
+      state: body.state ?? (credential.state as (typeof CREDENTIAL_STATES)[number]),
+      activeVersionId: revoking ? null : credential.activeVersionId,
+      revokedAt: revoking ? timestamp : credential.revokedAt,
+      revokedByUserId: revoking ? auth.user.id : credential.revokedByUserId,
+      revokeReason: revoking ? (body.revokeReason ?? null) : credential.revokeReason,
       updatedAt: timestamp,
     }
     await db.update(vaultCredentials).set(updated).where(eq(vaultCredentials.id, credential.id))
-    if (body.status === 'revoked') {
+    if (revoking) {
       await db
         .update(vaultCredentialVersions)
-        .set({ status: 'revoked', revokedAt: timestamp })
+        .set({ state: 'revoked', revokedAt: timestamp })
         .where(
-          and(eq(vaultCredentialVersions.credentialId, credential.id), eq(vaultCredentialVersions.status, 'active')),
+          and(eq(vaultCredentialVersions.credentialId, credential.id), eq(vaultCredentialVersions.state, 'active')),
         )
     }
-    const serializedActiveVersion =
-      body.status === 'revoked' ? null : await activeVersion(db, { ...credential, ...updated })
+    const serializedActiveVersion = revoking ? null : await activeVersion(db, { ...credential, ...updated })
     const serialized = serializeCredential({ ...credential, ...updated }, serializedActiveVersion)
     await recordAudit(db, {
       auth,
-      action: body.status === 'revoked' ? 'vault_credential.revoke' : 'vault_credential.update',
+      action: revoking ? 'vault_credential.revoke' : 'vault_credential.update',
       resourceType: 'vault_credential',
       resourceId: credential.id,
       outcome: 'success',
@@ -1124,7 +1105,7 @@ const routes = app
   })
   .openapi(listVersionsRoute, async (c) => {
     const { vaultId, credentialId } = c.req.valid('param')
-    const { includeArchived, status, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
+    const { state, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
     const db = drizzle(c.env.DB)
     const auth = await requireAuth(c, db)
     if (auth instanceof Response) {
@@ -1144,10 +1125,9 @@ const routes = app
       return c.json(domainValidation('Invalid list cursor', { cursor: 'Cursor is invalid.' }), 400)
     }
 
-    const statusFilter = status ?? (includeArchived === 'true' ? undefined : 'active')
     const filters = [
       eq(vaultCredentialVersions.credentialId, credential.id),
-      statusFilter ? eq(vaultCredentialVersions.status, statusFilter) : undefined,
+      state ? eq(vaultCredentialVersions.state, state) : undefined,
       createdFrom ? gte(vaultCredentialVersions.createdAt, createdFrom) : undefined,
       createdTo ? lte(vaultCredentialVersions.createdAt, createdTo) : undefined,
       parsedCursor
@@ -1169,7 +1149,7 @@ const routes = app
     const page = paginateRows(rows, limit)
     return c.json({ data: page.data.map(serializeVersion), pagination: page.pagination }, 200)
   })
-  .openapi(rotateCredentialRoute, async (c) => {
+  .openapi(createVersionRoute, async (c) => {
     const { vaultId, credentialId } = c.req.valid('param')
     const body = c.req.valid('json')
     const db = drizzle(c.env.DB)
@@ -1183,7 +1163,7 @@ const routes = app
     if (!vault || !credential) {
       return c.json({ error: { type: 'not_found', message: 'Credential not found' } }, 404)
     }
-    if (vault.status !== 'active' || credential.status !== 'active') {
+    if (vault.archivedAt !== null || credential.state !== 'active') {
       return c.json({ error: { type: 'conflict', message: 'Credential is not active' } }, 409)
     }
 
@@ -1204,11 +1184,10 @@ const routes = app
         version: nextVersion,
         ...reference,
         metadata: versionMetadata(reference, storedSecretMetadata),
-        status: 'active',
+        state: 'active',
         createdAt: timestamp,
         supersededAt: null,
         revokedAt: null,
-        deletedAt: null,
       }
     } catch (error) {
       return routeValidationError(c, error)
@@ -1220,7 +1199,7 @@ const routes = app
         ? [
             db
               .update(vaultCredentialVersions)
-              .set({ status: 'superseded', supersededAt: timestamp })
+              .set({ state: 'superseded', supersededAt: timestamp })
               .where(eq(vaultCredentialVersions.id, credential.activeVersionId)),
           ]
         : []),
@@ -1240,6 +1219,22 @@ const routes = app
     })
     return c.json(serialized, 201)
   })
+  .openapi(readVersionRoute, async (c) => {
+    const { vaultId, credentialId, versionId } = c.req.valid('param')
+    const db = drizzle(c.env.DB)
+    const auth = await requireAuth(c, db)
+    if (auth instanceof Response) {
+      return auth
+    }
+
+    const vault = await findVault(db, vaultId, auth)
+    const credential = vault ? await findCredential(db, vault, credentialId) : null
+    const version = credential ? await findVersion(db, credential, versionId) : null
+    if (!vault || !credential || !version) {
+      return c.json({ error: { type: 'not_found', message: 'Credential version not found' } }, 404)
+    }
+    return c.json(serializeVersion(version), 200)
+  })
   .openapi(deleteVersionRoute, async (c) => {
     const { vaultId, credentialId, versionId } = c.req.valid('param')
     const db = drizzle(c.env.DB)
@@ -1250,15 +1245,7 @@ const routes = app
 
     const vault = await findVault(db, vaultId, auth)
     const credential = vault ? await findCredential(db, vault, credentialId) : null
-    const version = credential
-      ? await db
-          .select()
-          .from(vaultCredentialVersions)
-          .where(
-            and(eq(vaultCredentialVersions.id, versionId), eq(vaultCredentialVersions.credentialId, credential.id)),
-          )
-          .get()
-      : null
+    const version = credential ? await findVersion(db, credential, versionId) : null
     if (!vault || !credential || !version) {
       return c.json({ error: { type: 'not_found', message: 'Credential version not found' } }, 404)
     }
@@ -1272,26 +1259,13 @@ const routes = app
       )
     }
 
-    const timestamp = now()
     try {
       await deleteCloudflareSecret(c.env, version)
     } catch (error) {
       return routeValidationError(c, error)
     }
 
-    await db
-      .update(vaultCredentialVersions)
-      .set({
-        status: 'deleted',
-        deletedAt: timestamp,
-        hasSecret: false,
-        metadata: stringify({
-          ...parseJson<Record<string, unknown>>(version.metadata),
-          deletedByUserId: auth.user.id,
-          deleteConfirmedAt: timestamp,
-        }),
-      })
-      .where(eq(vaultCredentialVersions.id, version.id))
+    await db.delete(vaultCredentialVersions).where(eq(vaultCredentialVersions.id, version.id))
     await recordAudit(db, {
       auth,
       action: 'vault_credential_version.delete',
@@ -1301,12 +1275,6 @@ const routes = app
       requestId: requestId(c),
       metadata: { vaultId: vault.id, credentialId: credential.id },
       before: serializeVersion(version),
-      after: {
-        ...serializeVersion(version),
-        status: 'deleted',
-        deletedAt: timestamp,
-        hasSecret: false,
-      },
     })
     return c.body(null, 204)
   })

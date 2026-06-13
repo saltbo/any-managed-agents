@@ -18,7 +18,14 @@ export function CreateProviderSheet({ open, onOpenChange }: { open: boolean; onO
         type: form.type,
         displayName: form.displayName,
         ...(form.baseUrl ? { baseUrl: form.baseUrl } : {}),
-        ...(form.credentialSecretRef ? { credentialSecretRef: form.credentialSecretRef } : {}),
+        ...(form.credentialId
+          ? {
+              credentialRef: {
+                credentialId: form.credentialId,
+                ...(form.credentialVersionId ? { versionId: form.credentialVersionId } : {}),
+              },
+            }
+          : {}),
       }),
     onSuccess: () => {
       onOpenChange(false)

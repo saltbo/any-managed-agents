@@ -22,12 +22,15 @@ Then('runtime work is cancelled and the session records a stopped event', async 
   const state = this.e2e
   assert.ok(state, 'e2e state must exist')
   const session = state.latestSession as Json
-  assert.equal(session.status, 'stopped')
+  assert.equal(session.state, 'stopped')
   // The stop is recorded via the audit trail — a session.stop audit event is
   // created by the control plane when the stop request is processed. In test
   // mode, sessions may have no active runtime work, so runtime lifecycle events
   // (agent_end, turn_end) are not guaranteed; the audit record is canonical proof.
-  const audit = await apiJson<ListResponse<Json>>(state.page.request, `/api/audit-records?action=session.stop&limit=10`)
+  const audit = await apiJson<ListResponse<Json>>(
+    state.page.request,
+    `/api/v1/audit-records?action=session.stop&limit=10`,
+  )
   assert.ok(audit.data.length > 0, 'Expected a session.stop audit record after stopping the session')
 })
 
@@ -39,7 +42,7 @@ Then('AMA sends the stop request to the selected session runtime', async functio
   // After stop, the session must be stopped — confirming AMA propagated the
   // stop to the runtime (in AMA cloud runtime the stop is applied directly).
   const session = state.latestSession as Json
-  assert.equal(session.status, 'stopped')
+  assert.equal(session.state, 'stopped')
 })
 
 // ─── Scenario: Terminate after runtime failure (engine-error-termination) ────
@@ -55,7 +58,7 @@ When('model, tool, sandbox, or policy execution fails', async function (this: St
   })
   state.agent = await createAgent(state, { name: `${state.runId} error agent` })
   // Create the session — it starts as pending/waiting-for-runner
-  state.latestSession = await apiJson<Json>(state.page.request, '/api/sessions', {
+  state.latestSession = await apiJson<Json>(state.page.request, '/api/v1/sessions', {
     method: 'POST',
     data: {
       agentId: state.agent.id,
@@ -82,16 +85,16 @@ When('model, tool, sandbox, or policy execution fails', async function (this: St
   // Allow the DB write to settle
   await new Promise((resolve) => setTimeout(resolve, 500))
   // Refresh the session
-  state.latestSession = await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession.id}`)
+  state.latestSession = await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.latestSession.id}`)
 })
 
 Then('the session records a structured error event and moves to an error state', async function (this: StepsWorld) {
   const state = this.e2e
   assert.ok(state, 'e2e state must exist')
   const session = state.latestSession as Json
-  assert.equal(session.status, 'error', `Expected session status error, got: ${session.status}`)
+  assert.equal(session.state, 'error', `Expected session state error, got: ${session.state}`)
   // Verify a runtime.error event was recorded
-  const events = await apiJson<ListResponse<Json>>(state.page.request, `/api/sessions/${session.id}/events?limit=50`)
+  const events = await apiJson<ListResponse<Json>>(state.page.request, `/api/v1/sessions/${session.id}/events?limit=50`)
   const errorEvent = events.data.find((e) => e.type === 'runtime.error')
   assert.ok(errorEvent, 'Expected a runtime.error event in session events')
   const payload = (errorEvent.payload ?? {}) as Json
@@ -108,8 +111,8 @@ Given('a session is running model, tool, or sandbox work', async function (this:
   const state = await ensureAgentAndEnvironment(this)
   state.latestSession = await createSession(state)
   assert.ok(
-    ['idle', 'running'].includes(String((state.latestSession as Json).status)),
-    `Expected session to be idle or running before cancellation; got: ${(state.latestSession as Json).status}`,
+    ['idle', 'running'].includes(String((state.latestSession as Json).state)),
+    `Expected session to be idle or running before cancellation; got: ${(state.latestSession as Json).state}`,
   )
 })
 
@@ -117,8 +120,11 @@ Then('the runtime sends a cancellation signal and records the final stopped stat
   const state = this.e2e
   assert.ok(state, 'e2e state must exist')
   const session = state.latestSession as Json
-  assert.equal(session.status, 'stopped')
+  assert.equal(session.state, 'stopped')
   // Audit record should include a stop action
-  const audit = await apiJson<ListResponse<Json>>(state.page.request, '/api/audit-records?action=session.stop&limit=10')
+  const audit = await apiJson<ListResponse<Json>>(
+    state.page.request,
+    '/api/v1/audit-records?action=session.stop&limit=10',
+  )
   assert.ok(audit.data.length > 0, 'Expected a session.stop audit record after cooperative cancellation')
 })

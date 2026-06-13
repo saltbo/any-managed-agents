@@ -2,9 +2,9 @@ import { SELF } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import { healthResponse } from './health'
 
-describe('[CF] GET /api/health', () => {
+describe('[CF] GET /api/v1/health', () => {
   it('returns the Worker health response', async () => {
-    const res = await SELF.fetch('https://example.com/api/health')
+    const res = await SELF.fetch('https://example.com/api/v1/health')
 
     expect(res.status).toBe(200)
     expect(await res.json()).toMatchObject({

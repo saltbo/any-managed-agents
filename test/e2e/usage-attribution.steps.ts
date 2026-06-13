@@ -23,7 +23,7 @@ type UsageWorld = StepsWorld & {
 async function sessionEventList(state: E2EState) {
   return await apiJson<ListResponse<Json>>(
     state.page.request,
-    `/api/sessions/${state.latestSession?.id}/events?limit=200`,
+    `/api/v1/sessions/${state.latestSession?.id}/events?limit=200`,
   )
 }
 
@@ -31,16 +31,15 @@ Given('a session records provider calls and tool calls', async function (this: U
   const state = await ensureSignedIn(this)
   state.agent = await createAgent(state, {
     name: `${state.runId} attribution agent`,
-    provider: 'workers-ai',
     model: WORKERS_AI_MODEL,
   })
   state.environment = await createEnvironment(state, { name: `${state.runId} attribution env` })
   state.latestSession = await createSession(state, { title: `${state.runId} attribution session` })
   // This prompt makes the test runtime issue a sandbox.exec tool call before
   // answering, so the turn records both model usage and tool usage.
-  await apiJson<Json>(state.page.request, `/api/sessions/${state.latestSession?.id}/commands`, {
+  await apiJson<Json>(state.page.request, `/api/v1/sessions/${state.latestSession?.id}/messages`, {
     method: 'POST',
-    data: { type: 'prompt', message: `${state.runId} inspect the sandbox status` },
+    data: { type: 'prompt', content: `${state.runId} inspect the sandbox status` },
   })
   await waitForSessionEventMatch(state, (event) => event.type === 'tool_execution_end', 'a completed tool execution')
   await waitForSessionEventMatch(state, (event) => event.type === 'usage.recorded', 'recorded model usage')
@@ -51,13 +50,11 @@ When('usage is summarized', async function (this: UsageWorld) {
   assert.ok(state, 'e2e state must exist')
   const records = await apiJson<ListResponse<Json>>(
     state.page.request,
-    `/api/usage?sessionId=${state.latestSession?.id}&limit=100`,
+    `/api/v1/usage-records?sessionId=${state.latestSession?.id}&limit=100`,
   )
   this.usageRecords = records.data
-  this.usageSummary = await apiJson<Json>(
-    state.page.request,
-    `/api/usage/summary?sessionId=${state.latestSession?.id}&groupBy=provider,model,session`,
-  )
+  // The summary endpoint groups by a single dimension over the project usage.
+  this.usageSummary = await apiJson<Json>(state.page.request, '/api/v1/usage-summary?groupBy=provider')
 })
 
 Then('model usage is traceable to session events', async function (this: UsageWorld) {
