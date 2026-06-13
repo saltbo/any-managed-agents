@@ -11,6 +11,8 @@ import { insertCanonicalSessionEvent } from './db/session-event-store'
 import type { Env } from './env'
 import { errorResponse } from './errors'
 import { registerAgentRoutes } from './http/agents'
+import { registerEnvironmentRoutes } from './http/environments'
+import { registerProviderRoutes } from './http/providers'
 import { ApiSecuritySchemes, createDepsApiRouter } from './openapi'
 import {
   evaluateMcpToolPolicy,
@@ -27,13 +29,11 @@ import connections from './routes/connections'
 import connectors from './routes/connectors'
 import e2e from './routes/e2e'
 import effectivePolicy from './routes/effective-policy'
-import environments from './routes/environments'
 import federatedTenants from './routes/federated-tenants'
 import health from './routes/health'
 import leases from './routes/leases'
 import policies from './routes/policies'
 import projects from './routes/projects'
-import providers from './routes/providers'
 import runners, { dispatchRunnerSessionCommand, hasAcceptedRunnerSessionChannel } from './routes/runners'
 import runtimeAi from './routes/runtime-ai'
 import sessionRoutes from './routes/sessions'
@@ -650,11 +650,14 @@ export function createApp() {
   // protocol-adapter endpoints: their wire shape is dictated by external
   // protocols (ACP tunnel, OpenAI-compatible inference) and is therefore
   // exempt from REST resource modeling (docs/api-v1-design.md §1.8).
-  // agents is migrated to the clean-architecture http layer. It registers its
-  // OpenAPI routes (load-bearing internal order: static before parameter
-  // segments) onto a sub-router mounted at the resource's original chain
-  // position, so the assembled route order and AppType stay identical.
+  // agents, environments, and providers are migrated to the clean-architecture
+  // http layer. Each registers its OpenAPI routes (load-bearing internal order:
+  // static before parameter segments) onto a sub-router mounted at the
+  // resource's original chain position, so the assembled route order and
+  // AppType stay identical.
   const agents = registerAgentRoutes(createDepsApiRouter())
+  const environments = registerEnvironmentRoutes(createDepsApiRouter())
+  const providers = registerProviderRoutes(createDepsApiRouter())
 
   const routes = app
     .route('/api/v1/health', health)

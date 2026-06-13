@@ -98,6 +98,11 @@ function fakeDeps(
   }
   return {
     agents: repo,
+    // The agents usecase never reaches for these ports; the fakes only satisfy
+    // the aggregate Deps shape.
+    environments: undefined as unknown as Deps['environments'],
+    providers: undefined as unknown as Deps['providers'],
+    providerCatalog: undefined as unknown as Deps['providerCatalog'],
     audit: { record: async (_auth, entry) => void auditLog.push(entry) },
     policy: { resolveToolPolicy: async () => overrides.toolPolicy ?? {} },
   }

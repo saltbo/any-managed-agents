@@ -5,9 +5,9 @@ import { createApp } from '../app'
 import type { Env } from '../env'
 
 const routeSources = {
-  // agents is migrated to the clean-architecture http layer.
+  // agents and environments are migrated to the clean-architecture http layer.
   agents: readFileSync('server/http/agents.ts', 'utf8'),
-  environments: readFileSync('server/routes/environments.ts', 'utf8'),
+  environments: readFileSync('server/http/environments.ts', 'utf8'),
   sessions: readFileSync('server/routes/sessions.ts', 'utf8'),
 }
 
