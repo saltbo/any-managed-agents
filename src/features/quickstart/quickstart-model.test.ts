@@ -12,10 +12,10 @@ import {
   sandboxAgentInput,
 } from './quickstart-model'
 
-const activeProvider = { status: 'active' } as Provider
-const activeEnvironment = { status: 'active' } as Environment
-const activeAgent = { status: 'active' } as Agent
-const cloudSession = { runtimeEndpointPath: '/runtime/sessions/abc/rpc' } as Session
+const activeProvider = { enabled: true } as Provider
+const activeEnvironment = { archivedAt: null } as Environment
+const activeAgent = { archivedAt: null } as Agent
+const cloudSession = { state: 'idle' } as Session
 
 const emptyResources = { providers: [], environments: [], agents: [], sessions: [] }
 
@@ -90,16 +90,14 @@ describe('quickstart environment input', () => {
 
 describe('quickstart sandbox add-on', () => {
   it('adds sandbox tools and carries skills consistent with the agent schema', () => {
-    const agent = { allowedTools: ['read', 'sandbox.exec'], skills: [] } as unknown as Agent
+    const agent = { tools: [{ name: 'read' }, { name: 'sandbox.exec' }], skills: [] } as unknown as Agent
     expect(agentHasSandboxExecution(agent)).toBe(true)
-    expect(agentHasSandboxExecution({ allowedTools: ['read'], skills: [] } as unknown as Agent)).toBe(false)
+    expect(agentHasSandboxExecution({ tools: [{ name: 'read' }], skills: [] } as unknown as Agent)).toBe(false)
     expect(sandboxAgentInput(agent)).toEqual({
-      allowedTools: ['read', 'sandbox.exec', 'sandbox.read', 'sandbox.write'],
+      tools: [{ name: 'read' }, { name: 'sandbox.exec' }, { name: 'sandbox.read' }, { name: 'sandbox.write' }],
       skills: ['ama@coding-agent'],
     })
-    expect(sandboxAgentInput({ allowedTools: [], skills: ['team@skill'] } as unknown as Agent).skills).toEqual([
-      'team@skill',
-    ])
+    expect(sandboxAgentInput({ tools: [], skills: ['team@skill'] } as unknown as Agent).skills).toEqual(['team@skill'])
   })
 })
 
@@ -109,7 +107,7 @@ describe('quickstart integration examples', () => {
     agentId: 'agent_123',
     environmentId: 'env_456',
     sessionId: 'sess_789',
-    runtimeEndpointPath: '/runtime/sessions/sess_789/rpc',
+    runtimePath: '/runtime/sessions/sess_789/rpc',
   })
 
   it('targets the platform origin with the created resource ids', () => {
@@ -119,7 +117,7 @@ describe('quickstart integration examples', () => {
     }
     expect(examples.curl).toContain('agent_123')
     expect(examples.curl).toContain('env_456')
-    expect(examples.restish).toContain('/api/openapi.json')
+    expect(examples.restish).toContain('/api/v1/openapi.json')
   })
 
   it('uses AMA session endpoints for live traffic and never embeds secrets or vendor URLs', () => {

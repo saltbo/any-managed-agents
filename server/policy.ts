@@ -2,12 +2,12 @@ import { and, desc, eq, isNull, or } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
 import type { AuthContext } from './auth/session'
 import {
+  accessRules as accessRulesTable,
   budgets,
-  governancePolicies,
-  mcpConnections,
-  mcpConnectionTools,
-  providerAccessRules,
-  providerConfigs,
+  connections,
+  connectionTools,
+  policies,
+  providers,
   usageRecords,
   vaultCredentials,
   vaultCredentialVersions,
@@ -15,14 +15,6 @@ import {
 
 type PolicyDb = ReturnType<typeof drizzle>
 
-interface Rule {
-  providerId?: string
-  modelId?: string
-  effect: 'allow' | 'deny'
-  reason?: string
-}
-
-type BudgetPolicy = Record<string, unknown>
 type PolicyDecision = {
   allowed: boolean
   category: string
@@ -167,21 +159,38 @@ export async function policyBlocksSandboxOperation(
   return { decision, operation }
 }
 
+// Agent tool attachments ({ name, ... } objects) are the only tool source;
+// the snapshot's tool names gate MCP tool access.
+function agentToolNames(value: unknown) {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  return value
+    .map((entry) =>
+      typeof entry === 'string'
+        ? entry
+        : entry && typeof entry === 'object' && typeof (entry as { name?: unknown }).name === 'string'
+          ? (entry as { name: string }).name
+          : null,
+    )
+    .filter((name): name is string => name !== null)
+}
+
 function sessionAllowsTool(session: { agentSnapshot: string | null } | null, connectorId: string, toolName: string) {
   if (!session?.agentSnapshot) {
     return true
   }
 
-  const snapshot = parseJson<{ allowedTools?: unknown }>(session.agentSnapshot, {})
-  const allowedTools = stringArray(snapshot.allowedTools)
-  if (allowedTools.length === 0) {
+  const snapshot = parseJson<{ tools?: unknown }>(session.agentSnapshot, {})
+  const toolNames = agentToolNames(snapshot.tools)
+  if (toolNames.length === 0) {
     return false
   }
 
   return (
-    includesWildcard(allowedTools, toolName) ||
-    includesWildcard(allowedTools, `mcp:${connectorId}`) ||
-    includesWildcard(allowedTools, `mcp:${connectorId}.${toolName}`)
+    includesWildcard(toolNames, toolName) ||
+    includesWildcard(toolNames, `mcp:${connectorId}`) ||
+    includesWildcard(toolNames, `mcp:${connectorId}.${toolName}`)
   )
 }
 
@@ -368,7 +377,7 @@ function mergePolicyObjects(levels: Record<string, unknown>[]) {
   return merged
 }
 
-type GovernancePolicyRow = typeof governancePolicies.$inferSelect
+type PolicyRow = typeof policies.$inferSelect
 
 export interface EffectivePolicySource {
   scope: 'organization' | 'team' | 'project'
@@ -383,17 +392,17 @@ export interface EffectivePolicySource {
 async function applicablePolicyRows(db: PolicyDb, auth: AuthContext) {
   const rows = await db
     .select()
-    .from(governancePolicies)
+    .from(policies)
     .where(
       or(
-        and(eq(governancePolicies.scope, 'project'), eq(governancePolicies.projectId, auth.project.id)),
-        and(eq(governancePolicies.scope, 'organization'), eq(governancePolicies.organizationId, auth.organization.id)),
-        and(eq(governancePolicies.scope, 'team'), eq(governancePolicies.organizationId, auth.organization.id)),
+        and(eq(policies.scope, 'project'), eq(policies.projectId, auth.project.id)),
+        and(eq(policies.scope, 'organization'), eq(policies.organizationId, auth.organization.id)),
+        and(eq(policies.scope, 'team'), eq(policies.organizationId, auth.organization.id)),
       ),
     )
-    .orderBy(desc(governancePolicies.updatedAt))
+    .orderBy(desc(policies.updatedAt))
   const memberTeams = auth.teams ?? []
-  const byKey = new Map<string, GovernancePolicyRow>()
+  const byKey = new Map<string, PolicyRow>()
   for (const row of rows) {
     if (row.scope === 'team' && (!row.teamId || !memberTeams.includes(row.teamId))) {
       continue
@@ -413,11 +422,8 @@ async function applicablePolicyRows(db: PolicyDb, auth: AuthContext) {
 
 export async function resolveEffectivePolicy(db: PolicyDb, auth: AuthContext) {
   const { organization, teams, project } = await applicablePolicyRows(db, auth)
-  const levels = [organization, ...teams, project].filter((row): row is GovernancePolicyRow => row !== null)
-  const accessRules = await db
-    .select()
-    .from(providerAccessRules)
-    .where(eq(providerAccessRules.projectId, auth.project.id))
+  const levels = [organization, ...teams, project].filter((row): row is PolicyRow => row !== null)
+  const accessRules = await db.select().from(accessRulesTable).where(eq(accessRulesTable.projectId, auth.project.id))
 
   const sources: EffectivePolicySource[] = levels.map((row) => ({
     scope: row.scope as EffectivePolicySource['scope'],
@@ -430,8 +436,8 @@ export async function resolveEffectivePolicy(db: PolicyDb, auth: AuthContext) {
       ? { type: mostSpecific.scope, id: mostSpecific.id }
       : { type: 'platform_default', id: 'workers-ai-default' },
     sources,
-    providerRules: levels.flatMap((row) => parseJson<Rule[]>(row.providerRules, [])),
-    modelRules: levels.flatMap((row) => parseJson<Rule[]>(row.modelRules, [])),
+    // Provider/model allow|deny rules live only in the access_rules table;
+    // budgets live only in the budgets table (docs/api-v1-design.md).
     accessRules: accessRules.map((rule) => ({
       id: rule.id,
       providerId: rule.providerId ?? '*',
@@ -443,48 +449,60 @@ export async function resolveEffectivePolicy(db: PolicyDb, auth: AuthContext) {
     toolPolicy: mergePolicyObjects(levels.map((row) => parseJson<Record<string, unknown>>(row.toolPolicy, {}))),
     mcpPolicy: mergePolicyObjects(levels.map((row) => parseJson<Record<string, unknown>>(row.mcpPolicy, {}))),
     sandboxPolicy: mergePolicyObjects(levels.map((row) => parseJson<Record<string, unknown>>(row.sandboxPolicy, {}))),
-    budgetPolicy: mergePolicyObjects(levels.map((row) => parseJson<BudgetPolicy>(row.budgetPolicy, {}))),
   }
 }
 
-// Providers may bind their credential through a vault credential-version
-// reference (version id, secretRef, or reference name). A revoked credential
+// Providers bind their credential through a vault credential reference
+// (credentialId + optional pinned version). A revoked or missing credential
 // must fail provider policy evaluation, not only runtime resolution.
 async function providerCredentialRevocation(
   db: PolicyDb,
   auth: AuthContext,
-  provider: { id: string; credentialSecretRef: string | null },
+  provider: { id: string; credentialId: string | null; credentialVersionId: string | null },
 ): Promise<PolicyDecision | null> {
-  if (!provider.credentialSecretRef) {
+  if (!provider.credentialId) {
     return null
   }
-  const ref = provider.credentialSecretRef
+  const denied: PolicyDecision = {
+    allowed: false,
+    category: 'provider',
+    rule: provider.id,
+    message: 'Provider credential is revoked or unavailable.',
+  }
+  const credential = await db
+    .select()
+    .from(vaultCredentials)
+    .where(
+      and(
+        eq(vaultCredentials.id, provider.credentialId),
+        eq(vaultCredentials.organizationId, auth.organization.id),
+        or(eq(vaultCredentials.projectId, auth.project.id), isNull(vaultCredentials.projectId)),
+      ),
+    )
+    .get()
+  if (!credential || credential.state === 'revoked') {
+    return denied
+  }
+  const versionId = provider.credentialVersionId ?? credential.activeVersionId
+  if (!versionId) {
+    return denied
+  }
   const version = await db
     .select()
     .from(vaultCredentialVersions)
     .where(
       and(
+        eq(vaultCredentialVersions.id, versionId),
+        eq(vaultCredentialVersions.credentialId, credential.id),
         eq(vaultCredentialVersions.organizationId, auth.organization.id),
         or(eq(vaultCredentialVersions.projectId, auth.project.id), isNull(vaultCredentialVersions.projectId)),
-        or(
-          eq(vaultCredentialVersions.id, ref),
-          eq(vaultCredentialVersions.secretRef, ref),
-          eq(vaultCredentialVersions.referenceName, ref),
-        ),
       ),
     )
     .get()
-  if (!version) {
-    return null
-  }
-  const credential = await db.select().from(vaultCredentials).where(eq(vaultCredentials.id, version.credentialId)).get()
-  if (version.status === 'revoked' || version.status === 'deleted' || credential?.status === 'revoked') {
-    return {
-      allowed: false,
-      category: 'provider',
-      rule: provider.id,
-      message: 'Provider credential is revoked or unavailable.',
-    }
+  // Deleted versions are physically removed, so a missing row means the
+  // reference is unusable.
+  if (!version || version.state === 'revoked') {
+    return denied
   }
   return null
 }
@@ -499,19 +517,17 @@ export async function evaluateProviderPolicy(
 ) {
   const provider = await db
     .select()
-    .from(providerConfigs)
+    .from(providers)
     .where(
       and(
-        eq(providerConfigs.projectId, auth.project.id),
-        values.providerId === 'workers-ai'
-          ? eq(providerConfigs.type, 'workers-ai')
-          : eq(providerConfigs.id, values.providerId),
+        eq(providers.projectId, auth.project.id),
+        values.providerId === 'workers-ai' ? eq(providers.type, 'workers-ai') : eq(providers.id, values.providerId),
       ),
     )
-    .orderBy(desc(providerConfigs.updatedAt))
+    .orderBy(desc(providers.updatedAt))
     .get()
 
-  if (provider && provider.status !== 'active') {
+  if (provider && !provider.enabled) {
     return {
       allowed: false,
       category: 'provider',
@@ -535,21 +551,21 @@ export async function evaluateProviderPolicy(
   }
 
   const providerPredicates = [
-    isNull(providerAccessRules.providerId),
-    eq(providerAccessRules.providerId, '*'),
-    eq(providerAccessRules.providerId, values.providerId),
+    isNull(accessRulesTable.providerId),
+    eq(accessRulesTable.providerId, '*'),
+    eq(accessRulesTable.providerId, values.providerId),
   ]
   if (provider) {
-    providerPredicates.push(eq(providerAccessRules.providerId, provider.id))
+    providerPredicates.push(eq(accessRulesTable.providerId, provider.id))
   }
-  const modelPredicates = [isNull(providerAccessRules.modelId), eq(providerAccessRules.modelId, '*')]
+  const modelPredicates = [isNull(accessRulesTable.modelId), eq(accessRulesTable.modelId, '*')]
   if (values.modelId) {
-    modelPredicates.push(eq(providerAccessRules.modelId, values.modelId))
+    modelPredicates.push(eq(accessRulesTable.modelId, values.modelId))
   }
   const accessRules = await db
     .select()
-    .from(providerAccessRules)
-    .where(and(eq(providerAccessRules.projectId, auth.project.id), or(...providerPredicates), or(...modelPredicates)))
+    .from(accessRulesTable)
+    .where(and(eq(accessRulesTable.projectId, auth.project.id), or(...providerPredicates), or(...modelPredicates)))
   // Team membership comes from OIDC claims (`teams`); AMA stores no team
   // tables. Team-scoped deny rules only bind members of that team, and any
   // team-scoped allow rule turns the matched provider/model into a
@@ -577,55 +593,18 @@ export async function evaluateProviderPolicy(
     }
   }
 
-  const effective = await resolveEffectivePolicy(db, auth)
-  const deniedRule = [...effective.providerRules, ...effective.modelRules].find(
-    (rule) =>
-      rule.effect === 'deny' &&
-      (!rule.providerId || rule.providerId === values.providerId || rule.providerId === provider?.id) &&
-      (!rule.modelId || rule.modelId === '*' || (values.modelId !== null && rule.modelId === values.modelId)),
-  )
-  if (deniedRule) {
-    return {
-      allowed: false,
-      category: deniedRule.modelId ? 'model' : 'provider',
-      rule: deniedRule.modelId ?? deniedRule.providerId ?? 'policy',
-      message: deniedRule.reason ?? 'Provider or model is denied by governance policy.',
-    }
-  }
-
+  // Budgets are the single budget source (docs/api-v1-design.md): the
+  // policies table carries no provider/model/budget rules anymore.
   const month = currentMonthPrefix()
   const usage = await db
     .select()
     .from(usageRecords)
     .where(and(eq(usageRecords.projectId, auth.project.id), eq(usageRecords.status, 'success')))
-  const monthUsage = usage.filter((record) => record.createdAt.startsWith(month))
-  const totalCostMicros = monthUsage.reduce((sum, record) => sum + record.costMicros, 0)
-  const totalTokens = monthUsage.reduce((sum, record) => sum + record.totalTokens, 0)
-  const monthlyCostMicros =
-    typeof effective.budgetPolicy.monthlyCostMicros === 'number' ? effective.budgetPolicy.monthlyCostMicros : undefined
-  const monthlyTokens =
-    typeof effective.budgetPolicy.monthlyTokens === 'number' ? effective.budgetPolicy.monthlyTokens : undefined
-  if (monthlyCostMicros !== undefined && totalCostMicros >= monthlyCostMicros) {
-    return {
-      allowed: false,
-      category: 'budget',
-      rule: 'monthlyCostMicros',
-      message: 'Monthly model cost budget is exhausted.',
-    }
-  }
-  if (monthlyTokens !== undefined && totalTokens >= monthlyTokens) {
-    return {
-      allowed: false,
-      category: 'budget',
-      rule: 'monthlyTokens',
-      message: 'Monthly model token budget is exhausted.',
-    }
-  }
 
   const activeBudgets = await db
     .select()
     .from(budgets)
-    .where(and(eq(budgets.projectId, auth.project.id), eq(budgets.status, 'active')))
+    .where(and(eq(budgets.projectId, auth.project.id), eq(budgets.enabled, true)))
   for (const budget of activeBudgets) {
     if (budget.providerId && budget.providerId !== values.providerId && budget.providerId !== provider?.id) {
       continue
@@ -720,10 +699,10 @@ export async function evaluateMcpToolPolicy(
 
   const connection = await db
     .select()
-    .from(mcpConnections)
-    .where(and(eq(mcpConnections.projectId, auth.project.id), eq(mcpConnections.connectorId, values.connectorId)))
+    .from(connections)
+    .where(and(eq(connections.projectId, auth.project.id), eq(connections.connectorId, values.connectorId)))
     .get()
-  if (connection?.status !== 'connected') {
+  if (connection?.state !== 'connected') {
     return {
       allowed: false,
       category: 'mcp',
@@ -742,16 +721,16 @@ export async function evaluateMcpToolPolicy(
 
   const tool = await db
     .select()
-    .from(mcpConnectionTools)
+    .from(connectionTools)
     .where(
       and(
-        eq(mcpConnectionTools.connectionId, connection.id),
-        eq(mcpConnectionTools.connectorId, values.connectorId),
-        eq(mcpConnectionTools.name, values.toolName),
+        eq(connectionTools.connectionId, connection.id),
+        eq(connectionTools.connectorId, values.connectorId),
+        eq(connectionTools.name, values.toolName),
       ),
     )
     .get()
-  if (tool?.status !== 'available') {
+  if (tool?.availability !== 'available') {
     return {
       allowed: false,
       category: 'tool',
@@ -787,8 +766,8 @@ export async function evaluateMcpToolPolicy(
       )
       .get()
     if (
-      version?.status !== 'active' ||
-      credential?.status === 'revoked' ||
+      version?.state !== 'active' ||
+      credential?.state === 'revoked' ||
       (credential && version.credentialId !== credential.id)
     ) {
       return {
@@ -804,7 +783,7 @@ export async function evaluateMcpToolPolicy(
     return {
       allowed: false,
       category: 'tool',
-      rule: 'agent.allowedTools',
+      rule: 'agent.tools',
       message: 'Agent version does not allow this MCP tool.',
     }
   }

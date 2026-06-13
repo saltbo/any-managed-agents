@@ -1,5 +1,4 @@
 import { SELF } from 'cloudflare:test'
-import { env } from 'cloudflare:workers'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultClaims, setupOidcProvider, signIn } from '../test/auth'
 
@@ -14,33 +13,34 @@ async function jsonFetch(path: string, authorization: string, init: RequestInit 
   })
 }
 
-async function createCredentialVersion(authorization: string) {
-  const vaultRes = await jsonFetch('/api/vaults', authorization, {
+async function createCredential(authorization: string) {
+  const vaultRes = await jsonFetch('/api/v1/vaults', authorization, {
     method: 'POST',
-    body: JSON.stringify({ name: 'Environment credentials' }),
+    body: JSON.stringify({ name: 'Workspace credentials' }),
   })
   expect(vaultRes.status).toBe(201)
   const vault = (await vaultRes.json()) as { id: string }
-  const credentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, authorization, {
+  const credentialRes = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials`, authorization, {
     method: 'POST',
     body: JSON.stringify({
       name: 'NPM token',
       type: 'api_key',
+      connectorBinding: {},
       secret: { provider: 'cloudflare-secrets', secretValue: 'raw-npm-token' },
     }),
   })
   expect(credentialRes.status).toBe(201)
-  return (await credentialRes.json()) as { activeVersionId: string }
+  return (await credentialRes.json()) as { id: string; activeVersionId: string }
 }
 
 async function connectMcp(authorization: string) {
-  const vaultRes = await jsonFetch('/api/vaults', authorization, {
+  const vaultRes = await jsonFetch('/api/v1/vaults', authorization, {
     method: 'POST',
     body: JSON.stringify({ name: 'MCP credentials' }),
   })
   expect(vaultRes.status).toBe(201)
   const vault = (await vaultRes.json()) as { id: string }
-  const credentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, authorization, {
+  const credentialRes = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials`, authorization, {
     method: 'POST',
     body: JSON.stringify({
       name: 'GitHub token',
@@ -51,19 +51,17 @@ async function connectMcp(authorization: string) {
   })
   expect(credentialRes.status).toBe(201)
   const mcpCredential = (await credentialRes.json()) as { id: string; activeVersionId: string }
-  const res = await jsonFetch('/api/mcp/connections', authorization, {
+  const connectRes = await jsonFetch('/api/v1/connections', authorization, {
     method: 'POST',
     body: JSON.stringify({
       connectorId: 'github',
-      credentialId: mcpCredential.id,
-      credentialVersionId: mcpCredential.activeVersionId,
-      approvalMode: 'none',
+      credentialRef: { credentialId: mcpCredential.id, versionId: mcpCredential.activeVersionId },
     }),
   })
-  expect([200, 201]).toContain(res.status)
+  expect(connectRes.status).toBe(201)
 }
 
-describe('[CF] /api/environments', () => {
+describe('[CF] /api/v1/environments', () => {
   beforeEach(async () => {
     await setupOidcProvider()
   })
@@ -72,15 +70,31 @@ describe('[CF] /api/environments', () => {
     vi.unstubAllGlobals()
   })
 
-  it('requires authentication before creating project-scoped environments', async () => {
-    const res = await SELF.fetch('https://example.com/api/environments', {
+  it('returns the stable error envelope for validation failures', async () => {
+    const res = await SELF.fetch('https://example.com/api/v1/environments', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: '' }),
+    })
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({
+      error: {
+        type: 'validation_error',
+        message: 'Invalid request',
+      },
+    })
+  })
+
+  it('requires authentication before creating environments', async () => {
+    const res = await SELF.fetch('https://example.com/api/v1/environments', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name: 'Node workspace' }),
     })
 
     expect(res.status).toBe(401)
-    await expect(res.json()).resolves.toMatchObject({
+    expect(await res.json()).toMatchObject({
       error: {
         type: 'authentication_required',
         message: 'Authentication required',
@@ -88,23 +102,39 @@ describe('[CF] /api/environments', () => {
     })
   })
 
-  it('creates, reads, updates, versions, and archives project-scoped environments without raw secrets', async () => {
+  it('rejects removed legacy fields (secretRefs, status)', async () => {
     const authorization = await signIn()
-    const credential = await createCredentialVersion(authorization)
-    await connectMcp(authorization)
-    const createRes = await jsonFetch('/api/environments', authorization, {
+    for (const body of [
+      { name: 'Legacy secrets', secretRefs: [{ name: 'NPM_TOKEN', ref: 'vaultver_abc' }] },
+      { name: 'Legacy status', status: 'active' },
+    ]) {
+      const res = await jsonFetch('/api/v1/environments', authorization, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      })
+      expect(res.status).toBe(400)
+      await expect(res.json()).resolves.toMatchObject({
+        error: { type: 'validation_error', message: 'Invalid request' },
+      })
+    }
+  })
+
+  it('creates, reads, updates, versions, and archives environments', async () => {
+    const authorization = await signIn()
+    const credential = await createCredential(authorization)
+
+    const createRes = await jsonFetch('/api/v1/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Node workspace',
+        description: 'Default Node.js environment.',
         packages: [{ name: 'tsx', version: 'latest' }],
-        variables: { NODE_ENV: { description: 'Runtime mode', required: true } },
-        secretRefs: [{ name: 'NPM_TOKEN', ref: credential.activeVersionId }],
+        variables: { NODE_ENV: { description: 'Runtime mode' } },
+        credentialRefs: [{ credentialId: credential.id, versionId: credential.activeVersionId }],
         networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
-        mcpPolicy: { allowedConnectors: ['github'] },
-        packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
         resourceLimits: { memoryMb: 512 },
-        hostingMode: 'cloud',
         runtimeConfig: { image: 'node:24' },
+        metadata: { owner: 'platform' },
       }),
     })
     expect(createRes.status).toBe(201)
@@ -112,404 +142,344 @@ describe('[CF] /api/environments', () => {
       id: string
       currentVersionId: string
       version: number
-      secretRefs: unknown[]
-      hostingMode: string
-      networkPolicy: Record<string, unknown>
+      archivedAt: string | null
+      credentialRefs: Array<{ credentialId: string; versionId?: string }>
+      status?: unknown
+      secretRefs?: unknown
     }
     expect(created.version).toBe(1)
-    expect(created.hostingMode).toBe('cloud')
-    expect(created.networkPolicy).toEqual({ mode: 'restricted', allowedHosts: ['registry.npmjs.org'] })
-    expect(JSON.stringify(created)).not.toContain('raw-secret')
-    expect(JSON.stringify(created)).not.toContain('runtimeType')
-    expect(JSON.stringify(created)).not.toContain('runtimeImage')
+    expect(created.archivedAt).toBeNull()
+    expect(created.status).toBeUndefined()
+    expect(created.secretRefs).toBeUndefined()
+    expect(created.credentialRefs).toEqual([{ credentialId: credential.id, versionId: credential.activeVersionId }])
 
-    const readRes = await jsonFetch(`/api/environments/${created.id}`, authorization)
+    const readRes = await jsonFetch(`/api/v1/environments/${created.id}`, authorization)
     expect(readRes.status).toBe(200)
     await expect(readRes.json()).resolves.toMatchObject({
       id: created.id,
+      version: 1,
+      name: 'Node workspace',
       hostingMode: 'cloud',
-      packages: [{ name: 'tsx', version: 'latest' }],
-      secretRefs: [{ name: 'NPM_TOKEN', ref: credential.activeVersionId }],
-      mcpPolicy: { allowedConnectors: ['github'] },
-      packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
+      networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
+      archivedAt: null,
     })
 
-    const updateRes = await jsonFetch(`/api/environments/${created.id}`, authorization, {
+    const updateRes = await jsonFetch(`/api/v1/environments/${created.id}`, authorization, {
       method: 'PATCH',
-      body: JSON.stringify({
-        hostingMode: 'self_hosted',
-        runtimeConfig: { mode: 'sdk-bridge', sandboxMode: 'workspace-write' },
-        metadata: { owner: 'runtime' },
-      }),
+      body: JSON.stringify({ packages: [{ name: 'vite' }] }),
     })
     expect(updateRes.status).toBe(200)
-    const updated = (await updateRes.json()) as {
-      version: number
-      currentVersionId: string
-      hostingMode: string
-      runtimeConfig: Record<string, unknown>
-    }
+    const updated = (await updateRes.json()) as { version: number; currentVersionId: string }
     expect(updated.version).toBe(2)
     expect(updated.currentVersionId).not.toBe(created.currentVersionId)
-    expect(updated.hostingMode).toBe('self_hosted')
-    expect(updated.runtimeConfig).toEqual({ mode: 'sdk-bridge', sandboxMode: 'workspace-write' })
 
-    const legacyUpdateRes = await jsonFetch(`/api/environments/${created.id}`, authorization, {
+    // Renames do not touch runtime configuration, so the version is kept.
+    const renameRes = await jsonFetch(`/api/v1/environments/${created.id}`, authorization, {
       method: 'PATCH',
-      body: JSON.stringify({ runtimeType: 'cloud-hosted', runtimeImage: { image: 'node:24' } }),
+      body: JSON.stringify({ name: 'Renamed workspace' }),
     })
-    expect(legacyUpdateRes.status).toBe(400)
+    expect(renameRes.status).toBe(200)
+    await expect(renameRes.json()).resolves.toMatchObject({ name: 'Renamed workspace', version: 2 })
 
-    const versionsRes = await jsonFetch(`/api/environments/${created.id}/versions`, authorization)
+    const versionsRes = await jsonFetch(`/api/v1/environments/${created.id}/versions`, authorization)
     expect(versionsRes.status).toBe(200)
     const versions = (await versionsRes.json()) as {
-      data: Array<{
-        version: number
-        hostingMode: string
-        runtimeConfig: Record<string, unknown>
-        packages: Array<{ name: string }>
-      }>
+      data: Array<{ version: number; packages: Array<{ name: string }> }>
+      pagination: Record<string, unknown>
     }
     expect(versions.data.map((version) => version.version)).toEqual([2, 1])
-    expect(versions.data.map((version) => version.hostingMode)).toEqual(['self_hosted', 'cloud'])
-    expect(versions.data[0]?.runtimeConfig).toEqual({ mode: 'sdk-bridge', sandboxMode: 'workspace-write' })
-    expect(JSON.stringify(versions)).not.toContain('runtimeType')
-    expect(JSON.stringify(versions)).not.toContain('runtimeImage')
     expect(versions.data.find((version) => version.version === 1)?.packages).toEqual([
       { name: 'tsx', version: 'latest' },
     ])
+    expect(versions.pagination).not.toHaveProperty('firstId')
+    expect(versions.pagination).not.toHaveProperty('lastId')
 
-    const archiveRes = await jsonFetch(`/api/environments/${created.id}`, authorization, { method: 'DELETE' })
-    expect(archiveRes.status).toBe(204)
+    const versionItemRes = await jsonFetch(`/api/v1/environments/${created.id}/versions/1`, authorization)
+    expect(versionItemRes.status).toBe(200)
+    await expect(versionItemRes.json()).resolves.toMatchObject({
+      environmentId: created.id,
+      version: 1,
+      packages: [{ name: 'tsx', version: 'latest' }],
+      credentialRefs: [{ credentialId: credential.id, versionId: credential.activeVersionId }],
+    })
 
-    const listRes = await jsonFetch('/api/environments', authorization)
-    const list = (await listRes.json()) as { data: Array<{ id: string }>; pagination: { hasMore: boolean } }
+    const missingVersionRes = await jsonFetch(`/api/v1/environments/${created.id}/versions/99`, authorization)
+    expect(missingVersionRes.status).toBe(404)
+
+    const invalidVersionRes = await jsonFetch(`/api/v1/environments/${created.id}/versions/not-a-number`, authorization)
+    expect(invalidVersionRes.status).toBe(400)
+
+    // Archive = PATCH {archived: true}; DELETE no longer exists.
+    const deleteRes = await jsonFetch(`/api/v1/environments/${created.id}`, authorization, { method: 'DELETE' })
+    expect(deleteRes.status).toBe(404)
+
+    const archiveRes = await jsonFetch(`/api/v1/environments/${created.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ archived: true }),
+    })
+    expect(archiveRes.status).toBe(200)
+    await expect(archiveRes.json()).resolves.toMatchObject({ archivedAt: expect.any(String) })
+
+    const listRes = await jsonFetch('/api/v1/environments', authorization)
+    const list = (await listRes.json()) as { data: Array<{ id: string }> }
     expect(list.data).not.toContainEqual(expect.objectContaining({ id: created.id }))
-    expect(list.pagination.hasMore).toBe(false)
 
-    const archivedListRes = await jsonFetch('/api/environments?includeArchived=true', authorization)
-    const archivedList = (await archivedListRes.json()) as {
-      data: Array<{
-        id: string
-        status: string
-        hostingMode: string
-        runtimeConfig: Record<string, unknown>
-      }>
-    }
+    const archivedListRes = await jsonFetch('/api/v1/environments?archived=true', authorization)
+    const archivedList = (await archivedListRes.json()) as { data: Array<{ id: string; archivedAt: string | null }> }
     expect(archivedList.data).toContainEqual(
-      expect.objectContaining({
-        id: created.id,
-        status: 'archived',
-        hostingMode: 'self_hosted',
-        runtimeConfig: { mode: 'sdk-bridge', sandboxMode: 'workspace-write' },
-      }),
+      expect.objectContaining({ id: created.id, archivedAt: expect.any(String) }),
     )
-    expect(JSON.stringify(archivedList)).not.toContain('runtimeType')
-    expect(JSON.stringify(archivedList)).not.toContain('runtimeImage')
 
-    const archivedReadRes = await jsonFetch(`/api/environments/${created.id}`, authorization)
-    expect(archivedReadRes.status).toBe(200)
-    await expect(archivedReadRes.json()).resolves.toMatchObject({ archivedAt: expect.any(String) })
-
-    const auditRes = await jsonFetch('/api/audit-records?action=environment.archive', authorization)
+    const auditRes = await jsonFetch('/api/v1/audit-records?action=environment.archive', authorization)
     expect(auditRes.status).toBe(200)
     await expect(auditRes.json()).resolves.toMatchObject({
       data: [expect.objectContaining({ resourceId: created.id, outcome: 'success' })],
     })
 
-    const archivedUpdateRes = await jsonFetch(`/api/environments/${created.id}`, authorization, {
+    const archivedUpdateRes = await jsonFetch(`/api/v1/environments/${created.id}`, authorization, {
       method: 'PATCH',
-      body: JSON.stringify({ description: 'Cannot update archived environments' }),
+      body: JSON.stringify({ packages: [{ name: 'esbuild' }] }),
     })
     expect(archivedUpdateRes.status).toBe(409)
-  })
-
-  it('rejects legacy and environment-owned runtime fields', async () => {
-    const authorization = await signIn()
-    const legacyRes = await jsonFetch('/api/environments', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Legacy runtime workspace',
-        runtimeType: 'cloud-hosted',
-        runtimeImage: { image: 'node:24' },
-      }),
-    })
-    expect(legacyRes.status).toBe(400)
-    await expect(legacyRes.json()).resolves.toMatchObject({
-      error: {
-        type: 'validation_error',
-        issues: expect.arrayContaining([expect.objectContaining({ keys: ['runtimeType', 'runtimeImage'] })]),
-      },
+    await expect(archivedUpdateRes.json()).resolves.toMatchObject({
+      error: { type: 'conflict', message: 'Archived environments cannot be updated' },
     })
 
-    const invalidCanonicalRes = await jsonFetch('/api/environments', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Invalid canonical runtime workspace',
-        hostingMode: 'self-hosted',
-        runtime: 'unknown',
-      }),
-    })
-    expect(invalidCanonicalRes.status).toBe(400)
-    await expect(invalidCanonicalRes.json()).resolves.toMatchObject({
-      error: {
-        type: 'validation_error',
-        issues: expect.arrayContaining([
-          expect.objectContaining({ path: ['hostingMode'] }),
-          expect.objectContaining({ keys: ['runtime'] }),
-        ]),
-      },
-    })
-  })
-
-  it('validates strict network policy modes with field-level paths', async () => {
-    const authorization = await signIn()
-    const missingHostsRes = await jsonFetch('/api/environments', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Restricted without hosts',
-        networkPolicy: { mode: 'restricted' },
-      }),
-    })
-    expect(missingHostsRes.status).toBe(400)
-    await expect(missingHostsRes.json()).resolves.toMatchObject({
-      error: {
-        type: 'validation_error',
-        issues: [expect.objectContaining({ path: ['networkPolicy', 'allowedHosts'] })],
-      },
-    })
-
-    const unrestrictedHostsRes = await jsonFetch('/api/environments', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Unrestricted with hosts',
-        networkPolicy: { mode: 'unrestricted', allowedHosts: ['registry.npmjs.org'] },
-      }),
-    })
-    expect(unrestrictedHostsRes.status).toBe(400)
-    await expect(unrestrictedHostsRes.json()).resolves.toMatchObject({
-      error: {
-        type: 'validation_error',
-        issues: [expect.objectContaining({ path: ['networkPolicy', 'allowedHosts'] })],
-      },
-    })
-
-    const invalidHostRes = await jsonFetch('/api/environments', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Invalid host workspace',
-        networkPolicy: { mode: 'restricted', allowedHosts: ['https://registry.npmjs.org'] },
-      }),
-    })
-    expect(invalidHostRes.status).toBe(400)
-    await expect(invalidHostRes.json()).resolves.toMatchObject({
-      error: {
-        type: 'validation_error',
-        issues: [expect.objectContaining({ path: ['networkPolicy', 'allowedHosts', 0] })],
-      },
-    })
-
-    const openModeRes = await jsonFetch('/api/environments', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Legacy open workspace',
-        networkPolicy: { mode: 'open' },
-      }),
-    })
-    expect(openModeRes.status).toBe(400)
-  })
-
-  it('normalizes legacy restricted network policy rows without host lists', async () => {
-    const authorization = await signIn()
-    const createRes = await jsonFetch('/api/environments', authorization, {
-      method: 'POST',
-      body: JSON.stringify({ name: 'Legacy restricted workspace' }),
-    })
-    expect(createRes.status).toBe(201)
-    const created = (await createRes.json()) as { id: string; currentVersionId: string }
-    await env.DB.prepare('UPDATE environments SET network_policy = ? WHERE id = ?')
-      .bind(JSON.stringify({ mode: 'restricted', allowedHosts: ['https://registry.npmjs.org'] }), created.id)
-      .run()
-    await env.DB.prepare('UPDATE environment_versions SET network_policy = ? WHERE id = ?')
-      .bind(
-        JSON.stringify({ mode: 'restricted', allowedHosts: ['https://registry.npmjs.org'] }),
-        created.currentVersionId,
-      )
-      .run()
-
-    const readRes = await jsonFetch(`/api/environments/${created.id}`, authorization)
-    expect(readRes.status).toBe(200)
-    await expect(readRes.json()).resolves.toMatchObject({
-      networkPolicy: { mode: 'unrestricted' },
-    })
-
-    const versionsRes = await jsonFetch(`/api/environments/${created.id}/versions`, authorization)
-    expect(versionsRes.status).toBe(200)
-    await expect(versionsRes.json()).resolves.toMatchObject({
-      data: [expect.objectContaining({ networkPolicy: { mode: 'unrestricted' } })],
-    })
-  })
-
-  it('rejects unavailable secret references and disconnected MCP policy connectors', async () => {
-    const authorization = await signIn()
-    const invalidSecretRes = await jsonFetch('/api/environments', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Invalid secret workspace',
-        secretRefs: [{ name: 'NPM_TOKEN', ref: 'vaultver_missing' }],
-      }),
-    })
-    expect(invalidSecretRes.status).toBe(400)
-    const invalidSecretBody = await invalidSecretRes.json()
-    expect(invalidSecretBody).toMatchObject({
-      error: { details: { fields: { 'secretRefs[0]': expect.any(String) } } },
-    })
-    expect(JSON.stringify(invalidSecretBody)).not.toContain('vaultver_missing')
-
-    const rawSecretRefRes = await jsonFetch('/api/environments', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Raw secret workspace',
-        secretRefs: [{ name: 'NPM_TOKEN', ref: 'raw-npm-token' }],
-      }),
-    })
-    expect(rawSecretRefRes.status).toBe(400)
-    const rawSecretRefBody = await rawSecretRefRes.json()
-    expect(rawSecretRefBody).toMatchObject({
-      error: { details: { fields: { 'secretRefs[0]': expect.any(String) } } },
-    })
-    expect(JSON.stringify(rawSecretRefBody)).not.toContain('raw-npm-token')
-
-    const rawMetadataRes = await jsonFetch('/api/environments', authorization, {
-      method: 'POST',
-      body: JSON.stringify({ name: 'Raw metadata workspace', metadata: { secretValue: 'raw-secret' } }),
-    })
-    expect(rawMetadataRes.status).toBe(400)
-    await expect(rawMetadataRes.json()).resolves.toMatchObject({
-      error: { details: { fields: { metadata: expect.any(String) } } },
-    })
-
-    const rawMetadataApiKeyRes = await jsonFetch('/api/environments', authorization, {
-      method: 'POST',
-      body: JSON.stringify({ name: 'Raw API key workspace', metadata: { api_key: 'raw-secret' } }),
-    })
-    expect(rawMetadataApiKeyRes.status).toBe(400)
-    await expect(rawMetadataApiKeyRes.json()).resolves.toMatchObject({
-      error: { details: { fields: { metadata: expect.any(String) } } },
-    })
-
-    const rawMcpPolicyRes = await jsonFetch('/api/environments', authorization, {
-      method: 'POST',
-      body: JSON.stringify({ name: 'Raw MCP policy workspace', mcpPolicy: { access_token: 'raw-secret' } }),
-    })
-    expect(rawMcpPolicyRes.status).toBe(400)
-    const rawMcpPolicyBody = await rawMcpPolicyRes.json()
-    expect(rawMcpPolicyBody).toMatchObject({
-      error: { type: 'validation_error', issues: [expect.objectContaining({ path: ['mcpPolicy'] })] },
-    })
-    expect(JSON.stringify(rawMcpPolicyBody)).not.toContain('raw-secret')
-
-    const rawPolicyRes = await jsonFetch('/api/environments', authorization, {
-      method: 'POST',
-      body: JSON.stringify({ name: 'Raw policy workspace', packageManagerPolicy: { npmToken: 'raw-secret' } }),
-    })
-    expect(rawPolicyRes.status).toBe(400)
-    await expect(rawPolicyRes.json()).resolves.toMatchObject({
-      error: { details: { fields: { packageManagerPolicy: expect.any(String) } } },
-    })
-
-    const invalidMcpRes = await jsonFetch('/api/environments', authorization, {
-      method: 'POST',
-      body: JSON.stringify({ name: 'Invalid MCP workspace', mcpPolicy: { allowedConnectors: ['linear'] } }),
-    })
-    expect(invalidMcpRes.status).toBe(400)
-    await expect(invalidMcpRes.json()).resolves.toMatchObject({
-      error: { details: { fields: { mcpPolicy: expect.any(String) } } },
-    })
-
-    const environmentRes = await jsonFetch('/api/environments', authorization, {
-      method: 'POST',
-      body: JSON.stringify({ name: 'Update boundary workspace' }),
-    })
-    expect(environmentRes.status).toBe(201)
-    const environment = (await environmentRes.json()) as { id: string }
-    const rawUpdatePolicyRes = await jsonFetch(`/api/environments/${environment.id}`, authorization, {
+    // Archiving an archived environment is idempotent.
+    const reArchiveRes = await jsonFetch(`/api/v1/environments/${created.id}`, authorization, {
       method: 'PATCH',
-      body: JSON.stringify({ mcpPolicy: { token: 'raw-secret' } }),
+      body: JSON.stringify({ archived: true }),
     })
-    expect(rawUpdatePolicyRes.status).toBe(400)
-    const rawUpdatePolicyBody = await rawUpdatePolicyRes.json()
-    expect(rawUpdatePolicyBody).toMatchObject({
-      error: { type: 'validation_error', issues: [expect.objectContaining({ path: ['mcpPolicy'] })] },
+    expect(reArchiveRes.status).toBe(200)
+
+    const unarchiveRes = await jsonFetch(`/api/v1/environments/${created.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ archived: false }),
     })
-    expect(JSON.stringify(rawUpdatePolicyBody)).not.toContain('raw-secret')
+    expect(unarchiveRes.status).toBe(200)
+    await expect(unarchiveRes.json()).resolves.toMatchObject({ archivedAt: null })
+
+    const unarchivedUpdateRes = await jsonFetch(`/api/v1/environments/${created.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ description: 'Updatable again' }),
+    })
+    expect(unarchivedUpdateRes.status).toBe(200)
   })
 
-  it('lists environments with pagination, search, status, and date filters', async () => {
+  it('lists environments with pagination, search, archived, and date filters', async () => {
     const authorization = await signIn()
-    const alphaRes = await jsonFetch('/api/environments', authorization, {
+    const alphaRes = await jsonFetch('/api/v1/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Alpha workspace' }),
     })
     const alpha = (await alphaRes.json()) as { id: string; createdAt: string }
-    const betaRes = await jsonFetch('/api/environments', authorization, {
+    const betaRes = await jsonFetch('/api/v1/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Beta workspace' }),
     })
     const beta = (await betaRes.json()) as { id: string; createdAt: string }
-    await jsonFetch(`/api/environments/${alpha.id}`, authorization, { method: 'DELETE' })
+    await jsonFetch(`/api/v1/environments/${alpha.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ archived: true }),
+    })
 
-    const pagedRes = await jsonFetch('/api/environments?includeArchived=true&limit=1', authorization)
-    const paged = (await pagedRes.json()) as {
+    const defaultListRes = await jsonFetch('/api/v1/environments?limit=1', authorization)
+    expect(defaultListRes.status).toBe(200)
+    const defaultList = (await defaultListRes.json()) as {
+      data: Array<{ id: string; archivedAt: string | null }>
+      pagination: { limit: number; hasMore: boolean; nextCursor: string | null }
+    }
+    expect(defaultList.data).toEqual([expect.objectContaining({ id: beta.id, archivedAt: null })])
+    expect(defaultList.pagination).toMatchObject({ limit: 1, hasMore: false, nextCursor: null })
+
+    const archivedListRes = await jsonFetch('/api/v1/environments?archived=true', authorization)
+    const archivedList = (await archivedListRes.json()) as { data: Array<{ id: string }> }
+    expect(archivedList.data).toEqual([expect.objectContaining({ id: alpha.id })])
+
+    const searchRes = await jsonFetch('/api/v1/environments?archived=true&search=Alpha', authorization)
+    const searchList = (await searchRes.json()) as { data: Array<{ id: string }> }
+    expect(searchList.data).toEqual([expect.objectContaining({ id: alpha.id })])
+
+    const dateRes = await jsonFetch(
+      `/api/v1/environments?createdFrom=${encodeURIComponent(alpha.createdAt)}&createdTo=${encodeURIComponent(beta.createdAt)}`,
+      authorization,
+    )
+    const dateList = (await dateRes.json()) as { data: Array<{ id: string }> }
+    expect(dateList.data.map((environment) => environment.id)).toEqual([beta.id])
+
+    await jsonFetch('/api/v1/environments', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Gamma workspace' }),
+    })
+    const firstPageRes = await jsonFetch('/api/v1/environments?limit=1', authorization)
+    const firstPage = (await firstPageRes.json()) as {
       data: Array<{ id: string }>
       pagination: { hasMore: boolean; nextCursor: string | null }
     }
-    expect(paged.data).toHaveLength(1)
-    expect(paged.pagination.hasMore).toBe(true)
-    expect(paged.pagination.nextCursor).toEqual(expect.any(String))
+    expect(firstPage.data).toHaveLength(1)
+    expect(firstPage.pagination.hasMore).toBe(true)
 
     const nextPageRes = await jsonFetch(
-      `/api/environments?includeArchived=true&limit=1&cursor=${paged.pagination.nextCursor}`,
+      `/api/v1/environments?limit=1&cursor=${firstPage.pagination.nextCursor}`,
       authorization,
     )
     const nextPage = (await nextPageRes.json()) as { data: Array<{ id: string }> }
+    expect(nextPage.data).toHaveLength(1)
     expect(nextPage.data.map((environment) => environment.id)).not.toEqual(
-      paged.data.map((environment) => environment.id),
+      firstPage.data.map((environment) => environment.id),
     )
 
-    const searchRes = await jsonFetch('/api/environments?includeArchived=true&search=Alpha', authorization)
-    const search = (await searchRes.json()) as { data: Array<{ id: string }> }
-    expect(search.data).toEqual([expect.objectContaining({ id: alpha.id })])
-
-    const statusRes = await jsonFetch('/api/environments?includeArchived=true&status=archived', authorization)
-    const status = (await statusRes.json()) as { data: Array<{ id: string; status: string }> }
-    expect(status.data).toContainEqual(expect.objectContaining({ id: alpha.id, status: 'archived' }))
-    expect(status.data.every((environment) => environment.status === 'archived')).toBe(true)
-
-    const dateRes = await jsonFetch(
-      `/api/environments?includeArchived=true&createdFrom=${encodeURIComponent(alpha.createdAt)}&createdTo=${encodeURIComponent(beta.createdAt)}`,
-      authorization,
-    )
-    const date = (await dateRes.json()) as { data: Array<{ id: string }> }
-    expect(date.data.map((environment) => environment.id)).toEqual(expect.arrayContaining([alpha.id, beta.id]))
+    const invalidCursorRes = await jsonFetch('/api/v1/environments?cursor=not-a-cursor', authorization)
+    expect(invalidCursorRes.status).toBe(400)
+    await expect(invalidCursorRes.json()).resolves.toMatchObject({
+      error: { type: 'validation_error', details: { fields: { cursor: expect.any(String) } } },
+    })
   })
 
-  it('returns 404 for cross-project environment access', async () => {
+  it('validates credential references against the vault', async () => {
     const authorization = await signIn()
-    const createRes = await jsonFetch('/api/environments', authorization, {
+    const credential = await createCredential(authorization)
+
+    const missingCredentialRes = await jsonFetch('/api/v1/environments', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Tenant environment' }),
+      body: JSON.stringify({
+        name: 'Missing credential workspace',
+        credentialRefs: [{ credentialId: 'cred_missing' }],
+      }),
     })
-    const environment = (await createRes.json()) as { id: string }
-    const otherCookie = await signIn({
+    expect(missingCredentialRes.status).toBe(400)
+    await expect(missingCredentialRes.json()).resolves.toMatchObject({
+      error: { details: { fields: { 'credentialRefs[0]': expect.any(String) } } },
+    })
+
+    const missingVersionRes = await jsonFetch('/api/v1/environments', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Missing version workspace',
+        credentialRefs: [{ credentialId: credential.id, versionId: 'credver_missing' }],
+      }),
+    })
+    expect(missingVersionRes.status).toBe(400)
+    await expect(missingVersionRes.json()).resolves.toMatchObject({
+      error: { details: { fields: { 'credentialRefs[0]': expect.any(String) } } },
+    })
+
+    // A bare credential reference (no pinned version) is valid.
+    const unpinnedRes = await jsonFetch('/api/v1/environments', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Unpinned credential workspace',
+        credentialRefs: [{ credentialId: credential.id }],
+      }),
+    })
+    expect(unpinnedRes.status).toBe(201)
+    await expect(unpinnedRes.json()).resolves.toMatchObject({
+      credentialRefs: [{ credentialId: credential.id }],
+    })
+
+    // Cross-tenant credentials are invisible.
+    const otherAuthorization = await signIn({
       ...defaultClaims(),
       sub: 'user_456',
       email: 'other@example.com',
       org_id: 'org_flare_456',
       org_name: 'Other Org',
     })
+    const crossTenantRes = await jsonFetch('/api/v1/environments', otherAuthorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Cross tenant workspace',
+        credentialRefs: [{ credentialId: credential.id }],
+      }),
+    })
+    expect(crossTenantRes.status).toBe(400)
+    await expect(crossTenantRes.json()).resolves.toMatchObject({
+      error: { details: { fields: { 'credentialRefs[0]': expect.any(String) } } },
+    })
+  })
 
-    const crossProjectRead = await jsonFetch(`/api/environments/${environment.id}`, otherCookie)
-    expect(crossProjectRead.status).toBe(404)
+  it('validates network policy, mcp policy, and secret-free configuration objects', async () => {
+    const authorization = await signIn()
+
+    const invalidNetworkRes = await jsonFetch('/api/v1/environments', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Invalid network workspace',
+        networkPolicy: { mode: 'restricted' },
+      }),
+    })
+    expect(invalidNetworkRes.status).toBe(400)
+
+    const unknownConnectorRes = await jsonFetch('/api/v1/environments', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Unknown connector workspace',
+        mcpPolicy: { allowedConnectors: ['linear'] },
+      }),
+    })
+    expect(unknownConnectorRes.status).toBe(400)
+    await expect(unknownConnectorRes.json()).resolves.toMatchObject({
+      error: { details: { fields: { mcpPolicy: expect.any(String) } } },
+    })
+
+    await connectMcp(authorization)
+    const connectedRes = await jsonFetch('/api/v1/environments', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Connected workspace',
+        mcpPolicy: { allowedConnectors: ['github'], connectorApprovalModes: { github: 'require_approval' } },
+      }),
+    })
+    expect(connectedRes.status).toBe(201)
+
+    const secretMetadataRes = await jsonFetch('/api/v1/environments', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Secret metadata workspace',
+        metadata: { apiKey: 'raw-secret' },
+      }),
+    })
+    expect(secretMetadataRes.status).toBe(400)
+    await expect(secretMetadataRes.json()).resolves.toMatchObject({
+      error: { details: { fields: { metadata: expect.any(String) } } },
+    })
+
+    const secretRuntimeRes = await jsonFetch('/api/v1/environments', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Secret runtime workspace',
+        runtimeConfig: { npmToken: 'raw-secret' },
+      }),
+    })
+    expect(secretRuntimeRes.status).toBe(400)
+    await expect(secretRuntimeRes.json()).resolves.toMatchObject({
+      error: { details: { fields: { runtimeConfig: expect.any(String) } } },
+    })
+  })
+
+  it('keeps cross-project environments invisible', async () => {
+    const authorization = await signIn()
+    const createRes = await jsonFetch('/api/v1/environments', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Tenant workspace' }),
+    })
+    expect(createRes.status).toBe(201)
+    const environment = (await createRes.json()) as { id: string }
+
+    const otherAuthorization = await signIn({
+      ...defaultClaims(),
+      sub: 'user_456',
+      email: 'other@example.com',
+      org_id: 'org_flare_456',
+      org_name: 'Other Org',
+    })
+    const crossReadRes = await jsonFetch(`/api/v1/environments/${environment.id}`, otherAuthorization)
+    expect(crossReadRes.status).toBe(404)
+
+    const crossUpdateRes = await jsonFetch(`/api/v1/environments/${environment.id}`, otherAuthorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ archived: true }),
+    })
+    expect(crossUpdateRes.status).toBe(404)
   })
 })

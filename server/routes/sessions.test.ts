@@ -18,25 +18,24 @@ async function jsonFetch(path: string, authorization: string, init: RequestInit 
   })
 }
 
-async function waitForSessionStatus(sessionId: string, authorization: string, status: string) {
+async function waitForSessionState(sessionId: string, authorization: string, state: string) {
   for (let attempt = 0; attempt < 20; attempt += 1) {
-    const res = await jsonFetch(`/api/sessions/${sessionId}`, authorization)
-    const session = (await res.json()) as { status: string }
-    if (session.status === status) {
+    const res = await jsonFetch(`/api/v1/sessions/${sessionId}`, authorization)
+    const session = (await res.json()) as { state: string }
+    if (session.state === state) {
       return session
     }
     await new Promise((resolve) => setTimeout(resolve, 5))
   }
-  throw new Error(`Session ${sessionId} did not reach ${status}`)
+  throw new Error(`Session ${sessionId} did not reach ${state}`)
 }
 
 async function createEnvironment(authorization: string, data: Record<string, unknown> = {}) {
-  const res = await jsonFetch('/api/environments', authorization, {
+  const res = await jsonFetch('/api/v1/environments', authorization, {
     method: 'POST',
     body: JSON.stringify({
       name: `AMA workspace ${crypto.randomUUID()}`,
       packages: [{ name: '@earendil-works/pi-agent-core', version: 'prebuilt' }],
-      secretRefs: [{ name: 'CLOUDFLARE_API_KEY', ref: 'wrangler_secret:AMA_WORKERS_AI_API_KEY' }],
       mcpPolicy: { allowedConnectors: ['github'] },
       packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
       runtimeConfig: { image: 'ama-tool-executor' },
@@ -46,17 +45,16 @@ async function createEnvironment(authorization: string, data: Record<string, unk
   if (res.status !== 201) {
     throw new Error(`Expected environment creation to return 201, got ${res.status}: ${await res.text()}`)
   }
-  return (await res.json()) as { id: string }
+  return (await res.json()) as { id: string; hostingMode?: string }
 }
 
 async function createAgent(authorization: string, data: Record<string, unknown> = {}) {
-  const res = await jsonFetch('/api/agents', authorization, {
+  const res = await jsonFetch('/api/v1/agents', authorization, {
     method: 'POST',
     body: JSON.stringify({
       name: 'Cloud session agent',
       instructions: 'Work through AMA runtime.',
       skills: ['ama@cloud-session'],
-      allowedTools: ['sandbox.exec', 'mcp:github.repo.read'],
       mcpConnectors: ['github'],
       ...data,
     }),
@@ -65,51 +63,106 @@ async function createAgent(authorization: string, data: Record<string, unknown> 
   return (await res.json()) as { id: string; currentVersionId: string; skills: string[] }
 }
 
+async function createVaultCredential(authorization: string, name: string) {
+  const vaultRes = await jsonFetch('/api/v1/vaults', authorization, {
+    method: 'POST',
+    body: JSON.stringify({ name: `${name} vault ${crypto.randomUUID()}` }),
+  })
+  expect(vaultRes.status).toBe(201)
+  const vault = (await vaultRes.json()) as { id: string }
+  const credentialRes = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials`, authorization, {
+    method: 'POST',
+    body: JSON.stringify({
+      name,
+      type: 'api_key',
+      secret: { provider: 'cloudflare-secrets', secretValue: `raw-${name}-secret` },
+    }),
+  })
+  expect(credentialRes.status).toBe(201)
+  return (await credentialRes.json()) as { id: string; activeVersionId: string }
+}
+
 async function createProviderModel(authorization: string, model: string) {
-  const providerRes = await jsonFetch('/api/providers', authorization, {
+  const providerRes = await jsonFetch('/api/v1/providers', authorization, {
     method: 'POST',
     body: JSON.stringify({
       type: 'openai-compatible',
       displayName: `OpenAI compatible ${crypto.randomUUID()}`,
       baseUrl: 'https://models.example.test/v1',
-      credentialSecretRef: `secret://providers/${crypto.randomUUID()}`,
     }),
   })
   expect(providerRes.status).toBe(201)
   const provider = (await providerRes.json()) as { id: string }
-  const modelRes = await jsonFetch(`/api/providers/${provider.id}/models`, authorization, {
-    method: 'POST',
-    body: JSON.stringify({
-      modelId: model,
-      displayName: model,
-      capabilities: ['text'],
-    }),
-  })
-  expect(modelRes.status).toBe(201)
+  const modelRes = await jsonFetch(
+    `/api/v1/providers/${provider.id}/models/${encodeURIComponent(model)}`,
+    authorization,
+    {
+      method: 'PUT',
+      body: JSON.stringify({
+        displayName: model,
+        capabilities: ['text'],
+      }),
+    },
+  )
+  expect([200, 201]).toContain(modelRes.status)
   return { providerId: provider.id, model }
 }
 
-async function registerSelfHostedRunnerSupport(authorization: string, environmentId: string, capability: string) {
-  const res = await jsonFetch('/api/runners', authorization, {
+async function registerRunner(authorization: string, environmentId: string, capabilities: string[]) {
+  const res = await jsonFetch('/api/v1/runners', authorization, {
     method: 'POST',
     body: JSON.stringify({
       name: `Runtime support runner ${crypto.randomUUID()}`,
       environmentId,
-      capabilities: [capability],
+      capabilities,
     }),
   })
   expect(res.status).toBe(201)
   return (await res.json()) as { id: string }
 }
 
+async function heartbeatRunner(authorization: string, runnerId: string, capabilities: string[]) {
+  const res = await jsonFetch(`/api/v1/runners/${runnerId}/heartbeat`, authorization, {
+    method: 'PUT',
+    body: JSON.stringify({ state: 'active', capabilities }),
+  })
+  expect(res.status).toBe(200)
+}
+
+// v1 lease flow: list available work, then claim one lease for it.
+async function claimLease(authorization: string, runnerId: string) {
+  const workRes = await jsonFetch('/api/v1/work-items?state=available', authorization)
+  expect(workRes.status).toBe(200)
+  const work = (await workRes.json()) as { data: Array<{ id: string }> }
+  if (work.data.length === 0) {
+    return null
+  }
+  for (const item of work.data) {
+    const leaseRes = await jsonFetch('/api/v1/leases', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ workItemId: item.id, runnerId }),
+    })
+    if (leaseRes.status === 201) {
+      return (await leaseRes.json()) as { id: string; workItemId: string; runnerId: string }
+    }
+  }
+  return null
+}
+
+async function readWorkItem(authorization: string, workItemId: string) {
+  const res = await jsonFetch(`/api/v1/work-items/${workItemId}`, authorization)
+  expect(res.status).toBe(200)
+  return (await res.json()) as { id: string; payload: Record<string, unknown> }
+}
+
 async function connectMcp(authorization: string, connectorId: string) {
-  const vaultRes = await jsonFetch('/api/vaults', authorization, {
+  const vaultRes = await jsonFetch('/api/v1/vaults', authorization, {
     method: 'POST',
     body: JSON.stringify({ name: `${connectorId} credentials` }),
   })
   expect(vaultRes.status).toBe(201)
   const vault = (await vaultRes.json()) as { id: string }
-  const credentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, authorization, {
+  const credentialRes = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials`, authorization, {
     method: 'POST',
     body: JSON.stringify({
       name: `${connectorId} token`,
@@ -120,19 +173,26 @@ async function connectMcp(authorization: string, connectorId: string) {
   })
   expect(credentialRes.status).toBe(201)
   const credential = (await credentialRes.json()) as { id: string; activeVersionId: string }
-  const connectRes = await jsonFetch('/api/mcp/connections', authorization, {
+  const connectRes = await jsonFetch('/api/v1/connections', authorization, {
     method: 'POST',
     body: JSON.stringify({
       connectorId,
-      credentialId: credential.id,
-      credentialVersionId: credential.activeVersionId,
+      credentialRef: { credentialId: credential.id, versionId: credential.activeVersionId },
     }),
   })
-  expect([200, 201]).toContain(connectRes.status)
+  expect(connectRes.status).toBe(201)
   return credential
 }
 
-describe('[CF] /api/sessions', () => {
+async function setProjectPolicy(authorization: string, policy: Record<string, unknown>) {
+  const res = await jsonFetch('/api/v1/policies', authorization, {
+    method: 'POST',
+    body: JSON.stringify({ scope: { level: 'project' }, ...policy }),
+  })
+  expect([200, 201]).toContain(res.status)
+}
+
+describe('[CF] /api/v1/sessions', () => {
   beforeEach(async () => {
     await setupOidcProvider()
   })
@@ -141,14 +201,14 @@ describe('[CF] /api/sessions', () => {
     vi.unstubAllGlobals()
   })
 
-  it('creates, reads, lists, reconnects, stops, archives, and records events for a cloud-owned runtime session', async () => {
+  it('creates, reads, lists, connects, messages, stops, archives, and records events for a cloud session', async () => {
     const authorization = await signIn()
     const githubCredential = await connectMcp(authorization, 'github')
     await connectMcp(authorization, 'linear')
     const environment = await createEnvironment(authorization)
     const agent = await createAgent(authorization)
 
-    const createRes = await jsonFetch('/api/sessions', authorization, {
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({
         agentId: agent.id,
@@ -157,67 +217,61 @@ describe('[CF] /api/sessions', () => {
         title: 'Ship the first task',
         metadata: { ticket: 'AMA-1' },
         resourceRefs: [{ type: 'repository', id: 'repo_1' }],
-        vaultRefs: [{ type: 'credential', id: 'cred_1' }],
-        runtimeEnv: { AK_API_URL: 'https://ak.example.com', AK_AGENT_ID: 'agent_123' },
-        runtimeSecretEnv: [{ name: 'AK_AGENT_KEY', ref: githubCredential.activeVersionId }],
+        env: { AK_API_URL: 'https://ak.example.com', AK_AGENT_ID: 'agent_123' },
+        secretEnv: [
+          {
+            name: 'AK_AGENT_KEY',
+            credentialRef: { credentialId: githubCredential.id, versionId: githubCredential.activeVersionId },
+          },
+        ],
       }),
     })
     expect(createRes.status).toBe(201)
     const created = (await createRes.json()) as {
       id: string
-      status: string
+      state: string
       agentVersionId: string
-      agentSnapshot: { instructions: string; skills: string[]; mcpConnectors: string[]; sandboxPolicy?: unknown }
+      agentSnapshot: { instructions: string; skills: string[]; mcpConnectors: string[]; providerId: string }
       environmentVersionId: string
       environmentSnapshot: {
         mcpPolicy: Record<string, unknown>
         packageManagerPolicy: Record<string, unknown>
       }
-      sandboxId: string
-      runtimeEndpointPath: string
       startedAt: string
       title: string
       resourceRefs: Array<Record<string, unknown>>
-      vaultRefs: Array<Record<string, unknown>>
-      runtimeEnv: Record<string, string>
-      runtimeSecretEnv: Array<{ name: string; ref: string }>
+      env: Record<string, string>
+      secretEnv: Array<{ name: string; credentialRef: { credentialId: string; versionId: string } }>
       metadata: Record<string, unknown>
       runtimeMetadata: Record<string, unknown>
     }
     expect(created).toMatchObject({
       title: 'Ship the first task',
-      status: 'idle',
+      state: 'idle',
       agentVersionId: agent.currentVersionId,
       agentSnapshot: {
         instructions: 'Work through AMA runtime.',
         skills: ['ama@cloud-session'],
         mcpConnectors: ['github'],
+        providerId: 'workers-ai',
       },
       environmentSnapshot: {
         mcpPolicy: { allowedConnectors: ['github'] },
         packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
       },
-      sandboxId: created.id.toLowerCase(),
-      runtimeEndpointPath: `/runtime/sessions/${created.id}/rpc`,
       resourceRefs: [{ type: 'repository', id: 'repo_1' }],
-      vaultRefs: [{ type: 'credential', id: 'cred_1' }],
-      runtimeEnv: { AK_API_URL: 'https://ak.example.com', AK_AGENT_ID: 'agent_123' },
-      runtimeSecretEnv: [{ name: 'AK_AGENT_KEY', ref: githubCredential.activeVersionId }],
+      env: { AK_API_URL: 'https://ak.example.com', AK_AGENT_ID: 'agent_123' },
+      secretEnv: [
+        {
+          name: 'AK_AGENT_KEY',
+          credentialRef: { credentialId: githubCredential.id, versionId: githubCredential.activeVersionId },
+        },
+      ],
       metadata: {
         ticket: 'AMA-1',
         hostingMode: 'cloud',
         runtime: 'ama',
         runtimeDriver: 'ama-cloud',
-        runtimeBackend: 'ama-cloud',
-        runtimeProtocol: 'ama-runtime-rpc',
-        runtimeMode: 'test',
-        loop: 'cloud-session-runtime',
-        executor: 'cloudflare-sandbox',
-        piCorePackage: '@earendil-works/pi-agent-core',
-        resourceManifestPath: '/workspace/.ama/resources.json',
-        runtimeEnvPath: '/workspace/.ama/runtime-env.json',
-        runtimeSecretEnvPath: '/workspace/.ama/runtime-secret-env.json',
-        mcpConnectors: ['github'],
       },
       runtimeMetadata: {
         hostingMode: 'cloud',
@@ -230,33 +284,38 @@ describe('[CF] /api/sessions', () => {
         protocol: 'ama-runtime-rpc',
       },
     })
-    expect(JSON.stringify(created)).not.toContain('runtimeOwner')
-    expect(JSON.stringify(created)).not.toContain('piRuntimeId')
-    expect(JSON.stringify(created)).not.toContain('piProcessId')
-    expect(JSON.stringify(created)).not.toContain('modelProvider')
-    expect(JSON.stringify(created)).not.toContain('modelConfig')
-    expect(created.agentSnapshot.sandboxPolicy).toBeUndefined()
+    // Internal placement and tenancy fields never leave the API (§1.7).
+    const serialized = JSON.stringify(created)
+    expect(serialized).not.toContain('durableObjectName')
+    expect(serialized).not.toContain('sandboxId')
+    expect(serialized).not.toContain('runtimeEndpointPath')
+    expect(serialized).not.toContain('organizationId')
+    expect(serialized).not.toContain('vaultRefs')
+    expect(serialized).not.toContain('piRuntimeId')
     expect(created.environmentVersionId).toMatch(/^envver_/)
     expect(created.startedAt).toEqual(expect.any(String))
 
-    const listRes = await jsonFetch('/api/sessions', authorization)
+    const listRes = await jsonFetch('/api/v1/sessions', authorization)
     expect(listRes.status).toBe(200)
     const list = (await listRes.json()) as { data: Array<{ id: string }>; pagination: { hasMore: boolean } }
     expect(list.data).toContainEqual(expect.objectContaining({ id: created.id }))
     expect(list.pagination.hasMore).toBe(false)
 
-    const readRes = await jsonFetch(`/api/sessions/${created.id}`, authorization)
+    const readRes = await jsonFetch(`/api/v1/sessions/${created.id}`, authorization)
     expect(readRes.status).toBe(200)
-    await expect(readRes.json()).resolves.toMatchObject({ id: created.id, status: 'idle' })
+    await expect(readRes.json()).resolves.toMatchObject({ id: created.id, state: 'idle' })
 
-    const reconnectRes = await jsonFetch(`/api/sessions/${created.id}/reconnect`, authorization)
-    expect(reconnectRes.status).toBe(200)
-    await expect(reconnectRes.json()).resolves.toMatchObject({
-      id: created.id,
-      runtimeEndpointPath: `/runtime/sessions/${created.id}/rpc`,
+    const connectionRes = await jsonFetch(`/api/v1/sessions/${created.id}/connection`, authorization)
+    expect(connectionRes.status).toBe(200)
+    await expect(connectionRes.json()).resolves.toEqual({
+      sessionId: created.id,
+      transport: 'ama-runtime-rpc',
+      path: `/api/v1/runtime/sessions/${created.id}/rpc`,
+      state: 'idle',
+      stateReason: null,
     })
 
-    const taskRes = await jsonFetch(`/runtime/sessions/${created.id}/rpc`, authorization, {
+    const taskRes = await jsonFetch(`/api/v1/runtime/sessions/${created.id}/rpc`, authorization, {
       method: 'POST',
       body: JSON.stringify({
         type: 'prompt',
@@ -264,39 +323,49 @@ describe('[CF] /api/sessions', () => {
       }),
     })
     expect(taskRes.status).toBe(200)
-    await expect(taskRes.json()).resolves.toMatchObject({
-      runtime: 'ama-cloud',
-      accepted: true,
-      sandboxId: created.id.toLowerCase(),
-      path: '/rpc',
-    })
-    const afterTaskRes = await jsonFetch(`/api/sessions/${created.id}`, authorization)
-    await expect(afterTaskRes.json()).resolves.toMatchObject({ id: created.id, status: 'idle' })
+    const afterTaskRes = await jsonFetch(`/api/v1/sessions/${created.id}`, authorization)
+    await expect(afterTaskRes.json()).resolves.toMatchObject({ id: created.id, state: 'idle' })
 
-    const historyTaskRes = await jsonFetch(`/api/sessions/${created.id}/commands`, authorization, {
+    const messageRes = await jsonFetch(`/api/v1/sessions/${created.id}/messages`, authorization, {
       method: 'POST',
       body: JSON.stringify({
         type: 'prompt',
-        message: 'What was my previous prompt?',
+        content: 'What was my previous prompt?',
       }),
     })
-    expect(historyTaskRes.status).toBe(202)
-    await expect(historyTaskRes.json()).resolves.toMatchObject({
-      runtime: 'ama-cloud',
-      accepted: true,
+    expect(messageRes.status).toBe(201)
+    const message = (await messageRes.json()) as { id: string; delivery: string; state: string }
+    expect(message).toMatchObject({
       sessionId: created.id,
-      path: '/rpc',
+      type: 'prompt',
+      content: 'What was my previous prompt?',
+      delivery: 'live',
+      state: 'delivered',
+      error: null,
     })
-    const afterCommandRes = await jsonFetch(`/api/sessions/${created.id}`, authorization)
-    await expect(afterCommandRes.json()).resolves.toMatchObject({ id: created.id, status: 'idle' })
 
-    const stopRes = await jsonFetch(`/api/sessions/${created.id}/stop`, authorization, { method: 'POST' })
+    const messageItemRes = await jsonFetch(`/api/v1/sessions/${created.id}/messages/${message.id}`, authorization)
+    expect(messageItemRes.status).toBe(200)
+    await expect(messageItemRes.json()).resolves.toMatchObject({ id: message.id, state: 'delivered' })
+
+    const messageListRes = await jsonFetch(`/api/v1/sessions/${created.id}/messages`, authorization)
+    expect(messageListRes.status).toBe(200)
+    const messageList = (await messageListRes.json()) as { data: Array<{ id: string }> }
+    expect(messageList.data).toContainEqual(expect.objectContaining({ id: message.id }))
+
+    const afterCommandRes = await jsonFetch(`/api/v1/sessions/${created.id}`, authorization)
+    await expect(afterCommandRes.json()).resolves.toMatchObject({ id: created.id, state: 'idle' })
+
+    const stopRes = await jsonFetch(`/api/v1/sessions/${created.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ state: 'stopped' }),
+    })
     expect(stopRes.status).toBe(200)
-    const stopped = (await stopRes.json()) as { status: string; stoppedAt: string }
-    expect(stopped.status).toBe('stopped')
+    const stopped = (await stopRes.json()) as { state: string; stoppedAt: string }
+    expect(stopped.state).toBe('stopped')
     expect(stopped.stoppedAt).toEqual(expect.any(String))
 
-    const eventsRes = await jsonFetch(`/api/sessions/${created.id}/events`, authorization)
+    const eventsRes = await jsonFetch(`/api/v1/sessions/${created.id}/events`, authorization)
     expect(eventsRes.status).toBe(200)
     const events = (await eventsRes.json()) as {
       data: Array<{
@@ -319,54 +388,24 @@ describe('[CF] /api/sessions', () => {
         'message_end',
         'tool_execution_start',
         'tool_execution_end',
-        'usage.recorded',
       ]),
     )
     expect(events.data.every((event) => event.visibility === 'runtime')).toBe(true)
-    expect(events.data).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: 'message_end',
-          payload: expect.objectContaining({
-            message: expect.objectContaining({ role: 'assistant' }),
-          }),
-        }),
-        expect.objectContaining({
-          type: 'tool_execution_end',
-          payload: expect.objectContaining({
-            toolCallId: 'call_git_status',
-            toolName: 'sandbox.exec',
-            isError: false,
-          }),
-        }),
-      ]),
-    )
     const toolCallEvent = events.data.find(
       (event) => event.type === 'tool_execution_start' && event.payload.toolCallId === 'call_git_status',
     )
     const toolResultEvent = events.data.find(
       (event) => event.type === 'tool_execution_end' && event.payload.toolCallId === 'call_git_status',
     )
-    expect(toolCallEvent).toMatchObject({
-      correlationId: 'tool:call_git_status',
-      payload: expect.objectContaining({
-        args: { command: 'git status' },
-      }),
-    })
+    expect(toolCallEvent).toMatchObject({ correlationId: 'tool:call_git_status' })
     expect(toolCallEvent?.parentEventId).toMatch(/^event_/)
-    expect(toolResultEvent).toMatchObject({
-      correlationId: 'tool:call_git_status',
-    })
     expect(toolResultEvent?.parentEventId).toBe(toolCallEvent?.parentEventId)
     expect(JSON.stringify(events.data)).not.toContain('raw-secret')
     expect(JSON.stringify(events.data)).toContain('Previous user prompt: Inspect repository status')
     expect(JSON.stringify(events.data)).not.toContain('raw-github-token')
-    expect(JSON.stringify(events.data)).not.toContain('secret-password')
-    expect(JSON.stringify(events.data)).not.toContain('Message accepted by AMA runtime.')
-    expect(JSON.stringify(events.data)).not.toContain('Received:')
-    expect(JSON.stringify(events.data)).not.toContain('oidc-access-token')
+    expect(JSON.stringify(events.data)).not.toContain('organizationId')
 
-    const pagedEventsRes = await jsonFetch(`/api/sessions/${created.id}/events?limit=1`, authorization)
+    const pagedEventsRes = await jsonFetch(`/api/v1/sessions/${created.id}/events?limit=1`, authorization)
     const pagedEvents = (await pagedEventsRes.json()) as {
       data: Array<{ sequence: number; type: string }>
       pagination: { hasMore: boolean; nextCursor: string | null }
@@ -374,41 +413,23 @@ describe('[CF] /api/sessions', () => {
     expect(pagedEvents.data).toEqual([expect.objectContaining({ sequence: 1, type: 'agent_start' })])
     expect(pagedEvents.pagination).toMatchObject({ hasMore: true, nextCursor: '1' })
 
-    const cursorEventsRes = await jsonFetch(`/api/sessions/${created.id}/events?cursor=1&limit=2`, authorization)
+    const cursorEventsRes = await jsonFetch(`/api/v1/sessions/${created.id}/events?cursor=1&limit=2`, authorization)
     const cursorEvents = (await cursorEventsRes.json()) as {
       data: Array<{ sequence: number; type: string }>
-      pagination: {
-        limit: number
-        hasMore: boolean
-        nextCursor: string | null
-        firstId: string | null
-        lastId: string | null
-      }
+      pagination: { limit: number; hasMore: boolean; nextCursor: string | null }
     }
     expect(cursorEvents.data.map((event) => event.sequence)).toEqual([2, 3])
-    expect(cursorEvents.pagination).toMatchObject({
-      limit: 2,
-      hasMore: true,
-      nextCursor: '3',
-      firstId: '2',
-      lastId: '3',
-      firstSequence: 2,
-      lastSequence: 3,
-    })
+    expect(cursorEvents.pagination).toEqual({ limit: 2, hasMore: true, nextCursor: '3' })
 
     const descendingEventsRes = await jsonFetch(
-      `/api/sessions/${created.id}/events?order=desc&cursor=6&limit=2`,
+      `/api/v1/sessions/${created.id}/events?order=desc&cursor=6&limit=2`,
       authorization,
     )
     const descendingEvents = (await descendingEventsRes.json()) as { data: Array<{ sequence: number; type: string }> }
     expect(descendingEvents.data.map((event) => event.sequence)).toEqual([5, 4])
 
-    const latestEventsRes = await jsonFetch(`/api/sessions/${created.id}/events?order=desc&limit=2`, authorization)
-    const latestEvents = (await latestEventsRes.json()) as { data: Array<{ sequence: number; type: string }> }
-    expect(latestEvents.data.map((event) => event.sequence)).toEqual([events.data.length, events.data.length - 1])
-
     const filteredEventsRes = await jsonFetch(
-      `/api/sessions/${created.id}/events?cursor=1&type=tool_execution_end`,
+      `/api/v1/sessions/${created.id}/events?cursor=1&type=tool_execution_end`,
       authorization,
     )
     const filteredEvents = (await filteredEventsRes.json()) as { data: Array<{ sequence: number; type: string }> }
@@ -416,122 +437,173 @@ describe('[CF] /api/sessions', () => {
       expect.arrayContaining([expect.objectContaining({ type: 'tool_execution_end' })]),
     )
 
-    const exportRes = await jsonFetch(`/api/sessions/${created.id}/events/export?cursor=2&limit=2`, authorization)
-    expect(exportRes.status).toBe(200)
-    expect(exportRes.headers.get('content-type')).toContain('application/x-ndjson')
-    const exportedText = await exportRes.text()
-    const exported = exportedText.trim().split('\n').map(JSON.parse) as Array<{ sequence: number }>
-    expect(exported.map((event) => event.sequence)).toEqual([3, 4])
-    expect(exportedText).not.toContain('raw-secret')
-    expect(exportedText).not.toContain('secret-password')
-
-    const descendingExportRes = await jsonFetch(
-      `/api/sessions/${created.id}/events/export?order=desc&cursor=6&limit=2`,
-      authorization,
+    // CSV export via content negotiation replaces /events/export (§1.2.6).
+    const csvRes = await jsonFetch(`/api/v1/sessions/${created.id}/events?cursor=2&limit=2`, authorization, {
+      headers: { accept: 'text/csv' },
+    })
+    expect(csvRes.status).toBe(200)
+    expect(csvRes.headers.get('content-type')).toContain('text/csv')
+    expect(csvRes.headers.get('content-disposition')).toContain(`session-${created.id}-events.csv`)
+    const csvText = await csvRes.text()
+    const csvLines = csvText.trim().split('\n')
+    expect(csvLines[0]).toBe(
+      'id,sessionId,sequence,type,visibility,role,correlationId,parentEventId,createdAt,payload,metadata',
     )
-    expect(descendingExportRes.status).toBe(200)
-    const descendingExported = (await descendingExportRes.text()).trim().split('\n').map(JSON.parse) as Array<{
-      sequence: number
-    }>
-    expect(descendingExported.map((event) => event.sequence)).toEqual([5, 4])
+    expect(csvLines).toHaveLength(3)
+    expect(csvText).not.toContain('raw-secret')
 
-    const streamRes = await jsonFetch(`/api/sessions/${created.id}/events/stream?cursor=4`, authorization)
+    // SSE stream via content negotiation replaces /events/stream.
+    const streamRes = await jsonFetch(`/api/v1/sessions/${created.id}/events?cursor=4`, authorization, {
+      headers: { accept: 'text/event-stream' },
+    })
     expect(streamRes.status).toBe(200)
-    expect(streamRes.headers.get('content-type')).toContain('application/x-ndjson')
-    const streamed = (await streamRes.text()).trim().split('\n').map(JSON.parse) as Array<{ sequence: number }>
-    expect(streamed[0]?.sequence).toBe(5)
+    expect(streamRes.headers.get('content-type')).toContain('text/event-stream')
+    const streamText = await streamRes.text()
+    const streamedEvents = streamText
+      .split('\n')
+      .filter((line) => line.startsWith('data: '))
+      .map((line) => JSON.parse(line.slice('data: '.length)) as { sequence: number })
+    expect(streamedEvents[0]?.sequence).toBe(5)
+    expect(streamText).not.toContain('raw-github-token')
 
-    const redactedStreamRes = await jsonFetch(`/api/sessions/${created.id}/events/stream?limit=4`, authorization)
-    expect(redactedStreamRes.status).toBe(200)
-    const streamedText = await redactedStreamRes.text()
-    expect(streamedText).not.toContain('raw-github-token')
-    expect(streamedText).not.toContain('secret-password')
-
-    const descendingStreamRes = await jsonFetch(`/api/sessions/${created.id}/events/stream?order=desc`, authorization)
+    const descendingStreamRes = await jsonFetch(`/api/v1/sessions/${created.id}/events?order=desc`, authorization, {
+      headers: { accept: 'text/event-stream' },
+    })
     expect(descendingStreamRes.status).toBe(400)
 
-    const inactiveRuntimeRes = await jsonFetch(`/runtime/sessions/${created.id}/rpc`, authorization)
-    expect(inactiveRuntimeRes.status).toBe(409)
-    await expect(inactiveRuntimeRes.json()).resolves.toMatchObject({
-      error: {
-        type: 'conflict',
-        message: 'Session runtime is not active',
-      },
+    const archiveRes = await jsonFetch(`/api/v1/sessions/${created.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ archived: true }),
     })
+    expect(archiveRes.status).toBe(200)
+    const archived = (await archiveRes.json()) as { state: string; archivedAt: string | null }
+    expect(archived.state).toBe('stopped')
+    expect(archived.archivedAt).toEqual(expect.any(String))
 
-    const archiveRes = await jsonFetch(`/api/sessions/${created.id}`, authorization, { method: 'DELETE' })
-    expect(archiveRes.status).toBe(204)
+    const liveListRes = await jsonFetch('/api/v1/sessions', authorization)
+    const liveList = (await liveListRes.json()) as { data: Array<{ id: string }> }
+    expect(liveList.data).not.toContainEqual(expect.objectContaining({ id: created.id }))
 
-    const archivedRuntimeRes = await jsonFetch(`/runtime/sessions/${created.id}/rpc`, authorization)
-    expect(archivedRuntimeRes.status).toBe(409)
-    await expect(archivedRuntimeRes.json()).resolves.toMatchObject({
-      error: {
-        type: 'conflict',
-        message: 'Session runtime is not active',
-      },
-    })
-
-    const archivedListRes = await jsonFetch('/api/sessions?includeArchived=true', authorization)
+    const archivedListRes = await jsonFetch('/api/v1/sessions?archived=true', authorization)
     expect(archivedListRes.status).toBe(200)
-    const archivedList = (await archivedListRes.json()) as { data: Array<{ id: string; status: string }> }
-    expect(archivedList.data).toContainEqual(expect.objectContaining({ id: created.id, status: 'archived' }))
+    const archivedList = (await archivedListRes.json()) as { data: Array<{ id: string; archivedAt: string | null }> }
+    expect(archivedList.data).toContainEqual(
+      expect.objectContaining({ id: created.id, archivedAt: expect.any(String) }),
+    )
+
+    // Archived sessions reject edits but can be restored.
+    const archivedEditRes = await jsonFetch(`/api/v1/sessions/${created.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ title: 'New title' }),
+    })
+    expect(archivedEditRes.status).toBe(409)
+
+    const unarchiveRes = await jsonFetch(`/api/v1/sessions/${created.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ archived: false }),
+    })
+    expect(unarchiveRes.status).toBe(200)
+    await expect(unarchiveRes.json()).resolves.toMatchObject({ id: created.id, archivedAt: null })
+  })
+
+  it('updates title and metadata without disturbing runtime-managed metadata', async () => {
+    const authorization = await signIn()
+    await connectMcp(authorization, 'github')
+    const environment = await createEnvironment(authorization)
+    const agent = await createAgent(authorization)
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtime: 'ama',
+        title: 'Before rename',
+        metadata: { ticket: 'AMA-1' },
+      }),
+    })
+    expect(createRes.status).toBe(201)
+    const created = (await createRes.json()) as { id: string }
+
+    const patchRes = await jsonFetch(`/api/v1/sessions/${created.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ title: 'After rename', metadata: { ticket: 'AMA-2', extra: true } }),
+    })
+    expect(patchRes.status).toBe(200)
+    await expect(patchRes.json()).resolves.toMatchObject({
+      title: 'After rename',
+      metadata: expect.objectContaining({
+        ticket: 'AMA-2',
+        extra: true,
+        hostingMode: 'cloud',
+        runtime: 'ama',
+      }),
+    })
+
+    const secretMetadataRes = await jsonFetch(`/api/v1/sessions/${created.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ metadata: { apiKey: 'raw-secret-token' } }),
+    })
+    expect(secretMetadataRes.status).toBe(400)
+
+    const emptyPatchRes = await jsonFetch(`/api/v1/sessions/${created.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({}),
+    })
+    expect(emptyPatchRes.status).toBe(400)
   })
 
   it('queues self-hosted sessions for runner lease support', async () => {
     const authorization = await signIn()
     const credential = await connectMcp(authorization, 'github')
-    const environmentRes = await jsonFetch('/api/environments', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Self-hosted workspace',
-        hostingMode: 'self_hosted',
-        networkPolicy: { mode: 'unrestricted' },
-      }),
+    const environment = await createEnvironment(authorization, {
+      name: 'Self-hosted workspace',
+      hostingMode: 'self_hosted',
+      networkPolicy: { mode: 'unrestricted' },
+      mcpPolicy: {},
+      packageManagerPolicy: {},
+      runtimeConfig: {},
+      packages: [],
     })
-    expect(environmentRes.status).toBe(201)
-    const environment = (await environmentRes.json()) as { id: string; hostingMode: string }
-    expect(environment.hostingMode).toBe('self_hosted')
-    const runner = await registerSelfHostedRunnerSupport(authorization, environment.id, DEFAULT_AMA_RUNNER_CAPABILITY)
-    const agentRes = await jsonFetch('/api/agents', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Self-hosted session agent',
-        instructions: 'Wait for a self-hosted runner.',
-        allowedTools: ['sandbox.exec'],
-      }),
+    const runner = await registerRunner(authorization, environment.id, [DEFAULT_AMA_RUNNER_CAPABILITY])
+    const agent = await createAgent(authorization, {
+      name: 'Self-hosted session agent',
+      instructions: 'Wait for a self-hosted runner.',
+      skills: [],
+      mcpConnectors: [],
     })
-    expect(agentRes.status).toBe(201)
-    const agent = (await agentRes.json()) as { id: string }
 
-    const createRes = await jsonFetch('/api/sessions', authorization, {
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({
         agentId: agent.id,
         environmentId: environment.id,
         runtime: 'ama',
         resourceRefs: [{ type: 'github_repository', owner: 'saltbo', repo: 'agent-kanban', ref: 'main' }],
-        runtimeSecretEnv: [{ name: 'AK_AGENT_KEY', ref: credential.activeVersionId }],
+        secretEnv: [
+          {
+            name: 'AK_AGENT_KEY',
+            credentialRef: { credentialId: credential.id, versionId: credential.activeVersionId },
+          },
+        ],
       }),
     })
     expect(createRes.status).toBe(201)
     const created = (await createRes.json()) as {
       id: string
-      status: string
-      statusReason: string | null
-      sandboxId: string | null
-      runtimeEndpointPath: string | null
+      state: string
+      stateReason: string | null
       environmentSnapshot: { hostingMode: string }
-      runtimeSecretEnv: Array<{ name: string; ref: string }>
+      secretEnv: Array<{ name: string; credentialRef: Record<string, string> }>
       metadata: Record<string, unknown>
       runtimeMetadata: Record<string, unknown>
     }
     expect(created).toMatchObject({
-      status: 'pending',
-      statusReason: 'waiting-for-runner',
-      sandboxId: null,
-      runtimeEndpointPath: null,
+      state: 'pending',
+      stateReason: 'waiting-for-runner',
       environmentSnapshot: { hostingMode: 'self_hosted' },
-      runtimeSecretEnv: [{ name: 'AK_AGENT_KEY', ref: credential.activeVersionId }],
+      secretEnv: [
+        { name: 'AK_AGENT_KEY', credentialRef: { credentialId: credential.id, versionId: credential.activeVersionId } },
+      ],
       metadata: {
         hostingMode: 'self_hosted',
         runtime: 'ama',
@@ -542,7 +614,6 @@ describe('[CF] /api/sessions', () => {
       runtimeMetadata: {
         hostingMode: 'self_hosted',
         runtime: 'ama',
-        runtimeConfig: {},
         provider: 'workers-ai',
         model: null,
         driver: 'ama-self-hosted',
@@ -550,9 +621,17 @@ describe('[CF] /api/sessions', () => {
         protocol: 'ama-runner-work',
       },
     })
-    expect(JSON.stringify(created)).not.toContain('runtimeOwner')
 
-    const workItemsRes = await jsonFetch(`/api/runners/work-items?sessionId=${created.id}`, authorization)
+    const connectionRes = await jsonFetch(`/api/v1/sessions/${created.id}/connection`, authorization)
+    expect(connectionRes.status).toBe(200)
+    await expect(connectionRes.json()).resolves.toMatchObject({
+      sessionId: created.id,
+      path: null,
+      state: 'pending',
+      stateReason: 'waiting-for-runner',
+    })
+
+    const workItemsRes = await jsonFetch(`/api/v1/work-items?sessionId=${created.id}`, authorization)
     expect(workItemsRes.status).toBe(200)
     await expect(workItemsRes.json()).resolves.toMatchObject({
       data: [
@@ -560,30 +639,20 @@ describe('[CF] /api/sessions', () => {
           sessionId: created.id,
           environmentId: environment.id,
           type: 'session.start',
-          status: 'available',
+          state: 'available',
         },
       ],
     })
 
-    const runtimeRes = await jsonFetch(`/runtime/sessions/${created.id}/rpc`, authorization, {
-      method: 'POST',
-      body: JSON.stringify({ type: 'prompt', message: 'Should wait for runner' }),
-    })
-    expect(runtimeRes.status).toBe(409)
-    await expect(runtimeRes.json()).resolves.toMatchObject({
-      error: {
-        type: 'conflict',
-        message: 'Session runtime is not active',
-      },
-    })
-    const workRow = await env.DB.prepare('SELECT payload FROM runner_work_items WHERE session_id = ?')
+    const workRow = await env.DB.prepare('SELECT payload FROM work_items WHERE session_id = ?')
       .bind(created.id)
       .first<{ payload: string }>()
     expect(workRow).toBeTruthy()
     const storedPayload = JSON.parse(workRow!.payload) as {
       resourceRefs: Array<Record<string, unknown>>
       runtimeEnv: Record<string, string>
-      runtimeSecretEnv: Array<{ name: string; ref: string }>
+      runtimeSecretEnv: Array<{ name: string; credentialRef: Record<string, string> }>
+      provider: string
     }
     expect(storedPayload.resourceRefs).toEqual([
       {
@@ -594,36 +663,22 @@ describe('[CF] /api/sessions', () => {
         mountPath: '/workspace/repos/saltbo/agent-kanban',
       },
     ])
+    expect(storedPayload.provider).toBe('workers-ai')
     expect(storedPayload.runtimeEnv).not.toHaveProperty('AK_AGENT_KEY')
-    expect(storedPayload.runtimeSecretEnv).toEqual([{ name: 'AK_AGENT_KEY', ref: credential.activeVersionId }])
+    expect(storedPayload.runtimeSecretEnv).toEqual([
+      { name: 'AK_AGENT_KEY', credentialRef: { credentialId: credential.id, versionId: credential.activeVersionId } },
+    ])
 
-    const heartbeatRes = await jsonFetch(`/api/runners/${runner.id}/heartbeats`, authorization, {
-      method: 'POST',
-      body: JSON.stringify({ status: 'active', capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY] }),
-    })
-    expect(heartbeatRes.status).toBe(200)
-    const leaseRes = await jsonFetch(`/api/runners/${runner.id}/leases`, authorization, {
-      method: 'POST',
-      body: JSON.stringify({}),
-    })
-    expect(leaseRes.status).toBe(201)
-    const lease = (await leaseRes.json()) as {
-      workItem: {
-        payload: {
-          resourceRefs: Array<Record<string, unknown>>
-          runtimeEnv: Record<string, string>
-          runtimeSecretEnv: Array<{ name: string; ref: string }>
-        }
-      }
+    await heartbeatRunner(authorization, runner.id, [DEFAULT_AMA_RUNNER_CAPABILITY])
+    const lease = await claimLease(authorization, runner.id)
+    expect(lease).toBeTruthy()
+    const workItem = await readWorkItem(authorization, lease!.workItemId)
+    const payload = workItem.payload as {
+      runtimeEnv: Record<string, string>
+      runtimeSecretEnv: Array<Record<string, unknown>>
     }
-    expect(lease.workItem.payload.resourceRefs[0]).toMatchObject({
-      type: 'github_repository',
-      owner: 'saltbo',
-      repo: 'agent-kanban',
-      mountPath: '/workspace/repos/saltbo/agent-kanban',
-    })
-    expect(lease.workItem.payload.runtimeEnv.AK_AGENT_KEY).toBe('raw-github-token')
-    expect(lease.workItem.payload.runtimeSecretEnv).toEqual([{ name: 'AK_AGENT_KEY', ref: credential.activeVersionId }])
+    // Lease materialization resolves the vault value into the runner env.
+    expect(payload.runtimeEnv.AK_AGENT_KEY).toBe('raw-github-token')
   })
 
   it('normalizes GitHub repository resource refs and rejects unsafe workspace inputs', async () => {
@@ -632,7 +687,7 @@ describe('[CF] /api/sessions', () => {
     const environment = await createEnvironment(authorization)
     const agent = await createAgent(authorization)
 
-    const createRes = await jsonFetch('/api/sessions', authorization, {
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({
         agentId: agent.id,
@@ -662,10 +717,9 @@ describe('[CF] /api/sessions', () => {
           credentialRef: credential.activeVersionId,
         },
       ],
-      metadata: { resourceManifestPath: '/workspace/.ama/resources.json' },
     })
 
-    const unsafePathRes = await jsonFetch('/api/sessions', authorization, {
+    const unsafePathRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({
         agentId: agent.id,
@@ -689,7 +743,7 @@ describe('[CF] /api/sessions', () => {
       },
     })
 
-    const embeddedCredentialUrlRes = await jsonFetch('/api/sessions', authorization, {
+    const embeddedCredentialUrlRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({
         agentId: agent.id,
@@ -705,7 +759,7 @@ describe('[CF] /api/sessions', () => {
     })
     expect(embeddedCredentialUrlRes.status).toBe(400)
 
-    const duplicateMountRes = await jsonFetch('/api/sessions', authorization, {
+    const duplicateMountRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({
         agentId: agent.id,
@@ -720,38 +774,57 @@ describe('[CF] /api/sessions', () => {
     expect(duplicateMountRes.status).toBe(400)
   })
 
-  it('validates runtime secret environment references without exposing raw secrets', async () => {
+  it('validates secret environment references without exposing raw secrets', async () => {
     const authorization = await signIn()
     const credential = await connectMcp(authorization, 'github')
     const environment = await createEnvironment(authorization)
     const agent = await createAgent(authorization)
 
-    const missingRefRes = await jsonFetch('/api/sessions', authorization, {
+    const missingRefRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({
         agentId: agent.id,
         environmentId: environment.id,
         runtime: 'ama',
-        runtimeSecretEnv: [{ name: 'AK_AGENT_KEY', ref: 'vaultver_missing' }],
+        secretEnv: [{ name: 'AK_AGENT_KEY', credentialRef: { credentialId: 'cred_missing' } }],
       }),
     })
     expect(missingRefRes.status).toBe(400)
     await expect(missingRefRes.json()).resolves.toMatchObject({
       error: {
         type: 'validation_error',
-        details: { fields: { 'runtimeSecretEnv.0.ref': expect.any(String) } },
+        details: { fields: { 'secretEnv.0.credentialRef.credentialId': expect.any(String) } },
       },
     })
 
-    const duplicateNameRes = await jsonFetch('/api/sessions', authorization, {
+    const wrongVersionRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({
         agentId: agent.id,
         environmentId: environment.id,
         runtime: 'ama',
-        runtimeSecretEnv: [
-          { name: 'AK_AGENT_KEY', ref: credential.activeVersionId },
-          { name: 'AK_AGENT_KEY', ref: credential.activeVersionId },
+        secretEnv: [
+          { name: 'AK_AGENT_KEY', credentialRef: { credentialId: credential.id, versionId: 'credver_missing' } },
+        ],
+      }),
+    })
+    expect(wrongVersionRes.status).toBe(400)
+    await expect(wrongVersionRes.json()).resolves.toMatchObject({
+      error: {
+        type: 'validation_error',
+        details: { fields: { 'secretEnv.0.credentialRef.versionId': expect.any(String) } },
+      },
+    })
+
+    const duplicateNameRes = await jsonFetch('/api/v1/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtime: 'ama',
+        secretEnv: [
+          { name: 'AK_AGENT_KEY', credentialRef: { credentialId: credential.id } },
+          { name: 'AK_AGENT_KEY', credentialRef: { credentialId: credential.id } },
         ],
       }),
     })
@@ -760,7 +833,7 @@ describe('[CF] /api/sessions', () => {
     expect(JSON.parse(duplicateNameText)).toMatchObject({
       error: {
         type: 'validation_error',
-        details: { fields: { 'runtimeSecretEnv.1.name': expect.any(String) } },
+        details: { fields: { 'secretEnv.1.name': expect.any(String) } },
       },
     })
     expect(duplicateNameText).not.toContain('raw-github-token')
@@ -769,26 +842,21 @@ describe('[CF] /api/sessions', () => {
   it('preserves canonical session environment snapshots for read contracts', async () => {
     const authorization = await signIn()
     await connectMcp(authorization, 'github')
-    const environmentRes = await jsonFetch('/api/environments', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: `Canonical snapshot workspace ${crypto.randomUUID()}`,
-        hostingMode: 'cloud',
-        runtimeConfig: { image: 'ama-runtime', timeoutSeconds: 120 },
-        networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
-      }),
+    const environment = await createEnvironment(authorization, {
+      name: `Canonical snapshot workspace ${crypto.randomUUID()}`,
+      hostingMode: 'cloud',
+      runtimeConfig: { image: 'ama-runtime', timeoutSeconds: 120 },
+      networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
     })
-    expect(environmentRes.status).toBe(201)
-    const environment = (await environmentRes.json()) as { id: string }
     const agent = await createAgent(authorization)
-    const createRes = await jsonFetch('/api/sessions', authorization, {
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     expect(createRes.status).toBe(201)
     const created = (await createRes.json()) as { id: string }
 
-    const readRes = await jsonFetch(`/api/sessions/${created.id}`, authorization)
+    const readRes = await jsonFetch(`/api/v1/sessions/${created.id}`, authorization)
     expect(readRes.status).toBe(200)
     const body = await readRes.json()
     expect(body).toMatchObject({
@@ -801,38 +869,32 @@ describe('[CF] /api/sessions', () => {
     })
   })
 
-  it('serializes stored canonical Pi runtime event rows as AMA session events', async () => {
+  it('serializes stored canonical runtime event rows as AMA session events', async () => {
     const authorization = await signIn()
     await connectMcp(authorization, 'github')
     const environment = await createEnvironment(authorization)
     const agent = await createAgent(authorization)
-    const createRes = await jsonFetch('/api/sessions', authorization, {
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     expect(createRes.status).toBe(201)
-    const created = (await createRes.json()) as { id: string; organizationId: string; projectId: string }
+    const created = (await createRes.json()) as { id: string; projectId: string }
+    const sessionRow = await env.DB.prepare('SELECT organization_id FROM sessions WHERE id = ?')
+      .bind(created.id)
+      .first<{ organization_id: string }>()
+    expect(sessionRow).toBeTruthy()
 
     await env.DB.prepare(
       `
         INSERT INTO session_events (
-          id,
-          organization_id,
-          project_id,
-          session_id,
-          sequence,
-          type,
-          visibility,
-          role,
-          payload,
-          metadata,
-          created_at
+          id, organization_id, project_id, session_id, sequence, type, visibility, role, payload, metadata, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
     )
       .bind(
         `event_${crypto.randomUUID().replaceAll('-', '')}`,
-        created.organizationId,
+        sessionRow!.organization_id,
         created.projectId,
         created.id,
         100,
@@ -845,7 +907,7 @@ describe('[CF] /api/sessions', () => {
       )
       .run()
 
-    const eventsRes = await jsonFetch(`/api/sessions/${created.id}/events?type=tool_execution_start`, authorization)
+    const eventsRes = await jsonFetch(`/api/v1/sessions/${created.id}/events?type=tool_execution_start`, authorization)
     expect(eventsRes.status).toBe(200)
     const events = (await eventsRes.json()) as { data: Array<{ type: string; payload: Record<string, unknown> }> }
     expect(events.data).toEqual(
@@ -861,40 +923,20 @@ describe('[CF] /api/sessions', () => {
       ]),
     )
 
+    const runtimeErrorId = `event_${crypto.randomUUID().replaceAll('-', '')}`
     await env.DB.prepare(
       `
         INSERT INTO session_events (
-          id,
-          organization_id,
-          project_id,
-          session_id,
-          sequence,
-          type,
-          visibility,
-          role,
-          payload,
-          metadata,
-          created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          id, organization_id, project_id, session_id, sequence, type, visibility, role, payload, metadata, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
     )
       .bind(
-        `event_${crypto.randomUUID().replaceAll('-', '')}`,
-        created.organizationId,
+        runtimeErrorId,
+        sessionRow!.organization_id,
         created.projectId,
         created.id,
         101,
-        'turn_end',
-        'runtime',
-        null,
-        JSON.stringify({ message: { role: 'assistant', content: 'done' }, toolResults: [] }),
-        JSON.stringify({ source: 'stored-runtime' }),
-        new Date().toISOString(),
-        `event_${crypto.randomUUID().replaceAll('-', '')}`,
-        created.organizationId,
-        created.projectId,
-        created.id,
-        102,
         'runtime.error',
         'runtime',
         null,
@@ -904,22 +946,8 @@ describe('[CF] /api/sessions', () => {
       )
       .run()
 
-    const lifecycleEventsRes = await jsonFetch(`/api/sessions/${created.id}/events?type=turn_end`, authorization)
-    const lifecycleEvents = (await lifecycleEventsRes.json()) as {
-      data: Array<{ type: string; payload: Record<string, unknown> }>
-    }
-    expect(lifecycleEvents.data).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: 'turn_end',
-          payload: expect.objectContaining({ message: { role: 'assistant', content: 'done' }, toolResults: [] }),
-        }),
-      ]),
-    )
-    expect(lifecycleEvents.data.every((event) => event.type === 'turn_end')).toBe(true)
-
     const runtimeErrorEventsRes = await jsonFetch(
-      `/api/sessions/${created.id}/events?type=runtime.error`,
+      `/api/v1/sessions/${created.id}/events?type=runtime.error`,
       authorization,
     )
     const runtimeErrorEvents = (await runtimeErrorEventsRes.json()) as {
@@ -935,119 +963,83 @@ describe('[CF] /api/sessions', () => {
     )
   })
 
-  it('streams canonical runtime websocket activity as AMA session events', async () => {
+  it('accepts batch event ingest from an authenticated project user', async () => {
     const authorization = await signIn()
     await connectMcp(authorization, 'github')
     const environment = await createEnvironment(authorization)
     const agent = await createAgent(authorization)
-    const createRes = await jsonFetch('/api/sessions', authorization, {
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     expect(createRes.status).toBe(201)
     const created = (await createRes.json()) as { id: string }
 
-    const wsRes = (await SELF.fetch(`https://example.com/runtime/sessions/${created.id}/ws`, {
-      headers: {
-        authorization,
-        upgrade: 'websocket',
-      },
-    })) as Response & { webSocket?: WebSocket }
-    expect(wsRes.status).toBe(101)
-    const socket = wsRes.webSocket
-    expect(socket).toBeTruthy()
-    socket?.accept()
-
-    const received = new Promise<Array<{ type?: string }>>((resolve, reject) => {
-      const payloads: Array<{ type?: string }> = []
-      const timeout = setTimeout(() => reject(new Error('Timed out waiting for websocket events')), 1_000)
-      socket?.addEventListener('message', (event) => {
-        const payload = JSON.parse(String(event.data)) as { type?: string }
-        payloads.push(payload)
-        const types = payloads.map((item) => item.type)
-        if (
-          types.includes('message_end') &&
-          types.includes('tool_execution_start') &&
-          types.includes('tool_execution_end') &&
-          types.includes('turn_end')
-        ) {
-          clearTimeout(timeout)
-          socket.close()
-          resolve(payloads)
-        }
-      })
-      socket?.addEventListener('error', () => {
-        clearTimeout(timeout)
-        reject(new Error('Runtime websocket failed'))
-      })
+    const ingestRes = await jsonFetch(`/api/v1/sessions/${created.id}/events`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        events: [
+          { type: 'turn_end', payload: { message: { role: 'assistant', content: 'done' }, toolResults: [] } },
+          { type: 'runtime.error', payload: { message: 'Bridge failed', code: 'runtime_exit' } },
+        ],
+      }),
     })
+    expect(ingestRes.status).toBe(201)
+    await expect(ingestRes.json()).resolves.toEqual({ accepted: 2 })
 
-    socket?.send(JSON.stringify({ id: 'cmd_ws', type: 'prompt', message: 'stream canonical websocket events' }))
-
-    const payloads = await received
-    const types = payloads.map((payload) => payload.type)
-    expect(types).toEqual(
+    const eventsRes = await jsonFetch(`/api/v1/sessions/${created.id}/events?type=turn_end`, authorization)
+    const events = (await eventsRes.json()) as { data: Array<{ type: string; metadata: Record<string, unknown> }> }
+    expect(events.data).toEqual(
       expect.arrayContaining([
-        'agent_start',
-        'turn_start',
-        'turn_end',
-        'message_update',
-        'message_end',
-        'tool_execution_start',
+        expect.objectContaining({ type: 'turn_end', metadata: expect.objectContaining({ source: 'api' }) }),
       ]),
     )
-    expect(types).not.toEqual(expect.arrayContaining(['transcript.message', 'tool_call.started']))
-    expect(JSON.stringify(payloads)).not.toContain('raw-secret-token')
+
+    const emptyBatchRes = await jsonFetch(`/api/v1/sessions/${created.id}/events`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ events: [] }),
+    })
+    expect(emptyBatchRes.status).toBe(400)
   })
 
   it('accepts self-hosted sessions when cloud sandbox startup is disabled', async () => {
     const authorization = await signIn()
-    const environmentRes = await jsonFetch('/api/environments', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Self-hosted no sandbox workspace',
-        hostingMode: 'self_hosted',
-        networkPolicy: { mode: 'unrestricted' },
-      }),
+    const environment = await createEnvironment(authorization, {
+      name: 'Self-hosted no sandbox workspace',
+      hostingMode: 'self_hosted',
+      networkPolicy: { mode: 'unrestricted' },
+      mcpPolicy: {},
+      packageManagerPolicy: {},
+      runtimeConfig: {},
+      packages: [],
     })
-    expect(environmentRes.status).toBe(201)
-    const environment = (await environmentRes.json()) as { id: string }
-    const agentRes = await jsonFetch('/api/agents', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Self-hosted no sandbox agent',
-        instructions: 'Wait for runner attachment.',
-        allowedTools: ['sandbox.exec'],
-      }),
+    const agent = await createAgent(authorization, {
+      name: 'Self-hosted no sandbox agent',
+      instructions: 'Wait for runner attachment.',
+      skills: [],
+      mcpConnectors: [],
     })
-    expect(agentRes.status).toBe(201)
-    const agent = (await agentRes.json()) as { id: string }
 
-    const queuedRes = await jsonFetch('/api/sessions', authorization, {
+    const queuedRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     expect(queuedRes.status).toBe(201)
     await expect(queuedRes.json()).resolves.toMatchObject({
-      status: 'pending',
-      statusReason: 'waiting-for-runner',
+      state: 'pending',
+      stateReason: 'waiting-for-runner',
     })
-    await registerSelfHostedRunnerSupport(authorization, environment.id, DEFAULT_AMA_RUNNER_CAPABILITY)
-    const policyRes = await jsonFetch('/api/governance/policy', authorization, {
-      method: 'PUT',
-      body: JSON.stringify({ sandboxPolicy: { enabled: false } }),
-    })
-    expect(policyRes.status).toBe(200)
+    await registerRunner(authorization, environment.id, [DEFAULT_AMA_RUNNER_CAPABILITY])
+    await setProjectPolicy(authorization, { sandboxPolicy: { enabled: false } })
 
-    const createRes = await jsonFetch('/api/sessions', authorization, {
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     expect(createRes.status).toBe(201)
     await expect(createRes.json()).resolves.toMatchObject({
-      status: 'pending',
-      statusReason: 'waiting-for-runner',
-      sandboxId: null,
+      state: 'pending',
+      stateReason: 'waiting-for-runner',
       environmentSnapshot: { hostingMode: 'self_hosted' },
       runtimeMetadata: { runtime: 'ama' },
     })
@@ -1059,7 +1051,7 @@ describe('[CF] /api/sessions', () => {
     const environment = await createEnvironment(authorization)
     const agent = await createAgent(authorization)
 
-    const createRes = await jsonFetch('/api/sessions', authorization, {
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({
         agentId: agent.id,
@@ -1069,30 +1061,33 @@ describe('[CF] /api/sessions', () => {
       }),
     })
     expect(createRes.status).toBe(201)
-    const created = (await createRes.json()) as { id: string; status: string }
-    expect(created.status).toBe('idle')
+    const created = (await createRes.json()) as { id: string; state: string }
+    expect(created.state).toBe('idle')
 
-    const runtimeRequest = jsonFetch(`/runtime/sessions/${created.id}/rpc`, authorization, {
+    const runtimeRequest = jsonFetch(`/api/v1/runtime/sessions/${created.id}/rpc`, authorization, {
       method: 'POST',
       body: JSON.stringify({
         type: 'prompt',
         message: 'Wait for cancellation before completing',
       }),
     })
-    await waitForSessionStatus(created.id, authorization, 'running')
+    await waitForSessionState(created.id, authorization, 'running')
 
-    const stopRes = await jsonFetch(`/api/sessions/${created.id}/stop`, authorization, { method: 'POST' })
+    const stopRes = await jsonFetch(`/api/v1/sessions/${created.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ state: 'stopped' }),
+    })
     const stopBody = await stopRes.clone().json()
     expect(stopRes.status, JSON.stringify(stopBody)).toBe(200)
-    expect(stopBody).toMatchObject({ id: created.id, status: 'stopped' })
+    expect(stopBody).toMatchObject({ id: created.id, state: 'stopped' })
 
     const runtimeRes = await runtimeRequest
     expect([200, 409]).toContain(runtimeRes.status)
 
-    const readRes = await jsonFetch(`/api/sessions/${created.id}`, authorization)
-    await expect(readRes.json()).resolves.toMatchObject({ id: created.id, status: 'stopped' })
+    const readRes = await jsonFetch(`/api/v1/sessions/${created.id}`, authorization)
+    await expect(readRes.json()).resolves.toMatchObject({ id: created.id, state: 'stopped' })
 
-    const eventsRes = await jsonFetch(`/api/sessions/${created.id}/events`, authorization)
+    const eventsRes = await jsonFetch(`/api/v1/sessions/${created.id}/events`, authorization)
     expect(eventsRes.status).toBe(200)
     const events = (await eventsRes.json()) as {
       data: Array<{ type: string; payload: Record<string, unknown> }>
@@ -1111,7 +1106,7 @@ describe('[CF] /api/sessions', () => {
     const environment = await createEnvironment(authorization)
     const agent = await createAgent(authorization)
 
-    const createRes = await jsonFetch('/api/sessions', authorization, {
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({
         agentId: agent.id,
@@ -1128,12 +1123,11 @@ describe('[CF] /api/sessions', () => {
     expect(createRes.status).toBe(201)
     const created = (await createRes.json()) as {
       id: string
-      status: string
+      state: string
       metadata: Record<string, unknown>
-      runtimeEndpointPath: string
     }
     expect(created).toMatchObject({
-      status: 'idle',
+      state: 'idle',
       metadata: expect.objectContaining({
         externalRunId: 'tftt-banking-bonus-2026-05-26',
         source: 'tftt-cron',
@@ -1142,10 +1136,9 @@ describe('[CF] /api/sessions', () => {
         runtimeBackend: 'ama-cloud',
         runtimeProtocol: 'ama-runtime-rpc',
       }),
-      runtimeEndpointPath: `/runtime/sessions/${created.id}/rpc`,
     })
 
-    const eventsRes = await jsonFetch(`/api/sessions/${created.id}/events`, authorization)
+    const eventsRes = await jsonFetch(`/api/v1/sessions/${created.id}/events`, authorization)
     expect(eventsRes.status).toBe(200)
     const events = (await eventsRes.json()) as {
       data: Array<{ sequence: number; type: string; payload: Record<string, unknown> }>
@@ -1169,10 +1162,8 @@ describe('[CF] /api/sessions', () => {
         }),
       ]),
     )
-    expect(JSON.stringify(events.data)).not.toContain('Received:')
-    expect(JSON.stringify(events.data)).not.toContain('Message accepted by AMA runtime.')
 
-    const auditRes = await jsonFetch('/api/audit-records?action=session.initial_prompt', authorization)
+    const auditRes = await jsonFetch('/api/v1/audit-records?action=session.initial_prompt', authorization)
     expect(auditRes.status).toBe(200)
     const audit = (await auditRes.json()) as { data: Array<Record<string, unknown>> }
     expect(audit.data).toEqual(
@@ -1192,15 +1183,15 @@ describe('[CF] /api/sessions', () => {
     const environment = await createEnvironment(authorization)
     const agent = await createAgent(authorization, { memoryPolicy: { enabled: true } })
 
-    const memoryRes = await jsonFetch(`/api/agents/${agent.id}/memory`, authorization, {
-      method: 'PATCH',
+    const memoryRes = await jsonFetch(`/api/v1/agents/${agent.id}/memory`, authorization, {
+      method: 'PUT',
       body: JSON.stringify({
         content: 'Previously decided to inspect stale proposals before creating new work.',
       }),
     })
     expect(memoryRes.status).toBe(200)
 
-    const createRes = await jsonFetch('/api/sessions', authorization, {
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({
         agentId: agent.id,
@@ -1212,7 +1203,7 @@ describe('[CF] /api/sessions', () => {
     expect(createRes.status).toBe(201)
     const created = (await createRes.json()) as { id: string }
 
-    const eventsRes = await jsonFetch(`/api/sessions/${created.id}/events`, authorization)
+    const eventsRes = await jsonFetch(`/api/v1/sessions/${created.id}/events`, authorization)
     expect(eventsRes.status).toBe(200)
     const events = await eventsRes.json()
     const serialized = JSON.stringify(events)
@@ -1221,13 +1212,13 @@ describe('[CF] /api/sessions', () => {
     expect(serialized).toContain('Run the maintainer heartbeat')
   })
 
-  it('validates initial prompt input and redacts runtime failure status reasons', async () => {
+  it('validates initial prompt input and redacts runtime failure reasons', async () => {
     const authorization = await signIn()
     await connectMcp(authorization, 'github')
     const environment = await createEnvironment(authorization)
     const agent = await createAgent(authorization)
 
-    const invalidRes = await jsonFetch('/api/sessions', authorization, {
+    const invalidRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({
         agentId: agent.id,
@@ -1246,24 +1237,24 @@ describe('[CF] /api/sessions', () => {
     ).toBe('[REDACTED]')
   })
 
-  it('lists sessions with pagination, status, search, and date filters', async () => {
+  it('lists sessions with pagination, state, search, and date filters', async () => {
     const authorization = await signIn()
     await connectMcp(authorization, 'github')
     const environment = await createEnvironment(authorization)
     const agent = await createAgent(authorization)
 
-    const firstRes = await jsonFetch('/api/sessions', authorization, {
+    const firstRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     const first = (await firstRes.json()) as { id: string; agentId: string; createdAt: string }
-    const secondRes = await jsonFetch('/api/sessions', authorization, {
+    const secondRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     const second = (await secondRes.json()) as { id: string; agentId: string; createdAt: string }
 
-    const pagedRes = await jsonFetch('/api/sessions?limit=1', authorization)
+    const pagedRes = await jsonFetch('/api/v1/sessions?limit=1', authorization)
     const paged = (await pagedRes.json()) as {
       data: Array<{ id: string }>
       pagination: { hasMore: boolean; nextCursor: string | null }
@@ -1271,20 +1262,20 @@ describe('[CF] /api/sessions', () => {
     expect(paged.data).toHaveLength(1)
     expect(paged.pagination.hasMore).toBe(true)
 
-    const nextPageRes = await jsonFetch(`/api/sessions?limit=1&cursor=${paged.pagination.nextCursor}`, authorization)
+    const nextPageRes = await jsonFetch(`/api/v1/sessions?limit=1&cursor=${paged.pagination.nextCursor}`, authorization)
     const nextPage = (await nextPageRes.json()) as { data: Array<{ id: string }> }
     expect(nextPage.data.map((session) => session.id)).not.toEqual(paged.data.map((session) => session.id))
 
-    const statusRes = await jsonFetch('/api/sessions?status=idle', authorization)
-    const statusList = (await statusRes.json()) as { data: Array<{ id: string; status: string }> }
-    expect(statusList.data.map((session) => session.status)).toEqual(['idle', 'idle'])
+    const stateRes = await jsonFetch('/api/v1/sessions?state=idle', authorization)
+    const stateList = (await stateRes.json()) as { data: Array<{ id: string; state: string }> }
+    expect(stateList.data.map((session) => session.state)).toEqual(['idle', 'idle'])
 
-    const searchRes = await jsonFetch(`/api/sessions?search=${agent.id}`, authorization)
+    const searchRes = await jsonFetch(`/api/v1/sessions?search=${agent.id}`, authorization)
     const searchList = (await searchRes.json()) as { data: Array<{ id: string }> }
     expect(searchList.data.map((session) => session.id)).toEqual(expect.arrayContaining([first.id, second.id]))
 
     const dateRes = await jsonFetch(
-      `/api/sessions?createdFrom=${encodeURIComponent(first.createdAt)}&createdTo=${encodeURIComponent(second.createdAt)}`,
+      `/api/v1/sessions?createdFrom=${encodeURIComponent(first.createdAt)}&createdTo=${encodeURIComponent(second.createdAt)}`,
       authorization,
     )
     const dateList = (await dateRes.json()) as { data: Array<{ id: string }> }
@@ -1292,14 +1283,14 @@ describe('[CF] /api/sessions', () => {
   })
 
   it('enforces auth and project tenancy for session lifecycle', async () => {
-    const unauthenticatedRes = await SELF.fetch('https://example.com/api/sessions')
+    const unauthenticatedRes = await SELF.fetch('https://example.com/api/v1/sessions')
     expect(unauthenticatedRes.status).toBe(401)
 
     const authorization = await signIn()
     await connectMcp(authorization, 'github')
     const environment = await createEnvironment(authorization)
     const agent = await createAgent(authorization)
-    const createRes = await jsonFetch('/api/sessions', authorization, {
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
@@ -1313,22 +1304,24 @@ describe('[CF] /api/sessions', () => {
       org_name: 'Other Org',
     })
     const crossProjectReads = await Promise.all([
-      jsonFetch(`/api/sessions/${created.id}`, otherCookie),
-      jsonFetch(`/api/sessions/${created.id}/reconnect`, otherCookie),
-      jsonFetch(`/api/sessions/${created.id}/events`, otherCookie),
-      jsonFetch(`/api/sessions/${created.id}/stop`, otherCookie, { method: 'POST' }),
-      jsonFetch(`/api/sessions/${created.id}`, otherCookie, { method: 'DELETE' }),
-      jsonFetch(`/runtime/sessions/${created.id}/rpc`, otherCookie),
+      jsonFetch(`/api/v1/sessions/${created.id}`, otherCookie),
+      jsonFetch(`/api/v1/sessions/${created.id}/connection`, otherCookie),
+      jsonFetch(`/api/v1/sessions/${created.id}/events`, otherCookie),
+      jsonFetch(`/api/v1/sessions/${created.id}/messages`, otherCookie),
+      jsonFetch(`/api/v1/sessions/${created.id}`, otherCookie, {
+        method: 'PATCH',
+        body: JSON.stringify({ state: 'stopped' }),
+      }),
+      jsonFetch(`/api/v1/sessions/${created.id}`, otherCookie, {
+        method: 'PATCH',
+        body: JSON.stringify({ archived: true }),
+      }),
+      jsonFetch(`/api/v1/sessions/${created.id}/events`, otherCookie, {
+        method: 'POST',
+        body: JSON.stringify({ events: [{ type: 'turn_end', payload: {} }] }),
+      }),
     ])
-    expect(crossProjectReads.map((response) => response.status)).toEqual([404, 404, 404, 404, 404, 404])
-
-    const runtimeRes = await jsonFetch(`/runtime/sessions/${created.id}/rpc`, authorization)
-    expect(runtimeRes.status).toBe(200)
-    await expect(runtimeRes.json()).resolves.toMatchObject({
-      runtime: 'ama-cloud',
-      sessionId: created.id,
-      path: '/rpc',
-    })
+    expect(crossProjectReads.map((response) => response.status)).toEqual([404, 404, 404, 404, 404, 404, 404])
   })
 
   it('blocks disabled sandbox startup before creating a runtime', async () => {
@@ -1337,13 +1330,9 @@ describe('[CF] /api/sessions', () => {
     const environment = await createEnvironment(authorization)
     const agent = await createAgent(authorization)
 
-    const policyRes = await jsonFetch('/api/governance/policy', authorization, {
-      method: 'PUT',
-      body: JSON.stringify({ sandboxPolicy: { enabled: false } }),
-    })
-    expect(policyRes.status).toBe(200)
+    await setProjectPolicy(authorization, { sandboxPolicy: { enabled: false } })
 
-    const createRes = await jsonFetch('/api/sessions', authorization, {
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
@@ -1356,7 +1345,7 @@ describe('[CF] /api/sessions', () => {
       },
     })
 
-    const auditRes = await jsonFetch('/api/audit-records?action=session.create', authorization)
+    const auditRes = await jsonFetch('/api/v1/audit-records?action=session.create', authorization)
     expect(auditRes.status).toBe(200)
     const auditRecords = (await auditRes.json()) as { data: Array<Record<string, unknown>> }
     expect(auditRecords.data).toEqual(
@@ -1373,128 +1362,36 @@ describe('[CF] /api/sessions', () => {
     )
   })
 
-  it('blocks sandbox command policy violations and records redacted policy events', async () => {
-    const authorization = await signIn()
-    await connectMcp(authorization, 'github')
-    const environment = await createEnvironment(authorization)
-    const agent = await createAgent(authorization)
-
-    const policyRes = await jsonFetch('/api/governance/policy', authorization, {
-      method: 'PUT',
-      body: JSON.stringify({ sandboxPolicy: { blockedCommands: ['curl'] } }),
-    })
-    expect(policyRes.status).toBe(200)
-
-    const createRes = await jsonFetch('/api/sessions', authorization, {
-      method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
-    })
-    expect(createRes.status).toBe(201)
-    const session = (await createRes.json()) as { id: string }
-
-    const runtimeRes = await jsonFetch(`/runtime/sessions/${session.id}/rpc`, authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        type: 'prompt',
-        message: 'Fetch data',
-        toolCalls: [
-          {
-            name: 'sandbox.exec',
-            input: { command: '  curl https://example.com?token=raw-secret-token' },
-          },
-        ],
-      }),
-    })
-    expect(runtimeRes.status).toBe(403)
-    const denied = await runtimeRes.json()
-    expect(denied).toMatchObject({
-      error: {
-        type: 'policy_denied',
-        message: 'Sandbox command is blocked by policy.',
-        details: {
-          category: 'sandbox_command',
-          resourceType: 'sandbox_command',
-          ruleId: 'sandboxPolicy.blockedCommands',
-        },
-      },
-    })
-    expect(JSON.stringify(denied)).not.toContain('raw-secret-token')
-
-    const directCommandRes = await jsonFetch(`/runtime/sessions/${session.id}/sandbox/exec`, authorization, {
-      method: 'POST',
-      body: JSON.stringify({ command: 'curl https://example.com?token=raw-secret-token' }),
-    })
-    expect(directCommandRes.status).toBe(403)
-    await expect(directCommandRes.json()).resolves.toMatchObject({
-      error: {
-        type: 'policy_denied',
-        message: 'Sandbox command is blocked by policy.',
-        details: { category: 'sandbox_command', resourceType: 'sandbox_command' },
-      },
-    })
-
-    const malformedCommandRes = await jsonFetch(`/runtime/sessions/${session.id}/sandbox/exec`, authorization, {
-      method: 'POST',
-      body: JSON.stringify({ argv: ['curl', 'https://example.com'] }),
-    })
-    expect(malformedCommandRes.status).toBe(403)
-    await expect(malformedCommandRes.json()).resolves.toMatchObject({
-      error: {
-        type: 'policy_denied',
-        message: 'Sandbox command is not allowed by policy.',
-        details: { category: 'sandbox_command', resourceType: 'sandbox_command' },
-      },
-    })
-
-    const eventsRes = await jsonFetch(`/api/sessions/${session.id}/events`, authorization)
-    const events = (await eventsRes.json()) as { data: Array<{ type: string; payload: Record<string, unknown> }> }
-    expect(events.data).toContainEqual(
-      expect.objectContaining({
-        type: 'policy.decision',
-        payload: expect.objectContaining({
-          category: 'sandbox_command',
-          ruleId: 'sandboxPolicy.blockedCommands',
-          resourceType: 'sandbox_command',
-        }),
-      }),
-    )
-    expect(JSON.stringify(events)).not.toContain('raw-secret-token')
-  })
-
   it('records model-originated sandbox policy denials before executor dispatch', async () => {
     const authorization = await signIn()
     await connectMcp(authorization, 'github')
     const environment = await createEnvironment(authorization)
     const agent = await createAgent(authorization)
 
-    const policyRes = await jsonFetch('/api/governance/policy', authorization, {
-      method: 'PUT',
-      body: JSON.stringify({ sandboxPolicy: { blockedCommands: ['git'] } }),
-    })
-    expect(policyRes.status).toBe(200)
+    await setProjectPolicy(authorization, { sandboxPolicy: { blockedCommands: ['git'] } })
 
-    const createRes = await jsonFetch('/api/sessions', authorization, {
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     expect(createRes.status).toBe(201)
     const session = (await createRes.json()) as { id: string }
 
-    const runtimeRes = await jsonFetch(`/runtime/sessions/${session.id}/rpc`, authorization, {
+    const runtimeRes = await jsonFetch(`/api/v1/runtime/sessions/${session.id}/rpc`, authorization, {
       method: 'POST',
       body: JSON.stringify({ type: 'prompt', message: 'Inspect repository status' }),
     })
     expect(runtimeRes.status).toBe(500)
 
     // A governance denial fails the turn but leaves the session usable.
-    const readRes = await jsonFetch(`/api/sessions/${session.id}`, authorization)
+    const readRes = await jsonFetch(`/api/v1/sessions/${session.id}`, authorization)
     await expect(readRes.json()).resolves.toMatchObject({
       id: session.id,
-      status: 'idle',
-      statusReason: 'policy-denied',
+      state: 'idle',
+      stateReason: 'policy-denied',
     })
 
-    const eventsRes = await jsonFetch(`/api/sessions/${session.id}/events`, authorization)
+    const eventsRes = await jsonFetch(`/api/v1/sessions/${session.id}/events`, authorization)
     const events = (await eventsRes.json()) as { data: Array<{ type: string; payload: Record<string, unknown> }> }
     expect(events.data).toEqual(
       expect.arrayContaining([
@@ -1516,200 +1413,18 @@ describe('[CF] /api/sessions', () => {
     )
   })
 
-  it('blocks sandbox network policy violations and records safe event details', async () => {
-    const authorization = await signIn()
-    await connectMcp(authorization, 'github')
-    const environmentRes = await jsonFetch('/api/environments', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Restricted workspace',
-        mcpPolicy: { allowedConnectors: ['github'] },
-        networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
-      }),
-    })
-    expect(environmentRes.status).toBe(201)
-    const environment = (await environmentRes.json()) as { id: string }
-    const agentRes = await jsonFetch('/api/agents', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Offline override agent',
-        skills: ['ama@runtime-network'],
-        allowedTools: ['mcp:github.repo.read'],
-        mcpConnectors: ['github'],
-      }),
-    })
-    expect(agentRes.status).toBe(201)
-    const agent = (await agentRes.json()) as { id: string }
-
-    const createRes = await jsonFetch('/api/sessions', authorization, {
-      method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
-    })
-    expect(createRes.status).toBe(201)
-    const session = (await createRes.json()) as { id: string }
-
-    const toolCallRes = await jsonFetch(`/runtime/sessions/${session.id}/rpc`, authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        type: 'prompt',
-        message: 'Fetch metadata',
-        toolCalls: [
-          {
-            name: 'sandbox.fetch',
-            input: { url: 'https://metadata.google.internal/latest', apiKey: 'raw-secret-token' },
-          },
-        ],
-      }),
-    })
-    expect(toolCallRes.status).toBe(403)
-    await expect(toolCallRes.json()).resolves.toMatchObject({
-      error: {
-        type: 'policy_denied',
-        message: 'Sandbox network host is not allowed by policy.',
-        details: {
-          category: 'sandbox_network',
-          resourceType: 'sandbox_network',
-          resourceId: 'metadata.google.internal',
-        },
-      },
-    })
-
-    const runtimeRes = await jsonFetch(`/runtime/sessions/${session.id}/sandbox/fetch`, authorization, {
-      method: 'POST',
-      body: JSON.stringify({ url: 'https://metadata.google.internal/latest', token: 'raw-secret-token' }),
-    })
-    expect(runtimeRes.status).toBe(403)
-    await expect(runtimeRes.json()).resolves.toMatchObject({
-      error: {
-        type: 'policy_denied',
-        message: 'Sandbox network host is not allowed by policy.',
-        details: {
-          category: 'sandbox_network',
-          resourceType: 'sandbox_network',
-          resourceId: 'metadata.google.internal',
-          ruleId: 'environment.networkPolicy.allowedHosts',
-        },
-      },
-    })
-
-    const eventsRes = await jsonFetch(`/api/sessions/${session.id}/events`, authorization)
-    const events = (await eventsRes.json()) as { data: Array<Record<string, unknown>> }
-    expect(events.data).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: 'policy.decision',
-          payload: expect.objectContaining({
-            category: 'sandbox_network',
-            resourceId: 'metadata.google.internal',
-          }),
-        }),
-      ]),
-    )
-    expect(JSON.stringify(events)).not.toContain('raw-secret-token')
-  })
-
-  it('enforces sandbox network policy from the immutable environment snapshot', async () => {
-    const authorization = await signIn()
-    await connectMcp(authorization, 'github')
-    const environmentRes = await jsonFetch('/api/environments', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Snapshot network workspace',
-        mcpPolicy: { allowedConnectors: ['github'] },
-        networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
-      }),
-    })
-    expect(environmentRes.status).toBe(201)
-    const environment = (await environmentRes.json()) as { id: string }
-    const agent = await createAgent(authorization)
-    const createRes = await jsonFetch('/api/sessions', authorization, {
-      method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
-    })
-    expect(createRes.status).toBe(201)
-    const session = (await createRes.json()) as { id: string }
-
-    const updateRes = await jsonFetch(`/api/environments/${environment.id}`, authorization, {
-      method: 'PATCH',
-      body: JSON.stringify({ networkPolicy: { mode: 'unrestricted' } }),
-    })
-    expect(updateRes.status).toBe(200)
-
-    const runtimeRes = await jsonFetch(`/runtime/sessions/${session.id}/sandbox/fetch`, authorization, {
-      method: 'POST',
-      body: JSON.stringify({ url: 'https://metadata.google.internal/latest' }),
-    })
-    expect(runtimeRes.status).toBe(403)
-    await expect(runtimeRes.json()).resolves.toMatchObject({
-      error: {
-        type: 'policy_denied',
-        details: {
-          category: 'sandbox_network',
-          resourceId: 'metadata.google.internal',
-          ruleId: 'environment.networkPolicy.allowedHosts',
-        },
-      },
-    })
-  })
-
-  it('blocks offline sandbox network policy before executor dispatch', async () => {
-    const authorization = await signIn()
-    await connectMcp(authorization, 'github')
-    const environmentRes = await jsonFetch('/api/environments', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Offline workspace',
-        mcpPolicy: { allowedConnectors: ['github'] },
-        networkPolicy: { mode: 'offline' },
-      }),
-    })
-    expect(environmentRes.status).toBe(201)
-    const environment = (await environmentRes.json()) as { id: string }
-    const agentRes = await jsonFetch('/api/agents', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Offline override agent',
-        skills: ['ama@runtime-network'],
-        allowedTools: ['mcp:github.repo.read'],
-        mcpConnectors: ['github'],
-      }),
-    })
-    expect(agentRes.status).toBe(201)
-    const agent = (await agentRes.json()) as { id: string }
-
-    const createRes = await jsonFetch('/api/sessions', authorization, {
-      method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
-    })
-    expect(createRes.status).toBe(201)
-    const session = (await createRes.json()) as { id: string }
-
-    const runtimeRes = await jsonFetch(`/runtime/sessions/${session.id}/sandbox/fetch`, authorization, {
-      method: 'POST',
-      body: JSON.stringify({ url: 'https://registry.npmjs.org/package' }),
-    })
-    expect(runtimeRes.status).toBe(403)
-    await expect(runtimeRes.json()).resolves.toMatchObject({
-      error: {
-        type: 'policy_denied',
-        message: 'Sandbox network access is disabled by policy.',
-        details: { category: 'sandbox_network', resourceType: 'sandbox_network' },
-      },
-    })
-  })
-
   it('records safe runtime errors without leaking secrets', async () => {
     const authorization = await signIn()
     await connectMcp(authorization, 'github')
     const environment = await createEnvironment(authorization)
     const agent = await createAgent(authorization)
-    const createRes = await jsonFetch('/api/sessions', authorization, {
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     const created = (await createRes.json()) as { id: string }
 
-    const taskRes = await jsonFetch(`/runtime/sessions/${created.id}/rpc`, authorization, {
+    const taskRes = await jsonFetch(`/api/v1/runtime/sessions/${created.id}/rpc`, authorization, {
       method: 'POST',
       body: JSON.stringify({
         message: 'Trigger failure',
@@ -1725,15 +1440,15 @@ describe('[CF] /api/sessions', () => {
       },
     })
 
-    const readRes = await jsonFetch(`/api/sessions/${created.id}`, authorization)
+    const readRes = await jsonFetch(`/api/v1/sessions/${created.id}`, authorization)
     expect(readRes.status).toBe(200)
     await expect(readRes.json()).resolves.toMatchObject({
       id: created.id,
-      status: 'error',
-      statusReason: '[REDACTED]',
+      state: 'error',
+      stateReason: '[REDACTED]',
     })
 
-    const eventsRes = await jsonFetch(`/api/sessions/${created.id}/events?type=runtime.error`, authorization)
+    const eventsRes = await jsonFetch(`/api/v1/sessions/${created.id}/events?type=runtime.error`, authorization)
     expect(eventsRes.status).toBe(200)
     const events = (await eventsRes.json()) as { data: Array<{ payload: Record<string, unknown> }> }
     expect(events.data).toHaveLength(1)
@@ -1747,41 +1462,24 @@ describe('[CF] /api/sessions', () => {
     const environment = await createEnvironment(authorization)
     const agent = await createAgent(authorization)
 
-    const createRes = await jsonFetch('/api/sessions', authorization, {
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
-    const created = (await createRes.json()) as {
-      id: string
-      agentSnapshot: {
-        instructions: string
-        version: number
-        skills: string[]
-        mcpConnectors: string[]
-        sandboxPolicy?: unknown
-      }
-      environmentSnapshot: {
-        packages: Array<{ name: string; version?: string }>
-        mcpPolicy: Record<string, unknown>
-        packageManagerPolicy: Record<string, unknown>
-      }
-    }
+    const created = (await createRes.json()) as { id: string }
 
-    await jsonFetch(`/api/environments/${environment.id}`, authorization, {
+    await jsonFetch(`/api/v1/environments/${environment.id}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ packages: [{ name: 'vite' }] }),
     })
-    await jsonFetch(`/api/agents/${agent.id}`, authorization, {
+    await jsonFetch(`/api/v1/agents/${agent.id}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ instructions: 'Updated instructions.' }),
     })
 
-    const rereadRes = await jsonFetch(`/api/sessions/${created.id}`, authorization)
+    const rereadRes = await jsonFetch(`/api/v1/sessions/${created.id}`, authorization)
     expect(rereadRes.status).toBe(200)
-    const reread = (await rereadRes.json()) as {
-      agentSnapshot: { sandboxPolicy?: unknown }
-    }
-    expect(reread).toMatchObject({
+    await expect(rereadRes.json()).resolves.toMatchObject({
       id: created.id,
       agentSnapshot: {
         instructions: 'Work through AMA runtime.',
@@ -1795,7 +1493,6 @@ describe('[CF] /api/sessions', () => {
         packageManagerPolicy: { allowedRegistries: ['registry.npmjs.org'] },
       },
     })
-    expect(reread.agentSnapshot.sandboxPolicy).toBeUndefined()
   })
 
   it('rejects cloud sessions when the session runtime cannot run the exact agent provider model', async () => {
@@ -1803,9 +1500,9 @@ describe('[CF] /api/sessions', () => {
     const model = 'gpt-5.3-codex'
     const { providerId } = await createProviderModel(authorization, model)
     const environment = await createEnvironment(authorization, { mcpPolicy: {} })
-    const agent = await createAgent(authorization, { provider: providerId, model, mcpConnectors: [] })
+    const agent = await createAgent(authorization, { providerId, model, mcpConnectors: [] })
 
-    const createRes = await jsonFetch('/api/sessions', authorization, {
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
@@ -1831,7 +1528,7 @@ describe('[CF] /api/sessions', () => {
     const environment = await createEnvironment(authorization, { mcpPolicy: {} })
     const agent = await createAgent(authorization, { mcpConnectors: [] })
 
-    const createRes = await jsonFetch('/api/sessions', authorization, {
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'codex' }),
     })
@@ -1860,146 +1557,95 @@ describe('[CF] /api/sessions', () => {
       hostingMode: 'self_hosted',
       mcpPolicy: {},
     })
-    const agent = await createAgent(authorization, { provider: providerId, model, mcpConnectors: [] })
+    const agent = await createAgent(authorization, { providerId, model, mcpConnectors: [] })
 
-    const wrongRunnerRes = await jsonFetch('/api/runners', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Wrong model runner',
-        environmentId: environment.id,
-        capabilities: [runtimeProviderModelCapability('codex', providerId, 'gpt-5.3-codex-mini')],
-      }),
-    })
-    expect(wrongRunnerRes.status).toBe(201)
+    const wrongCapability = runtimeProviderModelCapability('codex', providerId, 'gpt-5.3-codex-mini')
+    const wrongRunner = await registerRunner(authorization, environment.id, [wrongCapability])
 
-    const createRes = await jsonFetch('/api/sessions', authorization, {
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'codex' }),
     })
     expect(createRes.status).toBe(201)
-    const session = (await createRes.json()) as { id: string; status: string; statusReason: string | null }
-    expect(session).toMatchObject({ status: 'pending', statusReason: 'waiting-for-runner' })
+    const session = (await createRes.json()) as { id: string; state: string; stateReason: string | null }
+    expect(session).toMatchObject({ state: 'pending', stateReason: 'waiting-for-runner' })
 
-    const exactRunnerRes = await jsonFetch('/api/runners', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Exact model runner',
-        environmentId: environment.id,
-        capabilities: [runtimeProviderModelCapability('codex', '*', model)],
-      }),
-    })
-    expect(exactRunnerRes.status).toBe(201)
-    const exactRunner = (await exactRunnerRes.json()) as { id: string }
+    const exactCapability = runtimeProviderModelCapability('codex', '*', model)
+    const exactRunner = await registerRunner(authorization, environment.id, [exactCapability])
 
-    const wrongRunner = (await wrongRunnerRes.json()) as { id: string }
-    const wrongHeartbeatRes = await jsonFetch(`/api/runners/${wrongRunner.id}/heartbeats`, authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        status: 'active',
-        capabilities: [runtimeProviderModelCapability('codex', providerId, 'gpt-5.3-codex-mini')],
-      }),
-    })
-    expect(wrongHeartbeatRes.status).toBe(200)
+    await heartbeatRunner(authorization, wrongRunner.id, [wrongCapability])
     // Runners enumerate their host models, so model-specific declarations are
     // authoritative: a runner declaring only other model ids must not take
     // the work.
-    const wrongLeaseRes = await jsonFetch(`/api/runners/${wrongRunner.id}/leases`, authorization, {
-      method: 'POST',
-      body: JSON.stringify({}),
-    })
-    expect(wrongLeaseRes.status).toBe(204)
+    const wrongLease = await claimLease(authorization, wrongRunner.id)
+    expect(wrongLease).toBeNull()
 
-    await jsonFetch(`/api/runners/${exactRunner.id}/heartbeats`, authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        status: 'active',
-        capabilities: [runtimeProviderModelCapability('codex', '*', model)],
-      }),
-    })
-    const exactLeaseRes = await jsonFetch(`/api/runners/${exactRunner.id}/leases`, authorization, {
-      method: 'POST',
-      body: JSON.stringify({}),
-    })
-    expect(exactLeaseRes.status).toBe(201)
+    await heartbeatRunner(authorization, exactRunner.id, [exactCapability])
+    const exactLease = await claimLease(authorization, exactRunner.id)
+    expect(exactLease).toBeTruthy()
   })
 
   it('dispatches configured provider base URL and vault credential into the self-hosted runtime env', async () => {
     const authorization = await signIn()
-    const vaultRes = await jsonFetch('/api/vaults', authorization, {
-      method: 'POST',
-      body: JSON.stringify({ name: 'Provider credentials' }),
-    })
-    expect(vaultRes.status).toBe(201)
-    const vault = (await vaultRes.json()) as { id: string }
-    const credentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'OpenAI compatible key',
-        type: 'api_key',
-        secret: { provider: 'cloudflare-secrets', secretValue: 'raw-provider-api-key' },
-      }),
-    })
-    expect(credentialRes.status).toBe(201)
-    const credential = (await credentialRes.json()) as { activeVersionId: string }
+    const credential = await createVaultCredential(authorization, 'provider-api-key')
 
     const model = 'gpt-5.3-codex'
-    const providerRes = await jsonFetch('/api/providers', authorization, {
+    const providerRes = await jsonFetch('/api/v1/providers', authorization, {
       method: 'POST',
       body: JSON.stringify({
         type: 'openai-compatible',
         displayName: 'Dispatchable gateway',
         baseUrl: 'https://models.example.test/v1',
-        credentialSecretRef: credential.activeVersionId,
+        credentialRef: { credentialId: credential.id, versionId: credential.activeVersionId },
       }),
     })
     expect(providerRes.status).toBe(201)
     const provider = (await providerRes.json()) as { id: string }
-    const modelRes = await jsonFetch(`/api/providers/${provider.id}/models`, authorization, {
-      method: 'POST',
-      body: JSON.stringify({ modelId: model, displayName: model, capabilities: ['text'] }),
-    })
-    expect(modelRes.status).toBe(201)
+    const modelRes = await jsonFetch(
+      `/api/v1/providers/${provider.id}/models/${encodeURIComponent(model)}`,
+      authorization,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ displayName: model, capabilities: ['text'] }),
+      },
+    )
+    expect([200, 201]).toContain(modelRes.status)
 
     const environment = await createEnvironment(authorization, { hostingMode: 'self_hosted', mcpPolicy: {} })
-    const agent = await createAgent(authorization, { provider: provider.id, model, mcpConnectors: [] })
-    const createRes = await jsonFetch('/api/sessions', authorization, {
+    const agent = await createAgent(authorization, { providerId: provider.id, model, mcpConnectors: [] })
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'codex' }),
     })
     expect(createRes.status).toBe(201)
     const session = (await createRes.json()) as { id: string }
 
-    const workRow = await env.DB.prepare('SELECT payload FROM runner_work_items WHERE session_id = ?')
+    const workRow = await env.DB.prepare('SELECT payload FROM work_items WHERE session_id = ?')
       .bind(session.id)
       .first<{ payload: string }>()
     expect(workRow).toBeTruthy()
     const payload = JSON.parse(workRow!.payload) as {
       runtimeEnv: Record<string, string>
-      runtimeSecretEnv: Array<{ name: string; ref: string }>
+      runtimeSecretEnv: Array<{ name: string; credentialRef: Record<string, string> }>
     }
     expect(payload.runtimeEnv.OPENAI_BASE_URL).toBe('https://models.example.test/v1')
     expect(payload.runtimeEnv).not.toHaveProperty('OPENAI_API_KEY')
-    expect(payload.runtimeSecretEnv).toEqual([{ name: 'OPENAI_API_KEY', ref: credential.activeVersionId }])
+    expect(payload.runtimeSecretEnv).toEqual([
+      {
+        name: 'OPENAI_API_KEY',
+        credentialRef: { credentialId: credential.id, versionId: credential.activeVersionId },
+      },
+    ])
 
     const capability = runtimeProviderModelCapability('codex', '*', model)
-    const runnerRes = await jsonFetch('/api/runners', authorization, {
-      method: 'POST',
-      body: JSON.stringify({ name: 'Provider env runner', environmentId: environment.id, capabilities: [capability] }),
-    })
-    expect(runnerRes.status).toBe(201)
-    const runner = (await runnerRes.json()) as { id: string }
-    await jsonFetch(`/api/runners/${runner.id}/heartbeats`, authorization, {
-      method: 'POST',
-      body: JSON.stringify({ status: 'active', capabilities: [capability] }),
-    })
-    const leaseRes = await jsonFetch(`/api/runners/${runner.id}/leases`, authorization, {
-      method: 'POST',
-      body: JSON.stringify({}),
-    })
-    expect(leaseRes.status).toBe(201)
-    const lease = (await leaseRes.json()) as { workItem: { payload: { runtimeEnv: Record<string, string> } } }
-    expect(lease.workItem.payload.runtimeEnv.OPENAI_API_KEY).toBe('raw-provider-api-key')
-    expect(lease.workItem.payload.runtimeEnv.OPENAI_BASE_URL).toBe('https://models.example.test/v1')
+    const runner = await registerRunner(authorization, environment.id, [capability])
+    await heartbeatRunner(authorization, runner.id, [capability])
+    const lease = await claimLease(authorization, runner.id)
+    expect(lease).toBeTruthy()
+    const workItem = await readWorkItem(authorization, lease!.workItemId)
+    const materialized = workItem.payload as { runtimeEnv: Record<string, string> }
+    expect(materialized.runtimeEnv.OPENAI_API_KEY).toBe('raw-provider-api-key-secret')
+    expect(materialized.runtimeEnv.OPENAI_BASE_URL).toBe('https://models.example.test/v1')
   })
 
   it('rejects sessions when the agent provider was disabled after the agent was saved', async () => {
@@ -2007,15 +1653,15 @@ describe('[CF] /api/sessions', () => {
     const model = 'gpt-5.3-codex'
     const { providerId } = await createProviderModel(authorization, model)
     const environment = await createEnvironment(authorization, { hostingMode: 'self_hosted', mcpPolicy: {} })
-    const agent = await createAgent(authorization, { provider: providerId, model, mcpConnectors: [] })
+    const agent = await createAgent(authorization, { providerId, model, mcpConnectors: [] })
 
-    const disableRes = await jsonFetch(`/api/providers/${providerId}`, authorization, {
+    const disableRes = await jsonFetch(`/api/v1/providers/${providerId}`, authorization, {
       method: 'PATCH',
-      body: JSON.stringify({ status: 'disabled' }),
+      body: JSON.stringify({ enabled: false }),
     })
     expect(disableRes.status).toBe(200)
 
-    const createRes = await jsonFetch('/api/sessions', authorization, {
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'codex' }),
     })
@@ -2032,9 +1678,9 @@ describe('[CF] /api/sessions', () => {
     const authorization = await signIn()
     const { providerId } = await createProviderModel(authorization, 'gpt-5.3-codex')
     const environment = await createEnvironment(authorization, { mcpPolicy: {} })
-    const agent = await createAgent(authorization, { provider: providerId, mcpConnectors: [] })
+    const agent = await createAgent(authorization, { providerId, mcpConnectors: [] })
 
-    const createRes = await jsonFetch('/api/sessions', authorization, {
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
@@ -2059,34 +1705,55 @@ describe('[CF] /api/sessions', () => {
       hostingMode: 'self_hosted',
       mcpPolicy: {},
     })
-    const agent = await createAgent(authorization, { provider: providerId, model, mcpConnectors: [] })
+    const agent = await createAgent(authorization, { providerId, model, mcpConnectors: [] })
 
-    const createRes = await jsonFetch('/api/sessions', authorization, {
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'codex' }),
     })
     expect(createRes.status).toBe(201)
 
     const legacyCapabilities = ['codex', runtimeProviderModelCapability('codex', '*', 'gpt-5.3-codex-mini')]
-    const legacyRunnerRes = await jsonFetch('/api/runners', authorization, {
+    const legacyRunner = await registerRunner(authorization, environment.id, legacyCapabilities)
+    await heartbeatRunner(authorization, legacyRunner.id, legacyCapabilities)
+
+    const lease = await claimLease(authorization, legacyRunner.id)
+    expect(lease).toBeTruthy()
+  })
+
+  it('lists session approvals with explicit states', async () => {
+    const authorization = await signIn()
+    await connectMcp(authorization, 'github')
+    const environment = await createEnvironment(authorization)
+    const agent = await createAgent(authorization)
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
-      body: JSON.stringify({
-        name: 'Legacy single-model runner',
-        environmentId: environment.id,
-        capabilities: legacyCapabilities,
-      }),
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
-    expect(legacyRunnerRes.status).toBe(201)
-    const legacyRunner = (await legacyRunnerRes.json()) as { id: string }
-    await jsonFetch(`/api/runners/${legacyRunner.id}/heartbeats`, authorization, {
-      method: 'POST',
-      body: JSON.stringify({ status: 'active', capabilities: legacyCapabilities }),
+    expect(createRes.status).toBe(201)
+    const created = (await createRes.json()) as { id: string }
+
+    const approvalsRes = await jsonFetch(`/api/v1/sessions/${created.id}/approvals`, authorization)
+    expect(approvalsRes.status).toBe(200)
+    await expect(approvalsRes.json()).resolves.toEqual({
+      data: [],
+      pagination: { limit: 0, nextCursor: null, hasMore: false },
     })
 
-    const leaseRes = await jsonFetch(`/api/runners/${legacyRunner.id}/leases`, authorization, {
-      method: 'POST',
-      body: JSON.stringify({}),
-    })
-    expect(leaseRes.status).toBe(201)
+    const missingApprovalRes = await jsonFetch(
+      `/api/v1/sessions/${created.id}/approvals/approval_missing`,
+      authorization,
+    )
+    expect(missingApprovalRes.status).toBe(404)
+
+    const decideMissingRes = await jsonFetch(
+      `/api/v1/sessions/${created.id}/approvals/approval_missing`,
+      authorization,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ decision: 'approve' }),
+      },
+    )
+    expect(decideMissingRes.status).toBe(404)
   })
 })

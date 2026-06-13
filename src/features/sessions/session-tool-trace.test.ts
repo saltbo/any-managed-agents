@@ -8,7 +8,6 @@ function buildEvent(overrides: Partial<SessionEvent>): SessionEvent {
   sequence += 1
   return {
     id: `event_${sequence}`,
-    organizationId: 'org_1',
     projectId: 'project_1',
     sessionId: 'session_1',
     sequence,

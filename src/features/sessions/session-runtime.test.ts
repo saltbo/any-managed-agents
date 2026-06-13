@@ -11,7 +11,6 @@ import { initialSessionRuntimeState, sessionRuntimeReducer } from './session-run
 function event(sequence: number, type: AmaSessionEventType, payload: Record<string, unknown>): SessionEvent {
   return {
     id: `event_${sequence}`,
-    organizationId: 'org_1',
     projectId: 'project_1',
     sessionId: 'session_1',
     sequence,

@@ -94,3 +94,11 @@ export function matchesSearch(fields: Array<string | null | undefined>, query: s
   const normalized = query.trim().toLowerCase()
   return !normalized || fields.some((field) => field?.toLowerCase().includes(normalized))
 }
+
+export function isArchived(resource: { archivedAt: string | null }) {
+  return resource.archivedAt !== null
+}
+
+export function archivedLabel(resource: { archivedAt: string | null }) {
+  return resource.archivedAt === null ? 'active' : 'archived'
+}

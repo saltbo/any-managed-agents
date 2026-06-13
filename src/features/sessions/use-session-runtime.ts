@@ -1,5 +1,6 @@
+import { useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
-import type { Session, SessionEvent } from '@/lib/api'
+import { api, type Session, type SessionEvent } from '@/lib/api'
 import {
   initialSessionRuntimeState,
   type RuntimeRpcCommand,
@@ -23,15 +24,18 @@ export function useSessionRuntimeSession({
   const refreshTimerRef = useRef<number | null>(null)
   const reconnectTimerRef = useRef<number | null>(null)
   const sessionIdRef = useRef<string | null>(null)
+  // The runtime connection details (transport + path) come from the dedicated
+  // connection resource, fetched only while the runtime is actually active.
+  const live = session !== null && (session.state === 'idle' || session.state === 'running')
+  const connectionQuery = useQuery({
+    queryKey: ['sessions', 'detail', session?.id ?? '', 'connection'],
+    queryFn: () => api.readSessionConnection(session?.id as string),
+    enabled: live,
+  })
+  const runtimePath = connectionQuery.data?.path ?? null
   // Persisted events stay inspectable for any session; the live socket only
   // connects while the runtime is actually active.
-  const endpoint = useMemo(
-    () =>
-      session && (session.status === 'idle' || session.status === 'running') && session.runtimeEndpointPath
-        ? runtimeWebSocketUrl(session.runtimeEndpointPath)
-        : null,
-    [session],
-  )
+  const endpoint = useMemo(() => (live && runtimePath ? runtimeWebSocketUrl(runtimePath) : null), [live, runtimePath])
 
   useEffect(() => {
     if (sessionIdRef.current !== (session?.id ?? null)) {

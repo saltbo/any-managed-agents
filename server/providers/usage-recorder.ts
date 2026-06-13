@@ -1,7 +1,7 @@
 import { and, desc, eq } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
 import type { CanonicalAmaSessionEvent } from '../../shared/session-events'
-import { providerConfigs, providerModels, sessions, usageRecords } from '../db/schema'
+import { providerModels, providers, sessions, usageRecords } from '../db/schema'
 import { computeModelCostMicros, isProviderErrorCategory, providerFamily } from './adapters'
 
 type Db = ReturnType<typeof drizzle>
@@ -45,19 +45,19 @@ async function sessionAttribution(db: Db, scope: UsageRecordingScope) {
 // (e.g. runtime `cloudflare-workers-ai` -> configured `workers-ai` rows).
 async function resolveProviderConfig(db: Db, projectId: string, provider: string) {
   const byId = await db
-    .select({ id: providerConfigs.id, type: providerConfigs.type })
-    .from(providerConfigs)
-    .where(and(eq(providerConfigs.projectId, projectId), eq(providerConfigs.id, provider)))
+    .select({ id: providers.id, type: providers.type })
+    .from(providers)
+    .where(and(eq(providers.projectId, projectId), eq(providers.id, provider)))
     .get()
   if (byId) {
     return byId
   }
   return (
     (await db
-      .select({ id: providerConfigs.id, type: providerConfigs.type })
-      .from(providerConfigs)
-      .where(and(eq(providerConfigs.projectId, projectId), eq(providerConfigs.type, providerFamily(provider))))
-      .orderBy(desc(providerConfigs.updatedAt))
+      .select({ id: providers.id, type: providers.type })
+      .from(providers)
+      .where(and(eq(providers.projectId, projectId), eq(providers.type, providerFamily(provider))))
+      .orderBy(desc(providers.updatedAt))
       .get()) ?? null
   )
 }
@@ -185,7 +185,7 @@ async function recordProviderError(db: Db, scope: UsageRecordingScope, payload: 
   }
   const retryAfterSeconds = numberField(payload, 'retryAfterSeconds')
   await db
-    .update(providerConfigs)
+    .update(providers)
     .set({
       lastError: JSON.stringify({
         type: 'provider_error',
@@ -197,7 +197,7 @@ async function recordProviderError(db: Db, scope: UsageRecordingScope, payload: 
       }),
       updatedAt: new Date().toISOString(),
     })
-    .where(and(eq(providerConfigs.id, config.id), eq(providerConfigs.projectId, scope.projectId)))
+    .where(and(eq(providers.id, config.id), eq(providers.projectId, scope.projectId)))
 }
 
 // Canonical-event seam for provider-domain accounting: model usage rows from

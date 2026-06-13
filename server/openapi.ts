@@ -1,4 +1,5 @@
 import { OpenAPIHono, z } from '@hono/zod-openapi'
+import type { Context } from 'hono'
 import type { Env } from './env'
 
 export const ApiSecuritySchemes = {
@@ -6,7 +7,7 @@ export const ApiSecuritySchemes = {
     type: 'http',
     scheme: 'bearer',
     bearerFormat: 'OIDC access token',
-    description: 'OIDC access token.',
+    description: 'OIDC access token issued by the configured FlareAuth issuer.',
   },
 } as const
 
@@ -33,10 +34,6 @@ export const PaginationSchema = z
       .nullable()
       .openapi({ example: 'eyJjcmVhdGVkQXQiOiIyMDI2LTA1LTIyVDAwOjAwOjAwLjAwMFoiLCJpZCI6ImFnZW50X2FiYzEyMyJ9' }),
     hasMore: z.boolean().openapi({ example: false }),
-    firstId: z.string().nullable().openapi({ example: 'agent_abc123' }),
-    lastId: z.string().nullable().openapi({ example: 'agent_def456' }),
-    firstSequence: z.number().int().nullable().optional().openapi({ example: 1 }),
-    lastSequence: z.number().int().nullable().optional().openapi({ example: 50 }),
   })
   .openapi('ListPagination')
 
@@ -48,6 +45,22 @@ export function listResponseSchema<T extends z.ZodType>(name: string, itemSchema
     })
     .openapi(name)
 }
+
+// Vault credential reference: the only way secrets are referenced anywhere
+// in the API (docs/api-v1-design.md §1.4).
+export const CredentialRefSchema = z
+  .object({
+    credentialId: z.string().min(1).openapi({ example: 'cred_abc123' }),
+    versionId: z.string().min(1).optional().openapi({ example: 'credver_abc123' }),
+  })
+  .openapi('CredentialRef')
+
+export const SecretEnvEntrySchema = z
+  .object({
+    name: z.string().min(1).max(120).openapi({ example: 'GITHUB_TOKEN' }),
+    credentialRef: CredentialRefSchema,
+  })
+  .openapi('SecretEnvEntry')
 
 const limitQuery = z.coerce
   .number()
@@ -98,20 +111,20 @@ const createdToQuery = z
     example: '2026-05-31T23:59:59.999Z',
   })
 
-export function listQuerySchema<const T extends readonly [string, ...string[]]>(statuses: T) {
-  const statusValues = statuses as unknown as [T[number], ...T[number][]]
+const archivedQuery = z
+  .enum(['true', 'false'])
+  .optional()
+  .openapi({
+    param: { name: 'archived', in: 'query' },
+    description: 'Filter by lifecycle. Defaults to false (live resources only).',
+    example: 'false',
+  })
+
+// Standard list query for archivable resources. Domains with an operational
+// state machine add their own `state` filter on top.
+export function listQuerySchema() {
   return z.object({
-    includeArchived: z
-      .enum(['true', 'false'])
-      .optional()
-      .openapi({ param: { name: 'includeArchived', in: 'query' }, example: 'false' }),
-    status: z
-      .enum(statusValues)
-      .optional()
-      .openapi({
-        param: { name: 'status', in: 'query' },
-        example: statuses[0],
-      }),
+    archived: archivedQuery,
     search: searchQuery,
     createdFrom: createdFromQuery,
     createdTo: createdToQuery,
@@ -179,7 +192,6 @@ export function parseListCursor(cursor: string): ListCursor {
 
 export function paginateRows<T extends { id: string; createdAt: string }>(rows: T[], limit: number) {
   const data = rows.slice(0, limit)
-  const first = data.at(0)
   const last = data.at(-1)
   return {
     data,
@@ -187,15 +199,12 @@ export function paginateRows<T extends { id: string; createdAt: string }>(rows: 
       limit,
       nextCursor: rows.length > limit && last ? formatListCursor(last) : null,
       hasMore: rows.length > limit,
-      firstId: first?.id ?? null,
-      lastId: last?.id ?? null,
     },
   }
 }
 
 export function paginateSequenceRows<T extends { sequence: number }>(rows: T[], limit: number) {
   const data = rows.slice(0, limit)
-  const first = data.at(0)
   const last = data.at(-1)
   return {
     data,
@@ -203,12 +212,42 @@ export function paginateSequenceRows<T extends { sequence: number }>(rows: T[], 
       limit,
       nextCursor: rows.length > limit && last ? String(last.sequence) : null,
       hasMore: rows.length > limit,
-      firstId: first ? String(first.sequence) : null,
-      lastId: last ? String(last.sequence) : null,
-      firstSequence: first?.sequence ?? null,
-      lastSequence: last?.sequence ?? null,
     },
   }
+}
+
+// Content negotiation for collection exports and streams
+// (docs/api-v1-design.md §1.2 rule 6). Returns the first entry of `offered`
+// that the Accept header allows; JSON wins when the header is absent or
+// matches everything.
+export function negotiateMediaType<const T extends readonly string[]>(
+  c: Context,
+  offered: T,
+): T[number] | 'application/json' {
+  const accept = c.req.header('Accept')
+  if (!accept) {
+    return 'application/json'
+  }
+  const accepted = accept.split(',').map((entry) => (entry.split(';')[0] ?? '').trim().toLowerCase())
+  for (const candidate of accepted) {
+    if (candidate === 'application/json' || candidate === '*/*' || candidate === 'application/*') {
+      return 'application/json'
+    }
+    const match = offered.find((type) => type === candidate || candidate === `${type.split('/')[0] ?? ''}/*`)
+    if (match) {
+      return match
+    }
+  }
+  return 'application/json'
+}
+
+export function csvResponse(c: Context, filename: string, header: string[], rows: string[][]) {
+  const escapeCell = (value: string) => (/[",\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value)
+  const body = [header, ...rows].map((row) => row.map(escapeCell).join(',')).join('\n')
+  return c.body(`${body}\n`, 200, {
+    'Content-Type': 'text/csv; charset=utf-8',
+    'Content-Disposition': `attachment; filename="${filename}"`,
+  })
 }
 
 export function createApiRouter() {

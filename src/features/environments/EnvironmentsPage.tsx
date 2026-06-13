@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { PageHeader } from '@/console/components'
+import { archivedLabel } from '@/console/format'
 import { useClientPagination } from '@/console/use-client-pagination'
 import { matchesSearch, useUrlFilter } from '@/console/use-list-filters'
 import { api } from '@/lib/api'
@@ -19,10 +20,10 @@ export function EnvironmentsPage() {
   const [search, setSearch] = useUrlFilter('search')
   const [hosting, setHosting] = useUrlFilter('hosting', 'all')
   const [status, setStatus] = useUrlFilter('status', 'all')
-  const includeArchived = status === 'archived'
+  const archived = status === 'archived'
   const environmentsQuery = useQuery({
-    queryKey: queryKeys.environments.list(includeArchived),
-    queryFn: () => api.listEnvironments({ includeArchived }),
+    queryKey: queryKeys.environments.list(archived),
+    queryFn: () => api.listEnvironments({ archived }),
   })
   const allEnvironments = useMemo(() => environmentsQuery.data?.data ?? [], [environmentsQuery.data?.data])
   const environments = useMemo(
@@ -31,7 +32,7 @@ export function EnvironmentsPage() {
         (environment) =>
           matchesSearch(search, environment.name, environment.description) &&
           (hosting === 'all' || environment.hostingMode === hosting) &&
-          (status === 'all' || environment.status === status),
+          (status === 'all' || archivedLabel(environment) === status),
       ),
     [allEnvironments, search, hosting, status],
   )

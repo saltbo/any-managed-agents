@@ -10,7 +10,7 @@ import { stopSessionRuntime } from './session-runtime'
 // lets clients (and AK's reconcile sweep) recover the work.
 const STALLED_THRESHOLD_MS = 20 * 60_000
 
-const TERMINAL_STATUSES = ['stopped', 'error', 'archived']
+const TERMINAL_STATES = ['stopped', 'error']
 
 export async function markStalledCloudSessions(env: Env): Promise<void> {
   const db = drizzle(env.DB)
@@ -18,19 +18,19 @@ export async function markStalledCloudSessions(env: Env): Promise<void> {
   await db
     .update(sessions)
     .set({
-      status: 'error',
-      statusReason: 'Cloud session stalled: no completion within the wall-clock budget',
+      state: 'error',
+      stateReason: 'Cloud session stalled: no completion within the wall-clock budget',
       updatedAt: new Date().toISOString(),
     })
     .where(
       and(
         or(
           // a cloud turn lost its consumer mid-run
-          and(eq(sessions.status, 'running'), isNotNull(sessions.sandboxId)),
+          and(eq(sessions.state, 'running'), isNotNull(sessions.sandboxId)),
           // a cloud startup died before assigning a sandbox; self-hosted
-          // sessions waiting for a runner carry a statusReason and may wait
+          // sessions waiting for a runner carry a stateReason and may wait
           // indefinitely, so they are excluded
-          and(eq(sessions.status, 'pending'), isNull(sessions.statusReason)),
+          and(eq(sessions.state, 'pending'), isNull(sessions.stateReason)),
         ),
         lt(sessions.updatedAt, threshold),
       ),
@@ -47,7 +47,8 @@ async function destroyLeakedSandboxes(env: Env, db: ReturnType<typeof drizzle>):
     .from(sessions)
     .where(
       and(
-        inArray(sessions.status, TERMINAL_STATUSES),
+        // archived is lifecycle (archivedAt), not a state value
+        or(inArray(sessions.state, TERMINAL_STATES), isNotNull(sessions.archivedAt)),
         isNotNull(sessions.sandboxId),
         notLike(sessions.metadata, '%"sandboxDestroyedAt"%'),
       ),

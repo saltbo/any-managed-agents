@@ -15,7 +15,7 @@ export function ProviderPolicyPage() {
   const [creating, setCreating] = useState(false)
   const rulesQuery = useQuery({
     queryKey: queryKeys.governance.accessRules,
-    queryFn: () => api.listProviderAccessRules(),
+    queryFn: () => api.listAccessRules(),
   })
   const rules = rulesQuery.data?.data ?? []
   const pagination = useClientPagination(rules)

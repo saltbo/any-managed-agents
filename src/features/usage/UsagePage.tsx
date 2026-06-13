@@ -8,13 +8,11 @@ import { api, type UsageSummaryOptions } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 import { UsageView } from './UsageView'
 
-const DEFAULT_GROUP_BY = 'organization,project,provider,model,agent,session'
+const DEFAULT_GROUP_BY = 'provider'
 const GROUP_PRESETS = [
-  { value: DEFAULT_GROUP_BY, label: 'All dimensions' },
-  { value: 'provider,model', label: 'Provider and model' },
+  { value: 'provider', label: 'Provider' },
+  { value: 'model', label: 'Model' },
   { value: 'agent', label: 'Agent' },
-  { value: 'session', label: 'Session' },
-  { value: 'status', label: 'Status' },
 ]
 
 export function UsagePage() {
@@ -24,8 +22,8 @@ export function UsagePage() {
   const filters = useMemo<UsageSummaryOptions>(
     () => ({
       groupBy,
-      ...(createdFrom ? { createdFrom: new Date(createdFrom).toISOString() } : {}),
-      ...(createdTo ? { createdTo: new Date(createdTo).toISOString() } : {}),
+      ...(createdFrom ? { from: new Date(createdFrom).toISOString() } : {}),
+      ...(createdTo ? { to: new Date(createdTo).toISOString() } : {}),
     }),
     [groupBy, createdFrom, createdTo],
   )

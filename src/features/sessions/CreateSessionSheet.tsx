@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { emptySession } from '@/console/defaults'
-import { parseJsonObject, parseJsonObjectArray } from '@/console/format'
+import { isArchived, parseJsonObject, parseJsonObjectArray } from '@/console/format'
 import { SessionForm } from '@/console/forms'
 import type { SessionFormState } from '@/console/types'
 import { ApiError, api, type Session } from '@/lib/api'
@@ -46,7 +46,6 @@ export function CreateSessionSheet({
         ...(form.title ? { title: form.title } : {}),
         metadata: parseJsonObject(form.metadata, 'Metadata'),
         resourceRefs: parseJsonObjectArray(form.resourceRefs, 'Resource refs'),
-        vaultRefs: parseJsonObjectArray(form.vaultRefs, 'Vault refs'),
       }),
     onSuccess: (session: Session) => {
       onOpenChange(false)
@@ -61,8 +60,8 @@ export function CreateSessionSheet({
 
   useEffect(() => {
     if (!open) return
-    const activeAgent = agents.find((agent) => agent.status === 'active')
-    const activeEnvironment = environments.find((environment) => environment.status === 'active')
+    const activeAgent = agents.find((agent) => !isArchived(agent))
+    const activeEnvironment = environments.find((environment) => !isArchived(environment))
     setForm((current) => {
       const nextAgentId = agentId || current.agentId || activeAgent?.id || ''
       const nextEnvironmentId = current.environmentId || activeEnvironment?.id || ''

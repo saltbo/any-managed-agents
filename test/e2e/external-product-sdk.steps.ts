@@ -455,15 +455,15 @@ When(
   async function (this: ExternalProductWorld) {
     const product = state(this)
     const sessionId = String(objectValue(product.session).id)
-    product.commandResponse = await product.client.request<Json>('createSessionCommand', {
+    product.commandResponse = await product.client.request<Json>('createSessionMessage', {
       path: { sessionId },
-      body: { type: 'prompt', message: `external product follow-up ${product.runId}` },
+      body: { type: 'prompt', content: `external product follow-up ${product.runId}` },
     })
     // The follow-up is observable end-to-end before the stop request is sent.
     await waitForSessionEventText(product, sessionId, `external product follow-up ${product.runId}`)
-    product.session = await product.client.request<Json>('stopSession', {
+    product.session = await product.client.request<Json>('updateSession', {
       path: { sessionId },
-      query: { reason: 'user_requested' },
+      body: { state: 'stopped' },
     })
   },
 )

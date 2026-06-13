@@ -28,7 +28,7 @@ func TestRunnerTokenSourceRefreshesExpiredSavedToken(t *testing.T) {
 	refreshes := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/health":
+		case "/api/v1/health":
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"status":         "ok",
 				"name":           "Any Managed Agents",
@@ -116,7 +116,7 @@ func TestRunnerAuthTransportRefreshesAndRetriesUnauthorizedRequest(t *testing.T)
 				t.Fatalf("unexpected authorization header: %s", r.Header.Get("authorization"))
 			}
 			_, _ = w.Write([]byte(`{"ok":true}`))
-		case "/api/health":
+		case "/api/v1/health":
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"status":         "ok",
 				"name":           "Any Managed Agents",

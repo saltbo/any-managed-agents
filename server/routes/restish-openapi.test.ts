@@ -25,7 +25,7 @@ async function jsonFetch(path: string, authorization: string, init: RequestInit 
 }
 
 async function openApiOperationIds() {
-  const res = await SELF.fetch('https://example.com/api/openapi.json')
+  const res = await SELF.fetch('https://example.com/api/v1/openapi.json')
   expect(res.status).toBe(200)
   const doc = (await res.json()) as OpenApiDocument
 
@@ -47,7 +47,7 @@ describe('[CF] restish/OpenAPI control-plane path', () => {
     vi.unstubAllGlobals()
   })
 
-  it('discovers the documented resource groups from /api/openapi.json', async () => {
+  it('discovers the documented resource groups from /api/v1/openapi.json', async () => {
     const operationIds = await openApiOperationIds()
 
     expect(Array.from(operationIds)).toEqual(
@@ -58,17 +58,21 @@ describe('[CF] restish/OpenAPI control-plane path', () => {
         'listSessions',
         'listProviders',
         'listVaults',
-        'readGovernancePolicy',
+        'listPolicies',
+        'readEffectivePolicy',
+        'listUsageRecords',
         'readUsageSummary',
         'listAuditRecords',
+        'listWorkItems',
+        'listConnectors',
       ]),
     )
   })
 
-  it('exercises the core restish resource workflow over documented /api paths', async () => {
+  it('exercises the core restish resource workflow over documented /api/v1 paths', async () => {
     const authorization = await signIn()
 
-    const environmentRes = await jsonFetch('/api/environments', authorization, {
+    const environmentRes = await jsonFetch('/api/v1/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Restish e2e environment',
@@ -79,7 +83,7 @@ describe('[CF] restish/OpenAPI control-plane path', () => {
     expect(environmentRes.status).toBe(201)
     const environment = (await environmentRes.json()) as { id: string; currentVersionId: string }
 
-    const agentRes = await jsonFetch('/api/agents', authorization, {
+    const agentRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Restish e2e agent',
@@ -89,7 +93,7 @@ describe('[CF] restish/OpenAPI control-plane path', () => {
     expect(agentRes.status).toBe(201)
     const agent = (await agentRes.json()) as { id: string; currentVersionId: string }
 
-    const sessionRes = await jsonFetch('/api/sessions', authorization, {
+    const sessionRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
@@ -100,8 +104,7 @@ describe('[CF] restish/OpenAPI control-plane path', () => {
       agentVersionId: string
       environmentId: string
       environmentVersionId: string
-      runtimeEndpointPath: string
-      status: string
+      state: string
     }
 
     expect(session).toMatchObject({
@@ -109,8 +112,15 @@ describe('[CF] restish/OpenAPI control-plane path', () => {
       agentVersionId: agent.currentVersionId,
       environmentId: environment.id,
       environmentVersionId: environment.currentVersionId,
-      runtimeEndpointPath: `/runtime/sessions/${session.id}/rpc`,
-      status: 'idle',
+      state: 'idle',
+    })
+
+    const connectionRes = await jsonFetch(`/api/v1/sessions/${session.id}/connection`, authorization)
+    expect(connectionRes.status).toBe(200)
+    expect(await connectionRes.json()).toMatchObject({
+      sessionId: session.id,
+      path: `/api/v1/runtime/sessions/${session.id}/rpc`,
+      state: 'idle',
     })
   })
 })

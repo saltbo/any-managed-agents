@@ -8,7 +8,7 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { TextField } from '@/console/forms'
-import { api, type ProviderAccessRuleInput } from '@/lib/api'
+import { type AccessRuleInput, api } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 
 interface AccessRuleFormState {
@@ -38,7 +38,7 @@ export function CreateAccessRuleSheet({
   const [form, setForm] = useState<AccessRuleFormState>(emptyAccessRule)
   const [targetError, setTargetError] = useState<string | null>(null)
   const createRule = useMutation({
-    mutationFn: (input: ProviderAccessRuleInput) => api.createProviderAccessRule(input),
+    mutationFn: (input: AccessRuleInput) => api.createAccessRule(input),
     onSuccess: () => {
       onOpenChange(false)
       setForm(emptyAccessRule)

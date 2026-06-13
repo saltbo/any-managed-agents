@@ -5,6 +5,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui/field'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { StatusBadge } from '@/console/components'
+import { isArchived } from '@/console/format'
 import { TextAreaField, TextField } from '@/console/forms'
 import { CoreStep, StartStep } from '@/features/agents/AgentBuilderSteps'
 import type { AgentBuilderDraft, AgentTemplate, BuilderFieldErrors } from '@/features/agents/agent-builder-model'
@@ -48,7 +49,7 @@ export function QuickstartProviderStep({
           <li key={provider.id} className="flex flex-wrap items-center gap-2 rounded-md bg-muted/40 px-3 py-2 text-sm">
             <span className="font-medium">{provider.displayName}</span>
             <span className="font-mono text-xs text-muted-foreground">{provider.type}</span>
-            <StatusBadge value={provider.status} />
+            <StatusBadge value={provider.enabled ? 'enabled' : 'disabled'} />
             <span className="text-xs text-muted-foreground">
               {provider.credentialStatus === 'not_required' ? 'No credential required' : provider.credentialStatus}
             </span>
@@ -90,7 +91,7 @@ export function QuickstartEnvironmentStep({
   createPending: boolean
   onSelectExisting: (environmentId: string) => void
 }) {
-  const activeEnvironments = environments.filter((environment) => environment.status === 'active')
+  const activeEnvironments = environments.filter((environment) => !isArchived(environment))
   return (
     <div className="grid gap-4">
       <p className="text-sm text-muted-foreground">

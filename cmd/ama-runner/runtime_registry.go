@@ -3,15 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
-
-	ama "github.com/saltbo/any-managed-agents/sdk/go/ama"
 )
 
 type sessionRuntimeExecution struct {
 	RequestContext context.Context
 	LeaseContext   context.Context
 	Channel        RunnerSessionChannel
-	Lease          *ama.RunnerWorkLease
+	Lease          *Lease
 	Payload        WorkPayload
 	CheckRenewal   func() error
 	// ResumeTokens carries the latest runtime resume token from the runtime

@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { PageHeader } from '@/console/components'
-import { parsePackages, parseVariables, stringifyJson } from '@/console/format'
+import { isArchived, parsePackages, parseVariables, stringifyJson } from '@/console/format'
 import { EnvironmentForm } from '@/console/forms'
 import type { EnvironmentFormState } from '@/console/types'
 import { api, type Environment, type EnvironmentNetworkPolicy } from '@/lib/api'
@@ -90,7 +90,7 @@ export function EnvironmentDetailPage() {
           environment?.description ?? 'Inspect runtime config, package policy, network policy, and bindings.'
         }
         actions={
-          environment && environment.status !== 'archived' ? (
+          environment && !isArchived(environment) ? (
             <Button
               type="button"
               variant="outline"

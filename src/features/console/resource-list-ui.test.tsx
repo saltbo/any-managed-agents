@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ClientPagination } from '@/console/use-client-pagination'
 import { McpView } from '@/features/mcp/McpView'
 import { ProvidersView } from '@/features/providers/ProvidersView'
-import type { McpConnection, McpConnector, Provider } from '@/lib/api'
+import type { Connection, Connector, Provider } from '@/lib/api'
 
 afterEach(() => {
   cleanup()
@@ -35,13 +35,13 @@ function provider(overrides: Partial<Provider> = {}): Provider {
     displayName: 'Workers AI',
     baseUrl: null,
     isDefault: true,
-    status: 'disabled',
-    hasCredential: false,
+    enabled: false,
+    credentialRef: null,
     credentialStatus: 'missing',
     metadata: {},
     rateLimits: {},
     budgetPolicy: {},
-    modelCatalogStatus: 'error',
+    modelCatalogState: 'error',
     lastError: { message: 'Catalog failed' },
     createdAt: '2026-05-23T00:00:00.000Z',
     updatedAt: '2026-05-23T00:00:00.000Z',
@@ -49,10 +49,9 @@ function provider(overrides: Partial<Provider> = {}): Provider {
   }
 }
 
-function connector(overrides: Partial<McpConnector> = {}): McpConnector {
+function connector(overrides: Partial<Connector> = {}): Connector {
   return {
-    id: 'mcp_catalog_1',
-    connectorId: 'github',
+    id: 'github',
     name: 'GitHub',
     description: 'Repository access',
     category: 'source-control',
@@ -60,27 +59,32 @@ function connector(overrides: Partial<McpConnector> = {}): McpConnector {
     capabilities: ['repo'],
     supportedAuthModes: ['api_key'],
     setupRequirements: ['credential'],
-    tools: [{ name: 'repo.read', description: 'Read repository', approvalMode: 'project_policy' }],
+    tools: [
+      {
+        name: 'repo.read',
+        description: 'Read repository',
+        inputSchema: {},
+        approvalMode: 'project_policy',
+        policyMetadata: {},
+      },
+    ],
     metadata: {},
-    status: 'available',
-    policyStatus: 'allowed',
-    connectionStatus: 'connected',
+    availability: 'available',
     createdAt: '2026-05-23T00:00:00.000Z',
     updatedAt: '2026-05-23T00:00:00.000Z',
     ...overrides,
   }
 }
 
-function connection(overrides: Partial<McpConnection> = {}): McpConnection {
+function connection(overrides: Partial<Connection> = {}): Connection {
   return {
     id: 'mcpconn_1',
-    organizationId: 'org_1',
     projectId: 'project_1',
     connectorId: 'github',
-    hasCredential: true,
+    credentialRef: { credentialId: 'vaultcred_1' },
     endpointUrl: null,
     approvalMode: 'project_policy',
-    status: 'error',
+    state: 'error',
     lastError: { message: 'Connection failed' },
     metadata: {},
     connectedAt: '2026-05-23T00:00:00.000Z',

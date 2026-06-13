@@ -5,14 +5,11 @@ import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/compon
 import { ConfirmAction, StatusBadge, TableEmpty, TablePagination, TableSurface } from '@/console/components'
 import { stringifyJson } from '@/console/format'
 import type { ClientPagination } from '@/console/use-client-pagination'
-import type { McpConnection, McpConnector } from '@/lib/api'
+import type { Connection, Connector } from '@/lib/api'
 
-export function connectorDisabledReason(connector: McpConnector) {
-  if (connector.status === 'unavailable') {
+export function connectorDisabledReason(connector: Connector) {
+  if (connector.availability === 'unavailable') {
     return 'Connector is unavailable on this platform.'
-  }
-  if (connector.policyStatus === 'blocked') {
-    return 'Blocked by governance policy.'
   }
   return null
 }
@@ -24,10 +21,10 @@ export function McpView({
   connectionPagination,
   onDisconnect,
 }: {
-  connectors: McpConnector[]
-  connectorPagination: ClientPagination<McpConnector>
-  connections: McpConnection[]
-  connectionPagination: ClientPagination<McpConnection>
+  connectors: Connector[]
+  connectorPagination: ClientPagination<Connector>
+  connections: Connection[]
+  connectionPagination: ClientPagination<Connection>
   onDisconnect: (id: string) => void
 }) {
   return (
@@ -50,13 +47,11 @@ export function McpView({
                 <TableHead>Trust level</TableHead>
                 <TableHead>Capabilities</TableHead>
                 <TableHead>Auth and setup</TableHead>
-                <TableHead>Policy</TableHead>
-                <TableHead>Connection</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {connectors.length === 0 ? (
-                <TableEmpty colSpan={7}>No MCP connectors match the current catalog filters.</TableEmpty>
+                <TableEmpty colSpan={5}>No MCP connectors match the current catalog filters.</TableEmpty>
               ) : (
                 connectors.map((connector) => {
                   const disabledReason = connectorDisabledReason(connector)
@@ -64,7 +59,7 @@ export function McpView({
                     <TableRow
                       key={connector.id}
                       aria-disabled={disabledReason ? true : undefined}
-                      data-connector-id={connector.connectorId}
+                      data-connector-id={connector.id}
                       className={disabledReason ? 'opacity-60' : undefined}
                     >
                       <TableCell className="min-w-0">
@@ -74,13 +69,13 @@ export function McpView({
                               <span className="truncate font-medium">{connector.name}</span>
                             ) : (
                               <Link
-                                to={`/mcp/${connector.connectorId}`}
+                                to={`/mcp/${connector.id}`}
                                 className="truncate font-medium underline-offset-4 hover:underline"
                               >
                                 {connector.name}
                               </Link>
                             )}
-                            <span className="truncate text-xs text-muted-foreground">{connector.connectorId}</span>
+                            <span className="truncate text-xs text-muted-foreground">{connector.id}</span>
                           </div>
                           <span className="truncate text-xs text-muted-foreground">{connector.description}</span>
                           {disabledReason ? <span className="text-xs text-destructive">{disabledReason}</span> : null}
@@ -98,12 +93,6 @@ export function McpView({
                             Setup: {connector.setupRequirements.join(', ') || 'None'}
                           </span>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge value={connector.policyStatus} detail={disabledReason} />
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge value={connector.connectionStatus} />
                       </TableCell>
                     </TableRow>
                   )
@@ -141,11 +130,11 @@ export function McpView({
                     <TableCell className="font-medium">{connection.connectorId}</TableCell>
                     <TableCell>
                       <StatusBadge
-                        value={connection.status}
+                        value={connection.state}
                         detail={connection.lastError ? stringifyJson(connection.lastError) : null}
                       />
                     </TableCell>
-                    <TableCell>{connection.hasCredential ? 'Reference configured' : 'No credential'}</TableCell>
+                    <TableCell>{connection.credentialRef ? 'Reference configured' : 'No credential'}</TableCell>
                     <TableCell className="max-w-72 truncate">{connection.endpointUrl ?? 'Default'}</TableCell>
                     <TableCell>
                       <div className="flex justify-end">

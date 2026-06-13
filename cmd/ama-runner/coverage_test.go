@@ -72,14 +72,14 @@ func TestRunnerChannelAndCommandBranches(t *testing.T) {
 	client := &fakeControlPlane{lease: lease}
 	daemon = testDaemon(client, &fakeAdapter{})
 	daemon.Channels = nil
-	payload, err := parseWorkPayload(lease.WorkItem.Payload)
+	payload, err := parseWorkPayload(lease.workItem.Payload)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := daemon.completeSessionStart(context.Background(), lease, payload); err == nil {
+	if err := daemon.completeSessionStart(context.Background(), lease.lease, payload); err == nil {
 		t.Fatal("expected session start channel configuration error")
 	}
-	if len(client.updates) != 1 || client.updates[0].Status != "failed" {
+	if len(client.updates) != 1 || client.updates[0].State != "failed" {
 		t.Fatalf("expected failed lease update, got %#v", client.updates)
 	}
 	daemon = testDaemon(&fakeControlPlane{}, &fakeAdapter{result: ToolResult{Output: ama.JSON{"stdout": "ok"}}})

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ConfirmAction, EmptyState, PageHeader } from '@/console/components'
+import { isArchived } from '@/console/format'
 import { useClientPagination } from '@/console/use-client-pagination'
 import { matchesSearch, useUrlFilter } from '@/console/use-list-filters'
 import { api } from '@/lib/api'
@@ -32,16 +33,17 @@ export function SessionsPage() {
   const [sort, setSort] = useUrlFilter('sort', 'updated-desc')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [batchOutcome, setBatchOutcome] = useState<BatchArchiveOutcome | null>(null)
-  const includeArchived = status === 'archived'
+  const archived = status === 'archived'
   const sessionsQuery = useQuery({
-    queryKey: queryKeys.sessions.list(includeArchived),
-    queryFn: () => api.listSessions({ includeArchived }),
-    refetchInterval: (query) => (query.state.data?.data.some((session) => session.status === 'pending') ? 2000 : false),
+    queryKey: queryKeys.sessions.list(archived),
+    queryFn: () => api.listSessions({ archived }),
+    refetchInterval: (query) => (query.state.data?.data.some((session) => session.state === 'pending') ? 2000 : false),
   })
   const sessions = useMemo(() => {
     const filtered = (sessionsQuery.data?.data ?? []).filter(
       (session) =>
-        (status === 'all' || session.status === status) && matchesSearch(search, session.title, session.agentId),
+        (status === 'all' || (status === 'archived' ? isArchived(session) : session.state === status)) &&
+        matchesSearch(search, session.title, session.agentId),
     )
     return [...filtered].sort((a, b) => {
       const startedA = Date.parse(a.startedAt ?? a.createdAt)
@@ -123,7 +125,7 @@ export function SessionsPage() {
           <SelectContent>
             <SelectGroup>
               <SelectItem value="all">All statuses</SelectItem>
-              {['pending', 'running', 'idle', 'stopped', 'error', 'archived', 'requires-action'].map((value) => (
+              {['pending', 'running', 'idle', 'stopped', 'error', 'archived'].map((value) => (
                 <SelectItem key={value} value={value}>
                   {value}
                 </SelectItem>

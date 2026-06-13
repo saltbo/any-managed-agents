@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { toast } from 'sonner'
 import { EmptyState, PageHeader, StatusBadge } from '@/console/components'
+import { isArchived } from '@/console/format'
 import {
   type AgentBuilderDraft,
   apiErrorToBuilder,
@@ -120,8 +121,7 @@ export function QuickstartPage() {
         name: 'Workers AI starter agent',
         description: 'Zero-credential starter agent on the platform default Workers AI model.',
         instructions: 'You are the Workers AI starter agent. Respond helpfully and stay inside the session workspace.',
-        systemPrompt: 'You are the Workers AI starter agent. Respond helpfully and stay inside the session workspace.',
-        provider: DEFAULT_BUILDER_PROVIDER,
+        providerId: DEFAULT_BUILDER_PROVIDER,
         model: DEFAULT_BUILDER_MODEL,
       })
       const environment = await api.createEnvironment(
@@ -169,15 +169,15 @@ export function QuickstartPage() {
   const completion = quickstartCompletion({ providers, agents, environments, sessions })
   const current = resolveQuickstartStep(searchParams.get('step'), completion)
 
-  const activeAgents = agents.filter((agent) => agent.status === 'active')
-  const activeEnvironments = environments.filter((environment) => environment.status === 'active')
+  const activeAgents = agents.filter((agent) => !isArchived(agent))
+  const activeEnvironments = environments.filter((environment) => !isArchived(environment))
   const quickstartAgent = activeAgents[0] ?? null
   const quickstartEnvironment =
     activeEnvironments.find((environment) => environment.id === selectedEnvironmentId) ?? activeEnvironments[0] ?? null
   const previewSessionId = searchParams.get('session')
   const integrationSession =
     sessions.find((session) => session.id === previewSessionId) ??
-    sessions.find((session) => session.runtimeEndpointPath !== null) ??
+    sessions.find((session) => session.state === 'idle' || session.state === 'running') ??
     sessions[0] ??
     null
 
@@ -256,7 +256,7 @@ export function QuickstartPage() {
                 agentId: integrationSession.agentId,
                 environmentId: integrationSession.environmentId,
                 sessionId: integrationSession.id,
-                runtimeEndpointPath: integrationSession.runtimeEndpointPath,
+                runtimePath: null,
               }
             : null
         }

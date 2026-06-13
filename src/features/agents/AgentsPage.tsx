@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { PageHeader } from '@/console/components'
+import { archivedLabel } from '@/console/format'
 import { useClientPagination } from '@/console/use-client-pagination'
 import { matchesSearch, useUrlFilter } from '@/console/use-list-filters'
 import { CreateSessionSheet } from '@/features/sessions/CreateSessionSheet'
@@ -22,20 +23,23 @@ export function AgentsPage() {
   const [search, setSearch] = useUrlFilter('search')
   const [status, setStatus] = useUrlFilter('status', 'all')
   const [provider, setProvider] = useUrlFilter('provider', 'all')
-  const includeArchived = status === 'archived'
+  const archived = status === 'archived'
   const agentsQuery = useQuery({
-    queryKey: queryKeys.agents.list(includeArchived),
-    queryFn: () => api.listAgents({ includeArchived }),
+    queryKey: queryKeys.agents.list(archived),
+    queryFn: () => api.listAgents({ archived }),
   })
   const allAgents = useMemo(() => agentsQuery.data?.data ?? [], [agentsQuery.data?.data])
-  const providers = useMemo(() => [...new Set(allAgents.map((agent) => agent.provider))].sort(), [allAgents])
+  const providers = useMemo(
+    () => [...new Set(allAgents.map((agent) => agent.providerId).filter((id): id is string => Boolean(id)))].sort(),
+    [allAgents],
+  )
   const agents = useMemo(
     () =>
       allAgents.filter(
         (agent) =>
           matchesSearch(search, agent.name, agent.description) &&
-          (status === 'all' || agent.status === status) &&
-          (provider === 'all' || agent.provider === provider),
+          (status === 'all' || archivedLabel(agent) === status) &&
+          (provider === 'all' || agent.providerId === provider),
       ),
     [allAgents, search, status, provider],
   )

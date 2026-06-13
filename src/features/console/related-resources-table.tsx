@@ -2,7 +2,7 @@ import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { DetailSection, StatusBadge, TableEmpty, TableSurface } from '@/console/components'
-import { formatDate } from '@/console/format'
+import { archivedLabel, formatDate } from '@/console/format'
 import type { Agent, Session } from '@/lib/api'
 
 export function RelatedResourcesTable({
@@ -49,7 +49,7 @@ export function RelatedResourcesTable({
                     <span className="mt-1 block truncate text-xs text-muted-foreground">{item.id}</span>
                   </TableCell>
                   <TableCell>
-                    <StatusBadge value={item.status} />
+                    <StatusBadge value={isAgent ? archivedLabel(item) : item.state} />
                   </TableCell>
                   <TableCell className="hidden min-w-0 md:table-cell">
                     <span className="block truncate">{formatDate(isAgent ? item.updatedAt : item.startedAt)}</span>

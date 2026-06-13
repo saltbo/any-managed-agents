@@ -19,13 +19,20 @@ import (
 
 const defaultRuntimeProviderModelCapability = "runtime-provider-model:ama:workers-ai:@cf/moonshotai/kimi-k2.6"
 
+// fakeWork pairs a v1 lease with the work item the runner fetches after
+// claiming it; the lease no longer embeds the work item.
+type fakeWork struct {
+	lease    *Lease
+	workItem *WorkItem
+}
+
 type fakeControlPlane struct {
 	mu           sync.Mutex
 	creates      []ama.CreateRunnerRequest
-	heartbeats   []ama.RunnerHeartbeatRequest
-	updates      []ama.UpdateRunnerLeaseRequest
-	events       []ama.UploadRunnerLeaseEventsRequest
-	lease        *ama.RunnerWorkLease
+	heartbeats   []PutRunnerHeartbeatRequest
+	updates      []UpdateLeaseRequest
+	events       [][]SessionEvent
+	lease        *fakeWork
 	runnerID     string
 	claims       int
 	healthErr    error
@@ -60,47 +67,67 @@ func (f *fakeControlPlane) CreateRunner(_ context.Context, body ama.CreateRunner
 	return &ama.Runner{ID: runnerID}, nil
 }
 
-func (f *fakeControlPlane) CreateRunnerHeartbeat(_ context.Context, runnerID string, body ama.RunnerHeartbeatRequest) (*ama.Runner, error) {
+func (f *fakeControlPlane) PutRunnerHeartbeat(_ context.Context, _ string, body PutRunnerHeartbeatRequest) error {
 	if f.heartbeatErr != nil {
-		return nil, f.heartbeatErr
+		return f.heartbeatErr
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.heartbeats = append(f.heartbeats, body)
-	return &ama.Runner{ID: runnerID, Status: body.Status}, nil
+	return nil
 }
 
-func (f *fakeControlPlane) CreateRunnerLease(context.Context, string, ama.ClaimRunnerLeaseRequest) (*ama.RunnerWorkLease, error) {
+func (f *fakeControlPlane) ListAvailableWorkItems(context.Context) ([]WorkItem, error) {
 	f.mu.Lock()
 	f.claims += 1
 	f.mu.Unlock()
 	if f.claimErr != nil {
 		return nil, f.claimErr
 	}
-	return f.lease, nil
+	if f.lease == nil {
+		return nil, nil
+	}
+	return []WorkItem{*f.lease.workItem}, nil
 }
 
-func (f *fakeControlPlane) UpdateRunnerLease(_ context.Context, _ string, _ string, body ama.UpdateRunnerLeaseRequest) (*ama.RunnerWorkLease, error) {
+func (f *fakeControlPlane) CreateLease(context.Context, CreateLeaseRequest) (*Lease, error) {
+	if f.lease == nil {
+		return nil, fmt.Errorf("no work item to lease")
+	}
+	return f.lease.lease, nil
+}
+
+func (f *fakeControlPlane) ReadWorkItem(context.Context, string) (*WorkItem, error) {
+	if f.lease == nil {
+		return nil, fmt.Errorf("work item not found")
+	}
+	return f.lease.workItem, nil
+}
+
+func (f *fakeControlPlane) UpdateLease(_ context.Context, _ string, body UpdateLeaseRequest) (*Lease, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.updates = append(f.updates, body)
 	if f.updateErr != nil {
 		return nil, f.updateErr
 	}
-	return f.lease, nil
+	if f.lease == nil {
+		return nil, nil
+	}
+	return f.lease.lease, nil
 }
 
-func (f *fakeControlPlane) CreateRunnerLeaseEvents(_ context.Context, _ string, _ string, body ama.UploadRunnerLeaseEventsRequest) error {
+func (f *fakeControlPlane) CreateSessionEvents(_ context.Context, _ string, events []SessionEvent) error {
 	if f.eventErr != nil {
 		return f.eventErr
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.events = append(f.events, body)
+	f.events = append(f.events, events)
 	return nil
 }
 
-func (f *fakeControlPlane) OpenRunnerSessionChannel(context.Context, string, string) (RunnerSessionChannel, error) {
+func (f *fakeControlPlane) OpenRunnerSessionChannel(context.Context, string) (RunnerSessionChannel, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.opens += 1
@@ -300,7 +327,7 @@ func TestRunOnceSendsHeartbeatAndCompletesApprovedToolWork(t *testing.T) {
 	if daemon.RunnerID != "runner_1" {
 		t.Fatalf("expected configured runner id, got %q", daemon.RunnerID)
 	}
-	if len(client.updates) != 1 || client.updates[0].Status != "completed" {
+	if len(client.updates) != 1 || client.updates[0].State != "completed" {
 		t.Fatalf("expected completed update, got %#v", client.updates)
 	}
 	if len(client.events) != 2 {
@@ -328,7 +355,7 @@ func TestRunOnceRegistersRunnerWhenIDIsMissing(t *testing.T) {
 	if got := client.creates[0].Metadata["runnerCommit"]; got != runnerCommit {
 		t.Fatalf("expected runner commit metadata %q, got %#v", runnerCommit, got)
 	}
-	if len(client.updates) != 1 || client.updates[0].Status != "completed" {
+	if len(client.updates) != 1 || client.updates[0].State != "completed" {
 		t.Fatalf("expected completed update, got %#v", client.updates)
 	}
 }
@@ -447,7 +474,7 @@ func TestRunOnceFailsSessionChannelCommandOwnershipMismatch(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "ownership mismatch") {
 		t.Fatalf("expected ownership mismatch error, got %v", err)
 	}
-	if len(client.updates) != 1 || client.updates[0].Status != "failed" {
+	if len(client.updates) != 1 || client.updates[0].State != "failed" {
 		t.Fatalf("expected failed lease update, got %#v", client.updates)
 	}
 	if !channel.closed {
@@ -476,7 +503,7 @@ func TestRunOnceCancelsSessionChannelWhenContextIsCancelled(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for cancelled session channel")
 	}
-	if len(client.updates) != 1 || client.updates[0].Status != "interrupted" {
+	if len(client.updates) != 1 || client.updates[0].State != "interrupted" {
 		t.Fatalf("expected interrupted lease update, got %#v", client.updates)
 	}
 }
@@ -485,7 +512,7 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 	workDir := t.TempDir()
 	prompt := "build the feature"
 	lease := codexSessionStartLease(prompt)
-	lease.WorkItem.Payload["agentSnapshot"] = ama.JSON{
+	lease.workItem.Payload["agentSnapshot"] = ama.JSON{
 		"instructions":   "Follow the AK worker protocol.",
 		"skills":         []any{},
 		"subagents":      []any{ama.JSON{"username": "reviewer", "role": "reviewer"}},
@@ -543,7 +570,7 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 	if _, err := os.Stat(filepath.Join(runtimeAdapter.request.WorkDir, ".ama", "agent.json")); err != nil {
 		t.Fatalf("expected completed session workspace to remain inspectable, got %v", err)
 	}
-	if len(client.updates) != 1 || client.updates[0].Status != "completed" {
+	if len(client.updates) != 1 || client.updates[0].State != "completed" {
 		t.Fatalf("expected completed lease update, got %#v", client.updates)
 	}
 	if client.updates[0].Result["providerThreadId"] != "codex_thread_1" {
@@ -603,7 +630,7 @@ func TestRunOnceFailsCodexLeaseOnRuntimeAdapterFailure(t *testing.T) {
 	if err := daemon.RunOnce(context.Background()); err == nil || !strings.Contains(err.Error(), "codex SDK bridge failed") {
 		t.Fatalf("expected codex bridge error after failed lease update, got %v", err)
 	}
-	if len(client.updates) != 1 || client.updates[0].Status != "failed" {
+	if len(client.updates) != 1 || client.updates[0].State != "failed" {
 		t.Fatalf("expected failed lease update, got %#v", client.updates)
 	}
 	if len(client.events) != 0 {
@@ -629,7 +656,7 @@ func TestRunOnceFailsCodexLeaseWhenSessionStartedChannelEventIsRejected(t *testi
 	if err == nil || !strings.Contains(err.Error(), "start rejected") {
 		t.Fatalf("expected session started channel rejection, got %v", err)
 	}
-	if len(client.updates) != 1 || client.updates[0].Status != "failed" {
+	if len(client.updates) != 1 || client.updates[0].State != "failed" {
 		t.Fatalf("expected failed lease update, got %#v", client.updates)
 	}
 	if len(channel.writtenEvents()) != 1 || channel.writtenEvents()[0] != "runner.session.started" {
@@ -671,7 +698,7 @@ func TestSessionStartFailsLeaseWhenChannelOpenFails(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "channel failed") {
 		t.Fatalf("expected channel error, got %v", err)
 	}
-	if len(client.updates) != 1 || client.updates[0].Status != "failed" {
+	if len(client.updates) != 1 || client.updates[0].State != "failed" {
 		t.Fatalf("expected failed session.start lease, got %#v", client.updates)
 	}
 }
@@ -696,7 +723,7 @@ func TestRunOnceLaunchesClaudeCodeRuntimeAndCompletesLease(t *testing.T) {
 	if runtimeAdapter.request.RuntimeConfig["permissionMode"] != "acceptEdits" {
 		t.Fatalf("expected runtime config to reach adapter, got %#v", runtimeAdapter.request.RuntimeConfig)
 	}
-	if len(client.updates) != 1 || client.updates[0].Status != "completed" {
+	if len(client.updates) != 1 || client.updates[0].State != "completed" {
 		t.Fatalf("expected completed lease update, got %#v", client.updates)
 	}
 	got := channel.writtenEvents()
@@ -726,7 +753,7 @@ func TestRunOnceCompletesExternalRuntimeWhenSuccessfulResultHasCompletionWarning
 			if err := daemon.RunOnce(context.Background()); err != nil {
 				t.Fatalf("expected successful runtime result to complete despite warning, got %v", err)
 			}
-			if len(client.updates) != 1 || client.updates[0].Status != "completed" {
+			if len(client.updates) != 1 || client.updates[0].State != "completed" {
 				t.Fatalf("expected completed lease update, got %#v", client.updates)
 			}
 			serializedResult := mustJSON(t, client.updates[0].Result)
@@ -772,7 +799,7 @@ func TestRunOnceWaitsForRuntimeEventAcknowledgementBeforeCompletingLease(t *test
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for run completion after acknowledgement")
 	}
-	if len(client.updates) != 1 || client.updates[0].Status != "completed" {
+	if len(client.updates) != 1 || client.updates[0].State != "completed" {
 		t.Fatalf("expected completed lease update after acknowledgement, got %#v", client.updates)
 	}
 }
@@ -807,7 +834,7 @@ func TestRunOnceFailsLeaseWhenRuntimeEventAcknowledgementRejects(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for run failure after rejected event")
 	}
-	if len(client.updates) != 1 || client.updates[0].Status != "failed" {
+	if len(client.updates) != 1 || client.updates[0].State != "failed" {
 		t.Fatalf("expected failed lease update after rejected event, got %#v", client.updates)
 	}
 	got := channel.writtenEvents()
@@ -888,7 +915,7 @@ func TestStartRegistersRunnerAndSendsOfflineHeartbeatOnShutdown(t *testing.T) {
 	}
 	client.mu.Lock()
 	defer client.mu.Unlock()
-	if got := client.heartbeats[len(client.heartbeats)-1].Status; got != "offline" {
+	if got := client.heartbeats[len(client.heartbeats)-1].State; got != "offline" {
 		t.Fatalf("expected offline shutdown heartbeat, got %q", got)
 	}
 	if got := client.heartbeats[0].Metadata["runnerVersion"]; got != runnerVersion {
@@ -1013,7 +1040,7 @@ func TestRunOnceMarksExecutorFailureAsFailedLease(t *testing.T) {
 	if err := daemon.RunOnce(context.Background()); err != nil {
 		t.Fatalf("expected failed lease update to succeed, got %v", err)
 	}
-	if len(client.updates) != 1 || client.updates[0].Status != "failed" {
+	if len(client.updates) != 1 || client.updates[0].State != "failed" {
 		t.Fatalf("expected failed update, got %#v", client.updates)
 	}
 }
@@ -1029,8 +1056,8 @@ func TestRunOnceReturnsEventUploadErrors(t *testing.T) {
 
 func TestRunOnceSessionStartCancelsLeaseWhenContextCancels(t *testing.T) {
 	lease := approvedLease()
-	lease.WorkItem.Type = "session.start"
-	lease.WorkItem.Payload = sessionStartLease().WorkItem.Payload
+	lease.workItem.Type = "session.start"
+	lease.workItem.Payload = sessionStartLease().workItem.Payload
 	channel := newFakeRunnerSessionChannel(ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"})
 	client := &fakeControlPlane{lease: lease, channel: channel}
 	daemon := testDaemon(client, &fakeAdapter{})
@@ -1044,7 +1071,7 @@ func TestRunOnceSessionStartCancelsLeaseWhenContextCancels(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Fatalf("expected cancellation update to succeed, got %v", err)
 	}
-	if len(client.updates) != 1 || client.updates[0].Status != "interrupted" {
+	if len(client.updates) != 1 || client.updates[0].State != "interrupted" {
 		t.Fatalf("expected interrupted update, got %#v", client.updates)
 	}
 	if !channel.closed {
@@ -1054,7 +1081,7 @@ func TestRunOnceSessionStartCancelsLeaseWhenContextCancels(t *testing.T) {
 
 func TestRunOnceFailsFastOnUnapprovedWorkAfterMarkingLeaseFailed(t *testing.T) {
 	lease := approvedLease()
-	lease.WorkItem.Payload["approved"] = false
+	lease.workItem.Payload["approved"] = false
 	client := &fakeControlPlane{lease: lease}
 	adapter := &fakeAdapter{}
 	daemon := testDaemon(client, adapter)
@@ -1062,20 +1089,20 @@ func TestRunOnceFailsFastOnUnapprovedWorkAfterMarkingLeaseFailed(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "not approved") {
 		t.Fatalf("expected unapproved work error, got %v", err)
 	}
-	if len(client.updates) != 1 || client.updates[0].Status != "failed" {
+	if len(client.updates) != 1 || client.updates[0].State != "failed" {
 		t.Fatalf("expected failed lease update, got %#v", client.updates)
 	}
 }
 
 func TestRunOnceFailsLeaseWhenRequiredCapabilityDoesNotMatch(t *testing.T) {
 	lease := sessionStartLease()
-	lease.WorkItem.Payload["requiredRunnerCapability"] = "runtime-provider-model:codex:provider:gpt-5.3-codex"
+	lease.workItem.Payload["requiredRunnerCapability"] = "runtime-provider-model:codex:provider:gpt-5.3-codex"
 	client := &fakeControlPlane{lease: lease}
 	daemon := testDaemon(client, &fakeAdapter{})
 	if err := daemon.RunOnce(context.Background()); err != nil {
 		t.Fatalf("expected failed lease update to succeed, got %v", err)
 	}
-	if len(client.updates) != 1 || client.updates[0].Status != "failed" {
+	if len(client.updates) != 1 || client.updates[0].State != "failed" {
 		t.Fatalf("expected failed lease update, got %#v", client.updates)
 	}
 	message, _ := client.updates[0].Error["message"].(string)
@@ -1096,7 +1123,7 @@ func TestLeaseRenewalFailureCancelsLocalWorkWithoutCompletionRetry(t *testing.T)
 	if !adapter.cancelled.Load() {
 		t.Fatal("expected renew failure to cancel adapter context")
 	}
-	if len(client.updates) != 1 || client.updates[0].Status != "active" {
+	if len(client.updates) != 1 || client.updates[0].State != "active" {
 		t.Fatalf("expected only renew update, got %#v", client.updates)
 	}
 }
@@ -1110,7 +1137,7 @@ func TestSessionChannelRenewalFailureClosesChannelWithoutCompletion(t *testing.T
 	if err == nil || !strings.Contains(err.Error(), "runner lease renewal failed") {
 		t.Fatalf("expected renew failure, got %v", err)
 	}
-	if len(client.updates) != 1 || client.updates[0].Status != "active" {
+	if len(client.updates) != 1 || client.updates[0].State != "active" {
 		t.Fatalf("expected only renew update, got %#v", client.updates)
 	}
 	if !channel.closed {
@@ -1147,7 +1174,7 @@ func TestAMASessionChecksLeaseRenewalAfterHandlingCommand(t *testing.T) {
 		RequestContext: context.Background(),
 		LeaseContext:   context.Background(),
 		Channel:        channel,
-		Lease:          lease,
+		Lease:          lease.lease,
 		Payload: WorkPayload{
 			SessionID: "session_1",
 		},
@@ -1179,7 +1206,7 @@ func TestContextCancellationMarksLeaseCancelled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected cancelled lease update to succeed, got %v", err)
 	}
-	if len(client.updates) != 1 || client.updates[0].Status != "cancelled" {
+	if len(client.updates) != 1 || client.updates[0].State != "cancelled" {
 		t.Fatalf("expected cancelled update, got %#v", client.updates)
 	}
 }
@@ -1268,15 +1295,19 @@ func lookPathFinding(binaries ...string) func(string) (string, error) {
 	}
 }
 
-func approvedLease() *ama.RunnerWorkLease {
-	return &ama.RunnerWorkLease{
-		ID:       "lease_1",
-		RunnerID: "runner_1",
-		Status:   "active",
-		WorkItem: ama.RunnerWorkItem{
-			ID:     "work_1",
-			Type:   "tool.execute",
-			Status: "leased",
+func approvedLease() *fakeWork {
+	return &fakeWork{
+		lease: &Lease{
+			ID:         "lease_1",
+			WorkItemID: "work_1",
+			RunnerID:   "runner_1",
+			State:      "active",
+		},
+		workItem: &WorkItem{
+			ID:        "work_1",
+			SessionID: "session_1",
+			Type:      "tool.execute",
+			State:     "leased",
 			Payload: ama.JSON{
 				"protocol":   "ama-runner-work",
 				"type":       "tool.execute",
@@ -1289,15 +1320,19 @@ func approvedLease() *ama.RunnerWorkLease {
 	}
 }
 
-func sessionStartLease() *ama.RunnerWorkLease {
-	return &ama.RunnerWorkLease{
-		ID:       "lease_1",
-		RunnerID: "runner_1",
-		Status:   "active",
-		WorkItem: ama.RunnerWorkItem{
-			ID:     "work_1",
-			Type:   "session.start",
-			Status: "leased",
+func sessionStartLease() *fakeWork {
+	return &fakeWork{
+		lease: &Lease{
+			ID:         "lease_1",
+			WorkItemID: "work_1",
+			RunnerID:   "runner_1",
+			State:      "active",
+		},
+		workItem: &WorkItem{
+			ID:        "work_1",
+			SessionID: "session_1",
+			Type:      "session.start",
+			State:     "leased",
 			Payload: ama.JSON{
 				"protocol":                 "ama-runner-work",
 				"type":                     "session.start",
@@ -1314,16 +1349,16 @@ func sessionStartLease() *ama.RunnerWorkLease {
 	}
 }
 
-func codexSessionStartLease(prompt string) *ama.RunnerWorkLease {
-	lease := sessionStartLease()
-	lease.WorkItem.Payload["runtime"] = "codex"
-	lease.WorkItem.Payload["runtimeConfig"] = map[string]any{"model": "gpt-5.3-codex", "sandboxMode": "workspace-write"}
-	lease.WorkItem.Payload["provider"] = "provider_codex"
-	lease.WorkItem.Payload["model"] = "gpt-5.3-codex"
-	lease.WorkItem.Payload["runtimeDriver"] = "codex-self-hosted"
-	lease.WorkItem.Payload["requiredRunnerCapability"] = "runtime-provider-model:codex:*:gpt-5.3-codex"
-	lease.WorkItem.Payload["initialPrompt"] = prompt
-	return lease
+func codexSessionStartLease(prompt string) *fakeWork {
+	work := sessionStartLease()
+	work.workItem.Payload["runtime"] = "codex"
+	work.workItem.Payload["runtimeConfig"] = map[string]any{"model": "gpt-5.3-codex", "sandboxMode": "workspace-write"}
+	work.workItem.Payload["provider"] = "provider_codex"
+	work.workItem.Payload["model"] = "gpt-5.3-codex"
+	work.workItem.Payload["runtimeDriver"] = "codex-self-hosted"
+	work.workItem.Payload["requiredRunnerCapability"] = "runtime-provider-model:codex:*:gpt-5.3-codex"
+	work.workItem.Payload["initialPrompt"] = prompt
+	return work
 }
 
 func mustJSON(t *testing.T, value any) string {
@@ -1344,27 +1379,27 @@ func containsString(values []string, want string) bool {
 	return false
 }
 
-func claudeCodeSessionStartLease() *ama.RunnerWorkLease {
-	lease := externalRuntimeSessionStartLease("claude-code", "anthropic", "claude-sonnet-4-6", map[string]any{"permissionMode": "acceptEdits"})
-	lease.WorkItem.Payload["requiredRunnerCapability"] = "runtime-provider-model:claude-code:*:claude-sonnet-4-6"
-	lease.WorkItem.Payload["initialPrompt"] = "Run Claude Code"
-	return lease
+func claudeCodeSessionStartLease() *fakeWork {
+	work := externalRuntimeSessionStartLease("claude-code", "anthropic", "claude-sonnet-4-6", map[string]any{"permissionMode": "acceptEdits"})
+	work.workItem.Payload["requiredRunnerCapability"] = "runtime-provider-model:claude-code:*:claude-sonnet-4-6"
+	work.workItem.Payload["initialPrompt"] = "Run Claude Code"
+	return work
 }
 
-func externalRuntimeSessionStartLease(runtimeName string, provider string, model string, runtimeConfig any) *ama.RunnerWorkLease {
-	lease := sessionStartLease()
-	lease.WorkItem.Payload["runtime"] = runtimeName
+func externalRuntimeSessionStartLease(runtimeName string, provider string, model string, runtimeConfig any) *fakeWork {
+	work := sessionStartLease()
+	work.workItem.Payload["runtime"] = runtimeName
 	if config, ok := runtimeConfig.(map[string]any); ok {
-		lease.WorkItem.Payload["runtimeConfig"] = config
+		work.workItem.Payload["runtimeConfig"] = config
 	} else {
-		lease.WorkItem.Payload["runtimeConfig"] = map[string]any{"mode": runtimeConfig}
+		work.workItem.Payload["runtimeConfig"] = map[string]any{"mode": runtimeConfig}
 	}
-	lease.WorkItem.Payload["provider"] = provider
-	lease.WorkItem.Payload["model"] = model
-	lease.WorkItem.Payload["runtimeDriver"] = runtimeName + "-self-hosted"
-	lease.WorkItem.Payload["initialPrompt"] = "Run external runtime"
-	lease.WorkItem.Payload["requiredRunnerCapability"] = "runtime-provider-model:" + runtimeName + ":" + provider + ":" + model
-	return lease
+	work.workItem.Payload["provider"] = provider
+	work.workItem.Payload["model"] = model
+	work.workItem.Payload["runtimeDriver"] = runtimeName + "-self-hosted"
+	work.workItem.Payload["initialPrompt"] = "Run external runtime"
+	work.workItem.Payload["requiredRunnerCapability"] = "runtime-provider-model:" + runtimeName + ":" + provider + ":" + model
+	return work
 }
 
 func TestHeartbeatRefreshesRuntimeCapabilitiesFromPath(t *testing.T) {
@@ -1445,20 +1480,20 @@ func TestHeartbeatReportsRuntimeInventoryWithStatusAndDiagnostics(t *testing.T) 
 		t.Fatalf("expected heartbeat success, got %v", err)
 	}
 	inventory := client.heartbeats[0].RuntimeInventory
-	byRuntime := map[string]ama.RuntimeInventory{}
+	byRuntime := map[string]v1RuntimeInventory{}
 	for _, entry := range inventory {
 		byRuntime[entry.Runtime] = entry
 	}
-	if got := byRuntime["ama"]; got.Status != "ready" || got.Version != runnerVersion {
+	if got := byRuntime["ama"]; got.State != "ready" || got.Version != runnerVersion {
 		t.Fatalf("expected embedded ama runtime to be ready with runner version, got %#v", got)
 	}
-	if got := byRuntime["codex"]; got.Status != "ready" || got.Version != "0.42.0" || got.Detail == "" {
+	if got := byRuntime["codex"]; got.State != "ready" || got.Version != "0.42.0" || got.Detail == "" {
 		t.Fatalf("expected ready codex inventory with version and detail, got %#v", got)
 	}
-	if got := byRuntime["claude-code"]; got.Status != "unauthenticated" || got.Detail == "" {
+	if got := byRuntime["claude-code"]; got.State != "unauthenticated" || got.Detail == "" {
 		t.Fatalf("expected unauthenticated claude-code inventory, got %#v", got)
 	}
-	if got := byRuntime["copilot"]; got.Status != "missing" || got.Detail == "" {
+	if got := byRuntime["copilot"]; got.State != "missing" || got.Detail == "" {
 		t.Fatalf("expected missing copilot inventory, got %#v", got)
 	}
 	if data := mustJSON(t, inventory); strings.Contains(data, "raw-secret") {
@@ -1488,7 +1523,7 @@ func TestRunOnceFailsLeaseWhenRuntimeCLIIsMissing(t *testing.T) {
 	if err := daemon.RunOnce(context.Background()); err != nil {
 		t.Fatalf("expected failed lease update to succeed, got %v", err)
 	}
-	if len(client.updates) != 1 || client.updates[0].Status != "failed" {
+	if len(client.updates) != 1 || client.updates[0].State != "failed" {
 		t.Fatalf("expected failed lease update, got %#v", client.updates)
 	}
 	message, _ := client.updates[0].Error["message"].(string)
@@ -1511,7 +1546,7 @@ func TestRunOnceFailsLeaseWhenSessionExceedsMaxDuration(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "exceeded max duration") {
 		t.Fatalf("expected session timeout error, got %v", err)
 	}
-	if len(client.updates) != 1 || client.updates[0].Status != "failed" {
+	if len(client.updates) != 1 || client.updates[0].State != "failed" {
 		t.Fatalf("expected failed (not interrupted) lease update, got %#v", client.updates)
 	}
 	message, _ := client.updates[0].Error["message"].(string)
@@ -1536,7 +1571,7 @@ func TestRunOnceDisablesSessionDeadlineWhenMaxDurationIsZero(t *testing.T) {
 	if err := daemon.RunOnce(context.Background()); err != nil {
 		t.Fatalf("expected run success with disabled session deadline, got %v", err)
 	}
-	if len(client.updates) != 1 || client.updates[0].Status != "completed" {
+	if len(client.updates) != 1 || client.updates[0].State != "completed" {
 		t.Fatalf("expected completed lease update, got %#v", client.updates)
 	}
 }

@@ -1,7 +1,7 @@
 import { Archive } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ConfirmAction, DetailSection, EmptyState, Meta, MetaGrid, StatusBadge } from '@/console/components'
-import { stringifyJson } from '@/console/format'
+import { archivedLabel, isArchived, stringifyJson } from '@/console/format'
 import { RelatedResourcesTable } from '@/features/console/related-resources-table'
 import type { Environment, Session } from '@/lib/api'
 
@@ -36,9 +36,9 @@ export function EnvironmentDetailView({
         description={environment.description ?? 'No description'}
         actions={
           <>
-            <StatusBadge value={environment.status} />
+            <StatusBadge value={archivedLabel(environment)} />
             <StatusBadge value={`v${environment.version}`} />
-            {environment.status !== 'archived' ? (
+            {!isArchived(environment) ? (
               <ConfirmAction
                 title="Archive environment?"
                 description={`Archive ${environment.name}. New sessions cannot use this environment.`}
@@ -58,7 +58,10 @@ export function EnvironmentDetailView({
         <MetaGrid>
           <Meta label="Packages" value={environment.packages.map((item) => item.name).join(', ') || 'None'} />
           <Meta label="Variables" value={Object.keys(environment.variables).join(', ') || 'None'} />
-          <Meta label="Secret refs" value={environment.secretRefs.map((item) => item.name).join(', ') || 'None'} />
+          <Meta
+            label="Credential refs"
+            value={environment.credentialRefs.map((item) => item.credentialId).join(', ') || 'None'}
+          />
           <Meta label="Hosting mode" value={environment.hostingMode} />
           <Meta label="Runtime config" value={runtimeConfigSummary(environment)} />
           <Meta label="Network policy" value={networkSummary(environment)} />

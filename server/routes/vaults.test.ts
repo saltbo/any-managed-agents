@@ -14,7 +14,7 @@ async function jsonFetch(path: string, authorization: string, init: RequestInit 
   })
 }
 
-describe('[CF] /api/vaults', () => {
+describe('[CF] /api/v1/vaults', () => {
   beforeEach(async () => {
     await setupOidcProvider()
   })
@@ -24,7 +24,7 @@ describe('[CF] /api/vaults', () => {
   })
 
   it('requires authentication before creating vault metadata', async () => {
-    const res = await SELF.fetch('https://example.com/api/vaults', {
+    const res = await SELF.fetch('https://example.com/api/v1/vaults', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name: 'Provider credentials' }),
@@ -41,7 +41,7 @@ describe('[CF] /api/vaults', () => {
 
   it('creates, lists, reads, updates, and archives project-scoped vaults', async () => {
     const authorization = await signIn()
-    const createRes = await jsonFetch('/api/vaults', authorization, {
+    const createRes = await jsonFetch('/api/v1/vaults', authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Provider credentials',
@@ -51,32 +51,48 @@ describe('[CF] /api/vaults', () => {
       }),
     })
     expect(createRes.status).toBe(201)
-    const created = (await createRes.json()) as { id: string; scope: string; status: string; metadata: unknown }
-    expect(created).toMatchObject({ scope: 'project', status: 'active', metadata: { owner: 'platform' } })
+    const created = (await createRes.json()) as {
+      id: string
+      scope: string
+      archivedAt: string | null
+      metadata: unknown
+    }
+    expect(created).toMatchObject({ scope: 'project', archivedAt: null, metadata: { owner: 'platform' } })
+    expect(created).not.toHaveProperty('status')
+    expect(created).not.toHaveProperty('organizationId')
 
-    const readRes = await jsonFetch(`/api/vaults/${created.id}`, authorization)
+    const readRes = await jsonFetch(`/api/v1/vaults/${created.id}`, authorization)
     expect(readRes.status).toBe(200)
     await expect(readRes.json()).resolves.toMatchObject({ id: created.id, name: 'Provider credentials' })
 
-    const updateRes = await jsonFetch(`/api/vaults/${created.id}`, authorization, {
+    const updateRes = await jsonFetch(`/api/v1/vaults/${created.id}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ name: 'Updated credentials' }),
     })
     expect(updateRes.status).toBe(200)
     await expect(updateRes.json()).resolves.toMatchObject({ id: created.id, name: 'Updated credentials' })
 
-    const archiveRes = await jsonFetch(`/api/vaults/${created.id}`, authorization, { method: 'DELETE' })
-    expect(archiveRes.status).toBe(204)
+    const archiveRes = await jsonFetch(`/api/v1/vaults/${created.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ archived: true }),
+    })
+    expect(archiveRes.status).toBe(200)
+    await expect(archiveRes.json()).resolves.toMatchObject({ id: created.id, archivedAt: expect.any(String) })
 
-    const defaultListRes = await jsonFetch('/api/vaults', authorization)
+    const deleteRes = await jsonFetch(`/api/v1/vaults/${created.id}`, authorization, { method: 'DELETE' })
+    expect(deleteRes.status).toBe(404)
+
+    const defaultListRes = await jsonFetch('/api/v1/vaults', authorization)
     const defaultList = (await defaultListRes.json()) as { data: Array<{ id: string }> }
     expect(defaultList.data).not.toContainEqual(expect.objectContaining({ id: created.id }))
 
-    const archivedListRes = await jsonFetch('/api/vaults?includeArchived=true&status=archived', authorization)
-    const archivedList = (await archivedListRes.json()) as { data: Array<{ id: string; status: string }> }
-    expect(archivedList.data).toContainEqual(expect.objectContaining({ id: created.id, status: 'archived' }))
+    const archivedListRes = await jsonFetch('/api/v1/vaults?archived=true', authorization)
+    const archivedList = (await archivedListRes.json()) as { data: Array<{ id: string; archivedAt: string | null }> }
+    expect(archivedList.data).toContainEqual(
+      expect.objectContaining({ id: created.id, archivedAt: expect.any(String) }),
+    )
 
-    const createCredentialRes = await jsonFetch(`/api/vaults/${created.id}/credentials`, authorization, {
+    const createCredentialRes = await jsonFetch(`/api/v1/vaults/${created.id}/credentials`, authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Archived vault token',
@@ -88,20 +104,27 @@ describe('[CF] /api/vaults', () => {
     await expect(createCredentialRes.json()).resolves.toMatchObject({
       error: { type: 'conflict', message: 'Vault is archived' },
     })
+
+    const restoreRes = await jsonFetch(`/api/v1/vaults/${created.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ archived: false }),
+    })
+    expect(restoreRes.status).toBe(200)
+    await expect(restoreRes.json()).resolves.toMatchObject({ id: created.id, archivedAt: null })
   })
 
-  it('stores credential secret references only, redacts every response, rotates, revokes, and safely deletes versions', async () => {
+  it('stores credential secret references only, redacts every response, rotates, revokes, and hard-deletes versions', async () => {
     const rawSecret = 'raw-secret-material'
     const rotatedSecret = 'rotated-secret-material'
     const thirdSecret = 'third-secret-material'
     const authorization = await signIn()
-    const vaultRes = await jsonFetch('/api/vaults', authorization, {
+    const vaultRes = await jsonFetch('/api/v1/vaults', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Provider credentials' }),
     })
     const vault = (await vaultRes.json()) as { id: string }
 
-    const createCredentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, authorization, {
+    const createCredentialRes = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials`, authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Workers AI token',
@@ -113,24 +136,30 @@ describe('[CF] /api/vaults', () => {
     expect(createCredentialRes.status).toBe(201)
     const credential = (await createCredentialRes.json()) as {
       id: string
+      state: string
       activeVersionId: string
-      activeVersion: { id: string; version: number; secretRef: string; hasSecret: boolean; status: string }
+      activeVersion: { id: string; version: number; secretRef: string; hasSecret: boolean; state: string }
     }
+    expect(credential.state).toBe('active')
     expect(credential.activeVersion.version).toBe(1)
+    expect(credential.activeVersion.state).toBe('active')
     expect(credential.activeVersion.hasSecret).toBe(true)
+    expect(credential).not.toHaveProperty('status')
+    expect(credential.activeVersion).not.toHaveProperty('status')
+    expect(credential.activeVersion).not.toHaveProperty('deletedAt')
     expect(JSON.stringify(credential)).not.toContain(rawSecret)
     expect(cloudflareSecretRequests().writes).toHaveLength(1)
     expect(JSON.stringify(cloudflareSecretRequests().writes[0])).toContain(rawSecret)
 
-    const readCredentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials/${credential.id}`, authorization)
+    const readCredentialRes = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials/${credential.id}`, authorization)
     expect(readCredentialRes.status).toBe(200)
     expect(JSON.stringify(await readCredentialRes.clone().json())).not.toContain(rawSecret)
 
-    const listCredentialsRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, authorization)
+    const listCredentialsRes = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials`, authorization)
     expect(listCredentialsRes.status).toBe(200)
     expect(JSON.stringify(await listCredentialsRes.clone().json())).not.toContain(rawSecret)
 
-    const scopeChangeRes = await jsonFetch(`/api/vaults/${vault.id}`, authorization, {
+    const scopeChangeRes = await jsonFetch(`/api/v1/vaults/${vault.id}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ scope: 'organization' }),
     })
@@ -144,7 +173,7 @@ describe('[CF] /api/vaults', () => {
     ).all()
     expect(JSON.stringify(dbRows.results)).not.toContain(rawSecret)
 
-    const invalidCredentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, authorization, {
+    const invalidCredentialRes = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials`, authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Invalid token',
@@ -158,7 +187,7 @@ describe('[CF] /api/vaults', () => {
       .first<{ count: number }>()
     expect(credentialCount?.count).toBe(1)
 
-    const mixedProviderRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, authorization, {
+    const mixedProviderRes = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials`, authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'Mixed token',
@@ -172,14 +201,18 @@ describe('[CF] /api/vaults', () => {
     })
     expect(mixedProviderRes.status).toBe(400)
 
-    const rotateRes = await jsonFetch(`/api/vaults/${vault.id}/credentials/${credential.id}/versions`, authorization, {
-      method: 'POST',
-      body: JSON.stringify({ provider: 'cloudflare-secrets', secretValue: rotatedSecret }),
-    })
+    const rotateRes = await jsonFetch(
+      `/api/v1/vaults/${vault.id}/credentials/${credential.id}/versions`,
+      authorization,
+      {
+        method: 'POST',
+        body: JSON.stringify({ provider: 'cloudflare-secrets', secretValue: rotatedSecret }),
+      },
+    )
     expect(rotateRes.status).toBe(201)
     const rotated = (await rotateRes.json()) as {
       activeVersionId: string
-      activeVersion: { id: string; version: number; status: string }
+      activeVersion: { id: string; version: number; state: string }
     }
     expect(rotated.activeVersion.version).toBe(2)
     expect(JSON.stringify(rotated)).not.toContain(rotatedSecret)
@@ -187,31 +220,42 @@ describe('[CF] /api/vaults', () => {
     expect(JSON.stringify(cloudflareSecretRequests().writes[1])).toContain(rotatedSecret)
 
     const versionsAfterRotateRes = await jsonFetch(
-      `/api/vaults/${vault.id}/credentials/${credential.id}/versions?includeArchived=true`,
+      `/api/v1/vaults/${vault.id}/credentials/${credential.id}/versions`,
       authorization,
     )
     const versionsAfterRotate = (await versionsAfterRotateRes.json()) as {
-      data: Array<{ id: string; status: string; supersededAt: string | null }>
+      data: Array<{ id: string; state: string; supersededAt: string | null }>
     }
     expect(versionsAfterRotate.data).toContainEqual(
       expect.objectContaining({
         id: credential.activeVersion.id,
-        status: 'superseded',
+        state: 'superseded',
         supersededAt: expect.any(String),
       }),
     )
 
-    const environmentRes = await jsonFetch('/api/environments', authorization, {
+    const versionItemRes = await jsonFetch(
+      `/api/v1/vaults/${vault.id}/credentials/${credential.id}/versions/${credential.activeVersion.id}`,
+      authorization,
+    )
+    expect(versionItemRes.status).toBe(200)
+    await expect(versionItemRes.json()).resolves.toMatchObject({
+      id: credential.activeVersion.id,
+      credentialId: credential.id,
+      state: 'superseded',
+    })
+
+    const environmentRes = await jsonFetch('/api/v1/environments', authorization, {
       method: 'POST',
       body: JSON.stringify({
-        name: 'Runtime with old credential',
-        secretRefs: [{ name: 'WORKERS_AI_TOKEN', ref: credential.activeVersion.id }],
+        name: 'Runtime with pinned credential',
+        credentialRefs: [{ credentialId: credential.id, versionId: credential.activeVersion.id }],
       }),
     })
     expect(environmentRes.status).toBe(201)
 
     const deleteReferencedRes = await jsonFetch(
-      `/api/vaults/${vault.id}/credentials/${credential.id}/versions/${credential.activeVersion.id}?confirm=true`,
+      `/api/v1/vaults/${vault.id}/credentials/${credential.id}/versions/${credential.activeVersion.id}`,
       authorization,
       { method: 'DELETE' },
     )
@@ -222,7 +266,7 @@ describe('[CF] /api/vaults', () => {
 
     const secondVersionId = rotated.activeVersion.id
     const thirdRotateRes = await jsonFetch(
-      `/api/vaults/${vault.id}/credentials/${credential.id}/versions`,
+      `/api/v1/vaults/${vault.id}/credentials/${credential.id}/versions`,
       authorization,
       {
         method: 'POST',
@@ -234,7 +278,7 @@ describe('[CF] /api/vaults', () => {
     expect(JSON.stringify(thirdRotated)).not.toContain(thirdSecret)
 
     const deleteActiveRes = await jsonFetch(
-      `/api/vaults/${vault.id}/credentials/${credential.id}/versions/${thirdRotated.activeVersion.id}?confirm=true`,
+      `/api/v1/vaults/${vault.id}/credentials/${credential.id}/versions/${thirdRotated.activeVersion.id}`,
       authorization,
       { method: 'DELETE' },
     )
@@ -244,34 +288,36 @@ describe('[CF] /api/vaults', () => {
     })
 
     const deleteUnusedRes = await jsonFetch(
-      `/api/vaults/${vault.id}/credentials/${credential.id}/versions/${secondVersionId}?confirm=true`,
+      `/api/v1/vaults/${vault.id}/credentials/${credential.id}/versions/${secondVersionId}`,
       authorization,
       { method: 'DELETE' },
     )
     expect(deleteUnusedRes.status).toBe(204)
     expect(cloudflareSecretRequests().deletes).toContain(`secret_AMA_${credential.id.toUpperCase()}_V2`)
 
+    const deletedVersionRes = await jsonFetch(
+      `/api/v1/vaults/${vault.id}/credentials/${credential.id}/versions/${secondVersionId}`,
+      authorization,
+    )
+    expect(deletedVersionRes.status).toBe(404)
+
+    const deletedVersionRow = await env.DB.prepare('SELECT id FROM vault_credential_versions WHERE id = ?')
+      .bind(secondVersionId)
+      .first()
+    expect(deletedVersionRow).toBeNull()
+
     const versionsRes = await SELF.fetch(
-      `https://example.com/api/vaults/${vault.id}/credentials/${credential.id}/versions?includeArchived=true`,
+      `https://example.com/api/v1/vaults/${vault.id}/credentials/${credential.id}/versions`,
     )
     expect(versionsRes.status).toBe(401)
     const authenticatedVersionsRes = await jsonFetch(
-      `/api/vaults/${vault.id}/credentials/${credential.id}/versions?includeArchived=true`,
+      `/api/v1/vaults/${vault.id}/credentials/${credential.id}/versions`,
       authorization,
     )
     const versions = (await authenticatedVersionsRes.json()) as {
-      data: Array<{ id: string; status: string; metadata: Record<string, unknown> }>
+      data: Array<{ id: string; state: string }>
     }
-    expect(versions.data).toContainEqual(
-      expect.objectContaining({
-        id: secondVersionId,
-        status: 'deleted',
-        metadata: expect.objectContaining({
-          deletedByUserId: expect.any(String),
-          deleteConfirmedAt: expect.any(String),
-        }),
-      }),
-    )
+    expect(versions.data).not.toContainEqual(expect.objectContaining({ id: secondVersionId }))
     expect(JSON.stringify(versions)).not.toContain(rawSecret)
     expect(JSON.stringify(versions)).not.toContain(rotatedSecret)
     expect(JSON.stringify(versions)).not.toContain(thirdSecret)
@@ -283,38 +329,57 @@ describe('[CF] /api/vaults', () => {
     expect(JSON.stringify(rotatedDbRows.results)).not.toContain(rotatedSecret)
     expect(JSON.stringify(rotatedDbRows.results)).not.toContain(thirdSecret)
 
-    const revokeRes = await jsonFetch(`/api/vaults/${vault.id}/credentials/${credential.id}`, authorization, {
+    const revokeRes = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials/${credential.id}`, authorization, {
       method: 'PATCH',
-      body: JSON.stringify({ status: 'revoked', revokeReason: 'Replaced by provider binding' }),
+      body: JSON.stringify({ state: 'revoked', revokeReason: 'Replaced by provider binding' }),
     })
     expect(revokeRes.status).toBe(200)
     await expect(revokeRes.json()).resolves.toMatchObject({
       id: credential.id,
-      status: 'revoked',
+      state: 'revoked',
       activeVersionId: null,
       activeVersion: null,
       revokeReason: 'Replaced by provider binding',
     })
     const versionsAfterRevokeRes = await jsonFetch(
-      `/api/vaults/${vault.id}/credentials/${credential.id}/versions?includeArchived=true`,
+      `/api/v1/vaults/${vault.id}/credentials/${credential.id}/versions`,
       authorization,
     )
     const versionsAfterRevoke = (await versionsAfterRevokeRes.json()) as {
-      data: Array<{ id: string; status: string; revokedAt: string | null }>
+      data: Array<{ id: string; state: string; revokedAt: string | null }>
     }
     expect(versionsAfterRevoke.data).toContainEqual(
-      expect.objectContaining({ id: thirdRotated.activeVersion.id, status: 'revoked', revokedAt: expect.any(String) }),
+      expect.objectContaining({ id: thirdRotated.activeVersion.id, state: 'revoked', revokedAt: expect.any(String) }),
     )
+
+    const revokedListRes = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials?state=revoked`, authorization)
+    expect(revokedListRes.status).toBe(200)
+    await expect(revokedListRes.json()).resolves.toMatchObject({
+      data: [expect.objectContaining({ id: credential.id, state: 'revoked' })],
+    })
+
+    const rotateRevokedRes = await jsonFetch(
+      `/api/v1/vaults/${vault.id}/credentials/${credential.id}/versions`,
+      authorization,
+      {
+        method: 'POST',
+        body: JSON.stringify({ provider: 'cloudflare-secrets', secretValue: 'after-revoke' }),
+      },
+    )
+    expect(rotateRevokedRes.status).toBe(409)
+    await expect(rotateRevokedRes.json()).resolves.toMatchObject({
+      error: { type: 'conflict', message: 'Credential is not active' },
+    })
   })
 
   it('supports approved external vault paths without exposing cross-project metadata', async () => {
     const authorization = await signIn()
-    const vaultRes = await jsonFetch('/api/vaults', authorization, {
+    const vaultRes = await jsonFetch('/api/v1/vaults', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'External vault' }),
     })
     const vault = (await vaultRes.json()) as { id: string }
-    const credentialRes = await jsonFetch(`/api/vaults/${vault.id}/credentials`, authorization, {
+    const credentialRes = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials`, authorization, {
       method: 'POST',
       body: JSON.stringify({
         name: 'GitHub token',
@@ -339,25 +404,30 @@ describe('[CF] /api/vaults', () => {
       org_id: 'org_flare_456',
       org_name: 'Other Org',
     })
-    const crossProjectRead = await jsonFetch(`/api/vaults/${vault.id}`, otherCookie)
+    const crossProjectRead = await jsonFetch(`/api/v1/vaults/${vault.id}`, otherCookie)
     expect(crossProjectRead.status).toBe(404)
 
-    const crossProjectCredentialRead = await jsonFetch(`/api/vaults/${vault.id}/credentials`, otherCookie)
+    const crossProjectCredentialRead = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials`, otherCookie)
     expect(crossProjectCredentialRead.status).toBe(404)
   })
 
   it('isolates project vaults inside the same organization and shares organization-scoped vaults', async () => {
     const authorization = await signIn()
-    const projectVaultRes = await jsonFetch('/api/vaults', authorization, {
+    const projectVaultRes = await jsonFetch('/api/v1/vaults', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Project vault', scope: 'project' }),
     })
-    const projectVault = (await projectVaultRes.json()) as { id: string; organizationId: string }
-    const orgVaultRes = await jsonFetch('/api/vaults', authorization, {
+    const projectVault = (await projectVaultRes.json()) as { id: string }
+    const orgVaultRes = await jsonFetch('/api/v1/vaults', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Organization vault', scope: 'organization' }),
     })
     const orgVault = (await orgVaultRes.json()) as { id: string }
+
+    const vaultRow = await env.DB.prepare('SELECT organization_id FROM vaults WHERE id = ?')
+      .bind(projectVault.id)
+      .first<{ organization_id: string }>()
+    expect(vaultRow?.organization_id).toBeTruthy()
 
     const alternateProjectId = `project_${crypto.randomUUID().replaceAll('-', '')}`
     await env.DB.prepare(
@@ -365,18 +435,18 @@ describe('[CF] /api/vaults', () => {
     )
       .bind(
         alternateProjectId,
-        projectVault.organizationId,
+        vaultRow?.organization_id,
         'Alternate Project',
         new Date().toISOString(),
         new Date().toISOString(),
       )
       .run()
-    const projectReadRes = await jsonFetch(`/api/vaults/${projectVault.id}`, authorization, {
+    const projectReadRes = await jsonFetch(`/api/v1/vaults/${projectVault.id}`, authorization, {
       headers: { 'x-ama-project-id': alternateProjectId },
     })
     expect(projectReadRes.status).toBe(404)
 
-    const orgReadRes = await jsonFetch(`/api/vaults/${orgVault.id}`, authorization, {
+    const orgReadRes = await jsonFetch(`/api/v1/vaults/${orgVault.id}`, authorization, {
       headers: { 'x-ama-project-id': alternateProjectId },
     })
     expect(orgReadRes.status).toBe(200)

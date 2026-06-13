@@ -24,6 +24,7 @@ import {
   normalizeProviderError,
   providerFamily,
 } from '../providers/adapters'
+import type { RuntimeSecretEnvEntry } from './secret-env'
 import { toolExecutor } from './tool-executor'
 
 export type SessionRuntimeStartInput = {
@@ -37,7 +38,7 @@ export type SessionRuntimeStartInput = {
   mcpSnapshot?: Record<string, unknown>
   resourceRefs?: Record<string, unknown>[]
   runtimeEnv?: Record<string, string>
-  runtimeSecretEnv?: Array<{ name: string; ref: string }>
+  runtimeSecretEnv?: RuntimeSecretEnvEntry[]
   // Secret env values already resolved from the vault by the control plane.
   // Applied to the sandbox session env but never written to workspace files.
   resolvedSecretEnv?: Record<string, string>
@@ -164,7 +165,7 @@ async function getSandboxBinding() {
 }
 
 export function runtimeEndpointPath(sessionId: string) {
-  return `/runtime/sessions/${sessionId}/rpc`
+  return `/api/v1/runtime/sessions/${sessionId}/rpc`
 }
 
 export function workspaceResourceManifest(resourceRefs: Record<string, unknown>[] = []) {
@@ -364,12 +365,9 @@ export async function executeRuntimeToolCalls(
 }
 
 function runtimeSystemPrompt(snapshot: Record<string, unknown>) {
-  const parts = [snapshot.systemPrompt, snapshot.instructions].filter((value): value is string => {
-    return typeof value === 'string' && value.trim().length > 0
-  })
+  const instructions = typeof snapshot.instructions === 'string' ? snapshot.instructions.trim() : ''
   return (
-    parts.join('\n\n') ||
-    'You are an AMA cloud-owned coding agent. Use tools when workspace inspection or edits are needed.'
+    instructions || 'You are an AMA cloud-owned coding agent. Use tools when workspace inspection or edits are needed.'
   )
 }
 
@@ -907,14 +905,23 @@ function runtimeTools(
       },
     }) satisfies AgentTool
 
-  const allowedTools = Array.isArray(values.agentSnapshot.allowedTools)
-    ? values.agentSnapshot.allowedTools.filter((tool): tool is string => typeof tool === 'string')
-    : []
-  // An empty allowlist means "no restriction": agents without an explicit
-  // tool policy get the full sandbox toolset, matching environment policy
+  // Agent tool attachments ({ name, ... } objects) are the only tool source.
+  // An empty list means "no restriction": agents without explicit tool
+  // attachments get the full sandbox toolset, matching environment policy
   // defaults elsewhere (defaultEffect allow).
+  const toolNames = Array.isArray(values.agentSnapshot.tools)
+    ? values.agentSnapshot.tools
+        .map((tool) =>
+          typeof tool === 'string'
+            ? tool
+            : tool && typeof tool === 'object' && typeof (tool as { name?: unknown }).name === 'string'
+              ? (tool as { name: string }).name
+              : null,
+        )
+        .filter((name): name is string => name !== null)
+    : []
   const allowsTool = (toolName: string) =>
-    allowedTools.length === 0 || allowedTools.includes('*') || allowedTools.includes(toolName)
+    toolNames.length === 0 || toolNames.includes('*') || toolNames.includes(toolName)
 
   return [
     tool(

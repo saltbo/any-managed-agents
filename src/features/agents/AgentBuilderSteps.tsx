@@ -8,8 +8,9 @@ import { Field, FieldDescription, FieldError, FieldLabel } from '@/components/ui
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { StatusBadge } from '@/console/components'
+import { isArchived } from '@/console/format'
 import { TextAreaField, TextField } from '@/console/forms'
-import { api, type Environment, type McpConnector, type Provider } from '@/lib/api'
+import { api, type Connector, type Environment, type Provider } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 import { cn } from '@/lib/utils'
 import {
@@ -106,7 +107,7 @@ export function CoreStep({ draft, errors, setField, providers }: StepProps & { p
   const providerOptions = [
     { id: 'workers-ai', label: 'workers-ai (platform default)' },
     ...providers
-      .filter((provider) => provider.status === 'active' && provider.type !== 'workers-ai')
+      .filter((provider) => provider.enabled && provider.type !== 'workers-ai')
       .map((provider) => ({ id: provider.id, label: `${provider.displayName} (${provider.type})` })),
   ]
   const modelsQuery = useQuery({
@@ -187,7 +188,7 @@ export function CoreStep({ draft, errors, setField, providers }: StepProps & { p
   )
 }
 
-export function ToolsStep({ draft, errors, setField, connectors }: StepProps & { connectors: McpConnector[] }) {
+export function ToolsStep({ draft, errors, setField, connectors }: StepProps & { connectors: Connector[] }) {
   const toggleConnector = (connectorId: string, include: boolean) => {
     const next = draft.mcpConnectors.filter((id) => id !== connectorId)
     setField('mcpConnectors', include ? [...next, connectorId] : next)
@@ -210,10 +211,10 @@ export function ToolsStep({ draft, errors, setField, connectors }: StepProps & {
         <div className="grid gap-3">
           {connectors.map((connector) => (
             <ConnectorOption
-              key={connector.connectorId}
+              key={connector.id}
               connector={connector}
-              selected={draft.mcpConnectors.includes(connector.connectorId)}
-              onToggle={(include) => toggleConnector(connector.connectorId, include)}
+              selected={draft.mcpConnectors.includes(connector.id)}
+              onToggle={(include) => toggleConnector(connector.id, include)}
             />
           ))}
           {connectors.length === 0 ? (
@@ -231,12 +232,12 @@ function ConnectorOption({
   selected,
   onToggle,
 }: {
-  connector: McpConnector
+  connector: Connector
   selected: boolean
   onToggle: (include: boolean) => void
 }) {
-  const connectable = connector.connectionStatus === 'connected'
-  const checkboxId = `builder-connector-${connector.connectorId}`
+  const connectable = connector.availability === 'available'
+  const checkboxId = `builder-connector-${connector.id}`
   return (
     <div className="rounded-lg border p-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -249,8 +250,7 @@ function ConnectorOption({
         <label htmlFor={checkboxId} className="text-sm font-medium">
           {connector.name}
         </label>
-        <StatusBadge value={connector.policyStatus} />
-        <StatusBadge value={connector.connectionStatus} />
+        <StatusBadge value={connector.availability} />
       </div>
       <p className="mt-1 text-xs text-muted-foreground">{connector.description}</p>
       <ul className="mt-2 grid gap-2">
@@ -351,7 +351,7 @@ export function TestEnvironmentField({
   environmentId: string
   setEnvironmentId: (value: string) => void
 }) {
-  const activeEnvironments = environments.filter((environment) => environment.status === 'active')
+  const activeEnvironments = environments.filter((environment) => !isArchived(environment))
   return (
     <Field>
       <FieldLabel>Test environment</FieldLabel>

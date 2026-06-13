@@ -1,8 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { Download } from 'lucide-react'
-import { useMemo, useState } from 'react'
-import { toast } from 'sonner'
-import { Button } from '@/components/ui/button'
+import { useMemo } from 'react'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { PageHeader } from '@/console/components'
@@ -22,7 +19,6 @@ export function AuditPage() {
   const [createdFrom, setCreatedFrom] = useUrlFilter('createdFrom')
   const [createdTo, setCreatedTo] = useUrlFilter('createdTo')
   const [projectId] = useUrlFilter('projectId')
-  const [exporting, setExporting] = useState(false)
   const filters = useMemo<AuditRecordListOptions>(
     () => ({
       ...(action ? { action } : {}),
@@ -30,8 +26,8 @@ export function AuditPage() {
       ...(outcome !== 'all' ? { outcome } : {}),
       ...(actorId ? { actorId } : {}),
       ...(projectId ? { projectId } : {}),
-      ...(createdFrom ? { createdFrom: new Date(createdFrom).toISOString() } : {}),
-      ...(createdTo ? { createdTo: new Date(createdTo).toISOString() } : {}),
+      ...(createdFrom ? { from: new Date(createdFrom).toISOString() } : {}),
+      ...(createdTo ? { to: new Date(createdTo).toISOString() } : {}),
     }),
     [action, resourceType, outcome, actorId, projectId, createdFrom, createdTo],
   )
@@ -41,36 +37,9 @@ export function AuditPage() {
   })
   const records = auditQuery.data?.data ?? []
   const pagination = useClientPagination(records)
-  const exportRecords = async () => {
-    setExporting(true)
-    try {
-      const exported = await api.exportAuditRecords(filters)
-      const blob = new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const anchor = document.createElement('a')
-      anchor.href = url
-      anchor.download = `audit-records-${new Date().toISOString()}.json`
-      anchor.click()
-      URL.revokeObjectURL(url)
-      toast.success(`Exported ${exported.length} audit record${exported.length === 1 ? '' : 's'}`)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
-    } finally {
-      setExporting(false)
-    }
-  }
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader
-        title="Audit"
-        description="Review security-relevant control-plane activity and policy decisions."
-        actions={
-          <Button type="button" variant="outline" onClick={exportRecords} disabled={exporting}>
-            <Download data-icon="inline-start" />
-            Export records
-          </Button>
-        }
-      />
+      <PageHeader title="Audit" description="Review security-relevant control-plane activity and policy decisions." />
       <div className="flex flex-wrap items-center gap-2">
         <Input
           type="search"

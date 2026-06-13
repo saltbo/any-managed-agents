@@ -79,7 +79,7 @@ OPERATIONS = ${pythonLiteral(operations)}
 
 async function routeGeneratedOpenApi() {
   const app = createApp()
-  const response = await app.fetch(new Request('https://example.test/api/openapi.json'), {} as Env)
+  const response = await app.fetch(new Request('https://example.test/api/v1/openapi.json'), {} as Env)
   if (!response.ok) {
     throw new Error(`OpenAPI generation failed with HTTP ${response.status}`)
   }

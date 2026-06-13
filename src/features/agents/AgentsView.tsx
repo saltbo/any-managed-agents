@@ -3,7 +3,7 @@ import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ConfirmAction, EmptyState, StatusBadge, TablePagination, TableSurface } from '@/console/components'
-import { formatDate } from '@/console/format'
+import { archivedLabel, formatDate } from '@/console/format'
 import type { ClientPagination } from '@/console/use-client-pagination'
 import type { Agent } from '@/lib/api'
 
@@ -47,13 +47,15 @@ export function AgentsView({
             </TableCell>
             <TableCell>
               <div className="flex gap-1">
-                <StatusBadge value={agent.status} />
+                <StatusBadge value={archivedLabel(agent)} />
                 <StatusBadge value={`v${agent.version}`} />
               </div>
             </TableCell>
-            <TableCell className="max-w-64 truncate">{`${agent.provider} / ${agent.model}`}</TableCell>
+            <TableCell className="max-w-64 truncate">{`${agent.providerId ?? 'None'} / ${agent.model ?? 'None'}`}</TableCell>
             <TableCell className="max-w-48 truncate">{agent.skills.join(', ') || 'None'}</TableCell>
-            <TableCell className="max-w-48 truncate">{agent.allowedTools.join(', ') || 'None'}</TableCell>
+            <TableCell className="max-w-48 truncate">
+              {agent.tools.map((tool) => tool.name).join(', ') || 'None'}
+            </TableCell>
             <TableCell>{formatDate(agent.updatedAt)}</TableCell>
             <TableCell>
               <div className="flex justify-end gap-2">

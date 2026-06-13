@@ -116,7 +116,7 @@ export async function completeSignIn() {
   userPromise = Promise.resolve(user)
 
   // Create server-side httpOnly session cookie from the validated access token.
-  const sessionResponse = await fetch('/api/auth/session', {
+  const sessionResponse = await fetch('/api/v1/auth/sessions', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     credentials: 'include',

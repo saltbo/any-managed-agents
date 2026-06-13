@@ -30,14 +30,14 @@ export const emptySession: SessionFormState = {
   title: '',
   metadata: '{}',
   resourceRefs: '[]',
-  vaultRefs: '[]',
 }
 
 export const emptyProvider: ProviderFormState = {
   type: 'workers-ai',
   displayName: 'Workers AI',
   baseUrl: '',
-  credentialSecretRef: '',
+  credentialId: '',
+  credentialVersionId: '',
 }
 
 export const emptyVault: VaultFormState = {

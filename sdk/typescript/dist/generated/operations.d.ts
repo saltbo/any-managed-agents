@@ -1,584 +1,680 @@
 export declare const operations: readonly [{
+    readonly method: "GET";
+    readonly path: "/api/v1/leases/{leaseId}/channel";
+    readonly operationId: "connectLeaseSessionChannel";
+    readonly summary: "Open a claimed runner session WebSocket channel";
+    readonly tags: readonly ["Leases"];
+}, {
     readonly method: "POST";
-    readonly path: "/api/governance/config";
-    readonly operationId: "applyGovernanceConfig";
-    readonly summary: "Apply declarative governance config atomically";
+    readonly path: "/api/v1/access-rules";
+    readonly operationId: "createAccessRule";
+    readonly summary: "Create an access rule";
     readonly tags: readonly ["Governance"];
 }, {
-    readonly method: "DELETE";
-    readonly path: "/api/agents/{agentId}";
-    readonly operationId: "archiveAgent";
-    readonly summary: "Archive an agent";
-    readonly tags: readonly ["Agents"];
-}, {
-    readonly method: "DELETE";
-    readonly path: "/api/environments/{environmentId}";
-    readonly operationId: "archiveEnvironment";
-    readonly summary: "Archive an environment";
-    readonly tags: readonly ["Environments"];
-}, {
-    readonly method: "DELETE";
-    readonly path: "/api/scheduled-agent-triggers/{triggerId}";
-    readonly operationId: "archiveScheduledAgentTrigger";
-    readonly summary: "Archive a scheduled agent trigger";
-    readonly tags: readonly ["Scheduled agent triggers"];
-}, {
-    readonly method: "DELETE";
-    readonly path: "/api/sessions/{sessionId}";
-    readonly operationId: "archiveSession";
-    readonly summary: "Archive a session";
-    readonly tags: readonly ["Sessions"];
-}, {
-    readonly method: "DELETE";
-    readonly path: "/api/vaults/{vaultId}";
-    readonly operationId: "archiveVault";
-    readonly summary: "Archive a vault";
-    readonly tags: readonly ["Vaults"];
-}, {
     readonly method: "POST";
-    readonly path: "/api/mcp/connections/{connectionId}/tools/{toolName}/calls";
-    readonly operationId: "callMcpTool";
-    readonly summary: "Call MCP tool through AMA policy boundary";
-    readonly tags: readonly ["MCP"];
-}, {
-    readonly method: "POST";
-    readonly path: "/api/mcp/connections";
-    readonly operationId: "connectMcpConnector";
-    readonly summary: "Connect or upsert an MCP connector";
-    readonly tags: readonly ["MCP"];
-}, {
-    readonly method: "GET";
-    readonly path: "/api/runners/{runnerId}/leases/{leaseId}/channel";
-    readonly operationId: "connectRunnerSessionChannel";
-    readonly summary: "Open a claimed runner session WebSocket channel";
-    readonly tags: readonly ["Runner leases"];
-}, {
-    readonly method: "POST";
-    readonly path: "/api/agents";
+    readonly path: "/api/v1/agents";
     readonly operationId: "createAgent";
     readonly summary: "Create an agent";
     readonly tags: readonly ["Agents"];
 }, {
     readonly method: "POST";
-    readonly path: "/api/auth/session";
+    readonly path: "/api/v1/auth/sessions";
     readonly operationId: "createAuthSession";
     readonly summary: "Complete OIDC sign-in and create an httpOnly session cookie";
     readonly tags: readonly ["Auth"];
 }, {
     readonly method: "POST";
-    readonly path: "/api/governance/budgets";
+    readonly path: "/api/v1/budgets";
     readonly operationId: "createBudget";
-    readonly summary: "Create budget";
+    readonly summary: "Create a budget";
     readonly tags: readonly ["Governance"];
 }, {
     readonly method: "POST";
-    readonly path: "/api/environments";
+    readonly path: "/api/v1/connections";
+    readonly operationId: "createConnection";
+    readonly summary: "Create a connector connection";
+    readonly tags: readonly ["Connections"];
+}, {
+    readonly method: "POST";
+    readonly path: "/api/v1/environments";
     readonly operationId: "createEnvironment";
     readonly summary: "Create an environment";
     readonly tags: readonly ["Environments"];
 }, {
     readonly method: "POST";
-    readonly path: "/api/projects/{projectId}/external-bindings";
-    readonly operationId: "createExternalProjectBinding";
-    readonly summary: "Bind an external issuer tenant to a project";
-    readonly tags: readonly ["Projects"];
+    readonly path: "/api/v1/auth/federated-tenants";
+    readonly operationId: "createFederatedTenant";
+    readonly summary: "Authorize an external issuer tenant for the current project";
+    readonly tags: readonly ["Auth"];
 }, {
     readonly method: "POST";
-    readonly path: "/api/projects";
+    readonly path: "/api/v1/leases";
+    readonly operationId: "createLease";
+    readonly summary: "Claim a specific available work item for a runner";
+    readonly tags: readonly ["Leases"];
+}, {
+    readonly method: "POST";
+    readonly path: "/api/v1/providers/{providerId}/model-discovery-tasks";
+    readonly operationId: "createModelDiscoveryTask";
+    readonly summary: "Create a model discovery task";
+    readonly tags: readonly ["Providers"];
+}, {
+    readonly method: "POST";
+    readonly path: "/api/v1/policies";
+    readonly operationId: "createPolicy";
+    readonly summary: "Create a scoped governance policy";
+    readonly tags: readonly ["Governance"];
+}, {
+    readonly method: "POST";
+    readonly path: "/api/v1/projects";
     readonly operationId: "createProject";
     readonly summary: "Create a project in the current organization";
     readonly tags: readonly ["Projects"];
 }, {
     readonly method: "POST";
-    readonly path: "/api/providers";
+    readonly path: "/api/v1/providers";
     readonly operationId: "createProvider";
     readonly summary: "Create a provider";
     readonly tags: readonly ["Providers"];
 }, {
     readonly method: "POST";
-    readonly path: "/api/governance/provider-access-rules";
-    readonly operationId: "createProviderAccessRule";
-    readonly summary: "Create provider access rule";
-    readonly tags: readonly ["Governance"];
-}, {
-    readonly method: "POST";
-    readonly path: "/api/runners";
+    readonly path: "/api/v1/runners";
     readonly operationId: "createRunner";
     readonly summary: "Register a self-hosted runner";
     readonly tags: readonly ["Runners"];
 }, {
     readonly method: "POST";
-    readonly path: "/api/runners/{runnerId}/heartbeats";
-    readonly operationId: "createRunnerHeartbeat";
-    readonly summary: "Record a runner heartbeat";
-    readonly tags: readonly ["Runners"];
-}, {
-    readonly method: "POST";
-    readonly path: "/api/runners/{runnerId}/leases";
-    readonly operationId: "createRunnerLease";
-    readonly summary: "Claim queued self-hosted runner work";
-    readonly tags: readonly ["Runner leases"];
-}, {
-    readonly method: "POST";
-    readonly path: "/api/runners/{runnerId}/leases/{leaseId}/events";
-    readonly operationId: "createRunnerLeaseEvents";
-    readonly summary: "Upload structured runner lease events";
-    readonly tags: readonly ["Runner leases"];
-}, {
-    readonly method: "POST";
-    readonly path: "/api/scheduled-agent-triggers";
-    readonly operationId: "createScheduledAgentTrigger";
-    readonly summary: "Create a scheduled agent trigger";
-    readonly tags: readonly ["Scheduled agent triggers"];
-}, {
-    readonly method: "POST";
-    readonly path: "/api/sessions";
+    readonly path: "/api/v1/sessions";
     readonly operationId: "createSession";
     readonly summary: "Create a session";
     readonly tags: readonly ["Sessions"];
 }, {
     readonly method: "POST";
-    readonly path: "/api/sessions/{sessionId}/commands";
-    readonly operationId: "createSessionCommand";
-    readonly summary: "Send a command to an active session";
+    readonly path: "/api/v1/sessions/{sessionId}/events";
+    readonly operationId: "createSessionEvents";
+    readonly summary: "Batch-create session events";
     readonly tags: readonly ["Sessions"];
 }, {
     readonly method: "POST";
-    readonly path: "/api/vaults";
+    readonly path: "/api/v1/sessions/{sessionId}/messages";
+    readonly operationId: "createSessionMessage";
+    readonly summary: "Send a prompt message to a session";
+    readonly tags: readonly ["Sessions"];
+}, {
+    readonly method: "POST";
+    readonly path: "/api/v1/connections/{connectionId}/tools/{toolName}/calls";
+    readonly operationId: "createToolCall";
+    readonly summary: "Execute a connection tool through the AMA policy boundary";
+    readonly tags: readonly ["Connections"];
+}, {
+    readonly method: "POST";
+    readonly path: "/api/v1/triggers";
+    readonly operationId: "createTrigger";
+    readonly summary: "Create a trigger";
+    readonly tags: readonly ["Triggers"];
+}, {
+    readonly method: "POST";
+    readonly path: "/api/v1/vaults";
     readonly operationId: "createVault";
     readonly summary: "Create a vault";
     readonly tags: readonly ["Vaults"];
 }, {
     readonly method: "POST";
-    readonly path: "/api/vaults/{vaultId}/credentials";
+    readonly path: "/api/v1/vaults/{vaultId}/credentials";
     readonly operationId: "createVaultCredential";
     readonly summary: "Create vault credential metadata";
     readonly tags: readonly ["Vaults"];
 }, {
     readonly method: "POST";
-    readonly path: "/api/sessions/{sessionId}/approvals/{approvalId}";
+    readonly path: "/api/v1/vaults/{vaultId}/credentials/{credentialId}/versions";
+    readonly operationId: "createVaultCredentialVersion";
+    readonly summary: "Rotate a vault credential by creating a new version";
+    readonly tags: readonly ["Vaults"];
+}, {
+    readonly method: "PATCH";
+    readonly path: "/api/v1/sessions/{sessionId}/approvals/{approvalId}";
     readonly operationId: "decideSessionApproval";
     readonly summary: "Approve or deny a pending tool call";
     readonly tags: readonly ["Sessions"];
 }, {
     readonly method: "DELETE";
-    readonly path: "/api/providers/{providerId}";
+    readonly path: "/api/v1/access-rules/{ruleId}";
+    readonly operationId: "deleteAccessRule";
+    readonly summary: "Delete an access rule";
+    readonly tags: readonly ["Governance"];
+}, {
+    readonly method: "DELETE";
+    readonly path: "/api/v1/budgets/{budgetId}";
+    readonly operationId: "deleteBudget";
+    readonly summary: "Delete a budget";
+    readonly tags: readonly ["Governance"];
+}, {
+    readonly method: "DELETE";
+    readonly path: "/api/v1/auth/sessions/current";
+    readonly operationId: "deleteCurrentAuthSession";
+    readonly summary: "Sign out and clear the session cookie";
+    readonly tags: readonly ["Auth"];
+}, {
+    readonly method: "DELETE";
+    readonly path: "/api/v1/auth/federated-tenants/{tenantId}";
+    readonly operationId: "deleteFederatedTenant";
+    readonly summary: "Delete a federated tenant";
+    readonly tags: readonly ["Auth"];
+}, {
+    readonly method: "DELETE";
+    readonly path: "/api/v1/policies/{policyId}";
+    readonly operationId: "deletePolicy";
+    readonly summary: "Delete a governance policy";
+    readonly tags: readonly ["Governance"];
+}, {
+    readonly method: "DELETE";
+    readonly path: "/api/v1/providers/{providerId}";
     readonly operationId: "deleteProvider";
     readonly summary: "Delete a provider";
     readonly tags: readonly ["Providers"];
 }, {
     readonly method: "DELETE";
-    readonly path: "/api/vaults/{vaultId}/credentials/{credentialId}/versions/{versionId}";
-    readonly operationId: "deleteVaultCredentialVersion";
-    readonly summary: "Delete unused vault credential version metadata";
-    readonly tags: readonly ["Vaults"];
-}, {
-    readonly method: "DELETE";
-    readonly path: "/api/mcp/connections/{connectionId}";
-    readonly operationId: "disconnectMcpConnection";
-    readonly summary: "Disconnect MCP connection";
-    readonly tags: readonly ["MCP"];
-}, {
-    readonly method: "POST";
-    readonly path: "/api/providers/{providerId}/models/discovery";
-    readonly operationId: "discoverProviderModels";
-    readonly summary: "Discover provider models";
+    readonly path: "/api/v1/providers/{providerId}/models/{modelId}";
+    readonly operationId: "deleteProviderModel";
+    readonly summary: "Delete a provider model";
     readonly tags: readonly ["Providers"];
 }, {
-    readonly method: "POST";
-    readonly path: "/api/governance/evaluations";
-    readonly operationId: "evaluateGovernancePolicy";
-    readonly summary: "Evaluate governance policy";
-    readonly tags: readonly ["Governance"];
+    readonly method: "DELETE";
+    readonly path: "/api/v1/vaults/{vaultId}/credentials/{credentialId}/versions/{versionId}";
+    readonly operationId: "deleteVaultCredentialVersion";
+    readonly summary: "Delete an unused vault credential version";
+    readonly tags: readonly ["Vaults"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/audit-records/export";
-    readonly operationId: "exportAuditRecords";
-    readonly summary: "Export audit records";
-    readonly tags: readonly ["Audit"];
-}, {
-    readonly method: "GET";
-    readonly path: "/api/sessions/{sessionId}/events/export";
-    readonly operationId: "exportSessionEvents";
-    readonly summary: "Export session events as NDJSON";
-    readonly tags: readonly ["Sessions"];
-}, {
-    readonly method: "GET";
-    readonly path: "/api/usage/export";
-    readonly operationId: "exportUsageSummary";
-    readonly summary: "Export usage summaries";
-    readonly tags: readonly ["Usage"];
-}, {
-    readonly method: "GET";
-    readonly path: "/api/health";
+    readonly path: "/api/v1/health";
     readonly operationId: "getHealth";
     readonly summary: "Get Worker health";
     readonly tags: readonly ["System"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/auth/login-options";
-    readonly operationId: "getLoginOptions";
-    readonly summary: "Discover available login methods for an organization";
-    readonly tags: readonly ["Auth"];
+    readonly path: "/api/v1/access-rules";
+    readonly operationId: "listAccessRules";
+    readonly summary: "List provider and model access rules";
+    readonly tags: readonly ["Governance"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/agents/{agentId}/handoff-candidates";
+    readonly path: "/api/v1/agents/{agentId}/handoff-candidates";
     readonly operationId: "listAgentHandoffCandidates";
     readonly summary: "List handoff candidate agents";
     readonly tags: readonly ["Agents"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/agents";
+    readonly path: "/api/v1/agents";
     readonly operationId: "listAgents";
     readonly summary: "List agents";
     readonly tags: readonly ["Agents"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/agents/{agentId}/versions";
+    readonly path: "/api/v1/agents/{agentId}/versions";
     readonly operationId: "listAgentVersions";
     readonly summary: "List agent versions";
     readonly tags: readonly ["Agents"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/audit-records";
+    readonly path: "/api/v1/audit-records";
     readonly operationId: "listAuditRecords";
     readonly summary: "List audit records";
     readonly tags: readonly ["Audit"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/governance/budgets";
+    readonly path: "/api/v1/budgets";
     readonly operationId: "listBudgets";
     readonly summary: "List budgets";
     readonly tags: readonly ["Governance"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/environments";
+    readonly path: "/api/v1/connections";
+    readonly operationId: "listConnections";
+    readonly summary: "List connections";
+    readonly tags: readonly ["Connections"];
+}, {
+    readonly method: "GET";
+    readonly path: "/api/v1/connections/{connectionId}/tools";
+    readonly operationId: "listConnectionTools";
+    readonly summary: "List connection tools";
+    readonly tags: readonly ["Connections"];
+}, {
+    readonly method: "GET";
+    readonly path: "/api/v1/connectors";
+    readonly operationId: "listConnectors";
+    readonly summary: "List connectors";
+    readonly tags: readonly ["Connectors"];
+}, {
+    readonly method: "GET";
+    readonly path: "/api/v1/environments";
     readonly operationId: "listEnvironments";
     readonly summary: "List environments";
     readonly tags: readonly ["Environments"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/environments/{environmentId}/versions";
+    readonly path: "/api/v1/environments/{environmentId}/versions";
     readonly operationId: "listEnvironmentVersions";
     readonly summary: "List environment versions";
     readonly tags: readonly ["Environments"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/projects/{projectId}/external-bindings";
-    readonly operationId: "listExternalProjectBindings";
-    readonly summary: "List external tenant bindings for a project";
-    readonly tags: readonly ["Projects"];
+    readonly path: "/api/v1/auth/federated-tenants";
+    readonly operationId: "listFederatedTenants";
+    readonly summary: "List federated tenants for the current project";
+    readonly tags: readonly ["Auth"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/mcp/connections";
-    readonly operationId: "listMcpConnections";
-    readonly summary: "List MCP connections";
-    readonly tags: readonly ["MCP"];
+    readonly path: "/api/v1/leases";
+    readonly operationId: "listLeases";
+    readonly summary: "List work leases";
+    readonly tags: readonly ["Leases"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/mcp/connectors";
-    readonly operationId: "listMcpConnectors";
-    readonly summary: "List MCP connectors";
-    readonly tags: readonly ["MCP"];
+    readonly path: "/api/v1/policies";
+    readonly operationId: "listPolicies";
+    readonly summary: "List scoped governance policies";
+    readonly tags: readonly ["Governance"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/mcp/connections/{connectionId}/tools";
-    readonly operationId: "listMcpTools";
-    readonly summary: "List MCP connection tools";
-    readonly tags: readonly ["MCP"];
-}, {
-    readonly method: "GET";
-    readonly path: "/api/projects";
+    readonly path: "/api/v1/projects";
     readonly operationId: "listProjects";
     readonly summary: "List projects in the current organization";
     readonly tags: readonly ["Projects"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/governance/provider-access-rules";
-    readonly operationId: "listProviderAccessRules";
-    readonly summary: "List provider access rules";
-    readonly tags: readonly ["Governance"];
-}, {
-    readonly method: "GET";
-    readonly path: "/api/providers/{providerId}/models";
+    readonly path: "/api/v1/providers/{providerId}/models";
     readonly operationId: "listProviderModels";
     readonly summary: "List provider models";
     readonly tags: readonly ["Providers"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/providers";
+    readonly path: "/api/v1/providers";
     readonly operationId: "listProviders";
     readonly summary: "List providers";
     readonly tags: readonly ["Providers"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/runners";
+    readonly path: "/api/v1/runners";
     readonly operationId: "listRunners";
     readonly summary: "List self-hosted runners";
     readonly tags: readonly ["Runners"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/runners/work-items";
-    readonly operationId: "listRunnerWorkItems";
-    readonly summary: "List self-hosted runner work items";
-    readonly tags: readonly ["Runner work"];
-}, {
-    readonly method: "GET";
-    readonly path: "/api/scheduled-agent-triggers";
-    readonly operationId: "listScheduledAgentTriggers";
-    readonly summary: "List scheduled agent triggers";
-    readonly tags: readonly ["Scheduled agent triggers"];
-}, {
-    readonly method: "GET";
-    readonly path: "/api/scheduled-agent-triggers/{triggerId}/runs";
-    readonly operationId: "listScheduledTriggerRuns";
-    readonly summary: "List scheduled trigger runs";
-    readonly tags: readonly ["Scheduled agent triggers"];
-}, {
-    readonly method: "GET";
-    readonly path: "/api/sessions/{sessionId}/approvals";
+    readonly path: "/api/v1/sessions/{sessionId}/approvals";
     readonly operationId: "listSessionApprovals";
-    readonly summary: "List pending tool approvals for a session";
+    readonly summary: "List tool approvals for a session";
     readonly tags: readonly ["Sessions"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/sessions/{sessionId}/events";
+    readonly path: "/api/v1/sessions/{sessionId}/events";
     readonly operationId: "listSessionEvents";
     readonly summary: "List session events";
     readonly tags: readonly ["Sessions"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/sessions";
+    readonly path: "/api/v1/sessions/{sessionId}/messages";
+    readonly operationId: "listSessionMessages";
+    readonly summary: "List session messages";
+    readonly tags: readonly ["Sessions"];
+}, {
+    readonly method: "GET";
+    readonly path: "/api/v1/sessions";
     readonly operationId: "listSessions";
     readonly summary: "List sessions";
     readonly tags: readonly ["Sessions"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/usage";
+    readonly path: "/api/v1/connections/{connectionId}/tools/{toolName}/calls";
+    readonly operationId: "listToolCalls";
+    readonly summary: "List tool calls";
+    readonly tags: readonly ["Connections"];
+}, {
+    readonly method: "GET";
+    readonly path: "/api/v1/triggers/{triggerId}/runs";
+    readonly operationId: "listTriggerRuns";
+    readonly summary: "List trigger runs";
+    readonly tags: readonly ["Triggers"];
+}, {
+    readonly method: "GET";
+    readonly path: "/api/v1/triggers";
+    readonly operationId: "listTriggers";
+    readonly summary: "List triggers";
+    readonly tags: readonly ["Triggers"];
+}, {
+    readonly method: "GET";
+    readonly path: "/api/v1/usage-records";
     readonly operationId: "listUsageRecords";
     readonly summary: "List usage records";
     readonly tags: readonly ["Usage"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/vaults/{vaultId}/credentials";
+    readonly path: "/api/v1/vaults/{vaultId}/credentials";
     readonly operationId: "listVaultCredentials";
     readonly summary: "List vault credential metadata";
     readonly tags: readonly ["Vaults"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/vaults/{vaultId}/credentials/{credentialId}/versions";
+    readonly path: "/api/v1/vaults/{vaultId}/credentials/{credentialId}/versions";
     readonly operationId: "listVaultCredentialVersions";
     readonly summary: "List vault credential versions";
     readonly tags: readonly ["Vaults"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/vaults";
+    readonly path: "/api/v1/vaults";
     readonly operationId: "listVaults";
     readonly summary: "List vaults";
     readonly tags: readonly ["Vaults"];
 }, {
-    readonly method: "POST";
-    readonly path: "/api/governance/config/preview";
-    readonly operationId: "previewGovernanceConfig";
-    readonly summary: "Preview declarative governance config impact";
+    readonly method: "GET";
+    readonly path: "/api/v1/work-items";
+    readonly operationId: "listWorkItems";
+    readonly summary: "List queued self-hosted work items";
+    readonly tags: readonly ["Work items"];
+}, {
+    readonly method: "PUT";
+    readonly path: "/api/v1/runners/{runnerId}/heartbeat";
+    readonly operationId: "putRunnerHeartbeat";
+    readonly summary: "Replace the current runner heartbeat state";
+    readonly tags: readonly ["Runners"];
+}, {
+    readonly method: "GET";
+    readonly path: "/api/v1/access-rules/{ruleId}";
+    readonly operationId: "readAccessRule";
+    readonly summary: "Read an access rule";
     readonly tags: readonly ["Governance"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/agents/{agentId}";
+    readonly path: "/api/v1/agents/{agentId}";
     readonly operationId: "readAgent";
     readonly summary: "Read an agent";
     readonly tags: readonly ["Agents"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/agents/{agentId}/memory";
+    readonly path: "/api/v1/agents/{agentId}/memory";
     readonly operationId: "readAgentMemory";
     readonly summary: "Read agent memory";
     readonly tags: readonly ["Agents"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/audit-records/{recordId}";
+    readonly path: "/api/v1/agents/{agentId}/versions/{version}";
+    readonly operationId: "readAgentVersion";
+    readonly summary: "Read an agent version";
+    readonly tags: readonly ["Agents"];
+}, {
+    readonly method: "GET";
+    readonly path: "/api/v1/audit-records/{recordId}";
     readonly operationId: "readAuditRecord";
     readonly summary: "Read an audit record";
     readonly tags: readonly ["Audit"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/governance/effective-policy";
-    readonly operationId: "readEffectiveGovernancePolicy";
-    readonly summary: "Read effective governance policy";
+    readonly path: "/api/v1/auth/config";
+    readonly operationId: "readAuthConfig";
+    readonly summary: "Discover available sign-in methods for an organization";
+    readonly tags: readonly ["Auth"];
+}, {
+    readonly method: "GET";
+    readonly path: "/api/v1/budgets/{budgetId}";
+    readonly operationId: "readBudget";
+    readonly summary: "Read a budget";
     readonly tags: readonly ["Governance"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/environments/{environmentId}";
+    readonly path: "/api/v1/connections/{connectionId}";
+    readonly operationId: "readConnection";
+    readonly summary: "Read connection";
+    readonly tags: readonly ["Connections"];
+}, {
+    readonly method: "GET";
+    readonly path: "/api/v1/connectors/{connectorId}";
+    readonly operationId: "readConnector";
+    readonly summary: "Read connector";
+    readonly tags: readonly ["Connectors"];
+}, {
+    readonly method: "GET";
+    readonly path: "/api/v1/auth/sessions/current";
+    readonly operationId: "readCurrentAuthSession";
+    readonly summary: "Read the authenticated session context";
+    readonly tags: readonly ["Auth"];
+}, {
+    readonly method: "GET";
+    readonly path: "/api/v1/effective-policy";
+    readonly operationId: "readEffectivePolicy";
+    readonly summary: "Read the effective governance policy";
+    readonly tags: readonly ["Governance"];
+}, {
+    readonly method: "GET";
+    readonly path: "/api/v1/environments/{environmentId}";
     readonly operationId: "readEnvironment";
     readonly summary: "Read an environment";
     readonly tags: readonly ["Environments"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/governance/policy";
-    readonly operationId: "readGovernancePolicy";
-    readonly summary: "Read governance policy";
+    readonly path: "/api/v1/environments/{environmentId}/versions/{version}";
+    readonly operationId: "readEnvironmentVersion";
+    readonly summary: "Read an environment version";
+    readonly tags: readonly ["Environments"];
+}, {
+    readonly method: "GET";
+    readonly path: "/api/v1/auth/federated-tenants/{tenantId}";
+    readonly operationId: "readFederatedTenant";
+    readonly summary: "Read a federated tenant";
+    readonly tags: readonly ["Auth"];
+}, {
+    readonly method: "GET";
+    readonly path: "/api/v1/leases/{leaseId}";
+    readonly operationId: "readLease";
+    readonly summary: "Read a work lease";
+    readonly tags: readonly ["Leases"];
+}, {
+    readonly method: "GET";
+    readonly path: "/api/v1/providers/{providerId}/model-discovery-tasks/{taskId}";
+    readonly operationId: "readModelDiscoveryTask";
+    readonly summary: "Read a model discovery task";
+    readonly tags: readonly ["Providers"];
+}, {
+    readonly method: "GET";
+    readonly path: "/api/v1/policies/{policyId}";
+    readonly operationId: "readPolicy";
+    readonly summary: "Read a governance policy";
     readonly tags: readonly ["Governance"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/mcp/connections/{connectionId}";
-    readonly operationId: "readMcpConnection";
-    readonly summary: "Read MCP connection";
-    readonly tags: readonly ["MCP"];
+    readonly path: "/api/v1/projects/{projectId}";
+    readonly operationId: "readProject";
+    readonly summary: "Read a single project";
+    readonly tags: readonly ["Projects"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/mcp/connectors/{connectorId}";
-    readonly operationId: "readMcpConnector";
-    readonly summary: "Read MCP connector";
-    readonly tags: readonly ["MCP"];
-}, {
-    readonly method: "GET";
-    readonly path: "/api/providers/{providerId}";
+    readonly path: "/api/v1/providers/{providerId}";
     readonly operationId: "readProvider";
     readonly summary: "Read a provider";
     readonly tags: readonly ["Providers"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/runners/{runnerId}";
+    readonly path: "/api/v1/runners/{runnerId}";
     readonly operationId: "readRunner";
     readonly summary: "Read a self-hosted runner";
     readonly tags: readonly ["Runners"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/scheduled-agent-triggers/{triggerId}";
-    readonly operationId: "readScheduledAgentTrigger";
-    readonly summary: "Read a scheduled agent trigger";
-    readonly tags: readonly ["Scheduled agent triggers"];
+    readonly path: "/api/v1/runners/{runnerId}/heartbeat";
+    readonly operationId: "readRunnerHeartbeat";
+    readonly summary: "Read the current runner heartbeat state";
+    readonly tags: readonly ["Runners"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/sessions/{sessionId}";
+    readonly path: "/api/v1/sessions/{sessionId}";
     readonly operationId: "readSession";
     readonly summary: "Read a session";
     readonly tags: readonly ["Sessions"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/sessions/{sessionId}/reconnect";
-    readonly operationId: "readSessionReconnect";
-    readonly summary: "Read reconnect metadata";
+    readonly path: "/api/v1/sessions/{sessionId}/approvals/{approvalId}";
+    readonly operationId: "readSessionApproval";
+    readonly summary: "Read a tool approval";
     readonly tags: readonly ["Sessions"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/usage/summary";
-    readonly operationId: "readUsageSummary";
-    readonly summary: "Read usage summary";
+    readonly path: "/api/v1/sessions/{sessionId}/connection";
+    readonly operationId: "readSessionConnection";
+    readonly summary: "Read session runtime connection details";
+    readonly tags: readonly ["Sessions"];
+}, {
+    readonly method: "GET";
+    readonly path: "/api/v1/sessions/{sessionId}/messages/{messageId}";
+    readonly operationId: "readSessionMessage";
+    readonly summary: "Read a session message delivery state";
+    readonly tags: readonly ["Sessions"];
+}, {
+    readonly method: "GET";
+    readonly path: "/api/v1/connections/{connectionId}/tools/{toolName}/calls/{callId}";
+    readonly operationId: "readToolCall";
+    readonly summary: "Read tool call";
+    readonly tags: readonly ["Connections"];
+}, {
+    readonly method: "GET";
+    readonly path: "/api/v1/triggers/{triggerId}";
+    readonly operationId: "readTrigger";
+    readonly summary: "Read a trigger";
+    readonly tags: readonly ["Triggers"];
+}, {
+    readonly method: "GET";
+    readonly path: "/api/v1/triggers/{triggerId}/runs/{runId}";
+    readonly operationId: "readTriggerRun";
+    readonly summary: "Read a trigger run";
+    readonly tags: readonly ["Triggers"];
+}, {
+    readonly method: "GET";
+    readonly path: "/api/v1/usage-records/{recordId}";
+    readonly operationId: "readUsageRecord";
+    readonly summary: "Read a usage record";
     readonly tags: readonly ["Usage"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/vaults/{vaultId}";
+    readonly path: "/api/v1/usage-summary";
+    readonly operationId: "readUsageSummary";
+    readonly summary: "Read aggregated usage";
+    readonly tags: readonly ["Usage"];
+}, {
+    readonly method: "GET";
+    readonly path: "/api/v1/vaults/{vaultId}";
     readonly operationId: "readVault";
     readonly summary: "Read a vault";
     readonly tags: readonly ["Vaults"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/vaults/{vaultId}/credentials/{credentialId}";
+    readonly path: "/api/v1/vaults/{vaultId}/credentials/{credentialId}";
     readonly operationId: "readVaultCredential";
     readonly summary: "Read vault credential metadata";
     readonly tags: readonly ["Vaults"];
 }, {
-    readonly method: "POST";
-    readonly path: "/api/vaults/{vaultId}/credentials/{credentialId}/versions";
-    readonly operationId: "rotateVaultCredential";
-    readonly summary: "Rotate vault credential";
+    readonly method: "GET";
+    readonly path: "/api/v1/vaults/{vaultId}/credentials/{credentialId}/versions/{versionId}";
+    readonly operationId: "readVaultCredentialVersion";
+    readonly summary: "Read a vault credential version";
     readonly tags: readonly ["Vaults"];
 }, {
-    readonly method: "POST";
-    readonly path: "/api/sessions/{sessionId}/stop";
-    readonly operationId: "stopSession";
-    readonly summary: "Stop a session";
-    readonly tags: readonly ["Sessions"];
-}, {
     readonly method: "GET";
-    readonly path: "/api/sessions/{sessionId}/events/stream";
-    readonly operationId: "streamSessionEvents";
-    readonly summary: "Stream session events as NDJSON";
-    readonly tags: readonly ["Sessions"];
+    readonly path: "/api/v1/work-items/{workItemId}";
+    readonly operationId: "readWorkItem";
+    readonly summary: "Read a queued self-hosted work item";
+    readonly tags: readonly ["Work items"];
+}, {
+    readonly method: "PUT";
+    readonly path: "/api/v1/agents/{agentId}/memory";
+    readonly operationId: "replaceAgentMemory";
+    readonly summary: "Replace agent memory";
+    readonly tags: readonly ["Agents"];
+}, {
+    readonly method: "PUT";
+    readonly path: "/api/v1/policies/{policyId}";
+    readonly operationId: "replacePolicy";
+    readonly summary: "Replace a governance policy";
+    readonly tags: readonly ["Governance"];
 }, {
     readonly method: "PATCH";
-    readonly path: "/api/agents/{agentId}";
+    readonly path: "/api/v1/access-rules/{ruleId}";
+    readonly operationId: "updateAccessRule";
+    readonly summary: "Update an access rule";
+    readonly tags: readonly ["Governance"];
+}, {
+    readonly method: "PATCH";
+    readonly path: "/api/v1/agents/{agentId}";
     readonly operationId: "updateAgent";
     readonly summary: "Update an agent";
     readonly tags: readonly ["Agents"];
 }, {
     readonly method: "PATCH";
-    readonly path: "/api/agents/{agentId}/memory";
-    readonly operationId: "updateAgentMemory";
-    readonly summary: "Update agent memory";
-    readonly tags: readonly ["Agents"];
+    readonly path: "/api/v1/budgets/{budgetId}";
+    readonly operationId: "updateBudget";
+    readonly summary: "Update a budget";
+    readonly tags: readonly ["Governance"];
 }, {
     readonly method: "PATCH";
-    readonly path: "/api/environments/{environmentId}";
+    readonly path: "/api/v1/connections/{connectionId}";
+    readonly operationId: "updateConnection";
+    readonly summary: "Update connection state, credential, or settings";
+    readonly tags: readonly ["Connections"];
+}, {
+    readonly method: "PATCH";
+    readonly path: "/api/v1/environments/{environmentId}";
     readonly operationId: "updateEnvironment";
     readonly summary: "Update an environment";
     readonly tags: readonly ["Environments"];
 }, {
-    readonly method: "PUT";
-    readonly path: "/api/governance/policy";
-    readonly operationId: "updateGovernancePolicy";
-    readonly summary: "Update governance policy";
-    readonly tags: readonly ["Governance"];
+    readonly method: "PATCH";
+    readonly path: "/api/v1/auth/federated-tenants/{tenantId}";
+    readonly operationId: "updateFederatedTenant";
+    readonly summary: "Update a federated tenant";
+    readonly tags: readonly ["Auth"];
 }, {
     readonly method: "PATCH";
-    readonly path: "/api/mcp/connections/{connectionId}";
-    readonly operationId: "updateMcpConnection";
-    readonly summary: "Update MCP connection";
-    readonly tags: readonly ["MCP"];
+    readonly path: "/api/v1/leases/{leaseId}";
+    readonly operationId: "updateLease";
+    readonly summary: "Renew or finish a work lease";
+    readonly tags: readonly ["Leases"];
 }, {
     readonly method: "PATCH";
-    readonly path: "/api/providers/{providerId}";
+    readonly path: "/api/v1/providers/{providerId}";
     readonly operationId: "updateProvider";
     readonly summary: "Update a provider";
     readonly tags: readonly ["Providers"];
 }, {
     readonly method: "PATCH";
-    readonly path: "/api/runners/{runnerId}";
+    readonly path: "/api/v1/runners/{runnerId}";
     readonly operationId: "updateRunner";
-    readonly summary: "Update a self-hosted runner";
+    readonly summary: "Update or archive a self-hosted runner";
     readonly tags: readonly ["Runners"];
 }, {
     readonly method: "PATCH";
-    readonly path: "/api/runners/{runnerId}/leases/{leaseId}";
-    readonly operationId: "updateRunnerLease";
-    readonly summary: "Renew or finish a runner lease";
-    readonly tags: readonly ["Runner leases"];
-}, {
-    readonly method: "PATCH";
-    readonly path: "/api/scheduled-agent-triggers/{triggerId}";
-    readonly operationId: "updateScheduledAgentTrigger";
-    readonly summary: "Update a scheduled agent trigger";
-    readonly tags: readonly ["Scheduled agent triggers"];
-}, {
-    readonly method: "PATCH";
-    readonly path: "/api/sessions/{sessionId}";
+    readonly path: "/api/v1/sessions/{sessionId}";
     readonly operationId: "updateSession";
-    readonly summary: "Update a session lifecycle state";
+    readonly summary: "Update a session";
     readonly tags: readonly ["Sessions"];
 }, {
     readonly method: "PATCH";
-    readonly path: "/api/vaults/{vaultId}";
+    readonly path: "/api/v1/triggers/{triggerId}";
+    readonly operationId: "updateTrigger";
+    readonly summary: "Update, pause, or archive a trigger";
+    readonly tags: readonly ["Triggers"];
+}, {
+    readonly method: "PATCH";
+    readonly path: "/api/v1/vaults/{vaultId}";
     readonly operationId: "updateVault";
-    readonly summary: "Update a vault";
+    readonly summary: "Update or archive a vault";
     readonly tags: readonly ["Vaults"];
 }, {
     readonly method: "PATCH";
-    readonly path: "/api/vaults/{vaultId}/credentials/{credentialId}";
+    readonly path: "/api/v1/vaults/{vaultId}/credentials/{credentialId}";
     readonly operationId: "updateVaultCredential";
     readonly summary: "Update or revoke vault credential metadata";
     readonly tags: readonly ["Vaults"];
 }, {
-    readonly method: "POST";
-    readonly path: "/api/providers/{providerId}/models";
+    readonly method: "PUT";
+    readonly path: "/api/v1/providers/{providerId}/models/{modelId}";
     readonly operationId: "upsertProviderModel";
-    readonly summary: "Upsert provider model metadata";
+    readonly summary: "Create or replace provider model metadata";
     readonly tags: readonly ["Providers"];
-}, {
-    readonly method: "POST";
-    readonly path: "/api/governance/config/validate";
-    readonly operationId: "validateGovernanceConfig";
-    readonly summary: "Validate declarative governance config";
-    readonly tags: readonly ["Governance"];
 }];
 export type AmaOperationId = (typeof operations)[number]['operationId'];

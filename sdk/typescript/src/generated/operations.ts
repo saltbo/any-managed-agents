@@ -2,89 +2,26 @@
 
 export const operations = [
   {
+    "method": "GET",
+    "path": "/api/v1/leases/{leaseId}/channel",
+    "operationId": "connectLeaseSessionChannel",
+    "summary": "Open a claimed runner session WebSocket channel",
+    "tags": [
+      "Leases"
+    ]
+  },
+  {
     "method": "POST",
-    "path": "/api/governance/config",
-    "operationId": "applyGovernanceConfig",
-    "summary": "Apply declarative governance config atomically",
+    "path": "/api/v1/access-rules",
+    "operationId": "createAccessRule",
+    "summary": "Create an access rule",
     "tags": [
       "Governance"
     ]
   },
   {
-    "method": "DELETE",
-    "path": "/api/agents/{agentId}",
-    "operationId": "archiveAgent",
-    "summary": "Archive an agent",
-    "tags": [
-      "Agents"
-    ]
-  },
-  {
-    "method": "DELETE",
-    "path": "/api/environments/{environmentId}",
-    "operationId": "archiveEnvironment",
-    "summary": "Archive an environment",
-    "tags": [
-      "Environments"
-    ]
-  },
-  {
-    "method": "DELETE",
-    "path": "/api/scheduled-agent-triggers/{triggerId}",
-    "operationId": "archiveScheduledAgentTrigger",
-    "summary": "Archive a scheduled agent trigger",
-    "tags": [
-      "Scheduled agent triggers"
-    ]
-  },
-  {
-    "method": "DELETE",
-    "path": "/api/sessions/{sessionId}",
-    "operationId": "archiveSession",
-    "summary": "Archive a session",
-    "tags": [
-      "Sessions"
-    ]
-  },
-  {
-    "method": "DELETE",
-    "path": "/api/vaults/{vaultId}",
-    "operationId": "archiveVault",
-    "summary": "Archive a vault",
-    "tags": [
-      "Vaults"
-    ]
-  },
-  {
     "method": "POST",
-    "path": "/api/mcp/connections/{connectionId}/tools/{toolName}/calls",
-    "operationId": "callMcpTool",
-    "summary": "Call MCP tool through AMA policy boundary",
-    "tags": [
-      "MCP"
-    ]
-  },
-  {
-    "method": "POST",
-    "path": "/api/mcp/connections",
-    "operationId": "connectMcpConnector",
-    "summary": "Connect or upsert an MCP connector",
-    "tags": [
-      "MCP"
-    ]
-  },
-  {
-    "method": "GET",
-    "path": "/api/runners/{runnerId}/leases/{leaseId}/channel",
-    "operationId": "connectRunnerSessionChannel",
-    "summary": "Open a claimed runner session WebSocket channel",
-    "tags": [
-      "Runner leases"
-    ]
-  },
-  {
-    "method": "POST",
-    "path": "/api/agents",
+    "path": "/api/v1/agents",
     "operationId": "createAgent",
     "summary": "Create an agent",
     "tags": [
@@ -93,7 +30,7 @@ export const operations = [
   },
   {
     "method": "POST",
-    "path": "/api/auth/session",
+    "path": "/api/v1/auth/sessions",
     "operationId": "createAuthSession",
     "summary": "Complete OIDC sign-in and create an httpOnly session cookie",
     "tags": [
@@ -102,16 +39,25 @@ export const operations = [
   },
   {
     "method": "POST",
-    "path": "/api/governance/budgets",
+    "path": "/api/v1/budgets",
     "operationId": "createBudget",
-    "summary": "Create budget",
+    "summary": "Create a budget",
     "tags": [
       "Governance"
     ]
   },
   {
     "method": "POST",
-    "path": "/api/environments",
+    "path": "/api/v1/connections",
+    "operationId": "createConnection",
+    "summary": "Create a connector connection",
+    "tags": [
+      "Connections"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/environments",
     "operationId": "createEnvironment",
     "summary": "Create an environment",
     "tags": [
@@ -120,16 +66,43 @@ export const operations = [
   },
   {
     "method": "POST",
-    "path": "/api/projects/{projectId}/external-bindings",
-    "operationId": "createExternalProjectBinding",
-    "summary": "Bind an external issuer tenant to a project",
+    "path": "/api/v1/auth/federated-tenants",
+    "operationId": "createFederatedTenant",
+    "summary": "Authorize an external issuer tenant for the current project",
     "tags": [
-      "Projects"
+      "Auth"
     ]
   },
   {
     "method": "POST",
-    "path": "/api/projects",
+    "path": "/api/v1/leases",
+    "operationId": "createLease",
+    "summary": "Claim a specific available work item for a runner",
+    "tags": [
+      "Leases"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/providers/{providerId}/model-discovery-tasks",
+    "operationId": "createModelDiscoveryTask",
+    "summary": "Create a model discovery task",
+    "tags": [
+      "Providers"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/policies",
+    "operationId": "createPolicy",
+    "summary": "Create a scoped governance policy",
+    "tags": [
+      "Governance"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/projects",
     "operationId": "createProject",
     "summary": "Create a project in the current organization",
     "tags": [
@@ -138,7 +111,7 @@ export const operations = [
   },
   {
     "method": "POST",
-    "path": "/api/providers",
+    "path": "/api/v1/providers",
     "operationId": "createProvider",
     "summary": "Create a provider",
     "tags": [
@@ -147,16 +120,7 @@ export const operations = [
   },
   {
     "method": "POST",
-    "path": "/api/governance/provider-access-rules",
-    "operationId": "createProviderAccessRule",
-    "summary": "Create provider access rule",
-    "tags": [
-      "Governance"
-    ]
-  },
-  {
-    "method": "POST",
-    "path": "/api/runners",
+    "path": "/api/v1/runners",
     "operationId": "createRunner",
     "summary": "Register a self-hosted runner",
     "tags": [
@@ -165,43 +129,7 @@ export const operations = [
   },
   {
     "method": "POST",
-    "path": "/api/runners/{runnerId}/heartbeats",
-    "operationId": "createRunnerHeartbeat",
-    "summary": "Record a runner heartbeat",
-    "tags": [
-      "Runners"
-    ]
-  },
-  {
-    "method": "POST",
-    "path": "/api/runners/{runnerId}/leases",
-    "operationId": "createRunnerLease",
-    "summary": "Claim queued self-hosted runner work",
-    "tags": [
-      "Runner leases"
-    ]
-  },
-  {
-    "method": "POST",
-    "path": "/api/runners/{runnerId}/leases/{leaseId}/events",
-    "operationId": "createRunnerLeaseEvents",
-    "summary": "Upload structured runner lease events",
-    "tags": [
-      "Runner leases"
-    ]
-  },
-  {
-    "method": "POST",
-    "path": "/api/scheduled-agent-triggers",
-    "operationId": "createScheduledAgentTrigger",
-    "summary": "Create a scheduled agent trigger",
-    "tags": [
-      "Scheduled agent triggers"
-    ]
-  },
-  {
-    "method": "POST",
-    "path": "/api/sessions",
+    "path": "/api/v1/sessions",
     "operationId": "createSession",
     "summary": "Create a session",
     "tags": [
@@ -210,16 +138,43 @@ export const operations = [
   },
   {
     "method": "POST",
-    "path": "/api/sessions/{sessionId}/commands",
-    "operationId": "createSessionCommand",
-    "summary": "Send a command to an active session",
+    "path": "/api/v1/sessions/{sessionId}/events",
+    "operationId": "createSessionEvents",
+    "summary": "Batch-create session events",
     "tags": [
       "Sessions"
     ]
   },
   {
     "method": "POST",
-    "path": "/api/vaults",
+    "path": "/api/v1/sessions/{sessionId}/messages",
+    "operationId": "createSessionMessage",
+    "summary": "Send a prompt message to a session",
+    "tags": [
+      "Sessions"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/connections/{connectionId}/tools/{toolName}/calls",
+    "operationId": "createToolCall",
+    "summary": "Execute a connection tool through the AMA policy boundary",
+    "tags": [
+      "Connections"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/triggers",
+    "operationId": "createTrigger",
+    "summary": "Create a trigger",
+    "tags": [
+      "Triggers"
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/vaults",
     "operationId": "createVault",
     "summary": "Create a vault",
     "tags": [
@@ -228,7 +183,7 @@ export const operations = [
   },
   {
     "method": "POST",
-    "path": "/api/vaults/{vaultId}/credentials",
+    "path": "/api/v1/vaults/{vaultId}/credentials",
     "operationId": "createVaultCredential",
     "summary": "Create vault credential metadata",
     "tags": [
@@ -237,7 +192,16 @@ export const operations = [
   },
   {
     "method": "POST",
-    "path": "/api/sessions/{sessionId}/approvals/{approvalId}",
+    "path": "/api/v1/vaults/{vaultId}/credentials/{credentialId}/versions",
+    "operationId": "createVaultCredentialVersion",
+    "summary": "Rotate a vault credential by creating a new version",
+    "tags": [
+      "Vaults"
+    ]
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/sessions/{sessionId}/approvals/{approvalId}",
     "operationId": "decideSessionApproval",
     "summary": "Approve or deny a pending tool call",
     "tags": [
@@ -246,7 +210,52 @@ export const operations = [
   },
   {
     "method": "DELETE",
-    "path": "/api/providers/{providerId}",
+    "path": "/api/v1/access-rules/{ruleId}",
+    "operationId": "deleteAccessRule",
+    "summary": "Delete an access rule",
+    "tags": [
+      "Governance"
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/budgets/{budgetId}",
+    "operationId": "deleteBudget",
+    "summary": "Delete a budget",
+    "tags": [
+      "Governance"
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/auth/sessions/current",
+    "operationId": "deleteCurrentAuthSession",
+    "summary": "Sign out and clear the session cookie",
+    "tags": [
+      "Auth"
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/auth/federated-tenants/{tenantId}",
+    "operationId": "deleteFederatedTenant",
+    "summary": "Delete a federated tenant",
+    "tags": [
+      "Auth"
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/policies/{policyId}",
+    "operationId": "deletePolicy",
+    "summary": "Delete a governance policy",
+    "tags": [
+      "Governance"
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/providers/{providerId}",
     "operationId": "deleteProvider",
     "summary": "Delete a provider",
     "tags": [
@@ -255,70 +264,25 @@ export const operations = [
   },
   {
     "method": "DELETE",
-    "path": "/api/vaults/{vaultId}/credentials/{credentialId}/versions/{versionId}",
-    "operationId": "deleteVaultCredentialVersion",
-    "summary": "Delete unused vault credential version metadata",
-    "tags": [
-      "Vaults"
-    ]
-  },
-  {
-    "method": "DELETE",
-    "path": "/api/mcp/connections/{connectionId}",
-    "operationId": "disconnectMcpConnection",
-    "summary": "Disconnect MCP connection",
-    "tags": [
-      "MCP"
-    ]
-  },
-  {
-    "method": "POST",
-    "path": "/api/providers/{providerId}/models/discovery",
-    "operationId": "discoverProviderModels",
-    "summary": "Discover provider models",
+    "path": "/api/v1/providers/{providerId}/models/{modelId}",
+    "operationId": "deleteProviderModel",
+    "summary": "Delete a provider model",
     "tags": [
       "Providers"
     ]
   },
   {
-    "method": "POST",
-    "path": "/api/governance/evaluations",
-    "operationId": "evaluateGovernancePolicy",
-    "summary": "Evaluate governance policy",
+    "method": "DELETE",
+    "path": "/api/v1/vaults/{vaultId}/credentials/{credentialId}/versions/{versionId}",
+    "operationId": "deleteVaultCredentialVersion",
+    "summary": "Delete an unused vault credential version",
     "tags": [
-      "Governance"
+      "Vaults"
     ]
   },
   {
     "method": "GET",
-    "path": "/api/audit-records/export",
-    "operationId": "exportAuditRecords",
-    "summary": "Export audit records",
-    "tags": [
-      "Audit"
-    ]
-  },
-  {
-    "method": "GET",
-    "path": "/api/sessions/{sessionId}/events/export",
-    "operationId": "exportSessionEvents",
-    "summary": "Export session events as NDJSON",
-    "tags": [
-      "Sessions"
-    ]
-  },
-  {
-    "method": "GET",
-    "path": "/api/usage/export",
-    "operationId": "exportUsageSummary",
-    "summary": "Export usage summaries",
-    "tags": [
-      "Usage"
-    ]
-  },
-  {
-    "method": "GET",
-    "path": "/api/health",
+    "path": "/api/v1/health",
     "operationId": "getHealth",
     "summary": "Get Worker health",
     "tags": [
@@ -327,16 +291,16 @@ export const operations = [
   },
   {
     "method": "GET",
-    "path": "/api/auth/login-options",
-    "operationId": "getLoginOptions",
-    "summary": "Discover available login methods for an organization",
+    "path": "/api/v1/access-rules",
+    "operationId": "listAccessRules",
+    "summary": "List provider and model access rules",
     "tags": [
-      "Auth"
+      "Governance"
     ]
   },
   {
     "method": "GET",
-    "path": "/api/agents/{agentId}/handoff-candidates",
+    "path": "/api/v1/agents/{agentId}/handoff-candidates",
     "operationId": "listAgentHandoffCandidates",
     "summary": "List handoff candidate agents",
     "tags": [
@@ -345,7 +309,7 @@ export const operations = [
   },
   {
     "method": "GET",
-    "path": "/api/agents",
+    "path": "/api/v1/agents",
     "operationId": "listAgents",
     "summary": "List agents",
     "tags": [
@@ -354,7 +318,7 @@ export const operations = [
   },
   {
     "method": "GET",
-    "path": "/api/agents/{agentId}/versions",
+    "path": "/api/v1/agents/{agentId}/versions",
     "operationId": "listAgentVersions",
     "summary": "List agent versions",
     "tags": [
@@ -363,7 +327,7 @@ export const operations = [
   },
   {
     "method": "GET",
-    "path": "/api/audit-records",
+    "path": "/api/v1/audit-records",
     "operationId": "listAuditRecords",
     "summary": "List audit records",
     "tags": [
@@ -372,7 +336,7 @@ export const operations = [
   },
   {
     "method": "GET",
-    "path": "/api/governance/budgets",
+    "path": "/api/v1/budgets",
     "operationId": "listBudgets",
     "summary": "List budgets",
     "tags": [
@@ -381,7 +345,34 @@ export const operations = [
   },
   {
     "method": "GET",
-    "path": "/api/environments",
+    "path": "/api/v1/connections",
+    "operationId": "listConnections",
+    "summary": "List connections",
+    "tags": [
+      "Connections"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/connections/{connectionId}/tools",
+    "operationId": "listConnectionTools",
+    "summary": "List connection tools",
+    "tags": [
+      "Connections"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/connectors",
+    "operationId": "listConnectors",
+    "summary": "List connectors",
+    "tags": [
+      "Connectors"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/environments",
     "operationId": "listEnvironments",
     "summary": "List environments",
     "tags": [
@@ -390,7 +381,7 @@ export const operations = [
   },
   {
     "method": "GET",
-    "path": "/api/environments/{environmentId}/versions",
+    "path": "/api/v1/environments/{environmentId}/versions",
     "operationId": "listEnvironmentVersions",
     "summary": "List environment versions",
     "tags": [
@@ -399,43 +390,34 @@ export const operations = [
   },
   {
     "method": "GET",
-    "path": "/api/projects/{projectId}/external-bindings",
-    "operationId": "listExternalProjectBindings",
-    "summary": "List external tenant bindings for a project",
+    "path": "/api/v1/auth/federated-tenants",
+    "operationId": "listFederatedTenants",
+    "summary": "List federated tenants for the current project",
     "tags": [
-      "Projects"
+      "Auth"
     ]
   },
   {
     "method": "GET",
-    "path": "/api/mcp/connections",
-    "operationId": "listMcpConnections",
-    "summary": "List MCP connections",
+    "path": "/api/v1/leases",
+    "operationId": "listLeases",
+    "summary": "List work leases",
     "tags": [
-      "MCP"
+      "Leases"
     ]
   },
   {
     "method": "GET",
-    "path": "/api/mcp/connectors",
-    "operationId": "listMcpConnectors",
-    "summary": "List MCP connectors",
+    "path": "/api/v1/policies",
+    "operationId": "listPolicies",
+    "summary": "List scoped governance policies",
     "tags": [
-      "MCP"
+      "Governance"
     ]
   },
   {
     "method": "GET",
-    "path": "/api/mcp/connections/{connectionId}/tools",
-    "operationId": "listMcpTools",
-    "summary": "List MCP connection tools",
-    "tags": [
-      "MCP"
-    ]
-  },
-  {
-    "method": "GET",
-    "path": "/api/projects",
+    "path": "/api/v1/projects",
     "operationId": "listProjects",
     "summary": "List projects in the current organization",
     "tags": [
@@ -444,16 +426,7 @@ export const operations = [
   },
   {
     "method": "GET",
-    "path": "/api/governance/provider-access-rules",
-    "operationId": "listProviderAccessRules",
-    "summary": "List provider access rules",
-    "tags": [
-      "Governance"
-    ]
-  },
-  {
-    "method": "GET",
-    "path": "/api/providers/{providerId}/models",
+    "path": "/api/v1/providers/{providerId}/models",
     "operationId": "listProviderModels",
     "summary": "List provider models",
     "tags": [
@@ -462,7 +435,7 @@ export const operations = [
   },
   {
     "method": "GET",
-    "path": "/api/providers",
+    "path": "/api/v1/providers",
     "operationId": "listProviders",
     "summary": "List providers",
     "tags": [
@@ -471,7 +444,7 @@ export const operations = [
   },
   {
     "method": "GET",
-    "path": "/api/runners",
+    "path": "/api/v1/runners",
     "operationId": "listRunners",
     "summary": "List self-hosted runners",
     "tags": [
@@ -480,43 +453,16 @@ export const operations = [
   },
   {
     "method": "GET",
-    "path": "/api/runners/work-items",
-    "operationId": "listRunnerWorkItems",
-    "summary": "List self-hosted runner work items",
-    "tags": [
-      "Runner work"
-    ]
-  },
-  {
-    "method": "GET",
-    "path": "/api/scheduled-agent-triggers",
-    "operationId": "listScheduledAgentTriggers",
-    "summary": "List scheduled agent triggers",
-    "tags": [
-      "Scheduled agent triggers"
-    ]
-  },
-  {
-    "method": "GET",
-    "path": "/api/scheduled-agent-triggers/{triggerId}/runs",
-    "operationId": "listScheduledTriggerRuns",
-    "summary": "List scheduled trigger runs",
-    "tags": [
-      "Scheduled agent triggers"
-    ]
-  },
-  {
-    "method": "GET",
-    "path": "/api/sessions/{sessionId}/approvals",
+    "path": "/api/v1/sessions/{sessionId}/approvals",
     "operationId": "listSessionApprovals",
-    "summary": "List pending tool approvals for a session",
+    "summary": "List tool approvals for a session",
     "tags": [
       "Sessions"
     ]
   },
   {
     "method": "GET",
-    "path": "/api/sessions/{sessionId}/events",
+    "path": "/api/v1/sessions/{sessionId}/events",
     "operationId": "listSessionEvents",
     "summary": "List session events",
     "tags": [
@@ -525,7 +471,16 @@ export const operations = [
   },
   {
     "method": "GET",
-    "path": "/api/sessions",
+    "path": "/api/v1/sessions/{sessionId}/messages",
+    "operationId": "listSessionMessages",
+    "summary": "List session messages",
+    "tags": [
+      "Sessions"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/sessions",
     "operationId": "listSessions",
     "summary": "List sessions",
     "tags": [
@@ -534,7 +489,34 @@ export const operations = [
   },
   {
     "method": "GET",
-    "path": "/api/usage",
+    "path": "/api/v1/connections/{connectionId}/tools/{toolName}/calls",
+    "operationId": "listToolCalls",
+    "summary": "List tool calls",
+    "tags": [
+      "Connections"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/triggers/{triggerId}/runs",
+    "operationId": "listTriggerRuns",
+    "summary": "List trigger runs",
+    "tags": [
+      "Triggers"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/triggers",
+    "operationId": "listTriggers",
+    "summary": "List triggers",
+    "tags": [
+      "Triggers"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/usage-records",
     "operationId": "listUsageRecords",
     "summary": "List usage records",
     "tags": [
@@ -543,7 +525,7 @@ export const operations = [
   },
   {
     "method": "GET",
-    "path": "/api/vaults/{vaultId}/credentials",
+    "path": "/api/v1/vaults/{vaultId}/credentials",
     "operationId": "listVaultCredentials",
     "summary": "List vault credential metadata",
     "tags": [
@@ -552,7 +534,7 @@ export const operations = [
   },
   {
     "method": "GET",
-    "path": "/api/vaults/{vaultId}/credentials/{credentialId}/versions",
+    "path": "/api/v1/vaults/{vaultId}/credentials/{credentialId}/versions",
     "operationId": "listVaultCredentialVersions",
     "summary": "List vault credential versions",
     "tags": [
@@ -561,7 +543,7 @@ export const operations = [
   },
   {
     "method": "GET",
-    "path": "/api/vaults",
+    "path": "/api/v1/vaults",
     "operationId": "listVaults",
     "summary": "List vaults",
     "tags": [
@@ -569,17 +551,35 @@ export const operations = [
     ]
   },
   {
-    "method": "POST",
-    "path": "/api/governance/config/preview",
-    "operationId": "previewGovernanceConfig",
-    "summary": "Preview declarative governance config impact",
+    "method": "GET",
+    "path": "/api/v1/work-items",
+    "operationId": "listWorkItems",
+    "summary": "List queued self-hosted work items",
+    "tags": [
+      "Work items"
+    ]
+  },
+  {
+    "method": "PUT",
+    "path": "/api/v1/runners/{runnerId}/heartbeat",
+    "operationId": "putRunnerHeartbeat",
+    "summary": "Replace the current runner heartbeat state",
+    "tags": [
+      "Runners"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/access-rules/{ruleId}",
+    "operationId": "readAccessRule",
+    "summary": "Read an access rule",
     "tags": [
       "Governance"
     ]
   },
   {
     "method": "GET",
-    "path": "/api/agents/{agentId}",
+    "path": "/api/v1/agents/{agentId}",
     "operationId": "readAgent",
     "summary": "Read an agent",
     "tags": [
@@ -588,7 +588,7 @@ export const operations = [
   },
   {
     "method": "GET",
-    "path": "/api/agents/{agentId}/memory",
+    "path": "/api/v1/agents/{agentId}/memory",
     "operationId": "readAgentMemory",
     "summary": "Read agent memory",
     "tags": [
@@ -597,7 +597,16 @@ export const operations = [
   },
   {
     "method": "GET",
-    "path": "/api/audit-records/{recordId}",
+    "path": "/api/v1/agents/{agentId}/versions/{version}",
+    "operationId": "readAgentVersion",
+    "summary": "Read an agent version",
+    "tags": [
+      "Agents"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/audit-records/{recordId}",
     "operationId": "readAuditRecord",
     "summary": "Read an audit record",
     "tags": [
@@ -606,16 +615,61 @@ export const operations = [
   },
   {
     "method": "GET",
-    "path": "/api/governance/effective-policy",
-    "operationId": "readEffectiveGovernancePolicy",
-    "summary": "Read effective governance policy",
+    "path": "/api/v1/auth/config",
+    "operationId": "readAuthConfig",
+    "summary": "Discover available sign-in methods for an organization",
+    "tags": [
+      "Auth"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/budgets/{budgetId}",
+    "operationId": "readBudget",
+    "summary": "Read a budget",
     "tags": [
       "Governance"
     ]
   },
   {
     "method": "GET",
-    "path": "/api/environments/{environmentId}",
+    "path": "/api/v1/connections/{connectionId}",
+    "operationId": "readConnection",
+    "summary": "Read connection",
+    "tags": [
+      "Connections"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/connectors/{connectorId}",
+    "operationId": "readConnector",
+    "summary": "Read connector",
+    "tags": [
+      "Connectors"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/auth/sessions/current",
+    "operationId": "readCurrentAuthSession",
+    "summary": "Read the authenticated session context",
+    "tags": [
+      "Auth"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/effective-policy",
+    "operationId": "readEffectivePolicy",
+    "summary": "Read the effective governance policy",
+    "tags": [
+      "Governance"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/environments/{environmentId}",
     "operationId": "readEnvironment",
     "summary": "Read an environment",
     "tags": [
@@ -624,34 +678,61 @@ export const operations = [
   },
   {
     "method": "GET",
-    "path": "/api/governance/policy",
-    "operationId": "readGovernancePolicy",
-    "summary": "Read governance policy",
+    "path": "/api/v1/environments/{environmentId}/versions/{version}",
+    "operationId": "readEnvironmentVersion",
+    "summary": "Read an environment version",
+    "tags": [
+      "Environments"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/auth/federated-tenants/{tenantId}",
+    "operationId": "readFederatedTenant",
+    "summary": "Read a federated tenant",
+    "tags": [
+      "Auth"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/leases/{leaseId}",
+    "operationId": "readLease",
+    "summary": "Read a work lease",
+    "tags": [
+      "Leases"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/providers/{providerId}/model-discovery-tasks/{taskId}",
+    "operationId": "readModelDiscoveryTask",
+    "summary": "Read a model discovery task",
+    "tags": [
+      "Providers"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/policies/{policyId}",
+    "operationId": "readPolicy",
+    "summary": "Read a governance policy",
     "tags": [
       "Governance"
     ]
   },
   {
     "method": "GET",
-    "path": "/api/mcp/connections/{connectionId}",
-    "operationId": "readMcpConnection",
-    "summary": "Read MCP connection",
+    "path": "/api/v1/projects/{projectId}",
+    "operationId": "readProject",
+    "summary": "Read a single project",
     "tags": [
-      "MCP"
+      "Projects"
     ]
   },
   {
     "method": "GET",
-    "path": "/api/mcp/connectors/{connectorId}",
-    "operationId": "readMcpConnector",
-    "summary": "Read MCP connector",
-    "tags": [
-      "MCP"
-    ]
-  },
-  {
-    "method": "GET",
-    "path": "/api/providers/{providerId}",
+    "path": "/api/v1/providers/{providerId}",
     "operationId": "readProvider",
     "summary": "Read a provider",
     "tags": [
@@ -660,7 +741,7 @@ export const operations = [
   },
   {
     "method": "GET",
-    "path": "/api/runners/{runnerId}",
+    "path": "/api/v1/runners/{runnerId}",
     "operationId": "readRunner",
     "summary": "Read a self-hosted runner",
     "tags": [
@@ -669,16 +750,16 @@ export const operations = [
   },
   {
     "method": "GET",
-    "path": "/api/scheduled-agent-triggers/{triggerId}",
-    "operationId": "readScheduledAgentTrigger",
-    "summary": "Read a scheduled agent trigger",
+    "path": "/api/v1/runners/{runnerId}/heartbeat",
+    "operationId": "readRunnerHeartbeat",
+    "summary": "Read the current runner heartbeat state",
     "tags": [
-      "Scheduled agent triggers"
+      "Runners"
     ]
   },
   {
     "method": "GET",
-    "path": "/api/sessions/{sessionId}",
+    "path": "/api/v1/sessions/{sessionId}",
     "operationId": "readSession",
     "summary": "Read a session",
     "tags": [
@@ -687,25 +768,79 @@ export const operations = [
   },
   {
     "method": "GET",
-    "path": "/api/sessions/{sessionId}/reconnect",
-    "operationId": "readSessionReconnect",
-    "summary": "Read reconnect metadata",
+    "path": "/api/v1/sessions/{sessionId}/approvals/{approvalId}",
+    "operationId": "readSessionApproval",
+    "summary": "Read a tool approval",
     "tags": [
       "Sessions"
     ]
   },
   {
     "method": "GET",
-    "path": "/api/usage/summary",
-    "operationId": "readUsageSummary",
-    "summary": "Read usage summary",
+    "path": "/api/v1/sessions/{sessionId}/connection",
+    "operationId": "readSessionConnection",
+    "summary": "Read session runtime connection details",
+    "tags": [
+      "Sessions"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/sessions/{sessionId}/messages/{messageId}",
+    "operationId": "readSessionMessage",
+    "summary": "Read a session message delivery state",
+    "tags": [
+      "Sessions"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/connections/{connectionId}/tools/{toolName}/calls/{callId}",
+    "operationId": "readToolCall",
+    "summary": "Read tool call",
+    "tags": [
+      "Connections"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/triggers/{triggerId}",
+    "operationId": "readTrigger",
+    "summary": "Read a trigger",
+    "tags": [
+      "Triggers"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/triggers/{triggerId}/runs/{runId}",
+    "operationId": "readTriggerRun",
+    "summary": "Read a trigger run",
+    "tags": [
+      "Triggers"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/usage-records/{recordId}",
+    "operationId": "readUsageRecord",
+    "summary": "Read a usage record",
     "tags": [
       "Usage"
     ]
   },
   {
     "method": "GET",
-    "path": "/api/vaults/{vaultId}",
+    "path": "/api/v1/usage-summary",
+    "operationId": "readUsageSummary",
+    "summary": "Read aggregated usage",
+    "tags": [
+      "Usage"
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/vaults/{vaultId}",
     "operationId": "readVault",
     "summary": "Read a vault",
     "tags": [
@@ -714,7 +849,7 @@ export const operations = [
   },
   {
     "method": "GET",
-    "path": "/api/vaults/{vaultId}/credentials/{credentialId}",
+    "path": "/api/v1/vaults/{vaultId}/credentials/{credentialId}",
     "operationId": "readVaultCredential",
     "summary": "Read vault credential metadata",
     "tags": [
@@ -722,35 +857,53 @@ export const operations = [
     ]
   },
   {
-    "method": "POST",
-    "path": "/api/vaults/{vaultId}/credentials/{credentialId}/versions",
-    "operationId": "rotateVaultCredential",
-    "summary": "Rotate vault credential",
+    "method": "GET",
+    "path": "/api/v1/vaults/{vaultId}/credentials/{credentialId}/versions/{versionId}",
+    "operationId": "readVaultCredentialVersion",
+    "summary": "Read a vault credential version",
     "tags": [
       "Vaults"
     ]
   },
   {
-    "method": "POST",
-    "path": "/api/sessions/{sessionId}/stop",
-    "operationId": "stopSession",
-    "summary": "Stop a session",
+    "method": "GET",
+    "path": "/api/v1/work-items/{workItemId}",
+    "operationId": "readWorkItem",
+    "summary": "Read a queued self-hosted work item",
     "tags": [
-      "Sessions"
+      "Work items"
     ]
   },
   {
-    "method": "GET",
-    "path": "/api/sessions/{sessionId}/events/stream",
-    "operationId": "streamSessionEvents",
-    "summary": "Stream session events as NDJSON",
+    "method": "PUT",
+    "path": "/api/v1/agents/{agentId}/memory",
+    "operationId": "replaceAgentMemory",
+    "summary": "Replace agent memory",
     "tags": [
-      "Sessions"
+      "Agents"
+    ]
+  },
+  {
+    "method": "PUT",
+    "path": "/api/v1/policies/{policyId}",
+    "operationId": "replacePolicy",
+    "summary": "Replace a governance policy",
+    "tags": [
+      "Governance"
     ]
   },
   {
     "method": "PATCH",
-    "path": "/api/agents/{agentId}",
+    "path": "/api/v1/access-rules/{ruleId}",
+    "operationId": "updateAccessRule",
+    "summary": "Update an access rule",
+    "tags": [
+      "Governance"
+    ]
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/agents/{agentId}",
     "operationId": "updateAgent",
     "summary": "Update an agent",
     "tags": [
@@ -759,16 +912,25 @@ export const operations = [
   },
   {
     "method": "PATCH",
-    "path": "/api/agents/{agentId}/memory",
-    "operationId": "updateAgentMemory",
-    "summary": "Update agent memory",
+    "path": "/api/v1/budgets/{budgetId}",
+    "operationId": "updateBudget",
+    "summary": "Update a budget",
     "tags": [
-      "Agents"
+      "Governance"
     ]
   },
   {
     "method": "PATCH",
-    "path": "/api/environments/{environmentId}",
+    "path": "/api/v1/connections/{connectionId}",
+    "operationId": "updateConnection",
+    "summary": "Update connection state, credential, or settings",
+    "tags": [
+      "Connections"
+    ]
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/environments/{environmentId}",
     "operationId": "updateEnvironment",
     "summary": "Update an environment",
     "tags": [
@@ -776,26 +938,26 @@ export const operations = [
     ]
   },
   {
-    "method": "PUT",
-    "path": "/api/governance/policy",
-    "operationId": "updateGovernancePolicy",
-    "summary": "Update governance policy",
+    "method": "PATCH",
+    "path": "/api/v1/auth/federated-tenants/{tenantId}",
+    "operationId": "updateFederatedTenant",
+    "summary": "Update a federated tenant",
     "tags": [
-      "Governance"
+      "Auth"
     ]
   },
   {
     "method": "PATCH",
-    "path": "/api/mcp/connections/{connectionId}",
-    "operationId": "updateMcpConnection",
-    "summary": "Update MCP connection",
+    "path": "/api/v1/leases/{leaseId}",
+    "operationId": "updateLease",
+    "summary": "Renew or finish a work lease",
     "tags": [
-      "MCP"
+      "Leases"
     ]
   },
   {
     "method": "PATCH",
-    "path": "/api/providers/{providerId}",
+    "path": "/api/v1/providers/{providerId}",
     "operationId": "updateProvider",
     "summary": "Update a provider",
     "tags": [
@@ -804,52 +966,43 @@ export const operations = [
   },
   {
     "method": "PATCH",
-    "path": "/api/runners/{runnerId}",
+    "path": "/api/v1/runners/{runnerId}",
     "operationId": "updateRunner",
-    "summary": "Update a self-hosted runner",
+    "summary": "Update or archive a self-hosted runner",
     "tags": [
       "Runners"
     ]
   },
   {
     "method": "PATCH",
-    "path": "/api/runners/{runnerId}/leases/{leaseId}",
-    "operationId": "updateRunnerLease",
-    "summary": "Renew or finish a runner lease",
-    "tags": [
-      "Runner leases"
-    ]
-  },
-  {
-    "method": "PATCH",
-    "path": "/api/scheduled-agent-triggers/{triggerId}",
-    "operationId": "updateScheduledAgentTrigger",
-    "summary": "Update a scheduled agent trigger",
-    "tags": [
-      "Scheduled agent triggers"
-    ]
-  },
-  {
-    "method": "PATCH",
-    "path": "/api/sessions/{sessionId}",
+    "path": "/api/v1/sessions/{sessionId}",
     "operationId": "updateSession",
-    "summary": "Update a session lifecycle state",
+    "summary": "Update a session",
     "tags": [
       "Sessions"
     ]
   },
   {
     "method": "PATCH",
-    "path": "/api/vaults/{vaultId}",
+    "path": "/api/v1/triggers/{triggerId}",
+    "operationId": "updateTrigger",
+    "summary": "Update, pause, or archive a trigger",
+    "tags": [
+      "Triggers"
+    ]
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/vaults/{vaultId}",
     "operationId": "updateVault",
-    "summary": "Update a vault",
+    "summary": "Update or archive a vault",
     "tags": [
       "Vaults"
     ]
   },
   {
     "method": "PATCH",
-    "path": "/api/vaults/{vaultId}/credentials/{credentialId}",
+    "path": "/api/v1/vaults/{vaultId}/credentials/{credentialId}",
     "operationId": "updateVaultCredential",
     "summary": "Update or revoke vault credential metadata",
     "tags": [
@@ -857,21 +1010,12 @@ export const operations = [
     ]
   },
   {
-    "method": "POST",
-    "path": "/api/providers/{providerId}/models",
+    "method": "PUT",
+    "path": "/api/v1/providers/{providerId}/models/{modelId}",
     "operationId": "upsertProviderModel",
-    "summary": "Upsert provider model metadata",
+    "summary": "Create or replace provider model metadata",
     "tags": [
       "Providers"
-    ]
-  },
-  {
-    "method": "POST",
-    "path": "/api/governance/config/validate",
-    "operationId": "validateGovernanceConfig",
-    "summary": "Validate declarative governance config",
-    "tags": [
-      "Governance"
     ]
   }
 ] as const

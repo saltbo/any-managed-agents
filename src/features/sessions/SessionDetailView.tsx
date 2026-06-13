@@ -44,9 +44,9 @@ export function SessionDetailView({
   const [activeResource, setActiveResource] = useState<'agent' | 'environment' | 'resources' | null>(null)
   const shortSessionId = `${session.id.slice(0, 5)}...${session.id.slice(-7)}`
   const duration = formatDuration(session.startedAt, session.stoppedAt)
-  const agentName = agentDisplayName || session.agentSnapshot.systemPrompt || session.agentId
+  const agentName = agentDisplayName || session.agentSnapshot.instructions || session.agentId
   const environmentName = String(environmentDisplayName ?? session.environmentId ?? 'Environment')
-  const agentProviderModel = `${session.agentSnapshot.provider} / ${session.agentSnapshot.model}`
+  const agentProviderModel = `${session.agentSnapshot.providerId} / ${session.agentSnapshot.model ?? 'None'}`
   const hostingRuntime = session.environmentSnapshot
     ? `${hostingModeLabel(session.environmentSnapshot.hostingMode)} / ${session.runtimeMetadata.runtime}`
     : 'No environment snapshot'
@@ -89,7 +89,7 @@ export function SessionDetailView({
                 {session.title ?? session.id}
               </h1>
               <div className="shrink-0">
-                <StatusBadge value={session.status} detail={session.status === 'error' ? session.statusReason : null} />
+                <StatusBadge value={session.state} detail={session.state === 'error' ? session.stateReason : null} />
               </div>
               <div className="hidden min-w-0 shrink items-center gap-2 text-sm text-muted-foreground md:flex">
                 <SessionMeta
@@ -142,13 +142,12 @@ export function SessionDetailView({
             <div className="sr-only">
               <span className="truncate font-mono">Agent provider/model {agentProviderModel}</span>
               <span className="truncate font-mono">Hosting / runtime {hostingRuntime}</span>
-              <span className="truncate font-mono">Runtime endpoint {session.runtimeEndpointPath}</span>
             </div>
             <dl className="grid gap-2 pt-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
               <SessionFact label="Agent provider/model" value={agentProviderModel} />
               <SessionFact label="Hosting / runtime" value={hostingRuntime} />
               <SessionFact label="Hosting mode" value={session.environmentSnapshot?.hostingMode ?? 'None'} />
-              <SessionFact label="Runtime status" value={session.statusReason ?? session.status} />
+              <SessionFact label="Runtime status" value={session.stateReason ?? session.state} />
             </dl>
           </div>
         </div>
@@ -162,7 +161,7 @@ export function SessionDetailView({
         onSend={onSendMessage}
         onAbort={onAbortRuntime}
         onRefreshEvents={onRefreshEvents}
-        canSend={session.status === 'idle'}
+        canSend={session.state === 'idle'}
       />
       <Sheet open={activeResource !== null} onOpenChange={(open) => !open && setActiveResource(null)}>
         <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
@@ -174,16 +173,15 @@ export function SessionDetailView({
                 <MetaGrid>
                   <Meta label="Agent id" value={session.agentId} />
                   <Meta label="Version" value={`v${session.agentSnapshot.version}`} />
-                  <Meta label="Provider" value={session.agentSnapshot.provider} />
-                  <Meta label="Model" value={session.agentSnapshot.model} />
+                  <Meta label="Provider" value={session.agentSnapshot.providerId} />
+                  <Meta label="Model" value={session.agentSnapshot.model ?? 'None'} />
                   <Meta label="Skills" value={session.agentSnapshot.skills.join(', ') || 'None'} />
-                  <Meta label="Tools" value={session.agentSnapshot.allowedTools.join(', ') || 'None'} />
+                  <Meta label="Tools" value={agentSnapshotToolNames(session).join(', ') || 'None'} />
                   <Meta label="MCP connectors" value={session.agentSnapshot.mcpConnectors.join(', ') || 'None'} />
                 </MetaGrid>
               }
               json={{
                 instructions: session.agentSnapshot.instructions,
-                systemPrompt: session.agentSnapshot.systemPrompt,
                 metadata: session.agentSnapshot.metadata,
               }}
             />
@@ -208,8 +206,10 @@ export function SessionDetailView({
                     value={Object.keys(session.environmentSnapshot.variables).join(', ') || 'None'}
                   />
                   <Meta
-                    label="Secret refs"
-                    value={session.environmentSnapshot.secretRefs.map((item) => item.name).join(', ') || 'None'}
+                    label="Credential refs"
+                    value={
+                      session.environmentSnapshot.credentialRefs.map((item) => item.credentialId).join(', ') || 'None'
+                    }
                   />
                 </MetaGrid>
               }
@@ -274,6 +274,12 @@ function SessionFact({ label, value }: { label: string; value: string }) {
 
 function hostingModeLabel(value: string) {
   return value === 'self_hosted' ? 'Self-hosted' : 'Cloud'
+}
+
+function agentSnapshotToolNames(session: Session) {
+  return session.agentSnapshot.tools
+    .map((tool) => (typeof tool.name === 'string' ? tool.name : null))
+    .filter((name): name is string => Boolean(name))
 }
 
 function githubResources(session: Session) {

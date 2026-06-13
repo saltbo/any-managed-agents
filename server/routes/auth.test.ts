@@ -1,8 +1,23 @@
 import { SELF } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { setupOidcProvider, signIn } from '../test/auth'
+import { expectAuthRequired, setupOidcProvider, signIn, signInUser } from '../test/auth'
 
-describe('[CF] auth and tenancy', () => {
+function accessTokenOf(authorization: string) {
+  return authorization.slice('Bearer '.length)
+}
+
+async function jsonFetch(path: string, authorization?: string, init?: { method?: string; body?: unknown }) {
+  return SELF.fetch(`https://example.com${path}`, {
+    method: init?.method ?? (init?.body !== undefined ? 'POST' : 'GET'),
+    headers: {
+      'content-type': 'application/json',
+      ...(authorization ? { authorization } : {}),
+    },
+    ...(init?.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
+  })
+}
+
+describe('[CF] auth v1', () => {
   beforeEach(async () => {
     await setupOidcProvider()
   })
@@ -11,139 +26,216 @@ describe('[CF] auth and tenancy', () => {
     vi.unstubAllGlobals()
   })
 
-  it('does not expose AMA auth helper routes', async () => {
-    const res = await SELF.fetch('https://example.com/api/auth/config')
-    expect(res.status).toBe(404)
+  it('exposes the OIDC discovery config publicly', async () => {
+    const res = await SELF.fetch('https://example.com/api/v1/auth/config')
+    expect(res.status).toBe(200)
+    await expect(res.json()).resolves.toEqual({
+      methods: [{ type: 'oidc', issuer: 'https://oidc.test', clientId: 'ama-test' }],
+    })
+  })
+
+  it('accepts an organization hint on the discovery config', async () => {
+    const res = await SELF.fetch('https://example.com/api/v1/auth/config?organization=example-org')
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { methods: unknown[] }
+    expect(body.methods).toHaveLength(1)
+  })
+
+  it('creates an auth session from a valid access token', async () => {
+    const authorization = await signIn()
+    const res = await jsonFetch('/api/v1/auth/sessions', undefined, {
+      body: { accessToken: accessTokenOf(authorization) },
+    })
+    expect(res.status).toBe(201)
+    const body = (await res.json()) as {
+      user: Record<string, unknown>
+      organization: Record<string, unknown>
+      project: Record<string, unknown>
+    }
+    expect(body).toMatchObject({
+      user: {
+        id: expect.stringMatching(/^user_e2e_/),
+        email: expect.stringContaining('@e2e.example.com'),
+      },
+      organization: {
+        id: expect.stringMatching(/^org_e2e_/),
+        name: expect.stringContaining('E2E Organization'),
+      },
+      project: {
+        id: expect.stringMatching(/^project_/),
+        name: 'Default project',
+      },
+    })
+    expect(body.project).not.toHaveProperty('organizationId')
+  })
+
+  it('rejects invalid access tokens with 401', async () => {
+    const res = await jsonFetch('/api/v1/auth/sessions', undefined, {
+      body: { accessToken: 'invalid-token' },
+    })
+    expect(res.status).toBe(401)
     await expect(res.json()).resolves.toMatchObject({
-      error: {
-        type: 'not_found',
-        message: 'Not found',
-      },
+      error: { type: 'oidc_error', message: 'OIDC token validation failed' },
     })
   })
 
-  it('lists organization projects from a bearer token without an auth context endpoint', async () => {
+  it('rejects session creation from a disallowed origin', async () => {
     const authorization = await signIn()
-    const projectsRes = await SELF.fetch('https://example.com/api/projects', { headers: { authorization } })
-    expect(projectsRes.status).toBe(200)
-    await expect(projectsRes.json()).resolves.toMatchObject({
-      data: [
-        {
-          organizationId: expect.stringMatching(/^org_/),
-          name: 'Default project',
-        },
-      ],
-    })
-  })
-
-  it('rejects protected APIs without a bearer token', async () => {
-    const res = await SELF.fetch('https://example.com/api/agents')
-    expect(res.status).toBe(401)
-    expect(await res.json()).toMatchObject({
-      error: {
-        type: 'authentication_required',
-        message: 'Authentication required',
-        details: { reason: 'missing_or_invalid_bearer_token' },
-      },
-    })
-  })
-
-  it('treats rejected OIDC provider bearer tokens as authentication failures', async () => {
-    const res = await SELF.fetch('https://example.com/api/projects', {
-      headers: { authorization: 'Bearer invalid-token' },
-    })
-
-    expect(res.status).toBe(401)
-    expect(await res.json()).toMatchObject({
-      error: {
-        type: 'authentication_required',
-        message: 'Authentication required',
-        details: { reason: 'missing_or_invalid_bearer_token' },
-      },
-    })
-  })
-
-  it('scopes agent resources and runtime sessions to the OIDC provider organization project', async () => {
-    const authorization = await signIn()
-    const createRes = await SELF.fetch('https://example.com/api/agents', {
+    const res = await SELF.fetch('https://example.com/api/v1/auth/sessions', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', authorization },
-      body: JSON.stringify({ name: 'Research assistant', model: '@cf/moonshotai/kimi-k2.6' }),
+      headers: { 'content-type': 'application/json', origin: 'https://evil.example.com' },
+      body: JSON.stringify({ accessToken: accessTokenOf(authorization) }),
+    })
+    expect(res.status).toBe(403)
+    await expect(res.json()).resolves.toMatchObject({
+      error: { type: 'forbidden', message: 'Request origin is not allowed' },
+    })
+  })
+
+  it('rejects malformed session creation payloads', async () => {
+    const res = await jsonFetch('/api/v1/auth/sessions', undefined, { body: {} })
+    expect(res.status).toBe(400)
+    await expect(res.json()).resolves.toMatchObject({
+      error: { type: 'validation_error', message: 'Invalid request' },
+    })
+  })
+
+  it('reads the current session context from a bearer token', async () => {
+    const authorization = await signIn()
+    const res = await jsonFetch('/api/v1/auth/sessions/current', authorization)
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { user: { id: string }; project: Record<string, unknown> }
+    expect(body).toMatchObject({
+      user: { id: expect.stringMatching(/^user_e2e_/) },
+      organization: { id: expect.stringMatching(/^org_e2e_/) },
+      project: { name: 'Default project' },
+    })
+    expect(body.project).not.toHaveProperty('organizationId')
+  })
+
+  it('requires authentication for the current session context', async () => {
+    const res = await jsonFetch('/api/v1/auth/sessions/current')
+    expect(res.status).toBe(401)
+    expectAuthRequired(await res.json())
+  })
+
+  it('signs out by expiring the session cookie', async () => {
+    const res = await SELF.fetch('https://example.com/api/v1/auth/sessions/current', { method: 'DELETE' })
+    expect(res.status).toBe(204)
+    const setCookie = res.headers.get('set-cookie')
+    expect(setCookie).toContain('ama_session=;')
+    expect(setCookie).toContain('Max-Age=0')
+    expect(setCookie).toContain('HttpOnly')
+  })
+})
+
+describe('[CF] projects v1', () => {
+  beforeEach(async () => {
+    await setupOidcProvider()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('requires authentication', async () => {
+    const res = await jsonFetch('/api/v1/projects')
+    expect(res.status).toBe(401)
+    expectAuthRequired(await res.json())
+  })
+
+  it('lists the auto-created default project without exposing organizationId', async () => {
+    const authorization = await signIn()
+    const res = await jsonFetch('/api/v1/projects', authorization)
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as {
+      data: Array<Record<string, unknown>>
+      pagination: Record<string, unknown>
+    }
+    expect(body.data).toHaveLength(1)
+    expect(body.data[0]).toMatchObject({
+      id: expect.stringMatching(/^project_/),
+      name: 'Default project',
+      createdAt: expect.any(String),
+      updatedAt: expect.any(String),
+    })
+    expect(body.data[0]).not.toHaveProperty('organizationId')
+    expect(body.pagination).toEqual({ limit: 50, nextCursor: null, hasMore: false })
+  })
+
+  it('creates and reads a project', async () => {
+    const authorization = await signIn()
+    const createRes = await jsonFetch('/api/v1/projects', authorization, {
+      body: { name: 'Control Plane' },
     })
     expect(createRes.status).toBe(201)
-    const agent = (await createRes.json()) as { id: string; projectId: string }
+    const project = (await createRes.json()) as Record<string, unknown> & { id: string }
+    expect(project).toMatchObject({ id: expect.stringMatching(/^project_/), name: 'Control Plane' })
+    expect(project).not.toHaveProperty('organizationId')
 
-    const environmentRes = await SELF.fetch('https://example.com/api/environments', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization },
-      body: JSON.stringify({ name: 'Runtime environment' }),
-    })
-    expect(environmentRes.status).toBe(201)
-    const environment = (await environmentRes.json()) as { id: string }
-
-    const sessionRes = await SELF.fetch('https://example.com/api/sessions', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization },
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
-    })
-    expect(sessionRes.status).toBe(201)
-    const session = (await sessionRes.json()) as {
-      durableObjectName: string
-      runtimeEndpointPath: string
-      projectId: string
-    }
-    expect(session.projectId).toBe(agent.projectId)
-    expect(session.durableObjectName).toContain(`project_${agent.projectId}:session_`)
-
-    const runtimeRes = await SELF.fetch(`https://example.com${session.runtimeEndpointPath}`, {
-      method: 'POST',
-      headers: { authorization },
-    })
-    expect(runtimeRes.status).toBe(200)
+    const readRes = await jsonFetch(`/api/v1/projects/${project.id}`, authorization)
+    expect(readRes.status).toBe(200)
+    await expect(readRes.json()).resolves.toMatchObject({ id: project.id, name: 'Control Plane' })
   })
 
-  it('does not forward runtime requests across projects', async () => {
-    const tenantA = await signIn({
-      sub: 'user_a',
-      email: 'a@example.com',
-      name: 'A',
-      org_id: 'org_a',
-      org_name: 'Org A',
-      roles: ['owner'],
-      permissions: ['*'],
+  it('returns 404 for unknown projects', async () => {
+    const authorization = await signIn()
+    const res = await jsonFetch('/api/v1/projects/project_missing', authorization)
+    expect(res.status).toBe(404)
+    await expect(res.json()).resolves.toMatchObject({
+      error: { type: 'not_found', message: 'Project not found' },
     })
-    const agentRes = await SELF.fetch('https://example.com/api/agents', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: tenantA },
-      body: JSON.stringify({ name: 'Tenant A agent' }),
-    })
-    const agent = (await agentRes.json()) as { id: string }
-    const environmentRes = await SELF.fetch('https://example.com/api/environments', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: tenantA },
-      body: JSON.stringify({ name: 'Tenant A environment' }),
-    })
-    const environment = (await environmentRes.json()) as { id: string }
-    const sessionRes = await SELF.fetch('https://example.com/api/sessions', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: tenantA },
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
-    })
-    const session = (await sessionRes.json()) as { runtimeEndpointPath: string }
+  })
 
-    const tenantB = await signIn({
-      sub: 'user_b',
-      email: 'b@example.com',
-      name: 'B',
-      org_id: 'org_b',
-      org_name: 'Org B',
-      roles: ['owner'],
-      permissions: ['*'],
+  it('does not read projects across organizations', async () => {
+    const tenantA = await signInUser('proj_tenant_a')
+    const createRes = await jsonFetch('/api/v1/projects', tenantA, { body: { name: 'Tenant A project' } })
+    const project = (await createRes.json()) as { id: string }
+
+    const tenantB = await signInUser('proj_tenant_b')
+    const res = await jsonFetch(`/api/v1/projects/${project.id}`, tenantB)
+    expect(res.status).toBe(404)
+  })
+
+  it('paginates the project list with cursors', async () => {
+    const authorization = await signInUser('proj_paging')
+    for (const name of ['Project One', 'Project Two', 'Project Three']) {
+      const res = await jsonFetch('/api/v1/projects', authorization, { body: { name } })
+      expect(res.status).toBe(201)
+    }
+
+    const firstPageRes = await jsonFetch('/api/v1/projects?limit=2', authorization)
+    expect(firstPageRes.status).toBe(200)
+    const firstPage = (await firstPageRes.json()) as {
+      data: Array<{ id: string }>
+      pagination: { limit: number; hasMore: boolean; nextCursor: string | null }
+    }
+    expect(firstPage.data).toHaveLength(2)
+    expect(firstPage.pagination.hasMore).toBe(true)
+    expect(firstPage.pagination.nextCursor).toEqual(expect.any(String))
+
+    const secondPageRes = await jsonFetch(
+      `/api/v1/projects?limit=2&cursor=${encodeURIComponent(firstPage.pagination.nextCursor as string)}`,
+      authorization,
+    )
+    expect(secondPageRes.status).toBe(200)
+    const secondPage = (await secondPageRes.json()) as {
+      data: Array<{ id: string }>
+      pagination: { hasMore: boolean }
+    }
+    expect(secondPage.data.length).toBeGreaterThan(0)
+    const firstPageIds = new Set(firstPage.data.map((row) => row.id))
+    for (const row of secondPage.data) {
+      expect(firstPageIds.has(row.id)).toBe(false)
+    }
+  })
+
+  it('rejects invalid list cursors', async () => {
+    const authorization = await signIn()
+    const res = await jsonFetch('/api/v1/projects?cursor=not-a-cursor', authorization)
+    expect(res.status).toBe(400)
+    await expect(res.json()).resolves.toMatchObject({
+      error: { type: 'validation_error', message: 'Invalid list cursor' },
     })
-    const runtimeRes = await SELF.fetch(`https://example.com${session.runtimeEndpointPath}`, {
-      method: 'POST',
-      headers: { authorization: tenantB },
-    })
-    expect(runtimeRes.status).toBe(404)
   })
 })

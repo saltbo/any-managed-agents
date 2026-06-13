@@ -10,7 +10,7 @@ export function ProviderDetailView({ provider }: { provider: Provider | null }) 
       description={provider.type}
       actions={
         <>
-          <StatusBadge value={provider.status} />
+          <StatusBadge value={provider.enabled ? 'enabled' : 'disabled'} />
           <StatusBadge value={provider.credentialStatus} />
         </>
       }
