@@ -25,7 +25,6 @@ import {
   type AgentRecord,
   AgentValidationError,
   type AgentVersionRecord,
-  type AuthScope,
 } from '../usecases/ports'
 import { requestId } from './request-context'
 
@@ -487,7 +486,7 @@ export function registerAgentRoutes(routes: AgentRoutes) {
         return auth
       }
       try {
-        const agent = await createAgent(deps, authScope(auth), {
+        const agent = await createAgent(deps, auth, {
           name: body.name,
           description: body.description ?? null,
           config: configFromPayload(body),
@@ -522,7 +521,7 @@ export function registerAgentRoutes(routes: AgentRoutes) {
       if (!agent) {
         return notFound(c)
       }
-      const scope = authScope(auth)
+      const scope = auth
       const before = agent
       try {
         const result = await updateAgent(deps, scope, agent, patchFromBody(body))
@@ -662,10 +661,6 @@ export function registerAgentRoutes(routes: AgentRoutes) {
 }
 
 // --- helpers ---
-
-function authScope(auth: Awaited<ReturnType<typeof requireAuth>> & object): AuthScope {
-  return auth as unknown as AuthScope
-}
 
 // Builds the usecase patch from the validated PATCH body: only present fields
 // are forwarded (so an absent field is distinct from an explicit null), and

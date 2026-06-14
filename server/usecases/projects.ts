@@ -1,11 +1,11 @@
 import type { Deps } from './deps'
-import type { AuthScope, ProjectListQuery, ProjectRecord } from './ports'
+import type { OrgScope, ProjectListQuery, ProjectRecord } from './ports'
 
 // Lists projects in the caller's organization. Every organization always has at
 // least its default project, so a first, unpaged, empty page lazily creates it.
 export async function listProjects(
   deps: Deps,
-  auth: AuthScope,
+  auth: OrgScope,
   query: Omit<ProjectListQuery, 'organizationId'>,
 ): Promise<{ rows: ProjectRecord[]; hasMore: boolean }> {
   const page = await deps.projects.list({ organizationId: auth.organization.id, ...query })
@@ -16,6 +16,6 @@ export async function listProjects(
   return page
 }
 
-export async function createProject(deps: Deps, auth: AuthScope, name: string): Promise<ProjectRecord> {
+export async function createProject(deps: Deps, auth: OrgScope, name: string): Promise<ProjectRecord> {
   return deps.projects.insert(auth.organization.id, name, new Date().toISOString())
 }

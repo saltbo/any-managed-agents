@@ -256,4 +256,67 @@ describe('[spec: environments/update] updateEnvironment', () => {
     expect(result.environment.archivedAt).toBeNull()
     expect(result.unarchived).toBe(true)
   })
+
+  it('is a no-op when patching an archived environment with archived:true', async () => {
+    const archived = environmentRecord({ archivedAt: '2026-01-02T00:00:00.000Z' })
+    const result = await updateEnvironment(fakeDeps(), auth, archived, { archived: true })
+    expect(result.environment.archivedAt).toBe('2026-01-02T00:00:00.000Z')
+    expect(result.archived).toBe(false)
+    expect(result.unarchived).toBe(false)
+  })
+
+  it('is a no-op when patching an archived environment with an empty patch', async () => {
+    const archived = environmentRecord({ archivedAt: '2026-01-02T00:00:00.000Z' })
+    const result = await updateEnvironment(fakeDeps(), auth, archived, {})
+    expect(result.environment.archivedAt).toBe('2026-01-02T00:00:00.000Z')
+    expect(result.unarchived).toBe(false)
+  })
+})
+
+describe('[spec: environments/create] createEnvironment — secret variables', () => {
+  it('rejects secret material in environment variables', async () => {
+    await expect(
+      createEnvironment(fakeDeps(), auth, {
+        name: 'x',
+        description: null,
+        // Deliberately malformed: a raw string where a variable descriptor is
+        // expected — the create path must reject it at the input boundary.
+        config: config({ variables: { API_KEY: 'raw-secret' } as unknown as EnvironmentConfig['variables'] }),
+      }),
+    ).rejects.toBeInstanceOf(EnvironmentValidationError)
+  })
+
+  it('accepts a pinned credential version when it is usable', async () => {
+    const environment = await createEnvironment(fakeDeps(), auth, {
+      name: 'Pinned',
+      description: null,
+      config: config({ credentialRefs: [{ credentialId: 'cred_1', versionId: 'credver_1' }] }),
+    })
+    expect(environment.credentialRefs).toHaveLength(1)
+  })
+
+  it('accepts environments with connected mcp connectors in the mcp policy', async () => {
+    const environment = await createEnvironment(fakeDeps(), auth, {
+      name: 'With MCP',
+      description: null,
+      config: config({ mcpPolicy: { allowedConnectors: ['linear'] } }),
+    })
+    expect(environment.mcpPolicy).toMatchObject({ allowedConnectors: ['linear'] })
+  })
+})
+
+describe('[spec: environments/update] updateEnvironment — description branch', () => {
+  it('explicitly sets description to null when provided in patch', async () => {
+    const result = await updateEnvironment(fakeDeps(), auth, environmentRecord({ description: 'old desc' }), {
+      description: null,
+    })
+    expect(result.environment.description).toBeNull()
+  })
+
+  it('explicitly sets description to a string when provided in patch', async () => {
+    const result = await updateEnvironment(fakeDeps(), auth, environmentRecord({ description: null }), {
+      description: 'new desc',
+    })
+    expect(result.environment.description).toBe('new desc')
+  })
 })

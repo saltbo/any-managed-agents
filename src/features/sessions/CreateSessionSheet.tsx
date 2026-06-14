@@ -9,6 +9,7 @@ import { isArchived, parseJsonObject, parseJsonObjectArray } from '@/console/for
 import { SessionForm } from '@/console/forms'
 import type { SessionFormState } from '@/console/types'
 import { ApiError, api, type Session } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 
 const EMPTY_RESOURCES: never[] = []
@@ -114,7 +115,7 @@ export function formatCreateSessionError(error: unknown) {
       return `Unsupported capability: ${hostingModeLabel(details.hostingMode)} session runtime ${details.runtime} cannot run Agent provider ${details.provider} with model ${details.model}.`
     }
   }
-  return error instanceof Error ? error.message : String(error)
+  return errorMessage(error)
 }
 
 function apiErrorDetails(error: ApiError) {

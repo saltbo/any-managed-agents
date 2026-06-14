@@ -16,7 +16,7 @@ import {
   toolPolicyRequiresApproval as toolPolicyRequiresApprovalRule,
 } from '@server/domain/policy'
 import { createPolicyEvalRepo } from './adapters/repos/policy-eval'
-import type { AuthContext } from './auth/session'
+import type { AuthScope } from './usecases/ports'
 
 // The persistence handle the policy engine forwards into its read repo. Typed
 // off the repo factory so the engine never imports drizzle directly — the
@@ -32,7 +32,7 @@ export { sandboxOperationForRuntimeTool }
 // operation is allowed.
 export async function policyBlocksSandboxOperation(
   db: PolicyDb,
-  auth: AuthContext,
+  auth: AuthScope,
   values: {
     session: { id: string; agentSnapshot: string | null; environmentSnapshot: string | null } | null
     toolName: string
@@ -58,7 +58,7 @@ export async function policyBlocksSandboxOperation(
 // Sensitive sandbox tools can demand a human decision before they execute.
 // Symmetric with mcpPolicy.requireApprovalTools, but scoped to the governance
 // toolPolicy that gates the cloud sandbox toolset.
-export async function toolPolicyRequiresApproval(db: PolicyDb, auth: AuthContext, toolName: string) {
+export async function toolPolicyRequiresApproval(db: PolicyDb, auth: AuthScope, toolName: string) {
   const effective = await resolveEffectivePolicy(db, auth)
   return toolPolicyRequiresApprovalRule(effective.toolPolicy, toolName)
 }
@@ -71,7 +71,7 @@ export async function toolPolicyRequiresApproval(db: PolicyDb, auth: AuthContext
 // apply only when the caller's OIDC-asserted team memberships include the row's
 // team id.
 
-export async function resolveEffectivePolicy(db: PolicyDb, auth: AuthContext) {
+export async function resolveEffectivePolicy(db: PolicyDb, auth: AuthScope) {
   const repo = createPolicyEvalRepo(db)
   const levels = applicablePolicyLevels(await repo.policyLevels(auth), auth.teams ?? [])
   const accessRules = await repo.projectAccessRules(auth.project.id)
@@ -80,7 +80,7 @@ export async function resolveEffectivePolicy(db: PolicyDb, auth: AuthContext) {
 
 export async function evaluateProviderPolicy(
   db: PolicyDb,
-  auth: AuthContext,
+  auth: AuthScope,
   values: {
     providerId: string
     modelId: string | null
@@ -147,7 +147,7 @@ export async function evaluateProviderPolicy(
   return { allowed: true, category: 'provider', rule: null, message: 'Allowed by effective policy.' }
 }
 
-export function canOverrideProviderPolicy(auth: Pick<AuthContext, 'roles'>) {
+export function canOverrideProviderPolicy(auth: Pick<AuthScope, 'roles'>) {
   return canOverrideProviderPolicyRule(auth.roles)
 }
 
@@ -162,7 +162,7 @@ export interface ProviderPolicySessionDecision {
 // admin override request only for admin-role callers.
 export async function evaluateProviderPolicyForSession(
   db: PolicyDb,
-  auth: AuthContext,
+  auth: AuthScope,
   values: {
     providerId: string
     modelId: string | null
@@ -189,7 +189,7 @@ export async function evaluateProviderPolicyForSession(
 
 export async function evaluateMcpToolPolicy(
   db: PolicyDb,
-  auth: AuthContext,
+  auth: AuthScope,
   values: {
     connectorId: string
     toolName: string
@@ -273,7 +273,7 @@ export async function evaluateMcpToolPolicy(
 
 export async function evaluateSandboxRuntimePolicy(
   db: PolicyDb,
-  auth: AuthContext,
+  auth: AuthScope,
   values: {
     session?: { id: string; agentSnapshot: string | null; environmentSnapshot: string | null } | null
     operation: 'startup' | 'command' | 'network'

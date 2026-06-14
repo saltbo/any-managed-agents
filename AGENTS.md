@@ -24,8 +24,8 @@
 ## Workflow: Spec-Traced, Verified At The Cheapest Layer
 
 Specs are BDD-lite (see `spec/README.md`). `spec/*.feature` is the product source of
-truth — documentation, one file per capability — and is NOT a Cucumber runner over
-the whole tree. Tests trace back to scenarios with `[spec: <id>]` breadcrumbs.
+truth — documentation only, one file per capability — and is NOT executed; there is
+no Cucumber runner. Tests trace back to scenarios with `[spec: <id>]` breadcrumbs.
 
 1. Write or update a scenario in the capability's `spec/<capability>.feature`. Give it
    a stable id `@<capability>/<slug>` and one layer tag (`@domain`/`@usecase`/`@web`/
@@ -35,9 +35,10 @@ the whole tree. Tests trace back to scenarios with `[spec: <id>]` breadcrumbs.
 3. Implement the Worker, Agent, D1, or UI behavior.
 4. Run the smallest meaningful check:
    - `npm run test` (unit + web + integration vitest projects)
+   - `npm run test:coverage` (enforced per-file coverage gate)
    - `npm run typecheck`
    - `npm run lint:spec` (every enforced scenario id has a breadcrumb)
-   - `npm run test:e2e` (only `@e2e` scenarios — real cross-stack journeys)
+   - `npm run e2e` (native Playwright crowns in `e2e/*.spec.ts` — real cross-stack journeys)
 
 Scenarios describe business behaviour. Selectors, fixtures, and platform details
 belong in the home test and its helpers.
@@ -51,22 +52,25 @@ and update the relevant `spec/` scenario or product doc first.
   definitions. The id `@<capability>/<slug>` never changes once written.
 - Verify at the cheapest layer. Old `@api` scenarios usually map to `@api`
   (assembled server, real D1) or `@usecase` (fake-port business branch); old `@ui`
-  scenarios map to `@web` (jsdom + MSW) or `@e2e` (real browser). Reserve `@e2e` for
-  genuinely cross-stack, hermetic journeys — do not turn every scenario into a slow
-  E2E.
-- `npm run test:e2e` runs only `@e2e`-tagged scenarios from `spec/`, against local
-  resources. Their step text must match the definitions in `test/e2e/`. Do not make
-  e2e depend on production, staging, real model quota, real user credentials, or
+  scenarios map to `@web` (jsdom + vi-mocked api) or `@e2e` (real browser). Reserve
+  `@e2e` for genuinely cross-stack, hermetic journeys — do not turn every scenario
+  into a slow E2E.
+- `npm run e2e` runs the native Playwright crowns in `e2e/*.spec.ts`
+  (`auth.spec.ts`, `api-contracts.spec.ts`, `projects.spec.ts`) against local
+  resources; `npm run e2e:server` boots the dev stack for them. Do not make e2e
+  depend on production, staging, real model quota, real user credentials, or
   direct database access.
-- Staging or production verification lives in `spec/smoke/` and `npm run test:smoke`.
-  Smoke scenarios may use real FlareAuth, Cloudflare, Workers AI, and deployed
-  resources, but must not replace local layered coverage.
+- `npm run test:coverage` is the enforced coverage gate (`vitest run --project unit
+  --project web --coverage`): business logic (server/domain + server/usecases) ≥95%
+  per-file, everything else included (gateways, shared, src/features, src/lib) ≥90%
+  per-file.
 - `npm run lint:spec` is a governance lint (sibling to `lint:arch`): it fails when an
   enforced capability has a scenario id with no `[spec: id]` breadcrumb. Add a
   capability to `ENFORCED_CAPABILITIES` in `scripts/check-spec-coverage.ts` once its
   spec and breadcrumbs land.
 - Do not add standalone `scripts/` test runners for product behaviour. Restish/OpenAPI
-  contract behaviour lives in `server/http/*.test.ts` (integration) or `test/e2e/`.
+  contract behaviour lives in `server/http/*.test.ts` (integration) or the native
+  Playwright crowns in `e2e/*.spec.ts`.
 
 ## Architecture Map
 
@@ -81,7 +85,7 @@ and update the relevant `spec/` scenario or product doc first.
 - `src/console/` - Reusable AMA product components, form helpers, formatting, defaults, and view models.
 - `src/components/ui/` - shadcn-generated primitives. Prefer these before writing custom primitives.
 - `spec/` - Product behaviour in Gherkin (BDD-lite). One `.feature` per capability; tests trace back via `[spec: id]`. See `spec/README.md`.
-- `test/e2e/` - Cucumber step definitions, browser helpers, and local e2e harnesses for `@e2e` scenarios.
+- `e2e/` - Native Playwright crowns (`*.spec.ts`), fixtures, browser helpers, and local e2e harnesses for `@e2e` scenarios.
 - `docs/product/` - Product decisions, UI/UX standards, API/SDK boundaries, and implementation notes.
 - `docs/infra/` - Cloudflare deployment and infrastructure notes.
 
@@ -118,14 +122,14 @@ and update the relevant `spec/` scenario or product doc first.
 
 Choose the smallest meaningful check, then broaden when touching shared contracts:
 
-- Product/e2e specs: `npm run test:e2e`
+- Native Playwright e2e crowns: `npm run e2e`
+- Coverage gate: `npm run test:coverage`
 - Type safety: `npm run typecheck`
 - Unit/integration/runtime tests: `npm test`
 - Lint/format checks: `npm run lint`
 - Production build: `npm run build`
-- Staging smoke after deployment: `npm run test:smoke`
 
-For v1 acceptance or broad changes, run `npm run lint`, `npm run typecheck`, `npm test`, `npm run test:e2e`, and `npm run build`.
+For v1 acceptance or broad changes, run `npm run lint`, `npm run typecheck`, `npm test`, `npm run test:coverage`, `npm run e2e`, and `npm run build`.
 
 ## Local Safety
 

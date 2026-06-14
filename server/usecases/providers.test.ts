@@ -164,6 +164,30 @@ describe('[spec: providers/create] createProvider', () => {
     expect(cleared).toBe(true)
   })
 
+  it('inserts a non-default provider without clearing defaults', async () => {
+    let cleared = false
+    const deps = fakeDeps({
+      repo: {
+        clearDefaults: async () => {
+          cleared = true
+        },
+      },
+    })
+    const provider = await createProvider(deps, auth, {
+      type: 'openai',
+      displayName: 'Secondary',
+      baseUrl: null,
+      isDefault: false,
+      credentialId: null,
+      credentialVersionId: null,
+      metadata: {},
+      rateLimits: {},
+      budgetPolicy: {},
+    })
+    expect(cleared).toBe(false)
+    expect(provider.type).toBe('openai')
+  })
+
   it('rejects an openai-compatible provider without a base URL', async () => {
     await expect(
       createProvider(fakeDeps(), auth, {
@@ -198,6 +222,45 @@ describe('[spec: providers/update] updateProvider', () => {
       credential: { credentialId: null, credentialVersionId: null },
     })
     expect(updated.credentialId).toBeNull()
+  })
+
+  it('clears existing defaults when promoting a provider to default via update', async () => {
+    let cleared = false
+    const deps = fakeDeps({
+      repo: {
+        clearDefaults: async () => {
+          cleared = true
+        },
+      },
+    })
+    await updateProvider(deps, auth, providerRecord({ isDefault: false }), { isDefault: true })
+    expect(cleared).toBe(true)
+  })
+
+  it('retains existing baseUrl when patch does not include baseUrl', async () => {
+    const deps = fakeDeps({
+      repo: { update: async (_p, _id, fields, updatedAt) => providerRecord({ ...fields, updatedAt }) },
+    })
+    const updated = await updateProvider(
+      deps,
+      auth,
+      providerRecord({ type: 'openai-compatible', baseUrl: 'https://existing.example/v1' }),
+      { displayName: 'Renamed' },
+    )
+    expect(updated.baseUrl).toBe('https://existing.example/v1')
+  })
+
+  it('updates baseUrl when explicitly included in the patch', async () => {
+    const deps = fakeDeps({
+      repo: { update: async (_p, _id, fields, updatedAt) => providerRecord({ ...fields, updatedAt }) },
+    })
+    const updated = await updateProvider(
+      deps,
+      auth,
+      providerRecord({ type: 'openai-compatible', baseUrl: 'https://old.example/v1' }),
+      { baseUrl: 'https://new.example/v1' },
+    )
+    expect(updated.baseUrl).toBe('https://new.example/v1')
   })
 })
 
@@ -296,5 +359,45 @@ describe('[spec: providers/discovery] runModelDiscovery', () => {
     expect(result.outcome).toBe('failed')
     expect(result.category).toBe('model_unavailable')
     expect(catalogStatus).toMatchObject({ modelCatalogState: 'error' })
+  })
+
+  it('uses the built-in Workers AI default model when defaultModel is undefined', async () => {
+    const upserted: string[] = []
+    const deps = fakeDeps({
+      repo: {
+        upsertModel: async (input) => {
+          upserted.push(input.modelId)
+          return { record: modelRecord(input.modelId), created: true }
+        },
+      },
+    })
+    const result = await runModelDiscovery(deps, auth, providerRecord({ type: 'workers-ai' }), undefined)
+    expect(result.outcome).toBe('succeeded')
+    expect(upserted[0]).toMatch(/^@cf\//)
+  })
+
+  it('includes retryAfterSeconds in the failed task error when the provider returns a retry hint', async () => {
+    let savedError: Record<string, unknown> | null = null
+    const deps = fakeDeps({
+      catalog: {
+        fetchCatalog: async () => {
+          throw Object.assign(new Error('Rate limit'), { status: 429, retryAfterSeconds: 30 })
+        },
+      },
+      repo: {
+        updateDiscoveryTask: async (_p, _id, fields, updatedAt) => {
+          savedError = fields.error as Record<string, unknown>
+          return taskRecord({ state: fields.state ?? 'failed', error: fields.error, updatedAt })
+        },
+      },
+    })
+    const result = await runModelDiscovery(
+      deps,
+      auth,
+      providerRecord({ type: 'openai-compatible', baseUrl: 'https://x/v1' }),
+      undefined,
+    )
+    expect(result.outcome).toBe('failed')
+    expect(savedError).toMatchObject({ retryAfterSeconds: 30 })
   })
 })

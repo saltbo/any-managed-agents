@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import type { VaultCredential } from '@/lib/api'
 import { api } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 
 export function RotateCredentialSheet({
@@ -31,11 +32,13 @@ export function RotateCredentialSheet({
       toast.success('Credential rotated')
       void queryClient.invalidateQueries({ queryKey: queryKeys.vaults.detail(vaultId) })
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : String(error)),
+    onError: (error) => toast.error(errorMessage(error)),
   })
   const submit = (event: FormEvent) => {
     event.preventDefault()
+    /* v8 ignore start -- credential is null only when sheet is closed; form can't be submitted then */
     if (!credential || secretValue === '') return
+    /* v8 ignore stop */
     rotateCredential.mutate(credential.id)
   }
 
@@ -45,9 +48,11 @@ export function RotateCredentialSheet({
         <SheetHeader>
           <SheetTitle>Rotate credential</SheetTitle>
           <SheetDescription>
+            {/* v8 ignore start -- sheet is only open when credential !== null; the null fallback never renders */}
             {credential
               ? `Create a new active version for ${credential.name}. The previous version is kept as a safe reference for auditability.`
               : 'Create a new active credential version.'}
+            {/* v8 ignore stop */}
           </SheetDescription>
         </SheetHeader>
         <div className="px-4 pb-4">

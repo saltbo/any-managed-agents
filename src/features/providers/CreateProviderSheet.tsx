@@ -7,6 +7,7 @@ import { emptyProvider } from '@/console/defaults'
 import { ProviderForm } from '@/console/forms'
 import type { ProviderFormState } from '@/console/types'
 import { api } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 
 export function CreateProviderSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -33,7 +34,7 @@ export function CreateProviderSheet({ open, onOpenChange }: { open: boolean; onO
       toast.success('Provider created')
       void queryClient.invalidateQueries({ queryKey: queryKeys.providers.all })
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : String(error)),
+    onError: (error) => toast.error(errorMessage(error)),
   })
   const submit = (event: FormEvent) => {
     event.preventDefault()

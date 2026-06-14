@@ -14,7 +14,6 @@ import {
 } from '../openapi'
 import { createEnvironment, type UpdateEnvironmentPatch, updateEnvironment } from '../usecases/environments'
 import {
-  type AuthScope,
   EnvironmentArchivedError,
   type EnvironmentRecord,
   EnvironmentValidationError,
@@ -374,7 +373,7 @@ export function registerEnvironmentRoutes(routes: EnvironmentRoutes) {
         return auth
       }
       try {
-        const environment = await createEnvironment(deps, authScope(auth), {
+        const environment = await createEnvironment(deps, auth, {
           name: body.name,
           description: body.description ?? null,
           config: configFromPayload(body),
@@ -409,7 +408,7 @@ export function registerEnvironmentRoutes(routes: EnvironmentRoutes) {
       if (!environment) {
         return notFound(c)
       }
-      const scope = authScope(auth)
+      const scope = auth
       const before = environment
       try {
         const result = await updateEnvironment(deps, scope, environment, patchFromBody(body))
@@ -482,10 +481,6 @@ export function registerEnvironmentRoutes(routes: EnvironmentRoutes) {
 }
 
 // --- helpers ---
-
-function authScope(auth: Awaited<ReturnType<typeof requireAuth>> & object): AuthScope {
-  return auth as unknown as AuthScope
-}
 
 function configFromPayload(body: z.infer<typeof EnvironmentPayloadSchema>) {
   return {

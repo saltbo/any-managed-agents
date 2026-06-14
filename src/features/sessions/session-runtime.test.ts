@@ -4,9 +4,15 @@ import {
   amaSessionEventCategory,
   amaSessionEventTypeFromPayload,
 } from '@shared/session-events'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SessionEvent } from '@/lib/api'
-import { initialSessionRuntimeState, sessionRuntimeReducer } from './session-runtime'
+import * as oidcModule from '@/lib/oidc'
+import { initialSessionRuntimeState, runtimeWebSocketUrl, sessionRuntimeReducer } from './session-runtime'
+
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+})
 
 function event(sequence: number, type: AmaSessionEventType, payload: Record<string, unknown>): SessionEvent {
   return {
@@ -558,6 +564,271 @@ describe('sessionRuntimeReducer', () => {
     expect(replayed.messages[0]?.content).toBe('History loaded')
   })
 
+  it('handles command_sent with abort type without changing run state to running', () => {
+    const state = sessionRuntimeReducer(initialSessionRuntimeState, {
+      type: 'command_sent',
+      command: { id: 'cmd_1', type: 'abort', message: 'abort now' },
+      at: new Date(1000).toISOString(),
+    })
+
+    // abort command should NOT set runState to 'running'
+    expect(state.runState).toBe('idle')
+    expect(state.messages[0]?.content).toBe('abort now')
+  })
+
+  it('handles command_sent with no message by returning unchanged state', () => {
+    const state = sessionRuntimeReducer(initialSessionRuntimeState, {
+      type: 'command_sent',
+      command: { id: 'cmd_1', type: 'prompt' },
+      at: new Date(1000).toISOString(),
+    })
+
+    expect(state).toBe(initialSessionRuntimeState)
+    expect(state.messages).toHaveLength(0)
+  })
+
+  it('handles connection action with explicit null error', () => {
+    const state = sessionRuntimeReducer(initialSessionRuntimeState, {
+      type: 'connection',
+      state: 'closed',
+      error: null,
+    })
+
+    expect(state.connection).toBe('closed')
+    expect(state.error).toBeNull()
+  })
+
+  it('handles connection action error state without explicit error keeps prior error', () => {
+    const withError = sessionRuntimeReducer(initialSessionRuntimeState, {
+      type: 'connection',
+      state: 'error',
+      error: 'prior failure',
+    })
+    const stillError = sessionRuntimeReducer(withError, {
+      type: 'connection',
+      state: 'error',
+    })
+
+    expect(stillError.error).toBe('prior failure')
+  })
+
+  it('handles reset action by returning initial state', () => {
+    const modified = sessionRuntimeReducer(initialSessionRuntimeState, {
+      type: 'event',
+      event: { type: 'runtime.error', message: 'test error' },
+      at: new Date(1000).toISOString(),
+    })
+    const reset = sessionRuntimeReducer(modified, { type: 'reset' })
+
+    expect(reset).toEqual(initialSessionRuntimeState)
+  })
+
+  it('handles session_stop and session_checkpoint and session_resume events as debug-only events', () => {
+    const afterStop = sessionRuntimeReducer(initialSessionRuntimeState, {
+      type: 'event',
+      event: { type: 'session_stop', reason: 'user_requested' },
+      at: new Date(1000).toISOString(),
+    })
+    const afterCheckpoint = sessionRuntimeReducer(afterStop, {
+      type: 'event',
+      event: { type: 'session_checkpoint', resumeTokenRef: 'ref_1', scope: 'runtime-resume-token' },
+      at: new Date(2000).toISOString(),
+    })
+    const afterResume = sessionRuntimeReducer(afterCheckpoint, {
+      type: 'event',
+      event: { type: 'session_resume', fromCheckpoint: 'ref_1', reason: 'runner-recovery' },
+      at: new Date(3000).toISOString(),
+    })
+
+    // These go to debugEvents as misc events (not transcripted messages)
+    expect(afterResume.debugEvents.map((e) => e.type)).toEqual(['session_stop', 'session_checkpoint', 'session_resume'])
+    expect(afterResume.messages).toHaveLength(0)
+  })
+
+  it('handles permission.request as debug event without transcript message', () => {
+    const state = sessionRuntimeReducer(initialSessionRuntimeState, {
+      type: 'event',
+      event: {
+        type: 'permission.request',
+        permissionId: 'perm_1',
+        action: 'shell',
+        command: 'ls',
+        runtime: 'claude-code',
+      },
+      at: new Date(1000).toISOString(),
+    })
+
+    expect(state.debugEvents).toHaveLength(1)
+    expect(state.debugEvents[0]?.type).toBe('permission.request')
+    expect(state.messages).toHaveLength(0)
+  })
+
+  it('merges persisted events with session_checkpoint and keeps runState when no terminal event', () => {
+    const state = sessionRuntimeReducer(
+      { ...initialSessionRuntimeState, runState: 'running' },
+      {
+        type: 'persisted_events',
+        events: [
+          {
+            id: 'ev_checkpoint',
+            projectId: 'project_1',
+            sessionId: 'session_1',
+            sequence: 1,
+            type: 'session_checkpoint',
+            visibility: 'runtime',
+            role: null,
+            parentEventId: null,
+            correlationId: null,
+            payload: { type: 'session_checkpoint', resumeTokenRef: 'ref_1', scope: 'runtime-resume-token' },
+            metadata: {},
+            createdAt: new Date(1000).toISOString(),
+          },
+        ],
+      },
+    )
+
+    // No terminal event — runState stays as-is
+    expect(state.runState).toBe('running')
+    expect(state.debugEvents).toHaveLength(1)
+  })
+
+  it('handles runtime.error with object-type error field', () => {
+    const state = sessionRuntimeReducer(initialSessionRuntimeState, {
+      type: 'event',
+      event: { type: 'runtime.error', error: { message: 'structured error' } },
+      at: new Date(1000).toISOString(),
+    })
+
+    expect(state.error).toBe('structured error')
+  })
+
+  it('handles runtime.error with content field as fallback', () => {
+    const state = sessionRuntimeReducer(initialSessionRuntimeState, {
+      type: 'event',
+      event: { type: 'runtime.error', content: 'content error fallback' },
+      at: new Date(1000).toISOString(),
+    })
+
+    expect(state.error).toBe('content error fallback')
+  })
+
+  it('handles runtime.error with no specific fields using default message', () => {
+    const state = sessionRuntimeReducer(initialSessionRuntimeState, {
+      type: 'event',
+      event: { type: 'runtime.error' },
+      at: new Date(1000).toISOString(),
+    })
+
+    expect(state.error).toBe('Runtime error')
+  })
+
+  it('handles message_start event with streaming status', () => {
+    const state = sessionRuntimeReducer(initialSessionRuntimeState, {
+      type: 'event',
+      event: {
+        type: 'message_start',
+        message: { role: 'assistant', content: 'Starting...', timestamp: 12345 },
+      },
+      at: new Date(1000).toISOString(),
+    })
+
+    expect(state.messages).toHaveLength(1)
+    expect(state.messages[0]?.status).toBe('streaming')
+  })
+
+  it('appends streaming content to existing message on message_update', () => {
+    const started = sessionRuntimeReducer(initialSessionRuntimeState, {
+      type: 'event',
+      event: {
+        type: 'message_start',
+        message: { role: 'assistant', content: 'Hello', id: 'msg_stream_1' },
+      },
+      at: new Date(1000).toISOString(),
+    })
+    const updated = sessionRuntimeReducer(started, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: { role: 'assistant', content: ' world', id: 'msg_stream_1' },
+      },
+      at: new Date(2000).toISOString(),
+    })
+
+    // Streaming content is appended
+    const msg = updated.messages[0]
+    expect(msg?.content).toContain('Hello')
+  })
+
+  it('handles tool_execution_start with callId from toolCall.id', () => {
+    const state = sessionRuntimeReducer(initialSessionRuntimeState, {
+      type: 'event',
+      event: {
+        type: 'tool_execution_start',
+        toolCall: { id: 'tool_from_call', name: 'read_file', input: { path: 'README.md' } },
+      },
+      at: new Date(1000).toISOString(),
+    })
+
+    expect(state.tools).toHaveLength(1)
+    expect(state.tools[0]?.callId).toBe('tool_from_call')
+    expect(state.tools[0]?.status).toBe('running')
+  })
+
+  it('handles tool_execution_end with error status from isError=true', () => {
+    const started = sessionRuntimeReducer(initialSessionRuntimeState, {
+      type: 'event',
+      event: {
+        type: 'tool_execution_start',
+        toolCallId: 'tool_err_1',
+        toolName: 'exec',
+        args: { command: 'fail' },
+      },
+      at: new Date(1000).toISOString(),
+    })
+    const ended = sessionRuntimeReducer(started, {
+      type: 'event',
+      event: {
+        type: 'tool_execution_end',
+        toolCallId: 'tool_err_1',
+        toolName: 'exec',
+        isError: true,
+        error: 'exec failed',
+        result: { content: [{ type: 'text', text: 'exec failed' }] },
+      },
+      at: new Date(2000).toISOString(),
+    })
+
+    expect(ended.tools[0]?.status).toBe('error')
+    expect(ended.tools[0]?.error).toBe('exec failed')
+  })
+
+  it('handles message_end with errorMessage field', () => {
+    const state = sessionRuntimeReducer(initialSessionRuntimeState, {
+      type: 'event',
+      event: {
+        type: 'message_end',
+        message: { role: 'assistant', errorMessage: 'Model refused' },
+      },
+      at: new Date(1000).toISOString(),
+    })
+
+    expect(state.messages[0]?.status).toBe('error')
+    expect(state.messages[0]?.content).toBe('Model refused')
+  })
+
+  it('handles message_end with delta field for content', () => {
+    const state = sessionRuntimeReducer(initialSessionRuntimeState, {
+      type: 'event',
+      event: {
+        type: 'message_end',
+        delta: 'delta content here',
+      },
+      at: new Date(1000).toISOString(),
+    })
+
+    expect(state.messages[0]?.content).toBe('delta content here')
+  })
+
   it('ignores live tool events that were already loaded from history', () => {
     const startPayload = {
       type: 'tool_execution_start',
@@ -597,5 +868,268 @@ describe('sessionRuntimeReducer', () => {
       status: 'success',
       output: { ok: true },
     })
+  })
+})
+
+// ---------------------------------------------------------------------------
+// runtimeWebSocketUrl — URL construction branches
+// ---------------------------------------------------------------------------
+
+describe('runtimeWebSocketUrl', () => {
+  it('converts /rpc suffix to /ws', () => {
+    vi.stubGlobal('window', { location: { href: 'https://example.com/app' } })
+    vi.spyOn(oidcModule, 'getStoredAccessToken').mockReturnValue(null)
+
+    const url = runtimeWebSocketUrl('/api/sessions/s1/runtime/rpc')
+    expect(url).toContain('/ws')
+    expect(url).not.toContain('/rpc')
+    expect(url.startsWith('wss:')).toBe(true)
+  })
+
+  it('appends /ws for non-/rpc paths', () => {
+    vi.stubGlobal('window', { location: { href: 'https://example.com/' } })
+    vi.spyOn(oidcModule, 'getStoredAccessToken').mockReturnValue(null)
+
+    const url = runtimeWebSocketUrl('/api/sessions/s1/runtime')
+    expect(url).toContain('/ws')
+    expect(url.startsWith('wss:')).toBe(true)
+  })
+
+  it('uses ws: protocol for http: origins', () => {
+    vi.stubGlobal('window', { location: { href: 'http://localhost:3000/' } })
+    vi.spyOn(oidcModule, 'getStoredAccessToken').mockReturnValue(null)
+
+    const url = runtimeWebSocketUrl('/api/sessions/s1/runtime/ws')
+    expect(url.startsWith('ws:')).toBe(true)
+    expect(url.startsWith('wss:')).toBe(false)
+  })
+
+  it('appends access_token query param when token is present', () => {
+    vi.stubGlobal('window', { location: { href: 'https://example.com/' } })
+    vi.spyOn(oidcModule, 'getStoredAccessToken').mockReturnValue('test_token_xyz')
+
+    const url = runtimeWebSocketUrl('/api/sessions/s1/runtime/rpc')
+    expect(url).toContain('access_token=test_token_xyz')
+  })
+
+  it('strips trailing slash before appending /ws', () => {
+    vi.stubGlobal('window', { location: { href: 'https://example.com/' } })
+    vi.spyOn(oidcModule, 'getStoredAccessToken').mockReturnValue(null)
+
+    const url = runtimeWebSocketUrl('/api/sessions/s1/runtime/')
+    expect(url).toContain('/ws')
+    // Should not have double slash: /runtime//ws
+    expect(url).not.toContain('//ws')
+  })
+})
+
+describe('sessionRuntimeReducer — extractText edge cases (line 594)', () => {
+  it('extracts empty string from message with numeric content (extractText fallback)', () => {
+    // When message content is a number, extractText returns '' (line 594 fallback)
+    const state = sessionRuntimeReducer(initialSessionRuntimeState, {
+      type: 'event',
+      event: { type: 'message_end', message: { role: 'assistant', content: 42 } },
+      at: '2026-05-23T00:00:00.000Z',
+    })
+    const msg = state.messages[0]
+    // content is '' when extractText falls through to the final return ''
+    expect(msg?.content ?? '').toBe('')
+  })
+
+  it('extracts empty string from message with boolean content', () => {
+    const state = sessionRuntimeReducer(initialSessionRuntimeState, {
+      type: 'event',
+      event: { type: 'message_end', message: { role: 'assistant', content: false } },
+      at: '2026-05-23T00:00:00.000Z',
+    })
+    expect(state.messages[0]?.content ?? '').toBe('')
+  })
+})
+
+describe('sessionRuntimeReducer — mergePersistedEvents filter predicates', () => {
+  // These tests exercise the .filter() callbacks inside mergePersistedEvents
+  // that only run when state.messages/tools/debugEvents are already non-empty.
+  // Coverage target: the anonymous lambdas at lines 254-262 of session-runtime.ts.
+
+  it('deduplicates a message that already exists in state when persisted_events is dispatched twice', () => {
+    const msgEvent = event(1, 'message_end', {
+      type: 'message_end',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'Existing message' }] },
+    })
+    const termEvent = event(2, 'turn_end', { type: 'turn_end' })
+
+    // First dispatch: state gains 1 message, 1 debugEvent
+    const afterFirst = sessionRuntimeReducer(initialSessionRuntimeState, {
+      type: 'persisted_events',
+      events: [msgEvent, termEvent],
+    })
+    expect(afterFirst.messages).toHaveLength(1)
+
+    // Second dispatch with the SAME event: the filter predicate runs against
+    // state.messages (now non-empty) and deduplicates by id/sameRuntimeMessage.
+    const afterSecond = sessionRuntimeReducer(afterFirst, {
+      type: 'persisted_events',
+      events: [msgEvent, termEvent],
+    })
+
+    // Message must not be duplicated.
+    expect(afterSecond.messages).toHaveLength(1)
+    expect(afterSecond.messages[0]?.content).toBe('Existing message')
+  })
+
+  it('deduplicates a tool that already exists in state when persisted_events is dispatched twice', () => {
+    const toolStart = event(1, 'tool_execution_start', {
+      type: 'tool_execution_start',
+      toolCallId: 'tool_dedup',
+      toolName: 'bash',
+      args: { command: 'ls' },
+    })
+    const toolEnd = event(2, 'tool_execution_end', {
+      type: 'tool_execution_end',
+      toolCallId: 'tool_dedup',
+      toolName: 'bash',
+      result: { content: [{ type: 'text', text: 'ok' }] },
+      isError: false,
+    })
+
+    const afterFirst = sessionRuntimeReducer(initialSessionRuntimeState, {
+      type: 'persisted_events',
+      events: [toolStart, toolEnd],
+    })
+    expect(afterFirst.tools).toHaveLength(1)
+
+    // Second dispatch: state.tools.filter(...) predicate runs to avoid duplication.
+    const afterSecond = sessionRuntimeReducer(afterFirst, {
+      type: 'persisted_events',
+      events: [toolStart, toolEnd],
+    })
+
+    expect(afterSecond.tools).toHaveLength(1)
+    expect(afterSecond.tools[0]?.callId).toBe('tool_dedup')
+  })
+
+  it('deduplicates debug events that already exist in state when persisted_events is dispatched twice', () => {
+    const debugEvent = event(1, 'agent_start', { type: 'agent_start' })
+
+    const afterFirst = sessionRuntimeReducer(initialSessionRuntimeState, {
+      type: 'persisted_events',
+      events: [debugEvent],
+    })
+    expect(afterFirst.debugEvents).toHaveLength(1)
+
+    // Second dispatch: state.debugEvents.filter(...) predicate runs to avoid duplication.
+    const afterSecond = sessionRuntimeReducer(afterFirst, {
+      type: 'persisted_events',
+      events: [debugEvent],
+    })
+
+    expect(afterSecond.debugEvents).toHaveLength(1)
+    expect(afterSecond.debugEvents[0]?.type).toBe('agent_start')
+  })
+
+  it('appends new items while deduplicating existing ones in all three collections', () => {
+    const existingMsg = event(1, 'message_end', {
+      type: 'message_end',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'First' }] },
+    })
+    const existingTool = event(2, 'tool_execution_start', {
+      type: 'tool_execution_start',
+      toolCallId: 'tool_existing',
+      toolName: 'bash',
+      args: { command: 'ls' },
+    })
+
+    const afterFirst = sessionRuntimeReducer(initialSessionRuntimeState, {
+      type: 'persisted_events',
+      events: [existingMsg, existingTool],
+    })
+
+    const newMsg = event(10, 'message_end', {
+      type: 'message_end',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'Second' }] },
+    })
+    const newDebug = event(11, 'agent_start', { type: 'agent_start' })
+
+    // Second dispatch: existing events deduplicated, new events appended.
+    const afterSecond = sessionRuntimeReducer(afterFirst, {
+      type: 'persisted_events',
+      events: [existingMsg, existingTool, newMsg, newDebug],
+    })
+
+    // Both messages present, no duplicates.
+    expect(afterSecond.messages.map((m) => m.content)).toEqual(['First', 'Second'])
+    // Tools: same tool deduplicated.
+    expect(afterSecond.tools).toHaveLength(1)
+    // Debug events: new agent_start appended.
+    const types = afterSecond.debugEvents.map((d) => d.type)
+    expect(types.filter((t) => t === 'agent_start')).toHaveLength(1)
+  })
+})
+
+describe('sessionRuntimeReducer — hasToolValue edge cases (lines 632, 635)', () => {
+  it('preserves existing output when update result is empty string (hasToolValue("") = false)', () => {
+    // Create the tool first via tool_execution_start
+    const stateAfterStart = sessionRuntimeReducer(initialSessionRuntimeState, {
+      type: 'event',
+      event: {
+        type: 'tool_execution_start',
+        toolCallId: 'tool_str',
+        toolName: 'read',
+        args: { path: '/file.txt' },
+      },
+      at: '2026-05-23T00:00:00.000Z',
+    })
+
+    // Update with empty string result — hasToolValue('') = false → existing output kept
+    const stateAfterEnd = sessionRuntimeReducer(stateAfterStart, {
+      type: 'event',
+      event: {
+        type: 'tool_execution_end',
+        toolCallId: 'tool_str',
+        toolName: 'read',
+        result: '',
+        isError: false,
+      },
+      at: '2026-05-23T00:00:01.000Z',
+    })
+
+    const tool = stateAfterEnd.tools[0]
+    expect(tool?.status).toBe('success')
+    // Empty string output is not stored as the output (hasToolValue('') = false)
+    expect(tool?.output).not.toBe('')
+  })
+
+  it('preserves existing output when update has empty array result (hasToolValue([]) = false)', () => {
+    // First, create the tool via tool_execution_start with a real output
+    const stateAfterStart = sessionRuntimeReducer(initialSessionRuntimeState, {
+      type: 'event',
+      event: {
+        type: 'tool_execution_start',
+        toolCallId: 'tool_arr',
+        toolName: 'read',
+        args: { path: '/file.txt' },
+      },
+      at: '2026-05-23T00:00:00.000Z',
+    })
+
+    // Then update with tool_execution_end that has empty array result
+    // hasToolValue([]) → value.length > 0 → false → existing.output is kept
+    const stateAfterEnd = sessionRuntimeReducer(stateAfterStart, {
+      type: 'event',
+      event: {
+        type: 'tool_execution_end',
+        toolCallId: 'tool_arr',
+        toolName: 'read',
+        result: [],
+        isError: false,
+      },
+      at: '2026-05-23T00:00:01.000Z',
+    })
+
+    const tool = stateAfterEnd.tools[0]
+    // Output from start (undefined/args) should be preserved since [] has no value
+    expect(tool?.status).toBe('success')
+    // The tool was updated (status changed to success) even though output was kept
+    expect(tool?.output).not.toEqual([])
   })
 })

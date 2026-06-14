@@ -9,7 +9,7 @@ import {
   parseListCursor,
 } from '../openapi'
 import { createFederatedTenant, updateFederatedTenant } from '../usecases/federated-tenants'
-import { type AuthScope, FederatedTenantConflictError, type FederatedTenantRecord } from '../usecases/ports'
+import { FederatedTenantConflictError, type FederatedTenantRecord } from '../usecases/ports'
 import { requestId } from './request-context'
 
 // Mounted at /api/v1/auth/federated-tenants (docs/api-v1-design.md §2 Auth).
@@ -250,7 +250,7 @@ export function registerFederatedTenantRoutes(routes: FederatedTenantRoutes) {
         return auth
       }
       const body = c.req.valid('json')
-      const scope = authScope(auth)
+      const scope = auth
       try {
         const tenant = await createFederatedTenant(deps, scope, {
           issuer: body.issuer,
@@ -301,7 +301,7 @@ export function registerFederatedTenantRoutes(routes: FederatedTenantRoutes) {
         return c.json(errorBody('not_found', 'Federated tenant not found'), 404)
       }
       const body = c.req.valid('json')
-      const scope = authScope(auth)
+      const scope = auth
       const updated = await updateFederatedTenant(deps, scope, existing, {
         ...(body.enabled !== undefined ? { enabled: body.enabled } : {}),
         ...(body.capabilities !== undefined ? { capabilities: body.capabilities } : {}),
@@ -331,7 +331,7 @@ export function registerFederatedTenantRoutes(routes: FederatedTenantRoutes) {
       if (!existing) {
         return c.json(errorBody('not_found', 'Federated tenant not found'), 404)
       }
-      const scope = authScope(auth)
+      const scope = auth
       await deps.federatedTenants.delete(auth.project.id, tenantId)
       await deps.audit.record(scope, {
         action: 'federated_tenant.delete',
@@ -346,7 +346,3 @@ export function registerFederatedTenantRoutes(routes: FederatedTenantRoutes) {
 }
 
 // --- helpers ---
-
-function authScope(auth: Awaited<ReturnType<typeof requireAuth>> & object): AuthScope {
-  return auth as unknown as AuthScope
-}

@@ -1,6 +1,6 @@
 import { createRuntimeOrchestrationRepo } from '../adapters/repos/runtime-orchestration'
 import type { Env } from '../env'
-import { decryptSecretValue } from '../vaultCrypto'
+import { decryptSecretValue } from '../vault-crypto'
 
 type Db = Parameters<typeof createRuntimeOrchestrationRepo>[0]
 

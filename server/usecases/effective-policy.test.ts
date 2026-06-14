@@ -86,4 +86,31 @@ describe('[spec: governance/effective-policy] readEffectivePolicy', () => {
     await readEffectivePolicy(fakeDeps({ scopedTeams }), auth, { teamId: 'team_platform' })
     expect(scopedTeams).toEqual([['team_platform']])
   })
+
+  it('audits an allowed provider decision with success outcome and omits decision from metadata', async () => {
+    const audit: AuditEntry[] = []
+    const decision: PolicyDecisionResult = {
+      allowed: true,
+      category: 'provider',
+      rule: null,
+      message: 'ok',
+    }
+    const deps = fakeDeps({ decision, audit })
+    const result = await readEffectivePolicy(deps, auth, { providerId: 'workers-ai', modelId: 'm1' })
+    expect(result.decision?.allowed).toBe(true)
+    expect(audit).toContainEqual(expect.objectContaining({ action: 'policy.evaluate', outcome: 'success' }))
+    // metadata must not include 'decision' key when allowed
+    const entry = audit.find((e) => e.action === 'policy.evaluate')
+    expect(entry?.metadata).not.toHaveProperty('decision')
+  })
+
+  it('passes requestId from query into the audit entry', async () => {
+    const audit: AuditEntry[] = []
+    await readEffectivePolicy(fakeDeps({ audit }), auth, {
+      providerId: 'workers-ai',
+      modelId: 'm1',
+      requestId: 'req_xyz',
+    })
+    expect(audit).toContainEqual(expect.objectContaining({ requestId: 'req_xyz' }))
+  })
 })

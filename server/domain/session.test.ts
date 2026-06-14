@@ -92,3 +92,46 @@ describe('[spec: sessions/initial-prompt-compose] composeInitialPrompt', () => {
     expect(composeInitialPrompt('remembered', undefined)).toBe('Agent memory for this agent:\nremembered')
   })
 })
+
+describe('[spec: sessions/workspace-safety] hasEmbeddedCredentialUrl additional branches', () => {
+  it('returns false for an invalid URL string (parse error)', () => {
+    expect(hasEmbeddedCredentialUrl('not-a-url::bad')).toBe(false)
+  })
+
+  it('returns false for null and non-object primitives', () => {
+    expect(hasEmbeddedCredentialUrl(null)).toBe(false)
+    expect(hasEmbeddedCredentialUrl(42)).toBe(false)
+    expect(hasEmbeddedCredentialUrl(false)).toBe(false)
+  })
+
+  it('recurses through arrays of values', () => {
+    expect(hasEmbeddedCredentialUrl(['https://u:p@host', 'https://ok.com'])).toBe(true)
+    expect(hasEmbeddedCredentialUrl(['https://ok.com', 'plain'])).toBe(false)
+  })
+})
+
+describe('[spec: sessions/workspace-safety] normalizeMountPath additional branches', () => {
+  it('rejects paths containing control characters', () => {
+    expect(() => normalizeMountPath({ owner: 'o', repo: 'r', mountPath: 'path\x00with-null' })).toThrow(
+      'Mount path contains invalid characters.',
+    )
+  })
+
+  it('rejects mount path segments with special characters', () => {
+    expect(() => normalizeMountPath({ owner: 'o', repo: 'r', mountPath: 'a/b@c' })).toThrow(
+      'Mount path segments may contain only letters, numbers, dots, underscores, and hyphens.',
+    )
+  })
+
+  it('accepts an absolute /workspace/ path', () => {
+    expect(normalizeMountPath({ owner: 'o', repo: 'r', mountPath: '/workspace/my-repo' })).toBe('/workspace/my-repo')
+  })
+
+  it('rejects a path with empty segments from double-slash', () => {
+    expect(() => normalizeMountPath({ owner: 'o', repo: 'r', mountPath: 'a//b' })).toThrow()
+  })
+
+  it('rejects a path with a dot segment', () => {
+    expect(() => normalizeMountPath({ owner: 'o', repo: 'r', mountPath: 'a/./b' })).toThrow()
+  })
+})

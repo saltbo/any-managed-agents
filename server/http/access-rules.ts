@@ -2,7 +2,7 @@ import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
 import { requireAuth } from '../auth/session'
 import { AuthenticatedOperation, type DepsEnv, ErrorResponseSchema, listResponseSchema } from '../openapi'
 import { type UpdateAccessRulePatch, updateAccessRule } from '../usecases/access-rules'
-import type { AccessRuleRecord, AuthScope } from '../usecases/ports'
+import type { AccessRuleRecord } from '../usecases/ports'
 import { requestId } from './request-context'
 
 type AccessRuleRoutes = OpenAPIHono<DepsEnv>
@@ -172,7 +172,7 @@ export function registerAccessRuleRoutes(routes: AccessRuleRoutes) {
       if (auth instanceof Response) {
         return auth
       }
-      const scope = authScope(auth)
+      const scope = auth
       // Create is a pure forward with wildcard defaulting — no orchestration, so
       // the route maps the body to the repo input directly (anti-ceremony).
       const rule = await deps.accessRules.insert(
@@ -223,7 +223,7 @@ export function registerAccessRuleRoutes(routes: AccessRuleRoutes) {
       if (!existing) {
         return c.json(errorBody('not_found', 'Access rule not found'), 404)
       }
-      const scope = authScope(auth)
+      const scope = auth
       const rule = await updateAccessRule(deps, scope, existing, patchFromBody(body))
       await deps.audit.record(scope, {
         action: 'access_rule.update',
@@ -247,7 +247,7 @@ export function registerAccessRuleRoutes(routes: AccessRuleRoutes) {
       if (!existing) {
         return c.json(errorBody('not_found', 'Access rule not found'), 404)
       }
-      const scope = authScope(auth)
+      const scope = auth
       await deps.accessRules.delete(auth.project.id, ruleId)
       await deps.audit.record(scope, {
         action: 'access_rule.delete',
@@ -262,10 +262,6 @@ export function registerAccessRuleRoutes(routes: AccessRuleRoutes) {
 }
 
 // --- helpers ---
-
-function authScope(auth: Awaited<ReturnType<typeof requireAuth>> & object): AuthScope {
-  return auth as unknown as AuthScope
-}
 
 function patchFromBody(body: z.infer<typeof UpdateAccessRuleSchema>): UpdateAccessRulePatch {
   return {

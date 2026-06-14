@@ -1,8 +1,8 @@
 import { createRuntimeOrchestrationRepo } from '../adapters/repos/runtime-orchestration'
 import { recordAudit } from '../audit'
-import type { AuthContext } from '../auth/session'
 import { toolPolicyRequiresApproval } from '../policy'
 import { redactSensitiveValue } from '../redaction'
+import type { AuthScope } from '../usecases/ports'
 import type { RuntimeToolPolicyDecision, RuntimeToolPolicyInput } from './session-runtime'
 
 type Db = Parameters<typeof createRuntimeOrchestrationRepo>[0]
@@ -37,7 +37,7 @@ export function sessionApprovalState(metadata: Record<string, unknown>) {
 
 export async function writeSessionApprovalState(
   db: Db,
-  auth: AuthContext,
+  auth: AuthScope,
   sessionId: string,
   update: (metadata: Record<string, unknown>) => Record<string, unknown>,
 ) {
@@ -66,7 +66,7 @@ export interface ToolApprovalGate {
 
 export function createToolApprovalGate(values: {
   db: Db
-  auth: AuthContext
+  auth: AuthScope
   sessionId: string
   sessionMetadata: Record<string, unknown>
   appendEvent: (event: Record<string, unknown>, metadata: Record<string, unknown>) => Promise<string>

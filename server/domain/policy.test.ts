@@ -10,16 +10,21 @@ import {
   evaluateSandboxRuntimeDecision,
   mergePolicyObjects,
   type PolicyLevel,
+  parsePolicyJson,
   policyBlocksConnector,
   policyBlocksTool,
   policyRequiresApproval,
   policyScopeChanged,
+  type SandboxRuntimeOperation,
   sandboxOperationForRuntimeTool,
   sessionAllowsTool,
   toolPolicyRequiresApproval,
   validateBudgetScope,
   validatePolicyScope,
 } from './policy'
+
+type NetworkOp = Extract<SandboxRuntimeOperation, { operation: 'network' }>
+type CommandOp = Extract<SandboxRuntimeOperation, { operation: 'command' }>
 
 describe('mergePolicyObjects', () => {
   it('unions blocked/denied/requireApproval lists across levels', () => {
@@ -271,6 +276,12 @@ describe('[spec: governance/sandbox-restrictions] evaluateSandboxRuntimeDecision
     )
   })
 
+  it('denies when sandbox status is disabled', () => {
+    expect(
+      evaluateSandboxRuntimeDecision({ status: 'disabled' }, null, { operation: 'command', command: 'ls' }).rule,
+    ).toBe('sandboxPolicy.enabled')
+  })
+
   it('blocks network when governance network is off or host is not allowed', () => {
     expect(evaluateSandboxRuntimeDecision({ network: 'deny' }, null, { operation: 'network', host: 'x' }).rule).toBe(
       'sandboxPolicy.network',
@@ -282,6 +293,24 @@ describe('[spec: governance/sandbox-restrictions] evaluateSandboxRuntimeDecision
     expect(
       evaluateSandboxRuntimeDecision({ allowedHosts: ['ok.com'] }, null, { operation: 'network', host: 'ok.com' })
         .allowed,
+    ).toBe(true)
+  })
+
+  it('blocks network when governance network is false', () => {
+    expect(evaluateSandboxRuntimeDecision({ network: false }, null, { operation: 'network', host: 'x' }).rule).toBe(
+      'sandboxPolicy.network',
+    )
+  })
+
+  it('blocks network when governance network is offline', () => {
+    expect(evaluateSandboxRuntimeDecision({ network: 'offline' }, null, { operation: 'network', host: 'x' }).rule).toBe(
+      'sandboxPolicy.network',
+    )
+  })
+
+  it('blocks network with wildcard allowed host that matches', () => {
+    expect(
+      evaluateSandboxRuntimeDecision({ allowedHosts: ['*'] }, null, { operation: 'network', host: 'any.com' }).allowed,
     ).toBe(true)
   })
 
@@ -300,6 +329,22 @@ describe('[spec: governance/sandbox-restrictions] evaluateSandboxRuntimeDecision
     ).toBe(true)
   })
 
+  it('blocks a null command when command policies are present', () => {
+    expect(
+      evaluateSandboxRuntimeDecision({ blockedCommands: ['rm'] }, null, { operation: 'command', command: null }).rule,
+    ).toBe('sandboxPolicy.blockedCommands')
+  })
+
+  it('blocks a null command when allowed command policy is present', () => {
+    expect(
+      evaluateSandboxRuntimeDecision({ allowedCommands: ['ls'] }, null, { operation: 'command', command: null }).rule,
+    ).toBe('sandboxPolicy.allowedCommands')
+  })
+
+  it('allows a startup operation without restriction', () => {
+    expect(evaluateSandboxRuntimeDecision({}, null, { operation: 'startup' }).allowed).toBe(true)
+  })
+
   it('applies the session environment network policy restricted mode', () => {
     const session = {
       environmentSnapshot: '{"networkPolicy":{"mode":"restricted","allowedHosts":["ok.com"]}}',
@@ -308,5 +353,360 @@ describe('[spec: governance/sandbox-restrictions] evaluateSandboxRuntimeDecision
       'environment.networkPolicy.allowedHosts',
     )
     expect(evaluateSandboxRuntimeDecision({}, session, { operation: 'network', host: 'ok.com' }).allowed).toBe(true)
+  })
+
+  it('blocks network when environment network mode is offline', () => {
+    const session = {
+      environmentSnapshot: '{"networkPolicy":{"mode":"offline"}}',
+    }
+    expect(evaluateSandboxRuntimeDecision({}, session, { operation: 'network', host: 'any.com' }).rule).toBe(
+      'sandboxPolicy.network',
+    )
+  })
+
+  it('blocks network when governance allowedHosts is set but host is null', () => {
+    // host is null → hostAllowed returns false
+    expect(
+      evaluateSandboxRuntimeDecision({ allowedHosts: ['ok.com'] }, null, { operation: 'network', host: null }).rule,
+    ).toBe('sandboxPolicy.allowedHosts')
+  })
+
+  it('blocks network when environment restricted and host is null', () => {
+    const session = {
+      environmentSnapshot: '{"networkPolicy":{"mode":"restricted","allowedHosts":["ok.com"]}}',
+    }
+    expect(evaluateSandboxRuntimeDecision({}, session, { operation: 'network', host: null }).rule).toBe(
+      'environment.networkPolicy.allowedHosts',
+    )
+  })
+
+  it('normalizes host URLs when checking allowedHosts', () => {
+    expect(
+      evaluateSandboxRuntimeDecision({ allowedHosts: ['ok.com'] }, null, {
+        operation: 'network',
+        host: 'https://ok.com',
+      }).allowed,
+    ).toBe(true)
+  })
+})
+
+describe('parsePolicyJson', () => {
+  it('returns the fallback for falsy values', () => {
+    expect(parsePolicyJson(null, {})).toEqual({})
+    expect(parsePolicyJson(undefined, { default: true })).toEqual({ default: true })
+    expect(parsePolicyJson('', { fallback: 1 })).toEqual({ fallback: 1 })
+  })
+
+  it('parses a valid JSON string', () => {
+    expect(parsePolicyJson('{"key":"value"}', {})).toEqual({ key: 'value' })
+  })
+})
+
+describe('mergePolicyObjects additional branches', () => {
+  it('unions denied-prefix lists', () => {
+    const merged = mergePolicyObjects([{ deniedProviders: ['a'] }, { deniedProviders: ['b'] }])
+    expect(merged.deniedProviders).toContain('a')
+    expect(merged.deniedProviders).toContain('b')
+  })
+
+  it('unions requireApproval-prefix lists', () => {
+    const merged = mergePolicyObjects([{ requireApprovalConnectors: ['a'] }, { requireApprovalConnectors: ['b'] }])
+    expect(merged.requireApprovalConnectors).toContain('a')
+    expect(merged.requireApprovalConnectors).toContain('b')
+  })
+
+  it('replaces non-union non-allow arrays with the later value', () => {
+    const merged = mergePolicyObjects([{ items: ['a'] }, { items: ['b'] }])
+    expect(merged.items).toEqual(['b'])
+  })
+
+  it('keeps a non-restrictive string when next also is non-restrictive', () => {
+    expect(mergePolicyObjects([{ network: 'unrestricted' }, { network: 'allow' }]).network).toBe('allow')
+  })
+
+  it('uses the later value when a nested object is replaced by a non-object', () => {
+    expect(mergePolicyObjects([{ nested: { a: 1 } }, { nested: 'scalar' }]).nested).toBe('scalar')
+  })
+
+  it('intersects both-wildcard allow lists (identity)', () => {
+    expect(mergePolicyObjects([{ allowedTools: ['*'] }, { allowedTools: ['*'] }]).allowedTools).toEqual(['*'])
+  })
+
+  it('does not add deny when both effects are allow (defaultEffect non-deny)', () => {
+    expect(mergePolicyObjects([{ defaultEffect: 'allow' }, { defaultEffect: 'allow' }]).defaultEffect).toBe('allow')
+  })
+
+  it('intersects: next is wildcard, returns current as intersection identity', () => {
+    // current=['a','b'], next=['*'] — hits the `if (next.includes('*'))` branch
+    expect(mergePolicyObjects([{ allowedTools: ['a', 'b'] }, { allowedTools: ['*'] }]).allowedTools).toEqual(['a', 'b'])
+  })
+})
+
+describe('sandboxOperationForRuntimeTool additional branches', () => {
+  it('uses the sandbox.fetch host field directly when provided', () => {
+    const result = sandboxOperationForRuntimeTool('sandbox.fetch', { host: 'api.example.com' })
+    expect(result?.resourceId).toBe('api.example.com')
+  })
+
+  it('uses toolName as resourceId when no host or url', () => {
+    const result = sandboxOperationForRuntimeTool('sandbox.fetch', {}) as NetworkOp | null
+    expect(result?.resourceId).toBe('sandbox.fetch')
+    expect(result?.host).toBeNull()
+  })
+
+  it('uses toolName as resourceId for sandbox.exec when command is missing', () => {
+    const result = sandboxOperationForRuntimeTool('sandbox.exec', {}) as CommandOp | null
+    expect(result?.command).toBeNull()
+    expect(result?.resourceId).toBe('sandbox.exec')
+  })
+
+  it('extracts hostname from a URL for sandbox.fetch', () => {
+    const result = sandboxOperationForRuntimeTool('sandbox.fetch', {
+      url: 'https://api.example.com/path',
+    }) as NetworkOp | null
+    expect(result?.host).toBe('api.example.com')
+  })
+
+  it('returns null host when url is invalid', () => {
+    const result = sandboxOperationForRuntimeTool('sandbox.fetch', { url: 'not-a-url' }) as NetworkOp | null
+    expect(result?.host).toBeNull()
+  })
+
+  it('returns null when url has no hostname (e.g. file protocol)', () => {
+    // file:///path has empty hostname — triggers the `|| null` fallback
+    const result = sandboxOperationForRuntimeTool('sandbox.fetch', { url: 'file:///etc/passwd' }) as NetworkOp | null
+    expect(result?.host).toBeNull()
+  })
+
+  it('returns null host when url field is not a string', () => {
+    const result = sandboxOperationForRuntimeTool('sandbox.fetch', { url: 42 }) as NetworkOp | null
+    expect(result?.host).toBeNull()
+  })
+})
+
+describe('[spec: governance/access-rules] evaluateAccessRules additional branches', () => {
+  it('uses the deny reason when available', () => {
+    const result = evaluateAccessRules([{ id: 'r', effect: 'deny', teamId: null, reason: 'custom reason' }], [])
+    expect(result?.message).toBe('custom reason')
+  })
+
+  it('uses the restrict reason when available', () => {
+    const rules = [{ id: 'r', effect: 'allow', teamId: 'team_a', reason: 'restricted to team' }]
+    expect(evaluateAccessRules(rules, [])?.message).toBe('restricted to team')
+  })
+})
+
+describe('[spec: governance/model-budget] evaluateBudgets additional branches', () => {
+  const today = new Date().toISOString().slice(0, 10)
+  const month = new Date().toISOString().slice(0, 7)
+
+  it('denies on a cost_micros budget exhaustion', () => {
+    const budgets = [
+      { id: 'b', providerId: null, modelId: null, limitType: 'cost_micros', limitValue: 100, window: 'month' },
+    ]
+    const usage = [{ createdAt: `${month}-01T00:00:00.000Z`, costMicros: 200, totalTokens: 0, sessionId: 's1' }]
+    expect(evaluateBudgets(budgets, usage, { providerId: 'p', providerRowId: null, modelId: null })?.category).toBe(
+      'budget',
+    )
+  })
+
+  it('denies on a sessions budget exhaustion', () => {
+    const budgets = [
+      { id: 'b', providerId: null, modelId: null, limitType: 'sessions', limitValue: 1, window: 'month' },
+    ]
+    const usage = [
+      { createdAt: `${month}-01T00:00:00.000Z`, costMicros: 0, totalTokens: 0, sessionId: 's1' },
+      { createdAt: `${month}-01T00:00:00.000Z`, costMicros: 0, totalTokens: 0, sessionId: 's2' },
+    ]
+    expect(evaluateBudgets(budgets, usage, { providerId: 'p', providerRowId: null, modelId: null })?.category).toBe(
+      'budget',
+    )
+  })
+
+  it('uses day window prefix for daily budgets', () => {
+    const budgets = [{ id: 'b', providerId: null, modelId: null, limitType: 'tokens', limitValue: 10, window: 'day' }]
+    const usage = [{ createdAt: `${today}T00:00:00.000Z`, costMicros: 0, totalTokens: 50, sessionId: 's1' }]
+    expect(evaluateBudgets(budgets, usage, { providerId: 'p', providerRowId: null, modelId: null })?.category).toBe(
+      'budget',
+    )
+  })
+
+  it('matches budget by providerRowId when providerId does not match', () => {
+    const budgets = [
+      { id: 'b', providerId: 'row_id', modelId: null, limitType: 'tokens', limitValue: 10, window: 'month' },
+    ]
+    const usage = [{ createdAt: `${month}-01T00:00:00.000Z`, costMicros: 0, totalTokens: 50, sessionId: 's1' }]
+    const result = evaluateBudgets(budgets, usage, {
+      providerId: 'external-id',
+      providerRowId: 'row_id',
+      modelId: null,
+    })
+    expect(result?.category).toBe('budget')
+  })
+
+  it('skips a model-scoped budget when the session has no model', () => {
+    const budgets = [
+      { id: 'b', providerId: null, modelId: 'gpt-4o', limitType: 'tokens', limitValue: 1, window: 'month' },
+    ]
+    const usage = [{ createdAt: `${month}-01T00:00:00.000Z`, costMicros: 0, totalTokens: 50, sessionId: 's1' }]
+    expect(evaluateBudgets(budgets, usage, { providerId: 'p', providerRowId: null, modelId: null })).toBeNull()
+  })
+
+  it('skips null-sessionId entries when counting sessions', () => {
+    const budgets = [
+      { id: 'b', providerId: null, modelId: null, limitType: 'sessions', limitValue: 1, window: 'month' },
+    ]
+    const usage = [{ createdAt: `${month}-01T00:00:00.000Z`, costMicros: 0, totalTokens: 0, sessionId: null }]
+    // One usage record but with null sessionId; the Set should be empty → 0 sessions → not exhausted
+    expect(evaluateBudgets(budgets, usage, { providerId: 'p', providerRowId: null, modelId: null })).toBeNull()
+  })
+
+  it('skips a model-scoped budget when the model does not match', () => {
+    const budgets = [
+      { id: 'b', providerId: null, modelId: 'gpt-4o', limitType: 'tokens', limitValue: 1, window: 'month' },
+    ]
+    const usage = [{ createdAt: `${month}-01T00:00:00.000Z`, costMicros: 0, totalTokens: 50, sessionId: 's1' }]
+    // modelId is set but does not match → skip
+    expect(evaluateBudgets(budgets, usage, { providerId: 'p', providerRowId: null, modelId: 'gpt-3.5' })).toBeNull()
+  })
+})
+
+describe('applicablePolicyLevels additional branches', () => {
+  it('drops a team row with no teamId', () => {
+    const rows: PolicyLevel[] = [policyLevel({ id: 'team_no_id', scope: 'team', updatedAt: '2026-01-01' })]
+    expect(applicablePolicyLevels(rows, ['anything'])).toEqual([])
+  })
+
+  it('sorts multiple team rows by teamId', () => {
+    const rows: PolicyLevel[] = [
+      policyLevel({ id: 'team_b', scope: 'team', teamId: 'team_b', updatedAt: '2026-01-01' }),
+      policyLevel({ id: 'team_a', scope: 'team', teamId: 'team_a', updatedAt: '2026-01-01' }),
+    ]
+    const levels = applicablePolicyLevels(rows, ['team_a', 'team_b'])
+    expect(levels.map((l) => l.id)).toEqual(['team_a', 'team_b'])
+  })
+})
+
+describe('[spec: governance/access-rules] effectivePolicyFrom normalization', () => {
+  it('normalizes null providerId and modelId to wildcards in access rules', () => {
+    const levels: PolicyLevel[] = [policyLevel({ id: 'org', scope: 'organization', updatedAt: '2026-01-01' })]
+    const effective = effectivePolicyFrom(levels, [
+      { id: 'r1', providerId: null, modelId: null, teamId: 't1', effect: 'allow', reason: 'ok' },
+    ])
+    expect(effective.accessRules[0]).toEqual({
+      id: 'r1',
+      providerId: '*',
+      modelId: '*',
+      teamId: 't1',
+      effect: 'allow',
+      reason: 'ok',
+    })
+  })
+})
+
+describe('environmentAllowsConnector additional branches', () => {
+  it('allows when environment allowedConnectors includes the connector', () => {
+    expect(
+      environmentAllowsConnector({ environmentSnapshot: '{"mcpPolicy":{"allowedConnectors":["github"]}}' }, 'github'),
+    ).toBe(true)
+  })
+
+  it('denies when connector is not in an explicit allowedConnectors list', () => {
+    expect(
+      environmentAllowsConnector({ environmentSnapshot: '{"mcpPolicy":{"allowedConnectors":["linear"]}}' }, 'github'),
+    ).toBe(false)
+  })
+
+  it('allows when allowedConnectors is empty and no default deny', () => {
+    expect(environmentAllowsConnector({ environmentSnapshot: '{"mcpPolicy":{}}' }, 'github')).toBe(true)
+  })
+})
+
+describe('sessionAllowsTool additional branches', () => {
+  it('denies when agentSnapshot has no tools field', () => {
+    expect(sessionAllowsTool({ agentSnapshot: '{}' }, 'c', 't')).toBe(false)
+  })
+
+  it('allows when tool name is in snapshot tools as a string entry', () => {
+    expect(sessionAllowsTool({ agentSnapshot: '{"tools":["t"]}' }, 'c', 't')).toBe(true)
+  })
+
+  it('denies when agentSnapshot is empty string', () => {
+    expect(sessionAllowsTool({ agentSnapshot: null }, 'c', 't')).toBe(true)
+  })
+
+  it('handles tool entries that are name-keyed objects', () => {
+    expect(sessionAllowsTool({ agentSnapshot: '{"tools":[{"name":"t"}]}' }, 'c', 't')).toBe(true)
+  })
+
+  it('ignores non-string non-object tool entries', () => {
+    expect(sessionAllowsTool({ agentSnapshot: '{"tools":[42, null, {}]}' }, 'c', 't')).toBe(false)
+  })
+})
+
+describe('policyBlocksConnector additional branches', () => {
+  it('returns null when connector is in the allowed list', () => {
+    expect(policyBlocksConnector({ allowedConnectors: ['github'] }, 'github')).toBeNull()
+  })
+
+  it('blocks with wildcard blocker', () => {
+    expect(policyBlocksConnector({ blockedConnectors: ['*'] }, 'anything')?.rule).toBe('mcpPolicy.blockedConnectors')
+  })
+})
+
+describe('policyBlocksTool additional branches', () => {
+  it('returns null when tool is in the allowed list', () => {
+    expect(policyBlocksTool({ allowedTools: ['web.search'] }, 'web.search')).toBeNull()
+  })
+
+  it('returns null when default effect is not deny', () => {
+    expect(policyBlocksTool({}, 'web.search')).toBeNull()
+  })
+
+  it('blocks when tool is not in the non-wildcard allowedTools list', () => {
+    expect(policyBlocksTool({ allowedTools: ['other'] }, 'web.search')?.rule).toBe('toolPolicy.allowedTools')
+  })
+
+  it('blocks when defaultEffect is deny and no explicit lists', () => {
+    expect(policyBlocksTool({ defaultEffect: 'deny' }, 'web.search')?.rule).toBe('toolPolicy.defaultEffect')
+  })
+})
+
+describe('policyRequiresApproval additional branches', () => {
+  it('applies the wildcard connector approval mode', () => {
+    expect(policyRequiresApproval({ connectorApprovalModes: { '*': 'require_approval' } }, 'any_connector', 't')).toBe(
+      true,
+    )
+  })
+
+  it('returns false when the connector mode is not require_approval', () => {
+    expect(policyRequiresApproval({ connectorApprovalModes: { c: 'auto' } }, 'c', 't')).toBe(false)
+  })
+
+  it('requires approval by wildcard connector list', () => {
+    expect(policyRequiresApproval({ requireApprovalConnectors: ['*'] }, 'any', 't')).toBe(true)
+  })
+
+  it('requires approval by wildcard tool list', () => {
+    expect(policyRequiresApproval({ requireApprovalTools: ['*'] }, 'c', 'any')).toBe(true)
+  })
+})
+
+describe('accessRuleView additional branches', () => {
+  it('includes providerId when it is not wildcard', () => {
+    const view = accessRuleView({ providerId: 'openai', modelId: '*', effect: 'allow', reason: null })
+    expect(view.providerId).toBe('openai')
+    expect('modelId' in view).toBe(false)
+  })
+
+  it('includes modelId when it is not wildcard', () => {
+    const view = accessRuleView({ providerId: '*', modelId: 'gpt-4o', effect: 'deny', reason: null })
+    expect(view.modelId).toBe('gpt-4o')
+  })
+})
+
+describe('validatePolicyScope additional branches', () => {
+  it('passes for an organization scope without teamId', () => {
+    expect(validatePolicyScope({ level: 'organization' })).toBeNull()
   })
 })

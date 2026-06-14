@@ -422,7 +422,7 @@ export function registerConnectionRoutes(routes: ConnectionRoutes) {
       if (auth instanceof Response) {
         return auth
       }
-      const scope = authScope(auth)
+      const scope = auth
       await deps.connectors.seedCatalog()
       const catalog = await deps.connectors.find(body.connectorId)
       if (!catalog) {
@@ -469,7 +469,7 @@ export function registerConnectionRoutes(routes: ConnectionRoutes) {
       if (auth instanceof Response) {
         return auth
       }
-      const scope = authScope(auth)
+      const scope = auth
       const connection = await deps.connections.find(auth.project.id, c.req.valid('param').connectionId)
       if (!connection) {
         return errorResponse(c, 404, 'not_found', 'Connection not found')
@@ -560,7 +560,7 @@ export function registerConnectionRoutes(routes: ConnectionRoutes) {
       if (auth instanceof Response) {
         return auth
       }
-      const scope = authScope(auth)
+      const scope = auth
       const connection = await deps.connections.find(auth.project.id, connectionId)
       if (!connection) {
         return errorResponse(c, 404, 'not_found', 'Connection not found')
@@ -643,10 +643,6 @@ export function registerConnectionRoutes(routes: ConnectionRoutes) {
 }
 
 // --- helpers ---
-
-function authScope(auth: Awaited<ReturnType<typeof requireAuth>> & object): AuthScope {
-  return auth as unknown as AuthScope
-}
 
 function patchFromBody(body: z.infer<typeof UpdateConnectionSchema>): UpdateConnectionPatch {
   return {

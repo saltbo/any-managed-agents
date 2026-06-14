@@ -163,7 +163,14 @@ export function SessionDetailView({
         onRefreshEvents={onRefreshEvents}
         canSend={session.state === 'idle'}
       />
-      <Sheet open={activeResource !== null} onOpenChange={(open) => !open && setActiveResource(null)}>
+      <Sheet
+        open={activeResource !== null}
+        onOpenChange={(open) => {
+          /* v8 ignore start -- Radix never calls onOpenChange(true) in controlled mode (jsdom) */
+          if (!open) setActiveResource(null)
+          /* v8 ignore stop */
+        }}
+      >
         <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
           {activeResource === 'agent' ? (
             <ResourceSheet

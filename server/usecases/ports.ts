@@ -50,6 +50,11 @@ export interface AuthScope {
   teams?: string[]
 }
 
+// Organization-level identity: the AuthScope subset that org-scoped usecases
+// (which never resolve a project) require. Both AuthScope and the project-less
+// http AuthIdentity satisfy it structurally, so neither needs a cast.
+export type OrgScope = Pick<AuthScope, 'organization'>
+
 export interface AgentRecord extends AgentConfig {
   id: string
   projectId: string

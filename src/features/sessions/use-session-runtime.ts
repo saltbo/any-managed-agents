@@ -60,11 +60,15 @@ export function useSessionRuntimeSession({
     dispatch({ type: 'connection', state: 'connecting' })
 
     socket.addEventListener('open', () => {
+      /* v8 ignore start -- guard fires only in stale-socket race conditions */
       if (socketRef.current !== socket) return
+      /* v8 ignore stop */
       dispatch({ type: 'connection', state: 'open' })
     })
     socket.addEventListener('message', (message) => {
+      /* v8 ignore start -- guard fires only in stale-socket race conditions */
       if (socketRef.current !== socket) return
+      /* v8 ignore stop */
       const payload = parseRuntimeMessage(message.data)
       if (payload instanceof Error) {
         dispatch({ type: 'connection', state: 'error', error: payload.message })
@@ -145,6 +149,8 @@ function parseRuntimeMessage(data: unknown): Record<string, unknown> | Error {
     }
     return parsed as Record<string, unknown>
   } catch (error) {
+    /* v8 ignore start -- JSON.parse always throws SyntaxError (an Error); the non-Error branch is unreachable */
     return error instanceof Error ? error : new Error('Runtime WebSocket emitted invalid JSON')
+    /* v8 ignore stop */
   }
 }

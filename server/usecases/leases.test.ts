@@ -172,6 +172,95 @@ describe('[spec: runners/claim-eligibility] claimLease', () => {
     ).rejects.toThrow('credential revoked')
     expect(failClaim).toHaveBeenCalledOnce()
   })
+
+  it('uses the default lease duration when leaseDurationSeconds is not provided', async () => {
+    const claims: Array<{ leaseDurationSeconds: number }> = []
+    const deps = fakeDeps({
+      leases: {
+        claim: async (input) => {
+          claims.push(input as { leaseDurationSeconds: number })
+          return { lease, sessionId: 'session_1' }
+        },
+      },
+    })
+    await claimLease(deps, auth, runner(), { workItemId: 'work_1', leaseDurationSeconds: undefined })
+    expect(claims[0]?.leaseDurationSeconds).toBe(60)
+  })
+
+  it('conflicts when the work item is not yet available (availableAt in the future)', async () => {
+    const future = new Date(Date.now() + 60_000).toISOString()
+    await expect(
+      claimLease(
+        fakeDeps({ leases: { claimCandidate: async () => candidate({ availableAt: future }) } }),
+        auth,
+        runner(),
+        { workItemId: 'work_1', leaseDurationSeconds: 60 },
+      ),
+    ).rejects.toThrow('Work item is not available')
+  })
+
+  it('conflicts when the work item is in a non-available state', async () => {
+    await expect(
+      claimLease(
+        fakeDeps({ leases: { claimCandidate: async () => candidate({ state: 'claimed' }) } }),
+        auth,
+        runner(),
+        { workItemId: 'work_1', leaseDurationSeconds: 60 },
+      ),
+    ).rejects.toThrow('Work item is not available')
+  })
+
+  it('conflicts when the runner environment does not match the work item environment', async () => {
+    await expect(
+      claimLease(
+        fakeDeps({
+          leases: {
+            claimCandidate: async () => candidate({ environmentId: 'env_other' }),
+          },
+        }),
+        auth,
+        runner({ environmentId: 'env_mine' }),
+        { workItemId: 'work_1', leaseDurationSeconds: 60 },
+      ),
+    ).rejects.toThrow('Runner is not eligible for this work item')
+  })
+
+  it('conflicts when the runner runtime inventory has no ready entry for the required runtime', async () => {
+    await expect(
+      claimLease(
+        fakeDeps({}),
+        auth,
+        runner({
+          runtimeInventory: [{ runtime: 'node', state: 'ready', metadata: {} } as never],
+        }),
+        { workItemId: 'work_1', leaseDurationSeconds: 60 },
+      ),
+    ).rejects.toThrow('Runner is not eligible for this work item')
+  })
+
+  it('uses a non-Error message when claim-time secret resolution fails with a non-Error throw', async () => {
+    const failClaim = vi.fn(async () => {})
+    await expect(
+      claimLease(
+        fakeDeps({
+          leases: {
+            claimCandidate: async () =>
+              candidate({
+                rawPayload: { type: 'session.start', requiredRunnerCapability: CAP, runtimeSecretEnv: [{}] },
+              }),
+            failClaim,
+          },
+          resolve: async () => {
+            throw 'string error'
+          },
+        }),
+        auth,
+        runner(),
+        { workItemId: 'work_1', leaseDurationSeconds: 60 },
+      ),
+    ).rejects.toThrow('Runner secret resolution failed')
+    expect(failClaim).toHaveBeenCalledOnce()
+  })
 })
 
 describe('materializeWorkItemPayload', () => {
@@ -179,6 +268,32 @@ describe('materializeWorkItemPayload', () => {
     const deps = fakeDeps({ workItems: { rawPayload: async () => ({ type: 'maintenance', foo: 1 }) } })
     const payload = await materializeWorkItemPayload(deps, scope, { id: 'work_1' } as WorkItemRecord)
     expect(payload).toEqual({ type: 'maintenance', foo: 1 })
+  })
+
+  it('returns an empty object when rawPayload returns null', async () => {
+    const deps = fakeDeps({ workItems: { rawPayload: async () => null } })
+    const payload = await materializeWorkItemPayload(deps, scope, { id: 'work_1' } as WorkItemRecord)
+    expect(payload).toEqual({})
+  })
+
+  it('passes through a session-start payload unchanged when runtimeSecretEnv is empty', async () => {
+    const deps = fakeDeps({
+      workItems: {
+        rawPayload: async () => ({ type: 'session.start', runtimeSecretEnv: [] }),
+      },
+    })
+    const payload = await materializeWorkItemPayload(deps, scope, { id: 'work_1' } as WorkItemRecord)
+    expect(payload).toEqual({ type: 'session.start', runtimeSecretEnv: [] })
+  })
+
+  it('treats non-array runtimeSecretEnv as empty and returns payload unchanged', async () => {
+    const deps = fakeDeps({
+      workItems: {
+        rawPayload: async () => ({ type: 'session.start', runtimeSecretEnv: 'not-an-array' }),
+      },
+    })
+    const payload = await materializeWorkItemPayload(deps, scope, { id: 'work_1' } as WorkItemRecord)
+    expect(payload).toMatchObject({ type: 'session.start' })
   })
 
   it('resolves secret env into runtimeEnv for session starts', async () => {
@@ -194,5 +309,19 @@ describe('materializeWorkItemPayload', () => {
     })
     const payload = await materializeWorkItemPayload(deps, scope, { id: 'work_1' } as WorkItemRecord)
     expect(payload.runtimeEnv).toEqual({ EXISTING: 'a', TOKEN: 'secret' })
+  })
+
+  it('resolves secret env when no runtimeEnv exists yet in the payload', async () => {
+    const deps = fakeDeps({
+      workItems: {
+        rawPayload: async () => ({
+          type: 'session.start',
+          runtimeSecretEnv: [{ name: 'API_KEY', credentialRef: { credentialId: 'cred_1' } }],
+        }),
+      },
+      resolve: async () => ({ API_KEY: 'mysecret' }),
+    })
+    const payload = await materializeWorkItemPayload(deps, scope, { id: 'work_1' } as WorkItemRecord)
+    expect(payload.runtimeEnv).toEqual({ API_KEY: 'mysecret' })
   })
 })

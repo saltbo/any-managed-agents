@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { EmptyState, PageHeader } from '@/console/components'
 import { useClientPagination } from '@/console/use-client-pagination'
 import { api, type ConnectorListOptions } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 import { McpView } from './McpView'
 import { useMcpActions } from './use-mcp-actions'
@@ -60,7 +61,7 @@ export function McpPage() {
 
   const error = connectorsQuery.error ?? connectionsQuery.error
   if (error) {
-    return <EmptyState title="MCP unavailable" body={error instanceof Error ? error.message : String(error)} />
+    return <EmptyState title="MCP unavailable" body={errorMessage(error)} />
   }
   if (connectorsQuery.isPending || connectionsQuery.isPending) {
     return <EmptyState title="Loading MCP" body="Reading connector catalog and project connections." />

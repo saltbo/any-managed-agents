@@ -7,6 +7,7 @@ import { emptyVault } from '@/console/defaults'
 import { VaultForm } from '@/console/forms'
 import type { VaultFormState } from '@/console/types'
 import { api } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 
 export function CreateVaultSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -25,7 +26,7 @@ export function CreateVaultSheet({ open, onOpenChange }: { open: boolean; onOpen
       toast.success('Vault created')
       void queryClient.invalidateQueries({ queryKey: queryKeys.vaults.all })
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : String(error)),
+    onError: (error) => toast.error(errorMessage(error)),
   })
   const submit = (event: FormEvent) => {
     event.preventDefault()

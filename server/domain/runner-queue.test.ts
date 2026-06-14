@@ -93,6 +93,14 @@ describe('[spec: runners/auth-binding] runner registration binding', () => {
     expect(runnerAuthModeForRegistration(oidc(), 'bearer')).toBe('bearer')
   })
 
+  it('defaults to federated when externalTenantId is set', () => {
+    expect(runnerAuthModeForRegistration(oidc({ externalTenantId: 'tenant_1' }), undefined)).toBe('federated')
+  })
+
+  it('defaults to federated when runnerEnvironmentId is set', () => {
+    expect(runnerAuthModeForRegistration(oidc({ runnerEnvironmentId: 'env_1' }), undefined)).toBe('federated')
+  })
+
   it('overrides the environment with the federated token binding', () => {
     expect(environmentIdForRegistration(oidc({ runnerEnvironmentId: 'env_bound' }), 'env_req')).toBe('env_bound')
     expect(environmentIdForRegistration(oidc(), 'env_req')).toBe('env_req')
@@ -110,6 +118,26 @@ describe('[spec: runners/auth-binding] runner registration binding', () => {
     })
   })
 
+  it('accepts a federated runner token with a project binding and federated mode', () => {
+    expect(runnerOidcBindingFields(oidc({ isRunnerToken: true, runnerProjectId: 'project_1' }), 'federated')).toBeNull()
+  })
+
+  it('rejects a federated token that has only an environment id (no project or tenant binding)', () => {
+    expect(
+      runnerOidcBindingFields(oidc({ isRunnerToken: true, runnerEnvironmentId: 'env_1' }), 'federated'),
+    ).toMatchObject({ authorization: expect.stringContaining('project or external tenant') })
+  })
+
+  it('accepts an OIDC runner token with a client id and oidc mode', () => {
+    expect(runnerOidcBindingFields(oidc({ isRunnerToken: true, clientId: 'cid' }), 'oidc')).toBeNull()
+  })
+
+  it('rejects an OIDC runner token missing a client id', () => {
+    expect(runnerOidcBindingFields(oidc({ isRunnerToken: true }), 'oidc')).toMatchObject({
+      authorization: expect.stringContaining('client id'),
+    })
+  })
+
   it('accepts a console (non-runner) token for any mode', () => {
     expect(runnerOidcBindingFields(oidc(), 'bearer')).toBeNull()
   })
@@ -118,5 +146,19 @@ describe('[spec: runners/auth-binding] runner registration binding', () => {
     expect(runnerMachineId({ machineId: '  mac-1 ' })).toBe('mac-1')
     expect(runnerMachineId({ machineId: '' })).toBeNull()
     expect(runnerMachineId(undefined)).toBeNull()
+  })
+})
+
+describe('[spec: runners/eligibility] runnerCapabilityEligible capability expansion', () => {
+  it('expands runtime-provider-model capabilities to bare runtime names for eligibility', () => {
+    // A runner declaring a model-specific capability should also be eligible for
+    // work items that require just the bare runtime name
+    const modelCap = runtimeProviderModelCapability('codex', '*', 'gpt-4o')
+    expect(
+      runnerCapabilityEligible([modelCap], {
+        type: 'session.start',
+        requiredRunnerCapability: 'codex',
+      }),
+    ).toBe(true)
   })
 })

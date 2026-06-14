@@ -9,6 +9,7 @@ import { EnvironmentForm } from '@/console/forms'
 import type { EnvironmentFormState } from '@/console/types'
 import type { EnvironmentNetworkPolicy } from '@/lib/api'
 import { api } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 
 function parseAllowedHosts(value: string) {
@@ -56,7 +57,7 @@ export function CreateEnvironmentSheet({
       toast.success('Environment created')
       void queryClient.invalidateQueries({ queryKey: queryKeys.environments.all })
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : String(error)),
+    onError: (error) => toast.error(errorMessage(error)),
   })
   const submit = (event: FormEvent) => {
     event.preventDefault()

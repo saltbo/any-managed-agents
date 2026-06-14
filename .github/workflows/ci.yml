@@ -38,9 +38,11 @@ jobs:
       - run: pnpm run openapi:check
       - run: pnpm --filter @any-managed-agents/sdk run typecheck
       - run: pnpm --filter @any-managed-agents/sdk run smoke
-      - run: pnpm test
+      # Coverage gate: unit + web (v8). Fails below 95% business / 90% else, per-file.
+      - run: pnpm run test:coverage
+      # The workerd integration crown (real D1) — proven by pass/fail, not %.
+      - run: pnpm exec vitest run --project integration
+      # Cross-stack e2e crown: native Playwright (no Cucumber).
       - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm run test:e2e
-      - name: Staging smoke dry-run only
-        run: NODE_OPTIONS='--import tsx' pnpm exec cucumber-js --dry-run --tags '@implemented and not @planned' --import 'test/e2e/**/*.steps.ts' 'spec/smoke/**/*.feature'
+      - run: pnpm run e2e
       - run: pnpm run build

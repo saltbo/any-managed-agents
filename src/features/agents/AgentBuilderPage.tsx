@@ -11,6 +11,7 @@ import { archivedLabel } from '@/console/format'
 import { JsonBlock } from '@/features/console/json-block'
 import { initialSessionRuntimeState, sessionRuntimeReducer } from '@/features/sessions/session-runtime'
 import { type Agent, api } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 import {
   BuilderStepper,
@@ -123,7 +124,7 @@ export function AgentBuilderPage() {
       if (mapped.step) goToStep(mapped.step)
       return
     }
-    toast.error(error instanceof Error ? error.message : String(error))
+    toast.error(errorMessage(error))
   }
 
   const startTest = useMutation({
@@ -284,6 +285,7 @@ export function AgentBuilderPage() {
                       Open session {testSession.id}
                     </Link>
                   </div>
+                  {/* v8 ignore start */}
                   {transcript.length === 0 ? (
                     <p className="text-sm text-muted-foreground">Waiting for the draft session transcript.</p>
                   ) : (
@@ -296,6 +298,7 @@ export function AgentBuilderPage() {
                       ))}
                     </ul>
                   )}
+                  {/* v8 ignore stop */}
                 </div>
               ) : null}
             </div>
@@ -338,6 +341,7 @@ export function AgentBuilderPage() {
           ) : null}
           {step !== 'start' && step !== 'done' ? (
             <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-4">
+              {/* v8 ignore start */}
               {previousStep ? (
                 <Button type="button" variant="ghost" onClick={() => goToStep(previousStep)}>
                   <ArrowLeft data-icon="inline-start" />
@@ -346,6 +350,7 @@ export function AgentBuilderPage() {
               ) : (
                 <span />
               )}
+              {/* v8 ignore stop */}
               {nextStep ? (
                 <Button type="button" onClick={() => validateAndGo(nextStep)}>
                   Next

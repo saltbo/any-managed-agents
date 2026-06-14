@@ -1,0 +1,188 @@
+import { SELF } from 'cloudflare:test'
+import { runtimeProviderModelCapability } from '@server/domain/runtime-catalog'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { setupOidcProvider, signIn } from './auth'
+
+const DEFAULT_AMA_RUNNER_CAPABILITY = runtimeProviderModelCapability('ama', 'workers-ai', '@cf/moonshotai/kimi-k2.6')
+
+async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
+  return await SELF.fetch(`https://example.com${path}`, {
+    ...init,
+    headers: {
+      'content-type': 'application/json',
+      authorization,
+      ...init.headers,
+    },
+  })
+}
+
+async function createSelfHostedEnvironment(authorization: string) {
+  const res = await jsonFetch('/api/v1/environments', authorization, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: `Self-hosted workspace ${crypto.randomUUID()}`,
+      hostingMode: 'self_hosted',
+      networkPolicy: { mode: 'unrestricted' },
+    }),
+  })
+  expect(res.status).toBe(201)
+  return (await res.json()) as { id: string }
+}
+
+async function createAgent(authorization: string) {
+  const res = await jsonFetch('/api/v1/agents', authorization, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: `Runner-backed agent ${crypto.randomUUID()}`,
+      instructions: 'Use AMA-owned self-hosted runner work.',
+      tools: [{ name: 'sandbox.exec' }],
+    }),
+  })
+  expect(res.status).toBe(201)
+  return (await res.json()) as { id: string }
+}
+
+async function createSessionSecretEnv(authorization: string) {
+  const vaultRes = await jsonFetch('/api/v1/vaults', authorization, {
+    method: 'POST',
+    body: JSON.stringify({ name: `Runner runtime secrets ${crypto.randomUUID()}` }),
+  })
+  expect(vaultRes.status).toBe(201)
+  const vault = (await vaultRes.json()) as { id: string }
+  const credentialRes = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials`, authorization, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'AK agent session key',
+      type: 'session_env_secret',
+      secret: { provider: 'cloudflare-secrets', secretValue: 'raw-ak-agent-key' },
+    }),
+  })
+  expect(credentialRes.status).toBe(201)
+  const credential = (await credentialRes.json()) as { id: string; activeVersion: { id: string } }
+  return [
+    { name: 'AK_AGENT_KEY', credentialRef: { credentialId: credential.id, versionId: credential.activeVersion.id } },
+  ]
+}
+
+async function createSelfHostedSession(
+  authorization: string,
+  agentId: string,
+  environmentId: string,
+  executionOverrides: Record<string, unknown> = {},
+) {
+  const res = await jsonFetch('/api/v1/sessions', authorization, {
+    method: 'POST',
+    body: JSON.stringify({
+      agentId,
+      environmentId,
+      initialPrompt: 'Run the first queued self-hosted task.',
+      runtime: 'ama',
+      ...executionOverrides,
+    }),
+  })
+  expect(res.status).toBe(201)
+  return (await res.json()) as { id: string; state: string; stateReason: string }
+}
+
+describe('[CF] /api/v1/work-items', () => {
+  beforeEach(async () => {
+    await setupOidcProvider()
+  })
+
+  it('lists queued session work with state filters and redacted payload secrets [spec: runners/queue-work] [spec: runners/work-items]', async () => {
+    const authorization = await signIn()
+    const environment = await createSelfHostedEnvironment(authorization)
+    const agent = await createAgent(authorization)
+    const secretEnv = await createSessionSecretEnv(authorization)
+    const session = await createSelfHostedSession(authorization, agent.id, environment.id, {
+      env: { AK_API_URL: 'https://ak.example.test' },
+      secretEnv,
+    })
+    expect(session).toMatchObject({ state: 'pending', stateReason: 'waiting-for-runner' })
+
+    const listRes = await jsonFetch(`/api/v1/work-items?sessionId=${session.id}`, authorization)
+    expect(listRes.status).toBe(200)
+    const list = (await listRes.json()) as {
+      data: Array<Record<string, unknown>>
+      pagination: { limit: number; hasMore: boolean; nextCursor: string | null }
+    }
+    expect(list.data).toEqual([
+      expect.objectContaining({
+        state: 'available',
+        sessionId: session.id,
+        environmentId: environment.id,
+        runnerId: null,
+        leaseId: null,
+        attempts: 0,
+        payload: expect.objectContaining({
+          type: 'session.start',
+          sessionId: session.id,
+          requiredRunnerCapability: 'ama',
+        }),
+      }),
+    ])
+    expect(list.data[0].organizationId).toBeUndefined()
+    expect(JSON.stringify(list.data)).not.toContain('raw-ak-agent-key')
+    expect(list.pagination).toMatchObject({ limit: 50, hasMore: false, nextCursor: null })
+
+    const availableRes = await jsonFetch(`/api/v1/work-items?sessionId=${session.id}&state=available`, authorization)
+    const available = (await availableRes.json()) as { data: Array<{ id: string }> }
+    expect(available.data).toHaveLength(1)
+
+    const leasedRes = await jsonFetch(`/api/v1/work-items?sessionId=${session.id}&state=leased`, authorization)
+    const leased = (await leasedRes.json()) as { data: Array<{ id: string }> }
+    expect(leased.data).toHaveLength(0)
+
+    const searchRes = await jsonFetch(`/api/v1/work-items?sessionId=${session.id}&search=session.start`, authorization)
+    const searched = (await searchRes.json()) as { data: Array<{ id: string }> }
+    expect(searched.data).toHaveLength(1)
+  })
+
+  it('reads a single work item and returns 404 for unknown ids', async () => {
+    const authorization = await signIn()
+    const environment = await createSelfHostedEnvironment(authorization)
+    const agent = await createAgent(authorization)
+    const session = await createSelfHostedSession(authorization, agent.id, environment.id)
+
+    const listRes = await jsonFetch(`/api/v1/work-items?sessionId=${session.id}`, authorization)
+    const list = (await listRes.json()) as { data: Array<{ id: string }> }
+    expect(list.data).toHaveLength(1)
+
+    const readRes = await jsonFetch(`/api/v1/work-items/${list.data[0].id}`, authorization)
+    expect(readRes.status).toBe(200)
+    await expect(readRes.json()).resolves.toMatchObject({
+      id: list.data[0].id,
+      state: 'available',
+      sessionId: session.id,
+    })
+
+    const missingRes = await jsonFetch('/api/v1/work-items/work_missing', authorization)
+    expect(missingRes.status).toBe(404)
+    await expect(missingRes.json()).resolves.toMatchObject({
+      error: { type: 'not_found', message: 'Work item not found' },
+    })
+  })
+
+  it('lets runner tokens read the queue so they can pick work to claim', async () => {
+    const operatorAuthorization = await signIn()
+    const runnerAuthorization = operatorAuthorization.replace('e2e:', 'e2e-runner:')
+    const environment = await createSelfHostedEnvironment(operatorAuthorization)
+    const agent = await createAgent(operatorAuthorization)
+
+    const runnerRes = await jsonFetch('/api/v1/runners', runnerAuthorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Queue-reading runner',
+        environmentId: environment.id,
+        capabilities: [DEFAULT_AMA_RUNNER_CAPABILITY],
+      }),
+    })
+    expect(runnerRes.status).toBe(201)
+
+    const session = await createSelfHostedSession(operatorAuthorization, agent.id, environment.id)
+    const listRes = await jsonFetch(`/api/v1/work-items?state=available&sessionId=${session.id}`, runnerAuthorization)
+    expect(listRes.status).toBe(200)
+    const list = (await listRes.json()) as { data: Array<{ id: string; state: string }> }
+    expect(list.data).toEqual([expect.objectContaining({ state: 'available', sessionId: session.id })])
+  })
+})

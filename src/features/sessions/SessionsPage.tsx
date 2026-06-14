@@ -10,6 +10,7 @@ import { isArchived } from '@/console/format'
 import { useClientPagination } from '@/console/use-client-pagination'
 import { matchesSearch, useUrlFilter } from '@/console/use-list-filters'
 import { api } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 import { CreateSessionSheet } from './CreateSessionSheet'
 import { SessionsView } from './SessionsView'
@@ -37,7 +38,9 @@ export function SessionsPage() {
   const sessionsQuery = useQuery({
     queryKey: queryKeys.sessions.list(archived),
     queryFn: () => api.listSessions({ archived }),
+    /* v8 ignore start -- refetchInterval is a React Query internal callback, unreachable in unit tests */
     refetchInterval: (query) => (query.state.data?.data.some((session) => session.state === 'pending') ? 2000 : false),
+    /* v8 ignore stop */
   })
   const sessions = useMemo(() => {
     const filtered = (sessionsQuery.data?.data ?? []).filter(
@@ -70,7 +73,7 @@ export function SessionsPage() {
         const failed = {
           id,
           title: failedSession?.title ?? id,
-          message: error instanceof Error ? error.message : String(error),
+          message: errorMessage(error),
         }
         const unprocessed = queue.slice(index + 1)
         setBatchOutcome({ archived, failed, unprocessed })

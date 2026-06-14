@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { api } from './api'
+import { ApiError, api } from './api'
 
 describe('shared API client [spec: web-console/rpc-client]', () => {
   beforeEach(() => {
@@ -21,6 +21,29 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
     window.localStorage.clear()
     vi.unstubAllGlobals()
   })
+
+  function makeJsonFetch(body: unknown, status = 200) {
+    return vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
+      return new Response(JSON.stringify(body), {
+        status,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+  }
+
+  function makeEmptyFetch(status = 204) {
+    return vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
+      return new Response(null, { status })
+    })
+  }
+
+  function makeTextFetch(body: string, status = 200) {
+    return vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
+      return new Response(body, { status, headers: { 'content-type': 'text/plain' } })
+    })
+  }
+
+  const listPage = { data: [], pagination: { limit: 25, nextCursor: null, hasMore: false } }
 
   it('serializes list options through the shared authenticated client', async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
@@ -83,5 +106,958 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
     const headers = fetchMock.mock.calls[0]?.[1]?.headers
     expect(headerValue(headers, 'authorization')).toBe('Bearer e2e:api-test')
     expect(headerValue(headers, 'x-ama-client')).toBe('web-rpc')
+  })
+
+  // ---------------------------------------------------------------------------
+  // ApiError
+  // ---------------------------------------------------------------------------
+  describe('ApiError', () => {
+    it('is an instance of Error', () => {
+      const err = new ApiError('msg', 400, { detail: 'bad' })
+      expect(err).toBeInstanceOf(Error)
+    })
+
+    it('exposes status and details', () => {
+      const err = new ApiError('not found', 404, null)
+      expect(err.status).toBe(404)
+      expect(err.details).toBeNull()
+      expect(err.message).toBe('not found')
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // rpcRequest — error branches
+  // ---------------------------------------------------------------------------
+  describe('rpcRequest error handling', () => {
+    it('throws ApiError with error.message from JSON body on non-ok response', async () => {
+      vi.stubGlobal('fetch', makeJsonFetch({ error: { message: 'Resource not found' } }, 404))
+      await expect(api.readAgent('missing-id')).rejects.toMatchObject({
+        status: 404,
+        message: 'Resource not found',
+      })
+    })
+
+    it('throws ApiError using statusText when body has no error.message', async () => {
+      const fetchMock = vi.fn(async () => {
+        return new Response(JSON.stringify({ other: 'thing' }), {
+          status: 422,
+          statusText: 'Unprocessable Entity',
+          headers: { 'content-type': 'application/json' },
+        })
+      })
+      vi.stubGlobal('fetch', fetchMock)
+      await expect(api.readAgent('bad-id')).rejects.toMatchObject({
+        status: 422,
+        message: 'Unprocessable Entity',
+      })
+    })
+
+    it('throws ApiError with statusText when body is not JSON object', async () => {
+      vi.stubGlobal('fetch', makeTextFetch('Internal Server Error', 500))
+      await expect(api.readAgent('err-id')).rejects.toMatchObject({
+        status: 500,
+      })
+    })
+
+    it('returns undefined for 204 No Content responses', async () => {
+      vi.stubGlobal('fetch', makeEmptyFetch(204))
+      const result = await api.deleteCurrentSession()
+      expect(result).toBeUndefined()
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // queryOptions — false values are excluded, undefined excluded, 0 included
+  // ---------------------------------------------------------------------------
+  describe('queryOptions filtering (via listAgents)', () => {
+    it('omits undefined values from the query string', async () => {
+      const fetchMock = makeJsonFetch(listPage)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.listAgents({ limit: 10 })
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).not.toContain('search')
+      expect(url).toContain('limit=10')
+    })
+
+    it('omits false boolean values from the query string', async () => {
+      const fetchMock = makeJsonFetch(listPage)
+      vi.stubGlobal('fetch', fetchMock)
+      // archived=false should be excluded per queryOptions logic
+      await api.listAgents({ archived: false })
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).not.toContain('archived')
+    })
+
+    it('includes true boolean values', async () => {
+      const fetchMock = makeJsonFetch(listPage)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.listAgents({ archived: true })
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('archived=true')
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // Auth API
+  // ---------------------------------------------------------------------------
+  describe('auth API', () => {
+    it('readAuthConfig calls /api/v1/auth/config', async () => {
+      const fetchMock = makeJsonFetch({ methods: [] })
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.readAuthConfig()
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/auth/config')
+      expect(result).toEqual({ methods: [] })
+    })
+
+    it('readAuthConfig passes organization as query param', async () => {
+      const fetchMock = makeJsonFetch({ methods: [] })
+      vi.stubGlobal('fetch', fetchMock)
+      await api.readAuthConfig('my-org')
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('organization=my-org')
+    })
+
+    it('readCurrentSession calls /api/v1/auth/sessions/current', async () => {
+      const session = {
+        user: { id: 'u1', email: 'a@b.com', name: null },
+        organization: { id: 'o1', name: 'Org' },
+        project: { id: 'p1', name: 'Proj' },
+      }
+      const fetchMock = makeJsonFetch(session)
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.readCurrentSession()
+      expect(result).toEqual(session)
+    })
+
+    it('deleteCurrentSession calls DELETE /api/v1/auth/sessions/current', async () => {
+      vi.stubGlobal('fetch', makeEmptyFetch(204))
+      const result = await api.deleteCurrentSession()
+      expect(result).toBeUndefined()
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // Projects API
+  // ---------------------------------------------------------------------------
+  describe('projects API', () => {
+    it('listProjects returns the list response', async () => {
+      const fetchMock = makeJsonFetch({
+        data: [{ id: 'p1', name: 'My Project', createdAt: '', updatedAt: '' }],
+        pagination: { limit: 25, nextCursor: null, hasMore: false },
+      })
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.listProjects()
+      expect(result.data).toHaveLength(1)
+      expect(result.data[0]?.id).toBe('p1')
+    })
+
+    it('createProject posts the project name', async () => {
+      const fetchMock = makeJsonFetch({ id: 'p2', name: 'New Project', createdAt: '', updatedAt: '' })
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.createProject({ name: 'New Project' })
+      expect(result.id).toBe('p2')
+      const [, init] = fetchMock.mock.calls[0]!
+      expect(init?.method).toBe('POST')
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // Agents API
+  // ---------------------------------------------------------------------------
+  describe('agents API', () => {
+    const agentFixture = {
+      id: 'agent_1',
+      projectId: 'p1',
+      name: 'Test Agent',
+      description: null,
+      instructions: null,
+      providerId: null,
+      model: null,
+      skills: [],
+      subagents: [],
+      role: null,
+      capabilityTags: [],
+      handoffPolicy: {},
+      memoryPolicy: {},
+      tools: [],
+      mcpConnectors: [],
+      metadata: {},
+      archivedAt: null,
+      currentVersionId: null,
+      version: 1,
+      createdAt: '',
+      updatedAt: '',
+    }
+
+    it('readAgent calls GET /api/v1/agents/:agentId', async () => {
+      const fetchMock = makeJsonFetch(agentFixture)
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.readAgent('agent_1')
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/agents/agent_1')
+      expect(result.id).toBe('agent_1')
+    })
+
+    it('createAgent posts JSON', async () => {
+      const fetchMock = makeJsonFetch(agentFixture)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.createAgent({ name: 'Test Agent' })
+      const [, init] = fetchMock.mock.calls[0]!
+      expect(init?.method).toBe('POST')
+    })
+
+    it('updateAgent patches the agent', async () => {
+      const fetchMock = makeJsonFetch(agentFixture)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.updateAgent('agent_1', { name: 'Renamed' })
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/agents/agent_1')
+    })
+
+    it('archiveAgent patches with archived:true', async () => {
+      const fetchMock = makeJsonFetch({ ...agentFixture, archivedAt: '2026-01-01' })
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.archiveAgent('agent_1')
+      expect(result.archivedAt).toBeTruthy()
+    })
+
+    it('listAgentVersions calls the versions sub-resource', async () => {
+      const fetchMock = makeJsonFetch(listPage)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.listAgentVersions('agent_1')
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/agents/agent_1/versions')
+    })
+
+    it('readAgentMemory calls the memory sub-resource', async () => {
+      const memory = {
+        agentId: 'agent_1',
+        projectId: 'p1',
+        content: 'facts',
+        metadata: {},
+        createdAt: '',
+        updatedAt: '',
+      }
+      const fetchMock = makeJsonFetch(memory)
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.readAgentMemory('agent_1')
+      expect(result.content).toBe('facts')
+    })
+
+    it('replaceAgentMemory puts new content', async () => {
+      const memory = {
+        agentId: 'agent_1',
+        projectId: 'p1',
+        content: 'new facts',
+        metadata: {},
+        createdAt: '',
+        updatedAt: '',
+      }
+      const fetchMock = makeJsonFetch(memory)
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.replaceAgentMemory('agent_1', { content: 'new facts' })
+      expect(result.content).toBe('new facts')
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // Environments API
+  // ---------------------------------------------------------------------------
+  describe('environments API', () => {
+    const envFixture = {
+      id: 'env_1',
+      projectId: 'p1',
+      name: 'Prod',
+      description: null,
+      packages: [],
+      variables: {},
+      credentialRefs: [],
+      hostingMode: 'cloud' as const,
+      networkPolicy: { mode: 'unrestricted' as const },
+      mcpPolicy: {},
+      packageManagerPolicy: {},
+      resourceLimits: {},
+      runtimeConfig: {},
+      metadata: {},
+      archivedAt: null,
+      currentVersionId: null,
+      version: 1,
+      createdAt: '',
+      updatedAt: '',
+    }
+
+    it('listEnvironments calls /api/v1/environments', async () => {
+      const fetchMock = makeJsonFetch(listPage)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.listEnvironments()
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/environments')
+    })
+
+    it('readEnvironment calls /api/v1/environments/:id', async () => {
+      const fetchMock = makeJsonFetch(envFixture)
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.readEnvironment('env_1')
+      expect(result.id).toBe('env_1')
+    })
+
+    it('createEnvironment posts JSON', async () => {
+      const fetchMock = makeJsonFetch(envFixture)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.createEnvironment({ name: 'Prod' })
+      const [, init] = fetchMock.mock.calls[0]!
+      expect(init?.method).toBe('POST')
+    })
+
+    it('updateEnvironment patches the environment', async () => {
+      const fetchMock = makeJsonFetch(envFixture)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.updateEnvironment('env_1', { name: 'Updated' })
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/environments/env_1')
+    })
+
+    it('archiveEnvironment patches with archived:true', async () => {
+      const fetchMock = makeJsonFetch({ ...envFixture, archivedAt: '2026-01-01' })
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.archiveEnvironment('env_1')
+      expect(result.archivedAt).toBeTruthy()
+    })
+
+    it('listEnvironmentVersions calls the versions sub-resource', async () => {
+      const fetchMock = makeJsonFetch(listPage)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.listEnvironmentVersions('env_1')
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/environments/env_1/versions')
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // Sessions API
+  // ---------------------------------------------------------------------------
+  describe('sessions API', () => {
+    const sessionFixture = {
+      id: 'sess_1',
+      projectId: 'p1',
+      agentId: 'agent_1',
+      agentVersionId: 'av_1',
+      agentSnapshot: {} as never,
+      environmentId: null,
+      environmentVersionId: null,
+      environmentSnapshot: null,
+      title: null,
+      resourceRefs: [],
+      env: {},
+      secretEnv: [],
+      runtimeMetadata: {} as never,
+      state: 'running' as const,
+      stateReason: null,
+      metadata: {},
+      startedAt: null,
+      stoppedAt: null,
+      archivedAt: null,
+      createdAt: '',
+      updatedAt: '',
+    }
+
+    it('createSession posts JSON', async () => {
+      const fetchMock = makeJsonFetch(sessionFixture)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.createSession({ agentId: 'agent_1', environmentId: 'env_1', runtime: 'ama' })
+      const [, init] = fetchMock.mock.calls[0]!
+      expect(init?.method).toBe('POST')
+    })
+
+    it('readSession calls /api/v1/sessions/:sessionId', async () => {
+      const fetchMock = makeJsonFetch(sessionFixture)
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.readSession('sess_1')
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/sessions/sess_1')
+      expect(result.id).toBe('sess_1')
+    })
+
+    it('readSessionConnection calls the connection sub-resource', async () => {
+      const conn = { sessionId: 'sess_1', transport: null, path: null, state: 'running' as const, stateReason: null }
+      const fetchMock = makeJsonFetch(conn)
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.readSessionConnection('sess_1')
+      expect(result.sessionId).toBe('sess_1')
+    })
+
+    it('stopSession patches with state:stopped', async () => {
+      const fetchMock = makeJsonFetch({ ...sessionFixture, state: 'stopped' as const })
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.stopSession('sess_1')
+      expect(result.state).toBe('stopped')
+    })
+
+    it('archiveSession patches with archived:true', async () => {
+      const fetchMock = makeJsonFetch({ ...sessionFixture, archivedAt: '2026-01-01' })
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.archiveSession('sess_1')
+      expect(result.archivedAt).toBeTruthy()
+    })
+
+    it('sendSessionMessage posts to messages sub-resource', async () => {
+      const msg = {
+        id: 'msg_1',
+        sessionId: 'sess_1',
+        type: 'prompt' as const,
+        content: 'hello',
+        delivery: 'live' as const,
+        state: 'accepted' as const,
+        error: null,
+        createdAt: '',
+        updatedAt: '',
+      }
+      const fetchMock = makeJsonFetch(msg)
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.sendSessionMessage('sess_1', 'hello')
+      expect(result.content).toBe('hello')
+    })
+
+    it('listSessionEvents calls the events sub-resource', async () => {
+      const fetchMock = makeJsonFetch(listPage)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.listSessionEvents('sess_1', { limit: 10, order: 'asc' })
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/sessions/sess_1/events')
+      expect(url).toContain('limit=10')
+    })
+
+    it('listSessionApprovals calls the approvals sub-resource', async () => {
+      const fetchMock = makeJsonFetch(listPage)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.listSessionApprovals('sess_1')
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/sessions/sess_1/approvals')
+    })
+
+    it('decideSessionApproval patches the approval', async () => {
+      const approval = {
+        id: 'apr_1',
+        sessionId: 'sess_1',
+        toolCallId: 'tc_1',
+        toolName: 'bash',
+        input: {},
+        relatedEventIds: [],
+        state: 'approved' as const,
+        reason: null,
+        result: null,
+        requestedAt: '',
+        decidedAt: '',
+        createdAt: '',
+        updatedAt: '',
+      }
+      const fetchMock = makeJsonFetch(approval)
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.decideSessionApproval('sess_1', 'apr_1', { decision: 'approve' })
+      expect(result.state).toBe('approved')
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // Providers API
+  // ---------------------------------------------------------------------------
+  describe('providers API', () => {
+    const providerFixture = {
+      id: 'prov_1',
+      projectId: 'p1',
+      type: 'anthropic' as const,
+      displayName: 'Anthropic',
+      baseUrl: null,
+      isDefault: false,
+      enabled: true,
+      credentialRef: null,
+      credentialStatus: 'configured' as const,
+      metadata: {},
+      rateLimits: {},
+      budgetPolicy: {},
+      modelCatalogState: 'synced',
+      lastError: null,
+      createdAt: '',
+      updatedAt: '',
+    }
+
+    it('listProviders calls /api/v1/providers', async () => {
+      const fetchMock = makeJsonFetch(listPage)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.listProviders()
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/providers')
+    })
+
+    it('readProvider calls /api/v1/providers/:providerId', async () => {
+      const fetchMock = makeJsonFetch(providerFixture)
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.readProvider('prov_1')
+      expect(result.id).toBe('prov_1')
+    })
+
+    it('createProvider posts JSON', async () => {
+      const fetchMock = makeJsonFetch(providerFixture)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.createProvider({ type: 'anthropic', displayName: 'Anthropic' })
+      const [, init] = fetchMock.mock.calls[0]!
+      expect(init?.method).toBe('POST')
+    })
+
+    it('deleteProvider calls DELETE /api/v1/providers/:providerId', async () => {
+      vi.stubGlobal('fetch', makeEmptyFetch(204))
+      const result = await api.deleteProvider('prov_1')
+      expect(result).toBeUndefined()
+    })
+
+    it('listProviderModels calls the models sub-resource', async () => {
+      const fetchMock = makeJsonFetch(listPage)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.listProviderModels('prov_1')
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/providers/prov_1/models')
+    })
+
+    it('upsertProviderModel calls PUT on the model resource', async () => {
+      const model = {
+        id: 'pm_1',
+        providerId: 'prov_1',
+        modelId: 'claude-3',
+        displayName: 'Claude 3',
+        capabilities: [],
+        contextWindow: null,
+        pricing: {},
+        availability: 'available' as const,
+        metadata: {},
+        createdAt: '',
+        updatedAt: '',
+      }
+      const fetchMock = makeJsonFetch(model)
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.upsertProviderModel('prov_1', 'claude-3', { displayName: 'Claude 3' })
+      expect(result.modelId).toBe('claude-3')
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/providers/prov_1/models/claude-3')
+    })
+
+    it('startModelDiscovery posts to model-discovery-tasks', async () => {
+      const task = {
+        id: 'task_1',
+        providerId: 'prov_1',
+        state: 'pending' as const,
+        discoveredCount: null,
+        error: null,
+        createdAt: '',
+        updatedAt: '',
+      }
+      const fetchMock = makeJsonFetch(task)
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.startModelDiscovery('prov_1')
+      expect(result.state).toBe('pending')
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/providers/prov_1/model-discovery-tasks')
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // Vaults API
+  // ---------------------------------------------------------------------------
+  describe('vaults API', () => {
+    const vaultFixture = {
+      id: 'vault_1',
+      projectId: 'p1',
+      name: 'My Vault',
+      description: null,
+      scope: 'project' as const,
+      metadata: {},
+      archivedAt: null,
+      createdAt: '',
+      updatedAt: '',
+    }
+
+    it('listVaults calls /api/v1/vaults', async () => {
+      const fetchMock = makeJsonFetch(listPage)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.listVaults()
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/vaults')
+    })
+
+    it('readVault calls /api/v1/vaults/:vaultId', async () => {
+      const fetchMock = makeJsonFetch(vaultFixture)
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.readVault('vault_1')
+      expect(result.id).toBe('vault_1')
+    })
+
+    it('createVault posts JSON', async () => {
+      const fetchMock = makeJsonFetch(vaultFixture)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.createVault({ name: 'My Vault' })
+      const [, init] = fetchMock.mock.calls[0]!
+      expect(init?.method).toBe('POST')
+    })
+
+    it('archiveVault patches with archived:true', async () => {
+      const fetchMock = makeJsonFetch({ ...vaultFixture, archivedAt: '2026-01-01' })
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.archiveVault('vault_1')
+      expect(result.archivedAt).toBeTruthy()
+    })
+
+    it('listVaultCredentials calls the credentials sub-resource', async () => {
+      const fetchMock = makeJsonFetch(listPage)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.listVaultCredentials('vault_1', { search: 'test' })
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/vaults/vault_1/credentials')
+      expect(url).toContain('search=test')
+    })
+
+    it('createVaultCredential posts to credentials sub-resource', async () => {
+      const cred = {
+        id: 'cred_1',
+        vaultId: 'vault_1',
+        projectId: 'p1',
+        name: 'API Key',
+        type: 'api_key',
+        connectorBinding: {},
+        metadata: {},
+        state: 'active' as const,
+        activeVersionId: null,
+        activeVersion: null,
+        revokedAt: null,
+        revokedByUserId: null,
+        revokeReason: null,
+        createdAt: '',
+        updatedAt: '',
+      }
+      const fetchMock = makeJsonFetch(cred)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.createVaultCredential('vault_1', { name: 'API Key', type: 'api_key', secret: {} })
+      const [, init] = fetchMock.mock.calls[0]!
+      expect(init?.method).toBe('POST')
+    })
+
+    it('rotateVaultCredential posts to versions sub-resource', async () => {
+      const version = {
+        id: 'ver_1',
+        credentialId: 'cred_1',
+        vaultId: 'vault_1',
+        projectId: 'p1',
+        version: 2,
+        provider: 'ama-managed' as const,
+        secretRef: 'ref',
+        externalVaultPath: null,
+        referenceName: 'ref',
+        state: 'active' as const,
+        hasSecret: true,
+        metadata: {},
+        createdAt: '',
+        supersededAt: null,
+        revokedAt: null,
+      }
+      const fetchMock = makeJsonFetch(version)
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.rotateVaultCredential('vault_1', 'cred_1', { secretValue: 'newsecret' })
+      expect(result.id).toBe('ver_1')
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/vaults/vault_1/credentials/cred_1/versions')
+    })
+
+    it('revokeVaultCredential patches with state:revoked', async () => {
+      const cred = {
+        id: 'cred_1',
+        vaultId: 'vault_1',
+        projectId: 'p1',
+        name: 'API Key',
+        type: 'api_key',
+        connectorBinding: {},
+        metadata: {},
+        state: 'revoked' as const,
+        activeVersionId: null,
+        activeVersion: null,
+        revokedAt: '2026-01-01',
+        revokedByUserId: null,
+        revokeReason: null,
+        createdAt: '',
+        updatedAt: '',
+      }
+      const fetchMock = makeJsonFetch(cred)
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.revokeVaultCredential('vault_1', 'cred_1', 'no longer needed')
+      expect(result.state).toBe('revoked')
+    })
+
+    it('revokeVaultCredential works without a revokeReason', async () => {
+      const cred = {
+        id: 'cred_1',
+        vaultId: 'vault_1',
+        projectId: 'p1',
+        name: 'API Key',
+        type: 'api_key',
+        connectorBinding: {},
+        metadata: {},
+        state: 'revoked' as const,
+        activeVersionId: null,
+        activeVersion: null,
+        revokedAt: '2026-01-01',
+        revokedByUserId: null,
+        revokeReason: null,
+        createdAt: '',
+        updatedAt: '',
+      }
+      const fetchMock = makeJsonFetch(cred)
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.revokeVaultCredential('vault_1', 'cred_1')
+      expect(result.state).toBe('revoked')
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // Connectors & Connections API
+  // ---------------------------------------------------------------------------
+  describe('connectors and connections API', () => {
+    it('listConnectors calls /api/v1/connectors', async () => {
+      const fetchMock = makeJsonFetch(listPage)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.listConnectors({ search: 'github', category: 'vcs' })
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/connectors')
+      expect(url).toContain('search=github')
+    })
+
+    it('readConnector calls /api/v1/connectors/:connectorId', async () => {
+      const connector = {
+        id: 'conn_1',
+        name: 'GitHub',
+        description: 'GitHub connector',
+        category: 'vcs',
+        trustLevel: 'high',
+        capabilities: [],
+        supportedAuthModes: [],
+        setupRequirements: [],
+        tools: [],
+        metadata: {},
+        availability: 'available' as const,
+        createdAt: '',
+        updatedAt: '',
+      }
+      const fetchMock = makeJsonFetch(connector)
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.readConnector('conn_1')
+      expect(result.id).toBe('conn_1')
+    })
+
+    it('createConnection posts JSON', async () => {
+      const connection = {
+        id: 'cx_1',
+        projectId: 'p1',
+        connectorId: 'conn_1',
+        credentialRef: null,
+        endpointUrl: null,
+        approvalMode: 'none' as const,
+        state: 'connected' as const,
+        lastError: null,
+        metadata: {},
+        connectedAt: '',
+        disconnectedAt: null,
+        createdAt: '',
+        updatedAt: '',
+      }
+      const fetchMock = makeJsonFetch(connection)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.createConnection({ connectorId: 'conn_1' })
+      const [, init] = fetchMock.mock.calls[0]!
+      expect(init?.method).toBe('POST')
+    })
+
+    it('listConnections calls /api/v1/connections', async () => {
+      const fetchMock = makeJsonFetch(listPage)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.listConnections()
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/connections')
+    })
+
+    it('disconnectConnection patches with state:disconnected', async () => {
+      const connection = {
+        id: 'cx_1',
+        projectId: 'p1',
+        connectorId: 'conn_1',
+        credentialRef: null,
+        endpointUrl: null,
+        approvalMode: 'none' as const,
+        state: 'disconnected' as const,
+        lastError: null,
+        metadata: {},
+        connectedAt: '',
+        disconnectedAt: '',
+        createdAt: '',
+        updatedAt: '',
+      }
+      const fetchMock = makeJsonFetch(connection)
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.disconnectConnection('cx_1')
+      expect(result.state).toBe('disconnected')
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // Governance API (access-rules, policies, effective-policy, budgets)
+  // ---------------------------------------------------------------------------
+  describe('governance API', () => {
+    it('listAccessRules calls /api/v1/access-rules', async () => {
+      const fetchMock = makeJsonFetch(listPage)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.listAccessRules()
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/access-rules')
+    })
+
+    it('createAccessRule posts JSON', async () => {
+      const rule = {
+        id: 'ar_1',
+        providerId: 'prov_1',
+        modelId: '*',
+        teamId: null,
+        effect: 'allow' as const,
+        reason: null,
+        metadata: {},
+        createdAt: '',
+        updatedAt: '',
+      }
+      const fetchMock = makeJsonFetch(rule)
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.createAccessRule({ effect: 'allow' })
+      expect(result.effect).toBe('allow')
+    })
+
+    it('listPolicies calls /api/v1/policies', async () => {
+      const fetchMock = makeJsonFetch(listPage)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.listPolicies()
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/policies')
+    })
+
+    it('readEffectivePolicy calls /api/v1/effective-policy', async () => {
+      const policy = {
+        source: {},
+        sources: [],
+        providerRules: [],
+        modelRules: [],
+        accessRules: [],
+        toolPolicy: {},
+        mcpPolicy: {},
+        sandboxPolicy: {},
+        budgets: [],
+      }
+      const fetchMock = makeJsonFetch(policy)
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.readEffectivePolicy({ providerId: 'prov_1' })
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/effective-policy')
+      expect(result.providerRules).toEqual([])
+    })
+
+    it('listBudgets calls /api/v1/budgets', async () => {
+      const fetchMock = makeJsonFetch(listPage)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.listBudgets()
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/budgets')
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // Usage API
+  // ---------------------------------------------------------------------------
+  describe('usage API', () => {
+    it('readUsageSummary calls /api/v1/usage-summary', async () => {
+      const summary = {
+        groupBy: 'provider' as const,
+        totals: {
+          records: 0,
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+          durationMs: 0,
+          costMicros: 0,
+          currency: 'USD',
+        },
+        groups: [],
+      }
+      const fetchMock = makeJsonFetch(summary)
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.readUsageSummary({ groupBy: 'provider' })
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/usage-summary')
+      expect(result.groupBy).toBe('provider')
+    })
+
+    it('listUsageRecords calls /api/v1/usage-records', async () => {
+      const fetchMock = makeJsonFetch(listPage)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.listUsageRecords({ limit: 50 })
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/usage-records')
+      expect(url).toContain('limit=50')
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // Audit API
+  // ---------------------------------------------------------------------------
+  describe('audit API', () => {
+    const auditRecord = {
+      id: 'rec_1',
+      projectId: 'p1',
+      actorUserId: 'u1',
+      actorType: 'user',
+      action: 'create',
+      resourceType: 'agent',
+      resourceId: 'agent_1',
+      outcome: 'success',
+      requestId: null,
+      correlationId: null,
+      sessionId: null,
+      policyCategory: null,
+      metadata: {},
+      before: {},
+      after: {},
+      createdAt: '',
+    }
+
+    it('listAuditRecords calls /api/v1/audit-records', async () => {
+      const fetchMock = makeJsonFetch(listPage)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.listAuditRecords({ action: 'create' })
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/audit-records')
+    })
+
+    it('readAuditRecord calls /api/v1/audit-records/:recordId', async () => {
+      const fetchMock = makeJsonFetch(auditRecord)
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.readAuditRecord('rec_1')
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/audit-records/rec_1')
+      expect(result.id).toBe('rec_1')
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // Federated Tenants API
+  // ---------------------------------------------------------------------------
+  describe('federated tenants API', () => {
+    it('listFederatedTenants calls /api/v1/auth/federated-tenants', async () => {
+      const fetchMock = makeJsonFetch(listPage)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.listFederatedTenants()
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/auth/federated-tenants')
+    })
   })
 })

@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 
 export function useProviderActions() {
@@ -11,7 +12,7 @@ export function useProviderActions() {
       toast.success('Provider deleted')
       void queryClient.invalidateQueries({ queryKey: queryKeys.providers.all })
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : String(error)),
+    onError: (error) => toast.error(errorMessage(error)),
   })
 
   return {

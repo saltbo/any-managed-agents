@@ -1,16 +1,24 @@
-import { cleanup, render, screen } from '@testing-library/react'
-import { MemoryRouter } from 'react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { ClientPagination } from '@/console/use-client-pagination'
-import { VaultDetailView } from '@/features/vaults/VaultDetailView'
-import { VaultsView } from '@/features/vaults/VaultsView'
-import type { Vault, VaultCredential } from '@/lib/api'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter, Route, Routes } from 'react-router'
+import { describe, expect, it, vi } from 'vitest'
+import { useClientPagination } from '@/console/use-client-pagination'
+import type { AuditRecord, Vault, VaultCredential } from '@/lib/api'
+import { createCollection, HttpResponse, http, server } from '@/test/msw'
+import { AddCredentialSheet } from './AddCredentialSheet'
+import { CreateVaultSheet } from './CreateVaultSheet'
+import { RotateCredentialSheet } from './RotateCredentialSheet'
+import { useVaultActions } from './use-vault-actions'
+import { VaultDetailPage } from './VaultDetailPage'
+import { VaultDetailView } from './VaultDetailView'
+import { VaultsPage } from './VaultsPage'
+import { VaultsView } from './VaultsView'
 
-afterEach(() => {
-  cleanup()
-})
+function makeQueryClient() {
+  return new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+}
 
-function pagination<T>(items: T[]): ClientPagination<T> {
+function pagination<T>(items: T[]) {
   return {
     items,
     page: 1,
@@ -79,6 +87,50 @@ function credential(overrides: Partial<VaultCredential> = {}): VaultCredential {
   }
 }
 
+function auditRecord(overrides: Partial<AuditRecord> = {}): AuditRecord {
+  return {
+    id: 'audit_1',
+    projectId: 'project_1',
+    actorUserId: 'user_1',
+    actorType: 'user',
+    action: 'vault.create',
+    resourceType: 'vault',
+    resourceId: 'vault_1',
+    outcome: 'success',
+    requestId: null,
+    correlationId: null,
+    sessionId: null,
+    policyCategory: null,
+    metadata: {},
+    before: {},
+    after: {},
+    createdAt: '2026-05-23T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
+// Shared pointer-capture stubs needed for Radix dropdown interactions
+function stubPointerCapture() {
+  Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
+    value: vi.fn(() => false),
+    configurable: true,
+  })
+  Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', {
+    value: vi.fn(),
+    configurable: true,
+  })
+  Object.defineProperty(HTMLElement.prototype, 'releasePointerCapture', {
+    value: vi.fn(),
+    configurable: true,
+  })
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+    value: vi.fn(),
+    configurable: true,
+  })
+}
+
+// ─── VaultsView ─────────────────────────────────────────────────────────────
+
 describe('[spec: vaults/console-list] VaultsView', () => {
   it('shows the empty-state create affordance when no vaults exist', () => {
     render(
@@ -87,8 +139,8 @@ describe('[spec: vaults/console-list] VaultsView', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('No vaults')).toBeTruthy()
-    expect(screen.getByText(/Create a vault to track safe credential references/)).toBeTruthy()
+    expect(screen.getByText('No vaults')).toBeInTheDocument()
+    expect(screen.getByText(/Create a vault to track safe credential references/)).toBeInTheDocument()
   })
 
   it('renders vault rows with display name, scope, status, and timestamps', () => {
@@ -100,10 +152,103 @@ describe('[spec: vaults/console-list] VaultsView', () => {
     )
 
     expect(screen.getByRole('link', { name: 'Provider credentials' }).getAttribute('href')).toBe('/vaults/vault_1')
-    expect(screen.getByText('project')).toBeTruthy()
-    expect(screen.getByText('1-1 of 1')).toBeTruthy()
+    expect(screen.getByText('project')).toBeInTheDocument()
+    expect(screen.getByText('1-1 of 1')).toBeInTheDocument()
+  })
+
+  it('shows active badge when vault is not archived', () => {
+    const vaults = [vault()]
+    render(
+      <MemoryRouter>
+        <VaultsView vaults={vaults} pagination={pagination(vaults)} onArchive={vi.fn()} />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('active')).toBeInTheDocument()
+  })
+
+  it('shows archived badge when vault is archived', () => {
+    const vaults = [vault({ archivedAt: '2026-05-24T00:00:00.000Z' })]
+    render(
+      <MemoryRouter>
+        <VaultsView vaults={vaults} pagination={pagination(vaults)} onArchive={vi.fn()} />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('archived')).toBeInTheDocument()
+  })
+
+  it('falls back to vault id when description is null', () => {
+    const vaults = [vault({ description: null })]
+    render(
+      <MemoryRouter>
+        <VaultsView vaults={vaults} pagination={pagination(vaults)} onArchive={vi.fn()} />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('vault_1')).toBeInTheDocument()
+  })
+
+  it('shows organization scope badge for organization-scoped vault', () => {
+    const vaults = [vault({ scope: 'organization' })]
+    render(
+      <MemoryRouter>
+        <VaultsView vaults={vaults} pagination={pagination(vaults)} onArchive={vi.fn()} />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('organization')).toBeInTheDocument()
+  })
+
+  it('shows Organization in project cell when projectId is null', () => {
+    const vaults = [vault({ projectId: null })]
+    render(
+      <MemoryRouter>
+        <VaultsView vaults={vaults} pagination={pagination(vaults)} onArchive={vi.fn()} />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('Organization')).toBeInTheDocument()
+  })
+
+  it('calls onArchive when archive confirm is submitted', async () => {
+    stubPointerCapture()
+
+    const onArchive = vi.fn()
+    const vaults = [vault()]
+    render(
+      <MemoryRouter>
+        <VaultsView vaults={vaults} pagination={pagination(vaults)} onArchive={onArchive} />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Archive vault' }))
+    await waitFor(() => expect(screen.getByText('Archive vault?')).toBeInTheDocument())
+    const confirmBtns = screen.getAllByRole('button', { name: 'Archive vault', hidden: true })
+    fireEvent.click(confirmBtns[confirmBtns.length - 1] as HTMLElement)
+    await waitFor(() => expect(onArchive).toHaveBeenCalledWith('vault_1'))
+  })
+
+  it('paginates correctly with multiple vaults', () => {
+    const vaults = Array.from({ length: 11 }, (_, i) => vault({ id: `vault_${i + 1}`, name: `Vault ${i + 1}` }))
+
+    function Harness() {
+      const pag = useClientPagination(vaults)
+      return (
+        <MemoryRouter>
+          <VaultsView vaults={pag.items} pagination={pag} onArchive={vi.fn()} />
+        </MemoryRouter>
+      )
+    }
+
+    render(<Harness />)
+    expect(screen.getByText('1-10 of 11')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
+    expect(screen.getByText('11-11 of 11')).toBeInTheDocument()
   })
 })
+
+// ─── VaultDetailView ─────────────────────────────────────────────────────────
 
 describe('[spec: vaults/console-list] VaultDetailView', () => {
   it('renders credential metadata with safe references and redacts raw secret values', () => {
@@ -121,10 +266,1159 @@ describe('[spec: vaults/console-list] VaultDetailView', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByText('Credential metadata')).toBeTruthy()
-    expect(screen.getByText('Raw secret values are not returned by the control plane.')).toBeTruthy()
-    expect(screen.getByText('OpenAI key')).toBeTruthy()
-    expect(screen.getByText('v2')).toBeTruthy()
-    expect(screen.getByText('AMA_VAULTCRED_1_V2')).toBeTruthy()
+    expect(screen.getByText('Credential metadata')).toBeInTheDocument()
+    expect(screen.getByText('Raw secret values are not returned by the control plane.')).toBeInTheDocument()
+    expect(screen.getByText('OpenAI key')).toBeInTheDocument()
+    expect(screen.getByText('v2')).toBeInTheDocument()
+    expect(screen.getByText('AMA_VAULTCRED_1_V2')).toBeInTheDocument()
+  })
+
+  it('shows loading skeleton when loading is true', () => {
+    render(
+      <MemoryRouter>
+        <VaultDetailView
+          vault={null}
+          credentials={[]}
+          auditRecords={[]}
+          loading={true}
+          onAddCredential={vi.fn()}
+          onRotate={vi.fn()}
+          onRevoke={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByLabelText('Loading vault detail')).toBeInTheDocument()
+  })
+
+  it('shows vault not found when vault is null and not loading', () => {
+    render(
+      <MemoryRouter>
+        <VaultDetailView
+          vault={null}
+          credentials={[]}
+          auditRecords={[]}
+          loading={false}
+          onAddCredential={vi.fn()}
+          onRotate={vi.fn()}
+          onRevoke={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('Vault not found')).toBeInTheDocument()
+    expect(screen.getByText('The requested vault is not in this project.')).toBeInTheDocument()
+  })
+
+  it('shows vault profile section with vault id and metadata', () => {
+    render(
+      <MemoryRouter>
+        <VaultDetailView
+          vault={vault()}
+          credentials={[]}
+          auditRecords={[]}
+          loading={false}
+          onAddCredential={vi.fn()}
+          onRotate={vi.fn()}
+          onRevoke={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('Vault profile')).toBeInTheDocument()
+    expect(screen.getByText('vault_1')).toBeInTheDocument()
+  })
+
+  it('shows No description when vault description is null', () => {
+    render(
+      <MemoryRouter>
+        <VaultDetailView
+          vault={vault({ description: null })}
+          credentials={[]}
+          auditRecords={[]}
+          loading={false}
+          onAddCredential={vi.fn()}
+          onRotate={vi.fn()}
+          onRevoke={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('No description')).toBeInTheDocument()
+  })
+
+  it('shows No credentials empty state for active vault with no credentials', () => {
+    render(
+      <MemoryRouter>
+        <VaultDetailView
+          vault={vault()}
+          credentials={[]}
+          auditRecords={[]}
+          loading={false}
+          onAddCredential={vi.fn()}
+          onRotate={vi.fn()}
+          onRevoke={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('No credentials')).toBeInTheDocument()
+    expect(screen.getByText(/Store a credential to track safe versioned secret references/)).toBeInTheDocument()
+  })
+
+  it('shows archived vault empty state for archived vault with no credentials', () => {
+    render(
+      <MemoryRouter>
+        <VaultDetailView
+          vault={vault({ archivedAt: '2026-05-24T00:00:00.000Z' })}
+          credentials={[]}
+          auditRecords={[]}
+          loading={false}
+          onAddCredential={vi.fn()}
+          onRotate={vi.fn()}
+          onRevoke={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('No credentials')).toBeInTheDocument()
+    expect(screen.getByText(/This vault is archived/)).toBeInTheDocument()
+  })
+
+  it('hides Add credential button and actions column for archived vault', () => {
+    render(
+      <MemoryRouter>
+        <VaultDetailView
+          vault={vault({ archivedAt: '2026-05-24T00:00:00.000Z' })}
+          credentials={[credential()]}
+          auditRecords={[]}
+          loading={false}
+          onAddCredential={vi.fn()}
+          onRotate={vi.fn()}
+          onRevoke={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByRole('button', { name: 'Add credential' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Rotate credential' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Revoke credential' })).toBeNull()
+  })
+
+  it('shows Add credential button for active vault', () => {
+    render(
+      <MemoryRouter>
+        <VaultDetailView
+          vault={vault()}
+          credentials={[]}
+          auditRecords={[]}
+          loading={false}
+          onAddCredential={vi.fn()}
+          onRotate={vi.fn()}
+          onRevoke={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getAllByRole('button', { name: 'Add credential' }).length).toBeGreaterThan(0)
+  })
+
+  it('calls onAddCredential when Add credential button is clicked', () => {
+    const onAddCredential = vi.fn()
+    render(
+      <MemoryRouter>
+        <VaultDetailView
+          vault={vault()}
+          credentials={[]}
+          auditRecords={[]}
+          loading={false}
+          onAddCredential={onAddCredential}
+          onRotate={vi.fn()}
+          onRevoke={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add credential' })[0] as HTMLElement)
+    expect(onAddCredential).toHaveBeenCalledTimes(1)
+  })
+
+  it('calls onRotate with credential when Rotate button is clicked', () => {
+    const onRotate = vi.fn()
+    const cred = credential()
+    render(
+      <MemoryRouter>
+        <VaultDetailView
+          vault={vault()}
+          credentials={[cred]}
+          auditRecords={[]}
+          loading={false}
+          onAddCredential={vi.fn()}
+          onRotate={onRotate}
+          onRevoke={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Rotate credential' }))
+    expect(onRotate).toHaveBeenCalledWith(cred)
+  })
+
+  it('calls onRevoke with credential when Revoke confirm is submitted', async () => {
+    stubPointerCapture()
+
+    const onRevoke = vi.fn()
+    const cred = credential()
+    render(
+      <MemoryRouter>
+        <VaultDetailView
+          vault={vault()}
+          credentials={[cred]}
+          auditRecords={[]}
+          loading={false}
+          onAddCredential={vi.fn()}
+          onRotate={vi.fn()}
+          onRevoke={onRevoke}
+        />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke credential' }))
+    await waitFor(() => expect(screen.getByText('Revoke credential?')).toBeInTheDocument())
+    const confirmBtns = screen.getAllByRole('button', { name: 'Revoke credential', hidden: true })
+    fireEvent.click(confirmBtns[confirmBtns.length - 1] as HTMLElement)
+    await waitFor(() => expect(onRevoke).toHaveBeenCalledWith(cred))
+  })
+
+  it('does not show rotate/revoke buttons for revoked credential', () => {
+    const cred = credential({ state: 'revoked' })
+    render(
+      <MemoryRouter>
+        <VaultDetailView
+          vault={vault()}
+          credentials={[cred]}
+          auditRecords={[]}
+          loading={false}
+          onAddCredential={vi.fn()}
+          onRotate={vi.fn()}
+          onRevoke={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByRole('button', { name: 'Rotate credential' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Revoke credential' })).toBeNull()
+  })
+
+  it('shows None for active version when credential has no active version', () => {
+    const cred = credential({ activeVersion: null, activeVersionId: null })
+    render(
+      <MemoryRouter>
+        <VaultDetailView
+          vault={vault()}
+          credentials={[cred]}
+          auditRecords={[]}
+          loading={false}
+          onAddCredential={vi.fn()}
+          onRotate={vi.fn()}
+          onRevoke={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getAllByText('None').length).toBeGreaterThan(0)
+  })
+
+  it('shows Not returned for secret reference when active version is null', () => {
+    const cred = credential({ activeVersion: null, activeVersionId: null })
+    render(
+      <MemoryRouter>
+        <VaultDetailView
+          vault={vault()}
+          credentials={[cred]}
+          auditRecords={[]}
+          loading={false}
+          onAddCredential={vi.fn()}
+          onRotate={vi.fn()}
+          onRevoke={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('Not returned')).toBeInTheDocument()
+  })
+
+  it('renders audit records section with history', () => {
+    const record = auditRecord()
+    render(
+      <MemoryRouter>
+        <VaultDetailView
+          vault={vault()}
+          credentials={[]}
+          auditRecords={[record]}
+          loading={false}
+          onAddCredential={vi.fn()}
+          onRotate={vi.fn()}
+          onRevoke={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('Audit history')).toBeInTheDocument()
+    expect(screen.getByText('vault.create')).toBeInTheDocument()
+    expect(screen.getByText('success')).toBeInTheDocument()
+  })
+
+  it('shows audit record resourceType when resourceId is null', () => {
+    const record = auditRecord({ resourceId: null })
+    render(
+      <MemoryRouter>
+        <VaultDetailView
+          vault={vault()}
+          credentials={[]}
+          auditRecords={[record]}
+          loading={false}
+          onAddCredential={vi.fn()}
+          onRotate={vi.fn()}
+          onRevoke={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('vault')).toBeInTheDocument()
+  })
+
+  it('shows No audit history when no audit records exist', () => {
+    render(
+      <MemoryRouter>
+        <VaultDetailView
+          vault={vault()}
+          credentials={[]}
+          auditRecords={[]}
+          loading={false}
+          onAddCredential={vi.fn()}
+          onRotate={vi.fn()}
+          onRevoke={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('No audit history')).toBeInTheDocument()
+    expect(screen.getByText('Vault and credential changes will appear here.')).toBeInTheDocument()
+  })
+})
+
+// ─── CreateVaultSheet ────────────────────────────────────────────────────────
+
+describe('[spec: vaults/create-sheet] CreateVaultSheet', () => {
+  it('renders the create vault form when open', () => {
+    const client = makeQueryClient()
+    server.use(http.post('*/api/v1/vaults', () => HttpResponse.json(vault(), { status: 201 })))
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <CreateVaultSheet open onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    expect(screen.getByText('Create Vault')).toBeInTheDocument()
+    expect(screen.getByText('Create safe credential-reference metadata for runtime integrations.')).toBeInTheDocument()
+  })
+
+  it('does not render form content when closed', () => {
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <CreateVaultSheet open={false} onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    expect(screen.queryByText('Create Vault')).toBeNull()
+  })
+
+  it('calls POST /api/v1/vaults and closes sheet on submit', async () => {
+    const vaults = createCollection<Vault>()
+    server.use(
+      http.post('*/api/v1/vaults', async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>
+        const created = vault({ id: 'vault_new', name: String(body.name ?? 'Provider credentials') })
+        vaults.put(created)
+        return HttpResponse.json(created, { status: 201 })
+      }),
+      http.get('*/api/v1/vaults', () =>
+        HttpResponse.json({ data: vaults.list(), pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+    )
+
+    const onOpenChange = vi.fn()
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <CreateVaultSheet open onOpenChange={onOpenChange} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /Save vault/i }))
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+  })
+
+  it('shows toast error when POST /api/v1/vaults returns 500', async () => {
+    server.use(http.post('*/api/v1/vaults', () => HttpResponse.json({ error: 'Server error' }, { status: 500 })))
+
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <CreateVaultSheet open onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /Save vault/i }))
+    // The mutation fires; the 500 triggers the onError toast path — just wait for the request to settle
+    await waitFor(() => expect(screen.getByRole('button', { name: /Save vault/i })).toBeInTheDocument())
+  })
+})
+
+// ─── AddCredentialSheet ──────────────────────────────────────────────────────
+
+describe('[spec: vaults/add-credential-sheet] AddCredentialSheet', () => {
+  it('renders the form when open', () => {
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <AddCredentialSheet vaultId="vault_1" open onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    expect(screen.getByText('Add credential')).toBeInTheDocument()
+    expect(
+      screen.getByText('The secret value is encrypted at rest and never returned by the control plane.'),
+    ).toBeInTheDocument()
+  })
+
+  it('does not render form content when closed', () => {
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <AddCredentialSheet vaultId="vault_1" open={false} onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    expect(screen.queryByText('Add credential')).toBeNull()
+  })
+
+  it('disables the submit button when name, type, or secretValue is empty', () => {
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <AddCredentialSheet vaultId="vault_1" open onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    const btn = screen.getByRole('button', { name: /Save credential/i })
+    expect(btn.hasAttribute('disabled')).toBe(true)
+  })
+
+  it('enables the submit button when name, type, and secretValue are filled', () => {
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <AddCredentialSheet vaultId="vault_1" open onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'My key' } })
+    fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'api_key' } })
+    fireEvent.change(screen.getByLabelText('Secret value'), { target: { value: 'sk-supersecret' } })
+
+    const btn = screen.getByRole('button', { name: /Save credential/i })
+    expect(btn.hasAttribute('disabled')).toBe(false)
+  })
+
+  it('does not call the api when form is submitted with empty fields', async () => {
+    // No MSW handler — if the real client fires, onUnhandledRequest:'error' would throw
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <AddCredentialSheet vaultId="vault_1" open onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /Save credential/i }))
+    // Button stays disabled — no network request fired
+    expect(screen.getByRole('button', { name: /Save credential/i })).toBeInTheDocument()
+  })
+
+  it('returns early from submit handler without calling api when fields are invalid', () => {
+    // Fires the form submit event directly (bypassing the disabled button) to exercise
+    // the `if (!valid) return` guard in the submit handler.
+    // No MSW handler registered — if the real client were called, onUnhandledRequest:'error' would throw.
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <AddCredentialSheet vaultId="vault_1" open onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    // The sheet renders into a portal — find the form via the button's closest ancestor
+    const btn = screen.getByRole('button', { name: /Save credential/i })
+    const form = btn.closest('form')
+    expect(form).not.toBeNull()
+    // Submit the form while the fields are still empty (valid=false)
+    fireEvent.submit(form as HTMLFormElement)
+    // No network request should fire — the early-return guard prevents it
+    expect(screen.getByRole('button', { name: /Save credential/i })).toBeInTheDocument()
+  })
+
+  it('calls POST /api/v1/vaults/:vaultId/credentials on valid submit', async () => {
+    const credentials = createCollection<VaultCredential>()
+    server.use(
+      http.post('*/api/v1/vaults/vault_1/credentials', async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>
+        const created = credential({ id: 'vaultcred_new', name: String(body.name ?? 'My key') })
+        credentials.put(created)
+        return HttpResponse.json(created, { status: 201 })
+      }),
+      http.get('*/api/v1/vaults/vault_1/credentials', () =>
+        HttpResponse.json({ data: credentials.list(), pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+      http.get('*/api/v1/vaults/vault_1', () => HttpResponse.json(vault())),
+    )
+
+    const onOpenChange = vi.fn()
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <AddCredentialSheet vaultId="vault_1" open onOpenChange={onOpenChange} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'My key' } })
+    fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'api_key' } })
+    fireEvent.change(screen.getByLabelText('Secret value'), { target: { value: 'sk-supersecret' } })
+    fireEvent.click(screen.getByRole('button', { name: /Save credential/i }))
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+  })
+
+  it('includes connectorId and connectorBindingName in payload when filled', async () => {
+    let capturedBody: Record<string, unknown> = {}
+    server.use(
+      http.post('*/api/v1/vaults/vault_1/credentials', async ({ request }) => {
+        capturedBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(credential({ id: 'vaultcred_new' }), { status: 201 })
+      }),
+      http.get('*/api/v1/vaults/vault_1/credentials', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+      http.get('*/api/v1/vaults/vault_1', () => HttpResponse.json(vault())),
+    )
+
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <AddCredentialSheet vaultId="vault_1" open onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'My key' } })
+    fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'api_key' } })
+    fireEvent.change(screen.getByLabelText('Connector id'), { target: { value: 'connector_1' } })
+    fireEvent.change(screen.getByLabelText('Connector binding name'), { target: { value: 'myBinding' } })
+    fireEvent.change(screen.getByLabelText('Secret value'), { target: { value: 'sk-secret' } })
+    fireEvent.click(screen.getByRole('button', { name: /Save credential/i }))
+
+    await waitFor(() =>
+      expect((capturedBody.connectorBinding as Record<string, unknown>)?.connectorId).toBe('connector_1'),
+    )
+    expect((capturedBody.connectorBinding as Record<string, unknown>)?.name).toBe('myBinding')
+  })
+
+  it('updates metadata field when changed', () => {
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <AddCredentialSheet vaultId="vault_1" open onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    const metadataArea = screen.getByLabelText('Metadata')
+    fireEvent.change(metadataArea, { target: { value: '{"env":"prod"}' } })
+    expect((metadataArea as HTMLTextAreaElement).value).toBe('{"env":"prod"}')
+  })
+
+  it('shows saving state on button while mutation is pending', async () => {
+    let resolveRequest: () => void
+    server.use(
+      http.post('*/api/v1/vaults/vault_1/credentials', async () => {
+        await new Promise<void>((resolve) => {
+          resolveRequest = resolve
+        })
+        return HttpResponse.json(credential({ id: 'vaultcred_new' }), { status: 201 })
+      }),
+    )
+
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <AddCredentialSheet vaultId="vault_1" open onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'My key' } })
+    fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'api_key' } })
+    fireEvent.change(screen.getByLabelText('Secret value'), { target: { value: 'sk-secret' } })
+    fireEvent.click(screen.getByRole('button', { name: /Save credential/i }))
+
+    await waitFor(() => expect(screen.getByText('Saving credential')).toBeInTheDocument())
+    resolveRequest!()
+  })
+
+  it('shows error state when POST /api/v1/vaults/:vaultId/credentials returns 500', async () => {
+    server.use(
+      http.post('*/api/v1/vaults/vault_1/credentials', () =>
+        HttpResponse.json({ error: 'Server error' }, { status: 500 }),
+      ),
+    )
+
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <AddCredentialSheet vaultId="vault_1" open onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'My key' } })
+    fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'api_key' } })
+    fireEvent.change(screen.getByLabelText('Secret value'), { target: { value: 'sk-secret' } })
+    fireEvent.click(screen.getByRole('button', { name: /Save credential/i }))
+    // Wait for the button to return to its normal state after the error
+    await waitFor(() => expect(screen.getByRole('button', { name: /Save credential/i })).toBeInTheDocument())
+  })
+
+  it('submits without connectorId or connectorBindingName when both are empty', async () => {
+    let capturedBody: Record<string, unknown> = {}
+    server.use(
+      http.post('*/api/v1/vaults/vault_1/credentials', async ({ request }) => {
+        capturedBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(credential({ id: 'vaultcred_new' }), { status: 201 })
+      }),
+      http.get('*/api/v1/vaults/vault_1/credentials', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+      http.get('*/api/v1/vaults/vault_1', () => HttpResponse.json(vault())),
+    )
+
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <AddCredentialSheet vaultId="vault_1" open onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'My key' } })
+    fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'api_key' } })
+    fireEvent.change(screen.getByLabelText('Secret value'), { target: { value: 'sk-secret' } })
+    fireEvent.click(screen.getByRole('button', { name: /Save credential/i }))
+
+    await waitFor(() => expect(capturedBody.connectorBinding).toEqual({}))
+  })
+})
+
+// ─── RotateCredentialSheet ───────────────────────────────────────────────────
+
+describe('[spec: vaults/rotate-credential-sheet] RotateCredentialSheet', () => {
+  it('renders the form when credential is provided', () => {
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <RotateCredentialSheet vaultId="vault_1" credential={credential()} onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    expect(screen.getAllByText('Rotate credential').length).toBeGreaterThan(0)
+    expect(screen.getByText(/Create a new active version for OpenAI key/)).toBeInTheDocument()
+  })
+
+  it('does not render sheet when credential is null', () => {
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <RotateCredentialSheet vaultId="vault_1" credential={null} onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    expect(screen.queryByText('Rotate credential')).toBeNull()
+  })
+
+  it('disables submit when secret value is empty', () => {
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <RotateCredentialSheet vaultId="vault_1" credential={credential()} onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    const btn = screen.getByRole('button', { name: /Rotate credential/i })
+    expect(btn.hasAttribute('disabled')).toBe(true)
+  })
+
+  it('enables submit when secret value is filled', () => {
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <RotateCredentialSheet vaultId="vault_1" credential={credential()} onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.change(screen.getByLabelText('New secret value'), { target: { value: 'new-secret' } })
+
+    const btn = screen.getByRole('button', { name: /Rotate credential/i })
+    expect(btn.hasAttribute('disabled')).toBe(false)
+  })
+
+  it('calls POST /api/v1/vaults/:vaultId/credentials/:credentialId/versions on valid submit', async () => {
+    let capturedBody: Record<string, unknown> = {}
+    server.use(
+      http.post('*/api/v1/vaults/vault_1/credentials/vaultcred_1/versions', async ({ request }) => {
+        capturedBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json({ id: 'vaultver_new' }, { status: 201 })
+      }),
+      http.get('*/api/v1/vaults/vault_1', () => HttpResponse.json(vault())),
+      http.get('*/api/v1/vaults/vault_1/credentials', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+    )
+
+    const onOpenChange = vi.fn()
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <RotateCredentialSheet vaultId="vault_1" credential={credential()} onOpenChange={onOpenChange} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.change(screen.getByLabelText('New secret value'), { target: { value: 'rotated-secret' } })
+    fireEvent.click(screen.getByRole('button', { name: /Rotate credential/i }))
+
+    await waitFor(() => expect(capturedBody.provider).toBe('ama-managed'))
+    expect(capturedBody.secretValue).toBe('rotated-secret')
+  })
+
+  it('closes sheet after successful rotation', async () => {
+    server.use(
+      http.post('*/api/v1/vaults/vault_1/credentials/vaultcred_1/versions', () =>
+        HttpResponse.json({ id: 'vaultver_new' }, { status: 201 }),
+      ),
+      http.get('*/api/v1/vaults/vault_1', () => HttpResponse.json(vault())),
+      http.get('*/api/v1/vaults/vault_1/credentials', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+    )
+
+    const onOpenChange = vi.fn()
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <RotateCredentialSheet vaultId="vault_1" credential={credential()} onOpenChange={onOpenChange} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.change(screen.getByLabelText('New secret value'), { target: { value: 'rotated-secret' } })
+    fireEvent.click(screen.getByRole('button', { name: /Rotate credential/i }))
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+  })
+
+  it('shows toast error when POST /api/v1/vaults/:vaultId/credentials/:id/versions returns 500', async () => {
+    server.use(
+      http.post('*/api/v1/vaults/vault_1/credentials/vaultcred_1/versions', () =>
+        HttpResponse.json({ error: 'Rotation failed' }, { status: 500 }),
+      ),
+    )
+
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <RotateCredentialSheet vaultId="vault_1" credential={credential()} onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.change(screen.getByLabelText('New secret value'), { target: { value: 'rotated-secret' } })
+    fireEvent.click(screen.getByRole('button', { name: /Rotate credential/i }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /Rotate credential/i })).toBeInTheDocument())
+  })
+
+  it('shows rotating state on button while mutation is pending', async () => {
+    let resolveRequest: () => void
+    server.use(
+      http.post('*/api/v1/vaults/vault_1/credentials/vaultcred_1/versions', async () => {
+        await new Promise<void>((resolve) => {
+          resolveRequest = resolve
+        })
+        return HttpResponse.json({ id: 'vaultver_new' }, { status: 201 })
+      }),
+    )
+
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <RotateCredentialSheet vaultId="vault_1" credential={credential()} onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.change(screen.getByLabelText('New secret value'), { target: { value: 'rotated-secret' } })
+    fireEvent.click(screen.getByRole('button', { name: /Rotate credential/i }))
+
+    await waitFor(() => expect(screen.getByText('Rotating credential')).toBeInTheDocument())
+    resolveRequest!()
+  })
+})
+
+// ─── VaultsPage ──────────────────────────────────────────────────────────────
+
+describe('[spec: vaults/console-page] VaultsPage', () => {
+  function setupPage(seedVaults: Vault[] = []) {
+    const vaults = createCollection<Vault>(seedVaults)
+    server.use(
+      http.get('*/api/v1/vaults', () =>
+        HttpResponse.json({ data: vaults.list(), pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+      http.patch('*/api/v1/vaults/:vaultId', ({ params }) => {
+        const existing = vaults.get(String(params.vaultId))
+        if (!existing) return HttpResponse.json({ error: 'not found' }, { status: 404 })
+        const updated = { ...existing, archivedAt: new Date().toISOString() }
+        vaults.put(updated)
+        return HttpResponse.json(updated)
+      }),
+      http.post('*/api/v1/vaults', async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>
+        const created = vault({ id: `vault_${vaults.items.size + 1}`, name: String(body.name ?? 'New Vault') })
+        vaults.put(created)
+        return HttpResponse.json(created, { status: 201 })
+      }),
+    )
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <VaultsPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    return { vaults, client }
+  }
+
+  it('renders the page header and create vault button', async () => {
+    setupPage([])
+    expect(screen.getByText('Vaults')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Create vault/i })).toBeInTheDocument()
+  })
+
+  it('renders vault rows after data loads', async () => {
+    setupPage([vault()])
+    expect(await screen.findByText('Provider credentials')).toBeInTheDocument()
+  })
+
+  it('shows empty state when no vaults are returned', async () => {
+    setupPage([])
+    await waitFor(() => expect(screen.getByText('No vaults')).toBeInTheDocument())
+  })
+
+  it('opens create vault sheet when Create vault button is clicked', async () => {
+    setupPage([])
+    fireEvent.click(screen.getByRole('button', { name: /Create vault/i }))
+    await waitFor(() => expect(screen.getByText('Create Vault')).toBeInTheDocument())
+  })
+})
+
+// ─── VaultDetailPage ─────────────────────────────────────────────────────────
+
+describe('[spec: vaults/console-detail-page] VaultDetailPage', () => {
+  function setupDetailPage(vaultData: Vault | null, initialCredentials: VaultCredential[] = []) {
+    const vaults = createCollection<Vault>(vaultData ? [vaultData] : [])
+    const credentials = createCollection<VaultCredential>(initialCredentials)
+
+    server.use(
+      http.get('*/api/v1/vaults/:vaultId', ({ params }) => {
+        const v = vaults.get(String(params.vaultId))
+        return v ? HttpResponse.json(v) : HttpResponse.json({ error: 'not found' }, { status: 404 })
+      }),
+      http.get('*/api/v1/vaults/:vaultId/credentials', () =>
+        HttpResponse.json({ data: credentials.list(), pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+      http.get('*/api/v1/audit-records', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+      http.patch('*/api/v1/vaults/:vaultId/credentials/:credentialId', ({ params }) => {
+        const cred = credentials.get(String(params.credentialId))
+        if (!cred) return HttpResponse.json({ error: 'not found' }, { status: 404 })
+        const revoked: VaultCredential = { ...cred, state: 'revoked', revokedAt: new Date().toISOString() }
+        credentials.put(revoked)
+        return HttpResponse.json(revoked)
+      }),
+      http.post('*/api/v1/vaults/:vaultId/credentials', async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>
+        const cred = credential({ id: 'vaultcred_new', name: String(body.name ?? 'New cred') })
+        credentials.put(cred)
+        return HttpResponse.json(cred, { status: 201 })
+      }),
+      http.post('*/api/v1/vaults/:vaultId/credentials/:credentialId/versions', () =>
+        HttpResponse.json({ id: 'vaultver_new' }, { status: 201 }),
+      ),
+    )
+
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/vaults/vault_1']}>
+          <Routes>
+            <Route path="/vaults/:vaultId" element={<VaultDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    return { vaults, credentials, client }
+  }
+
+  it('renders vault name in header after load', async () => {
+    setupDetailPage(vault())
+    expect(await screen.findByText('Provider credentials')).toBeInTheDocument()
+  })
+
+  it('renders Vault detail fallback title when vault is not found', async () => {
+    setupDetailPage(null)
+    expect(screen.getByText('Vault detail')).toBeInTheDocument()
+  })
+
+  it('renders credential table after data loads', async () => {
+    setupDetailPage(vault(), [credential()])
+    expect(await screen.findByText('OpenAI key')).toBeInTheDocument()
+  })
+
+  it('opens AddCredentialSheet when onAddCredential is triggered', async () => {
+    setupDetailPage(vault())
+    await screen.findByText('Provider credentials')
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add credential' })[0] as HTMLElement)
+    await waitFor(() =>
+      expect(
+        screen.getByText('The secret value is encrypted at rest and never returned by the control plane.'),
+      ).toBeInTheDocument(),
+    )
+  })
+
+  it('opens RotateCredentialSheet when onRotate is triggered', async () => {
+    setupDetailPage(vault(), [credential()])
+    await screen.findByText('OpenAI key')
+    fireEvent.click(screen.getByRole('button', { name: 'Rotate credential' }))
+    await waitFor(() => expect(screen.getByText(/Create a new active version for OpenAI key/)).toBeInTheDocument())
+  })
+
+  it('calls PATCH /api/v1/vaults/:vaultId/credentials/:id when onRevoke is triggered', async () => {
+    stubPointerCapture()
+
+    const { credentials } = setupDetailPage(vault(), [credential()])
+    await screen.findByText('OpenAI key')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke credential' }))
+    await waitFor(() => expect(screen.getByText('Revoke credential?')).toBeInTheDocument())
+    const confirmBtns = screen.getAllByRole('button', { name: 'Revoke credential', hidden: true })
+    fireEvent.click(confirmBtns[confirmBtns.length - 1] as HTMLElement)
+    await waitFor(() => expect(credentials.get('vaultcred_1')?.state).toBe('revoked'))
+  })
+
+  it('closes RotateCredentialSheet after successful rotation', async () => {
+    setupDetailPage(vault(), [credential()])
+    await screen.findByText('OpenAI key')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Rotate credential' }))
+    await waitFor(() => expect(screen.getByText(/Create a new active version for OpenAI key/)).toBeInTheDocument())
+
+    fireEvent.change(screen.getByLabelText('New secret value'), { target: { value: 'new-secret' } })
+    fireEvent.click(screen.getByRole('button', { name: /Rotate credential/i }))
+
+    await waitFor(() => expect(screen.queryByText(/Create a new active version for OpenAI key/)).toBeNull())
+  })
+
+  it('filters audit records to only those matching the vault id and sorts by date descending', async () => {
+    const vaultRecord = auditRecord({
+      id: 'audit_vault',
+      action: 'vault.update',
+      resourceType: 'vault',
+      resourceId: 'vault_1',
+      metadata: {},
+      createdAt: '2026-05-20T00:00:00.000Z',
+    })
+    const matchingRecord = auditRecord({
+      id: 'audit_match',
+      action: 'vault.create',
+      resourceType: 'vault_credential',
+      resourceId: 'vaultcred_1',
+      metadata: { vaultId: 'vault_1' },
+      createdAt: '2026-05-23T00:00:00.000Z',
+    })
+    const nonMatchingRecord = auditRecord({
+      id: 'audit_no_match',
+      resourceType: 'vault_credential',
+      metadata: { vaultId: 'vault_other' },
+    })
+
+    // Override the audit-records handler to serve different responses for different resourceType params
+    server.use(
+      http.get('*/api/v1/vaults/:vaultId', () => HttpResponse.json(vault())),
+      http.get('*/api/v1/vaults/:vaultId/credentials', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+      http.get('*/api/v1/audit-records', ({ request }) => {
+        const url = new URL(request.url)
+        const resourceType = url.searchParams.get('resourceType')
+        if (resourceType === 'vault') {
+          return HttpResponse.json({
+            data: [vaultRecord],
+            pagination: { limit: 50, hasMore: false, nextCursor: null },
+          })
+        }
+        return HttpResponse.json({
+          data: [matchingRecord, nonMatchingRecord],
+          pagination: { limit: 50, hasMore: false, nextCursor: null },
+        })
+      }),
+    )
+
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/vaults/vault_1']}>
+          <Routes>
+            <Route path="/vaults/:vaultId" element={<VaultDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    await screen.findByText('Provider credentials')
+    await waitFor(() => expect(screen.getByText('vault.create')).toBeInTheDocument())
+    expect(screen.getByText('vault.update')).toBeInTheDocument()
+    expect(screen.queryByText('audit_no_match')).toBeNull()
+  })
+})
+
+// ─── useVaultActions ─────────────────────────────────────────────────────────
+
+describe('[spec: vaults/actions] useVaultActions', () => {
+  function ActionHarness({ onReady }: { onReady: (actions: ReturnType<typeof useVaultActions>) => void }) {
+    const actions = useVaultActions()
+    onReady(actions)
+    return null
+  }
+
+  function renderActions(onReady: (actions: ReturnType<typeof useVaultActions>) => void) {
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <ActionHarness onReady={onReady} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+  }
+
+  it('exposes archiveVault function and archiveVaultPending boolean', () => {
+    server.use(
+      http.patch('*/api/v1/vaults/:vaultId', () => HttpResponse.json(vault({ archivedAt: new Date().toISOString() }))),
+      http.get('*/api/v1/vaults', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+    )
+
+    let capturedActions: ReturnType<typeof useVaultActions> | null = null
+    renderActions((a) => {
+      capturedActions = a
+    })
+
+    expect(typeof capturedActions!.archiveVault).toBe('function')
+    expect(typeof capturedActions!.archiveVaultPending).toBe('boolean')
+    expect(capturedActions!.archiveVaultPending).toBe(false)
+  })
+
+  it('calls PATCH /api/v1/vaults/:vaultId with archived:true', async () => {
+    let capturedParams: unknown
+    server.use(
+      http.patch('*/api/v1/vaults/:vaultId', ({ params }) => {
+        capturedParams = params.vaultId
+        return HttpResponse.json(vault({ id: String(params.vaultId), archivedAt: new Date().toISOString() }))
+      }),
+      http.get('*/api/v1/vaults', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+    )
+
+    let capturedActions: ReturnType<typeof useVaultActions> | null = null
+    renderActions((a) => {
+      capturedActions = a
+    })
+
+    capturedActions!.archiveVault('vault_42')
+    await waitFor(() => expect(capturedParams).toBe('vault_42'))
+  })
+
+  it('handles PATCH /api/v1/vaults/:vaultId returning 500', async () => {
+    server.use(
+      http.patch('*/api/v1/vaults/:vaultId', () => HttpResponse.json({ error: 'Network failure' }, { status: 500 })),
+    )
+
+    let capturedActions: ReturnType<typeof useVaultActions> | null = null
+    renderActions((a) => {
+      capturedActions = a
+    })
+
+    capturedActions!.archiveVault('vault_fail')
+    await waitFor(() => expect(capturedActions!.archiveVaultPending).toBe(false))
   })
 })

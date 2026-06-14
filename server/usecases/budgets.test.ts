@@ -72,6 +72,36 @@ describe('[spec: governance/budget-create] createBudget', () => {
   })
 })
 
+describe('[spec: governance/budget-create] createBudget — provider and model scoped', () => {
+  it('inserts a provider-scoped budget with a providerId', async () => {
+    const budget = await createBudget(fakeDeps(), auth, {
+      scope: 'provider',
+      providerId: 'workers-ai',
+      modelId: null,
+      limitType: 'tokens',
+      limitValue: 1000,
+      window: 'day',
+      enabled: true,
+      metadata: {},
+    })
+    expect(budget.scope).toBe('provider')
+  })
+
+  it('inserts a model-scoped budget with a modelId', async () => {
+    const budget = await createBudget(fakeDeps(), auth, {
+      scope: 'model',
+      providerId: 'workers-ai',
+      modelId: '@cf/llama',
+      limitType: 'cost_micros',
+      limitValue: 500,
+      window: 'day',
+      enabled: true,
+      metadata: {},
+    })
+    expect(budget.scope).toBe('model')
+  })
+})
+
 describe('[spec: governance/budget-update] updateBudget', () => {
   it('merges present fields and keeps the rest', async () => {
     const existing = budgetRecord({ limitValue: 1000, window: 'month', enabled: true })
@@ -79,5 +109,23 @@ describe('[spec: governance/budget-update] updateBudget', () => {
     expect(updated.limitValue).toBe(2000)
     expect(updated.enabled).toBe(false)
     expect(updated.window).toBe('month')
+  })
+
+  it('keeps existing window when not specified in patch', async () => {
+    const existing = budgetRecord({ window: 'day' })
+    const updated = await updateBudget(fakeDeps(), auth, existing, { limitValue: 9999 })
+    expect(updated.window).toBe('day')
+  })
+
+  it('keeps existing metadata when not specified in patch', async () => {
+    const existing = budgetRecord({ metadata: { owner: 'team-a' } })
+    const updated = await updateBudget(fakeDeps(), auth, existing, { enabled: false })
+    expect(updated.metadata).toEqual({ owner: 'team-a' })
+  })
+
+  it('keeps existing limitValue when not specified in patch', async () => {
+    const existing = budgetRecord({ limitValue: 777 })
+    const updated = await updateBudget(fakeDeps(), auth, existing, { window: 'day' })
+    expect(updated.limitValue).toBe(777)
   })
 })

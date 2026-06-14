@@ -7,7 +7,7 @@
 // approval-decision continuation. It sits in server/runtime/ alongside the
 // other runtime execution infrastructure (drivers, sandbox/DO bindings, the
 // turn queue) and is consumed by the SessionRuntimeGateway adapter, the queue
-// consumer (workers/bootstrap), and the scheduler dispatcher.
+// consumer (server/worker), and the scheduled-dispatch wrapper.
 //
 // Every public entry here is Response-free: HTTP concerns (Response, status
 // codes, SSE) stay in server/http/sessions.ts. Outcomes cross the boundary as
@@ -29,7 +29,6 @@ import {
   type SessionRow,
 } from '../adapters/repos/runtime-orchestration'
 import { recordAudit } from '../audit'
-import type { AuthContext } from '../auth/session'
 import type { RuntimeName } from '../contracts/environment-contracts'
 import {
   composeInitialPrompt,
@@ -44,6 +43,7 @@ import {
   evaluateSandboxRuntimePolicy,
   policyBlocksSandboxOperation,
 } from '../policy'
+import type { AuthScope } from '../usecases/ports'
 import { runtimeDriver, runtimeDriverName } from './drivers'
 import { PLATFORM_DEFAULT_PROVIDER, providerRuntimeEnv, resolveSessionProviderConfig } from './provider-env'
 import { dispatchRunnerSessionCommand, hasAcceptedRunnerSessionChannel } from './runner-session-command'
@@ -264,7 +264,7 @@ function normalizeResourceRefs(resourceRefs: ResourceRef[]) {
   return { resourceRefs: normalized }
 }
 
-async function validateResourceCredentialRefs(db: Db, auth: AuthContext, resourceRefs: ResourceRef[]) {
+async function validateResourceCredentialRefs(db: Db, auth: AuthScope, resourceRefs: ResourceRef[]) {
   const credentialRefs = resourceRefs
     .filter((resourceRef): resourceRef is GitHubRepositoryResourceRef => resourceRef.type === 'github_repository')
     .map((resourceRef) => resourceRef.credentialRef)
@@ -290,7 +290,7 @@ async function validateResourceCredentialRefs(db: Db, auth: AuthContext, resourc
 
 async function resolveSecretEnvEntries(
   db: Db,
-  auth: AuthContext,
+  auth: AuthScope,
   secretEnv: SecretEnvEntry[],
 ): Promise<{ entries: ResolvedSecretEnvEntry[] } | { fields: Record<string, string> }> {
   const repo = createRuntimeOrchestrationRepo(db)
@@ -337,7 +337,7 @@ async function resolveSecretEnvEntries(
 
 // ── Session reads ───────────────────────────────────────────────────────────
 
-async function findSession(db: Db, auth: AuthContext, sessionId: string) {
+async function findSession(db: Db, auth: AuthScope, sessionId: string) {
   return createRuntimeOrchestrationRepo(db).findSession(auth.project.id, sessionId)
 }
 
@@ -375,7 +375,7 @@ async function resolveSessionProviderId(db: Db, projectId: string, providerId: s
 
 async function validateRuntimeProviderModel(
   db: Db,
-  auth: AuthContext,
+  auth: AuthScope,
   environmentId: string,
   hostingMode: 'cloud' | 'self_hosted',
   runtime: RuntimeName,
@@ -416,7 +416,7 @@ function mcpConnectorIds(snapshot: Record<string, unknown>) {
 
 async function resolveMcpSnapshot(
   db: Db,
-  auth: AuthContext,
+  auth: AuthScope,
   sessionId: string,
   agentSnapshot: SerializedAgentVersion,
   environmentSnapshot: NormalizedEnvironmentSnapshot | null,
@@ -472,7 +472,7 @@ async function resolveMcpSnapshot(
 
 async function enqueueSelfHostedSessionWork(
   db: Db,
-  auth: AuthContext,
+  auth: AuthScope,
   values: {
     session: SessionRow
     agentSnapshot: SerializedAgentVersion
@@ -534,7 +534,7 @@ async function enqueueSelfHostedSessionWork(
   })
 }
 
-async function latestRunnerResumeToken(db: Db, auth: AuthContext, sessionId: string) {
+async function latestRunnerResumeToken(db: Db, auth: AuthScope, sessionId: string) {
   const rows = await createRuntimeOrchestrationRepo(db).recentSessionWorkItems(auth.project.id, sessionId, 5)
   for (const row of rows) {
     if (row.state === 'succeeded') {
@@ -556,7 +556,7 @@ async function latestRunnerResumeToken(db: Db, auth: AuthContext, sessionId: str
 export async function createSessionForAgent(
   env: Env,
   db: Db,
-  auth: AuthContext,
+  auth: AuthScope,
   agentId: string,
   environmentId: string,
   options: CreateSessionOptions,
@@ -923,7 +923,7 @@ export async function createSessionForAgent(
 async function startSessionRuntimeForRow(
   env: Env,
   db: Db,
-  auth: AuthContext,
+  auth: AuthScope,
   input: {
     pending: SessionRow
     agentSnapshot: SerializedAgentVersion
@@ -1057,7 +1057,7 @@ type CloudTurnOutcome =
 async function executeCloudSessionTurn(
   env: Env,
   db: Db,
-  auth: AuthContext,
+  auth: AuthScope,
   session: SessionRow,
   work: { prompt?: string; continuation?: boolean },
   auditAction: 'session.initial_prompt' | 'session.command',
@@ -1260,27 +1260,17 @@ export async function consumeCloudTurnMessage(env: Env, message: CloudTurnMessag
   await executeCloudSessionTurn(env, db, auth, session, { prompt: message.prompt }, message.auditAction)
 }
 
-function cloudTurnSystemAuth(message: CloudTurnMessage): AuthContext {
+function cloudTurnSystemAuth(message: CloudTurnMessage): AuthScope {
   return {
-    user: { id: 'system:cloud-turn', email: '', name: 'AMA cloud turn runner', avatarUrl: null },
+    user: { id: 'system:cloud-turn' },
     organization: { id: message.organizationId, name: message.organizationId },
     project: { id: message.projectId, name: message.projectId },
     roles: ['system'],
     permissions: ['*'],
-    oidc: {
-      subject: 'system:cloud-turn',
-      clientId: null,
-      scope: null,
-      issuer: null,
-      externalTenantId: null,
-      runnerId: null,
-      runnerProjectId: null,
-      runnerEnvironmentId: null,
-    },
   }
 }
 
-async function dispatchInitialPrompt(env: Env, db: Db, auth: AuthContext, session: SessionRow, initialPrompt: string) {
+async function dispatchInitialPrompt(env: Env, db: Db, auth: AuthScope, session: SessionRow, initialPrompt: string) {
   const submittedAt = now()
   const started = await createRuntimeOrchestrationRepo(db).updateSessionWhenState(
     auth.project.id,
@@ -1315,7 +1305,7 @@ export type PromptDispatchOutcome =
 export async function dispatchSessionPrompt(
   env: Env,
   db: Db,
-  auth: AuthContext,
+  auth: AuthScope,
   sessionId: string,
   content: string,
 ): Promise<PromptDispatchOutcome> {
@@ -1384,7 +1374,7 @@ export async function dispatchSessionPrompt(
 
 async function queueSelfHostedSessionPrompt(
   db: Db,
-  auth: AuthContext,
+  auth: AuthScope,
   session: SessionRow,
   content: string,
 ): Promise<PromptDispatchOutcome> {
@@ -1422,7 +1412,7 @@ async function queueSelfHostedSessionPrompt(
   return { ok: true, delivery: 'queued', state: 'accepted' }
 }
 
-async function assertRuntimeSessionRunning(db: Db, auth: AuthContext, sessionId: string) {
+async function assertRuntimeSessionRunning(db: Db, auth: AuthScope, sessionId: string) {
   const active = await createRuntimeOrchestrationRepo(db).sessionState(auth.project.id, sessionId)
   if (active?.state !== 'running') {
     throw new RuntimeTurnCancelledError()
@@ -1434,13 +1424,7 @@ async function loadRuntimeMessages(db: Db, sessionId: string) {
   return runtimeMessagesFromEvents(rows)
 }
 
-async function markInitialPromptFailed(
-  db: Db,
-  auth: AuthContext,
-  session: SessionRow,
-  message: string,
-  status?: number,
-) {
+async function markInitialPromptFailed(db: Db, auth: AuthScope, session: SessionRow, message: string, status?: number) {
   const failedAt = now()
   await createRuntimeOrchestrationRepo(db).updateSessionWhenState(auth.project.id, session.id, 'running', {
     state: 'error',
@@ -1460,7 +1444,7 @@ async function markInitialPromptFailed(
 
 export async function appendRuntimeEvent(
   db: Db,
-  values: { auth: AuthContext; sessionId: string; event: Record<string, unknown>; metadata?: Record<string, unknown> },
+  values: { auth: AuthScope; sessionId: string; event: Record<string, unknown>; metadata?: Record<string, unknown> },
 ) {
   const canonicalEvent = canonicalAmaSessionEventFromRuntimeEvent(
     values.event,
@@ -1495,7 +1479,7 @@ export type StopSessionResult = { ok: true; session: SessionRow } | { ok: false;
 export async function stopSession(
   env: Env,
   db: Db,
-  auth: AuthContext,
+  auth: AuthScope,
   sessionId: string,
   requestId: string | null,
   reason = 'user_requested',
@@ -1510,7 +1494,7 @@ export async function stopSession(
 async function stopSessionRow(
   env: Env,
   db: Db,
-  auth: AuthContext,
+  auth: AuthScope,
   session: SessionRow,
   requestId: string | null,
   reason = 'user_requested',
@@ -1585,7 +1569,7 @@ async function stopSessionRow(
 async function stopSelfHostedSession(
   env: Env,
   db: Db,
-  auth: AuthContext,
+  auth: AuthScope,
   session: SessionRow,
   requestId: string | null,
   reason: string,
@@ -1652,7 +1636,7 @@ async function stopSelfHostedSession(
 export async function archiveSession(
   env: Env,
   db: Db,
-  auth: AuthContext,
+  auth: AuthScope,
   sessionId: string,
   requestId: string | null,
 ): Promise<StopSessionResult> {
@@ -1691,7 +1675,7 @@ export async function archiveSession(
 
 export async function unarchiveSession(
   db: Db,
-  auth: AuthContext,
+  auth: AuthScope,
   sessionId: string,
   requestId: string | null,
 ): Promise<SessionRow> {
@@ -1718,7 +1702,7 @@ export async function unarchiveSession(
 }
 
 // Mark pending sessions whose cloud runtime startup window elapsed as errored.
-export async function markExpiredPendingSessions(db: Db, auth: AuthContext) {
+export async function markExpiredPendingSessions(db: Db, auth: AuthScope) {
   const expiredBefore = new Date(Date.now() - RUNTIME_START_TIMEOUT_MS).toISOString()
   await createRuntimeOrchestrationRepo(db).markExpiredPendingSessions(auth.project.id, expiredBefore, now())
 }
@@ -1751,7 +1735,7 @@ export type ApprovalRowOutput = {
 export async function decideSessionApproval(
   env: Env,
   db: Db,
-  auth: AuthContext,
+  auth: AuthScope,
   sessionId: string,
   approvalId: string,
   body: { decision: 'approve' | 'deny'; reason?: string; result?: Record<string, unknown> },

@@ -235,6 +235,65 @@ describe('[spec: agents/create] createAgent', () => {
       }),
     ).rejects.toMatchObject({ fields: { tools: expect.stringContaining('blocked') } })
   })
+
+  it('rejects an invalid skill reference format', async () => {
+    await expect(
+      createAgent(fakeDeps(), auth, {
+        name: 'x',
+        description: null,
+        config: config({ skills: ['not-a-valid-skill'] }),
+      }),
+    ).rejects.toMatchObject({ fields: { skills: expect.any(String) } })
+  })
+
+  it('rejects raw secret material in subagents', async () => {
+    await expect(
+      createAgent(fakeDeps(), auth, {
+        name: 'x',
+        description: null,
+        config: config({ subagents: [{ apiKey: 'raw-secret' }] }),
+      }),
+    ).rejects.toMatchObject({ fields: { subagents: expect.any(String) } })
+  })
+
+  it('rejects an invalid capability tag format', async () => {
+    await expect(
+      createAgent(fakeDeps(), auth, {
+        name: 'x',
+        description: null,
+        config: config({ capabilityTags: ['invalid tag with space'] }),
+      }),
+    ).rejects.toMatchObject({ fields: { capabilityTags: expect.any(String) } })
+  })
+
+  it('rejects raw secret material in handoffPolicy config secrets', async () => {
+    await expect(
+      createAgent(fakeDeps(), auth, {
+        name: 'x',
+        description: null,
+        config: config({ handoffPolicy: { secretToken: 'raw-secret' } }),
+      }),
+    ).rejects.toMatchObject({ fields: expect.objectContaining({}) })
+  })
+
+  it('validates successfully when provider and model are both valid', async () => {
+    const agent = await createAgent(fakeDeps(), auth, {
+      name: 'x',
+      description: null,
+      config: config({ providerId: 'provider_x', model: 'gpt-4' }),
+    })
+    expect(agent.providerId).toBe('provider_x')
+    expect(agent.model).toBe('gpt-4')
+  })
+
+  it('passes validation when a non-empty mcpConnectors list contains only connected connectors', async () => {
+    const agent = await createAgent(fakeDeps(), auth, {
+      name: 'x',
+      description: null,
+      config: config({ mcpConnectors: ['github'] }),
+    })
+    expect(agent.mcpConnectors).toEqual(['github'])
+  })
 })
 
 describe('[spec: agents/update] updateAgent', () => {
@@ -369,5 +428,82 @@ describe('[spec: agents/memory] memory', () => {
         metadata: { secretValue: 'raw-secret' },
       }),
     ).rejects.toMatchObject({ fields: { metadata: expect.any(String) } })
+  })
+
+  it('returns the existing memory record without inserting on read when it already exists', async () => {
+    const existing: AgentMemoryRecord = {
+      agentId: 'agent_1',
+      projectId: 'project_1',
+      content: 'stored content',
+      metadata: { version: '2' },
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    }
+    let insertCalled = false
+    const deps = fakeDeps({
+      repo: {
+        findMemory: async () => existing,
+        insertMemory: async () => {
+          insertCalled = true
+        },
+      },
+    })
+    const memory = await readAgentMemory(deps, 'project_1', agentRecord())
+    expect(memory.content).toBe('stored content')
+    expect(insertCalled).toBe(false)
+  })
+
+  it('inserts and returns a new singleton on first replace when no memory exists', async () => {
+    const inserted: AgentMemoryRecord[] = []
+    const deps = fakeDeps({
+      repo: {
+        findMemory: async () => null,
+        insertMemory: async (record) => void inserted.push(record),
+      },
+    })
+    const memory = await replaceAgentMemory(deps, 'project_1', agentRecord(), {
+      content: 'initial',
+      metadata: { created: true },
+    })
+    expect(memory.content).toBe('initial')
+    expect(memory.metadata).toEqual({ created: true })
+    expect(inserted).toHaveLength(1)
+    expect(inserted[0]!.content).toBe('initial')
+  })
+})
+
+describe('[spec: agents/update] updateAgent — archived idempotent', () => {
+  it('is a no-op when patching an archived agent with archived:true', async () => {
+    const archived = agentRecord({ archivedAt: '2026-01-02T00:00:00.000Z' })
+    const result = await updateAgent(fakeDeps(), auth, archived, { archived: true })
+    expect(result.agent.archivedAt).toBe('2026-01-02T00:00:00.000Z')
+    expect(result.archived).toBe(false)
+  })
+
+  it('is a no-op when patching an archived agent with an empty patch', async () => {
+    const archived = agentRecord({ archivedAt: '2026-01-02T00:00:00.000Z' })
+    const result = await updateAgent(fakeDeps(), auth, archived, {})
+    expect(result.agent.archivedAt).toBe('2026-01-02T00:00:00.000Z')
+    expect(result.archived).toBe(false)
+  })
+
+  it('updates providerId, model, and role when explicitly patched', async () => {
+    const result = await updateAgent(fakeDeps(), auth, agentRecord({ providerId: null, model: null, role: null }), {
+      providerId: 'provider_new',
+      model: 'gpt-4',
+      role: 'analyst',
+    })
+    expect(result.agent.providerId).toBe('provider_new')
+    expect(result.agent.model).toBe('gpt-4')
+    expect(result.agent.role).toBe('analyst')
+  })
+
+  it('resolves a handoff by an explicit capability', async () => {
+    const worker = agentRecord({ id: 'agent_worker', role: 'worker', capabilityTags: ['build'] })
+    const deps = fakeDeps({ repo: { liveAgents: async () => [worker] } })
+    const candidates = await resolveHandoffCandidates(deps, 'project_1', agentRecord({ id: 'agent_lead' }), {
+      capability: 'build',
+    })
+    expect(candidates.map((c) => c.id)).toEqual(['agent_worker'])
   })
 })

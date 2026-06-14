@@ -41,6 +41,12 @@ describe('[spec: environments/secret-material] validateSecretFreeObjects', () =>
     expect(validateSecretFreeObjects({ ...clean, runtimeConfig: { npmToken: 'x' } })).toEqual({
       runtimeConfig: expect.any(String),
     })
+    expect(validateSecretFreeObjects({ ...clean, mcpPolicy: { token: 'x' } })).toEqual({
+      mcpPolicy: expect.any(String),
+    })
+    expect(validateSecretFreeObjects({ ...clean, packageManagerPolicy: { password: 'x' } })).toEqual({
+      packageManagerPolicy: expect.any(String),
+    })
   })
 })
 

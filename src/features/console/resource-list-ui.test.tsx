@@ -1,14 +1,10 @@
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { ClientPagination } from '@/console/use-client-pagination'
 import { McpView } from '@/features/mcp/McpView'
 import { ProvidersView } from '@/features/providers/ProvidersView'
 import type { Connection, Connector, Provider } from '@/lib/api'
-
-afterEach(() => {
-  cleanup()
-})
 
 function pagination<T>(items: T[]): ClientPagination<T> {
   return {

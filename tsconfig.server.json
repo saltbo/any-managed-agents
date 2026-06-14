@@ -16,11 +16,10 @@
     },
     "types": ["@cloudflare/workers-types", "node"]
   },
-  "include": ["server", "workers", "test", "specs", "drizzle.config.ts", "vitest*.ts"],
+  "include": ["server", "e2e", "drizzle.config.ts", "vitest*.ts"],
   "exclude": [
-    "server/http/**/*.test.ts",
-    "workers/**/*.test.ts",
-    "server/test/apply-migrations.ts",
-    "server/test/auth.ts"
+    "server/integration/**/*.test.ts",
+    "server/integration/apply-migrations.ts",
+    "server/integration/auth.ts"
   ]
 }

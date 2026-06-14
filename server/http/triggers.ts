@@ -12,7 +12,6 @@ import {
   SecretEnvEntrySchema,
 } from '../openapi'
 import {
-  type AuthScope,
   type SecretEnvEntry,
   TriggerConflictError,
   type TriggerRecord,
@@ -359,7 +358,7 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
       if (auth instanceof Response) {
         return auth
       }
-      const scope = authScope(auth)
+      const scope = auth
       try {
         const trigger = await createTrigger(deps, scope, {
           agentId: body.agentId,
@@ -450,7 +449,7 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
       if (!trigger) {
         return c.json(errorBody('not_found', 'Trigger not found'), 404)
       }
-      const scope = authScope(auth)
+      const scope = auth
       try {
         const result = await updateTrigger(deps, scope, trigger, patchFromBody(body))
         await deps.audit.record(scope, {
@@ -525,10 +524,6 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
 }
 
 // --- helpers ---
-
-function authScope(auth: Awaited<ReturnType<typeof requireAuth>> & object): AuthScope {
-  return auth as unknown as AuthScope
-}
 
 function patchFromBody(body: z.infer<typeof UpdateTriggerSchema>): UpdateTriggerPatch {
   return {
