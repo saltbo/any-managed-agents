@@ -31,6 +31,7 @@ import {
 import { toolExecutor } from '../adapters/runtime/sandbox-tool-executor'
 import { recordAudit } from '../audit'
 import type { RuntimeName } from '../contracts/environment-contracts'
+import { environmentHostingMode, sessionRuntimeConfig, sessionRuntimeFromMetadata } from '../domain/runtime-session'
 import {
   composeInitialPrompt,
   hasEmbeddedCredentialUrl,
@@ -201,22 +202,6 @@ function normalizeEnvironmentSnapshot(
     networkPolicy: objectValue(snapshotRecord.networkPolicy),
     runtimeConfig: objectValue(snapshotRecord.runtimeConfig),
   } as NormalizedEnvironmentSnapshot
-}
-
-function environmentHostingMode(snapshot: NormalizedEnvironmentSnapshot | null) {
-  return snapshot?.hostingMode === 'self_hosted' ? 'self_hosted' : 'cloud'
-}
-
-function sessionRuntimeFromMetadata(metadata: Record<string, unknown>): RuntimeName {
-  const runtime = metadata.runtime
-  if (typeof runtime !== 'string') {
-    throw new Error('Session runtime metadata is required')
-  }
-  return runtime as RuntimeName
-}
-
-function sessionRuntimeConfig(metadata: Record<string, unknown>) {
-  return objectValue(metadata.runtimeConfig)
 }
 
 // ── Resource ref + secret env resolution ────────────────────────────────────
