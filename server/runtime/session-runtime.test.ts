@@ -162,7 +162,7 @@ describe('session-runtime', () => {
           repo: 'alpha',
           ref: 'release',
           mountPath: '/workspace/repos/saltbo/alpha',
-          credentialRef: 'vaultcred_123',
+          credentialRef: { credentialId: 'vaultcred_123' },
         },
       ]),
     ).toEqual({

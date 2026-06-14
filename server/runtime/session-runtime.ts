@@ -168,18 +168,36 @@ export function runtimeEndpointPath(sessionId: string) {
   return `/api/v1/runtime/sessions/${sessionId}/rpc`
 }
 
+// The runner manifest carries the credential reference as a single vault id
+// string. The API now models resourceRef.credentialRef as { credentialId,
+// versionId? }, so flatten it back to versionId ?? credentialId here — the
+// runner protocol is unchanged.
+function manifestCredentialRef(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined
+  }
+  const ref = value as { credentialId?: unknown; versionId?: unknown }
+  if (typeof ref.versionId === 'string') {
+    return ref.versionId
+  }
+  return typeof ref.credentialId === 'string' ? ref.credentialId : undefined
+}
+
 export function workspaceResourceManifest(resourceRefs: Record<string, unknown>[] = []) {
   const resources = resourceRefs
     .filter((resourceRef) => resourceRef.type === 'github_repository')
-    .map((resourceRef) => ({
-      type: 'github_repository',
-      owner: resourceRef.owner,
-      repo: resourceRef.repo,
-      mountPath: resourceRef.mountPath,
-      ...(typeof resourceRef.ref === 'string' ? { ref: resourceRef.ref } : {}),
-      ...(typeof resourceRef.credentialRef === 'string' ? { credentialRef: resourceRef.credentialRef } : {}),
-      status: 'declared',
-    }))
+    .map((resourceRef) => {
+      const credentialRef = manifestCredentialRef(resourceRef.credentialRef)
+      return {
+        type: 'github_repository',
+        owner: resourceRef.owner,
+        repo: resourceRef.repo,
+        mountPath: resourceRef.mountPath,
+        ...(typeof resourceRef.ref === 'string' ? { ref: resourceRef.ref } : {}),
+        ...(credentialRef ? { credentialRef } : {}),
+        status: 'declared',
+      }
+    })
     .sort((left, right) => String(left.mountPath).localeCompare(String(right.mountPath)))
   return {
     version: 1,

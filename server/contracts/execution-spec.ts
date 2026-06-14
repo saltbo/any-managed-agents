@@ -1,4 +1,5 @@
 import { z } from '@hono/zod-openapi'
+import { CredentialRefSchema } from '../openapi'
 
 // Workspace resource references and the shared execution-spec building blocks
 // that Session and Trigger both use (docs/api-v1-design.md §1.7). Kept in one
@@ -33,11 +34,6 @@ const GitRefSchema = z
     'Use a safe branch, tag, or commit ref.',
   )
 const MountPathSchema = z.string().min(1).max(200)
-const ResourceCredentialRefSchema = z
-  .string()
-  .min(1)
-  .max(120)
-  .regex(/^vault(?:cred|ver)_[A-Za-z0-9]+$/, 'Use a vault credential or credential version id.')
 
 export const GitHubRepositoryResourceRefSchema = z
   .object({
@@ -46,7 +42,10 @@ export const GitHubRepositoryResourceRefSchema = z
     repo: GitHubRepoSchema,
     ref: GitRefSchema.optional(),
     mountPath: MountPathSchema.optional(),
-    credentialRef: ResourceCredentialRefSchema.optional(),
+    // Unified vault credential reference (docs/api-v1-design.md §1.4): the same
+    // { credentialId, versionId? } object every other resource uses, replacing
+    // the bare vaultcred_/vaultver_ string this field used to carry.
+    credentialRef: CredentialRefSchema.optional(),
   })
   .strict()
   .openapi('GitHubRepositoryResourceRef')

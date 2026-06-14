@@ -87,7 +87,7 @@ export type GitHubRepositoryResourceRef = {
   repo: string
   ref?: string
   mountPath?: string
-  credentialRef?: string
+  credentialRef?: { credentialId: string; versionId?: string }
 }
 type SecretEnvEntry = { name: string; credentialRef: { credentialId: string; versionId?: string } }
 type ResolvedSecretEnvEntry = { name: string; credentialRef: { credentialId: string; versionId: string } }
@@ -268,11 +268,21 @@ async function validateResourceCredentialRefs(db: Db, auth: AuthScope, resourceR
   const credentialRefs = resourceRefs
     .filter((resourceRef): resourceRef is GitHubRepositoryResourceRef => resourceRef.type === 'github_repository')
     .map((resourceRef) => resourceRef.credentialRef)
-    .filter((credentialRef): credentialRef is string => typeof credentialRef === 'string')
+    .filter((credentialRef): credentialRef is { credentialId: string; versionId?: string } => credentialRef != null)
   const repo = createRuntimeOrchestrationRepo(db)
-  for (const credentialRef of new Set(credentialRefs)) {
-    if (credentialRef.startsWith('vaultver_')) {
-      const exists = await repo.activeCredentialVersionExists(auth.organization.id, auth.project.id, credentialRef)
+  const seen = new Set<string>()
+  for (const credentialRef of credentialRefs) {
+    const dedupeKey = `${credentialRef.credentialId}:${credentialRef.versionId ?? ''}`
+    if (seen.has(dedupeKey)) {
+      continue
+    }
+    seen.add(dedupeKey)
+    if (credentialRef.versionId) {
+      const exists = await repo.activeCredentialVersionExists(
+        auth.organization.id,
+        auth.project.id,
+        credentialRef.versionId,
+      )
       if (!exists) {
         return {
           credentialRef: 'Credential version must exist, be active, and belong to this project or organization.',
@@ -280,7 +290,7 @@ async function validateResourceCredentialRefs(db: Db, auth: AuthScope, resourceR
       }
       continue
     }
-    const exists = await repo.activeCredentialExists(auth.organization.id, auth.project.id, credentialRef)
+    const exists = await repo.activeCredentialExists(auth.organization.id, auth.project.id, credentialRef.credentialId)
     if (!exists) {
       return { credentialRef: 'Credential must exist, be active, and belong to this project or organization.' }
     }

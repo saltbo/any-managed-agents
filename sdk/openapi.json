@@ -5345,10 +5345,7 @@
             "maxLength": 200
           },
           "credentialRef": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 120,
-            "pattern": "^vault(?:cred|ver)_[A-Za-z0-9]+$"
+            "$ref": "#/components/schemas/CredentialRef"
           }
         },
         "required": [

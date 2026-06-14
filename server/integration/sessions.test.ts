@@ -700,7 +700,7 @@ describe('[CF] /api/v1/sessions', () => {
             repo: 'any-managed-agents',
             ref: 'feature/session-resources',
             mountPath: 'repos/ama',
-            credentialRef: credential.activeVersionId,
+            credentialRef: { credentialId: credential.id, versionId: credential.activeVersionId },
           },
         ],
       }),
@@ -714,7 +714,7 @@ describe('[CF] /api/v1/sessions', () => {
           repo: 'any-managed-agents',
           ref: 'feature/session-resources',
           mountPath: '/workspace/repos/ama',
-          credentialRef: credential.activeVersionId,
+          credentialRef: { credentialId: credential.id, versionId: credential.activeVersionId },
         },
       ],
     })
