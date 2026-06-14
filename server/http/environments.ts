@@ -63,7 +63,7 @@ const EnvironmentSchema = z
     packages: z.array(PackageSchema).openapi({ example: [{ name: 'tsx', version: 'latest' }] }),
     variables: z.record(z.string(), VariableSchema).openapi({ example: { NODE_ENV: { description: 'Runtime mode' } } }),
     credentialRefs: z.array(CredentialRefSchema).openapi({
-      example: [{ credentialId: 'cred_abc123', versionId: 'credver_abc123' }],
+      example: [{ credentialId: 'vaultcred_abc123', versionId: 'vaultver_abc123' }],
     }),
     hostingMode: HostingModeSchema.openapi({ example: 'cloud' }),
     networkPolicy: NetworkPolicySchema.openapi({
@@ -91,7 +91,7 @@ const EnvironmentVersionSchema = z
     packages: z.array(PackageSchema).openapi({ example: [{ name: 'tsx' }] }),
     variables: z.record(z.string(), VariableSchema).openapi({ example: { NODE_ENV: { required: true } } }),
     credentialRefs: z.array(CredentialRefSchema).openapi({
-      example: [{ credentialId: 'cred_abc123', versionId: 'credver_abc123' }],
+      example: [{ credentialId: 'vaultcred_abc123', versionId: 'vaultver_abc123' }],
     }),
     hostingMode: HostingModeSchema.openapi({ example: 'cloud' }),
     networkPolicy: NetworkPolicySchema.openapi({
@@ -123,7 +123,7 @@ const EnvironmentPayloadSchema = z
       .array(CredentialRefSchema)
       .max(100)
       .optional()
-      .openapi({ example: [{ credentialId: 'cred_abc123', versionId: 'credver_abc123' }] }),
+      .openapi({ example: [{ credentialId: 'vaultcred_abc123', versionId: 'vaultver_abc123' }] }),
     hostingMode: HostingModeSchema.optional().openapi({ example: 'cloud' }),
     networkPolicy: NetworkPolicySchema.optional().openapi({
       example: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },

@@ -47,7 +47,10 @@ const CreateLeaseSchema = z
 
 const UpdateLeaseSchema = z
   .object({
-    state: z.enum(['active', 'completed', 'failed', 'cancelled', 'interrupted']).optional(),
+    state: z.enum(['active', 'completed', 'failed', 'cancelled', 'interrupted']).optional().openapi({
+      description:
+        'Lease transition. `interrupted` is an action, not a resting state: it requeues the work item for recovery and the lease settles as `expired` in the resource.',
+    }),
     leaseDurationSeconds: z.number().int().min(15).max(MAX_LEASE_DURATION_SECONDS).optional().openapi({ example: 60 }),
     expiresAt: z.string().datetime().optional(),
     resumeToken: z.string().min(1).max(2048).optional().openapi({ example: 'runtime-session-uuid' }),

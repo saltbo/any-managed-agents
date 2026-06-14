@@ -52,8 +52,8 @@ export function listResponseSchema<T extends z.ZodType>(name: string, itemSchema
 // in the API (docs/api-v1-design.md §1.4).
 export const CredentialRefSchema = z
   .object({
-    credentialId: z.string().min(1).openapi({ example: 'cred_abc123' }),
-    versionId: z.string().min(1).optional().openapi({ example: 'credver_abc123' }),
+    credentialId: z.string().min(1).openapi({ example: 'vaultcred_abc123' }),
+    versionId: z.string().min(1).optional().openapi({ example: 'vaultver_abc123' }),
   })
   .openapi('CredentialRef')
 

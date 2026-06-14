@@ -118,7 +118,9 @@ const SessionSchema = z
       .openapi({ example: [{ type: 'github_repository', owner: 'saltbo', repo: 'any-managed-agents', ref: 'main' }] }),
     env: z.record(z.string(), z.string()).openapi({ example: { AK_API_URL: 'https://ak.example.com' } }),
     secretEnv: z.array(SecretEnvEntrySchema).openapi({
-      example: [{ name: 'AK_AGENT_KEY', credentialRef: { credentialId: 'cred_abc123', versionId: 'credver_abc123' } }],
+      example: [
+        { name: 'AK_AGENT_KEY', credentialRef: { credentialId: 'vaultcred_abc123', versionId: 'vaultver_abc123' } },
+      ],
     }),
     runtimeMetadata: SessionRuntimeMetadataSchema,
     state: z.enum(SESSION_STATES).openapi({ example: 'idle' }),
@@ -170,7 +172,7 @@ const CreateSessionSchema = z
       .array(SecretEnvEntrySchema)
       .max(50)
       .optional()
-      .openapi({ example: [{ name: 'AK_AGENT_KEY', credentialRef: { credentialId: 'cred_abc123' } }] }),
+      .openapi({ example: [{ name: 'AK_AGENT_KEY', credentialRef: { credentialId: 'vaultcred_abc123' } }] }),
     initialPrompt: z
       .string()
       .trim()
@@ -271,10 +273,10 @@ const SessionApprovalSchema = z
     result: JsonObjectSchema.nullable().openapi({
       description: 'Caller-provided custom tool result recorded instead of executing the tool.',
     }),
-    requestedAt: z.string().openapi({ example: '2026-06-12T12:00:00.000Z' }),
-    decidedAt: z.string().nullable(),
-    createdAt: z.string(),
-    updatedAt: z.string(),
+    requestedAt: z.string().datetime().openapi({ example: '2026-06-12T12:00:00.000Z' }),
+    decidedAt: z.string().datetime().nullable(),
+    createdAt: z.string().datetime(),
+    updatedAt: z.string().datetime(),
   })
   .openapi('SessionApproval')
 

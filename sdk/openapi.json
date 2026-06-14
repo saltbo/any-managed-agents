@@ -1424,8 +1424,8 @@
             },
             "example": [
               {
-                "credentialId": "cred_abc123",
-                "versionId": "credver_abc123"
+                "credentialId": "vaultcred_abc123",
+                "versionId": "vaultver_abc123"
               }
             ]
           },
@@ -1545,12 +1545,12 @@
           "credentialId": {
             "type": "string",
             "minLength": 1,
-            "example": "cred_abc123"
+            "example": "vaultcred_abc123"
           },
           "versionId": {
             "type": "string",
             "minLength": 1,
-            "example": "credver_abc123"
+            "example": "vaultver_abc123"
           }
         },
         "required": [
@@ -1733,8 +1733,8 @@
             "maxItems": 100,
             "example": [
               {
-                "credentialId": "cred_abc123",
-                "versionId": "credver_abc123"
+                "credentialId": "vaultcred_abc123",
+                "versionId": "vaultver_abc123"
               }
             ]
           },
@@ -1877,8 +1877,8 @@
             "maxItems": 100,
             "example": [
               {
-                "credentialId": "cred_abc123",
-                "versionId": "credver_abc123"
+                "credentialId": "vaultcred_abc123",
+                "versionId": "vaultver_abc123"
               }
             ]
           },
@@ -2042,8 +2042,8 @@
             },
             "example": [
               {
-                "credentialId": "cred_abc123",
-                "versionId": "credver_abc123"
+                "credentialId": "vaultcred_abc123",
+                "versionId": "vaultver_abc123"
               }
             ]
           },
@@ -2362,12 +2362,12 @@
               "credentialId": {
                 "type": "string",
                 "minLength": 1,
-                "example": "cred_abc123"
+                "example": "vaultcred_abc123"
               },
               "versionId": {
                 "type": "string",
                 "minLength": 1,
-                "example": "credver_abc123"
+                "example": "vaultver_abc123"
               }
             },
             "required": [
@@ -2445,12 +2445,12 @@
               "credentialId": {
                 "type": "string",
                 "minLength": 1,
-                "example": "cred_abc123"
+                "example": "vaultcred_abc123"
               },
               "versionId": {
                 "type": "string",
                 "minLength": 1,
-                "example": "credver_abc123"
+                "example": "vaultver_abc123"
               }
             },
             "required": [
@@ -3401,7 +3401,8 @@
               "failed",
               "cancelled",
               "interrupted"
-            ]
+            ],
+            "description": "Lease transition. `interrupted` is an action, not a resting state: it requeues the work item for recovery and the lease settles as `expired` in the resource."
           },
           "leaseDurationSeconds": {
             "type": "integer",
@@ -5811,8 +5812,8 @@
               {
                 "name": "AK_AGENT_KEY",
                 "credentialRef": {
-                  "credentialId": "cred_abc123",
-                  "versionId": "credver_abc123"
+                  "credentialId": "vaultcred_abc123",
+                  "versionId": "vaultver_abc123"
                 }
               }
             ]
@@ -6224,7 +6225,7 @@
               {
                 "name": "AK_AGENT_KEY",
                 "credentialRef": {
-                  "credentialId": "cred_abc123"
+                  "credentialId": "vaultcred_abc123"
                 }
               }
             ]
@@ -6689,17 +6690,21 @@
           },
           "requestedAt": {
             "type": "string",
+            "format": "date-time",
             "example": "2026-06-12T12:00:00.000Z"
           },
           "decidedAt": {
             "type": "string",
-            "nullable": true
+            "nullable": true,
+            "format": "date-time"
           },
           "createdAt": {
-            "type": "string"
+            "type": "string",
+            "format": "date-time"
           },
           "updatedAt": {
-            "type": "string"
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
