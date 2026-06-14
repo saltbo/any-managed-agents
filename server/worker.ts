@@ -1,6 +1,6 @@
 import { createApp } from './app'
 import type { Env } from './env'
-import { consumeCloudTurnMessage } from './runtime/session-orchestration'
+import { consumeCloudTurnMessage, markCloudTurnDeadLettered } from './runtime/session-orchestration'
 import { markStalledCloudSessions } from './runtime/session-watchdog'
 import type { CloudTurnMessage } from './runtime/turn-queue'
 import { dispatchDueScheduledTriggers } from './scheduled-dispatch'
@@ -20,12 +20,21 @@ export default {
     ctx.waitUntil(markStalledCloudSessions(env))
   },
   async queue(batch, env) {
+    // Messages that exhausted their retries arrive on the dead-letter queue; mark
+    // the stranded session errored instead of re-running the turn.
+    const deadLetter = batch.queue.endsWith('-dlq')
     for (const message of batch.messages) {
       try {
-        await consumeCloudTurnMessage(env, message.body as CloudTurnMessage)
+        if (deadLetter) {
+          await markCloudTurnDeadLettered(env, message.body as CloudTurnMessage)
+        } else {
+          await consumeCloudTurnMessage(env, message.body as CloudTurnMessage)
+        }
         message.ack()
       } catch (error) {
-        console.error(`cloud turn failed for message ${message.id}: ${error}`)
+        console.error(
+          `cloud turn ${deadLetter ? 'dead-letter handler' : 'consumer'} failed for ${message.id}: ${error}`,
+        )
         message.retry()
       }
     }

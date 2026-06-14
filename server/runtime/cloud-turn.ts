@@ -494,3 +494,27 @@ export async function dispatchInitialPrompt(
     auditAction: 'session.initial_prompt',
   })
 }
+
+// A cloud turn message that exhausted its retries lands in the dead-letter queue.
+// Mark the stranded session errored (clearing any lease it held) so clients
+// recover it immediately instead of waiting for the 20-minute stall sweep.
+export async function markCloudTurnDeadLettered(env: Env, message: CloudTurnMessage): Promise<void> {
+  const repo = createRuntimeOrchestrationRepoFromBinding(env.DB)
+  const auth = cloudTurnSystemAuth(message)
+  await repo.updateSessionWhenState(auth.project.id, message.sessionId, ['pending', 'running'], {
+    state: 'error',
+    stateReason: 'cloud-turn-failed',
+    activeTurnId: null,
+    turnLeaseExpiresAt: null,
+    updatedAt: now(),
+  })
+  await recordAudit(repo.db, {
+    auth,
+    action: message.type === 'session.start' ? 'session.runtime.start' : 'session.command',
+    resourceType: 'session',
+    resourceId: message.sessionId,
+    outcome: 'failure',
+    sessionId: message.sessionId,
+    metadata: { reason: 'cloud_turn_dead_lettered', messageType: message.type },
+  })
+}

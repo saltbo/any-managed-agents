@@ -70,7 +70,7 @@ vi.mock('../adapters/repos/runtime-orchestration', () => {
   }
 })
 
-import { consumeCloudTurnMessage } from './session-orchestration'
+import { consumeCloudTurnMessage, markCloudTurnDeadLettered } from './session-orchestration'
 import { RuntimePolicyDeniedError } from './session-runtime'
 
 const env = { DB: {}, AMA_RUNTIME_MODE: 'production' } as unknown as Env
@@ -228,5 +228,17 @@ describe('consumeCloudTurnMessage — cloud-command turn path [spec: runtime/clo
     // renew failed → another worker owns the chain; this step must not run.
     expect(renewTurnLeaseMock).toHaveBeenCalledWith('proj_1', 'session_1', 'turn_held', expect.any(String))
     expect(runSessionTurnMock).not.toHaveBeenCalled()
+  })
+
+  it('marks a dead-lettered cloud turn errored and clears its lease [spec: runtime/cloud-turn]', async () => {
+    await markCloudTurnDeadLettered(env, stepMessage)
+
+    expect(updateSessionWhenStateMock).toHaveBeenCalledWith(
+      'proj_1',
+      'session_1',
+      ['pending', 'running'],
+      expect.objectContaining({ state: 'error', stateReason: 'cloud-turn-failed', activeTurnId: null }),
+    )
+    expect(recordAuditMock).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ outcome: 'failure' }))
   })
 })
