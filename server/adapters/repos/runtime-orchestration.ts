@@ -113,6 +113,81 @@ export function createRuntimeOrchestrationRepo(db: Db) {
       return Boolean(updated)
     },
 
+    // ── per-session turn lease (serializes concurrent cloud turns) ────────────
+
+    // Claim the turn lease for a fresh turn chain. Atomic compare-and-set: it
+    // succeeds only when the session is running AND no live lease is held (free,
+    // or expired past `now`). This is the real mutex the multi-state guard isn't —
+    // it fails on running→running while another turn holds the lease. Resets the
+    // continuation depth for the new chain.
+    async acquireTurnLease(
+      projectId: string,
+      sessionId: string,
+      turnId: string,
+      leaseExpiresAt: string,
+      now: string,
+    ): Promise<boolean> {
+      const updated = await db
+        .update(sessions)
+        .set({ activeTurnId: turnId, turnLeaseExpiresAt: leaseExpiresAt, continuationDepth: 0, updatedAt: now })
+        .where(
+          and(
+            eq(sessions.id, sessionId),
+            eq(sessions.projectId, projectId),
+            eq(sessions.state, 'running'),
+            or(isNull(sessions.activeTurnId), lt(sessions.turnLeaseExpiresAt, now)),
+          ),
+        )
+        .returning({ id: sessions.id })
+        .get()
+      return Boolean(updated)
+    },
+
+    // Extend the lease we already hold (matched by turnId). Returns false if the
+    // lease was lost (cleared or stolen after expiry) — the caller must stop.
+    async renewTurnLease(
+      projectId: string,
+      sessionId: string,
+      turnId: string,
+      leaseExpiresAt: string,
+    ): Promise<boolean> {
+      const updated = await db
+        .update(sessions)
+        .set({ turnLeaseExpiresAt: leaseExpiresAt })
+        .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, projectId), eq(sessions.activeTurnId, turnId)))
+        .returning({ id: sessions.id })
+        .get()
+      return Boolean(updated)
+    },
+
+    // Clear the lease and apply terminal fields, iff we still hold it (turnId).
+    async releaseTurnLease(
+      projectId: string,
+      sessionId: string,
+      turnId: string,
+      fields: SessionUpdate,
+    ): Promise<boolean> {
+      const updated = await db
+        .update(sessions)
+        .set({ ...fields, activeTurnId: null, turnLeaseExpiresAt: null })
+        .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, projectId), eq(sessions.activeTurnId, turnId)))
+        .returning({ id: sessions.id })
+        .get()
+      return Boolean(updated)
+    },
+
+    // Bump the continuation depth for the chain we hold; returns the new depth so
+    // the caller can enforce the cap. No-op (returns 0) if the lease was lost.
+    async incrementContinuationDepth(projectId: string, sessionId: string, turnId: string): Promise<number> {
+      const updated = await db
+        .update(sessions)
+        .set({ continuationDepth: sql`${sessions.continuationDepth} + 1` })
+        .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, projectId), eq(sessions.activeTurnId, turnId)))
+        .returning({ continuationDepth: sessions.continuationDepth })
+        .get()
+      return updated?.continuationDepth ?? 0
+    },
+
     // ── snapshot reads (create-session orchestration) ─────────────────────
     async findAgent(projectId: string, agentId: string): Promise<AgentRow | null> {
       return (

@@ -17,11 +17,17 @@ export type CloudSessionTurnMessage = {
 // Continuation of a paused turn: the transcript is rebuilt from persisted
 // events and the loop continues from the trailing tool results. Chaining
 // steps lifts the per-invocation wall-clock cap from total turn duration.
+// Carries the turnId so the step renews the SAME lease the paused turn holds —
+// the continuation chain is one logical turn, so a concurrent prompt that
+// arrives mid-chain loses the lease and is deferred until the chain ends.
 export type CloudSessionStepMessage = {
   type: 'session.step'
   sessionId: string
   organizationId: string
   projectId: string
+  // Present for a budget continuation (renew the held lease); absent for an
+  // approval-resume step, which acquires a fresh lease in the consumer.
+  turnId?: string
   auditAction: 'session.initial_prompt' | 'session.command'
 }
 
@@ -46,9 +52,16 @@ export function cloudTurnsRunInline(env: Env): boolean {
   return env.AMA_RUNTIME_MODE === 'test' || !env.CLOUD_TURNS
 }
 
-export async function enqueueCloudTurn(env: Env, message: CloudTurnMessage): Promise<void> {
+export async function enqueueCloudTurn(
+  env: Env,
+  message: CloudTurnMessage,
+  options?: { delaySeconds?: number },
+): Promise<void> {
   if (!env.CLOUD_TURNS) {
     throw new Error('CLOUD_TURNS queue binding is not configured')
   }
-  await env.CLOUD_TURNS.send(message)
+  await env.CLOUD_TURNS.send(
+    message,
+    options?.delaySeconds !== undefined ? { delaySeconds: options.delaySeconds } : undefined,
+  )
 }

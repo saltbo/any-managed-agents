@@ -531,6 +531,9 @@ export async function createSessionForAgent(
     modelConfig: stringify({ provider: providerId, ...(agentSnapshot.model ? { model: agentSnapshot.model } : {}) }),
     state: 'pending',
     stateReason: hostingMode === 'self_hosted' ? 'waiting-for-runner' : null,
+    activeTurnId: null,
+    turnLeaseExpiresAt: null,
+    continuationDepth: 0,
     metadata: stringify({
       ...(options.metadata ?? {}),
       hostingMode,
