@@ -15,6 +15,10 @@ const {
   findSessionMock,
   sessionEventStreamMock,
   updateSessionWhenStateMock,
+  acquireTurnLeaseMock,
+  renewTurnLeaseMock,
+  releaseTurnLeaseMock,
+  incrementContinuationDepthMock,
 } = vi.hoisted(() => ({
   runSessionTurnMock:
     vi.fn<(env: unknown, input: { provider: string; model: string | null }) => Promise<{ status: string }>>(),
@@ -26,6 +30,10 @@ const {
   updateSessionWhenStateMock: vi.fn<
     (projectId: string, sessionId: string, expected: string | string[], fields: Record<string, unknown>) => boolean
   >(() => true),
+  acquireTurnLeaseMock: vi.fn(async () => true),
+  renewTurnLeaseMock: vi.fn(async () => true),
+  releaseTurnLeaseMock: vi.fn(async () => true),
+  incrementContinuationDepthMock: vi.fn(async () => 1),
 }))
 
 vi.mock('@cloudflare/sandbox', () => ({ getSandbox: vi.fn() }))
@@ -51,6 +59,10 @@ vi.mock('../adapters/repos/runtime-orchestration', () => {
     findSession: findSessionMock,
     sessionEventStream: sessionEventStreamMock,
     updateSessionWhenState: updateSessionWhenStateMock,
+    acquireTurnLease: acquireTurnLeaseMock,
+    renewTurnLease: renewTurnLeaseMock,
+    releaseTurnLease: releaseTurnLeaseMock,
+    incrementContinuationDepth: incrementContinuationDepthMock,
   }
   return {
     createRuntimeOrchestrationRepo: vi.fn(() => repo),
@@ -96,6 +108,14 @@ describe('consumeCloudTurnMessage — cloud-command turn path [spec: runtime/clo
     findSessionMock.mockReset()
     findSessionMock.mockResolvedValue(fakeSession())
     cloudTurnsRunInlineMock.mockReturnValue(false)
+    acquireTurnLeaseMock.mockReset()
+    acquireTurnLeaseMock.mockResolvedValue(true)
+    renewTurnLeaseMock.mockReset()
+    renewTurnLeaseMock.mockResolvedValue(true)
+    releaseTurnLeaseMock.mockReset()
+    releaseTurnLeaseMock.mockResolvedValue(true)
+    incrementContinuationDepthMock.mockReset()
+    incrementContinuationDepthMock.mockResolvedValue(1)
   })
 
   it('re-enqueues a session.step continuation when the turn pauses, without parking idle', async () => {
@@ -166,5 +186,47 @@ describe('consumeCloudTurnMessage — cloud-command turn path [spec: runtime/clo
       'running',
       expect.objectContaining({ state: 'idle', stateReason: 'policy-denied' }),
     )
+  })
+
+  it('defers the turn (without running it) when another turn holds the session lease [spec: runtime/cloud-turn]', async () => {
+    acquireTurnLeaseMock.mockResolvedValue(false)
+
+    await consumeCloudTurnMessage(env, stepMessage)
+
+    // The lease CAS failed → the message is re-enqueued with a delay and the turn
+    // never runs against the session another turn is already driving.
+    expect(runSessionTurnMock).not.toHaveBeenCalled()
+    expect(enqueueCloudTurnMock).toHaveBeenCalledWith(
+      env,
+      expect.objectContaining({ type: 'session.step' }),
+      expect.objectContaining({ delaySeconds: expect.any(Number) }),
+    )
+  })
+
+  it('caps a runaway continuation chain at the limit and parks idle (recoverable)', async () => {
+    runSessionTurnMock.mockResolvedValue({ status: 'paused' })
+    incrementContinuationDepthMock.mockResolvedValue(25)
+
+    await consumeCloudTurnMessage(env, stepMessage)
+
+    // At the cap the lease is released with a recoverable reason and no further
+    // step is enqueued.
+    expect(releaseTurnLeaseMock).toHaveBeenCalledWith(
+      'proj_1',
+      'session_1',
+      expect.any(String),
+      expect.objectContaining({ state: 'idle', stateReason: 'continuation-limit' }),
+    )
+    expect(enqueueCloudTurnMock).not.toHaveBeenCalled()
+  })
+
+  it('stops a budget-continuation step whose held lease was lost (renew fails)', async () => {
+    renewTurnLeaseMock.mockResolvedValue(false)
+
+    await consumeCloudTurnMessage(env, { ...stepMessage, turnId: 'turn_held' })
+
+    // renew failed → another worker owns the chain; this step must not run.
+    expect(renewTurnLeaseMock).toHaveBeenCalledWith('proj_1', 'session_1', 'turn_held', expect.any(String))
+    expect(runSessionTurnMock).not.toHaveBeenCalled()
   })
 })

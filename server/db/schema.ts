@@ -356,6 +356,17 @@ export const sessions = sqliteTable(
     modelConfig: text('model_config'),
     state: text('state').notNull(),
     stateReason: text('state_reason'),
+    // Per-session turn lease. The multi-state CAS in updateSessionWhenState is not
+    // a mutex (it succeeds on running→running), so a concurrent prompt could race
+    // a turn already in flight. A turn claims the lease (active_turn_id) for the
+    // whole continuation chain; a second turn loses the CAS and is deferred. NULL
+    // means no turn is in flight; an elapsed turn_lease_expires_at lets the next
+    // turn reclaim a lease whose holder crashed.
+    activeTurnId: text('active_turn_id'),
+    turnLeaseExpiresAt: text('turn_lease_expires_at'),
+    // Continuation-step depth for the current turn chain; reset to 0 when a fresh
+    // turn acquires the lease, incremented per pause, capped to bound runaway loops.
+    continuationDepth: integer('continuation_depth').notNull().default(0),
     metadata: text('metadata').notNull().default('{}'),
     startedAt: text('started_at'),
     stoppedAt: text('stopped_at'),

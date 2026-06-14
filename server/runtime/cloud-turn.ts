@@ -29,6 +29,7 @@ import {
   findSession,
   markInitialPromptFailed,
   now,
+  type Repo,
   RUNTIME_START_TIMEOUT_MS,
   stringify,
   withRepo,
@@ -48,6 +49,13 @@ import {
   type ResourceRef,
   type SerializedAgentVersion,
 } from './session-snapshot'
+import {
+  CONTINUATION_LIMIT_REASON,
+  MAX_CONTINUATION_DEPTH,
+  newTurnId,
+  TURN_LEASE_RETRY_DELAY_SECONDS,
+  turnLeaseExpiry,
+} from './session-state'
 import { buildSessionTurnCallbacks, loadRuntimeMessages, resolveSessionProviderModel } from './turn-driver'
 import { type CloudTurnMessage, cloudTurnsRunInline, enqueueCloudTurn } from './turn-queue'
 
@@ -184,7 +192,7 @@ export async function startSessionRuntimeForRow(
 // ── Cloud turn execution + queue consumer ───────────────────────────────────
 
 export type CloudTurnOutcome =
-  | { ok: true; requiresAction?: boolean }
+  | { ok: true; requiresAction?: boolean; paused?: boolean }
   | { ok: false; cancelled: true }
   | { ok: false; cancelled: false; error: ReturnType<typeof safeRuntimeError> }
 
@@ -273,14 +281,9 @@ export async function executeCloudSessionTurn(
       await repo.updateSessionWhenState(auth.project.id, session.id, 'running', {
         updatedAt: now(),
       })
-      await enqueueCloudTurn(env, {
-        type: 'session.step',
-        sessionId: session.id,
-        organizationId: auth.organization.id,
-        projectId: auth.project.id,
-        auditAction,
-      })
-      return { ok: true }
+      // The queue consumer owns the continuation (lease renewal + step cap), so a
+      // paused turn just reports it instead of enqueuing the next step itself.
+      return { ok: true, paused: true }
     }
 
     await recordAudit(db, {
@@ -315,8 +318,78 @@ export async function executeCloudSessionTurn(
   }
 }
 
+// Maps a completed turn's outcome to the continuation decision under the lease we
+// hold (turnId). A paused turn extends the chain — bumping the depth, enforcing
+// the cap, renewing the lease, and enqueuing the next step. Any terminal outcome
+// releases the lease so the next queued turn can claim it.
+async function handleTurnOutcome(
+  env: Env,
+  repo: Repo,
+  auth: AuthScope,
+  session: SessionRow,
+  turnId: string,
+  auditAction: 'session.initial_prompt' | 'session.command',
+  outcome: CloudTurnOutcome,
+): Promise<void> {
+  if (outcome.ok && outcome.paused) {
+    const depth = await repo.incrementContinuationDepth(auth.project.id, session.id, turnId)
+    if (depth >= MAX_CONTINUATION_DEPTH) {
+      await repo.releaseTurnLease(auth.project.id, session.id, turnId, {
+        state: 'idle',
+        stateReason: CONTINUATION_LIMIT_REASON,
+        updatedAt: now(),
+      })
+      return
+    }
+    await repo.renewTurnLease(auth.project.id, session.id, turnId, turnLeaseExpiry())
+    await enqueueCloudTurn(env, {
+      type: 'session.step',
+      sessionId: session.id,
+      organizationId: auth.organization.id,
+      projectId: auth.project.id,
+      turnId,
+      auditAction,
+    })
+    return
+  }
+  // Terminal (idle / error / cancelled / requires-action): executeCloudSessionTurn
+  // already set the session state; just clear the lease for the next turn.
+  await repo.releaseTurnLease(auth.project.id, session.id, turnId, {})
+}
+
+// Runs a fresh turn under a newly-acquired lease. If the lease is held by another
+// in-flight turn the message is deferred (re-enqueued after a short delay) instead
+// of racing it — this is the per-session serialization (H1).
+async function runLeasedTurn(
+  env: Env,
+  db: Db,
+  repo: Repo,
+  auth: AuthScope,
+  session: SessionRow,
+  work: { prompt?: string; continuation?: boolean },
+  auditAction: 'session.initial_prompt' | 'session.command',
+  deferMessage: CloudTurnMessage,
+): Promise<void> {
+  const turnId = newTurnId()
+  const acquiredAt = now()
+  const acquired = await repo.acquireTurnLease(
+    auth.project.id,
+    session.id,
+    turnId,
+    turnLeaseExpiry(acquiredAt),
+    acquiredAt,
+  )
+  if (!acquired) {
+    await enqueueCloudTurn(env, deferMessage, { delaySeconds: TURN_LEASE_RETRY_DELAY_SECONDS })
+    return
+  }
+  const outcome = await executeCloudSessionTurn(env, db, auth, session, work, auditAction)
+  await handleTurnOutcome(env, repo, auth, session, turnId, auditAction, outcome)
+}
+
 export async function consumeCloudTurnMessage(env: Env, message: CloudTurnMessage): Promise<void> {
-  const db = createRuntimeOrchestrationRepoFromBinding(env.DB).db
+  const repo = createRuntimeOrchestrationRepoFromBinding(env.DB)
+  const db = repo.db
   const auth = cloudTurnSystemAuth(message)
   const session = await findSession(db, auth, message.sessionId)
   if (!session) {
@@ -347,23 +420,35 @@ export async function consumeCloudTurnMessage(env: Env, message: CloudTurnMessag
     if (session.state !== 'running') {
       return
     }
-    await executeCloudSessionTurn(env, db, auth, session, { continuation: true }, message.auditAction)
+    if (message.turnId) {
+      // Budget continuation of an in-flight chain: renew the SAME lease so a
+      // concurrent prompt that arrived mid-chain stays deferred. If the lease was
+      // lost (cleared, or reclaimed after expiry by another worker) — stop.
+      const renewed = await repo.renewTurnLease(auth.project.id, session.id, message.turnId, turnLeaseExpiry())
+      if (!renewed) {
+        return
+      }
+      const outcome = await executeCloudSessionTurn(env, db, auth, session, { continuation: true }, message.auditAction)
+      await handleTurnOutcome(env, repo, auth, session, message.turnId, message.auditAction, outcome)
+      return
+    }
+    // Approval-resume (continuation with no held lease): acquire a fresh lease.
+    await runLeasedTurn(env, db, repo, auth, session, { continuation: true }, message.auditAction, message)
     return
   }
   if (session.state === 'idle') {
-    const reclaimed = await createRuntimeOrchestrationRepo(db).updateSessionWhenState(
-      auth.project.id,
-      session.id,
-      'idle',
-      { state: 'running', stateReason: null, updatedAt: now() },
-    )
+    const reclaimed = await repo.updateSessionWhenState(auth.project.id, session.id, 'idle', {
+      state: 'running',
+      stateReason: null,
+      updatedAt: now(),
+    })
     if (!reclaimed) {
       return
     }
   } else if (session.state !== 'running') {
     return
   }
-  await executeCloudSessionTurn(env, db, auth, session, { prompt: message.prompt }, message.auditAction)
+  await runLeasedTurn(env, db, repo, auth, session, { prompt: message.prompt }, message.auditAction, message)
 }
 
 export async function dispatchInitialPrompt(
