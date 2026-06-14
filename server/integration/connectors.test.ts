@@ -28,7 +28,7 @@ describe('[CF] Connector catalog [spec: mcp/discovery]', () => {
     await setupOidcProvider()
   })
 
-  it('lists, filters, and reads the static connector catalog', async () => {
+  it('lists, filters, and reads the static connector catalog [spec: mcp/catalog]', async () => {
     const authorization = await signInUser('catalog')
 
     const listRes = await jsonFetch(

@@ -1,5 +1,4 @@
 import { type APIRequestContext, test as base, expect, type Page, request } from '@playwright/test'
-import { AmaClient } from '../sdk/typescript/src/index'
 
 const BASE = process.env.E2E_BASE_URL ?? `http://localhost:${process.env.E2E_PORT ?? 5173}`
 
@@ -17,8 +16,6 @@ type Fixtures = {
   token: E2eToken
   // An authenticated APIRequestContext for raw control-plane calls.
   api: APIRequestContext
-  // The generated SDK client — how an external product drives AMA.
-  ama: AmaClient
 }
 
 export const test = base.extend<Fixtures>({
@@ -47,9 +44,6 @@ export const test = base.extend<Fixtures>({
     })
     await use(ctx)
     await ctx.dispose()
-  },
-  ama: async ({ token }, use) => {
-    await use(new AmaClient({ origin: BASE, accessToken: token.accessToken, projectId: token.projectId }))
   },
 })
 
