@@ -138,6 +138,13 @@ function fakeDeps(
         sandboxPolicy: {},
       }),
       evaluateProvider: async () => ({ allowed: true, category: 'provider', rule: null, message: '' }),
+      evaluateSandboxRuntime: async () => ({ allowed: true, category: 'sandbox', rule: null, message: '' }),
+      policyBlocksSandboxOperation: async () => null,
+      toolPolicyRequiresApproval: async () => false,
+      evaluateProviderForSession: async () => ({
+        decision: { allowed: true, category: 'provider', rule: null, message: '' },
+        override: null,
+      }),
     },
   }
 }
@@ -199,6 +206,13 @@ describe('[spec: agents/create] createAgent', () => {
           sandboxPolicy: {},
         }),
         evaluateProvider: async () => ({ allowed: true, category: 'provider', rule: null, message: '' }),
+        evaluateSandboxRuntime: async () => ({ allowed: true, category: 'sandbox', rule: null, message: '' }),
+        policyBlocksSandboxOperation: async () => null,
+        toolPolicyRequiresApproval: async () => false,
+        evaluateProviderForSession: async () => ({
+          decision: { allowed: true, category: 'provider', rule: null, message: '' },
+          override: null,
+        }),
       },
     }
     await createAgent(deps, auth, { name: 'x', description: null, config: config() })

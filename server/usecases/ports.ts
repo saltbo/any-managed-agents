@@ -200,6 +200,30 @@ export interface PolicyDecisionResult {
   message: string
 }
 
+// The sandbox operation a runtime tool maps to, mirrored at the port boundary
+// so the runtime callers branch on it without importing the policy module.
+// Structurally matches domain/policy's SandboxRuntimeOperation so the adapter's
+// real return value is assignable.
+export type SandboxRuntimeOperationView =
+  | { operation: 'command'; command: string | null; resourceType: 'sandbox_command'; resourceId: string }
+  | { operation: 'network'; host: string | null; resourceType: 'sandbox_network'; resourceId: string }
+
+// A blocked sandbox operation: the denying decision plus the operation it
+// concerns. Null at the call site means the tool is not a sandbox operation or
+// the operation is allowed.
+export interface SandboxPolicyBlock {
+  decision: PolicyDecisionResult
+  operation: SandboxRuntimeOperationView
+}
+
+// Session-creation provider decision crossing the port boundary. Mirrors
+// server/policy's ProviderPolicySessionDecision: the resolved decision plus the
+// denied decision an admin explicitly overrode (null when none).
+export interface ProviderPolicySessionDecisionView {
+  decision: PolicyDecisionResult
+  override: PolicyDecisionResult | null
+}
+
 // Effective-policy boundary. Agents need the merged tool policy that gates which
 // tools an agent version may attach; connections need the merged MCP policy (to
 // gate connector creation) and full MCP tool-call evaluation. The
@@ -219,6 +243,35 @@ export interface PolicyPort {
   ): Promise<PolicyDecisionResult>
   resolveEffective(auth: AuthScope): Promise<EffectivePolicyResult>
   evaluateProvider(auth: AuthScope, values: { providerId: string; modelId: string }): Promise<PolicyDecisionResult>
+  // Sandbox executor seam: evaluates a command/network operation against the
+  // governance sandbox policy and the session environment network policy.
+  evaluateSandboxRuntime(
+    auth: AuthScope,
+    values: {
+      session: { id: string; agentSnapshot: string | null; environmentSnapshot: string | null }
+      operation: 'command' | 'network'
+      command: string | null
+      host: string | null
+    },
+  ): Promise<PolicyDecisionResult>
+  // Maps a runtime tool call to its sandbox operation and gates it. Returns null
+  // when the tool is not a sandbox operation or the operation is allowed.
+  policyBlocksSandboxOperation(
+    auth: AuthScope,
+    values: {
+      session: { id: string; agentSnapshot: string | null; environmentSnapshot: string | null }
+      toolName: string
+      input: Record<string, unknown>
+    },
+  ): Promise<SandboxPolicyBlock | null>
+  // Whether a sensitive sandbox tool demands a human decision before execution.
+  toolPolicyRequiresApproval(auth: AuthScope, toolName: string): Promise<boolean>
+  // Session-creation provider gate: evaluates effective provider policy and
+  // honors an explicit admin override request only for admin-role callers.
+  evaluateProviderForSession(
+    auth: AuthScope,
+    values: { providerId: string; modelId: string | null; adminOverride?: boolean },
+  ): Promise<ProviderPolicySessionDecisionView>
 }
 
 // --- environments ---
