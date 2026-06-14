@@ -16,12 +16,14 @@ import (
 const runtimeWorkspaceRetention = 24 * time.Hour
 
 type ResourceRef struct {
-	Type          string `json:"type"`
-	Owner         string `json:"owner"`
-	Repo          string `json:"repo"`
-	Ref           string `json:"ref"`
-	MountPath     string `json:"mountPath"`
-	CredentialRef string `json:"credentialRef"`
+	Type      string `json:"type"`
+	Owner     string `json:"owner"`
+	Repo      string `json:"repo"`
+	Ref       string `json:"ref"`
+	MountPath string `json:"mountPath"`
+	// credentialRef in the work-item payload is declarative metadata (the vault
+	// reference); the runner resolves the git token from runtimeEnv, so the field
+	// is intentionally not bound — json.Unmarshal ignores it.
 }
 
 type PreparedWorkspace struct {
