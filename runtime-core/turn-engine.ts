@@ -15,7 +15,14 @@ import {
   Type,
   type Usage,
 } from '@earendil-works/pi-ai'
-import { ProviderCallError, RuntimePolicyDeniedError, type RuntimeProviderError, RuntimeTurnCancelledError, isRuntimeTurnCancelled } from './errors'
+import {
+  CANCELLATION_REASON,
+  ProviderCallError,
+  RuntimePolicyDeniedError,
+  type RuntimeProviderError,
+  RuntimeTurnCancelledError,
+  isRuntimeTurnCancelled,
+} from './errors'
 import type {
   ModelClient,
   ToolExecutor,
@@ -26,6 +33,11 @@ import type {
   TurnEngineResult,
   TurnLiveness,
 } from './ports'
+import { reduceTurnStatus, type TurnStatus } from './turn-status'
+
+// runtimeMessagesFromEvents moved to ./transcript; re-exported here for the
+// existing import paths (server/runtime/session-runtime + the runner host).
+export { runtimeMessagesFromEvents } from './transcript'
 
 const EVENT_META = {
   source: 'ama-cloud-runtime',
@@ -105,11 +117,11 @@ export function emitAssistantMessage(stream: AssistantMessageEventStream, messag
 
 export async function ensureTurnActive(signal: AbortSignal, ensureActive: () => Promise<void>) {
   if (signal.aborted) {
-    throw new RuntimeTurnCancelledError('Runtime request aborted')
+    throw new RuntimeTurnCancelledError(CANCELLATION_REASON)
   }
   await ensureActive()
   if (signal.aborted) {
-    throw new RuntimeTurnCancelledError('Runtime request aborted')
+    throw new RuntimeTurnCancelledError(CANCELLATION_REASON)
   }
 }
 
@@ -247,7 +259,7 @@ function createTurnStreamFn(
     queueMicrotask(async () => {
       try {
         if (signal.aborted) {
-          emitAssistantMessage(stream, assistantMessage(model, [], 'aborted', ZERO_USAGE, 'Runtime request aborted'))
+          emitAssistantMessage(stream, assistantMessage(model, [], 'aborted', ZERO_USAGE, CANCELLATION_REASON))
           return
         }
         // Only pause once the transcript already contains assistant progress;
@@ -302,7 +314,7 @@ function usageEvent(message: AgentMessage, provider: string, model: string) {
 function turnFailureMessage(event: AgentEvent) {
   if (event.type === 'message_end' && event.message.role === 'assistant') {
     if (event.message.stopReason === 'aborted') {
-      return 'Runtime request aborted'
+      return CANCELLATION_REASON
     }
     if (event.message.stopReason === 'error') {
       return event.message.errorMessage ?? 'Runtime model request failed'
@@ -318,43 +330,22 @@ function turnFailureMessage(event: AgentEvent) {
   return null
 }
 
-function isPersistedMessage(value: unknown): value is AgentMessage {
-  if (!value || typeof value !== 'object' || !('role' in value)) {
-    return false
+// Maps the accumulated terminal status to the engine result. A 'failed' status
+// throws (the caller's catch rethrows it); cancelled surfaces as 'aborted'. Kept
+// as a function so its TurnStatus param holds the full union — the `status` local
+// in runTurn is narrowed to its initializer by control-flow analysis because it
+// is only reassigned inside callbacks.
+function resolveTurnResult(status: TurnStatus): TurnEngineResult {
+  switch (status.kind) {
+    case 'paused':
+      return { status: 'paused' }
+    case 'cancelled':
+      return { status: 'aborted' }
+    case 'failed':
+      throw new Error(status.message)
+    default:
+      return { status: 'idle' }
   }
-  const role = (value as { role?: unknown }).role
-  return role === 'user' || role === 'assistant' || role === 'toolResult'
-}
-
-// Rebuilds the agent transcript from persisted (or in-memory) runtime events so
-// a continuation turn resumes where the previous one left off. Prefers the
-// latest agent_end snapshot, else the accumulated message_end messages.
-export function runtimeMessagesFromEvents(
-  events: Array<{ type?: string; payload: string | Record<string, unknown> }>,
-): AgentMessage[] {
-  let latestAgentEndMessages: AgentMessage[] | null = null
-  const messageEndMessages: AgentMessage[] = []
-  for (const event of events) {
-    const payload: unknown = typeof event.payload === 'string' ? JSON.parse(event.payload) : event.payload
-    if (!payload || typeof payload !== 'object') {
-      continue
-    }
-    const record = payload as Record<string, unknown>
-    const sourceType =
-      typeof event.type === 'string' ? event.type : typeof record.type === 'string' ? record.type : undefined
-    if (sourceType === 'agent_end' && Array.isArray(record.messages)) {
-      const messages = record.messages.filter(isPersistedMessage)
-      if (messages.length > 0) {
-        latestAgentEndMessages = messages
-      }
-      continue
-    }
-    if (sourceType !== 'message_end' || !isPersistedMessage(record.message)) {
-      continue
-    }
-    messageEndMessages.push(record.message)
-  }
-  return latestAgentEndMessages ?? messageEndMessages
 }
 
 export async function runTurn(input: TurnEngineInput): Promise<TurnEngineResult> {
@@ -373,10 +364,7 @@ export async function runTurn(input: TurnEngineInput): Promise<TurnEngineResult>
   const { model } = input
   const provider = input.providerLabel
   const modelId = input.modelLabel
-  let aborted = false
-  let cancelled = false
-  let paused = false
-  let failureMessage: string | null = null
+  let status: TurnStatus = { kind: 'idle' }
   let providerError: RuntimeProviderError | null = null
   const agent = new Agent({
     initialState: {
@@ -396,14 +384,14 @@ export async function runTurn(input: TurnEngineInput): Promise<TurnEngineResult>
     streamFn: createTurnStreamFn(input.modelClient, {
       liveness: input.liveness,
       markCancelled: () => {
-        cancelled = true
+        status = reduceTurnStatus(status, { type: 'cancel' })
       },
       onProviderError: (normalized) => {
         providerError = normalized
       },
       ...(input.budget ? { budget: input.budget } : {}),
       markPaused: () => {
-        paused = true
+        status = reduceTurnStatus(status, { type: 'pause' })
       },
       engineSignal: controller.signal,
     }),
@@ -414,15 +402,14 @@ export async function runTurn(input: TurnEngineInput): Promise<TurnEngineResult>
   agent.subscribe(async (event: AgentEvent) => {
     // Everything after a pause is filler from the synthetic paused message;
     // completed turns are already persisted and the continuation rebuilds them.
-    if (paused) {
+    if (status.kind === 'paused') {
       return
     }
     try {
       await ensureTurnActive(controller.signal, () => input.liveness.ensureActive())
     } catch (error) {
       if (isRuntimeTurnCancelled(error)) {
-        cancelled = true
-        aborted = true
+        status = reduceTurnStatus(status, { type: 'cancel' })
         agent.abort()
         return
       }
@@ -430,8 +417,10 @@ export async function runTurn(input: TurnEngineInput): Promise<TurnEngineResult>
     }
     const eventFailure = turnFailureMessage(event)
     if (eventFailure) {
-      failureMessage = eventFailure
-      aborted ||= eventFailure === 'Runtime request aborted'
+      status = reduceTurnStatus(
+        status,
+        eventFailure === CANCELLATION_REASON ? { type: 'cancel' } : { type: 'fail', message: eventFailure },
+      )
     }
     await input.sink.emit({ ...event }, EVENT_META)
     if (event.type === 'message_end') {
@@ -474,16 +463,7 @@ export async function runTurn(input: TurnEngineInput): Promise<TurnEngineResult>
     await agent.waitForIdle()
     // A pause only fires when the loop was about to start another model call,
     // so by construction the run still has work for a continuation.
-    if (paused) {
-      return { status: 'paused' }
-    }
-    if (aborted || cancelled) {
-      return { status: 'aborted' }
-    }
-    if (failureMessage) {
-      throw new Error(failureMessage)
-    }
-    return { status: 'idle' }
+    return resolveTurnResult(status)
   } catch (error) {
     if (isRuntimeTurnCancelled(error)) {
       return { status: 'aborted' }

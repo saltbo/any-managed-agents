@@ -12,6 +12,11 @@ export interface RuntimeProviderError {
   retryAfterSeconds?: number
 }
 
+// The canonical cancellation reason. The engine compares against this constant
+// by identity instead of re-spelling the string literal at each call site, so a
+// cancelled turn and the failure-detection path can never drift apart.
+export const CANCELLATION_REASON = 'Runtime request aborted'
+
 export class RuntimeTurnCancelledError extends Error {
   constructor(message = 'Session runtime is no longer active') {
     super(message)
