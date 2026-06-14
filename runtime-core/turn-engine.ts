@@ -61,33 +61,38 @@ export function assistantMessage(
   }
 }
 
-function emitAssistantMessage(stream: AssistantMessageEventStream, message: AssistantMessage) {
+export function emitAssistantMessage(stream: AssistantMessageEventStream, message: AssistantMessage) {
   stream.push({ type: 'start', partial: { ...message, content: [] } })
   const partial: AssistantMessage = { ...message, content: [] }
-  for (let index = 0; index < message.content.length; index += 1) {
-    const block = message.content[index]
+  // contentIndex must track the position in `partial.content` (which only grows
+  // for emitted text/toolCall blocks), NOT the source index — otherwise any
+  // skipped block desyncs the two index spaces and the partial mutation lands on
+  // the wrong (or an undefined) slot.
+  for (const block of message.content) {
     if (!block) {
       continue
     }
     if (block.type === 'text') {
+      const contentIndex = partial.content.length
       partial.content = [...partial.content, { type: 'text', text: '' }]
-      stream.push({ type: 'text_start', contentIndex: index, partial: { ...partial } })
-      ;(partial.content[index] as { type: 'text'; text: string }).text = block.text
-      stream.push({ type: 'text_delta', contentIndex: index, delta: block.text, partial: { ...partial } })
-      stream.push({ type: 'text_end', contentIndex: index, content: block.text, partial: { ...partial } })
+      stream.push({ type: 'text_start', contentIndex, partial: { ...partial } })
+      ;(partial.content[contentIndex] as { type: 'text'; text: string }).text = block.text
+      stream.push({ type: 'text_delta', contentIndex, delta: block.text, partial: { ...partial } })
+      stream.push({ type: 'text_end', contentIndex, content: block.text, partial: { ...partial } })
       continue
     }
     if (block.type === 'toolCall') {
+      const contentIndex = partial.content.length
       partial.content = [...partial.content, { type: 'toolCall', id: block.id, name: block.name, arguments: {} }]
-      stream.push({ type: 'toolcall_start', contentIndex: index, partial: { ...partial } })
-      ;(partial.content[index] as ToolCall).arguments = block.arguments
+      stream.push({ type: 'toolcall_start', contentIndex, partial: { ...partial } })
+      ;(partial.content[contentIndex] as ToolCall).arguments = block.arguments
       stream.push({
         type: 'toolcall_delta',
-        contentIndex: index,
+        contentIndex,
         delta: JSON.stringify(block.arguments),
         partial: { ...partial },
       })
-      stream.push({ type: 'toolcall_end', contentIndex: index, toolCall: block, partial: { ...partial } })
+      stream.push({ type: 'toolcall_end', contentIndex, toolCall: block, partial: { ...partial } })
     }
   }
   if (message.stopReason === 'error' || message.stopReason === 'aborted') {
@@ -98,7 +103,7 @@ function emitAssistantMessage(stream: AssistantMessageEventStream, message: Assi
   stream.end(message)
 }
 
-async function ensureTurnActive(signal: AbortSignal, ensureActive: () => Promise<void>) {
+export async function ensureTurnActive(signal: AbortSignal, ensureActive: () => Promise<void>) {
   if (signal.aborted) {
     throw new RuntimeTurnCancelledError('Runtime request aborted')
   }
@@ -136,10 +141,11 @@ function runtimeTools(
     policy: ToolPolicyGate
     toolResults: ToolResultResolver
     liveness: TurnLiveness
+    engineSignal: AbortSignal
   },
 ) {
   const ensure = (signal: AbortSignal | undefined) =>
-    ensureTurnActive(signal ?? new AbortController().signal, () => values.liveness.ensureActive())
+    ensureTurnActive(signal ?? values.engineSignal, () => values.liveness.ensureActive())
   const tool = (
     name: 'sandbox.exec' | 'sandbox.read' | 'sandbox.write' | 'sandbox.fetch',
     label: string,
@@ -232,13 +238,15 @@ function createTurnStreamFn(
     onProviderError: (normalized: RuntimeProviderError) => void
     budget?: TurnBudget
     markPaused: () => void
+    engineSignal: AbortSignal
   },
 ) {
   return (model: Model<string>, context: Context, options?: StreamOptions) => {
+    const signal = options?.signal ?? values.engineSignal
     const stream = createAssistantMessageEventStream()
     queueMicrotask(async () => {
       try {
-        if (options?.signal?.aborted) {
+        if (signal.aborted) {
           emitAssistantMessage(stream, assistantMessage(model, [], 'aborted', ZERO_USAGE, 'Runtime request aborted'))
           return
         }
@@ -249,15 +257,15 @@ function createTurnStreamFn(
           emitAssistantMessage(stream, assistantMessage(model, [], 'aborted', ZERO_USAGE, 'Paused for continuation'))
           return
         }
-        await ensureTurnActive(options?.signal ?? new AbortController().signal, () => values.liveness.ensureActive())
-        const message = await modelClient.complete(model, context, options?.signal)
-        await ensureTurnActive(options?.signal ?? new AbortController().signal, () => values.liveness.ensureActive())
+        await ensureTurnActive(signal, () => values.liveness.ensureActive())
+        const message = await modelClient.complete(model, context, signal)
+        await ensureTurnActive(signal, () => values.liveness.ensureActive())
         emitAssistantMessage(stream, message)
       } catch (error) {
         if (isRuntimeTurnCancelled(error)) {
           values.markCancelled()
         }
-        const aborted = options?.signal?.aborted || isRuntimeTurnCancelled(error)
+        const aborted = signal.aborted || isRuntimeTurnCancelled(error)
         if (!aborted && error instanceof ProviderCallError) {
           values.onProviderError(error.normalized)
         }
@@ -351,6 +359,17 @@ export function runtimeMessagesFromEvents(
 
 export async function runTurn(input: TurnEngineInput): Promise<TurnEngineResult> {
   const controller = new AbortController()
+  // Link an external cancellation source (session stop / client disconnect) to
+  // the engine controller so it aborts the in-flight agent loop. Additive: when
+  // no signal is supplied the engine still relies on the cooperative liveness
+  // check, but cancellation is never silently disabled by a throwaway signal.
+  if (input.signal) {
+    if (input.signal.aborted) {
+      controller.abort()
+    } else {
+      input.signal.addEventListener('abort', () => controller.abort(), { once: true })
+    }
+  }
   const { model } = input
   const provider = input.providerLabel
   const modelId = input.modelLabel
@@ -370,6 +389,7 @@ export async function runTurn(input: TurnEngineInput): Promise<TurnEngineResult>
         policy: input.policy,
         toolResults: input.toolResults,
         liveness: input.liveness,
+        engineSignal: controller.signal,
       }),
       messages: input.messages ?? [],
     },
@@ -385,6 +405,7 @@ export async function runTurn(input: TurnEngineInput): Promise<TurnEngineResult>
       markPaused: () => {
         paused = true
       },
+      engineSignal: controller.signal,
     }),
     toolExecution: 'sequential',
     sessionId: input.sessionId,

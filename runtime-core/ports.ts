@@ -119,4 +119,8 @@ export type TurnEngineInput = {
   budget?: TurnBudget
   executor: ToolExecutor
   modelClient: ModelClient
+  // Optional external cancellation source. When it aborts, the engine aborts the
+  // in-flight agent loop (model + tool calls). Additive: hosts may omit it and
+  // rely on the cooperative liveness check instead.
+  signal?: AbortSignal
 }

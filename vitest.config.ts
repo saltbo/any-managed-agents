@@ -67,6 +67,7 @@ export default defineConfig({
             'server/runtime/**/*.test.ts',
             'server/*.test.ts',
             'shared/**/*.test.ts',
+            'runtime-core/**/*.test.ts',
             'runtime-bridge/src/**/*.test.ts',
           ],
         },
