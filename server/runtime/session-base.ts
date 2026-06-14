@@ -13,6 +13,10 @@ import type { CloudTurnMessage } from './turn-queue'
 
 export type Db = Parameters<typeof createRuntimeOrchestrationRepo>[0]
 
+// Cloud runtime startup window. Used both to time-bound the startup itself
+// (cloud-turn) and to expire pending sessions whose window elapsed (lifecycle).
+export const RUNTIME_START_TIMEOUT_MS = 300_000
+
 export function newId(prefix: string) {
   return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
 }
