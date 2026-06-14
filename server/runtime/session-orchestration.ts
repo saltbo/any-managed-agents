@@ -22,22 +22,15 @@ import {
 import { canonicalAmaSessionEventFromRuntimeEvent } from '../../shared/session-events'
 import {
   type AgentRow,
-  type AgentVersionRow,
   createRuntimeOrchestrationRepo,
   createRuntimeOrchestrationRepoFromBinding,
-  type EnvironmentVersionRow,
   type SessionRow,
 } from '../adapters/repos/runtime-orchestration'
 import { toolExecutor } from '../adapters/runtime/sandbox-tool-executor'
 import { recordAudit } from '../audit'
 import type { RuntimeName } from '../contracts/environment-contracts'
 import { environmentHostingMode, sessionRuntimeConfig, sessionRuntimeFromMetadata } from '../domain/runtime-session'
-import {
-  composeInitialPrompt,
-  hasEmbeddedCredentialUrl,
-  hasSecretMaterial,
-  normalizeMountPath,
-} from '../domain/session'
+import { composeInitialPrompt, hasSecretMaterial } from '../domain/session'
 import type { Env } from '../env'
 import {
   evaluateMcpToolPolicy,
@@ -59,6 +52,18 @@ import {
   stopSessionRuntime as stopCloudSessionRuntime,
 } from './session-runtime'
 import {
+  type GitHubRepositoryResourceRef,
+  type NormalizedEnvironmentSnapshot,
+  normalizeEnvironmentSnapshot,
+  normalizeResourceRefs,
+  parseAgentSnapshot,
+  parseJson,
+  type ResourceRef,
+  type SerializedAgentVersion,
+  serializeAgentVersion,
+  serializeEnvironmentVersion,
+} from './session-snapshot'
+import {
   createToolApprovalGate,
   type PendingSessionApproval,
   type SessionApprovalGrants,
@@ -67,6 +72,10 @@ import {
 } from './tool-approvals'
 import { type CloudTurnMessage, cloudTurnsRunInline, enqueueCloudTurn } from './turn-queue'
 import { assertRuntimeSessionRunning, loadRuntimeMessages, resolveSessionProviderModel } from './turn-runner'
+
+// Snapshot/resource shaping moved to ./session-snapshot; re-exported for the
+// (type-only) public surface that historically lived here.
+export type { GitHubRepositoryResourceRef, ResourceRef, SerializedAgentVersion }
 
 type Db = Parameters<typeof createRuntimeOrchestrationRepo>[0]
 
@@ -80,15 +89,6 @@ const ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
 // Per-invocation soft budget for new model turns (see executeCloudSessionTurn).
 const CLOUD_TURN_SOFT_BUDGET_MS = 4 * 60_000
 
-export type ResourceRef = Record<string, unknown>
-export type GitHubRepositoryResourceRef = {
-  type: 'github_repository'
-  owner: string
-  repo: string
-  ref?: string
-  mountPath?: string
-  credentialRef?: { credentialId: string; versionId?: string }
-}
 type SecretEnvEntry = { name: string; credentialRef: { credentialId: string; versionId?: string } }
 type ResolvedSecretEnvEntry = { name: string; credentialRef: { credentialId: string; versionId: string } }
 
@@ -125,119 +125,12 @@ function now() {
   return new Date().toISOString()
 }
 
-function parseJson<T>(value: string | null) {
-  return value ? (JSON.parse(value) as T) : null
-}
-
 function stringify(value: unknown) {
   return JSON.stringify(value)
 }
 
-function objectValue(value: unknown) {
-  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
-}
-
 function requestIdFrom(requestId: string | null | undefined) {
   return requestId ?? null
-}
-
-// ── Snapshot helpers ────────────────────────────────────────────────────────
-
-function serializeAgentVersion(row: AgentVersionRow, providerId: string) {
-  return {
-    id: row.id,
-    agentId: row.agentId,
-    projectId: row.projectId,
-    version: row.version,
-    instructions: row.instructions,
-    providerId,
-    model: row.model,
-    skills: JSON.parse(row.skills) as string[],
-    subagents: JSON.parse(row.subagents) as Record<string, unknown>[],
-    role: row.role,
-    capabilityTags: JSON.parse(row.capabilityTags) as string[],
-    handoffPolicy: JSON.parse(row.handoffPolicy) as Record<string, unknown>,
-    memoryPolicy: JSON.parse(row.memoryPolicy) as Record<string, unknown>,
-    tools: JSON.parse(row.tools) as Record<string, unknown>[],
-    mcpConnectors: JSON.parse(row.mcpConnectors) as string[],
-    metadata: JSON.parse(row.metadata) as Record<string, unknown>,
-    createdAt: row.createdAt,
-  }
-}
-
-export type SerializedAgentVersion = ReturnType<typeof serializeAgentVersion>
-
-function parseAgentSnapshot(value: string | null) {
-  return parseJson<SerializedAgentVersion>(value)
-}
-
-function serializeEnvironmentVersion(row: EnvironmentVersionRow) {
-  return {
-    ...row,
-    packages: JSON.parse(row.packages) as Record<string, unknown>[],
-    variables: JSON.parse(row.variables) as Record<string, unknown>,
-    credentialRefs: JSON.parse(row.credentialRefs) as Record<string, unknown>[],
-    hostingMode: row.hostingMode,
-    networkPolicy: JSON.parse(row.networkPolicy) as Record<string, unknown>,
-    mcpPolicy: JSON.parse(row.mcpPolicy) as Record<string, unknown>,
-    packageManagerPolicy: JSON.parse(row.packageManagerPolicy) as Record<string, unknown>,
-    resourceLimits: JSON.parse(row.resourceLimits) as Record<string, unknown>,
-    runtimeConfig: JSON.parse(row.runtimeConfig) as Record<string, unknown>,
-    metadata: JSON.parse(row.metadata) as Record<string, unknown>,
-  }
-}
-
-type NormalizedEnvironmentSnapshot = ReturnType<typeof serializeEnvironmentVersion>
-
-function normalizeEnvironmentSnapshot(
-  snapshot: ReturnType<typeof serializeEnvironmentVersion> | Record<string, unknown> | null,
-): NormalizedEnvironmentSnapshot | null {
-  if (!snapshot) {
-    return null
-  }
-  const snapshotRecord = snapshot as Record<string, unknown>
-  return {
-    ...snapshotRecord,
-    hostingMode: snapshotRecord.hostingMode === 'self_hosted' ? 'self_hosted' : 'cloud',
-    networkPolicy: objectValue(snapshotRecord.networkPolicy),
-    runtimeConfig: objectValue(snapshotRecord.runtimeConfig),
-  } as NormalizedEnvironmentSnapshot
-}
-
-// ── Resource ref + secret env resolution ────────────────────────────────────
-
-function normalizeResourceRefs(resourceRefs: ResourceRef[]) {
-  const normalized: ResourceRef[] = []
-  const mountPaths = new Set<string>()
-  for (const [index, resourceRef] of resourceRefs.entries()) {
-    if (hasEmbeddedCredentialUrl(resourceRef)) {
-      return { fields: { [`resourceRefs.${index}`]: 'URLs with embedded credentials are not allowed.' } }
-    }
-    if (resourceRef.type !== 'github_repository') {
-      normalized.push(resourceRef)
-      continue
-    }
-    const parsed = resourceRef as GitHubRepositoryResourceRef
-    let mountPath: string
-    try {
-      mountPath = normalizeMountPath(parsed)
-    } catch (error) {
-      return { fields: { [`resourceRefs.${index}.mountPath`]: error instanceof Error ? error.message : String(error) } }
-    }
-    if (mountPaths.has(mountPath)) {
-      return { fields: { [`resourceRefs.${index}.mountPath`]: 'Mount path must be unique within a session.' } }
-    }
-    mountPaths.add(mountPath)
-    normalized.push({
-      type: 'github_repository',
-      owner: parsed.owner,
-      repo: parsed.repo,
-      mountPath,
-      ...(parsed.ref ? { ref: parsed.ref } : {}),
-      ...(parsed.credentialRef ? { credentialRef: parsed.credentialRef } : {}),
-    })
-  }
-  return { resourceRefs: normalized }
 }
 
 async function validateResourceCredentialRefs(db: Db, auth: AuthScope, resourceRefs: ResourceRef[]) {
