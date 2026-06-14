@@ -1,21 +1,18 @@
 import { createRuntimeOrchestrationRepo } from '../adapters/repos/runtime-orchestration'
 import { providerFamily } from '../domain/provider-adapter'
+import {
+  PLATFORM_DEFAULT_PROVIDER,
+  type SessionProviderConfig,
+  type SessionProviderResolution,
+} from '../domain/runtime/provider'
 import type { RuntimeSecretEnvEntry } from './secret-env'
 import type { Db } from './session-base'
 
-export const PLATFORM_DEFAULT_PROVIDER = 'workers-ai'
-
-export type SessionProviderConfig = {
-  id: string
-  type: string
-  baseUrl: string | null
-  credentialId: string | null
-  credentialVersionId: string | null
-}
-
-export type SessionProviderResolution =
-  | { ok: true; config: SessionProviderConfig | null }
-  | { ok: false; reason: 'not_found' | 'unavailable' }
+export {
+  PLATFORM_DEFAULT_PROVIDER,
+  type SessionProviderConfig,
+  type SessionProviderResolution,
+} from '../domain/runtime/provider'
 
 function sessionProviderConfig(row: {
   id: string

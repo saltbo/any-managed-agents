@@ -1,5 +1,6 @@
 import { createRuntimeOrchestrationRepo } from '../adapters/repos/runtime-orchestration'
 import { recordAudit } from '../audit'
+import { type PendingSessionApproval, sessionApprovalState } from '../domain/runtime/approval-state'
 import { toolPolicyRequiresApproval } from '../policy'
 import { redactSensitiveValue } from '../redaction'
 import type { AuthScope } from '../usecases/ports'
@@ -13,41 +14,11 @@ import type { RuntimeToolPolicyDecision, RuntimeToolPolicyInput } from './sessio
 // drivers (the sessions command path and the runtime endpoint path) share
 // this gate so approval semantics cannot drift between surfaces.
 
-export interface PendingSessionApproval {
-  id: string
-  toolCallId: string
-  toolName: string
-  input: Record<string, unknown>
-  requestedAt: string
-  relatedEventIds: string[]
-}
-
-export interface SessionApprovalGrants {
-  approved?: Record<string, boolean>
-  denied?: Record<string, string>
-  results?: Record<string, Record<string, unknown>>
-}
-
-// Persisted session metadata is parsed JSON, so its shape is not guaranteed.
-// Treat a malformed pendingApproval / approvalGrants as "no pending approval"
-// / "no grants" rather than letting wrong-typed data flow into the gate logic.
-function isPendingSessionApproval(value: unknown): value is PendingSessionApproval {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return false
-  }
-  const record = value as Record<string, unknown>
-  return typeof record.toolCallId === 'string' && typeof record.toolName === 'string'
-}
-
-function asSessionApprovalGrants(value: unknown): SessionApprovalGrants {
-  return value && typeof value === 'object' && !Array.isArray(value) ? (value as SessionApprovalGrants) : {}
-}
-
-export function sessionApprovalState(metadata: Record<string, unknown>) {
-  const pending = isPendingSessionApproval(metadata.pendingApproval) ? metadata.pendingApproval : null
-  const grants = asSessionApprovalGrants(metadata.approvalGrants)
-  return { pending, grants }
-}
+export {
+  type PendingSessionApproval,
+  type SessionApprovalGrants,
+  sessionApprovalState,
+} from '../domain/runtime/approval-state'
 
 export async function writeSessionApprovalState(
   db: Db,

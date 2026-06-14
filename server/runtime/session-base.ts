@@ -12,7 +12,10 @@ import {
   type SessionRow,
 } from '../adapters/repos/runtime-orchestration'
 import { recordAudit } from '../audit'
+import { now } from '../domain/runtime/util'
 import type { AuthScope } from '../usecases/ports'
+
+export { newId, now, RUNTIME_START_TIMEOUT_MS, requestIdFrom, stringify, withTimeout } from '../domain/runtime/util'
 
 export type Db = Parameters<typeof createRuntimeOrchestrationRepo>[0]
 
@@ -43,26 +46,6 @@ export interface SessionRuntimeError {
   message: string
   fields?: Record<string, string>
   detail?: Record<string, unknown>
-}
-
-// Cloud runtime startup window. Used both to time-bound the startup itself
-// (cloud-turn) and to expire pending sessions whose window elapsed (lifecycle).
-export const RUNTIME_START_TIMEOUT_MS = 300_000
-
-export function newId(prefix: string) {
-  return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
-}
-
-export function now() {
-  return new Date().toISOString()
-}
-
-export function stringify(value: unknown) {
-  return JSON.stringify(value)
-}
-
-export function requestIdFrom(requestId: string | null | undefined) {
-  return requestId ?? null
 }
 
 // ── Session reads ───────────────────────────────────────────────────────────
@@ -107,22 +90,6 @@ export async function markInitialPromptFailed(
     sessionId: session.id,
     metadata: { message, ...(status ? { status } : {}) },
   })
-}
-
-export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string) {
-  let timeout: ReturnType<typeof setTimeout> | undefined
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<never>((_, reject) => {
-        timeout = setTimeout(() => reject(new Error(message)), timeoutMs)
-      }),
-    ])
-  } finally {
-    if (timeout) {
-      clearTimeout(timeout)
-    }
-  }
 }
 
 export function cloudTurnSystemAuth(message: { organizationId: string; projectId: string }): AuthScope {
