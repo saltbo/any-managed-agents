@@ -41,6 +41,15 @@ const SELF_HOSTED_DRIVERS: RuntimeDriver[] = SELF_HOSTED_ONLY_DRIVERS.map((runti
 
 export const RUNTIME_DRIVERS: readonly RuntimeDriver[] = [AMA_DRIVER, ...SELF_HOSTED_DRIVERS]
 
+// Valid runtime names derived from the registered drivers, so an untrusted
+// string (e.g. a queue message field) can be checked before it is cast to the
+// RuntimeName union and handed to runtimeDriver().
+const RUNTIME_DRIVER_NAMES: ReadonlySet<string> = new Set(RUNTIME_DRIVERS.map((driver) => driver.runtime))
+
+export function isRuntimeName(value: unknown): value is RuntimeName {
+  return typeof value === 'string' && RUNTIME_DRIVER_NAMES.has(value)
+}
+
 export function runtimeDriver(runtime: RuntimeName) {
   const driver = RUNTIME_DRIVERS.find((candidate) => candidate.runtime === runtime)
   if (!driver) {

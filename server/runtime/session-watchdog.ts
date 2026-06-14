@@ -33,8 +33,10 @@ async function destroyLeakedSandboxes(env: Env, repo: RuntimeOrchestrationRepo):
     if (!row.sandboxId) continue
     try {
       await stopSessionRuntime(env, row.sandboxId)
-    } catch {
-      // instance may already be gone; stamping below prevents retry loops
+    } catch (error) {
+      // instance may already be gone; stamping below prevents retry loops. Log
+      // which sandbox failed to destroy so a real teardown failure is visible.
+      console.warn(`failed to destroy leaked sandbox ${row.sandboxId} (sessionId=${row.id}):`, error)
     }
     const metadata = parseMetadata(row.metadata)
     metadata.sandboxDestroyedAt = new Date().toISOString()

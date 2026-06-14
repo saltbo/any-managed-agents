@@ -126,6 +126,13 @@ export class RunnerSessionChannelObject implements DurableObject {
         await this.decidePermissionRequest(state, payload as Record<string, unknown>, socket)
       }
     } catch (error) {
+      // A persistence or policy failure here is funneled into the same generic
+      // error frame as a malformed message; log it (with channel context) so the
+      // two are distinguishable server-side. Still send the error frame.
+      console.error(
+        `runner session channel handleMessage failed (sessionId=${state.sessionId} channelId=${state.channelId} eventId=${eventId ?? 'none'}):`,
+        error,
+      )
       if (socket.readyState === WebSocket.OPEN) {
         socket.send(
           JSON.stringify({
@@ -302,17 +309,21 @@ function workItemRuntimeMetadata(payloadValue: string) {
   }
 }
 
-async function appendSessionEvent(
-  repo: RuntimeOrchestrationRepo,
-  state: ChannelState,
+// The self-hosted runner is untrusted: scrub secret-shaped values out of the
+// runner-emitted payload (and metadata) before they reach the canonical event
+// store, matching how other inputs in this file are redacted.
+export function buildRedactedRunnerCanonicalEvent(
+  state: Pick<ChannelState, 'channelId' | 'runnerId' | 'leaseId' | 'workItemId'>,
   event: { type: string; payload: Record<string, unknown>; metadata?: Record<string, unknown> },
   runtimeMetadata: Record<string, unknown>,
 ) {
-  const canonicalEvent = canonicalAmaSessionEventFromRuntimeEvent(
-    { type: event.type, ...event.payload },
+  const payload = redactSensitiveValue(event.payload) as Record<string, unknown>
+  const metadata = event.metadata ? (redactSensitiveValue(event.metadata) as Record<string, unknown>) : undefined
+  return canonicalAmaSessionEventFromRuntimeEvent(
+    { type: event.type, ...payload },
     {
       source: 'self-hosted-runner',
-      ...(event.metadata ?? {}),
+      ...(metadata ?? {}),
       ...runtimeMetadata,
       channelId: state.channelId,
       runnerId: state.runnerId,
@@ -320,6 +331,15 @@ async function appendSessionEvent(
       workItemId: state.workItemId,
     },
   )
+}
+
+async function appendSessionEvent(
+  repo: RuntimeOrchestrationRepo,
+  state: ChannelState,
+  event: { type: string; payload: Record<string, unknown>; metadata?: Record<string, unknown> },
+  runtimeMetadata: Record<string, unknown>,
+) {
+  const canonicalEvent = buildRedactedRunnerCanonicalEvent(state, event, runtimeMetadata)
   await repo.appendCanonicalEvent(
     {
       organizationId: state.organizationId,

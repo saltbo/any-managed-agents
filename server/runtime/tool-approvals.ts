@@ -28,10 +28,25 @@ export interface SessionApprovalGrants {
   results?: Record<string, Record<string, unknown>>
 }
 
+// Persisted session metadata is parsed JSON, so its shape is not guaranteed.
+// Treat a malformed pendingApproval / approvalGrants as "no pending approval"
+// / "no grants" rather than letting wrong-typed data flow into the gate logic.
+function isPendingSessionApproval(value: unknown): value is PendingSessionApproval {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+  const record = value as Record<string, unknown>
+  return typeof record.toolCallId === 'string' && typeof record.toolName === 'string'
+}
+
+function asSessionApprovalGrants(value: unknown): SessionApprovalGrants {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as SessionApprovalGrants) : {}
+}
+
 export function sessionApprovalState(metadata: Record<string, unknown>) {
-  const pending = metadata.pendingApproval as PendingSessionApproval | undefined
-  const grants = (metadata.approvalGrants as SessionApprovalGrants | undefined) ?? {}
-  return { pending: pending ?? null, grants }
+  const pending = isPendingSessionApproval(metadata.pendingApproval) ? metadata.pendingApproval : null
+  const grants = asSessionApprovalGrants(metadata.approvalGrants)
+  return { pending, grants }
 }
 
 export async function writeSessionApprovalState(

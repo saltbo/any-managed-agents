@@ -230,6 +230,30 @@ describe('consumeCloudTurnMessage — cloud-command turn path [spec: runtime/clo
     expect(runSessionTurnMock).not.toHaveBeenCalled()
   })
 
+  it('marks the session errored without reaching the runtime driver on an unknown runtime name [spec: runtime/cloud-turn]', async () => {
+    findSessionMock.mockResolvedValue(fakeSession({ state: 'pending' }))
+
+    await consumeCloudTurnMessage(env, {
+      type: 'session.start',
+      sessionId: 'session_1',
+      organizationId: 'org_1',
+      projectId: 'proj_1',
+      runtime: 'totally-not-a-runtime',
+      runtimeConfig: {},
+      resourceRefs: [],
+      auditAction: 'session.initial_prompt',
+    } as unknown as Parameters<typeof consumeCloudTurnMessage>[1])
+
+    // An unknown runtime is dead-lettered up front: the turn engine never runs.
+    expect(runSessionTurnMock).not.toHaveBeenCalled()
+    expect(updateSessionWhenStateMock).toHaveBeenCalledWith(
+      'proj_1',
+      'session_1',
+      ['pending', 'running'],
+      expect.objectContaining({ state: 'error', stateReason: 'cloud-turn-failed' }),
+    )
+  })
+
   it('marks a dead-lettered cloud turn errored and clears its lease [spec: runtime/cloud-turn]', async () => {
     await markCloudTurnDeadLettered(env, stepMessage)
 

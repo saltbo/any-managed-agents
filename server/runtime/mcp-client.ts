@@ -119,6 +119,10 @@ async function withMcpClient<T>(target: McpClientTarget, operation: (client: Cli
   } catch (error) {
     throw new McpClientError(categorizeMcpClientFailure(error), error)
   } finally {
-    await client.close().catch(() => {})
+    // A close failure must not mask the operation's own error/result; log it for
+    // observability and still swallow.
+    await client.close().catch((closeError) => {
+      console.warn(`MCP client close failed for ${target.endpointUrl}:`, closeError)
+    })
   }
 }

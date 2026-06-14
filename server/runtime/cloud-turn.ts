@@ -19,7 +19,7 @@ import { recordAudit } from '../audit'
 import type { RuntimeName } from '../contracts/environment-contracts'
 import type { Env } from '../env'
 import type { AuthScope } from '../usecases/ports'
-import { runtimeDriver, runtimeDriverName } from './drivers'
+import { isRuntimeName, runtimeDriver, runtimeDriverName } from './drivers'
 import { safeRuntimeError } from './runtime-error'
 import { type RuntimeSecretEnvEntry, resolveRuntimeSecretEnv } from './secret-env'
 import {
@@ -415,11 +415,18 @@ export async function consumeCloudTurnMessage(env: Env, message: CloudTurnMessag
     if (!agentSnapshot) {
       throw new Error('Session agent snapshot is required for cloud startup')
     }
+    // message.runtime is an untrusted queue string; an unknown runtime would
+    // otherwise reach runtimeDriver() and fail late, after side effects. Mark
+    // the session errored up front instead of casting blindly.
+    if (!isRuntimeName(message.runtime)) {
+      await markCloudTurnDeadLettered(env, message)
+      return
+    }
     await startSessionRuntimeForRow(env, db, auth, {
       pending: session,
       agentSnapshot,
       environmentSnapshot: parseJson<NormalizedEnvironmentSnapshot>(session.environmentSnapshot),
-      runtime: message.runtime as RuntimeName,
+      runtime: message.runtime,
       runtimeConfig: message.runtimeConfig,
       resourceRefs: message.resourceRefs,
       env: message.runtimeEnv,
