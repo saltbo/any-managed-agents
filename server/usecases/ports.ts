@@ -2052,6 +2052,15 @@ export interface RunnerChannel {
 
 // --- sandbox runtime host (cloud session execution) ---
 
+// ports.ts may name the runtime-core execution contract: runtime-core/ sits
+// outside the depcruise scope (it is host-agnostic, framework-free, shared by
+// the Worker and the runner), so importing its types here keeps the port honest
+// without dragging infrastructure into usecases.
+import type { AgentMessage } from '@earendil-works/pi-agent-core'
+import type { RuntimeToolPolicyDecision, RuntimeToolPolicyInput } from '../../runtime-core/ports'
+
+export type { RuntimeToolPolicyDecision, RuntimeToolPolicyInput }
+
 // Start input for the cloud sandbox runtime host. Plain data — no drizzle rows.
 export interface SandboxRuntimeStartInput {
   sessionId: string
@@ -2100,16 +2109,48 @@ export interface SandboxRuntimeTurnResult {
   status: 'idle' | 'aborted' | 'paused'
 }
 
+// One model turn's outcome. 'paused' means the run wants more turns but yielded
+// its execution budget; the caller re-enters with `continuation` to resume from
+// the persisted transcript (whose last message is a tool result).
+export type SessionTurnResult = {
+  status: 'idle' | 'aborted' | 'paused'
+}
+
+// One model turn's input: the resolved provider/model, the agent snapshot, the
+// prompt or continuation, and the callback bundle the turn driver supplies
+// (liveness, event sink, tool-result resolver, tool-call approval, pause check).
+export type SessionTurnInput = {
+  sessionId: string
+  sandboxId: string
+  provider: string
+  model: string | null
+  agentSnapshot: Record<string, unknown>
+  // Required unless `continuation` is set: a continuation resumes from the
+  // persisted transcript whose last message is a tool result.
+  prompt?: string
+  continuation?: boolean
+  messages?: AgentMessage[]
+  // Checked before each model call after the first; returning true pauses the run.
+  shouldPause?: () => boolean
+  ensureActive?: () => Promise<void>
+  onEvent: (event: Record<string, unknown>, metadata?: Record<string, unknown>) => Promise<void>
+  approveToolCall?: (input: RuntimeToolPolicyInput) => Promise<RuntimeToolPolicyDecision>
+  // Supplies a caller-provided tool result (e.g. an approved custom tool
+  // outcome) instead of executing the tool in the sandbox.
+  resolveToolResult?: (input: RuntimeToolPolicyInput) => Promise<Record<string, unknown> | null>
+}
+
 // Cloud sandbox runtime host boundary. Wraps the @cloudflare/sandbox + turn
 // engine host: model resolve, sandbox start/stop, workspace prep, the model
 // turn loop, and tool-call execution. The only implementation lives in
-// adapters/runtime. The SessionTurnInput callback shape stays on the adapter's
-// concrete signature (it carries pi-agent-core message types); this port covers
-// the four host operations the runtime clusters reach for by capability.
+// adapters/runtime. The SessionTurnInput callback bundle carries runtime-core
+// message types; this port covers the host operations the runtime clusters
+// reach for by capability.
 export interface SandboxRuntimeHost {
   startCloudSession(input: SandboxRuntimeStartInput): Promise<SandboxRuntimeStartResult>
   stopCloudSession(sandboxId: string): Promise<void>
   executeToolCalls(input: { sessionId: string; sandboxId: string; body: unknown }): Promise<unknown[]>
+  runTurn(input: SessionTurnInput): Promise<SessionTurnResult>
 }
 
 // --- runtime orchestration store (runtime-internal persistence boundary) ---

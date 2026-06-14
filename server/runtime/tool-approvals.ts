@@ -1,24 +1,35 @@
-import { createRuntimeOrchestrationRepo } from '../adapters/repos/runtime-orchestration'
-import { recordAudit } from '../audit'
-import { type PendingSessionApproval, sessionApprovalState } from '../domain/runtime/approval-state'
-import { toolPolicyRequiresApproval } from '../policy'
-import { redactSensitiveValue } from '../redaction'
-import type { AuthScope } from '../usecases/ports'
-import type { Db } from './session-base'
-import type { RuntimeToolPolicyDecision, RuntimeToolPolicyInput } from './session-runtime'
+// Shim: session tool approvals now live in usecases/runtime/approval-gate as
+// deps-first functions. These wrappers preserve the (db,...) signatures the
+// current runtime callers rely on by constructing the store/audit/policy deps
+// inline and delegating. The pure approval-state read is re-exported straight
+// from domain/runtime/approval-state. Deleted once the callers thread Deps
+// directly.
 
-// ── Session tool approvals ───────────────────────────────────────────────────
-// A sensitive tool call pauses the run: the pending approval lives on the
-// session metadata, the session sits idle with a requires-action reason, and
-// recorded decision grants drive the continuation turn. Both cloud turn
-// drivers (the sessions command path and the runtime endpoint path) share
-// this gate so approval semantics cannot drift between surfaces.
+import { createAuditPort } from '../adapters/gateways/audit'
+import { createPolicyPort } from '../adapters/gateways/policy'
+import { createRuntimeOrchestrationRepo } from '../adapters/repos/runtime-orchestration'
+import type { AuthScope } from '../usecases/ports'
+import {
+  createToolApprovalGate as createToolApprovalGateUsecase,
+  type ToolApprovalGate,
+  writeSessionApprovalState as writeSessionApprovalStateUsecase,
+} from '../usecases/runtime'
+import type { Db } from './session-base'
 
 export {
   type PendingSessionApproval,
   type SessionApprovalGrants,
   sessionApprovalState,
 } from '../domain/runtime/approval-state'
+export type { ToolApprovalGate }
+
+function approvalGateDeps(db: Db) {
+  return {
+    sessionOrchestration: createRuntimeOrchestrationRepo(db),
+    audit: createAuditPort(db),
+    policy: createPolicyPort(db),
+  }
+}
 
 export async function writeSessionApprovalState(
   db: Db,
@@ -26,27 +37,12 @@ export async function writeSessionApprovalState(
   sessionId: string,
   update: (metadata: Record<string, unknown>) => Record<string, unknown>,
 ) {
-  const repo = createRuntimeOrchestrationRepo(db)
-  const row = await repo.sessionMetadata(auth.project.id, sessionId)
-  const metadata = row?.metadata ? (JSON.parse(row.metadata) as Record<string, unknown>) : {}
-  const next = update(metadata)
-  await repo.updateSession(auth.project.id, sessionId, {
-    metadata: JSON.stringify(next),
-    updatedAt: new Date().toISOString(),
-  })
-  return next
-}
-
-export interface ToolApprovalGate {
-  // Approval-aware policy decision; null means "no approval opinion, proceed".
-  gate: (input: RuntimeToolPolicyInput) => Promise<RuntimeToolPolicyDecision | null>
-  // Caller-provided custom tool result recorded by an approval decision.
-  resolveToolResult: (input: RuntimeToolPolicyInput) => Promise<Record<string, unknown> | null>
-  // Drops the synthetic failure events of a freshly-paused tool call so the
-  // continuation re-drives it from clean history.
-  shouldSuppressEvent: (event: Record<string, unknown>) => boolean
-  // True once this turn paused for an approval.
-  requiresAction: () => boolean
+  return writeSessionApprovalStateUsecase(
+    { sessionOrchestration: createRuntimeOrchestrationRepo(db) },
+    auth,
+    sessionId,
+    update,
+  )
 }
 
 export function createToolApprovalGate(values: {
@@ -56,89 +52,10 @@ export function createToolApprovalGate(values: {
   sessionMetadata: Record<string, unknown>
   appendEvent: (event: Record<string, unknown>, metadata: Record<string, unknown>) => Promise<string>
 }): ToolApprovalGate {
-  const { db, auth, sessionId } = values
-  const { grants } = sessionApprovalState(values.sessionMetadata)
-  let pendingToolCallId: string | null = null
-
-  return {
-    requiresAction: () => pendingToolCallId !== null,
-
-    async resolveToolResult({ toolCallId }) {
-      return grants.results?.[toolCallId] ?? null
-    },
-
-    shouldSuppressEvent(event) {
-      if (!pendingToolCallId) {
-        return false
-      }
-      const toolCall = event.toolCall as Record<string, unknown> | undefined
-      const message = event.message as Record<string, unknown> | undefined
-      const eventToolCallId =
-        typeof event.toolCallId === 'string'
-          ? event.toolCallId
-          : typeof toolCall?.id === 'string'
-            ? toolCall.id
-            : typeof message?.toolCallId === 'string'
-              ? message.toolCallId
-              : null
-      return eventToolCallId === pendingToolCallId
-    },
-
-    async gate({ toolCallId, toolName, input }) {
-      const denialReason = grants.denied?.[toolCallId]
-      if (denialReason !== undefined) {
-        return { allowed: false, reason: denialReason || 'Tool call denied by the user' }
-      }
-      if (grants.approved?.[toolCallId] || grants.results?.[toolCallId]) {
-        return { allowed: true }
-      }
-      if (!(await toolPolicyRequiresApproval(db, auth, toolName))) {
-        return null
-      }
-      const approvalId = `approval_${crypto.randomUUID().replaceAll('-', '')}`
-      const requestEventId = await values.appendEvent(
-        {
-          type: 'policy.decision',
-          allowed: false,
-          category: 'approval',
-          ruleId: 'toolPolicy.requireApprovalTools',
-          resourceType: 'tool',
-          resourceId: toolName,
-          operation: 'tool_approval_request',
-          decision: { approvalId, toolCallId, status: 'pending' },
-        },
-        { source: 'policy' },
-      )
-      await recordAudit(db, {
-        auth,
-        action: 'session.tool_approval_requested',
-        resourceType: 'tool',
-        resourceId: toolName,
-        outcome: 'denied',
-        sessionId,
-        policyCategory: 'approval',
-        metadata: { approvalId, toolCallId },
-      })
-      await writeSessionApprovalState(db, auth, sessionId, (metadata) => ({
-        ...metadata,
-        pendingApproval: {
-          id: approvalId,
-          toolCallId,
-          toolName,
-          input: redactSensitiveValue(input) as Record<string, unknown>,
-          requestedAt: new Date().toISOString(),
-          relatedEventIds: [requestEventId],
-        } satisfies PendingSessionApproval,
-      }))
-      pendingToolCallId = toolCallId
-      // Park the session: idle with a requires-action reason ends the turn
-      // cooperatively on the next liveness check.
-      await createRuntimeOrchestrationRepo(db).updateSession(auth.project.id, sessionId, {
-        state: 'idle',
-        stateReason: 'requires-action',
-        updatedAt: new Date().toISOString(),
-      })
-      return { allowed: false, reason: 'Tool call requires user approval' }
-    },
-  }
+  return createToolApprovalGateUsecase(approvalGateDeps(values.db), {
+    auth: values.auth,
+    sessionId: values.sessionId,
+    sessionMetadata: values.sessionMetadata,
+    appendEvent: values.appendEvent,
+  })
 }
