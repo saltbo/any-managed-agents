@@ -1,9 +1,19 @@
-import type { SessionRow } from '../adapters/repos/runtime-orchestration'
-import { recordAudit } from '../audit'
-import { runtimeToolCalls, sandboxOperationFromToolCall } from '../domain/runtime/proxy-route'
-import { evaluateSandboxRuntimePolicy, type PolicyDecision } from '../policy'
-import type { AuthScope } from '../usecases/ports'
-import { appendRuntimeEvent, type Repo } from './session-base'
+// Shim: the effectful sandbox-policy helpers now live in usecases/runtime/proxy
+// as deps-first functions. These wrappers preserve the (repo, auth, ...)
+// signatures the runtime-proxy handler relies on by constructing the
+// store/audit/policy deps inline and delegating. The pure parse/route helpers
+// are re-exported straight from domain/runtime/proxy-route. Deleted once the
+// proxy handler threads Deps directly.
+
+import { createAuditPort } from '../adapters/gateways/audit'
+import { createPolicyPort } from '../adapters/gateways/policy'
+import type { PolicyDecision } from '../policy'
+import type { AuthScope, SessionRow } from '../usecases/ports'
+import {
+  denyRuntimePolicy as denyRuntimePolicyUsecase,
+  evaluateRuntimeSandboxOperations as evaluateRuntimeSandboxOperationsUsecase,
+} from '../usecases/runtime'
+import type { Repo } from './session-base'
 
 export {
   parseRuntimeProxyRoute,
@@ -16,34 +26,6 @@ export {
   sandboxOperationFromRuntimePath,
   sandboxOperationFromToolCall,
 } from '../domain/runtime/proxy-route'
-
-async function appendRuntimePolicyEvent(
-  repo: Repo,
-  values: {
-    auth: AuthScope
-    sessionId: string
-    payload: Record<string, unknown>
-    metadata?: Record<string, unknown>
-  },
-) {
-  await appendRuntimeEvent(repo, {
-    auth: values.auth,
-    sessionId: values.sessionId,
-    event: {
-      type: 'policy_denied',
-      ...values.payload,
-    },
-    metadata: { source: 'policy', ...(values.metadata ?? {}) },
-  })
-  await recordAudit(repo.db, {
-    auth: values.auth,
-    action: 'runtime.policy',
-    resourceType: 'session',
-    resourceId: values.sessionId,
-    outcome: 'denied',
-    metadata: values.payload,
-  })
-}
 
 export async function denyRuntimePolicy(
   repo: Repo,
@@ -58,26 +40,7 @@ export async function denyRuntimePolicy(
     payload: Record<string, unknown>
   },
 ) {
-  const payload = {
-    category: values.decision.category,
-    ruleId: values.decision.rule,
-    resourceType: values.resourceType,
-    resourceId: values.resourceId,
-    decision: values.decision,
-    ...values.payload,
-  }
-  await appendRuntimePolicyEvent(repo, { auth, sessionId: values.sessionId, payload })
-  await recordAudit(repo.db, {
-    auth,
-    action: values.action,
-    resourceType: values.resourceType,
-    resourceId: values.resourceId,
-    outcome: 'denied',
-    requestId: values.requestId ?? null,
-    sessionId: values.sessionId,
-    policyCategory: values.decision.category,
-    metadata: payload,
-  })
+  await denyRuntimePolicyUsecase({ sessionOrchestration: repo, audit: createAuditPort(repo.db) }, auth, values)
 }
 
 export async function evaluateRuntimeSandboxOperations(
@@ -86,27 +49,5 @@ export async function evaluateRuntimeSandboxOperations(
   session: SessionRow,
   body: unknown,
 ) {
-  for (const call of runtimeToolCalls(body)) {
-    const operation = sandboxOperationFromToolCall(call)
-    if (!operation) {
-      continue
-    }
-    const decision = await evaluateSandboxRuntimePolicy(repo.db, auth, {
-      session: {
-        id: session.id,
-        agentSnapshot: session.agentSnapshot,
-        environmentSnapshot: session.environmentSnapshot,
-      },
-      operation: operation.operation,
-      command: 'command' in operation ? operation.command : null,
-      host: 'host' in operation ? operation.host : null,
-    })
-    if (!decision.allowed) {
-      return {
-        decision,
-        operation,
-      }
-    }
-  }
-  return null
+  return evaluateRuntimeSandboxOperationsUsecase({ policy: createPolicyPort(repo.db) }, auth, session, body)
 }

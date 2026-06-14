@@ -14,6 +14,18 @@ export function canonicalProvider(provider: string): string {
 
 export const PLATFORM_DEFAULT_PROVIDER = 'workers-ai'
 
+// Shapes the agent snapshot a runtime turn runs against: drop the sandboxPolicy
+// (the runtime gates sandbox operations itself, the snapshot must not re-assert
+// it) and normalize skills to an array. Parses the persisted JSON column.
+export function parseRuntimeAgentSnapshot(value: string | null) {
+  const snapshot = value ? (JSON.parse(value) as Record<string, unknown>) : {}
+  const { sandboxPolicy: _sandboxPolicy, ...runtimeSnapshot } = snapshot
+  return {
+    ...runtimeSnapshot,
+    skills: Array.isArray(snapshot.skills) ? snapshot.skills : [],
+  }
+}
+
 export type SessionProviderConfig = {
   id: string
   type: string
