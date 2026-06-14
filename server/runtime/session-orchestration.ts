@@ -14,7 +14,6 @@
 // discriminated result objects.
 
 import { runtimeRequiredRunnerCapability, runtimeSupportsLivePrompts } from '@server/domain/runtime-catalog'
-import { canonicalAmaSessionEventFromRuntimeEvent } from '../../shared/session-events'
 import {
   type AgentRow,
   createRuntimeOrchestrationRepo,
@@ -34,6 +33,18 @@ import { providerRuntimeEnv, resolveSessionProviderConfig } from './provider-env
 import { dispatchRunnerSessionCommand, hasAcceptedRunnerSessionChannel } from './runner-session-command'
 import { safeRuntimeError } from './runtime-error'
 import { type RuntimeSecretEnvEntry, resolveRuntimeSecretEnv } from './secret-env'
+import {
+  appendRuntimeEvent,
+  cloudTurnSystemAuth,
+  type Db,
+  findSession,
+  markInitialPromptFailed,
+  newId,
+  now,
+  requestIdFrom,
+  stringify,
+  withTimeout,
+} from './session-base'
 import {
   mcpConnectorIds,
   resolveMcpSnapshot,
@@ -71,11 +82,10 @@ import { assertRuntimeSessionRunning, loadRuntimeMessages, resolveSessionProvide
 
 // Snapshot/resource shaping moved to ./session-snapshot; re-exported for the
 // (type-only) public surface that historically lived here.
-export type { GitHubRepositoryResourceRef, ResourceRef, SerializedAgentVersion }
-
-type Db = Parameters<typeof createRuntimeOrchestrationRepo>[0]
-
-export type { SessionRow }
+export type { GitHubRepositoryResourceRef, ResourceRef, SerializedAgentVersion, SessionRow }
+// appendRuntimeEvent moved to ./session-base; re-exported for the public surface
+// that historically lived here (consumed by runtime-proxy and the http layer).
+export { appendRuntimeEvent }
 
 type MessageDelivery = 'live' | 'queued'
 type MessageState = 'accepted' | 'delivered' | 'failed'
@@ -112,22 +122,6 @@ export interface SessionRuntimeError {
 }
 
 export type CreateSessionResult = { ok: true; session: SessionRow } | { ok: false; error: SessionRuntimeError }
-
-function newId(prefix: string) {
-  return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
-}
-
-function now() {
-  return new Date().toISOString()
-}
-
-function stringify(value: unknown) {
-  return JSON.stringify(value)
-}
-
-function requestIdFrom(requestId: string | null | undefined) {
-  return requestId ?? null
-}
 
 async function validateResourceCredentialRefs(db: Db, auth: AuthScope, resourceRefs: ResourceRef[]) {
   const credentialRefs = resourceRefs
@@ -211,10 +205,6 @@ async function resolveSecretEnvEntries(
 }
 
 // ── Session reads ───────────────────────────────────────────────────────────
-
-async function findSession(db: Db, auth: AuthScope, sessionId: string) {
-  return createRuntimeOrchestrationRepo(db).findSession(auth.project.id, sessionId)
-}
 
 async function currentAgentVersion(db: Db, agent: AgentRow) {
   if (!agent.currentVersionId) {
@@ -1030,16 +1020,6 @@ export async function consumeCloudTurnMessage(env: Env, message: CloudTurnMessag
   await executeCloudSessionTurn(env, db, auth, session, { prompt: message.prompt }, message.auditAction)
 }
 
-function cloudTurnSystemAuth(message: CloudTurnMessage): AuthScope {
-  return {
-    user: { id: 'system:cloud-turn' },
-    organization: { id: message.organizationId, name: message.organizationId },
-    project: { id: message.projectId, name: message.projectId },
-    roles: ['system'],
-    permissions: ['*'],
-  }
-}
-
 async function dispatchInitialPrompt(env: Env, db: Db, auth: AuthScope, session: SessionRow, initialPrompt: string) {
   const submittedAt = now()
   const started = await createRuntimeOrchestrationRepo(db).updateSessionWhenState(
@@ -1180,54 +1160,6 @@ async function queueSelfHostedSessionPrompt(
     resumeToken: await latestRunnerResumeToken(db, auth, session.id),
   })
   return { ok: true, delivery: 'queued', state: 'accepted' }
-}
-
-async function markInitialPromptFailed(db: Db, auth: AuthScope, session: SessionRow, message: string, status?: number) {
-  const failedAt = now()
-  await createRuntimeOrchestrationRepo(db).updateSessionWhenState(auth.project.id, session.id, 'running', {
-    state: 'error',
-    stateReason: message,
-    updatedAt: failedAt,
-  })
-  await recordAudit(db, {
-    auth,
-    action: 'session.initial_prompt',
-    resourceType: 'session',
-    resourceId: session.id,
-    outcome: 'failure',
-    sessionId: session.id,
-    metadata: { message, ...(status ? { status } : {}) },
-  })
-}
-
-export async function appendRuntimeEvent(
-  db: Db,
-  values: { auth: AuthScope; sessionId: string; event: Record<string, unknown>; metadata?: Record<string, unknown> },
-) {
-  const canonicalEvent = canonicalAmaSessionEventFromRuntimeEvent(
-    values.event,
-    values.metadata ?? { source: 'runtime' },
-  )
-  return await createRuntimeOrchestrationRepo(db).appendCanonicalEvent(
-    { organizationId: values.auth.organization.id, projectId: values.auth.project.id, sessionId: values.sessionId },
-    canonicalEvent,
-  )
-}
-
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string) {
-  let timeout: ReturnType<typeof setTimeout> | undefined
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<never>((_, reject) => {
-        timeout = setTimeout(() => reject(new Error(message)), timeoutMs)
-      }),
-    ])
-  } finally {
-    if (timeout) {
-      clearTimeout(timeout)
-    }
-  }
 }
 
 // ── Stop / archive ──────────────────────────────────────────────────────────
