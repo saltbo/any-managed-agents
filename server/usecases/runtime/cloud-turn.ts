@@ -18,6 +18,13 @@
 import type { RuntimeName } from '@server/contracts/environment-contracts'
 import { isRuntimeName, runtimeDriver, runtimeDriverName } from '@server/domain/runtime/driver'
 import { resolveSessionProviderModel } from '@server/domain/runtime/provider'
+import {
+  type NormalizedEnvironmentSnapshot,
+  parseAgentSnapshot,
+  parseJson,
+  type ResourceRef,
+  type SerializedAgentVersion,
+} from '@server/domain/runtime/session-snapshot'
 import { cloudTurnSystemAuth } from '@server/domain/runtime/system-auth'
 import {
   CONTINUATION_LIMIT_REASON,
@@ -27,14 +34,7 @@ import {
   turnLeaseExpiry,
 } from '@server/domain/runtime/turn'
 import { now, RUNTIME_START_TIMEOUT_MS, stringify, withTimeout } from '@server/domain/runtime/util'
-import { safeRuntimeError } from '@server/runtime/runtime-error'
-import {
-  type NormalizedEnvironmentSnapshot,
-  parseAgentSnapshot,
-  parseJson,
-  type ResourceRef,
-  type SerializedAgentVersion,
-} from '@server/runtime/session-snapshot'
+import { safeRuntimeError } from '@server/runtime-error'
 import { isRuntimePolicyDenied, isRuntimeTurnCancelled } from '../../../runtime-core/errors'
 import type {
   AuditPort,

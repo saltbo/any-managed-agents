@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { providerRuntimeEnv } from './provider-env'
+import { providerRuntimeEnv } from './provider'
 
 describe('providerRuntimeEnv', () => {
   it('contributes nothing for the platform Workers AI provider', () => {

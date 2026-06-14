@@ -1,11 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Env } from '../env'
-import type { AuthScope } from '../usecases/ports'
+import type { AuthScope } from '../ports'
 
 // Robustness test for startup partial-failure (H5 FIX 2): when the launch
 // dispatch throws after the pending row is persisted (e.g. the cloud-turn queue
 // send fails), createSessionForAgent must reconcile the orphaned row to 'error'
 // and report a session_launch_failed failure instead of stranding it 'pending'.
+//
+// The usecase is deps-first: the orchestration store, audit, policy, and queue
+// all arrive on `deps`. Provider/runtime resolution + provider-config read live
+// in the sibling provisioning usecase, the snapshot serializers in
+// domain/runtime/session-snapshot, and providerRuntimeEnv is a pure domain rule;
+// those module seams are stubbed so the test pins the reconcile flow directly.
 const {
   enqueueCloudTurnMock,
   cloudTurnsRunInlineMock,
@@ -30,8 +35,13 @@ const {
   cloudTurnsRunInlineMock: vi.fn(() => false),
   startSessionRuntimeForRowMock: vi.fn(),
   recordAuditMock: vi.fn(),
-  evaluateProviderPolicyForSessionMock: vi.fn(async () => ({ decision: { allowed: true }, override: null })),
-  evaluateSandboxRuntimePolicyMock: vi.fn(async () => ({ allowed: true })),
+  evaluateProviderPolicyForSessionMock: vi.fn<(auth: unknown, values: unknown) => Promise<unknown>>(async () => ({
+    decision: { allowed: true },
+    override: null,
+  })),
+  evaluateSandboxRuntimePolicyMock: vi.fn<(auth: unknown, values: unknown) => Promise<unknown>>(async () => ({
+    allowed: true,
+  })),
   resolveSessionProviderIdMock: vi.fn(async () => 'anthropic'),
   validateRuntimeProviderModelMock: vi.fn(async () => true),
   resolveSessionProviderConfigMock: vi.fn(async () => ({ ok: true, config: null })),
@@ -48,73 +58,66 @@ const {
   findEnvironmentVersionMock: vi.fn(),
 }))
 
-vi.mock('@cloudflare/sandbox', () => ({ getSandbox: vi.fn() }))
-
-vi.mock('./turn-queue', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./turn-queue')>()),
-  enqueueCloudTurn: enqueueCloudTurnMock,
-  cloudTurnsRunInline: cloudTurnsRunInlineMock,
-}))
-
-// createSessionForAgent now delegates to the deps-first usecase; the shim builds
-// CreateSessionDeps via cloudTurnDeps (kept real) and the usecase reaches the
-// inline launch through the usecase cloud-turn module. Stub that seam so no real
-// startup runs; the queued path (cloudTurnsRunInline=false) never invokes it.
-vi.mock('./cloud-turn', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./cloud-turn')>()),
-}))
-
-vi.mock('../usecases/runtime/cloud-turn', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../usecases/runtime/cloud-turn')>()),
-  startSessionRuntimeForRow: startSessionRuntimeForRowMock,
-}))
-
-vi.mock('../audit', () => ({ recordAudit: recordAuditMock }))
-
-vi.mock('../policy', () => ({
-  evaluateProviderPolicyForSession: evaluateProviderPolicyForSessionMock,
-  evaluateSandboxRuntimePolicy: evaluateSandboxRuntimePolicyMock,
-}))
-
-// Provider/runtime resolution + provider-config read now live in the deps-first
-// provisioning usecase; providerRuntimeEnv is a pure domain rule. Mock those seams.
-vi.mock('../usecases/runtime/provisioning', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../usecases/runtime/provisioning')>()),
+// Provider/runtime resolution + provider-config read live in the deps-first
+// provisioning usecase; providerRuntimeEnv is a pure domain rule. Stub those seams.
+vi.mock('./provisioning', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./provisioning')>()),
   resolveSessionProviderId: resolveSessionProviderIdMock,
   validateRuntimeProviderModel: validateRuntimeProviderModelMock,
   resolveSessionProviderConfig: resolveSessionProviderConfigMock,
 }))
 
-vi.mock('../domain/runtime/provider', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../domain/runtime/provider')>()),
+vi.mock('@server/domain/runtime/provider', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@server/domain/runtime/provider')>()),
   providerRuntimeEnv: providerRuntimeEnvMock,
 }))
 
-vi.mock('./session-snapshot', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./session-snapshot')>()),
+vi.mock('@server/domain/runtime/session-snapshot', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@server/domain/runtime/session-snapshot')>()),
   serializeAgentVersion: serializeAgentVersionMock,
   serializeEnvironmentVersion: serializeEnvironmentVersionMock,
 }))
 
-vi.mock('../adapters/repos/runtime-orchestration', () => {
-  const repo = {
-    db: {},
-    findAgent: findAgentMock,
-    findAgentVersion: findAgentVersionMock,
-    findEnvironment: findEnvironmentMock,
-    findEnvironmentVersion: findEnvironmentVersionMock,
-    insertSession: insertSessionMock,
-    updateSessionWhenState: updateSessionWhenStateMock,
-  }
-  return {
-    createRuntimeOrchestrationRepo: vi.fn(() => repo),
-    createRuntimeOrchestrationRepoFromBinding: vi.fn(() => repo),
-  }
-})
+// The inline cloud launch delegates to the cloud-turn usecase; the queued path
+// (runsInline=false) never reaches it, but stub it so no real startup runs.
+vi.mock('./cloud-turn', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./cloud-turn')>()),
+  startSessionRuntimeForRow: startSessionRuntimeForRowMock,
+}))
 
-import { createSessionForAgent } from './session-create'
+import { type CreateSessionDeps, createSessionForAgent } from './session-create'
 
-const env = { DB: {}, AMA_RUNTIME_MODE: 'production' } as unknown as Env
+const store = {
+  db: {},
+  findAgent: findAgentMock,
+  findAgentVersion: findAgentVersionMock,
+  findEnvironment: findEnvironmentMock,
+  findEnvironmentVersion: findEnvironmentVersionMock,
+  insertSession: insertSessionMock,
+  updateSessionWhenState: updateSessionWhenStateMock,
+}
+
+// enqueue is env-bound at the gateway; the usecase drives it through
+// deps.cloudTurnQueue.enqueue(message). Route it to the spy so the throw lands on
+// the launch dispatch the reconcile flow catches.
+const deps: CreateSessionDeps = {
+  sessionOrchestration: store as never,
+  audit: { record: (auth: unknown, entry: unknown) => recordAuditMock(auth, entry) } as never,
+  policy: {
+    evaluateProviderForSession: (auth: unknown, values: unknown) =>
+      evaluateProviderPolicyForSessionMock(auth as never, values as never),
+    evaluateSandboxRuntime: (auth: unknown, values: unknown) =>
+      evaluateSandboxRuntimePolicyMock(auth as never, values as never),
+  } as never,
+  sandboxRuntime: {} as never,
+  cloudTurnQueue: {
+    enqueue: (message: unknown) => enqueueCloudTurnMock(message),
+    runsInline: () => cloudTurnsRunInlineMock(),
+  } as never,
+  runtimeSecretEnv: { resolve: async () => ({}) } as never,
+  createApprovalGate: () => ({}) as never,
+  rereadStartedSession: false,
+}
 
 const auth: AuthScope = {
   user: { id: 'user_1' },
@@ -147,7 +150,7 @@ describe('createSessionForAgent — launch dispatch failure (H5 FIX 2)', () => {
   it('reconciles the orphaned pending row to error and returns session_launch_failed when the cloud-turn enqueue throws', async () => {
     enqueueCloudTurnMock.mockRejectedValue(new Error('queue send failed'))
 
-    const result = await createSessionForAgent(env, {} as never, auth, 'agent_1', 'env_1', { runtime: 'ama' }, null)
+    const result = await createSessionForAgent(deps, auth, 'agent_1', 'env_1', { runtime: 'ama' }, null)
 
     expect(result).toEqual({
       ok: false,
@@ -173,7 +176,7 @@ describe('createSessionForAgent — launch dispatch failure (H5 FIX 2)', () => {
   it('keeps the happy path: returns ok and does not reconcile when the enqueue succeeds', async () => {
     enqueueCloudTurnMock.mockResolvedValue(undefined)
 
-    const result = await createSessionForAgent(env, {} as never, auth, 'agent_1', 'env_1', { runtime: 'ama' }, null)
+    const result = await createSessionForAgent(deps, auth, 'agent_1', 'env_1', { runtime: 'ama' }, null)
 
     expect(result.ok).toBe(true)
     expect(enqueueCloudTurnMock).toHaveBeenCalledTimes(1)

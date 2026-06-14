@@ -1,4 +1,4 @@
-import { redactSensitiveValue } from '../redaction'
+import { redactSensitiveValue } from './redaction'
 
 export interface SafeRuntimeError {
   type: 'runtime_error'

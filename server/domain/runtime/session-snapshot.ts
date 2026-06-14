@@ -1,5 +1,5 @@
-import type { AgentVersionRow, EnvironmentVersionRow } from '../adapters/repos/runtime-orchestration'
-import { hasEmbeddedCredentialUrl, normalizeMountPath } from '../domain/session'
+import type { AgentVersionRow, EnvironmentVersionRow } from '@shared/runtime-rows'
+import { hasEmbeddedCredentialUrl, normalizeMountPath } from '../session'
 
 // Snapshot serialization (DB row → immutable session snapshot) and resource-ref
 // normalization for the session runtime data plane. Pure shaping/validation with

@@ -11,7 +11,7 @@
 // module; only dependency acquisition changed.
 
 import { now, RUNTIME_START_TIMEOUT_MS, requestIdFrom, stringify } from '@server/domain/runtime/util'
-import { safeRuntimeError } from '@server/runtime/runtime-error'
+import { safeRuntimeError } from '@server/runtime-error'
 import type {
   AuditPort,
   AuthScope,

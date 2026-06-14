@@ -1,18 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-
-const { policyBlocksSandboxOperation, createToolApprovalGate } = vi.hoisted(() => ({
-  policyBlocksSandboxOperation: vi.fn(),
-  createToolApprovalGate: vi.fn(),
-}))
-
-vi.mock('../policy', () => ({ policyBlocksSandboxOperation }))
-vi.mock('./tool-approvals', () => ({ createToolApprovalGate }))
-
-import { buildSessionTurnCallbacks } from './turn-driver'
+import { buildSessionTurnCallbacks } from './turn-callbacks'
 
 // The shared callback bundle is the single seam both in-Worker turn drivers
 // (cloud-turn.executeCloudSessionTurn and recordRuntimeMessageOutcome) run
-// through. These tests pin its control flow so the two paths can't drift.
+// through. These tests pin its control flow so the two paths can't drift. The
+// usecase is deps-first: the policy gate, the approval-gate factory, and the
+// store all arrive on `deps`, and the policy-denial recorder is injected on
+// `values`, so the test wires fakes at those seams instead of mocking modules.
 describe('[spec: runtime/turn] buildSessionTurnCallbacks (shared turn-driver seam)', () => {
   const auth = { project: { id: 'project_1' }, organization: { id: 'org_1' } } as never
   const session = {
@@ -22,7 +16,9 @@ describe('[spec: runtime/turn] buildSessionTurnCallbacks (shared turn-driver sea
     metadata: null,
   } as never
 
-  let repo: { db: object; sessionState: ReturnType<typeof vi.fn>; appendCanonicalEvent: ReturnType<typeof vi.fn> }
+  let store: { db: object; sessionState: ReturnType<typeof vi.fn>; appendCanonicalEvent: ReturnType<typeof vi.fn> }
+  let policyBlocksSandboxOperation: ReturnType<typeof vi.fn>
+  let createToolApprovalGate: ReturnType<typeof vi.fn>
   let gate: {
     shouldSuppressEvent: ReturnType<typeof vi.fn>
     resolveToolResult: ReturnType<typeof vi.fn>
@@ -32,7 +28,7 @@ describe('[spec: runtime/turn] buildSessionTurnCallbacks (shared turn-driver sea
   let recordPolicyDenial: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
-    repo = {
+    store = {
       db: {},
       sessionState: vi.fn().mockResolvedValue({ state: 'running' }),
       appendCanonicalEvent: vi.fn().mockResolvedValue(undefined),
@@ -43,13 +39,20 @@ describe('[spec: runtime/turn] buildSessionTurnCallbacks (shared turn-driver sea
       gate: vi.fn().mockResolvedValue(null),
       requiresAction: vi.fn().mockReturnValue(false),
     }
-    createToolApprovalGate.mockReturnValue(gate)
-    policyBlocksSandboxOperation.mockReset()
+    createToolApprovalGate = vi.fn().mockReturnValue(gate)
+    policyBlocksSandboxOperation = vi.fn()
     recordPolicyDenial = vi.fn(async () => {})
   })
 
   const build = () =>
-    buildSessionTurnCallbacks({ repo: repo as never, auth, session, recordPolicyDenial: recordPolicyDenial as never })
+    buildSessionTurnCallbacks(
+      {
+        sessionOrchestration: store as never,
+        policy: { policyBlocksSandboxOperation } as never,
+        createApprovalGate: createToolApprovalGate as never,
+      },
+      { auth, session, recordPolicyDenial: recordPolicyDenial as never },
+    )
 
   it('records the denial and short-circuits the gate when a sandbox operation is policy-blocked', async () => {
     policyBlocksSandboxOperation.mockResolvedValue({
@@ -91,15 +94,15 @@ describe('[spec: runtime/turn] buildSessionTurnCallbacks (shared turn-driver sea
 
     gate.shouldSuppressEvent.mockReturnValueOnce(true)
     await callbacks.onEvent({ type: 'message_update' })
-    expect(repo.appendCanonicalEvent).not.toHaveBeenCalled()
+    expect(store.appendCanonicalEvent).not.toHaveBeenCalled()
 
     await callbacks.onEvent({ type: 'message_end' })
-    expect(repo.sessionState).toHaveBeenCalledWith('project_1', 'session_1')
-    expect(repo.appendCanonicalEvent).toHaveBeenCalledTimes(1)
+    expect(store.sessionState).toHaveBeenCalledWith('project_1', 'session_1')
+    expect(store.appendCanonicalEvent).toHaveBeenCalledTimes(1)
   })
 
   it('throws RuntimeTurnCancelled from ensureActive when the session is no longer running', async () => {
-    repo.sessionState.mockResolvedValue({ state: 'stopped' })
+    store.sessionState.mockResolvedValue({ state: 'stopped' })
     const callbacks = build()
     await expect(callbacks.ensureActive()).rejects.toThrow()
   })

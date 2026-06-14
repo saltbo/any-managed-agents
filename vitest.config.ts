@@ -79,7 +79,6 @@ export default defineConfig({
             'server/usecases/**/*.test.ts',
             'server/adapters/**/*.test.ts',
             'server/auth/**/*.test.ts',
-            'server/runtime/**/*.test.ts',
             'server/*.test.ts',
             'shared/**/*.test.ts',
             'runtime-core/**/*.test.ts',

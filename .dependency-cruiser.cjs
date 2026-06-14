@@ -15,9 +15,10 @@
  *                        polluting the VaultRepo port with a test-only method.
  *
  * Everything else is drizzle-free: composition.ts wires the db via db/client,
- * audit.ts delegates to adapters/repos/audit-write, app.ts is a pure assembler,
- * and the /runtime data-plane proxy lives in server/runtime/ (repo-backed) with
- * a thin http registration shell.
+ * audit.ts delegates to adapters/repos/audit-write, and app.ts is a pure
+ * assembler. The runtime is folded into domain/usecases/adapters/http under the
+ * standard clean-arch rules; the only named cross-layer modules are the Durable
+ * Objects under server/worker/ and runtime-core/.
  */
 
 const INFRA = '^server/auth|^server/http/e2e\\.ts'
@@ -79,20 +80,6 @@ module.exports = {
       severity: 'error',
       from: { path: '^shared' },
       to: { path: '^server|^src' },
-    },
-    {
-      name: 'runtime-no-drizzle',
-      comment: 'server/runtime/ is the repo-backed data plane; it routes every read/write through the orchestration repo and never imports drizzle or schema directly.',
-      severity: 'error',
-      from: { path: '^server/runtime' },
-      to: { path: 'node_modules/drizzle-orm|^server/db/schema' },
-    },
-    {
-      name: 'runtime-not-into-http',
-      comment: 'server/runtime/ may only import the http layer via request-context; everything else in http/ stays out of the data plane.',
-      severity: 'error',
-      from: { path: '^server/runtime' },
-      to: { path: '^server/http', pathNot: '^server/http/request-context' },
     },
   ],
   options: {
