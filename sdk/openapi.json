@@ -5155,10 +5155,7 @@
           "resourceRefs": {
             "type": "array",
             "items": {
-              "type": "object",
-              "additionalProperties": {
-                "nullable": true
-              }
+              "$ref": "#/components/schemas/ResourceRef"
             },
             "example": [
               {
@@ -5302,6 +5299,64 @@
         ],
         "example": "codex"
       },
+      "ResourceRef": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/GitHubRepositoryResourceRef"
+          },
+          {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          }
+        ]
+      },
+      "GitHubRepositoryResourceRef": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "github_repository"
+            ]
+          },
+          "owner": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 39,
+            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$"
+          },
+          "repo": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "^[A-Za-z0-9._-]+$"
+          },
+          "ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "mountPath": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "credentialRef": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "pattern": "^vault(?:cred|ver)_[A-Za-z0-9]+$"
+          }
+        },
+        "required": [
+          "type",
+          "owner",
+          "repo"
+        ],
+        "additionalProperties": false
+      },
       "SecretEnvEntry": {
         "type": "object",
         "properties": {
@@ -5351,10 +5406,7 @@
           "resourceRefs": {
             "type": "array",
             "items": {
-              "type": "object",
-              "additionalProperties": {
-                "nullable": true
-              }
+              "$ref": "#/components/schemas/ResourceRef"
             },
             "maxItems": 50,
             "example": [
@@ -5495,10 +5547,7 @@
           "resourceRefs": {
             "type": "array",
             "items": {
-              "type": "object",
-              "additionalProperties": {
-                "nullable": true
-              }
+              "$ref": "#/components/schemas/ResourceRef"
             },
             "maxItems": 50,
             "example": [
@@ -5733,7 +5782,7 @@
           "resourceRefs": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/SessionResourceRef"
+              "$ref": "#/components/schemas/ResourceRef"
             },
             "example": [
               {
@@ -5747,7 +5796,7 @@
           "env": {
             "type": "object",
             "additionalProperties": {
-              "nullable": true
+              "type": "string"
             },
             "example": {
               "AK_API_URL": "https://ak.example.com"
@@ -6049,64 +6098,6 @@
           "createdAt"
         ]
       },
-      "SessionResourceRef": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/GitHubRepositoryResourceRef"
-          },
-          {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
-          }
-        ]
-      },
-      "GitHubRepositoryResourceRef": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "github_repository"
-            ]
-          },
-          "owner": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 39,
-            "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$"
-          },
-          "repo": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 100,
-            "pattern": "^[A-Za-z0-9._-]+$"
-          },
-          "ref": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 255
-          },
-          "mountPath": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 200
-          },
-          "credentialRef": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 120,
-            "pattern": "^vault(?:cred|ver)_[A-Za-z0-9]+$"
-          }
-        },
-        "required": [
-          "type",
-          "owner",
-          "repo"
-        ],
-        "additionalProperties": false
-      },
       "SessionRuntimeMetadata": {
         "type": "object",
         "properties": {
@@ -6201,7 +6192,7 @@
           "resourceRefs": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/SessionResourceRef"
+              "$ref": "#/components/schemas/ResourceRef"
             },
             "maxItems": 50,
             "example": [

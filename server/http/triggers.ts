@@ -1,6 +1,7 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
 import { requireAuth } from '../auth/session'
 import { RuntimeSchema } from '../contracts/environment-contracts'
+import { type ResourceRef, ResourceRefSchema } from '../contracts/execution-spec'
 import {
   AuthenticatedOperation,
   type DepsEnv,
@@ -36,7 +37,7 @@ const TriggerSchema = z
     runtime: RuntimeSchema.openapi({ example: 'codex' }),
     name: z.string().openapi({ example: 'Daily research heartbeat' }),
     promptTemplate: z.string().openapi({ example: 'Research current Canadian banking bonus offers.' }),
-    resourceRefs: z.array(JsonObjectSchema).openapi({
+    resourceRefs: z.array(ResourceRefSchema).openapi({
       example: [{ type: 'github_repository', owner: 'openai', repo: 'openai' }],
     }),
     env: EnvSchema.openapi({ example: { AK_API_URL: 'https://ak.example.com' } }),
@@ -98,7 +99,7 @@ const CreateTriggerSchema = z
       example: 'Research current Canadian banking bonus offers.',
     }),
     resourceRefs: z
-      .array(JsonObjectSchema)
+      .array(ResourceRefSchema)
       .max(50)
       .optional()
       .openapi({
@@ -130,7 +131,7 @@ const UpdateTriggerSchema = z
       example: 'Research current Canadian banking bonus offers.',
     }),
     resourceRefs: z
-      .array(JsonObjectSchema)
+      .array(ResourceRefSchema)
       .max(50)
       .optional()
       .openapi({
@@ -208,7 +209,7 @@ function serializeTrigger(record: TriggerRecord) {
     runtime: record.runtime,
     name: record.name,
     promptTemplate: record.promptTemplate,
-    resourceRefs: record.resourceRefs,
+    resourceRefs: record.resourceRefs as ResourceRef[],
     env: record.env,
     secretEnv: record.secretEnv,
     schedule: {

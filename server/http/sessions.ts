@@ -7,6 +7,7 @@ import {
   EnvironmentNetworkPolicySchema,
   RuntimeSchema,
 } from '../contracts/environment-contracts'
+import { ResourceRefSchema } from '../contracts/execution-spec'
 import { type ErrorType, errorResponse } from '../errors'
 import {
   AuthenticatedOperation,
@@ -45,55 +46,6 @@ const APPROVAL_STATES = ['pending', 'approved', 'denied'] as const
 const MAX_EVENT_BATCH = 100
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
-const GitHubOwnerSchema = z
-  .string()
-  .min(1)
-  .max(39)
-  .regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/, 'Use a GitHub owner slug.')
-const GitHubRepoSchema = z
-  .string()
-  .min(1)
-  .max(100)
-  .regex(/^[A-Za-z0-9._-]+$/, 'Use a GitHub repository name.')
-  .refine((value) => value !== '.' && value !== '..', 'Use a GitHub repository name.')
-const GitRefSchema = z
-  .string()
-  .min(1)
-  .max(255)
-  .refine(
-    (value) =>
-      !/[\s\p{C}]/u.test(value) &&
-      !value.includes('..') &&
-      !value.includes('@{') &&
-      !value.includes('\\') &&
-      !value.startsWith('-') &&
-      !value.endsWith('/') &&
-      !value.endsWith('.lock'),
-    'Use a safe branch, tag, or commit ref.',
-  )
-const MountPathSchema = z.string().min(1).max(200)
-const ResourceCredentialRefSchema = z
-  .string()
-  .min(1)
-  .max(120)
-  .regex(/^vault(?:cred|ver)_[A-Za-z0-9]+$/, 'Use a vault credential or credential version id.')
-const GitHubRepositoryResourceRefSchema = z
-  .object({
-    type: z.literal('github_repository'),
-    owner: GitHubOwnerSchema,
-    repo: GitHubRepoSchema,
-    ref: GitRefSchema.optional(),
-    mountPath: MountPathSchema.optional(),
-    credentialRef: ResourceCredentialRefSchema.optional(),
-  })
-  .strict()
-  .openapi('GitHubRepositoryResourceRef')
-const LegacyResourceRefSchema = JsonObjectSchema.refine((value) => value.type !== 'github_repository', {
-  message: 'GitHub repository resources must use the github_repository schema.',
-})
-const ResourceRefSchema = z
-  .union([GitHubRepositoryResourceRefSchema, LegacyResourceRefSchema])
-  .openapi('SessionResourceRef')
 
 const AgentVersionSnapshotSchema = z
   .object({
@@ -164,7 +116,7 @@ const SessionSchema = z
     resourceRefs: z
       .array(ResourceRefSchema)
       .openapi({ example: [{ type: 'github_repository', owner: 'saltbo', repo: 'any-managed-agents', ref: 'main' }] }),
-    env: JsonObjectSchema.openapi({ example: { AK_API_URL: 'https://ak.example.com' } }),
+    env: z.record(z.string(), z.string()).openapi({ example: { AK_API_URL: 'https://ak.example.com' } }),
     secretEnv: z.array(SecretEnvEntrySchema).openapi({
       example: [{ name: 'AK_AGENT_KEY', credentialRef: { credentialId: 'cred_abc123', versionId: 'credver_abc123' } }],
     }),
