@@ -9,7 +9,7 @@ const callMcpServerToolMock = vi.fn()
 const categorizeMcpClientFailureMock = vi.fn()
 const resolveRuntimeSecretEnvMock = vi.fn()
 
-vi.mock('../../runtime/mcp-client', () => ({
+vi.mock('./mcp-client', () => ({
   listMcpServerTools: listMcpServerToolsMock,
   callMcpServerTool: callMcpServerToolMock,
   categorizeMcpClientFailure: categorizeMcpClientFailureMock,
@@ -22,7 +22,7 @@ vi.mock('../../runtime/mcp-client', () => ({
   },
 }))
 
-vi.mock('../../runtime/secret-env', () => ({
+vi.mock('./runtime-secret-env', () => ({
   resolveRuntimeSecretEnv: resolveRuntimeSecretEnvMock,
 }))
 

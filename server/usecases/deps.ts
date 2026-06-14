@@ -4,6 +4,7 @@ import type {
   AuditPort,
   AuditReadRepo,
   BudgetRepo,
+  CloudTurnQueue,
   ConnectionRepo,
   ConnectorRepo,
   EnvironmentRepo,
@@ -15,10 +16,13 @@ import type {
   ProjectRepo,
   ProviderCatalogGateway,
   ProviderRepo,
+  RunnerChannel,
   RunnerRepo,
   RuntimeSecretEnvGateway,
+  SandboxRuntimeHost,
   SecretStoreGateway,
   SessionEventPort,
+  SessionOrchestrationStore,
   SessionRepo,
   SessionRuntimeGateway,
   TriggerDispatchRepo,
@@ -56,6 +60,10 @@ export interface Deps {
   workItems: WorkItemRepo
   leases: LeaseRepo
   runtimeSecretEnv: RuntimeSecretEnvGateway
+  cloudTurnQueue: CloudTurnQueue
+  runnerChannel: RunnerChannel
+  sandboxRuntime: SandboxRuntimeHost
+  sessionOrchestration: SessionOrchestrationStore
   sessions: SessionRepo
   sessionRuntime: SessionRuntimeGateway
 }

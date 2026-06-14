@@ -17,8 +17,8 @@ import {
   McpClientError,
   type McpClientErrorCategory,
   type McpClientTarget,
-} from '../../runtime/mcp-client'
-import { resolveRuntimeSecretEnv } from '../../runtime/secret-env'
+} from './mcp-client'
+import { resolveRuntimeSecretEnv } from './runtime-secret-env'
 
 type Db = ReturnType<typeof drizzle>
 
