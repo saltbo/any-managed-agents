@@ -18,6 +18,7 @@ import type { AuthScope } from '../usecases/ports'
 
 export { resolveSessionProviderModel } from '../domain/runtime/provider'
 
+import { loadRuntimeMessages as loadRuntimeMessagesUsecase } from '../usecases/runtime'
 import { safeRuntimeError } from './runtime-error'
 import { denyRuntimePolicy, runtimeRequestHasTestOnlyFields } from './runtime-proxy-policy'
 import { appendRuntimeEvent, type Repo } from './session-base'
@@ -29,7 +30,6 @@ import {
   type RuntimeToolPolicyInput,
   RuntimeTurnCancelledError,
   runSessionTurn,
-  runtimeMessagesFromEvents,
 } from './session-runtime'
 import { parseJson } from './session-snapshot'
 import { createToolApprovalGate } from './tool-approvals'
@@ -37,7 +37,7 @@ import { createToolApprovalGate } from './tool-approvals'
 // ── Shared turn setup (single-sourced so the two paths can't drift) ───────────
 
 export async function loadRuntimeMessages(repo: RuntimeOrchestrationRepo, sessionId: string) {
-  return runtimeMessagesFromEvents(await repo.sessionEventStream(sessionId))
+  return loadRuntimeMessagesUsecase({ sessionOrchestration: repo }, sessionId)
 }
 
 export async function assertRuntimeSessionRunning(
