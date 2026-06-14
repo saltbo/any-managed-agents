@@ -24,9 +24,13 @@ type sessionRuntimeHandler struct {
 
 func sessionRuntimeHandlers() map[string]sessionRuntimeHandler {
 	return map[string]sessionRuntimeHandler{
+		// AMA now runs the shared runtime-core turn engine inside the embedded
+		// runtime-bridge subprocess (the same engine the cloud runs), so it goes
+		// through the external-session path like the other bridge runtimes.
 		"ama": {
+			acknowledgeSessionStarted: true,
 			run: func(d *RunnerDaemon, execution sessionRuntimeExecution) error {
-				return d.runAMASession(execution)
+				return d.runExternalSession(execution)
 			},
 		},
 		"codex": {

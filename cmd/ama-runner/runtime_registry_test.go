@@ -10,7 +10,7 @@ import (
 
 func TestSessionRuntimeHandlerRegistryCoversSupportedRuntimes(t *testing.T) {
 	tests := map[string]bool{
-		"ama":         false,
+		"ama":         true,
 		"codex":       true,
 		"claude-code": true,
 		"copilot":     true,

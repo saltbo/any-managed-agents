@@ -13,12 +13,12 @@ import {
 
 describe('runtimeSupportsLivePrompts', () => {
   it('returns true for runtimes that accept mid-run prompt injection', () => {
+    expect(runtimeSupportsLivePrompts('ama')).toBe(true)
     expect(runtimeSupportsLivePrompts('claude-code')).toBe(true)
     expect(runtimeSupportsLivePrompts('copilot')).toBe(true)
   })
 
   it('returns false for runtimes that do not support live prompts', () => {
-    expect(runtimeSupportsLivePrompts('ama')).toBe(false)
     expect(runtimeSupportsLivePrompts('codex')).toBe(false)
   })
 })

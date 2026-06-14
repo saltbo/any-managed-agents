@@ -1,0 +1,126 @@
+// Host-agnostic runtime execution contract.
+//
+// runtime-core/ is the single source of the AMA turn-execution core, shared by
+// BOTH hosts: the Cloudflare Worker (server/) and the runtime-bridge subprocess
+// bundled into the self-hosted runner. It depends only on the agent libraries
+// (@earendil-works/pi-agent-core, pi-ai) and shared/ — never on Env, the
+// Cloudflare Sandbox SDK, D1, Hono, or fetch. All platform differences enter
+// through the ports below, so the loop itself is identical on every host.
+import type { AgentMessage } from '@earendil-works/pi-agent-core'
+import type { AssistantMessage, Context, Model } from '@earendil-works/pi-ai'
+
+// ── Tool execution (canonical home; server/runtime/tool-executor re-exports) ──
+
+export type ToolExecutionInput = {
+  sessionId: string
+  sandboxId: string
+  toolCallId: string
+  toolName: string
+  input: Record<string, unknown>
+  cwd?: string
+}
+
+export type ToolExecutionResult = {
+  toolCallId: string
+  toolName: string
+  output: Record<string, unknown>
+  error: Record<string, unknown> | null
+  durationMs: number
+}
+
+// Sandbox tool execution. The Worker implements it against the Cloudflare
+// Sandbox; the runner implements it against the local OS. Same contract.
+export interface ToolExecutor {
+  execute(input: ToolExecutionInput, signal?: AbortSignal): Promise<ToolExecutionResult>
+  stop?(sandboxId: string): Promise<void>
+}
+
+// ── Tool policy (canonical home; server/runtime/session-runtime re-exports) ───
+
+export type RuntimeToolPolicyInput = {
+  toolCallId: string
+  toolName: string
+  input: Record<string, unknown>
+}
+
+export type RuntimeToolPolicyDecision = {
+  allowed: boolean
+  reason?: string
+}
+
+// ── Ports (formalize the SessionTurnInput inline callbacks) ───────────────────
+
+// Canonical session events leave the engine through here. The Worker appends to
+// D1; the runner forwards over its channel. A suppression decorator (approval
+// gate) wraps this without the engine knowing.
+export interface RuntimeEventSink {
+  emit(event: Record<string, unknown>, metadata?: Record<string, unknown>): Promise<void>
+}
+
+// Gates a tool call before execution (sandbox/network policy + approval).
+export interface ToolPolicyGate {
+  approve(input: RuntimeToolPolicyInput): Promise<RuntimeToolPolicyDecision>
+}
+
+// Supplies a caller-provided tool result (e.g. an approved custom tool outcome)
+// instead of executing the tool. Returns null to fall through to the executor.
+export interface ToolResultResolver {
+  resolve(input: RuntimeToolPolicyInput): Promise<Record<string, unknown> | null>
+}
+
+// Liveness check run before each model call after the first; throws to cancel.
+export interface TurnLiveness {
+  ensureActive(): Promise<void>
+}
+
+// Execution-budget check; returning true pauses the run for continuation.
+export interface TurnBudget {
+  shouldPause(): boolean
+}
+
+// Model egress. The Worker implements it against the Workers AI binding
+// (env.AI), with test-mode simulation; the runner implements it against the
+// session's real provider HTTP API. Owns provider/test specifics and the
+// OpenAI request/response mapping so the engine stays free of both. Throws
+// ProviderCallError (adapter-normalized) on failure.
+export interface ModelClient {
+  complete(model: Model<string>, context: Context, signal?: AbortSignal): Promise<AssistantMessage>
+}
+
+// ── The engine ────────────────────────────────────────────────────────────────
+
+export type TurnEngineResult = {
+  // 'paused': the run wants more model turns but yielded its execution budget;
+  // the caller re-enters with `continuation` to resume from the persisted
+  // transcript (whose last message is a tool result).
+  status: 'idle' | 'aborted' | 'paused'
+}
+
+export type TurnEngineInput = {
+  sessionId: string
+  // Opaque to the engine; forwarded to executor.execute (the Worker's Cloudflare
+  // Sandbox id; the runner's local workspace handle).
+  sandboxId: string
+  // The fully-resolved model object (host builds it; the engine never resolves
+  // provider/model defaults).
+  model: Model<string>
+  // Display labels for the usage / runtime.error events.
+  providerLabel: string
+  modelLabel: string
+  agentSnapshot: Record<string, unknown>
+  // Required unless `continuation` is set.
+  prompt?: string
+  continuation?: boolean
+  messages?: AgentMessage[]
+  sink: RuntimeEventSink
+  policy: ToolPolicyGate
+  toolResults: ToolResultResolver
+  liveness: TurnLiveness
+  budget?: TurnBudget
+  executor: ToolExecutor
+  modelClient: ModelClient
+}
+
+export interface TurnEngine {
+  run(input: TurnEngineInput): Promise<TurnEngineResult>
+}

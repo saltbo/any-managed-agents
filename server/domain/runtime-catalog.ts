@@ -37,9 +37,11 @@ export const RUNTIME_CATALOG: readonly RuntimeCatalogEntry[] = [
 ]
 
 // Runtimes whose bridge accepts mid-run prompt injection over the runner
-// session channel. codex runs one prompt per process, so live prompts are not
-// supported there and session commands must queue as new work items.
-const LIVE_PROMPT_RUNTIMES: ReadonlySet<RuntimeName> = new Set(['claude-code', 'copilot'])
+// session channel. ama runs the shared runtime-core engine and loops a
+// continuation turn per injected prompt; claude-code/copilot resume their SDK
+// session. codex runs one prompt per process, so its session commands must
+// queue as new work items instead.
+const LIVE_PROMPT_RUNTIMES: ReadonlySet<RuntimeName> = new Set(['ama', 'claude-code', 'copilot'])
 
 export function runtimeSupportsLivePrompts(runtime: RuntimeName) {
   return LIVE_PROMPT_RUNTIMES.has(runtime)

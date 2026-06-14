@@ -575,7 +575,7 @@ func (d *RunnerDaemon) executeLease(ctx context.Context, lease *Lease, workItem 
 		return d.finishFailed(ctx, lease, fmt.Errorf("runner does not advertise required capability %q", payload.RequiredRunnerCapability), nil)
 	}
 	sessionID := workItem.SessionID
-	if err := d.uploadEvent(ctx, sessionID, "tool_execution_start", ama.JSON{
+	if err := d.uploadEvent(ctx, sessionID, EventTypeToolExecutionStart, ama.JSON{
 		"toolCallId": payload.ToolCallID,
 		"toolName":   payload.ToolName,
 		"args":       payload.Input,
@@ -611,7 +611,7 @@ func (d *RunnerDaemon) executeLease(ctx context.Context, lease *Lease, workItem 
 		return err
 	}
 	if execErr != nil {
-		_ = d.uploadEvent(context.Background(), sessionID, "tool_execution_end", ama.JSON{
+		_ = d.uploadEvent(context.Background(), sessionID, EventTypeToolExecutionEnd, ama.JSON{
 			"toolCallId": payload.ToolCallID,
 			"toolName":   payload.ToolName,
 			"error":      execErr.Error(),
@@ -620,7 +620,7 @@ func (d *RunnerDaemon) executeLease(ctx context.Context, lease *Lease, workItem 
 		})
 		return d.finishFailed(context.Background(), lease, execErr, result.Output)
 	}
-	if err := d.uploadEvent(ctx, sessionID, "tool_execution_end", ama.JSON{
+	if err := d.uploadEvent(ctx, sessionID, EventTypeToolExecutionEnd, ama.JSON{
 		"toolCallId": payload.ToolCallID,
 		"toolName":   payload.ToolName,
 		"result":     result.Output,
@@ -729,42 +729,6 @@ func isCompletedLeaseRenewalRace(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "Runner lease is no longer active")
 }
 
-func (d *RunnerDaemon) runAMASession(execution sessionRuntimeExecution) error {
-	for {
-		var message RunnerChannelMessage
-		if err := execution.Channel.ReadJSON(execution.LeaseContext, &message); err != nil {
-			if execution.RequestContext.Err() != nil {
-				// Graceful shutdown — keep the session recoverable for resume on restart.
-				return d.finishInterrupted(context.Background(), execution.Lease, execution.ResumeTokens)
-			}
-			return nil
-		}
-		if message.Type != "session.command" {
-			continue
-		}
-		if message.SessionID != execution.Payload.SessionID || message.LeaseID != execution.Lease.ID || message.RunnerID != d.RunnerID {
-			err := fmt.Errorf("runner session command ownership mismatch")
-			if finishErr := d.finishFailed(context.Background(), execution.Lease, err, nil); finishErr != nil {
-				return finishErr
-			}
-			return err
-		}
-		if message.Command.Type == "stop" {
-			slog.Info("runner received stop command; ending session loop", "sessionId", execution.Payload.SessionID, "reason", message.Command.Reason)
-			return nil
-		}
-		if err := d.handleSessionCommand(execution.LeaseContext, execution.Channel, message.Command); err != nil {
-			if finishErr := d.finishFailed(context.Background(), execution.Lease, err, nil); finishErr != nil {
-				return finishErr
-			}
-			return err
-		}
-		if err := execution.CheckRenewal(); err != nil {
-			return err
-		}
-	}
-}
-
 func (d *RunnerDaemon) runExternalSession(execution sessionRuntimeExecution) error {
 	ctx := execution.LeaseContext
 	lease := execution.Lease
@@ -839,7 +803,7 @@ func (d *RunnerDaemon) runExternalSession(execution sessionRuntimeExecution) err
 			// never report it as interrupted, which would re-queue the session
 			// for resume and loop the runaway runtime forever.
 			timeoutErr := fmt.Errorf("session exceeded max duration %s", d.Config.MaxSessionDuration)
-			_ = d.writeAcknowledgedChannelEvent(context.Background(), channel, "runtime.error", ama.JSON{
+			_ = d.writeAcknowledgedChannelEvent(context.Background(), channel, EventTypeRuntimeError, ama.JSON{
 				"error": ama.JSON{"message": timeoutErr.Error(), "code": "session_timeout"},
 			})
 			if finishErr := d.finishFailed(context.Background(), lease, timeoutErr, result); finishErr != nil {
@@ -856,7 +820,7 @@ func (d *RunnerDaemon) runExternalSession(execution sessionRuntimeExecution) err
 			}
 			return runErr
 		}
-		_ = d.writeAcknowledgedChannelEvent(context.Background(), channel, "runtime.error", ama.JSON{
+		_ = d.writeAcknowledgedChannelEvent(context.Background(), channel, EventTypeRuntimeError, ama.JSON{
 			"error": ama.JSON{"message": runErr.Error(), "code": "runtime_failed"},
 		})
 		if finishErr := d.finishFailed(context.Background(), lease, runErr, result); finishErr != nil {
@@ -929,61 +893,6 @@ func (d *RunnerDaemon) waitForChannelAccepted(ctx context.Context, channel Runne
 		}
 		return nil
 	}
-}
-
-func (d *RunnerDaemon) handleSessionCommand(ctx context.Context, channel RunnerSessionChannel, command RunnerSessionCommand) error {
-	for _, toolCall := range command.Body.ToolCalls {
-		input := toolCall.Input
-		if input == nil {
-			input = toolCall.Arguments
-		}
-		if toolCall.ID == "" || toolCall.Name == "" || input == nil {
-			return fmt.Errorf("runner session command includes an invalid tool call")
-		}
-		if toolCall.Name != "sandbox.exec" && toolCall.Name != "sandbox.read" && toolCall.Name != "sandbox.write" {
-			return fmt.Errorf("unsupported sandbox tool: %s", toolCall.Name)
-		}
-		if err := d.executeSessionToolCall(ctx, channel, toolCall.ID, toolCall.Name, input); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (d *RunnerDaemon) executeSessionToolCall(
-	ctx context.Context,
-	channel RunnerSessionChannel,
-	toolCallID string,
-	toolName string,
-	input map[string]any,
-) error {
-	if err := d.writeChannelEvent(ctx, channel, "tool_execution_start", ama.JSON{
-		"toolCallId": toolCallID,
-		"toolName":   toolName,
-		"args":       input,
-	}); err != nil {
-		return err
-	}
-	startedAt := time.Now()
-	result, execErr := d.Adapter.Execute(ctx, ToolRequest{
-		ToolCallID: toolCallID,
-		ToolName:   toolName,
-		Input:      input,
-		WorkDir:    d.Config.WorkDir,
-	})
-	payload := ama.JSON{
-		"toolCallId": toolCallID,
-		"toolName":   toolName,
-		"result":     result.Output,
-		"durationMs": time.Since(startedAt).Milliseconds(),
-	}
-	if execErr != nil {
-		payload["error"] = ama.JSON{"message": execErr.Error()}
-		payload["isError"] = true
-		return d.writeChannelEvent(context.Background(), channel, "tool_execution_end", payload)
-	}
-	payload["isError"] = false
-	return d.writeChannelEvent(ctx, channel, "tool_execution_end", payload)
 }
 
 func (d *RunnerDaemon) writeChannelEvent(ctx context.Context, channel RunnerSessionChannel, eventType string, payload ama.JSON) error {

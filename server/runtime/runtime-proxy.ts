@@ -25,11 +25,10 @@ import {
   isRuntimePolicyDenied,
   isRuntimeTurnCancelled,
   RuntimePolicyDeniedError,
-  RuntimeTurnCancelledError,
   runSessionTurn,
-  runtimeMessagesFromEvents,
 } from './session-runtime'
 import { createToolApprovalGate } from './tool-approvals'
+import { assertRuntimeSessionRunning, loadRuntimeMessages, resolveSessionProviderModel } from './turn-runner'
 
 // The env-bound /api/v1/runtime data-plane proxy. Its wire shape is dictated by
 // external protocols (ACP tunnel, OpenAI-compatible inference, WebSocket RPC),
@@ -77,18 +76,6 @@ async function appendRuntimeEvent(
     },
     canonicalEvent,
   )
-}
-
-async function assertRuntimeSessionRunning(repo: Repo, auth: AuthContext, sessionId: string) {
-  const active = await repo.sessionState(auth.project.id, sessionId)
-  if (active?.state !== 'running') {
-    throw new RuntimeTurnCancelledError()
-  }
-}
-
-async function loadRuntimeMessages(repo: Repo, sessionId: string) {
-  const rows = await repo.sessionEventStream(sessionId)
-  return runtimeMessagesFromEvents(rows)
 }
 
 async function appendRuntimePolicyEvent(
@@ -318,8 +305,9 @@ async function recordRuntimeMessageOutcome(
   const agentSnapshot = parseRuntimeAgentSnapshot(session.agentSnapshot)
   const modelConfig = session.modelConfig ? (JSON.parse(session.modelConfig) as Record<string, unknown>) : {}
   const messages = await loadRuntimeMessages(repo, session.id)
+  const { provider, model } = resolveSessionProviderModel(session, agentSnapshot, modelConfig)
   const ensureActive = async () => {
-    await assertRuntimeSessionRunning(repo, auth, session.id)
+    await assertRuntimeSessionRunning(repo, auth.project.id, session.id)
   }
   const approvalGate = createToolApprovalGate({
     db: repo.db,
@@ -335,8 +323,8 @@ async function recordRuntimeMessageOutcome(
     runSessionTurn(env, {
       sessionId: session.id,
       sandboxId: session.sandboxId ?? '',
-      provider: session.modelProvider ?? 'workers-ai',
-      model: String(modelConfig.model ?? '@cf/moonshotai/kimi-k2.6'),
+      provider,
+      model,
       agentSnapshot,
       prompt,
       messages,

@@ -127,7 +127,7 @@ func (a SDKBridgeRuntimeAdapter) Run(ctx context.Context, request RuntimeRequest
 		}
 		return nil, err
 	}
-	if err := writeSerialized("runtime.metadata", ama.JSON{"data": ama.JSON{"runtime": request.Runtime, "stage": "sdk_bridge_started", "status": "running"}}); err != nil {
+	if err := writeSerialized(EventTypeRuntimeMetadata, ama.JSON{"data": ama.JSON{"runtime": request.Runtime, "stage": "sdk_bridge_started", "status": "running"}}); err != nil {
 		a.stopProcess(cmd)
 		_ = cmd.Wait()
 		return nil, err
@@ -211,7 +211,7 @@ func (a SDKBridgeRuntimeAdapter) Run(ctx context.Context, request RuntimeRequest
 		final["error"] = waitErr.Error()
 		return final, fmt.Errorf("%s SDK bridge exited with code %d", request.Runtime, exitCode(waitErr))
 	}
-	if err := writeSerialized("runtime.metadata", ama.JSON{"data": ama.JSON{"runtime": request.Runtime, "stage": "sdk_bridge_exited", "status": "completed"}}); err != nil {
+	if err := writeSerialized(EventTypeRuntimeMetadata, ama.JSON{"data": ama.JSON{"runtime": request.Runtime, "stage": "sdk_bridge_exited", "status": "completed"}}); err != nil {
 		final["finalEventError"] = err.Error()
 	}
 	return final, nil
@@ -282,7 +282,7 @@ func readBridgeMessages(scanner *bufio.Scanner, requestID string, write RuntimeE
 			}
 			return fmt.Errorf("%s", envelope.Error.Message)
 		case "log":
-			if err := write("runtime.output", ama.JSON{"stream": "bridge", "content": envelope.Message}); err != nil {
+			if err := write(EventTypeRuntimeOutput, ama.JSON{"stream": "bridge", "content": envelope.Message}); err != nil {
 				return err
 			}
 		default:
@@ -344,7 +344,7 @@ func streamBridgeStderr(reader io.Reader, output *bytes.Buffer, runtimeName stri
 		line := scanner.Text()
 		output.WriteString(line)
 		output.WriteByte('\n')
-		if err := write("runtime.output", ama.JSON{"stream": "stderr", "content": line, "runtime": runtimeName}); err != nil {
+		if err := write(EventTypeRuntimeOutput, ama.JSON{"stream": "stderr", "content": line, "runtime": runtimeName}); err != nil {
 			return err
 		}
 	}

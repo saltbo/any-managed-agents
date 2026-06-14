@@ -23,7 +23,7 @@ vi.mock('@cloudflare/sandbox', () => ({
   getSandbox: getSandboxMock,
 }))
 
-vi.mock('./tool-executor', () => ({
+vi.mock('../adapters/runtime/sandbox-tool-executor', () => ({
   toolExecutor: toolExecutorMock,
 }))
 

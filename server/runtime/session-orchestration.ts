@@ -28,6 +28,7 @@ import {
   type EnvironmentVersionRow,
   type SessionRow,
 } from '../adapters/repos/runtime-orchestration'
+import { toolExecutor } from '../adapters/runtime/sandbox-tool-executor'
 import { recordAudit } from '../audit'
 import type { RuntimeName } from '../contracts/environment-contracts'
 import {
@@ -52,10 +53,8 @@ import { type RuntimeSecretEnvEntry, resolveRuntimeSecretEnv } from './secret-en
 import {
   isRuntimePolicyDenied,
   isRuntimeTurnCancelled,
-  RuntimeTurnCancelledError,
   runSessionTurn,
   runtimeEndpointPath,
-  runtimeMessagesFromEvents,
   stopSessionRuntime as stopCloudSessionRuntime,
 } from './session-runtime'
 import {
@@ -65,8 +64,8 @@ import {
   sessionApprovalState,
   writeSessionApprovalState,
 } from './tool-approvals'
-import { toolExecutor } from './tool-executor'
 import { type CloudTurnMessage, cloudTurnsRunInline, enqueueCloudTurn } from './turn-queue'
+import { assertRuntimeSessionRunning, loadRuntimeMessages, resolveSessionProviderModel } from './turn-runner'
 
 type Db = Parameters<typeof createRuntimeOrchestrationRepo>[0]
 
@@ -218,14 +217,6 @@ function sessionRuntimeFromMetadata(metadata: Record<string, unknown>): RuntimeN
 
 function sessionRuntimeConfig(metadata: Record<string, unknown>) {
   return objectValue(metadata.runtimeConfig)
-}
-
-function sessionModel(modelConfig: Record<string, unknown>, agentSnapshot: SerializedAgentVersion) {
-  return typeof modelConfig.model === 'string'
-    ? modelConfig.model
-    : typeof agentSnapshot.model === 'string'
-      ? agentSnapshot.model
-      : null
 }
 
 // ── Resource ref + secret env resolution ────────────────────────────────────
@@ -1080,9 +1071,15 @@ async function executeCloudSessionTurn(
       throw new Error('Session agent snapshot is required')
     }
     const modelConfig = parseJson<Record<string, unknown>>(session.modelConfig) ?? {}
-    const messages = await loadRuntimeMessages(db, session.id)
+    const repo = createRuntimeOrchestrationRepo(db)
+    const messages = await loadRuntimeMessages(repo, session.id)
+    const { provider: turnProvider, model: turnModel } = resolveSessionProviderModel(
+      session,
+      agentSnapshot,
+      modelConfig,
+    )
     const ensureActive = async () => {
-      await assertRuntimeSessionRunning(db, auth, session.id)
+      await assertRuntimeSessionRunning(repo, auth.project.id, session.id)
     }
     const sessionMetadata = parseJson<Record<string, unknown>>(session.metadata) ?? {}
     const approvalGate = createToolApprovalGate({
@@ -1097,8 +1094,8 @@ async function executeCloudSessionTurn(
     const result = await runSessionTurn(env, {
       sessionId: session.id,
       sandboxId: session.sandboxId ?? '',
-      provider: session.modelProvider ?? agentSnapshot.providerId,
-      model: sessionModel(modelConfig, agentSnapshot),
+      provider: turnProvider,
+      model: turnModel,
       agentSnapshot,
       ...(work.prompt !== undefined ? { prompt: work.prompt } : {}),
       ...(work.continuation ? { continuation: true } : {}),
@@ -1420,18 +1417,6 @@ async function queueSelfHostedSessionPrompt(
     resumeToken: await latestRunnerResumeToken(db, auth, session.id),
   })
   return { ok: true, delivery: 'queued', state: 'accepted' }
-}
-
-async function assertRuntimeSessionRunning(db: Db, auth: AuthScope, sessionId: string) {
-  const active = await createRuntimeOrchestrationRepo(db).sessionState(auth.project.id, sessionId)
-  if (active?.state !== 'running') {
-    throw new RuntimeTurnCancelledError()
-  }
-}
-
-async function loadRuntimeMessages(db: Db, sessionId: string) {
-  const rows = await createRuntimeOrchestrationRepo(db).sessionEventStream(sessionId)
-  return runtimeMessagesFromEvents(rows)
 }
 
 async function markInitialPromptFailed(db: Db, auth: AuthScope, session: SessionRow, message: string, status?: number) {

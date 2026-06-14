@@ -1,31 +1,38 @@
-import {
-  Agent,
-  type AgentEvent,
-  type AgentMessage,
-  type AgentTool,
-  type AgentToolResult,
-} from '@earendil-works/pi-agent-core'
+import type { AgentMessage } from '@earendil-works/pi-agent-core'
 import {
   type AssistantMessage,
-  type AssistantMessageEventStream,
   type Context,
-  createAssistantMessageEventStream,
   getModel,
   type Model,
-  type StreamOptions,
   type ToolCall,
-  Type,
   type Usage,
 } from '@earendil-works/pi-ai'
 import {
-  extractProviderUsage,
-  type NormalizedProviderError,
-  normalizeProviderError,
-  providerFamily,
-} from '../domain/provider-adapter'
+  isRuntimePolicyDenied,
+  isRuntimeTurnCancelled,
+  ProviderCallError,
+  RuntimePolicyDeniedError,
+  RuntimeTurnCancelledError,
+} from '../../runtime-core/errors'
+import type { ModelClient } from '../../runtime-core/ports'
+import { assistantMessage, runTurn, runtimeMessagesFromEvents, ZERO_USAGE } from '../../runtime-core/turn-engine'
+import { toolExecutor } from '../adapters/runtime/sandbox-tool-executor'
+import { extractProviderUsage, normalizeProviderError, providerFamily } from '../domain/provider-adapter'
 import type { Env } from '../env'
 import type { RuntimeSecretEnvEntry } from './secret-env'
-import { toolExecutor } from './tool-executor'
+
+// The turn engine, ports, and error vocabulary live in runtime-core (shared by
+// the Worker and, in Phase 3, the runtime-bridge runner). This module is the
+// Worker host: it resolves the model, builds the Cloudflare tool executor and
+// the Workers AI model client, maps the SessionTurnInput callbacks to ports,
+// and owns cloud-only sandbox start/stop and workspace preparation.
+export {
+  isRuntimePolicyDenied,
+  isRuntimeTurnCancelled,
+  ProviderCallError,
+  RuntimePolicyDeniedError,
+  RuntimeTurnCancelledError,
+}
 
 export type SessionRuntimeStartInput = {
   sessionId: string
@@ -68,16 +75,11 @@ export type RuntimeCommandBody = {
   toolCalls?: RuntimeToolCall[]
 }
 
-export type RuntimeToolPolicyInput = {
-  toolCallId: string
-  toolName: string
-  input: Record<string, unknown>
-}
+// Canonical home is runtime-core/ports; imported for local use and re-exported
+// so existing importers keep their import paths.
+import type { RuntimeToolPolicyDecision, RuntimeToolPolicyInput } from '../../runtime-core/ports'
 
-export type RuntimeToolPolicyDecision = {
-  allowed: boolean
-  reason?: string
-}
+export type { RuntimeToolPolicyDecision, RuntimeToolPolicyInput }
 
 export type SessionTurnResult = {
   // 'paused': the run still wants more model turns but yielded its execution
@@ -105,58 +107,6 @@ export type SessionTurnInput = {
   // Supplies a caller-provided tool result (e.g. an approved custom tool
   // outcome) instead of executing the tool in the sandbox.
   resolveToolResult?: (input: RuntimeToolPolicyInput) => Promise<Record<string, unknown> | null>
-}
-
-export class RuntimeTurnCancelledError extends Error {
-  constructor(message = 'Session runtime is no longer active') {
-    super(message)
-    this.name = 'RuntimeTurnCancelledError'
-  }
-}
-
-// A tool call was denied by AMA policy. The turn fails, but the session stays
-// usable: a governance denial is an expected product outcome, not a runtime
-// fault, so callers park the session back to idle instead of error.
-export class RuntimePolicyDeniedError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'RuntimePolicyDeniedError'
-  }
-}
-
-export function isRuntimePolicyDenied(error: unknown): error is RuntimePolicyDeniedError {
-  return (
-    error instanceof RuntimePolicyDeniedError || (error instanceof Error && error.name === 'RuntimePolicyDeniedError')
-  )
-}
-
-// A provider/model call failed: carries the adapter-normalized error so the
-// canonical runtime.error event and the session status only ever expose the
-// safe category and message, never the raw provider payload.
-export class ProviderCallError extends Error {
-  constructor(readonly normalized: NormalizedProviderError) {
-    super(normalized.message)
-    this.name = 'ProviderCallError'
-  }
-}
-
-export function isRuntimeTurnCancelled(error: unknown) {
-  return error instanceof RuntimeTurnCancelledError
-}
-
-const ZERO_USAGE: Usage = {
-  input: 0,
-  output: 0,
-  cacheRead: 0,
-  cacheWrite: 0,
-  totalTokens: 0,
-  cost: {
-    input: 0,
-    output: 0,
-    cacheRead: 0,
-    cacheWrite: 0,
-    total: 0,
-  },
 }
 
 async function getSandboxBinding() {
@@ -366,13 +316,6 @@ export async function executeRuntimeToolCalls(
   return results
 }
 
-function runtimeSystemPrompt(snapshot: Record<string, unknown>) {
-  const instructions = typeof snapshot.instructions === 'string' ? snapshot.instructions.trim() : ''
-  return (
-    instructions || 'You are an AMA cloud-owned coding agent. Use tools when workspace inspection or edits are needed.'
-  )
-}
-
 function piProviderName(provider: string) {
   return provider === 'workers-ai' ? 'cloudflare-workers-ai' : provider
 }
@@ -494,63 +437,6 @@ function usageFromProvider(provider: string, raw: Record<string, unknown> | null
     totalTokens: usage.totalTokens,
     cost: ZERO_USAGE.cost,
   }
-}
-
-function assistantMessage(
-  model: Model<string>,
-  content: AssistantMessage['content'],
-  stopReason: AssistantMessage['stopReason'],
-  usage: Usage,
-  errorMessage?: string,
-): AssistantMessage {
-  return {
-    role: 'assistant',
-    content,
-    api: model.api,
-    provider: model.provider,
-    model: model.id,
-    usage,
-    stopReason,
-    ...(errorMessage ? { errorMessage } : {}),
-    timestamp: Date.now(),
-  }
-}
-
-function emitAssistantMessage(stream: AssistantMessageEventStream, message: AssistantMessage) {
-  stream.push({ type: 'start', partial: { ...message, content: [] } })
-  const partial: AssistantMessage = { ...message, content: [] }
-  for (let index = 0; index < message.content.length; index += 1) {
-    const block = message.content[index]
-    if (!block) {
-      continue
-    }
-    if (block.type === 'text') {
-      partial.content = [...partial.content, { type: 'text', text: '' }]
-      stream.push({ type: 'text_start', contentIndex: index, partial: { ...partial } })
-      ;(partial.content[index] as { type: 'text'; text: string }).text = block.text
-      stream.push({ type: 'text_delta', contentIndex: index, delta: block.text, partial: { ...partial } })
-      stream.push({ type: 'text_end', contentIndex: index, content: block.text, partial: { ...partial } })
-      continue
-    }
-    if (block.type === 'toolCall') {
-      partial.content = [...partial.content, { type: 'toolCall', id: block.id, name: block.name, arguments: {} }]
-      stream.push({ type: 'toolcall_start', contentIndex: index, partial: { ...partial } })
-      ;(partial.content[index] as ToolCall).arguments = block.arguments
-      stream.push({
-        type: 'toolcall_delta',
-        contentIndex: index,
-        delta: JSON.stringify(block.arguments),
-        partial: { ...partial },
-      })
-      stream.push({ type: 'toolcall_end', contentIndex: index, toolCall: block, partial: { ...partial } })
-    }
-  }
-  if (message.stopReason === 'error' || message.stopReason === 'aborted') {
-    stream.push({ type: 'error', reason: message.stopReason, error: message })
-  } else {
-    stream.push({ type: 'done', reason: message.stopReason, message })
-  }
-  stream.end(message)
 }
 
 function parseToolArguments(value: unknown) {
@@ -731,432 +617,75 @@ function testAssistantMessage(model: Model<string>, context: Context) {
   })
 }
 
-async function ensureTurnActive(signal: AbortSignal, ensureActive?: () => Promise<void>) {
-  if (signal.aborted) {
-    throw new RuntimeTurnCancelledError('Runtime request aborted')
-  }
-  await ensureActive?.()
-  if (signal.aborted) {
-    throw new RuntimeTurnCancelledError('Runtime request aborted')
-  }
-}
-
-// Provider boundary: everything inside is a provider-specific call; failures
-// are normalized through the provider adapter before they leave this seam.
-async function callProviderModel(env: Env, model: Model<string>, context: Context, signal?: AbortSignal) {
-  try {
-    if (env.AMA_RUNTIME_MODE === 'test') {
-      const latestUser = [...context.messages].reverse().find((message) => message.role === 'user')
-      const prompt = latestUser && latestUser.role === 'user' ? textContent(latestUser.content) : ''
-      const simulated = simulatedProviderFailure(prompt)
-      if (simulated) {
-        throw simulated
-      }
-      return testAssistantMessage(model, context)
-    }
-    return providerAssistantMessage(
-      model,
-      await env.AI.run(
-        model.id,
-        {
-          model: model.id,
-          messages: openAiMessages(context),
-          tools: openAiTools(context),
-        },
-        signal ? { signal } : undefined,
-      ),
-    )
-  } catch (error) {
-    if (isRuntimeTurnCancelled(error) || error instanceof ProviderCallError) {
-      throw error
-    }
-    throw new ProviderCallError(normalizeProviderError(providerFamily(model.provider), error))
-  }
-}
-
-function createRuntimeStreamFn(
-  env: Env,
-  values: {
-    ensureActive?: () => Promise<void>
-    markCancelled: () => void
-    onProviderError?: (normalized: NormalizedProviderError) => void
-    // Checked before each model call: pausing between completed turns lets a
-    // continuation pick the run up under a fresh execution budget.
-    shouldPause?: () => boolean
-    markPaused?: () => void
-  },
-) {
-  return (model: Model<string>, context: Context, options?: StreamOptions) => {
-    const stream = createAssistantMessageEventStream()
-    queueMicrotask(async () => {
-      try {
-        if (options?.signal?.aborted) {
-          const aborted = assistantMessage(model, [], 'aborted', ZERO_USAGE, 'Runtime request aborted')
-          emitAssistantMessage(stream, aborted)
-          return
-        }
-        // Only pause once the transcript already contains assistant progress;
-        // the first model call of an invocation always runs.
-        if (values.shouldPause?.() && context.messages.some((message) => message.role === 'assistant')) {
-          values.markPaused?.()
-          const paused = assistantMessage(model, [], 'aborted', ZERO_USAGE, 'Paused for continuation')
-          emitAssistantMessage(stream, paused)
-          return
-        }
-        await ensureTurnActive(options?.signal ?? new AbortController().signal, values.ensureActive)
-        const latestUser = [...context.messages].reverse().find((message) => message.role === 'user')
-        const prompt = latestUser && latestUser.role === 'user' ? textContent(latestUser.content) : ''
-        if (env.AMA_RUNTIME_MODE === 'test' && /wait for cancellation/i.test(prompt)) {
-          await new Promise((resolve) => setTimeout(resolve, 100))
-        }
-        const message = await callProviderModel(env, model, context, options?.signal)
-        await ensureTurnActive(options?.signal ?? new AbortController().signal, values.ensureActive)
-        emitAssistantMessage(stream, message)
-      } catch (error) {
-        if (isRuntimeTurnCancelled(error)) {
-          values.markCancelled()
-        }
-        const aborted = options?.signal?.aborted || isRuntimeTurnCancelled(error)
-        if (!aborted && error instanceof ProviderCallError) {
-          values.onProviderError?.(error.normalized)
-        }
-        const failed = assistantMessage(
-          model,
-          [],
-          aborted ? 'aborted' : 'error',
-          ZERO_USAGE,
-          error instanceof Error ? error.message : 'Model request failed',
-        )
-        emitAssistantMessage(stream, failed)
-      }
-    })
-    return stream
-  }
-}
-
-function stringifyToolOutput(result: Record<string, unknown>) {
-  if (typeof result.stdout === 'string' || typeof result.stderr === 'string') {
-    return [result.stdout, result.stderr]
-      .filter((value): value is string => typeof value === 'string' && value.length > 0)
-      .join('\n')
-  }
-  if (typeof result.content === 'string') {
-    return result.content
-  }
-  return JSON.stringify(result)
-}
-
-function runtimeTools(
-  env: Env,
-  values: {
-    sessionId: string
-    sandboxId: string
-    agentSnapshot: Record<string, unknown>
-    ensureActive?: () => Promise<void>
-    approveToolCall?: SessionTurnInput['approveToolCall']
-    resolveToolResult?: SessionTurnInput['resolveToolResult']
-  },
-) {
-  const executor = toolExecutor(env)
-  const tool = (
-    name: 'sandbox.exec' | 'sandbox.read' | 'sandbox.write' | 'sandbox.fetch',
-    label: string,
-    description: string,
-    parameters: AgentTool['parameters'],
-  ): AgentTool =>
-    ({
-      name,
-      label,
-      description,
-      parameters,
-      executionMode: 'sequential',
-      async execute(toolCallId, params, signal): Promise<AgentToolResult<Record<string, unknown>>> {
-        const input = params as Record<string, unknown>
-        await ensureTurnActive(signal ?? new AbortController().signal, values.ensureActive)
-        const decision = await values.approveToolCall?.({ toolCallId, toolName: name, input })
-        if (decision && !decision.allowed) {
-          throw new RuntimePolicyDeniedError(decision.reason ?? `Tool call blocked by AMA policy: ${name}`)
-        }
-        await ensureTurnActive(signal ?? new AbortController().signal, values.ensureActive)
-        const providedResult = await values.resolveToolResult?.({ toolCallId, toolName: name, input })
-        if (providedResult) {
-          return {
-            content: [{ type: 'text', text: stringifyToolOutput(providedResult) }],
-            details: providedResult,
-          }
-        }
-        const result = await executor.execute(
-          {
-            sessionId: values.sessionId,
-            sandboxId: values.sandboxId,
-            toolCallId,
-            toolName: name,
-            input,
-            cwd: '/workspace',
-          },
-          signal,
-        )
-        await ensureTurnActive(signal ?? new AbortController().signal, values.ensureActive)
-        if (result.error) {
-          throw new Error(JSON.stringify(result.error))
-        }
-        return {
-          content: [{ type: 'text', text: stringifyToolOutput(result.output) }],
-          details: { ...result.output, durationMs: result.durationMs },
-        }
-      },
-    }) satisfies AgentTool
-
-  // Agent tool attachments ({ name, ... } objects) are the only tool source.
-  // An empty list means "no restriction": agents without explicit tool
-  // attachments get the full sandbox toolset, matching environment policy
-  // defaults elsewhere (defaultEffect allow).
-  const toolNames = Array.isArray(values.agentSnapshot.tools)
-    ? values.agentSnapshot.tools
-        .map((tool) =>
-          typeof tool === 'string'
-            ? tool
-            : tool && typeof tool === 'object' && typeof (tool as { name?: unknown }).name === 'string'
-              ? (tool as { name: string }).name
-              : null,
-        )
-        .filter((name): name is string => name !== null)
-    : []
-  const allowsTool = (toolName: string) =>
-    toolNames.length === 0 || toolNames.includes('*') || toolNames.includes(toolName)
-
-  return [
-    tool(
-      'sandbox.exec',
-      'Run command',
-      'Run a shell command in the session workspace.',
-      Type.Object({ command: Type.String() }),
-    ),
-    tool(
-      'sandbox.read',
-      'Read file',
-      'Read a UTF-8 file from the session workspace.',
-      Type.Object({ path: Type.String() }),
-    ),
-    tool(
-      'sandbox.write',
-      'Write file',
-      'Write a UTF-8 file under the session workspace.',
-      Type.Object({ path: Type.String(), content: Type.String() }),
-    ),
-    tool(
-      'sandbox.fetch',
-      'Fetch URL',
-      'Fetch an HTTP(S) URL over the sandbox network, subject to the session network policy.',
-      Type.Object({ url: Type.String() }),
-    ),
-  ].filter((candidate) => allowsTool(candidate.name))
-}
-
-function usageEvent(message: AgentMessage, provider: string, model: string) {
-  if (message.role !== 'assistant') {
-    return null
-  }
+// The Worker's ModelClient port: Workers AI egress with deterministic test-mode
+// simulation. Owns the OpenAI request/response mapping and provider-error
+// normalization so the turn engine stays platform-free. Failures are normalized
+// through the provider adapter before they leave this seam.
+function workersAiModelClient(env: Env): ModelClient {
   return {
-    type: 'usage',
-    provider,
-    model,
-    promptTokens: message.usage.input,
-    completionTokens: message.usage.output,
-    totalTokens: message.usage.totalTokens,
-  }
-}
-
-function turnFailureMessage(event: AgentEvent) {
-  if (event.type === 'message_end' && event.message.role === 'assistant') {
-    if (event.message.stopReason === 'aborted') {
-      return 'Runtime request aborted'
-    }
-    if (event.message.stopReason === 'error') {
-      return event.message.errorMessage ?? 'Runtime model request failed'
-    }
-  }
-  if (event.type === 'tool_execution_end' && event.isError) {
-    const result = event.result as { content?: Array<{ type?: string; text?: string }>; details?: unknown }
-    const text = Array.isArray(result.content)
-      ? result.content.map((item) => (item.type === 'text' && typeof item.text === 'string' ? item.text : '')).join('')
-      : ''
-    return text || 'Runtime tool execution failed'
-  }
-  return null
-}
-
-function isPersistedMessage(value: unknown): value is AgentMessage {
-  if (!value || typeof value !== 'object' || !('role' in value)) {
-    return false
-  }
-  const role = (value as { role?: unknown }).role
-  return role === 'user' || role === 'assistant' || role === 'toolResult'
-}
-
-export function runtimeMessagesFromEvents(events: Array<{ type?: string; payload: string | Record<string, unknown> }>) {
-  let latestAgentEndMessages: AgentMessage[] | null = null
-  const messageEndMessages: AgentMessage[] = []
-  for (const event of events) {
-    const payload: unknown = typeof event.payload === 'string' ? JSON.parse(event.payload) : event.payload
-    if (!payload || typeof payload !== 'object') {
-      continue
-    }
-    const record = payload as Record<string, unknown>
-    const sourceType =
-      typeof event.type === 'string' ? event.type : typeof record.type === 'string' ? record.type : undefined
-    if (sourceType === 'agent_end' && Array.isArray(record.messages)) {
-      const messages = record.messages.filter(isPersistedMessage)
-      if (messages.length > 0) {
-        latestAgentEndMessages = messages
+    async complete(model, context, signal) {
+      try {
+        if (env.AMA_RUNTIME_MODE === 'test') {
+          const latestUser = [...context.messages].reverse().find((message) => message.role === 'user')
+          const prompt = latestUser && latestUser.role === 'user' ? textContent(latestUser.content) : ''
+          if (/wait for cancellation/i.test(prompt)) {
+            await new Promise((resolve) => setTimeout(resolve, 100))
+          }
+          const simulated = simulatedProviderFailure(prompt)
+          if (simulated) {
+            throw simulated
+          }
+          return testAssistantMessage(model, context)
+        }
+        return providerAssistantMessage(
+          model,
+          await env.AI.run(
+            model.id,
+            {
+              model: model.id,
+              messages: openAiMessages(context),
+              tools: openAiTools(context),
+            },
+            signal ? { signal } : undefined,
+          ),
+        )
+      } catch (error) {
+        if (isRuntimeTurnCancelled(error) || error instanceof ProviderCallError) {
+          throw error
+        }
+        throw new ProviderCallError(normalizeProviderError(providerFamily(model.provider), error))
       }
-      continue
-    }
-    if (sourceType !== 'message_end' || !isPersistedMessage(record.message)) {
-      continue
-    }
-    messageEndMessages.push(record.message)
+    },
   }
-  return latestAgentEndMessages ?? messageEndMessages
 }
 
+// Canonical home is runtime-core/turn-engine; re-exported for existing importers.
+export { runtimeMessagesFromEvents }
+
+// Worker host adapter over the shared turn engine: resolve the Workers AI
+// model, build the Cloudflare tool executor and model client, and map the
+// optional SessionTurnInput callbacks to the engine's ports (absent callbacks
+// become permissive defaults — no gating, no liveness check, never pause).
 export async function runSessionTurn(env: Env, input: SessionTurnInput): Promise<SessionTurnResult> {
-  const controller = new AbortController()
   const provider = piProviderName(input.provider)
   const modelId = resolveRuntimeModel(env, input.provider, input.model)
   const model = runtimeModel(input.provider, modelId)
-  let aborted = false
-  let cancelled = false
-  let paused = false
-  let failureMessage: string | null = null
-  let providerError: NormalizedProviderError | null = null
-  const agent = new Agent({
-    initialState: {
-      systemPrompt: runtimeSystemPrompt(input.agentSnapshot),
-      model,
-      tools: runtimeTools(env, {
-        sessionId: input.sessionId,
-        sandboxId: input.sandboxId,
-        agentSnapshot: input.agentSnapshot,
-        approveToolCall: input.approveToolCall,
-        resolveToolResult: input.resolveToolResult,
-        ...(input.ensureActive ? { ensureActive: input.ensureActive } : {}),
-      }),
-      messages: input.messages ?? [],
-    },
-    streamFn: createRuntimeStreamFn(env, {
-      markCancelled: () => {
-        cancelled = true
-      },
-      onProviderError: (normalized) => {
-        providerError = normalized
-      },
-      ...(input.shouldPause
-        ? {
-            shouldPause: input.shouldPause,
-            markPaused: () => {
-              paused = true
-            },
-          }
-        : {}),
-      ...(input.ensureActive ? { ensureActive: input.ensureActive } : {}),
-    }),
-    toolExecution: 'sequential',
+  return runTurn({
     sessionId: input.sessionId,
+    sandboxId: input.sandboxId,
+    model,
+    providerLabel: provider,
+    modelLabel: modelId,
+    agentSnapshot: input.agentSnapshot,
+    ...(input.prompt !== undefined ? { prompt: input.prompt } : {}),
+    ...(input.continuation ? { continuation: true } : {}),
+    ...(input.messages ? { messages: input.messages } : {}),
+    sink: { emit: (event, metadata) => input.onEvent(event, metadata) },
+    policy: { approve: input.approveToolCall ?? (async () => ({ allowed: true })) },
+    toolResults: { resolve: input.resolveToolResult ?? (async () => null) },
+    liveness: { ensureActive: input.ensureActive ?? (async () => {}) },
+    ...(input.shouldPause ? { budget: { shouldPause: input.shouldPause } } : {}),
+    executor: toolExecutor(env),
+    modelClient: workersAiModelClient(env),
   })
-
-  agent.subscribe(async (event: AgentEvent) => {
-    // Everything after a pause is filler from the synthetic paused message;
-    // completed turns are already persisted and the continuation rebuilds
-    // from them.
-    if (paused) {
-      return
-    }
-    try {
-      await ensureTurnActive(controller.signal, input.ensureActive)
-    } catch (error) {
-      if (isRuntimeTurnCancelled(error)) {
-        cancelled = true
-        aborted = true
-        agent.abort()
-        return
-      }
-      throw error
-    }
-    const eventFailure = turnFailureMessage(event)
-    if (eventFailure) {
-      failureMessage = eventFailure
-      aborted ||= eventFailure === 'Runtime request aborted'
-    }
-    await input.onEvent(
-      { ...event },
-      {
-        source: 'ama-cloud-runtime',
-        piCorePackage: '@earendil-works/pi-agent-core',
-      },
-    )
-    if (event.type === 'message_end') {
-      const usage = usageEvent(event.message, provider, modelId)
-      if (usage) {
-        await input.onEvent(usage, {
-          source: 'ama-cloud-runtime',
-          piCorePackage: '@earendil-works/pi-agent-core',
-        })
-      }
-      // Surface adapter-normalized provider failures as canonical
-      // runtime.error events: stable category, safe message, retry metadata.
-      if (event.message.role === 'assistant' && event.message.stopReason === 'error' && providerError) {
-        const normalized: NormalizedProviderError = providerError
-        providerError = null
-        await input.onEvent(
-          {
-            type: 'error',
-            message: normalized.message,
-            category: normalized.category,
-            retryable: normalized.retryable,
-            ...(normalized.retryAfterSeconds !== undefined ? { retryAfterSeconds: normalized.retryAfterSeconds } : {}),
-            provider,
-            model: modelId,
-          },
-          {
-            source: 'ama-cloud-runtime',
-            piCorePackage: '@earendil-works/pi-agent-core',
-          },
-        )
-      }
-    }
-  })
-
-  controller.signal.addEventListener('abort', () => agent.abort(), { once: true })
-  try {
-    await ensureTurnActive(controller.signal, input.ensureActive)
-    if (input.continuation) {
-      await agent.continue()
-    } else {
-      if (typeof input.prompt !== 'string') {
-        throw new Error('Session turn requires a prompt unless it is a continuation')
-      }
-      await agent.prompt(input.prompt)
-    }
-    await agent.waitForIdle()
-    // A pause only fires when the loop was about to start another model call,
-    // so by construction the run still has work for a continuation.
-    if (paused) {
-      return { status: 'paused' }
-    }
-    if (aborted || cancelled) {
-      return { status: 'aborted' }
-    }
-    if (failureMessage) {
-      throw new Error(failureMessage)
-    }
-    return { status: 'idle' }
-  } catch (error) {
-    if (isRuntimeTurnCancelled(error)) {
-      return { status: 'aborted' }
-    }
-    throw error
-  } finally {
-    agent.abort()
-  }
 }

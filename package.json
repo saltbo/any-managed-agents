@@ -28,7 +28,9 @@
     "format": "biome format --write .",
     "bridge:build": "esbuild runtime-bridge/src/main.ts --bundle --platform=node --format=esm --target=node24 --banner:js=\"import { createRequire as __amaCreateRequire } from 'node:module'; const require = __amaCreateRequire(import.meta.url);\" --outfile=cmd/ama-runner/runtime_bridge_bundle.mjs",
     "openapi:generate": "tsx scripts/generate-openapi-and-sdks.ts",
-    "openapi:check": "tsx scripts/generate-openapi-and-sdks.ts --check"
+    "openapi:check": "tsx scripts/generate-openapi-and-sdks.ts --check",
+    "contract:generate": "tsx scripts/generate-go-contract.ts",
+    "contract:check": "tsx scripts/generate-go-contract.ts --check"
   },
   "engines": {
     "node": ">=24"

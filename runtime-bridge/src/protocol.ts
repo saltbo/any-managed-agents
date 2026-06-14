@@ -3,7 +3,7 @@ import type { AmaSessionEventType } from '../../shared/session-events'
 export type RuntimeBridgeRequest = {
   type: 'run'
   requestId: string
-  runtime: 'codex' | 'claude-code' | 'copilot'
+  runtime: 'ama' | 'codex' | 'claude-code' | 'copilot'
   sessionId: string
   cwd: string
   env: Record<string, string>
@@ -28,14 +28,14 @@ export type RuntimeBridgeControl = {
 export type RuntimeBridgeUsageRequest = {
   type: 'fetchUsage'
   requestId: string
-  runtime: 'codex' | 'claude-code' | 'copilot'
+  runtime: 'ama' | 'codex' | 'claude-code' | 'copilot'
   env: Record<string, string>
 }
 
 export type RuntimeBridgeModelsRequest = {
   type: 'detectModels'
   requestId: string
-  runtime: 'codex' | 'claude-code' | 'copilot'
+  runtime: 'ama' | 'codex' | 'claude-code' | 'copilot'
   env: Record<string, string>
 }
 

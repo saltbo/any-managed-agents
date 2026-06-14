@@ -18,7 +18,7 @@
     },
     "types": ["@cloudflare/workers-types", "node"]
   },
-  "include": ["server", "e2e", "drizzle.config.ts", "vitest*.ts"],
+  "include": ["server", "runtime-core", "e2e", "drizzle.config.ts", "vitest*.ts"],
   "exclude": [
     "server/integration/**/*.test.ts",
     "server/integration/apply-migrations.ts",

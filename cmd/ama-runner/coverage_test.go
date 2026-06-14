@@ -98,35 +98,6 @@ func TestRunnerChannelAndCommandBranches(t *testing.T) {
 		t.Fatalf("expected channel accepted mismatch, got %v", err)
 	}
 
-	if err := daemon.handleSessionCommand(context.Background(), newFakeRunnerSessionChannel(), RunnerSessionCommand{}); err != nil {
-		t.Fatalf("expected empty command success, got %v", err)
-	}
-	if err := daemon.handleSessionCommand(context.Background(), newFakeRunnerSessionChannel(), RunnerSessionCommand{
-		Body: RunnerRuntimeRequest{ToolCalls: []RunnerRuntimeToolCall{{ID: "call_1", Name: "sandbox.exec", Arguments: map[string]any{"command": "printf ok"}}}},
-	}); err != nil {
-		t.Fatalf("expected arguments fallback success, got %v", err)
-	}
-	for _, toolCall := range []RunnerRuntimeToolCall{
-		{Name: "sandbox.exec", Input: map[string]any{"command": "printf ok"}},
-		{ID: "call_1", Name: "unknown", Input: map[string]any{"command": "printf ok"}},
-	} {
-		err := daemon.handleSessionCommand(context.Background(), newFakeRunnerSessionChannel(), RunnerSessionCommand{
-			Body: RunnerRuntimeRequest{ToolCalls: []RunnerRuntimeToolCall{toolCall}},
-		})
-		if err == nil {
-			t.Fatalf("expected command validation error for %#v", toolCall)
-		}
-	}
-
-	daemon.Adapter = &fakeAdapter{err: os.ErrPermission, result: ToolResult{Output: ama.JSON{"stderr": "denied"}}}
-	channel = newFakeRunnerSessionChannel()
-	if err := daemon.executeSessionToolCall(context.Background(), channel, "call_1", "sandbox.exec", map[string]any{"command": "bad"}); err != nil {
-		t.Fatalf("expected failed tool event write success, got %v", err)
-	}
-	events := channel.writtenEvents()
-	if !containsString(events, "tool_execution_start") || !containsString(events, "tool_execution_end") {
-		t.Fatalf("expected failed tool events, got %v", events)
-	}
 }
 
 func TestRunOnceAndChannelErrorBranches(t *testing.T) {
