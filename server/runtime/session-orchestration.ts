@@ -13,25 +13,14 @@
 // codes, SSE) stay in server/http/sessions.ts. Outcomes cross the boundary as
 // discriminated result objects.
 
-import { runtimeSupportsLivePrompts } from '@server/domain/runtime-catalog'
 import { createRuntimeOrchestrationRepo, type SessionRow } from '../adapters/repos/runtime-orchestration'
 import { toolExecutor } from '../adapters/runtime/sandbox-tool-executor'
 import { recordAudit } from '../audit'
-import { sessionRuntimeConfig, sessionRuntimeFromMetadata } from '../domain/runtime-session'
 import type { Env } from '../env'
 import type { AuthScope } from '../usecases/ports'
 import { consumeCloudTurnMessage, executeCloudSessionTurn } from './cloud-turn'
-import { dispatchRunnerSessionCommand, hasAcceptedRunnerSessionChannel } from './runner-session-command'
-import type { safeRuntimeError } from './runtime-error'
-import type { RuntimeSecretEnvEntry } from './secret-env'
 import { appendRuntimeEvent, type Db, findSession, now, type SessionRuntimeError, stringify } from './session-base'
-import {
-  type CreateSessionOptions,
-  type CreateSessionResult,
-  createSessionForAgent,
-  enqueueSelfHostedSessionWork,
-  latestRunnerResumeToken,
-} from './session-create'
+import { type CreateSessionOptions, type CreateSessionResult, createSessionForAgent } from './session-create'
 import {
   archiveSession,
   markExpiredPendingSessions,
@@ -39,14 +28,12 @@ import {
   stopSession,
   unarchiveSession,
 } from './session-lifecycle'
+import { dispatchSessionPrompt, type PromptDispatchOutcome } from './session-prompt'
 import {
   type GitHubRepositoryResourceRef,
-  normalizeEnvironmentSnapshot,
-  parseAgentSnapshot,
   parseJson,
   type ResourceRef,
   type SerializedAgentVersion,
-  type serializeEnvironmentVersion,
 } from './session-snapshot'
 import {
   type PendingSessionApproval,
@@ -58,12 +45,14 @@ import { cloudTurnsRunInline, enqueueCloudTurn } from './turn-queue'
 
 // Snapshot/resource shaping moved to ./session-snapshot; CreateSessionResult and
 // CreateSessionOptions to ./session-create; SessionRuntimeError to ./session-base;
-// StopSessionResult to ./session-lifecycle. Re-exported for the public surface
-// that historically lived here (consumed by the SessionRuntimeGateway adapter).
+// StopSessionResult to ./session-lifecycle; PromptDispatchOutcome to
+// ./session-prompt. Re-exported for the public surface that historically lived
+// here (consumed by the SessionRuntimeGateway adapter).
 export type {
   CreateSessionOptions,
   CreateSessionResult,
   GitHubRepositoryResourceRef,
+  PromptDispatchOutcome,
   ResourceRef,
   SerializedAgentVersion,
   SessionRow,
@@ -72,136 +61,18 @@ export type {
 }
 // appendRuntimeEvent moved to ./session-base; consumeCloudTurnMessage to
 // ./cloud-turn; createSessionForAgent to ./session-create; the stop/archive
-// lifecycle to ./session-lifecycle. Re-exported for the public surface that
-// historically lived here (consumed by the gateway adapter, runtime-proxy, the
-// http layer, and server/worker).
+// lifecycle to ./session-lifecycle; dispatchSessionPrompt to ./session-prompt.
+// Re-exported for the public surface that historically lived here (consumed by
+// the gateway adapter, runtime-proxy, the http layer, and server/worker).
 export {
   appendRuntimeEvent,
   archiveSession,
   consumeCloudTurnMessage,
   createSessionForAgent,
+  dispatchSessionPrompt,
   markExpiredPendingSessions,
   stopSession,
   unarchiveSession,
-}
-
-type MessageDelivery = 'live' | 'queued'
-type MessageState = 'accepted' | 'delivered' | 'failed'
-
-// ── Prompt dispatch ─────────────────────────────────────────────────────────
-
-export type PromptDispatchOutcome =
-  | { ok: false; status: 409 | 500; message: string; runtimeError?: ReturnType<typeof safeRuntimeError> }
-  | { ok: true; delivery: MessageDelivery; state: MessageState }
-
-export async function dispatchSessionPrompt(
-  env: Env,
-  db: Db,
-  auth: AuthScope,
-  sessionId: string,
-  content: string,
-): Promise<PromptDispatchOutcome> {
-  const session = await findSession(db, auth, sessionId)
-  if (!session) {
-    return { ok: false, status: 409, message: 'Session runtime is no longer active' }
-  }
-  if (session.state !== 'idle' && session.state !== 'running') {
-    return { ok: false, status: 409, message: 'Session runtime is not active' }
-  }
-  if (!session.sandboxId) {
-    const metadata = parseJson<Record<string, unknown>>(session.metadata) ?? {}
-    if (
-      runtimeSupportsLivePrompts(sessionRuntimeFromMetadata(metadata)) &&
-      (await hasAcceptedRunnerSessionChannel(env, session.id))
-    ) {
-      const delivered = await dispatchRunnerSessionCommand(env, session.id, { type: 'prompt', message: content })
-      if (delivered) {
-        await recordAudit(db, {
-          auth,
-          action: 'session.command',
-          resourceType: 'session',
-          resourceId: session.id,
-          outcome: 'success',
-          sessionId: session.id,
-          metadata: { type: 'prompt', delivery: 'live' },
-        })
-        return { ok: true, delivery: 'live', state: 'delivered' }
-      }
-    }
-    return await queueSelfHostedSessionPrompt(db, auth, session, content)
-  }
-
-  const submittedAt = now()
-  const started = await createRuntimeOrchestrationRepo(db).updateSessionWhenState(
-    auth.project.id,
-    session.id,
-    ['idle', 'running'],
-    { state: 'running', stateReason: null, updatedAt: submittedAt },
-  )
-  if (!started) {
-    return { ok: false, status: 409, message: 'Session runtime is no longer active' }
-  }
-
-  if (!cloudTurnsRunInline(env)) {
-    await enqueueCloudTurn(env, {
-      type: 'session.turn',
-      sessionId: session.id,
-      organizationId: auth.organization.id,
-      projectId: auth.project.id,
-      prompt: content,
-      auditAction: 'session.command',
-    })
-    return { ok: true, delivery: 'queued', state: 'accepted' }
-  }
-
-  const outcome = await executeCloudSessionTurn(env, db, auth, session, { prompt: content }, 'session.command')
-  if (!outcome.ok && outcome.cancelled) {
-    return { ok: false, status: 409, message: 'Session runtime is no longer active' }
-  }
-  if (!outcome.ok) {
-    return { ok: false, status: 500, message: outcome.error.message, runtimeError: outcome.error }
-  }
-  return { ok: true, delivery: 'live', state: 'delivered' }
-}
-
-async function queueSelfHostedSessionPrompt(
-  db: Db,
-  auth: AuthScope,
-  session: SessionRow,
-  content: string,
-): Promise<PromptDispatchOutcome> {
-  const agentSnapshot = parseAgentSnapshot(session.agentSnapshot)
-  if (!agentSnapshot) {
-    return { ok: false, status: 409, message: 'Session agent snapshot is required' }
-  }
-  const environmentSnapshot = normalizeEnvironmentSnapshot(
-    parseJson<ReturnType<typeof serializeEnvironmentVersion>>(session.environmentSnapshot),
-  )
-  const submittedAt = now()
-  const queued = await createRuntimeOrchestrationRepo(db).updateSessionWhenState(
-    auth.project.id,
-    session.id,
-    ['idle', 'running'],
-    { state: 'pending', stateReason: 'waiting-for-runner', updatedAt: submittedAt },
-  )
-  if (!queued) {
-    return { ok: false, status: 409, message: 'Session runtime is no longer active' }
-  }
-  const sessionMetadata = parseJson<Record<string, unknown>>(session.metadata) ?? {}
-  await enqueueSelfHostedSessionWork(db, auth, {
-    session,
-    agentSnapshot,
-    environmentSnapshot,
-    runtime: sessionRuntimeFromMetadata(sessionMetadata),
-    runtimeConfig: sessionRuntimeConfig(sessionMetadata),
-    resourceRefs: parseJson<ResourceRef[]>(session.resourceRefs) ?? [],
-    env: parseJson<Record<string, string>>(session.env) ?? {},
-    secretEnv: parseJson<RuntimeSecretEnvEntry[]>(session.secretEnv) ?? [],
-    initialPrompt: content,
-    resume: true,
-    resumeToken: await latestRunnerResumeToken(db, auth, session.id),
-  })
-  return { ok: true, delivery: 'queued', state: 'accepted' }
 }
 
 // ── Approval decision continuation ──────────────────────────────────────────
