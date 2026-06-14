@@ -18,7 +18,6 @@ import {
 import { recordAudit } from '../audit'
 import type { RuntimeName } from '../contracts/environment-contracts'
 import type { Env } from '../env'
-import { policyBlocksSandboxOperation } from '../policy'
 import type { AuthScope } from '../usecases/ports'
 import { runtimeDriver, runtimeDriverName } from './drivers'
 import { safeRuntimeError } from './runtime-error'
@@ -32,6 +31,7 @@ import {
   now,
   RUNTIME_START_TIMEOUT_MS,
   stringify,
+  withRepo,
   withTimeout,
 } from './session-base'
 import { mcpConnectorIds, resolveMcpSnapshot } from './session-provisioning'
@@ -48,9 +48,8 @@ import {
   type ResourceRef,
   type SerializedAgentVersion,
 } from './session-snapshot'
-import { createToolApprovalGate } from './tool-approvals'
+import { buildSessionTurnCallbacks, loadRuntimeMessages, resolveSessionProviderModel } from './turn-driver'
 import { type CloudTurnMessage, cloudTurnsRunInline, enqueueCloudTurn } from './turn-queue'
-import { assertRuntimeSessionRunning, loadRuntimeMessages, resolveSessionProviderModel } from './turn-runner'
 
 // Per-invocation soft budget for new model turns (see executeCloudSessionTurn).
 const CLOUD_TURN_SOFT_BUDGET_MS = 4 * 60_000
@@ -197,33 +196,56 @@ export async function executeCloudSessionTurn(
   work: { prompt?: string; continuation?: boolean },
   auditAction: 'session.initial_prompt' | 'session.command',
 ): Promise<CloudTurnOutcome> {
-  let approvalGateRef: ReturnType<typeof createToolApprovalGate> | null = null
-  let policyDeniedToolCall = false
+  const repo = withRepo(db)
+  let callbacks: ReturnType<typeof buildSessionTurnCallbacks> | null = null
   try {
     const agentSnapshot = parseAgentSnapshot(session.agentSnapshot)
     if (!agentSnapshot) {
       throw new Error('Session agent snapshot is required')
     }
     const modelConfig = parseJson<Record<string, unknown>>(session.modelConfig) ?? {}
-    const repo = createRuntimeOrchestrationRepo(db)
     const messages = await loadRuntimeMessages(repo, session.id)
     const { provider: turnProvider, model: turnModel } = resolveSessionProviderModel(
       session,
       agentSnapshot,
       modelConfig,
     )
-    const ensureActive = async () => {
-      await assertRuntimeSessionRunning(repo, auth.project.id, session.id)
-    }
-    const sessionMetadata = parseJson<Record<string, unknown>>(session.metadata) ?? {}
-    const approvalGate = createToolApprovalGate({
-      db,
+    callbacks = buildSessionTurnCallbacks({
+      repo,
       auth,
-      sessionId: session.id,
-      sessionMetadata,
-      appendEvent: (event, metadata) => appendRuntimeEvent(repo, { auth, sessionId: session.id, event, metadata }),
+      session,
+      recordPolicyDenial: async (blocked) => {
+        const operationFields =
+          blocked.operation.operation === 'command'
+            ? { command: blocked.operation.command }
+            : { host: blocked.operation.host }
+        await appendRuntimeEvent(repo, {
+          auth,
+          sessionId: session.id,
+          event: {
+            type: 'policy_denied',
+            category: blocked.decision.category,
+            ruleId: blocked.decision.rule,
+            resourceType: blocked.operation.resourceType,
+            resourceId: blocked.operation.resourceId,
+            decision: blocked.decision,
+            operation: blocked.operation.operation,
+            ...operationFields,
+          },
+          metadata: { source: 'policy' },
+        })
+        await recordAudit(db, {
+          auth,
+          action: 'runtime_sandbox.operation',
+          resourceType: blocked.operation.resourceType,
+          resourceId: blocked.operation.resourceId,
+          outcome: 'denied',
+          sessionId: session.id,
+          policyCategory: blocked.decision.category,
+          metadata: { operation: blocked.operation.operation, ...operationFields, decision: blocked.decision },
+        })
+      },
     })
-    approvalGateRef = approvalGate
     const startedAt = Date.now()
     const result = await runSessionTurn(env, {
       sessionId: session.id,
@@ -235,77 +257,20 @@ export async function executeCloudSessionTurn(
       ...(work.continuation ? { continuation: true } : {}),
       messages,
       ...(cloudTurnsRunInline(env) ? {} : { shouldPause: () => Date.now() - startedAt > CLOUD_TURN_SOFT_BUDGET_MS }),
-      ensureActive,
-      onEvent: async (event, metadata) => {
-        if (approvalGate.shouldSuppressEvent(event)) {
-          return
-        }
-        await ensureActive()
-        await appendRuntimeEvent(repo, { auth, sessionId: session.id, event, ...(metadata ? { metadata } : {}) })
-      },
-      resolveToolResult: (input) => approvalGate.resolveToolResult(input),
-      approveToolCall: async ({ toolCallId, toolName, input }) => {
-        await ensureActive()
-        const blocked = await policyBlocksSandboxOperation(db, auth, {
-          session: {
-            id: session.id,
-            agentSnapshot: session.agentSnapshot,
-            environmentSnapshot: session.environmentSnapshot,
-          },
-          toolName,
-          input,
-        })
-        if (blocked) {
-          const operationFields =
-            blocked.operation.operation === 'command'
-              ? { command: blocked.operation.command }
-              : { host: blocked.operation.host }
-          await ensureActive()
-          await appendRuntimeEvent(repo, {
-            auth,
-            sessionId: session.id,
-            event: {
-              type: 'policy_denied',
-              category: blocked.decision.category,
-              ruleId: blocked.decision.rule,
-              resourceType: blocked.operation.resourceType,
-              resourceId: blocked.operation.resourceId,
-              decision: blocked.decision,
-              operation: blocked.operation.operation,
-              ...operationFields,
-            },
-            metadata: { source: 'policy' },
-          })
-          await recordAudit(db, {
-            auth,
-            action: 'runtime_sandbox.operation',
-            resourceType: blocked.operation.resourceType,
-            resourceId: blocked.operation.resourceId,
-            outcome: 'denied',
-            sessionId: session.id,
-            policyCategory: blocked.decision.category,
-            metadata: { operation: blocked.operation.operation, ...operationFields, decision: blocked.decision },
-          })
-          await ensureActive()
-          policyDeniedToolCall = true
-          return { allowed: false, reason: blocked.decision.message }
-        }
-        const approvalDecision = await approvalGate.gate({ toolCallId, toolName, input })
-        if (approvalDecision) {
-          return approvalDecision
-        }
-        return { allowed: true }
-      },
+      ensureActive: callbacks.ensureActive,
+      onEvent: callbacks.onEvent,
+      resolveToolResult: callbacks.resolveToolResult,
+      approveToolCall: callbacks.approveToolCall,
     })
     if (result.status === 'idle') {
-      await createRuntimeOrchestrationRepo(db).updateSessionWhenState(auth.project.id, session.id, 'running', {
+      await repo.updateSessionWhenState(auth.project.id, session.id, 'running', {
         state: 'idle',
         updatedAt: now(),
       })
     }
 
     if (result.status === 'paused') {
-      await createRuntimeOrchestrationRepo(db).updateSessionWhenState(auth.project.id, session.id, 'running', {
+      await repo.updateSessionWhenState(auth.project.id, session.id, 'running', {
         updatedAt: now(),
       })
       await enqueueCloudTurn(env, {
@@ -331,14 +296,14 @@ export async function executeCloudSessionTurn(
     return { ok: true }
   } catch (error) {
     if (isRuntimeTurnCancelled(error)) {
-      if (approvalGateRef?.requiresAction()) {
+      if (callbacks?.approvalGate.requiresAction()) {
         return { ok: true, requiresAction: true }
       }
       return { ok: false, cancelled: true }
     }
     const safeError = safeRuntimeError(error)
-    if (policyDeniedToolCall || isRuntimePolicyDenied(error)) {
-      await createRuntimeOrchestrationRepo(db).updateSessionWhenState(auth.project.id, session.id, 'running', {
+    if (callbacks?.wasPolicyDenied() || isRuntimePolicyDenied(error)) {
+      await repo.updateSessionWhenState(auth.project.id, session.id, 'running', {
         state: 'idle',
         stateReason: 'policy-denied',
         updatedAt: now(),
