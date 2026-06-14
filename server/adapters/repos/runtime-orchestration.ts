@@ -1,3 +1,15 @@
+import type { SessionOrchestrationStore } from '@server/usecases/ports'
+import type {
+  AgentRow,
+  AgentVersionRow,
+  ConnectionRow,
+  ConnectionToolRow,
+  EnvironmentRow,
+  EnvironmentVersionRow,
+  ProviderConfigRow,
+  SessionRow,
+  WorkItemRow,
+} from '@shared/runtime-rows'
 import type { CanonicalAmaSessionEvent } from '@shared/session-events'
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, ne, notLike, or, sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
@@ -24,14 +36,20 @@ import { insertCanonicalSessionEvent } from '../../db/session-event-store'
 
 type Db = ReturnType<typeof drizzle>
 
-export type SessionRow = typeof sessions.$inferSelect
-export type AgentRow = typeof agents.$inferSelect
-export type AgentVersionRow = typeof agentVersions.$inferSelect
-export type EnvironmentRow = typeof environments.$inferSelect
-export type EnvironmentVersionRow = typeof environmentVersions.$inferSelect
-export type WorkItemRow = typeof workItems.$inferSelect
-export type ConnectionRow = typeof connections.$inferSelect
-export type ConnectionToolRow = typeof connectionTools.$inferSelect
+// The store's row shapes are the plain shared types (so usecases/ports can name
+// the SessionOrchestrationStore boundary without drizzle). The drizzle
+// $inferSelect rows are structurally assignable to them, verified by typecheck.
+export type {
+  AgentRow,
+  AgentVersionRow,
+  ConnectionRow,
+  ConnectionToolRow,
+  EnvironmentRow,
+  EnvironmentVersionRow,
+  ProviderConfigRow,
+  SessionRow,
+  WorkItemRow,
+} from '@shared/runtime-rows'
 
 type SessionInsert = typeof sessions.$inferInsert
 type WorkItemInsert = typeof workItems.$inferInsert
@@ -44,11 +62,13 @@ type SessionUpdate = Partial<typeof sessions.$inferInsert>
 // session rows, work-item/lease/channel mechanics, snapshot reads) — distinct
 // from the REST-facing SessionRepo, which serializes DTOs. Both are the only
 // places these tables are touched.
-export function createRuntimeOrchestrationRepo(db: Db) {
+export function createRuntimeOrchestrationRepo(db: Db): SessionOrchestrationStore & { db: Db } {
   return {
     // The persistence handle the runtime forwards to the cross-cutting policy
     // engine (server/policy.ts), which routes its own reads through repos. The
-    // handle never leaves this object for direct drizzle use in runtime/.
+    // handle is not part of the SessionOrchestrationStore port surface; it stays
+    // on the concrete repo for the current direct-db callers (removed in a later
+    // step) and never leaves for ad-hoc drizzle use in runtime/.
     db,
 
     // ── session reads ─────────────────────────────────────────────────────
@@ -757,13 +777,4 @@ const providerConfigSelection = {
   enabled: providersTable.enabled,
   credentialId: providersTable.credentialId,
   credentialVersionId: providersTable.credentialVersionId,
-}
-
-export interface ProviderConfigRow {
-  id: string
-  type: string
-  baseUrl: string | null
-  enabled: boolean
-  credentialId: string | null
-  credentialVersionId: string | null
 }

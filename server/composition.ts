@@ -1,7 +1,9 @@
 import { createAuditPort } from './adapters/gateways/audit'
+import { createCloudTurnQueue } from './adapters/gateways/cloud-turn-queue'
 import { createMcpGateway } from './adapters/gateways/mcp'
 import { createPolicyPort } from './adapters/gateways/policy'
 import { createProviderCatalogGateway } from './adapters/gateways/provider-catalog'
+import { createRunnerChannel } from './adapters/gateways/runner-channel'
 import { createRuntimeSecretEnvGateway } from './adapters/gateways/runtime-secret-env'
 import { createSecretStoreGateway } from './adapters/gateways/secret-store'
 import { createSessionEventPort } from './adapters/gateways/session-events'
@@ -19,12 +21,14 @@ import { createPolicyRepo } from './adapters/repos/policies'
 import { createProjectRepo } from './adapters/repos/projects'
 import { createProviderRepo } from './adapters/repos/providers'
 import { createRunnerRepo } from './adapters/repos/runners'
+import { createRuntimeOrchestrationRepo } from './adapters/repos/runtime-orchestration'
 import { createSessionRepo } from './adapters/repos/sessions'
 import { createTriggerDispatchRepo } from './adapters/repos/trigger-dispatch'
 import { createTriggerRepo } from './adapters/repos/triggers'
 import { createUsageRepo } from './adapters/repos/usage-records'
 import { createVaultRepo } from './adapters/repos/vaults'
 import { createWorkItemRepo } from './adapters/repos/work-items'
+import { createSandboxRuntimeHost } from './adapters/runtime/sandbox-runtime-host'
 import { createDb } from './db/client'
 import type { Env } from './env'
 import type { Deps } from './usecases/deps'
@@ -60,6 +64,10 @@ export function createDeps(env: Env): Deps {
     workItems: createWorkItemRepo(db),
     leases: createLeaseRepo(db),
     runtimeSecretEnv: createRuntimeSecretEnvGateway(env, db),
+    cloudTurnQueue: createCloudTurnQueue(env),
+    runnerChannel: createRunnerChannel(env),
+    sandboxRuntime: createSandboxRuntimeHost(env),
+    sessionOrchestration: createRuntimeOrchestrationRepo(db),
     sessions,
     sessionRuntime: createSessionRuntimeGateway(env, db, sessions),
   }

@@ -131,6 +131,10 @@ function fakeDeps(
     workItems: undefined as unknown as Deps['workItems'],
     leases: undefined as unknown as Deps['leases'],
     runtimeSecretEnv: undefined as unknown as Deps['runtimeSecretEnv'],
+    cloudTurnQueue: undefined as unknown as Deps['cloudTurnQueue'],
+    runnerChannel: undefined as unknown as Deps['runnerChannel'],
+    sandboxRuntime: undefined as unknown as Deps['sandboxRuntime'],
+    sessionOrchestration: undefined as unknown as Deps['sessionOrchestration'],
     sessions: undefined as unknown as Deps['sessions'],
     audit: { record: async () => {}, ...overrides.audit },
     policy: {

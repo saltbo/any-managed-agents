@@ -1974,6 +1974,323 @@ export interface RuntimeSecretEnvGateway {
   resolve(scope: { organizationId: string; projectId: string }, items: unknown): Promise<Record<string, string>>
 }
 
+// --- cloud turn queue (usecase ↔ queue worker contract) ---
+
+// A runtime secret-env entry as it rides on a cloud-turn message: a vault
+// credential reference resolved to a raw value only inside the queue consumer.
+// Mirrors the gateway adapter's RuntimeSecretEnvEntry without importing it.
+export interface CloudTurnSecretEnvEntry {
+  name: string
+  credentialRef: { credentialId: string; versionId?: string }
+}
+
+// Cloud session work runs from a queue consumer instead of HTTP waitUntil:
+// a turn that shells out (installs, builds, sleeps) or a sandbox cold boot
+// outlives the request lifetime cap and was silently killed mid-flight,
+// stranding the session. The consumer invocation owns the wall-clock budget.
+export type CloudSessionTurnMessage = {
+  type: 'session.turn'
+  sessionId: string
+  organizationId: string
+  projectId: string
+  prompt: string
+  auditAction: 'session.initial_prompt' | 'session.command'
+}
+
+// Continuation of a paused turn: the transcript is rebuilt from persisted
+// events and the loop continues from the trailing tool results. Chaining
+// steps lifts the per-invocation wall-clock cap from total turn duration.
+// Carries the turnId so the step renews the SAME lease the paused turn holds —
+// the continuation chain is one logical turn, so a concurrent prompt that
+// arrives mid-chain loses the lease and is deferred until the chain ends.
+export type CloudSessionStepMessage = {
+  type: 'session.step'
+  sessionId: string
+  organizationId: string
+  projectId: string
+  // Present for a budget continuation (renew the held lease); absent for an
+  // approval-resume step, which acquires a fresh lease in the consumer.
+  turnId?: string
+  auditAction: 'session.initial_prompt' | 'session.command'
+}
+
+export type CloudSessionStartMessage = {
+  type: 'session.start'
+  sessionId: string
+  organizationId: string
+  projectId: string
+  runtime: string
+  runtimeConfig: Record<string, unknown>
+  resourceRefs: Array<Record<string, unknown>>
+  runtimeEnv: Record<string, string>
+  runtimeSecretEnv: CloudTurnSecretEnvEntry[]
+  initialPrompt?: string
+}
+
+export type CloudTurnMessage = CloudSessionTurnMessage | CloudSessionStepMessage | CloudSessionStartMessage
+
+// Cloud-turn queue boundary. The runtime enqueues start/step/turn work onto the
+// CLOUD_TURNS queue (the consumer owns the wall-clock budget). `runsInline`
+// reports the test/no-binding mode where turns run synchronously inline so
+// existing assertions keep working. The only implementation lives in adapters.
+export interface CloudTurnQueue {
+  enqueue(message: CloudTurnMessage, opts?: { delaySeconds?: number }): Promise<void>
+  runsInline(): boolean
+}
+
+// --- runner session channel (self-hosted runner DO) ---
+
+// Self-hosted runner session channels live in a per-session Durable Object.
+// This gateway talks to that DO over its internal fetch protocol and never
+// touches control-plane tables. The only implementation lives in adapters.
+export interface RunnerChannel {
+  // Whether the session's runner channel DO has an accepted (active) runner.
+  isAccepted(sessionId: string): Promise<boolean>
+  // Dispatches a command to the runner over the channel; true when accepted.
+  dispatch(sessionId: string, command: Record<string, unknown>): Promise<boolean>
+}
+
+// --- sandbox runtime host (cloud session execution) ---
+
+// Start input for the cloud sandbox runtime host. Plain data — no drizzle rows.
+export interface SandboxRuntimeStartInput {
+  sessionId: string
+  sandboxId: string
+  runtime?: string
+  provider: string
+  model: string | null
+  agentSnapshot: Record<string, unknown>
+  environmentSnapshot: Record<string, unknown> | null
+  mcpSnapshot?: Record<string, unknown>
+  resourceRefs?: Record<string, unknown>[]
+  runtimeEnv?: Record<string, string>
+  runtimeSecretEnv?: CloudTurnSecretEnvEntry[]
+  // Secret env values already resolved from the vault by the control plane.
+  // Applied to the sandbox session env but never written to workspace files.
+  resolvedSecretEnv?: Record<string, string>
+}
+
+export interface SandboxRuntimeStartResult {
+  sandboxId: string
+  runtimeEndpointPath: string
+  metadata: Record<string, unknown>
+}
+
+export interface SandboxRuntimeToolCall {
+  id?: string
+  name?: string
+  input?: Record<string, unknown>
+  output?: Record<string, unknown>
+  error?: Record<string, unknown>
+  durationMs?: number
+}
+
+export interface SandboxRuntimeCommandBody {
+  type?: string
+  message?: string
+  response?: string
+  simulateError?: boolean
+  errorMessage?: string
+  toolCalls?: SandboxRuntimeToolCall[]
+}
+
+export interface SandboxRuntimeTurnResult {
+  // 'paused': the run still wants more model turns but yielded its execution
+  // budget; the caller re-enters with `continuation` to pick up the transcript.
+  status: 'idle' | 'aborted' | 'paused'
+}
+
+// Cloud sandbox runtime host boundary. Wraps the @cloudflare/sandbox + turn
+// engine host: model resolve, sandbox start/stop, workspace prep, the model
+// turn loop, and tool-call execution. The only implementation lives in
+// adapters/runtime. The SessionTurnInput callback shape stays on the adapter's
+// concrete signature (it carries pi-agent-core message types); this port covers
+// the four host operations the runtime clusters reach for by capability.
+export interface SandboxRuntimeHost {
+  startCloudSession(input: SandboxRuntimeStartInput): Promise<SandboxRuntimeStartResult>
+  stopCloudSession(sandboxId: string): Promise<void>
+  executeToolCalls(input: { sessionId: string; sandboxId: string; body: unknown }): Promise<unknown[]>
+}
+
+// --- runtime orchestration store (runtime-internal persistence boundary) ---
+
+import type {
+  AgentRow,
+  AgentVersionRow,
+  ConnectionRow,
+  ConnectionToolRow,
+  EnvironmentRow,
+  EnvironmentVersionRow,
+  ProviderConfigRow,
+  SessionApprovalInsert,
+  SessionInsert,
+  SessionRow,
+  SessionUpdate,
+  WorkItemInsert,
+  WorkItemRow,
+} from '@shared/runtime-rows'
+import type { CanonicalAmaSessionEvent } from '@shared/session-events'
+
+export type {
+  AgentRow,
+  AgentVersionRow,
+  ConnectionRow,
+  ConnectionToolRow,
+  EnvironmentRow,
+  EnvironmentVersionRow,
+  ProviderConfigRow,
+  SessionRow,
+} from '@shared/runtime-rows'
+
+// Runtime-internal persistence boundary. The env-bound session execution engine
+// (server/runtime/*) routes every drizzle read/write through this store so the
+// runtime layer itself stays drizzle-free. It is intentionally runtime-shaped
+// (raw session rows, work-item/lease/channel mechanics, snapshot reads) —
+// distinct from the REST-facing SessionRepo, which serializes DTOs. The only
+// implementation lives in adapters/repos/runtime-orchestration. The raw `db`
+// handle is intentionally NOT on this interface: persistence stays behind the
+// port surface.
+export interface SessionOrchestrationStore {
+  // ── session reads ──
+  findSession(projectId: string, sessionId: string): Promise<SessionRow | null>
+  sessionState(projectId: string, sessionId: string): Promise<{ state: string } | null>
+  sessionMetadata(projectId: string, sessionId: string): Promise<{ metadata: string | null } | null>
+
+  // ── session writes ──
+  insertSession(row: SessionInsert): Promise<void>
+  updateSession(projectId: string, sessionId: string, fields: SessionUpdate): Promise<void>
+  updateSessionWhenState(
+    projectId: string,
+    sessionId: string,
+    expected: string | string[],
+    fields: SessionUpdate,
+  ): Promise<boolean>
+
+  // ── per-session turn lease ──
+  acquireTurnLease(
+    projectId: string,
+    sessionId: string,
+    turnId: string,
+    leaseExpiresAt: string,
+    now: string,
+  ): Promise<boolean>
+  renewTurnLease(projectId: string, sessionId: string, turnId: string, leaseExpiresAt: string): Promise<boolean>
+  releaseTurnLease(projectId: string, sessionId: string, turnId: string, fields: SessionUpdate): Promise<boolean>
+  incrementContinuationDepth(projectId: string, sessionId: string, turnId: string): Promise<number>
+
+  // ── snapshot reads ──
+  findAgent(projectId: string, agentId: string): Promise<AgentRow | null>
+  findAgentVersion(agentId: string, versionId: string): Promise<AgentVersionRow | null>
+  agentMemoryContent(projectId: string, agentId: string): Promise<string | null>
+  findEnvironment(projectId: string, environmentId: string): Promise<EnvironmentRow | null>
+  findEnvironmentVersion(projectId: string, versionId: string): Promise<EnvironmentVersionRow | null>
+
+  // ── provider resolution ──
+  configuredDefaultProvider(projectId: string): Promise<{ id: string; type: string } | null>
+  providerType(projectId: string, providerId: string): Promise<{ type: string } | null>
+  defaultProviderConfig(projectId: string): Promise<ProviderConfigRow | null>
+  namedProviderConfig(projectId: string, providerId: string): Promise<ProviderConfigRow | null>
+
+  // ── runtime/runner capability validation ──
+  activeRunnerCapabilities(projectId: string, environmentId: string): Promise<string[]>
+
+  // ── MCP snapshot resolution ──
+  connectedConnections(projectId: string): Promise<ConnectionRow[]>
+  availableConnectionTools(connectionId: string): Promise<ConnectionToolRow[]>
+
+  // ── credential validation ──
+  activeCredentialVersionExists(organizationId: string, projectId: string, versionId: string): Promise<boolean>
+  activeCredentialExists(organizationId: string, projectId: string, credentialId: string): Promise<boolean>
+  activeCredentialForSecretEnv(
+    organizationId: string,
+    projectId: string,
+    credentialId: string,
+  ): Promise<{ id: string; activeVersionId: string | null } | null>
+  activeVersionForCredentialExists(credentialId: string, versionId: string): Promise<boolean>
+
+  // ── secret-env resolution ──
+  credentialForResolution(
+    organizationId: string,
+    projectId: string,
+    credentialId: string,
+  ): Promise<{ state: string; activeVersionId: string | null } | null>
+  credentialVersionForResolution(
+    organizationId: string,
+    projectId: string,
+    credentialId: string,
+    versionId: string,
+  ): Promise<{ state: string; metadata: string; externalVaultPath: string | null; secretRef: string } | null>
+
+  // ── work-item enqueue + resume ──
+  insertWorkItem(row: WorkItemInsert): Promise<void>
+  recentSessionWorkItems(
+    projectId: string,
+    sessionId: string,
+    limit: number,
+  ): Promise<{ state: string; payload: string; result: string | null }[]>
+
+  // ── self-hosted stop: active work items + lease/runner accounting ──
+  activeSessionWorkItems(
+    projectId: string,
+    sessionId: string,
+  ): Promise<{ id: string; runnerId: string | null; leaseId: string | null }[]>
+  cancelWorkItems(projectId: string, workItemIds: string[], errorJson: string, timestamp: string): Promise<void>
+  cancelLeases(projectId: string, leaseIds: string[], timestamp: string): Promise<void>
+  decrementRunnerLoad(projectId: string, runnerId: string, timestamp: string): Promise<void>
+
+  // ── turn execution reads ──
+  sessionEventStream(sessionId: string): Promise<{ type: string; payload: string }[]>
+
+  // ── pending session sweep ──
+  markExpiredPendingSessions(projectId: string, expiredBefore: string, timestamp: string): Promise<void>
+
+  // ── approval decision ──
+  findApproval(projectId: string, sessionId: string, approvalId: string): Promise<unknown>
+  upsertApproval(row: SessionApprovalInsert, decidedAt: string): Promise<void>
+
+  // ── watchdog: stalled cloud sessions + leaked sandboxes ──
+  markStalledCloudSessions(threshold: string, timestamp: string): Promise<void>
+  leakedSandboxSessions(
+    terminalStates: string[],
+    limit: number,
+  ): Promise<{ id: string; sandboxId: string | null; metadata: string | null }[]>
+  stampSandboxDestroyed(sessionId: string, metadataJson: string): Promise<void>
+
+  // ── runner session channel (durable object) ──
+  channelSession(
+    projectId: string,
+    sessionId: string,
+  ): Promise<{ id: string; agentSnapshot: string | null; environmentSnapshot: string | null } | null>
+  channelSessionState(
+    projectId: string,
+    sessionId: string,
+  ): Promise<{ state: string; stateReason: string | null } | null>
+  channelWorkItem(projectId: string, workItemId: string): Promise<WorkItemRow | null>
+  channelActiveLease(state: {
+    leaseId: string
+    workItemId: string
+    runnerId: string
+    projectId: string
+  }): Promise<{ expiresAt: string } | null>
+  channelActiveChannel(state: {
+    channelId: string
+    sessionId: string
+    workItemId: string
+    leaseId: string
+    runnerId: string
+    projectId: string
+  }): Promise<{ id: string } | null>
+  touchChannel(channelId: string, timestamp: string): Promise<void>
+  closeChannel(channelId: string, channelState: 'closed' | 'stale', reason: string, timestamp: string): Promise<void>
+  requeueSessionForRunnerRecovery(projectId: string, sessionId: string, timestamp: string): Promise<void>
+
+  // ── canonical event append ──
+  appendCanonicalEvent(
+    scope: { organizationId: string; projectId: string; sessionId: string },
+    canonicalEvent: CanonicalAmaSessionEvent,
+  ): Promise<string>
+}
+
 // --- sessions ---
 
 // The session DTO that crosses the wire. Internal plumbing columns
