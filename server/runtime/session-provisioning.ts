@@ -5,12 +5,12 @@ import type { RuntimeName } from '../contracts/environment-contracts'
 import { evaluateMcpToolPolicy } from '../policy'
 import { runtimeDriver } from './drivers'
 import { PLATFORM_DEFAULT_PROVIDER } from './provider-env'
+import type { Db } from './session-base'
 import { type NormalizedEnvironmentSnapshot, parseJson, type SerializedAgentVersion } from './session-snapshot'
 
 // Create-session provisioning: provider/model resolution + runtime capability
 // validation + the MCP tool snapshot. Repo/policy-backed reads with no turn
 // execution, factored out of the session-orchestration data-plane module.
-type Db = Parameters<typeof createRuntimeOrchestrationRepo>[0]
 
 export async function resolveSessionProviderId(db: Db, projectId: string, providerId: string | null) {
   const repo = createRuntimeOrchestrationRepo(db)

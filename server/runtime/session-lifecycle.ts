@@ -103,7 +103,7 @@ async function stopSessionRow(
     sessionId: session.id,
     metadata: { reason, sandboxId: session.sandboxId, piRuntimeId: session.piRuntimeId },
   })
-  await appendRuntimeEvent(db, {
+  await appendRuntimeEvent(repo, {
     auth,
     sessionId: session.id,
     event: { type: 'session_stop', reason },
@@ -169,7 +169,7 @@ async function stopSelfHostedSession(
     sessionId: session.id,
     metadata: { reason, hostingMode: 'self_hosted', cancelledWorkItems: activeWorkItems.length },
   })
-  await appendRuntimeEvent(db, {
+  await appendRuntimeEvent(repo, {
     auth,
     sessionId: session.id,
     event: { type: 'session_stop', reason },

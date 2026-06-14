@@ -221,7 +221,7 @@ export async function executeCloudSessionTurn(
       auth,
       sessionId: session.id,
       sessionMetadata,
-      appendEvent: (event, metadata) => appendRuntimeEvent(db, { auth, sessionId: session.id, event, metadata }),
+      appendEvent: (event, metadata) => appendRuntimeEvent(repo, { auth, sessionId: session.id, event, metadata }),
     })
     approvalGateRef = approvalGate
     const startedAt = Date.now()
@@ -241,7 +241,7 @@ export async function executeCloudSessionTurn(
           return
         }
         await ensureActive()
-        await appendRuntimeEvent(db, { auth, sessionId: session.id, event, ...(metadata ? { metadata } : {}) })
+        await appendRuntimeEvent(repo, { auth, sessionId: session.id, event, ...(metadata ? { metadata } : {}) })
       },
       resolveToolResult: (input) => approvalGate.resolveToolResult(input),
       approveToolCall: async ({ toolCallId, toolName, input }) => {
@@ -261,7 +261,7 @@ export async function executeCloudSessionTurn(
               ? { command: blocked.operation.command }
               : { host: blocked.operation.host }
           await ensureActive()
-          await appendRuntimeEvent(db, {
+          await appendRuntimeEvent(repo, {
             auth,
             sessionId: session.id,
             event: {

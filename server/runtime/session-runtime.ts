@@ -11,6 +11,7 @@ import { runTurn, runtimeMessagesFromEvents } from '../../runtime-core/turn-engi
 import { toolExecutor } from '../adapters/runtime/sandbox-tool-executor'
 import { workersAiModelClient } from '../adapters/runtime/workers-ai-model-client'
 import type { Env } from '../env'
+import { canonicalProvider, isWorkersAiProvider } from './provider-id'
 import type { RuntimeSecretEnvEntry } from './secret-env'
 
 // The turn engine, ports, and error vocabulary live in runtime-core (shared by
@@ -309,11 +310,11 @@ export async function executeRuntimeToolCalls(
 }
 
 function piProviderName(provider: string) {
-  return provider === 'workers-ai' ? 'cloudflare-workers-ai' : provider
+  return canonicalProvider(provider)
 }
 
 function runtimeDefaultModel(env: Env, provider: string) {
-  if (provider === 'workers-ai' || provider === 'cloudflare-workers-ai') {
+  if (isWorkersAiProvider(provider)) {
     return env.AMA_DEFAULT_MODEL ?? '@cf/moonshotai/kimi-k2.6'
   }
   throw new Error(`Runtime model is required for provider: ${provider}`)
@@ -339,7 +340,7 @@ function fallbackModel(provider: string, model: string): Model<string> {
 }
 
 function runtimeModel(provider: string, model: string) {
-  if (provider === 'workers-ai' || provider === 'cloudflare-workers-ai') {
+  if (isWorkersAiProvider(provider)) {
     return getModel('cloudflare-workers-ai', model as never) ?? fallbackModel('cloudflare-workers-ai', model)
   }
   throw new Error(`Unsupported AMA runtime provider: ${provider}`)

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { runtimeRequestHasTestOnlyFields } from './runtime-proxy'
+import { runtimeRequestHasTestOnlyFields } from './runtime-proxy-policy'
 
 describe('runtime request validation', () => {
   it('identifies client-supplied runtime fixture fields that are rejected outside test mode', () => {

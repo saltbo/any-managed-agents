@@ -80,6 +80,20 @@ module.exports = {
       from: { path: '^shared' },
       to: { path: '^server|^src' },
     },
+    {
+      name: 'runtime-no-drizzle',
+      comment: 'server/runtime/ is the repo-backed data plane; it routes every read/write through the orchestration repo and never imports drizzle or schema directly.',
+      severity: 'error',
+      from: { path: '^server/runtime' },
+      to: { path: 'node_modules/drizzle-orm|^server/db/schema' },
+    },
+    {
+      name: 'runtime-not-into-http',
+      comment: 'server/runtime/ may only import the http layer via request-context; everything else in http/ stays out of the data plane.',
+      severity: 'error',
+      from: { path: '^server/runtime' },
+      to: { path: '^server/http', pathNot: '^server/http/request-context' },
+    },
   ],
   options: {
     doNotFollow: { path: 'node_modules' },

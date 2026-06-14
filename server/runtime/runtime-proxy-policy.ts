@@ -1,42 +1,13 @@
-import { canonicalAmaSessionEventFromRuntimeEvent } from '@shared/session-events'
-import type { RuntimeOrchestrationRepo, SessionRow } from '../adapters/repos/runtime-orchestration'
+import type { SessionRow } from '../adapters/repos/runtime-orchestration'
 import { recordAudit } from '../audit'
-import type { AuthContext } from '../auth/session'
 import { evaluateSandboxRuntimePolicy, type PolicyDecision } from '../policy'
-
-export type Repo = RuntimeOrchestrationRepo
-
-export function newId(prefix: string) {
-  return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
-}
-
-export async function appendRuntimeEvent(
-  repo: Repo,
-  values: {
-    auth: AuthContext
-    sessionId: string
-    event: Record<string, unknown>
-    metadata?: Record<string, unknown>
-  },
-) {
-  const canonicalEvent = canonicalAmaSessionEventFromRuntimeEvent(
-    values.event,
-    values.metadata ?? { source: 'runtime' },
-  )
-  return await repo.appendCanonicalEvent(
-    {
-      organizationId: values.auth.organization.id,
-      projectId: values.auth.project.id,
-      sessionId: values.sessionId,
-    },
-    canonicalEvent,
-  )
-}
+import type { AuthScope } from '../usecases/ports'
+import { appendRuntimeEvent, type Repo } from './session-base'
 
 async function appendRuntimePolicyEvent(
   repo: Repo,
   values: {
-    auth: AuthContext
+    auth: AuthScope
     sessionId: string
     payload: Record<string, unknown>
     metadata?: Record<string, unknown>
@@ -163,7 +134,7 @@ export function sandboxOperationFromRuntimePath(path: string, body: unknown) {
 
 export async function denyRuntimePolicy(
   repo: Repo,
-  auth: AuthContext,
+  auth: AuthScope,
   values: {
     sessionId: string
     decision: PolicyDecision
@@ -198,7 +169,7 @@ export async function denyRuntimePolicy(
 
 export async function evaluateRuntimeSandboxOperations(
   repo: Repo,
-  auth: AuthContext,
+  auth: AuthScope,
   session: SessionRow,
   body: unknown,
 ) {

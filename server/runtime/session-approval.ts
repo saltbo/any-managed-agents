@@ -66,7 +66,7 @@ export async function decideSessionApproval(
   }
 
   const approved = body.decision === 'approve'
-  const decisionEventId = await appendRuntimeEvent(db, {
+  const decisionEventId = await appendRuntimeEvent(repo, {
     auth,
     sessionId: session.id,
     event: {
@@ -161,7 +161,7 @@ export async function decideSessionApproval(
           .filter((value): value is string => typeof value === 'string' && value.length > 0)
           .join('\n')
       : JSON.stringify(resultOutput)
-  await appendRuntimeEvent(db, {
+  await appendRuntimeEvent(repo, {
     auth,
     sessionId: session.id,
     event: {
@@ -174,7 +174,7 @@ export async function decideSessionApproval(
     },
     metadata: { source: 'approval' },
   })
-  await appendRuntimeEvent(db, {
+  await appendRuntimeEvent(repo, {
     auth,
     sessionId: session.id,
     event: {
