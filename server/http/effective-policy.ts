@@ -1,5 +1,13 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
 import { requireAuth } from '../auth/session'
+import {
+  type PolicyMcpPolicy,
+  PolicyMcpPolicySchema,
+  type SandboxPolicy,
+  SandboxPolicySchema,
+  type ToolPolicy,
+  ToolPolicySchema,
+} from '../contracts/policy-contracts'
 import { AuthenticatedOperation, type DepsEnv, ErrorResponseSchema } from '../openapi'
 import { readEffectivePolicy } from '../usecases/effective-policy'
 import { requestId } from './request-context'
@@ -58,9 +66,9 @@ const EffectivePolicySchema = z
     providerRules: z.array(EffectiveRuleSchema),
     modelRules: z.array(EffectiveRuleSchema),
     accessRules: z.array(EffectiveAccessRuleSchema),
-    toolPolicy: JsonObjectSchema,
-    mcpPolicy: JsonObjectSchema,
-    sandboxPolicy: JsonObjectSchema,
+    toolPolicy: ToolPolicySchema,
+    mcpPolicy: PolicyMcpPolicySchema,
+    sandboxPolicy: SandboxPolicySchema,
     budgets: z.array(EffectiveBudgetSchema),
     decision: PolicyDecisionSchema.optional(),
   })
@@ -145,9 +153,9 @@ export function registerEffectivePolicyRoutes(routes: EffectivePolicyRoutes) {
         providerRules: effective.providerRules,
         modelRules: effective.modelRules,
         accessRules: effective.accessRules,
-        toolPolicy: effective.toolPolicy,
-        mcpPolicy: effective.mcpPolicy,
-        sandboxPolicy: effective.sandboxPolicy,
+        toolPolicy: effective.toolPolicy as ToolPolicy,
+        mcpPolicy: effective.mcpPolicy as PolicyMcpPolicy,
+        sandboxPolicy: effective.sandboxPolicy as SandboxPolicy,
         budgets: effective.budgets.map((budget) => ({
           id: budget.id,
           scope: budget.scope,

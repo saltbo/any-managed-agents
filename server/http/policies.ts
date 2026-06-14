@@ -1,5 +1,13 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
 import { requireAuth } from '../auth/session'
+import {
+  type PolicyMcpPolicy,
+  PolicyMcpPolicySchema,
+  type SandboxPolicy,
+  SandboxPolicySchema,
+  type ToolPolicy,
+  ToolPolicySchema,
+} from '../contracts/policy-contracts'
 import { AuthenticatedOperation, type DepsEnv, ErrorResponseSchema, listResponseSchema } from '../openapi'
 import {
   type CreatePolicyInputDto,
@@ -32,9 +40,9 @@ const PolicySchema = z
     id: z.string(),
     projectId: z.string(),
     scope: PolicyScopeSchema,
-    toolPolicy: JsonObjectSchema,
-    mcpPolicy: JsonObjectSchema,
-    sandboxPolicy: JsonObjectSchema,
+    toolPolicy: ToolPolicySchema,
+    mcpPolicy: PolicyMcpPolicySchema,
+    sandboxPolicy: SandboxPolicySchema,
     metadata: JsonObjectSchema,
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
@@ -44,9 +52,9 @@ const PolicySchema = z
 const CreatePolicySchema = z
   .object({
     scope: PolicyScopeSchema,
-    toolPolicy: JsonObjectSchema.optional(),
-    mcpPolicy: JsonObjectSchema.optional(),
-    sandboxPolicy: JsonObjectSchema.optional(),
+    toolPolicy: ToolPolicySchema.optional(),
+    mcpPolicy: PolicyMcpPolicySchema.optional(),
+    sandboxPolicy: SandboxPolicySchema.optional(),
     metadata: JsonObjectSchema.optional(),
   })
   .strict()
@@ -57,9 +65,9 @@ const CreatePolicySchema = z
 const ReplacePolicySchema = z
   .object({
     scope: PolicyScopeSchema.optional(),
-    toolPolicy: JsonObjectSchema.optional(),
-    mcpPolicy: JsonObjectSchema.optional(),
-    sandboxPolicy: JsonObjectSchema.optional(),
+    toolPolicy: ToolPolicySchema.optional(),
+    mcpPolicy: PolicyMcpPolicySchema.optional(),
+    sandboxPolicy: SandboxPolicySchema.optional(),
     metadata: JsonObjectSchema.optional(),
   })
   .strict()
@@ -83,9 +91,9 @@ function serializePolicy(record: PolicyRecord) {
       level: record.scope.level,
       ...(record.scope.teamId ? { teamId: record.scope.teamId } : {}),
     },
-    toolPolicy: record.toolPolicy,
-    mcpPolicy: record.mcpPolicy,
-    sandboxPolicy: record.sandboxPolicy,
+    toolPolicy: record.toolPolicy as ToolPolicy,
+    mcpPolicy: record.mcpPolicy as PolicyMcpPolicy,
+    sandboxPolicy: record.sandboxPolicy as SandboxPolicy,
     metadata: record.metadata,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,

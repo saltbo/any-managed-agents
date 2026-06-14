@@ -558,10 +558,7 @@
           "subagents": {
             "type": "array",
             "items": {
-              "type": "object",
-              "additionalProperties": {
-                "nullable": true
-              }
+              "$ref": "#/components/schemas/AgentSubagent"
             },
             "example": [
               {
@@ -586,32 +583,10 @@
             ]
           },
           "handoffPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "enabled": true,
-              "targets": [
-                {
-                  "role": "reviewer"
-                },
-                {
-                  "capability": "code-review"
-                }
-              ]
-            }
+            "$ref": "#/components/schemas/AgentHandoffPolicy"
           },
           "memoryPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "enabled": true,
-              "mode": "notebook",
-              "scope": "project_agent"
-            }
+            "$ref": "#/components/schemas/AgentMemoryPolicy"
           },
           "tools": {
             "type": "array",
@@ -686,6 +661,68 @@
           "createdAt",
           "updatedAt"
         ]
+      },
+      "AgentSubagent": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": {
+          "nullable": true
+        }
+      },
+      "AgentHandoffPolicy": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentHandoffTarget"
+            }
+          }
+        },
+        "additionalProperties": {
+          "nullable": true
+        }
+      },
+      "AgentHandoffTarget": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string"
+          },
+          "capability": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": {
+          "nullable": true
+        }
+      },
+      "AgentMemoryPolicy": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": {
+          "nullable": true
+        }
       },
       "AgentToolAttachment": {
         "type": "object",
@@ -789,10 +826,7 @@
           "subagents": {
             "type": "array",
             "items": {
-              "type": "object",
-              "additionalProperties": {
-                "nullable": true
-              }
+              "$ref": "#/components/schemas/AgentSubagent"
             },
             "maxItems": 50,
             "example": [
@@ -823,32 +857,10 @@
             ]
           },
           "handoffPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "enabled": true,
-              "targets": [
-                {
-                  "role": "reviewer"
-                },
-                {
-                  "capability": "code-review"
-                }
-              ]
-            }
+            "$ref": "#/components/schemas/AgentHandoffPolicy"
           },
           "memoryPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "enabled": true,
-              "mode": "notebook",
-              "scope": "project_agent"
-            }
+            "$ref": "#/components/schemas/AgentMemoryPolicy"
           },
           "tools": {
             "type": "array",
@@ -986,10 +998,7 @@
           "subagents": {
             "type": "array",
             "items": {
-              "type": "object",
-              "additionalProperties": {
-                "nullable": true
-              }
+              "$ref": "#/components/schemas/AgentSubagent"
             },
             "maxItems": 50,
             "example": [
@@ -1020,32 +1029,10 @@
             ]
           },
           "handoffPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "enabled": true,
-              "targets": [
-                {
-                  "role": "reviewer"
-                },
-                {
-                  "capability": "code-review"
-                }
-              ]
-            }
+            "$ref": "#/components/schemas/AgentHandoffPolicy"
           },
           "memoryPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "enabled": true,
-              "mode": "notebook",
-              "scope": "project_agent"
-            }
+            "$ref": "#/components/schemas/AgentMemoryPolicy"
           },
           "tools": {
             "type": "array",
@@ -1147,10 +1134,7 @@
           "subagents": {
             "type": "array",
             "items": {
-              "type": "object",
-              "additionalProperties": {
-                "nullable": true
-              }
+              "$ref": "#/components/schemas/AgentSubagent"
             },
             "example": [
               {
@@ -1175,32 +1159,10 @@
             ]
           },
           "handoffPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "enabled": true,
-              "targets": [
-                {
-                  "role": "reviewer"
-                },
-                {
-                  "capability": "code-review"
-                }
-              ]
-            }
+            "$ref": "#/components/schemas/AgentHandoffPolicy"
           },
           "memoryPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "enabled": true,
-              "mode": "notebook",
-              "scope": "project_agent"
-            }
+            "$ref": "#/components/schemas/AgentMemoryPolicy"
           },
           "tools": {
             "type": "array",
@@ -2285,15 +2247,7 @@
             "example": "ready"
           },
           "lastError": {
-            "type": "object",
-            "nullable": true,
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "type": "provider_error",
-              "retryable": true
-            }
+            "$ref": "#/components/schemas/ProviderError"
           },
           "createdAt": {
             "type": "string",
@@ -2322,6 +2276,54 @@
           "createdAt",
           "updatedAt"
         ]
+      },
+      "ProviderError": {
+        "type": "object",
+        "nullable": true,
+        "properties": {
+          "type": {
+            "type": "string",
+            "example": "provider_error"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "auth",
+              "quota",
+              "rate_limit",
+              "model_unavailable",
+              "invalid_request",
+              "network",
+              "unknown"
+            ],
+            "example": "network"
+          },
+          "message": {
+            "type": "string",
+            "example": "The provider rejected the request."
+          },
+          "retryable": {
+            "type": "boolean",
+            "example": true
+          },
+          "retryAfterSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "example": 30
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "type",
+          "message"
+        ],
+        "example": {
+          "type": "provider_error",
+          "retryable": true
+        }
       },
       "CreateProviderRequest": {
         "type": "object",
@@ -2533,10 +2535,7 @@
             "nullable": true
           },
           "pricing": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
+            "$ref": "#/components/schemas/ProviderModelPricing"
           },
           "availability": {
             "type": "string",
@@ -2575,6 +2574,22 @@
           "updatedAt"
         ]
       },
+      "ProviderModelPricing": {
+        "type": "object",
+        "properties": {
+          "inputMicrosPerToken": {
+            "type": "number",
+            "minimum": 0
+          },
+          "outputMicrosPerToken": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": {
+          "nullable": true
+        }
+      },
       "UpsertProviderModelRequest": {
         "type": "object",
         "properties": {
@@ -2602,13 +2617,16 @@
             "example": 128000
           },
           "pricing": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "inputMicrosPerToken": 1
-            }
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProviderModelPricing"
+              },
+              {
+                "example": {
+                  "inputMicrosPerToken": 1
+                }
+              }
+            ]
           },
           "availability": {
             "type": "string",
@@ -2660,16 +2678,18 @@
             "example": 12
           },
           "error": {
-            "type": "object",
-            "nullable": true,
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "type": "provider_error",
-              "category": "network",
-              "retryable": true
-            }
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProviderError"
+              },
+              {
+                "example": {
+                  "type": "provider_error",
+                  "category": "network",
+                  "retryable": true
+                }
+              }
+            ]
           },
           "createdAt": {
             "type": "string",
@@ -3466,22 +3486,13 @@
             "$ref": "#/components/schemas/PolicyScope"
           },
           "toolPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
+            "$ref": "#/components/schemas/ToolPolicy"
           },
           "mcpPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
+            "$ref": "#/components/schemas/PolicyMcpPolicy"
           },
           "sandboxPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
+            "$ref": "#/components/schemas/SandboxPolicy"
           },
           "metadata": {
             "type": "object",
@@ -3533,6 +3544,130 @@
         ],
         "additionalProperties": false
       },
+      "ToolPolicy": {
+        "type": "object",
+        "properties": {
+          "allowedTools": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "blockedTools": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "requireApprovalTools": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaultEffect": {
+            "type": "string",
+            "enum": [
+              "allow",
+              "deny"
+            ]
+          }
+        },
+        "additionalProperties": {
+          "nullable": true
+        }
+      },
+      "PolicyMcpPolicy": {
+        "type": "object",
+        "properties": {
+          "allowedConnectors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "blockedConnectors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "requireApprovalConnectors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "requireApprovalTools": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "connectorApprovalModes": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "none",
+                "require_approval"
+              ]
+            }
+          },
+          "defaultEffect": {
+            "type": "string",
+            "enum": [
+              "allow",
+              "deny"
+            ]
+          }
+        },
+        "additionalProperties": {
+          "nullable": true
+        }
+      },
+      "SandboxPolicy": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string"
+          },
+          "network": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "allowedHosts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "blockedCommands": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "allowedCommands": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": {
+          "nullable": true
+        }
+      },
       "CreatePolicyRequest": {
         "type": "object",
         "properties": {
@@ -3540,22 +3675,13 @@
             "$ref": "#/components/schemas/PolicyScope"
           },
           "toolPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
+            "$ref": "#/components/schemas/ToolPolicy"
           },
           "mcpPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
+            "$ref": "#/components/schemas/PolicyMcpPolicy"
           },
           "sandboxPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
+            "$ref": "#/components/schemas/SandboxPolicy"
           },
           "metadata": {
             "type": "object",
@@ -3576,22 +3702,13 @@
             "$ref": "#/components/schemas/PolicyScope"
           },
           "toolPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
+            "$ref": "#/components/schemas/ToolPolicy"
           },
           "mcpPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
+            "$ref": "#/components/schemas/PolicyMcpPolicy"
           },
           "sandboxPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
+            "$ref": "#/components/schemas/SandboxPolicy"
           },
           "metadata": {
             "type": "object",
@@ -3662,22 +3779,13 @@
             }
           },
           "toolPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
+            "$ref": "#/components/schemas/ToolPolicy"
           },
           "mcpPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
+            "$ref": "#/components/schemas/PolicyMcpPolicy"
           },
           "sandboxPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
+            "$ref": "#/components/schemas/SandboxPolicy"
           },
           "budgets": {
             "type": "array",

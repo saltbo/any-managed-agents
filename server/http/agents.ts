@@ -31,12 +31,27 @@ import { requestId } from './request-context'
 type AgentRoutes = OpenAPIHono<DepsEnv>
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
-const HandoffPolicySchema = JsonObjectSchema.openapi({
-  example: { enabled: true, targets: [{ role: 'reviewer' }, { capability: 'code-review' }] },
-})
-const MemoryPolicySchema = JsonObjectSchema.openapi({
-  example: { enabled: true, mode: 'notebook', scope: 'project_agent' },
-})
+// Known fields documented; catchall keeps these policy/config blobs extensible
+// (the domain reads specific keys and ignores the rest).
+const HandoffTargetSchema = z
+  .object({ role: z.string().optional(), capability: z.string().optional() })
+  .catchall(z.unknown())
+  .openapi('AgentHandoffTarget')
+const HandoffPolicySchema = z
+  .object({ enabled: z.boolean().optional(), targets: z.array(HandoffTargetSchema).optional() })
+  .catchall(z.unknown())
+  .openapi('AgentHandoffPolicy')
+const MemoryPolicySchema = z
+  .object({ enabled: z.boolean().optional(), mode: z.string().optional(), scope: z.string().optional() })
+  .catchall(z.unknown())
+  .openapi('AgentMemoryPolicy')
+const SubagentSchema = z
+  .object({ username: z.string().optional(), role: z.string().optional() })
+  .catchall(z.unknown())
+  .openapi('AgentSubagent')
+type HandoffPolicy = z.infer<typeof HandoffPolicySchema>
+type MemoryPolicy = z.infer<typeof MemoryPolicySchema>
+type Subagent = z.infer<typeof SubagentSchema>
 
 const TOOL_APPROVAL_MODES = ['none', 'per_call', 'always_required', 'project_policy'] as const
 
@@ -74,7 +89,7 @@ const AgentSchema = z
     providerId: z.string().nullable().openapi({ example: 'provider_abc123' }),
     model: z.string().nullable().openapi({ example: '@cf/moonshotai/kimi-k2.6' }),
     skills: z.array(z.string()).openapi({ example: ['ama@code-review'] }),
-    subagents: z.array(JsonObjectSchema).openapi({ example: [{ username: 'reviewer', role: 'reviewer' }] }),
+    subagents: z.array(SubagentSchema).openapi({ example: [{ username: 'reviewer', role: 'reviewer' }] }),
     role: z.string().nullable().openapi({ example: 'maintainer' }),
     capabilityTags: z.array(z.string()).openapi({ example: ['issue-triage', 'code-review'] }),
     handoffPolicy: HandoffPolicySchema,
@@ -100,7 +115,7 @@ const AgentVersionSchema = z
     providerId: z.string().nullable().openapi({ example: 'provider_abc123' }),
     model: z.string().nullable().openapi({ example: '@cf/moonshotai/kimi-k2.6' }),
     skills: z.array(z.string()).openapi({ example: ['ama@code-review'] }),
-    subagents: z.array(JsonObjectSchema).openapi({ example: [{ username: 'reviewer', role: 'reviewer' }] }),
+    subagents: z.array(SubagentSchema).openapi({ example: [{ username: 'reviewer', role: 'reviewer' }] }),
     role: z.string().nullable().openapi({ example: 'maintainer' }),
     capabilityTags: z.array(z.string()).openapi({ example: ['issue-triage', 'code-review'] }),
     handoffPolicy: HandoffPolicySchema,
@@ -125,7 +140,7 @@ const AgentPayloadSchema = z
       .optional()
       .openapi({ example: ['ama@code-review'] }),
     subagents: z
-      .array(JsonObjectSchema)
+      .array(SubagentSchema)
       .max(50)
       .optional()
       .openapi({ example: [{ username: 'reviewer', role: 'reviewer' }] }),
@@ -231,11 +246,11 @@ function serializeAgent(record: AgentRecord) {
     providerId: record.providerId,
     model: record.model,
     skills: record.skills,
-    subagents: record.subagents,
+    subagents: record.subagents as Subagent[],
     role: record.role,
     capabilityTags: record.capabilityTags,
-    handoffPolicy: record.handoffPolicy,
-    memoryPolicy: record.memoryPolicy,
+    handoffPolicy: record.handoffPolicy as HandoffPolicy,
+    memoryPolicy: record.memoryPolicy as MemoryPolicy,
     tools: record.tools,
     mcpConnectors: record.mcpConnectors,
     metadata: record.metadata,
@@ -257,11 +272,11 @@ function serializeAgentVersion(record: AgentVersionRecord) {
     providerId: record.providerId,
     model: record.model,
     skills: record.skills,
-    subagents: record.subagents,
+    subagents: record.subagents as Subagent[],
     role: record.role,
     capabilityTags: record.capabilityTags,
-    handoffPolicy: record.handoffPolicy,
-    memoryPolicy: record.memoryPolicy,
+    handoffPolicy: record.handoffPolicy as HandoffPolicy,
+    memoryPolicy: record.memoryPolicy as MemoryPolicy,
     tools: record.tools,
     mcpConnectors: record.mcpConnectors,
     metadata: record.metadata,

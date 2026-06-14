@@ -5,6 +5,7 @@ import {
   MODEL_CATALOG_STATES,
   PROVIDER_TYPES,
 } from '@server/domain/provider'
+import { PROVIDER_ERROR_CATEGORIES } from '@server/domain/provider-adapter'
 import { requireAuth } from '../auth/session'
 import {
   AuthenticatedOperation,
@@ -38,6 +39,31 @@ type ProviderRoutes = OpenAPIHono<DepsEnv>
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
 
+// The normalized provider error envelope (domain NormalizedProviderError, plus
+// the occurredAt stamped at persist time). Raw provider payloads never reach it.
+const ProviderErrorSchema = z
+  .object({
+    type: z.string().openapi({ example: 'provider_error' }),
+    category: z.enum(PROVIDER_ERROR_CATEGORIES).optional().openapi({ example: 'network' }),
+    message: z.string().openapi({ example: 'The provider rejected the request.' }),
+    retryable: z.boolean().optional().openapi({ example: true }),
+    retryAfterSeconds: z.number().int().nonnegative().optional().openapi({ example: 30 }),
+    occurredAt: z.string().datetime().optional(),
+  })
+  .openapi('ProviderError')
+type ProviderErrorDto = z.infer<typeof ProviderErrorSchema>
+
+// Per-token pricing the cost calculator reads (computeModelCostMicros);
+// catchall keeps room for provider-specific pricing dimensions.
+const PricingSchema = z
+  .object({
+    inputMicrosPerToken: z.number().nonnegative().optional(),
+    outputMicrosPerToken: z.number().nonnegative().optional(),
+  })
+  .catchall(z.unknown())
+  .openapi('ProviderModelPricing')
+type PricingDto = z.infer<typeof PricingSchema>
+
 const ProviderSchema = z
   .object({
     id: z.string().openapi({ example: 'workers-ai' }),
@@ -55,7 +81,7 @@ const ProviderSchema = z
     rateLimits: JsonObjectSchema.openapi({ example: { requestsPerMinute: 120 } }),
     budgetPolicy: JsonObjectSchema.openapi({ example: { monthlyCostMicros: 1000000 } }),
     modelCatalogState: z.enum(MODEL_CATALOG_STATES).openapi({ example: 'ready' }),
-    lastError: JsonObjectSchema.nullable().openapi({ example: { type: 'provider_error', retryable: true } }),
+    lastError: ProviderErrorSchema.nullable().openapi({ example: { type: 'provider_error', retryable: true } }),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
   })
@@ -69,7 +95,7 @@ const ProviderModelSchema = z
     displayName: z.string(),
     capabilities: z.array(z.string()),
     contextWindow: z.number().int().nullable(),
-    pricing: JsonObjectSchema,
+    pricing: PricingSchema,
     availability: z.enum(MODEL_AVAILABILITY),
     metadata: JsonObjectSchema,
     createdAt: z.string().datetime(),
@@ -83,7 +109,7 @@ const ModelDiscoveryTaskSchema = z
     providerId: z.string().openapi({ example: 'provider_abc123' }),
     state: z.enum(DISCOVERY_TASK_STATES).openapi({ example: 'succeeded' }),
     discoveredCount: z.number().int().nullable().openapi({ example: 12 }),
-    error: JsonObjectSchema.nullable().openapi({
+    error: ProviderErrorSchema.nullable().openapi({
       example: { type: 'provider_error', category: 'network', retryable: true },
     }),
     createdAt: z.string().datetime(),
@@ -119,7 +145,7 @@ const UpsertProviderModelSchema = z
       .optional()
       .openapi({ example: ['text'] }),
     contextWindow: z.number().int().positive().optional().openapi({ example: 128000 }),
-    pricing: JsonObjectSchema.optional().openapi({ example: { inputMicrosPerToken: 1 } }),
+    pricing: PricingSchema.optional().openapi({ example: { inputMicrosPerToken: 1 } }),
     availability: z.enum(MODEL_AVAILABILITY).optional().openapi({ example: 'available' }),
     metadata: JsonObjectSchema.optional().openapi({ example: { family: 'kimi' } }),
   })
@@ -173,7 +199,8 @@ function serializeProvider(record: ProviderRecord) {
     rateLimits: record.rateLimits,
     budgetPolicy: record.budgetPolicy,
     modelCatalogState: record.modelCatalogState,
-    lastError: record.lastError,
+    // The repo persists the normalized error envelope; the record types it loosely.
+    lastError: record.lastError as ProviderErrorDto | null,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   }
@@ -187,7 +214,7 @@ function serializeModel(record: ProviderModelRecord) {
     displayName: record.displayName,
     capabilities: record.capabilities,
     contextWindow: record.contextWindow,
-    pricing: record.pricing,
+    pricing: record.pricing as PricingDto,
     availability: record.availability,
     metadata: record.metadata,
     createdAt: record.createdAt,
@@ -201,7 +228,7 @@ function serializeTask(record: ModelDiscoveryTaskRecord) {
     providerId: record.providerId,
     state: record.state,
     discoveredCount: record.discoveredCount,
-    error: record.error,
+    error: record.error as ProviderErrorDto | null,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   }
