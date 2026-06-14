@@ -1,8 +1,7 @@
-import { execSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { Codex, type ThreadEvent } from '@openai/codex-sdk'
-import { runtimeError, runtimeEvent, textMessage, toolEnd, toolStart, usageEvent } from '../events/ama'
+import { reasoning, runtimeError, runtimeEvent, textMessage, toolEnd, toolStart, turnEnd, usageEvent } from '../events/ama'
 import {
   agentSystemPrompt,
   type AmaRuntimeEvent,
@@ -11,12 +10,9 @@ import {
   type RuntimeProviderRequest,
   type RuntimeUsageWindow,
 } from '../protocol'
+import { arrayValue, hostHome, normalizeProviderUsage, objectValue, resolveCliPath, sdkEnv } from './cli-host'
 
 const CODEX_USAGE_API = 'https://chatgpt.com/backend-api/wham/usage'
-
-function homeFromEnv(env: Record<string, string>): string | undefined {
-  return typeof env.AMA_RUNTIME_BRIDGE_HOST_HOME === 'string' && env.AMA_RUNTIME_BRIDGE_HOST_HOME ? env.AMA_RUNTIME_BRIDGE_HOST_HOME : undefined
-}
 
 function codexAccessToken(home: string | undefined): string | null {
   if (!home) return null
@@ -31,28 +27,8 @@ function codexAccessToken(home: string | undefined): string | null {
   }
 }
 
-function hostHome(request: RuntimeProviderRequest): string | undefined {
-  return homeFromEnv(request.env)
-}
-
-function sdkEnv(request: RuntimeProviderRequest) {
-  const home = hostHome(request)
-  return {
-    ...request.env,
-    ...(home ? { HOME: home, AMA_RUNTIME_BRIDGE_SESSION_HOME: request.env.HOME } : {}),
-  }
-}
-
 function readAccessToken(request: RuntimeProviderRequest): string | null {
-  return codexAccessToken(hostHome(request))
-}
-
-function resolveCodexPath(): string | undefined {
-  try {
-    return execSync('which codex', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || undefined
-  } catch {
-    return undefined
-  }
+  return codexAccessToken(hostHome(request.env))
 }
 
 function resolveModel(request: RuntimeProviderRequest): string | undefined {
@@ -63,14 +39,6 @@ function resolveModel(request: RuntimeProviderRequest): string | undefined {
 
 function itemId(item: Record<string, unknown>) {
   return typeof item.id === 'string' && item.id ? item.id : `codex-tool-${Date.now()}`
-}
-
-function objectValue(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
-}
-
-function arrayValue(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : []
 }
 
 function codexToolShape(item: Record<string, unknown>): { toolName: string; args: Record<string, unknown> } | null {
@@ -105,18 +73,6 @@ function toolResult(item: Record<string, unknown>) {
   return Object.keys(result).length ? result : { item }
 }
 
-function usagePayload(usage: Record<string, unknown>) {
-  const inputTokens = Number(usage.input_tokens ?? usage.inputTokens ?? usage.prompt_tokens ?? 0)
-  const outputTokens = Number(usage.output_tokens ?? usage.outputTokens ?? usage.completion_tokens ?? 0)
-  const cachedInputTokens = Number(usage.cached_input_tokens ?? usage.cachedInputTokens ?? 0)
-  return {
-    inputTokens,
-    outputTokens,
-    cachedInputTokens,
-    totalTokens: Number(usage.total_tokens ?? usage.totalTokens ?? inputTokens + outputTokens),
-  }
-}
-
 function* mapThreadEvent(event: ThreadEvent): Generator<AmaRuntimeEvent> {
   switch (event.type) {
     case 'thread.started':
@@ -140,7 +96,7 @@ function* mapThreadEvent(event: ThreadEvent): Generator<AmaRuntimeEvent> {
         return
       }
       if (item.type === 'reasoning' && typeof item.text === 'string' && item.text) {
-        yield runtimeEvent('runtime.output', { stream: 'reasoning', content: item.text })
+        yield reasoning(item.text)
         return
       }
       const shape = codexToolShape(item)
@@ -148,8 +104,8 @@ function* mapThreadEvent(event: ThreadEvent): Generator<AmaRuntimeEvent> {
       return
     }
     case 'turn.completed':
-      yield usageEvent(usagePayload(objectValue(event.usage)))
-      yield runtimeEvent('turn_end', { message: { role: 'assistant', content: [], timestamp: Date.now() }, toolResults: [] })
+      yield usageEvent(normalizeProviderUsage(objectValue(event.usage)))
+      yield turnEnd()
       return
     case 'turn.failed':
       yield runtimeError(String(objectValue(event.error).message ?? JSON.stringify(event)), String(objectValue(event.error).code ?? 'codex_error'), event)
@@ -167,7 +123,7 @@ export const codexProvider: RuntimeProvider = {
   async execute(request: RuntimeProviderRequest): Promise<RuntimeProviderHandle> {
     let resumeToken = request.resumeToken
     const abortController = new AbortController()
-    const codexPathOverride = resolveCodexPath()
+    const codexPathOverride = resolveCliPath('codex')
     const codex = new Codex({
       env: sdkEnv(request),
       // Managed sessions must not inherit the host user's personal Codex Apps
@@ -213,7 +169,7 @@ export const codexProvider: RuntimeProvider = {
   // models cache (~/.codex/models_cache.json, populated when Codex runs).
   // There is no SDK listing call; the cache is the host's model universe.
   async listModels({ env }): Promise<string[] | null> {
-    const home = homeFromEnv(env) ?? process.env.HOME
+    const home = hostHome(env) ?? process.env.HOME
     if (!home) return null
     let raw: string
     try {
@@ -230,7 +186,7 @@ export const codexProvider: RuntimeProvider = {
   },
 
   async fetchUsage({ env }): Promise<RuntimeUsageWindow[] | null> {
-    const token = codexAccessToken(homeFromEnv(env))
+    const token = codexAccessToken(hostHome(env))
     if (!token) return null
     const res = await fetch(CODEX_USAGE_API, {
       headers: { Authorization: `Bearer ${token}` },
