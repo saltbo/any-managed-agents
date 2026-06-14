@@ -6,16 +6,18 @@ import { createDb } from '../db/client'
 import type { Env } from '../env'
 import { errorResponse } from '../errors'
 import { requestId } from '../http/request-context'
-import { evaluateMcpToolPolicy, evaluateSandboxRuntimePolicy } from '../policy'
+import { evaluateMcpToolPolicy, evaluateSandboxRuntimePolicy, type PolicyDecision } from '../policy'
 import { redactSensitiveValue } from '../redaction'
 import type { AuthScope } from '../usecases/ports'
 import { dispatchRunnerSessionCommand, hasAcceptedRunnerSessionChannel } from './runner-session-command'
 import {
   denyRuntimePolicy,
   evaluateRuntimeSandboxOperations,
+  parseRuntimeProxyRoute,
   type RuntimeCommand,
   runtimeCommand,
   runtimeRequestHasTestOnlyFields,
+  type SandboxOperation,
   sandboxOperationFromRuntimePath,
 } from './runtime-proxy-policy'
 import { newId, type Repo } from './session-base'
@@ -32,10 +34,46 @@ function redactRuntimeValue(value: unknown): unknown {
   return redactSensitiveValue(value)
 }
 
+async function readRuntimeJsonBody(request: Request): Promise<unknown> {
+  return request
+    .clone()
+    .json()
+    .catch(() => ({}))
+}
+
+async function denySandboxOperation<E extends HonoEnv>(
+  c: Context<E & { Bindings: Env }>,
+  repo: Repo,
+  auth: AuthScope,
+  sessionId: string,
+  requestIdValue: string | null,
+  decision: PolicyDecision,
+  operation: SandboxOperation,
+): Promise<Response> {
+  await denyRuntimePolicy(repo, auth, {
+    sessionId,
+    decision,
+    requestId: requestIdValue,
+    action: 'runtime_sandbox.operation',
+    resourceType: operation.resourceType,
+    resourceId: operation.resourceId,
+    payload: {
+      operation: operation.operation,
+      command: 'command' in operation ? operation.command : undefined,
+      host: 'host' in operation ? operation.host : undefined,
+    },
+  })
+  return errorResponse(c, 403, 'policy_denied', decision.message, {
+    category: decision.category,
+    resourceType: operation.resourceType,
+    resourceId: operation.resourceId,
+    ruleId: decision.rule,
+  })
+}
+
 function createWebSocketPair() {
   const pair = new WebSocketPair()
-  const [client, server] = Object.values(pair) as [WebSocket, WebSocket]
-  return { client, server }
+  return { client: pair[0], server: pair[1] }
 }
 
 function sendRuntimeJson(socket: WebSocket, payload: Record<string, unknown>) {
@@ -189,10 +227,7 @@ export async function handleRuntimeProxyRequest<E extends HonoEnv>(
   const path = c.req.path.replace(`/api/v1/runtime/sessions/${sessionId}`, '')
   if (!session.sandboxId) {
     if (path === '/rpc' && c.req.method === 'POST' && (await hasAcceptedRunnerSessionChannel(c.env, session.id))) {
-      const body = await c.req.raw
-        .clone()
-        .json()
-        .catch(() => ({}))
+      const body = await readRuntimeJsonBody(c.req.raw)
       if (c.env.AMA_RUNTIME_MODE !== 'test' && runtimeRequestHasTestOnlyFields(body)) {
         return errorResponse(
           c,
@@ -203,25 +238,15 @@ export async function handleRuntimeProxyRequest<E extends HonoEnv>(
       }
       const sandboxPolicyDenial = await evaluateRuntimeSandboxOperations(repo, resolvedAuth, session, body)
       if (sandboxPolicyDenial) {
-        await denyRuntimePolicy(repo, resolvedAuth, {
+        return denySandboxOperation(
+          c,
+          repo,
+          resolvedAuth,
           sessionId,
-          decision: sandboxPolicyDenial.decision,
-          requestId: requestId(c),
-          action: 'runtime_sandbox.operation',
-          resourceType: sandboxPolicyDenial.operation.resourceType,
-          resourceId: sandboxPolicyDenial.operation.resourceId,
-          payload: {
-            operation: sandboxPolicyDenial.operation.operation,
-            command: 'command' in sandboxPolicyDenial.operation ? sandboxPolicyDenial.operation.command : undefined,
-            host: 'host' in sandboxPolicyDenial.operation ? sandboxPolicyDenial.operation.host : undefined,
-          },
-        })
-        return errorResponse(c, 403, 'policy_denied', sandboxPolicyDenial.decision.message, {
-          category: sandboxPolicyDenial.decision.category,
-          resourceType: sandboxPolicyDenial.operation.resourceType,
-          resourceId: sandboxPolicyDenial.operation.resourceId,
-          ruleId: sandboxPolicyDenial.decision.rule,
-        })
+          requestId(c),
+          sandboxPolicyDenial.decision,
+          sandboxPolicyDenial.operation,
+        )
       }
       const dispatched = await dispatchRunnerSessionCommand(c.env, session.id, {
         id: newId('runnercmd'),
@@ -237,110 +262,105 @@ export async function handleRuntimeProxyRequest<E extends HonoEnv>(
     return errorResponse(c, 409, 'conflict', 'Session runtime is unavailable')
   }
 
-  if (path === '/ws') {
-    if (c.req.header('upgrade')?.toLowerCase() !== 'websocket') {
-      return errorResponse(c, 426, 'conflict', 'Runtime endpoint requires a WebSocket upgrade')
-    }
-    const { client, server } = createWebSocketPair()
-    server.accept()
-    server.addEventListener('message', (event) => {
-      c.executionCtx.waitUntil(
-        handleRuntimeWebSocketMessage(server, c.env, repo, resolvedAuth, session, event.data).catch(() => {
-          server.close(1011, 'Runtime processing failed')
-        }),
-      )
-    })
-    server.addEventListener('close', () => {
-      server.close()
-    })
-    return new Response(null, { status: 101, webSocket: client })
-  }
-  const mcpMatch = path.match(/^\/mcp\/([^/]+)\/tools\/([^/]+)\/calls$/)
-  if (mcpMatch && c.req.method === 'POST') {
-    const connectorId = decodeURIComponent(mcpMatch[1] ?? '')
-    const toolName = decodeURIComponent(mcpMatch[2] ?? '')
-    const decision = await evaluateMcpToolPolicy(repo.db, resolvedAuth, {
-      connectorId,
-      toolName,
-      session: {
-        id: session.id,
-        agentSnapshot: session.agentSnapshot,
-        environmentSnapshot: session.environmentSnapshot,
-      },
-    })
-    if (!decision.allowed) {
-      await denyRuntimePolicy(repo, resolvedAuth, {
-        sessionId,
-        decision,
-        requestId: requestId(c),
-        action: 'runtime_mcp_tool.call',
-        resourceType: decision.category === 'tool' ? 'tool' : 'mcp_connector',
-        resourceId: decision.category === 'tool' ? toolName : connectorId,
-        payload: { operation: 'mcp_tool_call', connectorId, toolName },
+  const request = c.req.raw
+  const route = parseRuntimeProxyRoute(path, c.req.method)
+  switch (route.kind) {
+    case 'ws': {
+      if (c.req.header('upgrade')?.toLowerCase() !== 'websocket') {
+        return errorResponse(c, 426, 'conflict', 'Runtime endpoint requires a WebSocket upgrade')
+      }
+      const { client, server } = createWebSocketPair()
+      server.accept()
+      server.addEventListener('message', (event) => {
+        c.executionCtx.waitUntil(
+          handleRuntimeWebSocketMessage(server, c.env, repo, resolvedAuth, session, event.data).catch(() => {
+            server.close(1011, 'Runtime processing failed')
+          }),
+        )
       })
-      return errorResponse(
-        c,
-        decision.category === 'approval' ? 409 : 403,
-        decision.category === 'approval' ? 'conflict' : 'policy_denied',
-        decision.message,
-        {
-          category: decision.category,
+      server.addEventListener('close', () => {
+        server.close()
+      })
+      return new Response(null, { status: 101, webSocket: client })
+    }
+    case 'mcpToolCall': {
+      const { connectorId, toolName } = route
+      const decision = await evaluateMcpToolPolicy(repo.db, resolvedAuth, {
+        connectorId,
+        toolName,
+        session: {
+          id: session.id,
+          agentSnapshot: session.agentSnapshot,
+          environmentSnapshot: session.environmentSnapshot,
+        },
+      })
+      if (!decision.allowed) {
+        await denyRuntimePolicy(repo, resolvedAuth, {
+          sessionId,
+          decision,
+          requestId: requestId(c),
+          action: 'runtime_mcp_tool.call',
           resourceType: decision.category === 'tool' ? 'tool' : 'mcp_connector',
           resourceId: decision.category === 'tool' ? toolName : connectorId,
-          ruleId: decision.rule,
-        },
-      )
+          payload: { operation: 'mcp_tool_call', connectorId, toolName },
+        })
+        return errorResponse(
+          c,
+          decision.category === 'approval' ? 409 : 403,
+          decision.category === 'approval' ? 'conflict' : 'policy_denied',
+          decision.message,
+          {
+            category: decision.category,
+            resourceType: decision.category === 'tool' ? 'tool' : 'mcp_connector',
+            resourceId: decision.category === 'tool' ? toolName : connectorId,
+            ruleId: decision.rule,
+          },
+        )
+      }
+      // An allowed MCP tool call falls through to the passthrough handler below.
+      break
     }
-  }
-
-  const request = c.req.raw
-  let runtimeRequestBody: unknown = {}
-  if (c.env.AMA_RUNTIME_MODE === 'test' && path === '/rpc' && request.method === 'POST') {
-    runtimeRequestBody = await request
-      .clone()
-      .json()
-      .catch(() => ({}))
-  }
-  if (path === '/rpc' && request.method === 'POST') {
-    const body =
-      c.env.AMA_RUNTIME_MODE === 'test'
-        ? runtimeRequestBody
-        : await request
-            .clone()
-            .json()
-            .catch(() => ({}))
-    if (c.env.AMA_RUNTIME_MODE !== 'test' && runtimeRequestHasTestOnlyFields(body)) {
-      return errorResponse(
-        c,
-        400,
-        'validation_error',
-        'Runtime clients cannot submit tool calls, tool results, or simulated runtime outcomes',
-      )
-    }
-    const sandboxPolicyDenial = await evaluateRuntimeSandboxOperations(repo, resolvedAuth, session, body)
-    if (sandboxPolicyDenial) {
-      await denyRuntimePolicy(repo, resolvedAuth, {
-        sessionId,
-        decision: sandboxPolicyDenial.decision,
-        requestId: requestId(c),
-        action: 'runtime_sandbox.operation',
-        resourceType: sandboxPolicyDenial.operation.resourceType,
-        resourceId: sandboxPolicyDenial.operation.resourceId,
-        payload: {
-          operation: sandboxPolicyDenial.operation.operation,
-          command: 'command' in sandboxPolicyDenial.operation ? sandboxPolicyDenial.operation.command : undefined,
-          host: 'host' in sandboxPolicyDenial.operation ? sandboxPolicyDenial.operation.host : undefined,
-        },
-      })
-      return errorResponse(c, 403, 'policy_denied', sandboxPolicyDenial.decision.message, {
-        category: sandboxPolicyDenial.decision.category,
-        resourceType: sandboxPolicyDenial.operation.resourceType,
-        resourceId: sandboxPolicyDenial.operation.resourceId,
-        ruleId: sandboxPolicyDenial.decision.rule,
-      })
-    }
-    const record = body && typeof body === 'object' ? (body as Record<string, unknown>) : {}
-    if (typeof record.message !== 'string' || !record.message.trim()) {
+    case 'rpc': {
+      const body = await readRuntimeJsonBody(request)
+      if (c.env.AMA_RUNTIME_MODE !== 'test' && runtimeRequestHasTestOnlyFields(body)) {
+        return errorResponse(
+          c,
+          400,
+          'validation_error',
+          'Runtime clients cannot submit tool calls, tool results, or simulated runtime outcomes',
+        )
+      }
+      const sandboxPolicyDenial = await evaluateRuntimeSandboxOperations(repo, resolvedAuth, session, body)
+      if (sandboxPolicyDenial) {
+        return denySandboxOperation(
+          c,
+          repo,
+          resolvedAuth,
+          sessionId,
+          requestId(c),
+          sandboxPolicyDenial.decision,
+          sandboxPolicyDenial.operation,
+        )
+      }
+      const record = body && typeof body === 'object' ? (body as Record<string, unknown>) : {}
+      if (typeof record.message !== 'string' || !record.message.trim()) {
+        return Response.json({
+          runtime: 'ama-cloud',
+          accepted: true,
+          sandboxId: session.sandboxId,
+          path,
+        })
+      }
+      await recordRuntimeMessageSubmission(repo, resolvedAuth, session)
+      try {
+        await recordRuntimeMessageOutcome(repo, c.env, resolvedAuth, session, body)
+      } catch (error) {
+        if (isRuntimeTurnCancelled(error)) {
+          return errorResponse(c, 409, 'conflict', 'Session runtime is no longer active')
+        }
+        const runtimeError = await markRuntimeExecutionFailed(repo, resolvedAuth, session, error)
+        return errorResponse(c, 500, 'internal_error', runtimeError.message, { runtime: runtimeError })
+      }
       return Response.json({
         runtime: 'ama-cloud',
         accepted: true,
@@ -348,86 +368,46 @@ export async function handleRuntimeProxyRequest<E extends HonoEnv>(
         path,
       })
     }
-    await recordRuntimeMessageSubmission(repo, resolvedAuth, session)
+  }
+
+  const body = request.method === 'GET' || request.method === 'HEAD' ? {} : await readRuntimeJsonBody(request)
+  const operation = sandboxOperationFromRuntimePath(path, body)
+  if (operation) {
+    const decision = await evaluateSandboxRuntimePolicy(repo.db, resolvedAuth, {
+      session: {
+        id: session.id,
+        agentSnapshot: session.agentSnapshot,
+        environmentSnapshot: session.environmentSnapshot,
+      },
+      operation: operation.operation,
+      command: 'command' in operation ? operation.command : null,
+      host: 'host' in operation ? operation.host : null,
+    })
+    if (!decision.allowed) {
+      return denySandboxOperation(c, repo, resolvedAuth, sessionId, requestId(c), decision, operation)
+    }
+  }
+  if (operation?.operation === 'command' && request.method === 'POST' && c.env.AMA_RUNTIME_MODE === 'test') {
+    let result: Awaited<ReturnType<typeof executeRuntimeToolCalls>>
     try {
-      await recordRuntimeMessageOutcome(repo, c.env, resolvedAuth, session, body)
+      result = await executeRuntimeToolCalls(c.env, {
+        sessionId: session.id,
+        sandboxId: session.sandboxId,
+        body: {
+          toolCalls: [
+            {
+              id: newId('tool'),
+              name: 'sandbox.exec',
+              input: { command: operation.command },
+            },
+          ],
+        },
+      })
     } catch (error) {
-      if (isRuntimeTurnCancelled(error)) {
-        return errorResponse(c, 409, 'conflict', 'Session runtime is no longer active')
-      }
       const runtimeError = await markRuntimeExecutionFailed(repo, resolvedAuth, session, error)
       return errorResponse(c, 500, 'internal_error', runtimeError.message, { runtime: runtimeError })
     }
-    return Response.json({
-      runtime: 'ama-cloud',
-      accepted: true,
-      sandboxId: session.sandboxId,
-      path,
-    })
-  } else {
-    const body =
-      request.method === 'GET' || request.method === 'HEAD'
-        ? {}
-        : await request
-            .clone()
-            .json()
-            .catch(() => ({}))
-    const operation = sandboxOperationFromRuntimePath(path, body)
-    if (operation) {
-      const decision = await evaluateSandboxRuntimePolicy(repo.db, resolvedAuth, {
-        session: {
-          id: session.id,
-          agentSnapshot: session.agentSnapshot,
-          environmentSnapshot: session.environmentSnapshot,
-        },
-        operation: operation.operation,
-        command: 'command' in operation ? operation.command : null,
-        host: 'host' in operation ? operation.host : null,
-      })
-      if (!decision.allowed) {
-        await denyRuntimePolicy(repo, resolvedAuth, {
-          sessionId,
-          decision,
-          requestId: requestId(c),
-          action: 'runtime_sandbox.operation',
-          resourceType: operation.resourceType,
-          resourceId: operation.resourceId,
-          payload: {
-            operation: operation.operation,
-            command: 'command' in operation ? operation.command : undefined,
-            host: 'host' in operation ? operation.host : undefined,
-          },
-        })
-        return errorResponse(c, 403, 'policy_denied', decision.message, {
-          category: decision.category,
-          resourceType: operation.resourceType,
-          resourceId: operation.resourceId,
-          ruleId: decision.rule,
-        })
-      }
-    }
-    if (operation?.operation === 'command' && request.method === 'POST' && c.env.AMA_RUNTIME_MODE === 'test') {
-      let result: Awaited<ReturnType<typeof executeRuntimeToolCalls>>
-      try {
-        result = await executeRuntimeToolCalls(c.env, {
-          sessionId: session.id,
-          sandboxId: session.sandboxId,
-          body: {
-            toolCalls: [
-              {
-                id: newId('tool'),
-                name: 'sandbox.exec',
-                input: { command: operation.command },
-              },
-            ],
-          },
-        })
-      } catch (error) {
-        const runtimeError = await markRuntimeExecutionFailed(repo, resolvedAuth, session, error)
-        return errorResponse(c, 500, 'internal_error', runtimeError.message, { runtime: runtimeError })
-      }
-      return Response.json({ runtime: 'ama-cloud', result: result[0] ?? null })
-    }
+    return Response.json({ runtime: 'ama-cloud', result: result[0] ?? null })
   }
   return Response.json({ runtime: 'ama-cloud', sessionId: session.id, path })
 }

@@ -95,21 +95,36 @@ function firstCommandWord(command: string | null, fallback: string) {
   return command?.trim().split(/\s+/)[0] ?? fallback
 }
 
+function commandOperation(command: string | null, fallbackResourceId: string) {
+  return {
+    operation: 'command' as const,
+    command,
+    resourceType: 'sandbox_command',
+    resourceId: firstCommandWord(command, fallbackResourceId),
+  }
+}
+
+function networkOperation(host: string | null, fallbackResourceId: string) {
+  return {
+    operation: 'network' as const,
+    host,
+    resourceType: 'sandbox_network',
+    resourceId: host ?? fallbackResourceId,
+  }
+}
+
+export type SandboxOperation = ReturnType<typeof commandOperation> | ReturnType<typeof networkOperation>
+
 export function sandboxOperationFromToolCall(call: Record<string, unknown>) {
   const name = typeof call.name === 'string' ? call.name : ''
   const input = call.input && typeof call.input === 'object' ? (call.input as Record<string, unknown>) : {}
   if (name === 'sandbox.exec' || name === 'shell.exec' || name === 'terminal.exec') {
     const command = typeof input.command === 'string' ? input.command : null
-    return {
-      operation: 'command' as const,
-      command,
-      resourceType: 'sandbox_command',
-      resourceId: firstCommandWord(command, name),
-    }
+    return commandOperation(command, name)
   }
   if (name === 'sandbox.fetch' || name === 'network.fetch' || name === 'web.fetch') {
     const host = typeof input.host === 'string' ? input.host : hostFromUrl(input.url)
-    return { operation: 'network' as const, host, resourceType: 'sandbox_network', resourceId: host ?? name }
+    return networkOperation(host, name)
   }
   return null
 }
@@ -118,18 +133,37 @@ export function sandboxOperationFromRuntimePath(path: string, body: unknown) {
   const record = body && typeof body === 'object' ? (body as Record<string, unknown>) : {}
   if (path === '/sandbox/exec' || path === '/sandbox/commands') {
     const command = typeof record.command === 'string' ? record.command : null
-    return {
-      operation: 'command' as const,
-      command,
-      resourceType: 'sandbox_command',
-      resourceId: firstCommandWord(command, path),
-    }
+    return commandOperation(command, path)
   }
   if (path === '/sandbox/network' || path === '/sandbox/fetch') {
     const host = typeof record.host === 'string' ? record.host : hostFromUrl(record.url)
-    return { operation: 'network' as const, host, resourceType: 'sandbox_network', resourceId: host ?? path }
+    return networkOperation(host, path)
   }
   return null
+}
+
+export type RuntimeRoute =
+  | { kind: 'ws' }
+  | { kind: 'mcpToolCall'; connectorId: string; toolName: string }
+  | { kind: 'rpc' }
+  | { kind: 'passthrough' }
+
+export function parseRuntimeProxyRoute(path: string, method: string): RuntimeRoute {
+  if (path === '/ws') {
+    return { kind: 'ws' }
+  }
+  const mcpMatch = path.match(/^\/mcp\/([^/]+)\/tools\/([^/]+)\/calls$/)
+  if (mcpMatch && method === 'POST') {
+    return {
+      kind: 'mcpToolCall',
+      connectorId: decodeURIComponent(mcpMatch[1] ?? ''),
+      toolName: decodeURIComponent(mcpMatch[2] ?? ''),
+    }
+  }
+  if (path === '/rpc' && method === 'POST') {
+    return { kind: 'rpc' }
+  }
+  return { kind: 'passthrough' }
 }
 
 export async function denyRuntimePolicy(
