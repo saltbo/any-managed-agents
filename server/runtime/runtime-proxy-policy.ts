@@ -6,6 +6,10 @@ import { evaluateSandboxRuntimePolicy, type PolicyDecision } from '../policy'
 
 export type Repo = RuntimeOrchestrationRepo
 
+export function newId(prefix: string) {
+  return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
+}
+
 export async function appendRuntimeEvent(
   repo: Repo,
   values: {
