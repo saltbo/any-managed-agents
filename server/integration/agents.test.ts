@@ -294,7 +294,7 @@ describe('[CF] /api/v1/agents', () => {
     expect(unarchivedUpdateRes.status).toBe(200)
   })
 
-  it('lists agents with pagination, search, archived, and date filters within the project [spec: agents/api-pagination]', async () => {
+  it('lists agents with pagination, search, archived, and date filters within the project [spec: agents/api-pagination] [spec: api-contracts/pagination] [spec: api-contracts/date-filters]', async () => {
     const authorization = await signIn()
     const createAlphaRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',

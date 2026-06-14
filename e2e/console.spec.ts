@@ -4,7 +4,10 @@ import { expect, gotoAuthed, test } from './fixtures'
 // through Chromium. Reserved for hermetic console journeys (sign-in, routing, admin
 // CRUD that only writes D1) per the skill — a handful, not one-per-feature.
 test.describe('console (real browser)', () => {
-  test('signs in and navigates the console shell [spec: web-console/shell]', async ({ page, token }) => {
+  test('signs in and navigates the console shell [spec: web-console/shell] [spec: auth/e2e-sign-in]', async ({
+    page,
+    token,
+  }) => {
     await gotoAuthed(page, token, '/agents')
 
     // The authenticated shell rendered (the e2e identity resolved client-side).

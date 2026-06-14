@@ -22,7 +22,7 @@ describe('[CF] v1 policies', () => {
     vi.unstubAllGlobals()
   })
 
-  it('creates, lists, reads, replaces, and deletes scoped policies [spec: governance/policy-api]', async () => {
+  it('creates, lists, reads, replaces, and deletes scoped policies [spec: governance/policy-api] [spec: governance/policy-replace]', async () => {
     const authorization = await signIn()
 
     const createRes = await jsonFetch('/api/v1/policies', authorization, {
