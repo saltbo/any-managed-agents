@@ -123,6 +123,13 @@ function fakeDeps(overrides: { repo?: Partial<Deps['environments']> } = {}): Dep
         sandboxPolicy: {},
       }),
       evaluateProvider: async () => ({ allowed: true, category: 'provider', rule: null, message: '' }),
+      evaluateSandboxRuntime: async () => ({ allowed: true, category: 'sandbox', rule: null, message: '' }),
+      policyBlocksSandboxOperation: async () => null,
+      toolPolicyRequiresApproval: async () => false,
+      evaluateProviderForSession: async () => ({
+        decision: { allowed: true, category: 'provider', rule: null, message: '' },
+        override: null,
+      }),
     },
   }
 }

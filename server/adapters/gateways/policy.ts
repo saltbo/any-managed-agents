@@ -1,6 +1,14 @@
 import type { AuthScope, PolicyPort } from '@server/usecases/ports'
 import type { drizzle } from 'drizzle-orm/d1'
-import { evaluateMcpToolPolicy, evaluateProviderPolicy, resolveEffectivePolicy } from '../../policy'
+import {
+  evaluateMcpToolPolicy,
+  evaluateProviderPolicy,
+  evaluateProviderPolicyForSession,
+  evaluateSandboxRuntimePolicy,
+  policyBlocksSandboxOperation,
+  resolveEffectivePolicy,
+  toolPolicyRequiresApproval,
+} from '../../policy'
 
 type Db = ReturnType<typeof drizzle>
 
@@ -30,6 +38,18 @@ export function createPolicyPort(db: Db): PolicyPort {
     },
     async evaluateProvider(auth: AuthScope, values) {
       return await evaluateProviderPolicy(db, auth, values)
+    },
+    async evaluateSandboxRuntime(auth: AuthScope, values) {
+      return await evaluateSandboxRuntimePolicy(db, auth, values)
+    },
+    async policyBlocksSandboxOperation(auth: AuthScope, values) {
+      return await policyBlocksSandboxOperation(db, auth, values)
+    },
+    async toolPolicyRequiresApproval(auth: AuthScope, toolName: string) {
+      return await toolPolicyRequiresApproval(db, auth, toolName)
+    },
+    async evaluateProviderForSession(auth: AuthScope, values) {
+      return await evaluateProviderPolicyForSession(db, auth, values)
     },
   }
 }
