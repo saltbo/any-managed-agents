@@ -13,6 +13,18 @@ import type { CloudTurnMessage } from './turn-queue'
 
 export type Db = Parameters<typeof createRuntimeOrchestrationRepo>[0]
 
+// Error code → http status mapping is the http layer's job; the gateway only
+// reports the kind. `fields` carries field-keyed validation detail; `detail`
+// carries the structured policy/conflict payload the http layer echoes. Shared
+// across the create / lifecycle / approval clusters as their failure shape.
+export interface SessionRuntimeError {
+  status: 400 | 403 | 404 | 409 | 500
+  code: string
+  message: string
+  fields?: Record<string, string>
+  detail?: Record<string, unknown>
+}
+
 // Cloud runtime startup window. Used both to time-bound the startup itself
 // (cloud-turn) and to expire pending sessions whose window elapsed (lifecycle).
 export const RUNTIME_START_TIMEOUT_MS = 300_000
