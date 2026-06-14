@@ -1,12 +1,12 @@
 import { createApp } from './app'
+import { createDeps } from './composition'
 import type { Env } from './env'
-import { consumeCloudTurnMessage, markCloudTurnDeadLettered } from './runtime/cloud-turn'
-import { markStalledCloudSessions } from './runtime/session-watchdog'
 import type { CloudTurnMessage } from './runtime/turn-queue'
 import { dispatchDueScheduledTriggers } from './scheduled-dispatch'
+import { consumeCloudTurnMessage, markCloudTurnDeadLettered, markStalledCloudSessions } from './usecases/runtime'
 
 export { Sandbox } from '@cloudflare/sandbox'
-export { RunnerSessionChannelObject } from './runtime/runner-session-channel'
+export { RunnerSessionChannelObject } from './worker/runner-session-channel'
 
 const app = createApp()
 
@@ -16,18 +16,19 @@ export default {
   },
   scheduled(event, env, ctx) {
     ctx.waitUntil(dispatchDueScheduledTriggers(env, ctx, { heartbeatAt: new Date(event.scheduledTime).toISOString() }))
-    ctx.waitUntil(markStalledCloudSessions(env))
+    ctx.waitUntil(markStalledCloudSessions(createDeps(env)))
   },
   async queue(batch, env) {
     // Messages that exhausted their retries arrive on the dead-letter queue; mark
     // the stranded session errored instead of re-running the turn.
     const deadLetter = batch.queue.endsWith('-dlq')
+    const deps = createDeps(env)
     for (const message of batch.messages) {
       try {
         if (deadLetter) {
-          await markCloudTurnDeadLettered(env, message.body as CloudTurnMessage)
+          await markCloudTurnDeadLettered(deps, message.body as CloudTurnMessage)
         } else {
-          await consumeCloudTurnMessage(env, message.body as CloudTurnMessage)
+          await consumeCloudTurnMessage(deps, message.body as CloudTurnMessage)
         }
         message.ack()
       } catch (error) {
