@@ -45,7 +45,7 @@ async function destroyLeakedSandboxes(env: Env, repo: RuntimeOrchestrationRepo):
 function parseMetadata(raw: string | null): Record<string, unknown> {
   if (!raw) return {}
   try {
-    const parsed = JSON.parse(raw)
+    const parsed: unknown = JSON.parse(raw)
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {}
   } catch {
     return {}

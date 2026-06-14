@@ -1,6 +1,6 @@
 import type { Hook } from '@hono/zod-openapi'
 import { OpenAPIHono, z } from '@hono/zod-openapi'
-import type { Context } from 'hono'
+import type { Context, Env as HonoBaseEnv } from 'hono'
 import type { Env } from './env'
 import type { Deps } from './usecases/deps'
 
@@ -253,26 +253,28 @@ export function csvResponse(c: Context, filename: string, header: string[], rows
 }
 
 // The shared validation-error hook: a zod failure becomes the stable error
-// envelope. Typed loosely so it works for any router env shape.
-// biome-ignore lint/suspicious/noExplicitAny: Hook env varies per router
-const validationErrorHook: Hook<unknown, any, any, unknown> = (result, c) => {
-  if (result.success) {
-    return
-  }
-  return c.json(
-    {
-      error: {
-        type: 'validation_error',
-        message: 'Invalid request',
-        issues: result.error.issues,
+// envelope. A generic factory so each router supplies its own env shape (E is
+// inferred at the call site) without an `any` escape hatch.
+function validationErrorHook<E extends HonoBaseEnv>(): Hook<unknown, E, string, unknown> {
+  return (result, c) => {
+    if (result.success) {
+      return
+    }
+    return c.json(
+      {
+        error: {
+          type: 'validation_error',
+          message: 'Invalid request',
+          issues: result.error.issues,
+        },
       },
-    },
-    400,
-  )
+      400,
+    )
+  }
 }
 
 export function createApiRouter() {
-  return new OpenAPIHono<{ Bindings: Env }>({ defaultHook: validationErrorHook })
+  return new OpenAPIHono<{ Bindings: Env }>({ defaultHook: validationErrorHook() })
 }
 
 // Router variant whose context carries the composition-root Deps object,
@@ -281,5 +283,5 @@ export function createApiRouter() {
 export type DepsEnv = { Bindings: Env; Variables: { deps: Deps } }
 
 export function createDepsApiRouter() {
-  return new OpenAPIHono<DepsEnv>({ defaultHook: validationErrorHook })
+  return new OpenAPIHono<DepsEnv>({ defaultHook: validationErrorHook() })
 }

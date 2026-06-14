@@ -9,6 +9,7 @@ import type { ConnectorAvailability, ConnectorCatalogEntry, ConnectorCatalogTool
 import type { EnvironmentConfig } from '@server/domain/environment'
 import type { CredentialStatus, DiscoveryTaskState, ModelAvailability, ProviderType } from '@server/domain/provider'
 import type { DiscoveredProviderModel } from '@server/domain/provider-adapter'
+import type { RunnerAuthMode } from '@server/domain/runner-queue'
 import type {
   CredentialState,
   SecretMaterial,
@@ -1632,7 +1633,7 @@ export interface RunnerRecord {
   capabilities: string[]
   environmentId: string | null
   credentialRef: RunnerCredentialRef | null
-  authMode: string
+  authMode: RunnerAuthMode
   state: string
   currentLoad: number
   maxConcurrent: number
@@ -1677,7 +1678,7 @@ export interface CreateRunnerInput {
   capabilities: string[]
   environmentId: string | null
   credentialRef: RunnerCredentialRef | null
-  authMode: string
+  authMode: RunnerAuthMode
   oidcSubject: string | null
   oidcClientId: string | null
   maxConcurrent: number

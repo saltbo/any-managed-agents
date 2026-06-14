@@ -1,4 +1,5 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
+import { RUNNER_AUTH_MODES } from '@server/domain/runner-queue'
 import { isRunnerOidcAuth, requireAuth } from '../auth/session'
 import { errorResponse } from '../errors'
 import {
@@ -65,7 +66,7 @@ const RunnerSchema = z
     capabilities: z.array(CapabilitySchema).openapi({ example: ['node', 'git', 'sandbox.exec'] }),
     environmentId: z.string().nullable().openapi({ example: 'env_abc123' }),
     credentialRef: CredentialRefSchema.nullable(),
-    authMode: z.string().openapi({ example: 'oidc' }),
+    authMode: z.enum(RUNNER_AUTH_MODES).openapi({ example: 'oidc' }),
     state: z.enum(RUNNER_STATES).openapi({ example: 'active' }),
     currentLoad: z.number().int().openapi({ example: 0 }),
     maxConcurrent: z.number().int().openapi({ example: 2 }),
@@ -101,7 +102,7 @@ const CreateRunnerSchema = z
       .openapi({ example: ['node', 'git'] }),
     environmentId: z.string().min(1).optional().openapi({ example: 'env_abc123' }),
     credentialRef: CredentialRefSchema.optional(),
-    authMode: z.enum(['bearer', 'mtls', 'oidc', 'federated']).optional().openapi({ example: 'bearer' }),
+    authMode: z.enum(RUNNER_AUTH_MODES).optional().openapi({ example: 'bearer' }),
     maxConcurrent: z.number().int().min(1).max(100).optional().openapi({ example: 2 }),
     metadata: JsonObjectSchema.optional().openapi({ example: { pool: 'default' } }),
   })

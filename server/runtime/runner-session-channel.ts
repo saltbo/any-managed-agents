@@ -96,7 +96,7 @@ export class RunnerSessionChannelObject implements DurableObject {
   private async handleMessage(state: ChannelState, data: unknown, socket: WebSocket) {
     let eventId: string | undefined
     try {
-      const parsed = typeof data === 'string' ? (JSON.parse(data) as unknown) : JSON.parse(String(data))
+      const parsed: unknown = typeof data === 'string' ? JSON.parse(data) : JSON.parse(String(data))
       if (!parsed || typeof parsed !== 'object') {
         throw new Error('Runner channel message must be an object')
       }

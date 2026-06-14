@@ -24,6 +24,7 @@ import {
   type UpdateConnectionPatch,
   updateConnection,
 } from '../usecases/connections'
+import type { Deps } from '../usecases/deps'
 import {
   type AuthScope,
   ConnectionConflictError,
@@ -657,7 +658,7 @@ function patchFromBody(body: z.infer<typeof UpdateConnectionSchema>): UpdateConn
 async function createConnectionError(
   c: Parameters<Parameters<ConnectionRoutes['openapi']>[1]>[0],
   scope: AuthScope,
-  deps: ReturnType<Parameters<Parameters<ConnectionRoutes['openapi']>[1]>[0]['get']>,
+  deps: Deps,
   error: unknown,
 ) {
   if (error instanceof ConnectionPolicyDeniedError) {

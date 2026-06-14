@@ -404,7 +404,7 @@ async function validateRuntimeProviderModel(
 }
 
 function mcpConnectorIds(snapshot: Record<string, unknown>) {
-  const connectors = Array.isArray(snapshot.connectors) ? snapshot.connectors : []
+  const connectors = Array.isArray(snapshot.connectors) ? (snapshot.connectors as unknown[]) : []
   return connectors
     .map((connector) =>
       connector && typeof connector === 'object' && 'connectorId' in connector

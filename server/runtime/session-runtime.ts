@@ -415,7 +415,7 @@ function textContent(value: unknown) {
   if (!Array.isArray(value)) {
     return ''
   }
-  return value
+  return (value as unknown[])
     .map((item) => {
       if (item && typeof item === 'object' && 'type' in item && item.type === 'text' && 'text' in item) {
         return String(item.text)
@@ -996,7 +996,7 @@ export function runtimeMessagesFromEvents(events: Array<{ type?: string; payload
   let latestAgentEndMessages: AgentMessage[] | null = null
   const messageEndMessages: AgentMessage[] = []
   for (const event of events) {
-    const payload = typeof event.payload === 'string' ? JSON.parse(event.payload) : event.payload
+    const payload: unknown = typeof event.payload === 'string' ? JSON.parse(event.payload) : event.payload
     if (!payload || typeof payload !== 'object') {
       continue
     }
@@ -1086,10 +1086,13 @@ export async function runSessionTurn(env: Env, input: SessionTurnInput): Promise
       failureMessage = eventFailure
       aborted ||= eventFailure === 'Runtime request aborted'
     }
-    await input.onEvent(event as unknown as Record<string, unknown>, {
-      source: 'ama-cloud-runtime',
-      piCorePackage: '@earendil-works/pi-agent-core',
-    })
+    await input.onEvent(
+      { ...event },
+      {
+        source: 'ama-cloud-runtime',
+        piCorePackage: '@earendil-works/pi-agent-core',
+      },
+    )
     if (event.type === 'message_end') {
       const usage = usageEvent(event.message, provider, modelId)
       if (usage) {

@@ -9,11 +9,11 @@ interface ManagedAgentState {
 }
 
 export class ManagedAgent extends Agent<Env, ManagedAgentState> {
-  initialState: ManagedAgentState = {
+  override initialState: ManagedAgentState = {
     status: 'idle',
   }
 
-  async onStart() {
+  override async onStart() {
     this.sql`
       CREATE TABLE IF NOT EXISTS messages (
         id TEXT PRIMARY KEY,
@@ -24,7 +24,7 @@ export class ManagedAgent extends Agent<Env, ManagedAgentState> {
     `
   }
 
-  async onRequest(request: Request) {
+  override async onRequest(request: Request) {
     const url = new URL(request.url)
 
     if (request.method === 'GET' && url.pathname.endsWith('/state')) {

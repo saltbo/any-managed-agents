@@ -1,6 +1,7 @@
 import {
   environmentIdForRegistration,
   hasSecretMaterial,
+  type RunnerAuthMode,
   type RunnerOidcContext,
   runnerAuthModeForRegistration,
   runnerMachineId,
@@ -23,7 +24,7 @@ export interface RegisterRunnerInput {
   capabilities: string[]
   environmentId: string | undefined
   credentialRef: RunnerCredentialRef | undefined
-  authMode: string | undefined
+  authMode: RunnerAuthMode | undefined
   maxConcurrent: number
   metadata: Record<string, unknown>
 }

@@ -84,7 +84,7 @@ export function createSessionRuntimeGateway(env: Env, db: Db, repo: SessionRepo)
           ok: false,
           status: outcome.status,
           message: outcome.message,
-          ...(outcome.runtimeError ? { runtimeError: outcome.runtimeError as unknown as Record<string, unknown> } : {}),
+          ...(outcome.runtimeError ? { runtimeError: { ...outcome.runtimeError } } : {}),
         }
       }
       return { ok: true, delivery: outcome.delivery, state: outcome.state }

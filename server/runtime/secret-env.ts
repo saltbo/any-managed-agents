@@ -104,7 +104,7 @@ function parseMetadata(raw: unknown): Record<string, unknown> | null {
     return null
   }
   try {
-    const parsed = JSON.parse(raw)
+    const parsed: unknown = JSON.parse(raw)
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null
   } catch {
     return null

@@ -38,12 +38,12 @@ function stringify(value: unknown) {
   return JSON.stringify(value)
 }
 
-function parseRefArray(value: string | null) {
+function parseRefArray(value: string | null): unknown[] {
   if (!value) {
     return []
   }
-  const parsed = JSON.parse(value) as unknown
-  return Array.isArray(parsed) ? parsed : []
+  const parsed: unknown = JSON.parse(value)
+  return Array.isArray(parsed) ? (parsed as unknown[]) : []
 }
 
 function vaultRecordFrom(row: VaultRow): VaultRecord {

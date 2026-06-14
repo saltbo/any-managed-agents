@@ -25,6 +25,9 @@ const routes = app.post('/workers-ai/v1/chat/completions', async (c) => {
   }
 
   const response = await c.env.AI.run(model, body, { returnRawResponse: true })
+  // Workers AI types the binding return as Record<string, unknown>, but the
+  // returnRawResponse overload yields a real Response at runtime. This is an
+  // external-protocol adapter endpoint (design §1.8), not the AMA contract.
   const rawResponse = response as unknown as Response
   const headers = new Headers(rawResponse.headers)
   headers.set('cache-control', 'no-store')

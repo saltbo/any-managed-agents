@@ -68,10 +68,18 @@ export interface RunnerOidcContext {
   externalTenantId: string | null
 }
 
+// The set of runner authentication modes. Single source of truth: the API enum,
+// the record type, and the registration logic all derive from this.
+export const RUNNER_AUTH_MODES = ['bearer', 'mtls', 'oidc', 'federated'] as const
+export type RunnerAuthMode = (typeof RUNNER_AUTH_MODES)[number]
+
 // The auth mode a registration resolves to: an explicit request wins, otherwise
 // a federated binding (project/tenant/environment claim) implies 'federated'
 // and a bare device-login token implies 'oidc'.
-export function runnerAuthModeForRegistration(oidc: RunnerOidcContext, requested: string | undefined): string {
+export function runnerAuthModeForRegistration(
+  oidc: RunnerOidcContext,
+  requested: RunnerAuthMode | undefined,
+): RunnerAuthMode {
   return requested ?? (oidc.runnerProjectId || oidc.externalTenantId || oidc.runnerEnvironmentId ? 'federated' : 'oidc')
 }
 

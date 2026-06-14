@@ -1,6 +1,7 @@
 import { swaggerUI } from '@hono/swagger-ui'
 import { cors } from 'hono/cors'
 import { createDeps } from './composition'
+import type { Env } from './env'
 import { registerAccessRuleRoutes } from './http/access-rules'
 import { registerAgentRoutes } from './http/agents'
 import { registerAuditRecordRoutes } from './http/audit-records'
@@ -42,7 +43,9 @@ export function createApp() {
     '/*',
     cors({
       origin: (origin, c) => {
-        const allowedOrigins = c.env.AMA_ALLOWED_ORIGINS
+        // hono's cors() erases the binding type on c, so env reads as `any`
+        // here; re-attach the worker Env to keep the read type-checked.
+        const allowedOrigins = (c.env as Env).AMA_ALLOWED_ORIGINS
         if (!allowedOrigins) {
           return null
         }

@@ -2701,6 +2701,12 @@
           },
           "authMode": {
             "type": "string",
+            "enum": [
+              "bearer",
+              "mtls",
+              "oidc",
+              "federated"
+            ],
             "example": "oidc"
           },
           "state": {

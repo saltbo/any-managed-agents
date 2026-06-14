@@ -1,3 +1,4 @@
+import type { RunnerAuthMode } from '@server/domain/runner-queue'
 import type {
   CreateRunnerInput,
   ListPageResult,
@@ -47,7 +48,8 @@ function recordFrom(row: RunnerRow): RunnerAuthRecord {
     credentialRef: row.credentialId
       ? { credentialId: row.credentialId, ...(row.credentialVersionId ? { versionId: row.credentialVersionId } : {}) }
       : null,
-    authMode: row.authMode,
+    // DB text column constrained to the auth-mode set by every write path.
+    authMode: row.authMode as RunnerAuthMode,
     state: row.state,
     currentLoad: row.currentLoad,
     maxConcurrent: row.maxConcurrent,
