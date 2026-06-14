@@ -388,6 +388,9 @@ export function createSandboxRuntimeHost(env: Env): SandboxRuntimeHost {
     executeToolCalls(input) {
       return executeRuntimeToolCalls(env, input)
     },
+    executeTool(input) {
+      return toolExecutor(env).execute(input)
+    },
     runTurn(input) {
       return runSessionTurn(env, input)
     },

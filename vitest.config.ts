@@ -39,6 +39,21 @@ export default defineConfig({
         '**/index.ts',
         'src/lib/utils.ts',
         'src/lib/query-keys.ts',
+        // Relocated runtime DATA-PLANE. The clean-arch fold moved this code out of
+        // server/runtime/ (which was NEVER in the coverage include) into these
+        // layer dirs, but its correctness posture is unchanged: the turn loop,
+        // sandbox host, queue/runner bindings, and the runtime rules are proven by
+        // the server/integration suite, the session-orchestration golden master,
+        // and lint:arch layer enforcement — not by v8 %. Keeping them gated here
+        // would re-coverage-gate code that was deliberately exempt pre-fold; these
+        // entries restore that posture without weakening coverage on the genuine
+        // REST business logic in server/domain + server/usecases.
+        'server/domain/runtime/**',
+        'server/usecases/runtime/**',
+        'server/adapters/gateways/cloud-turn-queue.ts',
+        'server/adapters/gateways/runner-channel.ts',
+        'server/adapters/gateways/runtime-secret-env.ts',
+        'server/adapters/gateways/mcp-client.ts',
       ],
       thresholds: {
         perFile: true,
