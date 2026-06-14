@@ -33,6 +33,18 @@ export {
   recordRuntimeMessageSubmission,
 } from './proxy'
 export {
+  appendRunnerEvent,
+  buildRedactedRunnerCanonicalEvent,
+  type ChannelState,
+  deactivateRunnerChannel,
+  decidePermissionRequest,
+  type RunnerCanonicalEvent,
+  type RunnerChannelDeps,
+  RunnerChannelOwnershipLostError,
+  type SessionCommandReply,
+  validateActiveOwnership,
+} from './runner-channel-ingest'
+export {
   type ApprovalDecisionResult,
   type ApprovalDeps,
   type ApprovalRowOutput,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildRedactedRunnerCanonicalEvent } from './runner-session-channel'
+import { buildRedactedRunnerCanonicalEvent } from './runner-channel-ingest'
 
 const channel = {
   channelId: 'channel_1',
