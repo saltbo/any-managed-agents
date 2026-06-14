@@ -6,7 +6,6 @@ import type { CloudTurnMessage } from './runtime/turn-queue'
 import { dispatchDueScheduledTriggers } from './scheduled-dispatch'
 
 export { Sandbox } from '@cloudflare/sandbox'
-export { ManagedAgent } from './runtime/managed-agent'
 export { RunnerSessionChannelObject } from './runtime/runner-session-channel'
 
 const app = createApp()

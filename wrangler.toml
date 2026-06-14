@@ -79,6 +79,13 @@ new_sqlite_classes = ["Sandbox"]
 tag = "v3"
 new_sqlite_classes = ["RunnerSessionChannelObject"]
 
+# ManagedAgent (the agents-SDK chat DO) was never bound to a binding and is not
+# the v1.0 runtime contract; the class is removed. The v1 tag stays as applied
+# history; this migration drops the unused class.
+[[migrations]]
+tag = "v4"
+deleted_classes = ["ManagedAgent"]
+
 [[containers]]
 class_name = "Sandbox"
 name = "any-managed-agents-sandbox"

@@ -48,3 +48,7 @@ new_sqlite_classes = ["Sandbox"]
 [[migrations]]
 tag = "v3"
 new_sqlite_classes = ["RunnerSessionChannelObject"]
+
+[[migrations]]
+tag = "v4"
+deleted_classes = ["ManagedAgent"]
