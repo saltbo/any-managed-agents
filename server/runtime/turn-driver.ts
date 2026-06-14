@@ -9,10 +9,15 @@
 // they record a policy denial (cloud inlines event+audit; the proxy uses the
 // shared denyRuntimePolicy helper) and in how they map the turn outcome, so the
 // denial recorder is injected and the outcome handling stays with each caller.
+
 import type { RuntimeOrchestrationRepo, SessionRow } from '../adapters/repos/runtime-orchestration'
+import { resolveSessionProviderModel } from '../domain/runtime/provider'
 import type { Env } from '../env'
 import { policyBlocksSandboxOperation } from '../policy'
 import type { AuthScope } from '../usecases/ports'
+
+export { resolveSessionProviderModel } from '../domain/runtime/provider'
+
 import { safeRuntimeError } from './runtime-error'
 import { denyRuntimePolicy, runtimeRequestHasTestOnlyFields } from './runtime-proxy-policy'
 import { appendRuntimeEvent, type Repo } from './session-base'
@@ -44,26 +49,6 @@ export async function assertRuntimeSessionRunning(
   if (active?.state !== 'running') {
     throw new RuntimeTurnCancelledError()
   }
-}
-
-// Single source for the session's runtime provider + model. The session's pinned
-// modelProvider wins; otherwise the agent snapshot's providerId (falling back to
-// the platform default). The model prefers the session modelConfig, then the
-// agent snapshot, else null (the engine resolves the provider default).
-export function resolveSessionProviderModel(
-  session: { modelProvider: string | null },
-  agentSnapshot: Record<string, unknown>,
-  modelConfig: Record<string, unknown>,
-): { provider: string; model: string | null } {
-  const provider =
-    session.modelProvider ?? (typeof agentSnapshot.providerId === 'string' ? agentSnapshot.providerId : 'workers-ai')
-  const model =
-    typeof modelConfig.model === 'string'
-      ? modelConfig.model
-      : typeof agentSnapshot.model === 'string'
-        ? agentSnapshot.model
-        : null
-  return { provider, model }
 }
 
 export function parseRuntimeAgentSnapshot(value: string | null) {
