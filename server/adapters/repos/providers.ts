@@ -1,4 +1,9 @@
-import { type ModelAvailability, type ProviderType, providerCredentialStatus } from '@server/domain/provider'
+import {
+  type ModelAvailability,
+  type ModelCatalogState,
+  type ProviderType,
+  providerCredentialStatus,
+} from '@server/domain/provider'
 import type {
   CreateProviderInput,
   ModelDiscoveryTaskRecord,
@@ -50,7 +55,7 @@ function providerRecordFrom(row: ProviderRow): ProviderRecord {
     metadata: parseJson<Record<string, unknown>>(row.metadata, {}),
     rateLimits: parseJson<Record<string, unknown>>(row.rateLimits, {}),
     budgetPolicy: parseJson<Record<string, unknown>>(row.budgetPolicy, {}),
-    modelCatalogState: row.modelCatalogState,
+    modelCatalogState: row.modelCatalogState as ModelCatalogState,
     lastError: parseJson<Record<string, unknown> | null>(row.lastError, null),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,

@@ -32,7 +32,7 @@ const EffectiveAccessRuleSchema = z
     providerId: z.string(),
     modelId: z.string(),
     teamId: z.string().nullable(),
-    effect: z.string(),
+    effect: z.enum(['allow', 'deny']),
     reason: z.string().nullable(),
   })
   .openapi('EffectiveAccessRule')
@@ -40,12 +40,12 @@ const EffectiveAccessRuleSchema = z
 const EffectiveBudgetSchema = z
   .object({
     id: z.string(),
-    scope: z.string(),
+    scope: z.enum(['project', 'provider', 'model']),
     providerId: z.string().nullable(),
     modelId: z.string().nullable(),
-    limitType: z.string(),
+    limitType: z.enum(['tokens', 'cost_micros', 'sessions']),
     limitValue: z.number().int(),
-    window: z.string(),
+    window: z.enum(['day', 'month']),
     enabled: z.boolean(),
     metadata: JsonObjectSchema,
   })

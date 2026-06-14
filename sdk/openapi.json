@@ -1489,9 +1489,24 @@
           },
           "resourceLimits": {
             "type": "object",
-            "additionalProperties": {
-              "nullable": true
+            "properties": {
+              "cpuMs": {
+                "type": "integer",
+                "minimum": 0,
+                "exclusiveMinimum": true
+              },
+              "memoryMb": {
+                "type": "integer",
+                "minimum": 0,
+                "exclusiveMinimum": true
+              },
+              "timeoutSeconds": {
+                "type": "integer",
+                "minimum": 0,
+                "exclusiveMinimum": true
+              }
             },
+            "additionalProperties": false,
             "example": {
               "memoryMb": 512
             }
@@ -2092,9 +2107,24 @@
           },
           "resourceLimits": {
             "type": "object",
-            "additionalProperties": {
-              "nullable": true
+            "properties": {
+              "cpuMs": {
+                "type": "integer",
+                "minimum": 0,
+                "exclusiveMinimum": true
+              },
+              "memoryMb": {
+                "type": "integer",
+                "minimum": 0,
+                "exclusiveMinimum": true
+              },
+              "timeoutSeconds": {
+                "type": "integer",
+                "minimum": 0,
+                "exclusiveMinimum": true
+              }
             },
+            "additionalProperties": false,
             "example": {
               "memoryMb": 512
             }
@@ -2248,6 +2278,10 @@
           },
           "modelCatalogState": {
             "type": "string",
+            "enum": [
+              "ready",
+              "error"
+            ],
             "example": "ready"
           },
           "lastError": {
@@ -3708,7 +3742,11 @@
             "nullable": true
           },
           "effect": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "allow",
+              "deny"
+            ]
           },
           "reason": {
             "type": "string",
@@ -3731,7 +3769,12 @@
             "type": "string"
           },
           "scope": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "project",
+              "provider",
+              "model"
+            ]
           },
           "providerId": {
             "type": "string",
@@ -3742,13 +3785,22 @@
             "nullable": true
           },
           "limitType": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "tokens",
+              "cost_micros",
+              "sessions"
+            ]
           },
           "limitValue": {
             "type": "integer"
           },
           "window": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "day",
+              "month"
+            ]
           },
           "enabled": {
             "type": "boolean"

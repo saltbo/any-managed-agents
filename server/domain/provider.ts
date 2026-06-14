@@ -9,6 +9,11 @@ export type ModelAvailability = (typeof MODEL_AVAILABILITY)[number]
 export const DISCOVERY_TASK_STATES = ['pending', 'running', 'succeeded', 'failed'] as const
 export type DiscoveryTaskState = (typeof DISCOVERY_TASK_STATES)[number]
 
+// The model catalog's operational state: 'ready' once a discovery has populated
+// (or the platform default is synthesized), 'error' when the last refresh failed.
+export const MODEL_CATALOG_STATES = ['ready', 'error'] as const
+export type ModelCatalogState = (typeof MODEL_CATALOG_STATES)[number]
+
 export type CredentialStatus = 'not_required' | 'configured' | 'missing'
 
 export type FieldErrors = Record<string, string>

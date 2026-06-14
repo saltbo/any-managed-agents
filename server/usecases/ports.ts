@@ -7,7 +7,13 @@ import type {
 } from '@server/domain/connection'
 import type { ConnectorAvailability, ConnectorCatalogEntry, ConnectorCatalogTool } from '@server/domain/connector'
 import type { EnvironmentConfig } from '@server/domain/environment'
-import type { CredentialStatus, DiscoveryTaskState, ModelAvailability, ProviderType } from '@server/domain/provider'
+import type {
+  CredentialStatus,
+  DiscoveryTaskState,
+  ModelAvailability,
+  ModelCatalogState,
+  ProviderType,
+} from '@server/domain/provider'
 import type { DiscoveredProviderModel } from '@server/domain/provider-adapter'
 import type { RunnerAuthMode } from '@server/domain/runner-queue'
 import type {
@@ -353,7 +359,7 @@ export interface ProviderRecord {
   metadata: Record<string, unknown>
   rateLimits: Record<string, unknown>
   budgetPolicy: Record<string, unknown>
-  modelCatalogState: string
+  modelCatalogState: ModelCatalogState
   lastError: Record<string, unknown> | null
   createdAt: string
   updatedAt: string
@@ -438,7 +444,7 @@ export interface UpsertProviderModelInput {
 }
 
 export interface ProviderCatalogStatus {
-  modelCatalogState: string
+  modelCatalogState: ModelCatalogState
   lastError: Record<string, unknown> | null
 }
 
@@ -1134,7 +1140,7 @@ export interface EffectivePolicyResult {
     providerId: string
     modelId: string
     teamId: string | null
-    effect: string
+    effect: 'allow' | 'deny'
     reason: string | null
   }[]
   toolPolicy: Record<string, unknown>

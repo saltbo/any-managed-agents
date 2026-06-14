@@ -99,7 +99,8 @@ export function createPolicyEvalRepo(db: Db): PolicyEvalRepo {
         providerId: rule.providerId,
         modelId: rule.modelId,
         teamId: rule.teamId,
-        effect: rule.effect,
+        // DB text column constrained to allow|deny by every write path.
+        effect: rule.effect as 'allow' | 'deny',
         reason: rule.reason,
       }))
     },

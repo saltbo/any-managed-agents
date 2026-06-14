@@ -232,7 +232,7 @@ export interface EffectivePolicy {
     providerId: string
     modelId: string
     teamId: string | null
-    effect: string
+    effect: 'allow' | 'deny'
     reason: string | null
   }[]
   toolPolicy: Record<string, unknown>
@@ -245,7 +245,7 @@ export interface PolicyAccessRule {
   providerId: string | null
   modelId: string | null
   teamId: string | null
-  effect: string
+  effect: 'allow' | 'deny'
   reason: string | null
 }
 

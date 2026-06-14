@@ -1,5 +1,10 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
-import { DISCOVERY_TASK_STATES, MODEL_AVAILABILITY, PROVIDER_TYPES } from '@server/domain/provider'
+import {
+  DISCOVERY_TASK_STATES,
+  MODEL_AVAILABILITY,
+  MODEL_CATALOG_STATES,
+  PROVIDER_TYPES,
+} from '@server/domain/provider'
 import { requireAuth } from '../auth/session'
 import {
   AuthenticatedOperation,
@@ -49,7 +54,7 @@ const ProviderSchema = z
     metadata: JsonObjectSchema.openapi({ example: { accountId: 'cf-account-ref' } }),
     rateLimits: JsonObjectSchema.openapi({ example: { requestsPerMinute: 120 } }),
     budgetPolicy: JsonObjectSchema.openapi({ example: { monthlyCostMicros: 1000000 } }),
-    modelCatalogState: z.string().openapi({ example: 'ready' }),
+    modelCatalogState: z.enum(MODEL_CATALOG_STATES).openapi({ example: 'ready' }),
     lastError: JsonObjectSchema.nullable().openapi({ example: { type: 'provider_error', retryable: true } }),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
