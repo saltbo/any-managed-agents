@@ -79,7 +79,7 @@ vi.mock('../adapters/repos/runtime-orchestration', () => {
   }
 })
 
-import { consumeCloudTurnMessage, markCloudTurnDeadLettered } from './session-orchestration'
+import { consumeCloudTurnMessage, markCloudTurnDeadLettered } from './cloud-turn'
 import { RuntimePolicyDeniedError } from './session-runtime'
 
 const env = { DB: {}, AMA_RUNTIME_MODE: 'production' } as unknown as Env

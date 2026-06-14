@@ -59,6 +59,15 @@ export {
   type PromptDispatchOutcome,
 } from './session-prompt'
 export {
+  archiveSession as archiveRuntimeSession,
+  createSession as createRuntimeSession,
+  decideApproval as decideRuntimeApproval,
+  dispatchPrompt as dispatchRuntimePrompt,
+  markExpiredPending as markRuntimeExpiredPending,
+  stopSession as stopRuntimeSession,
+  unarchiveSession as unarchiveRuntimeSession,
+} from './sessions'
+export {
   assertRuntimeSessionRunning,
   buildSessionTurnCallbacks,
   type SessionTurnCallbacks,

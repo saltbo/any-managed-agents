@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Deps } from './deps'
 import {
   type AuthScope,
@@ -7,7 +7,34 @@ import {
   type SessionRuntimeRow,
   SessionValidationError,
 } from './ports'
+
+// The session write usecases now call the runtime session usecases directly
+// (the SessionRuntimeGateway indirection was removed). Mock that module so these
+// tests drive the runtime outcomes the way they previously drove the gateway.
+vi.mock('./runtime/sessions', () => ({
+  createSession: vi.fn(),
+  stopSession: vi.fn(),
+  archiveSession: vi.fn(),
+  unarchiveSession: vi.fn(),
+  dispatchPrompt: vi.fn(),
+  decideApproval: vi.fn(),
+  markExpiredPending: vi.fn(),
+}))
+
+import * as runtimeSessions from './runtime/sessions'
 import { sendSessionMessage, updateSession } from './sessions'
+
+// The runtime-session behaviors a test wants to override, mirroring the former
+// gateway override surface. Applied onto the mocked module by fakeDeps.
+type RuntimeSessionOverrides = {
+  createSession?: typeof runtimeSessions.createSession
+  stopSession?: typeof runtimeSessions.stopSession
+  archiveSession?: typeof runtimeSessions.archiveSession
+  unarchiveSession?: typeof runtimeSessions.unarchiveSession
+  dispatchPrompt?: typeof runtimeSessions.dispatchPrompt
+  decideApproval?: typeof runtimeSessions.decideApproval
+  markExpiredPending?: typeof runtimeSessions.markExpiredPending
+}
 
 const auth: AuthScope = {
   organization: { id: 'org_1', name: 'Org' },
@@ -81,8 +108,12 @@ function messageRecord(overrides: Partial<SessionMessageRecord> = {}): SessionMe
   }
 }
 
+beforeEach(() => {
+  vi.clearAllMocks()
+})
+
 function fakeDeps(
-  overrides: { sessions?: Partial<Deps['sessions']>; sessionRuntime?: Partial<Deps['sessionRuntime']> } = {},
+  overrides: { sessions?: Partial<Deps['sessions']>; sessionRuntime?: RuntimeSessionOverrides } = {},
 ): Deps {
   const sessions: Deps['sessions'] = {
     list: async () => ({ rows: [], hasMore: false }),
@@ -106,7 +137,7 @@ function fakeDeps(
     activeSessionLeaseForRunner: async () => null,
     ...overrides.sessions,
   }
-  const sessionRuntime: Deps['sessionRuntime'] = {
+  const runtime: Required<RuntimeSessionOverrides> = {
     createSession: async () => ({ ok: true, value: sessionRecord() }),
     stopSession: async () => ({ ok: true, value: sessionRecord({ state: 'stopped' }) }),
     archiveSession: async () => ({ ok: true, value: sessionRecord({ archivedAt: '2026-01-02T00:00:00.000Z' }) }),
@@ -133,6 +164,13 @@ function fakeDeps(
     markExpiredPending: async () => {},
     ...overrides.sessionRuntime,
   }
+  vi.mocked(runtimeSessions.createSession).mockImplementation(runtime.createSession)
+  vi.mocked(runtimeSessions.stopSession).mockImplementation(runtime.stopSession)
+  vi.mocked(runtimeSessions.archiveSession).mockImplementation(runtime.archiveSession)
+  vi.mocked(runtimeSessions.unarchiveSession).mockImplementation(runtime.unarchiveSession)
+  vi.mocked(runtimeSessions.dispatchPrompt).mockImplementation(runtime.dispatchPrompt)
+  vi.mocked(runtimeSessions.decideApproval).mockImplementation(runtime.decideApproval)
+  vi.mocked(runtimeSessions.markExpiredPending).mockImplementation(runtime.markExpiredPending)
   return {
     agents: undefined as unknown as Deps['agents'],
     environments: undefined as unknown as Deps['environments'],
@@ -184,7 +222,8 @@ function fakeDeps(
       }),
     },
     sessions,
-    sessionRuntime,
+    createApprovalGate: undefined as unknown as Deps['createApprovalGate'],
+    rereadStartedSession: false,
   }
 }
 
