@@ -1,4 +1,4 @@
-import type { UsageMeasurement } from '@server/domain/usage'
+import type { UsageMeasurement, UsageProviderType, UsageStatus, UsageType } from '@server/domain/usage'
 import type { UsageListQuery, UsageRecord, UsageRepo, UsageSummaryQuery } from '@server/usecases/ports'
 import { and, desc, eq, gte, lt, lte, or } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
@@ -21,16 +21,17 @@ function recordFrom(row: UsageRow): UsageRecord {
     sessionEventId: row.sessionEventId,
     correlationId: row.correlationId,
     providerId: row.providerId,
-    providerType: row.providerType,
+    // DB text columns constrained to these enums by the usage write path.
+    providerType: row.providerType as UsageProviderType,
     modelId: row.modelId,
-    status: row.status,
+    status: row.status as UsageStatus,
     promptTokens: row.promptTokens,
     completionTokens: row.completionTokens,
     totalTokens: row.totalTokens,
     durationMs: row.durationMs,
     costMicros: row.costMicros,
     currency: row.currency,
-    usageType: row.usageType,
+    usageType: row.usageType as UsageType,
     metadata: parseJson<Record<string, unknown>>(row.metadata, {}),
     createdAt: row.createdAt,
   }

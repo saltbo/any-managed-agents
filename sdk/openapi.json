@@ -4313,10 +4313,17 @@
             "type": "string"
           },
           "category": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "development",
+              "planning"
+            ]
           },
           "trustLevel": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "verified"
+            ]
           },
           "capabilities": {
             "type": "array",
@@ -4327,7 +4334,10 @@
           "supportedAuthModes": {
             "type": "array",
             "items": {
-              "type": "string"
+              "type": "string",
+              "enum": [
+                "vault_credential"
+              ]
             }
           },
           "setupRequirements": {
@@ -4866,13 +4876,25 @@
             "nullable": true
           },
           "providerType": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "workers-ai",
+              "anthropic",
+              "openai",
+              "openai-compatible",
+              "ollama",
+              "sandbox"
+            ]
           },
           "modelId": {
             "type": "string"
           },
           "status": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
           },
           "promptTokens": {
             "type": "integer"
@@ -4893,7 +4915,11 @@
             "type": "string"
           },
           "usageType": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "model",
+              "tool"
+            ]
           },
           "metadata": {
             "type": "object",
@@ -5050,7 +5076,11 @@
             "nullable": true
           },
           "actorType": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "user",
+              "system"
+            ]
           },
           "action": {
             "type": "string"
@@ -5063,7 +5093,12 @@
             "nullable": true
           },
           "outcome": {
-            "type": "string"
+            "type": "string",
+            "enum": [
+              "success",
+              "failure",
+              "denied"
+            ]
           },
           "requestId": {
             "type": "string",

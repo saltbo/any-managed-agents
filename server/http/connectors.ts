@@ -1,5 +1,11 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
-import { CONNECTOR_APPROVAL_MODES, CONNECTOR_AVAILABILITIES } from '@server/domain/connector'
+import {
+  CONNECTOR_APPROVAL_MODES,
+  CONNECTOR_AUTH_MODES,
+  CONNECTOR_AVAILABILITIES,
+  CONNECTOR_CATEGORIES,
+  CONNECTOR_TRUST_LEVELS,
+} from '@server/domain/connector'
 import { requireAuth } from '../auth/session'
 import {
   AuthenticatedOperation,
@@ -31,10 +37,10 @@ const ConnectorSchema = z
     id: z.string(),
     name: z.string(),
     description: z.string(),
-    category: z.string(),
-    trustLevel: z.string(),
+    category: z.enum(CONNECTOR_CATEGORIES),
+    trustLevel: z.enum(CONNECTOR_TRUST_LEVELS),
     capabilities: z.array(z.string()),
-    supportedAuthModes: z.array(z.string()),
+    supportedAuthModes: z.array(z.enum(CONNECTOR_AUTH_MODES)),
     setupRequirements: z.array(z.string()),
     tools: z.array(ConnectorToolSchema),
     metadata: JsonObjectSchema,

@@ -1,4 +1,10 @@
-import { type ConnectorCatalogTool, DEFAULT_CONNECTORS } from '@server/domain/connector'
+import {
+  type ConnectorAuthMode,
+  type ConnectorCatalogTool,
+  type ConnectorCategory,
+  type ConnectorTrustLevel,
+  DEFAULT_CONNECTORS,
+} from '@server/domain/connector'
 import type { ConnectorListQuery, ConnectorRecord, ConnectorRepo, ListPageResult } from '@server/usecases/ports'
 import { and, desc, eq, like, lt, or } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
@@ -24,10 +30,11 @@ function recordFrom(row: ConnectorRow): ConnectorRecord {
     id: row.id,
     name: row.name,
     description: row.description,
-    category: row.category,
-    trustLevel: row.trustLevel,
+    // DB text columns constrained to the catalog enums by the seed writer.
+    category: row.category as ConnectorCategory,
+    trustLevel: row.trustLevel as ConnectorTrustLevel,
     capabilities: parseJson<string[]>(row.capabilities, []),
-    supportedAuthModes: parseJson<string[]>(row.supportedAuthModes, []),
+    supportedAuthModes: parseJson<ConnectorAuthMode[]>(row.supportedAuthModes, []),
     setupRequirements: parseJson<string[]>(row.setupRequirements, []),
     tools: parseJson<ConnectorCatalogTool[]>(row.tools, []),
     metadata: parseJson<Record<string, unknown>>(row.metadata, {}),

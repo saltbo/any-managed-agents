@@ -3,9 +3,15 @@
 
 export const CONNECTOR_AVAILABILITIES = ['available', 'unavailable'] as const
 export const CONNECTOR_APPROVAL_MODES = ['none', 'per_call', 'always_required', 'project_policy'] as const
+export const CONNECTOR_CATEGORIES = ['development', 'planning'] as const
+export const CONNECTOR_TRUST_LEVELS = ['verified'] as const
+export const CONNECTOR_AUTH_MODES = ['vault_credential'] as const
 
 export type ConnectorAvailability = (typeof CONNECTOR_AVAILABILITIES)[number]
 export type ConnectorApprovalMode = (typeof CONNECTOR_APPROVAL_MODES)[number]
+export type ConnectorCategory = (typeof CONNECTOR_CATEGORIES)[number]
+export type ConnectorTrustLevel = (typeof CONNECTOR_TRUST_LEVELS)[number]
+export type ConnectorAuthMode = (typeof CONNECTOR_AUTH_MODES)[number]
 
 export interface ConnectorCatalogTool {
   name: string
@@ -19,10 +25,10 @@ export interface ConnectorCatalogEntry {
   id: string
   name: string
   description: string
-  category: string
-  trustLevel: string
+  category: ConnectorCategory
+  trustLevel: ConnectorTrustLevel
   capabilities: string[]
-  supportedAuthModes: string[]
+  supportedAuthModes: ConnectorAuthMode[]
   setupRequirements: string[]
   tools: ConnectorCatalogTool[]
   metadata: Record<string, unknown>

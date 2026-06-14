@@ -3,6 +3,24 @@
 export const USAGE_GROUP_BY_VALUES = ['provider', 'model', 'agent'] as const
 export type UsageGroupBy = (typeof USAGE_GROUP_BY_VALUES)[number]
 
+export const USAGE_STATUSES = ['success', 'error'] as const
+export type UsageStatus = (typeof USAGE_STATUSES)[number]
+
+export const USAGE_TYPES = ['model', 'tool'] as const
+export type UsageType = (typeof USAGE_TYPES)[number]
+
+// Provider families (see domain/provider-adapter PROVIDER_FAMILIES) plus
+// 'sandbox' for tool-execution usage rows.
+export const USAGE_PROVIDER_TYPES = [
+  'workers-ai',
+  'anthropic',
+  'openai',
+  'openai-compatible',
+  'ollama',
+  'sandbox',
+] as const
+export type UsageProviderType = (typeof USAGE_PROVIDER_TYPES)[number]
+
 // The numeric fields a usage row contributes to a summary. A row carries more
 // columns, but only these cross into the aggregation.
 export interface UsageMeasurement {

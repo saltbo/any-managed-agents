@@ -1220,7 +1220,7 @@ export interface PolicyEvalRepo {
 
 // --- usage records + summary (read-only reporting) ---
 
-import type { UsageMeasurement } from '@server/domain/usage'
+import type { UsageMeasurement, UsageProviderType, UsageStatus, UsageType } from '@server/domain/usage'
 
 export interface UsageRecord {
   id: string
@@ -1231,16 +1231,16 @@ export interface UsageRecord {
   sessionEventId: string | null
   correlationId: string | null
   providerId: string | null
-  providerType: string
+  providerType: UsageProviderType
   modelId: string
-  status: string
+  status: UsageStatus
   promptTokens: number
   completionTokens: number
   totalTokens: number
   durationMs: number
   costMicros: number
   currency: string
-  usageType: string
+  usageType: UsageType
   metadata: Record<string, unknown>
   createdAt: string
 }
@@ -1280,11 +1280,11 @@ export interface AuditRecord {
   id: string
   projectId: string | null
   actorUserId: string | null
-  actorType: string
+  actorType: 'user' | 'system'
   action: string
   resourceType: string
   resourceId: string | null
-  outcome: string
+  outcome: 'success' | 'failure' | 'denied'
   requestId: string | null
   correlationId: string | null
   sessionId: string | null

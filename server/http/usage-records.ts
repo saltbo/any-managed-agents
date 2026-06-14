@@ -1,4 +1,5 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
+import { USAGE_PROVIDER_TYPES, USAGE_STATUSES, USAGE_TYPES } from '@server/domain/usage'
 import { requireAuth } from '../auth/session'
 import {
   AuthenticatedOperation,
@@ -26,16 +27,16 @@ const UsageRecordSchema = z
     sessionEventId: z.string().nullable(),
     correlationId: z.string().nullable(),
     providerId: z.string().nullable(),
-    providerType: z.string(),
+    providerType: z.enum(USAGE_PROVIDER_TYPES),
     modelId: z.string(),
-    status: z.string(),
+    status: z.enum(USAGE_STATUSES),
     promptTokens: z.number().int(),
     completionTokens: z.number().int(),
     totalTokens: z.number().int(),
     durationMs: z.number().int(),
     costMicros: z.number().int(),
     currency: z.string(),
-    usageType: z.string(),
+    usageType: z.enum(USAGE_TYPES),
     metadata: JsonObjectSchema,
     createdAt: z.string().datetime(),
   })
