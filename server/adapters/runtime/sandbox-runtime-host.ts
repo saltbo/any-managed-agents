@@ -1,5 +1,6 @@
 import type { AgentMessage } from '@earendil-works/pi-agent-core'
 import { getModel, type Model } from '@earendil-works/pi-ai'
+import { runtimeEndpointPath } from '@server/domain/runtime/driver'
 import type { SandboxRuntimeHost } from '@server/usecases/ports'
 import {
   isRuntimePolicyDenied,
@@ -108,9 +109,7 @@ async function getSandboxBinding() {
   return getSandbox
 }
 
-export function runtimeEndpointPath(sessionId: string) {
-  return `/api/v1/runtime/sessions/${sessionId}/rpc`
-}
+export { runtimeEndpointPath }
 
 export function workspaceResourceManifest(resourceRefs: Record<string, unknown>[] = []) {
   const resources = resourceRefs
