@@ -50,6 +50,15 @@ vi.mock('./secret-env', async (importOriginal) => ({
 
 vi.mock('../audit', () => ({ recordAudit: recordAuditMock }))
 
+// markInitialPromptFailed now records through the AuditPort (deps.audit); the
+// shim builds it via createAuditPort. Stub the gateway so the failure audit goes
+// to the same spy the legacy recordAudit path used (record(auth, entry) → the
+// entry lands in call[1], matching the recordAudit(db, { auth, ...entry }) shape
+// the assertions filter on).
+vi.mock('../adapters/gateways/audit', () => ({
+  createAuditPort: vi.fn(() => ({ record: (auth: unknown, entry: unknown) => recordAuditMock(auth, entry) })),
+}))
+
 vi.mock('../adapters/repos/runtime-orchestration', () => {
   const repo = {
     db: {},

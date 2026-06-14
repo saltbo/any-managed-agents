@@ -3,6 +3,7 @@ import {
   createRuntimeOrchestrationRepoFromBinding,
   type RuntimeOrchestrationRepo,
 } from '../adapters/repos/runtime-orchestration'
+import { channelSystemAuth } from '../domain/runtime/system-auth'
 import type { Env } from '../env'
 import { evaluateSandboxRuntimePolicy } from '../policy'
 import { redactSensitiveValue } from '../redaction'
@@ -348,28 +349,6 @@ async function appendSessionEvent(
     },
     canonicalEvent,
   )
-}
-
-// Channel-scoped system identity for policy evaluation and event audit on
-// runner-ingested permission requests.
-function channelSystemAuth(state: ChannelState) {
-  return {
-    user: { id: 'system:runner-channel', email: '', name: 'AMA runner channel', avatarUrl: null },
-    organization: { id: state.organizationId, name: state.organizationId },
-    project: { id: state.projectId, name: state.projectId },
-    roles: ['system'],
-    permissions: ['*'],
-    oidc: {
-      subject: 'system:runner-channel',
-      clientId: null,
-      scope: null,
-      issuer: null,
-      externalTenantId: null,
-      runnerId: state.runnerId,
-      runnerProjectId: state.projectId,
-      runnerEnvironmentId: null,
-    },
-  }
 }
 
 function safeChannelError(error: unknown) {

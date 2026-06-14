@@ -5,16 +5,19 @@
 // cluster modules (cloud-turn, lifecycle, create, prompt, approval) all import
 // from here, so this module sits at the bottom of the runtime DAG.
 
-import { canonicalAmaSessionEventFromRuntimeEvent } from '../../shared/session-events'
+import { createAuditPort } from '../adapters/gateways/audit'
 import {
   createRuntimeOrchestrationRepo,
   type RuntimeOrchestrationRepo,
   type SessionRow,
 } from '../adapters/repos/runtime-orchestration'
-import { recordAudit } from '../audit'
-import { now } from '../domain/runtime/util'
 import type { AuthScope } from '../usecases/ports'
+import {
+  appendRuntimeEvent as appendRuntimeEventUsecase,
+  markInitialPromptFailed as markInitialPromptFailedUsecase,
+} from '../usecases/runtime'
 
+export { cloudTurnSystemAuth } from '../domain/runtime/system-auth'
 export { newId, now, RUNTIME_START_TIMEOUT_MS, requestIdFrom, stringify, withTimeout } from '../domain/runtime/util'
 
 export type Db = Parameters<typeof createRuntimeOrchestrationRepo>[0]
@@ -58,14 +61,7 @@ export async function appendRuntimeEvent(
   repo: Repo,
   values: { auth: AuthScope; sessionId: string; event: Record<string, unknown>; metadata?: Record<string, unknown> },
 ) {
-  const canonicalEvent = canonicalAmaSessionEventFromRuntimeEvent(
-    values.event,
-    values.metadata ?? { source: 'runtime' },
-  )
-  return await repo.appendCanonicalEvent(
-    { organizationId: values.auth.organization.id, projectId: values.auth.project.id, sessionId: values.sessionId },
-    canonicalEvent,
-  )
+  return await appendRuntimeEventUsecase({ sessionOrchestration: repo }, values)
 }
 
 export async function markInitialPromptFailed(
@@ -75,29 +71,11 @@ export async function markInitialPromptFailed(
   message: string,
   status?: number,
 ) {
-  const failedAt = now()
-  await withRepo(db).updateSessionWhenState(auth.project.id, session.id, 'running', {
-    state: 'error',
-    stateReason: message,
-    updatedAt: failedAt,
-  })
-  await recordAudit(db, {
+  await markInitialPromptFailedUsecase(
+    { sessionOrchestration: withRepo(db), audit: createAuditPort(db) },
     auth,
-    action: 'session.initial_prompt',
-    resourceType: 'session',
-    resourceId: session.id,
-    outcome: 'failure',
-    sessionId: session.id,
-    metadata: { message, ...(status ? { status } : {}) },
-  })
-}
-
-export function cloudTurnSystemAuth(message: { organizationId: string; projectId: string }): AuthScope {
-  return {
-    user: { id: 'system:cloud-turn' },
-    organization: { id: message.organizationId, name: message.organizationId },
-    project: { id: message.projectId, name: message.projectId },
-    roles: ['system'],
-    permissions: ['*'],
-  }
+    session,
+    message,
+    status,
+  )
 }
