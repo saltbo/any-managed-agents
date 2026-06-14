@@ -35,7 +35,13 @@ const RULES: Rule[] = [
     id: 'json-blackhole',
     description: 'Contract-less `z.record(z.string(), z.unknown())` schema shape.',
     pattern: /z\.record\(z\.string\(\),\s*z\.unknown\(\)\)/g,
-    baseline: 19,
+    // Counts the per-file `JsonObjectSchema` const, a proxy for opaque shapes.
+    // 20 includes the shared execution-spec.ts legacy-resource-ref Record (a
+    // genuinely freeform shape). Opaque field *usages* dropped sharply this pass
+    // (lastError, pricing, policy docs, agent policies, resourceLimits, trigger
+    // resourceRefs, session.env all became typed); the remaining consts back
+    // legitimately freeform fields (metadata, runtimeConfig, legacy refs).
+    baseline: 20,
   },
 ]
 
