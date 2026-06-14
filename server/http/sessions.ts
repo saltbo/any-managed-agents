@@ -33,6 +33,11 @@ import {
   type SessionRuntimeError,
   SessionValidationError,
 } from '../usecases/ports'
+import {
+  createSession as createRuntimeSession,
+  decideApproval as decideRuntimeApproval,
+  markExpiredPending as markRuntimeExpiredPending,
+} from '../usecases/runtime/sessions'
 import { sendSessionMessage, type UpdateSessionPatch, updateSession } from '../usecases/sessions'
 import { requestId } from './request-context'
 
@@ -824,11 +829,11 @@ export function registerSessionRoutes(routes: SessionRoutes) {
       if (auth instanceof Response) {
         return auth
       }
-      // Create is a single forward to the env-bound runtime boundary (snapshot,
+      // Create is a single forward to the runtime boundary (snapshot,
       // provider/policy/runtime checks, session-row build, sandbox boot or
-      // self-hosted work-item enqueue all live behind the gateway), so the route
-      // calls the gateway via deps directly rather than through an empty usecase.
-      const outcome = await deps.sessionRuntime.createSession(auth as never, {
+      // self-hosted work-item enqueue all live behind the runtime usecase), so
+      // the route calls the runtime usecase with deps directly.
+      const outcome = await createRuntimeSession(deps, auth, {
         agentId: body.agentId,
         environmentId: body.environmentId,
         options: {
@@ -855,7 +860,7 @@ export function registerSessionRoutes(routes: SessionRoutes) {
       if (auth instanceof Response) {
         return auth
       }
-      await deps.sessionRuntime.markExpiredPending(auth as never)
+      await markRuntimeExpiredPending(deps, auth)
       const { archived, state, search, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
       let parsedCursor: ReturnType<typeof parseListCursor> | null = null
       try {
@@ -889,7 +894,7 @@ export function registerSessionRoutes(routes: SessionRoutes) {
       if (auth instanceof Response) {
         return auth
       }
-      await deps.sessionRuntime.markExpiredPending(auth as never)
+      await markRuntimeExpiredPending(deps, auth)
       const session = await deps.sessions.find(auth.project.id, sessionId)
       if (!session) {
         return errorResponse(c, 404, 'not_found', 'Session not found')
@@ -1130,8 +1135,8 @@ export function registerSessionRoutes(routes: SessionRoutes) {
       }
       // Decide is a single forward to the runtime boundary (it executes the
       // approved tool or records the denial, persists the decided approval, and
-      // resumes the turn), so the route calls the gateway via deps directly.
-      const outcome = await deps.sessionRuntime.decideApproval(auth as never, session, approvalId, {
+      // resumes the turn), so the route calls the runtime usecase with deps directly.
+      const outcome = await decideRuntimeApproval(deps, auth, session, approvalId, {
         decision: body.decision,
         ...(body.reason !== undefined ? { reason: body.reason } : {}),
         ...(body.result !== undefined ? { result: body.result } : {}),

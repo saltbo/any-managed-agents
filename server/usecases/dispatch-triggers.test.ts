@@ -1,7 +1,29 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Deps } from './deps'
-import { dispatchDueScheduledTriggers } from './dispatch-triggers'
 import type { ClaimedRun, DueTrigger, SessionRecord } from './ports'
+
+// dispatchDueScheduledTriggers now calls the runtime createSession usecase
+// directly (the SessionRuntimeGateway indirection was removed). Mock that module
+// so these tests drive the create outcome the way they previously drove the
+// gateway.
+vi.mock('./runtime/sessions', () => ({
+  createSession: vi.fn(),
+  stopSession: vi.fn(),
+  archiveSession: vi.fn(),
+  unarchiveSession: vi.fn(),
+  dispatchPrompt: vi.fn(),
+  decideApproval: vi.fn(),
+  markExpiredPending: vi.fn(),
+}))
+
+import { dispatchDueScheduledTriggers } from './dispatch-triggers'
+import * as runtimeSessions from './runtime/sessions'
+
+type RuntimeSessionOverrides = { createSession?: typeof runtimeSessions.createSession }
+
+beforeEach(() => {
+  vi.clearAllMocks()
+})
 
 function dueTrigger(overrides: Partial<DueTrigger> = {}): DueTrigger {
   return {
@@ -69,7 +91,7 @@ function sessionRecord(overrides: Partial<SessionRecord> = {}): SessionRecord {
 function fakeDeps(
   overrides: {
     triggerDispatch?: Partial<Deps['triggerDispatch']>
-    sessionRuntime?: Partial<Deps['sessionRuntime']>
+    sessionRuntime?: RuntimeSessionOverrides
     audit?: Partial<Deps['audit']>
   } = {},
 ): Deps {
@@ -81,33 +103,9 @@ function fakeDeps(
     markRunSessionCreated: async () => {},
     ...overrides.triggerDispatch,
   }
-  const sessionRuntime: Deps['sessionRuntime'] = {
-    createSession: async () => ({ ok: true, value: sessionRecord() }),
-    stopSession: async () => ({ ok: true, value: sessionRecord({ state: 'stopped' }) }),
-    archiveSession: async () => ({ ok: true, value: sessionRecord({ archivedAt: '2026-01-02T00:00:00.000Z' }) }),
-    unarchiveSession: async () => sessionRecord(),
-    dispatchPrompt: async () => ({ ok: true, delivery: 'live', state: 'accepted' }),
-    decideApproval: async () => ({
-      ok: true,
-      value: {
-        id: 'appr_1',
-        sessionId: 'sess_1',
-        toolCallId: 'tc_1',
-        toolName: 'tool',
-        input: {},
-        relatedEventIds: [],
-        state: 'approved',
-        reason: null,
-        result: null,
-        requestedAt: 'T',
-        decidedAt: 'T',
-        createdAt: 'T',
-        updatedAt: 'T',
-      },
-    }),
-    markExpiredPending: async () => {},
-    ...overrides.sessionRuntime,
-  }
+  vi.mocked(runtimeSessions.createSession).mockImplementation(
+    overrides.sessionRuntime?.createSession ?? (async () => ({ ok: true, value: sessionRecord() })),
+  )
   return {
     agents: undefined as unknown as Deps['agents'],
     environments: undefined as unknown as Deps['environments'],
@@ -136,6 +134,8 @@ function fakeDeps(
     sandboxRuntime: undefined as unknown as Deps['sandboxRuntime'],
     sessionOrchestration: undefined as unknown as Deps['sessionOrchestration'],
     sessions: undefined as unknown as Deps['sessions'],
+    createApprovalGate: undefined as unknown as Deps['createApprovalGate'],
+    rereadStartedSession: false,
     audit: { record: async () => {}, ...overrides.audit },
     policy: {
       resolveToolPolicy: async () => ({}),
@@ -159,7 +159,6 @@ function fakeDeps(
       }),
     },
     triggerDispatch,
-    sessionRuntime,
   }
 }
 

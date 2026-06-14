@@ -153,7 +153,8 @@ function fakeDeps(
     sandboxRuntime: undefined as unknown as Deps['sandboxRuntime'],
     sessionOrchestration: undefined as unknown as Deps['sessionOrchestration'],
     sessions: undefined as unknown as Deps['sessions'],
-    sessionRuntime: undefined as unknown as Deps['sessionRuntime'],
+    createApprovalGate: undefined as unknown as Deps['createApprovalGate'],
+    rereadStartedSession: false,
     audit: { record: async () => {} },
     policy: {
       resolveToolPolicy: async () => ({}),

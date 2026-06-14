@@ -9,6 +9,7 @@ import {
   type SessionRuntimeRow,
   SessionValidationError,
 } from './ports'
+import { archiveSession, dispatchPrompt, stopSession, unarchiveSession } from './runtime/sessions'
 
 export type SessionWriteOutcome<T> = { ok: true; value: T } | { ok: false; error: SessionRuntimeError }
 
@@ -37,7 +38,7 @@ export async function updateSession(
       patch.metadata === undefined &&
       patch.state === undefined
     ) {
-      const restored = await deps.sessionRuntime.unarchiveSession(auth, session, requestId)
+      const restored = await unarchiveSession(deps, auth, session, requestId)
       return { ok: true, value: restored }
     }
     return { ok: false, error: { status: 409, code: 'conflict', message: 'Archived sessions cannot be updated' } }
@@ -72,7 +73,7 @@ export async function updateSession(
   }
 
   if (patch.state === 'stopped') {
-    const stopped = await deps.sessionRuntime.stopSession(auth, current, requestId)
+    const stopped = await stopSession(deps, auth, current, requestId)
     if (!stopped.ok || patch.archived !== true) {
       return stopped
     }
@@ -84,7 +85,7 @@ export async function updateSession(
   }
 
   if (patch.archived === true) {
-    return await deps.sessionRuntime.archiveSession(auth, current, requestId)
+    return await archiveSession(deps, auth, current, requestId)
   }
 
   const record = await deps.sessions.find(auth.project.id, session.id)
@@ -98,10 +99,10 @@ export type SendMessageOutcome =
   | { ok: true; message: SessionMessageRecord }
   | { ok: false; status: 409 | 500; message: string; runtimeError?: Record<string, unknown> }
 
-// Sends a prompt to a live session: the runtime gateway dispatches it (live to
-// a runner channel, an inline cloud turn, or the cloud/self-hosted queue) and a
-// message record is persisted with the resulting delivery/state. An archived
-// session cannot accept messages.
+// Sends a prompt to a live session: the runtime prompt usecase dispatches it
+// (live to a runner channel, an inline cloud turn, or the cloud/self-hosted
+// queue) and a message record is persisted with the resulting delivery/state.
+// An archived session cannot accept messages.
 export async function sendSessionMessage(
   deps: Deps,
   auth: AuthScope,
@@ -111,7 +112,7 @@ export async function sendSessionMessage(
   if (session.archivedAt) {
     return { ok: false, status: 409, message: 'Archived sessions cannot accept messages', archived: true }
   }
-  const dispatch: PromptDispatchResult = await deps.sessionRuntime.dispatchPrompt(auth, session, content)
+  const dispatch: PromptDispatchResult = await dispatchPrompt(deps, auth, session, content)
   if (!dispatch.ok) {
     return {
       ok: false,

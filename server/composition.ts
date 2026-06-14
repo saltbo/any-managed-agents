@@ -7,7 +7,6 @@ import { createRunnerChannel } from './adapters/gateways/runner-channel'
 import { createRuntimeSecretEnvGateway } from './adapters/gateways/runtime-secret-env'
 import { createSecretStoreGateway } from './adapters/gateways/secret-store'
 import { createSessionEventPort } from './adapters/gateways/session-events'
-import { createSessionRuntimeGateway } from './adapters/gateways/session-runtime'
 import { createAccessRuleRepo } from './adapters/repos/access-rules'
 import { createAgentRepo } from './adapters/repos/agents'
 import { createAuditReadRepo } from './adapters/repos/audit-records'
@@ -32,12 +31,16 @@ import { createSandboxRuntimeHost } from './adapters/runtime/sandbox-runtime-hos
 import { createDb } from './db/client'
 import type { Env } from './env'
 import type { Deps } from './usecases/deps'
+import { createToolApprovalGate } from './usecases/runtime/approval-gate'
 
 // The single composition root. Wires adapters into the Deps object. Cheap,
 // plain-object, and request-free so scheduled/queue entrypoints can reuse it.
 export function createDeps(env: Env): Deps {
   const db = createDb(env)
   const sessions = createSessionRepo(db)
+  const audit = createAuditPort(db)
+  const policy = createPolicyPort(db)
+  const sessionOrchestration = createRuntimeOrchestrationRepo(db)
   return {
     agents: createAgentRepo(db),
     environments: createEnvironmentRepo(db),
@@ -52,8 +55,8 @@ export function createDeps(env: Env): Deps {
     budgets: createBudgetRepo(db),
     mcp: createMcpGateway(env, db),
     sessionEvents: createSessionEventPort(db),
-    audit: createAuditPort(db),
-    policy: createPolicyPort(db),
+    audit,
+    policy,
     usageRecords: createUsageRepo(db),
     auditRecords: createAuditReadRepo(db),
     triggers: createTriggerRepo(db),
@@ -67,8 +70,9 @@ export function createDeps(env: Env): Deps {
     cloudTurnQueue: createCloudTurnQueue(env),
     runnerChannel: createRunnerChannel(env),
     sandboxRuntime: createSandboxRuntimeHost(env),
-    sessionOrchestration: createRuntimeOrchestrationRepo(db),
+    sessionOrchestration,
     sessions,
-    sessionRuntime: createSessionRuntimeGateway(env, db, sessions),
+    createApprovalGate: (values) => createToolApprovalGate({ sessionOrchestration, audit, policy }, values),
+    rereadStartedSession: env.AMA_RUNTIME_MODE === 'test',
   }
 }

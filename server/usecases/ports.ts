@@ -2478,10 +2478,10 @@ export interface SessionListPage {
   hasMore: boolean
 }
 
-// The raw session row the runtime gateway needs to act on a session (stop,
+// The raw session row the runtime usecases need to act on a session (stop,
 // dispatch, decide). It carries the internal columns the DTO hides. The repo
 // is the only place the row is read; the usecase passes it straight to the
-// gateway and never inspects the internal fields.
+// runtime usecases and never inspects the internal fields.
 export interface SessionRuntimeRow {
   id: string
   projectId: string | null
@@ -2561,9 +2561,9 @@ export class SessionValidationError extends Error {
   }
 }
 
-// Error crossing the runtime-gateway boundary. The http layer maps status →
+// Error crossing the runtime-usecase boundary. The http layer maps status →
 // response and echoes detail/fields. Mirrors the runtime layer's outcome shape
-// so the gateway adapter forwards it without re-mapping.
+// so the runtime session usecases forward it without re-mapping.
 export interface SessionRuntimeError {
   status: 400 | 403 | 404 | 409 | 500
   code: string
@@ -2577,45 +2577,6 @@ export type SessionRuntimeOutcome<T> = { ok: true; value: T } | { ok: false; err
 export type PromptDispatchResult =
   | { ok: false; status: 409 | 500; message: string; runtimeError?: Record<string, unknown> }
   | { ok: true; delivery: string; state: string }
-
-// Cross-process runtime boundary for sessions. Wraps the env-bound runtime
-// execution layer (server/runtime/session-orchestration): sandbox/DO startup,
-// the cloud turn loop, runner-channel dispatch, and runtime teardown. All
-// methods are Response-free; the usecase orchestrates around them and the http
-// layer maps results to responses.
-export interface SessionRuntimeGateway {
-  createSession(
-    auth: AuthScope,
-    input: {
-      agentId: string
-      environmentId: string
-      options: SessionCreateOptions
-      requestId: string | null
-    },
-  ): Promise<SessionRuntimeOutcome<SessionRecord>>
-  stopSession(
-    auth: AuthScope,
-    session: SessionRuntimeRow,
-    requestId: string | null,
-    reason?: string,
-  ): Promise<SessionRuntimeOutcome<SessionRecord>>
-  archiveSession(
-    auth: AuthScope,
-    session: SessionRuntimeRow,
-    requestId: string | null,
-  ): Promise<SessionRuntimeOutcome<SessionRecord>>
-  unarchiveSession(auth: AuthScope, session: SessionRuntimeRow, requestId: string | null): Promise<SessionRecord>
-  dispatchPrompt(auth: AuthScope, session: SessionRuntimeRow, content: string): Promise<PromptDispatchResult>
-  decideApproval(
-    auth: AuthScope,
-    session: SessionRuntimeRow,
-    approvalId: string,
-    body: { decision: 'approve' | 'deny'; reason?: string; result?: Record<string, unknown> },
-  ): Promise<SessionRuntimeOutcome<SessionApprovalRecord>>
-  // Sweep pending cloud startups whose window elapsed → error. Called before
-  // list/read so stale rows surface as errored, matching legacy behavior.
-  markExpiredPending(auth: AuthScope): Promise<void>
-}
 
 export interface SessionCreateOptions {
   title?: string

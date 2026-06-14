@@ -1,6 +1,7 @@
 import { redactSensitiveValue } from '@server/redaction'
 import type { Deps } from './deps'
 import type { AuthScope, ClaimedRun, DueTrigger } from './ports'
+import { createSession } from './runtime/sessions'
 
 export interface ScheduleDispatchResult {
   heartbeatAt: string
@@ -87,7 +88,7 @@ async function dispatchTrigger(deps: Deps, trigger: DueTrigger, heartbeatAt: str
     // The trigger's execution spec uses the v1 secret env shape; the scheduler
     // path dispatches the session with empty runtime env (resource/prompt/
     // runtime carry through while env is left to the agent/provider defaults).
-    const result = await deps.sessionRuntime.createSession(auth, {
+    const result = await createSession(deps, auth, {
       agentId: trigger.agentId,
       environmentId: trigger.environmentId,
       options: {
