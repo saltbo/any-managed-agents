@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseRuntimeProxyRoute, runtimeRequestHasTestOnlyFields } from '../domain/runtime/proxy-route'
+import { parseRuntimeProxyRoute, runtimeRequestHasTestOnlyFields } from './proxy-route'
 
 describe('runtime request validation', () => {
   it('identifies client-supplied runtime fixture fields that are rejected outside test mode', () => {

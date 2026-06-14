@@ -23,10 +23,9 @@ import type { drizzle } from 'drizzle-orm/d1'
 import type { RuntimeName } from '../../contracts/environment-contracts'
 import { leases, runners, sessionApprovals, sessionEvents, sessionMessages, sessions, workItems } from '../../db/schema'
 import { insertCanonicalSessionEvent } from '../../db/session-event-store'
+import { runtimeEndpointPath, runtimeMetadata } from '../../domain/runtime/driver'
 import { hostingModeFromSnapshot } from '../../domain/session'
 import { redactSensitiveValue } from '../../redaction'
-import { runtimeMetadata } from '../../runtime/drivers'
-import { runtimeEndpointPath } from '../../runtime/session-runtime'
 
 type Db = ReturnType<typeof drizzle>
 type SessionRow = typeof sessions.$inferSelect

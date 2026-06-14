@@ -9,7 +9,7 @@ import {
   listResponseSchema,
   parseListCursor,
 } from '../openapi'
-import { safeRuntimeError } from '../runtime/runtime-error'
+import { safeRuntimeError } from '../runtime-error'
 import { materializeWorkItemPayload } from '../usecases/leases'
 import { RunnerConflictError, type WorkItemRecord } from '../usecases/ports'
 import { runnerOperationAuthorized } from './runner-auth'

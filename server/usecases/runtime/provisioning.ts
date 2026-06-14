@@ -6,18 +6,18 @@
 // are acquired changed.
 
 import type { RuntimeName } from '@server/contracts/environment-contracts'
+import { runtimeDriver } from '@server/domain/runtime/driver'
 import {
   PLATFORM_DEFAULT_PROVIDER,
   providerConfigFromRow,
   type SessionProviderResolution,
 } from '@server/domain/runtime/provider'
-import { runnerSupportsRuntimeProviderModel, runtimeCatalogSupportsProviderModel } from '@server/domain/runtime-catalog'
-import { runtimeDriver } from '@server/runtime/drivers'
 import {
   type NormalizedEnvironmentSnapshot,
   parseJson,
   type SerializedAgentVersion,
-} from '@server/runtime/session-snapshot'
+} from '@server/domain/runtime/session-snapshot'
+import { runnerSupportsRuntimeProviderModel, runtimeCatalogSupportsProviderModel } from '@server/domain/runtime-catalog'
 import type { AuthScope, PolicyPort, SessionOrchestrationStore } from '../ports'
 
 export { providerRuntimeEnv } from '@server/domain/runtime/provider'

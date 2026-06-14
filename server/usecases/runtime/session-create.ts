@@ -15,14 +15,8 @@
 // server/runtime/session-create module; only dependency acquisition changed.
 
 import type { RuntimeName } from '@server/contracts/environment-contracts'
-import { runtimeDriverName } from '@server/domain/runtime/driver'
+import { runtimeDriverName, runtimeEndpointPath } from '@server/domain/runtime/driver'
 import { providerRuntimeEnv } from '@server/domain/runtime/provider'
-import { newId, now, requestIdFrom, stringify } from '@server/domain/runtime/util'
-import { runtimeRequiredRunnerCapability } from '@server/domain/runtime-catalog'
-import { environmentHostingMode } from '@server/domain/runtime-session'
-import { composeInitialPrompt, hasSecretMaterial } from '@server/domain/session'
-import { safeRuntimeError } from '@server/runtime/runtime-error'
-import { runtimeEndpointPath } from '@server/runtime/session-runtime'
 import {
   type GitHubRepositoryResourceRef,
   type NormalizedEnvironmentSnapshot,
@@ -33,7 +27,12 @@ import {
   type SerializedAgentVersion,
   serializeAgentVersion,
   serializeEnvironmentVersion,
-} from '@server/runtime/session-snapshot'
+} from '@server/domain/runtime/session-snapshot'
+import { newId, now, requestIdFrom, stringify } from '@server/domain/runtime/util'
+import { runtimeRequiredRunnerCapability } from '@server/domain/runtime-catalog'
+import { environmentHostingMode } from '@server/domain/runtime-session'
+import { composeInitialPrompt, hasSecretMaterial } from '@server/domain/session'
+import { safeRuntimeError } from '@server/runtime-error'
 import type { AgentRow, AuthScope, CloudTurnSecretEnvEntry, SessionOrchestrationStore, SessionRow } from '../ports'
 import type { CloudTurnDeps } from './cloud-turn'
 import { startSessionRuntimeForRow } from './cloud-turn'

@@ -10,17 +10,17 @@
 // verbatim from the former server/runtime/session-prompt module; only dependency
 // acquisition changed.
 
-import { now } from '@server/domain/runtime/util'
-import { runtimeSupportsLivePrompts } from '@server/domain/runtime-catalog'
-import { sessionRuntimeConfig, sessionRuntimeFromMetadata } from '@server/domain/runtime-session'
-import type { safeRuntimeError } from '@server/runtime/runtime-error'
 import {
   normalizeEnvironmentSnapshot,
   parseAgentSnapshot,
   parseJson,
   type ResourceRef,
   type serializeEnvironmentVersion,
-} from '@server/runtime/session-snapshot'
+} from '@server/domain/runtime/session-snapshot'
+import { now } from '@server/domain/runtime/util'
+import { runtimeSupportsLivePrompts } from '@server/domain/runtime-catalog'
+import { sessionRuntimeConfig, sessionRuntimeFromMetadata } from '@server/domain/runtime-session'
+import type { safeRuntimeError } from '@server/runtime-error'
 import type { AuthScope, CloudTurnSecretEnvEntry, RunnerChannel, SessionRow } from '../ports'
 import type { CloudTurnDeps } from './cloud-turn'
 import { executeCloudSessionTurn } from './cloud-turn'

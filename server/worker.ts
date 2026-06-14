@@ -1,8 +1,8 @@
 import { createApp } from './app'
 import { createDeps } from './composition'
 import type { Env } from './env'
-import type { CloudTurnMessage } from './runtime/turn-queue'
 import { dispatchDueScheduledTriggers } from './scheduled-dispatch'
+import type { CloudTurnMessage } from './usecases/ports'
 import { consumeCloudTurnMessage, markCloudTurnDeadLettered, markStalledCloudSessions } from './usecases/runtime'
 
 export { Sandbox } from '@cloudflare/sandbox'

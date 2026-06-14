@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { runtimeDriver, runtimeDriverName, runtimeMetadata } from './drivers'
+import { runtimeDriver, runtimeDriverName, runtimeMetadata } from './driver'
 
 describe('[spec: runtime/driver-select] runtime drivers', () => {
   it('selects supported runtime drivers and rejects unknown names', () => {

@@ -15,7 +15,7 @@
 // the approval gate is built through the injected createApprovalGate seam (so
 // the tool-approvals layer stays the single owner of the gate construction).
 
-import { parseJson } from '@server/runtime/session-snapshot'
+import { parseJson } from '@server/domain/runtime/session-snapshot'
 import { RuntimeTurnCancelledError } from '../../../runtime-core/errors'
 import type { AuthScope, PolicyPort, SandboxPolicyBlock, SessionOrchestrationStore, SessionRow } from '../ports'
 import type { ToolApprovalGate } from './approval-gate'

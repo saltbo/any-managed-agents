@@ -8,6 +8,7 @@ import {
   RuntimeSchema,
 } from '../contracts/environment-contracts'
 import { ResourceRefSchema } from '../contracts/execution-spec'
+import { type PendingSessionApproval, sessionApprovalState } from '../domain/runtime/approval-state'
 import { type ErrorType, errorResponse } from '../errors'
 import {
   AuthenticatedOperation,
@@ -23,7 +24,6 @@ import {
   SecretEnvEntrySchema,
 } from '../openapi'
 import { redactSensitiveValue } from '../redaction'
-import { type PendingSessionApproval, sessionApprovalState } from '../runtime/tool-approvals'
 import {
   type SessionApprovalRecord,
   type SessionConnectionRecord,

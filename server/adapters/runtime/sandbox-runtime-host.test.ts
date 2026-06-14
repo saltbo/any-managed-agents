@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Env } from '../env'
+import type { Env } from '../../env'
 
 const { getSandboxMock, mockExecutor, mockSandbox, toolExecutorMock } = vi.hoisted(() => {
   const mockSandbox = {
@@ -23,7 +23,7 @@ vi.mock('@cloudflare/sandbox', () => ({
   getSandbox: getSandboxMock,
 }))
 
-vi.mock('../adapters/runtime/sandbox-tool-executor', () => ({
+vi.mock('./sandbox-tool-executor', () => ({
   toolExecutor: toolExecutorMock,
 }))
 
@@ -37,7 +37,7 @@ import {
   startSessionRuntime,
   stopSessionRuntime,
   workspaceResourceManifest,
-} from './session-runtime'
+} from './sandbox-runtime-host'
 
 describe('session-runtime', () => {
   beforeEach(() => {

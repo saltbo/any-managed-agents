@@ -13,8 +13,8 @@
 // server/runtime/session-approval module; only dependency acquisition changed.
 
 import { type SessionApprovalGrants, sessionApprovalState } from '@server/domain/runtime/approval-state'
+import { parseJson } from '@server/domain/runtime/session-snapshot'
 import { now, stringify } from '@server/domain/runtime/util'
-import { parseJson } from '@server/runtime/session-snapshot'
 import type { AuthScope } from '../ports'
 import { writeSessionApprovalState } from './approval-gate'
 import type { CloudTurnDeps } from './cloud-turn'

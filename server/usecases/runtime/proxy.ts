@@ -19,7 +19,7 @@ import {
   sandboxOperationFromToolCall,
 } from '@server/domain/runtime/proxy-route'
 import { now } from '@server/domain/runtime/util'
-import { safeRuntimeError } from '@server/runtime/runtime-error'
+import { safeRuntimeError } from '@server/runtime-error'
 import { isRuntimePolicyDenied, isRuntimeTurnCancelled, RuntimePolicyDeniedError } from '../../../runtime-core/errors'
 import type {
   AuditPort,
