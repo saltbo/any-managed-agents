@@ -172,11 +172,61 @@ describe('tool-executor', () => {
     ).rejects.toThrow('Unsupported sandbox tool: mcp.github.repo.read')
   })
 
+  it('rejects an already-aborted turn before acquiring the sandbox', async () => {
+    const executor = new CloudflareSandboxToolExecutor({ SANDBOX: {} } as Env)
+
+    await expect(
+      executor.execute(
+        {
+          sessionId: 'session_123',
+          sandboxId: 'sandbox_123',
+          toolCallId: 'call_1',
+          toolName: 'sandbox.exec',
+          input: { command: 'git status' },
+        },
+        AbortSignal.abort(),
+      ),
+    ).rejects.toThrow('Session runtime is no longer active')
+    expect(getSandboxMock).not.toHaveBeenCalled()
+    expect(sandboxMock.exec).not.toHaveBeenCalled()
+  })
+
+  it('forwards a live turn signal into the sandbox exec options', async () => {
+    sandboxMock.exec.mockResolvedValue({ stdout: 'ok', stderr: '', exitCode: 0 })
+    const executor = new CloudflareSandboxToolExecutor({ SANDBOX: {} } as Env)
+    const controller = new AbortController()
+
+    await executor.execute(
+      {
+        sessionId: 'session_123',
+        sandboxId: 'sandbox_123',
+        toolCallId: 'call_1',
+        toolName: 'sandbox.exec',
+        input: { command: 'git status' },
+      },
+      controller.signal,
+    )
+
+    expect(sandboxMock.exec).toHaveBeenCalledWith('git status', {
+      cwd: '/workspace',
+      timeout: 600_000,
+      signal: controller.signal,
+    })
+  })
+
   it('destroys the sandbox executor backend on stop', async () => {
     const executor = new CloudflareSandboxToolExecutor({ SANDBOX: {} } as Env)
 
     await executor.stop('sandbox_123')
 
+    expect(sandboxMock.destroy).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not throw when stop destroy rejects (idempotent teardown)', async () => {
+    sandboxMock.destroy.mockRejectedValue(new Error('sandbox already gone'))
+    const executor = new CloudflareSandboxToolExecutor({ SANDBOX: {} } as Env)
+
+    await expect(executor.stop('sandbox_123')).resolves.toBeUndefined()
     expect(sandboxMock.destroy).toHaveBeenCalledTimes(1)
   })
 })

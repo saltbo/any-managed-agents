@@ -32,6 +32,10 @@ import {
 
 const exec = promisify(execCallback)
 const EXEC_TIMEOUT_MS = 10 * 60 * 1000
+// Outbound fetches are bounded much tighter than commands in both time and
+// memory: a stalled or oversized host response must not strand the turn.
+const FETCH_TIMEOUT_MS = 90_000
+const MAX_FETCH_BYTES = 5_000_000
 
 function textContent(value: unknown): string {
   if (typeof value === 'string') return value
@@ -223,7 +227,35 @@ function resolveWorkspacePath(workdir: string, raw: unknown): string {
   return resolved
 }
 
-async function runLocalTool(workdir: string, input: ToolExecutionInput): Promise<Record<string, unknown>> {
+// Stream the body and stop once the cap is reached so an oversized response
+// neither buffers unbounded memory nor outlives the turn budget.
+async function readBoundedText(response: Response, maxBytes: number): Promise<string> {
+  const body = response.body
+  if (!body) {
+    return (await response.text()).slice(0, maxBytes)
+  }
+  const decoder = new TextDecoder()
+  const reader = body.getReader()
+  let content = ''
+  try {
+    while (content.length < maxBytes) {
+      const { done, value } = await reader.read()
+      if (done) {
+        break
+      }
+      content += decoder.decode(value, { stream: true })
+    }
+  } finally {
+    await reader.cancel().catch(() => {})
+  }
+  return content.slice(0, maxBytes)
+}
+
+export async function runLocalTool(
+  workdir: string,
+  input: ToolExecutionInput,
+  signal?: AbortSignal,
+): Promise<Record<string, unknown>> {
   const args = input.input
   switch (input.toolName) {
     case 'sandbox.exec': {
@@ -231,7 +263,14 @@ async function runLocalTool(workdir: string, input: ToolExecutionInput): Promise
       if (typeof command !== 'string' || !command.trim()) {
         throw new Error('sandbox.exec requires a non-empty command')
       }
-      const { stdout, stderr } = await exec(command, { cwd: workdir, timeout: EXEC_TIMEOUT_MS, encoding: 'utf8' })
+      // Thread the turn signal so an aborted run kills the child process
+      // (SIGTERM) instead of running to EXEC_TIMEOUT_MS.
+      const { stdout, stderr } = await exec(command, {
+        cwd: workdir,
+        timeout: EXEC_TIMEOUT_MS,
+        encoding: 'utf8',
+        ...(signal ? { signal } : {}),
+      })
       return { stdout, stderr, exitCode: 0 }
     }
     case 'sandbox.read': {
@@ -250,8 +289,14 @@ async function runLocalTool(workdir: string, input: ToolExecutionInput): Promise
       if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
         throw new Error('sandbox.fetch requires an http(s) URL')
       }
-      const response = await fetch(url)
-      return { status: response.status, content: await response.text() }
+      // Bound the fetch in both time (turn signal + own timeout) and memory
+      // (MAX_FETCH_BYTES): an unbounded host must not strand the turn.
+      const fetchSignal = signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(FETCH_TIMEOUT_MS)])
+        : AbortSignal.timeout(FETCH_TIMEOUT_MS)
+      const response = await fetch(url, { signal: fetchSignal })
+      const content = await readBoundedText(response, MAX_FETCH_BYTES)
+      return { status: response.status, content }
     }
     default:
       throw new Error(`Unsupported sandbox tool: ${input.toolName}`)
@@ -260,10 +305,10 @@ async function runLocalTool(workdir: string, input: ToolExecutionInput): Promise
 
 function localToolExecutor(workdir: string): ToolExecutor {
   return {
-    async execute(input: ToolExecutionInput): Promise<ToolExecutionResult> {
+    async execute(input: ToolExecutionInput, signal?: AbortSignal): Promise<ToolExecutionResult> {
       const startedAt = Date.now()
       try {
-        const output = await runLocalTool(workdir, input)
+        const output = await runLocalTool(workdir, input, signal)
         return { toolCallId: input.toolCallId, toolName: input.toolName, output, error: null, durationMs: Date.now() - startedAt }
       } catch (error) {
         return {
@@ -317,6 +362,9 @@ export const amaProvider: RuntimeProvider = {
       },
       executor: localToolExecutor(request.cwd),
       modelClient: openAiModelClient(request),
+      // The engine wires this into executor.execute so an aborted turn kills the
+      // in-flight tool call instead of running to its per-command timeout.
+      signal: abortController.signal,
     }
 
     // Run the initial prompt, then keep running a continuation turn for each

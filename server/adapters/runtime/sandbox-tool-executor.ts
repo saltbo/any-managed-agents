@@ -1,3 +1,4 @@
+import { RuntimeTurnCancelledError } from '../../../runtime-core/errors'
 import type { ToolExecutionInput, ToolExecutionResult, ToolExecutor } from '../../../runtime-core/ports'
 import type { Env } from '../../env'
 
@@ -79,10 +80,15 @@ function shellQuote(value: string) {
 export class CloudflareSandboxToolExecutor implements ToolExecutor {
   constructor(private readonly env: Env) {}
 
-  async execute(input: ToolExecutionInput): Promise<ToolExecutionResult> {
+  async execute(input: ToolExecutionInput, signal?: AbortSignal): Promise<ToolExecutionResult> {
+    // A cancelled turn must not start a new tool call: bail before acquiring the
+    // sandbox so an aborted turn never spins one up.
+    if (signal?.aborted) {
+      throw new RuntimeTurnCancelledError()
+    }
     const startedAt = Date.now()
     const sandbox = await this.sandbox(input.sandboxId)
-    const output = await this.executeInSandbox(sandbox, input)
+    const output = await this.executeInSandbox(sandbox, input, signal)
     return {
       toolCallId: input.toolCallId,
       toolName: input.toolName,
@@ -94,7 +100,12 @@ export class CloudflareSandboxToolExecutor implements ToolExecutor {
 
   async stop(sandboxId: string) {
     const sandbox = await this.sandbox(sandboxId)
-    await sandbox.destroy()
+    try {
+      await sandbox.destroy()
+    } catch {
+      // Teardown idempotency: a double-stop or stopping an already-gone sandbox
+      // must not throw — destroy is best-effort cleanup, not a turn outcome.
+    }
   }
 
   private async sandbox(sandboxId: string) {
@@ -105,6 +116,7 @@ export class CloudflareSandboxToolExecutor implements ToolExecutor {
   private async executeInSandbox(
     sandbox: Awaited<ReturnType<CloudflareSandboxToolExecutor['sandbox']>>,
     input: ToolExecutionInput,
+    signal?: AbortSignal,
   ) {
     if (input.toolName === 'sandbox.exec') {
       // Bounded: an unbounded hang (network stall, interactive prompt) would
@@ -113,6 +125,7 @@ export class CloudflareSandboxToolExecutor implements ToolExecutor {
         await sandbox.exec(commandFromInput(input.input), {
           cwd: input.cwd ?? '/workspace',
           timeout: SANDBOX_EXEC_TIMEOUT_MS,
+          ...(signal ? { signal } : {}),
         }),
       )
     }
@@ -131,6 +144,7 @@ export class CloudflareSandboxToolExecutor implements ToolExecutor {
         await sandbox.exec(`curl -fsS --max-time 60 ${shellQuote(urlFromInput(input.input))}`, {
           cwd: input.cwd ?? '/workspace',
           timeout: SANDBOX_FETCH_TIMEOUT_MS,
+          ...(signal ? { signal } : {}),
         }),
       )
     }
@@ -162,7 +176,12 @@ function simulatedExecOutput(command: string) {
 }
 
 export class TestToolExecutor implements ToolExecutor {
-  async execute(input: ToolExecutionInput): Promise<ToolExecutionResult> {
+  async execute(input: ToolExecutionInput, signal?: AbortSignal): Promise<ToolExecutionResult> {
+    // Parity with the cloud executor: a cancelled turn must not start a new tool
+    // call. Existing callers pass no signal, so simulation behavior is unchanged.
+    if (signal?.aborted) {
+      throw new RuntimeTurnCancelledError()
+    }
     if (
       input.toolName !== 'sandbox.exec' &&
       input.toolName !== 'sandbox.read' &&
