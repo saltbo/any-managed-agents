@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { runtimeRequestHasTestOnlyFields } from './runtime-proxy-policy'
+import { parseRuntimeProxyRoute, runtimeRequestHasTestOnlyFields } from './runtime-proxy-policy'
 
 describe('runtime request validation', () => {
   it('identifies client-supplied runtime fixture fields that are rejected outside test mode', () => {
@@ -7,5 +7,35 @@ describe('runtime request validation', () => {
     expect(runtimeRequestHasTestOnlyFields({ type: 'prompt', message: 'hello', toolCalls: [] })).toBe(true)
     expect(runtimeRequestHasTestOnlyFields({ type: 'prompt', message: 'hello', simulateError: true })).toBe(true)
     expect(runtimeRequestHasTestOnlyFields({ type: 'prompt', message: 'hello', response: 'canned' })).toBe(true)
+  })
+})
+
+describe('parseRuntimeProxyRoute', () => {
+  it('classifies the WebSocket upgrade path', () => {
+    expect(parseRuntimeProxyRoute('/ws', 'GET')).toEqual({ kind: 'ws' })
+  })
+
+  it('classifies an MCP tool call POST with decoded segments', () => {
+    expect(parseRuntimeProxyRoute('/mcp/connector%20one/tools/tool%2Fname/calls', 'POST')).toEqual({
+      kind: 'mcpToolCall',
+      connectorId: 'connector one',
+      toolName: 'tool/name',
+    })
+  })
+
+  it('treats a non-POST MCP tool call path as passthrough', () => {
+    expect(parseRuntimeProxyRoute('/mcp/c/tools/t/calls', 'GET')).toEqual({ kind: 'passthrough' })
+  })
+
+  it('classifies an rpc POST', () => {
+    expect(parseRuntimeProxyRoute('/rpc', 'POST')).toEqual({ kind: 'rpc' })
+  })
+
+  it('treats a non-POST rpc path as passthrough', () => {
+    expect(parseRuntimeProxyRoute('/rpc', 'GET')).toEqual({ kind: 'passthrough' })
+  })
+
+  it('treats sandbox operation paths as passthrough', () => {
+    expect(parseRuntimeProxyRoute('/sandbox/exec', 'POST')).toEqual({ kind: 'passthrough' })
   })
 })
