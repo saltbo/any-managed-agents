@@ -1,22 +1,18 @@
 import { canonicalAmaSessionEventFromRuntimeEvent } from '@shared/session-events'
 import type { Context, Env as HonoEnv } from 'hono'
-import {
-  createRuntimeOrchestrationRepo,
-  type RuntimeOrchestrationRepo,
-  type SessionRow,
-} from '../adapters/repos/runtime-orchestration'
-import { type AuthContext, requireAuth } from '../auth/session'
+import { createRuntimeOrchestrationRepo, type SessionRow } from '../adapters/repos/runtime-orchestration'
+import { requireAuth } from '../auth/session'
 import { createDb } from '../db/client'
 import type { Env } from '../env'
 import { errorResponse } from '../errors'
 import { requestId } from '../http/request-context'
 import { evaluateMcpToolPolicy, evaluateSandboxRuntimePolicy } from '../policy'
 import { redactSensitiveValue } from '../redaction'
+import type { AuthScope } from '../usecases/ports'
 import { dispatchRunnerSessionCommand, hasAcceptedRunnerSessionChannel } from './runner-session-command'
 import {
   denyRuntimePolicy,
   evaluateRuntimeSandboxOperations,
-  newId,
   type RuntimeCommand,
   runtimeCommand,
   runtimeRequestHasTestOnlyFields,
@@ -27,6 +23,7 @@ import {
   recordRuntimeMessageOutcome,
   recordRuntimeMessageSubmission,
 } from './runtime-proxy-turn'
+import { newId, type Repo } from './session-base'
 import { executeRuntimeToolCalls, isRuntimeTurnCancelled } from './session-runtime'
 
 // The env-bound /api/v1/runtime data-plane proxy. Its wire shape is dictated by
@@ -34,12 +31,6 @@ import { executeRuntimeToolCalls, isRuntimeTurnCancelled } from './session-runti
 // so it is exempt from REST resource modeling (docs/api-v1-design.md §1.8). It
 // stays drizzle-free by routing every session read/write through the runtime
 // orchestration repo; the http layer only registers it (server/http/runtime-proxy.ts).
-
-// Runtime-request validation lives with the policy module; re-exported here so
-// existing consumers keep importing it from the transport entrypoint.
-export { runtimeRequestHasTestOnlyFields } from './runtime-proxy-policy'
-
-type Repo = RuntimeOrchestrationRepo
 
 function redactRuntimeValue(value: unknown): unknown {
   return redactSensitiveValue(value)
@@ -65,7 +56,7 @@ function sendRuntimeJson(socket: WebSocket, payload: Record<string, unknown>) {
 async function handleTestRuntimeWebSocket(
   socket: WebSocket,
   repo: Repo,
-  auth: AuthContext,
+  auth: AuthScope,
   session: SessionRow,
   command: RuntimeCommand,
 ) {
@@ -145,7 +136,7 @@ async function handleRuntimeWebSocketMessage(
   socket: WebSocket,
   env: Env,
   repo: Repo,
-  auth: AuthContext,
+  auth: AuthScope,
   session: SessionRow,
   data: unknown,
 ) {

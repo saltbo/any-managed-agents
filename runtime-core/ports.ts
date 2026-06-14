@@ -120,7 +120,3 @@ export type TurnEngineInput = {
   executor: ToolExecutor
   modelClient: ModelClient
 }
-
-export interface TurnEngine {
-  run(input: TurnEngineInput): Promise<TurnEngineResult>
-}

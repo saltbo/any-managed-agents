@@ -1,15 +1,10 @@
 import type { SessionRow } from '../adapters/repos/runtime-orchestration'
-import type { AuthContext } from '../auth/session'
 import type { Env } from '../env'
 import { policyBlocksSandboxOperation } from '../policy'
+import type { AuthScope } from '../usecases/ports'
 import { safeRuntimeError } from './runtime-error'
-import {
-  appendRuntimeEvent,
-  denyRuntimePolicy,
-  newId,
-  type Repo,
-  runtimeRequestHasTestOnlyFields,
-} from './runtime-proxy-policy'
+import { denyRuntimePolicy, runtimeRequestHasTestOnlyFields } from './runtime-proxy-policy'
+import { appendRuntimeEvent, newId, type Repo } from './session-base'
 import {
   isRuntimePolicyDenied,
   isRuntimeTurnCancelled,
@@ -28,12 +23,7 @@ export function parseRuntimeAgentSnapshot(value: string | null) {
   }
 }
 
-export async function recordRuntimeMessageSubmission(
-  repo: Repo,
-  auth: AuthContext,
-  session: SessionRow,
-  _body: unknown,
-) {
+export async function recordRuntimeMessageSubmission(repo: Repo, auth: AuthScope, session: SessionRow, _body: unknown) {
   const timestamp = new Date().toISOString()
   const correlationId = newId('message')
   const updated = await repo.updateSessionWhenState(auth.project.id, session.id, ['idle', 'running'], {
@@ -50,7 +40,7 @@ export async function recordRuntimeMessageSubmission(
 export async function recordRuntimeMessageOutcome(
   repo: Repo,
   env: Env,
-  auth: AuthContext,
+  auth: AuthScope,
   session: SessionRow,
   body: unknown,
   _correlationId: string,
@@ -164,7 +154,7 @@ export async function recordRuntimeMessageOutcome(
   }
 }
 
-export async function markRuntimeExecutionFailed(repo: Repo, auth: AuthContext, session: SessionRow, error: unknown) {
+export async function markRuntimeExecutionFailed(repo: Repo, auth: AuthScope, session: SessionRow, error: unknown) {
   if (isRuntimeTurnCancelled(error)) {
     return safeRuntimeError(error)
   }

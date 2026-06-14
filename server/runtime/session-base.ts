@@ -6,12 +6,32 @@
 // from here, so this module sits at the bottom of the runtime DAG.
 
 import { canonicalAmaSessionEventFromRuntimeEvent } from '../../shared/session-events'
-import { createRuntimeOrchestrationRepo, type SessionRow } from '../adapters/repos/runtime-orchestration'
+import {
+  createRuntimeOrchestrationRepo,
+  type RuntimeOrchestrationRepo,
+  type SessionRow,
+} from '../adapters/repos/runtime-orchestration'
 import { recordAudit } from '../audit'
 import type { AuthScope } from '../usecases/ports'
-import type { CloudTurnMessage } from './turn-queue'
 
 export type Db = Parameters<typeof createRuntimeOrchestrationRepo>[0]
+
+export type Repo = RuntimeOrchestrationRepo
+
+// The orchestration repo is stateless, so one instance per db handle is safe to
+// reuse across the request's cluster calls. Keyed by the db handle so it is
+// garbage-collected with the request scope.
+const repoCache = new WeakMap<object, Repo>()
+
+export function withRepo(db: Db): Repo {
+  const cached = repoCache.get(db)
+  if (cached) {
+    return cached
+  }
+  const repo = createRuntimeOrchestrationRepo(db)
+  repoCache.set(db, repo)
+  return repo
+}
 
 // Error code → http status mapping is the http layer's job; the gateway only
 // reports the kind. `fields` carries field-keyed validation detail; `detail`
@@ -48,18 +68,18 @@ export function requestIdFrom(requestId: string | null | undefined) {
 // ── Session reads ───────────────────────────────────────────────────────────
 
 export async function findSession(db: Db, auth: AuthScope, sessionId: string) {
-  return createRuntimeOrchestrationRepo(db).findSession(auth.project.id, sessionId)
+  return withRepo(db).findSession(auth.project.id, sessionId)
 }
 
 export async function appendRuntimeEvent(
-  db: Db,
+  repo: Repo,
   values: { auth: AuthScope; sessionId: string; event: Record<string, unknown>; metadata?: Record<string, unknown> },
 ) {
   const canonicalEvent = canonicalAmaSessionEventFromRuntimeEvent(
     values.event,
     values.metadata ?? { source: 'runtime' },
   )
-  return await createRuntimeOrchestrationRepo(db).appendCanonicalEvent(
+  return await repo.appendCanonicalEvent(
     { organizationId: values.auth.organization.id, projectId: values.auth.project.id, sessionId: values.sessionId },
     canonicalEvent,
   )
@@ -73,7 +93,7 @@ export async function markInitialPromptFailed(
   status?: number,
 ) {
   const failedAt = now()
-  await createRuntimeOrchestrationRepo(db).updateSessionWhenState(auth.project.id, session.id, 'running', {
+  await withRepo(db).updateSessionWhenState(auth.project.id, session.id, 'running', {
     state: 'error',
     stateReason: message,
     updatedAt: failedAt,
@@ -105,7 +125,7 @@ export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, mes
   }
 }
 
-export function cloudTurnSystemAuth(message: CloudTurnMessage): AuthScope {
+export function cloudTurnSystemAuth(message: { organizationId: string; projectId: string }): AuthScope {
   return {
     user: { id: 'system:cloud-turn' },
     organization: { id: message.organizationId, name: message.organizationId },

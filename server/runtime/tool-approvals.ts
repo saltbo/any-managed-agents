@@ -3,9 +3,8 @@ import { recordAudit } from '../audit'
 import { toolPolicyRequiresApproval } from '../policy'
 import { redactSensitiveValue } from '../redaction'
 import type { AuthScope } from '../usecases/ports'
+import type { Db } from './session-base'
 import type { RuntimeToolPolicyDecision, RuntimeToolPolicyInput } from './session-runtime'
-
-type Db = Parameters<typeof createRuntimeOrchestrationRepo>[0]
 
 // ── Session tool approvals ───────────────────────────────────────────────────
 // A sensitive tool call pauses the run: the pending approval lives on the

@@ -1,8 +1,7 @@
 import { createRuntimeOrchestrationRepo } from '../adapters/repos/runtime-orchestration'
 import { providerFamily } from '../domain/provider-adapter'
 import type { RuntimeSecretEnvEntry } from './secret-env'
-
-type Db = Parameters<typeof createRuntimeOrchestrationRepo>[0]
+import type { Db } from './session-base'
 
 export const PLATFORM_DEFAULT_PROVIDER = 'workers-ai'
 
@@ -80,10 +79,6 @@ const FAMILY_BASE_URL_ENV: Record<string, string> = {
   openai: 'OPENAI_BASE_URL',
   'openai-compatible': 'OPENAI_BASE_URL',
   ollama: 'OLLAMA_HOST',
-}
-
-export function providerCredentialEnvName(providerType: string) {
-  return FAMILY_CREDENTIAL_ENV[providerFamily(providerType)] ?? null
 }
 
 // Translates a configured provider into the runtime env contract consumed by

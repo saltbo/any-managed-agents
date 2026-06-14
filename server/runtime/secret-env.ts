@@ -1,8 +1,7 @@
 import { createRuntimeOrchestrationRepo } from '../adapters/repos/runtime-orchestration'
 import type { Env } from '../env'
 import { decryptSecretValue } from '../vault-crypto'
-
-type Db = Parameters<typeof createRuntimeOrchestrationRepo>[0]
+import type { Db } from './session-base'
 
 // Vault credential reference: the only way secrets are referenced anywhere
 // (docs/api-v1-design.md §1.4). No versionId pins the credential's active
