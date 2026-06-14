@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import '@github/copilot/sdk'
 import type { SessionEvent } from '@github/copilot-sdk'
 import { approveAll, CopilotClient } from '@github/copilot-sdk'
-import { runtimeError, runtimeEvent, textMessage, toolEnd, toolStart, usageEvent } from '../events/ama'
+import { reasoning, runtimeError, runtimeEvent, textMessage, toolEnd, toolStart, turnEnd } from '../events/ama'
 import {
   agentSystemPrompt,
   type AmaRuntimeEvent,
@@ -12,6 +12,7 @@ import {
   type RuntimeProviderRequest,
   type RuntimeUsageWindow,
 } from '../protocol'
+import { hostHome, objectValue, sdkEnv } from './cli-host'
 
 const COPILOT_USER_API = 'https://api.github.com/copilot_internal/user'
 
@@ -27,10 +28,6 @@ function readGhToken(home: string | undefined): string | null {
   } catch {
     return null
   }
-}
-
-function objectValue(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
 }
 
 type CopilotState = {
@@ -52,24 +49,13 @@ function normalizeTool(name: string, args: Record<string, unknown>) {
   }
 }
 
-function sdkEnv(request: RuntimeProviderRequest) {
-  const home =
-    typeof request.env.AMA_RUNTIME_BRIDGE_HOST_HOME === 'string' && request.env.AMA_RUNTIME_BRIDGE_HOST_HOME
-      ? request.env.AMA_RUNTIME_BRIDGE_HOST_HOME
-      : undefined
-  return {
-    ...request.env,
-    ...(home ? { HOME: home, AMA_RUNTIME_BRIDGE_SESSION_HOME: request.env.HOME } : {}),
-  }
-}
-
 function* mapCopilotEvent(event: SessionEvent, state: CopilotState): Generator<AmaRuntimeEvent> {
   switch (event.type) {
     case 'assistant.turn_start':
       yield runtimeEvent('turn_start')
       return
     case 'assistant.reasoning':
-      if (event.data.content) yield runtimeEvent('runtime.output', { stream: 'reasoning', content: event.data.content })
+      if (event.data.content) yield reasoning(event.data.content)
       return
     case 'assistant.message':
       if (event.data.content) yield runtimeEvent('message_end', { message: textMessage('assistant', event.data.content) })
@@ -92,7 +78,7 @@ function* mapCopilotEvent(event: SessionEvent, state: CopilotState): Generator<A
       return
     }
     case 'session.idle':
-      yield runtimeEvent('turn_end', { message: { role: 'assistant', content: [], timestamp: Date.now() }, toolResults: [] })
+      yield turnEnd()
       return
     case 'session.error':
       yield runtimeError(String(event.data.message ?? 'Copilot session error'), 'copilot_error', event.data)
@@ -178,8 +164,7 @@ export const copilotProvider: RuntimeProvider = {
   // Enumerate the models the host Copilot login can serve via the SDK's
   // listModels() (same path as the AK CLI reference).
   async listModels({ env }): Promise<string[] | null> {
-    const home =
-      typeof env.AMA_RUNTIME_BRIDGE_HOST_HOME === 'string' && env.AMA_RUNTIME_BRIDGE_HOST_HOME ? env.AMA_RUNTIME_BRIDGE_HOST_HOME : undefined
+    const home = hostHome(env)
     const clientEnv = { ...(process.env as Record<string, string>), ...(home ? { HOME: home } : {}) }
     const client = new CopilotClient({ env: clientEnv, useLoggedInUser: true })
     await client.start()
@@ -192,9 +177,7 @@ export const copilotProvider: RuntimeProvider = {
   },
 
   async fetchUsage({ env }): Promise<RuntimeUsageWindow[] | null> {
-    const home =
-      typeof env.AMA_RUNTIME_BRIDGE_HOST_HOME === 'string' && env.AMA_RUNTIME_BRIDGE_HOST_HOME ? env.AMA_RUNTIME_BRIDGE_HOST_HOME : undefined
-    const token = readGhToken(home)
+    const token = readGhToken(hostHome(env))
     if (!token) return null
     const res = await fetch(COPILOT_USER_API, {
       headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },

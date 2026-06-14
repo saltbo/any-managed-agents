@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import { query } from '@anthropic-ai/claude-agent-sdk'
-import { runtimeError, runtimeEvent, textMessage, toolEnd, toolStart, usageEvent } from '../events/ama'
+import { reasoning, runtimeError, runtimeEvent, textMessage, toolEnd, toolStart, turnEnd, usageEvent } from '../events/ama'
 import {
   agentSystemPrompt,
   createAsyncPushQueue,
@@ -13,6 +13,7 @@ import {
   type RuntimeProviderRequest,
   type RuntimeUsageWindow,
 } from '../protocol'
+import { hostHome, normalizeProviderUsage, objectValue, resolveCliPath, sdkEnv } from './cli-host'
 
 const CLAUDE_USAGE_API = 'https://api.anthropic.com/api/oauth/usage'
 const CLAUDE_WINDOW_LABELS: Record<string, string> = {
@@ -24,10 +25,6 @@ const CLAUDE_WINDOW_LABELS: Record<string, string> = {
 
 function normalizeUsagePercent(value: number): number {
   return value < 1 ? value * 100 : value
-}
-
-function objectValue(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
 }
 
 function normalizeToolInput(name: string, input: Record<string, unknown>): Record<string, unknown> {
@@ -50,12 +47,8 @@ function normalizeToolInput(name: string, input: Record<string, unknown>): Recor
 }
 
 function usageFromResult(msg: Record<string, unknown>) {
-  const usage = objectValue(msg.usage)
   return {
-    inputTokens: Number(usage.input_tokens ?? usage.inputTokens ?? 0),
-    outputTokens: Number(usage.output_tokens ?? usage.outputTokens ?? 0),
-    cachedInputTokens: Number(usage.cache_read_input_tokens ?? usage.cachedInputTokens ?? 0),
-    totalTokens: Number(usage.total_tokens ?? usage.totalTokens ?? 0),
+    ...normalizeProviderUsage(objectValue(msg.usage)),
     costMicros: typeof msg.total_cost_usd === 'number' ? Math.round(msg.total_cost_usd * 1_000_000) : undefined,
   }
 }
@@ -96,28 +89,13 @@ function readClaudeOAuthToken(home: string | undefined): string | undefined {
   }
 }
 
-function sdkEnv(request: RuntimeProviderRequest) {
-  const home =
-    typeof request.env.AMA_RUNTIME_BRIDGE_HOST_HOME === 'string' && request.env.AMA_RUNTIME_BRIDGE_HOST_HOME
-      ? request.env.AMA_RUNTIME_BRIDGE_HOST_HOME
-      : undefined
-  const env: Record<string, string> = {
-    ...request.env,
-    ...(home ? { HOME: home, AMA_RUNTIME_BRIDGE_SESSION_HOME: request.env.HOME } : {}),
-  }
+function claudeSdkEnv(request: RuntimeProviderRequest) {
+  const env = sdkEnv(request)
   if (!env.CLAUDE_CODE_OAUTH_TOKEN && !env.ANTHROPIC_API_KEY) {
-    const token = readClaudeOAuthToken(home)
+    const token = readClaudeOAuthToken(hostHome(request.env))
     if (token) env.CLAUDE_CODE_OAUTH_TOKEN = token
   }
   return env
-}
-
-function resolveClaudePath(): string | undefined {
-  try {
-    return execSync('which claude', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || undefined
-  } catch {
-    return undefined
-  }
 }
 
 function* mapClaudeMessage(msg: SDKMessage): Generator<AmaRuntimeEvent> {
@@ -134,7 +112,7 @@ function* mapClaudeMessage(msg: SDKMessage): Generator<AmaRuntimeEvent> {
           yield runtimeEvent('message_end', { message: textMessage('assistant', block.text) })
         }
         if (block.type === 'thinking' && block.thinking) {
-          yield runtimeEvent('runtime.output', { stream: 'reasoning', content: block.thinking })
+          yield reasoning(block.thinking)
         }
         if (block.type === 'tool_use') {
           const args = normalizeToolInput(block.name, objectValue(block.input))
@@ -155,7 +133,7 @@ function* mapClaudeMessage(msg: SDKMessage): Generator<AmaRuntimeEvent> {
     }
     case 'result': {
       yield usageEvent(usageFromResult(msg as unknown as Record<string, unknown>))
-      yield runtimeEvent('turn_end', { message: { role: 'assistant', content: [], timestamp: Date.now() }, toolResults: [] })
+      yield turnEnd()
       return
     }
     case 'system': {
@@ -171,7 +149,7 @@ export const claudeCodeProvider: RuntimeProvider = {
   name: 'claude-code',
   execute(request: RuntimeProviderRequest): Promise<RuntimeProviderHandle> {
     const abortController = new AbortController()
-    const claudePath = resolveClaudePath()
+    const claudePath = resolveCliPath('claude')
     const systemPrompt =
       typeof request.runtimeConfig?.systemPromptFile === 'string'
         ? readFileSync(request.runtimeConfig.systemPromptFile, 'utf8')
@@ -182,7 +160,7 @@ export const claudeCodeProvider: RuntimeProvider = {
     const options = {
       ...(request.resume ? { resume: request.resumeToken ?? request.sessionId } : { sessionId: request.sessionId }),
       cwd: request.cwd,
-      env: sdkEnv(request),
+      env: claudeSdkEnv(request),
       ...(systemPrompt ? { systemPrompt } : {}),
       ...(request.model ? { model: request.model } : {}),
       permissionMode: 'bypassPermissions' as const,
@@ -247,14 +225,13 @@ export const claudeCodeProvider: RuntimeProvider = {
   // Enumerate the models the host Claude Code login can serve via the SDK's
   // supportedModels() on an idle query (same path as the AK CLI reference).
   async listModels({ env }): Promise<string[] | null> {
-    const home =
-      typeof env.AMA_RUNTIME_BRIDGE_HOST_HOME === 'string' && env.AMA_RUNTIME_BRIDGE_HOST_HOME ? env.AMA_RUNTIME_BRIDGE_HOST_HOME : undefined
+    const home = hostHome(env)
     const queryEnv = { ...(process.env as Record<string, string>) }
     if (!queryEnv.CLAUDE_CODE_OAUTH_TOKEN && !queryEnv.ANTHROPIC_API_KEY) {
       const token = readClaudeOAuthToken(home ?? queryEnv.HOME)
       if (token) queryEnv.CLAUDE_CODE_OAUTH_TOKEN = token
     }
-    const claudePath = resolveClaudePath()
+    const claudePath = resolveCliPath('claude')
     const q = query({
       prompt: '',
       options: {
@@ -274,9 +251,7 @@ export const claudeCodeProvider: RuntimeProvider = {
   },
 
   async fetchUsage({ env }): Promise<RuntimeUsageWindow[] | null> {
-    const home =
-      typeof env.AMA_RUNTIME_BRIDGE_HOST_HOME === 'string' && env.AMA_RUNTIME_BRIDGE_HOST_HOME ? env.AMA_RUNTIME_BRIDGE_HOST_HOME : undefined
-    const token = readClaudeOAuthToken(home)
+    const token = readClaudeOAuthToken(hostHome(env))
     if (!token) return null
     const res = await fetch(CLAUDE_USAGE_API, {
       headers: { Authorization: `Bearer ${token}`, 'anthropic-beta': 'oauth-2025-04-20' },
