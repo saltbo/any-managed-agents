@@ -14,7 +14,7 @@
 // discriminated result objects.
 
 export type { SessionRow } from '../adapters/repos/runtime-orchestration'
-export { consumeCloudTurnMessage } from './cloud-turn'
+export { consumeCloudTurnMessage, markCloudTurnDeadLettered } from './cloud-turn'
 export { type ApprovalDecisionResult, type ApprovalRowOutput, decideSessionApproval } from './session-approval'
 export { appendRuntimeEvent, type SessionRuntimeError } from './session-base'
 export {

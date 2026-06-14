@@ -37,6 +37,16 @@ queue = "ama-cloud-turns"
 [[queues.consumers]]
 queue = "ama-cloud-turns"
 max_batch_size = 1
+max_retries = 5
+dead_letter_queue = "ama-cloud-turns-dlq"
+
+# A cloud turn that keeps failing (infra / DB / queue errors) lands here after
+# max_retries instead of being silently dropped, stranding the session. The DLQ
+# consumer marks the session errored so clients recover. Provision the queue with
+# `wrangler queues create ama-cloud-turns-dlq` before deploying.
+[[queues.consumers]]
+queue = "ama-cloud-turns-dlq"
+max_batch_size = 1
 max_retries = 1
 
 [[services]]
@@ -102,6 +112,12 @@ queue = "ama-cloud-turns-staging"
 
 [[env.staging.queues.consumers]]
 queue = "ama-cloud-turns-staging"
+max_batch_size = 1
+max_retries = 5
+dead_letter_queue = "ama-cloud-turns-staging-dlq"
+
+[[env.staging.queues.consumers]]
+queue = "ama-cloud-turns-staging-dlq"
 max_batch_size = 1
 max_retries = 1
 
