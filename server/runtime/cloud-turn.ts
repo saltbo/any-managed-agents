@@ -142,7 +142,19 @@ export async function startSessionRuntimeForRow(
       startedAt,
       updatedAt: startedAt,
     }
-    await createRuntimeOrchestrationRepo(db).updateSessionWhenState(auth.project.id, sessionId, 'pending', started)
+    const recorded = await createRuntimeOrchestrationRepo(db).updateSessionWhenState(
+      auth.project.id,
+      sessionId,
+      'pending',
+      started,
+    )
+    if (!recorded) {
+      // The row left 'pending' between the re-read and this CAS (concurrent stop
+      // or a duplicate session.start). The just-provisioned sandbox is recorded
+      // on no row, so tear it down here — let a teardown error reach the catch.
+      await stopCloudSessionRuntime(env, sandboxId)
+      return
+    }
     await recordAudit(db, {
       auth,
       action: 'session.runtime.start',

@@ -22,6 +22,7 @@ import type { AuthScope } from '../usecases/ports'
 import { startSessionRuntimeForRow } from './cloud-turn'
 import { runtimeDriverName } from './drivers'
 import { providerRuntimeEnv, resolveSessionProviderConfig } from './provider-env'
+import { safeRuntimeError } from './runtime-error'
 import type { RuntimeSecretEnvEntry } from './secret-env'
 import { type Db, findSession, newId, now, requestIdFrom, type SessionRuntimeError, stringify } from './session-base'
 import { resolveSessionProviderId, validateRuntimeProviderModel } from './session-provisioning'
@@ -560,9 +561,40 @@ export async function createSessionForAgent(
     metadata: { state: pending.state, hostingMode, runtime },
   })
 
-  if (hostingMode === 'self_hosted') {
-    await enqueueSelfHostedSessionWork(db, auth, {
-      session: pending,
+  try {
+    if (hostingMode === 'self_hosted') {
+      await enqueueSelfHostedSessionWork(db, auth, {
+        session: pending,
+        agentSnapshot,
+        environmentSnapshot,
+        runtime,
+        runtimeConfig,
+        resourceRefs: normalizedResources.resourceRefs,
+        env: mergedEnv,
+        secretEnv: mergedSecretEnv,
+        ...(initialPrompt !== undefined ? { initialPrompt } : {}),
+      })
+      return { ok: true, session: pending }
+    }
+
+    if (!cloudTurnsRunInline(env)) {
+      await enqueueCloudTurn(env, {
+        type: 'session.start',
+        sessionId: pending.id,
+        organizationId: auth.organization.id,
+        projectId: auth.project.id,
+        runtime,
+        runtimeConfig,
+        resourceRefs: normalizedResources.resourceRefs,
+        runtimeEnv: mergedEnv,
+        runtimeSecretEnv: mergedSecretEnv,
+        ...(initialPrompt !== undefined ? { initialPrompt } : {}),
+      })
+      return { ok: true, session: pending }
+    }
+
+    await startSessionRuntimeForRow(env, db, auth, {
+      pending,
       agentSnapshot,
       environmentSnapshot,
       runtime,
@@ -572,42 +604,34 @@ export async function createSessionForAgent(
       secretEnv: mergedSecretEnv,
       ...(initialPrompt !== undefined ? { initialPrompt } : {}),
     })
-    return { ok: true, session: pending }
-  }
-
-  if (!cloudTurnsRunInline(env)) {
-    await enqueueCloudTurn(env, {
-      type: 'session.start',
-      sessionId: pending.id,
-      organizationId: auth.organization.id,
-      projectId: auth.project.id,
-      runtime,
-      runtimeConfig,
-      resourceRefs: normalizedResources.resourceRefs,
-      runtimeEnv: mergedEnv,
-      runtimeSecretEnv: mergedSecretEnv,
-      ...(initialPrompt !== undefined ? { initialPrompt } : {}),
+    if (env.AMA_RUNTIME_MODE !== 'test') {
+      return { ok: true, session: pending }
+    }
+    const started = await findSession(db, auth, id)
+    if (!started) {
+      throw new Error('Created session was not persisted')
+    }
+    return { ok: true, session: started }
+  } catch (error) {
+    // The row is persisted as 'pending' but the launch step failed (e.g. the
+    // queue send threw). Reconcile the orphaned row to 'error' so it is not
+    // stranded until the expiry sweep, then report the failure.
+    const safeError = safeRuntimeError(error)
+    await repo.updateSessionWhenState(auth.project.id, id, 'pending', {
+      state: 'error',
+      stateReason: safeError.message,
+      updatedAt: now(),
     })
-    return { ok: true, session: pending }
+    await recordAudit(db, {
+      auth,
+      action: 'session.create',
+      resourceType: 'session',
+      resourceId: id,
+      outcome: 'failure',
+      requestId: requestIdFrom(requestId),
+      sessionId: id,
+      metadata: { ...safeError },
+    })
+    return { ok: false, error: { status: 500, code: 'session_launch_failed', message: safeError.message } }
   }
-
-  await startSessionRuntimeForRow(env, db, auth, {
-    pending,
-    agentSnapshot,
-    environmentSnapshot,
-    runtime,
-    runtimeConfig,
-    resourceRefs: normalizedResources.resourceRefs,
-    env: mergedEnv,
-    secretEnv: mergedSecretEnv,
-    ...(initialPrompt !== undefined ? { initialPrompt } : {}),
-  })
-  if (env.AMA_RUNTIME_MODE !== 'test') {
-    return { ok: true, session: pending }
-  }
-  const started = await findSession(db, auth, id)
-  if (!started) {
-    throw new Error('Created session was not persisted')
-  }
-  return { ok: true, session: started }
 }
