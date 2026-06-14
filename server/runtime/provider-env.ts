@@ -1,7 +1,8 @@
 import { createRuntimeOrchestrationRepo } from '../adapters/repos/runtime-orchestration'
-import { providerFamily } from '../domain/provider-adapter'
 import {
   PLATFORM_DEFAULT_PROVIDER,
+  providerConfigFromRow,
+  providerRuntimeEnv as providerRuntimeEnvRule,
   type SessionProviderConfig,
   type SessionProviderResolution,
 } from '../domain/runtime/provider'
@@ -13,29 +14,6 @@ export {
   type SessionProviderConfig,
   type SessionProviderResolution,
 } from '../domain/runtime/provider'
-
-function sessionProviderConfig(row: {
-  id: string
-  type: string
-  baseUrl: string | null
-  enabled: boolean
-  credentialId: string | null
-  credentialVersionId: string | null
-}): SessionProviderResolution {
-  if (!row.enabled) {
-    return { ok: false, reason: 'unavailable' }
-  }
-  return {
-    ok: true,
-    config: {
-      id: row.id,
-      type: row.type,
-      baseUrl: row.baseUrl,
-      credentialId: row.credentialId,
-      credentialVersionId: row.credentialVersionId,
-    },
-  }
-}
 
 // Resolves the agent's provider reference to its configured connection
 // details. A null provider id means "use the project default provider"; a
@@ -55,57 +33,20 @@ export async function resolveSessionProviderConfig(
     if (!row) {
       return { ok: true, config: null }
     }
-    return sessionProviderConfig(row)
+    return providerConfigFromRow(row)
   }
   const row = await repo.namedProviderConfig(projectId, providerId)
   if (!row) {
     return { ok: false, reason: 'not_found' }
   }
-  return sessionProviderConfig(row)
+  return providerConfigFromRow(row)
 }
 
-const FAMILY_CREDENTIAL_ENV: Record<string, string> = {
-  anthropic: 'ANTHROPIC_API_KEY',
-  openai: 'OPENAI_API_KEY',
-  'openai-compatible': 'OPENAI_API_KEY',
-  ollama: 'OLLAMA_API_KEY',
-}
-
-const FAMILY_BASE_URL_ENV: Record<string, string> = {
-  anthropic: 'ANTHROPIC_BASE_URL',
-  openai: 'OPENAI_BASE_URL',
-  'openai-compatible': 'OPENAI_BASE_URL',
-  ollama: 'OLLAMA_HOST',
-}
-
-// Translates a configured provider into the runtime env contract consumed by
-// session runtimes: the base URL as a plain env var, and the credential as a
-// secret env credential reference that the lease/cloud dispatch seam resolves
-// at materialization time. Workers AI runs on the platform binding and
-// contributes nothing.
+// Translates a configured provider into the runtime env contract. The pure rule
+// lives in domain/runtime/provider; this re-export keeps the import path stable.
 export function providerRuntimeEnv(config: SessionProviderConfig | null): {
   env: Record<string, string>
   secretEnv: RuntimeSecretEnvEntry[]
 } {
-  if (!config || providerFamily(config.type) === 'workers-ai') {
-    return { env: {}, secretEnv: [] }
-  }
-  const family = providerFamily(config.type)
-  const env: Record<string, string> = {}
-  const baseUrlEnv = FAMILY_BASE_URL_ENV[family]
-  if (config.baseUrl && baseUrlEnv) {
-    env[baseUrlEnv] = config.baseUrl
-  }
-  const secretEnv: RuntimeSecretEnvEntry[] = []
-  const credentialEnv = FAMILY_CREDENTIAL_ENV[family]
-  if (config.credentialId && credentialEnv) {
-    secretEnv.push({
-      name: credentialEnv,
-      credentialRef: {
-        credentialId: config.credentialId,
-        ...(config.credentialVersionId ? { versionId: config.credentialVersionId } : {}),
-      },
-    })
-  }
-  return { env, secretEnv }
+  return providerRuntimeEnvRule(config)
 }

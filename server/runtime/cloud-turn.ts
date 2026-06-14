@@ -13,6 +13,7 @@ import {
   createRuntimeOrchestrationRepoFromBinding,
   type SessionRow,
 } from '../adapters/repos/runtime-orchestration'
+import { toolExecutor } from '../adapters/runtime/sandbox-tool-executor'
 import type { RuntimeName } from '../contracts/environment-contracts'
 import type { Env } from '../env'
 import type { AuthScope, CloudTurnMessage, SandboxRuntimeHost } from '../usecases/ports'
@@ -50,6 +51,9 @@ function cloudSandboxRuntime(env: Env): SandboxRuntimeHost {
     executeToolCalls(input) {
       return executeRuntimeToolCalls(env, input)
     },
+    executeTool(input) {
+      return toolExecutor(env).execute(input)
+    },
     runTurn(input) {
       return runSessionTurn(env, input)
     },
@@ -86,7 +90,7 @@ function approvalGateSeam(db: Db) {
   }) => createToolApprovalGate({ db, ...values })
 }
 
-function cloudTurnDeps(env: Env, repo: Repo): CloudTurnDeps {
+export function cloudTurnDeps(env: Env, repo: Repo): CloudTurnDeps {
   return {
     sessionOrchestration: repo,
     policy: createPolicyPort(repo.db),

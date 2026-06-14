@@ -4,11 +4,19 @@ import { describe, expect, it, vi } from 'vitest'
 const resolveEffectivePolicyMock = vi.fn()
 const evaluateMcpToolPolicyMock = vi.fn()
 const evaluateProviderPolicyMock = vi.fn()
+const evaluateSandboxRuntimePolicyMock = vi.fn()
+const policyBlocksSandboxOperationMock = vi.fn()
+const toolPolicyRequiresApprovalMock = vi.fn()
+const evaluateProviderPolicyForSessionMock = vi.fn()
 
 vi.mock('../../policy', () => ({
   resolveEffectivePolicy: resolveEffectivePolicyMock,
   evaluateMcpToolPolicy: evaluateMcpToolPolicyMock,
   evaluateProviderPolicy: evaluateProviderPolicyMock,
+  evaluateSandboxRuntimePolicy: evaluateSandboxRuntimePolicyMock,
+  policyBlocksSandboxOperation: policyBlocksSandboxOperationMock,
+  toolPolicyRequiresApproval: toolPolicyRequiresApprovalMock,
+  evaluateProviderPolicyForSession: evaluateProviderPolicyForSessionMock,
 }))
 
 const { createPolicyPort } = await import('./policy')
@@ -131,5 +139,68 @@ describe('[spec: policy/gateway] createPolicyPort', () => {
     await expect(port.evaluateProvider(auth, { providerId: 'prov_1', modelId: 'model_1' })).rejects.toThrow(
       'provider policy error',
     )
+  })
+
+  it('evaluateSandboxRuntime delegates to evaluateSandboxRuntimePolicy', async () => {
+    const decision = { allowed: false, category: 'sandbox', rule: 'sandbox.command', message: 'Blocked.' }
+    evaluateSandboxRuntimePolicyMock.mockResolvedValueOnce(decision)
+    const port = createPolicyPort(fakeDb)
+    const values = {
+      session: { id: 'sess_1', agentSnapshot: null, environmentSnapshot: null },
+      operation: 'command' as const,
+      command: 'rm -rf /',
+      host: null,
+    }
+    const result = await port.evaluateSandboxRuntime(auth, values)
+    expect(result).toBe(decision)
+    expect(evaluateSandboxRuntimePolicyMock).toHaveBeenCalledWith(fakeDb, auth, values)
+  })
+
+  it('policyBlocksSandboxOperation delegates to policyBlocksSandboxOperation', async () => {
+    const blocked = {
+      decision: { allowed: false, category: 'sandbox', rule: 'sandbox.network', message: 'Blocked host.' },
+      operation: { operation: 'network', host: 'evil.example' },
+    }
+    policyBlocksSandboxOperationMock.mockResolvedValueOnce(blocked)
+    const port = createPolicyPort(fakeDb)
+    const values = {
+      session: { id: 'sess_1', agentSnapshot: null, environmentSnapshot: null },
+      toolName: 'bash',
+      input: { command: 'curl evil.example' },
+    }
+    const result = await port.policyBlocksSandboxOperation(auth, values)
+    expect(result).toBe(blocked)
+    expect(policyBlocksSandboxOperationMock).toHaveBeenCalledWith(fakeDb, auth, values)
+  })
+
+  it('toolPolicyRequiresApproval delegates to toolPolicyRequiresApproval', async () => {
+    toolPolicyRequiresApprovalMock.mockResolvedValueOnce(true)
+    const port = createPolicyPort(fakeDb)
+    const result = await port.toolPolicyRequiresApproval(auth, 'bash')
+    expect(result).toBe(true)
+    expect(toolPolicyRequiresApprovalMock).toHaveBeenCalledWith(fakeDb, auth, 'bash')
+  })
+
+  it('evaluateProviderForSession delegates to evaluateProviderPolicyForSession', async () => {
+    const sessionDecision = { decision: allowedDecision, override: null }
+    evaluateProviderPolicyForSessionMock.mockResolvedValueOnce(sessionDecision)
+    const port = createPolicyPort(fakeDb)
+    const values = { providerId: 'prov_1', modelId: 'model_1', adminOverride: true }
+    const result = await port.evaluateProviderForSession(auth, values)
+    expect(result).toBe(sessionDecision)
+    expect(evaluateProviderPolicyForSessionMock).toHaveBeenCalledWith(fakeDb, auth, values)
+  })
+
+  it('propagates evaluateSandboxRuntimePolicy rejection', async () => {
+    evaluateSandboxRuntimePolicyMock.mockRejectedValueOnce(new Error('sandbox policy error'))
+    const port = createPolicyPort(fakeDb)
+    await expect(
+      port.evaluateSandboxRuntime(auth, {
+        session: { id: 'sess_1', agentSnapshot: null, environmentSnapshot: null },
+        operation: 'startup',
+        command: null,
+        host: null,
+      }),
+    ).rejects.toThrow('sandbox policy error')
   })
 })

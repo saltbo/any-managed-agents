@@ -19,7 +19,9 @@ export {
 export { appendRuntimeEvent, loadRuntimeMessages, markInitialPromptFailed } from './events'
 export {
   mcpConnectorIds,
+  providerRuntimeEnv,
   resolveMcpSnapshot,
+  resolveSessionProviderConfig,
   resolveSessionProviderId,
   validateRuntimeProviderModel,
 } from './provisioning'
@@ -31,7 +33,34 @@ export {
   recordRuntimeMessageSubmission,
 } from './proxy'
 export {
+  type ApprovalDecisionResult,
+  type ApprovalDeps,
+  type ApprovalRowOutput,
+  decideSessionApproval,
+} from './session-approval'
+export {
+  type CreateSessionDeps,
+  type CreateSessionOptions,
+  type CreateSessionResult,
+  createSessionForAgent,
+  enqueueSelfHostedSessionWork,
+  latestRunnerResumeToken,
+} from './session-create'
+export {
+  archiveSession,
+  markExpiredPendingSessions,
+  type StopSessionResult,
+  stopSession,
+  unarchiveSession,
+} from './session-lifecycle'
+export {
+  dispatchSessionPrompt,
+  type PromptDeps,
+  type PromptDispatchOutcome,
+} from './session-prompt'
+export {
   assertRuntimeSessionRunning,
   buildSessionTurnCallbacks,
   type SessionTurnCallbacks,
 } from './turn-callbacks'
+export { markStalledCloudSessions } from './watchdog'

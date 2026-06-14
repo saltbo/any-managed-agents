@@ -243,13 +243,14 @@ export interface PolicyPort {
   ): Promise<PolicyDecisionResult>
   resolveEffective(auth: AuthScope): Promise<EffectivePolicyResult>
   evaluateProvider(auth: AuthScope, values: { providerId: string; modelId: string }): Promise<PolicyDecisionResult>
-  // Sandbox executor seam: evaluates a command/network operation against the
-  // governance sandbox policy and the session environment network policy.
+  // Sandbox executor seam: evaluates a startup/command/network operation against
+  // the governance sandbox policy and the session environment network policy.
+  // Session creation gates the cloud startup; the executor gates command/network.
   evaluateSandboxRuntime(
     auth: AuthScope,
     values: {
       session: { id: string; agentSnapshot: string | null; environmentSnapshot: string | null }
-      operation: 'command' | 'network'
+      operation: 'startup' | 'command' | 'network'
       command: string | null
       host: string | null
     },
@@ -2057,9 +2058,14 @@ export interface RunnerChannel {
 // the Worker and the runner), so importing its types here keeps the port honest
 // without dragging infrastructure into usecases.
 import type { AgentMessage } from '@earendil-works/pi-agent-core'
-import type { RuntimeToolPolicyDecision, RuntimeToolPolicyInput } from '../../runtime-core/ports'
+import type {
+  RuntimeToolPolicyDecision,
+  RuntimeToolPolicyInput,
+  ToolExecutionInput,
+  ToolExecutionResult,
+} from '../../runtime-core/ports'
 
-export type { RuntimeToolPolicyDecision, RuntimeToolPolicyInput }
+export type { RuntimeToolPolicyDecision, RuntimeToolPolicyInput, ToolExecutionInput, ToolExecutionResult }
 
 // Start input for the cloud sandbox runtime host. Plain data — no drizzle rows.
 export interface SandboxRuntimeStartInput {
@@ -2150,6 +2156,9 @@ export interface SandboxRuntimeHost {
   startCloudSession(input: SandboxRuntimeStartInput): Promise<SandboxRuntimeStartResult>
   stopCloudSession(sandboxId: string): Promise<void>
   executeToolCalls(input: { sessionId: string; sandboxId: string; body: unknown }): Promise<unknown[]>
+  // Executes a single sandbox tool — the approval-decision continuation runs the
+  // approved tool through this seam instead of the model-turn loop.
+  executeTool(input: ToolExecutionInput): Promise<ToolExecutionResult>
   runTurn(input: SessionTurnInput): Promise<SessionTurnResult>
 }
 

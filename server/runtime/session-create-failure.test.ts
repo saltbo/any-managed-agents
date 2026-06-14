@@ -56,7 +56,18 @@ vi.mock('./turn-queue', async (importOriginal) => ({
   cloudTurnsRunInline: cloudTurnsRunInlineMock,
 }))
 
-vi.mock('./cloud-turn', () => ({ startSessionRuntimeForRow: startSessionRuntimeForRowMock }))
+// createSessionForAgent now delegates to the deps-first usecase; the shim builds
+// CreateSessionDeps via cloudTurnDeps (kept real) and the usecase reaches the
+// inline launch through the usecase cloud-turn module. Stub that seam so no real
+// startup runs; the queued path (cloudTurnsRunInline=false) never invokes it.
+vi.mock('./cloud-turn', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./cloud-turn')>()),
+}))
+
+vi.mock('../usecases/runtime/cloud-turn', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../usecases/runtime/cloud-turn')>()),
+  startSessionRuntimeForRow: startSessionRuntimeForRowMock,
+}))
 
 vi.mock('../audit', () => ({ recordAudit: recordAuditMock }))
 
@@ -65,15 +76,17 @@ vi.mock('../policy', () => ({
   evaluateSandboxRuntimePolicy: evaluateSandboxRuntimePolicyMock,
 }))
 
-vi.mock('./session-provisioning', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./session-provisioning')>()),
+// Provider/runtime resolution + provider-config read now live in the deps-first
+// provisioning usecase; providerRuntimeEnv is a pure domain rule. Mock those seams.
+vi.mock('../usecases/runtime/provisioning', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../usecases/runtime/provisioning')>()),
   resolveSessionProviderId: resolveSessionProviderIdMock,
   validateRuntimeProviderModel: validateRuntimeProviderModelMock,
+  resolveSessionProviderConfig: resolveSessionProviderConfigMock,
 }))
 
-vi.mock('./provider-env', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./provider-env')>()),
-  resolveSessionProviderConfig: resolveSessionProviderConfigMock,
+vi.mock('../domain/runtime/provider', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../domain/runtime/provider')>()),
   providerRuntimeEnv: providerRuntimeEnvMock,
 }))
 
