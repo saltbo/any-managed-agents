@@ -1,66 +1,102 @@
-// Cloud turn execution, runtime startup, and the queue consumer.
-//
-// This cluster owns the cloud-side model turn loop: launching the cloud
-// runtime for a pending session row (startSessionRuntimeForRow), running a
-// single model turn with the approval/policy gate (executeCloudSessionTurn),
-// the queue consumer that dispatches start/step/turn messages
-// (consumeCloudTurnMessage), and the initial-prompt dispatch that seeds the
-// first turn after startup (dispatchInitialPrompt).
-//
-// It imports from session-base + the runtime leaf modules; the higher clusters
-// (create, prompt, approval) import from here.
+// Shim: the cloud-turn LOOP (cloud turn execution, runtime startup, and the
+// queue consumer) now lives in usecases/runtime/cloud-turn as deps-first
+// functions over ports. These wrappers preserve the (env, db, ...) signatures
+// the runtime callers (session-create, session-prompt, session-approval) and the
+// queue worker (via the session-orchestration barrel) rely on, building the
+// CloudTurnDeps subset inline and delegating. The CloudTurnOutcome type is
+// re-exported. Deleted once the callers thread Deps directly.
 
+import { createAuditPort } from '../adapters/gateways/audit'
+import { createPolicyPort } from '../adapters/gateways/policy'
 import {
   createRuntimeOrchestrationRepo,
   createRuntimeOrchestrationRepoFromBinding,
   type SessionRow,
 } from '../adapters/repos/runtime-orchestration'
-import { recordAudit } from '../audit'
 import type { RuntimeName } from '../contracts/environment-contracts'
 import type { Env } from '../env'
-import type { AuthScope } from '../usecases/ports'
-import { isRuntimeName, runtimeDriver, runtimeDriverName } from './drivers'
-import { safeRuntimeError } from './runtime-error'
-import { type RuntimeSecretEnvEntry, resolveRuntimeSecretEnv } from './secret-env'
+import type { AuthScope, CloudTurnMessage, SandboxRuntimeHost } from '../usecases/ports'
 import {
-  appendRuntimeEvent,
-  cloudTurnSystemAuth,
-  type Db,
-  findSession,
-  markInitialPromptFailed,
-  now,
-  type Repo,
-  RUNTIME_START_TIMEOUT_MS,
-  stringify,
-  withRepo,
-  withTimeout,
-} from './session-base'
-import { mcpConnectorIds, resolveMcpSnapshot } from './session-provisioning'
-import {
-  isRuntimePolicyDenied,
-  isRuntimeTurnCancelled,
-  runSessionTurn,
-  stopSessionRuntime as stopCloudSessionRuntime,
-} from './session-runtime'
-import {
-  type NormalizedEnvironmentSnapshot,
-  parseAgentSnapshot,
-  parseJson,
-  type ResourceRef,
-  type SerializedAgentVersion,
-} from './session-snapshot'
-import {
-  CONTINUATION_LIMIT_REASON,
-  MAX_CONTINUATION_DEPTH,
-  newTurnId,
-  TURN_LEASE_RETRY_DELAY_SECONDS,
-  turnLeaseExpiry,
-} from './session-state'
-import { buildSessionTurnCallbacks, loadRuntimeMessages, resolveSessionProviderModel } from './turn-driver'
-import { type CloudTurnMessage, cloudTurnsRunInline, enqueueCloudTurn } from './turn-queue'
+  type CloudTurnDeps,
+  type CloudTurnOutcome,
+  consumeCloudTurnMessage as consumeCloudTurnMessageUsecase,
+  dispatchInitialPrompt as dispatchInitialPromptUsecase,
+  executeCloudSessionTurn as executeCloudSessionTurnUsecase,
+  markCloudTurnDeadLettered as markCloudTurnDeadLetteredUsecase,
+  startSessionRuntimeForRow as startSessionRuntimeForRowUsecase,
+} from '../usecases/runtime/cloud-turn'
+import type { RuntimeSecretEnvEntry } from './secret-env'
+import { resolveRuntimeSecretEnv } from './secret-env'
+import type { Db, Repo } from './session-base'
+import { executeRuntimeToolCalls, runSessionTurn, startSessionRuntime, stopSessionRuntime } from './session-runtime'
+import type { NormalizedEnvironmentSnapshot, ResourceRef, SerializedAgentVersion } from './session-snapshot'
+import { createToolApprovalGate } from './tool-approvals'
+import { cloudTurnsRunInline, enqueueCloudTurn } from './turn-queue'
 
-// Per-invocation soft budget for new model turns (see executeCloudSessionTurn).
-const CLOUD_TURN_SOFT_BUDGET_MS = 4 * 60_000
+export type { CloudTurnOutcome }
+
+// The cloud sandbox runtime host, routed through the env-bound session-runtime
+// shim so the existing runtime tests' mocks of startSessionRuntime /
+// stopSessionRuntime / runSessionTurn (mocked at ./session-runtime) keep flowing
+// through the port surface.
+function cloudSandboxRuntime(env: Env): SandboxRuntimeHost {
+  return {
+    startCloudSession(input) {
+      return startSessionRuntime(env, input)
+    },
+    stopCloudSession(sandboxId) {
+      return stopSessionRuntime(env, sandboxId)
+    },
+    executeToolCalls(input) {
+      return executeRuntimeToolCalls(env, input)
+    },
+    runTurn(input) {
+      return runSessionTurn(env, input)
+    },
+  }
+}
+
+// The cloud-turn queue, routed through the env-bound turn-queue shim so the
+// existing runtime tests' mocks (enqueueCloudTurn / cloudTurnsRunInline) keep
+// flowing through the port surface.
+function cloudTurnQueue(env: Env) {
+  return {
+    enqueue: (message: CloudTurnMessage, opts?: { delaySeconds?: number }) =>
+      opts ? enqueueCloudTurn(env, message, opts) : enqueueCloudTurn(env, message),
+    runsInline: () => cloudTurnsRunInline(env),
+  }
+}
+
+// The runtime secret-env gateway, routed through the env-bound secret-env shim.
+function runtimeSecretEnv(env: Env, db: Db) {
+  return {
+    resolve: (scope: { organizationId: string; projectId: string }, items: unknown) =>
+      resolveRuntimeSecretEnv(env, db, scope, items),
+  }
+}
+
+// The approval gate factory seam, routed through the tool-approvals shim so its
+// createToolApprovalGate stays the single gate constructor.
+function approvalGateSeam(db: Db) {
+  return (values: {
+    auth: AuthScope
+    sessionId: string
+    sessionMetadata: Record<string, unknown>
+    appendEvent: (event: Record<string, unknown>, metadata: Record<string, unknown>) => Promise<string>
+  }) => createToolApprovalGate({ db, ...values })
+}
+
+function cloudTurnDeps(env: Env, repo: Repo): CloudTurnDeps {
+  return {
+    sessionOrchestration: repo,
+    policy: createPolicyPort(repo.db),
+    audit: createAuditPort(repo.db),
+    sandboxRuntime: cloudSandboxRuntime(env),
+    cloudTurnQueue: cloudTurnQueue(env),
+    runtimeSecretEnv: runtimeSecretEnv(env, repo.db),
+    createApprovalGate: approvalGateSeam(repo.db),
+  }
+}
 
 export async function startSessionRuntimeForRow(
   env: Env,
@@ -78,135 +114,8 @@ export async function startSessionRuntimeForRow(
     initialPrompt?: string
   },
 ) {
-  const { pending, agentSnapshot, environmentSnapshot, runtime, runtimeConfig, resourceRefs, initialPrompt } = input
-  const sessionEnv = input.env
-  const sessionSecretEnv = input.secretEnv ?? []
-  const sessionId = pending.id
-  const sandboxId = pending.sandboxId ?? sessionId.toLowerCase()
-  const runtimeName = runtime
-  const driver = runtimeDriver(runtimeName)
-  if (!driver.startCloudSession) {
-    throw new Error(`Runtime ${runtimeName} does not support cloud session startup`)
-  }
-  try {
-    const mcpSnapshot = await resolveMcpSnapshot(db, auth, sessionId, agentSnapshot, environmentSnapshot)
-    const runtimeEnvironmentSnapshot = environmentSnapshot ? { ...environmentSnapshot, runtimeConfig } : null
-    const resolvedSecretEnv = await resolveRuntimeSecretEnv(
-      env,
-      db,
-      { organizationId: auth.organization.id, projectId: auth.project.id },
-      sessionSecretEnv,
-    )
-    const startedRuntime = await withTimeout(
-      driver.startCloudSession(env, {
-        sessionId,
-        sandboxId,
-        runtime: runtimeName,
-        provider: agentSnapshot.providerId,
-        model: agentSnapshot.model,
-        agentSnapshot,
-        environmentSnapshot: runtimeEnvironmentSnapshot,
-        mcpSnapshot,
-        resourceRefs,
-        runtimeEnv: sessionEnv ?? {},
-        runtimeSecretEnv: sessionSecretEnv,
-        resolvedSecretEnv,
-      }),
-      RUNTIME_START_TIMEOUT_MS,
-      'Session runtime startup timed out',
-    )
-    const current = await findSession(db, auth, sessionId)
-    if (current?.state !== 'pending') {
-      if (current?.state !== 'idle') {
-        await stopCloudSessionRuntime(env, sandboxId).catch(() => undefined)
-      }
-      return
-    }
-    const startedAt = now()
-    const existingMetadata = parseJson<Record<string, unknown>>(pending.metadata) ?? {}
-    const metadata = {
-      ...existingMetadata,
-      ...startedRuntime.metadata,
-      runtimeDriver: runtimeDriverName(runtimeName, 'cloud'),
-      runtimeBackend: driver.cloudBackend,
-      runtimeProtocol: driver.cloudProtocol,
-      mcpConnectors: mcpConnectorIds(mcpSnapshot),
-    }
-    const started = {
-      sandboxId,
-      piRuntimeId: null,
-      piProcessId: null,
-      runtimeEndpointPath: startedRuntime.runtimeEndpointPath,
-      state: 'idle',
-      metadata: stringify(metadata),
-      startedAt,
-      updatedAt: startedAt,
-    }
-    const recorded = await createRuntimeOrchestrationRepo(db).updateSessionWhenState(
-      auth.project.id,
-      sessionId,
-      'pending',
-      started,
-    )
-    if (!recorded) {
-      // The row left 'pending' between the re-read and this CAS (concurrent stop
-      // or a duplicate session.start). The just-provisioned sandbox is recorded
-      // on no row, so tear it down here — let a teardown error reach the catch.
-      await stopCloudSessionRuntime(env, sandboxId)
-      return
-    }
-    await recordAudit(db, {
-      auth,
-      action: 'session.runtime.start',
-      resourceType: 'session',
-      resourceId: sessionId,
-      outcome: 'success',
-      sessionId,
-      metadata: { sandboxId: startedRuntime.sandboxId, runtimeEndpointPath: startedRuntime.runtimeEndpointPath },
-    })
-    if (initialPrompt) {
-      await dispatchInitialPrompt(
-        env,
-        db,
-        auth,
-        { ...pending, ...started, stateReason: null, stoppedAt: null, archivedAt: null },
-        initialPrompt,
-      )
-    }
-  } catch (error) {
-    const safeError = safeRuntimeError(error)
-    const failedAt = now()
-    const failed = {
-      state: 'error',
-      stateReason: safeError.message,
-      metadata: stringify({
-        ...(parseJson<Record<string, unknown>>(pending.metadata) ?? {}),
-        runtimeDriver: runtimeDriverName(runtimeName, 'cloud'),
-        runtimeBackend: driver.cloudBackend,
-        error: safeError,
-      }),
-      updatedAt: failedAt,
-    }
-    await createRuntimeOrchestrationRepo(db).updateSessionWhenState(auth.project.id, sessionId, 'pending', failed)
-    await recordAudit(db, {
-      auth,
-      action: 'session.runtime.start',
-      resourceType: 'session',
-      resourceId: sessionId,
-      outcome: 'failure',
-      sessionId,
-      metadata: { ...safeError },
-    })
-    await stopCloudSessionRuntime(env, sandboxId).catch(() => undefined)
-  }
+  await startSessionRuntimeForRowUsecase(cloudTurnDeps(env, createRuntimeOrchestrationRepo(db)), auth, input)
 }
-
-// ── Cloud turn execution + queue consumer ───────────────────────────────────
-
-export type CloudTurnOutcome =
-  | { ok: true; requiresAction?: boolean; paused?: boolean }
-  | { ok: false; cancelled: true }
-  | { ok: false; cancelled: false; error: ReturnType<typeof safeRuntimeError> }
 
 export async function executeCloudSessionTurn(
   env: Env,
@@ -216,258 +125,13 @@ export async function executeCloudSessionTurn(
   work: { prompt?: string; continuation?: boolean },
   auditAction: 'session.initial_prompt' | 'session.command',
 ): Promise<CloudTurnOutcome> {
-  const repo = withRepo(db)
-  let callbacks: ReturnType<typeof buildSessionTurnCallbacks> | null = null
-  try {
-    const agentSnapshot = parseAgentSnapshot(session.agentSnapshot)
-    if (!agentSnapshot) {
-      throw new Error('Session agent snapshot is required')
-    }
-    const modelConfig = parseJson<Record<string, unknown>>(session.modelConfig) ?? {}
-    const messages = await loadRuntimeMessages(repo, session.id)
-    const { provider: turnProvider, model: turnModel } = resolveSessionProviderModel(
-      session,
-      agentSnapshot,
-      modelConfig,
-    )
-    callbacks = buildSessionTurnCallbacks({
-      repo,
-      auth,
-      session,
-      recordPolicyDenial: async (blocked) => {
-        const operationFields =
-          blocked.operation.operation === 'command'
-            ? { command: blocked.operation.command }
-            : { host: blocked.operation.host }
-        await appendRuntimeEvent(repo, {
-          auth,
-          sessionId: session.id,
-          event: {
-            type: 'policy_denied',
-            category: blocked.decision.category,
-            ruleId: blocked.decision.rule,
-            resourceType: blocked.operation.resourceType,
-            resourceId: blocked.operation.resourceId,
-            decision: blocked.decision,
-            operation: blocked.operation.operation,
-            ...operationFields,
-          },
-          metadata: { source: 'policy' },
-        })
-        await recordAudit(db, {
-          auth,
-          action: 'runtime_sandbox.operation',
-          resourceType: blocked.operation.resourceType,
-          resourceId: blocked.operation.resourceId,
-          outcome: 'denied',
-          sessionId: session.id,
-          policyCategory: blocked.decision.category,
-          metadata: { operation: blocked.operation.operation, ...operationFields, decision: blocked.decision },
-        })
-      },
-    })
-    const startedAt = Date.now()
-    const result = await runSessionTurn(env, {
-      sessionId: session.id,
-      sandboxId: session.sandboxId ?? '',
-      provider: turnProvider,
-      model: turnModel,
-      agentSnapshot,
-      ...(work.prompt !== undefined ? { prompt: work.prompt } : {}),
-      ...(work.continuation ? { continuation: true } : {}),
-      messages,
-      ...(cloudTurnsRunInline(env) ? {} : { shouldPause: () => Date.now() - startedAt > CLOUD_TURN_SOFT_BUDGET_MS }),
-      ensureActive: callbacks.ensureActive,
-      onEvent: callbacks.onEvent,
-      resolveToolResult: callbacks.resolveToolResult,
-      approveToolCall: callbacks.approveToolCall,
-    })
-    if (result.status === 'idle') {
-      await repo.updateSessionWhenState(auth.project.id, session.id, 'running', {
-        state: 'idle',
-        updatedAt: now(),
-      })
-    }
-
-    if (result.status === 'paused') {
-      await repo.updateSessionWhenState(auth.project.id, session.id, 'running', {
-        updatedAt: now(),
-      })
-      // The queue consumer owns the continuation (lease renewal + step cap), so a
-      // paused turn just reports it instead of enqueuing the next step itself.
-      return { ok: true, paused: true }
-    }
-
-    await recordAudit(db, {
-      auth,
-      action: auditAction,
-      resourceType: 'session',
-      resourceId: session.id,
-      outcome: 'success',
-      sessionId: session.id,
-      metadata:
-        auditAction === 'session.initial_prompt' ? { source: 'api', promptDispatched: true } : { type: 'prompt' },
-    })
-    return { ok: true }
-  } catch (error) {
-    if (isRuntimeTurnCancelled(error)) {
-      if (callbacks?.approvalGate.requiresAction()) {
-        return { ok: true, requiresAction: true }
-      }
-      return { ok: false, cancelled: true }
-    }
-    const safeError = safeRuntimeError(error)
-    if (callbacks?.wasPolicyDenied() || isRuntimePolicyDenied(error)) {
-      await repo.updateSessionWhenState(auth.project.id, session.id, 'running', {
-        state: 'idle',
-        stateReason: 'policy-denied',
-        updatedAt: now(),
-      })
-      return { ok: false, cancelled: false, error: safeError }
-    }
-    await markInitialPromptFailed(db, auth, session, safeError.message)
-    return { ok: false, cancelled: false, error: safeError }
-  }
-}
-
-// Maps a completed turn's outcome to the continuation decision under the lease we
-// hold (turnId). A paused turn extends the chain — bumping the depth, enforcing
-// the cap, renewing the lease, and enqueuing the next step. Any terminal outcome
-// releases the lease so the next queued turn can claim it.
-async function handleTurnOutcome(
-  env: Env,
-  repo: Repo,
-  auth: AuthScope,
-  session: SessionRow,
-  turnId: string,
-  auditAction: 'session.initial_prompt' | 'session.command',
-  outcome: CloudTurnOutcome,
-): Promise<void> {
-  if (outcome.ok && outcome.paused) {
-    const depth = await repo.incrementContinuationDepth(auth.project.id, session.id, turnId)
-    if (depth >= MAX_CONTINUATION_DEPTH) {
-      await repo.releaseTurnLease(auth.project.id, session.id, turnId, {
-        state: 'idle',
-        stateReason: CONTINUATION_LIMIT_REASON,
-        updatedAt: now(),
-      })
-      return
-    }
-    await repo.renewTurnLease(auth.project.id, session.id, turnId, turnLeaseExpiry())
-    await enqueueCloudTurn(env, {
-      type: 'session.step',
-      sessionId: session.id,
-      organizationId: auth.organization.id,
-      projectId: auth.project.id,
-      turnId,
-      auditAction,
-    })
-    return
-  }
-  // Terminal (idle / error / cancelled / requires-action): executeCloudSessionTurn
-  // already set the session state; just clear the lease for the next turn.
-  await repo.releaseTurnLease(auth.project.id, session.id, turnId, {})
-}
-
-// Runs a fresh turn under a newly-acquired lease. If the lease is held by another
-// in-flight turn the message is deferred (re-enqueued after a short delay) instead
-// of racing it — this is the per-session serialization (H1).
-async function runLeasedTurn(
-  env: Env,
-  db: Db,
-  repo: Repo,
-  auth: AuthScope,
-  session: SessionRow,
-  work: { prompt?: string; continuation?: boolean },
-  auditAction: 'session.initial_prompt' | 'session.command',
-  deferMessage: CloudTurnMessage,
-): Promise<void> {
-  const turnId = newTurnId()
-  const acquiredAt = now()
-  const acquired = await repo.acquireTurnLease(
-    auth.project.id,
-    session.id,
-    turnId,
-    turnLeaseExpiry(acquiredAt),
-    acquiredAt,
+  return executeCloudSessionTurnUsecase(
+    cloudTurnDeps(env, createRuntimeOrchestrationRepo(db)),
+    auth,
+    session,
+    work,
+    auditAction,
   )
-  if (!acquired) {
-    await enqueueCloudTurn(env, deferMessage, { delaySeconds: TURN_LEASE_RETRY_DELAY_SECONDS })
-    return
-  }
-  const outcome = await executeCloudSessionTurn(env, db, auth, session, work, auditAction)
-  await handleTurnOutcome(env, repo, auth, session, turnId, auditAction, outcome)
-}
-
-export async function consumeCloudTurnMessage(env: Env, message: CloudTurnMessage): Promise<void> {
-  const repo = createRuntimeOrchestrationRepoFromBinding(env.DB)
-  const db = repo.db
-  const auth = cloudTurnSystemAuth(message)
-  const session = await findSession(db, auth, message.sessionId)
-  if (!session) {
-    return
-  }
-  if (message.type === 'session.start') {
-    if (session.state !== 'pending') {
-      return
-    }
-    const agentSnapshot = parseAgentSnapshot(session.agentSnapshot)
-    if (!agentSnapshot) {
-      throw new Error('Session agent snapshot is required for cloud startup')
-    }
-    // message.runtime is an untrusted queue string; an unknown runtime would
-    // otherwise reach runtimeDriver() and fail late, after side effects. Mark
-    // the session errored up front instead of casting blindly.
-    if (!isRuntimeName(message.runtime)) {
-      await markCloudTurnDeadLettered(env, message)
-      return
-    }
-    await startSessionRuntimeForRow(env, db, auth, {
-      pending: session,
-      agentSnapshot,
-      environmentSnapshot: parseJson<NormalizedEnvironmentSnapshot>(session.environmentSnapshot),
-      runtime: message.runtime,
-      runtimeConfig: message.runtimeConfig,
-      resourceRefs: message.resourceRefs,
-      env: message.runtimeEnv,
-      secretEnv: message.runtimeSecretEnv,
-      ...(message.initialPrompt !== undefined ? { initialPrompt: message.initialPrompt } : {}),
-    })
-    return
-  }
-  if (message.type === 'session.step') {
-    if (session.state !== 'running') {
-      return
-    }
-    if (message.turnId) {
-      // Budget continuation of an in-flight chain: renew the SAME lease so a
-      // concurrent prompt that arrived mid-chain stays deferred. If the lease was
-      // lost (cleared, or reclaimed after expiry by another worker) — stop.
-      const renewed = await repo.renewTurnLease(auth.project.id, session.id, message.turnId, turnLeaseExpiry())
-      if (!renewed) {
-        return
-      }
-      const outcome = await executeCloudSessionTurn(env, db, auth, session, { continuation: true }, message.auditAction)
-      await handleTurnOutcome(env, repo, auth, session, message.turnId, message.auditAction, outcome)
-      return
-    }
-    // Approval-resume (continuation with no held lease): acquire a fresh lease.
-    await runLeasedTurn(env, db, repo, auth, session, { continuation: true }, message.auditAction, message)
-    return
-  }
-  if (session.state === 'idle') {
-    const reclaimed = await repo.updateSessionWhenState(auth.project.id, session.id, 'idle', {
-      state: 'running',
-      stateReason: null,
-      updatedAt: now(),
-    })
-    if (!reclaimed) {
-      return
-    }
-  } else if (session.state !== 'running') {
-    return
-  }
-  await runLeasedTurn(env, db, repo, auth, session, { prompt: message.prompt }, message.auditAction, message)
 }
 
 export async function dispatchInitialPrompt(
@@ -477,51 +141,18 @@ export async function dispatchInitialPrompt(
   session: SessionRow,
   initialPrompt: string,
 ) {
-  const submittedAt = now()
-  const started = await createRuntimeOrchestrationRepo(db).updateSessionWhenState(
-    auth.project.id,
-    session.id,
-    ['idle', 'running'],
-    { state: 'running', stateReason: null, updatedAt: submittedAt },
+  await dispatchInitialPromptUsecase(
+    cloudTurnDeps(env, createRuntimeOrchestrationRepo(db)),
+    auth,
+    session,
+    initialPrompt,
   )
-  if (!started) {
-    throw new Error('Session runtime is no longer active')
-  }
-
-  if (cloudTurnsRunInline(env)) {
-    await executeCloudSessionTurn(env, db, auth, session, { prompt: initialPrompt }, 'session.initial_prompt')
-    return
-  }
-  await enqueueCloudTurn(env, {
-    type: 'session.turn',
-    sessionId: session.id,
-    organizationId: auth.organization.id,
-    projectId: auth.project.id,
-    prompt: initialPrompt,
-    auditAction: 'session.initial_prompt',
-  })
 }
 
-// A cloud turn message that exhausted its retries lands in the dead-letter queue.
-// Mark the stranded session errored (clearing any lease it held) so clients
-// recover it immediately instead of waiting for the 20-minute stall sweep.
+export async function consumeCloudTurnMessage(env: Env, message: CloudTurnMessage): Promise<void> {
+  await consumeCloudTurnMessageUsecase(cloudTurnDeps(env, createRuntimeOrchestrationRepoFromBinding(env.DB)), message)
+}
+
 export async function markCloudTurnDeadLettered(env: Env, message: CloudTurnMessage): Promise<void> {
-  const repo = createRuntimeOrchestrationRepoFromBinding(env.DB)
-  const auth = cloudTurnSystemAuth(message)
-  await repo.updateSessionWhenState(auth.project.id, message.sessionId, ['pending', 'running'], {
-    state: 'error',
-    stateReason: 'cloud-turn-failed',
-    activeTurnId: null,
-    turnLeaseExpiresAt: null,
-    updatedAt: now(),
-  })
-  await recordAudit(repo.db, {
-    auth,
-    action: message.type === 'session.start' ? 'session.runtime.start' : 'session.command',
-    resourceType: 'session',
-    resourceId: message.sessionId,
-    outcome: 'failure',
-    sessionId: message.sessionId,
-    metadata: { reason: 'cloud_turn_dead_lettered', messageType: message.type },
-  })
+  await markCloudTurnDeadLetteredUsecase(cloudTurnDeps(env, createRuntimeOrchestrationRepoFromBinding(env.DB)), message)
 }

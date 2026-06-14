@@ -7,6 +7,15 @@ export {
   type ToolApprovalGate,
   writeSessionApprovalState,
 } from './approval-gate'
+export {
+  type CloudTurnDeps,
+  type CloudTurnOutcome,
+  consumeCloudTurnMessage,
+  dispatchInitialPrompt,
+  executeCloudSessionTurn,
+  markCloudTurnDeadLettered,
+  startSessionRuntimeForRow,
+} from './cloud-turn'
 export { appendRuntimeEvent, loadRuntimeMessages, markInitialPromptFailed } from './events'
 export {
   mcpConnectorIds,

@@ -38,8 +38,11 @@ vi.mock('./session-runtime', async (importOriginal) => ({
   stopSessionRuntime: stopSessionRuntimeMock,
 }))
 
-vi.mock('./session-provisioning', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./session-provisioning')>()),
+// startSessionRuntimeForRow now resolves the MCP snapshot through the provisioning
+// usecase (deps-first) and the secret env through deps.runtimeSecretEnv (built by
+// the shim from ./secret-env). Mock those seams so no real store/policy read runs.
+vi.mock('../usecases/runtime/provisioning', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../usecases/runtime/provisioning')>()),
   resolveMcpSnapshot: resolveMcpSnapshotMock,
 }))
 
