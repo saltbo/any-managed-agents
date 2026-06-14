@@ -18,13 +18,9 @@ import {
   runtimeRequestHasTestOnlyFields,
   sandboxOperationFromRuntimePath,
 } from './runtime-proxy-policy'
-import {
-  markRuntimeExecutionFailed,
-  recordRuntimeMessageOutcome,
-  recordRuntimeMessageSubmission,
-} from './runtime-proxy-turn'
 import { newId, type Repo } from './session-base'
 import { executeRuntimeToolCalls, isRuntimeTurnCancelled } from './session-runtime'
+import { markRuntimeExecutionFailed, recordRuntimeMessageOutcome, recordRuntimeMessageSubmission } from './turn-driver'
 
 // The env-bound /api/v1/runtime data-plane proxy. Its wire shape is dictated by
 // external protocols (ACP tunnel, OpenAI-compatible inference, WebSocket RPC),
@@ -78,7 +74,7 @@ async function handleTestRuntimeWebSocket(
     return
   }
 
-  const correlationId = await recordRuntimeMessageSubmission(repo, auth, session, command)
+  await recordRuntimeMessageSubmission(repo, auth, session)
   const response = `AMA runtime processed: ${command.message}`
   const events = [
     { type: 'agent_start', sessionId: session.id },
@@ -117,19 +113,11 @@ async function handleTestRuntimeWebSocket(
   for (const event of events) {
     sendRuntimeJson(socket, event)
   }
-  await recordRuntimeMessageOutcome(
-    repo,
-    { AMA_RUNTIME_MODE: 'test' } as Env,
-    auth,
-    session,
-    {
-      ...command,
-      response,
-      toolCalls: [],
-    },
-    correlationId,
-    { executeTools: true },
-  )
+  await recordRuntimeMessageOutcome(repo, { AMA_RUNTIME_MODE: 'test' } as Env, auth, session, {
+    ...command,
+    response,
+    toolCalls: [],
+  })
 }
 
 async function handleRuntimeWebSocketMessage(
@@ -157,9 +145,9 @@ async function handleRuntimeWebSocketMessage(
     return
   }
   if (command.type !== 'get_state') {
-    const correlationId = await recordRuntimeMessageSubmission(repo, auth, session, command)
+    await recordRuntimeMessageSubmission(repo, auth, session)
     try {
-      await recordRuntimeMessageOutcome(repo, env, auth, session, command, correlationId, { executeTools: false })
+      await recordRuntimeMessageOutcome(repo, env, auth, session, command)
     } catch (error) {
       await markRuntimeExecutionFailed(repo, auth, session, error)
       socket.close(1011, 'Runtime processing failed')
@@ -360,11 +348,9 @@ export async function handleRuntimeProxyRequest<E extends HonoEnv>(
         path,
       })
     }
-    const correlationId = await recordRuntimeMessageSubmission(repo, resolvedAuth, session, body)
+    await recordRuntimeMessageSubmission(repo, resolvedAuth, session)
     try {
-      await recordRuntimeMessageOutcome(repo, c.env, resolvedAuth, session, body, correlationId, {
-        executeTools: c.env.AMA_RUNTIME_MODE === 'test',
-      })
+      await recordRuntimeMessageOutcome(repo, c.env, resolvedAuth, session, body)
     } catch (error) {
       if (isRuntimeTurnCancelled(error)) {
         return errorResponse(c, 409, 'conflict', 'Session runtime is no longer active')
