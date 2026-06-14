@@ -27,10 +27,9 @@ const RULES: Rule[] = [
     id: 'as-unknown-as',
     description: 'Double cast `as unknown as` bypasses the type checker entirely.',
     pattern: /\bas unknown as\b/g,
-    // Remaining: server/http/sessions.ts (serializeSession — fixed in the Session
-    // schema pass) and server/http/runtime-ai.ts (a §1.8 external-protocol
-    // boundary). Drive to 0 as the contract refactor lands.
-    baseline: 2,
+    // Remaining: server/http/runtime-ai.ts only — a §1.8 external-protocol
+    // boundary where the Workers AI binding is mistyped. Everything else is gone.
+    baseline: 1,
   },
   {
     id: 'json-blackhole',

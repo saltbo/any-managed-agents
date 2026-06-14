@@ -34,6 +34,8 @@ jobs:
       - run: pnpm run lint
       - run: pnpm run lint:arch
       - run: pnpm run lint:spec
+      - run: pnpm run lint:escapes
+      - run: pnpm run lint:types
       - run: pnpm run typecheck
       - run: pnpm run openapi:check
       - run: pnpm --filter @any-managed-agents/sdk run typecheck

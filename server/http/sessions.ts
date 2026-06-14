@@ -404,7 +404,32 @@ const SessionApprovalListResponseSchema = listResponseSchema('SessionApprovalLis
 // type so the typed-response routes accept them.
 
 function serializeSession(record: SessionRecord): z.infer<typeof SessionSchema> {
-  return record as unknown as z.infer<typeof SessionSchema>
+  // The JSON snapshot columns are typed loosely on the record but structurally
+  // match these schemas (the repo builds them from the same serializers), so each
+  // loose field is narrowed at this boundary instead of laundering the whole DTO.
+  return {
+    id: record.id,
+    projectId: record.projectId,
+    agentId: record.agentId,
+    agentVersionId: record.agentVersionId,
+    agentSnapshot: record.agentSnapshot as z.infer<typeof AgentVersionSnapshotSchema>,
+    environmentId: record.environmentId,
+    environmentVersionId: record.environmentVersionId,
+    environmentSnapshot: record.environmentSnapshot as z.infer<typeof EnvironmentVersionSnapshotSchema> | null,
+    title: record.title,
+    resourceRefs: record.resourceRefs as z.infer<typeof ResourceRefSchema>[],
+    env: record.env,
+    secretEnv: record.secretEnv,
+    runtimeMetadata: record.runtimeMetadata as z.infer<typeof SessionRuntimeMetadataSchema>,
+    state: record.state as z.infer<typeof SessionSchema>['state'],
+    stateReason: record.stateReason,
+    metadata: record.metadata,
+    startedAt: record.startedAt,
+    stoppedAt: record.stoppedAt,
+    archivedAt: record.archivedAt,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  }
 }
 
 function serializeConnection(record: SessionConnectionRecord): z.infer<typeof SessionConnectionSchema> {
