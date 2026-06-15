@@ -19,9 +19,13 @@ export const RUNTIME_CATALOG: readonly RuntimeCatalogEntry[] = [
     hostingModes: ['cloud', 'self_hosted'],
     providerModels: [
       { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6' },
-      // A second tool-calling Workers AI model gives the cloud runtime a
-      // fallback when one model's upstream is degraded.
-      { provider: 'workers-ai', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' },
+      // Alternate tool-calling Workers AI models for when kimi-k2.6's upstream
+      // is degraded. gpt-oss-120b is a different-vendor backend (best failover
+      // isolation); kimi-k2.7-code is the newer same-family model. llama-3.3-70b
+      // was tried and dropped: it returns no tool_calls in this harness, so it
+      // cannot drive the agentic loop.
+      { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.7-code' },
+      { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b' },
     ],
   },
   {
