@@ -191,7 +191,7 @@ describe('tool-executor', () => {
     expect(sandboxMock.exec).not.toHaveBeenCalled()
   })
 
-  it('forwards a live turn signal into the sandbox exec options', async () => {
+  it('does not forward the abort signal to the sandbox exec (Workers RPC cannot serialize it)', async () => {
     sandboxMock.exec.mockResolvedValue({ stdout: 'ok', stderr: '', exitCode: 0 })
     const executor = new CloudflareSandboxToolExecutor({ SANDBOX: {} } as Env)
     const controller = new AbortController()
@@ -207,10 +207,12 @@ describe('tool-executor', () => {
       controller.signal,
     )
 
+    // The signal crosses the Sandbox binding's RPC boundary, which rejects with
+    // "AbortSignal serialization is not enabled" — cancellation is handled by the
+    // pre-exec abort check and stop() → destroy() instead, never over RPC.
     expect(sandboxMock.exec).toHaveBeenCalledWith('git status', {
       cwd: '/workspace',
       timeout: 600_000,
-      signal: controller.signal,
     })
   })
 

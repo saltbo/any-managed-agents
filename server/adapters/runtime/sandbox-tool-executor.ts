@@ -88,7 +88,7 @@ export class CloudflareSandboxToolExecutor implements ToolExecutor {
     }
     const startedAt = Date.now()
     const sandbox = await this.sandbox(input.sandboxId)
-    const output = await this.executeInSandbox(sandbox, input, signal)
+    const output = await this.executeInSandbox(sandbox, input)
     return {
       toolCallId: input.toolCallId,
       toolName: input.toolName,
@@ -116,8 +116,12 @@ export class CloudflareSandboxToolExecutor implements ToolExecutor {
   private async executeInSandbox(
     sandbox: Awaited<ReturnType<CloudflareSandboxToolExecutor['sandbox']>>,
     input: ToolExecutionInput,
-    signal?: AbortSignal,
   ) {
+    // An AbortSignal cannot be passed to the Sandbox binding: it crosses a
+    // Workers RPC boundary, which rejects with "AbortSignal serialization is
+    // not enabled". A cancelled turn is instead handled by the pre-exec abort
+    // check (no new tool calls start) plus stop() → sandbox.destroy(), which
+    // tears down any in-flight command. The per-exec timeout bounds hangs.
     if (input.toolName === 'sandbox.exec') {
       // Bounded: an unbounded hang (network stall, interactive prompt) would
       // otherwise consume the whole turn budget and strand the session.
@@ -125,7 +129,6 @@ export class CloudflareSandboxToolExecutor implements ToolExecutor {
         await sandbox.exec(commandFromInput(input.input), {
           cwd: input.cwd ?? '/workspace',
           timeout: SANDBOX_EXEC_TIMEOUT_MS,
-          ...(signal ? { signal } : {}),
         }),
       )
     }
@@ -144,7 +147,6 @@ export class CloudflareSandboxToolExecutor implements ToolExecutor {
         await sandbox.exec(`curl -fsS --max-time 60 ${shellQuote(urlFromInput(input.input))}`, {
           cwd: input.cwd ?? '/workspace',
           timeout: SANDBOX_FETCH_TIMEOUT_MS,
-          ...(signal ? { signal } : {}),
         }),
       )
     }
