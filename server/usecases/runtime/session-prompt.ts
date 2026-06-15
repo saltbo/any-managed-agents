@@ -53,7 +53,12 @@ export async function dispatchSessionPrompt(
   }
   if (!session.sandboxId) {
     const metadata = parseJson<Record<string, unknown>>(session.metadata) ?? {}
+    // Live channel delivery is only valid mid-turn: an idle session's agent has
+    // ended its turn and is no longer reading the channel, so a "live" prompt
+    // would be dropped (e.g. a reject arriving after the agent submitted review).
+    // An idle self-hosted session must resume through a fresh work item instead.
     if (
+      session.state === 'running' &&
       runtimeSupportsLivePrompts(sessionRuntimeFromMetadata(metadata)) &&
       (await deps.runnerChannel.isAccepted(session.id))
     ) {
