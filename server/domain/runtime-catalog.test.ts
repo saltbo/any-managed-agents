@@ -196,7 +196,9 @@ describe('cloudRuntimeModels', () => {
     // Every entry is a concrete Workers AI model with a display name (never a wildcard).
     expect(models.length).toBeGreaterThanOrEqual(3)
     expect(
-      models.every((m) => m.provider === 'workers-ai' && m.model.startsWith('@cf/') && typeof m.displayName === 'string'),
+      models.every(
+        (m) => m.provider === 'workers-ai' && m.model.startsWith('@cf/') && typeof m.displayName === 'string',
+      ),
     ).toBe(true)
     expect(models.some((m) => m.model === '*')).toBe(false)
   })

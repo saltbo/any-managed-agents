@@ -40,7 +40,9 @@ describe('[CF] v1 runtime models', () => {
       displayName: 'Kimi K2.7 Code (Workers AI)',
     })
     expect(json.data.length).toBeGreaterThanOrEqual(3)
-    expect(json.data.every((m) => m.provider === 'workers-ai' && m.model.startsWith('@cf/') && !!m.displayName)).toBe(true)
+    expect(json.data.every((m) => m.provider === 'workers-ai' && m.model.startsWith('@cf/') && !!m.displayName)).toBe(
+      true,
+    )
   })
 
   it('returns an empty catalog for self-hosted-only runtimes', async () => {

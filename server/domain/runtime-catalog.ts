@@ -32,7 +32,11 @@ export const RUNTIME_CATALOG: readonly RuntimeCatalogEntry[] = [
       { provider: 'workers-ai', model: '@cf/nvidia/nemotron-3-120b-a12b', displayName: 'Nemotron 3 120B (Workers AI)' },
       { provider: 'workers-ai', model: '@cf/google/gemma-4-26b-a4b-it', displayName: 'Gemma 4 26B (Workers AI)' },
       { provider: 'workers-ai', model: '@cf/zai-org/glm-4.7-flash', displayName: 'GLM 4.7 Flash (Workers AI)' },
-      { provider: 'workers-ai', model: '@cf/ibm-granite/granite-4.0-h-micro', displayName: 'Granite 4.0 H Micro (Workers AI)' },
+      {
+        provider: 'workers-ai',
+        model: '@cf/ibm-granite/granite-4.0-h-micro',
+        displayName: 'Granite 4.0 H Micro (Workers AI)',
+      },
       { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6', displayName: 'Kimi K2.6 (Workers AI)' },
     ],
   },
