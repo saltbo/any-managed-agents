@@ -300,6 +300,12 @@ export declare const operations: readonly [{
     readonly tags: readonly ["Runners"];
 }, {
     readonly method: "GET";
+    readonly path: "/api/v1/runtimes/{runtime}/models";
+    readonly operationId: "listRuntimeModels";
+    readonly summary: "List a runtime's cloud models";
+    readonly tags: readonly ["Runtimes"];
+}, {
+    readonly method: "GET";
     readonly path: "/api/v1/sessions/{sessionId}/approvals";
     readonly operationId: "listSessionApprovals";
     readonly summary: "List tool approvals for a session";
