@@ -36,12 +36,15 @@ export const RUNTIME_CATALOG: readonly RuntimeCatalogEntry[] = [
   },
 ]
 
-// Runtimes whose bridge accepts mid-run prompt injection over the runner
-// session channel. ama runs the shared runtime-core engine and loops a
-// continuation turn per injected prompt; claude-code/copilot resume their SDK
-// session. codex runs one prompt per process, so its session commands must
-// queue as new work items instead.
-const LIVE_PROMPT_RUNTIMES: ReadonlySet<RuntimeName> = new Set(['ama', 'claude-code', 'copilot'])
+// Runtimes whose bridge reliably accepts mid-run prompt injection over the
+// runner session channel. Only ama qualifies: it runs the shared runtime-core
+// engine and loops a continuation turn per injected prompt. The SDK-session
+// runtimes (claude-code, copilot) and the one-prompt-per-process runtime
+// (codex) cannot — a prompt injected as a turn ends (e.g. a reject arriving
+// right after the agent submitted review) races the SDK loop exit and is
+// silently dropped. They queue a fresh resume work item instead, which the
+// runner picks up as a new turn.
+const LIVE_PROMPT_RUNTIMES: ReadonlySet<RuntimeName> = new Set(['ama'])
 
 export function runtimeSupportsLivePrompts(runtime: RuntimeName) {
   return LIVE_PROMPT_RUNTIMES.has(runtime)
