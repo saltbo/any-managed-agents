@@ -17,13 +17,20 @@ export const RUNTIME_CATALOG: readonly RuntimeCatalogEntry[] = [
   {
     runtime: 'ama',
     hostingModes: ['cloud', 'self_hosted'],
-    // Workers AI models verified to emit tool_calls in this harness (probed via
-    // the runtime-ai proxy against live Workers AI). First entry is the default
-    // clients pick. kimi-k2.7-code + gpt-oss-120b are also proven end-to-end
-    // (full agentic loop → PR); the rest passed the tool_call probe. Models that
-    // returned no tool_calls are excluded (llama-3.1/3.3/4-scout, qwen2.5-coder,
-    // qwq-32b, deepseek-r1, gemma-sea-lion). kimi-k2.6 is last — its upstream is
-    // currently degraded.
+    // The cloud runtime calls env.AI.run(model), where provider is always
+    // 'workers-ai' (the AI binding): an '@cf/...' id runs a native Workers AI
+    // model; a '{vendor}/{model}' id (anthropic/openai/...) auto-routes through
+    // AI Gateway to that vendor. First entry = the default clients pick — kept a
+    // free @cf model so the default never incurs gateway billing.
+    //
+    // @cf models: free daily allocation; tool_calls verified in this harness
+    // (probed via the runtime-ai proxy). Excluded the @cf ones that returned no
+    // tool_calls (llama-3.1/3.3/4-scout, qwen2.5-coder, qwq-32b, deepseek-r1,
+    // gemma-sea-lion). kimi-k2.6 last — its upstream is currently degraded.
+    //
+    // Third-party (anthropic/openai): ids verified valid against the gateway;
+    // they bill via AI Gateway Unified Billing or BYOK (NOT the free @cf
+    // allocation) — native tool-callers, per-model run pending gateway funding.
     providerModels: [
       { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.7-code', displayName: 'Kimi K2.7 Code (Workers AI)' },
       { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', displayName: 'GPT-OSS 120B (Workers AI)' },
@@ -38,6 +45,17 @@ export const RUNTIME_CATALOG: readonly RuntimeCatalogEntry[] = [
         displayName: 'Granite 4.0 H Micro (Workers AI)',
       },
       { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6', displayName: 'Kimi K2.6 (Workers AI)' },
+      // Third-party via AI Gateway (Unified Billing / BYOK; not free):
+      { provider: 'workers-ai', model: 'anthropic/claude-opus-4', displayName: 'Claude Opus 4 (Anthropic)' },
+      { provider: 'workers-ai', model: 'anthropic/claude-sonnet-4', displayName: 'Claude Sonnet 4 (Anthropic)' },
+      { provider: 'workers-ai', model: 'anthropic/claude-fable-5', displayName: 'Claude Fable 5 (Anthropic)' },
+      { provider: 'workers-ai', model: 'openai/gpt-5.2', displayName: 'GPT-5.2 (OpenAI)' },
+      { provider: 'workers-ai', model: 'openai/gpt-5', displayName: 'GPT-5 (OpenAI)' },
+      { provider: 'workers-ai', model: 'openai/gpt-5-mini', displayName: 'GPT-5 mini (OpenAI)' },
+      { provider: 'workers-ai', model: 'openai/gpt-4.1', displayName: 'GPT-4.1 (OpenAI)' },
+      { provider: 'workers-ai', model: 'openai/gpt-4.1-mini', displayName: 'GPT-4.1 mini (OpenAI)' },
+      { provider: 'workers-ai', model: 'openai/gpt-4o', displayName: 'GPT-4o (OpenAI)' },
+      { provider: 'workers-ai', model: 'openai/o3', displayName: 'o3 (OpenAI)' },
     ],
   },
   {
