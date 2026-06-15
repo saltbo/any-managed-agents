@@ -1,5 +1,5 @@
 import type { AssistantMessage, Context, Model, ToolCall, Usage } from '@earendil-works/pi-ai'
-import { isRuntimeTurnCancelled, ProviderCallError } from '../../../runtime-core/errors'
+import { isRuntimeTurnCancelled, ProviderCallError, RuntimeTurnCancelledError } from '../../../runtime-core/errors'
 import type { ModelClient } from '../../../runtime-core/ports'
 import { assistantMessage, ZERO_USAGE } from '../../../runtime-core/turn-engine'
 import { extractProviderUsage, normalizeProviderError, providerFamily } from '../../domain/provider-adapter'
@@ -275,11 +275,29 @@ function testAssistantMessage(model: Model<string>, context: Context) {
   })
 }
 
+// A single transient Workers AI failure (capacity, 5xx, or an opaque "unknown"
+// with no status) must not kill a multi-turn cloud session: the turn engine
+// treats any ProviderCallError as terminal, so transient errors are retried
+// here in the adapter before one is surfaced.
+const PROVIDER_MAX_ATTEMPTS = 3
+
+function providerRetryBackoffMs(attempt: number): number {
+  return Math.min(500 * 2 ** (attempt - 1), 4000)
+}
+
+function isRetryableProviderError(error: ProviderCallError): boolean {
+  const { category, retryable } = error.normalized
+  // rate_limit/network are already flagged retryable. This adapter only ever
+  // talks to Workers AI, which surfaces transient upstream/capacity failures
+  // as an opaque 'unknown' (no status/code), so treat those as retryable too.
+  return retryable || category === 'unknown'
+}
+
 export function workersAiModelClient(env: Env): ModelClient {
   return {
     async complete(model, context, signal) {
-      try {
-        if (env.AMA_RUNTIME_MODE === 'test') {
+      if (env.AMA_RUNTIME_MODE === 'test') {
+        try {
           const latestUser = [...context.messages].reverse().find((message) => message.role === 'user')
           const prompt = latestUser && latestUser.role === 'user' ? textContent(latestUser.content) : ''
           if (/wait for cancellation/i.test(prompt)) {
@@ -290,25 +308,46 @@ export function workersAiModelClient(env: Env): ModelClient {
             throw simulated
           }
           return testAssistantMessage(model, context)
+        } catch (error) {
+          if (isRuntimeTurnCancelled(error) || error instanceof ProviderCallError) {
+            throw error
+          }
+          throw new ProviderCallError(normalizeProviderError(providerFamily(model.provider), error))
         }
-        return providerAssistantMessage(
-          model,
-          await env.AI.run(
-            model.id,
-            {
-              model: model.id,
-              messages: openAiMessages(context),
-              tools: openAiTools(context),
-            },
-            signal ? { signal } : undefined,
-          ),
-        )
-      } catch (error) {
-        if (isRuntimeTurnCancelled(error) || error instanceof ProviderCallError) {
-          throw error
-        }
-        throw new ProviderCallError(normalizeProviderError(providerFamily(model.provider), error))
       }
+      let lastError: ProviderCallError | null = null
+      for (let attempt = 1; attempt <= PROVIDER_MAX_ATTEMPTS; attempt += 1) {
+        if (signal?.aborted) {
+          throw new RuntimeTurnCancelledError()
+        }
+        try {
+          return providerAssistantMessage(
+            model,
+            await env.AI.run(
+              model.id,
+              {
+                model: model.id,
+                messages: openAiMessages(context),
+                tools: openAiTools(context),
+              },
+              signal ? { signal } : undefined,
+            ),
+          )
+        } catch (error) {
+          if (isRuntimeTurnCancelled(error)) {
+            throw error
+          }
+          lastError =
+            error instanceof ProviderCallError
+              ? error
+              : new ProviderCallError(normalizeProviderError(providerFamily(model.provider), error))
+          if (attempt >= PROVIDER_MAX_ATTEMPTS || !isRetryableProviderError(lastError)) {
+            throw lastError
+          }
+          await new Promise((resolve) => setTimeout(resolve, providerRetryBackoffMs(attempt)))
+        }
+      }
+      throw lastError ?? new ProviderCallError(normalizeProviderError(providerFamily(model.provider), new Error('provider request failed')))
     },
   }
 }

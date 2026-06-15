@@ -17,7 +17,12 @@ export const RUNTIME_CATALOG: readonly RuntimeCatalogEntry[] = [
   {
     runtime: 'ama',
     hostingModes: ['cloud', 'self_hosted'],
-    providerModels: [{ provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6' }],
+    providerModels: [
+      { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6' },
+      // A second tool-calling Workers AI model gives the cloud runtime a
+      // fallback when one model's upstream is degraded.
+      { provider: 'workers-ai', model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast' },
+    ],
   },
   {
     runtime: 'claude-code',
