@@ -143,8 +143,11 @@ func configureWorktreeCredentialHelper(ctx context.Context, worktreePath string,
 		return err
 	}
 	// An empty first helper resets inherited helpers so the session token
-	// wins over any host-level credential helpers.
-	if err := git(ctx, worktreePath, "config", "--worktree", "credential.helper", ""); err != nil {
+	// wins over any host-level credential helpers. --replace-all collapses any
+	// pre-existing values (a reused worktree config, or a host with multiple
+	// credential.helper entries) to the single empty reset; a plain set fails
+	// with "cannot overwrite multiple values with a single value".
+	if err := git(ctx, worktreePath, "config", "--worktree", "--replace-all", "credential.helper", ""); err != nil {
 		return err
 	}
 	helper := fmt.Sprintf("store --file %q", credentialsPath)
