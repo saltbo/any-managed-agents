@@ -241,7 +241,6 @@ export async function enqueueSelfHostedSessionWork(
     result: null,
     error: null,
     availableAt: timestamp,
-    leaseExpiresAt: null,
     createdAt: timestamp,
     updatedAt: timestamp,
   })

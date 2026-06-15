@@ -18,6 +18,9 @@ import { redactSensitiveValue } from '../../redaction'
 
 type Db = ReturnType<typeof drizzle>
 type RunnerRow = typeof runners.$inferSelect
+// The DB column is a closed enum; the port types carry the value as a plain
+// string, so writes/filters cast through this single schema-derived alias.
+type RunnerStateColumn = RunnerRow['state']
 
 function newId(prefix: string) {
   return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
@@ -101,7 +104,7 @@ export function createRunnerRepo(db: Db): RunnerRepo {
         query.oidcSubject ? eq(runners.oidcSubject, query.oidcSubject) : undefined,
         query.oidcClientId ? eq(runners.oidcClientId, query.oidcClientId) : undefined,
         query.archived ? isNotNull(runners.archivedAt) : isNull(runners.archivedAt),
-        query.state ? eq(runners.state, query.state) : undefined,
+        query.state ? eq(runners.state, query.state as RunnerStateColumn) : undefined,
         query.environmentId ? eq(runners.environmentId, query.environmentId) : undefined,
         query.search ? like(runners.name, `%${query.search}%`) : undefined,
         query.createdFrom ? gte(runners.createdAt, query.createdFrom) : undefined,
@@ -160,7 +163,7 @@ export function createRunnerRepo(db: Db): RunnerRepo {
         archivedAt: null,
         createdAt: timestamp,
         updatedAt: timestamp,
-      }
+      } satisfies typeof runners.$inferInsert
       await db.insert(runners).values(row)
       const inserted = await findRow(db, input.projectId, row.id)
       if (!inserted) {
@@ -187,7 +190,7 @@ export function createRunnerRepo(db: Db): RunnerRepo {
         .set({
           name: fields.name,
           capabilities: stringify(fields.capabilities),
-          state: fields.state,
+          state: fields.state as RunnerStateColumn,
           maxConcurrent: fields.maxConcurrent,
           metadata: stringify(fields.metadata),
           archivedAt: fields.archivedAt,
@@ -208,7 +211,7 @@ export function createRunnerRepo(db: Db): RunnerRepo {
       await db
         .update(runners)
         .set({
-          state: fields.state,
+          state: fields.state as RunnerStateColumn,
           capabilities: stringify(fields.capabilities),
           currentLoad: fields.currentLoad,
           runtimeUsage: stringify(fields.runtimeUsage),

@@ -134,7 +134,6 @@ async function requeueWorkItemForRecovery(
         state: 'cancelled',
         runnerId: null,
         leaseId: null,
-        leaseExpiresAt: null,
         error: stringify({ message: 'Superseded by newer queued work for the session' }),
         updatedAt: timestamp,
       })
@@ -149,7 +148,6 @@ async function requeueWorkItemForRecovery(
         state: 'failed',
         runnerId: null,
         leaseId: null,
-        leaseExpiresAt: null,
         error: stringify({ message: 'Runner stopped and retries are exhausted' }),
         updatedAt: timestamp,
       })
@@ -182,7 +180,6 @@ async function requeueWorkItemForRecovery(
       state: 'available',
       runnerId: null,
       leaseId: null,
-      leaseExpiresAt: null,
       payload: payloadJson,
       error: null,
       availableAt: timestamp,
@@ -279,7 +276,7 @@ export function createLeaseRepo(db: Db): LeaseRepo {
       const filters = [
         eq(leases.projectId, query.projectId),
         query.runnerId ? eq(leases.runnerId, query.runnerId) : undefined,
-        query.state ? eq(leases.state, query.state) : undefined,
+        query.state ? eq(leases.state, query.state as LeaseRow['state']) : undefined,
         query.cursor
           ? or(
               lt(leases.createdAt, query.cursor.createdAt),
@@ -370,14 +367,13 @@ export function createLeaseRepo(db: Db): LeaseRepo {
         resumeToken: null,
         createdAt: timestamp,
         updatedAt: timestamp,
-      }
+      } satisfies typeof leases.$inferInsert
       const claimed = await db
         .update(workItems)
         .set({
           state: 'leased',
           runnerId: input.runnerId,
           leaseId: lease.id,
-          leaseExpiresAt: lease.expiresAt,
           attempts: sql`${workItems.attempts} + 1`,
           updatedAt: timestamp,
         })
@@ -420,7 +416,6 @@ export function createLeaseRepo(db: Db): LeaseRepo {
           state: 'failed',
           runnerId: null,
           leaseId: null,
-          leaseExpiresAt: null,
           error: stringify({ message: input.reason }),
           updatedAt: failedAt,
         })
@@ -461,7 +456,6 @@ export function createLeaseRepo(db: Db): LeaseRepo {
         const renewedWorkItem = await db
           .update(workItems)
           .set({
-            leaseExpiresAt: expiresAt,
             updatedAt: timestamp,
             ...(renewedPayload !== null ? { payload: renewedPayload } : {}),
           })
@@ -550,7 +544,6 @@ export function createLeaseRepo(db: Db): LeaseRepo {
             state: input.state === 'completed' ? 'succeeded' : input.state,
             result,
             error,
-            leaseExpiresAt: null,
             updatedAt: timestamp,
           })
           .where(
@@ -590,7 +583,7 @@ export function createLeaseRepo(db: Db): LeaseRepo {
             .get()
           const failureReason =
             input.state === 'failed' ? await runtimeFailureStateReason(db, workItem.sessionId) : null
-          const sessionUpdate =
+          const sessionUpdate = (
             input.state === 'cancelled'
               ? {
                   state: 'stopped',
@@ -603,6 +596,7 @@ export function createLeaseRepo(db: Db): LeaseRepo {
                   stateReason: input.state === 'completed' ? null : (failureReason ?? 'runner-failed'),
                   updatedAt: timestamp,
                 }
+          ) satisfies Partial<typeof sessions.$inferInsert>
           const pendingWithoutAcceptedChannel = and(
             eq(sessions.state, 'pending'),
             or(eq(sessions.stateReason, 'waiting-for-runner'), eq(sessions.stateReason, 'waiting-for-runner-recovery')),

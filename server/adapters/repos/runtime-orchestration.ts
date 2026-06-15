@@ -7,7 +7,11 @@ import type {
   EnvironmentRow,
   EnvironmentVersionRow,
   ProviderConfigRow,
+  SessionApprovalInsert,
+  SessionInsert,
   SessionRow,
+  SessionUpdate,
+  WorkItemInsert,
   WorkItemRow,
 } from '@shared/runtime-rows'
 import type { CanonicalAmaSessionEvent } from '@shared/session-events'
@@ -51,10 +55,14 @@ export type {
   WorkItemRow,
 } from '@shared/runtime-rows'
 
-type SessionInsert = typeof sessions.$inferInsert
-type WorkItemInsert = typeof workItems.$inferInsert
-type SessionApprovalInsert = typeof sessionApprovals.$inferInsert
-type SessionUpdate = Partial<typeof sessions.$inferInsert>
+// The store boundary names the plain shared row shapes (string-typed
+// discriminators). Drizzle's enum-narrowed insert/update types are stricter, so
+// writes cast through these schema-derived aliases at the .values()/.set() call.
+type SessionInsertColumns = typeof sessions.$inferInsert
+type SessionUpdateColumns = Partial<typeof sessions.$inferInsert>
+type SessionStateColumn = (typeof sessions.$inferSelect)['state']
+type WorkItemInsertColumns = typeof workItems.$inferInsert
+type SessionApprovalInsertColumns = typeof sessionApprovals.$inferInsert
 
 // Runtime-internal persistence boundary. The env-bound session execution engine
 // (server/runtime/*) routes every drizzle read/write here so the runtime layer
@@ -104,13 +112,13 @@ export function createRuntimeOrchestrationRepo(db: Db): SessionOrchestrationStor
 
     // ── session writes ────────────────────────────────────────────────────
     async insertSession(row: SessionInsert): Promise<void> {
-      await db.insert(sessions).values(row)
+      await db.insert(sessions).values(row as SessionInsertColumns)
     },
 
     async updateSession(projectId: string, sessionId: string, fields: SessionUpdate): Promise<void> {
       await db
         .update(sessions)
-        .set(fields)
+        .set(fields as SessionUpdateColumns)
         .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, projectId)))
     },
 
@@ -122,11 +130,11 @@ export function createRuntimeOrchestrationRepo(db: Db): SessionOrchestrationStor
       fields: SessionUpdate,
     ): Promise<boolean> {
       const stateGuard = Array.isArray(expected)
-        ? or(...expected.map((state) => eq(sessions.state, state)))
-        : eq(sessions.state, expected)
+        ? or(...expected.map((state) => eq(sessions.state, state as SessionStateColumn)))
+        : eq(sessions.state, expected as SessionStateColumn)
       const updated = await db
         .update(sessions)
-        .set(fields)
+        .set(fields as SessionUpdateColumns)
         .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, projectId), stateGuard))
         .returning({ id: sessions.id })
         .get()
@@ -189,7 +197,7 @@ export function createRuntimeOrchestrationRepo(db: Db): SessionOrchestrationStor
     ): Promise<boolean> {
       const updated = await db
         .update(sessions)
-        .set({ ...fields, activeTurnId: null, turnLeaseExpiresAt: null })
+        .set({ ...fields, activeTurnId: null, turnLeaseExpiresAt: null } as SessionUpdateColumns)
         .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, projectId), eq(sessions.activeTurnId, turnId)))
         .returning({ id: sessions.id })
         .get()
@@ -467,7 +475,7 @@ export function createRuntimeOrchestrationRepo(db: Db): SessionOrchestrationStor
 
     // ── work-item enqueue + resume ──────────────────────────────────────────
     async insertWorkItem(row: WorkItemInsert): Promise<void> {
-      await db.insert(workItems).values(row)
+      await db.insert(workItems).values(row as WorkItemInsertColumns)
     },
 
     async recentSessionWorkItems(
@@ -508,7 +516,7 @@ export function createRuntimeOrchestrationRepo(db: Db): SessionOrchestrationStor
     ): Promise<void> {
       await db
         .update(workItems)
-        .set({ state: 'cancelled', leaseExpiresAt: null, error: errorJson, updatedAt: timestamp })
+        .set({ state: 'cancelled', error: errorJson, updatedAt: timestamp })
         .where(and(eq(workItems.projectId, projectId), inArray(workItems.id, workItemIds)))
     },
 
@@ -573,13 +581,14 @@ export function createRuntimeOrchestrationRepo(db: Db): SessionOrchestrationStor
     },
 
     async upsertApproval(row: SessionApprovalInsert, decidedAt: string): Promise<void> {
+      const columns = row as SessionApprovalInsertColumns
       await db
         .insert(sessionApprovals)
-        .values(row)
+        .values(columns)
         .onConflictDoUpdate({
           target: [sessionApprovals.sessionId, sessionApprovals.toolCallId],
           set: {
-            state: row.state,
+            state: columns.state,
             reason: row.reason,
             result: row.result,
             decidedByUserId: row.decidedByUserId,
@@ -618,7 +627,7 @@ export function createRuntimeOrchestrationRepo(db: Db): SessionOrchestrationStor
         .from(sessions)
         .where(
           and(
-            or(inArray(sessions.state, terminalStates), isNotNull(sessions.archivedAt)),
+            or(inArray(sessions.state, terminalStates as SessionStateColumn[]), isNotNull(sessions.archivedAt)),
             isNotNull(sessions.sandboxId),
             notLike(sessions.metadata, '%"sandboxDestroyedAt"%'),
           ),

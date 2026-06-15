@@ -97,12 +97,11 @@ type RunnerWorkItem struct {
 	EnvironmentID  string `json:"environmentId"`
 	RunnerID       string `json:"runnerId"`
 	LeaseID        string `json:"leaseId"`
-	Type           string `json:"type"`
-	Status         string `json:"status"`
-	Payload        JSON   `json:"payload"`
-	LeaseExpiresAt string `json:"leaseExpiresAt"`
-	Attempts       int    `json:"attempts"`
-	MaxAttempts    int    `json:"maxAttempts"`
+	Type        string `json:"type"`
+	State       string `json:"state"`
+	Payload     JSON   `json:"payload"`
+	Attempts    int    `json:"attempts"`
+	MaxAttempts int    `json:"maxAttempts"`
 }
 
 type RunnerWorkLease struct {

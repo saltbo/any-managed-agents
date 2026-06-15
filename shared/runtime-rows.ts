@@ -22,7 +22,7 @@ export interface SessionRow {
   resourceRefs: string
   env: string
   secretEnv: string
-  projectId: string | null
+  projectId: string
   durableObjectName: string
   sandboxId: string | null
   piRuntimeId: string | null
@@ -59,7 +59,7 @@ export interface SessionInsert {
   resourceRefs?: string
   env?: string
   secretEnv?: string
-  projectId?: string | null
+  projectId: string
   durableObjectName: string
   sandboxId?: string | null
   piRuntimeId?: string | null
@@ -84,7 +84,7 @@ export type SessionUpdate = Partial<SessionInsert>
 
 export interface AgentRow {
   id: string
-  projectId: string | null
+  projectId: string
   name: string
   description: string | null
   instructions: string | null
@@ -181,7 +181,6 @@ export interface WorkItemRow {
   result: string | null
   error: string | null
   availableAt: string
-  leaseExpiresAt: string | null
   createdAt: string
   updatedAt: string
 }
@@ -203,7 +202,6 @@ export interface WorkItemInsert {
   result?: string | null
   error?: string | null
   availableAt: string
-  leaseExpiresAt?: string | null
   createdAt: string
   updatedAt: string
 }

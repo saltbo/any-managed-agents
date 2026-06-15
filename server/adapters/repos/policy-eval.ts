@@ -98,9 +98,9 @@ export function createPolicyEvalRepo(db: Db): PolicyEvalRepo {
         id: rule.id,
         providerId: rule.providerId,
         modelId: rule.modelId,
-        teamId: rule.teamId,
-        // DB text column constrained to allow|deny by every write path.
-        effect: rule.effect as 'allow' | 'deny',
+        // '*' is the stored team wildcard; null = applies to every team.
+        teamId: rule.teamId === '*' ? null : rule.teamId,
+        effect: rule.effect,
         reason: rule.reason,
       }))
     },
@@ -148,14 +148,20 @@ export function createPolicyEvalRepo(db: Db): PolicyEvalRepo {
         .select()
         .from(accessRules)
         .where(and(eq(accessRules.projectId, projectId), or(...providerPredicates), or(...modelPredicates)))
-      return rows.map((rule) => ({ id: rule.id, effect: rule.effect, teamId: rule.teamId, reason: rule.reason }))
+      return rows.map((rule) => ({
+        id: rule.id,
+        effect: rule.effect,
+        // '*' is the stored team wildcard; null = applies to every team.
+        teamId: rule.teamId === '*' ? null : rule.teamId,
+        reason: rule.reason,
+      }))
     },
 
     async successfulUsage(projectId: string): Promise<BudgetUsageRecord[]> {
       const rows = await db
         .select()
         .from(usageRecords)
-        .where(and(eq(usageRecords.projectId, projectId), eq(usageRecords.status, 'success')))
+        .where(and(eq(usageRecords.projectId, projectId), eq(usageRecords.state, 'success')))
       return rows.map((record) => ({
         createdAt: record.createdAt,
         costMicros: record.costMicros,

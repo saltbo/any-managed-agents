@@ -45,7 +45,7 @@ function usageRow(project: { id: string; organizationId: string }, values: Parti
     providerId: 'workers-ai',
     providerType: 'workers-ai',
     modelId: '@cf/model-a',
-    status: 'success',
+    state: 'success',
     promptTokens: 10,
     completionTokens: 5,
     totalTokens: 15,
@@ -144,7 +144,7 @@ describe('[CF] v1 usage records', () => {
     expect(res.headers.get('content-disposition')).toContain('usage-records.csv')
     const lines = (await res.text()).trimEnd().split('\n')
     expect(lines[0]).toBe(
-      'id,createdAt,projectId,agentId,agentVersionId,sessionId,providerId,providerType,modelId,status,usageType,promptTokens,completionTokens,totalTokens,durationMs,costMicros,currency',
+      'id,createdAt,projectId,agentId,agentVersionId,sessionId,providerId,providerType,modelId,state,usageType,promptTokens,completionTokens,totalTokens,durationMs,costMicros,currency',
     )
     expect(lines).toHaveLength(2)
     expect(lines[1]).toContain('workers-ai')

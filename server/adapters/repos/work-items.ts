@@ -29,7 +29,6 @@ function recordFrom(row: WorkItemRow): WorkItemRecord {
     result: parseJson<Record<string, unknown>>(row.result),
     error: parseJson<Record<string, unknown>>(row.error),
     availableAt: row.availableAt,
-    leaseExpiresAt: row.leaseExpiresAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   }
@@ -40,7 +39,7 @@ export function createWorkItemRepo(db: Db): WorkItemRepo {
     async list(query: WorkItemListQuery): Promise<ListPageResult<WorkItemRecord>> {
       const filters = [
         eq(workItems.projectId, query.projectId),
-        query.state ? eq(workItems.state, query.state) : undefined,
+        query.state ? eq(workItems.state, query.state as WorkItemRow['state']) : undefined,
         query.sessionId ? eq(workItems.sessionId, query.sessionId) : undefined,
         query.runnerId ? eq(workItems.runnerId, query.runnerId) : undefined,
         query.search ? like(workItems.type, `%${query.search}%`) : undefined,

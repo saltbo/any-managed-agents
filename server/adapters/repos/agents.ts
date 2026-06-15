@@ -79,7 +79,7 @@ async function versionNumberOf(db: Db, agentId: string, versionId: string | null
 function agentRecordFrom(row: AgentRow, version: number): AgentRecord {
   return {
     id: row.id,
-    projectId: row.projectId ?? '',
+    projectId: row.projectId,
     name: row.name,
     description: row.description,
     archivedAt: row.archivedAt,

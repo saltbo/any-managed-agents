@@ -1128,6 +1128,14 @@ export interface UpdateAccessRuleFields {
 export interface AccessRuleRepo {
   list(projectId: string): Promise<AccessRuleRecord[]>
   find(projectId: string, ruleId: string): Promise<AccessRuleRecord | null>
+  // Guards the (project, provider, model, team) UNIQUE so a duplicate scope is a
+  // 409, not a raw D1 constraint 500. teamId null maps to the stored '*' wildcard.
+  findByScope(
+    projectId: string,
+    providerId: string,
+    modelId: string,
+    teamId: string | null,
+  ): Promise<AccessRuleRecord | null>
   insert(input: CreateAccessRuleInput, timestamp: string): Promise<AccessRuleRecord>
   update(
     projectId: string,
@@ -1287,7 +1295,7 @@ export interface UsageRecord {
   providerId: string | null
   providerType: UsageProviderType
   modelId: string
-  status: UsageStatus
+  state: UsageStatus
   promptTokens: number
   completionTokens: number
   totalTokens: number
@@ -1822,7 +1830,6 @@ export interface WorkItemRecord {
   result: Record<string, unknown> | null
   error: Record<string, unknown> | null
   availableAt: string
-  leaseExpiresAt: string | null
   createdAt: string
   updatedAt: string
 }
