@@ -204,9 +204,7 @@ async function handleRuntimeWebSocketMessage(
 // session read, the runtime state guards, the WebSocket upgrade, and the
 // protocol response shapes; every persistence touch, policy decision, and
 // sandbox/runner call goes through deps so this file holds no drizzle.
-export async function handleRuntimeProxyRequest<E extends HonoEnv>(
-  c: Context<E & { Bindings: Env; Variables: { deps: Deps } }>,
-): Promise<Response> {
+export async function handleRuntimeProxyRequest(c: Context<DepsEnv>): Promise<Response> {
   const deps = c.get('deps')
   const resolvedAuth = await requireAuth(c)
   if (resolvedAuth instanceof Response) {
