@@ -17,15 +17,16 @@ export const RUNTIME_CATALOG: readonly RuntimeCatalogEntry[] = [
   {
     runtime: 'ama',
     hostingModes: ['cloud', 'self_hosted'],
+    // First entry is the default clients pick. kimi-k2.7-code is the working
+    // primary (code-focused, healthy upstream); gpt-oss-120b is a
+    // different-vendor backend that survives a moonshot-side outage; kimi-k2.6
+    // is kept for when its upstream recovers. llama-3.3-70b was tried and
+    // dropped: it returns no tool_calls in this harness, so it can't drive the
+    // agentic loop.
     providerModels: [
-      { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6', displayName: 'Kimi K2.6 (Workers AI)' },
-      // Alternate tool-calling Workers AI models for when kimi-k2.6's upstream
-      // is degraded. gpt-oss-120b is a different-vendor backend (best failover
-      // isolation); kimi-k2.7-code is the newer same-family model. llama-3.3-70b
-      // was tried and dropped: it returns no tool_calls in this harness, so it
-      // cannot drive the agentic loop.
       { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.7-code', displayName: 'Kimi K2.7 Code (Workers AI)' },
       { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', displayName: 'GPT-OSS 120B (Workers AI)' },
+      { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6', displayName: 'Kimi K2.6 (Workers AI)' },
     ],
   },
   {

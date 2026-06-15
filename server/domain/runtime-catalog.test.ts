@@ -187,9 +187,9 @@ describe('runtimeSupportsHostingMode', () => {
 describe('cloudRuntimeModels', () => {
   it('returns the three concrete ama cloud models with their display names', () => {
     expect(cloudRuntimeModels('ama')).toEqual([
-      { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6', displayName: 'Kimi K2.6 (Workers AI)' },
       { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.7-code', displayName: 'Kimi K2.7 Code (Workers AI)' },
       { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', displayName: 'GPT-OSS 120B (Workers AI)' },
+      { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6', displayName: 'Kimi K2.6 (Workers AI)' },
     ])
   })
 
