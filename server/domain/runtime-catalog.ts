@@ -17,15 +17,22 @@ export const RUNTIME_CATALOG: readonly RuntimeCatalogEntry[] = [
   {
     runtime: 'ama',
     hostingModes: ['cloud', 'self_hosted'],
-    // First entry is the default clients pick. kimi-k2.7-code is the working
-    // primary (code-focused, healthy upstream); gpt-oss-120b is a
-    // different-vendor backend that survives a moonshot-side outage; kimi-k2.6
-    // is kept for when its upstream recovers. llama-3.3-70b was tried and
-    // dropped: it returns no tool_calls in this harness, so it can't drive the
-    // agentic loop.
+    // Workers AI models verified to emit tool_calls in this harness (probed via
+    // the runtime-ai proxy against live Workers AI). First entry is the default
+    // clients pick. kimi-k2.7-code + gpt-oss-120b are also proven end-to-end
+    // (full agentic loop → PR); the rest passed the tool_call probe. Models that
+    // returned no tool_calls are excluded (llama-3.1/3.3/4-scout, qwen2.5-coder,
+    // qwq-32b, deepseek-r1, gemma-sea-lion). kimi-k2.6 is last — its upstream is
+    // currently degraded.
     providerModels: [
       { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.7-code', displayName: 'Kimi K2.7 Code (Workers AI)' },
       { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', displayName: 'GPT-OSS 120B (Workers AI)' },
+      { provider: 'workers-ai', model: '@cf/openai/gpt-oss-20b', displayName: 'GPT-OSS 20B (Workers AI)' },
+      { provider: 'workers-ai', model: '@cf/qwen/qwen3-30b-a3b-fp8', displayName: 'Qwen3 30B A3B (Workers AI)' },
+      { provider: 'workers-ai', model: '@cf/nvidia/nemotron-3-120b-a12b', displayName: 'Nemotron 3 120B (Workers AI)' },
+      { provider: 'workers-ai', model: '@cf/google/gemma-4-26b-a4b-it', displayName: 'Gemma 4 26B (Workers AI)' },
+      { provider: 'workers-ai', model: '@cf/zai-org/glm-4.7-flash', displayName: 'GLM 4.7 Flash (Workers AI)' },
+      { provider: 'workers-ai', model: '@cf/ibm-granite/granite-4.0-h-micro', displayName: 'Granite 4.0 H Micro (Workers AI)' },
       { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6', displayName: 'Kimi K2.6 (Workers AI)' },
     ],
   },

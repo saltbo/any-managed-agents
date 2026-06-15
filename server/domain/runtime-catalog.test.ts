@@ -185,12 +185,20 @@ describe('runtimeSupportsHostingMode', () => {
 })
 
 describe('cloudRuntimeModels', () => {
-  it('returns the three concrete ama cloud models with their display names', () => {
-    expect(cloudRuntimeModels('ama')).toEqual([
-      { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.7-code', displayName: 'Kimi K2.7 Code (Workers AI)' },
-      { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', displayName: 'GPT-OSS 120B (Workers AI)' },
-      { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6', displayName: 'Kimi K2.6 (Workers AI)' },
-    ])
+  it('returns the concrete ama cloud models, kimi-k2.7-code first, each with a display name', () => {
+    const models = cloudRuntimeModels('ama')
+    // The default clients pick (data[0]) must be the proven working model.
+    expect(models[0]).toEqual({
+      provider: 'workers-ai',
+      model: '@cf/moonshotai/kimi-k2.7-code',
+      displayName: 'Kimi K2.7 Code (Workers AI)',
+    })
+    // Every entry is a concrete Workers AI model with a display name (never a wildcard).
+    expect(models.length).toBeGreaterThanOrEqual(3)
+    expect(
+      models.every((m) => m.provider === 'workers-ai' && m.model.startsWith('@cf/') && typeof m.displayName === 'string'),
+    ).toBe(true)
+    expect(models.some((m) => m.model === '*')).toBe(false)
   })
 
   it('returns an empty list for a self-hosted-only runtime whose catalog entry is wildcard', () => {

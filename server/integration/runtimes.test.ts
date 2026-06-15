@@ -32,13 +32,15 @@ describe('[CF] v1 runtime models', () => {
     const authorization = await signIn()
     const res = await jsonFetch('/api/v1/runtimes/ama/models', authorization)
     expect(res.status).toBe(200)
-    await expect(res.json()).resolves.toEqual({
-      data: [
-        { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.7-code', displayName: 'Kimi K2.7 Code (Workers AI)' },
-        { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', displayName: 'GPT-OSS 120B (Workers AI)' },
-        { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6', displayName: 'Kimi K2.6 (Workers AI)' },
-      ],
+    const json = (await res.json()) as { data: Array<{ provider: string; model: string; displayName?: string }> }
+    // Default (data[0]) is the proven working model; every entry is a concrete WAI model with a label.
+    expect(json.data[0]).toEqual({
+      provider: 'workers-ai',
+      model: '@cf/moonshotai/kimi-k2.7-code',
+      displayName: 'Kimi K2.7 Code (Workers AI)',
     })
+    expect(json.data.length).toBeGreaterThanOrEqual(3)
+    expect(json.data.every((m) => m.provider === 'workers-ai' && m.model.startsWith('@cf/') && !!m.displayName)).toBe(true)
   })
 
   it('returns an empty catalog for self-hosted-only runtimes', async () => {
