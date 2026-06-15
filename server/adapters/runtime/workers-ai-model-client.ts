@@ -347,7 +347,12 @@ export function workersAiModelClient(env: Env): ModelClient {
           await new Promise((resolve) => setTimeout(resolve, providerRetryBackoffMs(attempt)))
         }
       }
-      throw lastError ?? new ProviderCallError(normalizeProviderError(providerFamily(model.provider), new Error('provider request failed')))
+      throw (
+        lastError ??
+        new ProviderCallError(
+          normalizeProviderError(providerFamily(model.provider), new Error('provider request failed')),
+        )
+      )
     },
   }
 }
