@@ -4,16 +4,18 @@ CREATE TABLE `access_rules` (
 	`project_id` text NOT NULL,
 	`provider_id` text,
 	`model_id` text,
-	`team_id` text,
+	`team_id` text DEFAULT '*' NOT NULL,
 	`effect` text NOT NULL,
 	`reason` text,
 	`metadata` text DEFAULT '{}' NOT NULL,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
-	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "ck_access_rules_effect" CHECK("access_rules"."effect" in ('allow','deny'))
 );
 --> statement-breakpoint
 CREATE INDEX `idx_access_rules_project_provider` ON `access_rules` (`project_id`,`provider_id`,`model_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `idx_access_rules_unique_scope` ON `access_rules` (`project_id`,`provider_id`,`model_id`,`team_id`);--> statement-breakpoint
 CREATE TABLE `agent_memories` (
 	`agent_id` text PRIMARY KEY NOT NULL,
 	`project_id` text NOT NULL,
@@ -52,7 +54,7 @@ CREATE INDEX `idx_agent_versions_agent_id` ON `agent_versions` (`agent_id`);--> 
 CREATE UNIQUE INDEX `idx_agent_versions_agent_version` ON `agent_versions` (`agent_id`,`version`);--> statement-breakpoint
 CREATE TABLE `agents` (
 	`id` text PRIMARY KEY NOT NULL,
-	`project_id` text,
+	`project_id` text NOT NULL,
 	`name` text NOT NULL,
 	`description` text,
 	`instructions` text,
@@ -113,7 +115,10 @@ CREATE TABLE `budgets` (
 	`metadata` text DEFAULT '{}' NOT NULL,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
-	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "ck_budgets_scope" CHECK("budgets"."scope" in ('project','provider','model')),
+	CONSTRAINT "ck_budgets_limit_type" CHECK("budgets"."limit_type" in ('tokens','cost_micros','sessions')),
+	CONSTRAINT "ck_budgets_window" CHECK("budgets"."window" in ('day','month'))
 );
 --> statement-breakpoint
 CREATE INDEX `idx_budgets_project_enabled` ON `budgets` (`project_id`,`enabled`,`scope`);--> statement-breakpoint
@@ -132,7 +137,8 @@ CREATE TABLE `connection_tools` (
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
 	FOREIGN KEY (`connection_id`) REFERENCES `connections`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`connector_id`) REFERENCES `connectors`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `idx_connection_tools_connection_name` ON `connection_tools` (`connection_id`,`name`);--> statement-breakpoint
@@ -154,6 +160,7 @@ CREATE TABLE `connections` (
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
 	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`connector_id`) REFERENCES `connectors`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`credential_id`) REFERENCES `vault_credentials`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`credential_version_id`) REFERENCES `vault_credential_versions`(`id`) ON UPDATE no action ON DELETE no action
 );
@@ -194,7 +201,8 @@ CREATE TABLE `environment_versions` (
 	`metadata` text NOT NULL,
 	`created_at` text NOT NULL,
 	FOREIGN KEY (`environment_id`) REFERENCES `environments`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "ck_environment_versions_hosting_mode" CHECK("environment_versions"."hosting_mode" in ('cloud','self_hosted'))
 );
 --> statement-breakpoint
 CREATE INDEX `idx_environment_versions_environment_id` ON `environment_versions` (`environment_id`);--> statement-breakpoint
@@ -218,7 +226,8 @@ CREATE TABLE `environments` (
 	`current_version_id` text,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
-	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "ck_environments_hosting_mode" CHECK("environments"."hosting_mode" in ('cloud','self_hosted'))
 );
 --> statement-breakpoint
 CREATE INDEX `idx_environments_project_created` ON `environments` (`project_id`,`created_at`,`id`);--> statement-breakpoint
@@ -252,7 +261,8 @@ CREATE TABLE `leases` (
 	`updated_at` text NOT NULL,
 	FOREIGN KEY (`work_item_id`) REFERENCES `work_items`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`runner_id`) REFERENCES `runners`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "ck_leases_state" CHECK("leases"."state" in ('active','completed','failed','cancelled','expired','interrupted'))
 );
 --> statement-breakpoint
 CREATE INDEX `idx_leases_project_state_expires` ON `leases` (`project_id`,`state`,`expires_at`);--> statement-breakpoint
@@ -269,7 +279,8 @@ CREATE TABLE `model_discovery_tasks` (
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
 	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`provider_id`) REFERENCES `providers`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`provider_id`) REFERENCES `providers`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "ck_model_discovery_tasks_state" CHECK("model_discovery_tasks"."state" in ('pending','running','succeeded','failed'))
 );
 --> statement-breakpoint
 CREATE INDEX `idx_model_discovery_tasks_provider_created` ON `model_discovery_tasks` (`provider_id`,`created_at`,`id`);--> statement-breakpoint
@@ -285,7 +296,8 @@ CREATE TABLE `policies` (
 	`metadata` text DEFAULT '{}' NOT NULL,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
-	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "ck_policies_scope" CHECK("policies"."scope" in ('organization','team','project'))
 );
 --> statement-breakpoint
 CREATE INDEX `idx_policies_project_scope` ON `policies` (`project_id`,`scope`,`updated_at`);--> statement-breakpoint
@@ -317,7 +329,6 @@ CREATE TABLE `provider_models` (
 	FOREIGN KEY (`provider_id`) REFERENCES `providers`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE INDEX `idx_provider_models_project_provider` ON `provider_models` (`project_id`,`provider_id`,`model_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `idx_provider_models_unique_model` ON `provider_models` (`project_id`,`provider_id`,`model_id`);--> statement-breakpoint
 CREATE TABLE `providers` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -365,7 +376,9 @@ CREATE TABLE `runners` (
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
 	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`environment_id`) REFERENCES `environments`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`environment_id`) REFERENCES `environments`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "ck_runners_state" CHECK("runners"."state" in ('active','draining','disabled','offline')),
+	CONSTRAINT "ck_runners_auth_mode" CHECK("runners"."auth_mode" in ('bearer','mtls','oidc','federated'))
 );
 --> statement-breakpoint
 CREATE INDEX `idx_runners_project_state_updated` ON `runners` (`project_id`,`state`,`updated_at`,`id`);--> statement-breakpoint
@@ -388,7 +401,8 @@ CREATE TABLE `session_approvals` (
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
 	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`session_id`) REFERENCES `sessions`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`session_id`) REFERENCES `sessions`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "ck_session_approvals_state" CHECK("session_approvals"."state" in ('pending','approved','denied'))
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `idx_session_approvals_session_tool_call` ON `session_approvals` (`session_id`,`tool_call_id`);--> statement-breakpoint
@@ -452,7 +466,9 @@ CREATE TABLE `session_messages` (
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
 	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`session_id`) REFERENCES `sessions`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`session_id`) REFERENCES `sessions`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "ck_session_messages_delivery" CHECK("session_messages"."delivery" in ('live','queued')),
+	CONSTRAINT "ck_session_messages_state" CHECK("session_messages"."state" in ('accepted','delivered','failed'))
 );
 --> statement-breakpoint
 CREATE INDEX `idx_session_messages_session_created` ON `session_messages` (`session_id`,`created_at`,`id`);--> statement-breakpoint
@@ -470,7 +486,7 @@ CREATE TABLE `sessions` (
 	`resource_refs` text DEFAULT '[]' NOT NULL,
 	`env` text DEFAULT '{}' NOT NULL,
 	`secret_env` text DEFAULT '[]' NOT NULL,
-	`project_id` text,
+	`project_id` text NOT NULL,
 	`durable_object_name` text NOT NULL,
 	`sandbox_id` text,
 	`pi_runtime_id` text,
@@ -480,6 +496,9 @@ CREATE TABLE `sessions` (
 	`model_config` text,
 	`state` text NOT NULL,
 	`state_reason` text,
+	`active_turn_id` text,
+	`turn_lease_expires_at` text,
+	`continuation_depth` integer DEFAULT 0 NOT NULL,
 	`metadata` text DEFAULT '{}' NOT NULL,
 	`started_at` text,
 	`stopped_at` text,
@@ -490,10 +509,12 @@ CREATE TABLE `sessions` (
 	FOREIGN KEY (`agent_version_id`) REFERENCES `agent_versions`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`environment_id`) REFERENCES `environments`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`environment_version_id`) REFERENCES `environment_versions`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "ck_sessions_state" CHECK("sessions"."state" in ('pending','running','idle','stopped','error'))
 );
 --> statement-breakpoint
 CREATE INDEX `idx_sessions_project_state_created` ON `sessions` (`project_id`,`state`,`created_at`,`id`);--> statement-breakpoint
+CREATE INDEX `idx_sessions_sandbox` ON `sessions` (`sandbox_id`);--> statement-breakpoint
 CREATE TABLE `tool_calls` (
 	`id` text PRIMARY KEY NOT NULL,
 	`organization_id` text NOT NULL,
@@ -510,10 +531,13 @@ CREATE TABLE `tool_calls` (
 	`created_at` text NOT NULL,
 	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`connection_id`) REFERENCES `connections`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`session_id`) REFERENCES `sessions`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`connector_id`) REFERENCES `connectors`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`session_id`) REFERENCES `sessions`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "ck_tool_calls_state" CHECK("tool_calls"."state" in ('success','error'))
 );
 --> statement-breakpoint
 CREATE INDEX `idx_tool_calls_connection_tool_created` ON `tool_calls` (`connection_id`,`tool_name`,`created_at`,`id`);--> statement-breakpoint
+CREATE INDEX `idx_tool_calls_session_created` ON `tool_calls` (`session_id`,`created_at`,`id`);--> statement-breakpoint
 CREATE TABLE `trigger_runs` (
 	`id` text PRIMARY KEY NOT NULL,
 	`organization_id` text NOT NULL,
@@ -531,7 +555,8 @@ CREATE TABLE `trigger_runs` (
 	`updated_at` text NOT NULL,
 	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`trigger_id`) REFERENCES `triggers`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`session_id`) REFERENCES `sessions`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`session_id`) REFERENCES `sessions`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "ck_trigger_runs_state" CHECK("trigger_runs"."state" in ('claimed','session_created','failed'))
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `idx_trigger_runs_unique_occurrence` ON `trigger_runs` (`trigger_id`,`scheduled_for`);--> statement-breakpoint
@@ -563,7 +588,8 @@ CREATE TABLE `triggers` (
 	`updated_at` text NOT NULL,
 	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`agent_id`) REFERENCES `agents`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`environment_id`) REFERENCES `environments`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`environment_id`) REFERENCES `environments`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "ck_triggers_runtime" CHECK("triggers"."runtime" in ('ama','claude-code','codex','copilot'))
 );
 --> statement-breakpoint
 CREATE INDEX `idx_triggers_project_next` ON `triggers` (`project_id`,`enabled`,`next_due_at`,`id`);--> statement-breakpoint
@@ -580,7 +606,7 @@ CREATE TABLE `usage_records` (
 	`provider_id` text,
 	`provider_type` text NOT NULL,
 	`model_id` text NOT NULL,
-	`status` text NOT NULL,
+	`state` text NOT NULL,
 	`prompt_tokens` integer DEFAULT 0 NOT NULL,
 	`completion_tokens` integer DEFAULT 0 NOT NULL,
 	`total_tokens` integer DEFAULT 0 NOT NULL,
@@ -590,7 +616,8 @@ CREATE TABLE `usage_records` (
 	`usage_type` text DEFAULT 'model' NOT NULL,
 	`metadata` text DEFAULT '{}' NOT NULL,
 	`created_at` text NOT NULL,
-	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "ck_usage_records_state" CHECK("usage_records"."state" in ('success','error'))
 );
 --> statement-breakpoint
 CREATE INDEX `idx_usage_records_project_created` ON `usage_records` (`project_id`,`created_at`,`id`);--> statement-breakpoint
@@ -614,10 +641,11 @@ CREATE TABLE `vault_credential_versions` (
 	`revoked_at` text,
 	FOREIGN KEY (`credential_id`) REFERENCES `vault_credentials`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`vault_id`) REFERENCES `vaults`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "ck_vault_credential_versions_state" CHECK("vault_credential_versions"."state" in ('active','superseded','revoked')),
+	CONSTRAINT "ck_vault_credential_versions_provider" CHECK("vault_credential_versions"."provider" in ('ama-managed','cloudflare-secrets','external-vault'))
 );
 --> statement-breakpoint
-CREATE INDEX `idx_vault_credential_versions_credential_version` ON `vault_credential_versions` (`credential_id`,`version`);--> statement-breakpoint
 CREATE UNIQUE INDEX `idx_vault_credential_versions_unique_credential_version` ON `vault_credential_versions` (`credential_id`,`version`);--> statement-breakpoint
 CREATE INDEX `idx_vault_credential_versions_vault_created` ON `vault_credential_versions` (`vault_id`,`created_at`,`id`);--> statement-breakpoint
 CREATE TABLE `vault_credentials` (
@@ -637,7 +665,8 @@ CREATE TABLE `vault_credentials` (
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
 	FOREIGN KEY (`vault_id`) REFERENCES `vaults`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "ck_vault_credentials_state" CHECK("vault_credentials"."state" in ('active','revoked'))
 );
 --> statement-breakpoint
 CREATE INDEX `idx_vault_credentials_vault_created` ON `vault_credentials` (`vault_id`,`created_at`,`id`);--> statement-breakpoint
@@ -653,7 +682,8 @@ CREATE TABLE `vaults` (
 	`archived_at` text,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
-	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "ck_vaults_scope" CHECK("vaults"."scope" in ('project','organization'))
 );
 --> statement-breakpoint
 CREATE INDEX `idx_vaults_project_created` ON `vaults` (`project_id`,`created_at`,`id`);--> statement-breakpoint
@@ -675,13 +705,13 @@ CREATE TABLE `work_items` (
 	`result` text,
 	`error` text,
 	`available_at` text NOT NULL,
-	`lease_expires_at` text,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
 	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`session_id`) REFERENCES `sessions`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`environment_id`) REFERENCES `environments`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`runner_id`) REFERENCES `runners`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`runner_id`) REFERENCES `runners`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "ck_work_items_state" CHECK("work_items"."state" in ('available','leased','succeeded','failed','cancelled'))
 );
 --> statement-breakpoint
 CREATE INDEX `idx_work_items_project_state_available` ON `work_items` (`project_id`,`state`,`available_at`,`priority`,`created_at`);--> statement-breakpoint

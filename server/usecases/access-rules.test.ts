@@ -30,6 +30,7 @@ function fakeDeps(repo: Partial<Deps['accessRules']> = {}): Deps {
   const accessRules: Deps['accessRules'] = {
     list: async () => [],
     find: async () => null,
+    findByScope: async () => null,
     insert: async (input, timestamp) => accessRuleRecord({ ...input, createdAt: timestamp, updatedAt: timestamp }),
     update: async (_p, id, fields, updatedAt) => accessRuleRecord({ id, ...fields, updatedAt }),
     delete: async () => {},

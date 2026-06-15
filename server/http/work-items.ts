@@ -37,7 +37,6 @@ const WorkItemSchema = z
     result: JsonObjectSchema.nullable(),
     error: JsonObjectSchema.nullable(),
     availableAt: z.string().datetime(),
-    leaseExpiresAt: z.string().datetime().nullable(),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
   })
@@ -110,7 +109,6 @@ function serializeWorkItem(record: WorkItemRecord) {
     result: record.result,
     error: record.error,
     availableAt: record.availableAt,
-    leaseExpiresAt: record.leaseExpiresAt,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   }

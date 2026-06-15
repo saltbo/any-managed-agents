@@ -609,7 +609,7 @@ export interface UsageRecord {
   providerId: string | null
   providerType: string
   modelId: string
-  status: string
+  state: string
   promptTokens: number
   completionTokens: number
   totalTokens: number

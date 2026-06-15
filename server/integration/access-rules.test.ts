@@ -50,6 +50,24 @@ describe('[CF] v1 access rules', () => {
     await expect(readRes.json()).resolves.toMatchObject({ id: created.id, effect: 'deny' })
   })
 
+  it('rejects a duplicate (provider, model, team) scope with 409, not a 500 [spec: governance/access-rule-api]', async () => {
+    const authorization = await signIn()
+    const rule = { providerId: 'workers-ai', modelId: '@cf/meta/llama' }
+
+    const first = await jsonFetch('/api/v1/access-rules', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ ...rule, effect: 'deny' }),
+    })
+    expect(first.status).toBe(201)
+
+    const dup = await jsonFetch('/api/v1/access-rules', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ ...rule, effect: 'allow' }),
+    })
+    expect(dup.status).toBe(409)
+    await expect(dup.json()).resolves.toMatchObject({ error: { type: 'conflict' } })
+  })
+
   it('creates scoped team rules and updates effect, reason, and metadata', async () => {
     const authorization = await signIn()
 

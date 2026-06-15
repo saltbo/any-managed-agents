@@ -95,7 +95,7 @@ function serializeSession(row: SessionRow): SessionRecord {
 
   return {
     id: row.id,
-    projectId: row.projectId ?? '',
+    projectId: row.projectId,
     agentId: row.agentId,
     agentVersionId: row.agentVersionId ?? '',
     agentSnapshot: agentSnapshot as Record<string, unknown>,
@@ -268,7 +268,7 @@ export function createSessionRepo(db: Db): SessionRepo {
       const filters = [
         eq(sessions.projectId, query.projectId),
         query.archived ? isNotNull(sessions.archivedAt) : isNull(sessions.archivedAt),
-        query.state ? eq(sessions.state, query.state) : undefined,
+        query.state ? eq(sessions.state, query.state as SessionRow['state']) : undefined,
         query.search ? like(sessions.agentId, `%${query.search}%`) : undefined,
         query.createdFrom ? gte(sessions.createdAt, query.createdFrom) : undefined,
         query.createdTo ? lte(sessions.createdAt, query.createdTo) : undefined,
@@ -377,14 +377,14 @@ export function createSessionRepo(db: Db): SessionRepo {
         sessionId: record.sessionId,
         type: 'prompt',
         content: record.content,
-        delivery: record.delivery,
-        state: record.state,
+        delivery: record.delivery as SessionMessageRow['delivery'],
+        state: record.state as SessionMessageRow['state'],
         error: null,
         createdAt: record.createdAt,
         updatedAt: record.createdAt,
-      }
+      } satisfies typeof sessionMessages.$inferInsert
       await db.insert(sessionMessages).values(row)
-      return serializeMessage(row as SessionMessageRow)
+      return serializeMessage(row)
     },
 
     async queryEvents(sessionId, query) {

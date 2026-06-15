@@ -93,6 +93,10 @@ const createAccessRuleRoute = createRoute({
     201: { description: 'Created access rule', content: { 'application/json': { schema: AccessRuleSchema } } },
     400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    409: {
+      description: 'An access rule already exists for this scope',
+      content: { 'application/json': { schema: ErrorResponseSchema } },
+    },
   },
 })
 
@@ -173,15 +177,30 @@ export function registerAccessRuleRoutes(routes: AccessRuleRoutes) {
         return auth
       }
       const scope = auth
+      const providerId = body.providerId ?? '*'
+      const modelId = body.modelId ?? '*'
+      const teamId = body.teamId ?? null
+      // One rule per (provider, model, team) scope — a duplicate is a 409, not a
+      // raw D1 UNIQUE 500 (mirrors the policies scope-conflict pattern).
+      const conflict = await deps.accessRules.findByScope(auth.project.id, providerId, modelId, teamId)
+      if (conflict) {
+        return c.json(
+          errorBody('conflict', 'An access rule already exists for this scope', {
+            resourceType: 'access_rule',
+            resourceId: conflict.id,
+          }),
+          409,
+        )
+      }
       // Create is a pure forward with wildcard defaulting — no orchestration, so
       // the route maps the body to the repo input directly (anti-ceremony).
       const rule = await deps.accessRules.insert(
         {
           organizationId: auth.organization.id,
           projectId: auth.project.id,
-          providerId: body.providerId ?? '*',
-          modelId: body.modelId ?? '*',
-          teamId: body.teamId ?? null,
+          providerId,
+          modelId,
+          teamId,
           effect: body.effect,
           reason: body.reason ?? null,
           metadata: body.metadata ?? {},

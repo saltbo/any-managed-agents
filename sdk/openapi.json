@@ -3250,11 +3250,6 @@
             "type": "string",
             "format": "date-time"
           },
-          "leaseExpiresAt": {
-            "type": "string",
-            "nullable": true,
-            "format": "date-time"
-          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -3280,7 +3275,6 @@
           "result",
           "error",
           "availableAt",
-          "leaseExpiresAt",
           "createdAt",
           "updatedAt"
         ]
@@ -4889,7 +4883,7 @@
           "modelId": {
             "type": "string"
           },
-          "status": {
+          "state": {
             "type": "string",
             "enum": [
               "success",
@@ -4943,7 +4937,7 @@
           "providerId",
           "providerType",
           "modelId",
-          "status",
+          "state",
           "promptTokens",
           "completionTokens",
           "totalTokens",
@@ -11464,6 +11458,16 @@
           },
           "401": {
             "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "An access rule already exists for this scope",
             "content": {
               "application/json": {
                 "schema": {

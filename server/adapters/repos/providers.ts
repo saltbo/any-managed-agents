@@ -179,7 +179,7 @@ export function createProviderRepo(db: Db): ProviderRepo {
         lastError: null,
         createdAt,
         updatedAt: createdAt,
-      }
+      } satisfies typeof providers.$inferInsert
       await db.insert(providers).values(row)
       return providerRecordFrom(row)
     },

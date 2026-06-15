@@ -45,7 +45,7 @@ function usageRow(project: { id: string; organizationId: string }, values: Parti
     providerId: 'workers-ai',
     providerType: 'workers-ai',
     modelId: '@cf/model-a',
-    status: 'success',
+    state: 'success',
     promptTokens: 10,
     completionTokens: 5,
     totalTokens: 15,

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ae6c5f22-7670-4bab-9cef-ac91f7d8aafb",
+  "id": "1b38916f-8e17-4c16-b405-dac49b65a31b",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "access_rules": {
@@ -46,8 +46,9 @@
           "name": "team_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'*'"
         },
         "effect": {
           "name": "effect",
@@ -95,6 +96,16 @@
             "model_id"
           ],
           "isUnique": false
+        },
+        "idx_access_rules_unique_scope": {
+          "name": "idx_access_rules_unique_scope",
+          "columns": [
+            "project_id",
+            "provider_id",
+            "model_id",
+            "team_id"
+          ],
+          "isUnique": true
         }
       },
       "foreignKeys": {
@@ -114,7 +125,12 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "ck_access_rules_effect": {
+          "name": "ck_access_rules_effect",
+          "value": "\"access_rules\".\"effect\" in ('allow','deny')"
+        }
+      }
     },
     "agent_memories": {
       "name": "agent_memories",
@@ -401,7 +417,7 @@
           "name": "project_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         },
         "name": {
@@ -868,7 +884,20 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "ck_budgets_scope": {
+          "name": "ck_budgets_scope",
+          "value": "\"budgets\".\"scope\" in ('project','provider','model')"
+        },
+        "ck_budgets_limit_type": {
+          "name": "ck_budgets_limit_type",
+          "value": "\"budgets\".\"limit_type\" in ('tokens','cost_micros','sessions')"
+        },
+        "ck_budgets_window": {
+          "name": "ck_budgets_window",
+          "value": "\"budgets\".\"window\" in ('day','month')"
+        }
+      }
     },
     "connection_tools": {
       "name": "connection_tools",
@@ -1008,6 +1037,19 @@
           "tableTo": "projects",
           "columnsFrom": [
             "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "connection_tools_connector_id_connectors_id_fk": {
+          "name": "connection_tools_connector_id_connectors_id_fk",
+          "tableFrom": "connection_tools",
+          "tableTo": "connectors",
+          "columnsFrom": [
+            "connector_id"
           ],
           "columnsTo": [
             "id"
@@ -1159,6 +1201,19 @@
           "tableTo": "projects",
           "columnsFrom": [
             "project_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "connections_connector_id_connectors_id_fk": {
+          "name": "connections_connector_id_connectors_id_fk",
+          "tableFrom": "connections",
+          "tableTo": "connectors",
+          "columnsFrom": [
+            "connector_id"
           ],
           "columnsTo": [
             "id"
@@ -1474,7 +1529,12 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "ck_environment_versions_hosting_mode": {
+          "name": "ck_environment_versions_hosting_mode",
+          "value": "\"environment_versions\".\"hosting_mode\" in ('cloud','self_hosted')"
+        }
+      }
     },
     "environments": {
       "name": "environments",
@@ -1644,7 +1704,12 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "ck_environments_hosting_mode": {
+          "name": "ck_environments_hosting_mode",
+          "value": "\"environments\".\"hosting_mode\" in ('cloud','self_hosted')"
+        }
+      }
     },
     "federated_tenants": {
       "name": "federated_tenants",
@@ -1910,7 +1975,12 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "ck_leases_state": {
+          "name": "ck_leases_state",
+          "value": "\"leases\".\"state\" in ('active','completed','failed','cancelled','expired','interrupted')"
+        }
+      }
     },
     "model_discovery_tasks": {
       "name": "model_discovery_tasks",
@@ -2021,7 +2091,12 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "ck_model_discovery_tasks_state": {
+          "name": "ck_model_discovery_tasks_state",
+          "value": "\"model_discovery_tasks\".\"state\" in ('pending','running','succeeded','failed')"
+        }
+      }
     },
     "policies": {
       "name": "policies",
@@ -2156,7 +2231,12 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "ck_policies_scope": {
+          "name": "ck_policies_scope",
+          "value": "\"policies\".\"scope\" in ('organization','team','project')"
+        }
+      }
     },
     "projects": {
       "name": "projects",
@@ -2303,15 +2383,6 @@
         }
       },
       "indexes": {
-        "idx_provider_models_project_provider": {
-          "name": "idx_provider_models_project_provider",
-          "columns": [
-            "project_id",
-            "provider_id",
-            "model_id"
-          ],
-          "isUnique": false
-        },
         "idx_provider_models_unique_model": {
           "name": "idx_provider_models_unique_model",
           "columns": [
@@ -2731,7 +2802,16 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "ck_runners_state": {
+          "name": "ck_runners_state",
+          "value": "\"runners\".\"state\" in ('active','draining','disabled','offline')"
+        },
+        "ck_runners_auth_mode": {
+          "name": "ck_runners_auth_mode",
+          "value": "\"runners\".\"auth_mode\" in ('bearer','mtls','oidc','federated')"
+        }
+      }
     },
     "session_approvals": {
       "name": "session_approvals",
@@ -2901,7 +2981,12 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "ck_session_approvals_state": {
+          "name": "ck_session_approvals_state",
+          "value": "\"session_approvals\".\"state\" in ('pending','approved','denied')"
+        }
+      }
     },
     "session_channels": {
       "name": "session_channels",
@@ -3383,7 +3468,16 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "ck_session_messages_delivery": {
+          "name": "ck_session_messages_delivery",
+          "value": "\"session_messages\".\"delivery\" in ('live','queued')"
+        },
+        "ck_session_messages_state": {
+          "name": "ck_session_messages_state",
+          "value": "\"session_messages\".\"state\" in ('accepted','delivered','failed')"
+        }
+      }
     },
     "sessions": {
       "name": "sessions",
@@ -3486,7 +3580,7 @@
           "name": "project_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         },
         "durable_object_name": {
@@ -3552,6 +3646,28 @@
           "notNull": false,
           "autoincrement": false
         },
+        "active_turn_id": {
+          "name": "active_turn_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "turn_lease_expires_at": {
+          "name": "turn_lease_expires_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "continuation_depth": {
+          "name": "continuation_depth",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
         "metadata": {
           "name": "metadata",
           "type": "text",
@@ -3604,6 +3720,13 @@
             "state",
             "created_at",
             "id"
+          ],
+          "isUnique": false
+        },
+        "idx_sessions_sandbox": {
+          "name": "idx_sessions_sandbox",
+          "columns": [
+            "sandbox_id"
           ],
           "isUnique": false
         }
@@ -3677,7 +3800,12 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "ck_sessions_state": {
+          "name": "ck_sessions_state",
+          "value": "\"sessions\".\"state\" in ('pending','running','idle','stopped','error')"
+        }
+      }
     },
     "tool_calls": {
       "name": "tool_calls",
@@ -3786,6 +3914,15 @@
             "id"
           ],
           "isUnique": false
+        },
+        "idx_tool_calls_session_created": {
+          "name": "idx_tool_calls_session_created",
+          "columns": [
+            "session_id",
+            "created_at",
+            "id"
+          ],
+          "isUnique": false
         }
       },
       "foreignKeys": {
@@ -3815,6 +3952,19 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
+        "tool_calls_connector_id_connectors_id_fk": {
+          "name": "tool_calls_connector_id_connectors_id_fk",
+          "tableFrom": "tool_calls",
+          "tableTo": "connectors",
+          "columnsFrom": [
+            "connector_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "tool_calls_session_id_sessions_id_fk": {
           "name": "tool_calls_session_id_sessions_id_fk",
           "tableFrom": "tool_calls",
@@ -3831,7 +3981,12 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "ck_tool_calls_state": {
+          "name": "ck_tool_calls_state",
+          "value": "\"tool_calls\".\"state\" in ('success','error')"
+        }
+      }
     },
     "trigger_runs": {
       "name": "trigger_runs",
@@ -4014,7 +4169,12 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "ck_trigger_runs_state": {
+          "name": "ck_trigger_runs_state",
+          "value": "\"trigger_runs\".\"state\" in ('claimed','session_created','failed')"
+        }
+      }
     },
     "triggers": {
       "name": "triggers",
@@ -4244,7 +4404,12 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "ck_triggers_runtime": {
+          "name": "ck_triggers_runtime",
+          "value": "\"triggers\".\"runtime\" in ('ama','claude-code','codex','copilot')"
+        }
+      }
     },
     "usage_records": {
       "name": "usage_records",
@@ -4326,8 +4491,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "status": {
-          "name": "status",
+        "state": {
+          "name": "state",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -4442,7 +4607,12 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "ck_usage_records_state": {
+          "name": "ck_usage_records_state",
+          "value": "\"usage_records\".\"state\" in ('success','error')"
+        }
+      }
     },
     "vault_credential_versions": {
       "name": "vault_credential_versions",
@@ -4564,14 +4734,6 @@
         }
       },
       "indexes": {
-        "idx_vault_credential_versions_credential_version": {
-          "name": "idx_vault_credential_versions_credential_version",
-          "columns": [
-            "credential_id",
-            "version"
-          ],
-          "isUnique": false
-        },
         "idx_vault_credential_versions_unique_credential_version": {
           "name": "idx_vault_credential_versions_unique_credential_version",
           "columns": [
@@ -4633,7 +4795,16 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "ck_vault_credential_versions_state": {
+          "name": "ck_vault_credential_versions_state",
+          "value": "\"vault_credential_versions\".\"state\" in ('active','superseded','revoked')"
+        },
+        "ck_vault_credential_versions_provider": {
+          "name": "ck_vault_credential_versions_provider",
+          "value": "\"vault_credential_versions\".\"provider\" in ('ama-managed','cloudflare-secrets','external-vault')"
+        }
+      }
     },
     "vault_credentials": {
       "name": "vault_credentials",
@@ -4797,7 +4968,12 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "ck_vault_credentials_state": {
+          "name": "ck_vault_credentials_state",
+          "value": "\"vault_credentials\".\"state\" in ('active','revoked')"
+        }
+      }
     },
     "vaults": {
       "name": "vaults",
@@ -4912,7 +5088,12 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "ck_vaults_scope": {
+          "name": "ck_vaults_scope",
+          "value": "\"vaults\".\"scope\" in ('project','organization')"
+        }
+      }
     },
     "work_items": {
       "name": "work_items",
@@ -5033,13 +5214,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "lease_expires_at": {
-          "name": "lease_expires_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "text",
@@ -5139,7 +5313,12 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "ck_work_items_state": {
+          "name": "ck_work_items_state",
+          "value": "\"work_items\".\"state\" in ('available','leased','succeeded','failed','cancelled')"
+        }
+      }
     }
   },
   "views": {},

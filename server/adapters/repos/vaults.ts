@@ -278,7 +278,7 @@ export function createVaultRepo(db: Db): VaultRepo {
         revokeReason: null,
         createdAt,
         updatedAt: createdAt,
-      }
+      } satisfies typeof vaultCredentials.$inferInsert
       const versionRow = {
         id: version.id,
         credentialId: version.credentialId,
@@ -291,7 +291,7 @@ export function createVaultRepo(db: Db): VaultRepo {
         createdAt,
         supersededAt: null,
         revokedAt: null,
-      }
+      } satisfies typeof vaultCredentialVersions.$inferInsert
       await db.batch([
         db.insert(vaultCredentials).values(credentialRow),
         db.insert(vaultCredentialVersions).values(versionRow),
@@ -377,7 +377,7 @@ export function createVaultRepo(db: Db): VaultRepo {
         createdAt: timestamp,
         supersededAt: null,
         revokedAt: null,
-      }
+      } satisfies typeof vaultCredentialVersions.$inferInsert
       await db.batch([
         db.insert(vaultCredentialVersions).values(versionRow),
         ...(previousActiveVersionId
