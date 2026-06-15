@@ -294,7 +294,7 @@ func (d *RunnerDaemon) Start(ctx context.Context) error {
 	if err := d.ensureRunnerID(ctx); err != nil {
 		return err
 	}
-	if err := d.heartbeat(ctx); err != nil {
+	if err := d.heartbeatOrRecover(ctx); err != nil {
 		return err
 	}
 	go d.runUsageCollector(ctx)
@@ -321,6 +321,22 @@ func (d *RunnerDaemon) Start(ctx context.Context) error {
 			return ctx.Err()
 		case <-heartbeatTicker.C:
 			if err := d.heartbeat(ctx); err != nil {
+				// The control plane forgot this runner (reaped or data reset):
+				// re-register under a fresh id instead of heartbeating a ghost.
+				if isRunnerGoneError(err) {
+					slog.Warn("runner registration was lost; re-registering", "error", err)
+					if recoverErr := d.recoverRunnerIdentity(ctx); recoverErr != nil {
+						heartbeatFailures++
+						slog.Warn("runner re-registration failed", "consecutiveFailures", heartbeatFailures, "error", recoverErr)
+						if heartbeatFailures >= heartbeatMaxConsecutiveFailures {
+							d.drainInFlightLeases(&inFlight)
+							return fmt.Errorf("runner re-registration failed %d consecutive times: %w", heartbeatFailures, recoverErr)
+						}
+						continue
+					}
+					heartbeatFailures = 0
+					continue
+				}
 				// A transient network blip must not take the runner offline and
 				// interrupt every running session; give up only when the control
 				// plane stays unreachable across many consecutive intervals.
@@ -402,7 +418,7 @@ func (d *RunnerDaemon) RunOnce(ctx context.Context) error {
 	if err := d.ensureRunnerID(ctx); err != nil {
 		return err
 	}
-	if err := d.heartbeat(ctx); err != nil {
+	if err := d.heartbeatOrRecover(ctx); err != nil {
 		return err
 	}
 	if !d.tryAcquireLeaseSlot() {
@@ -497,6 +513,32 @@ func (d *RunnerDaemon) ensureRunnerID(ctx context.Context) error {
 		return err
 	}
 	return nil
+}
+
+// recoverRunnerIdentity forgets the current (stale) runner id — both in memory
+// and in the persisted state file — and registers a fresh runner. Called when
+// the control plane reports the runner row is gone (404).
+func (d *RunnerDaemon) recoverRunnerIdentity(ctx context.Context) error {
+	d.RunnerID = ""
+	if err := clearStoredRunnerID(d.Config); err != nil {
+		return err
+	}
+	return d.ensureRunnerID(ctx)
+}
+
+// heartbeatOrRecover sends a heartbeat and, if the control plane reports the
+// runner is gone (404), re-registers once and retries. Used on the startup
+// paths where a single heartbeat must succeed before proceeding.
+func (d *RunnerDaemon) heartbeatOrRecover(ctx context.Context) error {
+	err := d.heartbeat(ctx)
+	if err == nil || !isRunnerGoneError(err) {
+		return err
+	}
+	slog.Warn("runner registration was lost; re-registering", "error", err)
+	if recoverErr := d.recoverRunnerIdentity(ctx); recoverErr != nil {
+		return recoverErr
+	}
+	return d.heartbeat(ctx)
 }
 
 func (d *RunnerDaemon) ensureRunner(ctx context.Context) (string, error) {

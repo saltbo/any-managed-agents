@@ -131,8 +131,18 @@ func (c *v1ControlPlane) CreateRunner(ctx context.Context, body ama.CreateRunner
 }
 
 func (c *v1ControlPlane) PutRunnerHeartbeat(ctx context.Context, runnerID string, body PutRunnerHeartbeatRequest) error {
-	_, err := c.doStatus(ctx, http.MethodPut, "/api/v1/runners/"+url.PathEscape(runnerID)+"/heartbeat", body, nil)
-	return err
+	status, err := c.doStatus(ctx, http.MethodPut, "/api/v1/runners/"+url.PathEscape(runnerID)+"/heartbeat", body, nil)
+	if err != nil {
+		// 404: the control plane no longer knows this runner — its row was
+		// reaped (offline timeout) or lost (control-plane data reset). The
+		// stored runner id is stale; surface it so the daemon re-registers
+		// instead of heartbeating a ghost forever.
+		if status == http.StatusNotFound {
+			return runnerGoneError{err: err}
+		}
+		return err
+	}
+	return nil
 }
 
 func (c *v1ControlPlane) ListAvailableWorkItems(ctx context.Context) ([]WorkItem, error) {
@@ -194,6 +204,22 @@ func (e claimRaceError) Error() string {
 func isClaimRaceError(err error) bool {
 	var raceErr claimRaceError
 	return errors.As(err, &raceErr)
+}
+
+// runnerGoneError marks an operation that found the runner row absent (404).
+// Unlike a transient heartbeat failure, this is terminal for the current
+// runner id and is recovered by re-registering, not by retrying.
+type runnerGoneError struct {
+	err error
+}
+
+func (e runnerGoneError) Error() string {
+	return e.err.Error()
+}
+
+func isRunnerGoneError(err error) bool {
+	var goneErr runnerGoneError
+	return errors.As(err, &goneErr)
 }
 
 func (c *v1ControlPlane) doStatus(ctx context.Context, method string, path string, body any, out any) (int, error) {

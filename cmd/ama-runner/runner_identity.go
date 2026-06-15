@@ -138,6 +138,30 @@ func storeRunnerID(config Config, runnerID string) error {
 	return saveRunnerState(path, state)
 }
 
+// clearStoredRunnerID drops the persisted binding for the current
+// (origin, project, environment, machine) key so the next ensureRunnerID
+// registers a fresh runner. Used to recover from a stale runner id.
+func clearStoredRunnerID(config Config) error {
+	machineID, err := ensureMachineID(config)
+	if err != nil {
+		return err
+	}
+	path := runnerStatePath(config)
+	state, err := loadRunnerState(path)
+	if err != nil {
+		return err
+	}
+	key := runnerIdentityKey(config, machineID)
+	kept := make([]runnerStateBinding, 0, len(state.Bindings))
+	for _, binding := range state.Bindings {
+		if binding.Key != key {
+			kept = append(kept, binding)
+		}
+	}
+	state.Bindings = kept
+	return saveRunnerState(path, state)
+}
+
 func loadRunnerState(path string) (runnerState, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
