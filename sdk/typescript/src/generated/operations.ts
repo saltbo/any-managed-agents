@@ -453,6 +453,15 @@ export const operations = [
   },
   {
     "method": "GET",
+    "path": "/api/v1/runtimes/{runtime}/models",
+    "operationId": "listRuntimeModels",
+    "summary": "List a runtime's cloud models",
+    "tags": [
+      "Runtimes"
+    ]
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/sessions/{sessionId}/approvals",
     "operationId": "listSessionApprovals",
     "summary": "List tool approvals for a session",

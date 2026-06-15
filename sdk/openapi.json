@@ -2710,6 +2710,41 @@
           "updatedAt"
         ]
       },
+      "RuntimeModelList": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RuntimeModel"
+            }
+          }
+        },
+        "required": [
+          "data"
+        ]
+      },
+      "RuntimeModel": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "example": "workers-ai"
+          },
+          "model": {
+            "type": "string",
+            "example": "@cf/moonshotai/kimi-k2.6"
+          },
+          "displayName": {
+            "type": "string",
+            "example": "Kimi K2.6 (Workers AI)"
+          }
+        },
+        "required": [
+          "provider",
+          "model"
+        ]
+      },
       "Runner": {
         "type": "object",
         "properties": {
@@ -9820,6 +9855,53 @@
           },
           "404": {
             "description": "Provider or task not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runtimes/{runtime}/models": {
+      "get": {
+        "operationId": "listRuntimeModels",
+        "tags": [
+          "Runtimes"
+        ],
+        "summary": "List a runtime's cloud models",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "ama"
+            },
+            "required": true,
+            "name": "runtime",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Runtime cloud models",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuntimeModelList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
             "content": {
               "application/json": {
                 "schema": {

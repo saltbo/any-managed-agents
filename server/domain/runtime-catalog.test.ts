@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  cloudRuntimeModels,
   RUNTIME_CATALOG,
   RUNTIME_PROVIDER_MODEL_CAPABILITY_PREFIX,
   runnerSupportsRuntimeProviderModel,
@@ -180,6 +181,26 @@ describe('runtimeSupportsHostingMode', () => {
   it('returns false for unknown runtimes', () => {
     // @ts-expect-error testing unknown runtime
     expect(runtimeSupportsHostingMode('cloud', 'unknown')).toBe(false)
+  })
+})
+
+describe('cloudRuntimeModels', () => {
+  it('returns the three concrete ama cloud models with their display names', () => {
+    expect(cloudRuntimeModels('ama')).toEqual([
+      { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6', displayName: 'Kimi K2.6 (Workers AI)' },
+      { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.7-code', displayName: 'Kimi K2.7 Code (Workers AI)' },
+      { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', displayName: 'GPT-OSS 120B (Workers AI)' },
+    ])
+  })
+
+  it('returns an empty list for a self-hosted-only runtime whose catalog entry is wildcard', () => {
+    // claude-code is self_hosted only and pins '*'/'*', so it exposes no cloud catalog.
+    expect(cloudRuntimeModels('claude-code')).toEqual([])
+  })
+
+  it('returns an empty list for an unknown runtime', () => {
+    // @ts-expect-error testing unknown runtime
+    expect(cloudRuntimeModels('unknown-runtime')).toEqual([])
   })
 })
 

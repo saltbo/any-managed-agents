@@ -61,6 +61,7 @@ var Operations = []Operation{
 	{Method: "GET", Path: "/api/v1/providers/{providerId}/models", OperationID: "listProviderModels", Summary: "List provider models", Tags: []string{"Providers"}},
 	{Method: "GET", Path: "/api/v1/providers", OperationID: "listProviders", Summary: "List providers", Tags: []string{"Providers"}},
 	{Method: "GET", Path: "/api/v1/runners", OperationID: "listRunners", Summary: "List self-hosted runners", Tags: []string{"Runners"}},
+	{Method: "GET", Path: "/api/v1/runtimes/{runtime}/models", OperationID: "listRuntimeModels", Summary: "List a runtime's cloud models", Tags: []string{"Runtimes"}},
 	{Method: "GET", Path: "/api/v1/sessions/{sessionId}/approvals", OperationID: "listSessionApprovals", Summary: "List tool approvals for a session", Tags: []string{"Sessions"}},
 	{Method: "GET", Path: "/api/v1/sessions/{sessionId}/events", OperationID: "listSessionEvents", Summary: "List session events", Tags: []string{"Sessions"}},
 	{Method: "GET", Path: "/api/v1/sessions/{sessionId}/messages", OperationID: "listSessionMessages", Summary: "List session messages", Tags: []string{"Sessions"}},

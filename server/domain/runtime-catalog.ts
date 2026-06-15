@@ -6,7 +6,7 @@ export type RuntimeName = 'ama' | 'claude-code' | 'codex' | 'copilot'
 type RuntimeCatalogEntry = {
   runtime: RuntimeName
   hostingModes: RuntimeHostingMode[]
-  providerModels: Array<{ provider: string; model: string }>
+  providerModels: Array<{ provider: string; model: string; displayName?: string }>
 }
 
 // Self-hosted CLI runtimes accept any model ('*'): the host CLI owns the
@@ -18,14 +18,14 @@ export const RUNTIME_CATALOG: readonly RuntimeCatalogEntry[] = [
     runtime: 'ama',
     hostingModes: ['cloud', 'self_hosted'],
     providerModels: [
-      { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6' },
+      { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6', displayName: 'Kimi K2.6 (Workers AI)' },
       // Alternate tool-calling Workers AI models for when kimi-k2.6's upstream
       // is degraded. gpt-oss-120b is a different-vendor backend (best failover
       // isolation); kimi-k2.7-code is the newer same-family model. llama-3.3-70b
       // was tried and dropped: it returns no tool_calls in this harness, so it
       // cannot drive the agentic loop.
-      { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.7-code' },
-      { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b' },
+      { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.7-code', displayName: 'Kimi K2.7 Code (Workers AI)' },
+      { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', displayName: 'GPT-OSS 120B (Workers AI)' },
     ],
   },
   {
@@ -44,6 +44,23 @@ export const RUNTIME_CATALOG: readonly RuntimeCatalogEntry[] = [
     providerModels: [{ provider: '*', model: '*' }],
   },
 ]
+
+// Cloud runtime model catalog exposed to clients: only concrete platform models
+// of a cloud-capable runtime. Self-hosted-only runtimes (wildcard '*' entries,
+// not cloud) own their model universe at the host CLI, so they return [].
+export function cloudRuntimeModels(
+  runtime: RuntimeName,
+): Array<{ provider: string; model: string; displayName?: string }> {
+  const entry = RUNTIME_CATALOG.find((e) => e.runtime === runtime)
+  if (!entry?.hostingModes.includes('cloud')) return []
+  return entry.providerModels
+    .filter((pm) => pm.model !== '*')
+    .map((pm) => ({
+      provider: pm.provider,
+      model: pm.model,
+      ...(pm.displayName ? { displayName: pm.displayName } : {}),
+    }))
+}
 
 // Runtimes whose bridge reliably accepts mid-run prompt injection over the
 // runner session channel. Only ama qualifies: it runs the shared runtime-core
