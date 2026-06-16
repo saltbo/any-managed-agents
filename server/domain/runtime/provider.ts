@@ -3,10 +3,6 @@
 // global vendor catalog with no credentials and no baseUrl, so the session path
 // no longer resolves or dispatches any provider connection config.
 
-export function isWorkersAiProvider(provider: string): boolean {
-  return provider === 'workers-ai' || provider === 'cloudflare-workers-ai'
-}
-
 export function canonicalProvider(provider: string): string {
   return provider === 'workers-ai' ? 'cloudflare-workers-ai' : provider
 }

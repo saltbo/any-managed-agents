@@ -43,6 +43,7 @@ import type {
   CloudTurnQueue,
   CloudTurnSecretEnvEntry,
   PolicyPort,
+  ProviderRepo,
   RuntimeSecretEnvGateway,
   SandboxRuntimeHost,
   SessionOrchestrationStore,
@@ -67,6 +68,7 @@ type CreateApprovalGate = (values: {
 export type CloudTurnDeps = {
   sessionOrchestration: SessionOrchestrationStore
   policy: PolicyPort
+  providers: ProviderRepo
   audit: AuditPort
   sandboxRuntime: SandboxRuntimeHost
   cloudTurnQueue: CloudTurnQueue

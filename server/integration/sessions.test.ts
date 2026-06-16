@@ -5,7 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { runtimeErrorMessage } from '../http/sessions'
 import { defaultClaims, seedPlatformProvider, setupOidcProvider, signIn } from './auth'
 
-const DEFAULT_AMA_RUNNER_CAPABILITY = runtimeProviderModelCapability('ama', 'workers-ai', '@cf/moonshotai/kimi-k2.6')
+// ama is a wildcard runtime, so its required runner capability normalizes the
+// provider segment to '*' regardless of the agent's vendor.
+const DEFAULT_AMA_RUNNER_CAPABILITY = runtimeProviderModelCapability('ama', '*', '@cf/moonshotai/kimi-k2.6')
 
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
@@ -57,9 +59,10 @@ async function createAgent(authorization: string, data: Record<string, unknown> 
       skills: ['ama@cloud-session'],
       mcpConnectors: ['github'],
       // Agents must pin a provider before a session can be created. The cloud
-      // runtime ('ama') always routes through the workers-ai binding; the model
-      // stays open unless a test pins one. The seeded global provider row backs
-      // the agent.providerId FK.
+      // runtime ('ama') routes through the Workers AI binding, which only
+      // recognizes the 'workers-ai' provider and supplies a default model when
+      // none is pinned. The seeded global provider row backs the agent.providerId
+      // FK and the cloud catalog check.
       providerId: 'workers-ai',
       ...data,
     }),
@@ -1476,6 +1479,13 @@ describe('[CF] /api/v1/sessions', () => {
     const environment = await createEnvironment(authorization, { mcpPolicy: {} })
     const agent = await createAgent(authorization, { providerId, model, mcpConnectors: [] })
 
+    // Cloud validation checks the GLOBAL catalog (provider_models) via findModel.
+    // Drop the model row out of band (the agent pinned it at save time) so the
+    // exact (provider, model) the agent pins is no longer in the catalog.
+    await env.DB.prepare('DELETE FROM provider_models WHERE provider_id = ? AND model_id = ?')
+      .bind(providerId, model)
+      .run()
+
     const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
@@ -1584,9 +1594,14 @@ describe('[CF] /api/v1/sessions', () => {
 
   it('rejects ama runtime sessions for configured external providers even without a pinned model', async () => {
     const authorization = await signIn()
-    const { providerId } = await createProviderModel(authorization, 'gpt-5.3-codex')
+    // Cloud validation with no pinned model checks the GLOBAL catalog via
+    // findBySlug(provider). Seed a provider whose row id (what the agent pins)
+    // differs from its slug, so the agent saves but the catalog lookup by slug
+    // misses and the session is rejected.
+    const providerId = `external-${crypto.randomUUID().slice(0, 8)}`
+    await seedPlatformProvider({ providerId, slug: `${providerId}-slug`, displayName: 'External gateway' })
     const environment = await createEnvironment(authorization, { mcpPolicy: {} })
-    const agent = await createAgent(authorization, { providerId, mcpConnectors: [] })
+    const agent = await createAgent(authorization, { providerId, model: null, mcpConnectors: [] })
 
     const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',

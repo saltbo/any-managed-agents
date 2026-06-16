@@ -71,6 +71,10 @@ const store = {
 
 const deps: CloudTurnDeps = {
   sessionOrchestration: store as never,
+  providers: {
+    findModel: async () => ({ id: 'm', providerId: 'workers-ai', modelId: '@cf/x' }),
+    findBySlug: async () => ({ id: 'workers-ai', slug: 'workers-ai' }),
+  } as never,
   // The cloud-turn usecase records audit through the AuditPort (deps.audit);
   // record(auth, entry) routes to the same spy the legacy recordAudit path used
   // (the entry lands in call[1], matching the recordAudit(db, { auth, ...entry })
@@ -295,6 +299,10 @@ describe('startSessionRuntimeForRow — startup partial-failure (H5 FIX 1)', () 
 
   const startupDeps: CloudTurnDeps = {
     sessionOrchestration: store as never,
+    providers: {
+      findModel: async () => ({ id: 'm', providerId: 'workers-ai', modelId: '@cf/x' }),
+      findBySlug: async () => ({ id: 'workers-ai', slug: 'workers-ai' }),
+    } as never,
     audit: { record: (auth: unknown, entry: unknown) => recordAuditMock(auth, entry) } as never,
     // resolveMcpSnapshot reads the agent connectors through deps; route it through
     // the same store, but mcp resolution is stubbed below by overriding the methods

@@ -17,46 +17,11 @@ export const RUNTIME_CATALOG: readonly RuntimeCatalogEntry[] = [
   {
     runtime: 'ama',
     hostingModes: ['cloud', 'self_hosted'],
-    // The cloud runtime calls env.AI.run(model), where provider is always
-    // 'workers-ai' (the AI binding): an '@cf/...' id runs a native Workers AI
-    // model; a '{vendor}/{model}' id (anthropic/openai/...) auto-routes through
-    // AI Gateway to that vendor. First entry = the default clients pick — kept a
-    // free @cf model so the default never incurs gateway billing.
-    //
-    // @cf models: free daily allocation; tool_calls verified in this harness
-    // (probed via the runtime-ai proxy). Excluded the @cf ones that returned no
-    // tool_calls (llama-3.1/3.3/4-scout, qwen2.5-coder, qwq-32b, deepseek-r1,
-    // gemma-sea-lion). kimi-k2.6 last — its upstream is currently degraded.
-    //
-    // Third-party (anthropic/openai): ids verified valid against the gateway;
-    // they bill via AI Gateway Unified Billing or BYOK (NOT the free @cf
-    // allocation) — native tool-callers, per-model run pending gateway funding.
-    providerModels: [
-      { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.7-code', displayName: 'Kimi K2.7 Code (Workers AI)' },
-      { provider: 'workers-ai', model: '@cf/openai/gpt-oss-120b', displayName: 'GPT-OSS 120B (Workers AI)' },
-      { provider: 'workers-ai', model: '@cf/openai/gpt-oss-20b', displayName: 'GPT-OSS 20B (Workers AI)' },
-      { provider: 'workers-ai', model: '@cf/qwen/qwen3-30b-a3b-fp8', displayName: 'Qwen3 30B A3B (Workers AI)' },
-      { provider: 'workers-ai', model: '@cf/nvidia/nemotron-3-120b-a12b', displayName: 'Nemotron 3 120B (Workers AI)' },
-      { provider: 'workers-ai', model: '@cf/google/gemma-4-26b-a4b-it', displayName: 'Gemma 4 26B (Workers AI)' },
-      { provider: 'workers-ai', model: '@cf/zai-org/glm-4.7-flash', displayName: 'GLM 4.7 Flash (Workers AI)' },
-      {
-        provider: 'workers-ai',
-        model: '@cf/ibm-granite/granite-4.0-h-micro',
-        displayName: 'Granite 4.0 H Micro (Workers AI)',
-      },
-      { provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6', displayName: 'Kimi K2.6 (Workers AI)' },
-      // Third-party via AI Gateway (Unified Billing / BYOK; not free):
-      { provider: 'workers-ai', model: 'anthropic/claude-opus-4', displayName: 'Claude Opus 4 (Anthropic)' },
-      { provider: 'workers-ai', model: 'anthropic/claude-sonnet-4', displayName: 'Claude Sonnet 4 (Anthropic)' },
-      { provider: 'workers-ai', model: 'anthropic/claude-fable-5', displayName: 'Claude Fable 5 (Anthropic)' },
-      { provider: 'workers-ai', model: 'openai/gpt-5.2', displayName: 'GPT-5.2 (OpenAI)' },
-      { provider: 'workers-ai', model: 'openai/gpt-5', displayName: 'GPT-5 (OpenAI)' },
-      { provider: 'workers-ai', model: 'openai/gpt-5-mini', displayName: 'GPT-5 mini (OpenAI)' },
-      { provider: 'workers-ai', model: 'openai/gpt-4.1', displayName: 'GPT-4.1 (OpenAI)' },
-      { provider: 'workers-ai', model: 'openai/gpt-4.1-mini', displayName: 'GPT-4.1 mini (OpenAI)' },
-      { provider: 'workers-ai', model: 'openai/gpt-4o', displayName: 'GPT-4o (OpenAI)' },
-      { provider: 'workers-ai', model: 'openai/o3', displayName: 'o3 (OpenAI)' },
-    ],
+    // Models are no longer hardcoded here. Cloud validates the provider/model
+    // against the GLOBAL catalog (server/domain/model-catalog.ts populated by
+    // discovery), and self-hosted gates on the runner's declared capabilities —
+    // so ama declares a wildcard like the other runtimes.
+    providerModels: [{ provider: '*', model: '*' }],
   },
   {
     runtime: 'claude-code',
@@ -74,23 +39,6 @@ export const RUNTIME_CATALOG: readonly RuntimeCatalogEntry[] = [
     providerModels: [{ provider: '*', model: '*' }],
   },
 ]
-
-// Cloud runtime model catalog exposed to clients: only concrete platform models
-// of a cloud-capable runtime. Self-hosted-only runtimes (wildcard '*' entries,
-// not cloud) own their model universe at the host CLI, so they return [].
-export function cloudRuntimeModels(
-  runtime: RuntimeName,
-): Array<{ provider: string; model: string; displayName?: string }> {
-  const entry = RUNTIME_CATALOG.find((e) => e.runtime === runtime)
-  if (!entry?.hostingModes.includes('cloud')) return []
-  return entry.providerModels
-    .filter((pm) => pm.model !== '*')
-    .map((pm) => ({
-      provider: pm.provider,
-      model: pm.model,
-      ...(pm.displayName ? { displayName: pm.displayName } : {}),
-    }))
-}
 
 // Runtimes whose bridge reliably accepts mid-run prompt injection over the
 // runner session channel. Only ama qualifies: it runs the shared runtime-core
@@ -176,24 +124,23 @@ export function runtimeCatalogSupportsProviderModel(
   if (!entry?.hostingModes.includes(hostingMode)) {
     return false
   }
-  /* v8 ignore start -- catalog-growth guard: no current RUNTIME_CATALOG entry declares zero providerModels */
-  if (entry.providerModels.length === 0) {
+  // Every runtime entry now declares a wildcard provider/model, so a hosting-mode
+  // match suffices here — the real provider/model gating is the global catalog
+  // (cloud) and runner capabilities (self-hosted). The concrete-match arms below
+  // are a growth guard for a future pinned catalog entry.
+  if (entry.providerModels.every((capability) => capability.provider === '*' && capability.model === '*')) {
     return true
   }
-  /* v8 ignore stop */
-  // Provider support is checked even when no model is pinned: a runtime that
-  // only serves the platform provider (ama → workers-ai) must not accept a
-  // configured external provider just because the agent left the model open.
+  /* v8 ignore start -- catalog-growth guard: no current RUNTIME_CATALOG entry pins a provider/model */
   if (!model) {
     return entry.providerModels.some((capability) => capability.provider === '*' || capability.provider === provider)
   }
-  return Boolean(
-    entry.providerModels.some(
-      (capability) =>
-        (capability.provider === '*' || capability.provider === provider) &&
-        (capability.model === '*' || capability.model === model),
-    ),
+  return entry.providerModels.some(
+    (capability) =>
+      (capability.provider === '*' || capability.provider === provider) &&
+      (capability.model === '*' || capability.model === model),
   )
+  /* v8 ignore stop */
 }
 
 export function runtimeSupportsHostingMode(hostingMode: RuntimeHostingMode, runtime: RuntimeName) {
