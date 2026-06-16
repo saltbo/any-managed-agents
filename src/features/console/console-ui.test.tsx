@@ -378,7 +378,7 @@ describe('[spec: console/shell] ConsoleShell', () => {
     expect(screen.getAllByRole('link', { name: 'Agents' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('link', { name: 'Environments' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('link', { name: 'Sessions' }).length).toBeGreaterThan(0)
-    expect(screen.getAllByRole('link', { name: 'Providers' }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('link', { name: 'Provider policy' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('link', { name: 'Vaults' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('link', { name: 'MCP' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('link', { name: 'Audit' }).length).toBeGreaterThan(0)

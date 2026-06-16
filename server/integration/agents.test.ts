@@ -1,6 +1,6 @@
 import { SELF } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { defaultClaims, setupOidcProvider, signIn } from './auth'
+import { defaultClaims, seedPlatformProvider, setupOidcProvider, signIn } from './auth'
 
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
@@ -387,23 +387,20 @@ describe('[CF] /api/v1/agents', () => {
     expect(deferredRes.status).toBe(201)
     await expect(deferredRes.json()).resolves.toMatchObject({ providerId: null })
 
-    const providerRes = await jsonFetch('/api/v1/providers', authorization, {
-      method: 'POST',
-      body: JSON.stringify({ type: 'workers-ai', displayName: 'Workers AI' }),
-    })
-    expect(providerRes.status).toBe(201)
-    const provider = (await providerRes.json()) as { id: string }
+    // Providers are a global vendor catalog seeded out of band (discovery), not
+    // created through the API. Bind the agent to the seeded vendor row.
+    const { providerId, modelId } = await seedPlatformProvider()
 
     const boundRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Bound provider agent', providerId: provider.id }),
+      body: JSON.stringify({ name: 'Bound provider agent', providerId, model: modelId }),
     })
     expect(boundRes.status).toBe(201)
-    await expect(boundRes.json()).resolves.toMatchObject({ providerId: provider.id })
+    await expect(boundRes.json()).resolves.toMatchObject({ providerId, model: modelId })
 
     const unknownModelRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Unknown model agent', providerId: provider.id, model: 'unknown-model' }),
+      body: JSON.stringify({ name: 'Unknown model agent', providerId, model: 'unknown-model' }),
     })
     expect(unknownModelRes.status).toBe(400)
     await expect(unknownModelRes.json()).resolves.toMatchObject({

@@ -47,30 +47,22 @@ export const federatedTenants = sqliteTable(
   ],
 )
 
+// Global vendor catalog. NOT per-tenant: the platform serves one shared model
+// universe (cloud runs everything through the Workers AI binding + AI Gateway),
+// so a provider is just the model VENDOR (anthropic, openai, moonshotai, …).
+// BYOK connection columns (base_url, credential refs, rate limits, budgets) were
+// removed — they only ever mattered for the dropped per-tenant BYOK path.
 export const providers = sqliteTable(
   'providers',
   {
     id: text('id').primaryKey(),
-    organizationId: text('organization_id').notNull(),
-    projectId: text('project_id')
-      .notNull()
-      .references(() => projects.id),
-    type: text('type').notNull(),
+    // Vendor identity, derivable from a model id's vendor segment so discovery
+    // resolves rows by slug.
+    slug: text('slug').notNull(),
     displayName: text('display_name').notNull(),
-    baseUrl: text('base_url'),
-    isDefault: integer('is_default', { mode: 'boolean' }).notNull().default(false),
     enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
-    // Vault credential ref (nullable). credential_version_id optionally pins a
-    // specific version. NOT validated at write — a dangling/deleted ref is tolerated
-    // and surfaced as credentialStatus:'missing' on read, resolved live at
-    // session-create. Intentionally NOT a FK: D1 enforces FKs at runtime, so a FK
-    // would turn a tolerated/stale ref into a raw 500. Documented soft pointer.
-    credentialId: text('credential_id'),
-    credentialVersionId: text('credential_version_id'),
     metadata: text('metadata').notNull().default('{}'),
-    rateLimits: text('rate_limits').notNull().default('{}'),
-    budgetPolicy: text('budget_policy').notNull().default('{}'),
-    // Mirrors MODEL_CATALOG_STATES (server/domain/provider.ts).
+    // Last discovery refresh health for this vendor. Mirrors MODEL_CATALOG_STATES.
     modelCatalogState: text('model_catalog_state', { enum: ['ready', 'error'] })
       .notNull()
       .default('ready'),
@@ -79,20 +71,16 @@ export const providers = sqliteTable(
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
   },
-  (table) => [
-    index('idx_providers_project_created').on(table.projectId, table.createdAt, table.id),
-    index('idx_providers_project_default').on(table.projectId, table.isDefault),
-  ],
+  (table) => [uniqueIndex('idx_providers_slug').on(table.slug)],
 )
 
+// Global model catalog. One row per (vendor provider, model); populated by the
+// scheduled discovery refresh (CF Workers AI search API + models.dev), not by
+// per-tenant discovery.
 export const providerModels = sqliteTable(
   'provider_models',
   {
     id: text('id').primaryKey(),
-    organizationId: text('organization_id').notNull(),
-    projectId: text('project_id')
-      .notNull()
-      .references(() => projects.id),
     providerId: text('provider_id')
       .notNull()
       .references(() => providers.id),
@@ -109,37 +97,7 @@ export const providerModels = sqliteTable(
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
   },
-  // idx_provider_models_project_provider dropped: the uniqueIndex below covers the
-  // identical (projectId, providerId, modelId) tuple and its leftmost prefixes.
-  (table) => [uniqueIndex('idx_provider_models_unique_model').on(table.projectId, table.providerId, table.modelId)],
-)
-
-export const modelDiscoveryTasks = sqliteTable(
-  'model_discovery_tasks',
-  {
-    id: text('id').primaryKey(),
-    organizationId: text('organization_id').notNull(),
-    projectId: text('project_id')
-      .notNull()
-      .references(() => projects.id),
-    providerId: text('provider_id')
-      .notNull()
-      .references(() => providers.id),
-    // Closed value set: pending|running|succeeded|failed (server/usecases/providers.ts
-    // discovery flow). enum types the column; check enforces it in D1/SQLite.
-    state: text('state', { enum: ['pending', 'running', 'succeeded', 'failed'] })
-      .notNull()
-      .default('pending'),
-    discoveredCount: integer('discovered_count'),
-    // JSON-encoded error object (nullable).
-    error: text('error'),
-    createdAt: text('created_at').notNull(),
-    updatedAt: text('updated_at').notNull(),
-  },
-  (table) => [
-    index('idx_model_discovery_tasks_provider_created').on(table.providerId, table.createdAt, table.id),
-    check('ck_model_discovery_tasks_state', sql`${table.state} in ('pending','running','succeeded','failed')`),
-  ],
+  (table) => [uniqueIndex('idx_provider_models_unique_model').on(table.providerId, table.modelId)],
 )
 
 export const agents = sqliteTable(

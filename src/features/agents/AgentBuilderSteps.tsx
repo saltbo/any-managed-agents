@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { StatusBadge } from '@/console/components'
 import { isArchived } from '@/console/format'
 import { TextAreaField, TextField } from '@/console/forms'
-import { api, type Connector, type Environment, type Provider } from '@/lib/api'
+import { api, type Connector, type Environment } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 import { cn } from '@/lib/utils'
 import {
@@ -103,21 +103,14 @@ export function StartStep({
   )
 }
 
-export function CoreStep({ draft, errors, setField, providers }: StepProps & { providers: Provider[] }) {
-  const providerOptions = [
-    { id: 'workers-ai', label: 'workers-ai (platform default)' },
-    ...providers
-      .filter((provider) => provider.enabled && provider.type !== 'workers-ai')
-      .map((provider) => ({ id: provider.id, label: `${provider.displayName} (${provider.type})` })),
-  ]
+export function CoreStep({ draft, errors, setField }: StepProps) {
   const modelsQuery = useQuery({
-    queryKey: queryKeys.providers.models(draft.provider),
-    queryFn: () => api.listProviderModels(draft.provider),
-    enabled: Boolean(draft.provider),
+    queryKey: queryKeys.providers.models,
+    queryFn: () => api.listModels(),
   })
-  const modelIds = (modelsQuery.data?.data ?? [])
-    .filter((model) => model.availability === 'available')
-    .map((model) => model.modelId)
+  const models = (modelsQuery.data?.data ?? []).filter((model) => model.availability === 'available')
+  const selectedModelKey = draft.model ? `${draft.provider}::${draft.model}` : ''
+  const hasSelected = models.some((model) => model.providerId === draft.provider && model.modelId === draft.model)
   return (
     <div className="grid gap-4">
       <TextField label="Name" value={draft.name} onChange={(value) => setField('name', value)} error={errors.name} />
@@ -135,53 +128,41 @@ export function CoreStep({ draft, errors, setField, providers }: StepProps & { p
         onChange={(value) => setField('instructions', value)}
         error={errors.instructions}
       />
-      <Field data-invalid={errors.provider ? true : undefined}>
-        <FieldLabel htmlFor="builder-provider">Provider</FieldLabel>
+      <Field data-invalid={errors.model || errors.provider ? true : undefined}>
+        <FieldLabel htmlFor="builder-model">Model</FieldLabel>
         <Select
-          value={draft.provider}
-          onValueChange={(value) => {
-            setField('provider', value)
-            setField('model', '')
+          {...(selectedModelKey ? { value: selectedModelKey } : {})}
+          onValueChange={(key) => {
+            const [provider, ...rest] = key.split('::')
+            setField('provider', provider ?? '')
+            setField('model', rest.join('::'))
           }}
         >
-          <SelectTrigger id="builder-provider">
-            <SelectValue placeholder="Select a provider" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              {providerOptions.map((option) => (
-                <SelectItem key={option.id} value={option.id}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-        <FieldDescription>Configured project providers appear here next to the platform default.</FieldDescription>
-        {errors.provider ? <FieldError>{errors.provider}</FieldError> : null}
-      </Field>
-      <Field data-invalid={errors.model ? true : undefined}>
-        <FieldLabel htmlFor="builder-model">Model</FieldLabel>
-        <Select {...(draft.model ? { value: draft.model } : {})} onValueChange={(value) => setField('model', value)}>
           <SelectTrigger id="builder-model">
             <SelectValue placeholder="Select a model" />
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
-              {modelIds.map((modelId) => (
-                <SelectItem key={modelId} value={modelId}>
-                  {modelId}
+              {models.map((model) => (
+                <SelectItem
+                  key={`${model.providerId}::${model.modelId}`}
+                  value={`${model.providerId}::${model.modelId}`}
+                >
+                  {model.displayName || model.modelId} ({model.providerId})
                 </SelectItem>
               ))}
-              {draft.model && !modelIds.includes(draft.model) ? (
-                <SelectItem value={draft.model}>{draft.model}</SelectItem>
+              {draft.model && !hasSelected ? (
+                <SelectItem value={selectedModelKey}>
+                  {draft.model} ({draft.provider})
+                </SelectItem>
               ) : null}
             </SelectGroup>
           </SelectContent>
         </Select>
         <FieldDescription>
-          Models come from the provider catalog and are validated when the agent is saved.
+          Models come from the global vendor catalog. Picking one pins both the vendor and the model.
         </FieldDescription>
+        {errors.provider ? <FieldError>{errors.provider}</FieldError> : null}
         {errors.model ? <FieldError>{errors.model}</FieldError> : null}
       </Field>
     </div>

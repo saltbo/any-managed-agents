@@ -2,7 +2,7 @@ import { SELF } from 'cloudflare:test'
 import { isAmaSessionEventType } from '@shared/session-events'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AmaClient, operations } from '../../sdk/typescript/src/index'
-import { signIn } from './auth'
+import { seedPlatformProvider, signIn } from './auth'
 
 // Integration port of the generated-SDK journey from e2e/projects.spec.ts. The
 // SDK calls global fetch(origin + path); in the integration pool there is no HTTP
@@ -84,6 +84,7 @@ async function createAgentThroughSdk(ama: AmaClient, runId: string, refs: Return
     body: {
       name: `${runId} external agent`,
       instructions: 'Work items arrive from an external product over the AMA SDK.',
+      providerId: 'workers-ai',
       model: '@cf/moonshotai/kimi-k2.6',
       metadata: externalMetadata(refs),
     },
@@ -127,7 +128,8 @@ async function createSessionThroughSdk(
 }
 
 describe('[CF] generated SDK contract', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await seedPlatformProvider()
     // Route the SDK's global fetch to the assembled worker via SELF.
     vi.stubGlobal('fetch', (input: unknown, init?: RequestInit) =>
       SELF.fetch(typeof input === 'string' ? input : ((input as { url?: string })?.url ?? String(input)), init),

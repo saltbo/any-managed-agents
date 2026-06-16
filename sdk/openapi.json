@@ -2143,7 +2143,24 @@
             }
           },
           "pagination": {
-            "$ref": "#/components/schemas/ListPagination"
+            "type": "object",
+            "properties": {
+              "limit": {
+                "type": "number"
+              },
+              "nextCursor": {
+                "type": "string",
+                "nullable": true
+              },
+              "hasMore": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "limit",
+              "nextCursor",
+              "hasMore"
+            ]
           }
         },
         "required": [
@@ -2156,87 +2173,26 @@
         "properties": {
           "id": {
             "type": "string",
-            "example": "workers-ai"
+            "example": "provider_abc123"
           },
-          "projectId": {
+          "slug": {
             "type": "string",
-            "example": "project_abc123"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "workers-ai",
-              "anthropic",
-              "openai",
-              "openai-compatible",
-              "ollama",
-              "other"
-            ],
-            "example": "workers-ai"
+            "example": "anthropic"
           },
           "displayName": {
             "type": "string",
-            "example": "Workers AI"
-          },
-          "baseUrl": {
-            "type": "string",
-            "nullable": true,
-            "example": "https://api.openai.com/v1"
-          },
-          "isDefault": {
-            "type": "boolean",
-            "example": true
+            "example": "Anthropic"
           },
           "enabled": {
             "type": "boolean",
             "example": true
-          },
-          "credentialRef": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/CredentialRef"
-              },
-              {
-                "nullable": true,
-                "description": "Vault credential reference used as the provider API key, or null when none is configured."
-              }
-            ]
-          },
-          "credentialStatus": {
-            "type": "string",
-            "enum": [
-              "not_required",
-              "configured",
-              "missing"
-            ],
-            "example": "not_required"
           },
           "metadata": {
             "type": "object",
             "additionalProperties": {
               "nullable": true
             },
-            "example": {
-              "accountId": "cf-account-ref"
-            }
-          },
-          "rateLimits": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "requestsPerMinute": 120
-            }
-          },
-          "budgetPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "monthlyCostMicros": 1000000
-            }
+            "example": {}
           },
           "modelCatalogState": {
             "type": "string",
@@ -2260,17 +2216,10 @@
         },
         "required": [
           "id",
-          "projectId",
-          "type",
+          "slug",
           "displayName",
-          "baseUrl",
-          "isDefault",
           "enabled",
-          "credentialRef",
-          "credentialStatus",
           "metadata",
-          "rateLimits",
-          "budgetPolicy",
           "modelCatalogState",
           "lastError",
           "createdAt",
@@ -2320,176 +2269,7 @@
           "type",
           "message"
         ],
-        "example": {
-          "type": "provider_error",
-          "retryable": true
-        }
-      },
-      "CreateProviderRequest": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "workers-ai",
-              "anthropic",
-              "openai",
-              "openai-compatible",
-              "ollama",
-              "other"
-            ],
-            "example": "workers-ai"
-          },
-          "displayName": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 120,
-            "example": "Workers AI"
-          },
-          "baseUrl": {
-            "type": "string",
-            "format": "uri",
-            "example": "https://api.example.com/v1"
-          },
-          "isDefault": {
-            "type": "boolean",
-            "example": true
-          },
-          "credentialRef": {
-            "type": "object",
-            "nullable": true,
-            "properties": {
-              "credentialId": {
-                "type": "string",
-                "minLength": 1,
-                "example": "vaultcred_abc123"
-              },
-              "versionId": {
-                "type": "string",
-                "minLength": 1,
-                "example": "vaultver_abc123"
-              }
-            },
-            "required": [
-              "credentialId"
-            ],
-            "description": "Vault credential reference dispatched to session runtimes as the provider API key."
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "accountId": "cf-account-ref"
-            }
-          },
-          "rateLimits": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "requestsPerMinute": 120
-            }
-          },
-          "budgetPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "monthlyCostMicros": 1000000
-            }
-          }
-        },
-        "required": [
-          "type",
-          "displayName"
-        ]
-      },
-      "UpdateProviderRequest": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "workers-ai",
-              "anthropic",
-              "openai",
-              "openai-compatible",
-              "ollama",
-              "other"
-            ],
-            "example": "workers-ai"
-          },
-          "displayName": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 120,
-            "example": "Workers AI"
-          },
-          "baseUrl": {
-            "type": "string",
-            "format": "uri",
-            "example": "https://api.example.com/v1"
-          },
-          "isDefault": {
-            "type": "boolean",
-            "example": true
-          },
-          "credentialRef": {
-            "type": "object",
-            "nullable": true,
-            "properties": {
-              "credentialId": {
-                "type": "string",
-                "minLength": 1,
-                "example": "vaultcred_abc123"
-              },
-              "versionId": {
-                "type": "string",
-                "minLength": 1,
-                "example": "vaultver_abc123"
-              }
-            },
-            "required": [
-              "credentialId"
-            ],
-            "description": "Vault credential reference dispatched to session runtimes as the provider API key."
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "accountId": "cf-account-ref"
-            }
-          },
-          "rateLimits": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "requestsPerMinute": 120
-            }
-          },
-          "budgetPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "monthlyCostMicros": 1000000
-            }
-          },
-          "enabled": {
-            "type": "boolean",
-            "example": false
-          }
-        }
+        "example": null
       },
       "ProviderModelListResponse": {
         "type": "object",
@@ -2501,7 +2281,24 @@
             }
           },
           "pagination": {
-            "$ref": "#/components/schemas/ListPagination"
+            "type": "object",
+            "properties": {
+              "limit": {
+                "type": "number"
+              },
+              "nextCursor": {
+                "type": "string",
+                "nullable": true
+              },
+              "hasMore": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "limit",
+              "nextCursor",
+              "hasMore"
+            ]
           }
         },
         "required": [
@@ -2590,83 +2387,12 @@
           "nullable": true
         }
       },
-      "UpsertProviderModelRequest": {
+      "CatalogRefreshResult": {
         "type": "object",
         "properties": {
-          "displayName": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 240,
-            "example": "Kimi K2.6"
-          },
-          "capabilities": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1
-            },
-            "maxItems": 50,
-            "example": [
-              "text"
-            ]
-          },
-          "contextWindow": {
-            "type": "integer",
-            "minimum": 0,
-            "exclusiveMinimum": true,
-            "example": 128000
-          },
-          "pricing": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ProviderModelPricing"
-              },
-              {
-                "example": {
-                  "inputMicrosPerToken": 1
-                }
-              }
-            ]
-          },
-          "availability": {
+          "outcome": {
             "type": "string",
             "enum": [
-              "available",
-              "unavailable",
-              "disabled"
-            ],
-            "example": "available"
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "family": "kimi"
-            }
-          }
-        },
-        "required": [
-          "displayName"
-        ]
-      },
-      "ModelDiscoveryTask": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "example": "mdtask_abc123"
-          },
-          "providerId": {
-            "type": "string",
-            "example": "provider_abc123"
-          },
-          "state": {
-            "type": "string",
-            "enum": [
-              "pending",
-              "running",
               "succeeded",
               "failed"
             ],
@@ -2674,40 +2400,29 @@
           },
           "discoveredCount": {
             "type": "integer",
-            "nullable": true,
-            "example": 12
+            "example": 41
           },
-          "error": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ProviderError"
-              },
-              {
-                "example": {
-                  "type": "provider_error",
-                  "category": "network",
-                  "retryable": true
-                }
-              }
+          "vendors": {
+            "type": "integer",
+            "example": 3
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "auth",
+              "quota",
+              "rate_limit",
+              "model_unavailable",
+              "invalid_request",
+              "network",
+              "unknown"
             ]
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
           }
         },
         "required": [
-          "id",
-          "providerId",
-          "state",
+          "outcome",
           "discoveredCount",
-          "error",
-          "createdAt",
-          "updatedAt"
+          "vendors"
         ]
       },
       "RuntimeModelList": {
@@ -9158,80 +8873,10 @@
         "tags": [
           "Providers"
         ],
-        "summary": "List providers",
+        "summary": "List model vendors",
         "security": [
           {
             "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "enum": [
-                "true",
-                "false"
-              ],
-              "description": "Filter by lifecycle. Defaults to false (live resources only).",
-              "example": "false"
-            },
-            "required": false,
-            "description": "Filter by lifecycle. Defaults to false (live resources only).",
-            "name": "archived",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 120,
-              "example": "research"
-            },
-            "required": false,
-            "name": "search",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "format": "date-time",
-              "example": "2026-05-01T00:00:00.000Z"
-            },
-            "required": false,
-            "name": "createdFrom",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "format": "date-time",
-              "example": "2026-05-31T23:59:59.999Z"
-            },
-            "required": false,
-            "name": "createdTo",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 100,
-              "example": 50
-            },
-            "required": false,
-            "name": "limit",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 512,
-              "example": "eyJjcmVhdGVkQXQiOiIyMDI2LTA1LTIyVDAwOjAwOjAwLjAwMFoiLCJpZCI6ImFnZW50X2FiYzEyMyJ9"
-            },
-            "required": false,
-            "name": "cursor",
-            "in": "query"
           }
         ],
         "responses": {
@@ -9241,16 +8886,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProviderListResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -9266,45 +8901,64 @@
             }
           }
         }
-      },
-      "post": {
-        "operationId": "createProvider",
+      }
+    },
+    "/api/v1/providers/models": {
+      "get": {
+        "operationId": "listModels",
         "tags": [
           "Providers"
         ],
-        "summary": "Create a provider",
+        "summary": "List all catalog models",
         "security": [
           {
             "bearerAuth": []
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateProviderRequest"
-              }
-            }
-          }
-        },
         "responses": {
-          "201": {
-            "description": "Created provider",
+          "200": {
+            "description": "All catalog models",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Provider"
+                  "$ref": "#/components/schemas/ProviderModelListResponse"
                 }
               }
             }
           },
-          "400": {
-            "description": "Validation error",
+          "401": {
+            "description": "Authentication required",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/providers/refresh": {
+      "post": {
+        "operationId": "refreshCatalog",
+        "tags": [
+          "Providers"
+        ],
+        "summary": "Refresh the model catalog",
+        "description": "Triggers a discovery refresh of the global model catalog (also runs hourly on a schedule).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Refresh result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogRefreshResult"
                 }
               }
             }
@@ -9328,7 +8982,7 @@
         "tags": [
           "Providers"
         ],
-        "summary": "Read a provider",
+        "summary": "Read a model vendor",
         "security": [
           {
             "bearerAuth": []
@@ -9338,7 +8992,7 @@
           {
             "schema": {
               "type": "string",
-              "example": "workers-ai"
+              "example": "provider_abc123"
             },
             "required": true,
             "name": "providerId",
@@ -9377,140 +9031,6 @@
             }
           }
         }
-      },
-      "patch": {
-        "operationId": "updateProvider",
-        "tags": [
-          "Providers"
-        ],
-        "summary": "Update a provider",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "example": "workers-ai"
-            },
-            "required": true,
-            "name": "providerId",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateProviderRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Updated provider",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Provider"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Provider not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "operationId": "deleteProvider",
-        "tags": [
-          "Providers"
-        ],
-        "summary": "Delete a provider",
-        "description": "Permanently deletes the provider and its model catalog. Fails with 409 while agents still reference the provider.",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "example": "workers-ai"
-            },
-            "required": true,
-            "name": "providerId",
-            "in": "path"
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Provider deleted"
-          },
-          "401": {
-            "description": "Authentication required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Provider not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Provider is still referenced",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
       }
     },
     "/api/v1/providers/{providerId}/models": {
@@ -9519,7 +9039,7 @@
         "tags": [
           "Providers"
         ],
-        "summary": "List provider models",
+        "summary": "List a vendor's models",
         "security": [
           {
             "bearerAuth": []
@@ -9529,7 +9049,7 @@
           {
             "schema": {
               "type": "string",
-              "example": "workers-ai"
+              "example": "provider_abc123"
             },
             "required": true,
             "name": "providerId",
@@ -9559,302 +9079,6 @@
           },
           "404": {
             "description": "Provider not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/providers/{providerId}/models/{modelId}": {
-      "put": {
-        "operationId": "upsertProviderModel",
-        "tags": [
-          "Providers"
-        ],
-        "summary": "Create or replace provider model metadata",
-        "description": "Idempotent full replacement keyed by model id. Omitted optional fields reset to their defaults.",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "example": "workers-ai"
-            },
-            "required": true,
-            "name": "providerId",
-            "in": "path"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 240,
-              "description": "Provider model id. Ids containing slashes (e.g. @cf/…) must be URL-encoded.",
-              "example": "@cf%2Fmoonshotai%2Fkimi-k2.6"
-            },
-            "required": true,
-            "description": "Provider model id. Ids containing slashes (e.g. @cf/…) must be URL-encoded.",
-            "name": "modelId",
-            "in": "path"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpsertProviderModelRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Updated provider model",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProviderModel"
-                }
-              }
-            }
-          },
-          "201": {
-            "description": "Created provider model",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProviderModel"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Provider not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "operationId": "deleteProviderModel",
-        "tags": [
-          "Providers"
-        ],
-        "summary": "Delete a provider model",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "example": "workers-ai"
-            },
-            "required": true,
-            "name": "providerId",
-            "in": "path"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 240,
-              "description": "Provider model id. Ids containing slashes (e.g. @cf/…) must be URL-encoded.",
-              "example": "@cf%2Fmoonshotai%2Fkimi-k2.6"
-            },
-            "required": true,
-            "description": "Provider model id. Ids containing slashes (e.g. @cf/…) must be URL-encoded.",
-            "name": "modelId",
-            "in": "path"
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Provider model deleted"
-          },
-          "401": {
-            "description": "Authentication required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Provider or model not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/providers/{providerId}/model-discovery-tasks": {
-      "post": {
-        "operationId": "createModelDiscoveryTask",
-        "tags": [
-          "Providers"
-        ],
-        "summary": "Create a model discovery task",
-        "description": "Refreshes the model catalog from the provider. The task executes synchronously: the response carries the final task state (succeeded or failed). Discovery never sends or echoes stored credential references.",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "example": "workers-ai"
-            },
-            "required": true,
-            "name": "providerId",
-            "in": "path"
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "Model discovery task (terminal state)",
-            "headers": {
-              "Location": {
-                "schema": {
-                  "type": "string",
-                  "description": "URL of the created task"
-                },
-                "required": true,
-                "description": "URL of the created task"
-              }
-            },
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ModelDiscoveryTask"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Provider not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/providers/{providerId}/model-discovery-tasks/{taskId}": {
-      "get": {
-        "operationId": "readModelDiscoveryTask",
-        "tags": [
-          "Providers"
-        ],
-        "summary": "Read a model discovery task",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "example": "workers-ai"
-            },
-            "required": true,
-            "name": "providerId",
-            "in": "path"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "example": "mdtask_abc123"
-            },
-            "required": true,
-            "name": "taskId",
-            "in": "path"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Model discovery task",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ModelDiscoveryTask"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Provider or task not found",
             "content": {
               "application/json": {
                 "schema": {

@@ -1,6 +1,6 @@
 import { SELF } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { setupOidcProvider, signIn } from './auth'
+import { seedPlatformProvider, setupOidcProvider, signIn } from './auth'
 
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
@@ -31,6 +31,8 @@ async function createAgent(authorization: string) {
     body: JSON.stringify({
       name: `Trigger agent ${crypto.randomUUID()}`,
       instructions: 'Run scheduled work.',
+      providerId: 'workers-ai',
+      model: '@cf/moonshotai/kimi-k2.6',
     }),
   })
   expect(res.status).toBe(201)
@@ -93,6 +95,7 @@ async function createTrigger(
 describe('[CF] /api/v1/triggers', () => {
   beforeEach(async () => {
     await setupOidcProvider()
+    await seedPlatformProvider()
   })
 
   afterEach(() => {

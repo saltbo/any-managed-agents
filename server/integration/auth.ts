@@ -1,4 +1,47 @@
+import { env } from 'cloudflare:workers'
 import { expect, vi } from 'vitest'
+
+// Providers are a global vendor catalog (no org/project). Tests that pin an
+// agent to a provider/model need the row to exist so the agent.providerId FK
+// and the provider/model availability checks resolve. The cloud runtime ('ama')
+// always routes through the 'workers-ai' binding, so this seeds that vendor plus
+// the default model the test agents pin. Call from a beforeEach: isolated
+// storage resets writes between tests.
+export const PLATFORM_PROVIDER_ID = 'workers-ai'
+export const PLATFORM_MODEL_ID = '@cf/moonshotai/kimi-k2.6'
+
+export async function seedPlatformProvider(
+  options: { providerId?: string; slug?: string; displayName?: string; modelId?: string; enabled?: boolean } = {},
+) {
+  const providerId = options.providerId ?? PLATFORM_PROVIDER_ID
+  const slug = options.slug ?? 'workers-ai'
+  const displayName = options.displayName ?? 'Workers AI'
+  const modelId = options.modelId ?? PLATFORM_MODEL_ID
+  const enabled = options.enabled ?? true
+  const timestamp = new Date().toISOString()
+  await env.DB.prepare(
+    `INSERT INTO providers (id, slug, display_name, enabled, metadata, model_catalog_state, last_error, created_at, updated_at)
+     VALUES (?, ?, ?, ?, '{}', 'ready', NULL, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET enabled = excluded.enabled, updated_at = excluded.updated_at`,
+  )
+    .bind(providerId, slug, displayName, enabled ? 1 : 0, timestamp, timestamp)
+    .run()
+  await env.DB.prepare(
+    `INSERT INTO provider_models (id, provider_id, model_id, display_name, capabilities, context_window, pricing, availability, metadata, created_at, updated_at)
+     VALUES (?, ?, ?, ?, '["text"]', NULL, '{}', 'available', '{}', ?, ?)
+     ON CONFLICT(provider_id, model_id) DO NOTHING`,
+  )
+    .bind(
+      `${providerId}_${modelId}`.replaceAll(/[^A-Za-z0-9_-]/g, '_'),
+      providerId,
+      modelId,
+      modelId,
+      timestamp,
+      timestamp,
+    )
+    .run()
+  return { providerId, modelId }
+}
 
 interface TestClaims {
   sub: string

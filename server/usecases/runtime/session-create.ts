@@ -16,7 +16,6 @@
 
 import type { RuntimeName } from '@server/contracts/environment-contracts'
 import { runtimeDriverName, runtimeEndpointPath } from '@server/domain/runtime/driver'
-import { providerRuntimeEnv } from '@server/domain/runtime/provider'
 import {
   type GitHubRepositoryResourceRef,
   type NormalizedEnvironmentSnapshot,
@@ -36,7 +35,7 @@ import { safeRuntimeError } from '@server/runtime-error'
 import type { AgentRow, AuthScope, CloudTurnSecretEnvEntry, SessionOrchestrationStore, SessionRow } from '../ports'
 import type { CloudTurnDeps } from './cloud-turn'
 import { startSessionRuntimeForRow } from './cloud-turn'
-import { resolveSessionProviderConfig, resolveSessionProviderId, validateRuntimeProviderModel } from './provisioning'
+import { validateRuntimeProviderModel } from './provisioning'
 
 const ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
 
@@ -326,7 +325,18 @@ export async function createSessionForAgent(
   if (!agentVersion) {
     throw new Error('Agent current version is required')
   }
-  const providerId = await resolveSessionProviderId(deps, auth.project.id, agentVersion.providerId)
+  if (!agentVersion.providerId) {
+    return {
+      ok: false,
+      error: {
+        status: 409,
+        code: 'conflict',
+        message: 'Agent must pin a provider before a session can be created',
+        detail: { resourceType: 'provider', resourceId: agentId },
+      },
+    }
+  }
+  const providerId = agentVersion.providerId
   const initialPrompt = await sessionInitialPrompt(store, auth.project.id, agent, options.initialPrompt)
   const { decision: policyDecision, override: policyOverride } = await policy.evaluateProviderForSession(auth, {
     providerId,
@@ -384,33 +394,6 @@ export async function createSessionForAgent(
     })
   }
 
-  const providerResolution = await resolveSessionProviderConfig(deps, auth.project.id, providerId)
-  if (!providerResolution.ok) {
-    return {
-      ok: false,
-      error: {
-        status: 409,
-        code: 'conflict',
-        message: 'Agent provider is not configured or unavailable for this project',
-        detail: { resourceType: 'provider', resourceId: providerId, reason: providerResolution.reason },
-      },
-    }
-  }
-  const providerEnv = providerRuntimeEnv(providerResolution.config)
-  const providerSecretResolution = await resolveSecretEnvEntries(store, auth, providerEnv.secretEnv)
-  if ('fields' in providerSecretResolution) {
-    return {
-      ok: false,
-      error: {
-        status: 409,
-        code: 'conflict',
-        message: 'Provider credential reference is not an active vault credential version',
-        detail: { resourceType: 'provider', resourceId: providerId },
-      },
-    }
-  }
-  const providerSecretEntries = providerSecretResolution.entries
-
   const environment = await store.findEnvironment(auth.project.id, environmentId)
   if (!environment?.currentVersionId) {
     return {
@@ -450,17 +433,8 @@ export async function createSessionForAgent(
     }
   }
 
-  const sessionEnv = options.env ?? {}
-  const sessionSecretEnv = resolvedSecretEnv.entries
-  const explicitEnvNames = new Set([...Object.keys(sessionEnv), ...sessionSecretEnv.map((item) => item.name)])
-  const mergedEnv = {
-    ...Object.fromEntries(Object.entries(providerEnv.env).filter(([name]) => !explicitEnvNames.has(name))),
-    ...sessionEnv,
-  }
-  const mergedSecretEnv = [
-    ...providerSecretEntries.filter((item) => !explicitEnvNames.has(item.name)),
-    ...sessionSecretEnv,
-  ]
+  const mergedEnv = options.env ?? {}
+  const mergedSecretEnv = resolvedSecretEnv.entries
 
   const timestamp = now()
   const id = crypto.randomUUID()

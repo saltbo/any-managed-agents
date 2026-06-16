@@ -34,17 +34,10 @@ const now = '2026-05-23T00:00:00.000Z'
 function buildProvider(overrides: Partial<Provider> = {}): Provider {
   return {
     id: 'workers-ai',
-    projectId: 'project_1',
-    type: 'workers-ai',
+    slug: 'workers-ai',
     displayName: 'Workers AI',
-    baseUrl: null,
-    isDefault: true,
     enabled: true,
-    credentialRef: null,
-    credentialStatus: 'not_required',
     metadata: {},
-    rateLimits: {},
-    budgetPolicy: {},
     modelCatalogState: 'ready',
     lastError: null,
     createdAt: now,
@@ -117,7 +110,6 @@ describe('QuickstartProviderStep', () => {
     )
     expect(screen.getByText('Workers AI')).toBeTruthy()
     expect(screen.getByText('workers-ai')).toBeTruthy()
-    expect(screen.getByText('No credential required')).toBeTruthy()
   })
 
   it('renders empty providers list without error', () => {
@@ -170,18 +162,19 @@ describe('QuickstartProviderStep', () => {
     expect(btn?.disabled).toBe(true)
   })
 
-  it('shows disabled credential status for non-not_required status', () => {
+  it('renders the provider slug and display name', () => {
     render(
       <MemoryRouter>
         <QuickstartProviderStep
-          providers={[buildProvider({ credentialStatus: 'missing' })]}
+          providers={[buildProvider({ slug: 'anthropic', displayName: 'Anthropic' })]}
           onRunDefault={vi.fn()}
           runPending={false}
           onContinue={vi.fn()}
         />
       </MemoryRouter>,
     )
-    expect(screen.getByText('missing')).toBeTruthy()
+    expect(screen.getByText('Anthropic')).toBeTruthy()
+    expect(screen.getByText('anthropic')).toBeTruthy()
   })
 })
 
@@ -460,7 +453,6 @@ describe('QuickstartAgentStep [draft=null — start view]', () => {
           onDiscardDraft={vi.fn()}
           setField={vi.fn()}
           errors={{}}
-          providers={[]}
           onCreate={vi.fn()}
           createPending={false}
         />
@@ -483,7 +475,6 @@ describe('QuickstartAgentStep [draft=null — start view]', () => {
           onDiscardDraft={vi.fn()}
           setField={vi.fn()}
           errors={{}}
-          providers={[]}
           onCreate={vi.fn()}
           createPending={false}
         />
@@ -497,11 +488,11 @@ describe('QuickstartAgentStep [draft=null — start view]', () => {
 describe('QuickstartAgentStep [draft≠null — review view]', () => {
   const draft: AgentBuilderDraft = { ...emptyBuilderDraft, name: 'My Agent', instructions: 'Do stuff' }
 
-  // CoreStep inside QuickstartAgentStep calls useQuery (for provider models) —
-  // MSW handles GET /api/v1/providers/:providerId/models.
+  // CoreStep inside QuickstartAgentStep calls useQuery for the global model
+  // catalog — MSW handles GET /api/v1/providers/models.
   function renderWithClient(props: React.ComponentProps<typeof QuickstartAgentStep>) {
     server.use(
-      http.get('*/api/v1/providers/:providerId/models', () =>
+      http.get('*/api/v1/providers/models', () =>
         HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
       ),
     )
@@ -526,7 +517,6 @@ describe('QuickstartAgentStep [draft≠null — review view]', () => {
       onDiscardDraft: vi.fn(),
       setField: vi.fn(),
       errors: {},
-      providers: [],
       onCreate: vi.fn(),
       createPending: false,
     })
@@ -545,7 +535,6 @@ describe('QuickstartAgentStep [draft≠null — review view]', () => {
       onDiscardDraft: vi.fn(),
       setField: vi.fn(),
       errors: {},
-      providers: [],
       onCreate: vi.fn(),
       createPending: true,
     })
@@ -564,7 +553,6 @@ describe('QuickstartAgentStep [draft≠null — review view]', () => {
       onDiscardDraft: vi.fn(),
       setField: vi.fn(),
       errors: {},
-      providers: [],
       onCreate,
       createPending: false,
     })
@@ -584,7 +572,6 @@ describe('QuickstartAgentStep [draft≠null — review view]', () => {
       onDiscardDraft,
       setField: vi.fn(),
       errors: {},
-      providers: [],
       onCreate: vi.fn(),
       createPending: false,
     })
@@ -603,7 +590,6 @@ describe('QuickstartAgentStep [draft≠null — review view]', () => {
       onDiscardDraft: vi.fn(),
       setField: vi.fn(),
       errors: { mcpConnectors: 'MCP error occurred' },
-      providers: [],
       onCreate: vi.fn(),
       createPending: false,
     })
@@ -621,7 +607,6 @@ describe('QuickstartAgentStep [draft≠null — review view]', () => {
       onDiscardDraft: vi.fn(),
       setField: vi.fn(),
       errors: {},
-      providers: [],
       onCreate: vi.fn(),
       createPending: false,
     })
@@ -639,7 +624,6 @@ describe('QuickstartAgentStep [draft≠null — review view]', () => {
       onDiscardDraft: vi.fn(),
       setField: vi.fn(),
       errors: {},
-      providers: [],
       onCreate: vi.fn(),
       createPending: false,
     })

@@ -22,51 +22,6 @@ import {
 
 type Db = ReturnType<typeof drizzle>
 
-// Confirms a vault credential reference (credentialId + optional pinned
-// version) is still usable: the credential and the resolved version both exist,
-// belong to each other, and are not revoked. Shared by provider and MCP
-// connection credential checks.
-async function credentialVersionUsable(
-  db: Db,
-  auth: AuthScope,
-  binding: { credentialId: string | null; credentialVersionId: string | null },
-): Promise<boolean> {
-  if (!binding.credentialId) {
-    return true
-  }
-  const credential = await db
-    .select()
-    .from(vaultCredentials)
-    .where(
-      and(
-        eq(vaultCredentials.id, binding.credentialId),
-        eq(vaultCredentials.organizationId, auth.organization.id),
-        or(eq(vaultCredentials.projectId, auth.project.id), isNull(vaultCredentials.projectId)),
-      ),
-    )
-    .get()
-  if (!credential || credential.state === 'revoked') {
-    return false
-  }
-  const versionId = binding.credentialVersionId ?? credential.activeVersionId
-  if (!versionId) {
-    return false
-  }
-  const version = await db
-    .select()
-    .from(vaultCredentialVersions)
-    .where(
-      and(
-        eq(vaultCredentialVersions.id, versionId),
-        eq(vaultCredentialVersions.credentialId, credential.id),
-        eq(vaultCredentialVersions.organizationId, auth.organization.id),
-        or(eq(vaultCredentialVersions.projectId, auth.project.id), isNull(vaultCredentialVersions.projectId)),
-      ),
-    )
-    .get()
-  return !!version && version.state !== 'revoked'
-}
-
 export function createPolicyEvalRepo(db: Db): PolicyEvalRepo {
   return {
     async policyLevels(auth: AuthScope): Promise<PolicyLevel[]> {
@@ -105,30 +60,32 @@ export function createPolicyEvalRepo(db: Db): PolicyEvalRepo {
       }))
     },
 
-    async findProvider(projectId: string, providerId: string): Promise<PolicyProvider | null> {
+    // Providers are a GLOBAL vendor catalog (not per-project): resolve by id, or
+    // by slug for the platform-default 'workers-ai' lookup. projectId is accepted
+    // to satisfy the port but no longer scopes the query.
+    async findProvider(_projectId: string, providerId: string): Promise<PolicyProvider | null> {
       const row = await db
         .select()
         .from(providers)
-        .where(
-          and(
-            eq(providers.projectId, projectId),
-            providerId === 'workers-ai' ? eq(providers.type, 'workers-ai') : eq(providers.id, providerId),
-          ),
-        )
+        .where(providerId === 'workers-ai' ? eq(providers.slug, 'workers-ai') : eq(providers.id, providerId))
         .orderBy(desc(providers.updatedAt))
         .get()
       return row
         ? {
             id: row.id,
             enabled: row.enabled,
-            credentialId: row.credentialId,
-            credentialVersionId: row.credentialVersionId,
+            // BYOK credentials were removed; a global vendor only needs to be
+            // enabled. Always usable as far as credentials go.
+            credentialId: null,
+            credentialVersionId: null,
           }
         : null
     },
 
-    async providerCredentialUsable(auth: AuthScope, provider: PolicyProvider): Promise<boolean> {
-      return credentialVersionUsable(db, auth, provider)
+    // BYOK was removed: provider rows carry no credential, so there is nothing to
+    // revoke. Enablement is gated in evaluateProviderPolicy.
+    async providerCredentialUsable(_auth: AuthScope, _provider: PolicyProvider): Promise<boolean> {
+      return true
     },
 
     async providerAccessRules(projectId, values): Promise<ProviderAccessRule[]> {

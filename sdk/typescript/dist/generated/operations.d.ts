@@ -54,12 +54,6 @@ export declare const operations: readonly [{
     readonly tags: readonly ["Leases"];
 }, {
     readonly method: "POST";
-    readonly path: "/api/v1/providers/{providerId}/model-discovery-tasks";
-    readonly operationId: "createModelDiscoveryTask";
-    readonly summary: "Create a model discovery task";
-    readonly tags: readonly ["Providers"];
-}, {
-    readonly method: "POST";
     readonly path: "/api/v1/policies";
     readonly operationId: "createPolicy";
     readonly summary: "Create a scoped governance policy";
@@ -70,12 +64,6 @@ export declare const operations: readonly [{
     readonly operationId: "createProject";
     readonly summary: "Create a project in the current organization";
     readonly tags: readonly ["Projects"];
-}, {
-    readonly method: "POST";
-    readonly path: "/api/v1/providers";
-    readonly operationId: "createProvider";
-    readonly summary: "Create a provider";
-    readonly tags: readonly ["Providers"];
 }, {
     readonly method: "POST";
     readonly path: "/api/v1/runners";
@@ -168,18 +156,6 @@ export declare const operations: readonly [{
     readonly tags: readonly ["Governance"];
 }, {
     readonly method: "DELETE";
-    readonly path: "/api/v1/providers/{providerId}";
-    readonly operationId: "deleteProvider";
-    readonly summary: "Delete a provider";
-    readonly tags: readonly ["Providers"];
-}, {
-    readonly method: "DELETE";
-    readonly path: "/api/v1/providers/{providerId}/models/{modelId}";
-    readonly operationId: "deleteProviderModel";
-    readonly summary: "Delete a provider model";
-    readonly tags: readonly ["Providers"];
-}, {
-    readonly method: "DELETE";
     readonly path: "/api/v1/vaults/{vaultId}/credentials/{credentialId}/versions/{versionId}";
     readonly operationId: "deleteVaultCredentialVersion";
     readonly summary: "Delete an unused vault credential version";
@@ -270,6 +246,12 @@ export declare const operations: readonly [{
     readonly tags: readonly ["Leases"];
 }, {
     readonly method: "GET";
+    readonly path: "/api/v1/providers/models";
+    readonly operationId: "listModels";
+    readonly summary: "List all catalog models";
+    readonly tags: readonly ["Providers"];
+}, {
+    readonly method: "GET";
     readonly path: "/api/v1/policies";
     readonly operationId: "listPolicies";
     readonly summary: "List scoped governance policies";
@@ -284,13 +266,13 @@ export declare const operations: readonly [{
     readonly method: "GET";
     readonly path: "/api/v1/providers/{providerId}/models";
     readonly operationId: "listProviderModels";
-    readonly summary: "List provider models";
+    readonly summary: "List a vendor's models";
     readonly tags: readonly ["Providers"];
 }, {
     readonly method: "GET";
     readonly path: "/api/v1/providers";
     readonly operationId: "listProviders";
-    readonly summary: "List providers";
+    readonly summary: "List model vendors";
     readonly tags: readonly ["Providers"];
 }, {
     readonly method: "GET";
@@ -474,12 +456,6 @@ export declare const operations: readonly [{
     readonly tags: readonly ["Leases"];
 }, {
     readonly method: "GET";
-    readonly path: "/api/v1/providers/{providerId}/model-discovery-tasks/{taskId}";
-    readonly operationId: "readModelDiscoveryTask";
-    readonly summary: "Read a model discovery task";
-    readonly tags: readonly ["Providers"];
-}, {
-    readonly method: "GET";
     readonly path: "/api/v1/policies/{policyId}";
     readonly operationId: "readPolicy";
     readonly summary: "Read a governance policy";
@@ -494,7 +470,7 @@ export declare const operations: readonly [{
     readonly method: "GET";
     readonly path: "/api/v1/providers/{providerId}";
     readonly operationId: "readProvider";
-    readonly summary: "Read a provider";
+    readonly summary: "Read a model vendor";
     readonly tags: readonly ["Providers"];
 }, {
     readonly method: "GET";
@@ -587,6 +563,12 @@ export declare const operations: readonly [{
     readonly summary: "Read a queued self-hosted work item";
     readonly tags: readonly ["Work items"];
 }, {
+    readonly method: "POST";
+    readonly path: "/api/v1/providers/refresh";
+    readonly operationId: "refreshCatalog";
+    readonly summary: "Refresh the model catalog";
+    readonly tags: readonly ["Providers"];
+}, {
     readonly method: "PUT";
     readonly path: "/api/v1/agents/{agentId}/memory";
     readonly operationId: "replaceAgentMemory";
@@ -642,12 +624,6 @@ export declare const operations: readonly [{
     readonly tags: readonly ["Leases"];
 }, {
     readonly method: "PATCH";
-    readonly path: "/api/v1/providers/{providerId}";
-    readonly operationId: "updateProvider";
-    readonly summary: "Update a provider";
-    readonly tags: readonly ["Providers"];
-}, {
-    readonly method: "PATCH";
     readonly path: "/api/v1/runners/{runnerId}";
     readonly operationId: "updateRunner";
     readonly summary: "Update or archive a self-hosted runner";
@@ -676,11 +652,5 @@ export declare const operations: readonly [{
     readonly operationId: "updateVaultCredential";
     readonly summary: "Update or revoke vault credential metadata";
     readonly tags: readonly ["Vaults"];
-}, {
-    readonly method: "PUT";
-    readonly path: "/api/v1/providers/{providerId}/models/{modelId}";
-    readonly operationId: "upsertProviderModel";
-    readonly summary: "Create or replace provider model metadata";
-    readonly tags: readonly ["Providers"];
 }];
 export type AmaOperationId = (typeof operations)[number]['operationId'];

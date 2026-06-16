@@ -1,10 +1,9 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import type { ClientPagination } from '@/console/use-client-pagination'
 import { McpView } from '@/features/mcp/McpView'
-import { ProvidersView } from '@/features/providers/ProvidersView'
-import type { Connection, Connector, Provider } from '@/lib/api'
+import type { Connection, Connector } from '@/lib/api'
 
 function pagination<T>(items: T[]): ClientPagination<T> {
   return {
@@ -20,28 +19,6 @@ function pagination<T>(items: T[]): ClientPagination<T> {
     viewportRef: { current: null },
     previous: vi.fn(),
     next: vi.fn(),
-  }
-}
-
-function provider(overrides: Partial<Provider> = {}): Provider {
-  return {
-    id: 'workers-ai',
-    projectId: 'project_1',
-    type: 'workers-ai',
-    displayName: 'Workers AI',
-    baseUrl: null,
-    isDefault: true,
-    enabled: false,
-    credentialRef: null,
-    credentialStatus: 'missing',
-    metadata: {},
-    rateLimits: {},
-    budgetPolicy: {},
-    modelCatalogState: 'error',
-    lastError: { message: 'Catalog failed' },
-    createdAt: '2026-05-23T00:00:00.000Z',
-    updatedAt: '2026-05-23T00:00:00.000Z',
-    ...overrides,
   }
 }
 
@@ -92,22 +69,6 @@ function connection(overrides: Partial<Connection> = {}): Connection {
 }
 
 describe('resource list UI contracts [spec: web-console/resource-lists]', () => {
-  it('renders provider rows on one line with tooltip-backed error details', () => {
-    const providers = [provider()]
-    render(
-      <MemoryRouter>
-        <ProvidersView providers={providers} pagination={pagination(providers)} onArchive={vi.fn()} />
-      </MemoryRouter>,
-    )
-
-    const providerCell = screen.getByText('Workers AI').closest('td')
-    expect(providerCell).toBeTruthy()
-    expect(within(providerCell as HTMLElement).getByText('workers-ai')).toBeTruthy()
-    expect(providerCell?.querySelector('p')).toBeNull()
-    expect(screen.getByLabelText(/disabled: .*Catalog failed/)).toBeTruthy()
-    expect(screen.getByText('1-1 of 1')).toBeTruthy()
-  })
-
   it('renders MCP rows on one line with tooltip-backed connection errors', () => {
     const connectors = [connector()]
     const connections = [connection()]

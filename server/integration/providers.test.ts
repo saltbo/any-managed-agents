@@ -1,10 +1,6 @@
 import { SELF } from 'cloudflare:test'
-import { env } from 'cloudflare:workers'
-import { eq } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/d1'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { agents } from '../db/schema'
-import { expectAuthRequired, setupOidcProvider, signInUser } from './auth'
+import { expectAuthRequired, seedPlatformProvider, setupOidcProvider, signInUser } from './auth'
 
 async function jsonFetch(path: string, authorization: string | null, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
@@ -17,32 +13,10 @@ async function jsonFetch(path: string, authorization: string | null, init: Reque
   })
 }
 
-function newId(prefix: string) {
-  return `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`
-}
-
-async function createProvider(authorization: string, body: Record<string, unknown>) {
-  const res = await jsonFetch('/api/v1/providers', authorization, {
-    method: 'POST',
-    body: JSON.stringify(body),
-  })
-  expect(res.status).toBe(201)
-  return (await res.json()) as {
-    id: string
-    projectId: string
-    type: string
-    displayName: string
-    baseUrl: string | null
-    isDefault: boolean
-    enabled: boolean
-    credentialRef: { credentialId: string; versionId?: string } | null
-    credentialStatus: string
-    modelCatalogState: string
-    lastError: Record<string, unknown> | null
-  }
-}
-
-describe('[CF] providers v1 [spec: providers/api-crud]', () => {
+// The global model catalog is populated by the discovery refresh, not per-tenant
+// CRUD. These tests seed the catalog directly (seedPlatformProvider) for the read
+// routes and stub the discovery feeds for the refresh route.
+describe('[CF] providers v1 [spec: providers/api-catalog]', () => {
   beforeEach(async () => {
     await setupOidcProvider()
   })
@@ -57,8 +31,9 @@ describe('[CF] providers v1 [spec: providers/api-crud]', () => {
     expectAuthRequired(await res.json())
   })
 
-  it('lists the platform default Workers AI provider with the v1 schema', async () => {
-    const authorization = await signInUser('providers_default_list')
+  it('lists global model vendors with the v1 catalog schema', async () => {
+    const authorization = await signInUser('providers_list')
+    await seedPlatformProvider()
 
     const res = await jsonFetch('/api/v1/providers', authorization)
     expect(res.status).toBe(200)
@@ -66,397 +41,140 @@ describe('[CF] providers v1 [spec: providers/api-crud]', () => {
     expect(body.data).toContainEqual(
       expect.objectContaining({
         id: 'workers-ai',
-        type: 'workers-ai',
+        slug: 'workers-ai',
+        displayName: 'Workers AI',
         enabled: true,
-        credentialRef: null,
-        credentialStatus: 'not_required',
         modelCatalogState: 'ready',
+        lastError: null,
       }),
     )
+    // The de-tenanted provider carries no transport/credential/default fields.
     const serialized = JSON.stringify(body)
-    expect(serialized).not.toContain('hasCredential')
-    expect(serialized).not.toContain('credentialSecretRef')
-    expect(serialized).not.toContain('"status"')
-    expect(serialized).not.toContain('modelCatalogStatus')
+    expect(serialized).not.toContain('"type"')
+    expect(serialized).not.toContain('baseUrl')
+    expect(serialized).not.toContain('credentialRef')
+    expect(serialized).not.toContain('credentialStatus')
+    expect(serialized).not.toContain('isDefault')
   })
 
-  it('creates, reads, updates, and hard-deletes providers', async () => {
-    const authorization = await signInUser('providers_crud')
+  it('reads a single vendor and 404s for unknown ids', async () => {
+    const authorization = await signInUser('providers_read')
+    await seedPlatformProvider()
 
-    const created = await createProvider(authorization, {
-      type: 'openai-compatible',
-      displayName: 'Gateway',
-      baseUrl: 'https://models.example.test/v1',
-      isDefault: true,
-      credentialRef: { credentialId: 'cred_gateway', versionId: 'credver_gateway_1' },
-      metadata: { region: 'auto' },
-    })
-    expect(created).toMatchObject({
-      type: 'openai-compatible',
-      displayName: 'Gateway',
-      baseUrl: 'https://models.example.test/v1',
-      isDefault: true,
-      enabled: true,
-      credentialRef: { credentialId: 'cred_gateway', versionId: 'credver_gateway_1' },
-      credentialStatus: 'configured',
-      modelCatalogState: 'ready',
-      lastError: null,
-    })
-
-    const readRes = await jsonFetch(`/api/v1/providers/${created.id}`, authorization)
+    const readRes = await jsonFetch('/api/v1/providers/workers-ai', authorization)
     expect(readRes.status).toBe(200)
-    await expect(readRes.json()).resolves.toMatchObject({ id: created.id, displayName: 'Gateway' })
+    await expect(readRes.json()).resolves.toMatchObject({ id: 'workers-ai', slug: 'workers-ai' })
 
-    const disableRes = await jsonFetch(`/api/v1/providers/${created.id}`, authorization, {
-      method: 'PATCH',
-      body: JSON.stringify({ enabled: false }),
-    })
-    expect(disableRes.status).toBe(200)
-    await expect(disableRes.json()).resolves.toMatchObject({ enabled: false })
-
-    const clearCredentialRes = await jsonFetch(`/api/v1/providers/${created.id}`, authorization, {
-      method: 'PATCH',
-      body: JSON.stringify({ credentialRef: null }),
-    })
-    expect(clearCredentialRes.status).toBe(200)
-    await expect(clearCredentialRes.json()).resolves.toMatchObject({
-      credentialRef: null,
-      credentialStatus: 'missing',
-    })
-
-    const deleteRes = await jsonFetch(`/api/v1/providers/${created.id}`, authorization, { method: 'DELETE' })
-    expect(deleteRes.status).toBe(204)
-
-    const goneRes = await jsonFetch(`/api/v1/providers/${created.id}`, authorization)
-    expect(goneRes.status).toBe(404)
-    await expect(goneRes.json()).resolves.toMatchObject({ error: { type: 'not_found' } })
-
-    // With every configured provider deleted the platform default reappears.
-    const listRes = await jsonFetch('/api/v1/providers', authorization)
-    expect(listRes.status).toBe(200)
-    const list = (await listRes.json()) as { data: Array<{ id: string }> }
-    expect(list.data.map((row) => row.id)).toEqual(['workers-ai'])
-  })
-
-  it('deleting the synthesized platform default returns 404', async () => {
-    const authorization = await signInUser('providers_delete_virtual')
-    const res = await jsonFetch('/api/v1/providers/workers-ai', authorization, { method: 'DELETE' })
-    expect(res.status).toBe(404)
-  })
-
-  it('validates openai-compatible base URLs on create and update', async () => {
-    const authorization = await signInUser('providers_baseurl')
-
-    const createRes = await jsonFetch('/api/v1/providers', authorization, {
-      method: 'POST',
-      body: JSON.stringify({ type: 'openai-compatible', displayName: 'No base URL' }),
-    })
-    expect(createRes.status).toBe(400)
-    await expect(createRes.json()).resolves.toMatchObject({
-      error: { type: 'validation_error', details: { fields: { baseUrl: expect.any(String) } } },
-    })
-
-    const created = await createProvider(authorization, { type: 'openai', displayName: 'OpenAI' })
-    const patchRes = await jsonFetch(`/api/v1/providers/${created.id}`, authorization, {
-      method: 'PATCH',
-      body: JSON.stringify({ type: 'openai-compatible' }),
-    })
-    expect(patchRes.status).toBe(400)
-    await expect(patchRes.json()).resolves.toMatchObject({
-      error: { type: 'validation_error', details: { fields: { baseUrl: expect.any(String) } } },
-    })
-  })
-
-  it('keeps a single default provider per project', async () => {
-    const authorization = await signInUser('providers_default_unique')
-
-    const first = await createProvider(authorization, {
-      type: 'openai',
-      displayName: 'First',
-      isDefault: true,
-    })
-    const second = await createProvider(authorization, {
-      type: 'anthropic',
-      displayName: 'Second',
-      isDefault: true,
-    })
-
-    const listRes = await jsonFetch('/api/v1/providers', authorization)
-    const list = (await listRes.json()) as { data: Array<{ id: string; isDefault: boolean }> }
-    expect(list.data.find((row) => row.id === first.id)).toMatchObject({ isDefault: false })
-    expect(list.data.find((row) => row.id === second.id)).toMatchObject({ isDefault: true })
-
-    const promoteRes = await jsonFetch(`/api/v1/providers/${first.id}`, authorization, {
-      method: 'PATCH',
-      body: JSON.stringify({ isDefault: true }),
-    })
-    expect(promoteRes.status).toBe(200)
-    const afterRes = await jsonFetch('/api/v1/providers', authorization)
-    const after = (await afterRes.json()) as { data: Array<{ id: string; isDefault: boolean }> }
-    expect(after.data.find((row) => row.id === first.id)).toMatchObject({ isDefault: true })
-    expect(after.data.find((row) => row.id === second.id)).toMatchObject({ isDefault: false })
-  })
-
-  it('supports the standard list contract: archived slice is empty, search filters by name', async () => {
-    const authorization = await signInUser('providers_list_contract')
-    await createProvider(authorization, { type: 'openai', displayName: 'Gateway Alpha' })
-    await createProvider(authorization, { type: 'anthropic', displayName: 'Bravo' })
-
-    const archivedRes = await jsonFetch('/api/v1/providers?archived=true', authorization)
-    expect(archivedRes.status).toBe(200)
-    await expect(archivedRes.json()).resolves.toMatchObject({ data: [] })
-
-    const searchRes = await jsonFetch('/api/v1/providers?search=Alpha', authorization)
-    expect(searchRes.status).toBe(200)
-    const searched = (await searchRes.json()) as { data: Array<{ displayName: string }> }
-    expect(searched.data).toHaveLength(1)
-    expect(searched.data[0]).toMatchObject({ displayName: 'Gateway Alpha' })
-  })
-
-  it('isolates providers between tenants', async () => {
-    const authorization = await signInUser('providers_iso_a')
-    const other = await signInUser('providers_iso_b')
-
-    const created = await createProvider(authorization, { type: 'openai', displayName: 'Tenant A provider' })
-    const crossReadRes = await jsonFetch(`/api/v1/providers/${created.id}`, other)
-    expect(crossReadRes.status).toBe(404)
-    const crossDeleteRes = await jsonFetch(`/api/v1/providers/${created.id}`, other, { method: 'DELETE' })
-    expect(crossDeleteRes.status).toBe(404)
-  })
-
-  it('rejects deleting a provider that agents still reference', async () => {
-    const authorization = await signInUser('providers_delete_conflict')
-    const created = await createProvider(authorization, { type: 'openai', displayName: 'Referenced' })
-
-    const db = drizzle(env.DB)
-    const agentId = newId('agent')
-    const timestamp = new Date().toISOString()
-    await db.insert(agents).values({
-      id: agentId,
-      projectId: created.projectId,
-      name: 'Provider-bound agent',
-      providerId: created.id,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    })
-
-    const conflictRes = await jsonFetch(`/api/v1/providers/${created.id}`, authorization, { method: 'DELETE' })
-    expect(conflictRes.status).toBe(409)
-    await expect(conflictRes.json()).resolves.toMatchObject({ error: { type: 'conflict' } })
-
-    await db.delete(agents).where(eq(agents.id, agentId))
-    const deleteRes = await jsonFetch(`/api/v1/providers/${created.id}`, authorization, { method: 'DELETE' })
-    expect(deleteRes.status).toBe(204)
-  })
-
-  it('upserts provider models via PUT with full-replacement semantics [spec: providers/api-models]', async () => {
-    const authorization = await signInUser('providers_model_upsert')
-    const provider = await createProvider(authorization, { type: 'openai', displayName: 'Model host' })
-
-    const createRes = await jsonFetch(`/api/v1/providers/${provider.id}/models/gateway-model`, authorization, {
-      method: 'PUT',
-      body: JSON.stringify({ displayName: 'Gateway Model', capabilities: ['text'], contextWindow: 8000 }),
-    })
-    expect(createRes.status).toBe(201)
-    const model = (await createRes.json()) as { id: string; modelId: string }
-    expect(model).toMatchObject({ modelId: 'gateway-model', providerId: provider.id })
-
-    const updateRes = await jsonFetch(`/api/v1/providers/${provider.id}/models/gateway-model`, authorization, {
-      method: 'PUT',
-      body: JSON.stringify({ displayName: 'Gateway Model v2' }),
-    })
-    expect(updateRes.status).toBe(200)
-    // PUT is a full replacement: omitted optional fields reset to defaults.
-    await expect(updateRes.json()).resolves.toMatchObject({
-      id: model.id,
-      displayName: 'Gateway Model v2',
-      capabilities: [],
-      contextWindow: null,
-      availability: 'available',
-    })
-
-    const listRes = await jsonFetch(`/api/v1/providers/${provider.id}/models`, authorization)
-    expect(listRes.status).toBe(200)
-    const list = (await listRes.json()) as { data: Array<{ modelId: string }> }
-    expect(list.data).toContainEqual(expect.objectContaining({ modelId: 'gateway-model' }))
-  })
-
-  it('accepts URL-encoded model ids containing slashes', async () => {
-    const authorization = await signInUser('providers_model_encoded')
-    const provider = await createProvider(authorization, { type: 'workers-ai', displayName: 'Workers AI' })
-
-    const modelId = '@cf/moonshotai/kimi-k2.6'
-    const encoded = encodeURIComponent(modelId)
-    const putRes = await jsonFetch(`/api/v1/providers/${provider.id}/models/${encoded}`, authorization, {
-      method: 'PUT',
-      body: JSON.stringify({ displayName: 'Kimi K2.6' }),
-    })
-    expect(putRes.status).toBe(201)
-    await expect(putRes.json()).resolves.toMatchObject({ modelId })
-
-    const deleteRes = await jsonFetch(`/api/v1/providers/${provider.id}/models/${encoded}`, authorization, {
-      method: 'DELETE',
-    })
-    expect(deleteRes.status).toBe(204)
-  })
-
-  it('deletes provider models and 404s afterwards', async () => {
-    const authorization = await signInUser('providers_model_delete')
-    const provider = await createProvider(authorization, { type: 'openai', displayName: 'Model host' })
-
-    const putRes = await jsonFetch(`/api/v1/providers/${provider.id}/models/doomed-model`, authorization, {
-      method: 'PUT',
-      body: JSON.stringify({ displayName: 'Doomed' }),
-    })
-    expect(putRes.status).toBe(201)
-
-    const deleteRes = await jsonFetch(`/api/v1/providers/${provider.id}/models/doomed-model`, authorization, {
-      method: 'DELETE',
-    })
-    expect(deleteRes.status).toBe(204)
-
-    const againRes = await jsonFetch(`/api/v1/providers/${provider.id}/models/doomed-model`, authorization, {
-      method: 'DELETE',
-    })
-    expect(againRes.status).toBe(404)
-
-    const listRes = await jsonFetch(`/api/v1/providers/${provider.id}/models`, authorization)
-    const list = (await listRes.json()) as { data: Array<{ modelId: string }> }
-    expect(list.data).not.toContainEqual(expect.objectContaining({ modelId: 'doomed-model' }))
-  })
-
-  it('returns 404 for model writes on unknown or synthesized providers', async () => {
-    const authorization = await signInUser('providers_model_404')
-
-    const missingRes = await jsonFetch('/api/v1/providers/provider_missing/models/some-model', authorization, {
-      method: 'PUT',
-      body: JSON.stringify({ displayName: 'Nope' }),
-    })
+    const missingRes = await jsonFetch('/api/v1/providers/provider_missing', authorization)
     expect(missingRes.status).toBe(404)
-
-    // The synthesized platform default has no DB row to attach models to.
-    const virtualRes = await jsonFetch('/api/v1/providers/workers-ai/models/some-model', authorization, {
-      method: 'PUT',
-      body: JSON.stringify({ displayName: 'Nope' }),
-    })
-    expect(virtualRes.status).toBe(404)
+    await expect(missingRes.json()).resolves.toMatchObject({ error: { type: 'not_found' } })
   })
 
-  it('runs model discovery synchronously as an addressable task resource', async () => {
-    const authorization = await signInUser('providers_discovery_ok')
-    const provider = await createProvider(authorization, {
-      type: 'openai-compatible',
-      displayName: 'Gateway',
-      baseUrl: 'https://models.example.test/v1',
-    })
+  it('lists all catalog models and a single vendor models', async () => {
+    const authorization = await signInUser('providers_models')
+    await seedPlatformProvider()
+
+    const allModelsRes = await jsonFetch('/api/v1/providers/models', authorization)
+    expect(allModelsRes.status).toBe(200)
+    const allModels = (await allModelsRes.json()) as { data: Array<{ providerId: string; modelId: string }> }
+    expect(allModels.data).toContainEqual(
+      expect.objectContaining({ providerId: 'workers-ai', modelId: '@cf/moonshotai/kimi-k2.6' }),
+    )
+
+    const vendorModelsRes = await jsonFetch('/api/v1/providers/workers-ai/models', authorization)
+    expect(vendorModelsRes.status).toBe(200)
+    const vendorModels = (await vendorModelsRes.json()) as { data: Array<{ modelId: string }> }
+    expect(vendorModels.data).toContainEqual(expect.objectContaining({ modelId: '@cf/moonshotai/kimi-k2.6' }))
+
+    const unknownVendorRes = await jsonFetch('/api/v1/providers/provider_missing/models', authorization)
+    expect(unknownVendorRes.status).toBe(404)
+  })
+
+  it('refreshes the global catalog from the discovery feeds', async () => {
+    const authorization = await signInUser('providers_refresh')
 
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = new URL(input instanceof Request ? input.url : input.toString())
-        if (url.origin === 'https://models.example.test' && url.pathname === '/v1/models') {
+        // Workers AI model search API.
+        if (url.hostname === 'api.cloudflare.com' && url.pathname.endsWith('/ai/models/search')) {
           return Response.json({
-            data: [{ id: 'gateway-model-a', context_length: 8000 }, { id: 'gateway-model-b' }],
+            result: [
+              {
+                name: '@cf/moonshotai/kimi-k2.6',
+                task: { name: 'Text Generation' },
+                properties: [
+                  { property_id: 'function_calling', value: 'true' },
+                  { property_id: 'context_window', value: '128000' },
+                ],
+              },
+            ],
+          })
+        }
+        // models.dev third-party catalog.
+        if (url.hostname === 'models.dev') {
+          return Response.json({
+            anthropic: {
+              models: {
+                'claude-opus-4': { name: 'Claude Opus 4', tool_call: true, limit: { context: 200000 } },
+              },
+            },
+            openai: {
+              models: {
+                'gpt-5': { name: 'GPT-5', tool_call: true, limit: { context: 400000 } },
+              },
+            },
           })
         }
         return new Response('not found', { status: 404 })
       }),
     )
 
-    const taskRes = await jsonFetch(`/api/v1/providers/${provider.id}/model-discovery-tasks`, authorization, {
-      method: 'POST',
+    const refreshRes = await jsonFetch('/api/v1/providers/refresh', authorization, { method: 'POST' })
+    expect(refreshRes.status).toBe(200)
+    await expect(refreshRes.json()).resolves.toMatchObject({
+      outcome: 'succeeded',
+      discoveredCount: 3,
+      vendors: 3,
     })
-    expect(taskRes.status).toBe(201)
-    const task = (await taskRes.json()) as { id: string; providerId: string; state: string; discoveredCount: number }
-    expect(task).toMatchObject({
-      providerId: provider.id,
-      state: 'succeeded',
-      discoveredCount: 2,
-      error: null,
-    })
-    expect(taskRes.headers.get('location')).toBe(`/api/v1/providers/${provider.id}/model-discovery-tasks/${task.id}`)
 
-    const readTaskRes = await jsonFetch(
-      `/api/v1/providers/${provider.id}/model-discovery-tasks/${task.id}`,
-      authorization,
+    const listRes = await jsonFetch('/api/v1/providers', authorization)
+    const list = (await listRes.json()) as { data: Array<{ slug: string; modelCatalogState: string }> }
+    const slugs = list.data.map((row) => row.slug)
+    expect(slugs).toEqual(expect.arrayContaining(['moonshotai', 'anthropic', 'openai']))
+    for (const row of list.data) {
+      expect(row.modelCatalogState).toBe('ready')
+    }
+
+    const modelsRes = await jsonFetch('/api/v1/providers/models', authorization)
+    const models = (await modelsRes.json()) as { data: Array<{ modelId: string }> }
+    expect(models.data.map((row) => row.modelId)).toEqual(
+      expect.arrayContaining(['@cf/moonshotai/kimi-k2.6', 'anthropic/claude-opus-4', 'openai/gpt-5']),
     )
-    expect(readTaskRes.status).toBe(200)
-    await expect(readTaskRes.json()).resolves.toMatchObject({ id: task.id, state: 'succeeded', discoveredCount: 2 })
-
-    const modelsRes = await jsonFetch(`/api/v1/providers/${provider.id}/models`, authorization)
-    const models = (await modelsRes.json()) as { data: Array<{ modelId: string; contextWindow: number | null }> }
-    expect(models.data.map((row) => row.modelId)).toEqual(['gateway-model-a', 'gateway-model-b'])
-    expect(models.data[0]).toMatchObject({ contextWindow: 8000 })
-
-    const providerRes = await jsonFetch(`/api/v1/providers/${provider.id}`, authorization)
-    await expect(providerRes.json()).resolves.toMatchObject({ modelCatalogState: 'ready', lastError: null })
   })
 
-  it('records failed discovery on the task and provider without leaking credentials', async () => {
-    const authorization = await signInUser('providers_discovery_fail')
-    const provider = await createProvider(authorization, {
-      type: 'openai-compatible',
-      displayName: 'Broken gateway',
-      baseUrl: 'https://broken.example.test/v1',
-      credentialRef: { credentialId: 'cred_top_secret' },
-    })
+  it('records a failed refresh without leaking discovery failures as raw payloads', async () => {
+    const authorization = await signInUser('providers_refresh_fail')
+    // Seed an existing vendor so the failure path can stamp its catalog status.
+    await seedPlatformProvider()
 
-    // setupOidcProvider's fetch stub returns 404 for unknown hosts.
-    const taskRes = await jsonFetch(`/api/v1/providers/${provider.id}/model-discovery-tasks`, authorization, {
-      method: 'POST',
-    })
-    expect(taskRes.status).toBe(201)
-    const task = (await taskRes.json()) as { id: string; state: string; error: Record<string, unknown> | null }
-    expect(task).toMatchObject({
-      state: 'failed',
-      discoveredCount: null,
-      // The stub returns 404 for the discovery host, which the provider adapter
-      // classifies as model_unavailable (see provider-adapters.test.ts).
-      error: expect.objectContaining({ type: 'provider_error', category: 'model_unavailable', retryable: false }),
-    })
-    expect(JSON.stringify(task)).not.toContain('cred_top_secret')
-
-    const readTaskRes = await jsonFetch(
-      `/api/v1/providers/${provider.id}/model-discovery-tasks/${task.id}`,
-      authorization,
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(input instanceof Request ? input.url : input.toString())
+        if (url.hostname === 'api.cloudflare.com' && url.pathname.endsWith('/ai/models/search')) {
+          return new Response('upstream unavailable', { status: 503 })
+        }
+        return new Response('not found', { status: 404 })
+      }),
     )
-    expect(readTaskRes.status).toBe(200)
-    await expect(readTaskRes.json()).resolves.toMatchObject({ state: 'failed' })
 
-    const providerRes = await jsonFetch(`/api/v1/providers/${provider.id}`, authorization)
-    await expect(providerRes.json()).resolves.toMatchObject({
-      modelCatalogState: 'error',
-      lastError: expect.objectContaining({ type: 'provider_error', category: 'model_unavailable' }),
-    })
-  })
+    const refreshRes = await jsonFetch('/api/v1/providers/refresh', authorization, { method: 'POST' })
+    expect(refreshRes.status).toBe(200)
+    await expect(refreshRes.json()).resolves.toMatchObject({ outcome: 'failed', discoveredCount: 0 })
 
-  it('discovers the Workers AI catalog for configured workers-ai providers', async () => {
-    const authorization = await signInUser('providers_discovery_workers')
-    const provider = await createProvider(authorization, { type: 'workers-ai', displayName: 'Workers AI' })
-
-    const taskRes = await jsonFetch(`/api/v1/providers/${provider.id}/model-discovery-tasks`, authorization, {
-      method: 'POST',
-    })
-    expect(taskRes.status).toBe(201)
-    await expect(taskRes.json()).resolves.toMatchObject({ state: 'succeeded', discoveredCount: 1 })
-
-    const modelsRes = await jsonFetch(`/api/v1/providers/${provider.id}/models`, authorization)
-    const models = (await modelsRes.json()) as { data: Array<{ displayName: string }> }
-    expect(models.data).toContainEqual(expect.objectContaining({ displayName: 'Workers AI default model' }))
-  })
-
-  it('rejects discovery tasks for the synthesized platform default provider', async () => {
-    const authorization = await signInUser('providers_discovery_virtual')
-    const res = await jsonFetch('/api/v1/providers/workers-ai/model-discovery-tasks', authorization, {
-      method: 'POST',
-    })
-    expect(res.status).toBe(404)
-  })
-
-  it('returns 404 for unknown discovery tasks', async () => {
-    const authorization = await signInUser('providers_discovery_404')
-    const provider = await createProvider(authorization, { type: 'openai', displayName: 'Task host' })
-    const res = await jsonFetch(`/api/v1/providers/${provider.id}/model-discovery-tasks/mdtask_missing`, authorization)
-    expect(res.status).toBe(404)
+    const readRes = await jsonFetch('/api/v1/providers/workers-ai', authorization)
+    await expect(readRes.json()).resolves.toMatchObject({ modelCatalogState: 'error' })
   })
 })

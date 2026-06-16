@@ -258,13 +258,3 @@ export interface SessionApprovalInsert {
   createdAt: string
   updatedAt: string
 }
-
-// The default-or-named provider connection projection for runtime dispatch.
-export interface ProviderConfigRow {
-  id: string
-  type: string
-  baseUrl: string | null
-  enabled: boolean
-  credentialId: string | null
-  credentialVersionId: string | null
-}

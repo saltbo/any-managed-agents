@@ -330,21 +330,14 @@ export type GitHubRepositoryResourceRef = {
 
 export type SessionResourceRef = GitHubRepositoryResourceRef | Record<string, unknown>
 
-export type ProviderType = 'workers-ai' | 'anthropic' | 'openai' | 'openai-compatible' | 'ollama' | 'other'
-
+// A provider is now a global model vendor (anthropic, openai, …); the catalog is
+// shared across all projects and refreshed by the scheduled discovery job.
 export interface Provider {
   id: string
-  projectId: string
-  type: ProviderType
+  slug: string
   displayName: string
-  baseUrl: string | null
-  isDefault: boolean
   enabled: boolean
-  credentialRef: CredentialRef | null
-  credentialStatus: 'not_required' | 'configured' | 'missing'
   metadata: Record<string, unknown>
-  rateLimits: Record<string, unknown>
-  budgetPolicy: Record<string, unknown>
   modelCatalogState: string
   lastError: Record<string, unknown> | null
   createdAt: string
@@ -365,14 +358,11 @@ export interface ProviderModel {
   updatedAt: string
 }
 
-export interface ModelDiscoveryTask {
-  id: string
-  providerId: string
-  state: 'pending' | 'running' | 'succeeded' | 'failed'
-  discoveredCount: number | null
-  error: Record<string, unknown> | null
-  createdAt: string
-  updatedAt: string
+export interface CatalogRefreshResult {
+  outcome: 'succeeded' | 'failed'
+  discoveredCount: number
+  vendors: number
+  category?: string
 }
 
 export interface Vault {
@@ -741,17 +731,6 @@ export interface SessionInput {
   secretEnv?: SecretEnvEntry[]
 }
 
-export interface ProviderInput {
-  type: ProviderType
-  displayName: string
-  baseUrl?: string
-  isDefault?: boolean
-  credentialRef?: CredentialRef | null
-  metadata?: Record<string, unknown>
-  rateLimits?: Record<string, unknown>
-  budgetPolicy?: Record<string, unknown>
-}
-
 export interface VaultInput {
   name: string
   description?: string
@@ -948,23 +927,11 @@ export const api = {
     ),
   listProviders: (options: ListOptions = {}) =>
     rpcRequest<ListResponse<Provider>>(v1.providers.$get(queryArg<typeof v1.providers.$get>(options))),
+  listModels: () => rpcRequest<ListResponse<ProviderModel>>(v1.providers.models.$get()),
   readProvider: (id: string) => rpcRequest<Provider>(v1.providers[':providerId'].$get({ param: { providerId: id } })),
-  createProvider: (input: ProviderInput) =>
-    rpcRequest<Provider>(v1.providers.$post(jsonArg<typeof v1.providers.$post>(input))),
-  deleteProvider: (id: string) => rpcRequest<void>(v1.providers[':providerId'].$delete({ param: { providerId: id } })),
   listProviderModels: (id: string) =>
     rpcRequest<ListResponse<ProviderModel>>(v1.providers[':providerId'].models.$get({ param: { providerId: id } })),
-  upsertProviderModel: (id: string, modelId: string, input: { displayName: string } & Record<string, unknown>) =>
-    rpcRequest<ProviderModel>(
-      v1.providers[':providerId'].models[':modelId'].$put({
-        param: { providerId: id, modelId },
-        json: input as RpcJson<(typeof v1.providers)[':providerId']['models'][':modelId']['$put']>,
-      }),
-    ),
-  startModelDiscovery: (id: string) =>
-    rpcRequest<ModelDiscoveryTask>(
-      v1.providers[':providerId']['model-discovery-tasks'].$post({ param: { providerId: id } }),
-    ),
+  refreshCatalog: () => rpcRequest<CatalogRefreshResult>(v1.providers.refresh.$post()),
   listVaults: (options: ListOptions = {}) =>
     rpcRequest<ListResponse<Vault>>(v1.vaults.$get(queryArg<typeof v1.vaults.$get>(options))),
   readVault: (id: string) => rpcRequest<Vault>(v1.vaults[':vaultId'].$get({ param: { vaultId: id } })),

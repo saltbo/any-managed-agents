@@ -1,3 +1,4 @@
+import type { Env } from '@server/env'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createProviderCatalogGateway } from './provider-catalog'
 
@@ -5,141 +6,202 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-function makeFetch(body: unknown, status = 200) {
-  return vi.fn().mockResolvedValue(
-    new Response(JSON.stringify(body), {
-      status,
-      headers: { 'content-type': 'application/json' },
-    }),
-  )
-}
+const WORKERS_AI_SEARCH_HOST = 'https://api.cloudflare.com/client/v4/accounts/'
+const MODELS_DEV_URL = 'https://models.dev/api.json'
 
-const openaiModelsPayload = {
-  data: [
-    { id: 'gpt-4o', display_name: 'GPT-4o', capabilities: ['text'], context_window: 128000, pricing: {} },
-    { id: 'gpt-3.5-turbo', display_name: null, name: 'GPT-3.5', capabilities: [], context_window: null, pricing: {} },
+// A native @cf Text Generation model flagged function_calling=true — the only
+// shape catalogModelFromWorkersAi keeps.
+const workersAiModel = {
+  name: '@cf/meta/llama-3.1-8b-instruct',
+  task: { name: 'Text Generation' },
+  properties: [
+    { property_id: 'function_calling', value: 'true' },
+    { property_id: 'context_window', value: '128000' },
+    {
+      property_id: 'price',
+      value: [
+        { unit: 'per M input tokens', price: 0.03 },
+        { unit: 'per M output tokens', price: 0.2 },
+      ],
+    },
   ],
 }
 
-const anthropicModelsPayload = {
-  data: [
-    { id: 'claude-opus-4', display_name: 'Claude Opus 4', capabilities: ['text'], context_window: 200000, pricing: {} },
-  ],
+// A non-tool-calling model the gateway drops (filtered by the domain mapper).
+const workersAiNonToolModel = {
+  name: '@cf/meta/llama-2-7b-chat-int8',
+  task: { name: 'Text Generation' },
+  properties: [{ property_id: 'function_calling', value: 'false' }],
 }
 
-const ollamaModelsPayload = {
-  models: [{ name: 'llama3', model: 'llama3:latest', context_length: 8192 }],
+const workersAiPayload = { result: [workersAiModel, workersAiNonToolModel] }
+
+// models.dev: one tool-calling anthropic model, one non-tool entry that is dropped.
+const modelsDevPayload = {
+  anthropic: {
+    models: {
+      'claude-opus-4': {
+        name: 'Claude Opus 4',
+        tool_call: true,
+        reasoning: true,
+        modalities: { input: ['text', 'image'] },
+        limit: { context: 200000 },
+        cost: { input: 15, output: 75 },
+      },
+      'claude-instant-legacy': {
+        name: 'Claude Instant Legacy',
+        tool_call: false,
+      },
+    },
+  },
+  google: {
+    models: {
+      'gemini-pro': { name: 'Gemini Pro', tool_call: true },
+    },
+  },
+}
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  })
+}
+
+// Routes the two discovery calls to their feed payloads by URL.
+function stubFeeds(workersAi: Response, modelsDev: Response) {
+  const fetchMock = vi.fn(async (input: string | URL, _init?: RequestInit) => {
+    const url = String(input)
+    if (url.startsWith(WORKERS_AI_SEARCH_HOST)) {
+      return workersAi
+    }
+    if (url === MODELS_DEV_URL) {
+      return modelsDev
+    }
+    throw new Error(`unexpected fetch url ${url}`)
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  return fetchMock
+}
+
+function env(overrides: Record<string, unknown> = {}): Env {
+  return {
+    AMA_WORKERS_AI_ACCOUNT_ID: 'acct_123',
+    AMA_WORKERS_AI_API_TOKEN: 'token_abc',
+    ...overrides,
+  } as unknown as Env
 }
 
 describe('[spec: provider-catalog/gateway] createProviderCatalogGateway', () => {
-  it('returns a gateway with a fetchCatalog method', () => {
-    const gateway = createProviderCatalogGateway()
-    expect(typeof gateway.fetchCatalog).toBe('function')
+  it('exposes a fetchPlatformCatalog method', () => {
+    const gateway = createProviderCatalogGateway(env())
+    expect(typeof gateway.fetchPlatformCatalog).toBe('function')
   })
 
-  it('fetches the OpenAI model list from the default base URL', async () => {
-    const fetchMock = makeFetch(openaiModelsPayload)
-    vi.stubGlobal('fetch', fetchMock)
+  it('concatenates rows from the Workers AI search and models.dev feeds', async () => {
+    stubFeeds(jsonResponse(workersAiPayload), jsonResponse(modelsDevPayload))
 
-    const gateway = createProviderCatalogGateway()
-    const models = await gateway.fetchCatalog({ type: 'openai', baseUrl: null })
+    const models = await createProviderCatalogGateway(env()).fetchPlatformCatalog()
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://api.openai.com/v1/models',
-      expect.objectContaining({ headers: { accept: 'application/json' } }),
-    )
-    expect(models).toHaveLength(2)
-    expect(models[0]?.modelId).toBe('gpt-4o')
-    expect(models[0]?.displayName).toBe('GPT-4o')
-    expect(models[0]?.contextWindow).toBe(128000)
+    const ids = models.map((model) => model.modelId)
+    expect(ids).toContain('@cf/meta/llama-3.1-8b-instruct')
+    expect(ids).toContain('anthropic/claude-opus-4')
+    // Non-tool entries from both feeds are dropped by the domain mappers.
+    expect(ids).not.toContain('@cf/meta/llama-2-7b-chat-int8')
+    expect(ids).not.toContain('anthropic/claude-instant-legacy')
+    // Only the gateway's third-party allowlist (anthropic/openai) is pulled.
+    expect(ids).not.toContain('google/gemini-pro')
   })
 
-  it('fetches the Anthropic model list from the default base URL', async () => {
-    const fetchMock = makeFetch(anthropicModelsPayload)
-    vi.stubGlobal('fetch', fetchMock)
+  it('maps the Workers AI model into a native catalog row with parsed properties', async () => {
+    stubFeeds(jsonResponse(workersAiPayload), jsonResponse({}))
 
-    const gateway = createProviderCatalogGateway()
-    const models = await gateway.fetchCatalog({ type: 'anthropic', baseUrl: null })
+    const models = await createProviderCatalogGateway(env()).fetchPlatformCatalog()
+    const row = models.find((model) => model.modelId === '@cf/meta/llama-3.1-8b-instruct')
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://api.anthropic.com/v1/models',
-      expect.objectContaining({ headers: { accept: 'application/json' } }),
-    )
-    expect(models).toHaveLength(1)
-    expect(models[0]?.modelId).toBe('claude-opus-4')
+    expect(row).toMatchObject({
+      vendor: 'meta',
+      serving: 'workers-ai-native',
+      capabilities: ['text', 'tools'],
+      contextWindow: 128000,
+      pricing: { inputMicrosPerToken: 0.03, outputMicrosPerToken: 0.2 },
+      availability: 'available',
+    })
   })
 
-  it('fetches Ollama model list from /api/tags instead of /models', async () => {
-    const fetchMock = makeFetch(ollamaModelsPayload)
-    vi.stubGlobal('fetch', fetchMock)
+  it('maps the models.dev anthropic entry into a gateway-served catalog row', async () => {
+    stubFeeds(jsonResponse({ result: [] }), jsonResponse(modelsDevPayload))
 
-    const gateway = createProviderCatalogGateway()
-    const models = await gateway.fetchCatalog({ type: 'ollama', baseUrl: null })
+    const models = await createProviderCatalogGateway(env()).fetchPlatformCatalog()
+    const row = models.find((model) => model.modelId === 'anthropic/claude-opus-4')
 
-    expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:11434/api/tags', expect.any(Object))
-    expect(models).toHaveLength(1)
-    expect(models[0]?.modelId).toBe('llama3')
+    expect(row).toMatchObject({
+      vendor: 'anthropic',
+      serving: 'ai-gateway',
+      displayName: 'Claude Opus 4',
+      capabilities: ['text', 'tools', 'vision', 'reasoning'],
+      contextWindow: 200000,
+      pricing: { inputMicrosPerToken: 15, outputMicrosPerToken: 75 },
+    })
   })
 
-  it('uses a custom baseUrl when provided, stripping trailing slash', async () => {
-    const fetchMock = makeFetch(openaiModelsPayload)
-    vi.stubGlobal('fetch', fetchMock)
+  it('calls the Workers AI search endpoint with the account id and bearer token', async () => {
+    const fetchMock = stubFeeds(jsonResponse({ result: [] }), jsonResponse({}))
 
-    const gateway = createProviderCatalogGateway()
-    await gateway.fetchCatalog({ type: 'openai', baseUrl: 'https://my-proxy.example.com/v1/' })
+    await createProviderCatalogGateway(env()).fetchPlatformCatalog()
 
-    const [url] = fetchMock.mock.calls[0] ?? []
-    expect(url).toBe('https://my-proxy.example.com/v1/models')
+    const searchCall = fetchMock.mock.calls.find((call) => String(call[0]).startsWith(WORKERS_AI_SEARCH_HOST))
+    expect(searchCall).toBeDefined()
+    const [url, init] = searchCall ?? []
+    expect(String(url)).toContain('/accounts/acct_123/ai/models/search')
+    expect(String(url)).toContain('task=Text+Generation')
+    expect((init as RequestInit).headers).toMatchObject({ authorization: 'Bearer token_abc' })
   })
 
-  it('throws when provider type has no known base URL and baseUrl is null', async () => {
-    const gateway = createProviderCatalogGateway()
-    await expect(gateway.fetchCatalog({ type: 'openai-compatible', baseUrl: null })).rejects.toThrow(
-      /base URL is required/,
-    )
+  it('falls back to the cloudflare API token when the Workers AI token is absent', async () => {
+    const fetchMock = stubFeeds(jsonResponse({ result: [] }), jsonResponse({}))
+
+    await createProviderCatalogGateway(
+      env({ AMA_WORKERS_AI_API_TOKEN: undefined, AMA_CLOUDFLARE_API_TOKEN: 'fallback_token' }),
+    ).fetchPlatformCatalog()
+
+    const searchCall = fetchMock.mock.calls.find((call) => String(call[0]).startsWith(WORKERS_AI_SEARCH_HOST))
+    expect((searchCall?.[1] as RequestInit).headers).toMatchObject({ authorization: 'Bearer fallback_token' })
   })
 
-  it('throws on non-ok HTTP response with status in the error message', async () => {
-    const fetchMock = makeFetch({ error: 'Unauthorized' }, 401)
-    vi.stubGlobal('fetch', fetchMock)
+  it('throws when the Workers AI account id is missing', async () => {
+    stubFeeds(jsonResponse({ result: [] }), jsonResponse({}))
 
-    const gateway = createProviderCatalogGateway()
-    await expect(gateway.fetchCatalog({ type: 'openai', baseUrl: null })).rejects.toThrow(/401/)
+    await expect(
+      createProviderCatalogGateway(env({ AMA_WORKERS_AI_ACCOUNT_ID: undefined })).fetchPlatformCatalog(),
+    ).rejects.toThrow(/account id and API token are required/)
   })
 
-  it('passes the AbortSignal timeout option', async () => {
-    const fetchMock = makeFetch(openaiModelsPayload)
-    vi.stubGlobal('fetch', fetchMock)
+  it('throws when both Workers AI and cloudflare API tokens are missing', async () => {
+    stubFeeds(jsonResponse({ result: [] }), jsonResponse({}))
 
-    const gateway = createProviderCatalogGateway()
-    await gateway.fetchCatalog({ type: 'openai', baseUrl: null })
-
-    const [, init] = fetchMock.mock.calls[0] ?? []
-    expect(init?.signal).toBeDefined()
+    await expect(
+      createProviderCatalogGateway(
+        env({ AMA_WORKERS_AI_API_TOKEN: undefined, AMA_CLOUDFLARE_API_TOKEN: undefined }),
+      ).fetchPlatformCatalog(),
+    ).rejects.toThrow(/account id and API token are required/)
   })
 
-  it('maps openai-compatible type through the default openai-compatible family (no default URL)', async () => {
-    const gateway = createProviderCatalogGateway()
-    await expect(gateway.fetchCatalog({ type: 'openai-compatible', baseUrl: null })).rejects.toThrow(
-      /base URL is required/,
-    )
+  it('throws with the HTTP status when the Workers AI search returns non-ok', async () => {
+    stubFeeds(jsonResponse({ error: 'Unauthorized' }, 401), jsonResponse(modelsDevPayload))
+
+    await expect(createProviderCatalogGateway(env()).fetchPlatformCatalog()).rejects.toThrow(/HTTP 401/)
   })
 
-  it('uses the custom baseUrl for openai-compatible providers', async () => {
-    const fetchMock = makeFetch(openaiModelsPayload)
-    vi.stubGlobal('fetch', fetchMock)
+  it('throws with the HTTP status when models.dev returns non-ok', async () => {
+    stubFeeds(jsonResponse(workersAiPayload), jsonResponse({ error: 'down' }, 503))
 
-    const gateway = createProviderCatalogGateway()
-    await gateway.fetchCatalog({ type: 'openai-compatible', baseUrl: 'https://custom.api.com/v1' })
-
-    const [url] = fetchMock.mock.calls[0] ?? []
-    expect(url).toBe('https://custom.api.com/v1/models')
+    await expect(createProviderCatalogGateway(env()).fetchPlatformCatalog()).rejects.toThrow(/HTTP 503/)
   })
 
-  it('propagates fetch network errors', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('fetch failed')))
+  it('throws when the Workers AI search payload has no result array', async () => {
+    stubFeeds(jsonResponse({ messages: [] }), jsonResponse({}))
 
-    const gateway = createProviderCatalogGateway()
-    await expect(gateway.fetchCatalog({ type: 'openai', baseUrl: null })).rejects.toThrow('fetch failed')
+    await expect(createProviderCatalogGateway(env()).fetchPlatformCatalog()).rejects.toThrow(/not recognized/)
   })
 })

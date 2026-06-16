@@ -8,11 +8,6 @@
 import type { RuntimeName } from '@server/contracts/environment-contracts'
 import { runtimeDriver } from '@server/domain/runtime/driver'
 import {
-  PLATFORM_DEFAULT_PROVIDER,
-  providerConfigFromRow,
-  type SessionProviderResolution,
-} from '@server/domain/runtime/provider'
-import {
   type NormalizedEnvironmentSnapshot,
   parseJson,
   type SerializedAgentVersion,
@@ -20,58 +15,9 @@ import {
 import { runnerSupportsRuntimeProviderModel, runtimeCatalogSupportsProviderModel } from '@server/domain/runtime-catalog'
 import type { AuthScope, PolicyPort, SessionOrchestrationStore } from '../ports'
 
-export { providerRuntimeEnv } from '@server/domain/runtime/provider'
-
 type ProvisioningDeps = {
   sessionOrchestration: SessionOrchestrationStore
   policy: PolicyPort
-}
-
-// Resolves the agent's provider reference to its configured connection details
-// through the orchestration store. A null provider id means "use the project
-// default provider"; a project without a configured default falls back to the
-// platform Workers AI binding, which needs no configuration row.
-export async function resolveSessionProviderConfig(
-  deps: Pick<ProvisioningDeps, 'sessionOrchestration'>,
-  projectId: string,
-  providerId: string | null,
-): Promise<SessionProviderResolution> {
-  if (providerId === PLATFORM_DEFAULT_PROVIDER) {
-    return { ok: true, config: null }
-  }
-  const store = deps.sessionOrchestration
-  if (providerId === null) {
-    const row = await store.defaultProviderConfig(projectId)
-    if (!row) {
-      return { ok: true, config: null }
-    }
-    return providerConfigFromRow(row)
-  }
-  const row = await store.namedProviderConfig(projectId, providerId)
-  if (!row) {
-    return { ok: false, reason: 'not_found' }
-  }
-  return providerConfigFromRow(row)
-}
-
-export async function resolveSessionProviderId(
-  deps: Pick<ProvisioningDeps, 'sessionOrchestration'>,
-  projectId: string,
-  providerId: string | null,
-) {
-  const store = deps.sessionOrchestration
-  if (!providerId) {
-    const configuredDefault = await store.configuredDefaultProvider(projectId)
-    if (!configuredDefault) {
-      return PLATFORM_DEFAULT_PROVIDER
-    }
-    return configuredDefault.type === PLATFORM_DEFAULT_PROVIDER ? PLATFORM_DEFAULT_PROVIDER : configuredDefault.id
-  }
-  if (providerId === PLATFORM_DEFAULT_PROVIDER) {
-    return PLATFORM_DEFAULT_PROVIDER
-  }
-  const configured = await store.providerType(projectId, providerId)
-  return configured?.type === PLATFORM_DEFAULT_PROVIDER ? PLATFORM_DEFAULT_PROVIDER : providerId
 }
 
 export async function validateRuntimeProviderModel(

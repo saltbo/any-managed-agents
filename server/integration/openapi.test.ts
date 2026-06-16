@@ -33,7 +33,7 @@ const EXPECTED_RESTISH_OPERATIONS = {
   Runners: ['listRunners', 'createRunner'],
   'Work items': ['listWorkItems', 'readWorkItem'],
   Leases: ['listLeases', 'createLease'],
-  Providers: ['listProviders', 'createProvider'],
+  Providers: ['listProviders', 'listModels'],
   Vaults: ['listVaults', 'createVault'],
   Governance: ['readEffectivePolicy', 'listPolicies'],
   Connectors: ['listConnectors', 'readConnector'],
@@ -92,8 +92,10 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths).toHaveProperty('/api/v1/providers')
     expect(doc.paths).toHaveProperty('/api/v1/providers/{providerId}')
     expect(doc.paths).toHaveProperty('/api/v1/providers/{providerId}/models')
-    expect(doc.paths).toHaveProperty('/api/v1/providers/{providerId}/models/{modelId}')
-    expect(doc.paths).toHaveProperty('/api/v1/providers/{providerId}/model-discovery-tasks')
+    expect(doc.paths).toHaveProperty('/api/v1/providers/models')
+    expect(doc.paths).toHaveProperty('/api/v1/providers/refresh')
+    expect(doc.paths).not.toHaveProperty('/api/v1/providers/{providerId}/models/{modelId}')
+    expect(doc.paths).not.toHaveProperty('/api/v1/providers/{providerId}/model-discovery-tasks')
     expect(doc.paths).toHaveProperty('/api/v1/policies')
     expect(doc.paths).toHaveProperty('/api/v1/policies/{policyId}')
     expect(doc.paths).toHaveProperty('/api/v1/effective-policy')
@@ -190,8 +192,8 @@ describe('[CF] OpenAPI documentation', () => {
     )
 
     expect(doc.paths['/api/v1/providers']).toHaveProperty('get')
-    expect(doc.paths['/api/v1/providers']).toHaveProperty('post')
-    expect(doc.paths['/api/v1/providers/{providerId}/models/{modelId}']).toHaveProperty('put')
+    expect(doc.paths['/api/v1/providers/{providerId}']).toHaveProperty('get')
+    expect(doc.paths['/api/v1/providers/{providerId}/models']).toHaveProperty('get')
     expect(doc.paths['/api/v1/connectors']).toHaveProperty('get')
     expect(doc.paths['/api/v1/connections']).toHaveProperty('get')
     expect(doc.paths['/api/v1/connections']).toHaveProperty('post')
