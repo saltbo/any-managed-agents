@@ -22,7 +22,11 @@ export function AgentsView({
     return <EmptyState title="No agents" body="Create an agent, then create a session from this list." />
   }
   return (
-    <TableSurface viewportRef={pagination.viewportRef} footer={<TablePagination pagination={pagination} />}>
+    <TableSurface
+      tableId="agents"
+      viewportRef={pagination.viewportRef}
+      footer={<TablePagination pagination={pagination} />}
+    >
       <TableHeader>
         <TableRow>
           <TableHead>Agent</TableHead>

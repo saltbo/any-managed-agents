@@ -36,6 +36,7 @@ export function McpView({
         </CardHeader>
         <CardContent>
           <TableSurface
+            tableId="mcp-connectors"
             viewportRef={connectorPagination.viewportRef}
             footer={<TablePagination pagination={connectorPagination} />}
             tableClassName="min-w-[960px]"
@@ -109,6 +110,7 @@ export function McpView({
         </CardHeader>
         <CardContent>
           <TableSurface
+            tableId="mcp-connections"
             viewportRef={connectionPagination.viewportRef}
             footer={<TablePagination pagination={connectionPagination} />}
           >

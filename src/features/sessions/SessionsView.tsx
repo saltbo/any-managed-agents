@@ -34,6 +34,7 @@ export function SessionsView({
   }
   return (
     <TableSurface
+      tableId="sessions"
       tableClassName="min-w-[1120px] table-fixed"
       viewportRef={pagination.viewportRef}
       footer={<TablePagination pagination={pagination} />}

@@ -23,7 +23,7 @@ export function UsageView({ summary }: { summary: UsageSummary | null }) {
           </MetaGrid>
         </CardContent>
       </Card>
-      <TableSurface>
+      <TableSurface tableId="usage">
         <TableHeader>
           <TableRow>
             <TableHead>Group</TableHead>

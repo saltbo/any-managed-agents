@@ -54,7 +54,11 @@ export function ProvidersPage() {
           body="The catalog is empty. Refresh to discover models from Workers AI and models.dev."
         />
       ) : (
-        <TableSurface viewportRef={pagination.viewportRef} footer={<TablePagination pagination={pagination} />}>
+        <TableSurface
+          tableId="provider-catalog"
+          viewportRef={pagination.viewportRef}
+          footer={<TablePagination pagination={pagination} />}
+        >
           <TableHeader>
             <TableRow>
               <TableHead>Model</TableHead>
@@ -66,8 +70,8 @@ export function ProvidersPage() {
           <TableBody>
             {pagination.items.map((model) => (
               <TableRow key={model.id}>
-                <TableCell className="max-w-80 truncate font-mono text-xs">{model.modelId}</TableCell>
-                <TableCell className="truncate">{model.providerId}</TableCell>
+                <TableCell className="font-mono text-xs">{model.modelId}</TableCell>
+                <TableCell>{model.providerId}</TableCell>
                 <TableCell className="tabular-nums">{model.contextWindow ?? '—'}</TableCell>
                 <TableCell>
                   <StatusBadge value={model.availability} />

@@ -22,7 +22,11 @@ export function VaultsView({
     )
   }
   return (
-    <TableSurface viewportRef={pagination.viewportRef} footer={<TablePagination pagination={pagination} />}>
+    <TableSurface
+      tableId="vaults"
+      viewportRef={pagination.viewportRef}
+      footer={<TablePagination pagination={pagination} />}
+    >
       <TableHeader>
         <TableRow>
           <TableHead>Vault</TableHead>

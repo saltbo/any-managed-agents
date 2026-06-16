@@ -88,7 +88,7 @@ export function VaultDetailView({
             }
           />
         ) : (
-          <TableSurface>
+          <TableSurface tableId="vault-credentials">
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
@@ -153,7 +153,7 @@ export function VaultDetailView({
         {auditRecords.length === 0 ? (
           <EmptyState title="No audit history" body="Vault and credential changes will appear here." />
         ) : (
-          <TableSurface>
+          <TableSurface tableId="vault-audit">
             <TableHeader>
               <TableRow>
                 <TableHead>Action</TableHead>

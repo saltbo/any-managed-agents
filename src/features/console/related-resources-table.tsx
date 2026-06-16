@@ -16,7 +16,7 @@ export function RelatedResourcesTable({
 }) {
   return (
     <DetailSection title={title}>
-      <TableSurface tableClassName="min-w-full md:min-w-[720px]">
+      <TableSurface tableId="related-resources" tableClassName="min-w-full md:min-w-[720px]">
         <colgroup>
           <col className="w-[62%] md:w-[44%]" />
           <col className="w-[38%] md:w-[18%]" />

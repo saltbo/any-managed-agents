@@ -31,7 +31,11 @@ export function EnvironmentsView({
     return <EmptyState title="No environments" body="Create an execution environment before creating an agent." />
   }
   return (
-    <TableSurface viewportRef={pagination.viewportRef} footer={<TablePagination pagination={pagination} />}>
+    <TableSurface
+      tableId="environments"
+      viewportRef={pagination.viewportRef}
+      footer={<TablePagination pagination={pagination} />}
+    >
       <TableHeader>
         <TableRow>
           <TableHead>Environment</TableHead>

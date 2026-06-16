@@ -16,7 +16,11 @@ export function AuditView({
     return <EmptyState title="No audit records" body="Security-relevant control-plane activity will appear here." />
   }
   return (
-    <TableSurface viewportRef={pagination.viewportRef} footer={<TablePagination pagination={pagination} />}>
+    <TableSurface
+      tableId="audit"
+      viewportRef={pagination.viewportRef}
+      footer={<TablePagination pagination={pagination} />}
+    >
       <TableHeader>
         <TableRow>
           <TableHead>Action</TableHead>

@@ -1,5 +1,5 @@
 import { Bot, ChevronLeft, ChevronRight } from 'lucide-react'
-import type { ReactNode, RefObject } from 'react'
+import { type ReactNode, type RefObject, useCallback, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useMatch } from 'react-router'
 import {
   AlertDialog,
@@ -15,7 +15,7 @@ import {
 import { Badge as UiBadge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Table } from '@/components/ui/table'
+import { ColumnResizeProvider, Table } from '@/components/ui/table'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import type { ClientPagination } from './use-client-pagination'
@@ -135,19 +135,71 @@ export function PageHeader({
   )
 }
 
+const WIDTHS_KEY = 'ama:table-widths:'
+
+function loadWidths(tableId: string): number[] | null {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(WIDTHS_KEY + tableId) ?? 'null') as unknown
+    return Array.isArray(parsed) && parsed.every((value) => typeof value === 'number') ? (parsed as number[]) : null
+  } catch {
+    return null
+  }
+}
+
+function saveWidths(tableId: string, widths: number[]) {
+  try {
+    window.localStorage.setItem(WIDTHS_KEY + tableId, JSON.stringify(widths))
+  } catch {
+    // storage may be unavailable (private mode / quota); width persistence is best-effort.
+  }
+}
+
+// Columns render auto-sized once, then their natural widths are fixed so the
+// table no longer collapses every column to an equal table-fixed share, and each
+// becomes drag-resizable. A tableId persists the user's widths across reloads.
+function useColumnWidths(tableId: string | undefined, tableRef: RefObject<HTMLTableElement | null>) {
+  const [widths, setWidths] = useState<number[] | null>(null)
+  useLayoutEffect(() => {
+    if (widths) return
+    const ths = tableRef.current?.querySelectorAll<HTMLTableCellElement>(':scope > thead > tr:first-child > th')
+    if (!ths?.length) return
+    const measured = Array.from(ths, (th) => Math.round(th.getBoundingClientRect().width))
+    const persisted = tableId ? loadWidths(tableId) : null
+    setWidths(persisted && persisted.length === measured.length ? persisted : measured)
+  }, [widths, tableId, tableRef])
+  const setWidth = useCallback(
+    (columnIndex: number, width: number) => {
+      setWidths((prev) => {
+        if (!prev) return prev
+        const next = [...prev]
+        next[columnIndex] = Math.max(80, Math.round(width))
+        if (tableId) saveWidths(tableId, next)
+        return next
+      })
+    },
+    [tableId],
+  )
+  return { widths, setWidth }
+}
+
 export function TableSurface({
   children,
   footer,
   viewportRef,
   className,
   tableClassName,
+  tableId,
 }: {
   children: ReactNode
   footer?: ReactNode
   viewportRef?: RefObject<HTMLDivElement | null>
   className?: string
   tableClassName?: string
+  // Persists drag-resized column widths under this id (omit for ephemeral widths).
+  tableId?: string
 }) {
+  const tableRef = useRef<HTMLTableElement>(null)
+  const { widths, setWidth } = useColumnWidths(tableId, tableRef)
   return (
     <div
       className={cn(
@@ -156,7 +208,19 @@ export function TableSurface({
       )}
     >
       <div ref={viewportRef} className="min-h-0 flex-1 overflow-auto">
-        <Table className={cn('min-w-[760px] table-fixed', tableClassName)}>{children}</Table>
+        <Table ref={tableRef} className={cn('min-w-[760px]', widths ? 'table-fixed' : 'table-auto', tableClassName)}>
+          <ColumnResizeProvider value={widths ? { setWidth } : null}>
+            {widths ? (
+              <colgroup>
+                {widths.map((width, columnIndex) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: columns are positional, index is the stable identity
+                  <col key={columnIndex} style={{ width: `${width}px` }} />
+                ))}
+              </colgroup>
+            ) : null}
+            {children}
+          </ColumnResizeProvider>
+        </Table>
       </div>
       {footer ? <div className="shrink-0 border-t bg-background px-3 py-2">{footer}</div> : null}
     </div>
