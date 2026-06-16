@@ -450,6 +450,26 @@ describe('ProvidersPage', () => {
     await waitFor(() => expect(refreshed).toBe(true))
   })
 
+  it('does not report success when the refresh returns outcome failed', async () => {
+    let invalidated = false
+    server.use(
+      http.get('*/api/v1/providers/models', () => {
+        invalidated = true
+        return HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } })
+      }),
+      http.post('*/api/v1/providers/refresh', () =>
+        HttpResponse.json({ outcome: 'failed', discoveredCount: 0, vendors: 0, category: 'auth' }),
+      ),
+    )
+    renderProviders()
+    await waitFor(() => expect(screen.getByText('No models yet')).toBeTruthy())
+    invalidated = false
+    fireEvent.click(screen.getByRole('button', { name: /Refresh catalog/ }))
+    // A failed outcome must not re-fetch the catalog as if it succeeded.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(invalidated).toBe(false)
+  })
+
   it('surfaces a refresh failure without crashing', async () => {
     server.use(
       http.get('*/api/v1/providers/models', () =>

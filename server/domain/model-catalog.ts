@@ -68,75 +68,10 @@ function pricingMicros(input?: number, output?: number, cacheRead?: number, cach
   return pricing
 }
 
-// --- Workers AI search API: GET /accounts/{id}/ai/models/search -------------
-// Each model: { name, task: { name }, properties: [{ property_id, value }] }.
-
-interface WorkersAiModel {
-  name?: unknown
-  task?: { name?: unknown } | null
-  properties?: Array<{ property_id?: unknown; value?: unknown }> | null
-}
-
-function propertyMap(model: WorkersAiModel): Map<string, unknown> {
-  const map = new Map<string, unknown>()
-  for (const prop of model.properties ?? []) {
-    if (typeof prop?.property_id === 'string') {
-      map.set(prop.property_id, prop.value)
-    }
-  }
-  return map
-}
-
-function workersAiPricing(priceProp: unknown): Record<string, number> {
-  if (!Array.isArray(priceProp)) {
-    return {}
-  }
-  let input: number | undefined
-  let output: number | undefined
-  for (const tier of priceProp) {
-    if (!tier || typeof tier !== 'object') continue
-    const unit = (tier as { unit?: unknown }).unit
-    const price = (tier as { price?: unknown }).price
-    if (typeof unit !== 'string' || typeof price !== 'number') continue
-    if (/per M input tokens/i.test(unit)) input = price
-    else if (/per M output tokens/i.test(unit)) output = price
-  }
-  return pricingMicros(input, output)
-}
-
-// Returns null for anything that is not a tool-driving text-generation model:
-// non-text tasks, models without `function_calling`, and denylisted ids.
-export function catalogModelFromWorkersAi(model: WorkersAiModel): CatalogModel | null {
-  const modelId = typeof model.name === 'string' ? model.name : null
-  if (!modelId || TOOL_CALL_DENYLIST.has(modelId)) {
-    return null
-  }
-  if (typeof model.task?.name !== 'string' || model.task.name !== 'Text Generation') {
-    return null
-  }
-  const props = propertyMap(model)
-  if (props.get('function_calling') !== 'true') {
-    return null
-  }
-  const capabilities = ['text', 'tools']
-  if (props.get('vision') === 'true') capabilities.push('vision')
-  if (props.get('reasoning') === 'true') capabilities.push('reasoning')
-  const ctx = props.get('context_window')
-  return {
-    vendor: vendorFromModelId(modelId),
-    modelId,
-    displayName: displayNameFromModelId(modelId),
-    serving: 'workers-ai-native',
-    capabilities,
-    contextWindow: typeof ctx === 'string' && Number.isFinite(Number(ctx)) ? Number(ctx) : null,
-    pricing: workersAiPricing(props.get('price')),
-    availability: 'available',
-    metadata: {},
-  }
-}
-
 // --- models.dev: GET https://models.dev/api.json ----------------------------
-// Shape: { [vendor]: { models: { [id]: ModelsDevModel } } }.
+// Shape: { [provider]: { models: { [id]: ModelsDevModel } } }. The single
+// discovery source (no API key): the `cloudflare-workers-ai` provider gives the
+// native @cf models, `anthropic`/`openai` give the gateway-routed ones.
 
 interface ModelsDevModel {
   name?: unknown
@@ -151,23 +86,29 @@ function numberOrUndefined(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
-// Maps one models.dev entry under a vendor to a gateway-served catalog row.
-// Returns null for non-tool-callers (the agent runtime needs tool loops).
-export function catalogModelFromModelsDev(vendor: string, id: string, model: ModelsDevModel): CatalogModel | null {
+// Maps one models.dev entry to a catalog row. Returns null for non-tool-callers
+// (the agent runtime needs tool loops) and denylisted ids. The vendor + serving
+// path are derived from the resolved model id: cloudflare-workers-ai entries are
+// already full `@cf/{vendor}/{model}` ids (native, free); other providers give a
+// bare id that takes the provider prefix for AI Gateway routing.
+export function catalogModelFromModelsDev(providerKey: string, id: string, model: ModelsDevModel): CatalogModel | null {
   if (model.tool_call !== true) {
     return null
   }
-  const modelId = `${vendor}/${id}`
+  const modelId = id.startsWith(WORKERS_AI_NATIVE_PREFIX) ? id : `${providerKey}/${id}`
+  if (TOOL_CALL_DENYLIST.has(modelId)) {
+    return null
+  }
   const capabilities = ['text', 'tools']
   const inputModalities = model.modalities?.input
   if (Array.isArray(inputModalities) && inputModalities.includes('image')) capabilities.push('vision')
   if (model.reasoning === true) capabilities.push('reasoning')
   const cost = model.cost ?? {}
   return {
-    vendor,
+    vendor: vendorFromModelId(modelId),
     modelId,
-    displayName: typeof model.name === 'string' && model.name.length > 0 ? model.name : id,
-    serving: 'ai-gateway',
+    displayName: typeof model.name === 'string' && model.name.length > 0 ? model.name : displayNameFromModelId(modelId),
+    serving: servingFromModelId(modelId),
     capabilities,
     contextWindow: numberOrUndefined(model.limit?.context) ?? null,
     pricing: pricingMicros(
