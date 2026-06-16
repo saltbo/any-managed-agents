@@ -9,7 +9,7 @@ import { drizzle } from 'drizzle-orm/d1'
 import { Hono } from 'hono'
 import { getBearerClaims, upsertProjectForClaims } from '../auth/oidc'
 import { requireAuth } from '../auth/session'
-import { vaultCredentialVersions } from '../db/schema'
+import { providerModels, providers, vaultCredentialVersions } from '../db/schema'
 import type { Env } from '../env'
 import { errorResponse } from '../errors'
 import { dispatchDueScheduledTriggers } from '../scheduled-dispatch'
@@ -48,6 +48,39 @@ const routes = app
       return errorResponse(c, 404, 'not_found', 'Not found')
     }
     return c.json({ ok: true, runtimeMode: c.env.AMA_RUNTIME_MODE ?? null })
+  })
+  // Seeds the global vendor catalog (a provider + one model) so browser journeys
+  // can pin a provider/model on an agent and create a session. Discovery hits
+  // external feeds, so e2e seeds the catalog directly instead. Idempotent.
+  .post('/catalog/seed', async (c) => {
+    if (c.env.AMA_E2E_TEST_AUTH !== 'true' || c.env.AMA_RUNTIME_MODE !== 'test') {
+      return errorResponse(c, 404, 'not_found', 'Not found')
+    }
+    const auth = await requireAuth(c)
+    if (auth instanceof Response) {
+      return auth
+    }
+    const db = drizzle(c.env.DB)
+    const now = new Date().toISOString()
+    const slug = 'workers-ai'
+    const modelId = '@cf/moonshotai/kimi-k2.6'
+    await db
+      .insert(providers)
+      .values({ id: slug, slug, displayName: 'Workers AI', enabled: true, createdAt: now, updatedAt: now })
+      .onConflictDoNothing()
+    await db
+      .insert(providerModels)
+      .values({
+        id: `model_${slug}_${modelId}`.replaceAll(/[^a-z0-9]+/gi, '_'),
+        providerId: slug,
+        modelId,
+        displayName: 'Kimi K2.6',
+        availability: 'available',
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoNothing()
+    return c.json({ providerId: slug, modelId }, 201)
   })
   // Local-product-spec inspection of vault credential storage. Returns the raw
   // persisted D1 row (including ciphertext) so encryption-at-rest scenarios can
