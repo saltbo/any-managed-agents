@@ -2,10 +2,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
-import type { AccessRule } from '@/lib/api'
+import type { AccessRule, ProviderModel } from '@/lib/api'
 import { HttpResponse, http, server } from '@/test/msw'
 import { CreateAccessRuleSheet } from './CreateAccessRuleSheet'
 import { ProviderPolicyPage } from './ProviderPolicyPage'
+import { ProvidersPage } from './ProvidersPage'
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -351,5 +352,116 @@ describe('[spec: providers/create-access-rule] CreateAccessRuleSheet', () => {
     await waitFor(() => expect(capturedBody).not.toBeNull())
     expect(capturedBody!.effect).toBe('allow')
     expect(capturedBody!.providerId).toBe('openai')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// ProvidersPage (global model catalog)
+// ---------------------------------------------------------------------------
+
+function buildModel(overrides: Partial<ProviderModel> = {}): ProviderModel {
+  return {
+    id: 'model_1',
+    providerId: 'moonshotai',
+    modelId: '@cf/moonshotai/kimi-k2.6',
+    displayName: 'Kimi K2.6',
+    capabilities: ['text', 'tools'],
+    contextWindow: 262144,
+    pricing: {},
+    availability: 'available',
+    metadata: {},
+    createdAt: '2026-06-16T00:00:00.000Z',
+    updatedAt: '2026-06-16T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
+function renderProviders() {
+  render(
+    <QueryClientProvider client={mkClient()}>
+      <MemoryRouter>
+        <ProvidersPage />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
+}
+
+describe('ProvidersPage', () => {
+  it('shows the catalog header while loading', () => {
+    server.use(http.get('*/api/v1/providers/models', () => new Promise(() => {})))
+    renderProviders()
+    expect(screen.getByText('Model catalog')).toBeTruthy()
+  })
+
+  it('shows the empty state when the catalog has no models', async () => {
+    server.use(
+      http.get('*/api/v1/providers/models', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+    )
+    renderProviders()
+    await waitFor(() => expect(screen.getByText('No models yet')).toBeTruthy())
+  })
+
+  it('renders model rows with vendor, model id, capabilities, context, and availability', async () => {
+    server.use(
+      http.get('*/api/v1/providers/models', () =>
+        HttpResponse.json({
+          data: [buildModel()],
+          pagination: { limit: 50, hasMore: false, nextCursor: null },
+        }),
+      ),
+    )
+    renderProviders()
+    await waitFor(() => expect(screen.getByText('@cf/moonshotai/kimi-k2.6')).toBeTruthy())
+    expect(screen.getByText('moonshotai')).toBeTruthy()
+    expect(screen.getByText('text, tools')).toBeTruthy()
+    expect(screen.getByText('262144')).toBeTruthy()
+  })
+
+  it('renders a dash for models with no capabilities and an unknown context window', async () => {
+    server.use(
+      http.get('*/api/v1/providers/models', () =>
+        HttpResponse.json({
+          data: [buildModel({ id: 'model_2', capabilities: [], contextWindow: null })],
+          pagination: { limit: 50, hasMore: false, nextCursor: null },
+        }),
+      ),
+    )
+    renderProviders()
+    await waitFor(() => expect(screen.getByText('@cf/moonshotai/kimi-k2.6')).toBeTruthy())
+    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('triggers a catalog refresh when the refresh button is clicked', async () => {
+    let refreshed = false
+    server.use(
+      http.get('*/api/v1/providers/models', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+      http.post('*/api/v1/providers/refresh', () => {
+        refreshed = true
+        return HttpResponse.json({ outcome: 'succeeded', discoveredCount: 12, vendors: 3 })
+      }),
+    )
+    renderProviders()
+    await waitFor(() => expect(screen.getByText('No models yet')).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: /Refresh catalog/ }))
+    await waitFor(() => expect(refreshed).toBe(true))
+  })
+
+  it('surfaces a refresh failure without crashing', async () => {
+    server.use(
+      http.get('*/api/v1/providers/models', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+      http.post('*/api/v1/providers/refresh', () =>
+        HttpResponse.json({ error: { type: 'internal_error', message: 'boom' } }, { status: 500 }),
+      ),
+    )
+    renderProviders()
+    await waitFor(() => expect(screen.getByText('No models yet')).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: /Refresh catalog/ }))
+    await waitFor(() => expect(screen.getByText('Model catalog')).toBeTruthy())
   })
 })
