@@ -3,6 +3,7 @@ import { isRuntimeTurnCancelled, ProviderCallError, RuntimeTurnCancelledError } 
 import type { ModelClient } from '../../../runtime-core/ports'
 import { assistantMessage, ZERO_USAGE } from '../../../runtime-core/turn-engine'
 import { extractProviderUsage, normalizeProviderError, providerFamily } from '../../domain/provider-adapter'
+import { aiGatewayFor } from '../../domain/runtime-catalog'
 import type { Env } from '../../env'
 
 // The Worker host's ModelClient adapter: Workers AI egress with deterministic
@@ -293,16 +294,6 @@ function isRetryableProviderError(error: ProviderCallError): boolean {
   return retryable || category === 'unknown'
 }
 
-const DEFAULT_AI_GATEWAY_ID = 'ama'
-
-// Third-party ({vendor}/{model}) cloud models bill through AI Gateway and must
-// name a gateway (configurable via AMA_AI_GATEWAY_ID, default 'ama'). '@cf/'
-// models stay gateway-free: they run on the free Workers AI allocation, and
-// forcing a not-yet-created named gateway returns 400 for them too.
-export function aiGatewayFor(env: Env, modelId: string) {
-  return modelId.startsWith('@cf/') ? undefined : { id: env.AMA_AI_GATEWAY_ID || DEFAULT_AI_GATEWAY_ID }
-}
-
 export function workersAiModelClient(env: Env): ModelClient {
   return {
     async complete(model, context, signal) {
@@ -325,7 +316,7 @@ export function workersAiModelClient(env: Env): ModelClient {
           throw new ProviderCallError(normalizeProviderError(providerFamily(model.provider), error))
         }
       }
-      const gateway = aiGatewayFor(env, model.id)
+      const gateway = aiGatewayFor(model.id, env.AMA_AI_GATEWAY_ID)
       let lastError: ProviderCallError | null = null
       for (let attempt = 1; attempt <= PROVIDER_MAX_ATTEMPTS; attempt += 1) {
         if (signal?.aborted) {

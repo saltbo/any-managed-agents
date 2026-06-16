@@ -199,3 +199,15 @@ export function runtimeCatalogSupportsProviderModel(
 export function runtimeSupportsHostingMode(hostingMode: RuntimeHostingMode, runtime: RuntimeName) {
   return RUNTIME_CATALOG.some((entry) => entry.runtime === runtime && entry.hostingModes.includes(hostingMode))
 }
+
+export const DEFAULT_AI_GATEWAY_ID = 'ama'
+
+// Pure cloud-model routing rule. Third-party ({vendor}/{model}) cloud models
+// bill through AI Gateway and must name a gateway (configurable, default 'ama').
+// '@cf/' models stay gateway-free: they run on the free Workers AI allocation,
+// and forcing a not-yet-created named gateway returns 400 for them too. The
+// effectful env read stays at the call sites (adapter egress + the runtime-ai
+// proxy); this seam only decides which gateway routes a given model id.
+export function aiGatewayFor(modelId: string, gatewayId: string | undefined) {
+  return modelId.startsWith('@cf/') ? undefined : { id: gatewayId || DEFAULT_AI_GATEWAY_ID }
+}
