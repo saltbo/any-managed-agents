@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import {
   ArrowRight,
   Bot,
+  Boxes,
   Code2,
   DatabaseZap,
   LogOut,
@@ -102,6 +103,7 @@ function DesktopNav() {
       <NavButton icon={<Bot size={17} />} to="/agents" label="Agents" />
       <NavButton icon={<Server size={17} />} to="/environments" label="Environments" />
       <NavButton icon={<MessageSquare size={17} />} to="/sessions" label="Sessions" />
+      <NavButton icon={<Boxes size={17} />} to="/providers" label="Providers" />
       <NavButton icon={<ShieldCheck size={17} />} to="/providers/policy" label="Provider policy" />
       <NavButton icon={<Vault size={17} />} to="/vaults" label="Vaults" />
       <NavButton icon={<PlugZap size={17} />} to="/mcp" label="MCP" />
@@ -163,6 +165,7 @@ function MobileNav() {
       <MobileNavButton icon={<Bot size={16} />} to="/agents" label="Agents" />
       <MobileNavButton icon={<Server size={16} />} to="/environments" label="Environments" />
       <MobileNavButton icon={<MessageSquare size={16} />} to="/sessions" label="Sessions" />
+      <MobileNavButton icon={<Boxes size={16} />} to="/providers" label="Providers" />
       <MobileNavButton icon={<ShieldCheck size={16} />} to="/providers/policy" label="Provider policy" />
       <MobileNavButton icon={<Vault size={16} />} to="/vaults" label="Vaults" />
       <MobileNavButton icon={<PlugZap size={16} />} to="/mcp" label="MCP" />
