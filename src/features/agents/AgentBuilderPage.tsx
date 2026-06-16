@@ -64,10 +64,6 @@ export function AgentBuilderPage() {
   const [testPrompt, setTestPrompt] = useState('Summarize your purpose and confirm you are ready to work.')
   const [testSessionId, setTestSessionId] = useState<string | null>(null)
 
-  const providersQuery = useQuery({
-    queryKey: queryKeys.providers.list(false),
-    queryFn: () => api.listProviders(),
-  })
   const connectorsQuery = useQuery({
     queryKey: queryKeys.connectors.list(),
     queryFn: () => api.listConnectors(),
@@ -225,14 +221,7 @@ export function AgentBuilderPage() {
               onSkip={() => goToStep('core')}
             />
           ) : null}
-          {step === 'core' ? (
-            <CoreStep
-              draft={draft}
-              errors={fieldErrors}
-              setField={setField}
-              providers={providersQuery.data?.data ?? EMPTY_LIST}
-            />
-          ) : null}
+          {step === 'core' ? <CoreStep draft={draft} errors={fieldErrors} setField={setField} /> : null}
           {step === 'tools' ? (
             <ToolsStep
               draft={draft}

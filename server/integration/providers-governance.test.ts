@@ -1,6 +1,6 @@
 import { SELF } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { defaultClaims, setupOidcProvider, signIn } from './auth'
+import { seedPlatformProvider, setupOidcProvider, signIn } from './auth'
 
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
@@ -25,103 +25,57 @@ describe('[CF] providers', () => {
     vi.unstubAllGlobals()
   })
 
-  it('lists default Workers AI and manages configured providers without exposing credentials', async () => {
+  it('lists global model vendors and governs agent provider binding without exposing credentials', async () => {
     const authorization = await signIn()
 
-    const defaultListRes = await jsonFetch('/api/v1/providers', authorization)
-    expect(defaultListRes.status).toBe(200)
-    const defaultList = (await defaultListRes.json()) as {
-      data: Array<{ id: string; type: string }>
-    }
-    expect(defaultList.data).toContainEqual(expect.objectContaining({ id: 'workers-ai', type: 'workers-ai' }))
-    expect(JSON.stringify(defaultList)).not.toContain('credentialSecretRef')
+    // The model catalog is a global vendor list now; seed an enabled and a
+    // disabled vendor row directly (discovery owns these in production).
+    await seedPlatformProvider()
+    const { providerId: disabledProviderId, modelId: disabledModelId } = await seedPlatformProvider({
+      providerId: 'gateway-vendor',
+      slug: 'gateway-vendor',
+      displayName: 'Gateway Vendor',
+      modelId: 'gateway-model',
+      enabled: false,
+    })
 
-    const workersRes = await jsonFetch('/api/v1/providers', authorization, {
+    const listRes = await jsonFetch('/api/v1/providers', authorization)
+    expect(listRes.status).toBe(200)
+    const list = (await listRes.json()) as { data: Array<{ id: string; slug: string }> }
+    expect(list.data).toContainEqual(expect.objectContaining({ id: 'workers-ai', slug: 'workers-ai' }))
+    // The de-tenanted catalog never carries transport/credential fields.
+    const serialized = JSON.stringify(list)
+    expect(serialized).not.toContain('credentialSecretRef')
+    expect(serialized).not.toContain('credentialRef')
+    expect(serialized).not.toContain('baseUrl')
+
+    // A null providerId defers resolution to session start (docs §Agents).
+    const deferredAgentRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
-      body: JSON.stringify({ type: 'workers-ai', displayName: 'Workers AI', isDefault: true }),
+      body: JSON.stringify({ name: 'Deferred provider agent' }),
     })
-    expect(workersRes.status).toBe(201)
-    const workers = (await workersRes.json()) as { id: string; type: string }
-    expect(workers).toMatchObject({ type: 'workers-ai' })
-    expect(workers.id).not.toBe('workers-ai')
+    expect(deferredAgentRes.status).toBe(201)
+    await expect(deferredAgentRes.json()).resolves.toMatchObject({ providerId: null })
 
-    // A null providerId defers resolution of the project default provider to
-    // session start, so it is not auto-filled at creation (docs §Agents).
-    const defaultWorkersAgentRes = await jsonFetch('/api/v1/agents', authorization, {
-      method: 'POST',
-      body: JSON.stringify({ name: 'Default Workers AI agent' }),
-    })
-    expect(defaultWorkersAgentRes.status).toBe(201)
-    await expect(defaultWorkersAgentRes.json()).resolves.toMatchObject({ providerId: null })
-
-    const explicitWorkersAgentRes = await jsonFetch('/api/v1/agents', authorization, {
-      method: 'POST',
-      body: JSON.stringify({ name: 'Explicit Workers AI agent', providerId: workers.id }),
-    })
-    expect(explicitWorkersAgentRes.status).toBe(201)
-    await expect(explicitWorkersAgentRes.json()).resolves.toMatchObject({ providerId: workers.id })
-
-    const otherCookie = await signIn({
-      ...defaultClaims(),
-      sub: 'user_other_provider',
-      email: 'provider-other@example.com',
-      org_id: 'org_flare_provider_other',
-      org_name: 'Other Provider Org',
-    })
-    const otherWorkersRes = await jsonFetch('/api/v1/providers', otherCookie, {
-      method: 'POST',
-      body: JSON.stringify({ type: 'workers-ai', displayName: 'Other Workers AI', isDefault: true }),
-    })
-    expect(otherWorkersRes.status).toBe(201)
-
-    const externalRes = await jsonFetch('/api/v1/providers', authorization, {
+    // Binding to an enabled vendor + available model succeeds.
+    const boundAgentRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({
-        type: 'openai-compatible',
-        displayName: 'Gateway',
-        baseUrl: 'https://models.example.test/v1',
-        isDefault: true,
-        credentialRef: { credentialId: 'cred_gateway', versionId: 'credver_gateway_1' },
-        metadata: { region: 'auto' },
+        name: 'Workers AI agent',
+        providerId: 'workers-ai',
+        model: '@cf/moonshotai/kimi-k2.6',
       }),
     })
-    expect(externalRes.status).toBe(201)
-    const external = (await externalRes.json()) as {
-      id: string
-      credentialStatus: string
-      isDefault: boolean
-      credentialRef: { credentialId: string } | null
-    }
-    expect(external).toMatchObject({ credentialStatus: 'configured', isDefault: true })
-    expect(JSON.stringify(external)).not.toContain('credentialSecretRef')
-    expect(JSON.stringify(external)).not.toContain('hasCredential')
+    expect(boundAgentRes.status).toBe(201)
+    await expect(boundAgentRes.json()).resolves.toMatchObject({ providerId: 'workers-ai' })
 
-    const modelRes = await jsonFetch(`/api/v1/providers/${external.id}/models/gateway-model`, authorization, {
-      method: 'PUT',
-      body: JSON.stringify({ displayName: 'Gateway Model', capabilities: ['text'] }),
-    })
-    expect([200, 201]).toContain(modelRes.status)
-    const model = (await modelRes.json()) as { id: string; displayName: string }
-    const updateModelRes = await jsonFetch(`/api/v1/providers/${external.id}/models/gateway-model`, authorization, {
-      method: 'PUT',
-      body: JSON.stringify({ displayName: 'Gateway Model v2', capabilities: ['text'] }),
-    })
-    expect([200, 201]).toContain(updateModelRes.status)
-    await expect(updateModelRes.json()).resolves.toMatchObject({ id: model.id, displayName: 'Gateway Model v2' })
-
-    const disableRes = await jsonFetch(`/api/v1/providers/${external.id}`, authorization, {
-      method: 'PATCH',
-      body: JSON.stringify({ enabled: false }),
-    })
-    expect(disableRes.status).toBe(200)
-    await expect(disableRes.json()).resolves.toMatchObject({ enabled: false })
-
-    const agentRes = await jsonFetch('/api/v1/agents', authorization, {
+    // Binding to a disabled vendor is rejected at agent creation.
+    const disabledAgentRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Gateway agent', providerId: external.id, model: 'gateway-model' }),
+      body: JSON.stringify({ name: 'Disabled vendor agent', providerId: disabledProviderId, model: disabledModelId }),
     })
-    expect(agentRes.status).toBe(400)
-    await expect(agentRes.json()).resolves.toMatchObject({
+    expect(disabledAgentRes.status).toBe(400)
+    await expect(disabledAgentRes.json()).resolves.toMatchObject({
       error: { type: 'validation_error', details: { fields: { providerId: expect.any(String) } } },
     })
   })

@@ -28,7 +28,7 @@ export const queryKeys = {
     all: ['providers'] as const,
     list: (includeArchived = false) => ['providers', 'list', { includeArchived }] as const,
     detail: (id: string) => ['providers', 'detail', id] as const,
-    models: (id: string) => ['providers', 'detail', id, 'models'] as const,
+    models: ['providers', 'models'] as const,
   },
   vaults: {
     all: ['vaults'] as const,

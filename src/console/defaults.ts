@@ -1,4 +1,4 @@
-import type { AgentFormState, EnvironmentFormState, ProviderFormState, SessionFormState, VaultFormState } from './types'
+import type { AgentFormState, EnvironmentFormState, SessionFormState, VaultFormState } from './types'
 
 export const emptyEnvironment: EnvironmentFormState = {
   name: 'Node workspace',
@@ -30,14 +30,6 @@ export const emptySession: SessionFormState = {
   title: '',
   metadata: '{}',
   resourceRefs: '[]',
-}
-
-export const emptyProvider: ProviderFormState = {
-  type: 'workers-ai',
-  displayName: 'Workers AI',
-  baseUrl: '',
-  credentialId: '',
-  credentialVersionId: '',
 }
 
 export const emptyVault: VaultFormState = {

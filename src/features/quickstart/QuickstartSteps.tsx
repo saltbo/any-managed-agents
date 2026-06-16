@@ -48,11 +48,8 @@ export function QuickstartProviderStep({
         {providers.map((provider) => (
           <li key={provider.id} className="flex flex-wrap items-center gap-2 rounded-md bg-muted/40 px-3 py-2 text-sm">
             <span className="font-medium">{provider.displayName}</span>
-            <span className="font-mono text-xs text-muted-foreground">{provider.type}</span>
+            <span className="font-mono text-xs text-muted-foreground">{provider.slug}</span>
             <StatusBadge value={provider.enabled ? 'enabled' : 'disabled'} />
-            <span className="text-xs text-muted-foreground">
-              {provider.credentialStatus === 'not_required' ? 'No credential required' : provider.credentialStatus}
-            </span>
           </li>
         ))}
       </ul>
@@ -191,7 +188,6 @@ export function QuickstartAgentStep({
   onDiscardDraft,
   setField,
   errors,
-  providers,
   onCreate,
   createPending,
 }: {
@@ -204,7 +200,6 @@ export function QuickstartAgentStep({
   onDiscardDraft: () => void
   setField: <K extends keyof AgentBuilderDraft>(field: K, value: AgentBuilderDraft[K]) => void
   errors: BuilderFieldErrors
-  providers: Provider[]
   onCreate: () => void
   createPending: boolean
 }) {
@@ -229,7 +224,7 @@ export function QuickstartAgentStep({
       <p className="text-sm text-muted-foreground">
         Review the drafted configuration. Everything stays editable until you create the agent.
       </p>
-      <CoreStep draft={draft} errors={errors} setField={setField} providers={providers} />
+      <CoreStep draft={draft} errors={errors} setField={setField} />
       <TextAreaField
         label="Allowed tools"
         description="One runtime tool name per line. Policy-blocked tools are rejected when the agent is saved."

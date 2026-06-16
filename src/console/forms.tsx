@@ -1,17 +1,15 @@
 import { useQuery } from '@tanstack/react-query'
-import { Bot, Boxes, Cloud, MessageSquare, Server } from 'lucide-react'
+import { Bot, Boxes, MessageSquare, Server } from 'lucide-react'
 import type { FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { type Agent, api, type Environment, type ProviderType } from '@/lib/api'
+import { type Agent, api, type Environment } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 import { isArchived } from './format'
-import type { AgentFormState, EnvironmentFormState, ProviderFormState, SessionFormState, VaultFormState } from './types'
-
-const PROVIDER_TYPES: ProviderType[] = ['workers-ai', 'anthropic', 'openai', 'openai-compatible', 'ollama', 'other']
+import type { AgentFormState, EnvironmentFormState, SessionFormState, VaultFormState } from './types'
 
 export function EnvironmentForm({
   value,
@@ -178,12 +176,9 @@ export function AgentForm({
   )
 }
 
-const PLATFORM_PROVIDER_ID = 'workers-ai'
-const NO_MODEL_VALUE = '__no-model__'
-
-// Provider and model choices come from the configured provider catalog, so an
-// agent can only reference providers whose connection details the runtime can
-// actually dispatch. Workers AI is always offered as the platform default.
+// The model catalog is now global: a single dropdown lists every available
+// model across all vendors. Selecting a model pins both the vendor (provider)
+// and the model id, since an agent must reference a concrete vendor + model.
 function AgentProviderModelFields({
   value,
   setValue,
@@ -191,76 +186,45 @@ function AgentProviderModelFields({
   value: AgentFormState
   setValue: (value: AgentFormState) => void
 }) {
-  const providersQuery = useQuery({
-    queryKey: queryKeys.providers.list(),
-    queryFn: () => api.listProviders(),
-  })
-  const configuredProviders = (providersQuery.data?.data ?? []).filter(
-    (provider) => provider.enabled && provider.type !== PLATFORM_PROVIDER_ID,
-  )
-  const knownProviderIds = new Set([PLATFORM_PROVIDER_ID, ...configuredProviders.map((provider) => provider.id)])
   const modelsQuery = useQuery({
-    queryKey: queryKeys.providers.models(value.provider),
-    queryFn: () => api.listProviderModels(value.provider),
-    enabled: Boolean(value.provider),
+    queryKey: queryKeys.providers.models,
+    queryFn: () => api.listModels(),
   })
-  const modelIds = (modelsQuery.data?.data ?? [])
-    .filter((model) => model.availability === 'available')
-    .map((model) => model.modelId)
+  const models = (modelsQuery.data?.data ?? []).filter((model) => model.availability === 'available')
+  const selectedModelKey = value.model ? `${value.provider}::${value.model}` : ''
+  const hasSelected = models.some((model) => model.providerId === value.provider && model.modelId === value.model)
   return (
-    <>
-      <Field>
-        <FieldLabel htmlFor="field-provider">Provider</FieldLabel>
-        <Select value={value.provider} onValueChange={(provider) => setValue({ ...value, provider, model: '' })}>
-          <SelectTrigger id="field-provider">
-            <SelectValue placeholder="Select a provider" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectItem value={PLATFORM_PROVIDER_ID}>Workers AI (platform)</SelectItem>
-              {configuredProviders.map((provider) => (
-                <SelectItem key={provider.id} value={provider.id}>
-                  {provider.displayName} ({provider.type})
-                </SelectItem>
-              ))}
-              {value.provider && !knownProviderIds.has(value.provider) ? (
-                <SelectItem value={value.provider}>{value.provider}</SelectItem>
-              ) : null}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-        <FieldDescription>
-          Sessions dispatch the configured provider base URL and vault credential to the runtime.
-        </FieldDescription>
-      </Field>
-      <Field>
-        <FieldLabel htmlFor="field-model">Model</FieldLabel>
-        <Select
-          value={value.model || NO_MODEL_VALUE}
-          onValueChange={(model) => setValue({ ...value, model: model === NO_MODEL_VALUE ? '' : model })}
-        >
-          <SelectTrigger id="field-model">
-            <SelectValue placeholder="Select a model" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectItem value={NO_MODEL_VALUE}>No pinned model</SelectItem>
-              {modelIds.map((modelId) => (
-                <SelectItem key={modelId} value={modelId}>
-                  {modelId}
-                </SelectItem>
-              ))}
-              {value.model && !modelIds.includes(value.model) ? (
-                <SelectItem value={value.model}>{value.model}</SelectItem>
-              ) : null}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-        <FieldDescription>
-          Models come from the provider catalog. Leave unpinned to let the runtime decide.
-        </FieldDescription>
-      </Field>
-    </>
+    <Field>
+      <FieldLabel htmlFor="field-model">Model</FieldLabel>
+      <Select
+        {...(selectedModelKey ? { value: selectedModelKey } : {})}
+        onValueChange={(key) => {
+          const [provider, ...rest] = key.split('::')
+          setValue({ ...value, provider: provider ?? '', model: rest.join('::') })
+        }}
+      >
+        <SelectTrigger id="field-model">
+          <SelectValue placeholder="Select a model" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            {models.map((model) => (
+              <SelectItem key={`${model.providerId}::${model.modelId}`} value={`${model.providerId}::${model.modelId}`}>
+                {model.displayName || model.modelId} ({model.providerId})
+              </SelectItem>
+            ))}
+            {value.model && !hasSelected ? (
+              <SelectItem value={selectedModelKey}>
+                {value.model} ({value.provider})
+              </SelectItem>
+            ) : null}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+      <FieldDescription>
+        Models come from the global vendor catalog. Picking one pins both the vendor and the model.
+      </FieldDescription>
+    </Field>
   )
 }
 
@@ -379,68 +343,6 @@ export function SessionForm({
 
 function hostingModeLabel(value: Environment['hostingMode']) {
   return value === 'self_hosted' ? 'Self-hosted' : 'Cloud'
-}
-
-export function ProviderForm({
-  value,
-  setValue,
-  onSubmit,
-}: {
-  value: ProviderFormState
-  setValue: (value: ProviderFormState) => void
-  onSubmit: (event: FormEvent) => void
-}) {
-  return (
-    <form className="flex flex-col gap-4" onSubmit={onSubmit}>
-      <FieldGroup>
-        <Field>
-          <FieldLabel>Provider type</FieldLabel>
-          <Select value={value.type} onValueChange={(type) => setValue({ ...value, type: type as ProviderType })}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {PROVIDER_TYPES.map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {type}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <FieldDescription>Provider identifiers match the OpenAPI provider contract.</FieldDescription>
-        </Field>
-        <TextField
-          label="Display name"
-          value={value.displayName}
-          onChange={(displayName) => setValue({ ...value, displayName })}
-        />
-        <TextField
-          label="Base URL"
-          description="Required only for OpenAI-compatible or custom providers."
-          value={value.baseUrl}
-          onChange={(baseUrl) => setValue({ ...value, baseUrl })}
-        />
-        <TextField
-          label="Credential id"
-          description="Vault credential id (cred_…) so sessions can dispatch the credential to the runtime. Raw secret values are never accepted here."
-          value={value.credentialId}
-          onChange={(credentialId) => setValue({ ...value, credentialId })}
-        />
-        <TextField
-          label="Credential version id"
-          description="Optional pinned credential version id (vaultver_…). Leave empty to use the active version."
-          value={value.credentialVersionId}
-          onChange={(credentialVersionId) => setValue({ ...value, credentialVersionId })}
-        />
-      </FieldGroup>
-      <Button type="submit">
-        <Cloud data-icon="inline-start" />
-        Save provider
-      </Button>
-    </form>
-  )
 }
 
 export function VaultForm({

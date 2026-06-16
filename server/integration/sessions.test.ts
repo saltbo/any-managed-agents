@@ -3,7 +3,7 @@ import { env } from 'cloudflare:workers'
 import { runtimeProviderModelCapability } from '@server/domain/runtime-catalog'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { runtimeErrorMessage } from '../http/sessions'
-import { defaultClaims, setupOidcProvider, signIn } from './auth'
+import { defaultClaims, seedPlatformProvider, setupOidcProvider, signIn } from './auth'
 
 const DEFAULT_AMA_RUNNER_CAPABILITY = runtimeProviderModelCapability('ama', 'workers-ai', '@cf/moonshotai/kimi-k2.6')
 
@@ -56,6 +56,11 @@ async function createAgent(authorization: string, data: Record<string, unknown> 
       instructions: 'Work through AMA runtime.',
       skills: ['ama@cloud-session'],
       mcpConnectors: ['github'],
+      // Agents must pin a provider before a session can be created. The cloud
+      // runtime ('ama') always routes through the workers-ai binding; the model
+      // stays open unless a test pins one. The seeded global provider row backs
+      // the agent.providerId FK.
+      providerId: 'workers-ai',
       ...data,
     }),
   })
@@ -63,49 +68,17 @@ async function createAgent(authorization: string, data: Record<string, unknown> 
   return (await res.json()) as { id: string; currentVersionId: string; skills: string[] }
 }
 
-async function createVaultCredential(authorization: string, name: string) {
-  const vaultRes = await jsonFetch('/api/v1/vaults', authorization, {
-    method: 'POST',
-    body: JSON.stringify({ name: `${name} vault ${crypto.randomUUID()}` }),
+// Providers are a global vendor catalog now; seed an external vendor + model row
+// directly (discovery owns these in production). Returns the row id callers pin.
+async function createProviderModel(_authorization: string, model: string) {
+  const slug = `external-${crypto.randomUUID().slice(0, 8)}`
+  const { providerId } = await seedPlatformProvider({
+    providerId: slug,
+    slug,
+    displayName: 'External gateway',
+    modelId: model,
   })
-  expect(vaultRes.status).toBe(201)
-  const vault = (await vaultRes.json()) as { id: string }
-  const credentialRes = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials`, authorization, {
-    method: 'POST',
-    body: JSON.stringify({
-      name,
-      type: 'api_key',
-      secret: { provider: 'cloudflare-secrets', secretValue: `raw-${name}-secret` },
-    }),
-  })
-  expect(credentialRes.status).toBe(201)
-  return (await credentialRes.json()) as { id: string; activeVersionId: string }
-}
-
-async function createProviderModel(authorization: string, model: string) {
-  const providerRes = await jsonFetch('/api/v1/providers', authorization, {
-    method: 'POST',
-    body: JSON.stringify({
-      type: 'openai-compatible',
-      displayName: `OpenAI compatible ${crypto.randomUUID()}`,
-      baseUrl: 'https://models.example.test/v1',
-    }),
-  })
-  expect(providerRes.status).toBe(201)
-  const provider = (await providerRes.json()) as { id: string }
-  const modelRes = await jsonFetch(
-    `/api/v1/providers/${provider.id}/models/${encodeURIComponent(model)}`,
-    authorization,
-    {
-      method: 'PUT',
-      body: JSON.stringify({
-        displayName: model,
-        capabilities: ['text'],
-      }),
-    },
-  )
-  expect([200, 201]).toContain(modelRes.status)
-  return { providerId: provider.id, model }
+  return { providerId, model }
 }
 
 async function registerRunner(authorization: string, environmentId: string, capabilities: string[]) {
@@ -195,6 +168,7 @@ async function setProjectPolicy(authorization: string, policy: Record<string, un
 describe('[CF] /api/v1/sessions', () => {
   beforeEach(async () => {
     await setupOidcProvider()
+    await seedPlatformProvider()
   })
 
   afterEach(() => {
@@ -1585,69 +1559,6 @@ describe('[CF] /api/v1/sessions', () => {
     expect(exactLease).toBeTruthy()
   })
 
-  it('dispatches configured provider base URL and vault credential into the self-hosted runtime env [spec: providers/dispatch]', async () => {
-    const authorization = await signIn()
-    const credential = await createVaultCredential(authorization, 'provider-api-key')
-
-    const model = 'gpt-5.3-codex'
-    const providerRes = await jsonFetch('/api/v1/providers', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        type: 'openai-compatible',
-        displayName: 'Dispatchable gateway',
-        baseUrl: 'https://models.example.test/v1',
-        credentialRef: { credentialId: credential.id, versionId: credential.activeVersionId },
-      }),
-    })
-    expect(providerRes.status).toBe(201)
-    const provider = (await providerRes.json()) as { id: string }
-    const modelRes = await jsonFetch(
-      `/api/v1/providers/${provider.id}/models/${encodeURIComponent(model)}`,
-      authorization,
-      {
-        method: 'PUT',
-        body: JSON.stringify({ displayName: model, capabilities: ['text'] }),
-      },
-    )
-    expect([200, 201]).toContain(modelRes.status)
-
-    const environment = await createEnvironment(authorization, { hostingMode: 'self_hosted', mcpPolicy: {} })
-    const agent = await createAgent(authorization, { providerId: provider.id, model, mcpConnectors: [] })
-    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
-      method: 'POST',
-      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'codex' }),
-    })
-    expect(createRes.status).toBe(201)
-    const session = (await createRes.json()) as { id: string }
-
-    const workRow = await env.DB.prepare('SELECT payload FROM work_items WHERE session_id = ?')
-      .bind(session.id)
-      .first<{ payload: string }>()
-    expect(workRow).toBeTruthy()
-    const payload = JSON.parse(workRow!.payload) as {
-      runtimeEnv: Record<string, string>
-      runtimeSecretEnv: Array<{ name: string; credentialRef: Record<string, string> }>
-    }
-    expect(payload.runtimeEnv.OPENAI_BASE_URL).toBe('https://models.example.test/v1')
-    expect(payload.runtimeEnv).not.toHaveProperty('OPENAI_API_KEY')
-    expect(payload.runtimeSecretEnv).toEqual([
-      {
-        name: 'OPENAI_API_KEY',
-        credentialRef: { credentialId: credential.id, versionId: credential.activeVersionId },
-      },
-    ])
-
-    const capability = runtimeProviderModelCapability('codex', '*', model)
-    const runner = await registerRunner(authorization, environment.id, [capability])
-    await heartbeatRunner(authorization, runner.id, [capability])
-    const lease = await claimLease(authorization, runner.id)
-    expect(lease).toBeTruthy()
-    const workItem = await readWorkItem(authorization, lease!.workItemId)
-    const materialized = workItem.payload as { runtimeEnv: Record<string, string> }
-    expect(materialized.runtimeEnv.OPENAI_API_KEY).toBe('raw-provider-api-key-secret')
-    expect(materialized.runtimeEnv.OPENAI_BASE_URL).toBe('https://models.example.test/v1')
-  })
-
   it('rejects sessions when the agent provider was disabled after the agent was saved', async () => {
     const authorization = await signIn()
     const model = 'gpt-5.3-codex'
@@ -1655,11 +1566,8 @@ describe('[CF] /api/v1/sessions', () => {
     const environment = await createEnvironment(authorization, { hostingMode: 'self_hosted', mcpPolicy: {} })
     const agent = await createAgent(authorization, { providerId, model, mcpConnectors: [] })
 
-    const disableRes = await jsonFetch(`/api/v1/providers/${providerId}`, authorization, {
-      method: 'PATCH',
-      body: JSON.stringify({ enabled: false }),
-    })
-    expect(disableRes.status).toBe(200)
+    // The vendor is disabled out of band (global catalog) after the agent saved.
+    await env.DB.prepare('UPDATE providers SET enabled = 0 WHERE id = ?').bind(providerId).run()
 
     const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',

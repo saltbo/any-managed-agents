@@ -32,17 +32,10 @@ function listEnvelope<T>(data: T[]) {
 function buildProvider(overrides: Partial<Provider> = {}): Provider {
   return {
     id: 'workers-ai',
-    projectId: 'project_1',
-    type: 'workers-ai',
+    slug: 'workers-ai',
     displayName: 'Workers AI',
-    baseUrl: null,
-    isDefault: true,
     enabled: true,
-    credentialRef: null,
-    credentialStatus: 'not_required',
     metadata: {},
-    rateLimits: {},
-    budgetPolicy: {},
     modelCatalogState: 'ready',
     lastError: null,
     createdAt: now,

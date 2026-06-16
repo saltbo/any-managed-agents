@@ -248,7 +248,6 @@ export function QuickstartPage() {
         onDiscardDraft={() => setDraft(null)}
         setField={setField}
         errors={draftErrors}
-        providers={providers}
         onCreate={submitAgentDraft}
         createPending={createAgent.isPending}
       />

@@ -1,39 +1,37 @@
+import type { CatalogModel } from '@server/domain/model-catalog'
 import { describe, expect, it } from 'vitest'
 import type { Deps } from './deps'
-import {
-  type AuthScope,
-  type ModelDiscoveryTaskRecord,
-  type ProviderModelRecord,
-  type ProviderRecord,
-  ProviderReferencedError,
-  ProviderValidationError,
+import type {
+  ProviderCatalogStatus,
+  ProviderModelRecord,
+  ProviderRecord,
+  UpsertProviderInput,
+  UpsertProviderModelInput,
 } from './ports'
-import { createProvider, deleteProvider, runModelDiscovery, updateProvider } from './providers'
+import { refreshPlatformCatalog } from './providers'
 
-const auth: AuthScope = {
-  organization: { id: 'org_1', name: 'Org' },
-  project: { id: 'project_1', name: 'Project' },
-  user: { id: 'user_1' },
-  roles: [],
-  permissions: [],
+function catalogModel(overrides: Partial<CatalogModel> = {}): CatalogModel {
+  return {
+    vendor: 'anthropic',
+    modelId: 'anthropic/claude-opus-4',
+    displayName: 'Claude Opus 4',
+    serving: 'ai-gateway',
+    capabilities: ['text', 'tools'],
+    contextWindow: 200000,
+    pricing: { inputMicrosPerToken: 3, outputMicrosPerToken: 15 },
+    availability: 'available',
+    metadata: {},
+    ...overrides,
+  }
 }
 
 function providerRecord(overrides: Partial<ProviderRecord> = {}): ProviderRecord {
   return {
-    id: 'provider_1',
-    organizationId: 'org_1',
-    projectId: 'project_1',
-    type: 'openai',
-    displayName: 'OpenAI',
-    baseUrl: null,
-    isDefault: false,
+    id: `provider_${overrides.slug ?? 'anthropic'}`,
+    slug: 'anthropic',
+    displayName: 'Anthropic',
     enabled: true,
-    credentialId: null,
-    credentialVersionId: null,
-    credentialStatus: 'missing',
     metadata: {},
-    rateLimits: {},
-    budgetPolicy: {},
     modelCatalogState: 'ready',
     lastError: null,
     createdAt: '2026-01-01T00:00:00.000Z',
@@ -42,374 +40,176 @@ function providerRecord(overrides: Partial<ProviderRecord> = {}): ProviderRecord
   }
 }
 
-function modelRecord(modelId: string): ProviderModelRecord {
+function modelRecord(input: UpsertProviderModelInput): ProviderModelRecord {
   return {
-    id: `model_${modelId}`,
-    providerId: 'provider_1',
-    modelId,
-    displayName: modelId,
-    capabilities: ['text'],
-    contextWindow: null,
-    pricing: {},
-    availability: 'available',
-    metadata: {},
+    id: `model_${input.modelId}`,
+    providerId: input.providerId,
+    modelId: input.modelId,
+    displayName: input.displayName,
+    capabilities: input.capabilities,
+    contextWindow: input.contextWindow,
+    pricing: input.pricing,
+    availability: input.availability,
+    metadata: input.metadata,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
   }
 }
 
-function taskRecord(overrides: Partial<ModelDiscoveryTaskRecord> = {}): ModelDiscoveryTaskRecord {
-  return {
-    id: 'mdtask_1',
-    providerId: 'provider_1',
-    state: 'running',
-    discoveredCount: null,
-    error: null,
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
-    ...overrides,
-  }
+interface RepoCalls {
+  upserts: UpsertProviderInput[]
+  models: UpsertProviderModelInput[]
+  statuses: { providerId: string; status: ProviderCatalogStatus }[]
 }
 
-function fakeDeps(
-  overrides: { repo?: Partial<Deps['providers']>; catalog?: Partial<Deps['providerCatalog']> } = {},
-): Deps {
-  const repo: Deps['providers'] = {
-    list: async () => ({ rows: [], hasMore: false }),
-    find: async () => null,
-    platformDefault: (projectId) => providerRecord({ id: 'workers-ai', projectId, type: 'workers-ai' }),
-    insert: async (input, createdAt) =>
-      providerRecord({ id: 'provider_new', ...input, createdAt, updatedAt: createdAt, enabled: true }),
-    update: async (_p, _id, fields, updatedAt) => providerRecord({ ...fields, updatedAt }),
-    delete: async () => {},
-    clearDefaults: async () => {},
-    setCatalogStatus: async () => {},
-    agentReferences: async () => false,
-    listModels: async () => [],
-    platformDefaultModels: () => [modelRecord('default')],
-    findModel: async () => null,
-    upsertModel: async (input) => ({ record: modelRecord(input.modelId), created: true }),
-    deleteModel: async () => {},
-    insertDiscoveryTask: async () => taskRecord(),
-    updateDiscoveryTask: async (_p, _id, fields, updatedAt) =>
-      taskRecord({ state: fields.state, discoveredCount: fields.discoveredCount, error: fields.error, updatedAt }),
-    findDiscoveryTask: async () => null,
-    ...overrides.repo,
-  }
-  return {
-    agents: undefined as unknown as Deps['agents'],
-    environments: undefined as unknown as Deps['environments'],
-    providers: repo,
-    providerCatalog: { fetchCatalog: async () => [], ...overrides.catalog },
-    vaults: undefined as unknown as Deps['vaults'],
-    secretStore: undefined as unknown as Deps['secretStore'],
-    connectors: undefined as unknown as Deps['connectors'],
-    connections: undefined as unknown as Deps['connections'],
-    policies: undefined as unknown as Deps['policies'],
-    accessRules: undefined as unknown as Deps['accessRules'],
-    budgets: undefined as unknown as Deps['budgets'],
-    mcp: undefined as unknown as Deps['mcp'],
-    usageRecords: undefined as unknown as Deps['usageRecords'],
-    auditRecords: undefined as unknown as Deps['auditRecords'],
-    triggers: undefined as unknown as Deps['triggers'],
-    triggerDispatch: undefined as unknown as Deps['triggerDispatch'],
-    projects: undefined as unknown as Deps['projects'],
-    federatedTenants: undefined as unknown as Deps['federatedTenants'],
-    runners: undefined as unknown as Deps['runners'],
-    workItems: undefined as unknown as Deps['workItems'],
-    leases: undefined as unknown as Deps['leases'],
-    runtimeSecretEnv: undefined as unknown as Deps['runtimeSecretEnv'],
-    cloudTurnQueue: undefined as unknown as Deps['cloudTurnQueue'],
-    runnerChannel: undefined as unknown as Deps['runnerChannel'],
-    sandboxRuntime: undefined as unknown as Deps['sandboxRuntime'],
-    sessionOrchestration: undefined as unknown as Deps['sessionOrchestration'],
-    sessions: undefined as unknown as Deps['sessions'],
-    createApprovalGate: undefined as unknown as Deps['createApprovalGate'],
-    rereadStartedSession: false,
-    sessionEvents: undefined as unknown as Deps['sessionEvents'],
-    audit: { record: async () => {} },
-    policy: {
-      resolveToolPolicy: async () => ({}),
-      resolveMcpPolicy: async () => ({}),
-      evaluateMcpTool: async () => ({ allowed: true, category: 'mcp', rule: null, message: '' }),
-      resolveEffective: async () => ({
-        source: { type: 'platform_default', id: 'workers-ai-default' },
-        sources: [],
-        accessRules: [],
-        toolPolicy: {},
-        mcpPolicy: {},
-        sandboxPolicy: {},
-      }),
-      evaluateProvider: async () => ({ allowed: true, category: 'provider', rule: null, message: '' }),
-      evaluateSandboxRuntime: async () => ({ allowed: true, category: 'sandbox', rule: null, message: '' }),
-      policyBlocksSandboxOperation: async () => null,
-      toolPolicyRequiresApproval: async () => false,
-      evaluateProviderForSession: async () => ({
-        decision: { allowed: true, category: 'provider', rule: null, message: '' },
-        override: null,
-      }),
+function fakeDeps(options: { fetch: () => Promise<CatalogModel[]>; list?: ProviderRecord[] }): {
+  deps: Deps
+  calls: RepoCalls
+} {
+  const calls: RepoCalls = { upserts: [], models: [], statuses: [] }
+  const providers: Partial<Deps['providers']> = {
+    list: async () => options.list ?? [],
+    upsert: async (input, timestamp) => {
+      calls.upserts.push(input)
+      return providerRecord({
+        id: `provider_${input.slug}`,
+        slug: input.slug,
+        displayName: input.displayName,
+        updatedAt: timestamp,
+      })
+    },
+    upsertModel: async (input) => {
+      calls.models.push(input)
+      return { record: modelRecord(input), created: true }
+    },
+    setCatalogStatus: async (providerId, status) => {
+      calls.statuses.push({ providerId, status })
     },
   }
+  const deps = {
+    providers,
+    providerCatalog: { fetchPlatformCatalog: options.fetch },
+  } as unknown as Deps
+  return { deps, calls }
 }
 
-describe('[spec: providers/create] createProvider', () => {
-  it('clears existing defaults when creating a default provider', async () => {
-    let cleared = false
-    const deps = fakeDeps({
-      repo: {
-        clearDefaults: async () => {
-          cleared = true
-        },
-      },
+describe('[spec: providers/catalog-refresh] refreshPlatformCatalog', () => {
+  it('groups discovered models by vendor and upserts a provider plus its models', async () => {
+    const { deps, calls } = fakeDeps({
+      fetch: async () => [
+        catalogModel({ vendor: 'anthropic', modelId: 'anthropic/claude-opus-4' }),
+        catalogModel({ vendor: 'anthropic', modelId: 'anthropic/claude-sonnet-4', displayName: 'Claude Sonnet 4' }),
+        catalogModel({
+          vendor: 'meta',
+          modelId: '@cf/meta/llama-3.1-8b-instruct',
+          displayName: 'Llama 3.1 8b Instruct',
+          serving: 'workers-ai-native',
+        }),
+      ],
     })
-    await createProvider(deps, auth, {
-      type: 'openai',
-      displayName: 'Default',
-      baseUrl: null,
-      isDefault: true,
-      credentialId: null,
-      credentialVersionId: null,
+
+    const result = await refreshPlatformCatalog(deps)
+
+    expect(result).toEqual({ outcome: 'succeeded', discoveredCount: 3, vendors: 2 })
+    expect(calls.upserts).toEqual([
+      { slug: 'anthropic', displayName: 'Anthropic' },
+      { slug: 'meta', displayName: 'Meta' },
+    ])
+    expect(calls.models.map((model) => model.modelId)).toEqual([
+      'anthropic/claude-opus-4',
+      'anthropic/claude-sonnet-4',
+      '@cf/meta/llama-3.1-8b-instruct',
+    ])
+  })
+
+  it('carries the catalog model fields onto each upserted model row', async () => {
+    const { deps, calls } = fakeDeps({
+      fetch: async () => [
+        catalogModel({
+          vendor: 'anthropic',
+          modelId: 'anthropic/claude-opus-4',
+          capabilities: ['text', 'tools', 'vision'],
+          contextWindow: 200000,
+          pricing: { inputMicrosPerToken: 3 },
+        }),
+      ],
+    })
+
+    await refreshPlatformCatalog(deps)
+
+    expect(calls.models[0]).toMatchObject({
+      providerId: 'provider_anthropic',
+      modelId: 'anthropic/claude-opus-4',
+      displayName: 'Claude Opus 4',
+      capabilities: ['text', 'tools', 'vision'],
+      contextWindow: 200000,
+      pricing: { inputMicrosPerToken: 3 },
+      availability: 'available',
       metadata: {},
-      rateLimits: {},
-      budgetPolicy: {},
     })
-    expect(cleared).toBe(true)
   })
 
-  it('inserts a non-default provider without clearing defaults', async () => {
-    let cleared = false
-    const deps = fakeDeps({
-      repo: {
-        clearDefaults: async () => {
-          cleared = true
-        },
+  it('marks each refreshed vendor provider catalog status ready with no error', async () => {
+    const { deps, calls } = fakeDeps({
+      fetch: async () => [
+        catalogModel({ vendor: 'anthropic' }),
+        catalogModel({ vendor: 'openai', modelId: 'openai/gpt-4.1', displayName: 'GPT-4.1' }),
+      ],
+    })
+
+    await refreshPlatformCatalog(deps)
+
+    expect(calls.statuses).toEqual([
+      { providerId: 'provider_anthropic', status: { modelCatalogState: 'ready', lastError: null } },
+      { providerId: 'provider_openai', status: { modelCatalogState: 'ready', lastError: null } },
+    ])
+  })
+
+  it('returns a zero-vendor success when the catalog is empty', async () => {
+    const { deps, calls } = fakeDeps({ fetch: async () => [] })
+
+    const result = await refreshPlatformCatalog(deps)
+
+    expect(result).toEqual({ outcome: 'succeeded', discoveredCount: 0, vendors: 0 })
+    expect(calls.upserts).toEqual([])
+    expect(calls.statuses).toEqual([])
+  })
+
+  it('marks every existing provider catalog status error when the discovery fetch throws', async () => {
+    const { deps, calls } = fakeDeps({
+      fetch: async () => {
+        throw Object.assign(new Error('discovery returned HTTP 404'), { status: 404 })
       },
+      list: [
+        providerRecord({ id: 'provider_anthropic', slug: 'anthropic' }),
+        providerRecord({ id: 'provider_openai', slug: 'openai', displayName: 'OpenAI' }),
+      ],
     })
-    const provider = await createProvider(deps, auth, {
-      type: 'openai',
-      displayName: 'Secondary',
-      baseUrl: null,
-      isDefault: false,
-      credentialId: null,
-      credentialVersionId: null,
-      metadata: {},
-      rateLimits: {},
-      budgetPolicy: {},
+
+    const result = await refreshPlatformCatalog(deps)
+
+    expect(result).toEqual({ outcome: 'failed', discoveredCount: 0, vendors: 0, category: 'model_unavailable' })
+    expect(calls.statuses.map((entry) => entry.providerId)).toEqual(['provider_anthropic', 'provider_openai'])
+    expect(calls.statuses[0]?.status.modelCatalogState).toBe('error')
+    expect(calls.statuses[0]?.status.lastError).toMatchObject({
+      type: 'provider_error',
+      category: 'model_unavailable',
     })
-    expect(cleared).toBe(false)
-    expect(provider.type).toBe('openai')
+    expect(calls.upserts).toEqual([])
   })
 
-  it('rejects an openai-compatible provider without a base URL', async () => {
-    await expect(
-      createProvider(fakeDeps(), auth, {
-        type: 'openai-compatible',
-        displayName: 'Gateway',
-        baseUrl: null,
-        isDefault: false,
-        credentialId: null,
-        credentialVersionId: null,
-        metadata: {},
-        rateLimits: {},
-        budgetPolicy: {},
-      }),
-    ).rejects.toMatchObject({ fields: { baseUrl: expect.any(String) } })
-  })
-})
-
-describe('[spec: providers/update] updateProvider', () => {
-  it('rejects switching to openai-compatible without a base URL', async () => {
-    await expect(
-      updateProvider(fakeDeps(), auth, providerRecord({ type: 'openai', baseUrl: null }), {
-        type: 'openai-compatible',
-      }),
-    ).rejects.toBeInstanceOf(ProviderValidationError)
-  })
-
-  it('clears the credential when credential patch is null', async () => {
-    const deps = fakeDeps({
-      repo: { update: async (_p, _id, fields, updatedAt) => providerRecord({ ...fields, updatedAt }) },
-    })
-    const updated = await updateProvider(deps, auth, providerRecord({ credentialId: 'cred_1' }), {
-      credential: { credentialId: null, credentialVersionId: null },
-    })
-    expect(updated.credentialId).toBeNull()
-  })
-
-  it('clears existing defaults when promoting a provider to default via update', async () => {
-    let cleared = false
-    const deps = fakeDeps({
-      repo: {
-        clearDefaults: async () => {
-          cleared = true
-        },
+  it('reports failure even when no providers exist to mark', async () => {
+    const { deps, calls } = fakeDeps({
+      fetch: async () => {
+        throw new TypeError('fetch failed')
       },
+      list: [],
     })
-    await updateProvider(deps, auth, providerRecord({ isDefault: false }), { isDefault: true })
-    expect(cleared).toBe(true)
-  })
 
-  it('retains existing baseUrl when patch does not include baseUrl', async () => {
-    const deps = fakeDeps({
-      repo: { update: async (_p, _id, fields, updatedAt) => providerRecord({ ...fields, updatedAt }) },
-    })
-    const updated = await updateProvider(
-      deps,
-      auth,
-      providerRecord({ type: 'openai-compatible', baseUrl: 'https://existing.example/v1' }),
-      { displayName: 'Renamed' },
-    )
-    expect(updated.baseUrl).toBe('https://existing.example/v1')
-  })
+    const result = await refreshPlatformCatalog(deps)
 
-  it('updates baseUrl when explicitly included in the patch', async () => {
-    const deps = fakeDeps({
-      repo: { update: async (_p, _id, fields, updatedAt) => providerRecord({ ...fields, updatedAt }) },
-    })
-    const updated = await updateProvider(
-      deps,
-      auth,
-      providerRecord({ type: 'openai-compatible', baseUrl: 'https://old.example/v1' }),
-      { baseUrl: 'https://new.example/v1' },
-    )
-    expect(updated.baseUrl).toBe('https://new.example/v1')
-  })
-})
-
-describe('[spec: providers/delete] deleteProvider', () => {
-  it('rejects deleting a provider still referenced by agents', async () => {
-    const deps = fakeDeps({ repo: { agentReferences: async () => true } })
-    await expect(deleteProvider(deps, auth, providerRecord())).rejects.toBeInstanceOf(ProviderReferencedError)
-  })
-
-  it('deletes an unreferenced provider', async () => {
-    let deleted = false
-    const deps = fakeDeps({
-      repo: {
-        delete: async () => {
-          deleted = true
-        },
-      },
-    })
-    await deleteProvider(deps, auth, providerRecord())
-    expect(deleted).toBe(true)
-  })
-})
-
-describe('[spec: providers/discovery] runModelDiscovery', () => {
-  it('discovers the Workers AI catalog from the binding default', async () => {
-    const upserted: string[] = []
-    const deps = fakeDeps({
-      repo: {
-        upsertModel: async (input) => {
-          upserted.push(input.modelId)
-          return { record: modelRecord(input.modelId), created: true }
-        },
-      },
-    })
-    const result = await runModelDiscovery(deps, auth, providerRecord({ type: 'workers-ai' }), '@cf/test/model')
-    expect(result.outcome).toBe('succeeded')
-    expect(result.discoveredCount).toBe(1)
-    expect(upserted).toEqual(['@cf/test/model'])
-  })
-
-  it('upserts every fetched model and marks the task succeeded', async () => {
-    const deps = fakeDeps({
-      catalog: {
-        fetchCatalog: async () => [
-          {
-            modelId: 'a',
-            displayName: 'A',
-            capabilities: ['text'],
-            contextWindow: null,
-            pricing: {},
-            availability: 'available',
-            metadata: {},
-          },
-          {
-            modelId: 'b',
-            displayName: 'B',
-            capabilities: ['text'],
-            contextWindow: 8000,
-            pricing: {},
-            availability: 'available',
-            metadata: {},
-          },
-        ],
-      },
-    })
-    const result = await runModelDiscovery(
-      deps,
-      auth,
-      providerRecord({ type: 'openai-compatible', baseUrl: 'https://x/v1' }),
-      undefined,
-    )
-    expect(result.outcome).toBe('succeeded')
-    expect(result.discoveredCount).toBe(2)
-  })
-
-  it('normalizes a fetch failure into a failed task with a stable category', async () => {
-    let catalogStatus: { modelCatalogState: string } | null = null
-    const deps = fakeDeps({
-      catalog: {
-        fetchCatalog: async () => {
-          throw Object.assign(new Error('HTTP 404'), { status: 404 })
-        },
-      },
-      repo: {
-        setCatalogStatus: async (_p, _id, status) => {
-          catalogStatus = status
-        },
-      },
-    })
-    const result = await runModelDiscovery(
-      deps,
-      auth,
-      providerRecord({ type: 'openai-compatible', baseUrl: 'https://x/v1' }),
-      undefined,
-    )
     expect(result.outcome).toBe('failed')
-    expect(result.category).toBe('model_unavailable')
-    expect(catalogStatus).toMatchObject({ modelCatalogState: 'error' })
-  })
-
-  it('uses the built-in Workers AI default model when defaultModel is undefined', async () => {
-    const upserted: string[] = []
-    const deps = fakeDeps({
-      repo: {
-        upsertModel: async (input) => {
-          upserted.push(input.modelId)
-          return { record: modelRecord(input.modelId), created: true }
-        },
-      },
-    })
-    const result = await runModelDiscovery(deps, auth, providerRecord({ type: 'workers-ai' }), undefined)
-    expect(result.outcome).toBe('succeeded')
-    expect(upserted[0]).toMatch(/^@cf\//)
-  })
-
-  it('includes retryAfterSeconds in the failed task error when the provider returns a retry hint', async () => {
-    let savedError: Record<string, unknown> | null = null
-    const deps = fakeDeps({
-      catalog: {
-        fetchCatalog: async () => {
-          throw Object.assign(new Error('Rate limit'), { status: 429, retryAfterSeconds: 30 })
-        },
-      },
-      repo: {
-        updateDiscoveryTask: async (_p, _id, fields, updatedAt) => {
-          savedError = fields.error as Record<string, unknown>
-          return taskRecord({ state: fields.state ?? 'failed', error: fields.error, updatedAt })
-        },
-      },
-    })
-    const result = await runModelDiscovery(
-      deps,
-      auth,
-      providerRecord({ type: 'openai-compatible', baseUrl: 'https://x/v1' }),
-      undefined,
-    )
-    expect(result.outcome).toBe('failed')
-    expect(savedError).toMatchObject({ retryAfterSeconds: 30 })
+    expect(result.category).toBe('network')
+    expect(calls.statuses).toEqual([])
   })
 })

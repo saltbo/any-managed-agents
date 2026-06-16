@@ -52,39 +52,33 @@ async function sessionAttribution(db: Db, scope: UsageRecordingScope) {
   )
 }
 
-// Resolves the configured provider row backing a runtime provider name: a
-// configured provider id matches directly, otherwise the provider family type
-// (e.g. runtime `cloudflare-workers-ai` -> configured `workers-ai` rows).
-async function resolveProviderConfig(db: Db, projectId: string, provider: string) {
+// Resolves the global vendor row backing a runtime provider name: a vendor id
+// matches directly, otherwise the provider family slug (e.g. runtime
+// `cloudflare-workers-ai` -> the `workers-ai` vendor row).
+async function resolveProviderConfig(db: Db, provider: string) {
   const byId = await db
-    .select({ id: providers.id, type: providers.type })
+    .select({ id: providers.id, slug: providers.slug })
     .from(providers)
-    .where(and(eq(providers.projectId, projectId), eq(providers.id, provider)))
+    .where(eq(providers.id, provider))
     .get()
   if (byId) {
     return byId
   }
   return (
     (await db
-      .select({ id: providers.id, type: providers.type })
+      .select({ id: providers.id, slug: providers.slug })
       .from(providers)
-      .where(and(eq(providers.projectId, projectId), eq(providers.type, providerFamily(provider))))
+      .where(eq(providers.slug, providerFamily(provider)))
       .orderBy(desc(providers.updatedAt))
       .get()) ?? null
   )
 }
 
-async function modelPricing(db: Db, projectId: string, providerId: string, modelId: string) {
+async function modelPricing(db: Db, providerId: string, modelId: string) {
   const row = await db
     .select({ pricing: providerModels.pricing })
     .from(providerModels)
-    .where(
-      and(
-        eq(providerModels.projectId, projectId),
-        eq(providerModels.providerId, providerId),
-        eq(providerModels.modelId, modelId),
-      ),
-    )
+    .where(and(eq(providerModels.providerId, providerId), eq(providerModels.modelId, modelId)))
     .get()
   if (!row?.pricing) {
     return null
@@ -108,11 +102,11 @@ async function recordModelUsage(
   const session = await sessionAttribution(db, scope)
   const provider = stringField(payload, 'provider') ?? session?.modelProvider ?? 'workers-ai'
   const modelId = stringField(payload, 'model') ?? 'unknown'
-  const config = await resolveProviderConfig(db, scope.projectId, provider)
-  // Configured provider ids carry no family information themselves; the
-  // configured type is the authoritative family for attribution.
-  const family = providerFamily(config?.type ?? provider)
-  const pricing = config ? await modelPricing(db, scope.projectId, config.id, modelId) : null
+  const config = await resolveProviderConfig(db, provider)
+  // Vendor ids carry no family information themselves; the vendor slug is the
+  // authoritative family for attribution.
+  const family = providerFamily(config?.slug ?? provider)
+  const pricing = config ? await modelPricing(db, config.id, modelId) : null
   const pricedCostMicros = pricing ? computeModelCostMicros(pricing, { promptTokens, completionTokens }) : null
   const costMicros = eventCostMicros ?? pricedCostMicros
   await db.insert(usageRecords).values({
@@ -191,7 +185,7 @@ async function recordProviderError(db: Db, scope: UsageRecordingScope, payload: 
   if (!provider) {
     return
   }
-  const config = await resolveProviderConfig(db, scope.projectId, provider)
+  const config = await resolveProviderConfig(db, provider)
   if (!config) {
     return
   }
@@ -209,7 +203,7 @@ async function recordProviderError(db: Db, scope: UsageRecordingScope, payload: 
       }),
       updatedAt: new Date().toISOString(),
     })
-    .where(and(eq(providers.id, config.id), eq(providers.projectId, scope.projectId)))
+    .where(eq(providers.id, config.id))
 }
 
 // Canonical-event seam for provider-domain accounting: model usage rows from

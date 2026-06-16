@@ -2,7 +2,7 @@ import { SELF } from 'cloudflare:test'
 import { env } from 'cloudflare:workers'
 import { runtimeProviderModelCapability } from '@server/domain/runtime-catalog'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { setupOidcProvider, signIn } from './auth'
+import { seedPlatformProvider, setupOidcProvider, signIn } from './auth'
 
 const DEFAULT_AMA_RUNNER_CAPABILITY = runtimeProviderModelCapability('ama', 'workers-ai', '@cf/moonshotai/kimi-k2.6')
 
@@ -37,6 +37,8 @@ async function createAgent(authorization: string) {
       name: `Runner-backed agent ${crypto.randomUUID()}`,
       instructions: 'Use AMA-owned self-hosted runner work.',
       tools: [{ name: 'sandbox.exec' }],
+      providerId: 'workers-ai',
+      model: '@cf/moonshotai/kimi-k2.6',
     }),
   })
   expect(res.status).toBe(201)
@@ -139,6 +141,7 @@ async function openLeaseChannel(authorization: string, leaseId: string) {
 describe('[CF] /api/v1/leases', () => {
   beforeEach(async () => {
     await setupOidcProvider()
+    await seedPlatformProvider()
   })
 
   it('claims a specific work item, opens the channel, renews, and completes the lease [spec: runners/lease-claim]', async () => {

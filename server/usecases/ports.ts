@@ -7,14 +7,8 @@ import type {
 } from '@server/domain/connection'
 import type { ConnectorAvailability, ConnectorCatalogEntry, ConnectorCatalogTool } from '@server/domain/connector'
 import type { EnvironmentConfig } from '@server/domain/environment'
-import type {
-  CredentialStatus,
-  DiscoveryTaskState,
-  ModelAvailability,
-  ModelCatalogState,
-  ProviderType,
-} from '@server/domain/provider'
-import type { DiscoveredProviderModel } from '@server/domain/provider-adapter'
+import type { CatalogModel } from '@server/domain/model-catalog'
+import type { ModelAvailability, ModelCatalogState } from '@server/domain/provider'
 import type { RunnerAuthMode } from '@server/domain/runner-queue'
 import type {
   CredentialState,
@@ -375,44 +369,15 @@ export interface EnvironmentRepo {
 
 // --- providers ---
 
-export class ProviderValidationError extends Error {
-  readonly fields: Record<string, string>
-  constructor(message: string, fields: Record<string, string>) {
-    super(message)
-    this.name = 'ProviderValidationError'
-    this.fields = fields
-  }
-}
-
-// Thrown when a provider is still referenced by agents and cannot be deleted.
-// The http layer maps it to 409.
-export class ProviderReferencedError extends Error {
-  readonly fields: Record<string, string>
-  constructor(
-    message = 'Provider is referenced by agents and cannot be deleted',
-    fields: Record<string, string> = { providerId: 'Detach or archive agents using this provider first.' },
-  ) {
-    super(message)
-    this.name = 'ProviderReferencedError'
-    this.fields = fields
-  }
-}
-
+// A provider is a model VENDOR (anthropic, openai, moonshotai, …). Global, not
+// per-tenant: the platform serves one shared catalog. Populated by the scheduled
+// discovery refresh.
 export interface ProviderRecord {
   id: string
-  organizationId: string
-  projectId: string
-  type: ProviderType
+  slug: string
   displayName: string
-  baseUrl: string | null
-  isDefault: boolean
   enabled: boolean
-  credentialId: string | null
-  credentialVersionId: string | null
-  credentialStatus: CredentialStatus
   metadata: Record<string, unknown>
-  rateLimits: Record<string, unknown>
-  budgetPolicy: Record<string, unknown>
   modelCatalogState: ModelCatalogState
   lastError: Record<string, unknown> | null
   createdAt: string
@@ -433,60 +398,13 @@ export interface ProviderModelRecord {
   updatedAt: string
 }
 
-export interface ModelDiscoveryTaskRecord {
-  id: string
-  providerId: string
-  state: DiscoveryTaskState
-  discoveredCount: number | null
-  error: Record<string, unknown> | null
-  createdAt: string
-  updatedAt: string
-}
-
-export interface ProviderListQuery {
-  projectId: string
-  search?: string
-  createdFrom?: string
-  createdTo?: string
-  limit: number
-  cursor: { createdAt: string; id: string } | null
-}
-
-export interface ProviderListPage {
-  rows: ProviderRecord[]
-  hasMore: boolean
-}
-
-export interface CreateProviderInput {
-  organizationId: string
-  projectId: string
-  type: ProviderType
+// Discovery seeds vendor rows by slug.
+export interface UpsertProviderInput {
+  slug: string
   displayName: string
-  baseUrl: string | null
-  isDefault: boolean
-  credentialId: string | null
-  credentialVersionId: string | null
-  metadata: Record<string, unknown>
-  rateLimits: Record<string, unknown>
-  budgetPolicy: Record<string, unknown>
-}
-
-export interface UpdateProviderFields {
-  type: ProviderType
-  displayName: string
-  baseUrl: string | null
-  isDefault: boolean
-  enabled: boolean
-  credentialId: string | null
-  credentialVersionId: string | null
-  metadata: Record<string, unknown>
-  rateLimits: Record<string, unknown>
-  budgetPolicy: Record<string, unknown>
 }
 
 export interface UpsertProviderModelInput {
-  organizationId: string
-  projectId: string
   providerId: string
   modelId: string
   displayName: string
@@ -502,58 +420,32 @@ export interface ProviderCatalogStatus {
   lastError: Record<string, unknown> | null
 }
 
-// DB boundary for providers, their model catalog, and discovery tasks. The
-// only implementation lives in adapters/repos. The platform-default Workers AI
-// provider is a synthesized read-only record (no DB row); the repo returns it
-// from `platformDefault(...)` so the usecase/http need no synthesis logic.
+// DB boundary for the GLOBAL vendor catalog (providers = model vendors) and
+// their models. Populated by the scheduled discovery refresh; read by the model
+// dropdown, policy, and usage. No per-tenant scope. The only implementation
+// lives in adapters/repos.
 export interface ProviderRepo {
-  list(query: ProviderListQuery): Promise<ProviderListPage>
-  find(projectId: string, providerId: string): Promise<ProviderRecord | null>
-  platformDefault(projectId: string): ProviderRecord
-  insert(input: CreateProviderInput, createdAt: string): Promise<ProviderRecord>
-  update(
-    projectId: string,
-    providerId: string,
-    fields: UpdateProviderFields,
-    updatedAt: string,
-  ): Promise<ProviderRecord>
-  delete(projectId: string, providerId: string): Promise<void>
-  clearDefaults(projectId: string, updatedAt: string): Promise<void>
-  setCatalogStatus(
-    projectId: string,
-    providerId: string,
-    status: ProviderCatalogStatus,
-    updatedAt: string,
-  ): Promise<void>
-  agentReferences(projectId: string, providerId: string): Promise<boolean>
+  list(): Promise<ProviderRecord[]>
+  find(providerId: string): Promise<ProviderRecord | null>
+  findBySlug(slug: string): Promise<ProviderRecord | null>
+  upsert(input: UpsertProviderInput, timestamp: string): Promise<ProviderRecord>
+  setCatalogStatus(providerId: string, status: ProviderCatalogStatus, updatedAt: string): Promise<void>
+  agentReferences(providerId: string): Promise<boolean>
 
-  listModels(projectId: string, providerId: string): Promise<ProviderModelRecord[]>
-  platformDefaultModels(projectId: string, providerId: string, defaultModelId: string): ProviderModelRecord[]
-  findModel(projectId: string, providerId: string, modelId: string): Promise<ProviderModelRecord | null>
+  listModels(providerId?: string): Promise<ProviderModelRecord[]>
+  findModel(providerId: string, modelId: string): Promise<ProviderModelRecord | null>
   upsertModel(
     input: UpsertProviderModelInput,
     timestamp: string,
   ): Promise<{ record: ProviderModelRecord; created: boolean }>
-  deleteModel(projectId: string, modelRecordId: string): Promise<void>
-
-  insertDiscoveryTask(
-    input: { organizationId: string; projectId: string; providerId: string },
-    createdAt: string,
-  ): Promise<ModelDiscoveryTaskRecord>
-  updateDiscoveryTask(
-    projectId: string,
-    taskId: string,
-    fields: { state: DiscoveryTaskState; discoveredCount: number | null; error: Record<string, unknown> | null },
-    updatedAt: string,
-  ): Promise<ModelDiscoveryTaskRecord>
-  findDiscoveryTask(projectId: string, providerId: string, taskId: string): Promise<ModelDiscoveryTaskRecord | null>
+  deleteModel(modelRecordId: string): Promise<void>
 }
 
-// External-provider catalog boundary. Fetches a provider's live model list;
-// the only fetch caller for provider discovery. Throws on transport/HTTP
-// failure (normalized by the usecase into a stable error category).
+// Discovery source boundary: fetches the platform's live model catalog from the
+// Workers AI search API (native @cf models) and models.dev (third-party gateway
+// models). Throws on transport/HTTP failure (normalized by the usecase).
 export interface ProviderCatalogGateway {
-  fetchCatalog(provider: { type: string; baseUrl: string | null }): Promise<DiscoveredProviderModel[]>
+  fetchPlatformCatalog(): Promise<CatalogModel[]>
 }
 
 // --- vaults ---
@@ -2178,7 +2070,6 @@ import type {
   ConnectionToolRow,
   EnvironmentRow,
   EnvironmentVersionRow,
-  ProviderConfigRow,
   SessionApprovalInsert,
   SessionInsert,
   SessionRow,
@@ -2195,7 +2086,6 @@ export type {
   ConnectionToolRow,
   EnvironmentRow,
   EnvironmentVersionRow,
-  ProviderConfigRow,
   SessionRow,
 } from '@shared/runtime-rows'
 
@@ -2241,12 +2131,6 @@ export interface SessionOrchestrationStore {
   agentMemoryContent(projectId: string, agentId: string): Promise<string | null>
   findEnvironment(projectId: string, environmentId: string): Promise<EnvironmentRow | null>
   findEnvironmentVersion(projectId: string, versionId: string): Promise<EnvironmentVersionRow | null>
-
-  // ── provider resolution ──
-  configuredDefaultProvider(projectId: string): Promise<{ id: string; type: string } | null>
-  providerType(projectId: string, providerId: string): Promise<{ type: string } | null>
-  defaultProviderConfig(projectId: string): Promise<ProviderConfigRow | null>
-  namedProviderConfig(projectId: string, providerId: string): Promise<ProviderConfigRow | null>
 
   // ── runtime/runner capability validation ──
   activeRunnerCapabilities(projectId: string, environmentId: string): Promise<string[]>

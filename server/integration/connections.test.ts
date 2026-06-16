@@ -1,6 +1,6 @@
 import { SELF } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { defaultClaims, setupOidcProvider, signIn } from './auth'
+import { defaultClaims, seedPlatformProvider, setupOidcProvider, signIn } from './auth'
 
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
@@ -141,7 +141,12 @@ async function createSession(authorization: string, tools = ['mcp:github.repo.re
 
   const agentRes = await jsonFetch('/api/v1/agents', authorization, {
     method: 'POST',
-    body: JSON.stringify({ name: 'Connection agent', tools: tools.map((name) => ({ name })) }),
+    body: JSON.stringify({
+      name: 'Connection agent',
+      tools: tools.map((name) => ({ name })),
+      providerId: 'workers-ai',
+      model: '@cf/moonshotai/kimi-k2.6',
+    }),
   })
   expect(agentRes.status).toBe(201)
   const agent = (await agentRes.json()) as { id: string }
@@ -196,6 +201,7 @@ async function signInUser(suffix: string) {
 describe('[CF] Connections, tools, policy, and tool call execution [spec: mcp/connect]', () => {
   beforeEach(async () => {
     await setupOidcProvider()
+    await seedPlatformProvider()
   })
 
   afterEach(() => {
@@ -703,7 +709,12 @@ describe('[CF] Connections, tools, policy, and tool call execution [spec: mcp/co
 
     const agentRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Environment connection agent', tools: [{ name: 'mcp:github.repo.read' }] }),
+      body: JSON.stringify({
+        name: 'Environment connection agent',
+        tools: [{ name: 'mcp:github.repo.read' }],
+        providerId: 'workers-ai',
+        model: '@cf/moonshotai/kimi-k2.6',
+      }),
     })
     expect(agentRes.status).toBe(201)
     const agent = (await agentRes.json()) as { id: string }

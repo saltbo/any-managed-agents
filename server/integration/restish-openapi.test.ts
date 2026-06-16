@@ -1,6 +1,6 @@
 import { SELF } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { setupOidcProvider, signIn } from './auth'
+import { seedPlatformProvider, setupOidcProvider, signIn } from './auth'
 
 interface OpenApiOperation {
   operationId?: string
@@ -41,6 +41,7 @@ async function openApiOperationIds() {
 describe('[CF] restish/OpenAPI control-plane path [spec: api-contracts/restish]', () => {
   beforeEach(async () => {
     await setupOidcProvider()
+    await seedPlatformProvider()
   })
 
   afterEach(() => {
@@ -88,6 +89,8 @@ describe('[CF] restish/OpenAPI control-plane path [spec: api-contracts/restish]'
       body: JSON.stringify({
         name: 'Restish e2e agent',
         instructions: 'Run e2e checks through documented control-plane operations.',
+        providerId: 'workers-ai',
+        model: '@cf/moonshotai/kimi-k2.6',
       }),
     })
     expect(agentRes.status).toBe(201)

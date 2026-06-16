@@ -1,6 +1,6 @@
 import { SELF } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { setupOidcProvider, signIn } from './auth'
+import { seedPlatformProvider, setupOidcProvider, signIn } from './auth'
 
 const MODEL_ID = '@cf/moonshotai/kimi-k2.6'
 
@@ -136,18 +136,9 @@ describe('[CF] v1 effective policy', () => {
   it('denies disabled providers in the policy decision', async () => {
     const authorization = await signIn()
 
-    const workersRes = await jsonFetch('/api/v1/providers', authorization, {
-      method: 'POST',
-      body: JSON.stringify({ type: 'workers-ai', displayName: 'Workers AI override' }),
-    })
-    expect(workersRes.status).toBe(201)
-    const workers = (await workersRes.json()) as { id: string }
-
-    const disableRes = await jsonFetch(`/api/v1/providers/${workers.id}`, authorization, {
-      method: 'PATCH',
-      body: JSON.stringify({ enabled: false }),
-    })
-    expect(disableRes.status).toBe(200)
+    // Providers are a global vendor catalog now; disable the workers-ai vendor
+    // row directly. Provider policy resolves the row by slug and reports its id.
+    const { providerId } = await seedPlatformProvider({ enabled: false })
 
     const decisionRes = await jsonFetch(decisionPath('workers-ai', MODEL_ID), authorization)
     expect(decisionRes.status).toBe(200)
@@ -155,7 +146,7 @@ describe('[CF] v1 effective policy', () => {
       decision: {
         allowed: false,
         category: 'provider',
-        rule: workers.id,
+        rule: providerId,
         message: 'Provider is disabled for this project.',
       },
     })

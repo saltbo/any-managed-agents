@@ -283,23 +283,22 @@ export function createAgentRepo(db: Db): AgentRepo {
         .where(and(eq(agentMemories.agentId, agentId), eq(agentMemories.projectId, projectId)))
     },
 
-    async providerEnabled(projectId, providerId) {
+    async providerEnabled(_projectId, providerId) {
       const provider = await db
         .select({ enabled: providers.enabled })
         .from(providers)
-        .where(and(eq(providers.id, providerId), eq(providers.projectId, projectId)))
+        .where(eq(providers.id, providerId))
         .get()
       return Boolean(provider?.enabled)
     },
 
-    async modelAvailable(projectId, providerId, model) {
+    async modelAvailable(_projectId, providerId, model) {
       const known = await db
         .select({ id: providerModels.id })
         .from(providerModels)
         .where(
           and(
             eq(providerModels.providerId, providerId),
-            eq(providerModels.projectId, projectId),
             eq(providerModels.modelId, model),
             eq(providerModels.availability, 'available'),
           ),

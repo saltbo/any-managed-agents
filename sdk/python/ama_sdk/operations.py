@@ -84,15 +84,6 @@ OPERATIONS = [
   },
   {
     "method": "POST",
-    "path": "/api/v1/providers/{providerId}/model-discovery-tasks",
-    "operationId": "createModelDiscoveryTask",
-    "summary": "Create a model discovery task",
-    "tags": [
-      "Providers"
-    ]
-  },
-  {
-    "method": "POST",
     "path": "/api/v1/policies",
     "operationId": "createPolicy",
     "summary": "Create a scoped governance policy",
@@ -107,15 +98,6 @@ OPERATIONS = [
     "summary": "Create a project in the current organization",
     "tags": [
       "Projects"
-    ]
-  },
-  {
-    "method": "POST",
-    "path": "/api/v1/providers",
-    "operationId": "createProvider",
-    "summary": "Create a provider",
-    "tags": [
-      "Providers"
     ]
   },
   {
@@ -255,24 +237,6 @@ OPERATIONS = [
   },
   {
     "method": "DELETE",
-    "path": "/api/v1/providers/{providerId}",
-    "operationId": "deleteProvider",
-    "summary": "Delete a provider",
-    "tags": [
-      "Providers"
-    ]
-  },
-  {
-    "method": "DELETE",
-    "path": "/api/v1/providers/{providerId}/models/{modelId}",
-    "operationId": "deleteProviderModel",
-    "summary": "Delete a provider model",
-    "tags": [
-      "Providers"
-    ]
-  },
-  {
-    "method": "DELETE",
     "path": "/api/v1/vaults/{vaultId}/credentials/{credentialId}/versions/{versionId}",
     "operationId": "deleteVaultCredentialVersion",
     "summary": "Delete an unused vault credential version",
@@ -408,6 +372,15 @@ OPERATIONS = [
   },
   {
     "method": "GET",
+    "path": "/api/v1/providers/models",
+    "operationId": "listModels",
+    "summary": "List all catalog models",
+    "tags": [
+      "Providers"
+    ]
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/policies",
     "operationId": "listPolicies",
     "summary": "List scoped governance policies",
@@ -428,7 +401,7 @@ OPERATIONS = [
     "method": "GET",
     "path": "/api/v1/providers/{providerId}/models",
     "operationId": "listProviderModels",
-    "summary": "List provider models",
+    "summary": "List a vendor's models",
     "tags": [
       "Providers"
     ]
@@ -437,7 +410,7 @@ OPERATIONS = [
     "method": "GET",
     "path": "/api/v1/providers",
     "operationId": "listProviders",
-    "summary": "List providers",
+    "summary": "List model vendors",
     "tags": [
       "Providers"
     ]
@@ -714,15 +687,6 @@ OPERATIONS = [
   },
   {
     "method": "GET",
-    "path": "/api/v1/providers/{providerId}/model-discovery-tasks/{taskId}",
-    "operationId": "readModelDiscoveryTask",
-    "summary": "Read a model discovery task",
-    "tags": [
-      "Providers"
-    ]
-  },
-  {
-    "method": "GET",
     "path": "/api/v1/policies/{policyId}",
     "operationId": "readPolicy",
     "summary": "Read a governance policy",
@@ -743,7 +707,7 @@ OPERATIONS = [
     "method": "GET",
     "path": "/api/v1/providers/{providerId}",
     "operationId": "readProvider",
-    "summary": "Read a provider",
+    "summary": "Read a model vendor",
     "tags": [
       "Providers"
     ]
@@ -884,6 +848,15 @@ OPERATIONS = [
     ]
   },
   {
+    "method": "POST",
+    "path": "/api/v1/providers/refresh",
+    "operationId": "refreshCatalog",
+    "summary": "Refresh the model catalog",
+    "tags": [
+      "Providers"
+    ]
+  },
+  {
     "method": "PUT",
     "path": "/api/v1/agents/{agentId}/memory",
     "operationId": "replaceAgentMemory",
@@ -966,15 +939,6 @@ OPERATIONS = [
   },
   {
     "method": "PATCH",
-    "path": "/api/v1/providers/{providerId}",
-    "operationId": "updateProvider",
-    "summary": "Update a provider",
-    "tags": [
-      "Providers"
-    ]
-  },
-  {
-    "method": "PATCH",
     "path": "/api/v1/runners/{runnerId}",
     "operationId": "updateRunner",
     "summary": "Update or archive a self-hosted runner",
@@ -1016,15 +980,6 @@ OPERATIONS = [
     "summary": "Update or revoke vault credential metadata",
     "tags": [
       "Vaults"
-    ]
-  },
-  {
-    "method": "PUT",
-    "path": "/api/v1/providers/{providerId}/models/{modelId}",
-    "operationId": "upsertProviderModel",
-    "summary": "Create or replace provider model metadata",
-    "tags": [
-      "Providers"
     ]
   }
 ]

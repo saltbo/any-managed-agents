@@ -565,18 +565,11 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
   describe('providers API', () => {
     const providerFixture = {
       id: 'prov_1',
-      projectId: 'p1',
-      type: 'anthropic' as const,
+      slug: 'anthropic',
       displayName: 'Anthropic',
-      baseUrl: null,
-      isDefault: false,
       enabled: true,
-      credentialRef: null,
-      credentialStatus: 'configured' as const,
       metadata: {},
-      rateLimits: {},
-      budgetPolicy: {},
-      modelCatalogState: 'synced',
+      modelCatalogState: 'ready',
       lastError: null,
       createdAt: '',
       updatedAt: '',
@@ -590,25 +583,19 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
       expect(url).toContain('/api/v1/providers')
     })
 
+    it('listModels calls /api/v1/providers/models', async () => {
+      const fetchMock = makeJsonFetch(listPage)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.listModels()
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/providers/models')
+    })
+
     it('readProvider calls /api/v1/providers/:providerId', async () => {
       const fetchMock = makeJsonFetch(providerFixture)
       vi.stubGlobal('fetch', fetchMock)
       const result = await api.readProvider('prov_1')
       expect(result.id).toBe('prov_1')
-    })
-
-    it('createProvider posts JSON', async () => {
-      const fetchMock = makeJsonFetch(providerFixture)
-      vi.stubGlobal('fetch', fetchMock)
-      await api.createProvider({ type: 'anthropic', displayName: 'Anthropic' })
-      const [, init] = fetchMock.mock.calls[0]!
-      expect(init?.method).toBe('POST')
-    })
-
-    it('deleteProvider calls DELETE /api/v1/providers/:providerId', async () => {
-      vi.stubGlobal('fetch', makeEmptyFetch(204))
-      const result = await api.deleteProvider('prov_1')
-      expect(result).toBeUndefined()
     })
 
     it('listProviderModels calls the models sub-resource', async () => {
@@ -619,44 +606,14 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
       expect(url).toContain('/api/v1/providers/prov_1/models')
     })
 
-    it('upsertProviderModel calls PUT on the model resource', async () => {
-      const model = {
-        id: 'pm_1',
-        providerId: 'prov_1',
-        modelId: 'claude-3',
-        displayName: 'Claude 3',
-        capabilities: [],
-        contextWindow: null,
-        pricing: {},
-        availability: 'available' as const,
-        metadata: {},
-        createdAt: '',
-        updatedAt: '',
-      }
-      const fetchMock = makeJsonFetch(model)
+    it('refreshCatalog posts to /api/v1/providers/refresh', async () => {
+      const fetchMock = makeJsonFetch({ outcome: 'succeeded', discoveredCount: 3, vendors: 2 })
       vi.stubGlobal('fetch', fetchMock)
-      const result = await api.upsertProviderModel('prov_1', 'claude-3', { displayName: 'Claude 3' })
-      expect(result.modelId).toBe('claude-3')
-      const url = fetchMock.mock.calls[0]?.[0] as string
-      expect(url).toContain('/api/v1/providers/prov_1/models/claude-3')
-    })
-
-    it('startModelDiscovery posts to model-discovery-tasks', async () => {
-      const task = {
-        id: 'task_1',
-        providerId: 'prov_1',
-        state: 'pending' as const,
-        discoveredCount: null,
-        error: null,
-        createdAt: '',
-        updatedAt: '',
-      }
-      const fetchMock = makeJsonFetch(task)
-      vi.stubGlobal('fetch', fetchMock)
-      const result = await api.startModelDiscovery('prov_1')
-      expect(result.state).toBe('pending')
-      const url = fetchMock.mock.calls[0]?.[0] as string
-      expect(url).toContain('/api/v1/providers/prov_1/model-discovery-tasks')
+      const result = await api.refreshCatalog()
+      expect(result.outcome).toBe('succeeded')
+      const [url, init] = fetchMock.mock.calls[0]!
+      expect(url).toContain('/api/v1/providers/refresh')
+      expect(init?.method).toBe('POST')
     })
   })
 

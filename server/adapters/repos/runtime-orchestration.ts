@@ -6,7 +6,6 @@ import type {
   ConnectionToolRow,
   EnvironmentRow,
   EnvironmentVersionRow,
-  ProviderConfigRow,
   SessionApprovalInsert,
   SessionInsert,
   SessionRow,
@@ -26,7 +25,6 @@ import {
   environments,
   environmentVersions,
   leases,
-  providers as providersTable,
   runners,
   sessionApprovals,
   sessionChannels,
@@ -50,7 +48,6 @@ export type {
   ConnectionToolRow,
   EnvironmentRow,
   EnvironmentVersionRow,
-  ProviderConfigRow,
   SessionRow,
   WorkItemRow,
 } from '@shared/runtime-rows'
@@ -268,55 +265,6 @@ export function createRuntimeOrchestrationRepo(db: Db): SessionOrchestrationStor
           .select()
           .from(environmentVersions)
           .where(and(eq(environmentVersions.id, versionId), eq(environmentVersions.projectId, projectId)))
-          .get()) ?? null
-      )
-    },
-
-    // ── provider resolution ───────────────────────────────────────────────
-    async configuredDefaultProvider(projectId: string): Promise<{ id: string; type: string } | null> {
-      return (
-        (await db
-          .select({ id: providersTable.id, type: providersTable.type })
-          .from(providersTable)
-          .where(
-            and(
-              eq(providersTable.projectId, projectId),
-              eq(providersTable.isDefault, true),
-              eq(providersTable.enabled, true),
-            ),
-          )
-          .get()) ?? null
-      )
-    },
-
-    async providerType(projectId: string, providerId: string): Promise<{ type: string } | null> {
-      return (
-        (await db
-          .select({ type: providersTable.type })
-          .from(providersTable)
-          .where(and(eq(providersTable.id, providerId), eq(providersTable.projectId, projectId)))
-          .get()) ?? null
-      )
-    },
-
-    // The default-or-named provider connection projection for runtime dispatch.
-    async defaultProviderConfig(projectId: string): Promise<ProviderConfigRow | null> {
-      return (
-        (await db
-          .select(providerConfigSelection)
-          .from(providersTable)
-          .where(and(eq(providersTable.projectId, projectId), eq(providersTable.isDefault, true)))
-          .orderBy(desc(providersTable.updatedAt))
-          .get()) ?? null
-      )
-    },
-
-    async namedProviderConfig(projectId: string, providerId: string): Promise<ProviderConfigRow | null> {
-      return (
-        (await db
-          .select(providerConfigSelection)
-          .from(providersTable)
-          .where(and(eq(providersTable.id, providerId), eq(providersTable.projectId, projectId)))
           .get()) ?? null
       )
     },
@@ -777,13 +725,4 @@ export type RuntimeOrchestrationRepo = ReturnType<typeof createRuntimeOrchestrat
 // the raw `D1Database` binding and never import drizzle themselves.
 export function createRuntimeOrchestrationRepoFromBinding(binding: D1Database): RuntimeOrchestrationRepo {
   return createRuntimeOrchestrationRepo(drizzle(binding))
-}
-
-const providerConfigSelection = {
-  id: providersTable.id,
-  type: providersTable.type,
-  baseUrl: providersTable.baseUrl,
-  enabled: providersTable.enabled,
-  credentialId: providersTable.credentialId,
-  credentialVersionId: providersTable.credentialVersionId,
 }
