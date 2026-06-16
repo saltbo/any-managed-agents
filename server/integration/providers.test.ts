@@ -93,37 +93,22 @@ describe('[CF] providers v1 [spec: providers/api-catalog]', () => {
   it('refreshes the global catalog from the discovery feeds', async () => {
     const authorization = await signInUser('providers_refresh')
 
+    // Discovery is keyless: the whole catalog comes from models.dev, with native
+    // @cf models under the cloudflare-workers-ai provider.
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = new URL(input instanceof Request ? input.url : input.toString())
-        // Workers AI model search API.
-        if (url.hostname === 'api.cloudflare.com' && url.pathname.endsWith('/ai/models/search')) {
-          return Response.json({
-            result: [
-              {
-                name: '@cf/moonshotai/kimi-k2.6',
-                task: { name: 'Text Generation' },
-                properties: [
-                  { property_id: 'function_calling', value: 'true' },
-                  { property_id: 'context_window', value: '128000' },
-                ],
-              },
-            ],
-          })
-        }
-        // models.dev third-party catalog.
         if (url.hostname === 'models.dev') {
           return Response.json({
+            'cloudflare-workers-ai': {
+              models: { '@cf/moonshotai/kimi-k2.6': { tool_call: true, limit: { context: 128000 } } },
+            },
             anthropic: {
-              models: {
-                'claude-opus-4': { name: 'Claude Opus 4', tool_call: true, limit: { context: 200000 } },
-              },
+              models: { 'claude-opus-4': { name: 'Claude Opus 4', tool_call: true, limit: { context: 200000 } } },
             },
             openai: {
-              models: {
-                'gpt-5': { name: 'GPT-5', tool_call: true, limit: { context: 400000 } },
-              },
+              models: { 'gpt-5': { name: 'GPT-5', tool_call: true, limit: { context: 400000 } } },
             },
           })
         }
@@ -163,7 +148,7 @@ describe('[CF] providers v1 [spec: providers/api-catalog]', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = new URL(input instanceof Request ? input.url : input.toString())
-        if (url.hostname === 'api.cloudflare.com' && url.pathname.endsWith('/ai/models/search')) {
+        if (url.hostname === 'models.dev') {
           return new Response('upstream unavailable', { status: 503 })
         }
         return new Response('not found', { status: 404 })
