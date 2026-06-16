@@ -60,7 +60,7 @@ describe('ProvidersPage', () => {
     await waitFor(() => expect(screen.getByText('No models yet')).toBeTruthy())
   })
 
-  it('renders model rows with vendor, model id, capabilities, context, and availability', async () => {
+  it('renders model rows with model id, vendor, context, and availability', async () => {
     server.use(
       http.get('*/api/v1/providers/models', () =>
         HttpResponse.json({
@@ -72,22 +72,21 @@ describe('ProvidersPage', () => {
     renderProviders()
     await waitFor(() => expect(screen.getByText('@cf/moonshotai/kimi-k2.6')).toBeTruthy())
     expect(screen.getByText('moonshotai')).toBeTruthy()
-    expect(screen.getByText('text, tools')).toBeTruthy()
     expect(screen.getByText('262144')).toBeTruthy()
   })
 
-  it('renders a dash for models with no capabilities and an unknown context window', async () => {
+  it('renders a dash for an unknown context window', async () => {
     server.use(
       http.get('*/api/v1/providers/models', () =>
         HttpResponse.json({
-          data: [buildModel({ id: 'model_2', capabilities: [], contextWindow: null })],
+          data: [buildModel({ id: 'model_2', contextWindow: null })],
           pagination: { limit: 50, hasMore: false, nextCursor: null },
         }),
       ),
     )
     renderProviders()
     await waitFor(() => expect(screen.getByText('@cf/moonshotai/kimi-k2.6')).toBeTruthy())
-    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText('—')).toBeTruthy()
   })
 
   it('triggers a catalog refresh when the refresh button is clicked', async () => {

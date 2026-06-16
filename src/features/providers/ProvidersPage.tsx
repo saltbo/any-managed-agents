@@ -57,9 +57,8 @@ export function ProvidersPage() {
         <TableSurface viewportRef={pagination.viewportRef} footer={<TablePagination pagination={pagination} />}>
           <TableHeader>
             <TableRow>
-              <TableHead>Vendor</TableHead>
               <TableHead>Model</TableHead>
-              <TableHead>Capabilities</TableHead>
+              <TableHead>Vendor</TableHead>
               <TableHead>Context</TableHead>
               <TableHead>Availability</TableHead>
             </TableRow>
@@ -67,10 +66,9 @@ export function ProvidersPage() {
           <TableBody>
             {pagination.items.map((model) => (
               <TableRow key={model.id}>
-                <TableCell className="max-w-40 break-all">{model.providerId}</TableCell>
-                <TableCell className="max-w-64 break-all">{model.modelId}</TableCell>
-                <TableCell className="max-w-48 truncate">{model.capabilities.join(', ') || '—'}</TableCell>
-                <TableCell>{model.contextWindow ?? '—'}</TableCell>
+                <TableCell className="max-w-80 truncate font-mono text-xs">{model.modelId}</TableCell>
+                <TableCell className="truncate">{model.providerId}</TableCell>
+                <TableCell className="tabular-nums">{model.contextWindow ?? '—'}</TableCell>
                 <TableCell>
                   <StatusBadge value={model.availability} />
                 </TableCell>
