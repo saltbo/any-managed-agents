@@ -24,6 +24,10 @@ export function ProvidersPage() {
   const refresh = useMutation({
     mutationFn: () => api.refreshCatalog(),
     onSuccess: (result) => {
+      if (result.outcome === 'failed') {
+        toast.error(`Catalog refresh failed${result.category ? ` (${result.category})` : ''}`)
+        return
+      }
       toast.success(`Catalog refreshed — ${result.discoveredCount} models across ${result.vendors} vendors`)
       void queryClient.invalidateQueries({ queryKey: queryKeys.providers.all })
     },

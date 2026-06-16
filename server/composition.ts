@@ -45,7 +45,7 @@ export function createDeps(env: Env): Deps {
     agents: createAgentRepo(db),
     environments: createEnvironmentRepo(db),
     providers: createProviderRepo(db),
-    providerCatalog: createProviderCatalogGateway(env),
+    providerCatalog: createProviderCatalogGateway(),
     vaults: createVaultRepo(db),
     secretStore: createSecretStoreGateway(env),
     connectors: createConnectorRepo(db),
