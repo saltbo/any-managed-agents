@@ -9,8 +9,17 @@ test('lists a seeded session and opens its detail page [spec: web-console/routed
   api,
   runId,
 }) => {
+  // Agents must pin a provider+model from the global catalog; seed it first.
+  await api.post('/api/v1/e2e/catalog/seed', { data: {} })
   const agent = (await (
-    await api.post('/api/v1/agents', { data: { name: `s-agent-${runId}`, instructions: 'x' } })
+    await api.post('/api/v1/agents', {
+      data: {
+        name: `s-agent-${runId}`,
+        instructions: 'x',
+        providerId: 'workers-ai',
+        model: '@cf/moonshotai/kimi-k2.6',
+      },
+    })
   ).json()) as { id: string }
   const environment = (await (
     await api.post('/api/v1/environments', {
