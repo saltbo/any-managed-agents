@@ -1,9 +1,14 @@
 -- De-tenant the provider catalog: providers/provider_models become a GLOBAL
 -- vendor catalog (populated by the scheduled discovery refresh), model_discovery
 -- tasks are removed. The old rows are discovery-derived, so they are dropped and
--- repopulated; agents.provider_id keeps its FK to providers (values are re-pinned
--- to the new vendor rows). FK enforcement is disabled for the rebuild.
-PRAGMA foreign_keys=OFF;--> statement-breakpoint
+-- repopulated.
+--
+-- D1 enforces foreign keys at runtime and ignores `PRAGMA foreign_keys=OFF`, so
+-- the agents that reference the soon-to-be-wiped providers must be detached
+-- first: clear agents.provider_id (the old per-tenant providers are gone; agents
+-- re-pin to the new global vendor catalog — agents.model is preserved). Then the
+-- child catalog tables drop before their parent, leaving no dangling references.
+UPDATE `agents` SET `provider_id` = NULL;--> statement-breakpoint
 DROP TABLE `model_discovery_tasks`;--> statement-breakpoint
 DROP TABLE `provider_models`;--> statement-breakpoint
 DROP TABLE `providers`;--> statement-breakpoint
@@ -33,5 +38,4 @@ CREATE TABLE `provider_models` (
 	`updated_at` text NOT NULL,
 	FOREIGN KEY (`provider_id`) REFERENCES `providers`(`id`) ON UPDATE no action ON DELETE no action
 );--> statement-breakpoint
-CREATE UNIQUE INDEX `idx_provider_models_unique_model` ON `provider_models` (`provider_id`,`model_id`);--> statement-breakpoint
-PRAGMA foreign_keys=ON;
+CREATE UNIQUE INDEX `idx_provider_models_unique_model` ON `provider_models` (`provider_id`,`model_id`);
