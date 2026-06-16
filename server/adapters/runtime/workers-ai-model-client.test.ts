@@ -123,8 +123,8 @@ describe('workersAiModelClient — retry logic (live mode)', () => {
         model: model.id,
         messages: expect.arrayContaining([{ role: 'user', content: 'hi' }]),
       }),
-      // No signal provided → source passes undefined as the options argument.
-      undefined,
+      // @cf model + no signal → no gateway, no signal → empty options object.
+      {},
     )
   })
 
@@ -255,7 +255,7 @@ describe('workersAiModelClient — message serialization (openAiMessages + openA
       expect.objectContaining({
         messages: expect.arrayContaining([{ role: 'system', content: 'You are helpful.' }]),
       }),
-      undefined,
+      {},
     )
   })
 
@@ -274,7 +274,7 @@ describe('workersAiModelClient — message serialization (openAiMessages + openA
       expect.objectContaining({
         messages: expect.arrayContaining([expect.objectContaining({ role: 'assistant' })]),
       }),
-      undefined,
+      {},
     )
   })
 
@@ -391,7 +391,7 @@ describe('workersAiModelClient — message serialization (openAiMessages + openA
           },
         ],
       }),
-      undefined,
+      {},
     )
   })
 })
@@ -871,5 +871,29 @@ describe('workersAiModelClient — test mode bypass', () => {
       .map((b) => (b as { type: 'text'; text: string }).text)
       .join('')
     expect(text).toContain('none')
+  })
+})
+
+describe('workersAiModelClient — AI gateway routing (live mode)', () => {
+  const thirdPartyModel: Model<string> = { ...model, id: 'anthropic/claude-sonnet-4' }
+
+  it('routes a third-party model through the default "ama" gateway', async () => {
+    const aiRun = vi.fn().mockResolvedValue(successResponse())
+    await workersAiModelClient(makeEnv(aiRun)).complete(thirdPartyModel, context)
+    expect(aiRun).toHaveBeenCalledWith('anthropic/claude-sonnet-4', expect.anything(), { gateway: { id: 'ama' } })
+  })
+
+  it('honors AMA_AI_GATEWAY_ID for third-party models', async () => {
+    const aiRun = vi.fn().mockResolvedValue(successResponse())
+    const env = { AMA_RUNTIME_MODE: 'live', AI: { run: aiRun }, AMA_AI_GATEWAY_ID: 'custom-gw' } as unknown as Env
+    await workersAiModelClient(env).complete(thirdPartyModel, context)
+    expect(aiRun).toHaveBeenCalledWith('anthropic/claude-sonnet-4', expect.anything(), { gateway: { id: 'custom-gw' } })
+  })
+
+  it('passes no gateway for @cf models (free Workers AI)', async () => {
+    const aiRun = vi.fn().mockResolvedValue(successResponse())
+    await workersAiModelClient(makeEnv(aiRun)).complete(model, context)
+    const options = aiRun.mock.calls[0]?.[2] as { gateway?: unknown }
+    expect(options.gateway).toBeUndefined()
   })
 })

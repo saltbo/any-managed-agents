@@ -22,6 +22,8 @@ export interface Env {
   AMA_SESSION_SECRET?: string
   AMA_VAULT_ENCRYPTION_KEY?: string
   AMA_APPROVED_EXTERNAL_VAULT_PREFIXES?: string
+  // AI Gateway name for third-party ({vendor}/{model}) cloud models (Unified
+  // Billing / BYOK); defaults to 'ama'. '@cf/' models stay gateway-free.
   AMA_AI_GATEWAY_ID?: string
   OIDC_ISSUER?: string
   OIDC_CLIENT_ID?: string

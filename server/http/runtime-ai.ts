@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { aiGatewayFor } from '../adapters/runtime/workers-ai-model-client'
 import type { Env } from '../env'
 import { errorResponse } from '../errors'
 
@@ -24,7 +25,8 @@ const routes = app.post('/workers-ai/v1/chat/completions', async (c) => {
     return errorResponse(c, 400, 'validation_error', 'OpenAI chat completion body must include model')
   }
 
-  const response = await c.env.AI.run(model, body, { returnRawResponse: true })
+  const gateway = aiGatewayFor(c.env, model)
+  const response = await c.env.AI.run(model, body, { returnRawResponse: true, ...(gateway ? { gateway } : {}) })
   // Workers AI types the binding return as Record<string, unknown>, but the
   // returnRawResponse overload yields a real Response at runtime. This is an
   // external-protocol adapter endpoint (design §1.8), not the AMA contract.
