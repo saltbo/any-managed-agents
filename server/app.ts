@@ -21,7 +21,6 @@ import { registerProviderRoutes } from './http/providers'
 import { registerRunnerRoutes } from './http/runners'
 import runtimeAi from './http/runtime-ai'
 import { registerRuntimeProxy } from './http/runtime-proxy'
-import { registerRuntimeRoutes } from './http/runtimes'
 import { registerSessionRoutes } from './http/sessions'
 import { registerTriggerRoutes } from './http/triggers'
 import { registerUsageRecordRoutes } from './http/usage-records'
@@ -91,7 +90,6 @@ export function createApp() {
   const auditRecords = registerAuditRecordRoutes(createDepsApiRouter())
   const sessionsRoutes = registerSessionRoutes(createDepsApiRouter())
   const vaults = registerVaultRoutes(createDepsApiRouter())
-  const runtimes = registerRuntimeRoutes(createDepsApiRouter())
 
   const routes = app
     .route('/api/v1/health', health)
@@ -103,7 +101,6 @@ export function createApp() {
     .route('/api/v1/environments', environments)
     .route('/api/v1/providers', providers)
     .route('/api/v1/runtime', runtimeAi)
-    .route('/api/v1/runtimes', runtimes)
     .route('/api/v1/runners', runners)
     .route('/api/v1/work-items', workItems)
     .route('/api/v1/leases', leases)

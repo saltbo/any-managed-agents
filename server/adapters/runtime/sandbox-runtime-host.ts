@@ -11,7 +11,7 @@ import {
 } from '../../../runtime-core/errors'
 import type { RuntimeToolPolicyDecision, RuntimeToolPolicyInput } from '../../../runtime-core/ports'
 import { runTurn, runtimeMessagesFromEvents } from '../../../runtime-core/turn-engine'
-import { canonicalProvider, isWorkersAiProvider } from '../../domain/runtime/provider'
+import { canonicalProvider } from '../../domain/runtime/provider'
 import type { Env } from '../../env'
 import type { RuntimeSecretEnvEntry } from '../gateways/runtime-secret-env'
 import { toolExecutor } from './sandbox-tool-executor'
@@ -209,7 +209,7 @@ export async function startSessionRuntime(
   env: Env,
   input: SessionRuntimeStartInput,
 ): Promise<SessionRuntimeStartResult> {
-  const model = resolveRuntimeModel(env, input.provider, input.model)
+  const model = resolveRuntimeModel(env, input.model)
   if (env.AMA_RUNTIME_MODE !== 'test') {
     const getSandbox = await getSandboxBinding()
     const sandbox = getSandbox(env.SANDBOX, input.sandboxId, { keepAlive: true, normalizeId: true })
@@ -313,23 +313,20 @@ function piProviderName(provider: string) {
   return canonicalProvider(provider)
 }
 
-function runtimeDefaultModel(env: Env, provider: string) {
-  if (isWorkersAiProvider(provider)) {
-    return env.AMA_DEFAULT_MODEL ?? '@cf/moonshotai/kimi-k2.6'
-  }
-  throw new Error(`Runtime model is required for provider: ${provider}`)
+function runtimeDefaultModel(env: Env) {
+  return env.AMA_DEFAULT_MODEL ?? '@cf/moonshotai/kimi-k2.6'
 }
 
-function resolveRuntimeModel(env: Env, provider: string, model: string | null) {
-  return model ?? runtimeDefaultModel(env, provider)
+function resolveRuntimeModel(env: Env, model: string | null) {
+  return model ?? runtimeDefaultModel(env)
 }
 
-function fallbackModel(provider: string, model: string): Model<string> {
+function fallbackModel(model: string): Model<string> {
   return {
     id: model,
     name: model,
     api: 'ama-workers-ai',
-    provider,
+    provider: 'cloudflare-workers-ai',
     baseUrl: 'cloudflare-ai-binding://AI',
     reasoning: false,
     input: ['text'],
@@ -339,11 +336,11 @@ function fallbackModel(provider: string, model: string): Model<string> {
   }
 }
 
-function runtimeModel(provider: string, model: string) {
-  if (isWorkersAiProvider(provider)) {
-    return getModel('cloudflare-workers-ai', model as never) ?? fallbackModel('cloudflare-workers-ai', model)
-  }
-  throw new Error(`Unsupported AMA runtime provider: ${provider}`)
+// Cloud dispatches every model through the Workers AI binding (env.AI.run): the
+// model id drives native (@cf) vs AI Gateway routing, so the agent's vendor is
+// irrelevant here — every cloud model resolves against the workers-ai api.
+function runtimeModel(model: string) {
+  return getModel('cloudflare-workers-ai', model as never) ?? fallbackModel(model)
 }
 
 // Worker host adapter over the shared turn engine: resolve the Workers AI
@@ -352,8 +349,8 @@ function runtimeModel(provider: string, model: string) {
 // become permissive defaults — no gating, no liveness check, never pause).
 export async function runSessionTurn(env: Env, input: SessionTurnInput): Promise<SessionTurnResult> {
   const provider = piProviderName(input.provider)
-  const modelId = resolveRuntimeModel(env, input.provider, input.model)
-  const model = runtimeModel(input.provider, modelId)
+  const modelId = resolveRuntimeModel(env, input.model)
+  const model = runtimeModel(modelId)
   return runTurn({
     sessionId: input.sessionId,
     sandboxId: input.sandboxId,

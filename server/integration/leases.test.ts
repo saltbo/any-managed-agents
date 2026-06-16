@@ -4,7 +4,9 @@ import { runtimeProviderModelCapability } from '@server/domain/runtime-catalog'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { seedPlatformProvider, setupOidcProvider, signIn } from './auth'
 
-const DEFAULT_AMA_RUNNER_CAPABILITY = runtimeProviderModelCapability('ama', 'workers-ai', '@cf/moonshotai/kimi-k2.6')
+// ama is a wildcard runtime, so its required runner capability normalizes the
+// provider segment to '*' regardless of the agent's vendor.
+const DEFAULT_AMA_RUNNER_CAPABILITY = runtimeProviderModelCapability('ama', '*', '@cf/moonshotai/kimi-k2.6')
 
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {

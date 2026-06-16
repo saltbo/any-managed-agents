@@ -102,6 +102,10 @@ const store = {
 // the launch dispatch the reconcile flow catches.
 const deps: CreateSessionDeps = {
   sessionOrchestration: store as never,
+  providers: {
+    findModel: async () => ({ id: 'm', providerId: 'workers-ai', modelId: '@cf/x' }),
+    findBySlug: async () => ({ id: 'workers-ai', slug: 'workers-ai' }),
+  } as never,
   audit: { record: (auth: unknown, entry: unknown) => recordAuditMock(auth, entry) } as never,
   policy: {
     evaluateProviderForSession: (auth: unknown, values: unknown) =>

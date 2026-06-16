@@ -3,10 +3,12 @@ import { expect, vi } from 'vitest'
 
 // Providers are a global vendor catalog (no org/project). Tests that pin an
 // agent to a provider/model need the row to exist so the agent.providerId FK
-// and the provider/model availability checks resolve. The cloud runtime ('ama')
-// always routes through the 'workers-ai' binding, so this seeds that vendor plus
-// the default model the test agents pin. Call from a beforeEach: isolated
-// storage resets writes between tests.
+// and the provider/model availability checks resolve. Provider rows use the
+// vendor slug as their id (id === slug; discovery upserts id: slug). The cloud
+// runtime ('ama') dispatches every model through the Workers AI binding, which
+// only recognizes the 'workers-ai' provider, so this seeds that vendor plus the
+// default model the test agents pin. Call from a beforeEach: isolated storage
+// resets writes between tests.
 export const PLATFORM_PROVIDER_ID = 'workers-ai'
 export const PLATFORM_MODEL_ID = '@cf/moonshotai/kimi-k2.6'
 
@@ -14,7 +16,7 @@ export async function seedPlatformProvider(
   options: { providerId?: string; slug?: string; displayName?: string; modelId?: string; enabled?: boolean } = {},
 ) {
   const providerId = options.providerId ?? PLATFORM_PROVIDER_ID
-  const slug = options.slug ?? 'workers-ai'
+  const slug = options.slug ?? PLATFORM_PROVIDER_ID
   const displayName = options.displayName ?? 'Workers AI'
   const modelId = options.modelId ?? PLATFORM_MODEL_ID
   const enabled = options.enabled ?? true

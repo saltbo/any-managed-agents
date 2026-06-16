@@ -13,7 +13,7 @@ import {
   type SerializedAgentVersion,
 } from '@server/domain/runtime/session-snapshot'
 import { runnerSupportsRuntimeProviderModel, runtimeCatalogSupportsProviderModel } from '@server/domain/runtime-catalog'
-import type { AuthScope, PolicyPort, SessionOrchestrationStore } from '../ports'
+import type { AuthScope, PolicyPort, ProviderRepo, SessionOrchestrationStore } from '../ports'
 
 type ProvisioningDeps = {
   sessionOrchestration: SessionOrchestrationStore
@@ -21,7 +21,7 @@ type ProvisioningDeps = {
 }
 
 export async function validateRuntimeProviderModel(
-  deps: Pick<ProvisioningDeps, 'sessionOrchestration'>,
+  deps: Pick<ProvisioningDeps, 'sessionOrchestration'> & { providers: ProviderRepo },
   auth: AuthScope,
   environmentId: string,
   hostingMode: 'cloud' | 'self_hosted',
@@ -33,21 +33,28 @@ export async function validateRuntimeProviderModel(
   if (!driver.supportsHostingMode(hostingMode)) {
     return false
   }
-  if (hostingMode === 'self_hosted') {
-    if (!runtimeCatalogSupportsProviderModel(hostingMode, runtime, provider, model)) {
-      return false
-    }
-    const activeRunnerCapabilities = await deps.sessionOrchestration.activeRunnerCapabilities(
-      auth.project.id,
-      environmentId,
-    )
-    return (
-      activeRunnerCapabilities.some((capabilities) =>
-        runnerSupportsRuntimeProviderModel(parseJson<string[]>(capabilities) ?? [], runtime, provider, model),
-      ) || activeRunnerCapabilities.length === 0
-    )
+  if (hostingMode === 'cloud') {
+    // Cloud dispatches every model through the Workers AI binding + AI Gateway,
+    // so the global catalog (populated by discovery) is the source of truth for
+    // what exists. provider is the vendor slug, which is the provider row id.
+    return model
+      ? Boolean(await deps.providers.findModel(provider, model))
+      : Boolean(await deps.providers.findBySlug(provider))
   }
-  return driver.supportsCloudProviderModel(provider, model)
+  // self_hosted: the catalog is a loose pre-filter; the runner's declared
+  // capabilities do the real gating.
+  if (!runtimeCatalogSupportsProviderModel(hostingMode, runtime, provider, model)) {
+    return false
+  }
+  const activeRunnerCapabilities = await deps.sessionOrchestration.activeRunnerCapabilities(
+    auth.project.id,
+    environmentId,
+  )
+  return (
+    activeRunnerCapabilities.some((capabilities) =>
+      runnerSupportsRuntimeProviderModel(parseJson<string[]>(capabilities) ?? [], runtime, provider, model),
+    ) || activeRunnerCapabilities.length === 0
+  )
 }
 
 export function mcpConnectorIds(snapshot: Record<string, unknown>) {

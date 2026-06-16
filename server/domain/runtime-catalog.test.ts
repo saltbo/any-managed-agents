@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  cloudRuntimeModels,
   RUNTIME_CATALOG,
   RUNTIME_PROVIDER_MODEL_CAPABILITY_PREFIX,
   runnerSupportsRuntimeProviderModel,
@@ -61,10 +60,9 @@ describe('runtimeRequiredRunnerCapability', () => {
     )
   })
 
-  it('uses the concrete provider when the catalog pins a specific provider', () => {
-    // ama has workers-ai pinned (not wildcard), so provider segment stays concrete
-    expect(runtimeRequiredRunnerCapability('ama', 'workers-ai', '@cf/moonshotai/kimi-k2.6')).toBe(
-      runtimeProviderModelCapability('ama', 'workers-ai', '@cf/moonshotai/kimi-k2.6'),
+  it('normalizes ama to a wildcard provider (the catalog no longer pins models)', () => {
+    expect(runtimeRequiredRunnerCapability('ama', 'moonshotai', '@cf/moonshotai/kimi-k2.6')).toBe(
+      runtimeProviderModelCapability('ama', '*', '@cf/moonshotai/kimi-k2.6'),
     )
   })
 
@@ -79,11 +77,12 @@ describe('runtimeRequiredRunnerCapability', () => {
 describe('transitionalRuntimeLevelRuntimes', () => {
   it('returns all runtimes whose catalog entry uses a wildcard model', () => {
     const names = transitionalRuntimeLevelRuntimes()
+    // Every runtime now declares a wildcard model (ama validates against the
+    // global catalog instead of a pinned list), so all of them appear.
+    expect(names).toContain('ama')
     expect(names).toContain('claude-code')
     expect(names).toContain('codex')
     expect(names).toContain('copilot')
-    // ama pins a specific model, so it should not appear
-    expect(names).not.toContain('ama')
   })
 })
 
@@ -117,9 +116,9 @@ describe('runnerSupportsRuntimeProviderModel', () => {
     expect(runnerSupportsRuntimeProviderModel(['claude-code'], 'claude-code', 'anthropic', 'claude-opus-4')).toBe(true)
   })
 
-  it('does not apply transitional fallback for pinned-model runtimes like ama', () => {
-    // ama is NOT a wildcard-model runtime, bare 'ama' does not grant model-specific work
-    expect(runnerSupportsRuntimeProviderModel(['ama'], 'ama', 'workers-ai', '@cf/moonshotai/kimi-k2.6')).toBe(false)
+  it('applies transitional bare-runtime fallback for ama (now a wildcard runtime)', () => {
+    // ama is a wildcard-model runtime now, so bare 'ama' grants model-specific work
+    expect(runnerSupportsRuntimeProviderModel(['ama'], 'ama', 'workers-ai', '@cf/moonshotai/kimi-k2.6')).toBe(true)
   })
 
   it('returns false when model is given but runner has no matching capability', () => {
@@ -133,17 +132,11 @@ describe('runtimeCatalogSupportsProviderModel', () => {
     expect(runtimeCatalogSupportsProviderModel('cloud', 'claude-code', 'anthropic', 'claude-opus-4')).toBe(false)
   })
 
-  it('returns true for a pinned provider and model match (ama cloud)', () => {
+  it('accepts any provider/model on ama cloud (catalog is wildcard; the global catalog validates)', () => {
+    // ama no longer pins models here — the loose catalog filter accepts anything,
+    // and provisioning validates cloud provider/model against the global catalog.
     expect(runtimeCatalogSupportsProviderModel('cloud', 'ama', 'workers-ai', '@cf/moonshotai/kimi-k2.6')).toBe(true)
-  })
-
-  it('returns false for a mismatched provider on a pinned-provider runtime', () => {
-    // ama only supports workers-ai
-    expect(runtimeCatalogSupportsProviderModel('cloud', 'ama', 'anthropic', '@cf/moonshotai/kimi-k2.6')).toBe(false)
-  })
-
-  it('returns false for a mismatched model on a pinned-model runtime', () => {
-    expect(runtimeCatalogSupportsProviderModel('cloud', 'ama', 'workers-ai', 'some-other-model')).toBe(false)
+    expect(runtimeCatalogSupportsProviderModel('cloud', 'ama', 'anthropic', 'anthropic/claude-opus-4')).toBe(true)
   })
 
   it('returns true for any provider/model on a wildcard-model self-hosted runtime', () => {
@@ -152,10 +145,8 @@ describe('runtimeCatalogSupportsProviderModel', () => {
     expect(runtimeCatalogSupportsProviderModel('self_hosted', 'copilot', 'azure', 'gpt-4.1')).toBe(true)
   })
 
-  it('checks provider even when no model is given', () => {
-    // ama has a pinned provider (workers-ai), so a different provider without a model is rejected
-    expect(runtimeCatalogSupportsProviderModel('cloud', 'ama', 'anthropic')).toBe(false)
-    // wildcard-provider runtimes accept any provider even without a model
+  it('accepts any provider on a wildcard runtime even when no model is given', () => {
+    expect(runtimeCatalogSupportsProviderModel('cloud', 'ama', 'anthropic')).toBe(true)
     expect(runtimeCatalogSupportsProviderModel('self_hosted', 'claude-code', 'anthropic')).toBe(true)
   })
 
@@ -181,34 +172,6 @@ describe('runtimeSupportsHostingMode', () => {
   it('returns false for unknown runtimes', () => {
     // @ts-expect-error testing unknown runtime
     expect(runtimeSupportsHostingMode('cloud', 'unknown')).toBe(false)
-  })
-})
-
-describe('cloudRuntimeModels', () => {
-  it('returns the concrete ama cloud models, kimi-k2.7-code first, each with a display name', () => {
-    const models = cloudRuntimeModels('ama')
-    // The default clients pick (data[0]) must be the proven working model.
-    expect(models[0]).toEqual({
-      provider: 'workers-ai',
-      model: '@cf/moonshotai/kimi-k2.7-code',
-      displayName: 'Kimi K2.7 Code (Workers AI)',
-    })
-    // Every entry is a concrete Workers AI model with a display name (never a wildcard).
-    expect(models.length).toBeGreaterThanOrEqual(3)
-    expect(
-      models.every((m) => m.provider === 'workers-ai' && m.model.includes('/') && typeof m.displayName === 'string'),
-    ).toBe(true)
-    expect(models.some((m) => m.model === '*')).toBe(false)
-  })
-
-  it('returns an empty list for a self-hosted-only runtime whose catalog entry is wildcard', () => {
-    // claude-code is self_hosted only and pins '*'/'*', so it exposes no cloud catalog.
-    expect(cloudRuntimeModels('claude-code')).toEqual([])
-  })
-
-  it('returns an empty list for an unknown runtime', () => {
-    // @ts-expect-error testing unknown runtime
-    expect(cloudRuntimeModels('unknown-runtime')).toEqual([])
   })
 })
 
