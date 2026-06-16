@@ -92,7 +92,6 @@ function fakeDeps(
     insertMemory: async () => {},
     replaceMemory: async () => {},
     providerEnabled: async () => true,
-    modelAvailable: async () => true,
     connectorConnected: async () => true,
     ...overrides.repo,
   }
@@ -171,15 +170,15 @@ describe('[spec: agents/create] createAgent', () => {
     ).rejects.toMatchObject({ fields: { providerId: expect.any(String) } })
   })
 
-  it('rejects an unavailable model', async () => {
-    const deps = fakeDeps({ repo: { modelAvailable: async () => false } })
-    await expect(
-      createAgent(deps, auth, {
-        name: 'x',
-        description: null,
-        config: config({ providerId: 'provider_x', model: 'unknown' }),
-      }),
-    ).rejects.toMatchObject({ fields: { model: expect.any(String) } })
+  it('accepts a non-catalog model — model validity is resolved at session creation', async () => {
+    // A self-hosted agent legitimately pins a runner-native model id (e.g. `opus`)
+    // that never appears in the global catalog; createAgent must not reject it.
+    const agent = await createAgent(fakeDeps(), auth, {
+      name: 'x',
+      description: null,
+      config: config({ providerId: 'provider_x', model: 'opus' }),
+    })
+    expect(agent.model).toBe('opus')
   })
 
   it('rejects a disconnected mcp connector', async () => {

@@ -27,7 +27,7 @@ import {
 // AgentValidationError on the first failure. `auth` is needed only to resolve
 // the effective tool policy, and only when tools are present.
 async function validateConfig(deps: Deps, auth: AuthScope, config: AgentConfig) {
-  const providerError = await validateProviderRef(deps, auth.project.id, config.providerId, config.model)
+  const providerError = await validateProviderRef(deps, auth.project.id, config.providerId)
   if (providerError) {
     throw new AgentValidationError('Invalid agent configuration', providerError)
   }
@@ -60,16 +60,19 @@ async function validateConfig(deps: Deps, auth: AuthScope, config: AgentConfig) 
 }
 
 // A null providerId defers project-default resolution to session start, so it
-// needs no validation here.
-async function validateProviderRef(deps: Deps, projectId: string, providerId: string | null, model: string | null) {
+// needs no validation here. The model is NOT checked against the catalog here:
+// an agent is environment-agnostic at creation, so the hosting mode is unknown,
+// and a self-hosted agent legitimately pins a runner-native model id (e.g.
+// `opus`) that never appears in the global catalog. Model validity is therefore
+// resolved at session creation, where the environment — and thus whether the
+// catalog (cloud) or the runner's capabilities (self-hosted) is authoritative —
+// is known.
+async function validateProviderRef(deps: Deps, projectId: string, providerId: string | null) {
   if (!providerId) {
     return null
   }
   if (!(await deps.agents.providerEnabled(projectId, providerId))) {
     return { providerId: 'Provider is disabled or unavailable for this project.' }
-  }
-  if (model && !(await deps.agents.modelAvailable(projectId, providerId, model))) {
-    return { model: 'Model is not available for this provider.' }
   }
   return null
 }

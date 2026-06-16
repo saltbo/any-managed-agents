@@ -11,7 +11,7 @@ import type {
 } from '@server/usecases/ports'
 import { and, desc, eq, gte, isNotNull, isNull, like, lt, lte, or } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
-import { agentMemories, agents, agentVersions, connections, providerModels, providers } from '../../db/schema'
+import { agentMemories, agents, agentVersions, connections, providers } from '../../db/schema'
 
 type Db = ReturnType<typeof drizzle>
 type AgentRow = typeof agents.$inferSelect
@@ -290,21 +290,6 @@ export function createAgentRepo(db: Db): AgentRepo {
         .where(eq(providers.id, providerId))
         .get()
       return Boolean(provider?.enabled)
-    },
-
-    async modelAvailable(_projectId, providerId, model) {
-      const known = await db
-        .select({ id: providerModels.id })
-        .from(providerModels)
-        .where(
-          and(
-            eq(providerModels.providerId, providerId),
-            eq(providerModels.modelId, model),
-            eq(providerModels.availability, 'available'),
-          ),
-        )
-        .get()
-      return Boolean(known)
     },
 
     async connectorConnected(projectId, connectorId) {

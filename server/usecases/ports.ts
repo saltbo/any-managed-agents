@@ -157,7 +157,6 @@ export interface AgentRepo {
 
   // Reference validation against sibling resources.
   providerEnabled(projectId: string, providerId: string): Promise<boolean>
-  modelAvailable(projectId: string, providerId: string, model: string): Promise<boolean>
   connectorConnected(projectId: string, connectorId: string): Promise<boolean>
 }
 
