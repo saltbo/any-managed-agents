@@ -986,58 +986,6 @@ export interface PolicyRepo {
   delete(projectId: string, policyId: string): Promise<void>
 }
 
-export interface AccessRuleRecord {
-  id: string
-  providerId: string
-  modelId: string
-  teamId: string | null
-  effect: 'allow' | 'deny'
-  reason: string | null
-  metadata: Record<string, unknown>
-  createdAt: string
-  updatedAt: string
-}
-
-export interface CreateAccessRuleInput {
-  organizationId: string
-  projectId: string
-  providerId: string
-  modelId: string
-  teamId: string | null
-  effect: 'allow' | 'deny'
-  reason: string | null
-  metadata: Record<string, unknown>
-}
-
-export interface UpdateAccessRuleFields {
-  effect: 'allow' | 'deny'
-  reason: string | null
-  metadata: Record<string, unknown>
-}
-
-// DB boundary for provider/model access rules. The only implementation lives in
-// adapters/repos.
-export interface AccessRuleRepo {
-  list(projectId: string): Promise<AccessRuleRecord[]>
-  find(projectId: string, ruleId: string): Promise<AccessRuleRecord | null>
-  // Guards the (project, provider, model, team) UNIQUE so a duplicate scope is a
-  // 409, not a raw D1 constraint 500. teamId null maps to the stored '*' wildcard.
-  findByScope(
-    projectId: string,
-    providerId: string,
-    modelId: string,
-    teamId: string | null,
-  ): Promise<AccessRuleRecord | null>
-  insert(input: CreateAccessRuleInput, timestamp: string): Promise<AccessRuleRecord>
-  update(
-    projectId: string,
-    ruleId: string,
-    fields: UpdateAccessRuleFields,
-    updatedAt: string,
-  ): Promise<AccessRuleRecord>
-  delete(projectId: string, ruleId: string): Promise<void>
-}
-
 export interface BudgetRecord {
   id: string
   scope: BudgetScope
@@ -1089,14 +1037,6 @@ export interface BudgetRepo {
 export interface EffectivePolicyResult {
   source: { type: string; id: string }
   sources: { scope: string; id: string; teamId: string | null }[]
-  accessRules: {
-    id: string
-    providerId: string
-    modelId: string
-    teamId: string | null
-    effect: 'allow' | 'deny'
-    reason: string | null
-  }[]
   toolPolicy: Record<string, unknown>
   mcpPolicy: Record<string, unknown>
   sandboxPolicy: Record<string, unknown>
@@ -1104,13 +1044,7 @@ export interface EffectivePolicyResult {
 
 // --- policy evaluation (read side) ---
 
-import type {
-  BudgetRule,
-  BudgetUsageRecord,
-  PolicyAccessRule,
-  PolicyLevel,
-  ProviderAccessRule,
-} from '@server/domain/policy'
+import type { BudgetRule, BudgetUsageRecord, PolicyLevel } from '@server/domain/policy'
 
 // A provider row the policy engine evaluates: enablement + the vault credential
 // binding it must verify is still usable.
@@ -1139,8 +1073,6 @@ export interface PolicyEvalRepo {
   // The applicable policy hierarchy rows (org for the org, all team rows, the
   // project row); applicablePolicyLevels filters them by team membership.
   policyLevels(auth: AuthScope): Promise<PolicyLevel[]>
-  // Every access rule for the project (effective-policy projection).
-  projectAccessRules(projectId: string): Promise<PolicyAccessRule[]>
 
   // The provider row matched by id (or the workers-ai type for the platform
   // default id); null when not configured.
@@ -1148,11 +1080,6 @@ export interface PolicyEvalRepo {
   // Whether the provider's pinned/active vault credential version is usable
   // (credential + version present and not revoked).
   providerCredentialUsable(auth: AuthScope, provider: PolicyProvider): Promise<boolean>
-  // The access rules matching a provider/model lookup, scoped to the project.
-  providerAccessRules(
-    projectId: string,
-    values: { providerId: string; providerRowId: string | null; modelId: string | null },
-  ): Promise<ProviderAccessRule[]>
 
   // The project's successful usage records (budget windows filter by createdAt).
   successfulUsage(projectId: string): Promise<BudgetUsageRecord[]>

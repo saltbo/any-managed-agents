@@ -499,15 +499,6 @@ export interface EffectiveRule {
   reason?: string
 }
 
-export interface EffectiveAccessRule {
-  id: string
-  providerId: string
-  modelId: string
-  teamId: string | null
-  effect: string
-  reason: string | null
-}
-
 export interface EffectiveBudget {
   id: string
   scope: string
@@ -525,33 +516,11 @@ export interface EffectivePolicy {
   sources: Record<string, unknown>[]
   providerRules: EffectiveRule[]
   modelRules: EffectiveRule[]
-  accessRules: EffectiveAccessRule[]
   toolPolicy: Record<string, unknown>
   mcpPolicy: Record<string, unknown>
   sandboxPolicy: Record<string, unknown>
   budgets: EffectiveBudget[]
   decision?: PolicyDecision
-}
-
-export interface AccessRule {
-  id: string
-  providerId: string
-  modelId: string
-  teamId: string | null
-  effect: 'allow' | 'deny'
-  reason: string | null
-  metadata: Record<string, unknown>
-  createdAt: string
-  updatedAt: string
-}
-
-export interface AccessRuleInput {
-  providerId?: string
-  modelId?: string
-  teamId?: string
-  effect: 'allow' | 'deny'
-  reason?: string
-  metadata?: Record<string, unknown>
 }
 
 export interface Budget {
@@ -979,10 +948,6 @@ export const api = {
         json: { state: 'disconnected' },
       }),
     ),
-  listAccessRules: () =>
-    rpcRequest<ListResponse<AccessRule>>(v1['access-rules'].$get(queryArg<(typeof v1)['access-rules']['$get']>({}))),
-  createAccessRule: (input: AccessRuleInput) =>
-    rpcRequest<AccessRule>(v1['access-rules'].$post(jsonArg<(typeof v1)['access-rules']['$post']>(input))),
   listPolicies: () => rpcRequest<ListResponse<Policy>>(v1.policies.$get(queryArg<typeof v1.policies.$get>({}))),
   readEffectivePolicy: (options: EffectivePolicyOptions = {}) =>
     rpcRequest<EffectivePolicy>(

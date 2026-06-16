@@ -14,10 +14,6 @@ const auth: AuthScope = {
 const effective: EffectivePolicyResult = {
   source: { type: 'project', id: 'policy_1' },
   sources: [{ scope: 'project', id: 'policy_1', teamId: null }],
-  accessRules: [
-    { id: 'rule_provider', providerId: 'workers-ai', modelId: '*', teamId: null, effect: 'deny', reason: 'paused' },
-    { id: 'rule_model', providerId: '*', modelId: 'm1', teamId: null, effect: 'allow', reason: null },
-  ],
   toolPolicy: { blockedTools: ['sandbox.exec'] },
   mcpPolicy: {},
   sandboxPolicy: {},
@@ -57,10 +53,9 @@ function fakeDeps(
 }
 
 describe('[spec: governance/effective-policy] readEffectivePolicy', () => {
-  it('splits access rules into provider and model views and lists enabled budgets', async () => {
+  it('resolves the merged policy objects and lists enabled budgets', async () => {
     const result = await readEffectivePolicy(fakeDeps(), auth, {})
-    expect(result.providerRules).toEqual([{ providerId: 'workers-ai', effect: 'deny', reason: 'paused' }])
-    expect(result.modelRules).toEqual([{ modelId: 'm1', effect: 'allow' }])
+    expect(result.toolPolicy).toEqual({ blockedTools: ['sandbox.exec'] })
     expect(result.budgets).toHaveLength(1)
     expect(result.decision).toBeUndefined()
   })

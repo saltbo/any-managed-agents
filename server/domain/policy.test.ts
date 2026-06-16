@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
-  accessRuleView,
   applicablePolicyLevels,
   canOverrideProviderPolicy,
   effectivePolicyFrom,
   environmentAllowsConnector,
-  evaluateAccessRules,
   evaluateBudgets,
   evaluateSandboxRuntimeDecision,
   mergePolicyObjects,
@@ -90,18 +88,6 @@ describe('validateBudgetScope', () => {
   })
 })
 
-describe('[spec: governance/access-rules] accessRuleView', () => {
-  it('drops wildcard scopes and omits an empty reason', () => {
-    expect(accessRuleView({ providerId: '*', modelId: '*', effect: 'deny', reason: null })).toEqual({ effect: 'deny' })
-    expect(accessRuleView({ providerId: 'p1', modelId: 'm1', effect: 'allow', reason: 'ok' })).toEqual({
-      providerId: 'p1',
-      modelId: 'm1',
-      effect: 'allow',
-      reason: 'ok',
-    })
-  })
-})
-
 function policyLevel(overrides: Partial<PolicyLevel> & Pick<PolicyLevel, 'id' | 'scope' | 'updatedAt'>): PolicyLevel {
   return {
     teamId: null,
@@ -136,47 +122,21 @@ describe('[spec: governance/policy-hierarchy] applicablePolicyLevels', () => {
 
 describe('[spec: governance/policy-hierarchy] effectivePolicyFrom', () => {
   it('reports the most specific level as the source and the platform default when empty', () => {
-    expect(effectivePolicyFrom([], []).source).toEqual({ type: 'platform_default', id: 'workers-ai-default' })
+    expect(effectivePolicyFrom([]).source).toEqual({ type: 'platform_default', id: 'workers-ai-default' })
     const levels: PolicyLevel[] = [
       policyLevel({ id: 'org', scope: 'organization', updatedAt: '2026-01-01' }),
       policyLevel({ id: 'proj', scope: 'project', updatedAt: '2026-01-01' }),
     ]
-    expect(effectivePolicyFrom(levels, []).source).toEqual({ type: 'project', id: 'proj' })
+    expect(effectivePolicyFrom(levels).source).toEqual({ type: 'project', id: 'proj' })
   })
 
-  it('merges the policy objects across levels and normalizes access rule wildcards', () => {
+  it('merges the policy objects across levels', () => {
     const levels: PolicyLevel[] = [
       policyLevel({ id: 'org', scope: 'organization', updatedAt: '2026-01-01', toolPolicy: '{"blockedTools":["a"]}' }),
       policyLevel({ id: 'proj', scope: 'project', updatedAt: '2026-01-01', toolPolicy: '{"blockedTools":["b"]}' }),
     ]
-    const effective = effectivePolicyFrom(levels, [
-      { id: 'r1', providerId: null, modelId: null, teamId: null, effect: 'deny', reason: null },
-    ])
+    const effective = effectivePolicyFrom(levels)
     expect(effective.toolPolicy.blockedTools).toEqual(['a', 'b'])
-    expect(effective.accessRules[0]).toEqual({
-      id: 'r1',
-      providerId: '*',
-      modelId: '*',
-      teamId: null,
-      effect: 'deny',
-      reason: null,
-    })
-  })
-})
-
-describe('[spec: governance/access-rules] evaluateAccessRules', () => {
-  it('denies on a matching deny rule, honoring team scoping', () => {
-    expect(evaluateAccessRules([{ id: 'r', effect: 'deny', teamId: null, reason: 'no' }], [])?.rule).toBe('r')
-    expect(evaluateAccessRules([{ id: 'r', effect: 'deny', teamId: 'team_a', reason: null }], [])).toBeNull()
-    expect(evaluateAccessRules([{ id: 'r', effect: 'deny', teamId: 'team_a', reason: null }], ['team_a'])?.rule).toBe(
-      'r',
-    )
-  })
-
-  it('restricts a team-allow resource to members of an allowed team', () => {
-    const rules = [{ id: 'allow_a', effect: 'allow', teamId: 'team_a', reason: null }]
-    expect(evaluateAccessRules(rules, [])?.message).toBe('Provider is restricted to approved teams.')
-    expect(evaluateAccessRules(rules, ['team_a'])).toBeNull()
   })
 })
 
@@ -484,18 +444,6 @@ describe('sandboxOperationForRuntimeTool additional branches', () => {
   })
 })
 
-describe('[spec: governance/access-rules] evaluateAccessRules additional branches', () => {
-  it('uses the deny reason when available', () => {
-    const result = evaluateAccessRules([{ id: 'r', effect: 'deny', teamId: null, reason: 'custom reason' }], [])
-    expect(result?.message).toBe('custom reason')
-  })
-
-  it('uses the restrict reason when available', () => {
-    const rules = [{ id: 'r', effect: 'allow', teamId: 'team_a', reason: 'restricted to team' }]
-    expect(evaluateAccessRules(rules, [])?.message).toBe('restricted to team')
-  })
-})
-
 describe('[spec: governance/model-budget] evaluateBudgets additional branches', () => {
   const today = new Date().toISOString().slice(0, 10)
   const month = new Date().toISOString().slice(0, 7)
@@ -587,23 +535,6 @@ describe('applicablePolicyLevels additional branches', () => {
   })
 })
 
-describe('[spec: governance/access-rules] effectivePolicyFrom normalization', () => {
-  it('normalizes null providerId and modelId to wildcards in access rules', () => {
-    const levels: PolicyLevel[] = [policyLevel({ id: 'org', scope: 'organization', updatedAt: '2026-01-01' })]
-    const effective = effectivePolicyFrom(levels, [
-      { id: 'r1', providerId: null, modelId: null, teamId: 't1', effect: 'allow', reason: 'ok' },
-    ])
-    expect(effective.accessRules[0]).toEqual({
-      id: 'r1',
-      providerId: '*',
-      modelId: '*',
-      teamId: 't1',
-      effect: 'allow',
-      reason: 'ok',
-    })
-  })
-})
-
 describe('environmentAllowsConnector additional branches', () => {
   it('allows when environment allowedConnectors includes the connector', () => {
     expect(
@@ -689,19 +620,6 @@ describe('policyRequiresApproval additional branches', () => {
 
   it('requires approval by wildcard tool list', () => {
     expect(policyRequiresApproval({ requireApprovalTools: ['*'] }, 'c', 'any')).toBe(true)
-  })
-})
-
-describe('accessRuleView additional branches', () => {
-  it('includes providerId when it is not wildcard', () => {
-    const view = accessRuleView({ providerId: 'openai', modelId: '*', effect: 'allow', reason: null })
-    expect(view.providerId).toBe('openai')
-    expect('modelId' in view).toBe(false)
-  })
-
-  it('includes modelId when it is not wildcard', () => {
-    const view = accessRuleView({ providerId: '*', modelId: 'gpt-4o', effect: 'deny', reason: null })
-    expect(view.modelId).toBe('gpt-4o')
   })
 })
 

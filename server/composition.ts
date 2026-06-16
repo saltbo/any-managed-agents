@@ -7,7 +7,6 @@ import { createRunnerChannel } from './adapters/gateways/runner-channel'
 import { createRuntimeSecretEnvGateway } from './adapters/gateways/runtime-secret-env'
 import { createSecretStoreGateway } from './adapters/gateways/secret-store'
 import { createSessionEventPort } from './adapters/gateways/session-events'
-import { createAccessRuleRepo } from './adapters/repos/access-rules'
 import { createAgentRepo } from './adapters/repos/agents'
 import { createAuditReadRepo } from './adapters/repos/audit-records'
 import { createBudgetRepo } from './adapters/repos/budgets'
@@ -51,7 +50,6 @@ export function createDeps(env: Env): Deps {
     connectors: createConnectorRepo(db),
     connections: createConnectionRepo(db),
     policies: createPolicyRepo(db),
-    accessRules: createAccessRuleRepo(db),
     budgets: createBudgetRepo(db),
     mcp: createMcpGateway(env, db),
     sessionEvents: createSessionEventPort(db),

@@ -12,15 +12,6 @@ OPERATIONS = [
   },
   {
     "method": "POST",
-    "path": "/api/v1/access-rules",
-    "operationId": "createAccessRule",
-    "summary": "Create an access rule",
-    "tags": [
-      "Governance"
-    ]
-  },
-  {
-    "method": "POST",
     "path": "/api/v1/agents",
     "operationId": "createAgent",
     "summary": "Create an agent",
@@ -192,15 +183,6 @@ OPERATIONS = [
   },
   {
     "method": "DELETE",
-    "path": "/api/v1/access-rules/{ruleId}",
-    "operationId": "deleteAccessRule",
-    "summary": "Delete an access rule",
-    "tags": [
-      "Governance"
-    ]
-  },
-  {
-    "method": "DELETE",
     "path": "/api/v1/budgets/{budgetId}",
     "operationId": "deleteBudget",
     "summary": "Delete a budget",
@@ -251,15 +233,6 @@ OPERATIONS = [
     "summary": "Get Worker health",
     "tags": [
       "System"
-    ]
-  },
-  {
-    "method": "GET",
-    "path": "/api/v1/access-rules",
-    "operationId": "listAccessRules",
-    "summary": "List provider and model access rules",
-    "tags": [
-      "Governance"
     ]
   },
   {
@@ -539,15 +512,6 @@ OPERATIONS = [
     "summary": "Replace the current runner heartbeat state",
     "tags": [
       "Runners"
-    ]
-  },
-  {
-    "method": "GET",
-    "path": "/api/v1/access-rules/{ruleId}",
-    "operationId": "readAccessRule",
-    "summary": "Read an access rule",
-    "tags": [
-      "Governance"
     ]
   },
   {
@@ -861,15 +825,6 @@ OPERATIONS = [
     "path": "/api/v1/policies/{policyId}",
     "operationId": "replacePolicy",
     "summary": "Replace a governance policy",
-    "tags": [
-      "Governance"
-    ]
-  },
-  {
-    "method": "PATCH",
-    "path": "/api/v1/access-rules/{ruleId}",
-    "operationId": "updateAccessRule",
-    "summary": "Update an access rule",
     "tags": [
       "Governance"
     ]

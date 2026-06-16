@@ -134,7 +134,6 @@ function fakeDeps(
     connectors: undefined as unknown as Deps['connectors'],
     connections,
     policies: undefined as unknown as Deps['policies'],
-    accessRules: undefined as unknown as Deps['accessRules'],
     budgets: undefined as unknown as Deps['budgets'],
     mcp,
     sessionEvents: { append: async () => 'event_1', ...overrides.sessionEvents },
@@ -163,7 +162,6 @@ function fakeDeps(
       resolveEffective: async () => ({
         source: { type: 'platform_default', id: 'workers-ai-default' },
         sources: [],
-        accessRules: [],
         toolPolicy: {},
         mcpPolicy: {},
         sandboxPolicy: {},

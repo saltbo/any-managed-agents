@@ -354,7 +354,6 @@ function governancePolicy(overrides: Partial<EffectivePolicy> = {}): EffectivePo
     sources: [],
     providerRules: [],
     modelRules: [],
-    accessRules: [],
     toolPolicy: {},
     mcpPolicy: { defaultEffect: 'allow' },
     sandboxPolicy: {},
@@ -544,9 +543,6 @@ function mockConsoleApi(seed?: {
     if (url === '/api/v1/connections' && method === 'GET') {
       return jsonResponse({ data: state.mcpConnections })
     }
-    if (url === '/api/v1/access-rules' && method === 'GET') {
-      return jsonResponse({ data: [] })
-    }
     if (url.startsWith('/api/v1/effective-policy') && method === 'GET') {
       return jsonResponse(state.governancePolicy)
     }
@@ -718,7 +714,6 @@ describe('App', () => {
     expect(primaryNav().getByRole('link', { name: 'Agents' })).toBeTruthy()
     expect(primaryNav().getByRole('link', { name: 'Environments' })).toBeTruthy()
     expect(primaryNav().getByRole('link', { name: 'Sessions' })).toBeTruthy()
-    expect(primaryNav().getByRole('link', { name: 'Provider policy' })).toBeTruthy()
     expect(primaryNav().getByRole('link', { name: 'Vaults' })).toBeTruthy()
     expect(primaryNav().getByRole('link', { name: 'MCP' })).toBeTruthy()
     expect(primaryNav().getByRole('link', { name: 'Usage' })).toBeTruthy()
@@ -792,10 +787,6 @@ describe('App', () => {
     expect(screen.queryByText('Sandbox policy')).toBeNull()
     fireEvent.click(screen.getByRole('tab', { name: 'Sessions' }))
     expect(screen.getAllByText('Sessions').length).toBeGreaterThan(1)
-
-    fireEvent.click(primaryNav().getByRole('link', { name: 'Provider policy' }))
-    expect(await screen.findByText('Provider access policy')).toBeTruthy()
-    expect(await screen.findByText('No access rules')).toBeTruthy()
 
     fireEvent.click(primaryNav().getByRole('link', { name: 'Vaults' }))
     expect(await screen.findByText('Provider credentials')).toBeTruthy()

@@ -3,7 +3,6 @@ import {
   canOverrideProviderPolicy as canOverrideProviderPolicyRule,
   effectivePolicyFrom,
   environmentAllowsConnector,
-  evaluateAccessRules,
   evaluateBudgets,
   evaluateSandboxRuntimeDecision,
   type PolicyDecision,
@@ -74,8 +73,7 @@ export async function toolPolicyRequiresApproval(db: PolicyDb, auth: AuthScope, 
 export async function resolveEffectivePolicy(db: PolicyDb, auth: AuthScope) {
   const repo = createPolicyEvalRepo(db)
   const levels = applicablePolicyLevels(await repo.policyLevels(auth), auth.teams ?? [])
-  const accessRules = await repo.projectAccessRules(auth.project.id)
-  return effectivePolicyFrom(levels, accessRules)
+  return effectivePolicyFrom(levels)
 }
 
 export async function evaluateProviderPolicy(
@@ -117,20 +115,7 @@ export async function evaluateProviderPolicy(
     }
   }
 
-  // Team membership comes from OIDC claims (`teams`); AMA stores no team
-  // tables. Provider/model allow|deny rules live only in the access_rules
-  // table; budgets live only in the budgets table (docs/api-v1-design.md).
-  const memberTeams = auth.teams ?? []
-  const accessRules = await repo.providerAccessRules(auth.project.id, {
-    providerId: values.providerId,
-    providerRowId: provider?.id ?? null,
-    modelId: values.modelId,
-  })
-  const accessDecision = evaluateAccessRules(accessRules, memberTeams)
-  if (accessDecision) {
-    return accessDecision
-  }
-
+  // Budgets live only in the budgets table (docs/api-v1-design.md).
   const budgetDecision = evaluateBudgets(
     await repo.enabledBudgets(auth.project.id),
     await repo.successfulUsage(auth.project.id),
@@ -158,7 +143,7 @@ export interface ProviderPolicySessionDecision {
 }
 
 // Session-creation entrypoint for provider policy: evaluates the effective
-// policy (including OIDC-team-scoped access rules) and honors an explicit
+// provider policy (enablement, credential, budgets) and honors an explicit
 // admin override request only for admin-role callers.
 export async function evaluateProviderPolicyForSession(
   db: PolicyDb,

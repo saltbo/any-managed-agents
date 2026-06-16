@@ -28,7 +28,7 @@ describe('[CF] v1 effective policy', () => {
     vi.unstubAllGlobals()
   })
 
-  it('merges policies, access rules, and enabled budgets into the effective policy [spec: governance/effective-policy-api]', async () => {
+  it('merges policies and enabled budgets into the effective policy [spec: governance/effective-policy-api]', async () => {
     const authorization = await signIn()
 
     const policyRes = await jsonFetch('/api/v1/policies', authorization, {
@@ -36,13 +36,6 @@ describe('[CF] v1 effective policy', () => {
       body: JSON.stringify({ scope: { level: 'project' }, toolPolicy: { blockedTools: ['sandbox.exec'] } }),
     })
     expect(policyRes.status).toBe(201)
-
-    const ruleRes = await jsonFetch('/api/v1/access-rules', authorization, {
-      method: 'POST',
-      body: JSON.stringify({ providerId: 'workers-ai', effect: 'deny', reason: 'Budget review required.' }),
-    })
-    expect(ruleRes.status).toBe(201)
-    const rule = (await ruleRes.json()) as { id: string }
 
     const enabledBudgetRes = await jsonFetch('/api/v1/budgets', authorization, {
       method: 'POST',
@@ -65,18 +58,10 @@ describe('[CF] v1 effective policy', () => {
     expect(effectiveRes.status).toBe(200)
     const effective = (await effectiveRes.json()) as {
       toolPolicy: Record<string, unknown>
-      providerRules: Array<Record<string, unknown>>
-      accessRules: Array<Record<string, unknown>>
       budgets: Array<Record<string, unknown>>
       decision?: unknown
     }
     expect(effective.toolPolicy).toMatchObject({ blockedTools: ['sandbox.exec'] })
-    expect(effective.accessRules).toContainEqual(
-      expect.objectContaining({ id: rule.id, providerId: 'workers-ai', effect: 'deny' }),
-    )
-    expect(effective.providerRules).toEqual([
-      { providerId: 'workers-ai', effect: 'deny', reason: 'Budget review required.' },
-    ])
     expect(effective.budgets).toEqual([expect.objectContaining({ limitType: 'tokens', enabled: true })])
     expect(effective.decision).toBeUndefined()
   })
@@ -84,12 +69,9 @@ describe('[CF] v1 effective policy', () => {
   it('attaches a denial decision for providerId+modelId and writes a safe audit record [spec: governance/effective-policy-api]', async () => {
     const authorization = await signIn()
 
-    const ruleRes = await jsonFetch('/api/v1/access-rules', authorization, {
-      method: 'POST',
-      body: JSON.stringify({ effect: 'deny', reason: 'Project-wide model access is paused.' }),
-    })
-    expect(ruleRes.status).toBe(201)
-    const rule = (await ruleRes.json()) as { id: string }
+    // A disabled provider denies the provider/model decision. The platform-default
+    // workers-ai vendor row resolves by slug; disabling it produces the denial.
+    const { providerId } = await seedPlatformProvider({ enabled: false })
 
     const decisionRes = await jsonFetch(decisionPath('workers-ai', MODEL_ID), authorization)
     expect(decisionRes.status).toBe(200)
@@ -97,8 +79,8 @@ describe('[CF] v1 effective policy', () => {
       decision: {
         allowed: false,
         category: 'provider',
-        rule: rule.id,
-        message: 'Project-wide model access is paused.',
+        rule: providerId,
+        message: 'Provider is disabled for this project.',
       },
     })
 
@@ -111,6 +93,10 @@ describe('[CF] v1 effective policy', () => {
 
   it('returns an allowed decision when nothing denies the provider', async () => {
     const authorization = await signIn()
+
+    // The providers catalog is global state shared across tests; seed an enabled
+    // workers-ai row so this decision is deterministic regardless of prior tests.
+    await seedPlatformProvider({ enabled: true })
 
     const decisionRes = await jsonFetch(decisionPath('workers-ai', MODEL_ID), authorization)
     expect(decisionRes.status).toBe(200)

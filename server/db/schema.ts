@@ -783,41 +783,6 @@ export const sessionChannels = sqliteTable(
   ],
 )
 
-export const accessRules = sqliteTable(
-  'access_rules',
-  {
-    id: text('id').primaryKey(),
-    organizationId: text('organization_id').notNull(),
-    projectId: text('project_id')
-      .notNull()
-      .references(() => projects.id),
-    // Not FKs: store the literal '*' wildcard sentinel (unscoped) or a concrete
-    // provider/model id (including the synthesized platform-default which has no
-    // providers row). Matched by value at policy-eval time, and must survive a
-    // provider hard-delete — a deny rule outlives the provider it denies.
-    providerId: text('provider_id'),
-    modelId: text('model_id'),
-    // .notNull().default('*'): the wildcard convention (matches providerId/modelId)
-    // makes the 4-col UNIQUE effective — SQLite treats NULL as DISTINCT, so a
-    // nullable teamId would let two project-wide rules co-exist. The repo maps '*'
-    // back to null on read to preserve domain null semantics.
-    teamId: text('team_id').notNull().default('*'),
-    // Security-relevant discriminator. Mirrors the AccessRuleRecord 'allow'|'deny'
-    // union (server/usecases/ports.ts) + http z.enum.
-    effect: text('effect', { enum: ['allow', 'deny'] }).notNull(),
-    reason: text('reason'),
-    metadata: text('metadata').notNull().default('{}'),
-    createdAt: text('created_at').notNull(),
-    updatedAt: text('updated_at').notNull(),
-  },
-  (table) => [
-    index('idx_access_rules_project_provider').on(table.projectId, table.providerId, table.modelId),
-    // Prevents contradictory allow+deny on the same (provider,model,team) scope.
-    uniqueIndex('idx_access_rules_unique_scope').on(table.projectId, table.providerId, table.modelId, table.teamId),
-    check('ck_access_rules_effect', sql`${table.effect} in ('allow','deny')`),
-  ],
-)
-
 export const policies = sqliteTable(
   'policies',
   {

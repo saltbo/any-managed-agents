@@ -2,9 +2,9 @@
 //
 // Two concerns live here: hierarchy merge (org → team → project policy objects
 // combine with most-restrictive semantics) and the field-level validation rules
-// for policy/access-rule/budget scopes. The DB-mixed evaluation (provider
-// access decisions, effective-policy resolution) stays in server/policy.ts,
-// which reuses mergePolicyObjects from here.
+// for policy/budget scopes. The DB-mixed evaluation (provider decisions,
+// effective-policy resolution) stays in server/policy.ts, which reuses
+// mergePolicyObjects from here.
 
 export type FieldErrors = Record<string, string>
 
@@ -154,18 +154,6 @@ export function validateBudgetScope(input: {
   return Object.keys(fields).length > 0 ? fields : null
 }
 
-// Provider/model allow|deny access rules surface in the effective policy split
-// by whether they carry a model scope: model-less rules are provider rules,
-// model-scoped rules are model rules. '*' is the unscoped wildcard.
-export function accessRuleView(rule: { providerId: string; modelId: string; effect: string; reason: string | null }) {
-  return {
-    ...(rule.providerId === '*' ? {} : { providerId: rule.providerId }),
-    ...(rule.modelId === '*' ? {} : { modelId: rule.modelId }),
-    effect: rule.effect as 'allow' | 'deny',
-    ...(rule.reason ? { reason: rule.reason } : {}),
-  }
-}
-
 // ─── Sandbox runtime tool mapping ─────────────────────────────────────────────
 
 function hostFromUrl(value: unknown) {
@@ -227,26 +215,9 @@ export interface EffectivePolicySource {
 export interface EffectivePolicy {
   source: { type: string; id: string }
   sources: EffectivePolicySource[]
-  accessRules: {
-    id: string
-    providerId: string
-    modelId: string
-    teamId: string | null
-    effect: 'allow' | 'deny'
-    reason: string | null
-  }[]
   toolPolicy: Record<string, unknown>
   mcpPolicy: Record<string, unknown>
   sandboxPolicy: Record<string, unknown>
-}
-
-export interface PolicyAccessRule {
-  id: string
-  providerId: string | null
-  modelId: string | null
-  teamId: string | null
-  effect: 'allow' | 'deny'
-  reason: string | null
 }
 
 // Picks the applicable hierarchy rows from the candidate policy rows ordered
@@ -275,9 +246,8 @@ export function applicablePolicyLevels(rows: PolicyLevel[], memberTeams: string[
 }
 
 // Builds the merged effective governance policy from the ordered hierarchy
-// levels and the project's access rules. Provider/model rules live only in
-// access_rules; budgets live only in the budgets table.
-export function effectivePolicyFrom(levels: PolicyLevel[], accessRules: PolicyAccessRule[]): EffectivePolicy {
+// levels. Budgets live only in the budgets table.
+export function effectivePolicyFrom(levels: PolicyLevel[]): EffectivePolicy {
   const sources: EffectivePolicySource[] = levels.map((row) => ({ scope: row.scope, id: row.id, teamId: row.teamId }))
   const mostSpecific = levels.at(-1)
   return {
@@ -285,14 +255,6 @@ export function effectivePolicyFrom(levels: PolicyLevel[], accessRules: PolicyAc
       ? { type: mostSpecific.scope, id: mostSpecific.id }
       : { type: 'platform_default', id: 'workers-ai-default' },
     sources,
-    accessRules: accessRules.map((rule) => ({
-      id: rule.id,
-      providerId: rule.providerId ?? '*',
-      modelId: rule.modelId ?? '*',
-      teamId: rule.teamId,
-      effect: rule.effect,
-      reason: rule.reason,
-    })),
     toolPolicy: mergePolicyObjects(levels.map((row) => parsePolicyJson<Record<string, unknown>>(row.toolPolicy, {}))),
     mcpPolicy: mergePolicyObjects(levels.map((row) => parsePolicyJson<Record<string, unknown>>(row.mcpPolicy, {}))),
     sandboxPolicy: mergePolicyObjects(
@@ -301,43 +263,7 @@ export function effectivePolicyFrom(levels: PolicyLevel[], accessRules: PolicyAc
   }
 }
 
-// ─── Provider access decision ─────────────────────────────────────────────────
-
-export interface ProviderAccessRule {
-  id: string
-  effect: string
-  teamId: string | null
-  reason: string | null
-}
-
-// Evaluates the project access rules for a provider/model against the caller's
-// OIDC team memberships. Team-scoped deny rules only bind members of that team;
-// any team-scoped allow rule turns the matched provider/model into a
-// team-restricted resource that requires membership in an allowed team.
-export function evaluateAccessRules(rules: ProviderAccessRule[], memberTeams: string[]): PolicyDecision | null {
-  const deniedAccessRule = rules.find(
-    (rule) => rule.effect === 'deny' && (!rule.teamId || memberTeams.includes(rule.teamId)),
-  )
-  if (deniedAccessRule) {
-    return {
-      allowed: false,
-      category: 'provider',
-      rule: deniedAccessRule.id,
-      message: deniedAccessRule.reason ?? 'Provider or model is denied by governance policy.',
-    }
-  }
-  const teamAllowRules = rules.filter((rule) => rule.effect === 'allow' && rule.teamId)
-  if (teamAllowRules.length > 0 && !teamAllowRules.some((rule) => rule.teamId && memberTeams.includes(rule.teamId))) {
-    const restrictingRule = teamAllowRules[0]
-    return {
-      allowed: false,
-      category: 'provider',
-      rule: restrictingRule?.id ?? null,
-      message: restrictingRule?.reason ?? 'Provider is restricted to approved teams.',
-    }
-  }
-  return null
-}
+// ─── Budget decision ──────────────────────────────────────────────────────────
 
 export interface BudgetUsageRecord {
   createdAt: string

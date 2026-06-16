@@ -93,7 +93,6 @@ function fakeDeps(overrides: { repo?: Partial<Deps['environments']> } = {}): Dep
     connectors: undefined as unknown as Deps['connectors'],
     connections: undefined as unknown as Deps['connections'],
     policies: undefined as unknown as Deps['policies'],
-    accessRules: undefined as unknown as Deps['accessRules'],
     budgets: undefined as unknown as Deps['budgets'],
     mcp: undefined as unknown as Deps['mcp'],
     usageRecords: undefined as unknown as Deps['usageRecords'],
@@ -122,7 +121,6 @@ function fakeDeps(overrides: { repo?: Partial<Deps['environments']> } = {}): Dep
       resolveEffective: async () => ({
         source: { type: 'platform_default', id: 'workers-ai-default' },
         sources: [],
-        accessRules: [],
         toolPolicy: {},
         mcpPolicy: {},
         sandboxPolicy: {},

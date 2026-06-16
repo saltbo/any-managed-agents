@@ -30,7 +30,6 @@ export function createPolicyPort(db: Db): PolicyPort {
       return {
         source: effective.source,
         sources: effective.sources,
-        accessRules: effective.accessRules,
         toolPolicy: effective.toolPolicy,
         mcpPolicy: effective.mcpPolicy,
         sandboxPolicy: effective.sandboxPolicy,

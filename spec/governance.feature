@@ -1,7 +1,7 @@
 Feature: Governance
-  Organizations enforce provider, model, tool, MCP, sandbox, and budget rules across
-  a project hierarchy. Policies, access rules, and budgets are scoped resources that
-  resolve into an effective policy and gate sessions before runtime execution.
+  Organizations enforce tool, MCP, sandbox, and budget rules across a project
+  hierarchy. Policies and budgets are scoped resources that resolve into an
+  effective policy and gate sessions before runtime execution.
 
   # ── Resolution and enforcement (domain: business rules, cheapest layer) ──
 
@@ -12,14 +12,6 @@ Feature: Governance
     Then levels are ordered organization, applicable teams, then project
     And policy objects merge so the most restrictive rule wins across levels
     And the most specific level is reported as the effective source
-
-  @governance/access-rules @domain
-  Scenario: Evaluate provider and model access rules
-    Given normalized allow and deny access rules exist
-    When a provider and model are checked against the rules
-    Then a matching deny rule blocks the resource, honoring team scoping
-    And a team-allow rule restricts the resource to members of an approved team
-    And wildcard scopes collapse to a compact rule view without an empty reason
 
   @governance/model-budget @domain
   Scenario: Enforce a model budget before provider execution
@@ -51,13 +43,6 @@ Feature: Governance
     Then omitted policy objects reset and present objects are applied
     And changing the scope is rejected as immutable
 
-  @governance/access-rule-update @usecase
-  Scenario: Update a provider and model access rule
-    Given an access rule exists with an effect and reason
-    When the admin updates the rule
-    Then present fields override and absent fields keep their stored value
-    And the reason clears only when explicitly set to null
-
   @governance/budget-create @usecase
   Scenario: Create a budget with scope validation
     Given project budgets are enabled
@@ -73,9 +58,9 @@ Feature: Governance
 
   @governance/effective-policy @usecase
   Scenario: Read effective policy with an optional provider and model decision
-    Given organization, team, and project policies, access rules, and budgets exist
+    Given organization, team, and project policies and budgets exist
     When the admin reads effective policy, optionally for a provider and model
-    Then access rules split into provider and model views and enabled budgets are listed
+    Then the merged tool, MCP, and sandbox policy and enabled budgets are listed
     And a provider-and-model request attaches a decision and audits the evaluation
     And the policy can be resolved as a member of a requested team
 
@@ -89,13 +74,6 @@ Feature: Governance
     And duplicate scopes return conflict and invalid team scopes return validation errors
     And responses never expose the organization id
 
-  @governance/access-rule-api @api
-  Scenario: Manage provider and model access rules through the control plane
-    Given a signed-in admin
-    When the admin creates wildcard and team-scoped rules and edits them
-    Then effect, reason, and metadata update and a cleared reason is null
-    And deleting a rule removes it and later reads return not found
-
   @governance/budget-api @api
   Scenario: Manage budgets through the control plane
     Given a signed-in admin
@@ -105,9 +83,9 @@ Feature: Governance
 
   @governance/effective-policy-api @api
   Scenario: Read effective policy and policy decisions through the control plane
-    Given a signed-in admin with policies, access rules, and budgets configured
+    Given a signed-in admin with policies and budgets configured
     When the admin reads effective policy and requests a provider and model decision
-    Then merged policy, access rules, provider rules, and enabled budgets are returned
+    Then the merged policy and enabled budgets are returned
     And a denied decision is explained by policy category and safe rule reference
     And the denial writes a safe audit record with no secret values
     And providerId or modelId on their own are rejected

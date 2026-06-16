@@ -1,5 +1,4 @@
 import type {
-  AccessRuleRepo,
   AgentRepo,
   AuditPort,
   AuditReadRepo,
@@ -55,7 +54,6 @@ export interface Deps {
   connectors: ConnectorRepo
   connections: ConnectionRepo
   policies: PolicyRepo
-  accessRules: AccessRuleRepo
   budgets: BudgetRepo
   mcp: McpGateway
   sessionEvents: SessionEventPort

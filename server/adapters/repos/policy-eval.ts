@@ -1,15 +1,8 @@
-import type {
-  BudgetRule,
-  BudgetUsageRecord,
-  PolicyAccessRule,
-  PolicyLevel,
-  ProviderAccessRule,
-} from '@server/domain/policy'
+import type { BudgetRule, BudgetUsageRecord, PolicyLevel } from '@server/domain/policy'
 import type { AuthScope, PolicyConnection, PolicyEvalRepo, PolicyProvider } from '@server/usecases/ports'
 import { and, desc, eq, isNull, or } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
 import {
-  accessRules,
   budgets,
   connections,
   connectionTools,
@@ -47,19 +40,6 @@ export function createPolicyEvalRepo(db: Db): PolicyEvalRepo {
       }))
     },
 
-    async projectAccessRules(projectId: string): Promise<PolicyAccessRule[]> {
-      const rows = await db.select().from(accessRules).where(eq(accessRules.projectId, projectId))
-      return rows.map((rule) => ({
-        id: rule.id,
-        providerId: rule.providerId,
-        modelId: rule.modelId,
-        // '*' is the stored team wildcard; null = applies to every team.
-        teamId: rule.teamId === '*' ? null : rule.teamId,
-        effect: rule.effect,
-        reason: rule.reason,
-      }))
-    },
-
     // Providers are a GLOBAL vendor catalog (not per-project): resolve by id, or
     // by slug for the platform-default 'workers-ai' lookup. projectId is accepted
     // to satisfy the port but no longer scopes the query.
@@ -86,32 +66,6 @@ export function createPolicyEvalRepo(db: Db): PolicyEvalRepo {
     // revoke. Enablement is gated in evaluateProviderPolicy.
     async providerCredentialUsable(_auth: AuthScope, _provider: PolicyProvider): Promise<boolean> {
       return true
-    },
-
-    async providerAccessRules(projectId, values): Promise<ProviderAccessRule[]> {
-      const providerPredicates = [
-        isNull(accessRules.providerId),
-        eq(accessRules.providerId, '*'),
-        eq(accessRules.providerId, values.providerId),
-      ]
-      if (values.providerRowId) {
-        providerPredicates.push(eq(accessRules.providerId, values.providerRowId))
-      }
-      const modelPredicates = [isNull(accessRules.modelId), eq(accessRules.modelId, '*')]
-      if (values.modelId) {
-        modelPredicates.push(eq(accessRules.modelId, values.modelId))
-      }
-      const rows = await db
-        .select()
-        .from(accessRules)
-        .where(and(eq(accessRules.projectId, projectId), or(...providerPredicates), or(...modelPredicates)))
-      return rows.map((rule) => ({
-        id: rule.id,
-        effect: rule.effect,
-        // '*' is the stored team wildcard; null = applies to every team.
-        teamId: rule.teamId === '*' ? null : rule.teamId,
-        reason: rule.reason,
-      }))
     },
 
     async successfulUsage(projectId: string): Promise<BudgetUsageRecord[]> {

@@ -37,7 +37,6 @@ const effectivePolicy = {
   toolPolicy: { blockedTools: [] },
   mcpPolicy: { defaultEffect: 'allow' },
   sandboxPolicy: {},
-  accessRules: [],
 }
 
 const allowedDecision = { allowed: true, category: 'provider', rule: null, message: 'Allowed.' }
@@ -88,7 +87,6 @@ describe('[spec: policy/gateway] createPolicyPort', () => {
     expect(result).toEqual({
       source: effectivePolicy.source,
       sources: effectivePolicy.sources,
-      accessRules: effectivePolicy.accessRules,
       toolPolicy: effectivePolicy.toolPolicy,
       mcpPolicy: effectivePolicy.mcpPolicy,
       sandboxPolicy: effectivePolicy.sandboxPolicy,

@@ -1,13 +1,9 @@
-import { accessRuleView } from '@server/domain/policy'
 import type { Deps } from './deps'
 import type { AuthScope, BudgetRecord, EffectivePolicyResult, PolicyDecisionResult } from './ports'
 
 export interface EffectivePolicyView {
   source: EffectivePolicyResult['source']
   sources: EffectivePolicyResult['sources']
-  providerRules: ReturnType<typeof accessRuleView>[]
-  modelRules: ReturnType<typeof accessRuleView>[]
-  accessRules: EffectivePolicyResult['accessRules']
   toolPolicy: Record<string, unknown>
   mcpPolicy: Record<string, unknown>
   sandboxPolicy: Record<string, unknown>
@@ -16,9 +12,9 @@ export interface EffectivePolicyView {
 }
 
 // Reads the merged effective governance policy: the hierarchy-resolved policy
-// objects + access rules (split into provider/model views) + enabled budgets.
-// When providerId+modelId are supplied, attaches a provider policy decision and
-// audits the evaluation. teamId resolves the policy as a member of that team.
+// objects + enabled budgets. When providerId+modelId are supplied, attaches a
+// provider policy decision and audits the evaluation. teamId resolves the policy
+// as a member of that team.
 export async function readEffectivePolicy(
   deps: Deps,
   auth: AuthScope,
@@ -49,9 +45,6 @@ export async function readEffectivePolicy(
   return {
     source: effective.source,
     sources: effective.sources,
-    providerRules: effective.accessRules.filter((rule) => rule.modelId === '*').map(accessRuleView),
-    modelRules: effective.accessRules.filter((rule) => rule.modelId !== '*').map(accessRuleView),
-    accessRules: effective.accessRules,
     toolPolicy: effective.toolPolicy,
     mcpPolicy: effective.mcpPolicy,
     sandboxPolicy: effective.sandboxPolicy,

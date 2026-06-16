@@ -8,12 +8,11 @@ export function GovernanceView({ policy }: { policy: EffectivePolicy | null }) {
   return (
     <DetailSection
       title="Effective governance"
-      description="Read-only merged policy for providers, models, access rules, tools, MCP, sandbox, and budgets."
+      description="Read-only merged policy for providers, models, tools, MCP, sandbox, and budgets."
     >
       <MetaGrid>
         <Meta label="Provider rules" value={stringifyJson(policy.providerRules)} />
         <Meta label="Model rules" value={stringifyJson(policy.modelRules)} />
-        <Meta label="Access rules" value={stringifyJson(policy.accessRules)} />
         <Meta label="Tool policy" value={stringifyJson(policy.toolPolicy)} />
         <Meta label="MCP policy" value={stringifyJson(policy.mcpPolicy)} />
         <Meta label="Sandbox policy" value={stringifyJson(policy.sandboxPolicy)} />

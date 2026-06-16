@@ -25,26 +25,6 @@ const PolicyDecisionSchema = z
   })
   .openapi('PolicyDecision')
 
-const EffectiveRuleSchema = z
-  .object({
-    providerId: z.string().optional(),
-    modelId: z.string().optional(),
-    effect: z.enum(['allow', 'deny']),
-    reason: z.string().optional(),
-  })
-  .openapi('EffectiveRule')
-
-const EffectiveAccessRuleSchema = z
-  .object({
-    id: z.string(),
-    providerId: z.string(),
-    modelId: z.string(),
-    teamId: z.string().nullable(),
-    effect: z.enum(['allow', 'deny']),
-    reason: z.string().nullable(),
-  })
-  .openapi('EffectiveAccessRule')
-
 const EffectiveBudgetSchema = z
   .object({
     id: z.string(),
@@ -63,9 +43,6 @@ const EffectivePolicySchema = z
   .object({
     source: z.object({ type: z.string(), id: z.string() }),
     sources: z.array(z.object({ scope: z.string(), id: z.string(), teamId: z.string().nullable() })),
-    providerRules: z.array(EffectiveRuleSchema),
-    modelRules: z.array(EffectiveRuleSchema),
-    accessRules: z.array(EffectiveAccessRuleSchema),
     toolPolicy: ToolPolicySchema,
     mcpPolicy: PolicyMcpPolicySchema,
     sandboxPolicy: SandboxPolicySchema,
@@ -103,7 +80,7 @@ const readRoute = createRoute({
   tags: ['Governance'],
   summary: 'Read the effective governance policy',
   description:
-    'Merges organization, team, and project policies with access rules and enabled budgets. Pass teamId to resolve the policy as a member of that team. Pass providerId and modelId together to attach a policy decision for that provider/model pair.',
+    'Merges organization, team, and project policies with enabled budgets. Pass teamId to resolve the policy as a member of that team. Pass providerId and modelId together to attach a policy decision for that provider/model pair.',
   ...AuthenticatedOperation,
   request: { query: QuerySchema },
   responses: {
@@ -150,9 +127,6 @@ export function registerEffectivePolicyRoutes(routes: EffectivePolicyRoutes) {
       {
         source: effective.source,
         sources: effective.sources,
-        providerRules: effective.providerRules,
-        modelRules: effective.modelRules,
-        accessRules: effective.accessRules,
         toolPolicy: effective.toolPolicy as ToolPolicy,
         mcpPolicy: effective.mcpPolicy as PolicyMcpPolicy,
         sandboxPolicy: effective.sandboxPolicy as SandboxPolicy,

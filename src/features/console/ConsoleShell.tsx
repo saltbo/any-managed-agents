@@ -10,7 +10,6 @@ import {
   PlugZap,
   Server,
   Settings,
-  ShieldCheck,
   Vault,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
@@ -104,7 +103,6 @@ function DesktopNav() {
       <NavButton icon={<Server size={17} />} to="/environments" label="Environments" />
       <NavButton icon={<MessageSquare size={17} />} to="/sessions" label="Sessions" />
       <NavButton icon={<Boxes size={17} />} to="/providers" label="Providers" />
-      <NavButton icon={<ShieldCheck size={17} />} to="/providers/policy" label="Provider policy" />
       <NavButton icon={<Vault size={17} />} to="/vaults" label="Vaults" />
       <NavButton icon={<PlugZap size={17} />} to="/mcp" label="MCP" />
       <NavButton icon={<Code2 size={17} />} to="/usage" label="Usage" />
@@ -166,7 +164,6 @@ function MobileNav() {
       <MobileNavButton icon={<Server size={16} />} to="/environments" label="Environments" />
       <MobileNavButton icon={<MessageSquare size={16} />} to="/sessions" label="Sessions" />
       <MobileNavButton icon={<Boxes size={16} />} to="/providers" label="Providers" />
-      <MobileNavButton icon={<ShieldCheck size={16} />} to="/providers/policy" label="Provider policy" />
       <MobileNavButton icon={<Vault size={16} />} to="/vaults" label="Vaults" />
       <MobileNavButton icon={<PlugZap size={16} />} to="/mcp" label="MCP" />
       <MobileNavButton icon={<Code2 size={16} />} to="/usage" label="Usage" />

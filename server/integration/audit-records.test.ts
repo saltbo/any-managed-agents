@@ -13,10 +13,16 @@ async function jsonFetch(path: string, authorization: string, init: RequestInit 
   })
 }
 
-async function createAuditedAccessRule(authorization: string, metadata?: Record<string, unknown>) {
-  const res = await jsonFetch('/api/v1/access-rules', authorization, {
+async function createAuditedBudget(authorization: string, metadata?: Record<string, unknown>) {
+  const res = await jsonFetch('/api/v1/budgets', authorization, {
     method: 'POST',
-    body: JSON.stringify({ effect: 'deny', reason: 'Audit trail seed.', ...(metadata ? { metadata } : {}) }),
+    body: JSON.stringify({
+      scope: 'project',
+      limitType: 'tokens',
+      limitValue: 1000,
+      window: 'month',
+      ...(metadata ? { metadata } : {}),
+    }),
   })
   expect(res.status).toBe(201)
   return (await res.json()) as { id: string }
@@ -33,16 +39,16 @@ describe('[CF] v1 audit records', () => {
 
   it('lists and filters audit records scoped to the organization [spec: audit/records-api] [spec: audit/auto-record]', async () => {
     const authorization = await signIn()
-    const rule = await createAuditedAccessRule(authorization)
+    const budget = await createAuditedBudget(authorization)
 
-    const listRes = await jsonFetch('/api/v1/audit-records?action=access_rule.create', authorization)
+    const listRes = await jsonFetch('/api/v1/audit-records?action=budget.create', authorization)
     expect(listRes.status).toBe(200)
     const list = (await listRes.json()) as { data: Array<Record<string, unknown>> }
     expect(list.data).toContainEqual(
       expect.objectContaining({
-        action: 'access_rule.create',
-        resourceType: 'access_rule',
-        resourceId: rule.id,
+        action: 'budget.create',
+        resourceType: 'budget',
+        resourceId: budget.id,
         outcome: 'success',
       }),
     )
@@ -51,14 +57,14 @@ describe('[CF] v1 audit records', () => {
     const outcomeRes = await jsonFetch('/api/v1/audit-records?outcome=denied', authorization)
     expect(outcomeRes.status).toBe(200)
     const denied = (await outcomeRes.json()) as { data: Array<{ resourceId: string | null }> }
-    expect(denied.data).not.toContainEqual(expect.objectContaining({ resourceId: rule.id }))
+    expect(denied.data).not.toContainEqual(expect.objectContaining({ resourceId: budget.id }))
   })
 
   it('reads a single audit record and 404s unknown ids [spec: audit/records-api]', async () => {
     const authorization = await signIn()
-    await createAuditedAccessRule(authorization, { apiKey: 'top-secret-credential' })
+    await createAuditedBudget(authorization, { apiKey: 'top-secret-credential' })
 
-    const listRes = await jsonFetch('/api/v1/audit-records?action=access_rule.create', authorization)
+    const listRes = await jsonFetch('/api/v1/audit-records?action=budget.create', authorization)
     expect(listRes.status).toBe(200)
     const list = (await listRes.json()) as { data: Array<{ id: string }> }
     const recordId = list.data[0]?.id
@@ -67,7 +73,7 @@ describe('[CF] v1 audit records', () => {
     const readRes = await jsonFetch(`/api/v1/audit-records/${recordId}`, authorization)
     expect(readRes.status).toBe(200)
     const record = (await readRes.json()) as { id: string; action: string }
-    expect(record).toMatchObject({ id: recordId, action: 'access_rule.create' })
+    expect(record).toMatchObject({ id: recordId, action: 'budget.create' })
     expect(JSON.stringify(record)).not.toContain('top-secret-credential')
 
     const missingRes = await jsonFetch('/api/v1/audit-records/audit_does_not_exist', authorization)
@@ -76,9 +82,9 @@ describe('[CF] v1 audit records', () => {
 
   it('exports audit records as CSV with secret-like values redacted [spec: audit/export-api]', async () => {
     const authorization = await signIn()
-    await createAuditedAccessRule(authorization, { apiKey: 'top-secret-credential' })
+    await createAuditedBudget(authorization, { apiKey: 'top-secret-credential' })
 
-    const res = await jsonFetch('/api/v1/audit-records?action=access_rule.create', authorization, {
+    const res = await jsonFetch('/api/v1/audit-records?action=budget.create', authorization, {
       headers: { accept: 'text/csv' },
     })
     expect(res.status).toBe(200)

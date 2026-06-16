@@ -6,12 +6,6 @@ export declare const operations: readonly [{
     readonly tags: readonly ["Leases"];
 }, {
     readonly method: "POST";
-    readonly path: "/api/v1/access-rules";
-    readonly operationId: "createAccessRule";
-    readonly summary: "Create an access rule";
-    readonly tags: readonly ["Governance"];
-}, {
-    readonly method: "POST";
     readonly path: "/api/v1/agents";
     readonly operationId: "createAgent";
     readonly summary: "Create an agent";
@@ -126,12 +120,6 @@ export declare const operations: readonly [{
     readonly tags: readonly ["Sessions"];
 }, {
     readonly method: "DELETE";
-    readonly path: "/api/v1/access-rules/{ruleId}";
-    readonly operationId: "deleteAccessRule";
-    readonly summary: "Delete an access rule";
-    readonly tags: readonly ["Governance"];
-}, {
-    readonly method: "DELETE";
     readonly path: "/api/v1/budgets/{budgetId}";
     readonly operationId: "deleteBudget";
     readonly summary: "Delete a budget";
@@ -166,12 +154,6 @@ export declare const operations: readonly [{
     readonly operationId: "getHealth";
     readonly summary: "Get Worker health";
     readonly tags: readonly ["System"];
-}, {
-    readonly method: "GET";
-    readonly path: "/api/v1/access-rules";
-    readonly operationId: "listAccessRules";
-    readonly summary: "List provider and model access rules";
-    readonly tags: readonly ["Governance"];
 }, {
     readonly method: "GET";
     readonly path: "/api/v1/agents/{agentId}/handoff-candidates";
@@ -358,12 +340,6 @@ export declare const operations: readonly [{
     readonly operationId: "putRunnerHeartbeat";
     readonly summary: "Replace the current runner heartbeat state";
     readonly tags: readonly ["Runners"];
-}, {
-    readonly method: "GET";
-    readonly path: "/api/v1/access-rules/{ruleId}";
-    readonly operationId: "readAccessRule";
-    readonly summary: "Read an access rule";
-    readonly tags: readonly ["Governance"];
 }, {
     readonly method: "GET";
     readonly path: "/api/v1/agents/{agentId}";
@@ -573,12 +549,6 @@ export declare const operations: readonly [{
     readonly path: "/api/v1/policies/{policyId}";
     readonly operationId: "replacePolicy";
     readonly summary: "Replace a governance policy";
-    readonly tags: readonly ["Governance"];
-}, {
-    readonly method: "PATCH";
-    readonly path: "/api/v1/access-rules/{ruleId}";
-    readonly operationId: "updateAccessRule";
-    readonly summary: "Update an access rule";
     readonly tags: readonly ["Governance"];
 }, {
     readonly method: "PATCH";

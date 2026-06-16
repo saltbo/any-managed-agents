@@ -862,35 +862,9 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
   })
 
   // ---------------------------------------------------------------------------
-  // Governance API (access-rules, policies, effective-policy, budgets)
+  // Governance API (policies, effective-policy, budgets)
   // ---------------------------------------------------------------------------
   describe('governance API', () => {
-    it('listAccessRules calls /api/v1/access-rules', async () => {
-      const fetchMock = makeJsonFetch(listPage)
-      vi.stubGlobal('fetch', fetchMock)
-      await api.listAccessRules()
-      const url = fetchMock.mock.calls[0]?.[0] as string
-      expect(url).toContain('/api/v1/access-rules')
-    })
-
-    it('createAccessRule posts JSON', async () => {
-      const rule = {
-        id: 'ar_1',
-        providerId: 'prov_1',
-        modelId: '*',
-        teamId: null,
-        effect: 'allow' as const,
-        reason: null,
-        metadata: {},
-        createdAt: '',
-        updatedAt: '',
-      }
-      const fetchMock = makeJsonFetch(rule)
-      vi.stubGlobal('fetch', fetchMock)
-      const result = await api.createAccessRule({ effect: 'allow' })
-      expect(result.effect).toBe('allow')
-    })
-
     it('listPolicies calls /api/v1/policies', async () => {
       const fetchMock = makeJsonFetch(listPage)
       vi.stubGlobal('fetch', fetchMock)
@@ -905,7 +879,6 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
         sources: [],
         providerRules: [],
         modelRules: [],
-        accessRules: [],
         toolPolicy: {},
         mcpPolicy: {},
         sandboxPolicy: {},

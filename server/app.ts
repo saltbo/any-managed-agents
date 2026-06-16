@@ -2,7 +2,6 @@ import { swaggerUI } from '@hono/swagger-ui'
 import { cors } from 'hono/cors'
 import { createDeps } from './composition'
 import type { Env } from './env'
-import { registerAccessRuleRoutes } from './http/access-rules'
 import { registerAgentRoutes } from './http/agents'
 import { registerAuditRecordRoutes } from './http/audit-records'
 import { registerAuthRoutes } from './http/auth'
@@ -83,7 +82,6 @@ export function createApp() {
   const connections = registerConnectionRoutes(createDepsApiRouter())
   const policies = registerPolicyRoutes(createDepsApiRouter())
   const effectivePolicy = registerEffectivePolicyRoutes(createDepsApiRouter())
-  const accessRules = registerAccessRuleRoutes(createDepsApiRouter())
   const budgets = registerBudgetRoutes(createDepsApiRouter())
   const usageRecords = registerUsageRecordRoutes(createDepsApiRouter())
   const usageSummary = registerUsageSummaryRoutes(createDepsApiRouter())
@@ -106,7 +104,6 @@ export function createApp() {
     .route('/api/v1/leases', leases)
     .route('/api/v1/policies', policies)
     .route('/api/v1/effective-policy', effectivePolicy)
-    .route('/api/v1/access-rules', accessRules)
     .route('/api/v1/budgets', budgets)
     .route('/api/v1/connectors', connectors)
     .route('/api/v1/connections', connections)
