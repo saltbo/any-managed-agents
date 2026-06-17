@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
 import * as client from 'openid-client'
-import { federatedTenants, projects } from '../db/schema'
+import { projects } from '../db/schema'
 import type { Env } from '../env'
 
 export interface UserInfoClaims {
@@ -272,29 +272,18 @@ export function organizationIdForClaims(claims: UserInfoClaims) {
 }
 
 async function projectForFederatedClaims(db: DrizzleD1Database, claims: UserInfoClaims) {
-  const externalTenantId = claims.external_tenant_id ?? claims.tenant_id
-  if (claims.iss && externalTenantId) {
-    const tenant = await db
-      .select({ project: projects, tenant: federatedTenants })
-      .from(federatedTenants)
-      .innerJoin(projects, eq(projects.id, federatedTenants.projectId))
-      .where(
-        and(
-          eq(federatedTenants.issuer, claims.iss),
-          eq(federatedTenants.externalTenantId, externalTenantId),
-          eq(federatedTenants.enabled, true),
-        ),
-      )
-      .get()
-    return tenant
-      ? { id: tenant.project.id, name: tenant.project.name, organizationId: tenant.project.organizationId }
-      : null
+  // A federated/runner token names its target AMA project explicitly via `ama_project_id`.
+  // The project must belong to the caller's organization (derived from the client identity
+  // via organizationIdForClaims), which bounds the token to its own tenant's workspaces — no
+  // separate per-tenant federation binding is needed.
+  if (!claims.ama_project_id) return null
+  const project = await db.select().from(projects).where(eq(projects.id, claims.ama_project_id)).get()
+  if (!project) return null
+  const organizationId = organizationIdForClaims(claims)
+  if (project.organizationId !== organizationId) {
+    throw new OidcError('Federated token project does not belong to the caller organization')
   }
-  if (!claims.iss && claims.ama_project_id) {
-    const project = await db.select().from(projects).where(eq(projects.id, claims.ama_project_id)).get()
-    return project ? { id: project.id, name: project.name, organizationId: project.organizationId } : null
-  }
-  return null
+  return { id: project.id, name: project.name, organizationId: project.organizationId }
 }
 
 function normalizeClaims(env: Env, claims: Record<string, unknown> & { sub: string }): UserInfoClaims {
