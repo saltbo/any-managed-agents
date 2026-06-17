@@ -398,14 +398,14 @@ describe('[CF] /api/v1/agents', () => {
     expect(boundRes.status).toBe(201)
     await expect(boundRes.json()).resolves.toMatchObject({ providerId, model: modelId })
 
+    // An unknown model is accepted at agent creation; (provider, model) validation
+    // against the global catalog is deferred to session start.
     const unknownModelRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',
       body: JSON.stringify({ name: 'Unknown model agent', providerId, model: 'unknown-model' }),
     })
-    expect(unknownModelRes.status).toBe(400)
-    await expect(unknownModelRes.json()).resolves.toMatchObject({
-      error: { details: { fields: { model: expect.any(String) } } },
-    })
+    expect(unknownModelRes.status).toBe(201)
+    await expect(unknownModelRes.json()).resolves.toMatchObject({ providerId, model: 'unknown-model' })
   })
 
   it('stores agent memory only for agents with memory enabled and replaces it via PUT', async () => {
