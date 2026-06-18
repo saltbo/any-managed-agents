@@ -1,11 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { delay } from 'msw'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Agent, AuthContext, Project, Session } from '@/lib/api'
 import { HttpResponse, http, server } from '@/test/msw'
 import { ConsoleLayout } from './ConsoleLayout'
 import { ConsoleShell } from './ConsoleShell'
+import { CreateProjectSheet } from './CreateProjectSheet'
 import { ConsoleContextProvider, useConsoleContext } from './console-context'
 import { JsonBlock } from './json-block'
 import { RelatedResourcesTable } from './related-resources-table'
@@ -117,6 +119,15 @@ function renderShell(auth: AuthContext = buildAuth(), projects: Project[] = [bui
     </QueryClientProvider>,
   )
   return client
+}
+
+// Radix menus rely on Pointer Events APIs jsdom doesn't implement; stub them so
+// fireEvent can open dropdowns and reach their items.
+function stubMenuPointerEvents() {
+  Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', { value: vi.fn(() => false), configurable: true })
+  Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', { value: vi.fn(), configurable: true })
+  Object.defineProperty(HTMLElement.prototype, 'releasePointerCapture', { value: vi.fn(), configurable: true })
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { value: vi.fn(), configurable: true })
 }
 
 // ─── console-context.tsx ─────────────────────────────────────────────────────
@@ -456,18 +467,7 @@ describe('[spec: console/shell] ConsoleShell', () => {
   })
 
   it('calls signOut when Log out menu item is selected', async () => {
-    Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
-      value: vi.fn(() => false),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'releasePointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
+    stubMenuPointerEvents()
 
     const signOut = vi.fn().mockResolvedValue(undefined)
     vi.spyOn(await import('@/lib/oidc'), 'signOut').mockImplementation(signOut)
@@ -485,8 +485,8 @@ describe('[spec: console/shell] ConsoleShell', () => {
       </QueryClientProvider>,
     )
 
-    const menuTriggers = screen.getAllByRole('button')
-    const trigger = menuTriggers[0] as HTMLElement
+    // The user-menu trigger carries the user name; the project switcher now precedes it in the DOM.
+    const trigger = screen.getAllByText(auth.user.name as string)[0]!.closest('button') as HTMLElement
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerId: 1, pointerType: 'mouse' })
     fireEvent.mouseDown(trigger)
     fireEvent.click(trigger)
@@ -497,31 +497,15 @@ describe('[spec: console/shell] ConsoleShell', () => {
     await waitFor(() => expect(signOut).toHaveBeenCalled())
   })
 
-  it('calls selectProject and invalidates queries when project is changed', async () => {
-    Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
-      value: vi.fn(() => false),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'releasePointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
-      value: vi.fn(),
-      configurable: true,
-    })
+  it('[spec: web-console/project-switcher] switches the active project from the sidebar dropdown', async () => {
+    stubMenuPointerEvents()
 
     const selectProject = vi.fn()
     const projects = [buildProject({ id: 'p1', name: 'Alpha' }), buildProject({ id: 'p2', name: 'Beta' })]
     const auth = buildAuth({ project: { id: 'p1', name: 'Alpha' } })
 
-    const client = makeQueryClient()
     render(
-      <QueryClientProvider client={client}>
+      <QueryClientProvider client={makeQueryClient()}>
         <MemoryRouter>
           <ConsoleContextProvider value={{ auth, projects, selectProject }}>
             <ConsoleShell>
@@ -532,13 +516,126 @@ describe('[spec: console/shell] ConsoleShell', () => {
       </QueryClientProvider>,
     )
 
-    const select = screen.getByRole('combobox')
-    select.focus()
-    fireEvent.pointerDown(select, { button: 0, ctrlKey: false, pointerId: 1, pointerType: 'mouse' })
-    fireEvent.mouseDown(select)
-    fireEvent.click(await screen.findByRole('option', { name: 'Beta' }))
+    const trigger = screen.getAllByLabelText('Switch project')[0]!
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerId: 1, pointerType: 'mouse' })
+    fireEvent.click(trigger)
 
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Beta' }))
     await waitFor(() => expect(selectProject).toHaveBeenCalledWith('p2'))
+  })
+
+  it('[spec: web-console/project-switcher] opens the create-project form from the switcher', async () => {
+    stubMenuPointerEvents()
+
+    const projects = [buildProject({ id: 'p1', name: 'Alpha' })]
+    const auth = buildAuth({ project: { id: 'p1', name: 'Alpha' } })
+
+    render(
+      <QueryClientProvider client={makeQueryClient()}>
+        <MemoryRouter>
+          <ConsoleContextProvider value={{ auth, projects, selectProject: vi.fn() }}>
+            <ConsoleShell>
+              <div />
+            </ConsoleShell>
+          </ConsoleContextProvider>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    const trigger = screen.getAllByLabelText('Switch project')[0]!
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerId: 1, pointerType: 'mouse' })
+    fireEvent.click(trigger)
+
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Create project' }))
+    await waitFor(() => expect(screen.getByText(/A project isolates its own/)).toBeTruthy())
+  })
+})
+
+// ─── CreateProjectSheet.tsx ──────────────────────────────────────────────────
+//
+// CreateProjectSheet drives the REAL api client against MSW (POST /api/v1/projects)
+// and reads the console context for selectProject. It is always rendered inside a
+// ConsoleContextProvider so useConsoleContext resolves.
+
+describe('[spec: web-console/project-switcher] CreateProjectSheet', () => {
+  function renderSheet(
+    open: boolean,
+    onOpenChange: (open: boolean) => void = vi.fn(),
+    selectProject: (projectId: string) => void = vi.fn(),
+  ) {
+    render(
+      <QueryClientProvider client={makeQueryClient()}>
+        <MemoryRouter>
+          <ConsoleContextProvider value={{ auth: buildAuth(), projects: [buildProject()], selectProject }}>
+            <CreateProjectSheet open={open} onOpenChange={onOpenChange} />
+          </ConsoleContextProvider>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+  }
+
+  it('renders the form with a disabled submit until a name is entered', () => {
+    renderSheet(true)
+    expect(screen.getByText(/A project isolates its own/)).toBeTruthy()
+    expect(screen.getByLabelText('Name')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Create project/i })).toBeDisabled()
+  })
+
+  it('does not render form content when closed', () => {
+    renderSheet(false)
+    expect(screen.queryByText(/A project isolates its own/)).toBeNull()
+  })
+
+  it('creates a project, switches to it, and closes on submit', async () => {
+    server.use(
+      http.post('*/api/v1/projects', async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(buildProject({ id: 'project_new', name: String(body.name) }), { status: 201 })
+      }),
+      projectsHandler([buildProject(), buildProject({ id: 'project_new', name: 'New Project' })]),
+    )
+
+    const onOpenChange = vi.fn()
+    const selectProject = vi.fn()
+    renderSheet(true, onOpenChange, selectProject)
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'New Project' } })
+    fireEvent.click(screen.getByRole('button', { name: /Create project/i }))
+
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    await waitFor(() => expect(selectProject).toHaveBeenCalledWith('project_new'))
+  })
+
+  it('shows the in-flight label while the create request is pending', async () => {
+    server.use(
+      http.post('*/api/v1/projects', async ({ request }) => {
+        await delay(40)
+        const body = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(buildProject({ id: 'project_new', name: String(body.name) }), { status: 201 })
+      }),
+      projectsHandler([buildProject({ id: 'project_new', name: 'New Project' })]),
+    )
+
+    renderSheet(true)
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'New Project' } })
+    fireEvent.click(screen.getByRole('button', { name: /Create project/i }))
+
+    expect(await screen.findByRole('button', { name: /Creating project/i })).toBeTruthy()
+    // Let the delayed response settle so the pending state resolves inside act().
+    await waitFor(() => expect(screen.getByRole('button', { name: /Create project/i })).toBeInTheDocument())
+  })
+
+  it('keeps the sheet open and surfaces an error when the request fails', async () => {
+    server.use(http.post('*/api/v1/projects', () => HttpResponse.json({ error: 'Server error' }, { status: 500 })))
+
+    const onOpenChange = vi.fn()
+    renderSheet(true, onOpenChange)
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Doomed' } })
+    fireEvent.click(screen.getByRole('button', { name: /Create project/i }))
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /Create project/i })).toBeInTheDocument())
+    expect(onOpenChange).not.toHaveBeenCalledWith(false)
   })
 })
 
@@ -759,22 +856,7 @@ describe('[spec: console/layout] ConsoleLayout', () => {
   })
 
   it('calls setSelectedProjectId when project select changes in the full layout', async () => {
-    Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
-      value: vi.fn(() => false),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'releasePointerCapture', {
-      value: vi.fn(),
-      configurable: true,
-    })
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
-      value: vi.fn(),
-      configurable: true,
-    })
+    stubMenuPointerEvents()
 
     const projects = [buildProject({ id: 'p1', name: 'Alpha' }), buildProject({ id: 'p2', name: 'Beta' })]
     // Seed the stored project id so p1 is pre-selected; e2e token stays for getAccessToken.
@@ -792,11 +874,10 @@ describe('[spec: console/layout] ConsoleLayout', () => {
 
     await waitFor(() => expect(screen.getAllByText('Any Managed Agents').length).toBeGreaterThan(0))
 
-    const select = screen.getByRole('combobox')
-    select.focus()
-    fireEvent.pointerDown(select, { button: 0, ctrlKey: false, pointerId: 1, pointerType: 'mouse' })
-    fireEvent.mouseDown(select)
-    fireEvent.click(await screen.findByRole('option', { name: 'Beta' }))
+    const trigger = screen.getAllByLabelText('Switch project')[0]!
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerId: 1, pointerType: 'mouse' })
+    fireEvent.click(trigger)
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Beta' }))
 
     await waitFor(() => expect(window.localStorage.getItem('ama:selected-project-id')).toBe('p2'))
   })

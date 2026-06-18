@@ -1115,7 +1115,7 @@ describe('App', () => {
 
     render(<App />)
 
-    await waitFor(() => expect(screen.getByText('Control Plane')).toBeTruthy())
+    await waitFor(() => expect(screen.getAllByText('Control Plane').length).toBeGreaterThan(0))
     fireEvent.click(primaryNav().getByRole('link', { name: 'Sessions' }))
     expect(await screen.findByRole('heading', { name: 'Sessions' })).toBeTruthy()
     expect(screen.queryByRole('tab', { name: 'Transcript' })).toBeNull()

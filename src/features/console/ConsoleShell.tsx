@@ -3,16 +3,19 @@ import {
   ArrowRight,
   Bot,
   Boxes,
+  Check,
+  ChevronsUpDown,
   Code2,
   DatabaseZap,
   LogOut,
   MessageSquare,
   PlugZap,
+  Plus,
   Server,
   Settings,
   Vault,
 } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { type ReactNode, useState } from 'react'
 import { useLocation } from 'react-router'
 import { Button } from '@/components/ui/button'
 import {
@@ -23,15 +26,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { MobileNavButton, NavButton } from '@/console/components'
+import type { Project } from '@/lib/api'
 import { signOut } from '@/lib/oidc'
+import { CreateProjectSheet } from './CreateProjectSheet'
 import { useConsoleContext } from './console-context'
 
 export function ConsoleShell({ children }: { children: ReactNode }) {
   const context = useConsoleContext()
   const queryClient = useQueryClient()
   const location = useLocation()
+  const [creatingProject, setCreatingProject] = useState(false)
   const fullBleed = /^\/sessions\/[^/]+/.test(location.pathname)
   function selectProject(projectId: string) {
     context.selectProject(projectId)
@@ -44,25 +49,15 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
           <div className="grid size-10 place-items-center rounded-lg bg-primary text-primary-foreground">
             <Bot size={20} />
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">Any Managed Agents</p>
-            <Select value={context.auth.project.id} onValueChange={selectProject}>
-              <SelectTrigger
-                size="sm"
-                className="mt-1 max-w-44 border-0 px-0 text-xs text-muted-foreground shadow-none"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {context.projects.map((project) => (
-                    <SelectItem key={project.id} value={project.id}>
-                      {project.name}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
+            <ProjectSwitcher
+              projects={context.projects}
+              currentProjectId={context.auth.project.id}
+              currentProjectName={context.auth.project.name}
+              onSelect={selectProject}
+              onCreate={() => setCreatingProject(true)}
+            />
           </div>
         </div>
         <DesktopNav />
@@ -73,7 +68,13 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
         <div className="border-b bg-background px-4 py-4 lg:hidden">
           <div className="mb-3 min-w-0">
             <p className="truncate text-sm font-medium">Any Managed Agents</p>
-            <p className="truncate text-xs text-muted-foreground">Console</p>
+            <ProjectSwitcher
+              projects={context.projects}
+              currentProjectId={context.auth.project.id}
+              currentProjectName={context.auth.project.name}
+              onSelect={selectProject}
+              onCreate={() => setCreatingProject(true)}
+            />
           </div>
           <MobileNav />
         </div>
@@ -91,7 +92,51 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
         </div>
         <UserMenu placement="mobile" />
       </section>
+      <CreateProjectSheet open={creatingProject} onOpenChange={setCreatingProject} />
     </main>
+  )
+}
+
+function ProjectSwitcher({
+  projects,
+  currentProjectId,
+  currentProjectName,
+  onSelect,
+  onCreate,
+}: {
+  projects: Project[]
+  currentProjectId: string
+  currentProjectName: string
+  onSelect: (projectId: string) => void
+  onCreate: () => void
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label="Switch project"
+          className="mt-1 flex max-w-44 items-center gap-1 rounded-sm text-xs text-muted-foreground outline-hidden hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <span className="truncate">{currentProjectName}</span>
+          <ChevronsUpDown size={12} className="shrink-0" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-56">
+        <DropdownMenuLabel>Projects</DropdownMenuLabel>
+        {projects.map((project) => (
+          <DropdownMenuItem key={project.id} onSelect={() => onSelect(project.id)}>
+            <span className="truncate">{project.name}</span>
+            {project.id === currentProjectId ? <Check size={15} className="ml-auto" /> : null}
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={onCreate}>
+          <Plus size={15} />
+          Create project
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
