@@ -365,8 +365,16 @@ func (d *RunnerDaemon) Start(ctx context.Context) error {
 					if ctx.Err() != nil {
 						return
 					}
-					leaseFailures.Add(1)
-					slog.Warn("runner lease failed", "consecutiveFailures", leaseFailures.Load(), "error", err)
+					if isCompletedLeaseRenewalRace(err) {
+						// A lease that is no longer active is normal: the session
+						// finished or another runner took over. Not a failure to
+						// back off on, and not WARN-worthy.
+						leaseFailures.Store(0)
+						slog.Info("runner lease ended", "error", err)
+					} else {
+						leaseFailures.Add(1)
+						slog.Warn("runner lease failed", "consecutiveFailures", leaseFailures.Load(), "error", err)
+					}
 				}()
 			}
 			pollTimer.Reset(leasePollDelay(d.Config.PollInterval, leaseFailures.Load()))
@@ -433,7 +441,12 @@ func (d *RunnerDaemon) runOneLease(ctx context.Context) error {
 	if err != nil || lease == nil {
 		return err
 	}
-	return d.executeLease(ctx, lease, workItem)
+	slog.Info("claimed work item", "workItemId", lease.WorkItemID, "sessionId", workItem.SessionID, "leaseId", lease.ID)
+	if err := d.executeLease(ctx, lease, workItem); err != nil {
+		return err
+	}
+	slog.Info("work item completed", "workItemId", lease.WorkItemID, "sessionId", workItem.SessionID)
+	return nil
 }
 
 // claimLease implements the v1 two-step claim: read the available work queue,
