@@ -365,7 +365,7 @@ func (d *RunnerDaemon) Start(ctx context.Context) error {
 					if ctx.Err() != nil {
 						return
 					}
-					if isCompletedLeaseRenewalRace(err) {
+					if isLeaseInactive(err) {
 						// A lease that is no longer active is normal: the session
 						// finished or another runner took over. Not a failure to
 						// back off on, and not WARN-worthy.
@@ -782,6 +782,13 @@ func (d *RunnerDaemon) completeSessionStart(ctx context.Context, lease *Lease, p
 
 func isCompletedLeaseRenewalRace(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "Runner lease is no longer active")
+}
+
+// isLeaseInactive matches both "Lease is no longer active" and "Runner lease is
+// no longer active" — the normal end-of-session signals where the lease was
+// released or taken over, not a failure to alarm on.
+func isLeaseInactive(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "is no longer active")
 }
 
 func (d *RunnerDaemon) runExternalSession(execution sessionRuntimeExecution) error {
