@@ -297,6 +297,16 @@ func (d *RunnerDaemon) Start(ctx context.Context) error {
 	if err := d.heartbeatOrRecover(ctx); err != nil {
 		return err
 	}
+	// One-time readiness line so `ak logs` shows the runner came up and is
+	// connected/polling even when it is idle (no work in the queue).
+	slog.Info("runner ready; polling for work",
+		"runnerId", d.RunnerID,
+		"projectId", d.Config.ProjectID,
+		"environmentId", d.Config.EnvironmentID,
+		"runtimes", d.currentCapabilities(),
+		"maxConcurrent", d.Config.MaxConcurrent,
+		"pollInterval", d.Config.PollInterval.String(),
+	)
 	go d.runUsageCollector(ctx)
 
 	heartbeatTicker := time.NewTicker(d.Config.HeartbeatInterval)
