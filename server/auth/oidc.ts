@@ -207,15 +207,17 @@ async function introspectAccessToken(
   if (!claims.active) {
     throw new OidcError('OIDC token introspection reported an inactive token')
   }
-  const tokenClientId = stringClaim(claims.client_id) ?? stringClaim(claims.azp)
-  const sub = stringClaim(claims.sub) ?? (tokenClientId ? `client:${tokenClientId}` : null)
+  // The principal is always a real user `sub`. A token's `client_id`/`azp` identifies which
+  // application is calling — it must never stand in as the subject or the tenant. A token with
+  // no user subject (e.g. a pure client_credentials token) is rejected here. client_id/azp still
+  // pass through via `...claims` for audit and runner detection.
+  const sub = stringClaim(claims.sub)
   if (!sub) {
-    throw new OidcError('OIDC token introspection did not include subject or client id')
+    throw new OidcError('OIDC token introspection did not include a subject')
   }
   return {
     ...claims,
     sub,
-    ...(tokenClientId && !claims.org_id && !claims.organization_id ? { org_id: `client:${tokenClientId}` } : {}),
   } as Record<string, unknown> & { sub: string }
 }
 
