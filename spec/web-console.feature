@@ -13,6 +13,14 @@ Feature: Web console
     Then the sidebar shows agents, environments, sessions, providers, vaults, MCP, usage, audit, and settings
     And the current organization and project context are visible
 
+  @web-console/project-switcher @web
+  Scenario: Switch and create projects from the sidebar header
+    Given a signed-in user belongs to an organization with one or more projects
+    When the user opens the project switcher in the sidebar header
+    Then the switcher lists every project and marks the active one
+    And selecting a project switches the active project and refreshes control-plane data
+    And choosing "Create project" opens a form that creates a project and switches to it
+
   @web-console/routed-pages @web
   Scenario: Navigate routed resource and detail pages
     Given a project has agents, environments, sessions, providers, vaults, MCP connectors, usage, and audit records
