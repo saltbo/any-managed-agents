@@ -298,12 +298,18 @@ func (d *RunnerDaemon) Start(ctx context.Context) error {
 		return err
 	}
 	// One-time readiness line so `ak logs` shows the runner came up and is
-	// connected/polling even when it is idle (no work in the queue).
+	// connected/polling even when it is idle (no work in the queue). List the
+	// detected runtime names only — not the full capability-token matrix
+	// (runtime×provider×model), which is internal scheduling data.
+	runtimeNames := make([]string, 0)
+	for _, r := range d.currentRuntimeInventory() {
+		runtimeNames = append(runtimeNames, r.Runtime)
+	}
 	slog.Info("runner ready; polling for work",
 		"runnerId", d.RunnerID,
 		"projectId", d.Config.ProjectID,
 		"environmentId", d.Config.EnvironmentID,
-		"runtimes", d.currentCapabilities(),
+		"runtimes", strings.Join(runtimeNames, ", "),
 		"maxConcurrent", d.Config.MaxConcurrent,
 		"pollInterval", d.Config.PollInterval.String(),
 	)
