@@ -144,6 +144,12 @@ export declare const operations: readonly [{
     readonly tags: readonly ["Governance"];
 }, {
     readonly method: "DELETE";
+    readonly path: "/api/v1/triggers/{triggerId}";
+    readonly operationId: "deleteTrigger";
+    readonly summary: "Delete a trigger";
+    readonly tags: readonly ["Triggers"];
+}, {
+    readonly method: "DELETE";
     readonly path: "/api/v1/vaults/{vaultId}/credentials/{credentialId}/versions/{versionId}";
     readonly operationId: "deleteVaultCredentialVersion";
     readonly summary: "Delete an unused vault credential version";
