@@ -1318,6 +1318,9 @@ export interface TriggerRepo {
   find(projectId: string, triggerId: string): Promise<TriggerRecord | null>
   insert(input: CreateTriggerInput, timestamp: string): Promise<TriggerRecord>
   update(projectId: string, triggerId: string, fields: UpdateTriggerFields, updatedAt: string): Promise<TriggerRecord>
+  // Hard-deletes the trigger and its runs (the only FK to triggers.id). Returns
+  // whether the trigger row existed so the caller can map a missing row to 404.
+  delete(projectId: string, triggerId: string): Promise<boolean>
 
   listRuns(query: TriggerRunListQuery): Promise<ListPageResult<TriggerRunRecord>>
   findRun(projectId: string, triggerId: string, runId: string): Promise<TriggerRunRecord | null>

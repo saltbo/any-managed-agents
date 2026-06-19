@@ -7,7 +7,7 @@ import {
   type TriggerRecord,
   TriggerValidationError,
 } from './ports'
-import { createTrigger, updateTrigger } from './triggers'
+import { createTrigger, deleteTrigger, updateTrigger } from './triggers'
 
 const auth: AuthScope = {
   organization: { id: 'org_1', name: 'Org' },
@@ -57,6 +57,7 @@ function fakeDeps(repo: Partial<Deps['triggers']> = {}): Deps {
     insert: async (input, timestamp) => triggerRecord({ ...input.config, createdAt: timestamp, updatedAt: timestamp }),
     update: async (_p, id, fields, updatedAt) =>
       triggerRecord({ id, ...fields.config, archivedAt: fields.archivedAt, updatedAt }),
+    delete: async () => true,
     listRuns: async () => ({ rows: [], hasMore: false }),
     findRun: async () => null,
     agentUsable: async () => null,
@@ -168,5 +169,25 @@ describe('[spec: triggers/lifecycle] updateTrigger', () => {
       name: 'TriggerConflictError',
       status: 404,
     })
+  })
+})
+
+describe('[spec: triggers/delete] deleteTrigger', () => {
+  it('deletes the trigger scoped to the project and reports that it existed', async () => {
+    const calls: Array<{ projectId: string; triggerId: string }> = []
+    const deps = fakeDeps({
+      delete: async (projectId, triggerId) => {
+        calls.push({ projectId, triggerId })
+        return true
+      },
+    })
+    const existed = await deleteTrigger(deps, auth, 'trigger_1')
+    expect(existed).toBe(true)
+    expect(calls).toEqual([{ projectId: 'project_1', triggerId: 'trigger_1' }])
+  })
+
+  it('reports a missing trigger so the caller can answer 404', async () => {
+    const deps = fakeDeps({ delete: async () => false })
+    await expect(deleteTrigger(deps, auth, 'trigger_missing')).resolves.toBe(false)
   })
 })

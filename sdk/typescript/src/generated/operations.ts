@@ -219,6 +219,15 @@ export const operations = [
   },
   {
     "method": "DELETE",
+    "path": "/api/v1/triggers/{triggerId}",
+    "operationId": "deleteTrigger",
+    "summary": "Delete a trigger",
+    "tags": [
+      "Triggers"
+    ]
+  },
+  {
+    "method": "DELETE",
     "path": "/api/v1/vaults/{vaultId}/credentials/{credentialId}/versions/{versionId}",
     "operationId": "deleteVaultCredentialVersion",
     "summary": "Delete an unused vault credential version",

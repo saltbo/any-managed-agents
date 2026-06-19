@@ -937,6 +937,7 @@ export const api = {
         json: input as RpcJson<(typeof v1.triggers)[':triggerId']['$patch']>,
       }),
     ),
+  deleteTrigger: (id: string) => rpcRequest<void>(v1.triggers[':triggerId'].$delete({ param: { triggerId: id } })),
   listTriggerRuns: (id: string, options: ListOptions = {}) =>
     rpcRequest<ListResponse<TriggerRun>>(
       v1.triggers[':triggerId'].runs.$get(

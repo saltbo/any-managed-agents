@@ -1,8 +1,8 @@
-import { Pause, Play } from 'lucide-react'
+import { Pause, Play, Trash2 } from 'lucide-react'
 import { Link } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { EmptyState, StatusBadge, TablePagination, TableSurface } from '@/console/components'
+import { ConfirmAction, EmptyState, StatusBadge, TablePagination, TableSurface } from '@/console/components'
 import { formatRelativeTime } from '@/console/format'
 import type { ClientPagination } from '@/console/use-client-pagination'
 import type { Trigger } from '@/lib/api'
@@ -25,11 +25,13 @@ export function TriggersView({
   pagination,
   onPause,
   onResume,
+  onDelete,
 }: {
   triggers: Trigger[]
   pagination: ClientPagination<Trigger>
   onPause: (id: string) => void
   onResume: (id: string) => void
+  onDelete: (id: string) => void
 }) {
   if (triggers.length === 0) {
     return <EmptyState title="No triggers" body="Schedule a trigger to dispatch an agent on a recurring interval." />
@@ -70,7 +72,7 @@ export function TriggersView({
             <TableCell>{formatRelativeTime(trigger.nextDueAt)}</TableCell>
             <TableCell>{trigger.lastDispatchedAt ? formatRelativeTime(trigger.lastDispatchedAt) : '—'}</TableCell>
             <TableCell>
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-2">
                 {trigger.enabled ? (
                   <Button
                     type="button"
@@ -92,6 +94,17 @@ export function TriggersView({
                     <Play data-icon="inline-start" />
                   </Button>
                 )}
+                <ConfirmAction
+                  title="Delete trigger?"
+                  description={`Permanently delete ${trigger.name} and its run history. This cannot be undone.`}
+                  confirmLabel="Delete trigger"
+                  destructive
+                  onConfirm={() => onDelete(trigger.id)}
+                >
+                  <Button type="button" variant="outline" size="icon" aria-label="Delete trigger">
+                    <Trash2 data-icon="inline-start" />
+                  </Button>
+                </ConfirmAction>
               </div>
             </TableCell>
           </TableRow>

@@ -35,6 +35,7 @@ var Operations = []Operation{
 	{Method: "DELETE", Path: "/api/v1/auth/sessions/current", OperationID: "deleteCurrentAuthSession", Summary: "Sign out and clear the session cookie", Tags: []string{"Auth"}},
 	{Method: "DELETE", Path: "/api/v1/auth/federated-tenants/{tenantId}", OperationID: "deleteFederatedTenant", Summary: "Delete a federated tenant", Tags: []string{"Auth"}},
 	{Method: "DELETE", Path: "/api/v1/policies/{policyId}", OperationID: "deletePolicy", Summary: "Delete a governance policy", Tags: []string{"Governance"}},
+	{Method: "DELETE", Path: "/api/v1/triggers/{triggerId}", OperationID: "deleteTrigger", Summary: "Delete a trigger", Tags: []string{"Triggers"}},
 	{Method: "DELETE", Path: "/api/v1/vaults/{vaultId}/credentials/{credentialId}/versions/{versionId}", OperationID: "deleteVaultCredentialVersion", Summary: "Delete an unused vault credential version", Tags: []string{"Vaults"}},
 	{Method: "GET", Path: "/api/v1/health", OperationID: "getHealth", Summary: "Get Worker health", Tags: []string{"System"}},
 	{Method: "GET", Path: "/api/v1/agents/{agentId}/handoff-candidates", OperationID: "listAgentHandoffCandidates", Summary: "List handoff candidate agents", Tags: []string{"Agents"}},

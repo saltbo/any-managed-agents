@@ -27,6 +27,13 @@ Feature: Triggers
     Then the request is rejected with field-level validation details
     And no secret-bearing trigger config is persisted
 
+  @triggers/delete @usecase
+  Scenario: Permanently delete a trigger and its runs
+    Given a trigger with run history exists
+    When the user deletes the trigger
+    Then the trigger and all of its runs are removed and the delete is audited
+    And deleting a missing or foreign-project trigger is rejected as not found
+
   # ── API contract (api: assembled server, real D1, pagination, audit) ──
 
   @triggers/api-crud @api

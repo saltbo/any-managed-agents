@@ -154,6 +154,25 @@ export function createTriggerRepo(db: Db): TriggerRepo {
       return recordFrom(row)
     },
 
+    async delete(projectId, triggerId) {
+      const existing = await db
+        .select({ id: triggers.id })
+        .from(triggers)
+        .where(and(eq(triggers.id, triggerId), eq(triggers.projectId, projectId)))
+        .get()
+      if (!existing) {
+        return false
+      }
+      // trigger_runs.trigger_id is the only FK to triggers.id; delete the runs
+      // first so the trigger row delete never violates it. One D1 batch keeps
+      // both statements atomic.
+      await db.batch([
+        db.delete(triggerRuns).where(and(eq(triggerRuns.triggerId, triggerId), eq(triggerRuns.projectId, projectId))),
+        db.delete(triggers).where(and(eq(triggers.id, triggerId), eq(triggers.projectId, projectId))),
+      ])
+      return true
+    },
+
     async listRuns(query: TriggerRunListQuery): Promise<ListPageResult<TriggerRunRecord>> {
       const filters = [
         eq(triggerRuns.triggerId, query.triggerId),

@@ -22,11 +22,21 @@ export function useTriggerActions() {
     },
     onError: (error) => toast.error(errorMessage(error)),
   })
+  const deleteTrigger = useMutation({
+    mutationFn: (id: string) => api.deleteTrigger(id),
+    onSuccess: () => {
+      toast.success('Trigger deleted')
+      void queryClient.invalidateQueries({ queryKey: queryKeys.triggers.all })
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  })
 
   return {
     pauseTrigger: (id: string) => pauseTrigger.mutate(id),
     pauseTriggerPending: pauseTrigger.isPending,
     resumeTrigger: (id: string) => resumeTrigger.mutate(id),
     resumeTriggerPending: resumeTrigger.isPending,
+    deleteTrigger: (id: string) => deleteTrigger.mutate(id),
+    deleteTriggerPending: deleteTrigger.isPending,
   }
 }

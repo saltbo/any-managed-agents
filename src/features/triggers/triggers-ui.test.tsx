@@ -86,7 +86,13 @@ describe('[spec: triggers/console-list] TriggersView', () => {
   it('explains the empty state when no triggers exist', () => {
     render(
       <MemoryRouter>
-        <TriggersView triggers={[]} pagination={pagination<Trigger>([])} onPause={vi.fn()} onResume={vi.fn()} />
+        <TriggersView
+          triggers={[]}
+          pagination={pagination<Trigger>([])}
+          onPause={vi.fn()}
+          onResume={vi.fn()}
+          onDelete={vi.fn()}
+        />
       </MemoryRouter>,
     )
 
@@ -98,7 +104,13 @@ describe('[spec: triggers/console-list] TriggersView', () => {
     const triggers = [trigger()]
     render(
       <MemoryRouter>
-        <TriggersView triggers={triggers} pagination={pagination(triggers)} onPause={vi.fn()} onResume={vi.fn()} />
+        <TriggersView
+          triggers={triggers}
+          pagination={pagination(triggers)}
+          onPause={vi.fn()}
+          onResume={vi.fn()}
+          onDelete={vi.fn()}
+        />
       </MemoryRouter>,
     )
 
@@ -115,7 +127,13 @@ describe('[spec: triggers/console-list] TriggersView', () => {
     const triggers = [trigger({ enabled: false })]
     render(
       <MemoryRouter>
-        <TriggersView triggers={triggers} pagination={pagination(triggers)} onPause={vi.fn()} onResume={vi.fn()} />
+        <TriggersView
+          triggers={triggers}
+          pagination={pagination(triggers)}
+          onPause={vi.fn()}
+          onResume={vi.fn()}
+          onDelete={vi.fn()}
+        />
       </MemoryRouter>,
     )
 
@@ -127,7 +145,13 @@ describe('[spec: triggers/console-list] TriggersView', () => {
     const triggers = [trigger({ lastDispatchedAt: null })]
     render(
       <MemoryRouter>
-        <TriggersView triggers={triggers} pagination={pagination(triggers)} onPause={vi.fn()} onResume={vi.fn()} />
+        <TriggersView
+          triggers={triggers}
+          pagination={pagination(triggers)}
+          onPause={vi.fn()}
+          onResume={vi.fn()}
+          onDelete={vi.fn()}
+        />
       </MemoryRouter>,
     )
 
@@ -139,7 +163,13 @@ describe('[spec: triggers/console-list] TriggersView', () => {
     const triggers = [trigger()]
     render(
       <MemoryRouter>
-        <TriggersView triggers={triggers} pagination={pagination(triggers)} onPause={onPause} onResume={vi.fn()} />
+        <TriggersView
+          triggers={triggers}
+          pagination={pagination(triggers)}
+          onPause={onPause}
+          onResume={vi.fn()}
+          onDelete={vi.fn()}
+        />
       </MemoryRouter>,
     )
 
@@ -152,12 +182,41 @@ describe('[spec: triggers/console-list] TriggersView', () => {
     const triggers = [trigger({ enabled: false })]
     render(
       <MemoryRouter>
-        <TriggersView triggers={triggers} pagination={pagination(triggers)} onPause={vi.fn()} onResume={onResume} />
+        <TriggersView
+          triggers={triggers}
+          pagination={pagination(triggers)}
+          onPause={vi.fn()}
+          onResume={onResume}
+          onDelete={vi.fn()}
+        />
       </MemoryRouter>,
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Resume trigger' }))
     expect(onResume).toHaveBeenCalledWith('trigger_1')
+  })
+
+  it('calls onDelete only after the destructive delete is confirmed', async () => {
+    const onDelete = vi.fn()
+    const triggers = [trigger()]
+    render(
+      <MemoryRouter>
+        <TriggersView
+          triggers={triggers}
+          pagination={pagination(triggers)}
+          onPause={vi.fn()}
+          onResume={vi.fn()}
+          onDelete={onDelete}
+        />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete trigger' }))
+    expect(onDelete).not.toHaveBeenCalled()
+    await waitFor(() => expect(screen.getByText('Delete trigger?')).toBeTruthy())
+    const confirmBtns = screen.getAllByRole('button', { name: 'Delete trigger', hidden: true })
+    fireEvent.click(confirmBtns[confirmBtns.length - 1] as HTMLElement)
+    await waitFor(() => expect(onDelete).toHaveBeenCalledWith('trigger_1'))
   })
 
   it('paginates correctly with multiple triggers', () => {
@@ -167,7 +226,7 @@ describe('[spec: triggers/console-list] TriggersView', () => {
       const pag = useClientPagination(triggers)
       return (
         <MemoryRouter>
-          <TriggersView triggers={pag.items} pagination={pag} onPause={vi.fn()} onResume={vi.fn()} />
+          <TriggersView triggers={pag.items} pagination={pag} onPause={vi.fn()} onResume={vi.fn()} onDelete={vi.fn()} />
         </MemoryRouter>
       )
     }
@@ -337,5 +396,38 @@ describe('[spec: triggers/actions] useTriggerActions', () => {
     capturedActions!.resumeTrigger('trigger_1')
     await waitFor(() => expect(patchedBody).not.toBeNull())
     expect(patchedBody!.enabled).toBe(true)
+  })
+
+  it('calls DELETE /triggers/:id when deleteTrigger is invoked [spec: triggers/delete]', async () => {
+    let deletedUrl = ''
+    let deletedMethod = ''
+    server.use(
+      http.delete('*/api/v1/triggers/:id', ({ request }) => {
+        deletedUrl = request.url
+        deletedMethod = request.method
+        return new HttpResponse(null, { status: 204 })
+      }),
+      http.get('*/api/v1/triggers', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+    )
+
+    const client = makeQueryClient()
+    let capturedActions: ReturnType<typeof useTriggerActions> | null = null
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <ActionHarness
+            onReady={(a) => {
+              capturedActions = a
+            }}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    capturedActions!.deleteTrigger('trigger_1')
+    await waitFor(() => expect(deletedMethod).toBe('DELETE'))
+    expect(deletedUrl).toContain('trigger_1')
   })
 })

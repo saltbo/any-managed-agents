@@ -1,6 +1,6 @@
 import { SELF } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { seedPlatformProvider, setupOidcProvider, signIn } from './auth'
+import { seedPlatformProvider, setupOidcProvider, signIn, signInUser } from './auth'
 
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
@@ -490,5 +490,61 @@ describe('[CF] /api/v1/triggers', () => {
     await expect(pausedRunsRes.json()).resolves.toMatchObject({ data: [] })
     const archivedRunsRes = await jsonFetch(`/api/v1/triggers/${archived.id}/runs`, authorization)
     await expect(archivedRunsRes.json()).resolves.toMatchObject({ data: [] })
+  })
+
+  it('permanently deletes a trigger and its runs and audits it [spec: triggers/delete]', async () => {
+    const authorization = await signIn()
+    const agent = await createAgent(authorization)
+    const environment = await createEnvironment(authorization)
+    const trigger = await createTrigger(authorization, agent.id, environment.id, {
+      name: 'Disposable heartbeat',
+      nextDueAt: '2026-05-26T12:00:00.000Z',
+    })
+
+    const dispatchRes = await jsonFetch('/api/v1/e2e/scheduled-agent-triggers/dispatch', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ heartbeatAt: '2026-05-26T12:01:00.000Z' }),
+    })
+    expect(dispatchRes.status).toBe(200)
+    await expect(dispatchRes.json()).resolves.toMatchObject({ claimed: 1, sessionCreated: 1 })
+
+    const runsBeforeRes = await jsonFetch(`/api/v1/triggers/${trigger.id}/runs`, authorization)
+    const runsBefore = (await runsBeforeRes.json()) as { data: Array<{ id: string }> }
+    expect(runsBefore.data).toHaveLength(1)
+
+    const deleteRes = await jsonFetch(`/api/v1/triggers/${trigger.id}`, authorization, { method: 'DELETE' })
+    expect(deleteRes.status).toBe(204)
+    expect(await deleteRes.text()).toBe('')
+
+    const readAfterRes = await jsonFetch(`/api/v1/triggers/${trigger.id}`, authorization)
+    expect(readAfterRes.status).toBe(404)
+
+    const runsAfterRes = await jsonFetch(`/api/v1/triggers/${trigger.id}/runs`, authorization)
+    expect(runsAfterRes.status).toBe(404)
+
+    const archivedListRes = await jsonFetch('/api/v1/triggers?archived=true', authorization)
+    const archivedList = (await archivedListRes.json()) as { data: Array<{ id: string }> }
+    expect(archivedList.data).not.toContainEqual(expect.objectContaining({ id: trigger.id }))
+
+    const auditRes = await jsonFetch('/api/v1/audit-records?action=trigger', authorization)
+    const audit = (await auditRes.json()) as { data: Array<{ action: string; resourceId: string }> }
+    expect(audit.data).toContainEqual(expect.objectContaining({ action: 'trigger.delete', resourceId: trigger.id }))
+
+    const missingDeleteRes = await jsonFetch('/api/v1/triggers/trigger_missing', authorization, { method: 'DELETE' })
+    expect(missingDeleteRes.status).toBe(404)
+  })
+
+  it('does not delete a trigger owned by another project', async () => {
+    const owner = await signIn()
+    const agent = await createAgent(owner)
+    const environment = await createEnvironment(owner)
+    const trigger = await createTrigger(owner, agent.id, environment.id, { name: 'Tenant-scoped heartbeat' })
+
+    const intruder = await signInUser('trigger-delete-foreign')
+    const foreignDeleteRes = await jsonFetch(`/api/v1/triggers/${trigger.id}`, intruder, { method: 'DELETE' })
+    expect(foreignDeleteRes.status).toBe(404)
+
+    const stillThereRes = await jsonFetch(`/api/v1/triggers/${trigger.id}`, owner)
+    expect(stillThereRes.status).toBe(200)
   })
 })

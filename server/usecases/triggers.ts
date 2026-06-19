@@ -145,3 +145,9 @@ export async function updateTrigger(
   const updated = await deps.triggers.update(auth.project.id, trigger.id, { config, archivedAt }, timestamp)
   return { trigger: updated, archived: patch.archived === true && trigger.archivedAt === null }
 }
+
+// Hard-deletes the trigger and its runs, tenant-scoped. Returns false when no
+// matching trigger exists in the project so the http layer can answer 404.
+export async function deleteTrigger(deps: Deps, auth: AuthScope, triggerId: string): Promise<boolean> {
+  return deps.triggers.delete(auth.project.id, triggerId)
+}

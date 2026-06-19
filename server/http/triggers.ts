@@ -19,7 +19,7 @@ import {
   type TriggerRunRecord,
   TriggerValidationError,
 } from '../usecases/ports'
-import { createTrigger, type UpdateTriggerPatch, updateTrigger } from '../usecases/triggers'
+import { createTrigger, deleteTrigger, type UpdateTriggerPatch, updateTrigger } from '../usecases/triggers'
 import { requestId } from './request-context'
 
 type TriggerRoutes = OpenAPIHono<DepsEnv>
@@ -316,6 +316,22 @@ const updateRouteDefinition = createRoute({
   },
 })
 
+const deleteRouteDefinition = createRoute({
+  method: 'delete',
+  path: '/{triggerId}',
+  operationId: 'deleteTrigger',
+  tags: ['Triggers'],
+  summary: 'Delete a trigger',
+  description: 'Permanently deletes the trigger and its run history.',
+  ...AuthenticatedOperation,
+  request: { params: TriggerParamsSchema },
+  responses: {
+    204: { description: 'Trigger deleted' },
+    401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    404: { description: 'Trigger not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
+  },
+})
+
 const listRunsRouteDefinition = createRoute({
   method: 'get',
   path: '/{triggerId}/runs',
@@ -466,6 +482,29 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
       } catch (error) {
         return conflictOrValidation(c, error)
       }
+    })
+    .openapi(deleteRouteDefinition, async (c) => {
+      const deps = c.get('deps')
+      const auth = await requireAuth(c)
+      if (auth instanceof Response) {
+        return auth
+      }
+      const { triggerId } = c.req.valid('param')
+      const trigger = await deps.triggers.find(auth.project.id, triggerId)
+      if (!trigger) {
+        return c.json(errorBody('not_found', 'Trigger not found'), 404)
+      }
+      const scope = auth
+      await deleteTrigger(deps, scope, triggerId)
+      await deps.audit.record(scope, {
+        action: 'trigger.delete',
+        resourceType: 'trigger',
+        resourceId: trigger.id,
+        outcome: 'success',
+        requestId: requestId(c),
+        before: serializeTrigger(trigger),
+      })
+      return c.body(null, 204)
     })
     .openapi(listRunsRouteDefinition, async (c) => {
       const deps = c.get('deps')

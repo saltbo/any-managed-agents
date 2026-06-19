@@ -63,6 +63,7 @@ export function TriggersPage() {
         pagination={pagination}
         onPause={actions.pauseTrigger}
         onResume={actions.resumeTrigger}
+        onDelete={actions.deleteTrigger}
       />
     </div>
   )
