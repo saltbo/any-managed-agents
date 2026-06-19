@@ -12,7 +12,7 @@ import {
   type RuntimeProviderRequest,
   type RuntimeUsageWindow,
 } from '../protocol'
-import { hostHome, objectValue, sdkEnv } from './cli-host'
+import { hostHome, objectValue, resolveCliPath, sdkEnv } from './cli-host'
 
 const COPILOT_USER_API = 'https://api.github.com/copilot_internal/user'
 
@@ -95,7 +95,16 @@ export const copilotProvider: RuntimeProvider = {
       typeof request.runtimeConfig?.systemPromptFile === 'string'
         ? readFileSync(request.runtimeConfig.systemPromptFile, 'utf8')
         : agentSystemPrompt(request)
-    const client = new CopilotClient({ cwd: request.cwd, env: sdkEnv(request), useLoggedInUser: true })
+    // Without an explicit cliPath the SDK resolves @github/copilot via
+    // import.meta.resolve, which throws when the bridge runs from the runner's
+    // materialized temp dir (no node_modules). Point it at the host CLI instead.
+    const copilotPath = resolveCliPath('copilot')
+    const client = new CopilotClient({
+      cwd: request.cwd,
+      env: sdkEnv(request),
+      useLoggedInUser: true,
+      ...(copilotPath ? { cliPath: copilotPath } : {}),
+    })
     await client.start()
     const sessionConfig = {
       ...(request.model ? { model: request.model } : {}),
@@ -166,7 +175,12 @@ export const copilotProvider: RuntimeProvider = {
   async listModels({ env }): Promise<string[] | null> {
     const home = hostHome(env)
     const clientEnv = { ...(process.env as Record<string, string>), ...(home ? { HOME: home } : {}) }
-    const client = new CopilotClient({ env: clientEnv, useLoggedInUser: true })
+    const copilotPath = resolveCliPath('copilot')
+    const client = new CopilotClient({
+      env: clientEnv,
+      useLoggedInUser: true,
+      ...(copilotPath ? { cliPath: copilotPath } : {}),
+    })
     await client.start()
     try {
       const models = await client.listModels()
