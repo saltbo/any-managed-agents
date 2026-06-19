@@ -95,6 +95,51 @@ export interface Environment {
   updatedAt: string
 }
 
+export interface TriggerSchedule {
+  type: 'interval'
+  intervalSeconds: number
+  windowSeconds: number
+}
+
+export interface Trigger {
+  id: string
+  projectId: string
+  agentId: string
+  environmentId: string
+  runtime: RuntimeName
+  name: string
+  promptTemplate: string
+  resourceRefs: SessionResourceRef[]
+  env: Record<string, string>
+  secretEnv: SecretEnvEntry[]
+  schedule: TriggerSchedule
+  enabled: boolean
+  nextDueAt: string
+  lastDispatchedAt: string | null
+  lastRunId: string | null
+  metadata: Record<string, unknown>
+  createdByUserId: string | null
+  archivedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface TriggerRun {
+  id: string
+  projectId: string
+  triggerId: string
+  scheduledFor: string
+  heartbeatAt: string
+  state: 'claimed' | 'session_created' | 'failed'
+  idempotencyKey: string
+  sessionId: string | null
+  correlationId: string
+  errorMessage: string | null
+  metadata: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
 export interface AgentToolAttachment {
   name: string
   description: string | null
@@ -636,6 +681,10 @@ export interface SessionListOptions extends ListOptions {
   state?: string
 }
 
+export interface TriggerListOptions extends ListOptions {
+  enabled?: boolean
+}
+
 export interface VaultCredentialListOptions {
   search?: string
   state?: string
@@ -667,6 +716,20 @@ export interface EnvironmentInput {
   packageManagerPolicy?: Record<string, unknown>
   resourceLimits?: Record<string, unknown>
   runtimeConfig?: Record<string, unknown>
+  metadata?: Record<string, unknown>
+}
+
+export interface TriggerInput {
+  agentId?: string
+  environmentId?: string
+  runtime?: RuntimeName
+  name?: string
+  promptTemplate?: string
+  resourceRefs?: SessionResourceRef[]
+  env?: Record<string, string>
+  secretEnv?: SecretEnvEntry[]
+  schedule?: Partial<Omit<TriggerSchedule, 'type'>>
+  nextDueAt?: string
   metadata?: Record<string, unknown>
 }
 
@@ -863,6 +926,22 @@ export const api = {
   listEnvironmentVersions: (id: string) =>
     rpcRequest<ListResponse<EnvironmentVersion>>(
       v1.environments[':environmentId'].versions.$get({ param: { environmentId: id } }),
+    ),
+  listTriggers: (options: TriggerListOptions = {}) =>
+    rpcRequest<ListResponse<Trigger>>(v1.triggers.$get(queryArg<typeof v1.triggers.$get>(options))),
+  readTrigger: (id: string) => rpcRequest<Trigger>(v1.triggers[':triggerId'].$get({ param: { triggerId: id } })),
+  updateTrigger: (id: string, input: Partial<TriggerInput> & { enabled?: boolean; archived?: boolean }) =>
+    rpcRequest<Trigger>(
+      v1.triggers[':triggerId'].$patch({
+        param: { triggerId: id },
+        json: input as RpcJson<(typeof v1.triggers)[':triggerId']['$patch']>,
+      }),
+    ),
+  listTriggerRuns: (id: string, options: ListOptions = {}) =>
+    rpcRequest<ListResponse<TriggerRun>>(
+      v1.triggers[':triggerId'].runs.$get(
+        paramQueryArg<(typeof v1.triggers)[':triggerId']['runs']['$get']>({ triggerId: id }, options),
+      ),
     ),
   listSessions: (options: SessionListOptions = {}) =>
     rpcRequest<ListResponse<Session>>(v1.sessions.$get(queryArg<typeof v1.sessions.$get>(options))),

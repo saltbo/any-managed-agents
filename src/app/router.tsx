@@ -15,6 +15,7 @@ import { QuickstartPage } from '@/features/quickstart/QuickstartPage'
 import { SessionDetailPage } from '@/features/sessions/SessionDetailPage'
 import { SessionsPage } from '@/features/sessions/SessionsPage'
 import { SettingsPage } from '@/features/settings/SettingsPage'
+import { TriggersPage } from '@/features/triggers/TriggersPage'
 import { UsagePage } from '@/features/usage/UsagePage'
 import { VaultDetailPage } from '@/features/vaults/VaultDetailPage'
 import { VaultsPage } from '@/features/vaults/VaultsPage'
@@ -36,6 +37,7 @@ export function createAppRouter() {
         { path: 'agents/:agentId', element: <AgentDetailPage /> },
         { path: 'environments', element: <EnvironmentsPage /> },
         { path: 'environments/:environmentId', element: <EnvironmentDetailPage /> },
+        { path: 'triggers', element: <TriggersPage /> },
         { path: 'sessions', element: <SessionsPage /> },
         { path: 'sessions/:sessionId', element: <SessionDetailPage /> },
         { path: 'providers', element: <ProvidersPage /> },

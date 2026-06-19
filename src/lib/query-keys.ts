@@ -18,6 +18,12 @@ export const queryKeys = {
     detail: (id: string) => ['environments', 'detail', id] as const,
     versions: (id: string) => ['environments', 'detail', id, 'versions'] as const,
   },
+  triggers: {
+    all: ['triggers'] as const,
+    list: (filters: Record<string, string> = {}) => ['triggers', 'list', filters] as const,
+    detail: (id: string) => ['triggers', 'detail', id] as const,
+    runs: (id: string) => ['triggers', 'detail', id, 'runs'] as const,
+  },
   sessions: {
     all: ['sessions'] as const,
     list: (includeArchived = false) => ['sessions', 'list', { includeArchived }] as const,

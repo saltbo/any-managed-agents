@@ -5,6 +5,7 @@ import {
   Boxes,
   Check,
   ChevronsUpDown,
+  Clock,
   Code2,
   DatabaseZap,
   LogOut,
@@ -146,6 +147,7 @@ function DesktopNav() {
       <NavButton icon={<Code2 size={17} />} to="/quickstart" label="Quickstart" />
       <NavButton icon={<Bot size={17} />} to="/agents" label="Agents" />
       <NavButton icon={<Server size={17} />} to="/environments" label="Environments" />
+      <NavButton icon={<Clock size={17} />} to="/triggers" label="Triggers" />
       <NavButton icon={<MessageSquare size={17} />} to="/sessions" label="Sessions" />
       <NavButton icon={<Boxes size={17} />} to="/providers" label="Providers" />
       <NavButton icon={<Vault size={17} />} to="/vaults" label="Vaults" />
@@ -207,6 +209,7 @@ function MobileNav() {
       <MobileNavButton icon={<Code2 size={16} />} to="/quickstart" label="Quickstart" />
       <MobileNavButton icon={<Bot size={16} />} to="/agents" label="Agents" />
       <MobileNavButton icon={<Server size={16} />} to="/environments" label="Environments" />
+      <MobileNavButton icon={<Clock size={16} />} to="/triggers" label="Triggers" />
       <MobileNavButton icon={<MessageSquare size={16} />} to="/sessions" label="Sessions" />
       <MobileNavButton icon={<Boxes size={16} />} to="/providers" label="Providers" />
       <MobileNavButton icon={<Vault size={16} />} to="/vaults" label="Vaults" />
