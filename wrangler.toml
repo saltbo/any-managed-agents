@@ -26,7 +26,7 @@ OIDC_RUNNER_SCOPES = "openid profile email offline_access"
 AMA_ALLOWED_ORIGINS = "https://ama.tftt.cc,https://any-managed-agents.saltbo.workers.dev"
 
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["* * * * *"]
 
 [ai]
 binding = "AI"
@@ -109,7 +109,7 @@ OIDC_RUNNER_SCOPES = "openid profile email offline_access"
 AMA_ALLOWED_ORIGINS = "https://any-managed-agents-staging.saltbo.workers.dev"
 
 [env.staging.triggers]
-crons = ["*/5 * * * *"]
+crons = ["* * * * *"]
 
 [env.staging.ai]
 binding = "AI"

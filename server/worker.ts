@@ -19,8 +19,8 @@ export default {
     ctx.waitUntil(dispatchDueScheduledTriggers(env, ctx, { heartbeatAt: new Date(event.scheduledTime).toISOString() }))
     ctx.waitUntil(markStalledCloudSessions(createDeps(env)))
     // The model catalog changes slowly; refresh once an hour (the cron fires
-    // every 5 minutes) rather than every tick.
-    if (new Date(event.scheduledTime).getUTCMinutes() < 5) {
+    // every minute, so gate on minute 0) rather than every tick.
+    if (new Date(event.scheduledTime).getUTCMinutes() === 0) {
       ctx.waitUntil(refreshPlatformCatalog(createDeps(env)))
     }
   },
