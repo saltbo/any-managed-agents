@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
+import { toast } from 'sonner'
 import { describe, expect, it, vi } from 'vitest'
 import type { ClientPagination } from '@/console/use-client-pagination'
 import { useClientPagination } from '@/console/use-client-pagination'
@@ -487,6 +488,50 @@ describe('[spec: triggers/actions] useTriggerActions', () => {
     await waitFor(() => expect(deletedMethod).toBe('DELETE'))
     expect(deletedUrl).toContain('trigger_1')
   })
+
+  function renderActions() {
+    const client = makeQueryClient()
+    let captured: ReturnType<typeof useTriggerActions> | null = null
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <ActionHarness
+            onReady={(a) => {
+              captured = a
+            }}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    return () => captured!
+  }
+
+  it('toasts an error when pauseTrigger fails', async () => {
+    const errorSpy = vi.spyOn(toast, 'error').mockImplementation(() => 'toast-id')
+    server.use(http.patch('*/api/v1/triggers/:id', () => HttpResponse.json({ error: 'boom' }, { status: 500 })))
+    const actions = renderActions()
+    actions().pauseTrigger('trigger_1')
+    await waitFor(() => expect(errorSpy).toHaveBeenCalled())
+    errorSpy.mockRestore()
+  })
+
+  it('toasts an error when resumeTrigger fails', async () => {
+    const errorSpy = vi.spyOn(toast, 'error').mockImplementation(() => 'toast-id')
+    server.use(http.patch('*/api/v1/triggers/:id', () => HttpResponse.json({ error: 'boom' }, { status: 500 })))
+    const actions = renderActions()
+    actions().resumeTrigger('trigger_1')
+    await waitFor(() => expect(errorSpy).toHaveBeenCalled())
+    errorSpy.mockRestore()
+  })
+
+  it('toasts an error when deleteTrigger fails', async () => {
+    const errorSpy = vi.spyOn(toast, 'error').mockImplementation(() => 'toast-id')
+    server.use(http.delete('*/api/v1/triggers/:id', () => HttpResponse.json({ error: 'boom' }, { status: 500 })))
+    const actions = renderActions()
+    actions().deleteTrigger('trigger_1')
+    await waitFor(() => expect(errorSpy).toHaveBeenCalled())
+    errorSpy.mockRestore()
+  })
 })
 
 // ─── CreateTriggerSheet ──────────────────────────────────────────────────────
@@ -534,5 +579,205 @@ describe('[spec: triggers/create] CreateTriggerSheet', () => {
       schedule: { type: 'interval', intervalSeconds: 6 * 86400 },
     })
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+  })
+
+  function stubPointerEvents() {
+    Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
+      value: vi.fn(() => false),
+      configurable: true,
+    })
+    Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', {
+      value: vi.fn(),
+      configurable: true,
+    })
+    Object.defineProperty(HTMLElement.prototype, 'releasePointerCapture', {
+      value: vi.fn(),
+      configurable: true,
+    })
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      value: vi.fn(),
+      configurable: true,
+    })
+  }
+
+  function renderSheet(extraHandlers: Parameters<typeof server.use>[0][] = []) {
+    server.use(
+      http.get('*/api/v1/agents', () => HttpResponse.json(listEnvelope([agent()]))),
+      http.get('*/api/v1/environments', () => HttpResponse.json(listEnvelope([environment()]))),
+      ...extraHandlers,
+    )
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <CreateTriggerSheet open onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+  }
+
+  async function waitForFormReady() {
+    const submitButton = screen.getByRole('button', { name: /create trigger/i })
+    await waitFor(() => expect((submitButton as HTMLButtonElement).disabled).toBe(false))
+    return submitButton
+  }
+
+  async function fillRequiredFields() {
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'My trigger' } })
+    fireEvent.change(screen.getByLabelText('Prompt template'), { target: { value: 'Do the thing.' } })
+    fireEvent.change(screen.getByLabelText('Interval value'), { target: { value: '5' } })
+    return waitForFormReady()
+  }
+
+  it('toasts an error when the create mutation fails', async () => {
+    const errorSpy = vi.spyOn(toast, 'error').mockImplementation(() => 'toast-id')
+    renderSheet([http.post('*/api/v1/triggers', () => HttpResponse.json({ error: 'boom' }, { status: 500 }))])
+    const submitButton = await fillRequiredFields()
+    fireEvent.click(submitButton)
+    await waitFor(() => expect(errorSpy).toHaveBeenCalled())
+    errorSpy.mockRestore()
+  })
+
+  it('sends intervalSeconds=60 when intervalValue is 0 (fallback to minimum)', async () => {
+    let postedBody: Record<string, unknown> | null = null
+    renderSheet([
+      http.post('*/api/v1/triggers', async ({ request }) => {
+        postedBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(trigger({ id: 'trigger_new' }), { status: 201 })
+      }),
+      http.get('*/api/v1/triggers', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+    ])
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Zero interval trigger' } })
+    fireEvent.change(screen.getByLabelText('Prompt template'), { target: { value: 'Do the thing.' } })
+    // Set intervalValue to '0' — below 1, triggers the MIN_INTERVAL_SECONDS fallback
+    fireEvent.change(screen.getByLabelText('Interval value'), { target: { value: '0' } })
+
+    // Wait for agents/envs to auto-fill, then submit the form directly to bypass
+    // the native number input min=1 constraint that jsdom enforces on button click
+    await waitFor(() =>
+      expect((screen.getByRole('button', { name: /create trigger/i }) as HTMLButtonElement).disabled).toBe(false),
+    )
+    const form = screen.getByRole('button', { name: /create trigger/i }).closest('form') as HTMLFormElement
+    fireEvent.submit(form)
+
+    await waitFor(() => expect(postedBody).not.toBeNull())
+    const schedule = postedBody!.schedule as Record<string, unknown>
+    expect(schedule.intervalSeconds).toBe(60)
+  })
+
+  it('updates the runtime when a different runtime is selected', async () => {
+    stubPointerEvents()
+    let postedBody: Record<string, unknown> | null = null
+    renderSheet([
+      http.post('*/api/v1/triggers', async ({ request }) => {
+        postedBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(trigger({ id: 'trigger_new' }), { status: 201 })
+      }),
+      http.get('*/api/v1/triggers', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+    ])
+    const submitButton = await fillRequiredFields()
+
+    // Runtime is the 3rd combobox in the DOM (Agent=0, Environment=1, Runtime=2)
+    const runtimeSelect = screen.getAllByRole('combobox')[2] as HTMLElement
+    runtimeSelect.focus()
+    fireEvent.pointerDown(runtimeSelect, { button: 0, ctrlKey: false, pointerId: 1, pointerType: 'mouse' })
+    fireEvent.mouseDown(runtimeSelect)
+    fireEvent.keyDown(runtimeSelect, { key: 'ArrowDown' })
+    fireEvent.click(await screen.findByRole('option', { name: 'Codex' }))
+
+    fireEvent.click(submitButton)
+    await waitFor(() => expect(postedBody).not.toBeNull())
+    expect(postedBody!.runtime).toBe('codex')
+  })
+
+  it('updates intervalUnit when a different unit is selected', async () => {
+    stubPointerEvents()
+    let postedBody: Record<string, unknown> | null = null
+    renderSheet([
+      http.post('*/api/v1/triggers', async ({ request }) => {
+        postedBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(trigger({ id: 'trigger_new' }), { status: 201 })
+      }),
+      http.get('*/api/v1/triggers', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+    ])
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Hourly trigger' } })
+    fireEvent.change(screen.getByLabelText('Prompt template'), { target: { value: 'Do the thing.' } })
+    fireEvent.change(screen.getByLabelText('Interval value'), { target: { value: '2' } })
+    const submitButton = await waitForFormReady()
+
+    // Interval unit select has aria-label="Interval unit"
+    const intervalUnitSelect = screen.getByRole('combobox', { name: 'Interval unit' }) as HTMLElement
+    intervalUnitSelect.focus()
+    fireEvent.pointerDown(intervalUnitSelect, { button: 0, ctrlKey: false, pointerId: 1, pointerType: 'mouse' })
+    fireEvent.mouseDown(intervalUnitSelect)
+    fireEvent.keyDown(intervalUnitSelect, { key: 'ArrowDown' })
+    fireEvent.click(await screen.findByRole('option', { name: 'hours' }))
+
+    fireEvent.click(submitButton)
+    await waitFor(() => expect(postedBody).not.toBeNull())
+    const schedule = postedBody!.schedule as Record<string, unknown>
+    // 2 hours = 2 * 3600 = 7200
+    expect(schedule.intervalSeconds).toBe(7200)
+  })
+
+  it('sends enabled:false when status is changed to paused', async () => {
+    stubPointerEvents()
+    let postedBody: Record<string, unknown> | null = null
+    renderSheet([
+      http.post('*/api/v1/triggers', async ({ request }) => {
+        postedBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(trigger({ id: 'trigger_new' }), { status: 201 })
+      }),
+      http.get('*/api/v1/triggers', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+    ])
+    const submitButton = await fillRequiredFields()
+
+    // Status select has aria-label="Status"
+    const statusSelect = screen.getByRole('combobox', { name: 'Status' }) as HTMLElement
+    statusSelect.focus()
+    fireEvent.pointerDown(statusSelect, { button: 0, ctrlKey: false, pointerId: 1, pointerType: 'mouse' })
+    fireEvent.mouseDown(statusSelect)
+    fireEvent.keyDown(statusSelect, { key: 'ArrowDown' })
+    fireEvent.click(await screen.findByRole('option', { name: 'paused' }))
+
+    fireEvent.click(submitButton)
+    await waitFor(() => expect(postedBody).not.toBeNull())
+    expect(postedBody!.enabled).toBe(false)
+  })
+})
+
+// ─── TriggersPage — Create trigger button ────────────────────────────────────
+
+describe('[spec: triggers/console-page] TriggersPage create trigger button', () => {
+  it('opens the CreateTriggerSheet when the Create trigger button is clicked', async () => {
+    server.use(
+      http.get('*/api/v1/triggers', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+      http.get('*/api/v1/agents', () => HttpResponse.json(listEnvelope([agent()]))),
+      http.get('*/api/v1/environments', () => HttpResponse.json(listEnvelope([environment()]))),
+    )
+
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <TriggersPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /create trigger/i }))
+    expect(await screen.findByText('Create Trigger')).toBeTruthy()
   })
 })
