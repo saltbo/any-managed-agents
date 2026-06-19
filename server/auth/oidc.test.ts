@@ -54,4 +54,37 @@ describe('[spec: auth/oidc-claims] OIDC bearer claim resolution', () => {
     // The client_id is passed through for audit but never elevated to a tenant.
     expect(JSON.stringify(claims)).not.toContain('client:')
   })
+
+  it('binds a runner token from introspection (client_id = OIDC_RUNNER_CLIENT_ID) without calling userinfo', async () => {
+    // A self-hosted runner's device-login token: userinfo would resolve the user
+    // but drop client_id, so the runner row would bind to a null client and every
+    // heartbeat would 403. Introspection reports client_id, so the runner path
+    // must resolve from it directly and skip userinfo entirely.
+    const runnerEnv = { ...realPathEnv, OIDC_RUNNER_CLIENT_ID: 'client_runner' } as Env
+    let userinfoCalled = false
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(input instanceof Request ? input.url : input.toString())
+        if (url.pathname.endsWith('/oauth2/introspect')) {
+          return Response.json({
+            active: true,
+            sub: 'user_runner',
+            client_id: 'client_runner',
+            scope: 'openid profile email offline_access',
+          })
+        }
+        if (url.pathname.endsWith('/oauth2/userinfo')) {
+          userinfoCalled = true
+          return new Response('unauthorized', { status: 401 })
+        }
+        return new Response('not found', { status: 404 })
+      }),
+    )
+    const claims = await getBearerClaims(runnerEnv, 'runner-device-token')
+    expect(claims.sub).toBe('user_runner')
+    expect(claims.client_id).toBe('client_runner')
+    expect(claims.roles).toContain('runner')
+    expect(userinfoCalled).toBe(false)
+  })
 })
