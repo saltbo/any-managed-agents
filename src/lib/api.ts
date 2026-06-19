@@ -733,6 +733,21 @@ export interface TriggerInput {
   metadata?: Record<string, unknown>
 }
 
+export interface CreateTriggerInput {
+  agentId: string
+  environmentId: string
+  runtime: RuntimeName
+  name: string
+  promptTemplate: string
+  schedule: { type: 'interval'; intervalSeconds: number }
+  enabled?: boolean
+  resourceRefs?: SessionResourceRef[]
+  env?: Record<string, string>
+  secretEnv?: SecretEnvEntry[]
+  nextDueAt?: string
+  metadata?: Record<string, unknown>
+}
+
 export interface AgentInput {
   name: string
   description?: string
@@ -929,6 +944,8 @@ export const api = {
     ),
   listTriggers: (options: TriggerListOptions = {}) =>
     rpcRequest<ListResponse<Trigger>>(v1.triggers.$get(queryArg<typeof v1.triggers.$get>(options))),
+  createTrigger: (input: CreateTriggerInput) =>
+    rpcRequest<Trigger>(v1.triggers.$post(jsonArg<typeof v1.triggers.$post>(input))),
   readTrigger: (id: string) => rpcRequest<Trigger>(v1.triggers[':triggerId'].$get({ param: { triggerId: id } })),
   updateTrigger: (id: string, input: Partial<TriggerInput> & { enabled?: boolean; archived?: boolean }) =>
     rpcRequest<Trigger>(

@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
-import { useMemo } from 'react'
+import { AlarmClock } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { PageHeader } from '@/console/components'
@@ -7,6 +9,7 @@ import { useClientPagination } from '@/console/use-client-pagination'
 import { matchesSearch, useUrlFilter } from '@/console/use-list-filters'
 import { api } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
+import { CreateTriggerSheet } from './CreateTriggerSheet'
 import { TriggersView } from './TriggersView'
 import { useTriggerActions } from './use-trigger-actions'
 
@@ -15,6 +18,7 @@ function triggerStatus(enabled: boolean) {
 }
 
 export function TriggersPage() {
+  const [creating, setCreating] = useState(false)
   const actions = useTriggerActions()
   const [search, setSearch] = useUrlFilter('search')
   const [status, setStatus] = useUrlFilter('status', 'all')
@@ -35,7 +39,16 @@ export function TriggersPage() {
   const pagination = useClientPagination(triggers)
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader title="Triggers" description="Scheduled triggers that dispatch an agent on a recurring interval." />
+      <PageHeader
+        title="Triggers"
+        description="Scheduled triggers that dispatch an agent on a recurring interval."
+        actions={
+          <Button type="button" onClick={() => setCreating(true)}>
+            <AlarmClock data-icon="inline-start" />
+            Create trigger
+          </Button>
+        }
+      />
       <div className="flex flex-wrap items-center gap-2">
         <Input
           type="search"
@@ -65,6 +78,7 @@ export function TriggersPage() {
         onResume={actions.resumeTrigger}
         onDelete={actions.deleteTrigger}
       />
+      <CreateTriggerSheet open={creating} onOpenChange={setCreating} />
     </div>
   )
 }

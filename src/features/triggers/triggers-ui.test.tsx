@@ -4,8 +4,9 @@ import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import type { ClientPagination } from '@/console/use-client-pagination'
 import { useClientPagination } from '@/console/use-client-pagination'
-import type { Trigger } from '@/lib/api'
+import type { Agent, Environment, Trigger } from '@/lib/api'
 import { createCollection, HttpResponse, http, resourceHandlers, server } from '@/test/msw'
+import { CreateTriggerSheet } from './CreateTriggerSheet'
 import { TriggersPage } from './TriggersPage'
 import { formatInterval, TriggersView } from './TriggersView'
 import { useTriggerActions } from './use-trigger-actions'
@@ -67,6 +68,62 @@ function setupTriggerHandlers(triggers: Trigger[] = []) {
     ),
   )
   return { collection }
+}
+
+function listEnvelope<T>(data: T[]) {
+  return { data, pagination: { limit: 50, hasMore: false, nextCursor: null } }
+}
+
+function agent(overrides: Partial<Agent> = {}): Agent {
+  return {
+    id: 'agent_1',
+    projectId: 'project_1',
+    name: 'Coding agent',
+    description: null,
+    instructions: 'Do the work',
+    providerId: 'workers-ai',
+    model: '@cf/moonshotai/kimi-k2.6',
+    skills: [],
+    subagents: [],
+    role: null,
+    capabilityTags: [],
+    handoffPolicy: {},
+    memoryPolicy: { enabled: false },
+    tools: [],
+    mcpConnectors: [],
+    metadata: {},
+    archivedAt: null,
+    currentVersionId: 'agentver_1',
+    version: 1,
+    createdAt: '2026-06-01T00:00:00.000Z',
+    updatedAt: '2026-06-01T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
+function environment(overrides: Partial<Environment> = {}): Environment {
+  return {
+    id: 'env_1',
+    projectId: 'project_1',
+    name: 'Node workspace',
+    description: null,
+    packages: [],
+    variables: {},
+    credentialRefs: [],
+    hostingMode: 'cloud',
+    networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
+    mcpPolicy: {},
+    packageManagerPolicy: {},
+    resourceLimits: { memoryMb: 1024 },
+    runtimeConfig: { image: 'node:24' },
+    metadata: {},
+    archivedAt: null,
+    currentVersionId: 'envver_1',
+    version: 1,
+    createdAt: '2026-06-01T00:00:00.000Z',
+    updatedAt: '2026-06-01T00:00:00.000Z',
+    ...overrides,
+  }
 }
 
 // ─── formatInterval ──────────────────────────────────────────────────────────
@@ -429,5 +486,53 @@ describe('[spec: triggers/actions] useTriggerActions', () => {
     capturedActions!.deleteTrigger('trigger_1')
     await waitFor(() => expect(deletedMethod).toBe('DELETE'))
     expect(deletedUrl).toContain('trigger_1')
+  })
+})
+
+// ─── CreateTriggerSheet ──────────────────────────────────────────────────────
+
+describe('[spec: triggers/create] CreateTriggerSheet', () => {
+  it('posts the trigger with the required fields when the form is submitted', async () => {
+    let postedBody: Record<string, unknown> | null = null
+    server.use(
+      http.get('*/api/v1/agents', () => HttpResponse.json(listEnvelope([agent()]))),
+      http.get('*/api/v1/environments', () => HttpResponse.json(listEnvelope([environment()]))),
+      http.post('*/api/v1/triggers', async ({ request }) => {
+        postedBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(trigger({ id: 'trigger_new' }), { status: 201 })
+      }),
+    )
+
+    const onOpenChange = vi.fn()
+    const client = makeQueryClient()
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <CreateTriggerSheet open onOpenChange={onOpenChange} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Nightly research' } })
+    fireEvent.change(screen.getByLabelText('Prompt template'), { target: { value: 'Research the latest offers.' } })
+    fireEvent.change(screen.getByLabelText('Interval value'), { target: { value: '6' } })
+
+    // The submit enables only once the agent/environment selects auto-fill from the loaded lists.
+    const submitButton = screen.getByRole('button', { name: /create trigger/i })
+    await waitFor(() => expect((submitButton as HTMLButtonElement).disabled).toBe(false))
+
+    fireEvent.click(submitButton)
+
+    await waitFor(() => expect(postedBody).not.toBeNull())
+    expect(postedBody).toMatchObject({
+      agentId: 'agent_1',
+      environmentId: 'env_1',
+      runtime: 'ama',
+      name: 'Nightly research',
+      promptTemplate: 'Research the latest offers.',
+      enabled: true,
+      schedule: { type: 'interval', intervalSeconds: 6 * 86400 },
+    })
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
   })
 })
