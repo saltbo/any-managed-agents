@@ -153,6 +153,20 @@ export async function getBearerClaims(env: Env, accessToken: string): Promise<Us
     return e2eFederatedRunnerClaims(accessToken.slice('e2e-federated-runner:'.length))
   }
 
+  // Identify the calling client via introspection (RFC 7662) first: userinfo
+  // describes the end user but never reports `client_id`/`azp`, which runner
+  // detection and runner-row binding key off. A runner token carries everything
+  // it needs in the introspection result, so it skips the userinfo round-trip;
+  // interactive user tokens still go through userinfo for the richer profile and
+  // merge in the client identity introspection reported.
+  const introspected = await introspectAccessToken(env, accessToken).catch(() => null)
+  const introspectedClientId = introspected
+    ? (stringClaim(introspected.client_id) ?? stringClaim(introspected.azp))
+    : undefined
+  if (introspected && isRunnerTokenClaim(env, introspectedClientId, introspected)) {
+    return normalizeClaims(env, introspected)
+  }
+
   const oidcClient = await createOidcClient(env)
   const claims = await runOidcWithIntrospectionFallback(env, accessToken, () =>
     client.fetchUserInfo(oidcClient, accessToken, client.skipSubjectCheck),
@@ -160,7 +174,15 @@ export async function getBearerClaims(env: Env, accessToken: string): Promise<Us
   if (!claims.sub) {
     throw new OidcError('OIDC provider userinfo did not include required subject')
   }
-  return normalizeClaims(env, claims as Record<string, unknown> & { sub: string })
+  const merged =
+    introspectedClientId && !claims.client_id && !claims.azp
+      ? {
+          ...claims,
+          client_id: introspected!.client_id ?? introspectedClientId,
+          ...(introspected!.azp ? { azp: introspected!.azp } : {}),
+        }
+      : claims
+  return normalizeClaims(env, merged as Record<string, unknown> & { sub: string })
 }
 
 async function runOidcWithIntrospectionFallback<T extends Record<string, unknown>>(
