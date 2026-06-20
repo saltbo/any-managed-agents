@@ -1,0 +1,26 @@
+# oapi-codegen configuration for the AMA Go SDK.
+#
+# Regenerate with:
+#   cd sdk/go && go generate ./...
+# or explicitly:
+#   cd sdk/go && oapi-codegen -config oapi-codegen.config.yaml ../openapi.json
+#
+# oapi-codegen must be installed first:
+#   go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
+package: ama
+output: ama/ama.gen.go
+generate:
+  models: true
+  client: true
+output-options:
+  # The hand-written runtime client in client.go already owns the name `Client`
+  # (with the WebSocket session-channel logic). Generate the REST client under a
+  # distinct name so both coexist in package ama.
+  client-type-name: APIClient
+  # Rename generated models that collide with hand-written types we keep.
+  overlay:
+    path: oapi-codegen.overlay.yaml
+compatibility:
+  # The `credentialRef` schemas merge an $ref with a nullable override via allOf;
+  # the new merge path rejects differing Nullable. Old inlining merge handles it.
+  old-merge-schemas: true

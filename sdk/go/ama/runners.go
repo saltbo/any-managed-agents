@@ -15,16 +15,8 @@ import (
 
 type JSON = map[string]any
 
-type RuntimeUsageWindow struct {
-	Label       string  `json:"label"`
-	Utilization float64 `json:"utilization"`
-	ResetsAt    string  `json:"resetsAt"`
-}
-
-type RuntimeUsage struct {
-	Runtime string               `json:"runtime"`
-	Windows []RuntimeUsageWindow `json:"windows"`
-}
+// RuntimeUsage and RuntimeUsageWindow are generated from the OpenAPI schemas
+// (see ama.gen.go); they are not redeclared here.
 
 // RuntimeInventory reports one host runtime's availability: its version when
 // known, a readiness status (ready, missing, unauthenticated, unauthorized,
@@ -92,16 +84,16 @@ type UploadRunnerLeaseEventsRequest struct {
 }
 
 type RunnerWorkItem struct {
-	ID             string `json:"id"`
-	SessionID      string `json:"sessionId"`
-	EnvironmentID  string `json:"environmentId"`
-	RunnerID       string `json:"runnerId"`
-	LeaseID        string `json:"leaseId"`
-	Type        string `json:"type"`
-	State       string `json:"state"`
-	Payload     JSON   `json:"payload"`
-	Attempts    int    `json:"attempts"`
-	MaxAttempts int    `json:"maxAttempts"`
+	ID            string `json:"id"`
+	SessionID     string `json:"sessionId"`
+	EnvironmentID string `json:"environmentId"`
+	RunnerID      string `json:"runnerId"`
+	LeaseID       string `json:"leaseId"`
+	Type          string `json:"type"`
+	State         string `json:"state"`
+	Payload       JSON   `json:"payload"`
+	Attempts      int    `json:"attempts"`
+	MaxAttempts   int    `json:"maxAttempts"`
 }
 
 type RunnerWorkLease struct {

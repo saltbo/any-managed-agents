@@ -1,0 +1,237 @@
+overlay: 1.0.0
+info:
+  title: AMA Go SDK generation overlay
+  version: 1.0.0
+# Generated alongside oapi-codegen.config.yaml. Two concerns:
+#  1. Rename generated models that collide with hand-written SDK types
+#     (runners.go) kept for the self-hosted runner protocol.
+#  2. Drop the meaningless `nullable: true` on free-form additionalProperties
+#     / items values. oapi-codegen renders those as *interface{} but its
+#     additionalProperties helper methods assume interface{}, which does not
+#     compile. Removing the nullable flag yields plain interface{}.
+actions:
+  - target: $.components.schemas.Runner
+    update:
+      x-go-name: GeneratedRunner
+  - target: $.components.schemas.CreateRunnerRequest
+    update:
+      x-go-name: GeneratedCreateRunnerRequest
+  - target: $.components.schemas.ErrorResponse
+    update:
+      x-go-name: GeneratedErrorResponse
+  - target: $.components.schemas['FederatedTenant']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['ErrorResponse']['properties']['error']['properties']['issues'].items.nullable
+    remove: true
+  - target: $.components.schemas['ErrorResponse']['properties']['error']['properties']['details'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['CreateFederatedTenantRequest']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['UpdateFederatedTenantRequest']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['Agent']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['AgentSubagent'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['AgentHandoffPolicy'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['AgentHandoffTarget'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['AgentMemoryPolicy'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['AgentToolAttachment']['properties']['inputSchema'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['AgentToolAttachment']['properties']['policyMetadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['CreateAgentRequest']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['AgentToolAttachmentInput']['properties']['inputSchema'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['AgentToolAttachmentInput']['properties']['policyMetadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['UpdateAgentRequest']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['AgentVersion']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['AgentMemory']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['ReplaceAgentMemoryRequest']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['Environment']['properties']['packageManagerPolicy'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['Environment']['properties']['runtimeConfig'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['Environment']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['CreateEnvironmentRequest']['properties']['packageManagerPolicy'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['CreateEnvironmentRequest']['properties']['runtimeConfig'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['CreateEnvironmentRequest']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['UpdateEnvironmentRequest']['properties']['packageManagerPolicy'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['UpdateEnvironmentRequest']['properties']['runtimeConfig'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['UpdateEnvironmentRequest']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['EnvironmentVersion']['properties']['packageManagerPolicy'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['EnvironmentVersion']['properties']['runtimeConfig'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['EnvironmentVersion']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['Provider']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['ProviderModel']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['ProviderModelPricing'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['Runner']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['CreateRunnerRequest']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['UpdateRunnerRequest']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['PutRunnerHeartbeatRequest']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['WorkItem']['properties']['payload'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['WorkItem']['properties']['result'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['WorkItem']['properties']['error'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['UpdateLeaseRequest']['properties']['result'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['UpdateLeaseRequest']['properties']['error'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['Policy']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['ToolPolicy'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['PolicyMcpPolicy'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['SandboxPolicy'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['CreatePolicyRequest']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['ReplacePolicyRequest']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['EffectiveBudget']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['Budget']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['CreateBudgetRequest']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['UpdateBudgetRequest']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['Connector']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['ConnectorTool']['properties']['inputSchema'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['ConnectorTool']['properties']['policyMetadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['Connection']['properties']['lastError'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['Connection']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['CreateConnectionRequest']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['UpdateConnectionRequest']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['ConnectionTool']['properties']['inputSchema'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['ConnectionTool']['properties']['policyMetadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['ToolCall']['properties']['input'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['ToolCall']['properties']['output'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['CreateToolCallRequest']['properties']['input'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['UsageRecord']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['AuditRecord']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['AuditRecord']['properties']['before'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['AuditRecord']['properties']['after'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['Trigger']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['ResourceRef']['anyOf'][1].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['CreateTriggerRequest']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['UpdateTriggerRequest']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['TriggerRun']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['Session']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['SessionAgentSnapshot']['properties']['subagents']['items'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['SessionAgentSnapshot']['properties']['handoffPolicy'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['SessionAgentSnapshot']['properties']['memoryPolicy'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['SessionAgentSnapshot']['properties']['tools']['items'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['SessionAgentSnapshot']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['SessionEnvironmentSnapshot']['properties']['packages']['items'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['SessionEnvironmentSnapshot']['properties']['variables'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['SessionEnvironmentSnapshot']['properties']['credentialRefs']['items'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['SessionEnvironmentSnapshot']['properties']['mcpPolicy'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['SessionEnvironmentSnapshot']['properties']['packageManagerPolicy'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['SessionEnvironmentSnapshot']['properties']['resourceLimits'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['SessionEnvironmentSnapshot']['properties']['runtimeConfig'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['SessionEnvironmentSnapshot']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['SessionRuntimeMetadata']['properties']['runtimeConfig'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['CreateSessionRequest']['properties']['runtimeConfig'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['CreateSessionRequest']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['UpdateSessionRequest']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['SessionEvent']['properties']['payload'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['SessionEvent']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['SessionEventInput']['properties']['payload'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['SessionEventInput']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['SessionApproval']['properties']['input'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['SessionApproval']['properties']['result'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['SessionApprovalDecisionRequest']['properties']['result'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['Vault']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['CreateVaultRequest']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['UpdateVaultRequest']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['VaultCredential']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['VaultCredentialVersion']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['CreateVaultCredentialRequest']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['CreateVaultCredentialRequest']['properties']['secret']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['UpdateVaultCredentialRequest']['properties']['metadata'].additionalProperties.nullable
+    remove: true
+  - target: $.components.schemas['CreateVaultCredentialVersionRequest']['properties']['metadata'].additionalProperties.nullable
+    remove: true
