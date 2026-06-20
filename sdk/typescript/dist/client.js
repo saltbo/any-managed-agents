@@ -22,6 +22,9 @@ export class AmaApiError extends Error {
         this.name = 'AmaApiError';
     }
 }
+// The generated functions resolve to { data, error, response } where `data` is
+// `T | undefined` across the success/error union. Typing the param as
+// `T | undefined` makes inference recover the bare success type `T`.
 async function unwrap(call) {
     const { data, error, response } = await call;
     if (response?.ok && error === undefined) {

@@ -35,11 +35,10 @@ export class AmaApiError extends Error {
   }
 }
 
-type AmaResult<TData> =
-  | { data: TData; error: undefined; request?: Request; response?: Response }
-  | { data: undefined; error: unknown; request?: Request; response?: Response }
-
-async function unwrap<TData>(call: Promise<AmaResult<TData>>): Promise<TData> {
+// The generated functions resolve to { data, error, response } where `data` is
+// `T | undefined` across the success/error union. Typing the param as
+// `T | undefined` makes inference recover the bare success type `T`.
+async function unwrap<TData>(call: Promise<{ data: TData | undefined; error?: unknown; response?: Response }>): Promise<TData> {
   const { data, error, response } = await call
   if (response?.ok && error === undefined) {
     return data as TData

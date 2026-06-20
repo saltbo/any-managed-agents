@@ -21,52 +21,52 @@ export declare function createAmaClient(config: AmaClientConfig): {
     /** Escape hatch: the raw generated client for operations not yet on the facade. */
     raw: import("./generated/client/types.gen.js").Client;
     agents: {
-        create: (body: types.CreateAgentRequest) => Promise<types.Agent | undefined>;
-        get: (agentId: string) => Promise<types.Agent | undefined>;
-        update: (agentId: string, body: types.UpdateAgentRequest) => Promise<types.Agent | undefined>;
-        list: (query?: types.ListAgentsData["query"]) => Promise<types.AgentListResponse | undefined>;
+        create: (body: types.CreateAgentRequest) => Promise<types.Agent>;
+        get: (agentId: string) => Promise<types.Agent>;
+        update: (agentId: string, body: types.UpdateAgentRequest) => Promise<types.Agent>;
+        list: (query?: types.ListAgentsData["query"]) => Promise<types.AgentListResponse>;
     };
     environments: {
-        create: (body: types.CreateEnvironmentRequest) => Promise<types.Environment | undefined>;
-        get: (environmentId: string) => Promise<types.Environment | undefined>;
-        update: (environmentId: string, body: types.UpdateEnvironmentRequest) => Promise<types.Environment | undefined>;
-        list: (query?: types.ListEnvironmentsData["query"]) => Promise<types.EnvironmentListResponse | undefined>;
+        create: (body: types.CreateEnvironmentRequest) => Promise<types.Environment>;
+        get: (environmentId: string) => Promise<types.Environment>;
+        update: (environmentId: string, body: types.UpdateEnvironmentRequest) => Promise<types.Environment>;
+        list: (query?: types.ListEnvironmentsData["query"]) => Promise<types.EnvironmentListResponse>;
     };
     projects: {
-        create: (body: types.CreateProjectRequest) => Promise<types.Project | undefined>;
-        get: (projectId: string) => Promise<types.Project | undefined>;
+        create: (body: types.CreateProjectRequest) => Promise<types.Project>;
+        get: (projectId: string) => Promise<types.Project>;
     };
     sessions: {
-        create: (body: types.CreateSessionRequest) => Promise<types.Session | undefined>;
-        get: (sessionId: string) => Promise<types.Session | undefined>;
-        update: (sessionId: string, body: types.UpdateSessionRequest) => Promise<types.Session | undefined>;
-        list: (query?: types.ListSessionsData["query"]) => Promise<types.SessionListResponse | undefined>;
-        listEvents: (sessionId: string, query?: types.ListSessionEventsData["query"]) => Promise<types.SessionEventListResponse | undefined>;
-        createMessage: (sessionId: string, body: types.CreateSessionMessageRequest) => Promise<types.SessionMessage | undefined>;
+        create: (body: types.CreateSessionRequest) => Promise<types.Session>;
+        get: (sessionId: string) => Promise<types.Session>;
+        update: (sessionId: string, body: types.UpdateSessionRequest) => Promise<types.Session>;
+        list: (query?: types.ListSessionsData["query"]) => Promise<types.SessionListResponse>;
+        listEvents: (sessionId: string, query?: types.ListSessionEventsData["query"]) => Promise<types.SessionEventListResponse>;
+        createMessage: (sessionId: string, body: types.CreateSessionMessageRequest) => Promise<types.SessionMessage>;
     };
     vaults: {
-        create: (body: types.CreateVaultRequest) => Promise<types.Vault | undefined>;
-        createCredential: (vaultId: string, body: types.CreateVaultCredentialRequest) => Promise<types.VaultCredential | undefined>;
-        updateCredential: (vaultId: string, credentialId: string, body: types.UpdateVaultCredentialRequest) => Promise<types.VaultCredential | undefined>;
+        create: (body: types.CreateVaultRequest) => Promise<types.Vault>;
+        createCredential: (vaultId: string, body: types.CreateVaultCredentialRequest) => Promise<types.VaultCredential>;
+        updateCredential: (vaultId: string, credentialId: string, body: types.UpdateVaultCredentialRequest) => Promise<types.VaultCredential>;
     };
     triggers: {
-        create: (body: types.CreateTriggerRequest) => Promise<types.Trigger | undefined>;
-        get: (triggerId: string) => Promise<types.Trigger | undefined>;
-        update: (triggerId: string, body: types.UpdateTriggerRequest) => Promise<types.Trigger | undefined>;
-        delete: (triggerId: string) => Promise<void | undefined>;
-        listRuns: (triggerId: string, query?: types.ListTriggerRunsData["query"]) => Promise<types.TriggerRunListResponse | undefined>;
+        create: (body: types.CreateTriggerRequest) => Promise<types.Trigger>;
+        get: (triggerId: string) => Promise<types.Trigger>;
+        update: (triggerId: string, body: types.UpdateTriggerRequest) => Promise<types.Trigger>;
+        delete: (triggerId: string) => Promise<void>;
+        listRuns: (triggerId: string, query?: types.ListTriggerRunsData["query"]) => Promise<types.TriggerRunListResponse>;
     };
     runners: {
-        list: (query?: types.ListRunnersData["query"]) => Promise<types.RunnerListResponse | undefined>;
+        list: (query?: types.ListRunnersData["query"]) => Promise<types.RunnerListResponse>;
     };
     usage: {
-        listRecords: (query?: types.ListUsageRecordsData["query"]) => Promise<types.UsageRecordListResponse | undefined>;
-        summary: (query?: types.ReadUsageSummaryData["query"]) => Promise<types.UsageSummary | undefined>;
+        listRecords: (query?: types.ListUsageRecordsData["query"]) => Promise<types.UsageRecordListResponse>;
+        summary: (query?: types.ReadUsageSummaryData["query"]) => Promise<types.UsageSummary>;
     };
     models: {
-        list: (query?: types.ListModelsData["query"]) => Promise<types.ProviderModelListResponse | undefined>;
+        list: (query?: types.ListModelsData["query"]) => Promise<types.ProviderModelListResponse>;
     };
     federatedTenants: {
-        create: (body: types.CreateFederatedTenantRequest) => Promise<types.FederatedTenant | undefined>;
+        create: (body: types.CreateFederatedTenantRequest) => Promise<types.FederatedTenant>;
     };
 };
