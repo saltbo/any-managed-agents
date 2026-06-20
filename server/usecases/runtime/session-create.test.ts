@@ -105,6 +105,12 @@ const store = {
 // the launch dispatch the reconcile flow catches.
 const deps: CreateSessionDeps = {
   sessionOrchestration: store as never,
+  sessionEventStore: {
+    eventStream: async () => [],
+    appendCanonicalEvent: async () => 'event_test',
+    queryEvents: async () => ({ rows: [], hasMore: false }),
+    archive: async () => {},
+  } as never,
   providers: {
     findModel: async () => ({ id: 'm', providerId: 'workers-ai', modelId: '@cf/x' }),
     findBySlug: async () => ({ id: 'workers-ai', slug: 'workers-ai' }),

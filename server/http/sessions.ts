@@ -460,7 +460,7 @@ function eventsQueryFor(query: EventsQuery, limit: number) {
 async function eventsJsonResponse(c: Context<DepsEnv>, sessionId: string, query: EventsQuery) {
   const deps = c.get('deps')
   const limit = query.limit ?? 100
-  const page = await deps.sessions.queryEvents(sessionId, eventsQueryFor(query, limit))
+  const page = await deps.sessionEventStore.queryEvents(sessionId, eventsQueryFor(query, limit))
   const last = page.rows.at(-1)
   const nextCursor = page.hasMore && last ? String(last.sequence) : null
   return c.json({ data: page.rows.map(serializeEvent), pagination: { limit, nextCursor, hasMore: page.hasMore } }, 200)
@@ -469,7 +469,7 @@ async function eventsJsonResponse(c: Context<DepsEnv>, sessionId: string, query:
 async function eventsCsvResponse(c: Context<DepsEnv>, sessionId: string, query: EventsQuery) {
   const deps = c.get('deps')
   const limit = query.limit ?? 200
-  const page = await deps.sessions.queryEvents(sessionId, eventsQueryFor(query, limit + 1))
+  const page = await deps.sessionEventStore.queryEvents(sessionId, eventsQueryFor(query, limit + 1))
   const rows = page.rows.slice(0, limit)
   const header = [
     'id',
@@ -526,7 +526,7 @@ function eventsSseResponse(c: Context<DepsEnv>, sessionId: string, query: Events
       try {
         const deadline = Date.now() + 1000
         while (Date.now() <= deadline && !signal.aborted) {
-          const page = await deps.sessions.queryEvents(sessionId, {
+          const page = await deps.sessionEventStore.queryEvents(sessionId, {
             ...(query.type ? { type: query.type } : {}),
             visibility: query.visibility ?? 'runtime',
             ...(query.createdFrom ? { createdFrom: query.createdFrom } : {}),
@@ -1067,7 +1067,7 @@ export function registerSessionRoutes(routes: SessionRoutes) {
         runnerLeaseMetadata = ownedLease
       }
 
-      const accepted = await deps.sessions.insertEvents(
+      const accepted = await deps.sessionEventStore.insertEvents(
         {
           organizationId: session.organizationId ?? auth.organization.id,
           projectId: auth.project.id,

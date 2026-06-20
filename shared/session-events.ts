@@ -1,3 +1,9 @@
+// The session metadata stamp that routes a session's canonical event firehose to
+// the per-session Session DO (SQLite hot + R2 cold). Written by the cloud-loop
+// (ama) start path; read by the event-store router. Absent ⇒ events live on D1
+// (pre-migration cloud sessions, self-hosted CLI sessions).
+export const SESSION_DO_EVENT_STORE = 'session-do'
+
 export const AMA_SESSION_EVENT_DEFINITIONS = {
   agent_start: { category: 'lifecycle', label: 'Agent started' },
   agent_end: { category: 'lifecycle', label: 'Agent completed' },

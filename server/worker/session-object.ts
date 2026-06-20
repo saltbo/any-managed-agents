@@ -10,8 +10,10 @@
 // in-DO cloud event store (ama runtime), the browser WebSocket hub, and R2
 // archival, per docs/designs/session-event-storage-and-self-hosted-relay.md.
 
+import type { CanonicalAmaSessionEvent } from '@shared/session-events'
 import { createDeps } from '../composition'
 import type { Env } from '../env'
+import type { SessionEventQuery } from '../usecases/ports'
 import {
   appendRunnerEvent,
   type ChannelState,
@@ -20,10 +22,26 @@ import {
   RunnerChannelOwnershipLostError,
   validateActiveOwnership,
 } from '../usecases/runtime/runner-channel-ingest'
+import {
+  appendCanonicalEventToSql,
+  countSessionEvents,
+  ensureSessionEventSchema,
+  exportSessionEventsJsonl,
+  queryEventsFromSql,
+  type SessionEventScope,
+  streamSessionEvents,
+} from './session-event-store-sql'
+
+type AppendBody = {
+  scope: SessionEventScope
+  canonicalEvent: CanonicalAmaSessionEvent
+  overrides?: { parentEventId?: string | null; correlationId?: string | null }
+}
 
 export class SessionObject implements DurableObject {
   private socket: WebSocket | null = null
   private state: ChannelState | null = null
+  private eventSchemaReady = false
 
   constructor(
     private readonly durableState: DurableObjectState,
@@ -41,7 +59,56 @@ export class SessionObject implements DurableObject {
     if (url.pathname === '/status') {
       return Response.json({ active: await this.isActive() })
     }
+    if (url.pathname.startsWith('/events/') && request.method === 'POST') {
+      return this.handleEvents(url.pathname, await request.json())
+    }
     return new Response('Not found', { status: 404 })
+  }
+
+  // The cloud event store routes. Appends are serialised by the DO single-thread,
+  // so the in-DO sequence is allocated race-free. The worker-side gateway owns
+  // usage accounting; this DO owns the rows (and, once wired, browser fan-out).
+  private handleEvents(pathname: string, body: unknown): Response | Promise<Response> {
+    const sql = this.eventSql()
+    if (pathname === '/events/append') {
+      const { scope, canonicalEvent, overrides } = body as AppendBody
+      const appended = appendCanonicalEventToSql(sql, scope, canonicalEvent, overrides)
+      return Response.json(appended)
+    }
+    if (pathname === '/events/query') {
+      const { sessionId, query } = body as { sessionId: string; query: SessionEventQuery }
+      return Response.json(queryEventsFromSql(sql, sessionId, query))
+    }
+    if (pathname === '/events/count') {
+      const { sessionId } = body as { sessionId: string }
+      return Response.json({ count: countSessionEvents(sql, sessionId) })
+    }
+    if (pathname === '/events/stream') {
+      const { sessionId } = body as { sessionId: string }
+      return Response.json({ events: streamSessionEvents(sql, sessionId) })
+    }
+    if (pathname === '/events/archive') {
+      return this.archiveEvents(sql, body as { scope: SessionEventScope })
+    }
+    return new Response('Not found', { status: 404 })
+  }
+
+  private async archiveEvents(sql: SqlStorage, body: { scope: SessionEventScope }): Promise<Response> {
+    const jsonl = exportSessionEventsJsonl(sql, body.scope.sessionId)
+    const key = `sessions/${body.scope.sessionId}/events.jsonl`
+    await this.env.SESSION_EVENTS.put(key, jsonl, {
+      customMetadata: { organizationId: body.scope.organizationId, projectId: body.scope.projectId },
+    })
+    return Response.json({ archived: true, key, bytes: jsonl.length })
+  }
+
+  private eventSql(): SqlStorage {
+    const sql = this.durableState.storage.sql
+    if (!this.eventSchemaReady) {
+      ensureSessionEventSchema(sql)
+      this.eventSchemaReady = true
+    }
+    return sql
   }
 
   private connectChannel(request: Request, url: URL) {

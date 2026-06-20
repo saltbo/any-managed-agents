@@ -760,8 +760,9 @@ export function createRuntimeOrchestrationRepo(db: Db): SessionOrchestrationStor
     async appendCanonicalEvent(
       scope: { organizationId: string; projectId: string; sessionId: string },
       canonicalEvent: CanonicalAmaSessionEvent,
+      overrides?: { parentEventId?: string | null; correlationId?: string | null },
     ): Promise<string> {
-      return insertCanonicalSessionEvent(db, scope, canonicalEvent)
+      return insertCanonicalSessionEvent(db, scope, canonicalEvent, overrides)
     },
   }
 }

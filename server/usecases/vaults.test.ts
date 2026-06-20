@@ -124,6 +124,7 @@ function fakeDeps(
     runnerChannel: undefined as unknown as Deps['runnerChannel'],
     sandboxRuntime: undefined as unknown as Deps['sandboxRuntime'],
     sessionOrchestration: undefined as unknown as Deps['sessionOrchestration'],
+    sessionEventStore: undefined as unknown as Deps['sessionEventStore'],
     sessions: undefined as unknown as Deps['sessions'],
     createApprovalGate: undefined as unknown as Deps['createApprovalGate'],
     rereadStartedSession: false,

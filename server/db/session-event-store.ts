@@ -69,16 +69,24 @@ export async function insertCanonicalSessionEvent(
   db: Db,
   scope: SessionEventScope,
   canonicalEvent: CanonicalAmaSessionEvent,
+  // Producers (the MCP tool path) that thread their own parent/correlation ids
+  // pass them here so the store does not recompute its turn/transcript threading.
+  overrides?: { parentEventId?: string | null; correlationId?: string | null },
 ): Promise<string> {
-  const parentEventId = await enclosingTurnEventId(db, scope.sessionId, canonicalEvent.type)
+  const parentEventId =
+    overrides?.parentEventId !== undefined
+      ? overrides.parentEventId
+      : await enclosingTurnEventId(db, scope.sessionId, canonicalEvent.type)
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const eventId = newEventId()
     const explicitCorrelation = canonicalEventCorrelation(canonicalEvent.type, canonicalEvent.payload)
     const correlationId =
-      explicitCorrelation ??
-      (MESSAGE_EVENT_TYPES.includes(canonicalEvent.type as (typeof MESSAGE_EVENT_TYPES)[number])
-        ? await transcriptCorrelation(db, scope.sessionId, canonicalEvent.type, eventId)
-        : null)
+      overrides?.correlationId !== undefined
+        ? overrides.correlationId
+        : (explicitCorrelation ??
+          (MESSAGE_EVENT_TYPES.includes(canonicalEvent.type as (typeof MESSAGE_EVENT_TYPES)[number])
+            ? await transcriptCorrelation(db, scope.sessionId, canonicalEvent.type, eventId)
+            : null))
     const latest = await db
       .select({ sequence: max(sessionEvents.sequence) })
       .from(sessionEvents)

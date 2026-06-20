@@ -60,6 +60,10 @@ database_name = "any-managed-agents-db"
 database_id = "1b821d59-c74b-47e4-9af3-3d83de81dc1c"
 migrations_dir = "./migrations"
 
+[[r2_buckets]]
+binding = "SESSION_EVENTS"
+bucket_name = "ama-session-events"
+
 [[durable_objects.bindings]]
 name = "SANDBOX"
 class_name = "Sandbox"
@@ -147,6 +151,10 @@ database_name = "any-managed-agents-db-staging"
 database_id = "8a30ad06-ace4-4cf7-a70d-61adc0e3e042"
 migrations_dir = "./migrations"
 
+[[env.staging.r2_buckets]]
+binding = "SESSION_EVENTS"
+bucket_name = "ama-session-events-staging"
+
 [[env.staging.durable_objects.bindings]]
 name = "SANDBOX"
 class_name = "Sandbox"
@@ -193,6 +201,10 @@ binding = "DB"
 database_name = "any-managed-agents-db-staging"
 database_id = "8a30ad06-ace4-4cf7-a70d-61adc0e3e042"
 migrations_dir = "./migrations"
+
+[[env.e2e.r2_buckets]]
+binding = "SESSION_EVENTS"
+bucket_name = "ama-session-events-staging"
 
 [[env.e2e.durable_objects.bindings]]
 name = "SANDBOX"

@@ -17,6 +17,7 @@ import type {
   AuthScope,
   RunnerChannel,
   SandboxRuntimeHost,
+  SessionEventStore,
   SessionOrchestrationStore,
   SessionRow,
 } from '../ports'
@@ -24,6 +25,7 @@ import { appendRuntimeEvent } from './events'
 
 type LifecycleDeps = {
   sessionOrchestration: SessionOrchestrationStore
+  sessionEventStore: SessionEventStore
   audit: AuditPort
   sandboxRuntime: SandboxRuntimeHost
   runnerChannel: RunnerChannel
@@ -118,11 +120,28 @@ async function stopSessionRow(
     event: { type: 'session_stop', reason },
     metadata: { source: 'control-plane', sandboxId: session.sandboxId },
   })
+  await archiveTerminalSession(deps, auth, session.id)
   const stopped = await store.findSession(auth.project.id, session.id)
   if (!stopped) {
     throw new Error('Stopped session row is required')
   }
   return { ok: true, session: stopped }
+}
+
+// On terminal stop, snapshot a cloud (ama) session's Session DO event log to its
+// R2 archive object. Best-effort: the DO keeps the hot rows, so a transient R2
+// failure must not strand the stop. No-op for D1-backed sessions (the router
+// only archives DO-stored ones).
+async function archiveTerminalSession(deps: LifecycleDeps, auth: AuthScope, sessionId: string) {
+  try {
+    await deps.sessionEventStore.archive({
+      organizationId: auth.organization.id,
+      projectId: auth.project.id,
+      sessionId,
+    })
+  } catch (error) {
+    console.error(`session ${sessionId} event archive failed:`, error)
+  }
 }
 
 async function stopSelfHostedSession(

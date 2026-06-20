@@ -888,32 +888,21 @@ describe('[CF] /api/v1/sessions', () => {
     })
     expect(createRes.status).toBe(201)
     const created = (await createRes.json()) as { id: string; projectId: string }
-    const sessionRow = await env.DB.prepare('SELECT organization_id FROM sessions WHERE id = ?')
-      .bind(created.id)
-      .first<{ organization_id: string }>()
-    expect(sessionRow).toBeTruthy()
 
-    await env.DB.prepare(
-      `
-        INSERT INTO session_events (
-          id, organization_id, project_id, session_id, sequence, type, visibility, role, payload, metadata, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-    )
-      .bind(
-        `event_${crypto.randomUUID().replaceAll('-', '')}`,
-        sessionRow!.organization_id,
-        created.projectId,
-        created.id,
-        100,
-        'tool_execution_start',
-        'runtime',
-        null,
-        JSON.stringify({ toolCallId: 'call_pi', toolName: 'sandbox.exec', args: { command: 'npm test' } }),
-        JSON.stringify({ source: 'stored-runtime' }),
-        new Date().toISOString(),
-      )
-      .run()
+    // The cloud ama session stores its events in the Session DO; seed through the
+    // ingest endpoint (which routes to that store) rather than D1 directly.
+    const ingestStartRes = await jsonFetch(`/api/v1/sessions/${created.id}/events`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        events: [
+          {
+            type: 'tool_execution_start',
+            payload: { toolCallId: 'call_pi', toolName: 'sandbox.exec', args: { command: 'npm test' } },
+          },
+        ],
+      }),
+    })
+    expect(ingestStartRes.status).toBe(201)
 
     const eventsRes = await jsonFetch(`/api/v1/sessions/${created.id}/events?type=tool_execution_start`, authorization)
     expect(eventsRes.status).toBe(200)
@@ -931,28 +920,18 @@ describe('[CF] /api/v1/sessions', () => {
       ]),
     )
 
-    const runtimeErrorId = `event_${crypto.randomUUID().replaceAll('-', '')}`
-    await env.DB.prepare(
-      `
-        INSERT INTO session_events (
-          id, organization_id, project_id, session_id, sequence, type, visibility, role, payload, metadata, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-    )
-      .bind(
-        runtimeErrorId,
-        sessionRow!.organization_id,
-        created.projectId,
-        created.id,
-        101,
-        'runtime.error',
-        'runtime',
-        null,
-        JSON.stringify({ message: 'Runtime failed safely', code: 'runtime_exit', details: { exitCode: 1 } }),
-        JSON.stringify({ source: 'stored-runtime' }),
-        new Date().toISOString(),
-      )
-      .run()
+    const ingestErrorRes = await jsonFetch(`/api/v1/sessions/${created.id}/events`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        events: [
+          {
+            type: 'runtime.error',
+            payload: { message: 'Runtime failed safely', code: 'runtime_exit', details: { exitCode: 1 } },
+          },
+        ],
+      }),
+    })
+    expect(ingestErrorRes.status).toBe(201)
 
     const runtimeErrorEventsRes = await jsonFetch(
       `/api/v1/sessions/${created.id}/events?type=runtime.error`,
@@ -1008,6 +987,45 @@ describe('[CF] /api/v1/sessions', () => {
       body: JSON.stringify({ events: [] }),
     })
     expect(emptyBatchRes.status).toBe(400)
+  })
+
+  it('archives a cloud ama session event log to R2 on stop', async () => {
+    const authorization = await signIn()
+    await connectMcp(authorization, 'github')
+    const environment = await createEnvironment(authorization)
+    const agent = await createAgent(authorization)
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
+    })
+    expect(createRes.status).toBe(201)
+    const created = (await createRes.json()) as { id: string }
+
+    await jsonFetch(`/api/v1/sessions/${created.id}/events`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        events: [
+          { type: 'turn_end', payload: { message: { role: 'assistant', content: 'archived run' }, toolResults: [] } },
+        ],
+      }),
+    })
+
+    const stopRes = await jsonFetch(`/api/v1/sessions/${created.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ state: 'stopped' }),
+    })
+    expect(stopRes.status).toBe(200)
+
+    // The cloud loop owns this session's events in the Session DO; stopping it
+    // snapshots the whole log to one R2 archive object (sessions/{id}/events.jsonl).
+    const archived = await env.SESSION_EVENTS.get(`sessions/${created.id}/events.jsonl`)
+    expect(archived).toBeTruthy()
+    const events = (await archived!.text())
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as { type: string })
+    expect(events.some((event) => event.type === 'turn_end')).toBe(true)
+    expect(events.some((event) => event.type === 'session_stop')).toBe(true)
   })
 
   it('accepts self-hosted sessions when cloud sandbox startup is disabled [spec: environments/self-hosted]', async () => {

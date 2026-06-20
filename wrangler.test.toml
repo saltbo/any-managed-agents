@@ -29,6 +29,10 @@ database_name = "any-managed-agents-db-test"
 database_id = "test"
 migrations_dir = "./migrations"
 
+[[r2_buckets]]
+binding = "SESSION_EVENTS"
+bucket_name = "ama-session-events-test"
+
 [[durable_objects.bindings]]
 name = "SANDBOX"
 class_name = "Sandbox"

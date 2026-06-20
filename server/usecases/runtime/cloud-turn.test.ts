@@ -71,6 +71,12 @@ const store = {
 
 const deps: CloudTurnDeps = {
   sessionOrchestration: store as never,
+  sessionEventStore: {
+    eventStream: sessionEventStreamMock,
+    appendCanonicalEvent: vi.fn(async () => 'event_test'),
+    queryEvents: vi.fn(),
+    archive: vi.fn(),
+  } as never,
   providers: {
     findModel: async () => ({ id: 'm', providerId: 'workers-ai', modelId: '@cf/x' }),
     findBySlug: async () => ({ id: 'workers-ai', slug: 'workers-ai' }),
@@ -299,6 +305,12 @@ describe('startSessionRuntimeForRow — startup partial-failure (H5 FIX 1)', () 
 
   const startupDeps: CloudTurnDeps = {
     sessionOrchestration: store as never,
+    sessionEventStore: {
+      eventStream: sessionEventStreamMock,
+      appendCanonicalEvent: vi.fn(async () => 'event_test'),
+      queryEvents: vi.fn(),
+      archive: vi.fn(),
+    } as never,
     providers: {
       findModel: async () => ({ id: 'm', providerId: 'workers-ai', modelId: '@cf/x' }),
       findBySlug: async () => ({ id: 'workers-ai', slug: 'workers-ai' }),

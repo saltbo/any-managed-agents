@@ -48,6 +48,7 @@ describe('[spec: runtime/turn] buildSessionTurnCallbacks (shared turn-driver sea
     buildSessionTurnCallbacks(
       {
         sessionOrchestration: store as never,
+        sessionEventStore: store as never,
         policy: { policyBlocksSandboxOperation } as never,
         createApprovalGate: createToolApprovalGate as never,
       },

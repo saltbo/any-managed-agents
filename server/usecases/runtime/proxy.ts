@@ -27,6 +27,7 @@ import type {
   PolicyDecisionResult,
   PolicyPort,
   SandboxRuntimeHost,
+  SessionEventStore,
   SessionOrchestrationStore,
   SessionRow,
 } from '../ports'
@@ -37,7 +38,7 @@ import { buildSessionTurnCallbacks, type SessionTurnCallbacks } from './turn-cal
 // ── Sandbox-policy effects (event + audit) ────────────────────────────────────
 
 async function appendRuntimePolicyEvent(
-  deps: { sessionOrchestration: SessionOrchestrationStore; audit: AuditPort },
+  deps: { sessionEventStore: SessionEventStore; audit: AuditPort },
   values: {
     auth: AuthScope
     sessionId: string
@@ -64,7 +65,7 @@ async function appendRuntimePolicyEvent(
 }
 
 export async function denyRuntimePolicy(
-  deps: { sessionOrchestration: SessionOrchestrationStore; audit: AuditPort },
+  deps: { sessionEventStore: SessionEventStore; audit: AuditPort },
   auth: AuthScope,
   values: {
     sessionId: string
@@ -132,6 +133,7 @@ export async function evaluateRuntimeSandboxOperations(
 
 type ProxyTurnDeps = {
   sessionOrchestration: SessionOrchestrationStore
+  sessionEventStore: SessionEventStore
   policy: PolicyPort
   audit: AuditPort
   sandboxRuntime: SandboxRuntimeHost
@@ -238,7 +240,7 @@ export async function recordRuntimeMessageOutcome(
 }
 
 export async function markRuntimeExecutionFailed(
-  deps: { sessionOrchestration: SessionOrchestrationStore },
+  deps: { sessionEventStore: SessionEventStore; sessionOrchestration: SessionOrchestrationStore },
   auth: AuthScope,
   session: SessionRow,
   error: unknown,

@@ -1,0 +1,72 @@
+// Worker-side transport to the Session DO's in-object event store. Mirrors the
+// runner-channel gateway: it talks to the per-session DO over its internal fetch
+// protocol and holds no control-plane state. The DO owns the rows + browser
+// fan-out; this gateway is the typed call surface the routing store uses for
+// cloud-loop (ama) sessions.
+
+import type { SessionEventPage, SessionEventQuery, SessionEventRecord } from '@server/usecases/ports'
+import type { CanonicalAmaSessionEvent } from '@shared/session-events'
+import type { Env } from '../../env'
+
+export interface SessionEventScope {
+  organizationId: string
+  projectId: string
+  sessionId: string
+}
+
+export interface SessionEventOverrides {
+  parentEventId?: string | null
+  correlationId?: string | null
+}
+
+async function callSessionObject<T>(env: Env, sessionId: string, path: string, body: unknown): Promise<T> {
+  const stub = env.SESSION.get(env.SESSION.idFromName(sessionId))
+  const response = await stub.fetch(`https://session-object${path}`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+    headers: { 'content-type': 'application/json' },
+  })
+  if (!response.ok) {
+    throw new Error(`Session DO ${path} failed with HTTP ${response.status}`)
+  }
+  return (await response.json()) as T
+}
+
+export interface SessionDoEventStore {
+  append(
+    scope: SessionEventScope,
+    canonicalEvent: CanonicalAmaSessionEvent,
+    overrides?: SessionEventOverrides,
+  ): Promise<{ id: string; sequence: number; record: SessionEventRecord }>
+  query(sessionId: string, query: SessionEventQuery): Promise<SessionEventPage>
+  stream(sessionId: string): Promise<{ type: string; payload: string }[]>
+  count(sessionId: string): Promise<number>
+  archive(scope: SessionEventScope): Promise<void>
+}
+
+export function createSessionDoEventStore(env: Env): SessionDoEventStore {
+  return {
+    async append(scope, canonicalEvent, overrides) {
+      return await callSessionObject(env, scope.sessionId, '/events/append', { scope, canonicalEvent, overrides })
+    },
+    async query(sessionId, query) {
+      return await callSessionObject<SessionEventPage>(env, sessionId, '/events/query', { sessionId, query })
+    },
+    async stream(sessionId) {
+      const { events } = await callSessionObject<{ events: { type: string; payload: string }[] }>(
+        env,
+        sessionId,
+        '/events/stream',
+        { sessionId },
+      )
+      return events
+    },
+    async count(sessionId) {
+      const { count } = await callSessionObject<{ count: number }>(env, sessionId, '/events/count', { sessionId })
+      return count
+    },
+    async archive(scope) {
+      await callSessionObject(env, scope.sessionId, '/events/archive', { scope })
+    },
+  }
+}

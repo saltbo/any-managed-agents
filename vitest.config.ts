@@ -52,6 +52,7 @@ export default defineConfig({
         'server/usecases/runtime/**',
         'server/adapters/gateways/cloud-turn-queue.ts',
         'server/adapters/gateways/runner-channel.ts',
+        'server/adapters/gateways/session-do-events.ts',
         'server/adapters/gateways/runtime-secret-env.ts',
         'server/adapters/gateways/mcp-client.ts',
       ],

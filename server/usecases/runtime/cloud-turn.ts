@@ -35,6 +35,7 @@ import {
 } from '@server/domain/runtime/turn'
 import { now, RUNTIME_START_TIMEOUT_MS, stringify, withTimeout } from '@server/domain/runtime/util'
 import { safeRuntimeError } from '@server/runtime-error'
+import { SESSION_DO_EVENT_STORE } from '@shared/session-events'
 import { isRuntimePolicyDenied, isRuntimeTurnCancelled } from '../../../runtime-core/errors'
 import type {
   AuditPort,
@@ -46,6 +47,7 @@ import type {
   ProviderRepo,
   RuntimeSecretEnvGateway,
   SandboxRuntimeHost,
+  SessionEventStore,
   SessionOrchestrationStore,
   SessionRow,
 } from '../ports'
@@ -67,6 +69,7 @@ type CreateApprovalGate = (values: {
 
 export type CloudTurnDeps = {
   sessionOrchestration: SessionOrchestrationStore
+  sessionEventStore: SessionEventStore
   policy: PolicyPort
   providers: ProviderRepo
   audit: AuditPort
@@ -143,6 +146,10 @@ export async function startSessionRuntimeForRow(
       runtimeBackend: driver.cloudBackend,
       runtimeProtocol: driver.cloudProtocol,
       mcpConnectors: mcpConnectorIds(mcpSnapshot),
+      // "Storage follows the loop": the cloud ama loop owns this session's events,
+      // so route its firehose to the Session DO (the event-store router reads
+      // this stamp). Self-hosted CLI sessions never reach this path.
+      eventStore: SESSION_DO_EVENT_STORE,
     }
     const started = {
       sandboxId,

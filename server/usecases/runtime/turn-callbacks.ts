@@ -17,7 +17,14 @@
 
 import { parseJson } from '@server/domain/runtime/session-snapshot'
 import { RuntimeTurnCancelledError } from '../../../runtime-core/errors'
-import type { AuthScope, PolicyPort, SandboxPolicyBlock, SessionOrchestrationStore, SessionRow } from '../ports'
+import type {
+  AuthScope,
+  PolicyPort,
+  SandboxPolicyBlock,
+  SessionEventStore,
+  SessionOrchestrationStore,
+  SessionRow,
+} from '../ports'
 import type { ToolApprovalGate } from './approval-gate'
 import { appendRuntimeEvent } from './events'
 
@@ -51,6 +58,7 @@ export interface SessionTurnCallbacks {
 
 type TurnCallbacksDeps = {
   sessionOrchestration: SessionOrchestrationStore
+  sessionEventStore: SessionEventStore
   policy: PolicyPort
   // The approval gate factory. Injected so the tool-approvals layer stays the
   // single owner of gate construction (and stays mockable for the golden-master
@@ -74,7 +82,7 @@ export function buildSessionTurnCallbacks(
     recordPolicyDenial: (blocked: SandboxPolicyBlock) => Promise<void>
   },
 ): SessionTurnCallbacks {
-  const { sessionOrchestration: store, policy } = deps
+  const { sessionOrchestration: store, sessionEventStore, policy } = deps
   const { auth, session, recordPolicyDenial } = values
   const sessionId = session.id
   const ensureActive = async () => {
@@ -84,8 +92,7 @@ export function buildSessionTurnCallbacks(
     auth,
     sessionId,
     sessionMetadata: parseJson<Record<string, unknown>>(session.metadata) ?? {},
-    appendEvent: (event, metadata) =>
-      appendRuntimeEvent({ sessionOrchestration: store }, { auth, sessionId, event, metadata }),
+    appendEvent: (event, metadata) => appendRuntimeEvent({ sessionEventStore }, { auth, sessionId, event, metadata }),
   })
   let policyDeniedToolCall = false
   const onEvent = async (event: Record<string, unknown>, metadata?: Record<string, unknown>) => {
@@ -93,10 +100,7 @@ export function buildSessionTurnCallbacks(
       return
     }
     await ensureActive()
-    await appendRuntimeEvent(
-      { sessionOrchestration: store },
-      { auth, sessionId, event, ...(metadata ? { metadata } : {}) },
-    )
+    await appendRuntimeEvent({ sessionEventStore }, { auth, sessionId, event, ...(metadata ? { metadata } : {}) })
   }
   const approveToolCall = async ({
     toolCallId,

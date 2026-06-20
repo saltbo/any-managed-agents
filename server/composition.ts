@@ -6,6 +6,8 @@ import { createProviderCatalogGateway } from './adapters/gateways/provider-catal
 import { createRunnerChannel } from './adapters/gateways/runner-channel'
 import { createRuntimeSecretEnvGateway } from './adapters/gateways/runtime-secret-env'
 import { createSecretStoreGateway } from './adapters/gateways/secret-store'
+import { createSessionDoEventStore } from './adapters/gateways/session-do-events'
+import { createCloudLoopChecker, createSessionEventStore } from './adapters/gateways/session-event-store'
 import { createSessionEventPort } from './adapters/gateways/session-events'
 import { createAgentRepo } from './adapters/repos/agents'
 import { createAuditReadRepo } from './adapters/repos/audit-records'
@@ -40,6 +42,18 @@ export function createDeps(env: Env): Deps {
   const audit = createAuditPort(db)
   const policy = createPolicyPort(db)
   const sessionOrchestration = createRuntimeOrchestrationRepo(db)
+  // Routes the canonical event store per session: cloud-loop (ama) → Session DO,
+  // pre-migration cloud + self-hosted CLI → the existing D1 repo methods. The DO
+  // gateway + cloud-loop checker are shared with the MCP event port so the
+  // per-session lookup is cached once.
+  const sessionDoEvents = createSessionDoEventStore(env)
+  const isCloudLoop = createCloudLoopChecker(db)
+  const sessionEventStore = createSessionEventStore(db, isCloudLoop, sessionDoEvents, {
+    append: (scope, canonicalEvent, overrides) =>
+      sessionOrchestration.appendCanonicalEvent(scope, canonicalEvent, overrides),
+    queryEvents: (sessionId, query) => sessions.queryEvents(sessionId, query),
+    eventStream: (sessionId) => sessionOrchestration.sessionEventStream(sessionId),
+  })
   return {
     agents: createAgentRepo(db),
     environments: createEnvironmentRepo(db),
@@ -52,7 +66,7 @@ export function createDeps(env: Env): Deps {
     policies: createPolicyRepo(db),
     budgets: createBudgetRepo(db),
     mcp: createMcpGateway(env, db),
-    sessionEvents: createSessionEventPort(db),
+    sessionEvents: createSessionEventPort(sessionEventStore),
     audit,
     policy,
     usageRecords: createUsageRepo(db),
@@ -70,6 +84,7 @@ export function createDeps(env: Env): Deps {
     sandboxRuntime: createSandboxRuntimeHost(env),
     sessionOrchestration,
     sessions,
+    sessionEventStore,
     createApprovalGate: (values) => createToolApprovalGate({ sessionOrchestration, audit, policy }, values),
     rereadStartedSession: env.AMA_RUNTIME_MODE === 'test',
   }

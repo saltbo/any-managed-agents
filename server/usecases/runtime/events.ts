@@ -9,17 +9,17 @@ import { now } from '@server/domain/runtime/util'
 import type { SessionRow } from '@shared/runtime-rows'
 import { canonicalAmaSessionEventFromRuntimeEvent } from '@shared/session-events'
 import { runtimeMessagesFromEvents } from '../../../runtime-core/transcript'
-import type { AuditPort, AuthScope, SessionOrchestrationStore } from '../ports'
+import type { AuditPort, AuthScope, SessionEventStore, SessionOrchestrationStore } from '../ports'
 
 export async function appendRuntimeEvent(
-  deps: { sessionOrchestration: SessionOrchestrationStore },
+  deps: { sessionEventStore: SessionEventStore },
   values: { auth: AuthScope; sessionId: string; event: Record<string, unknown>; metadata?: Record<string, unknown> },
 ) {
   const canonicalEvent = canonicalAmaSessionEventFromRuntimeEvent(
     values.event,
     values.metadata ?? { source: 'runtime' },
   )
-  return await deps.sessionOrchestration.appendCanonicalEvent(
+  return await deps.sessionEventStore.appendCanonicalEvent(
     { organizationId: values.auth.organization.id, projectId: values.auth.project.id, sessionId: values.sessionId },
     canonicalEvent,
   )
@@ -48,9 +48,6 @@ export async function markInitialPromptFailed(
   })
 }
 
-export async function loadRuntimeMessages(
-  deps: { sessionOrchestration: SessionOrchestrationStore },
-  sessionId: string,
-) {
-  return runtimeMessagesFromEvents(await deps.sessionOrchestration.sessionEventStream(sessionId))
+export async function loadRuntimeMessages(deps: { sessionEventStore: SessionEventStore }, sessionId: string) {
+  return runtimeMessagesFromEvents(await deps.sessionEventStore.eventStream(sessionId))
 }

@@ -2173,6 +2173,7 @@ export interface SessionOrchestrationStore {
   appendCanonicalEvent(
     scope: { organizationId: string; projectId: string; sessionId: string },
     canonicalEvent: CanonicalAmaSessionEvent,
+    overrides?: { parentEventId?: string | null; correlationId?: string | null },
   ): Promise<string>
 }
 
@@ -2294,6 +2295,34 @@ export interface SessionEventQuery {
 export interface SessionEventPage {
   rows: SessionEventRecord[]
   hasMore: boolean
+}
+
+// Explicit parent/correlation ids some producers (the MCP tool path) thread
+// themselves; when given they override the store's turn/transcript threading.
+export interface SessionEventOverrides {
+  parentEventId?: string | null
+  correlationId?: string | null
+}
+
+// "Storage follows the loop": the canonical event store that routes cloud-loop
+// (ama) sessions to the per-session Session DO (SQLite hot + R2 cold) and leaves
+// pre-migration cloud + self-hosted CLI sessions on D1. One contract over both
+// backends; the read shape (SessionEventRecord/Page) is identical either way.
+export interface SessionEventStore {
+  appendCanonicalEvent(
+    scope: { organizationId: string; projectId: string; sessionId: string },
+    canonicalEvent: CanonicalAmaSessionEvent,
+    overrides?: SessionEventOverrides,
+  ): Promise<string>
+  // Batch ingest (the POST /events endpoint): canonicalises each runtime event
+  // and routes it to the session's store. Returns the count.
+  insertEvents(
+    scope: { organizationId: string; projectId: string; sessionId: string },
+    events: Array<{ type: string; payload: Record<string, unknown>; metadata: Record<string, unknown> }>,
+  ): Promise<number>
+  queryEvents(sessionId: string, query: SessionEventQuery): Promise<SessionEventPage>
+  eventStream(sessionId: string): Promise<{ type: string; payload: string }[]>
+  archive(scope: { organizationId: string; projectId: string; sessionId: string }): Promise<void>
 }
 
 export interface SessionMessageListQuery {
