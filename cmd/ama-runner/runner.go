@@ -875,10 +875,18 @@ func (d *RunnerDaemon) runExternalSession(execution sessionRuntimeExecution) err
 		defer writeMu.Unlock()
 		// Store locally first so a relayed backfill can serve this event even
 		// though the cloud keeps no copy, then relay it live upstream.
-		if _, err := store.Append(eventType, eventPayload, ama.JSON{"runnerId": d.RunnerID, "executor": d.Config.SandboxAdapter}); err != nil {
+		stored, err := store.Append(eventType, eventPayload, ama.JSON{"runnerId": d.RunnerID, "executor": d.Config.SandboxAdapter})
+		if err != nil {
 			return err
 		}
-		return d.writeAcknowledgedChannelEvent(ctx, channel, eventType, eventPayload)
+		// Carry the store's own id/sequence/timestamp upstream so the cloud DO can
+		// fan this event to browsers live with the same identity the relayed
+		// backfill uses (the browser dedups by them) — the cloud keeps no copy.
+		return d.writeAcknowledgedChannelEventWithRelay(ctx, channel, eventType, eventPayload, &relayStamp{
+			sequence:  stored.Sequence,
+			id:        stored.ID,
+			createdAt: stored.CreatedAt,
+		})
 	})
 	if runErr != nil {
 		if successfulRuntimeResult(result) {
@@ -1007,9 +1015,22 @@ func (d *RunnerDaemon) channelEventMessage(eventType string, payload ama.JSON) a
 	return message
 }
 
+// relayStamp carries a stored event's stable identity (assigned by the runner's
+// local store) upstream, so the cloud DO can fan a CLI relay event to browsers
+// live with the exact id/sequence/timestamp the relayed backfill serves.
+type relayStamp struct {
+	sequence  int64
+	id        string
+	createdAt string
+}
+
 func (d *RunnerDaemon) writeAcknowledgedChannelEvent(ctx context.Context, channel RunnerSessionChannel, eventType string, payload ama.JSON) error {
+	return d.writeAcknowledgedChannelEventWithRelay(ctx, channel, eventType, payload, nil)
+}
+
+func (d *RunnerDaemon) writeAcknowledgedChannelEventWithRelay(ctx context.Context, channel RunnerSessionChannel, eventType string, payload ama.JSON, relay *relayStamp) error {
 	eventID := fmt.Sprintf("runner_event_%d", time.Now().UnixNano())
-	if err := channel.WriteJSON(ctx, ama.JSON{
+	message := ama.JSON{
 		"type":    "runner.event",
 		"eventId": eventID,
 		"event": ama.JSON{
@@ -1020,7 +1041,13 @@ func (d *RunnerDaemon) writeAcknowledgedChannelEvent(ctx context.Context, channe
 				"executor": d.Config.SandboxAdapter,
 			},
 		},
-	}); err != nil {
+	}
+	if relay != nil {
+		message["relaySequence"] = relay.sequence
+		message["relayId"] = relay.id
+		message["relayCreatedAt"] = relay.createdAt
+	}
+	if err := channel.WriteJSON(ctx, message); err != nil {
 		return err
 	}
 	for {

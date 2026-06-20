@@ -27,10 +27,14 @@ import {
   countSessionEvents,
   ensureSessionEventSchema,
   exportSessionEventsJsonl,
+  newRelayThreadState,
   queryEventsFromSql,
   queryRelayedEvents,
   type RelayedRunnerEvent,
+  type RelayThreadState,
   type SessionEventScope,
+  serializeRow,
+  stepRelayEvent,
   streamSessionEvents,
 } from './session-event-store-sql'
 
@@ -55,6 +59,10 @@ export class SessionObject implements DurableObject {
       timer: ReturnType<typeof setTimeout>
     }
   >()
+  // Threading state for the live relay fan, advanced per relay event in channel
+  // order (synchronously, before any await) so a pushed CLI event canonicalises
+  // identically to its backfilled twin. Reset when a new runner channel connects.
+  private relayThread: RelayThreadState = newRelayThreadState()
 
   constructor(
     private readonly durableState: DurableObjectState,
@@ -278,6 +286,7 @@ export class SessionObject implements DurableObject {
     server.accept()
     this.socket = server
     this.state = next
+    this.relayThread = newRelayThreadState()
     server.send(
       JSON.stringify({ type: 'session.channel.accepted', sessionId: next.sessionId, channelId: next.channelId }),
     )
@@ -340,6 +349,32 @@ export class SessionObject implements DurableObject {
       const metadata = eventRecord.metadata
       if (typeof type !== 'string' || !payload || typeof payload !== 'object' || Array.isArray(payload)) {
         throw new Error('Runner channel event is invalid')
+      }
+      // CLI relay events keep no cloud copy, so the append path never fans them.
+      // Push them live to browsers here — in channel order, before any await — so
+      // the threading state advances deterministically. The runner stamps its own
+      // store sequence/id (which the relay backfill agrees on), and we thread +
+      // serialise exactly as queryRelayedEvents does, so a pushed event is
+      // identical to its backfilled twin.
+      const relaySequence = record.relaySequence
+      const relayId = record.relayId
+      if (typeof relaySequence === 'number' && typeof relayId === 'string') {
+        const row = stepRelayEvent(
+          {
+            id: relayId,
+            sequence: relaySequence,
+            type,
+            payload: payload as Record<string, unknown>,
+            metadata:
+              metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+                ? (metadata as Record<string, unknown>)
+                : {},
+            createdAt: typeof record.relayCreatedAt === 'string' ? record.relayCreatedAt : new Date().toISOString(),
+          },
+          { organizationId: state.organizationId, projectId: state.projectId, sessionId: state.sessionId },
+          this.relayThread,
+        )
+        this.fanOutToBrowsers({ type: 'event', event: serializeRow(row) })
       }
       const deps = createDeps(this.env)
       try {

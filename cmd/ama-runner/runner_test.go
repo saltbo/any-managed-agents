@@ -622,6 +622,46 @@ func TestAcknowledgedChannelEventFailsOnUnscopedChannelError(t *testing.T) {
 	}
 }
 
+func TestAcknowledgedChannelEventWithRelayStampsStoreIdentity(t *testing.T) {
+	channel := newFakeRunnerSessionChannel()
+	daemon := testDaemon(&fakeControlPlane{}, &fakeAdapter{})
+	err := daemon.writeAcknowledgedChannelEventWithRelay(
+		context.Background(), channel, "message_start", ama.JSON{"text": "hi"},
+		&relayStamp{sequence: 9, id: "evt-9", createdAt: "2026-01-01T00:00:09Z"},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	channel.mu.Lock()
+	defer channel.mu.Unlock()
+	last := channel.writes[len(channel.writes)-1]
+	// The cloud DO fans relay events live keyed by the store's own identity, so the
+	// channel event must carry it (JSON numbers decode to float64).
+	if last["relaySequence"] != float64(9) {
+		t.Fatalf("expected relaySequence 9, got %v", last["relaySequence"])
+	}
+	if last["relayId"] != "evt-9" {
+		t.Fatalf("expected relayId evt-9, got %v", last["relayId"])
+	}
+	if last["relayCreatedAt"] != "2026-01-01T00:00:09Z" {
+		t.Fatalf("expected relayCreatedAt 2026-01-01T00:00:09Z, got %v", last["relayCreatedAt"])
+	}
+}
+
+func TestAcknowledgedChannelEventWithoutRelayOmitsStamp(t *testing.T) {
+	channel := newFakeRunnerSessionChannel()
+	daemon := testDaemon(&fakeControlPlane{}, &fakeAdapter{})
+	if err := daemon.writeAcknowledgedChannelEvent(context.Background(), channel, "runtime.metadata", ama.JSON{"status": "started"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	channel.mu.Lock()
+	defer channel.mu.Unlock()
+	last := channel.writes[len(channel.writes)-1]
+	if _, ok := last["relaySequence"]; ok {
+		t.Fatalf("a non-relay channel event must not carry a relay stamp: %v", last)
+	}
+}
+
 func TestSessionStartFailsLeaseWhenChannelOpenFails(t *testing.T) {
 	client := &fakeControlPlane{lease: sessionStartLease(), channelErr: errors.New("channel failed")}
 	daemon := testDaemon(client, &fakeAdapter{})

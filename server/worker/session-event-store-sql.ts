@@ -237,53 +237,68 @@ export interface RelayedRunnerEvent {
 // same way appendCanonicalEventToSql does — then applies the same filter/cursor
 // /pagination as queryEventsFromSql so a relayed page is indistinguishable from
 // a DO-served one.
+// Per-session threading state for the relay canonicaliser: turn nesting + message
+// correlation carry across events. The SAME machine drives both the full-log
+// backfill (queryRelayedEvents) and the DO's live fan (stepRelayEvent), so a
+// pushed event is byte-identical to its backfilled twin.
+export interface RelayThreadState {
+  currentTurnId: string | null
+  lastMessageType: string | null
+  lastMessageCorrelation: string | null
+}
+
+export function newRelayThreadState(): RelayThreadState {
+  return { currentTurnId: null, lastMessageType: null, lastMessageCorrelation: null }
+}
+
+// Canonicalise + thread ONE raw runner event, advancing `state` in place.
+export function stepRelayEvent(raw: RelayedRunnerEvent, scope: SessionEventScope, state: RelayThreadState): EventRow {
+  const canonical = canonicalAmaSessionEventFromRuntimeEvent({ type: raw.type, ...raw.payload }, raw.metadata)
+  const parentEventId = state.currentTurnId
+  const isMessage = MESSAGE_EVENT_TYPES.includes(canonical.type as (typeof MESSAGE_EVENT_TYPES)[number])
+  let correlationId = canonicalEventCorrelation(canonical.type, canonical.payload)
+  if (correlationId === null && isMessage) {
+    correlationId =
+      canonical.type !== 'message_start' &&
+      state.lastMessageType !== null &&
+      state.lastMessageType !== 'message_end' &&
+      state.lastMessageCorrelation
+        ? state.lastMessageCorrelation
+        : `message:${raw.id}`
+  }
+  if (canonical.type === 'turn_start') {
+    state.currentTurnId = raw.id
+  } else if (canonical.type === 'turn_end') {
+    state.currentTurnId = null
+  }
+  if (isMessage) {
+    state.lastMessageType = canonical.type
+    state.lastMessageCorrelation = correlationId
+  }
+  return {
+    id: raw.id,
+    organization_id: scope.organizationId,
+    project_id: scope.projectId,
+    session_id: scope.sessionId,
+    sequence: raw.sequence,
+    type: canonical.type,
+    visibility: canonical.visibility,
+    role: canonical.role,
+    parent_event_id: parentEventId,
+    correlation_id: correlationId,
+    payload: JSON.stringify(canonical.payload),
+    metadata: JSON.stringify(canonical.metadata),
+    created_at: raw.createdAt,
+  }
+}
+
 export function queryRelayedEvents(
   rawEvents: RelayedRunnerEvent[],
   scope: SessionEventScope,
   query: SessionEventQuery,
 ): SessionEventPage {
-  let currentTurnId: string | null = null
-  let lastMessageType: string | null = null
-  let lastMessageCorrelation: string | null = null
-  const rows: EventRow[] = rawEvents.map((raw) => {
-    const canonical = canonicalAmaSessionEventFromRuntimeEvent({ type: raw.type, ...raw.payload }, raw.metadata)
-    const parentEventId = currentTurnId
-    const isMessage = MESSAGE_EVENT_TYPES.includes(canonical.type as (typeof MESSAGE_EVENT_TYPES)[number])
-    let correlationId = canonicalEventCorrelation(canonical.type, canonical.payload)
-    if (correlationId === null && isMessage) {
-      correlationId =
-        canonical.type !== 'message_start' &&
-        lastMessageType !== null &&
-        lastMessageType !== 'message_end' &&
-        lastMessageCorrelation
-          ? lastMessageCorrelation
-          : `message:${raw.id}`
-    }
-    if (canonical.type === 'turn_start') {
-      currentTurnId = raw.id
-    } else if (canonical.type === 'turn_end') {
-      currentTurnId = null
-    }
-    if (isMessage) {
-      lastMessageType = canonical.type
-      lastMessageCorrelation = correlationId
-    }
-    return {
-      id: raw.id,
-      organization_id: scope.organizationId,
-      project_id: scope.projectId,
-      session_id: scope.sessionId,
-      sequence: raw.sequence,
-      type: canonical.type,
-      visibility: canonical.visibility,
-      role: canonical.role,
-      parent_event_id: parentEventId,
-      correlation_id: correlationId,
-      payload: JSON.stringify(canonical.payload),
-      metadata: JSON.stringify(canonical.metadata),
-      created_at: raw.createdAt,
-    }
-  })
+  const state = newRelayThreadState()
+  const rows: EventRow[] = rawEvents.map((raw) => stepRelayEvent(raw, scope, state))
 
   const visibility = query.visibility ?? 'runtime'
   let filtered = rows.filter((row) => row.visibility === visibility)
@@ -332,7 +347,7 @@ export function exportSessionEventsJsonl(sql: SqlStorage, sessionId: string): st
 // Row → SessionEventRecord. Identical output to the D1 repo's serializeEvent:
 // canonicalises a non-canonical stored type, redacts payload/metadata on the way
 // out, and tags the raw type into metadata for non-canonical rows.
-function serializeRow(row: EventRow): SessionEventRecord {
+export function serializeRow(row: EventRow): SessionEventRecord {
   const rawPayload = JSON.parse(row.payload) as Record<string, unknown>
   const rawMetadata = JSON.parse(row.metadata) as Record<string, unknown>
   const event = isAmaSessionEventType(row.type)
