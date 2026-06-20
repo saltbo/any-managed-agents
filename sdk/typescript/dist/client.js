@@ -66,6 +66,7 @@ export function createAmaClient(config) {
             get: (sessionId) => unwrap(ops.readSession({ client, path: { sessionId } })),
             update: (sessionId, body) => unwrap(ops.updateSession({ client, path: { sessionId }, body })),
             list: (query) => unwrap(ops.listSessions({ client, query })),
+            connection: (sessionId) => unwrap(ops.readSessionConnection({ client, path: { sessionId } })),
             listEvents: (sessionId, query) => unwrap(ops.listSessionEvents({ client, path: { sessionId }, query })),
             createMessage: (sessionId, body) => unwrap(ops.createSessionMessage({ client, path: { sessionId }, body })),
         },

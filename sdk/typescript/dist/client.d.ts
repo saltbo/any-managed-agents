@@ -41,6 +41,7 @@ export declare function createAmaClient(config: AmaClientConfig): {
         get: (sessionId: string) => Promise<types.Session>;
         update: (sessionId: string, body: types.UpdateSessionRequest) => Promise<types.Session>;
         list: (query?: types.ListSessionsData["query"]) => Promise<types.SessionListResponse>;
+        connection: (sessionId: string) => Promise<types.SessionConnection>;
         listEvents: (sessionId: string, query?: types.ListSessionEventsData["query"]) => Promise<types.SessionEventListResponse>;
         createMessage: (sessionId: string, body: types.CreateSessionMessageRequest) => Promise<types.SessionMessage>;
     };

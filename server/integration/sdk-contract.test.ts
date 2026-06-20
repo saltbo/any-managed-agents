@@ -1,8 +1,23 @@
 import { SELF } from 'cloudflare:test'
 import { isAmaSessionEventType } from '@shared/session-events'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AmaClient, operations } from '../../sdk/typescript/src/index'
+import openapi from '../../sdk/openapi.json'
+import type { AmaClient } from '../../sdk/typescript/src/index'
+import { createAmaClient } from '../../sdk/typescript/src/index'
 import { seedPlatformProvider, signIn } from './auth'
+
+// The SDK's external operation inventory, derived from the published OpenAPI
+// document the generated client is built from — { path, operationId } per
+// operation. The generated client used to ship a hand-maintained `operations`
+// array; the facade migration dropped it, so the contract is asserted against
+// the spec itself, which is strictly more faithful.
+const operations: Array<{ path: string; operationId: string }> = Object.entries(
+  (openapi as { paths: Record<string, Record<string, { operationId?: string }>> }).paths,
+).flatMap(([path, methods]) =>
+  Object.values(methods)
+    .filter((op): op is { operationId: string } => typeof op?.operationId === 'string')
+    .map((op) => ({ path, operationId: op.operationId })),
+)
 
 // Integration port of the generated-SDK journey from e2e/projects.spec.ts. The
 // SDK calls global fetch(origin + path); in the integration pool there is no HTTP
@@ -76,32 +91,28 @@ async function newSdk() {
   const authorization = await signIn()
   const accessToken = authorization.replace(/^Bearer\s+/i, '')
   const runId = accessToken.replace(/^e2e:/, '')
-  return { ama: new AmaClient({ origin: 'https://example.com', accessToken }), runId }
+  return { ama: createAmaClient({ baseUrl: 'https://example.com', accessToken }), runId }
 }
 
 async function createAgentThroughSdk(ama: AmaClient, runId: string, refs: ReturnType<typeof externalRefs>) {
-  return await ama.request<Json>('createAgent', {
-    body: {
-      name: `${runId} external agent`,
-      instructions: 'Work items arrive from an external product over the AMA SDK.',
-      providerId: 'workers-ai',
-      model: '@cf/moonshotai/kimi-k2.6',
-      metadata: externalMetadata(refs),
-    },
-  })
+  return (await ama.agents.create({
+    name: `${runId} external agent`,
+    instructions: 'Work items arrive from an external product over the AMA SDK.',
+    providerId: 'workers-ai',
+    model: '@cf/moonshotai/kimi-k2.6',
+    metadata: externalMetadata(refs),
+  })) as Json
 }
 async function createEnvironmentThroughSdk(ama: AmaClient, runId: string, refs: ReturnType<typeof externalRefs>) {
-  return await ama.request<Json>('createEnvironment', {
-    body: {
-      name: `${runId} external env`,
-      runtimeConfig: { image: 'ama-pi-runtime' },
-      metadata: externalMetadata(refs),
-    },
-  })
+  return (await ama.environments.create({
+    name: `${runId} external env`,
+    runtimeConfig: { image: 'ama-pi-runtime' },
+    metadata: externalMetadata(refs),
+  })) as Json
 }
-const readSession = (ama: AmaClient, sessionId: string) => ama.request<Json>('readSession', { path: { sessionId } })
+const readSession = (ama: AmaClient, sessionId: string) => ama.sessions.get(sessionId) as Promise<Json>
 const listEvents = (ama: AmaClient, sessionId: string) =>
-  ama.request<SdkList>('listSessionEvents', { path: { sessionId }, query: { limit: 200 } })
+  ama.sessions.listEvents(sessionId, { limit: 200 }) as Promise<SdkList>
 
 async function createSessionThroughSdk(
   ama: AmaClient,
@@ -111,16 +122,14 @@ async function createSessionThroughSdk(
   environment: Json,
   extra: Json,
 ) {
-  const created = await ama.request<Json>('createSession', {
-    body: {
-      agentId: obj(agent).id,
-      environmentId: obj(environment).id,
-      runtime: 'ama',
-      title: `${runId} external session`,
-      metadata: externalMetadata(refs),
-      ...extra,
-    },
-  })
+  const created = (await ama.sessions.create({
+    agentId: String(obj(agent).id),
+    environmentId: String(obj(environment).id),
+    runtime: 'ama',
+    title: `${runId} external session`,
+    metadata: externalMetadata(refs),
+    ...extra,
+  })) as Json
   // Cloud sessions reach `idle` synchronously in the integration pool, so we just
   // read the session back rather than polling a runtime drive-to-idle loop.
   const session = await readSession(ama, String(created.id))
@@ -130,10 +139,11 @@ async function createSessionThroughSdk(
 describe('[CF] generated SDK contract', () => {
   beforeEach(async () => {
     await seedPlatformProvider()
-    // Route the SDK's global fetch to the assembled worker via SELF.
-    vi.stubGlobal('fetch', (input: unknown, init?: RequestInit) =>
-      SELF.fetch(typeof input === 'string' ? input : ((input as { url?: string })?.url ?? String(input)), init),
-    )
+    // Route the SDK's global fetch to the assembled worker via SELF. The
+    // generated client issues `fetch(new Request(url, init))` — a single Request
+    // that already carries method, headers, and body — so the stub forwards it
+    // whole; reducing it to a bare url would strip auth + body (HTTP 401).
+    vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => SELF.fetch(input as RequestInfo, init))
   })
 
   afterEach(() => {
@@ -145,20 +155,17 @@ describe('[CF] generated SDK contract', () => {
     const refs = externalRefs(runId)
 
     const createdAgent = await createAgentThroughSdk(ama, runId, refs)
-    const updatedAgent = await ama.request<Json>('updateAgent', {
-      path: { agentId: String(createdAgent.id) },
-      body: { description: 'Updated by the external product through the SDK.' },
-    })
+    const updatedAgent = (await ama.agents.update(String(createdAgent.id), {
+      description: 'Updated by the external product through the SDK.',
+    })) as Json
     const createdEnv = await createEnvironmentThroughSdk(ama, runId, refs)
 
     // AMA stores only standard resource fields; external ids survive only in metadata.
-    const agent = await ama.request<Json>('readAgent', { path: { agentId: String(obj(updatedAgent).id) } })
+    const agent = (await ama.agents.get(String(obj(updatedAgent).id))) as Json
     for (const key of Object.keys(agent)) {
       expect(STANDARD_AGENT_FIELDS.has(key), `agent field "${key}" is not standard`).toBe(true)
     }
-    const environment = await ama.request<Json>('readEnvironment', {
-      path: { environmentId: String(obj(createdEnv).id) },
-    })
+    const environment = (await ama.environments.get(String(obj(createdEnv).id))) as Json
     for (const key of Object.keys(environment)) {
       expect(STANDARD_ENVIRONMENT_FIELDS.has(key), `environment field "${key}" is not standard`).toBe(true)
     }
@@ -181,16 +188,8 @@ describe('[CF] generated SDK contract', () => {
     const productRecords = new Map<string, string>()
     productRecords.set(refs.taskId, String(agent.id))
     productRecords.set(refs.boardId, String(environment.id))
-    expect(
-      (await ama.request<Json>('readAgent', { path: { agentId: productRecords.get(refs.taskId) as string } })).id,
-    ).toBe(agent.id)
-    expect(
-      (
-        await ama.request<Json>('readEnvironment', {
-          path: { environmentId: productRecords.get(refs.boardId) as string },
-        })
-      ).id,
-    ).toBe(environment.id)
+    expect(((await ama.agents.get(productRecords.get(refs.taskId) as string)) as Json).id).toBe(agent.id)
+    expect(((await ama.environments.get(productRecords.get(refs.boardId) as string)) as Json).id).toBe(environment.id)
 
     // The SDK inventory exposes no product-workflow concepts.
     const asyncTaskResource = /[a-z]+-tasks(\/|\b)/i
@@ -225,9 +224,8 @@ describe('[CF] generated SDK contract', () => {
     expect(obj(before.agentSnapshot).agentId).toBe(obj(agent).id)
     expect(typeof obj(before.agentSnapshot).version).toBe('number')
     expect(obj(before.environmentSnapshot).environmentId).toBe(obj(environment).id)
-    await ama.request<Json>('updateAgent', {
-      path: { agentId: String(obj(agent).id) },
-      body: { instructions: 'Changed after session creation — the snapshot must not follow.' },
+    await ama.agents.update(String(obj(agent).id), {
+      instructions: 'Changed after session creation — the snapshot must not follow.',
     })
     const after = await readSession(ama, sessionId)
     expect(after.agentSnapshot).toEqual(before.agentSnapshot)
@@ -244,7 +242,7 @@ describe('[CF] generated SDK contract', () => {
     const fetched = await readSession(ama, String(created.id))
     expect(fetched.id).toBe(created.id)
     expect('stateReason' in fetched).toBe(true)
-    const connection = await ama.request<Json>('readSessionConnection', { path: { sessionId: String(created.id) } })
+    const connection = (await ama.sessions.connection(String(created.id))) as Json
     expect(connection.path).toBe(`/api/v1/runtime/sessions/${created.id}/rpc`)
     const eventsOperation = operations.find((op) => op.operationId === 'listSessionEvents')
     expect(eventsOperation?.path).toBe('/api/v1/sessions/{sessionId}/events')
@@ -268,11 +266,11 @@ describe('[CF] generated SDK contract', () => {
     const { session } = await createSessionThroughSdk(ama, runId, refs, agent, environment, {})
     const sessionId = String(obj(session).id)
 
-    const command = await ama.request<Json>('createSessionMessage', {
-      path: { sessionId },
-      body: { type: 'prompt', content: `external product follow-up ${runId}` },
-    })
-    const stopped = await ama.request<Json>('updateSession', { path: { sessionId }, body: { state: 'stopped' } })
+    const command = (await ama.sessions.createMessage(sessionId, {
+      type: 'prompt',
+      content: `external product follow-up ${runId}`,
+    })) as Json
+    const stopped = (await ama.sessions.update(sessionId, { state: 'stopped' })) as Json
 
     // The follow-up is an addressable message routed on AMA-relative channels.
     expect(typeof command.id === 'string' && (command.id as string).length > 0).toBe(true)
