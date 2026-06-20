@@ -784,6 +784,14 @@ export const readSessionConnection = (options) => (options.client ?? client).get
     ...options
 });
 /**
+ * Open the session browser WebSocket (live events + backfill + input)
+ */
+export const connectSessionSocket = (options) => (options.client ?? client).get({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/sessions/{sessionId}/socket',
+    ...options
+});
+/**
  * List session messages
  */
 export const listSessionMessages = (options) => (options.client ?? client).get({

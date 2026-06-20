@@ -5748,6 +5748,9 @@ type ClientInterface interface {
 	// ReadSessionMessage request
 	ReadSessionMessage(ctx context.Context, sessionId string, messageId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ConnectSessionSocket request
+	ConnectSessionSocket(ctx context.Context, sessionId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListTriggers request
 	ListTriggers(ctx context.Context, params *ListTriggersParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -7097,6 +7100,18 @@ func (c *APIClient) CreateSessionMessage(ctx context.Context, sessionId string, 
 
 func (c *APIClient) ReadSessionMessage(ctx context.Context, sessionId string, messageId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewReadSessionMessageRequest(c.Server, sessionId, messageId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *APIClient) ConnectSessionSocket(ctx context.Context, sessionId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewConnectSessionSocketRequest(c.Server, sessionId)
 	if err != nil {
 		return nil, err
 	}
@@ -11487,6 +11502,40 @@ func NewReadSessionMessageRequest(server string, sessionId string, messageId str
 	return req, nil
 }
 
+// NewConnectSessionSocketRequest generates requests for ConnectSessionSocket
+func NewConnectSessionSocketRequest(server string, sessionId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "sessionId", sessionId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/sessions/%s/socket", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewListTriggersRequest generates requests for ListTriggers
 func NewListTriggersRequest(server string, params *ListTriggersParams) (*http.Request, error) {
 	var err error
@@ -13450,6 +13499,9 @@ type ClientWithResponsesInterface interface {
 
 	// ReadSessionMessageWithResponse request
 	ReadSessionMessageWithResponse(ctx context.Context, sessionId string, messageId string, reqEditors ...RequestEditorFn) (*ReadSessionMessageResponse, error)
+
+	// ConnectSessionSocketWithResponse request
+	ConnectSessionSocketWithResponse(ctx context.Context, sessionId string, reqEditors ...RequestEditorFn) (*ConnectSessionSocketResponse, error)
 
 	// ListTriggersWithResponse request
 	ListTriggersWithResponse(ctx context.Context, params *ListTriggersParams, reqEditors ...RequestEditorFn) (*ListTriggersResponse, error)
@@ -16139,6 +16191,39 @@ func (r ReadSessionMessageResponse) ContentType() string {
 	return ""
 }
 
+type ConnectSessionSocketResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *SessionConnection
+	JSON401      *GeneratedErrorResponse
+	JSON404      *GeneratedErrorResponse
+	JSON426      *GeneratedErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r ConnectSessionSocketResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ConnectSessionSocketResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ConnectSessionSocketResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ListTriggersResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -17848,6 +17933,15 @@ func (c *ClientWithResponses) ReadSessionMessageWithResponse(ctx context.Context
 		return nil, err
 	}
 	return ParseReadSessionMessageResponse(rsp)
+}
+
+// ConnectSessionSocketWithResponse request returning *ConnectSessionSocketResponse
+func (c *ClientWithResponses) ConnectSessionSocketWithResponse(ctx context.Context, sessionId string, reqEditors ...RequestEditorFn) (*ConnectSessionSocketResponse, error) {
+	rsp, err := c.ConnectSessionSocket(ctx, sessionId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseConnectSessionSocketResponse(rsp)
 }
 
 // ListTriggersWithResponse request returning *ListTriggersResponse
@@ -21606,6 +21700,53 @@ func ParseReadSessionMessageResponse(rsp *http.Response) (*ReadSessionMessageRes
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseConnectSessionSocketResponse parses an HTTP response from a ConnectSessionSocketWithResponse call
+func ParseConnectSessionSocketResponse(rsp *http.Response) (*ConnectSessionSocketResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ConnectSessionSocketResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SessionConnection
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 426:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON426 = &dest
 
 	}
 

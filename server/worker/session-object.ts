@@ -53,6 +53,9 @@ export class SessionObject implements DurableObject {
     if (url.pathname === '/connect') {
       return this.connectChannel(request, url)
     }
+    if (url.pathname === '/browser') {
+      return this.connectBrowser(request, url)
+    }
     if (url.pathname === '/dispatch' && request.method === 'POST') {
       return this.dispatch(await request.json())
     }
@@ -73,6 +76,9 @@ export class SessionObject implements DurableObject {
     if (pathname === '/events/append') {
       const { scope, canonicalEvent, overrides } = body as AppendBody
       const appended = appendCanonicalEventToSql(sql, scope, canonicalEvent, overrides)
+      // Fan the freshly-appended event out to every connected browser socket so
+      // live chat updates without polling. Backfill (history) is served on request.
+      this.fanOutToBrowsers({ type: 'event', event: appended.record })
       return Response.json(appended)
     }
     if (pathname === '/events/query') {
@@ -109,6 +115,84 @@ export class SessionObject implements DurableObject {
       this.eventSchemaReady = true
     }
     return sql
+  }
+
+  // ── browser transport ───────────────────────────────────────────────────────
+  // One hibernatable WebSocket per browser tab. The HTTP layer authorises that the
+  // connecting user owns the session before upgrading, so the DO trusts the
+  // upgrade and stores the scope on the socket (surviving hibernation). The socket
+  // carries live events (server→browser, fanned out on append), a backfill replay
+  // on request, and — over the same socket — inbound prompt/abort/steer/approval
+  // (REST POST /messages stays a fallback).
+  private connectBrowser(request: Request, url: URL): Response {
+    if (request.headers.get('upgrade')?.toLowerCase() !== 'websocket') {
+      return new Response('WebSocket upgrade required', { status: 426 })
+    }
+    const scope = browserScopeFromUrl(url)
+    const pair = new WebSocketPair()
+    const [client, server] = Object.values(pair) as [WebSocket, WebSocket]
+    this.durableState.acceptWebSocket(server, ['browser'])
+    server.serializeAttachment(scope)
+    return new Response(null, { status: 101, webSocket: client })
+  }
+
+  private fanOutToBrowsers(frame: Record<string, unknown>): void {
+    const payload = JSON.stringify(frame)
+    for (const ws of this.durableState.getWebSockets('browser')) {
+      try {
+        ws.send(payload)
+      } catch {
+        // A socket that errors on send is closing; hibernation reaps it.
+      }
+    }
+  }
+
+  // Hibernation message handler — fires only for browser sockets (the runner
+  // socket uses the standard accept() listener, never acceptWebSocket).
+  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    const scope = ws.deserializeAttachment() as BrowserScope | null
+    if (!scope) {
+      return
+    }
+    let frame: Record<string, unknown>
+    try {
+      const text = typeof message === 'string' ? message : new TextDecoder().decode(message)
+      const parsed: unknown = JSON.parse(text)
+      if (!parsed || typeof parsed !== 'object') {
+        return
+      }
+      frame = parsed as Record<string, unknown>
+    } catch {
+      return
+    }
+    if (frame.type === 'backfill') {
+      this.sendBackfill(ws, scope.sessionId, frame)
+    }
+    // prompt/abort/steer/approval (the inbound write frames) route through the
+    // session usecases; handled in browser-write wiring.
+  }
+
+  // Hibernation close handler. Hibernation reaps the socket; nothing to clean up.
+  async webSocketClose(_ws: WebSocket, _code: number, _reason: string, _wasClean: boolean): Promise<void> {}
+
+  private sendBackfill(ws: WebSocket, sessionId: string, frame: Record<string, unknown>): void {
+    const page = queryEventsFromSql(this.eventSql(), sessionId, {
+      order: 'asc',
+      limit: typeof frame.limit === 'number' ? frame.limit : 200,
+      ...(typeof frame.cursor === 'number' ? { cursor: frame.cursor } : {}),
+      ...(typeof frame.eventType === 'string' ? { type: frame.eventType } : {}),
+      visibility: typeof frame.visibility === 'string' ? frame.visibility : 'runtime',
+    })
+    const last = page.rows.at(-1)
+    ws.send(
+      JSON.stringify({
+        type: 'backfill',
+        requestId: typeof frame.requestId === 'string' ? frame.requestId : null,
+        events: page.rows,
+        nextCursor: page.hasMore && last ? last.sequence : null,
+        hasMore: page.hasMore,
+      }),
+    )
   }
 
   private connectChannel(request: Request, url: URL) {
@@ -267,6 +351,24 @@ function requiredParam(url: URL, name: string) {
     throw new Error(`Missing runner channel parameter ${name}`)
   }
   return value
+}
+
+// The owning-user scope the HTTP layer stamps onto a browser socket at upgrade
+// (after it has authorised ownership). userId scopes inbound write frames.
+type BrowserScope = {
+  sessionId: string
+  organizationId: string
+  projectId: string
+  userId: string
+}
+
+function browserScopeFromUrl(url: URL): BrowserScope {
+  return {
+    sessionId: requiredParam(url, 'sessionId'),
+    organizationId: requiredParam(url, 'organizationId'),
+    projectId: requiredParam(url, 'projectId'),
+    userId: requiredParam(url, 'userId'),
+  }
 }
 
 function safeChannelError(error: unknown) {

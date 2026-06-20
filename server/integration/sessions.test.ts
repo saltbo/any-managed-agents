@@ -317,8 +317,8 @@ describe('[CF] /api/v1/sessions', () => {
     expect(connectionRes.status).toBe(200)
     await expect(connectionRes.json()).resolves.toEqual({
       sessionId: created.id,
-      transport: 'ama-runtime-rpc',
-      path: `/api/v1/runtime/sessions/${created.id}/rpc`,
+      transport: 'websocket',
+      path: `/api/v1/sessions/${created.id}/socket`,
       state: 'idle',
       stateReason: null,
     })
@@ -634,7 +634,8 @@ describe('[CF] /api/v1/sessions', () => {
     expect(connectionRes.status).toBe(200)
     await expect(connectionRes.json()).resolves.toMatchObject({
       sessionId: created.id,
-      path: null,
+      transport: 'websocket',
+      path: `/api/v1/sessions/${created.id}/socket`,
       state: 'pending',
       stateReason: 'waiting-for-runner',
     })
@@ -1026,6 +1027,75 @@ describe('[CF] /api/v1/sessions', () => {
       .map((line) => JSON.parse(line) as { type: string })
     expect(events.some((event) => event.type === 'turn_end')).toBe(true)
     expect(events.some((event) => event.type === 'session_stop')).toBe(true)
+  })
+
+  it('streams backfill history and live events over the browser WebSocket', async () => {
+    const authorization = await signIn()
+    await connectMcp(authorization, 'github')
+    const environment = await createEnvironment(authorization)
+    const agent = await createAgent(authorization)
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
+    })
+    expect(createRes.status).toBe(201)
+    const created = (await createRes.json()) as { id: string }
+
+    // A historical event the backfill request must replay.
+    await jsonFetch(`/api/v1/sessions/${created.id}/events`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ events: [{ type: 'message_start', payload: { role: 'assistant' } }] }),
+    })
+
+    // The connection resource advertises the WebSocket transport + path.
+    const connection = (await (await jsonFetch(`/api/v1/sessions/${created.id}/connection`, authorization)).json()) as {
+      transport: string
+      path: string
+    }
+    expect(connection.transport).toBe('websocket')
+
+    const socketRes = await SELF.fetch(`https://example.com${connection.path}`, {
+      headers: { authorization, Upgrade: 'websocket' },
+    })
+    expect(socketRes.status).toBe(101)
+    const ws = socketRes.webSocket as WebSocket
+    const frames: Array<Record<string, unknown>> = []
+    let onFrame: (() => void) | null = null
+    ws.addEventListener('message', (event: MessageEvent) => {
+      const data = typeof event.data === 'string' ? event.data : new TextDecoder().decode(event.data as ArrayBuffer)
+      frames.push(JSON.parse(data))
+      onFrame?.()
+    })
+    ws.accept()
+
+    async function waitForFrame(predicate: (frame: Record<string, unknown>) => boolean) {
+      for (let attempt = 0; attempt < 50; attempt += 1) {
+        if (frames.some(predicate)) {
+          return frames.find(predicate) as Record<string, unknown>
+        }
+        await new Promise<void>((resolve) => {
+          onFrame = resolve
+          setTimeout(resolve, 20)
+        })
+      }
+      throw new Error(`expected frame never arrived; got ${JSON.stringify(frames)}`)
+    }
+
+    ws.send(JSON.stringify({ type: 'backfill', requestId: 'r1', limit: 100 }))
+    const backfill = await waitForFrame((frame) => frame.type === 'backfill')
+    expect((backfill.events as Array<{ type: string }>).some((event) => event.type === 'message_start')).toBe(true)
+
+    // A live append fans out to the open socket without polling.
+    await jsonFetch(`/api/v1/sessions/${created.id}/events`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ events: [{ type: 'message_end', payload: { content: 'live frame' } }] }),
+    })
+    const live = await waitForFrame(
+      (frame) => frame.type === 'event' && (frame.event as { type: string }).type === 'message_end',
+    )
+    expect((live.event as { type: string }).type).toBe('message_end')
+
+    ws.close()
   })
 
   it('accepts self-hosted sessions when cloud sandbox startup is disabled [spec: environments/self-hosted]', async () => {

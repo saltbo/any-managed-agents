@@ -243,7 +243,8 @@ describe('[CF] generated SDK contract', () => {
     expect(fetched.id).toBe(created.id)
     expect('stateReason' in fetched).toBe(true)
     const connection = (await ama.sessions.connection(String(created.id))) as Json
-    expect(connection.path).toBe(`/api/v1/runtime/sessions/${created.id}/rpc`)
+    expect(connection.transport).toBe('websocket')
+    expect(connection.path).toBe(`/api/v1/sessions/${created.id}/socket`)
     const eventsOperation = operations.find((op) => op.operationId === 'listSessionEvents')
     expect(eventsOperation?.path).toBe('/api/v1/sessions/{sessionId}/events')
 

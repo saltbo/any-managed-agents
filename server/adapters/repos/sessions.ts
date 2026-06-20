@@ -23,7 +23,7 @@ import type { drizzle } from 'drizzle-orm/d1'
 import type { RuntimeName } from '../../contracts/environment-contracts'
 import { leases, runners, sessionApprovals, sessionEvents, sessionMessages, sessions, workItems } from '../../db/schema'
 import { insertCanonicalSessionEvent } from '../../db/session-event-store'
-import { runtimeEndpointPath, runtimeMetadata } from '../../domain/runtime/driver'
+import { runtimeMetadata, sessionSocketPath } from '../../domain/runtime/driver'
 import { hostingModeFromSnapshot } from '../../domain/session'
 import { redactSensitiveValue } from '../../redaction'
 
@@ -126,29 +126,15 @@ function serializeSession(row: SessionRow): SessionRecord {
 }
 
 function serializeConnection(row: SessionRow): SessionConnectionRecord {
-  const environmentSnapshot = normalizeEnvironmentSnapshot(parseJson<Record<string, unknown>>(row.environmentSnapshot))
-  const metadata = parseJson<Record<string, unknown>>(row.metadata) ?? {}
-  const agentSnapshot = parseAgentSnapshot(row.agentSnapshot)
-  if (!agentSnapshot) {
-    throw new Error('Session agent snapshot is required')
-  }
-  const hostingMode = hostingModeFromSnapshot(environmentSnapshot?.hostingMode)
-  const meta = runtimeMetadata({
-    hostingMode,
-    runtime: snapshotRuntime(metadata),
-    runtimeConfig: objectValue(metadata.runtimeConfig),
-    provider: row.modelProvider ?? agentSnapshot.providerId,
-    model: sessionModel(parseJson<Record<string, unknown>>(row.modelConfig) ?? {}, agentSnapshot),
-    metadata,
-  })
-  // The path is the public runtime proxy mount, not the internal endpoint
-  // column: cloud sessions always reconnect via the canonical proxy path,
-  // self-hosted sessions only once a runner channel attached one.
-  const path = row.runtimeEndpointPath ?? (hostingMode === 'cloud' ? runtimeEndpointPath(row.id) : null)
+  // Browser session transport is a single WebSocket to the per-session Session DO
+  // (live events server→browser, backfill replay on request, and inbound
+  // prompt/abort/steer/approval). SSE + POST /messages remain as REST fallbacks.
+  // The schema already carries transport/path, so this is the advertised value
+  // change only — no contract reshape.
   return {
     sessionId: row.id,
-    transport: meta.protocol,
-    path,
+    transport: 'websocket',
+    path: sessionSocketPath(row.id),
     state: row.state,
     stateReason: row.stateReason,
   }

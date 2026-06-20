@@ -9,6 +9,7 @@ import {
 } from '../contracts/environment-contracts'
 import { ResourceRefSchema } from '../contracts/execution-spec'
 import { type PendingSessionApproval, sessionApprovalState } from '../domain/runtime/approval-state'
+import type { Env } from '../env'
 import { type ErrorType, errorResponse } from '../errors'
 import {
   AuthenticatedOperation,
@@ -397,6 +398,23 @@ function serializeConnection(record: SessionConnectionRecord): z.infer<typeof Se
   return record as z.infer<typeof SessionConnectionSchema>
 }
 
+// Forwards an authorised browser WebSocket upgrade to the per-session Session DO,
+// carrying the owning-user scope as query params (the DO trusts the upgrade since
+// the route already verified ownership). Mirrors the runner channel upgrade.
+function upgradeSessionBrowserSocket(
+  env: Env,
+  request: Request,
+  scope: { sessionId: string; organizationId: string; projectId: string; userId: string },
+) {
+  const stub = env.SESSION.get(env.SESSION.idFromName(scope.sessionId))
+  const url = new URL('https://session-object/browser')
+  url.searchParams.set('sessionId', scope.sessionId)
+  url.searchParams.set('organizationId', scope.organizationId)
+  url.searchParams.set('projectId', scope.projectId)
+  url.searchParams.set('userId', scope.userId)
+  return stub.fetch(new Request(url, request))
+}
+
 function serializeMessage(record: SessionMessageRecord): z.infer<typeof SessionMessageSchema> {
   return record as z.infer<typeof SessionMessageSchema>
 }
@@ -651,6 +669,29 @@ const readSessionConnectionRoute = createRoute({
     200: { description: 'Connection details', content: { 'application/json': { schema: SessionConnectionSchema } } },
     401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
     404: { description: 'Session not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
+  },
+})
+
+const connectSessionSocketRoute = createRoute({
+  method: 'get',
+  path: '/{sessionId}/socket',
+  operationId: 'connectSessionSocket',
+  tags: ['Sessions'],
+  summary: 'Open the session browser WebSocket (live events + backfill + input)',
+  ...AuthenticatedOperation,
+  request: { params: ParamsSchema },
+  responses: {
+    101: { description: 'Session browser socket accepted as a WebSocket upgrade' },
+    200: {
+      description: 'Session connection metadata for OpenAPI clients (no WebSocket upgrade requested)',
+      content: { 'application/json': { schema: SessionConnectionSchema } },
+    },
+    401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    404: { description: 'Session not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    426: {
+      description: 'WebSocket upgrade required',
+      content: { 'application/json': { schema: ErrorResponseSchema } },
+    },
   },
 })
 
@@ -943,6 +984,30 @@ export function registerSessionRoutes(routes: SessionRoutes) {
         return errorResponse(c, 404, 'not_found', 'Session not found')
       }
       return c.json(serializeConnection(connection), 200)
+    })
+    .openapi(connectSessionSocketRoute, async (c) => {
+      // Authorise that the connecting user owns the session, then forward the
+      // upgrade to the per-session Session DO. Non-upgrade (OpenAPI/REST) callers
+      // get the connection metadata instead of a socket.
+      const { sessionId } = c.req.valid('param')
+      const deps = c.get('deps')
+      const auth = await requireAuth(c)
+      if (auth instanceof Response) {
+        return auth
+      }
+      const connection = await deps.sessions.readConnection(auth.project.id, sessionId)
+      if (!connection) {
+        return errorResponse(c, 404, 'not_found', 'Session not found')
+      }
+      if (c.req.header('upgrade')?.toLowerCase() !== 'websocket') {
+        return c.json(serializeConnection(connection), 200)
+      }
+      return upgradeSessionBrowserSocket(c.env, c.req.raw, {
+        sessionId,
+        organizationId: auth.organization.id,
+        projectId: auth.project.id,
+        userId: auth.user.id,
+      })
     })
     .openapi(listSessionMessagesRoute, async (c) => {
       const { sessionId } = c.req.valid('param')

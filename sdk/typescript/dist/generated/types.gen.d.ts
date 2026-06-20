@@ -3869,6 +3869,36 @@ export type ReadSessionConnectionResponses = {
     200: SessionConnection;
 };
 export type ReadSessionConnectionResponse = ReadSessionConnectionResponses[keyof ReadSessionConnectionResponses];
+export type ConnectSessionSocketData = {
+    body?: never;
+    path: {
+        sessionId: string;
+    };
+    query?: never;
+    url: '/api/v1/sessions/{sessionId}/socket';
+};
+export type ConnectSessionSocketErrors = {
+    /**
+     * Authentication required
+     */
+    401: ErrorResponse;
+    /**
+     * Session not found
+     */
+    404: ErrorResponse;
+    /**
+     * WebSocket upgrade required
+     */
+    426: ErrorResponse;
+};
+export type ConnectSessionSocketError = ConnectSessionSocketErrors[keyof ConnectSessionSocketErrors];
+export type ConnectSessionSocketResponses = {
+    /**
+     * Session connection metadata for OpenAPI clients (no WebSocket upgrade requested)
+     */
+    200: SessionConnection;
+};
+export type ConnectSessionSocketResponse = ConnectSessionSocketResponses[keyof ConnectSessionSocketResponses];
 export type ListSessionMessagesData = {
     body?: never;
     path: {

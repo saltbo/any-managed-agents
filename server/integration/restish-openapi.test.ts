@@ -122,7 +122,8 @@ describe('[CF] restish/OpenAPI control-plane path [spec: api-contracts/restish]'
     expect(connectionRes.status).toBe(200)
     expect(await connectionRes.json()).toMatchObject({
       sessionId: session.id,
-      path: `/api/v1/runtime/sessions/${session.id}/rpc`,
+      transport: 'websocket',
+      path: `/api/v1/sessions/${session.id}/socket`,
       state: 'idle',
     })
   })

@@ -12967,6 +12967,76 @@
         }
       }
     },
+    "/api/v1/sessions/{sessionId}/socket": {
+      "get": {
+        "operationId": "connectSessionSocket",
+        "tags": [
+          "Sessions"
+        ],
+        "summary": "Open the session browser WebSocket (live events + backfill + input)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "session_abc123"
+            },
+            "required": true,
+            "name": "sessionId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "101": {
+            "description": "Session browser socket accepted as a WebSocket upgrade"
+          },
+          "200": {
+            "description": "Session connection metadata for OpenAPI clients (no WebSocket upgrade requested)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionConnection"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "WebSocket upgrade required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/sessions/{sessionId}/messages": {
       "get": {
         "operationId": "listSessionMessages",
