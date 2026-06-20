@@ -1,0 +1,126 @@
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import Any, TypeVar, BinaryIO, TextIO, TYPE_CHECKING, Generator
+
+from attrs import define as _attrs_define
+from attrs import field as _attrs_field
+
+from ..types import UNSET, Unset
+
+from ..models.session_backfill_request_frame_type import SessionBackfillRequestFrameType
+from ..types import UNSET, Unset
+
+
+
+
+
+
+T = TypeVar("T", bound="SessionBackfillRequestFrame")
+
+
+
+@_attrs_define
+class SessionBackfillRequestFrame:
+    """ 
+        Attributes:
+            type_ (SessionBackfillRequestFrameType):
+            request_id (str | Unset):
+            cursor (int | Unset):
+            limit (int | Unset):
+            event_type (str | Unset):
+            visibility (str | Unset):
+     """
+
+    type_: SessionBackfillRequestFrameType
+    request_id: str | Unset = UNSET
+    cursor: int | Unset = UNSET
+    limit: int | Unset = UNSET
+    event_type: str | Unset = UNSET
+    visibility: str | Unset = UNSET
+    additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
+
+
+
+
+
+    def to_dict(self) -> dict[str, Any]:
+        type_ = self.type_.value
+
+        request_id = self.request_id
+
+        cursor = self.cursor
+
+        limit = self.limit
+
+        event_type = self.event_type
+
+        visibility = self.visibility
+
+
+        field_dict: dict[str, Any] = {}
+        field_dict.update(self.additional_properties)
+        field_dict.update({
+            "type": type_,
+        })
+        if request_id is not UNSET:
+            field_dict["requestId"] = request_id
+        if cursor is not UNSET:
+            field_dict["cursor"] = cursor
+        if limit is not UNSET:
+            field_dict["limit"] = limit
+        if event_type is not UNSET:
+            field_dict["eventType"] = event_type
+        if visibility is not UNSET:
+            field_dict["visibility"] = visibility
+
+        return field_dict
+
+
+
+    @classmethod
+    def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
+        d = dict(src_dict)
+        type_ = SessionBackfillRequestFrameType(d.pop("type"))
+
+
+
+
+        request_id = d.pop("requestId", UNSET)
+
+        cursor = d.pop("cursor", UNSET)
+
+        limit = d.pop("limit", UNSET)
+
+        event_type = d.pop("eventType", UNSET)
+
+        visibility = d.pop("visibility", UNSET)
+
+        session_backfill_request_frame = cls(
+            type_=type_,
+            request_id=request_id,
+            cursor=cursor,
+            limit=limit,
+            event_type=event_type,
+            visibility=visibility,
+        )
+
+
+        session_backfill_request_frame.additional_properties = d
+        return session_backfill_request_frame
+
+    @property
+    def additional_keys(self) -> list[str]:
+        return list(self.additional_properties.keys())
+
+    def __getitem__(self, key: str) -> Any:
+        return self.additional_properties[key]
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        self.additional_properties[key] = value
+
+    def __delitem__(self, key: str) -> None:
+        del self.additional_properties[key]
+
+    def __contains__(self, key: str) -> bool:
+        return key in self.additional_properties

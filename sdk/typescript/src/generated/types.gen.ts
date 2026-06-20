@@ -4,6 +4,85 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
 
+export type SessionLiveEventFrame = {
+    type: 'event';
+    event: SessionEvent;
+};
+
+export type SessionEvent = {
+    id: string;
+    projectId: string;
+    sessionId: string;
+    sequence: number;
+    type: 'agent_start' | 'agent_end' | 'turn_start' | 'turn_end' | 'session_stop' | 'session_checkpoint' | 'session_resume' | 'message_start' | 'message_update' | 'message_end' | 'tool_execution_start' | 'tool_execution_update' | 'tool_execution_end' | 'usage.recorded' | 'policy.decision' | 'permission.request' | 'runtime.error' | 'runtime.metadata' | 'runtime.output' | 'runner.metadata';
+    visibility: 'runtime' | 'transcript' | 'debug' | 'audit';
+    role: string | null;
+    parentEventId: string | null;
+    correlationId: string | null;
+    payload: {
+        [key: string]: unknown;
+    };
+    metadata: {
+        [key: string]: unknown;
+    };
+    createdAt: string;
+};
+
+export type SessionBackfillResponse = {
+    type: 'backfill';
+    requestId: string | null;
+    events: Array<SessionEvent>;
+    nextCursor: number | null;
+    hasMore: boolean;
+};
+
+export type SessionRunnerUnavailable = {
+    type: 'runner_unavailable';
+    message: string;
+};
+
+export type SessionPromptFrame = {
+    type: 'prompt';
+    content: string;
+};
+
+export type SessionAbortFrame = {
+    type: 'abort';
+};
+
+export type SessionSteerFrame = {
+    type: 'steer';
+    content: string;
+};
+
+export type SessionApprovalFrame = {
+    type: 'approval';
+    approvalId: string;
+    decision: 'approve' | 'reject';
+    reason?: string;
+};
+
+export type SessionBackfillRequestFrame = {
+    type: 'backfill';
+    requestId?: string;
+    cursor?: number;
+    limit?: number;
+    eventType?: string;
+    visibility?: string;
+};
+
+export type SessionClientFrame = ({
+    type: 'prompt';
+} & SessionPromptFrame) | ({
+    type: 'abort';
+} & SessionAbortFrame) | ({
+    type: 'steer';
+} & SessionSteerFrame) | ({
+    type: 'approval';
+} & SessionApprovalFrame) | ({
+    type: 'backfill';
+} & SessionBackfillRequestFrame);
+
 export type HealthResponse = {
     status: 'ok';
     name: string;
@@ -1391,25 +1470,6 @@ export type CreateSessionMessageRequest = {
 export type SessionEventListResponse = {
     data: Array<SessionEvent>;
     pagination: ListPagination;
-};
-
-export type SessionEvent = {
-    id: string;
-    projectId: string;
-    sessionId: string;
-    sequence: number;
-    type: 'agent_start' | 'agent_end' | 'turn_start' | 'turn_end' | 'session_stop' | 'session_checkpoint' | 'session_resume' | 'message_start' | 'message_update' | 'message_end' | 'tool_execution_start' | 'tool_execution_update' | 'tool_execution_end' | 'usage.recorded' | 'policy.decision' | 'permission.request' | 'runtime.error' | 'runtime.metadata' | 'runtime.output' | 'runner.metadata';
-    visibility: 'runtime' | 'transcript' | 'debug' | 'audit';
-    role: string | null;
-    parentEventId: string | null;
-    correlationId: string | null;
-    payload: {
-        [key: string]: unknown;
-    };
-    metadata: {
-        [key: string]: unknown;
-    };
-    createdAt: string;
 };
 
 export type SessionEventsAccepted = {

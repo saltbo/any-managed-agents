@@ -20,6 +20,307 @@
       }
     },
     "schemas": {
+      "SessionLiveEventFrame": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "event"
+            ]
+          },
+          "event": {
+            "$ref": "#/components/schemas/SessionEvent"
+          }
+        },
+        "required": [
+          "type",
+          "event"
+        ]
+      },
+      "SessionEvent": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "sequence": {
+            "type": "integer"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "agent_start",
+              "agent_end",
+              "turn_start",
+              "turn_end",
+              "session_stop",
+              "session_checkpoint",
+              "session_resume",
+              "message_start",
+              "message_update",
+              "message_end",
+              "tool_execution_start",
+              "tool_execution_update",
+              "tool_execution_end",
+              "usage.recorded",
+              "policy.decision",
+              "permission.request",
+              "runtime.error",
+              "runtime.metadata",
+              "runtime.output",
+              "runner.metadata"
+            ]
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "runtime",
+              "transcript",
+              "debug",
+              "audit"
+            ]
+          },
+          "role": {
+            "type": "string",
+            "nullable": true
+          },
+          "parentEventId": {
+            "type": "string",
+            "nullable": true
+          },
+          "correlationId": {
+            "type": "string",
+            "nullable": true
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "projectId",
+          "sessionId",
+          "sequence",
+          "type",
+          "visibility",
+          "role",
+          "parentEventId",
+          "correlationId",
+          "payload",
+          "metadata",
+          "createdAt"
+        ]
+      },
+      "SessionBackfillResponse": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "backfill"
+            ]
+          },
+          "requestId": {
+            "type": "string",
+            "nullable": true
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SessionEvent"
+            }
+          },
+          "nextCursor": {
+            "type": "integer",
+            "nullable": true
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "type",
+          "requestId",
+          "events",
+          "nextCursor",
+          "hasMore"
+        ]
+      },
+      "SessionRunnerUnavailable": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "runner_unavailable"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "message"
+        ]
+      },
+      "SessionPromptFrame": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "prompt"
+            ]
+          },
+          "content": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "content"
+        ]
+      },
+      "SessionAbortFrame": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "abort"
+            ]
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "SessionSteerFrame": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "steer"
+            ]
+          },
+          "content": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "content"
+        ]
+      },
+      "SessionApprovalFrame": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "approval"
+            ]
+          },
+          "approvalId": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "reject"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "approvalId",
+          "decision"
+        ]
+      },
+      "SessionBackfillRequestFrame": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "backfill"
+            ]
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "cursor": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "eventType": {
+            "type": "string"
+          },
+          "visibility": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "SessionClientFrame": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/SessionPromptFrame"
+          },
+          {
+            "$ref": "#/components/schemas/SessionAbortFrame"
+          },
+          {
+            "$ref": "#/components/schemas/SessionSteerFrame"
+          },
+          {
+            "$ref": "#/components/schemas/SessionApprovalFrame"
+          },
+          {
+            "$ref": "#/components/schemas/SessionBackfillRequestFrame"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "prompt": "#/components/schemas/SessionPromptFrame",
+            "abort": "#/components/schemas/SessionAbortFrame",
+            "steer": "#/components/schemas/SessionSteerFrame",
+            "approval": "#/components/schemas/SessionApprovalFrame",
+            "backfill": "#/components/schemas/SessionBackfillRequestFrame"
+          }
+        }
+      },
       "HealthResponse": {
         "type": "object",
         "properties": {
@@ -5979,99 +6280,6 @@
         "required": [
           "data",
           "pagination"
-        ]
-      },
-      "SessionEvent": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "projectId": {
-            "type": "string"
-          },
-          "sessionId": {
-            "type": "string"
-          },
-          "sequence": {
-            "type": "integer"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "agent_start",
-              "agent_end",
-              "turn_start",
-              "turn_end",
-              "session_stop",
-              "session_checkpoint",
-              "session_resume",
-              "message_start",
-              "message_update",
-              "message_end",
-              "tool_execution_start",
-              "tool_execution_update",
-              "tool_execution_end",
-              "usage.recorded",
-              "policy.decision",
-              "permission.request",
-              "runtime.error",
-              "runtime.metadata",
-              "runtime.output",
-              "runner.metadata"
-            ]
-          },
-          "visibility": {
-            "type": "string",
-            "enum": [
-              "runtime",
-              "transcript",
-              "debug",
-              "audit"
-            ]
-          },
-          "role": {
-            "type": "string",
-            "nullable": true
-          },
-          "parentEventId": {
-            "type": "string",
-            "nullable": true
-          },
-          "correlationId": {
-            "type": "string",
-            "nullable": true
-          },
-          "payload": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        },
-        "required": [
-          "id",
-          "projectId",
-          "sessionId",
-          "sequence",
-          "type",
-          "visibility",
-          "role",
-          "parentEventId",
-          "correlationId",
-          "payload",
-          "metadata",
-          "createdAt"
         ]
       },
       "SessionEventsAccepted": {

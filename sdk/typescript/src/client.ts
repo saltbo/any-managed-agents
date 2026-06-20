@@ -47,6 +47,106 @@ async function unwrap<TData>(call: Promise<{ data: TData | undefined; error?: un
   throw new AmaApiError(response?.status, typeof body === 'string' ? body : JSON.stringify(body ?? {}), body)
 }
 
+/**
+ * A live session WebSocket. `events` is the async-iterable of pushed
+ * {@link types.SessionEvent}s; `backfill` requests a replay; `send` posts a typed
+ * client frame; `close` tears the socket down. The frame payloads are all typed
+ * against the generated schemas — OpenAPI can't describe the socket protocol, so
+ * the transport is the one piece hand-wrapped here (mirrors the Go SDK).
+ */
+export interface SessionStream {
+  events: AsyncIterable<types.SessionEvent>
+  send(frame: types.SessionClientFrame): Promise<void>
+  backfill(options?: { cursor?: number; limit?: number; eventType?: string; visibility?: string }): Promise<types.SessionBackfillResponse>
+  close(): void
+}
+
+type SessionStreamFrame =
+  | { type: 'event'; event: types.SessionEvent }
+  | (types.SessionBackfillResponse & { type: 'backfill' })
+  | { type: 'runner_unavailable'; message: string }
+
+function createSessionStream(config: AmaClientConfig, sessionId: string): SessionStream {
+  const url = new URL(`/api/v1/sessions/${sessionId}/socket`, config.baseUrl)
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+  // Browsers can't set an Authorization header on a WebSocket; AMA's auth wall
+  // also accepts the token as an access_token query param, so use that.
+  if (config.accessToken) {
+    url.searchParams.set('access_token', config.accessToken)
+  }
+  const socket = new WebSocket(url.toString())
+
+  const buffered: types.SessionEvent[] = []
+  const waiters: Array<(result: IteratorResult<types.SessionEvent>) => void> = []
+  const backfillWaiters = new Map<string, (response: types.SessionBackfillResponse) => void>()
+  let done = false
+
+  const drainDone = () => {
+    done = true
+    for (const resolve of waiters.splice(0)) {
+      resolve({ value: undefined, done: true })
+    }
+  }
+
+  socket.addEventListener('message', (event: MessageEvent) => {
+    const frame = JSON.parse(typeof event.data === 'string' ? event.data : '') as SessionStreamFrame
+    if (frame.type === 'event') {
+      const waiter = waiters.shift()
+      if (waiter) {
+        waiter({ value: frame.event, done: false })
+      } else {
+        buffered.push(frame.event)
+      }
+    } else if (frame.type === 'backfill') {
+      const resolve = frame.requestId ? backfillWaiters.get(frame.requestId) : undefined
+      if (frame.requestId) {
+        backfillWaiters.delete(frame.requestId)
+      }
+      resolve?.(frame)
+    }
+  })
+  socket.addEventListener('close', drainDone)
+
+  const ready = new Promise<void>((resolve, reject) => {
+    socket.addEventListener('open', () => resolve())
+    socket.addEventListener('error', () => reject(new Error('Session socket failed to open')))
+  })
+
+  let backfillSeq = 0
+  return {
+    events: {
+      [Symbol.asyncIterator]() {
+        return {
+          next(): Promise<IteratorResult<types.SessionEvent>> {
+            const value = buffered.shift()
+            if (value !== undefined) {
+              return Promise.resolve({ value, done: false })
+            }
+            if (done) {
+              return Promise.resolve({ value: undefined, done: true })
+            }
+            return new Promise((resolve) => waiters.push(resolve))
+          },
+        }
+      },
+    },
+    async send(frame) {
+      await ready
+      socket.send(JSON.stringify(frame))
+    },
+    async backfill(options = {}) {
+      await ready
+      const requestId = `bf_${(backfillSeq += 1)}`
+      const response = new Promise<types.SessionBackfillResponse>((resolve) => backfillWaiters.set(requestId, resolve))
+      socket.send(JSON.stringify({ type: 'backfill', requestId, ...options }))
+      return response
+    },
+    close() {
+      socket.close()
+    },
+  }
+}
+
 export type AmaClient = ReturnType<typeof createAmaClient>
 
 export function createAmaClient(config: AmaClientConfig) {
@@ -90,6 +190,8 @@ export function createAmaClient(config: AmaClientConfig) {
       update: (sessionId: string, body: types.UpdateSessionRequest) => unwrap(ops.updateSession({ client, path: { sessionId }, body })),
       list: (query?: types.ListSessionsData['query']) => unwrap(ops.listSessions({ client, query })),
       connection: (sessionId: string) => unwrap(ops.readSessionConnection({ client, path: { sessionId } })),
+      /** Open the live session WebSocket: pushed events + backfill replay + typed input frames. */
+      stream: (sessionId: string): SessionStream => createSessionStream(config, sessionId),
       listEvents: (sessionId: string, query?: types.ListSessionEventsData['query']) => unwrap(ops.listSessionEvents({ client, path: { sessionId }, query })),
       createMessage: (sessionId: string, body: types.CreateSessionMessageRequest) => unwrap(ops.createSessionMessage({ client, path: { sessionId }, body })),
     },

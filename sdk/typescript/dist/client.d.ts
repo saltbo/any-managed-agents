@@ -16,6 +16,24 @@ export declare class AmaApiError extends Error {
     readonly body: unknown;
     constructor(status: number | undefined, responseText: string, body: unknown);
 }
+/**
+ * A live session WebSocket. `events` is the async-iterable of pushed
+ * {@link types.SessionEvent}s; `backfill` requests a replay; `send` posts a typed
+ * client frame; `close` tears the socket down. The frame payloads are all typed
+ * against the generated schemas — OpenAPI can't describe the socket protocol, so
+ * the transport is the one piece hand-wrapped here (mirrors the Go SDK).
+ */
+export interface SessionStream {
+    events: AsyncIterable<types.SessionEvent>;
+    send(frame: types.SessionClientFrame): Promise<void>;
+    backfill(options?: {
+        cursor?: number;
+        limit?: number;
+        eventType?: string;
+        visibility?: string;
+    }): Promise<types.SessionBackfillResponse>;
+    close(): void;
+}
 export type AmaClient = ReturnType<typeof createAmaClient>;
 export declare function createAmaClient(config: AmaClientConfig): {
     /** Escape hatch: the raw generated client for operations not yet on the facade. */
@@ -42,6 +60,8 @@ export declare function createAmaClient(config: AmaClientConfig): {
         update: (sessionId: string, body: types.UpdateSessionRequest) => Promise<types.Session>;
         list: (query?: types.ListSessionsData["query"]) => Promise<types.SessionListResponse>;
         connection: (sessionId: string) => Promise<types.SessionConnection>;
+        /** Open the live session WebSocket: pushed events + backfill replay + typed input frames. */
+        stream: (sessionId: string) => SessionStream;
         listEvents: (sessionId: string, query?: types.ListSessionEventsData["query"]) => Promise<types.SessionEventListResponse>;
         createMessage: (sessionId: string, body: types.CreateSessionMessageRequest) => Promise<types.SessionMessage>;
     };

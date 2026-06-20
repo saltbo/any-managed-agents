@@ -157,6 +157,78 @@ const SessionEventSchema = z
   })
   .openapi('SessionEvent')
 
+// ── browser session socket frame schemas ─────────────────────────────────────
+// OpenAPI 3.x cannot describe a WebSocket message protocol, only the HTTP upgrade
+// endpoint (connectSessionSocket). These component schemas type the frames the
+// socket carries so the generated SDK types stay route/spec-derived (no drift);
+// the transport itself is hand-wrapped in the SDK facade.
+
+// server → client
+const SessionLiveEventFrameSchema = z
+  .object({ type: z.literal('event'), event: SessionEventSchema })
+  .openapi('SessionLiveEventFrame')
+const SessionBackfillResponseSchema = z
+  .object({
+    type: z.literal('backfill'),
+    requestId: z.string().nullable(),
+    events: z.array(SessionEventSchema),
+    nextCursor: z.number().int().nullable(),
+    hasMore: z.boolean(),
+  })
+  .openapi('SessionBackfillResponse')
+const SessionRunnerUnavailableSchema = z
+  .object({ type: z.literal('runner_unavailable'), message: z.string() })
+  .openapi('SessionRunnerUnavailable')
+
+// client → server
+const SessionPromptFrameSchema = z
+  .object({ type: z.literal('prompt'), content: z.string() })
+  .openapi('SessionPromptFrame')
+const SessionAbortFrameSchema = z.object({ type: z.literal('abort') }).openapi('SessionAbortFrame')
+const SessionSteerFrameSchema = z.object({ type: z.literal('steer'), content: z.string() }).openapi('SessionSteerFrame')
+const SessionApprovalFrameSchema = z
+  .object({
+    type: z.literal('approval'),
+    approvalId: z.string(),
+    decision: z.enum(['approve', 'reject']),
+    reason: z.string().optional(),
+  })
+  .openapi('SessionApprovalFrame')
+const SessionBackfillRequestFrameSchema = z
+  .object({
+    type: z.literal('backfill'),
+    requestId: z.string().optional(),
+    cursor: z.number().int().optional(),
+    limit: z.number().int().optional(),
+    eventType: z.string().optional(),
+    visibility: z.string().optional(),
+  })
+  .openapi('SessionBackfillRequestFrame')
+const SessionClientFrameSchema = z
+  .discriminatedUnion('type', [
+    SessionPromptFrameSchema,
+    SessionAbortFrameSchema,
+    SessionSteerFrameSchema,
+    SessionApprovalFrameSchema,
+    SessionBackfillRequestFrameSchema,
+  ])
+  .openapi('SessionClientFrame')
+
+// The component schemas above are emitted into the OpenAPI document (and so the
+// generated SDK types) only when registered; connectSessionSocket is a bare
+// upgrade with no body, so register them explicitly.
+const SESSION_FRAME_SCHEMAS = {
+  SessionLiveEventFrame: SessionLiveEventFrameSchema,
+  SessionBackfillResponse: SessionBackfillResponseSchema,
+  SessionRunnerUnavailable: SessionRunnerUnavailableSchema,
+  SessionPromptFrame: SessionPromptFrameSchema,
+  SessionAbortFrame: SessionAbortFrameSchema,
+  SessionSteerFrame: SessionSteerFrameSchema,
+  SessionApprovalFrame: SessionApprovalFrameSchema,
+  SessionBackfillRequestFrame: SessionBackfillRequestFrameSchema,
+  SessionClientFrame: SessionClientFrameSchema,
+} as const
+
 const CreateSessionSchema = z
   .object({
     agentId: z.string().min(1).openapi({ example: 'agent_abc123' }),
@@ -864,6 +936,9 @@ const decideSessionApprovalRoute = createRoute({
 // static segments register before parameter segments. The assembler in app.ts
 // calls this at the sessions resource's original mount position.
 export function registerSessionRoutes(routes: SessionRoutes) {
+  for (const [name, schema] of Object.entries(SESSION_FRAME_SCHEMAS)) {
+    routes.openAPIRegistry.register(name, schema)
+  }
   return routes
     .openapi(createSessionRoute, async (c) => {
       const body = c.req.valid('json')

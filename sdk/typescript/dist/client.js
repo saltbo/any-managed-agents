@@ -33,6 +33,83 @@ async function unwrap(call) {
     const body = error ?? data;
     throw new AmaApiError(response?.status, typeof body === 'string' ? body : JSON.stringify(body ?? {}), body);
 }
+function createSessionStream(config, sessionId) {
+    const url = new URL(`/api/v1/sessions/${sessionId}/socket`, config.baseUrl);
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    // Browsers can't set an Authorization header on a WebSocket; AMA's auth wall
+    // also accepts the token as an access_token query param, so use that.
+    if (config.accessToken) {
+        url.searchParams.set('access_token', config.accessToken);
+    }
+    const socket = new WebSocket(url.toString());
+    const buffered = [];
+    const waiters = [];
+    const backfillWaiters = new Map();
+    let done = false;
+    const drainDone = () => {
+        done = true;
+        for (const resolve of waiters.splice(0)) {
+            resolve({ value: undefined, done: true });
+        }
+    };
+    socket.addEventListener('message', (event) => {
+        const frame = JSON.parse(typeof event.data === 'string' ? event.data : '');
+        if (frame.type === 'event') {
+            const waiter = waiters.shift();
+            if (waiter) {
+                waiter({ value: frame.event, done: false });
+            }
+            else {
+                buffered.push(frame.event);
+            }
+        }
+        else if (frame.type === 'backfill') {
+            const resolve = frame.requestId ? backfillWaiters.get(frame.requestId) : undefined;
+            if (frame.requestId) {
+                backfillWaiters.delete(frame.requestId);
+            }
+            resolve?.(frame);
+        }
+    });
+    socket.addEventListener('close', drainDone);
+    const ready = new Promise((resolve, reject) => {
+        socket.addEventListener('open', () => resolve());
+        socket.addEventListener('error', () => reject(new Error('Session socket failed to open')));
+    });
+    let backfillSeq = 0;
+    return {
+        events: {
+            [Symbol.asyncIterator]() {
+                return {
+                    next() {
+                        const value = buffered.shift();
+                        if (value !== undefined) {
+                            return Promise.resolve({ value, done: false });
+                        }
+                        if (done) {
+                            return Promise.resolve({ value: undefined, done: true });
+                        }
+                        return new Promise((resolve) => waiters.push(resolve));
+                    },
+                };
+            },
+        },
+        async send(frame) {
+            await ready;
+            socket.send(JSON.stringify(frame));
+        },
+        async backfill(options = {}) {
+            await ready;
+            const requestId = `bf_${(backfillSeq += 1)}`;
+            const response = new Promise((resolve) => backfillWaiters.set(requestId, resolve));
+            socket.send(JSON.stringify({ type: 'backfill', requestId, ...options }));
+            return response;
+        },
+        close() {
+            socket.close();
+        },
+    };
+}
 export function createAmaClient(config) {
     const client = createClient(createConfig({
         baseUrl: config.baseUrl,
@@ -67,6 +144,8 @@ export function createAmaClient(config) {
             update: (sessionId, body) => unwrap(ops.updateSession({ client, path: { sessionId }, body })),
             list: (query) => unwrap(ops.listSessions({ client, query })),
             connection: (sessionId) => unwrap(ops.readSessionConnection({ client, path: { sessionId } })),
+            /** Open the live session WebSocket: pushed events + backfill replay + typed input frames. */
+            stream: (sessionId) => createSessionStream(config, sessionId),
             listEvents: (sessionId, query) => unwrap(ops.listSessionEvents({ client, path: { sessionId }, query })),
             createMessage: (sessionId, body) => unwrap(ops.createSessionMessage({ client, path: { sessionId }, body })),
         },

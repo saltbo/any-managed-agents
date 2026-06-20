@@ -243,6 +243,8 @@ from .runtime_usage_window import RuntimeUsageWindow
 from .sandbox_policy import SandboxPolicy
 from .secret_env_entry import SecretEnvEntry
 from .session import Session
+from .session_abort_frame import SessionAbortFrame
+from .session_abort_frame_type import SessionAbortFrameType
 from .session_agent_snapshot import SessionAgentSnapshot
 from .session_agent_snapshot_handoff_policy import SessionAgentSnapshotHandoffPolicy
 from .session_agent_snapshot_memory_policy import SessionAgentSnapshotMemoryPolicy
@@ -253,10 +255,17 @@ from .session_approval import SessionApproval
 from .session_approval_decision_request import SessionApprovalDecisionRequest
 from .session_approval_decision_request_decision import SessionApprovalDecisionRequestDecision
 from .session_approval_decision_request_result import SessionApprovalDecisionRequestResult
+from .session_approval_frame import SessionApprovalFrame
+from .session_approval_frame_decision import SessionApprovalFrameDecision
+from .session_approval_frame_type import SessionApprovalFrameType
 from .session_approval_input import SessionApprovalInput
 from .session_approval_list_response import SessionApprovalListResponse
 from .session_approval_result_type_0 import SessionApprovalResultType0
 from .session_approval_state import SessionApprovalState
+from .session_backfill_request_frame import SessionBackfillRequestFrame
+from .session_backfill_request_frame_type import SessionBackfillRequestFrameType
+from .session_backfill_response import SessionBackfillResponse
+from .session_backfill_response_type import SessionBackfillResponseType
 from .session_connection import SessionConnection
 from .session_connection_state import SessionConnectionState
 from .session_env import SessionEnv
@@ -279,15 +288,23 @@ from .session_event_type import SessionEventType
 from .session_event_visibility import SessionEventVisibility
 from .session_events_accepted import SessionEventsAccepted
 from .session_list_response import SessionListResponse
+from .session_live_event_frame import SessionLiveEventFrame
+from .session_live_event_frame_type import SessionLiveEventFrameType
 from .session_message import SessionMessage
 from .session_message_delivery import SessionMessageDelivery
 from .session_message_list_response import SessionMessageListResponse
 from .session_message_state import SessionMessageState
 from .session_message_type import SessionMessageType
 from .session_metadata import SessionMetadata
+from .session_prompt_frame import SessionPromptFrame
+from .session_prompt_frame_type import SessionPromptFrameType
+from .session_runner_unavailable import SessionRunnerUnavailable
+from .session_runner_unavailable_type import SessionRunnerUnavailableType
 from .session_runtime_metadata import SessionRuntimeMetadata
 from .session_runtime_metadata_runtime_config import SessionRuntimeMetadataRuntimeConfig
 from .session_state import SessionState
+from .session_steer_frame import SessionSteerFrame
+from .session_steer_frame_type import SessionSteerFrameType
 from .tool_call import ToolCall
 from .tool_call_error_type_0 import ToolCallErrorType0
 from .tool_call_input import ToolCallInput
@@ -622,6 +639,8 @@ __all__ = (
     "SandboxPolicy",
     "SecretEnvEntry",
     "Session",
+    "SessionAbortFrame",
+    "SessionAbortFrameType",
     "SessionAgentSnapshot",
     "SessionAgentSnapshotHandoffPolicy",
     "SessionAgentSnapshotMemoryPolicy",
@@ -632,10 +651,17 @@ __all__ = (
     "SessionApprovalDecisionRequest",
     "SessionApprovalDecisionRequestDecision",
     "SessionApprovalDecisionRequestResult",
+    "SessionApprovalFrame",
+    "SessionApprovalFrameDecision",
+    "SessionApprovalFrameType",
     "SessionApprovalInput",
     "SessionApprovalListResponse",
     "SessionApprovalResultType0",
     "SessionApprovalState",
+    "SessionBackfillRequestFrame",
+    "SessionBackfillRequestFrameType",
+    "SessionBackfillResponse",
+    "SessionBackfillResponseType",
     "SessionConnection",
     "SessionConnectionState",
     "SessionEnv",
@@ -658,15 +684,23 @@ __all__ = (
     "SessionEventType",
     "SessionEventVisibility",
     "SessionListResponse",
+    "SessionLiveEventFrame",
+    "SessionLiveEventFrameType",
     "SessionMessage",
     "SessionMessageDelivery",
     "SessionMessageListResponse",
     "SessionMessageState",
     "SessionMessageType",
     "SessionMetadata",
+    "SessionPromptFrame",
+    "SessionPromptFrameType",
+    "SessionRunnerUnavailable",
+    "SessionRunnerUnavailableType",
     "SessionRuntimeMetadata",
     "SessionRuntimeMetadataRuntimeConfig",
     "SessionState",
+    "SessionSteerFrame",
+    "SessionSteerFrameType",
     "ToolCall",
     "ToolCallErrorType0",
     "ToolCallInput",
