@@ -8,8 +8,12 @@ is no hand-written client surface to drift from the contract.
 ## Layout
 
 - `src/generated/` — output of `@hey-api/openapi-ts`. Do not edit by hand.
-- `src/index.ts` — the only hand-maintained file: re-exports the generated
-  operations, models, and the `createClient`/`createConfig` factory.
+- `src/client.ts` — the stable, hand-maintained **facade** consumers code
+  against (`createAmaClient(...).<resource>.<verb>(...)`). It delegates to the
+  generated functions, so the generated layer can be re-shaped — or the
+  generator swapped — without changing these call signatures.
+- `src/index.ts` — public barrel: exports the facade plus the raw generated
+  operations/models as an escape hatch.
 - `openapi-ts.config.ts` — generator config (input `../openapi.json`).
 
 ## Regenerate
@@ -26,44 +30,46 @@ pnpm --filter @any-managed-agents/sdk run typecheck
 ## Usage
 
 Create a client bound to an origin and an OIDC access token, then call the
-typed operation functions. Pass a per-call `client` for multi-tenant use, or
-configure the default client once.
+resource methods. Each method takes the natural arguments (ids, body, query),
+returns the typed result, and throws `AmaApiError` (with `.status`) on non-2xx.
 
 ```ts
-import {
-  createClient,
-  createConfig,
-  createAgent,
-  createEnvironment,
-  readSession,
-} from '@any-managed-agents/sdk'
+import { createAmaClient, AmaApiError } from '@any-managed-agents/sdk'
 
-const client = createClient(
-  createConfig({
-    baseUrl: process.env.AMA_ORIGIN,
-    headers: {
-      authorization: `Bearer ${accessToken}`,
-      'x-ama-project-id': projectId,
-    },
-  }),
-)
-
-const env = await createEnvironment({
-  client,
-  body: { name: 'Node workspace', hostingMode: 'cloud', runtime: 'ama', runtimeConfig: { image: 'node:24' } },
+const client = createAmaClient({
+  baseUrl: process.env.AMA_ORIGIN,
+  accessToken,        // sent as Authorization: Bearer <token>
+  projectId,          // sent as x-ama-project-id (optional)
 })
 
-const agent = await createAgent({
-  client,
-  body: { name: 'Research assistant', provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6' },
+const env = await client.environments.create({
+  name: 'Node workspace',
+  hostingMode: 'cloud',
+  runtime: 'ama',
+  runtimeConfig: { image: 'node:24' },
 })
 
-const { data, error } = await readSession({ client, path: { sessionId } })
+const agent = await client.agents.create({
+  name: 'Research assistant',
+  provider: 'workers-ai',
+  model: '@cf/moonshotai/kimi-k2.6',
+})
+
+const session = await client.sessions.create({ agentId: agent.id, environmentId: env.id, runtime: 'ama', title: 'Research' })
+
+try {
+  const found = await client.agents.get(agentId)
+} catch (err) {
+  if (err instanceof AmaApiError && err.status === 404) {
+    // not found
+  }
+}
 ```
 
-Each function returns `{ data, error }` (or throws when called with
-`{ throwOnError: true }`). `data` and `body` are fully typed from the OpenAPI
-schemas.
+`body`, `query`, and the returned data are fully typed from the OpenAPI schemas.
+The generated operation functions (`createAgent`, `readSession`, …) and
+`createClient`/`createConfig` are also exported for operations the facade does
+not wrap yet, reachable as `client.raw` too.
 
 The web console does not import this package; console code uses the
 project-local Hono RPC client in `src/lib/api.ts`.
