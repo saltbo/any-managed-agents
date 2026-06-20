@@ -1,6 +1,6 @@
 # SDK and API Boundary
 
-This repository maintains generated SDK scaffolds under `sdk/`, but it does not maintain a bespoke CLI binary or hand-authored SDK behavior that drifts from OpenAPI. It publishes the Any Managed Agents control-plane OpenAPI contract. SDKs are generated from or mechanically aligned with the Hono-generated OpenAPI document, and command-line automation uses restish against the same OpenAPI document. The web console is an internal entrypoint and uses the project-local Hono RPC client.
+This repository publishes the Any Managed Agents control-plane OpenAPI contract and generates the `sdk/` clients from it with standard community generators — no bespoke CLI binary and no hand-authored client behavior that can drift from OpenAPI. Each SDK is produced from the Hono-generated OpenAPI document by its language's mainstream generator (`@hey-api/openapi-ts` for TypeScript, `oapi-codegen` for Go, `openapi-python-client` for Python), so every operation and every request/response body is a generated, typed surface. Command-line automation uses restish against the same OpenAPI document. The web console is an internal entrypoint and uses the project-local Hono RPC client.
 
 ## SDK Layers
 
@@ -30,7 +30,7 @@ Repo-local generated SDK scaffolds use this repository's OpenAPI document as the
 - manage provider, vault, policy, usage, and audit resources
 - connect to a running session through AMA session endpoints
 
-SDKs should stay thin. They wrap the public control-plane API and may provide a small set of ergonomic helpers, such as `sessions.connect(sessionId)`, only when those helpers delegate to AMA session endpoints. Release ownership may move to separate repositories later, but this repository currently owns the reproducible generated layout.
+SDKs are fully typed and generated end to end from the OpenAPI document — typed operations and typed request/response models, not a thin untyped operation registry. Hand-written code is allowed only where the contract cannot express it (for example the Go runtime-session WebSocket helper that connects to an AMA session channel); everything REST-shaped is generated. Release ownership may move to separate repositories later, but this repository currently owns the reproducible generated layout.
 
 ## Repo-Local Generated Layout
 
@@ -46,10 +46,10 @@ Regenerate and check the SDK artifacts with:
 ```bash
 pnpm run openapi:generate
 pnpm run openapi:check
-pnpm --filter -managed-agents/sdk run typecheck
+pnpm --filter @any-managed-agents/sdk run typecheck
 ```
 
-The generator is intentionally repo-local and route-driven. Do not edit generated operation metadata or OpenAPI snapshots by hand.
+`pnpm run openapi:generate` re-emits `sdk/openapi.json` from the Hono routes and then drives each language's generator. Do not edit generated code or the OpenAPI snapshot by hand.
 
 ## CLI Boundary
 

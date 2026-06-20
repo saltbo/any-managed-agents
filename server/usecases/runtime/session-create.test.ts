@@ -30,6 +30,7 @@ const {
   findAgentVersionMock,
   findEnvironmentMock,
   findEnvironmentVersionMock,
+  resolveEnvironmentForRuntimeMock,
 } = vi.hoisted(() => ({
   enqueueCloudTurnMock: vi.fn(),
   cloudTurnsRunInlineMock: vi.fn(() => false),
@@ -56,6 +57,7 @@ const {
   findAgentVersionMock: vi.fn(),
   findEnvironmentMock: vi.fn(),
   findEnvironmentVersionMock: vi.fn(),
+  resolveEnvironmentForRuntimeMock: vi.fn(),
 }))
 
 // Provider/runtime resolution + provider-config read live in the deps-first
@@ -93,6 +95,7 @@ const store = {
   findAgentVersion: findAgentVersionMock,
   findEnvironment: findEnvironmentMock,
   findEnvironmentVersion: findEnvironmentVersionMock,
+  resolveEnvironmentForRuntime: resolveEnvironmentForRuntimeMock,
   insertSession: insertSessionMock,
   updateSessionWhenState: updateSessionWhenStateMock,
 }
@@ -149,6 +152,7 @@ describe('createSessionForAgent — launch dispatch failure (H5 FIX 2)', () => {
     findAgentVersionMock.mockResolvedValue({ id: 'agentver_1', model: '@cf/x', providerId: 'anthropic' })
     findEnvironmentMock.mockResolvedValue({ id: 'env_1', currentVersionId: 'envver_1' })
     findEnvironmentVersionMock.mockResolvedValue({ id: 'envver_1', hostingMode: 'cloud' })
+    resolveEnvironmentForRuntimeMock.mockReset()
   })
 
   it('reconciles the orphaned pending row to error and returns session_launch_failed when the cloud-turn enqueue throws', async () => {
@@ -188,5 +192,65 @@ describe('createSessionForAgent — launch dispatch failure (H5 FIX 2)', () => {
       (call) => (call[3] as { state?: string }).state === 'error',
     )
     expect(reconcile).toBeUndefined()
+  })
+})
+
+describe('createSessionForAgent — environment resolution', () => {
+  beforeEach(() => {
+    enqueueCloudTurnMock.mockReset()
+    enqueueCloudTurnMock.mockResolvedValue(undefined)
+    cloudTurnsRunInlineMock.mockReturnValue(false)
+    recordAuditMock.mockReset()
+    insertSessionMock.mockReset()
+    insertSessionMock.mockResolvedValue(undefined)
+    updateSessionWhenStateMock.mockReset()
+    updateSessionWhenStateMock.mockReturnValue(true)
+    findAgentMock.mockResolvedValue({
+      id: 'agent_1',
+      currentVersionId: 'agentver_1',
+      archivedAt: null,
+      memoryPolicy: null,
+    })
+    findAgentVersionMock.mockResolvedValue({ id: 'agentver_1', model: '@cf/x', providerId: 'anthropic' })
+    findEnvironmentMock.mockReset()
+    findEnvironmentMock.mockResolvedValue({ id: 'env_resolved', currentVersionId: 'envver_1' })
+    findEnvironmentVersionMock.mockResolvedValue({ id: 'envver_1', hostingMode: 'cloud' })
+    resolveEnvironmentForRuntimeMock.mockReset()
+  })
+
+  it('resolves an environment for the runtime/provider/model when none is pinned', async () => {
+    resolveEnvironmentForRuntimeMock.mockResolvedValue('env_resolved')
+
+    const result = await createSessionForAgent(deps, auth, 'agent_1', null, { runtime: 'codex' }, null)
+
+    expect(result.ok).toBe(true)
+    expect(resolveEnvironmentForRuntimeMock).toHaveBeenCalledWith('proj_1', 'codex', 'anthropic', '@cf/x')
+    // The resolved id is what gets looked up and used.
+    expect(findEnvironmentMock).toHaveBeenCalledWith('proj_1', 'env_resolved')
+  })
+
+  it('does not resolve when an environment is pinned', async () => {
+    const result = await createSessionForAgent(deps, auth, 'agent_1', 'env_pinned', { runtime: 'codex' }, null)
+
+    expect(result.ok).toBe(true)
+    expect(resolveEnvironmentForRuntimeMock).not.toHaveBeenCalled()
+    expect(findEnvironmentMock).toHaveBeenCalledWith('proj_1', 'env_pinned')
+  })
+
+  it('returns a 409 and creates no session when no environment can be resolved', async () => {
+    resolveEnvironmentForRuntimeMock.mockResolvedValue(null)
+
+    const result = await createSessionForAgent(deps, auth, 'agent_1', null, { runtime: 'codex' }, null)
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        status: 409,
+        code: 'conflict',
+        message: 'No environment has an active runner for runtime "codex"; specify environmentId',
+      },
+    })
+    expect(findEnvironmentMock).not.toHaveBeenCalled()
+    expect(insertSessionMock).not.toHaveBeenCalled()
   })
 })

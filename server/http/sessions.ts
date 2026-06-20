@@ -159,7 +159,9 @@ const SessionEventSchema = z
 const CreateSessionSchema = z
   .object({
     agentId: z.string().min(1).openapi({ example: 'agent_abc123' }),
-    environmentId: z.string().min(1).openapi({ example: 'env_abc123' }),
+    // Optional: omit to let the session resolve a runner-capable environment
+    // for the runtime instead of pinning one.
+    environmentId: z.string().min(1).optional().openapi({ example: 'env_abc123' }),
     runtime: RuntimeSchema.openapi({ example: 'codex' }),
     runtimeConfig: JsonObjectSchema.optional().openapi({ example: { sandboxMode: 'workspace-write' } }),
     title: z.string().min(1).max(160).optional().openapi({ example: 'Implement billing export' }),
@@ -835,7 +837,7 @@ export function registerSessionRoutes(routes: SessionRoutes) {
       // the route calls the runtime usecase with deps directly.
       const outcome = await createRuntimeSession(deps, auth, {
         agentId: body.agentId,
-        environmentId: body.environmentId,
+        ...(body.environmentId !== undefined ? { environmentId: body.environmentId } : {}),
         options: {
           ...(body.title !== undefined ? { title: body.title } : {}),
           ...(body.metadata !== undefined ? { metadata: body.metadata } : {}),

@@ -90,6 +90,8 @@ async function dispatchTrigger(deps: Deps, trigger: DueTrigger, heartbeatAt: str
     // runtime carry through while env is left to the agent/provider defaults).
     const result = await createSession(deps, auth, {
       agentId: trigger.agentId,
+      // Null when the trigger is unpinned; createSession resolves an environment
+      // for the runtime at dispatch time.
       environmentId: trigger.environmentId,
       options: {
         title: trigger.name,

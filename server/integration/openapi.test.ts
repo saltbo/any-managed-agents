@@ -372,9 +372,12 @@ describe('[CF] OpenAPI documentation', () => {
       metadata: { type: 'object' },
     })
     expect(createTriggerProperties?.runtime).toEqual({ $ref: '#/components/schemas/Runtime' })
+    // environmentId is optional: an unpinned trigger resolves an environment per
+    // dispatch, so it must NOT be in the required set.
     expect(createTriggerSchema?.required).toEqual(
-      expect.arrayContaining(['agentId', 'environmentId', 'runtime', 'name', 'promptTemplate', 'schedule']),
+      expect.arrayContaining(['agentId', 'runtime', 'name', 'promptTemplate', 'schedule']),
     )
+    expect(createTriggerSchema?.required).not.toContain('environmentId')
 
     const triggerRunProperties = (
       doc.components?.schemas?.TriggerRun as {

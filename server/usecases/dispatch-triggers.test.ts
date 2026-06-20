@@ -357,6 +357,43 @@ describe('[spec: triggers/dispatch] dispatchDueScheduledTriggers — successful 
   })
 })
 
+describe('[spec: triggers/dispatch] dispatchDueScheduledTriggers — environment pass-through', () => {
+  it('passes a null environment through to createSession for an unpinned trigger', async () => {
+    // The dispatcher no longer resolves an environment; createSession resolves a
+    // runner-capable one when it receives null.
+    const trigger = dueTrigger({ environmentId: null, runtime: 'codex' })
+    let dispatchedEnvironmentId: string | null | undefined = 'unset'
+    const deps = fakeDeps({
+      triggerDispatch: { dueTriggers: async () => [trigger] },
+      sessionRuntime: {
+        createSession: async (_deps, _auth, input) => {
+          dispatchedEnvironmentId = (input as { environmentId?: string | null }).environmentId
+          return { ok: true, value: sessionRecord() }
+        },
+      },
+    })
+    const result = await dispatchDueScheduledTriggers(deps)
+    expect(result.sessionCreated).toBe(1)
+    expect(dispatchedEnvironmentId).toBeNull()
+  })
+
+  it('passes the pinned environment through to createSession', async () => {
+    const trigger = dueTrigger({ environmentId: 'env_pinned' })
+    let dispatchedEnvironmentId: string | null | undefined = 'unset'
+    const deps = fakeDeps({
+      triggerDispatch: { dueTriggers: async () => [trigger] },
+      sessionRuntime: {
+        createSession: async (_deps, _auth, input) => {
+          dispatchedEnvironmentId = (input as { environmentId?: string | null }).environmentId
+          return { ok: true, value: sessionRecord() }
+        },
+      },
+    })
+    await dispatchDueScheduledTriggers(deps)
+    expect(dispatchedEnvironmentId).toBe('env_pinned')
+  })
+})
+
 describe('[spec: triggers/dispatch] dispatchDueScheduledTriggers — skipped (already claimed)', () => {
   it('increments skipped when claimRun returns null', async () => {
     const trigger = dueTrigger()

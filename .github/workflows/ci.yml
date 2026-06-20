@@ -28,9 +28,15 @@ jobs:
         with:
           go-version: '1.25'
           cache: false
+      - uses: astral-sh/setup-uv@v6
       - run: pnpm install --frozen-lockfile
       - run: go install github.com/rest-sh/restish@v0.21.2
+      # SDK generators for `openapi:check` — pinned to the versions that produced
+      # the committed sdk/ artifacts so regeneration is byte-identical in CI.
+      - run: go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.7.1
+      - run: uv tool install openapi-python-client==0.29.0
       - run: echo "$HOME/go/bin" >> "$GITHUB_PATH"
+      - run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - run: pnpm run lint
       - run: pnpm run lint:arch
       - run: pnpm run lint:spec

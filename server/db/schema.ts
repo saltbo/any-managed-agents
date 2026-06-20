@@ -549,9 +549,10 @@ export const triggers = sqliteTable(
     agentId: text('agent_id')
       .notNull()
       .references(() => agents.id),
-    environmentId: text('environment_id')
-      .notNull()
-      .references(() => environments.id),
+    // Nullable: an unpinned trigger resolves a runner-capable environment per
+    // dispatch (dispatch-triggers.resolveEnvironmentForRuntime) instead of
+    // baking one in at creation time.
+    environmentId: text('environment_id').references(() => environments.id),
     // Mirrors RuntimeSchema (server/contracts/environment-contracts.ts) — keep in lockstep.
     runtime: text('runtime', { enum: ['ama', 'claude-code', 'codex', 'copilot'] }).notNull(),
     name: text('name').notNull(),

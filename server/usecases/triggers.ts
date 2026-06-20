@@ -31,22 +31,26 @@ function rejectSecretMaterial(input: {
   }
 }
 
-// The referenced agent and environment must both be live for the trigger to
-// dispatch. A missing reference is a 404; an archived/unavailable one is a 409.
-async function assertReferencesUsable(deps: Deps, projectId: string, agentId: string, environmentId: string) {
+// The referenced agent must be live for the trigger to dispatch, and a pinned
+// environment must be live too. A null environment is left to per-dispatch
+// resolution and skips the environment check. A missing reference is a 404; an
+// archived/unavailable one is a 409.
+async function assertReferencesUsable(deps: Deps, projectId: string, agentId: string, environmentId: string | null) {
   const agentError = await deps.triggers.agentUsable(projectId, agentId)
   if (agentError) {
     throw new TriggerConflictError(agentError.message, agentError.status)
   }
-  const environmentError = await deps.triggers.environmentUsable(projectId, environmentId)
-  if (environmentError) {
-    throw new TriggerConflictError(environmentError.message, environmentError.status)
+  if (environmentId !== null) {
+    const environmentError = await deps.triggers.environmentUsable(projectId, environmentId)
+    if (environmentError) {
+      throw new TriggerConflictError(environmentError.message, environmentError.status)
+    }
   }
 }
 
 export interface CreateTriggerInputDto {
   agentId: string
-  environmentId: string
+  environmentId: string | null
   config: Omit<TriggerConfig, 'agentId' | 'environmentId' | 'nextDueAt'> & { nextDueAt: string | null }
 }
 

@@ -33,7 +33,7 @@ const TriggerSchema = z
     id: z.string().openapi({ example: 'trigger_abc123' }),
     projectId: z.string().openapi({ example: 'project_abc123' }),
     agentId: z.string().openapi({ example: 'agent_abc123' }),
-    environmentId: z.string().openapi({ example: 'env_abc123' }),
+    environmentId: z.string().nullable().openapi({ example: 'env_abc123' }),
     runtime: RuntimeSchema.openapi({ example: 'codex' }),
     name: z.string().openapi({ example: 'Daily research heartbeat' }),
     promptTemplate: z.string().openapi({ example: 'Research current Canadian banking bonus offers.' }),
@@ -92,7 +92,9 @@ const SchedulePayloadSchema = z
 const CreateTriggerSchema = z
   .object({
     agentId: z.string().min(1).openapi({ example: 'agent_abc123' }),
-    environmentId: z.string().min(1).openapi({ example: 'env_abc123' }),
+    // Optional: omit to leave the trigger unpinned and let each dispatch resolve
+    // a runner-capable environment for the runtime.
+    environmentId: z.string().min(1).optional().openapi({ example: 'env_abc123' }),
     runtime: RuntimeSchema.openapi({ example: 'codex' }),
     name: z.string().min(1).max(160).openapi({ example: 'Daily research heartbeat' }),
     promptTemplate: z.string().trim().min(1).max(16000).openapi({
@@ -379,7 +381,7 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
       try {
         const trigger = await createTrigger(deps, scope, {
           agentId: body.agentId,
-          environmentId: body.environmentId,
+          environmentId: body.environmentId ?? null,
           config: {
             runtime: body.runtime,
             name: body.name,

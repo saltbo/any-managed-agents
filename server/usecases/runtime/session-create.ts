@@ -272,7 +272,7 @@ export async function createSessionForAgent(
   deps: CreateSessionDeps,
   auth: AuthScope,
   agentId: string,
-  environmentId: string,
+  requestedEnvironmentId: string | null,
   options: CreateSessionOptions,
   requestId: string | null,
 ): Promise<CreateSessionResult> {
@@ -392,6 +392,23 @@ export async function createSessionForAgent(
         overriddenDecision: policyOverride,
       },
     })
+  }
+
+  // Resolve an environment when the caller didn't pin one: pick one whose
+  // active runner can serve this runtime/model. Cloud runtimes have no runner,
+  // so they resolve to nothing and must pin an environment explicitly.
+  const environmentId =
+    requestedEnvironmentId ??
+    (await store.resolveEnvironmentForRuntime(auth.project.id, options.runtime, providerId, agentVersion.model))
+  if (!environmentId) {
+    return {
+      ok: false,
+      error: {
+        status: 409,
+        code: 'conflict',
+        message: `No environment has an active runner for runtime "${options.runtime}"; specify environmentId`,
+      },
+    }
   }
 
   const environment = await store.findEnvironment(auth.project.id, environmentId)

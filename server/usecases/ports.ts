@@ -1237,7 +1237,9 @@ export interface SecretEnvEntry {
 
 export interface TriggerConfig {
   agentId: string
-  environmentId: string
+  // Null pins no environment; the dispatcher resolves a runner-capable one per
+  // run via TriggerDispatchRepo.resolveEnvironmentForRuntime.
+  environmentId: string | null
   runtime: RuntimeName
   name: string
   promptTemplate: string
@@ -1343,7 +1345,9 @@ export interface DueTrigger {
   projectId: string
   name: string
   agentId: string
-  environmentId: string
+  // Null when the trigger is unpinned; the dispatcher resolves an environment
+  // per run before creating the session.
+  environmentId: string | null
   runtime: RuntimeName
   promptTemplate: string
   resourceRefs: Record<string, unknown>[]
@@ -2063,6 +2067,17 @@ export interface SessionOrchestrationStore {
 
   // ── runtime/runner capability validation ──
   activeRunnerCapabilities(projectId: string, environmentId: string): Promise<string[]>
+  // Resolves an environment whose active runner can serve the runtime (and,
+  // when possible, the provider/model), for sessions created without a pinned
+  // environment. Returns null when none exists — e.g. a cloud runtime with no
+  // runner — so the caller can require an explicit environmentId. Prefers a
+  // model-declaring runner, then one with spare capacity.
+  resolveEnvironmentForRuntime(
+    projectId: string,
+    runtime: RuntimeName,
+    providerId: string,
+    model: string | null,
+  ): Promise<string | null>
 
   // ── MCP snapshot resolution ──
   connectedConnections(projectId: string): Promise<ConnectionRow[]>

@@ -178,6 +178,37 @@ describe('[CF] /api/v1/sessions', () => {
     vi.unstubAllGlobals()
   })
 
+  it('resolves a runner-capable environment when none is pinned [spec: sessions/create]', async () => {
+    const authorization = await signIn()
+    const environment = await createEnvironment(authorization, { mcpPolicy: { allowedConnectors: [] } })
+    const agent = await createAgent(authorization, { mcpConnectors: [] })
+    const runner = await registerRunner(authorization, environment.id, [DEFAULT_AMA_RUNNER_CAPABILITY])
+    await heartbeatRunner(authorization, runner.id, [DEFAULT_AMA_RUNNER_CAPABILITY])
+
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ agentId: agent.id, runtime: 'ama', title: 'Unpinned session' }),
+    })
+    expect(createRes.status).toBe(201)
+    await expect(createRes.json()).resolves.toMatchObject({ environmentId: environment.id })
+  })
+
+  it('rejects an unpinned session when no runner environment is available [spec: sessions/create]', async () => {
+    const authorization = await signIn()
+    // An environment exists but has no active runner, so it is not a candidate.
+    await createEnvironment(authorization, { mcpPolicy: { allowedConnectors: [] } })
+    const agent = await createAgent(authorization, { mcpConnectors: [] })
+
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ agentId: agent.id, runtime: 'ama', title: 'Unpinned session' }),
+    })
+    expect(createRes.status).toBe(409)
+    await expect(createRes.json()).resolves.toMatchObject({
+      error: { type: 'conflict', message: expect.stringContaining('No environment has an active runner') },
+    })
+  })
+
   it('creates, reads, lists, connects, messages, stops, archives, and records events for a cloud session [spec: sessions/create] [spec: sessions/prompt] [spec: sessions/stop] [spec: sessions/archive] [spec: sessions/connection] [spec: sessions/events-query] [spec: sessions/events-redaction]', async () => {
     const authorization = await signIn()
     const githubCredential = await connectMcp(authorization, 'github')

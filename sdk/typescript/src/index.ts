@@ -1,82 +1,18 @@
-import { operations, type AmaOperationId } from './generated/operations.js'
+// Public entry point for @any-managed-agents/sdk.
+//
+// Prefer the stable facade: `createAmaClient(...).<resource>.<verb>(...)`.
+// It is hand-maintained (src/client.ts) and insulates consumers from the
+// generated layer — the generator can be re-shaped or swapped without changing
+// the facade's call signatures.
+//
+// Everything under ./generated is produced by `pnpm run generate`
+// (@hey-api/openapi-ts) from sdk/openapi.json — do not edit it by hand. The raw
+// typed operation functions and models are also re-exported below as an escape
+// hatch for operations the facade does not wrap yet.
 
-export { operations, type AmaOperationId }
+export { createAmaClient, AmaApiError } from './client.js'
+export type { AmaClient, AmaClientConfig } from './client.js'
 
-export type AmaClientOptions = {
-  origin: string
-  accessToken: string
-  projectId?: string
-}
-
-export type AmaRequestOptions = {
-  path?: Record<string, string>
-  query?: Record<string, string | number | boolean | undefined>
-  body?: unknown
-}
-
-export class AmaClient {
-  readonly #origin: string
-  readonly #accessToken: string
-  readonly #projectId: string | undefined
-
-  constructor(options: AmaClientOptions) {
-    this.#origin = options.origin.replace(/\/$/, '')
-    this.#accessToken = options.accessToken
-    this.#projectId = options.projectId
-  }
-
-  async request<T>(operationId: AmaOperationId, options: AmaRequestOptions = {}) {
-    const operation = operations.find((candidate) => candidate.operationId === operationId)
-    if (!operation) {
-      throw new Error(`Unknown AMA operation: ${operationId}`)
-    }
-
-    const url = new URL(`${this.#origin}${formatPath(operation.path, options.path ?? {})}`)
-    for (const [key, value] of Object.entries(options.query ?? {})) {
-      if (value !== undefined) {
-        url.searchParams.set(key, String(value))
-      }
-    }
-
-    const requestInit: RequestInit = {
-      method: operation.method,
-      headers: {
-        authorization: `Bearer ${this.#accessToken}`,
-        ...(this.#projectId ? { 'x-ama-project-id': this.#projectId } : {}),
-        ...(options.body === undefined ? {} : { 'content-type': 'application/json' }),
-      },
-    }
-    if (options.body !== undefined) {
-      requestInit.body = JSON.stringify(options.body)
-    }
-
-    const response = await fetch(url, requestInit)
-
-    if (!response.ok) {
-      throw new AmaApiError(response.status, await response.text())
-    }
-    if (response.status === 204) {
-      return undefined as T
-    }
-    return (await response.json()) as T
-  }
-}
-
-export class AmaApiError extends Error {
-  constructor(
-    readonly status: number,
-    readonly responseText: string,
-  ) {
-    super(`AMA API request failed with HTTP ${status}`)
-  }
-}
-
-function formatPath(pathTemplate: string, values: Record<string, string>) {
-  return pathTemplate.replaceAll(/\{([^}]+)\}/g, (_, key: string) => {
-    const value = values[key]
-    if (!value) {
-      throw new Error(`Missing path parameter: ${key}`)
-    }
-    return encodeURIComponent(value)
-  })
-}
+export * from './generated/index.js'
+export { createClient, createConfig, mergeHeaders } from './generated/client/index.js'
+export type { Client, ClientOptions, Config } from './generated/client/index.js'

@@ -50,7 +50,9 @@ export async function createSession(
   auth: AuthScope,
   input: {
     agentId: string
-    environmentId: string
+    // Null/undefined leaves the environment unpinned; createSessionForAgent
+    // resolves a runner-capable one for the runtime.
+    environmentId?: string | null
     options: SessionCreateOptions
     requestId: string | null
   },
@@ -59,7 +61,7 @@ export async function createSession(
     deps,
     auth,
     input.agentId,
-    input.environmentId,
+    input.environmentId ?? null,
     input.options as CreateSessionOptions,
     input.requestId,
   )
