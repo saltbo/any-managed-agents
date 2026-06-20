@@ -52,12 +52,29 @@ Three problems:
   live events (server→browser), historical replay (on request), and inbound
   prompt/abort/steering/approval (browser→server). SSE may remain as a degraded
   fallback. `/sessions/{id}/connection` advertises `transport: "websocket"`.
-- **Cloud sessions** store events in the `Session` DO's **SQLite** (hot) and roll
-  closed sessions into **one R2 object per session** (cold). Not KV, not D1.
-- **Self-hosted sessions are relay-only.** Events live only on the runner's
-  machine; the cloud stores no copy. The `Session` DO bridges the browser
-  WebSocket to the runner WebSocket. **Runner offline ⇒ history unavailable, and
-  that is acceptable** (locality over availability — confirmed product call).
+- **Storage follows the loop, not the hosting mode.** Where the agent loop runs
+  decides where its events live:
+  - **`ama` runtime (loop in the cloud)** → events/transcript are **always**
+    stored in the cloud (`Session` DO SQLite hot + one R2 object per session
+    cold; not KV, not D1), **regardless of where its Sandbox runs** (Cloudflare or
+    self-hosted). Once the loop is in the cloud it already holds the full context
+    to build each prompt, so withholding persistence would be high complexity for
+    near-zero privacy gain.
+  - **CLI runtimes (`claude-code`/`codex`/`copilot`, loop local on the runner)** →
+    **relay-only**: events live only on the runner; the cloud stores no copy; the
+    `Session` DO bridges browser WS ⇄ runner WS. **Runner offline ⇒ history
+    unavailable, accepted** (locality over availability — confirmed product call).
+- **The `ama` loop moves to the cloud — part of this goal (not a follow-up).**
+  Today `ama` runs its turn engine on the local runner
+  (`runtime-bridge/src/providers/ama.ts`). This goal relocates the `ama` loop to
+  the cloud turn driver and decouples it from the Sandbox: the cloud loop runs
+  and **dispatches tool execution to a Sandbox that may be Cloudflare-hosted or
+  self-hosted** (for `ama`, the runner becomes a dispatched sandbox host, not a
+  loop host). CLI runtimes keep their local loop.
+- **UX honesty.** The `ama` runtime stores the transcript in the cloud even when
+  its Sandbox is self-hosted. Data locality is available only via a local-loop
+  (CLI) runtime; surface this so a user self-hosting a sandbox does not assume
+  locality.
 - D1 keeps only the **session index/metadata** (list, filter by project/state),
   never the per-event firehose.
 
@@ -115,23 +132,28 @@ can still connect and relay `AgentEvent`s.
 | **Comms + data** | `Session` (evolved from `RunnerSessionChannelObject`, `idFromName(sessionId)`) | cloud + self_hosted | browser WebSocket hub; cloud event store; self-hosted runner bridge |
 
 These are different concerns — *where the agent computes* vs *how events are
-stored and transported*. `Sandbox` is vendor-owned, container-heavy, and absent
-for self-hosted, so the comms/data plane must not be folded into it. Two DOs is
+stored and transported*. The `Sandbox` row is the Cloudflare-hosted sandbox; for
+`ama` the cloud loop dispatches tool execution to a Sandbox that is **either**
+the Cloudflare `Sandbox` **or** a self-hosted runner-sandbox (sandbox-anywhere).
+`Sandbox` is vendor-owned and container-heavy, so the comms/data plane must not
+be folded into it. Two DOs is
 the floor; the previously-proposed third (a standalone event-log DO) collapses
 into `Session`.
 
 ## Architecture — the `Session` DO
 
-One instance per `sessionId`. Behaviour branches on `session.hostingMode`; the
+One instance per `sessionId`. Behaviour branches on **where the loop runs** —
+cloud (`ama` runtime) vs local (CLI runtimes) — not on `hostingMode`; the
 browser-facing contract is identical either way.
 
 ```
             browser ──WebSocket──►  Session DO  (idFromName(sessionId))
                                         │
-   ┌── hostingMode = cloud ─────────────┤  events appended to in-DO SQLite,
+   ┌── ama (loop in cloud) ─────────────┤  events appended to in-DO SQLite,
    │                                     │  pushed to browser; archived to R2 on close
+   │                                     │  (its Sandbox may be cloud OR self-hosted)
    │                                     │
-   └── hostingMode = self_hosted ────────┤  bridges browser WS ⇄ runner WS;
+   └── CLI runtime (loop on runner) ─────┤  bridges browser WS ⇄ runner WS;
                                           │  NO cloud storage (relay-only)
                                           ▼
                                    runner (local store, serves over the tunnel)
@@ -150,7 +172,10 @@ browser-facing contract is identical either way.
   url>, state, stateReason }`. The schema already carries `transport`/`path`, so
   no contract reshape — only the advertised value changes.
 
-### Cloud mode — event store in the `Session` DO
+### Cloud-loop runtimes (`ama`) — event store in the `Session` DO
+
+Applies whenever the loop runs in the cloud (`ama`), independent of where the
+Sandbox runs.
 
 - In-DO SQLite mirrors today's canonical row: `sequence` (monotonic per
   session, PK), `type`, `visibility`, `role`, `parentEventId`, `correlationId`,
@@ -164,7 +189,10 @@ browser-facing contract is identical either way.
   (`sessions/{sessionId}/events.jsonl`); the DO may then evict. Reopening
   rehydrates read-only from R2.
 
-### Self-hosted mode — relay-only bridge
+### Local-loop runtimes (CLI) — relay-only bridge
+
+Applies to the self-hosted CLI runtimes (`claude-code`/`codex`/`copilot`) whose
+loop runs on the runner.
 
 - The `Session` DO already owns the runner WebSocket (the absorbed
   `RunnerSessionChannelObject` role). It now also owns the browser WebSocket and
@@ -184,8 +212,8 @@ browser-facing contract is identical either way.
 
 | Path | Today | Target |
 |------|-------|--------|
-| Cloud turn events | D1 `session_events` | `Session` DO SQLite → R2 on close |
-| Self-hosted runner events | redact + append to cloud D1 | runner local store only |
+| `ama` events (loop in cloud; any Sandbox location) | D1 `session_events` | `Session` DO SQLite → R2 on close |
+| CLI-runtime self-hosted events (loop on runner) | redact + append to cloud D1 | runner local store only |
 | Browser ← live events | SSE (~1 s polling) | `Session` DO WebSocket push |
 | Browser → prompt/abort/steer | REST `POST /messages` | same WebSocket (REST fallback) |
 | Session list/metadata | D1 | D1 (unchanged) |
@@ -279,16 +307,30 @@ Build in three phases. A phase's gate must be green before starting the next.
 Commit each logical unit; push the SDK before AK consumes it.
 
 **Phase 1 — Server `Session` DO** (any-managed-agents). Evolve
-`RunnerSessionChannelObject` into the per-session `Session` DO per *Architecture*:
-cloud mode = in-DO SQLite event store + browser WebSocket push + R2 archive on
-close; self_hosted mode = bridge browser WS ⇄ runner WS with no cloud storage;
-the runner becomes store-and-serve with a relayed backfill read; stop the
-self-hosted cloud append; shrink D1 to the session index. Add the `Session` DO
-binding + sqlite migration and the R2 bucket binding.
+`RunnerSessionChannelObject` into the per-session `Session` DO per *Architecture*.
+**Storage keys on loop location (runtime), not `hostingMode`**: cloud-loop
+runtimes (`ama`) = in-DO SQLite event store + browser WebSocket push + R2 archive
+on close; local-loop CLI runtimes (`claude-code`/`codex`/`copilot`) = bridge
+browser WS ⇄ runner WS with no cloud storage, the runner becomes store-and-serve
+with a relayed backfill read, stop the CLI-runtime cloud append; shrink D1 to the
+session index. Add the `Session` DO binding + sqlite migration and the R2 bucket
+binding.
 - Gate: `pnpm run lint && pnpm run lint:types && pnpm run typecheck && pnpm run
   openapi:check && pnpm run test:coverage` and `pnpm exec vitest run --project
   integration` all green; `go build ./... && go vet ./... && go test ./...`
   green in both `sdk/go` and `cmd/ama-runner`.
+
+**Phase 1b — Relocate the `ama` loop to the cloud + dispatched Sandbox**
+(any-managed-agents; in this goal, not a follow-up). Move the `ama` turn engine
+off the local runner (`runtime-bridge/src/providers/ama.ts`) to the cloud turn
+driver; decouple the loop from the Sandbox so the cloud loop **dispatches tool
+execution to a Sandbox that may be the Cloudflare `Sandbox` or a self-hosted
+runner-sandbox** (for `ama`, the runner becomes a dispatched sandbox host, not a
+loop host). `ama` events are written to the `Session` DO store regardless of
+Sandbox location. CLI runtimes keep their local loop unchanged.
+- Gate: the Phase 1 server gates stay green; an `ama` session runs end to end
+  with (a) a Cloudflare Sandbox and (b) a self-hosted runner-sandbox, both
+  rendering events from the cloud store.
 
 **Phase 2 — Frame schemas + SDK** (any-managed-agents). Declare the WebSocket
 frame messages as OpenAPI `components.schemas` (`SessionEvent` reused,
