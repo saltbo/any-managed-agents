@@ -1,6 +1,6 @@
 // Runner session channel ingest — deps-first. The control-plane decisions for an
 // untrusted self-hosted runner connection, lifted out of the
-// RunnerSessionChannelObject durable object so the DO is a thin socket shell.
+// Session durable object so the DO is a thin socket shell.
 //
 // This module owns: ownership validation (lease/work-item/channel/session-state
 // over deps.sessionOrchestration), the redact-and-append of a runner-emitted

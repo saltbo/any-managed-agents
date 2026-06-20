@@ -6,7 +6,9 @@ export interface Env {
   ASSETS: Fetcher
   OIDC_PROVIDER?: Fetcher
   SANDBOX: DurableObjectNamespace<Sandbox>
-  RUNNER_SESSION_CHANNEL: DurableObjectNamespace
+  // The per-session Session DO (idFromName(sessionId)): self-hosted runner
+  // bridge today; cloud event store + browser WebSocket hub as it evolves.
+  SESSION: DurableObjectNamespace
   // Cloud session turn queue; absent in test mode where turns run inline.
   CLOUD_TURNS?: Queue<unknown>
   AMA_DEFAULT_MODEL?: string

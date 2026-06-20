@@ -65,8 +65,8 @@ name = "SANDBOX"
 class_name = "Sandbox"
 
 [[durable_objects.bindings]]
-name = "RUNNER_SESSION_CHANNEL"
-class_name = "RunnerSessionChannelObject"
+name = "SESSION"
+class_name = "SessionObject"
 
 [[migrations]]
 tag = "v1"
@@ -86,6 +86,14 @@ new_sqlite_classes = ["RunnerSessionChannelObject"]
 [[migrations]]
 tag = "v4"
 deleted_classes = ["ManagedAgent"]
+
+# The runner session channel DO is generalised into the per-session Session DO
+# (browser transport + cloud event store + runner bridge). Rename preserves the
+# existing sqlite-class lineage and any live instances; idFromName(sessionId)
+# addressing is unchanged.
+[[migrations]]
+tag = "v5"
+renamed_classes = [{ from = "RunnerSessionChannelObject", to = "SessionObject" }]
 
 [[containers]]
 class_name = "Sandbox"
@@ -144,8 +152,8 @@ name = "SANDBOX"
 class_name = "Sandbox"
 
 [[env.staging.durable_objects.bindings]]
-name = "RUNNER_SESSION_CHANNEL"
-class_name = "RunnerSessionChannelObject"
+name = "SESSION"
+class_name = "SessionObject"
 
 [[env.staging.containers]]
 class_name = "Sandbox"
@@ -191,8 +199,8 @@ name = "SANDBOX"
 class_name = "Sandbox"
 
 [[env.e2e.durable_objects.bindings]]
-name = "RUNNER_SESSION_CHANNEL"
-class_name = "RunnerSessionChannelObject"
+name = "SESSION"
+class_name = "SessionObject"
 
 [[env.e2e.containers]]
 class_name = "Sandbox"

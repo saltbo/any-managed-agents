@@ -275,9 +275,9 @@ async function upgradeRunnerSessionChannel(
   organizationId: string,
   projectId: string,
 ) {
-  const id = env.RUNNER_SESSION_CHANNEL.idFromName(prepared.sessionId)
-  const stub = env.RUNNER_SESSION_CHANNEL.get(id)
-  const url = new URL('https://runner-session-channel/connect')
+  const id = env.SESSION.idFromName(prepared.sessionId)
+  const stub = env.SESSION.get(id)
+  const url = new URL('https://session-object/connect')
   url.searchParams.set('channelId', prepared.channelId)
   url.searchParams.set('sessionId', prepared.sessionId)
   url.searchParams.set('workItemId', prepared.workItemId)

@@ -1,11 +1,14 @@
-// The runner session channel durable object — a thin socket shell. It owns only
-// the WebSocket plumbing (pair/accept/supersede/close), the in-DO socket + state
-// fields, the /connect|/dispatch|/status fetch protocol with URL parsing, and
-// the send/close-code mechanics. Every control-plane decision (ownership
-// validation, redact-and-append of runner events, the permission-request policy
-// decision, and the close/requeue recovery) is delegated to the deps-first
+// The per-session Session durable object (idFromName(sessionId)). Today a thin
+// socket shell for the self-hosted runner bridge: it owns only the WebSocket
+// plumbing (pair/accept/supersede/close), the in-DO socket + state fields, the
+// /connect|/dispatch|/status fetch protocol with URL parsing, and the
+// send/close-code mechanics. Every control-plane decision (ownership validation,
+// redact-and-append of runner events, the permission-request policy decision,
+// and the close/requeue recovery) is delegated to the deps-first
 // runner-channel-ingest usecase, reached through createDeps(this.env) — the DO is
-// an entry/composition point, like main().
+// an entry/composition point, like main(). Subsequent work extends it with the
+// in-DO cloud event store (ama runtime), the browser WebSocket hub, and R2
+// archival, per docs/designs/session-event-storage-and-self-hosted-relay.md.
 
 import { createDeps } from '../composition'
 import type { Env } from '../env'
@@ -18,7 +21,7 @@ import {
   validateActiveOwnership,
 } from '../usecases/runtime/runner-channel-ingest'
 
-export class RunnerSessionChannelObject implements DurableObject {
+export class SessionObject implements DurableObject {
   private socket: WebSocket | null = null
   private state: ChannelState | null = null
 

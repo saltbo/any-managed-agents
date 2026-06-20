@@ -8,9 +8,9 @@ import type { Env } from '../../env'
 export function createRunnerChannel(env: Env): RunnerChannel {
   return {
     async isAccepted(sessionId: string): Promise<boolean> {
-      const id = env.RUNNER_SESSION_CHANNEL.idFromName(sessionId)
-      const stub = env.RUNNER_SESSION_CHANNEL.get(id)
-      const response = await stub.fetch('https://runner-session-channel/status')
+      const id = env.SESSION.idFromName(sessionId)
+      const stub = env.SESSION.get(id)
+      const response = await stub.fetch('https://session-object/status')
       if (!response.ok) {
         return false
       }
@@ -19,9 +19,9 @@ export function createRunnerChannel(env: Env): RunnerChannel {
     },
 
     async dispatch(sessionId: string, command: Record<string, unknown>): Promise<boolean> {
-      const id = env.RUNNER_SESSION_CHANNEL.idFromName(sessionId)
-      const stub = env.RUNNER_SESSION_CHANNEL.get(id)
-      const response = await stub.fetch('https://runner-session-channel/dispatch', {
+      const id = env.SESSION.idFromName(sessionId)
+      const stub = env.SESSION.get(id)
+      const response = await stub.fetch('https://session-object/dispatch', {
         method: 'POST',
         body: JSON.stringify(command),
       })
