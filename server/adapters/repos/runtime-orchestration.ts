@@ -1,3 +1,5 @@
+import { parseJson } from '@server/domain/runtime/session-snapshot'
+import { runnerSupportsRuntimeProviderModel } from '@server/domain/runtime-catalog'
 import type { SessionOrchestrationStore } from '@server/usecases/ports'
 import type {
   AgentRow,
@@ -278,6 +280,53 @@ export function createRuntimeOrchestrationRepo(db: Db): SessionOrchestrationStor
           and(eq(runners.projectId, projectId), eq(runners.environmentId, environmentId), eq(runners.state, 'active')),
         )
       return activeRunners.map((runner) => runner.capabilities)
+    },
+
+    async resolveEnvironmentForRuntime(projectId, runtime, providerId, model): Promise<string | null> {
+      // Candidate = an active, non-archived runner bound to a usable environment
+      // (live + has a current version). The join plus isNotNull drops unbound
+      // runners (environment_id null) since the session needs a concrete
+      // environment. Least-loaded first so the capacity preference below is
+      // deterministic rather than dependent on row order.
+      const rows = await db
+        .select({
+          environmentId: runners.environmentId,
+          capabilities: runners.capabilities,
+          currentLoad: runners.currentLoad,
+          maxConcurrent: runners.maxConcurrent,
+        })
+        .from(runners)
+        .innerJoin(environments, eq(runners.environmentId, environments.id))
+        .where(
+          and(
+            eq(runners.projectId, projectId),
+            eq(runners.state, 'active'),
+            isNull(runners.archivedAt),
+            isNotNull(runners.environmentId),
+            isNull(environments.archivedAt),
+            isNotNull(environments.currentVersionId),
+          ),
+        )
+        .orderBy(asc(runners.currentLoad), asc(runners.id))
+      const capable = rows
+        .map((row) => ({
+          environmentId: row.environmentId,
+          capabilities: parseJson<string[]>(row.capabilities) ?? [],
+          available: row.currentLoad < row.maxConcurrent,
+        }))
+        .filter((row) => runnerSupportsRuntimeProviderModel(row.capabilities, runtime, providerId))
+      if (capable.length === 0) {
+        return null
+      }
+      // Prefer a runner that declares the model, then one with spare capacity;
+      // otherwise fall back to any runtime-capable environment (its work item
+      // queues until a runner frees up).
+      const modelCapable = model
+        ? capable.filter((row) => runnerSupportsRuntimeProviderModel(row.capabilities, runtime, providerId, model))
+        : capable
+      const pool = modelCapable.length > 0 ? modelCapable : capable
+      const chosen = pool.find((row) => row.available) ?? pool[0]
+      return chosen?.environmentId ?? null
     },
 
     // ── MCP snapshot resolution ────────────────────────────────────────────

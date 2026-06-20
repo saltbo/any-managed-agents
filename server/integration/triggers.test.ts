@@ -1,6 +1,9 @@
 import { SELF } from 'cloudflare:test'
+import { runtimeProviderModelCapability } from '@server/domain/runtime-catalog'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { seedPlatformProvider, setupOidcProvider, signIn, signInUser } from './auth'
+
+const AMA_RUNNER_CAPABILITY = runtimeProviderModelCapability('ama', '*', '@cf/moonshotai/kimi-k2.6')
 
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
@@ -56,6 +59,27 @@ async function createRuntimeCredential(authorization: string) {
   })
   expect(credentialRes.status).toBe(201)
   return (await credentialRes.json()) as { id: string; activeVersionId: string }
+}
+
+async function registerActiveRunner(authorization: string, environmentId: string) {
+  const capabilities = [AMA_RUNNER_CAPABILITY]
+  const runnerRes = await jsonFetch('/api/v1/runners', authorization, {
+    method: 'POST',
+    body: JSON.stringify({
+      name: `Trigger runner ${crypto.randomUUID()}`,
+      environmentId,
+      capabilities,
+      maxConcurrent: 2,
+    }),
+  })
+  expect(runnerRes.status).toBe(201)
+  const runner = (await runnerRes.json()) as { id: string }
+  const heartbeatRes = await jsonFetch(`/api/v1/runners/${runner.id}/heartbeat`, authorization, {
+    method: 'PUT',
+    body: JSON.stringify({ state: 'active', currentLoad: 0, capabilities }),
+  })
+  expect(heartbeatRes.status).toBe(200)
+  return runner
 }
 
 async function createTrigger(
@@ -490,6 +514,86 @@ describe('[CF] /api/v1/triggers', () => {
     await expect(pausedRunsRes.json()).resolves.toMatchObject({ data: [] })
     const archivedRunsRes = await jsonFetch(`/api/v1/triggers/${archived.id}/runs`, authorization)
     await expect(archivedRunsRes.json()).resolves.toMatchObject({ data: [] })
+  })
+
+  it('creates an unpinned trigger and resolves a runner-capable environment at dispatch [spec: triggers/dispatch]', async () => {
+    const authorization = await signIn()
+    const agent = await createAgent(authorization)
+    const environment = await createEnvironment(authorization)
+    await registerActiveRunner(authorization, environment.id)
+    const dueAt = '2026-05-26T12:00:00.000Z'
+
+    const createRes = await jsonFetch('/api/v1/triggers', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        agentId: agent.id,
+        runtime: 'ama',
+        name: 'Unpinned heartbeat',
+        promptTemplate: 'Run scheduled work.',
+        schedule: { type: 'interval', intervalSeconds: 3600 },
+        nextDueAt: dueAt,
+      }),
+    })
+    expect(createRes.status).toBe(201)
+    const trigger = (await createRes.json()) as { id: string; environmentId: string | null }
+    expect(trigger.environmentId).toBeNull()
+
+    const dispatchRes = await jsonFetch('/api/v1/e2e/scheduled-agent-triggers/dispatch', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ heartbeatAt: '2026-05-26T12:01:00.000Z' }),
+    })
+    expect(dispatchRes.status).toBe(200)
+    const dispatch = (await dispatchRes.json()) as {
+      sessionCreated: number
+      runs: Array<{ sessionId: string }>
+    }
+    expect(dispatch).toMatchObject({ claimed: 1, sessionCreated: 1 })
+
+    // The dispatched session must land in the environment the runner serves.
+    const sessionId = dispatch.runs[0]?.sessionId
+    const sessionRes = await jsonFetch(`/api/v1/sessions/${sessionId}`, authorization)
+    expect(sessionRes.status).toBe(200)
+    await expect(sessionRes.json()).resolves.toMatchObject({ environmentId: environment.id })
+  })
+
+  it('fails an unpinned trigger run when no runner environment is available [spec: triggers/dispatch]', async () => {
+    const authorization = await signIn()
+    const agent = await createAgent(authorization)
+    // An environment exists but has no active runner, so it is not a candidate.
+    await createEnvironment(authorization)
+    const dueAt = '2026-05-26T12:00:00.000Z'
+
+    const createRes = await jsonFetch('/api/v1/triggers', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        agentId: agent.id,
+        runtime: 'ama',
+        name: 'Unrunnable heartbeat',
+        promptTemplate: 'Run scheduled work.',
+        schedule: { type: 'interval', intervalSeconds: 3600 },
+        nextDueAt: dueAt,
+      }),
+    })
+    expect(createRes.status).toBe(201)
+    const trigger = (await createRes.json()) as { id: string }
+
+    const dispatchRes = await jsonFetch('/api/v1/e2e/scheduled-agent-triggers/dispatch', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ heartbeatAt: '2026-05-26T12:01:00.000Z' }),
+    })
+    expect(dispatchRes.status).toBe(200)
+    const dispatch = (await dispatchRes.json()) as {
+      sessionCreated: number
+      failed: number
+      runs: Array<{ status: string; errorMessage: string | null }>
+    }
+    expect(dispatch).toMatchObject({ claimed: 1, sessionCreated: 0, failed: 1 })
+    // createSession (not the dispatcher) now owns resolution, so the run fails
+    // with its "no runner environment" message.
+    expect(dispatch.runs[0]?.errorMessage).toContain('No environment has an active runner')
+
+    const runsRes = await jsonFetch(`/api/v1/triggers/${trigger.id}/runs`, authorization)
+    await expect(runsRes.json()).resolves.toMatchObject({ data: [expect.objectContaining({ state: 'failed' })] })
   })
 
   it('permanently deletes a trigger and its runs and audits it [spec: triggers/delete]', async () => {

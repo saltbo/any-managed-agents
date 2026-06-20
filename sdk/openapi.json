@@ -4660,6 +4660,7 @@
           },
           "environmentId": {
             "type": "string",
+            "nullable": true,
             "example": "env_abc123"
           },
           "runtime": {
@@ -5008,7 +5009,6 @@
         },
         "required": [
           "agentId",
-          "environmentId",
           "runtime",
           "name",
           "promptTemplate",
@@ -5760,7 +5760,6 @@
         },
         "required": [
           "agentId",
-          "environmentId",
           "runtime"
         ],
         "additionalProperties": false
