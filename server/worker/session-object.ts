@@ -211,6 +211,9 @@ export class SessionObject implements DurableObject {
     const [client, server] = Object.values(pair) as [WebSocket, WebSocket]
     this.durableState.acceptWebSocket(server, ['browser'])
     server.serializeAttachment(scope)
+    // Push history immediately on connect so the chat renders from the socket alone
+    // — events never travel over HTTP. Live events follow via fanOutToBrowsers.
+    this.durableState.waitUntil(this.sendBackfill(server, scope.sessionId, { order: 'asc', limit: 200 }))
     return new Response(null, { status: 101, webSocket: client })
   }
 
@@ -244,7 +247,7 @@ export class SessionObject implements DurableObject {
       return
     }
     if (frame.type === 'backfill') {
-      this.sendBackfill(ws, scope.sessionId, frame)
+      this.durableState.waitUntil(this.sendBackfill(ws, scope.sessionId, frame))
     }
     // prompt/abort/steer/approval (the inbound write frames) route through the
     // session usecases; handled in browser-write wiring.
@@ -253,14 +256,31 @@ export class SessionObject implements DurableObject {
   // Hibernation close handler. Hibernation reaps the socket; nothing to clean up.
   async webSocketClose(_ws: WebSocket, _code: number, _reason: string, _wasClean: boolean): Promise<void> {}
 
-  private sendBackfill(ws: WebSocket, sessionId: string, frame: Record<string, unknown>): void {
-    const page = queryEventsFromSql(this.eventSql(), sessionId, {
+  private async sendBackfill(ws: WebSocket, sessionId: string, frame: Record<string, unknown>): Promise<void> {
+    const query: SessionEventQuery = {
       order: 'asc',
       limit: typeof frame.limit === 'number' ? frame.limit : 200,
       ...(typeof frame.cursor === 'number' ? { cursor: frame.cursor } : {}),
       ...(typeof frame.eventType === 'string' ? { type: frame.eventType } : {}),
       visibility: typeof frame.visibility === 'string' ? frame.visibility : 'runtime',
-    })
+    }
+    let page = queryEventsFromSql(this.eventSql(), sessionId, query)
+    // CLI relay sessions keep no cloud copy: when the store is empty but the runner
+    // is live, relay the backfill to it (the same path /events/relay-query uses), so
+    // the browser gets a full history from the socket alone — never over HTTP.
+    if (page.rows.length === 0 && this.socket?.readyState === WebSocket.OPEN && this.state) {
+      try {
+        const events = await this.requestRunnerBackfill()
+        page = queryRelayedEvents(
+          events,
+          { organizationId: this.state.organizationId, projectId: this.state.projectId, sessionId },
+          query,
+        )
+      } catch {
+        // runner unavailable — serve the (empty) store page
+      }
+    }
+    if (ws.readyState !== WebSocket.OPEN) return
     const last = page.rows.at(-1)
     ws.send(
       JSON.stringify({
