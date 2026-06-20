@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -811,12 +812,20 @@ func (d *RunnerDaemon) runExternalSession(execution sessionRuntimeExecution) err
 	ctx := execution.LeaseContext
 	lease := execution.Lease
 	payload := execution.Payload
+	// The runner is the durable store for a CLI relay session: every event is
+	// written to a local per-session log so a relayed backfill can be answered
+	// from it (the cloud keeps no copy). Opened before the run so the router can
+	// serve a backfill that races the first event.
+	store, err := openSessionEventStore(filepath.Join(d.Config.WorkDir, "sessions", payload.SessionID))
+	if err != nil {
+		return fmt.Errorf("open session event store: %w", err)
+	}
 	// A single reader goroutine owns the channel for the whole run: it routes
 	// mid-run session.command prompts to the live runtime and everything else
 	// (event acks, channel errors) back to the acknowledged event writers.
 	// Starting it before workspace preparation buffers prompts that arrive
 	// while the runtime is still starting.
-	router := newSessionChannelRouter(execution.Channel, payload.SessionID, lease.ID, d.RunnerID)
+	router := newSessionChannelRouter(execution.Channel, payload.SessionID, lease.ID, d.RunnerID, store)
 	go router.run(ctx)
 	channel := router.routedChannel()
 	workspace, err := prepareRuntimeWorkspace(ctx, d.Config.WorkDir, payload.SessionID, payload.ResourceRefs, payload.RuntimeEnv)
@@ -864,6 +873,11 @@ func (d *RunnerDaemon) runExternalSession(execution sessionRuntimeExecution) err
 	}, func(eventType string, eventPayload ama.JSON) error {
 		writeMu.Lock()
 		defer writeMu.Unlock()
+		// Store locally first so a relayed backfill can serve this event even
+		// though the cloud keeps no copy, then relay it live upstream.
+		if _, err := store.Append(eventType, eventPayload, ama.JSON{"runnerId": d.RunnerID, "executor": d.Config.SandboxAdapter}); err != nil {
+			return err
+		}
 		return d.writeAcknowledgedChannelEvent(ctx, channel, eventType, eventPayload)
 	})
 	if runErr != nil {

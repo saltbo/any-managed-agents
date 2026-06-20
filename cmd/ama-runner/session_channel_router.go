@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"log/slog"
 	"sync"
+
+	ama "github.com/saltbo/any-managed-agents/sdk/go/ama"
 )
 
 // resumeTokenBox shares the latest runtime resume token between the runtime
@@ -43,6 +45,10 @@ type sessionChannelRouter struct {
 	sessionID string
 	leaseID   string
 	runnerID  string
+	// store is the local event log for a CLI relay session; nil for runtimes
+	// whose events the cloud stores. When set, the router answers relayed
+	// backfill reads from it.
+	store *sessionEventStore
 
 	mu                 sync.Mutex
 	sendPrompt         func(message string) error
@@ -52,6 +58,10 @@ type sessionChannelRouter struct {
 	sendPermission     func(permissionId string, allowed bool, reason string) error
 	pendingPermissions []RunnerSessionCommand
 
+	// writeMu serializes channel writes so a relayed backfill response cannot
+	// interleave mid-frame with an acknowledged event write.
+	writeMu sync.Mutex
+
 	acks chan json.RawMessage
 	// readErr is written by run() strictly before it closes acks, and read
 	// only after a receive observes the closed channel — the channel close is
@@ -59,12 +69,13 @@ type sessionChannelRouter struct {
 	readErr error
 }
 
-func newSessionChannelRouter(channel RunnerSessionChannel, sessionID string, leaseID string, runnerID string) *sessionChannelRouter {
+func newSessionChannelRouter(channel RunnerSessionChannel, sessionID string, leaseID string, runnerID string, store *sessionEventStore) *sessionChannelRouter {
 	return &sessionChannelRouter{
 		channel:   channel,
 		sessionID: sessionID,
 		leaseID:   leaseID,
 		runnerID:  runnerID,
+		store:     store,
 		acks:      make(chan json.RawMessage, 16),
 	}
 }
@@ -80,6 +91,10 @@ func (r *sessionChannelRouter) run(ctx context.Context) {
 		var message RunnerChannelMessage
 		if err := json.Unmarshal(raw, &message); err != nil {
 			slog.Warn("runner session channel message is not an object; dropping", "error", err)
+			continue
+		}
+		if message.Type == "session.backfill_request" {
+			r.handleBackfillRequest(ctx, message)
 			continue
 		}
 		if message.Type != "session.command" {
@@ -111,6 +126,37 @@ func (r *sessionChannelRouter) run(ctx context.Context) {
 			continue
 		}
 		r.deliverPrompt(message.Command.Message)
+	}
+}
+
+// handleBackfillRequest answers a relayed history read: the Session DO forwards
+// the browser's backfill over the channel, and the runner — the sole store for a
+// CLI relay session — replies with its whole local log for the server to
+// canonicalise, thread, and paginate.
+func (r *sessionChannelRouter) handleBackfillRequest(ctx context.Context, message RunnerChannelMessage) {
+	if message.SessionID != r.sessionID || message.LeaseID != r.leaseID || message.RunnerID != r.runnerID {
+		slog.Warn("runner backfill request ownership mismatch; dropping",
+			"sessionId", message.SessionID, "leaseId", message.LeaseID, "runnerId", message.RunnerID)
+		return
+	}
+	response := ama.JSON{
+		"type":      "session.backfill_response",
+		"eventId":   message.EventID,
+		"sessionId": r.sessionID,
+		"events":    []storedRunnerEvent{},
+	}
+	if r.store != nil {
+		if events, err := r.store.ReadAll(); err != nil {
+			response["error"] = err.Error()
+		} else if events != nil {
+			response["events"] = events
+		}
+	}
+	r.writeMu.Lock()
+	err := r.channel.WriteJSON(ctx, response)
+	r.writeMu.Unlock()
+	if err != nil {
+		slog.Warn("runner failed to write backfill response", "sessionId", r.sessionID, "error", err)
 	}
 }
 
@@ -226,6 +272,8 @@ func (c *routedSessionChannel) ReadJSON(ctx context.Context, out any) error {
 }
 
 func (c *routedSessionChannel) WriteJSON(ctx context.Context, value any) error {
+	c.router.writeMu.Lock()
+	defer c.router.writeMu.Unlock()
 	return c.router.channel.WriteJSON(ctx, value)
 }
 
