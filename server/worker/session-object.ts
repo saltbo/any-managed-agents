@@ -28,6 +28,8 @@ import {
   ensureSessionEventSchema,
   exportSessionEventsJsonl,
   queryEventsFromSql,
+  queryRelayedEvents,
+  type RelayedRunnerEvent,
   type SessionEventScope,
   streamSessionEvents,
 } from './session-event-store-sql'
@@ -42,6 +44,17 @@ export class SessionObject implements DurableObject {
   private socket: WebSocket | null = null
   private state: ChannelState | null = null
   private eventSchemaReady = false
+  // In-flight relayed backfill reads, keyed by request id: the DO sends a
+  // session.backfill_request to the runner and resolves here when the matching
+  // session.backfill_response arrives (or rejects on timeout / runner loss).
+  private readonly pendingBackfills = new Map<
+    string,
+    {
+      resolve: (events: RelayedRunnerEvent[]) => void
+      reject: (error: Error) => void
+      timer: ReturnType<typeof setTimeout>
+    }
+  >()
 
   constructor(
     private readonly durableState: DurableObjectState,
@@ -85,6 +98,9 @@ export class SessionObject implements DurableObject {
       const { sessionId, query } = body as { sessionId: string; query: SessionEventQuery }
       return Response.json(queryEventsFromSql(sql, sessionId, query))
     }
+    if (pathname === '/events/relay-query') {
+      return this.relayQuery(body as { query: SessionEventQuery })
+    }
     if (pathname === '/events/count') {
       const { sessionId } = body as { sessionId: string }
       return Response.json({ count: countSessionEvents(sql, sessionId) })
@@ -115,6 +131,60 @@ export class SessionObject implements DurableObject {
       this.eventSchemaReady = true
     }
     return sql
+  }
+
+  // The relay read for a CLI session: forward the page request to the live runner
+  // (the only store) and canonicalise its log in memory — the cloud keeps no copy.
+  // Runner offline ⇒ runnerUnavailable, so the event-store router falls back to D1.
+  private async relayQuery(body: { query: SessionEventQuery }): Promise<Response> {
+    if (!this.socket || !this.state || this.socket.readyState !== WebSocket.OPEN) {
+      return Response.json({ rows: [], hasMore: false, runnerUnavailable: true })
+    }
+    const scope = {
+      organizationId: this.state.organizationId,
+      projectId: this.state.projectId,
+      sessionId: this.state.sessionId,
+    }
+    try {
+      const events = await this.requestRunnerBackfill()
+      return Response.json(queryRelayedEvents(events, scope, body.query))
+    } catch {
+      return Response.json({ rows: [], hasMore: false, runnerUnavailable: true })
+    }
+  }
+
+  private requestRunnerBackfill(): Promise<RelayedRunnerEvent[]> {
+    const requestId = `backfill_${crypto.randomUUID()}`
+    return new Promise<RelayedRunnerEvent[]>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingBackfills.delete(requestId)
+        reject(new Error('runner backfill timed out'))
+      }, 10_000)
+      this.pendingBackfills.set(requestId, { resolve, reject, timer })
+      this.socket?.send(
+        JSON.stringify({
+          type: 'session.backfill_request',
+          eventId: requestId,
+          sessionId: this.state?.sessionId,
+          leaseId: this.state?.leaseId,
+          runnerId: this.state?.runnerId,
+        }),
+      )
+    })
+  }
+
+  private resolveBackfill(record: Record<string, unknown>): void {
+    const requestId = typeof record.eventId === 'string' ? record.eventId : null
+    if (!requestId) {
+      return
+    }
+    const pending = this.pendingBackfills.get(requestId)
+    if (!pending) {
+      return
+    }
+    clearTimeout(pending.timer)
+    this.pendingBackfills.delete(requestId)
+    pending.resolve(Array.isArray(record.events) ? (record.events as RelayedRunnerEvent[]) : [])
   }
 
   // ── browser transport ───────────────────────────────────────────────────────
@@ -256,6 +326,10 @@ export class SessionObject implements DurableObject {
         throw new Error('Runner channel message must be an object')
       }
       const record = parsed as Record<string, unknown>
+      if (record.type === 'session.backfill_response') {
+        this.resolveBackfill(record)
+        return
+      }
       eventId = typeof record.eventId === 'string' ? record.eventId : undefined
       const eventRecord =
         record.type === 'runner.event' && record.event && typeof record.event === 'object'
@@ -325,6 +399,11 @@ export class SessionObject implements DurableObject {
     const socket = this.socket
     this.socket = null
     this.state = null
+    for (const pending of this.pendingBackfills.values()) {
+      clearTimeout(pending.timer)
+      pending.reject(new Error('runner channel closed'))
+    }
+    this.pendingBackfills.clear()
     if (socket?.readyState === WebSocket.OPEN) {
       socket.close(channelState === 'stale' ? 4001 : 1000, reason)
     }

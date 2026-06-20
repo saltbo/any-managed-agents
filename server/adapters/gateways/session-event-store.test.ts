@@ -7,7 +7,7 @@ const recordProviderSignals = vi.fn()
 vi.mock('../repos/usage-write', () => ({ createUsageWriteRepo: () => ({ recordProviderSignals }) }))
 
 import type { CanonicalAmaSessionEvent } from '@shared/session-events'
-import { createCloudLoopChecker, createSessionEventStore } from './session-event-store'
+import { createCliRuntimeChecker, createCloudLoopChecker, createSessionEventStore } from './session-event-store'
 
 function fakeStampDb(row: { metadata: string | null } | undefined) {
   const get = vi.fn().mockResolvedValue(row)
@@ -33,10 +33,29 @@ describe('createCloudLoopChecker', () => {
   })
 })
 
+describe('createCliRuntimeChecker', () => {
+  it('returns true for a CLI runtime session and caches the lookup', async () => {
+    const db = fakeStampDb({ metadata: JSON.stringify({ runtime: 'claude-code' }) })
+    const check = createCliRuntimeChecker(db as never)
+    expect(await check('sess_1')).toBe(true)
+    expect(await check('sess_1')).toBe(true)
+    expect(db._get).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns false for ama, missing, or metadata-less sessions', async () => {
+    expect(
+      await createCliRuntimeChecker(fakeStampDb({ metadata: JSON.stringify({ runtime: 'ama' }) }) as never)('s'),
+    ).toBe(false)
+    expect(await createCliRuntimeChecker(fakeStampDb({ metadata: null }) as never)('s')).toBe(false)
+    expect(await createCliRuntimeChecker(fakeStampDb(undefined) as never)('s')).toBe(false)
+  })
+})
+
 function fakeDoStore() {
   return {
     append: vi.fn().mockResolvedValue({ id: 'do_event', sequence: 1, record: { id: 'do_event' } }),
     query: vi.fn().mockResolvedValue({ rows: [{ id: 'do_event' }], hasMore: false }),
+    relayQuery: vi.fn().mockResolvedValue({ rows: [{ id: 'relay_event' }], hasMore: false }),
     stream: vi.fn().mockResolvedValue([{ type: 'turn_end', payload: '{}' }]),
     count: vi.fn().mockResolvedValue(1),
     archive: vi.fn().mockResolvedValue(undefined),
@@ -61,10 +80,16 @@ const canonical: CanonicalAmaSessionEvent = {
 }
 const query = { order: 'asc' as const, limit: 50 }
 
-function makeStore(inDo: boolean) {
+function makeStore(inDo: boolean, isRelay = false) {
   const doStore = fakeDoStore()
   const d1 = fakeD1()
-  const store = createSessionEventStore({} as never, async () => inDo, doStore as never, d1)
+  const store = createSessionEventStore(
+    {} as never,
+    async () => inDo,
+    async () => isRelay,
+    doStore as never,
+    d1,
+  )
   return { store, doStore, d1 }
 }
 
@@ -97,6 +122,28 @@ describe('createSessionEventStore — storage follows the loop', () => {
     const local = makeStore(false)
     expect((await local.store.queryEvents('sess_1', query)).rows[0]).toEqual({ id: 'd1_event' })
     expect(local.d1.queryEvents).toHaveBeenCalledWith('sess_1', query)
+  })
+
+  it('relay append is a no-op in the cloud — the runner store-and-serves it', async () => {
+    recordProviderSignals.mockClear()
+    const { store, doStore, d1 } = makeStore(false, true)
+    const id = await store.appendCanonicalEvent(scope, canonical)
+    expect(id).toBe('relay')
+    expect(doStore.append).not.toHaveBeenCalled()
+    expect(d1.append).not.toHaveBeenCalled()
+    expect(recordProviderSignals).not.toHaveBeenCalled()
+  })
+
+  it('relay queryEvents reads the live runner, falling back to D1 when offline', async () => {
+    const relay = makeStore(false, true)
+    expect((await relay.store.queryEvents('sess_1', query)).rows[0]).toEqual({ id: 'relay_event' })
+    expect(relay.doStore.relayQuery).toHaveBeenCalledWith('sess_1', query)
+    expect(relay.d1.queryEvents).not.toHaveBeenCalled()
+
+    const offline = makeStore(false, true)
+    offline.doStore.relayQuery.mockResolvedValue({ rows: [], hasMore: false, runnerUnavailable: true })
+    expect((await offline.store.queryEvents('sess_1', query)).rows[0]).toEqual({ id: 'd1_event' })
+    expect(offline.d1.queryEvents).toHaveBeenCalledWith('sess_1', query)
   })
 
   it('routes eventStream to the DO for cloud-loop and to D1 otherwise', async () => {

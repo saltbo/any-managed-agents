@@ -7,7 +7,11 @@ import { createRunnerChannel } from './adapters/gateways/runner-channel'
 import { createRuntimeSecretEnvGateway } from './adapters/gateways/runtime-secret-env'
 import { createSecretStoreGateway } from './adapters/gateways/secret-store'
 import { createSessionDoEventStore } from './adapters/gateways/session-do-events'
-import { createCloudLoopChecker, createSessionEventStore } from './adapters/gateways/session-event-store'
+import {
+  createCliRuntimeChecker,
+  createCloudLoopChecker,
+  createSessionEventStore,
+} from './adapters/gateways/session-event-store'
 import { createSessionEventPort } from './adapters/gateways/session-events'
 import { createAgentRepo } from './adapters/repos/agents'
 import { createAuditReadRepo } from './adapters/repos/audit-records'
@@ -48,7 +52,8 @@ export function createDeps(env: Env): Deps {
   // per-session lookup is cached once.
   const sessionDoEvents = createSessionDoEventStore(env)
   const isCloudLoop = createCloudLoopChecker(db)
-  const sessionEventStore = createSessionEventStore(db, isCloudLoop, sessionDoEvents, {
+  const isRunnerRelay = createCliRuntimeChecker(db)
+  const sessionEventStore = createSessionEventStore(db, isCloudLoop, isRunnerRelay, sessionDoEvents, {
     append: (scope, canonicalEvent, overrides) =>
       sessionOrchestration.appendCanonicalEvent(scope, canonicalEvent, overrides),
     queryEvents: (sessionId, query) => sessions.queryEvents(sessionId, query),

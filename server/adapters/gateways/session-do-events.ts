@@ -39,6 +39,11 @@ export interface SessionDoEventStore {
     overrides?: SessionEventOverrides,
   ): Promise<{ id: string; sequence: number; record: SessionEventRecord }>
   query(sessionId: string, query: SessionEventQuery): Promise<SessionEventPage>
+  // The relay read for a CLI session: the DO forwards a backfill to the live
+  // runner (the sole store) and canonicalises its log in memory. `runnerUnavailable`
+  // means the runner is offline, so the router falls back to D1 (legacy events or,
+  // for a completed relay session, nothing — the accepted offline-history trade-off).
+  relayQuery(sessionId: string, query: SessionEventQuery): Promise<SessionEventPage & { runnerUnavailable?: boolean }>
   stream(sessionId: string): Promise<{ type: string; payload: string }[]>
   count(sessionId: string): Promise<number>
   archive(scope: SessionEventScope): Promise<void>
@@ -51,6 +56,14 @@ export function createSessionDoEventStore(env: Env): SessionDoEventStore {
     },
     async query(sessionId, query) {
       return await callSessionObject<SessionEventPage>(env, sessionId, '/events/query', { sessionId, query })
+    },
+    async relayQuery(sessionId, query) {
+      return await callSessionObject<SessionEventPage & { runnerUnavailable?: boolean }>(
+        env,
+        sessionId,
+        '/events/relay-query',
+        { sessionId, query },
+      )
     },
     async stream(sessionId) {
       const { events } = await callSessionObject<{ events: { type: string; payload: string }[] }>(

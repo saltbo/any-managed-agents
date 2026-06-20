@@ -220,6 +220,91 @@ export function queryEventsFromSql(sql: SqlStorage, sessionId: string, query: Se
   return { rows: rows.slice(0, query.limit).map(serializeRow), hasMore }
 }
 
+// One event in a runner's local log, relayed verbatim from the store-and-serve
+// runner over the channel — the bytes the cloud never kept a copy of.
+export interface RelayedRunnerEvent {
+  id: string
+  sequence: number
+  type: string
+  payload: Record<string, unknown>
+  metadata: Record<string, unknown>
+  createdAt: string
+}
+
+// The relay's second implementation of the store query: a CLI relay session's
+// events live only on the runner, so the read path canonicalises the runner's
+// raw log in memory (no cloud copy) — threading turn/transcript correlation the
+// same way appendCanonicalEventToSql does — then applies the same filter/cursor
+// /pagination as queryEventsFromSql so a relayed page is indistinguishable from
+// a DO-served one.
+export function queryRelayedEvents(
+  rawEvents: RelayedRunnerEvent[],
+  scope: SessionEventScope,
+  query: SessionEventQuery,
+): SessionEventPage {
+  let currentTurnId: string | null = null
+  let lastMessageType: string | null = null
+  let lastMessageCorrelation: string | null = null
+  const rows: EventRow[] = rawEvents.map((raw) => {
+    const canonical = canonicalAmaSessionEventFromRuntimeEvent({ type: raw.type, ...raw.payload }, raw.metadata)
+    const parentEventId = currentTurnId
+    const isMessage = MESSAGE_EVENT_TYPES.includes(canonical.type as (typeof MESSAGE_EVENT_TYPES)[number])
+    let correlationId = canonicalEventCorrelation(canonical.type, canonical.payload)
+    if (correlationId === null && isMessage) {
+      correlationId =
+        canonical.type !== 'message_start' &&
+        lastMessageType !== null &&
+        lastMessageType !== 'message_end' &&
+        lastMessageCorrelation
+          ? lastMessageCorrelation
+          : `message:${raw.id}`
+    }
+    if (canonical.type === 'turn_start') {
+      currentTurnId = raw.id
+    } else if (canonical.type === 'turn_end') {
+      currentTurnId = null
+    }
+    if (isMessage) {
+      lastMessageType = canonical.type
+      lastMessageCorrelation = correlationId
+    }
+    return {
+      id: raw.id,
+      organization_id: scope.organizationId,
+      project_id: scope.projectId,
+      session_id: scope.sessionId,
+      sequence: raw.sequence,
+      type: canonical.type,
+      visibility: canonical.visibility,
+      role: canonical.role,
+      parent_event_id: parentEventId,
+      correlation_id: correlationId,
+      payload: JSON.stringify(canonical.payload),
+      metadata: JSON.stringify(canonical.metadata),
+      created_at: raw.createdAt,
+    }
+  })
+
+  const visibility = query.visibility ?? 'runtime'
+  let filtered = rows.filter((row) => row.visibility === visibility)
+  if (query.type) {
+    filtered = filtered.filter((row) => row.type === query.type)
+  }
+  if (query.createdFrom) {
+    filtered = filtered.filter((row) => row.created_at >= query.createdFrom!)
+  }
+  if (query.createdTo) {
+    filtered = filtered.filter((row) => row.created_at <= query.createdTo!)
+  }
+  const cursor = query.cursor ?? (query.order === 'asc' ? 0 : undefined)
+  if (cursor !== undefined) {
+    filtered = filtered.filter((row) => (query.order === 'asc' ? row.sequence > cursor : row.sequence < cursor))
+  }
+  filtered.sort((a, b) => (query.order === 'asc' ? a.sequence - b.sequence : b.sequence - a.sequence))
+  const hasMore = filtered.length > query.limit
+  return { rows: filtered.slice(0, query.limit).map(serializeRow), hasMore }
+}
+
 export function countSessionEvents(sql: SqlStorage, sessionId: string): number {
   return sql.exec<{ c: number }>('SELECT count(*) AS c FROM session_events WHERE session_id = ?', sessionId).one().c
 }
