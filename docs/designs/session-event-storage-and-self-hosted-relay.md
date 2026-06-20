@@ -194,9 +194,17 @@ Sandbox runs.
 Applies to the self-hosted CLI runtimes (`claude-code`/`codex`/`copilot`) whose
 loop runs on the runner.
 
-- The `Session` DO already owns the runner WebSocket (the absorbed
-  `RunnerSessionChannelObject` role). It now also owns the browser WebSocket and
-  **bridges the two directly** — no cloud event storage.
+- **The relay hub is the `Session` DO keyed by `runnerId`** (not `sessionId`) —
+  one instance per runner, the shape of the old AK `TunnelRelay`. **Both ends
+  connect to that one instance**: the runner opens ONE persistent WebSocket
+  (shared across all its leases, reconnecting on restart), and the browsers for
+  that runner's CLI sessions connect to it too. The DO multiplexes by `sessionId`
+  carried **per-frame** — the channel is no longer bound to one session. Live
+  events fan to the browsers matching that `sessionId`; a `backfill` request is
+  relayed to the runner for that `sessionId`. No cloud event storage. The
+  per-`sessionId` `Session` instance is used only for cloud-loop (`ama`) storage.
+  (Earlier this owned the runner WebSocket **per session** — that was the bug; see
+  Availability.)
 - The runner gains a **local durable event store** (SQLite/framed file, one per
   session). Today `runtime-bridge` only `write({type:'event'})` upstream
   (stream-and-forget); it becomes **store-and-serve**, surviving a runner
@@ -220,6 +228,12 @@ loop runs on the runner.
 
 ## Availability & UX
 
+- Self-hosted history is available **whenever the runner is online** — running,
+  `in_review`, or `done` alike — because the relay connection is **per-runner**,
+  not per-session. An implementation that binds the connection to a session's
+  lease breaks this: the data is still on disk but unreachable once the session
+  completes. The contract is `runner online ⇒ available`, never tied to session
+  state.
 - Self-hosted + runner offline ⇒ the WebSocket connect / `backfill` returns a
   typed `runner_unavailable` (not a 500); the browser renders "runner offline —
   session history lives on the runner and is not reachable now." Live obviously
