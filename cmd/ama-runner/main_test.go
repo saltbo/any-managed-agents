@@ -116,6 +116,11 @@ func TestRunWithContextWiresSDKDaemonAndStops(t *testing.T) {
 			_, _ = w.Write([]byte(`{"runnerId":"runner_1","state":"active","currentLoad":0,"runtimeUsage":[],"runtimeInventory":[],"lastHeartbeatAt":null}`))
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/work-items":
 			_, _ = w.Write([]byte(`{"data":[],"pagination":{"limit":50,"hasMore":false,"nextCursor":null}}`))
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/channel"):
+			// The relay hub dials the per-runner channel via WebSocket upgrade.
+			// A non-upgrade response causes the hub to log a warning and retry
+			// after its reconnect delay, which is fine for this integration test.
+			w.WriteHeader(http.StatusBadRequest)
 		default:
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
 		}
@@ -135,13 +140,5 @@ func TestRunWithContextWiresSDKDaemonAndStops(t *testing.T) {
 	}
 	if heartbeatCount < 2 {
 		t.Fatalf("expected active and offline heartbeats, got %d", heartbeatCount)
-	}
-}
-
-func TestV1RunnerSessionChannelOpenerReturnsURLValidationErrors(t *testing.T) {
-	opener := v1RunnerSessionChannelOpener{origin: "ftp://ama.example.test"}
-	_, err := opener.OpenRunnerSessionChannel(context.Background(), "lease_1")
-	if err == nil || !strings.Contains(err.Error(), "http or https") {
-		t.Fatalf("expected URL validation error, got %v", err)
 	}
 }

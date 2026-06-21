@@ -37,11 +37,18 @@ type sessionEventStore struct {
 	seq  int64
 }
 
+// sessionEventLogPath is the canonical on-disk log file for a session's event
+// store. The relay hub serves a backfill for a completed session straight from
+// this file, so the path is shared rather than re-derived.
+func sessionEventLogPath(sessionDir string) string {
+	return filepath.Join(sessionDir, "events.jsonl")
+}
+
 func openSessionEventStore(sessionDir string) (*sessionEventStore, error) {
 	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
 		return nil, err
 	}
-	store := &sessionEventStore{path: filepath.Join(sessionDir, "events.jsonl")}
+	store := &sessionEventStore{path: sessionEventLogPath(sessionDir)}
 	// Recover the latest sequence so a resumed session continues the run rather
 	// than restarting the count (the on-disk log is the source of truth).
 	events, err := store.readAll()
@@ -99,7 +106,15 @@ func (s *sessionEventStore) ReadAll() ([]storedRunnerEvent, error) {
 }
 
 func (s *sessionEventStore) readAll() ([]storedRunnerEvent, error) {
-	file, err := os.Open(s.path)
+	return readSessionEventLog(s.path)
+}
+
+// readSessionEventLog reads a session's full ordered log straight from disk. The
+// relay hub uses it to answer a backfill for a session whose live store is gone
+// (the lease completed) — the events survive on disk. A missing log is an empty
+// history, not an error.
+func readSessionEventLog(path string) ([]storedRunnerEvent, error) {
+	file, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}

@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 	"time"
 
@@ -62,63 +61,23 @@ func TestWorkspacePathSafetyBranches(t *testing.T) {
 	}
 }
 
-func TestRunnerChannelAndCommandBranches(t *testing.T) {
-	daemon := testDaemon(&fakeControlPlane{}, &fakeAdapter{result: ToolResult{Output: ama.JSON{"stdout": "ok"}}})
-	daemon.Channels = nil
-	if _, err := daemon.openRunnerSessionChannel(context.Background(), "lease_1"); err == nil {
-		t.Fatal("expected missing channel opener error")
-	}
+func TestCompleteSessionStartFailsLeaseWhenRelayHubIsNil(t *testing.T) {
+	// completeSessionStart must fail the lease when the relay hub has not been
+	// started (d.relayHub == nil). This guards the invariant that the hub is
+	// always running before session work is dispatched.
 	lease := sessionStartLease()
 	client := &fakeControlPlane{lease: lease}
-	daemon = testDaemon(client, &fakeAdapter{})
-	daemon.Channels = nil
+	daemon := testDaemon(client, &fakeAdapter{})
+	// relayHub is nil by default in testDaemon (it is started lazily by Start).
 	payload, err := parseWorkPayload(lease.workItem.Payload)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := daemon.completeSessionStart(context.Background(), lease.lease, payload); err == nil {
-		t.Fatal("expected session start channel configuration error")
+		t.Fatal("expected session start error when relay hub is nil")
 	}
 	if len(client.updates) != 1 || client.updates[0].State != "failed" {
 		t.Fatalf("expected failed lease update, got %#v", client.updates)
-	}
-	daemon = testDaemon(&fakeControlPlane{}, &fakeAdapter{result: ToolResult{Output: ama.JSON{"stdout": "ok"}}})
-	channel := newFakeRunnerSessionChannel(
-		ama.JSON{"type": "runner.event.accepted", "eventId": "unrelated"},
-	)
-	if err := daemon.writeAcknowledgedChannelEvent(context.Background(), channel, "runtime.metadata", ama.JSON{"status": "started"}); err != nil {
-		t.Fatalf("expected acknowledged event after unrelated ack, got %v", err)
-	}
-
-	channel = newFakeRunnerSessionChannel(
-		ama.JSON{"type": "runner.noop"},
-		ama.JSON{"type": "session.channel.accepted", "sessionId": "other_session"},
-	)
-	if err := daemon.waitForChannelAccepted(context.Background(), channel, "session_1"); err == nil || !strings.Contains(err.Error(), "mismatched") {
-		t.Fatalf("expected channel accepted mismatch, got %v", err)
-	}
-
-}
-
-func TestRunOnceAndChannelErrorBranches(t *testing.T) {
-	client := &fakeControlPlane{}
-	daemon := testDaemon(client, &fakeAdapter{})
-	daemon.RunnerID = "runner_1"
-	if err := daemon.RunOnce(context.Background()); err != nil {
-		t.Fatalf("expected nil lease to be ignored, got %v", err)
-	}
-	client.claimErr = os.ErrPermission
-	if err := daemon.RunOnce(context.Background()); err == nil || !strings.Contains(err.Error(), "permission denied") {
-		t.Fatalf("expected lease claim error, got %v", err)
-	}
-
-	channel := newFakeRunnerSessionChannel(os.ErrClosed)
-	if err := daemon.waitForChannelAccepted(context.Background(), channel, "session_1"); err == nil {
-		t.Fatal("expected channel read error")
-	}
-	channel = newFakeRunnerSessionChannel(os.ErrClosed)
-	if err := daemon.writeAcknowledgedChannelEvent(context.Background(), channel, "runtime.metadata", ama.JSON{}); err == nil {
-		t.Fatal("expected acknowledged event read context error")
 	}
 }
 

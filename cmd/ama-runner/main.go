@@ -102,17 +102,21 @@ type v1RunnerSessionChannelOpener struct {
 	tokens    *RunnerTokenSource
 }
 
-// OpenRunnerSessionChannel dials the v1 lease channel
-// (GET /api/v1/leases/{leaseId}/channel). The server derives the runner from
-// the lease, so runnerId is no longer part of the request.
-func (o v1RunnerSessionChannelOpener) OpenRunnerSessionChannel(
+// OpenRunnerChannel dials the per-runner relay channel
+// (GET /api/v1/runners/{runnerId}/channel). One channel per runner carries every
+// session it hosts, multiplexed by the per-frame sessionId, and outlives any lease.
+func (o v1RunnerSessionChannelOpener) OpenRunnerChannel(
 	ctx context.Context,
-	leaseID string,
+	runnerID string,
 ) (RunnerSessionChannel, error) {
-	endpoint, err := v1LeaseChannelURL(o.origin, leaseID)
+	endpoint, err := v1RunnerChannelURL(o.origin, runnerID)
 	if err != nil {
 		return nil, err
 	}
+	return o.dial(ctx, endpoint)
+}
+
+func (o v1RunnerSessionChannelOpener) dial(ctx context.Context, endpoint string) (RunnerSessionChannel, error) {
 	headers := http.Header{}
 	if o.tokens != nil {
 		token, err := o.tokens.AccessToken(ctx)

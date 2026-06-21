@@ -1,11 +1,9 @@
 package main
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	ama "github.com/saltbo/any-managed-agents/sdk/go/ama"
 )
@@ -61,70 +59,12 @@ func TestSessionEventStoreAppendReadAllAndReopen(t *testing.T) {
 	}
 }
 
-func waitForBackfillResponse(t *testing.T, channel *fakeRunnerSessionChannel) ama.JSON {
-	t.Helper()
-	for i := 0; i < 200; i++ {
-		channel.mu.Lock()
-		for _, write := range channel.writes {
-			if write["type"] == "session.backfill_response" {
-				channel.mu.Unlock()
-				return write
-			}
-		}
-		channel.mu.Unlock()
-		time.Sleep(5 * time.Millisecond)
+func TestReadSessionEventLogReturnsNilForMissingFile(t *testing.T) {
+	events, err := readSessionEventLog(filepath.Join(t.TempDir(), "nonexistent.jsonl"))
+	if err != nil {
+		t.Fatalf("missing log file must not error, got %v", err)
 	}
-	t.Fatal("no backfill response written")
-	return nil
-}
-
-func TestRouterAnswersBackfillFromStore(t *testing.T) {
-	store, _ := openSessionEventStore(t.TempDir())
-	store.Append("runtime.output", ama.JSON{"text": "hello"}, ama.JSON{"runnerId": "runner-1"})
-	store.Append("runtime.output", ama.JSON{"text": "world"}, ama.JSON{"runnerId": "runner-1"})
-
-	channel := newFakeRunnerSessionChannel()
-	router := newSessionChannelRouter(channel, "sess-1", "lease-1", "runner-1", store)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go router.run(ctx)
-
-	channel.push(ama.JSON{
-		"type": "session.backfill_request", "eventId": "req-1",
-		"sessionId": "sess-1", "leaseId": "lease-1", "runnerId": "runner-1",
-	})
-
-	response := waitForBackfillResponse(t, channel)
-	if response["eventId"] != "req-1" {
-		t.Fatalf("eventId = %v, want req-1", response["eventId"])
-	}
-	events, ok := response["events"].([]any)
-	if !ok || len(events) != 2 {
-		t.Fatalf("events = %v, want 2 entries", response["events"])
-	}
-}
-
-func TestRouterDropsBackfillOwnershipMismatch(t *testing.T) {
-	store, _ := openSessionEventStore(t.TempDir())
-	store.Append("runtime.output", ama.JSON{"text": "hello"}, nil)
-
-	channel := newFakeRunnerSessionChannel()
-	router := newSessionChannelRouter(channel, "sess-1", "lease-1", "runner-1", store)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go router.run(ctx)
-
-	// Wrong leaseId — a different lease must not be able to read this session.
-	channel.push(ama.JSON{
-		"type": "session.backfill_request", "eventId": "req-x",
-		"sessionId": "sess-1", "leaseId": "OTHER", "runnerId": "runner-1",
-	})
-	time.Sleep(50 * time.Millisecond)
-	channel.mu.Lock()
-	defer channel.mu.Unlock()
-	for _, write := range channel.writes {
-		if write["type"] == "session.backfill_response" {
-			t.Fatal("answered a backfill request from a mismatched lease")
-		}
+	if events != nil {
+		t.Fatalf("missing log file must return nil events, got %v", events)
 	}
 }

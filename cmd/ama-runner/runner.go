@@ -29,10 +29,6 @@ type ControlPlane interface {
 	CreateSessionEvents(ctx context.Context, sessionID string, events []SessionEvent) error
 }
 
-type RunnerSessionChannelOpener interface {
-	OpenRunnerSessionChannel(ctx context.Context, leaseID string) (RunnerSessionChannel, error)
-}
-
 type RunnerSessionChannel interface {
 	ReadJSON(ctx context.Context, out any) error
 	WriteJSON(ctx context.Context, value any) error
@@ -42,9 +38,13 @@ type RunnerSessionChannel interface {
 type RunnerDaemon struct {
 	Config         Config
 	Client         ControlPlane
-	Channels       RunnerSessionChannelOpener
+	Channels       RunnerChannelOpener
 	Adapter        SandboxAdapter
 	RuntimeAdapter RuntimeAdapter
+	// relayHub owns the runner's single per-runner relay channel for all sessions
+	// (claude-code/codex/copilot). Started once the runner id is known and kept
+	// open for the runner's lifetime; nil until Start wires it.
+	relayHub *relayHub
 	// LookPath resolves runtime CLI binaries on PATH; defaults to exec.LookPath.
 	LookPath func(string) (string, error)
 	// DetectRuntime probes the host CLI for a runtime: enumerated model ids
@@ -315,6 +315,10 @@ func (d *RunnerDaemon) Start(ctx context.Context) error {
 		"pollInterval", d.Config.PollInterval.String(),
 	)
 	go d.runUsageCollector(ctx)
+	// Open the per-runner relay channel for CLI sessions and keep it for the
+	// runner's lifetime (reconnecting on drop), so a completed CLI session still
+	// streams its history over the relay while the runner is online.
+	d.startRelayHub(ctx)
 
 	heartbeatTicker := time.NewTicker(d.Config.HeartbeatInterval)
 	defer heartbeatTicker.Stop()
@@ -446,11 +450,25 @@ func (d *RunnerDaemon) RunOnce(ctx context.Context) error {
 	if err := d.heartbeatOrRecover(ctx); err != nil {
 		return err
 	}
+	d.startRelayHub(ctx)
 	if !d.tryAcquireLeaseSlot() {
 		return nil
 	}
 	defer d.releaseLeaseSlot()
 	return d.runOneLease(ctx)
+}
+
+// startRelayHub wires the per-runner relay channel once the runner id is known and
+// runs it under the daemon context. Idempotent: a second call is a no-op so Start
+// and RunOnce can both call it.
+func (d *RunnerDaemon) startRelayHub(ctx context.Context) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.relayHub != nil {
+		return
+	}
+	d.relayHub = newRelayHub(d.Channels, d.RunnerID, d.Config.SandboxAdapter, d.Config.WorkDir)
+	go d.relayHub.run(ctx)
 }
 
 func (d *RunnerDaemon) runOneLease(ctx context.Context) error {
@@ -712,35 +730,89 @@ func (d *RunnerDaemon) executeLease(ctx context.Context, lease *Lease, workItem 
 }
 
 func (d *RunnerDaemon) completeSessionStart(ctx context.Context, lease *Lease, payload WorkPayload) error {
-	handler, err := sessionRuntimeHandlerFor(payload.Runtime)
-	if err != nil {
+	if !isSupportedSessionRuntime(payload.Runtime) {
+		err := fmt.Errorf("unsupported session runtime %q", payload.Runtime)
 		if finishErr := d.finishFailed(ctx, lease, err, nil); finishErr != nil {
 			return finishErr
 		}
 		return err
 	}
+	// Every runtime runs its loop on the runner and relays over the single
+	// per-runner channel — the channel outlives the lease, so a completed session
+	// still serves history while the runner is online.
+	return d.runRelaySessionStart(ctx, lease, payload)
+}
 
-	channel, err := d.openRunnerSessionChannel(ctx, lease.ID)
-	if err != nil {
-		if finishErr := d.finishFailed(ctx, lease, err, nil); finishErr != nil {
-			return finishErr
-		}
-		return err
-	}
-	defer channel.Close(1000, "runner session complete")
+// isSupportedSessionRuntime reports whether the runner can host a session for this
+// runtime. Every supported runtime runs its loop locally and relays over the
+// per-runner channel.
+func isSupportedSessionRuntime(runtime string) bool {
+	return runtime == "ama" || runtime == "claude-code" || runtime == "codex" || runtime == "copilot"
+}
 
-	if err := d.waitForChannelAccepted(ctx, channel, payload.SessionID); err != nil {
+// sessionStartedPayload is the runner.session.started event body relayed at the
+// start of every session.
+func (d *RunnerDaemon) sessionStartedPayload(payload WorkPayload) ama.JSON {
+	started := ama.JSON{
+		"sessionId":     payload.SessionID,
+		"hostingMode":   payload.HostingMode,
+		"runtime":       payload.Runtime,
+		"runtimeConfig": payload.RuntimeConfig,
+		"provider":      payload.Provider,
+		"runtimeDriver": payload.RuntimeDriver,
+		"executor":      d.Config.SandboxAdapter,
+	}
+	if payload.Model != "" {
+		started["model"] = payload.Model
+	}
+	return started
+}
+
+func isCompletedLeaseRenewalRace(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "Runner lease is no longer active")
+}
+
+// isLeaseInactive matches both "Lease is no longer active" and "Runner lease is
+// no longer active" — the normal end-of-session signals where the lease was
+// released or taken over, not a failure to alarm on.
+func isLeaseInactive(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "is no longer active")
+}
+
+// relaySink relays one stored event live over a session's transport: the ama
+// per-lease channel (acked to the cloud) or the CLI per-runner hub (fire-and-forget;
+// the event is already durable on the runner).
+type relaySink func(ctx context.Context, eventType string, payload ama.JSON, relay *relayStamp) error
+
+// runRelaySessionStart runs a session over the per-runner relay channel. Events are
+// stored on the runner and relayed live fire-and-forget; commands route in over the
+// hub by sessionId. The hub keeps serving this session's on-disk history after the
+// lease ends, so a completed session still renders while the runner is online.
+func (d *RunnerDaemon) runRelaySessionStart(ctx context.Context, lease *Lease, payload WorkPayload) error {
+	hub := d.relayHub
+	if hub == nil {
+		err := fmt.Errorf("runner relay channel is not started")
 		if finishErr := d.finishFailed(ctx, lease, err, nil); finishErr != nil {
 			return finishErr
 		}
 		return err
 	}
+	store, err := openSessionEventStore(filepath.Join(d.Config.WorkDir, "sessions", payload.SessionID))
+	if err != nil {
+		if finishErr := d.finishFailed(ctx, lease, fmt.Errorf("open session event store: %w", err), nil); finishErr != nil {
+			return finishErr
+		}
+		return err
+	}
+	// Register the live command router so the hub routes this session's prompts/
+	// stop/permission by sessionId; unregister on end. Backfill does not need
+	// registration (the hub reads the disk log), so history outlives the lease.
+	cmdRouter := newSessionCommandRouter(payload.SessionID)
+	hub.register(payload.SessionID, cmdRouter)
+	defer hub.unregister(payload.SessionID)
 
 	leaseCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	// The latest runtime resume token rides along on lease renewals and the
-	// interrupted status so the server can resume the session in place if this
-	// runner stops mid-flight.
 	resumeTokens := &resumeTokenBox{}
 	renewErrors := make(chan error, 1)
 	go d.renewLease(leaseCtx, lease, cancel, renewErrors, resumeTokens)
@@ -755,98 +827,77 @@ func (d *RunnerDaemon) completeSessionStart(ctx context.Context, lease *Lease, p
 		return nil
 	}
 
-	sessionStartedPayload := ama.JSON{
-		"sessionId":     payload.SessionID,
-		"hostingMode":   payload.HostingMode,
-		"runtime":       payload.Runtime,
-		"runtimeConfig": payload.RuntimeConfig,
-		"provider":      payload.Provider,
-		"runtimeDriver": payload.RuntimeDriver,
-		"executor":      d.Config.SandboxAdapter,
+	// The relay sink stores then fans each event live, fire-and-forget — the event
+	// is durable on disk so a momentary disconnect drops only the live fan.
+	relay := func(relayCtx context.Context, eventType string, eventPayload ama.JSON, stamp *relayStamp) error {
+		hub.relayEvent(relayCtx, payload.SessionID, eventType, eventPayload, stamp)
+		return nil
 	}
-	if payload.Model != "" {
-		sessionStartedPayload["model"] = payload.Model
-	}
-	writeSessionStarted := d.writeChannelEvent
-	if handler.acknowledgeSessionStarted {
-		writeSessionStarted = d.writeAcknowledgedChannelEvent
-	}
-	if err := writeSessionStarted(leaseCtx, channel, "runner.session.started", sessionStartedPayload); err != nil {
+	if err := d.relayStoredEvent(leaseCtx, store, relay, "runner.session.started", d.sessionStartedPayload(payload)); err != nil {
 		if finishErr := d.finishFailed(context.Background(), lease, err, nil); finishErr != nil {
 			return finishErr
 		}
 		return err
 	}
 
-	err = handler.run(d, sessionRuntimeExecution{
-		RequestContext: ctx,
-		LeaseContext:   leaseCtx,
-		Channel:        channel,
-		Lease:          lease,
-		Payload:        payload,
-		CheckRenewal:   checkRenewal,
-		ResumeTokens:   resumeTokens,
-	})
+	result, runErr, timedOut := d.runRuntimeAndRelay(leaseCtx, payload, store, cmdRouter, resumeTokens, relay)
+	writeRuntimeError := func(errPayload ama.JSON) {
+		_ = d.relayStoredEvent(context.Background(), store, relay, EventTypeRuntimeError, errPayload)
+	}
+	finalizeErr := d.finalizeRuntimeRun(leaseCtx, ctx, lease, resumeTokens, result, runErr, timedOut, writeRuntimeError)
 	cancel()
 	if renewErr := checkRenewal(); renewErr != nil {
-		if err == nil && isCompletedLeaseRenewalRace(renewErr) {
+		if finalizeErr == nil && isCompletedLeaseRenewalRace(renewErr) {
 			return nil
 		}
 		return renewErr
 	}
-	return err
+	return finalizeErr
 }
 
-func isCompletedLeaseRenewalRace(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "Runner lease is no longer active")
-}
-
-// isLeaseInactive matches both "Lease is no longer active" and "Runner lease is
-// no longer active" — the normal end-of-session signals where the lease was
-// released or taken over, not a failure to alarm on.
-func isLeaseInactive(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "is no longer active")
-}
-
-func (d *RunnerDaemon) runExternalSession(execution sessionRuntimeExecution) error {
-	ctx := execution.LeaseContext
-	lease := execution.Lease
-	payload := execution.Payload
-	// The runner is the durable store for a CLI relay session: every event is
-	// written to a local per-session log so a relayed backfill can be answered
-	// from it (the cloud keeps no copy). Opened before the run so the router can
-	// serve a backfill that races the first event.
-	store, err := openSessionEventStore(filepath.Join(d.Config.WorkDir, "sessions", payload.SessionID))
+// relayStoredEvent stores one server-generated event (session.started, a runtime
+// error) to the local log and relays it live, so even events the runtime did not
+// emit are durable and visible to the browser over the relay.
+func (d *RunnerDaemon) relayStoredEvent(ctx context.Context, store *sessionEventStore, relay relaySink, eventType string, payload ama.JSON) error {
+	stored, err := store.Append(eventType, payload, ama.JSON{"runnerId": d.RunnerID, "executor": d.Config.SandboxAdapter})
 	if err != nil {
-		return fmt.Errorf("open session event store: %w", err)
+		return err
 	}
-	// A single reader goroutine owns the channel for the whole run: it routes
-	// mid-run session.command prompts to the live runtime and everything else
-	// (event acks, channel errors) back to the acknowledged event writers.
-	// Starting it before workspace preparation buffers prompts that arrive
-	// while the runtime is still starting.
-	router := newSessionChannelRouter(execution.Channel, payload.SessionID, lease.ID, d.RunnerID, store)
-	go router.run(ctx)
-	channel := router.routedChannel()
+	return relay(ctx, eventType, payload, &relayStamp{sequence: stored.Sequence, id: stored.ID, createdAt: stored.CreatedAt})
+}
+
+// runRuntimeAndRelay prepares the workspace + runtime adapter and runs it, storing
+// every event to the local log and relaying it live via `relay`; cmdRouter receives
+// the runtime's prompt/stop/permission senders. Shared by the ama (per-lease) and
+// CLI (per-runner) session paths. Returns the result, the run error, and whether
+// the per-session deadline fired (the finalizer fails — never interrupts — on that).
+func (d *RunnerDaemon) runRuntimeAndRelay(
+	ctx context.Context,
+	payload WorkPayload,
+	store *sessionEventStore,
+	cmdRouter *sessionCommandRouter,
+	resumeTokens *resumeTokenBox,
+	relay relaySink,
+) (ama.JSON, error, bool) {
 	workspace, err := prepareRuntimeWorkspace(ctx, d.Config.WorkDir, payload.SessionID, payload.ResourceRefs, payload.RuntimeEnv)
 	if err != nil {
-		return err
+		return nil, err, false
 	}
 	if err := prepareAgentWorkspace(ctx, workspace.Cwd, payload.Runtime, payload.AgentSnapshot); err != nil {
-		return err
+		return nil, err, false
 	}
 	adapter := d.RuntimeAdapter
 	if adapter == nil {
 		selectedAdapter, err := runtimeAdapterFor(payload.Runtime, d.Config.CommandTimeout, d.Config.ShutdownGraceInterval)
 		if err != nil {
-			return err
+			return nil, err, false
 		}
 		adapter = selectedAdapter
 	}
-	// Lease renewal keeps a session alive indefinitely, so a runaway runtime
-	// would run forever without a hard per-session deadline. Cancelling the
-	// run context follows the same stop path as a server-side cancel
-	// (SIGTERM, then SIGKILL after the shutdown grace).
+	// Lease renewal keeps a session alive indefinitely, so a runaway runtime would
+	// run forever without a hard per-session deadline. Cancelling the run context
+	// follows the same stop path as a server-side cancel (SIGTERM, then SIGKILL
+	// after the shutdown grace).
 	runCtx := ctx
 	cancelDeadline := func() {}
 	if d.Config.MaxSessionDuration > 0 {
@@ -866,73 +917,75 @@ func (d *RunnerDaemon) runExternalSession(execution sessionRuntimeExecution) err
 		Resume:                   payload.Resume,
 		ResumeToken:              payload.ResumeToken,
 		WorkDir:                  workspace.Cwd,
-		OnResumeToken:            execution.ResumeTokens.Set,
-		RegisterPromptSender:     router.registerPromptSender,
-		RegisterStopSender:       router.registerStopSender,
-		RegisterPermissionSender: router.registerPermissionSender,
+		OnResumeToken:            resumeTokens.Set,
+		RegisterPromptSender:     cmdRouter.registerPromptSender,
+		RegisterStopSender:       cmdRouter.registerStopSender,
+		RegisterPermissionSender: cmdRouter.registerPermissionSender,
 	}, func(eventType string, eventPayload ama.JSON) error {
 		writeMu.Lock()
 		defer writeMu.Unlock()
-		// Store locally first so a relayed backfill can serve this event even
-		// though the cloud keeps no copy, then relay it live upstream.
+		// Store locally first so a relayed backfill can serve this event, then relay
+		// it live with the store's own id/sequence/timestamp (the browser dedups by
+		// them).
 		stored, err := store.Append(eventType, eventPayload, ama.JSON{"runnerId": d.RunnerID, "executor": d.Config.SandboxAdapter})
 		if err != nil {
 			return err
 		}
-		// Carry the store's own id/sequence/timestamp upstream so the cloud DO can
-		// fan this event to browsers live with the same identity the relayed
-		// backfill uses (the browser dedups by them) — the cloud keeps no copy.
-		return d.writeAcknowledgedChannelEventWithRelay(ctx, channel, eventType, eventPayload, &relayStamp{
-			sequence:  stored.Sequence,
-			id:        stored.ID,
-			createdAt: stored.CreatedAt,
-		})
+		return relay(ctx, eventType, eventPayload, &relayStamp{sequence: stored.Sequence, id: stored.ID, createdAt: stored.CreatedAt})
 	})
-	if runErr != nil {
-		if successfulRuntimeResult(result) {
-			completedResult := cloneJSON(result)
-			completedResult["completionWarning"] = runErr.Error()
-			_, err := d.Client.UpdateLease(ctx, lease.ID, UpdateLeaseRequest{
-				State:  "completed",
-				Result: completedResult,
-			})
-			return err
+	return result, runErr, errors.Is(runCtx.Err(), context.DeadlineExceeded)
+}
+
+// finalizeRuntimeRun settles the lease after a runtime run, shared by the ama
+// (per-lease) and CLI (per-runner) paths. A clean run completes the lease; a
+// successful-looking result with a late error completes with a warning; a deadline
+// failure fails the lease (never interrupted, which would re-queue the runaway
+// forever); a shutdown (request context cancelled) reports interrupted so the
+// server resumes the session in place; anything else fails the lease.
+// writeRuntimeError relays the error event over the session's transport.
+func (d *RunnerDaemon) finalizeRuntimeRun(
+	ctx context.Context,
+	requestCtx context.Context,
+	lease *Lease,
+	resumeTokens *resumeTokenBox,
+	result ama.JSON,
+	runErr error,
+	timedOut bool,
+	writeRuntimeError func(payload ama.JSON),
+) error {
+	if runErr == nil {
+		// Use the (still-live) lease context here, not Background: if a renewal race
+		// already finished the lease, this completion fails with "lease no longer
+		// active" and the caller's renewal-race check treats it as benign. The
+		// terminal paths below use Background because they must report regardless.
+		_, updateErr := d.Client.UpdateLease(ctx, lease.ID, UpdateLeaseRequest{State: "completed", Result: result})
+		return updateErr
+	}
+	if successfulRuntimeResult(result) {
+		completedResult := cloneJSON(result)
+		completedResult["completionWarning"] = runErr.Error()
+		_, err := d.Client.UpdateLease(ctx, lease.ID, UpdateLeaseRequest{State: "completed", Result: completedResult})
+		return err
+	}
+	if timedOut {
+		timeoutErr := fmt.Errorf("session exceeded max duration %s", d.Config.MaxSessionDuration)
+		writeRuntimeError(ama.JSON{"error": ama.JSON{"message": timeoutErr.Error(), "code": "session_timeout"}})
+		if finishErr := d.finishFailed(context.Background(), lease, timeoutErr, result); finishErr != nil {
+			return finishErr
 		}
-		if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
-			// The session hit MaxSessionDuration. Fail the lease explicitly —
-			// never report it as interrupted, which would re-queue the session
-			// for resume and loop the runaway runtime forever.
-			timeoutErr := fmt.Errorf("session exceeded max duration %s", d.Config.MaxSessionDuration)
-			_ = d.writeAcknowledgedChannelEvent(context.Background(), channel, EventTypeRuntimeError, ama.JSON{
-				"error": ama.JSON{"message": timeoutErr.Error(), "code": "session_timeout"},
-			})
-			if finishErr := d.finishFailed(context.Background(), lease, timeoutErr, result); finishErr != nil {
-				return finishErr
-			}
-			return timeoutErr
-		}
-		if execution.RequestContext.Err() != nil {
-			// The runner is shutting down, not the runtime failing. Report the lease
-			// as interrupted so the server re-queues the session for resume instead of
-			// marking it failed; a restarted runner picks it up and continues.
-			if finishErr := d.finishInterrupted(context.Background(), lease, execution.ResumeTokens); finishErr != nil {
-				return finishErr
-			}
-			return runErr
-		}
-		_ = d.writeAcknowledgedChannelEvent(context.Background(), channel, EventTypeRuntimeError, ama.JSON{
-			"error": ama.JSON{"message": runErr.Error(), "code": "runtime_failed"},
-		})
-		if finishErr := d.finishFailed(context.Background(), lease, runErr, result); finishErr != nil {
+		return timeoutErr
+	}
+	if requestCtx.Err() != nil {
+		if finishErr := d.finishInterrupted(context.Background(), lease, resumeTokens); finishErr != nil {
 			return finishErr
 		}
 		return runErr
 	}
-	_, updateErr := d.Client.UpdateLease(ctx, lease.ID, UpdateLeaseRequest{
-		State:  "completed",
-		Result: result,
-	})
-	return updateErr
+	writeRuntimeError(ama.JSON{"error": ama.JSON{"message": runErr.Error(), "code": "runtime_failed"}})
+	if finishErr := d.finishFailed(context.Background(), lease, runErr, result); finishErr != nil {
+		return finishErr
+	}
+	return runErr
 }
 
 func cloneJSON(value ama.JSON) ama.JSON {
@@ -972,99 +1025,13 @@ func exitCodeValue(value any) int {
 	}
 }
 
-func (d *RunnerDaemon) openRunnerSessionChannel(ctx context.Context, leaseID string) (RunnerSessionChannel, error) {
-	if d.Channels == nil {
-		return nil, fmt.Errorf("runner session channel client is not configured")
-	}
-	return d.Channels.OpenRunnerSessionChannel(ctx, leaseID)
-}
-
-func (d *RunnerDaemon) waitForChannelAccepted(ctx context.Context, channel RunnerSessionChannel, sessionID string) error {
-	for {
-		var message RunnerChannelMessage
-		if err := channel.ReadJSON(ctx, &message); err != nil {
-			return err
-		}
-		if message.Type != "session.channel.accepted" {
-			continue
-		}
-		if message.SessionID != sessionID {
-			return fmt.Errorf("runner session channel accepted mismatched session %q", message.SessionID)
-		}
-		return nil
-	}
-}
-
-func (d *RunnerDaemon) writeChannelEvent(ctx context.Context, channel RunnerSessionChannel, eventType string, payload ama.JSON) error {
-	return channel.WriteJSON(ctx, d.channelEventMessage(eventType, payload))
-}
-
-func (d *RunnerDaemon) channelEventMessage(eventType string, payload ama.JSON) ama.JSON {
-	metadata := ama.JSON{
-		"runnerId": d.RunnerID,
-		"executor": d.Config.SandboxAdapter,
-	}
-	message := ama.JSON{
-		"type": "runner.event",
-		"event": ama.JSON{
-			"type":     eventType,
-			"payload":  payload,
-			"metadata": metadata,
-		},
-	}
-	return message
-}
-
 // relayStamp carries a stored event's stable identity (assigned by the runner's
-// local store) upstream, so the cloud DO can fan a CLI relay event to browsers
-// live with the exact id/sequence/timestamp the relayed backfill serves.
+// local store) upstream, so the cloud DO fans a relayed event to browsers live with
+// the exact id/sequence/timestamp the relayed backfill serves (the browser dedups).
 type relayStamp struct {
 	sequence  int64
 	id        string
 	createdAt string
-}
-
-func (d *RunnerDaemon) writeAcknowledgedChannelEvent(ctx context.Context, channel RunnerSessionChannel, eventType string, payload ama.JSON) error {
-	return d.writeAcknowledgedChannelEventWithRelay(ctx, channel, eventType, payload, nil)
-}
-
-func (d *RunnerDaemon) writeAcknowledgedChannelEventWithRelay(ctx context.Context, channel RunnerSessionChannel, eventType string, payload ama.JSON, relay *relayStamp) error {
-	eventID := fmt.Sprintf("runner_event_%d", time.Now().UnixNano())
-	message := ama.JSON{
-		"type":    "runner.event",
-		"eventId": eventID,
-		"event": ama.JSON{
-			"type":    eventType,
-			"payload": payload,
-			"metadata": ama.JSON{
-				"runnerId": d.RunnerID,
-				"executor": d.Config.SandboxAdapter,
-			},
-		},
-	}
-	if relay != nil {
-		message["relaySequence"] = relay.sequence
-		message["relayId"] = relay.id
-		message["relayCreatedAt"] = relay.createdAt
-	}
-	if err := channel.WriteJSON(ctx, message); err != nil {
-		return err
-	}
-	for {
-		var message RunnerChannelMessage
-		if err := channel.ReadJSON(ctx, &message); err != nil {
-			return err
-		}
-		if message.Type == "session.channel.error" && (message.EventID == "" || message.EventID == eventID) {
-			return fmt.Errorf("runner session channel rejected event %s: %s", eventID, message.Message)
-		}
-		if message.EventID != eventID {
-			continue
-		}
-		if message.Type == "runner.event.accepted" {
-			return nil
-		}
-	}
 }
 
 func (d *RunnerDaemon) renewLease(ctx context.Context, lease *Lease, cancel context.CancelFunc, errors chan<- error, resumeTokens *resumeTokenBox) {

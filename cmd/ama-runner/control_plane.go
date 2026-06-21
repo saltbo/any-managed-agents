@@ -278,9 +278,9 @@ func (c *v1ControlPlane) doStatus(ctx context.Context, method string, path strin
 	return response.StatusCode, nil
 }
 
-// v1LeaseChannelURL builds the v1 WebSocket channel URL. runnerId is no longer
-// part of the path; the server derives it from the lease.
-func v1LeaseChannelURL(origin string, leaseID string) (string, error) {
+// v1WebSocketBaseURL turns the AMA origin into its ws/wss base (scheme flipped,
+// path/query/fragment stripped) — the shared root for every v1 channel URL.
+func v1WebSocketBaseURL(origin string) (string, error) {
 	if strings.TrimSpace(origin) == "" {
 		return "", fmt.Errorf("AMA origin is required")
 	}
@@ -300,5 +300,17 @@ func v1LeaseChannelURL(origin string, leaseID string) (string, error) {
 	parsed.RawPath = ""
 	parsed.RawQuery = ""
 	parsed.Fragment = ""
-	return strings.TrimRight(parsed.String(), "/") + "/api/v1/leases/" + url.PathEscape(leaseID) + "/channel", nil
+	return strings.TrimRight(parsed.String(), "/"), nil
+}
+
+// v1RunnerChannelURL builds the per-runner relay channel URL (CLI runtimes). One
+// channel per runner multiplexes every CLI session it hosts (the sessionId rides
+// per-frame), so it outlives any single lease and serves a completed session's
+// history while the runner is online.
+func v1RunnerChannelURL(origin string, runnerID string) (string, error) {
+	base, err := v1WebSocketBaseURL(origin)
+	if err != nil {
+		return "", err
+	}
+	return base + "/api/v1/runners/" + url.PathEscape(runnerID) + "/channel", nil
 }

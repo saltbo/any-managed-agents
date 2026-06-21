@@ -10,8 +10,10 @@ import (
 )
 
 func TestRunOnceDispatchesCopilotRuntimeThroughAdapter(t *testing.T) {
-	channel := newFakeRunnerSessionChannel(ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"})
-	client := &fakeControlPlane{lease: copilotSessionStartLease("copilot prompt"), channel: channel}
+	// Copilot is a CLI relay runtime: events flow over the per-runner hub channel,
+	// not a per-lease channel. Seed the hub channel so the hub connects immediately.
+	hubChannel := newFakeRunnerSessionChannel(ama.JSON{"type": "runner.channel.accepted"})
+	client := &fakeControlPlane{lease: copilotSessionStartLease("copilot prompt"), hubChannel: hubChannel}
 	runtimeAdapter := &fakeRuntimeAdapter{
 		result: ama.JSON{"exitCode": 0, "providerThreadId": "copilot_thread_1"},
 		events: []RuntimeEventRecord{
@@ -25,7 +27,11 @@ func TestRunOnceDispatchesCopilotRuntimeThroughAdapter(t *testing.T) {
 	}
 	daemon := testDaemon(client, &fakeAdapter{})
 	daemon.RuntimeAdapter = runtimeAdapter
-	if err := daemon.RunOnce(context.Background()); err != nil {
+	done := make(chan error, 1)
+	go func() { done <- daemon.RunOnce(context.Background()) }()
+	// Wait for at least runner.session.started to be relayed over the hub channel.
+	waitForRunnerWriteCount(t, hubChannel, 1, done)
+	if err := <-done; err != nil {
 		t.Fatalf("expected copilot run success, got %v", err)
 	}
 	if runtimeAdapter.request.Runtime != "copilot" ||
@@ -43,7 +49,7 @@ func TestRunOnceDispatchesCopilotRuntimeThroughAdapter(t *testing.T) {
 	if client.updates[len(client.updates)-1].Result["providerThreadId"] != "copilot_thread_1" {
 		t.Fatalf("expected adapter result to complete lease, got %#v", client.updates[len(client.updates)-1].Result)
 	}
-	gotTypes := channel.writtenEvents()
+	gotTypes := hubChannel.writtenEvents()
 	for _, want := range []string{
 		"runner.session.started",
 		"runtime.metadata",
@@ -57,12 +63,12 @@ func TestRunOnceDispatchesCopilotRuntimeThroughAdapter(t *testing.T) {
 			t.Fatalf("expected channel event %s in %v", want, gotTypes)
 		}
 	}
-	for _, message := range channel.writtenMessages() {
+	for _, message := range hubChannel.writtenMessages() {
 		if message["type"] != "runner.event" || message["eventId"] == "" {
-			t.Fatalf("expected copilot event to use acknowledged runner event envelope, got %#v", message)
+			t.Fatalf("expected copilot event to use runner event envelope, got %#v", message)
 		}
 	}
-	serializedEvents := mustJSON(t, channel.writtenMessages())
+	serializedEvents := mustJSON(t, hubChannel.writtenMessages())
 	for _, want := range []string{
 		"copilot prompt ok",
 		"provider_copilot",
@@ -79,8 +85,9 @@ func TestRunOnceDispatchesCopilotRuntimeThroughAdapter(t *testing.T) {
 }
 
 func TestRunOnceFailsCopilotLeaseOnRuntimeAdapterFailure(t *testing.T) {
-	channel := newFakeRunnerSessionChannel(ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"})
-	client := &fakeControlPlane{lease: copilotSessionStartLease("fail"), channel: channel}
+	// Copilot is a CLI relay runtime: events flow over the per-runner hub channel.
+	hubChannel := newFakeRunnerSessionChannel(ama.JSON{"type": "runner.channel.accepted"})
+	client := &fakeControlPlane{lease: copilotSessionStartLease("fail"), hubChannel: hubChannel}
 	runtimeAdapter := &fakeRuntimeAdapter{
 		result: ama.JSON{"exitCode": 7, "stderr": "bad failure"},
 		err:    errors.New("copilot SDK bridge failed"),
@@ -90,43 +97,24 @@ func TestRunOnceFailsCopilotLeaseOnRuntimeAdapterFailure(t *testing.T) {
 	}
 	daemon := testDaemon(client, &fakeAdapter{})
 	daemon.RuntimeAdapter = runtimeAdapter
-	err := daemon.RunOnce(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- daemon.RunOnce(context.Background()) }()
+	// Wait for at least runner.session.started + runtime.error to be relayed.
+	waitForRunnerWriteCount(t, hubChannel, 2, done)
+	err := <-done
 	if err == nil || !strings.Contains(err.Error(), "copilot SDK bridge failed") {
 		t.Fatalf("expected copilot failure to be returned, got %v", err)
 	}
 	if len(client.updates) == 0 || client.updates[len(client.updates)-1].State != "failed" {
 		t.Fatalf("expected failed copilot lease update, got %#v", client.updates)
 	}
-	serializedEvents := mustJSON(t, channel.writtenMessages())
+	serializedEvents := mustJSON(t, hubChannel.writtenMessages())
 	if !strings.Contains(serializedEvents, "runtime.error") || !strings.Contains(serializedEvents, "copilot SDK bridge failed") || !strings.Contains(serializedEvents, "bad failure") {
 		t.Fatalf("expected runtime error events, got %s", serializedEvents)
 	}
 	failedUpdate := client.updates[len(client.updates)-1]
 	if !strings.Contains(mustJSON(t, failedUpdate.Result), `"exitCode":7`) {
 		t.Fatalf("expected failed lease result to include exit code, got %#v", failedUpdate.Result)
-	}
-}
-
-func TestCopilotSessionStartedRejectionFailsBeforeRuntimeAdapter(t *testing.T) {
-	lease := copilotSessionStartLease("start")
-	channel := newFakeRunnerSessionChannel(ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"})
-	channel.eventErrors = map[string]string{"runner.session.started": "start rejected"}
-	client := &fakeControlPlane{lease: lease, channel: channel}
-	runtimeAdapter := &fakeRuntimeAdapter{}
-	daemon := testDaemon(client, &fakeAdapter{})
-	daemon.RuntimeAdapter = runtimeAdapter
-	err := daemon.RunOnce(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "start rejected") {
-		t.Fatalf("expected session started channel rejection, got %v", err)
-	}
-	if len(client.updates) != 1 || client.updates[0].State != "failed" {
-		t.Fatalf("expected failed lease update, got %#v", client.updates)
-	}
-	if len(channel.writtenEvents()) != 1 || channel.writtenEvents()[0] != "runner.session.started" {
-		t.Fatalf("expected only acknowledged session started write before failure, got %v", channel.writtenEvents())
-	}
-	if runtimeAdapter.request.SessionID != "" {
-		t.Fatalf("expected copilot adapter not to run, got %#v", runtimeAdapter.request)
 	}
 }
 

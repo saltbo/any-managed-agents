@@ -40,7 +40,7 @@ type fakeControlPlane struct {
 	claimErr     error
 	eventErr     error
 	updateErr    error
-	channel      *fakeRunnerSessionChannel
+	hubChannel   *fakeRunnerSessionChannel
 	channelErr   error
 	opens        int
 }
@@ -126,17 +126,17 @@ func (f *fakeControlPlane) CreateSessionEvents(_ context.Context, _ string, even
 	return nil
 }
 
-func (f *fakeControlPlane) OpenRunnerSessionChannel(context.Context, string) (RunnerSessionChannel, error) {
+func (f *fakeControlPlane) OpenRunnerChannel(context.Context, string) (RunnerSessionChannel, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.opens += 1
 	if f.channelErr != nil {
 		return nil, f.channelErr
 	}
-	if f.channel == nil {
-		f.channel = newFakeRunnerSessionChannel()
+	if f.hubChannel == nil {
+		f.hubChannel = newFakeRunnerSessionChannel(ama.JSON{"type": "runner.channel.accepted"})
 	}
-	return f.channel, nil
+	return f.hubChannel, nil
 }
 
 type fakeAdapter struct {
@@ -410,10 +410,10 @@ func TestRunnerIdentityStateUsesStateDirAndMachineID(t *testing.T) {
 
 func TestRunOnceCancelsSessionChannelWhenContextIsCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	channel := newFakeRunnerSessionChannel(
-		ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"},
-	)
-	client := &fakeControlPlane{lease: sessionStartLease(), channel: channel}
+	// All runtimes now relay over the per-runner hub channel. Seed it so the hub
+	// connects immediately and the relay path is live when the session starts.
+	hubChannel := newFakeRunnerSessionChannel(ama.JSON{"type": "runner.channel.accepted"})
+	client := &fakeControlPlane{lease: sessionStartLease(), hubChannel: hubChannel}
 	daemon := testDaemon(client, &fakeAdapter{})
 	// AMA runs via the bridge runtime adapter; block it until the run context is
 	// cancelled so this exercises the channel cancellation path.
@@ -422,7 +422,8 @@ func TestRunOnceCancelsSessionChannelWhenContextIsCancelled(t *testing.T) {
 	go func() {
 		done <- daemon.RunOnce(ctx)
 	}()
-	waitForRunnerWriteCount(t, channel, 1, done)
+	// Wait for runner.session.started to be relayed over the hub channel.
+	waitForRunnerWriteCount(t, hubChannel, 1, done)
 	cancel()
 	select {
 	case err := <-done:
@@ -452,10 +453,11 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 		"mcpConnectors":  []any{},
 		"capabilityTags": []any{"implementation"},
 	}
-	channel := newFakeRunnerSessionChannel(
-		ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"},
-	)
-	client := &fakeControlPlane{lease: lease, channel: channel}
+	// Codex is a CLI relay runtime: events flow over the per-runner hub channel,
+	// not a per-lease channel. Seed the hub channel with runner.channel.accepted
+	// so the hub connects without delay.
+	hubChannel := newFakeRunnerSessionChannel(ama.JSON{"type": "runner.channel.accepted"})
+	client := &fakeControlPlane{lease: lease, hubChannel: hubChannel}
 	runtimeAdapter := &fakeRuntimeAdapter{
 		result: ama.JSON{"exitCode": 0, "providerThreadId": "codex_thread_1"},
 		inspect: func(request RuntimeRequest) error {
@@ -480,7 +482,13 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 	daemon := testDaemon(client, &fakeAdapter{})
 	daemon.RuntimeAdapter = runtimeAdapter
 	daemon.Config.WorkDir = workDir
-	if err := daemon.RunOnce(context.Background()); err != nil {
+	// Run in a goroutine: the hub connects asynchronously, so wait for relay
+	// events to appear on hubChannel before asserting.
+	done := make(chan error, 1)
+	go func() { done <- daemon.RunOnce(context.Background()) }()
+	// Wait for at least runner.session.started to be relayed over the hub channel.
+	waitForRunnerWriteCount(t, hubChannel, 1, done)
+	if err := <-done; err != nil {
 		t.Fatalf("expected codex run success, got %v", err)
 	}
 	if runtimeAdapter.request.Runtime != "codex" ||
@@ -510,7 +518,7 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 	if len(client.events) != 0 {
 		t.Fatalf("expected codex session to write runtime events on channel without HTTP uploads, got %#v", client.events)
 	}
-	gotTypes := channel.writtenEvents()
+	gotTypes := hubChannel.writtenEvents()
 	for _, want := range []string{
 		"runner.session.started",
 		"runtime.metadata",
@@ -524,12 +532,12 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 			t.Fatalf("expected channel/uploaded events to include %q, got %v", want, gotTypes)
 		}
 	}
-	for _, message := range channel.writtenMessages() {
+	for _, message := range hubChannel.writtenMessages() {
 		if message["type"] != "runner.event" {
 			t.Fatalf("expected codex event to use runner session channel envelope, got %#v", message)
 		}
 	}
-	serializedEvents := mustJSON(t, channel.writtenMessages())
+	serializedEvents := mustJSON(t, hubChannel.writtenMessages())
 	if strings.Contains(serializedEvents, "AMA_TOKEN") {
 		t.Fatalf("expected safe codex environment, got %s", serializedEvents)
 	}
@@ -544,10 +552,9 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 func TestRunOnceFailsCodexLeaseOnRuntimeAdapterFailure(t *testing.T) {
 	workDir := t.TempDir()
 	lease := codexSessionStartLease("fail")
-	channel := newFakeRunnerSessionChannel(
-		ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"},
-	)
-	client := &fakeControlPlane{lease: lease, channel: channel}
+	// Codex is a CLI relay runtime: events flow over the per-runner hub channel.
+	hubChannel := newFakeRunnerSessionChannel(ama.JSON{"type": "runner.channel.accepted"})
+	client := &fakeControlPlane{lease: lease, hubChannel: hubChannel}
 	runtimeAdapter := &fakeRuntimeAdapter{
 		result: ama.JSON{"exitCode": 7, "stderr": "bad failure"},
 		err:    errors.New("codex SDK bridge failed"),
@@ -558,7 +565,11 @@ func TestRunOnceFailsCodexLeaseOnRuntimeAdapterFailure(t *testing.T) {
 	daemon := testDaemon(client, &fakeAdapter{})
 	daemon.RuntimeAdapter = runtimeAdapter
 	daemon.Config.WorkDir = workDir
-	if err := daemon.RunOnce(context.Background()); err == nil || !strings.Contains(err.Error(), "codex SDK bridge failed") {
+	done := make(chan error, 1)
+	go func() { done <- daemon.RunOnce(context.Background()) }()
+	// Wait for at least runner.session.started + runtime.error to be relayed.
+	waitForRunnerWriteCount(t, hubChannel, 2, done)
+	if err := <-done; err == nil || !strings.Contains(err.Error(), "codex SDK bridge failed") {
 		t.Fatalf("expected codex bridge error after failed lease update, got %v", err)
 	}
 	if len(client.updates) != 1 || client.updates[0].State != "failed" {
@@ -567,34 +578,9 @@ func TestRunOnceFailsCodexLeaseOnRuntimeAdapterFailure(t *testing.T) {
 	if len(client.events) != 0 {
 		t.Fatalf("expected failed codex session to write runtime events on channel without HTTP uploads, got %#v", client.events)
 	}
-	serializedEvents := mustJSON(t, channel.writtenMessages())
+	serializedEvents := mustJSON(t, hubChannel.writtenMessages())
 	if !strings.Contains(serializedEvents, "runtime.error") || !strings.Contains(serializedEvents, "codex SDK bridge failed") || !strings.Contains(serializedEvents, "bad failure") {
 		t.Fatalf("expected runtime error events, got %s", serializedEvents)
-	}
-}
-
-func TestRunOnceFailsCodexLeaseWhenSessionStartedChannelEventIsRejected(t *testing.T) {
-	workDir := t.TempDir()
-	lease := codexSessionStartLease("start")
-	channel := newFakeRunnerSessionChannel(ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"})
-	channel.eventErrors = map[string]string{"runner.session.started": "start rejected"}
-	client := &fakeControlPlane{lease: lease, channel: channel}
-	runtimeAdapter := &fakeRuntimeAdapter{}
-	daemon := testDaemon(client, &fakeAdapter{})
-	daemon.RuntimeAdapter = runtimeAdapter
-	daemon.Config.WorkDir = workDir
-	err := daemon.RunOnce(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "start rejected") {
-		t.Fatalf("expected session started channel rejection, got %v", err)
-	}
-	if len(client.updates) != 1 || client.updates[0].State != "failed" {
-		t.Fatalf("expected failed lease update, got %#v", client.updates)
-	}
-	if len(channel.writtenEvents()) != 1 || channel.writtenEvents()[0] != "runner.session.started" {
-		t.Fatalf("expected only acknowledged session started write before failure, got %v", channel.writtenEvents())
-	}
-	if runtimeAdapter.request.SessionID != "" {
-		t.Fatalf("expected runtime adapter not to run after start rejection, got %#v", runtimeAdapter.request)
 	}
 }
 
@@ -613,76 +599,18 @@ func TestCodexSessionWorkspaceRejectsTraversalBeforeCreatingDirectory(t *testing
 	}
 }
 
-func TestAcknowledgedChannelEventFailsOnUnscopedChannelError(t *testing.T) {
-	channel := newFakeRunnerSessionChannel(ama.JSON{"type": "session.channel.error", "message": "previous event rejected"})
-	daemon := testDaemon(&fakeControlPlane{}, &fakeAdapter{})
-	err := daemon.writeAcknowledgedChannelEvent(context.Background(), channel, "runtime.metadata", ama.JSON{"status": "started"})
-	if err == nil || !strings.Contains(err.Error(), "previous event rejected") {
-		t.Fatalf("expected unscoped channel error, got %v", err)
-	}
-}
-
-func TestAcknowledgedChannelEventWithRelayStampsStoreIdentity(t *testing.T) {
-	channel := newFakeRunnerSessionChannel()
-	daemon := testDaemon(&fakeControlPlane{}, &fakeAdapter{})
-	err := daemon.writeAcknowledgedChannelEventWithRelay(
-		context.Background(), channel, "message_start", ama.JSON{"text": "hi"},
-		&relayStamp{sequence: 9, id: "evt-9", createdAt: "2026-01-01T00:00:09Z"},
-	)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	channel.mu.Lock()
-	defer channel.mu.Unlock()
-	last := channel.writes[len(channel.writes)-1]
-	// The cloud DO fans relay events live keyed by the store's own identity, so the
-	// channel event must carry it (JSON numbers decode to float64).
-	if last["relaySequence"] != float64(9) {
-		t.Fatalf("expected relaySequence 9, got %v", last["relaySequence"])
-	}
-	if last["relayId"] != "evt-9" {
-		t.Fatalf("expected relayId evt-9, got %v", last["relayId"])
-	}
-	if last["relayCreatedAt"] != "2026-01-01T00:00:09Z" {
-		t.Fatalf("expected relayCreatedAt 2026-01-01T00:00:09Z, got %v", last["relayCreatedAt"])
-	}
-}
-
-func TestAcknowledgedChannelEventWithoutRelayOmitsStamp(t *testing.T) {
-	channel := newFakeRunnerSessionChannel()
-	daemon := testDaemon(&fakeControlPlane{}, &fakeAdapter{})
-	if err := daemon.writeAcknowledgedChannelEvent(context.Background(), channel, "runtime.metadata", ama.JSON{"status": "started"}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	channel.mu.Lock()
-	defer channel.mu.Unlock()
-	last := channel.writes[len(channel.writes)-1]
-	if _, ok := last["relaySequence"]; ok {
-		t.Fatalf("a non-relay channel event must not carry a relay stamp: %v", last)
-	}
-}
-
-func TestSessionStartFailsLeaseWhenChannelOpenFails(t *testing.T) {
-	client := &fakeControlPlane{lease: sessionStartLease(), channelErr: errors.New("channel failed")}
-	daemon := testDaemon(client, &fakeAdapter{})
-	err := daemon.RunOnce(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "channel failed") {
-		t.Fatalf("expected channel error, got %v", err)
-	}
-	if len(client.updates) != 1 || client.updates[0].State != "failed" {
-		t.Fatalf("expected failed session.start lease, got %#v", client.updates)
-	}
-}
-
 func TestRunOnceLaunchesClaudeCodeRuntimeAndCompletesLease(t *testing.T) {
-	channel := newFakeRunnerSessionChannel(
-		ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"},
-	)
-	client := &fakeControlPlane{lease: claudeCodeSessionStartLease(), channel: channel}
+	// Claude-code is a CLI relay runtime: events flow over the per-runner hub channel.
+	hubChannel := newFakeRunnerSessionChannel(ama.JSON{"type": "runner.channel.accepted"})
+	client := &fakeControlPlane{lease: claudeCodeSessionStartLease(), hubChannel: hubChannel}
 	runtimeAdapter := &fakeRuntimeAdapter{result: ama.JSON{"exitCode": 0}}
 	daemon := testDaemon(client, &fakeAdapter{})
 	daemon.RuntimeAdapter = runtimeAdapter
-	if err := daemon.RunOnce(context.Background()); err != nil {
+	done := make(chan error, 1)
+	go func() { done <- daemon.RunOnce(context.Background()) }()
+	// Wait for at least runner.session.started + message_end to be relayed.
+	waitForRunnerWriteCount(t, hubChannel, 2, done)
+	if err := <-done; err != nil {
 		t.Fatalf("expected claude runtime success, got %v", err)
 	}
 	if runtimeAdapter.request.InitialPrompt != "Run Claude Code" {
@@ -697,7 +625,7 @@ func TestRunOnceLaunchesClaudeCodeRuntimeAndCompletesLease(t *testing.T) {
 	if len(client.updates) != 1 || client.updates[0].State != "completed" {
 		t.Fatalf("expected completed lease update, got %#v", client.updates)
 	}
-	got := channel.writtenEvents()
+	got := hubChannel.writtenEvents()
 	want := []string{"runner.session.started", "message_end"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("expected channel events %v, got %v", want, got)
@@ -710,10 +638,10 @@ func TestRunOnceCompletesExternalRuntimeWhenSuccessfulResultHasCompletionWarning
 		"nested-output-exit-code": {"output": ama.JSON{"exitCode": 0}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			channel := newFakeRunnerSessionChannel(
-				ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"},
-			)
-			client := &fakeControlPlane{lease: claudeCodeSessionStartLease(), channel: channel}
+			// All runtimes relay over the per-runner hub channel. Seed it so the hub
+			// connects immediately.
+			hubChannel := newFakeRunnerSessionChannel(ama.JSON{"type": "runner.channel.accepted"})
+			client := &fakeControlPlane{lease: claudeCodeSessionStartLease(), hubChannel: hubChannel}
 			runtimeAdapter := &fakeRuntimeAdapter{
 				result: result,
 				err:    errors.New("failed to get reader: failed to read frame header: EOF"),
@@ -721,7 +649,11 @@ func TestRunOnceCompletesExternalRuntimeWhenSuccessfulResultHasCompletionWarning
 			daemon := testDaemon(client, &fakeAdapter{})
 			daemon.RuntimeAdapter = runtimeAdapter
 
-			if err := daemon.RunOnce(context.Background()); err != nil {
+			done := make(chan error, 1)
+			go func() { done <- daemon.RunOnce(context.Background()) }()
+			// Wait for runner.session.started + message_end before asserting completion.
+			waitForRunnerWriteCount(t, hubChannel, 2, done)
+			if err := <-done; err != nil {
 				t.Fatalf("expected successful runtime result to complete despite warning, got %v", err)
 			}
 			if len(client.updates) != 1 || client.updates[0].State != "completed" {
@@ -732,106 +664,6 @@ func TestRunOnceCompletesExternalRuntimeWhenSuccessfulResultHasCompletionWarning
 				t.Fatalf("expected completion warning in result, got %s", serializedResult)
 			}
 		})
-	}
-}
-
-func TestRunOnceWaitsForRuntimeEventAcknowledgementBeforeCompletingLease(t *testing.T) {
-	channel := newFakeRunnerSessionChannel(
-		ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"},
-	)
-	channel.autoAck = false
-	client := &fakeControlPlane{lease: claudeCodeSessionStartLease(), channel: channel}
-	runtimeAdapter := &fakeRuntimeAdapter{result: ama.JSON{"exitCode": 0}}
-	daemon := testDaemon(client, &fakeAdapter{})
-	daemon.RuntimeAdapter = runtimeAdapter
-
-	done := make(chan error, 1)
-	go func() {
-		done <- daemon.RunOnce(context.Background())
-	}()
-
-	startEventID := waitForRunnerWriteID(t, channel, 1, done)
-	channel.push(ama.JSON{"type": "runner.event.accepted", "eventId": startEventID})
-	runtimeEventID := waitForRunnerWriteID(t, channel, 2, done)
-
-	client.mu.Lock()
-	updateCount := len(client.updates)
-	client.mu.Unlock()
-	if updateCount != 0 {
-		t.Fatalf("expected lease completion to wait for event acknowledgement, got updates %#v", client.updates)
-	}
-
-	channel.push(ama.JSON{"type": "runner.event.accepted", "eventId": runtimeEventID})
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("expected run success after acknowledgement, got %v", err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for run completion after acknowledgement")
-	}
-	if len(client.updates) != 1 || client.updates[0].State != "completed" {
-		t.Fatalf("expected completed lease update after acknowledgement, got %#v", client.updates)
-	}
-}
-
-func TestRunOnceFailsLeaseWhenRuntimeEventAcknowledgementRejects(t *testing.T) {
-	channel := newFakeRunnerSessionChannel(
-		ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"},
-	)
-	channel.autoAck = false
-	client := &fakeControlPlane{lease: claudeCodeSessionStartLease(), channel: channel}
-	runtimeAdapter := &fakeRuntimeAdapter{result: ama.JSON{"exitCode": 0}}
-	daemon := testDaemon(client, &fakeAdapter{})
-	daemon.RuntimeAdapter = runtimeAdapter
-
-	done := make(chan error, 1)
-	go func() {
-		done <- daemon.RunOnce(context.Background())
-	}()
-
-	startEventID := waitForRunnerWriteID(t, channel, 1, done)
-	channel.push(ama.JSON{"type": "runner.event.accepted", "eventId": startEventID})
-	runtimeEventID := waitForRunnerWriteID(t, channel, 2, done)
-	channel.push(ama.JSON{"type": "session.channel.error", "eventId": runtimeEventID, "message": "append failed"})
-	errorEventID := waitForRunnerWriteID(t, channel, 3, done)
-	channel.push(ama.JSON{"type": "runner.event.accepted", "eventId": errorEventID})
-
-	select {
-	case err := <-done:
-		if err == nil || !strings.Contains(err.Error(), "runner session channel rejected event") {
-			t.Fatalf("expected rejected runtime event error, got %v", err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for run failure after rejected event")
-	}
-	if len(client.updates) != 1 || client.updates[0].State != "failed" {
-		t.Fatalf("expected failed lease update after rejected event, got %#v", client.updates)
-	}
-	got := channel.writtenEvents()
-	want := []string{"runner.session.started", "message_end", "runtime.error"}
-	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("expected channel events %v, got %v", want, got)
-	}
-}
-
-func waitForRunnerWriteID(t *testing.T, channel *fakeRunnerSessionChannel, count int, done <-chan error) string {
-	t.Helper()
-	deadline := time.After(time.Second)
-	for {
-		if channel.writeCount() >= count {
-			if eventID := channel.lastWriteEventID(); eventID != "" {
-				return eventID
-			}
-		}
-		select {
-		case err := <-done:
-			t.Fatalf("run finished before write %d: %v", count, err)
-		case <-deadline:
-			t.Fatalf("timed out waiting for write %d", count)
-		default:
-			time.Sleep(time.Millisecond)
-		}
 	}
 }
 
@@ -1025,32 +857,6 @@ func TestRunOnceReturnsEventUploadErrors(t *testing.T) {
 	}
 }
 
-func TestRunOnceSessionStartCancelsLeaseWhenContextCancels(t *testing.T) {
-	lease := approvedLease()
-	lease.workItem.Type = "session.start"
-	lease.workItem.Payload = sessionStartLease().workItem.Payload
-	channel := newFakeRunnerSessionChannel(ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"})
-	client := &fakeControlPlane{lease: lease, channel: channel}
-	daemon := testDaemon(client, &fakeAdapter{})
-	daemon.RuntimeAdapter = &fakeRuntimeAdapter{waitForCancel: true}
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan error, 1)
-	go func() {
-		done <- daemon.RunOnce(ctx)
-	}()
-	time.Sleep(5 * time.Millisecond)
-	cancel()
-	if err := <-done; err != nil && !errors.Is(err, context.Canceled) {
-		t.Fatalf("expected cancellation to succeed or report context cancellation, got %v", err)
-	}
-	if len(client.updates) != 1 || client.updates[0].State != "interrupted" {
-		t.Fatalf("expected interrupted update, got %#v", client.updates)
-	}
-	if !channel.closed {
-		t.Fatal("expected channel to close on context cancellation")
-	}
-}
-
 func TestRunOnceFailsFastOnUnapprovedWorkAfterMarkingLeaseFailed(t *testing.T) {
 	lease := approvedLease()
 	lease.workItem.Payload["approved"] = false
@@ -1097,26 +903,6 @@ func TestLeaseRenewalFailureCancelsLocalWorkWithoutCompletionRetry(t *testing.T)
 	}
 	if len(client.updates) != 1 || client.updates[0].State != "active" {
 		t.Fatalf("expected only renew update, got %#v", client.updates)
-	}
-}
-
-func TestSessionChannelRenewalFailureClosesChannelWithoutCompletion(t *testing.T) {
-	channel := newFakeRunnerSessionChannel(ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"})
-	client := &fakeControlPlane{lease: sessionStartLease(), channel: channel, updateErr: errors.New("lease lost")}
-	daemon := testDaemon(client, &fakeAdapter{})
-	daemon.RuntimeAdapter = &fakeRuntimeAdapter{waitForCancel: true}
-	daemon.Config.RenewInterval = time.Millisecond
-	err := daemon.RunOnce(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "runner lease renewal failed") {
-		t.Fatalf("expected renew failure, got %v", err)
-	}
-	// The renewal attempt (active) is recorded; the bridge path may additionally
-	// finalize the cancelled run. The lease loss + channel close are the contract.
-	if len(client.updates) == 0 || client.updates[0].State != "active" {
-		t.Fatalf("expected the failed lease renewal attempt, got %#v", client.updates)
-	}
-	if !channel.closed {
-		t.Fatal("expected renewal failure to close channel")
 	}
 }
 
@@ -1463,16 +1249,19 @@ func TestRunOnceFailsLeaseWhenRuntimeCLIIsMissing(t *testing.T) {
 }
 
 func TestRunOnceFailsLeaseWhenSessionExceedsMaxDuration(t *testing.T) {
-	channel := newFakeRunnerSessionChannel(
-		ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"},
-	)
-	client := &fakeControlPlane{lease: codexSessionStartLease("runaway"), channel: channel}
+	// Codex is a CLI relay runtime: events flow over the per-runner hub channel.
+	hubChannel := newFakeRunnerSessionChannel(ama.JSON{"type": "runner.channel.accepted"})
+	client := &fakeControlPlane{lease: codexSessionStartLease("runaway"), hubChannel: hubChannel}
 	runtimeAdapter := &fakeRuntimeAdapter{waitForCancel: true}
 	daemon := testDaemon(client, &fakeAdapter{})
 	daemon.RuntimeAdapter = runtimeAdapter
 	daemon.Config.MaxSessionDuration = 20 * time.Millisecond
 
-	err := daemon.RunOnce(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- daemon.RunOnce(context.Background()) }()
+	// Wait for at least runner.session.started + runtime.error to be relayed.
+	waitForRunnerWriteCount(t, hubChannel, 2, done)
+	err := <-done
 	if err == nil || !strings.Contains(err.Error(), "exceeded max duration") {
 		t.Fatalf("expected session timeout error, got %v", err)
 	}
@@ -1483,26 +1272,51 @@ func TestRunOnceFailsLeaseWhenSessionExceedsMaxDuration(t *testing.T) {
 	if !strings.Contains(message, "session exceeded max duration") {
 		t.Fatalf("expected explicit timeout message, got %#v", client.updates[0].Error)
 	}
-	serializedEvents := mustJSON(t, channel.writtenMessages())
+	serializedEvents := mustJSON(t, hubChannel.writtenMessages())
 	if !strings.Contains(serializedEvents, "session_timeout") {
 		t.Fatalf("expected session_timeout runtime.error event, got %s", serializedEvents)
 	}
 }
 
 func TestRunOnceDisablesSessionDeadlineWhenMaxDurationIsZero(t *testing.T) {
-	channel := newFakeRunnerSessionChannel(
-		ama.JSON{"type": "session.channel.accepted", "sessionId": "session_1"},
-	)
-	client := &fakeControlPlane{lease: codexSessionStartLease("build"), channel: channel}
+	// Codex is a CLI relay runtime: events flow over the per-runner hub channel.
+	hubChannel := newFakeRunnerSessionChannel(ama.JSON{"type": "runner.channel.accepted"})
+	client := &fakeControlPlane{lease: codexSessionStartLease("build"), hubChannel: hubChannel}
 	runtimeAdapter := &fakeRuntimeAdapter{result: ama.JSON{"exitCode": 0}}
 	daemon := testDaemon(client, &fakeAdapter{})
 	daemon.RuntimeAdapter = runtimeAdapter
 	daemon.Config.MaxSessionDuration = 0
-	if err := daemon.RunOnce(context.Background()); err != nil {
+	done := make(chan error, 1)
+	go func() { done <- daemon.RunOnce(context.Background()) }()
+	waitForRunnerWriteCount(t, hubChannel, 1, done)
+	if err := <-done; err != nil {
 		t.Fatalf("expected run success with disabled session deadline, got %v", err)
 	}
 	if len(client.updates) != 1 || client.updates[0].State != "completed" {
 		t.Fatalf("expected completed lease update, got %#v", client.updates)
+	}
+}
+
+func TestIsCompletedLeaseRenewalRaceMatchesMessage(t *testing.T) {
+	// isCompletedLeaseRenewalRace must detect the specific error the control plane
+	// sends when the lease has already been completed (race between completion and renew).
+	if !isCompletedLeaseRenewalRace(fmt.Errorf("runner lease renewal failed: Runner lease is no longer active")) {
+		t.Fatal("expected race detection for 'Runner lease is no longer active'")
+	}
+	if !isCompletedLeaseRenewalRace(fmt.Errorf("runner renewal: Runner lease is no longer active in state completed")) {
+		t.Fatal("expected race detection for message containing 'Runner lease is no longer active'")
+	}
+}
+
+func TestIsCompletedLeaseRenewalRaceRejectsOtherErrors(t *testing.T) {
+	if isCompletedLeaseRenewalRace(nil) {
+		t.Fatal("nil must not be a race error")
+	}
+	if isCompletedLeaseRenewalRace(fmt.Errorf("runner lease renewal failed: connection refused")) {
+		t.Fatal("unrelated renewal error must not be treated as a race")
+	}
+	if isCompletedLeaseRenewalRace(fmt.Errorf("Lease is no longer active")) {
+		t.Fatal("lowercase 'lease' form must not match")
 	}
 }
 

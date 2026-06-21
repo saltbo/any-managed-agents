@@ -8,27 +8,19 @@ import (
 	"testing"
 )
 
-func TestSessionRuntimeHandlerRegistryCoversSupportedRuntimes(t *testing.T) {
-	tests := map[string]bool{
-		"ama":         true,
-		"codex":       true,
-		"claude-code": true,
-		"copilot":     true,
-	}
-	for runtimeName, wantAcknowledgedStart := range tests {
-		handler, err := sessionRuntimeHandlerFor(runtimeName)
-		if err != nil {
-			t.Fatalf("expected handler for %s, got %v", runtimeName, err)
-		}
-		if handler.run == nil {
-			t.Fatalf("expected handler run function for %s", runtimeName)
-		}
-		if handler.acknowledgeSessionStarted != wantAcknowledgedStart {
-			t.Fatalf("expected %s acknowledged start %v, got %v", runtimeName, wantAcknowledgedStart, handler.acknowledgeSessionStarted)
+func TestIsSupportedSessionRuntimeAcceptsKnownRuntimes(t *testing.T) {
+	for _, runtime := range []string{"ama", "claude-code", "codex", "copilot"} {
+		if !isSupportedSessionRuntime(runtime) {
+			t.Fatalf("expected %q to be a supported session runtime", runtime)
 		}
 	}
-	if _, err := sessionRuntimeHandlerFor("unknown-runtime"); err == nil {
-		t.Fatal("expected unknown runtime to be rejected")
+}
+
+func TestIsSupportedSessionRuntimeRejectsUnknownRuntime(t *testing.T) {
+	for _, runtime := range []string{"unknown-runtime", "", "gpt", "gemini"} {
+		if isSupportedSessionRuntime(runtime) {
+			t.Fatalf("expected %q to be rejected as an unsupported session runtime", runtime)
+		}
 	}
 }
 
