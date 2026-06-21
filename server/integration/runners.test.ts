@@ -286,6 +286,40 @@ describe('[CF] /api/v1/runners', () => {
     expectAuthRequired(await missingHeartbeatRes.json())
   })
 
+  it('guards the runner relay channel: 426 without upgrade, 404 for missing runner, 101 for valid runner [spec: runners/channel]', async () => {
+    const authorization = await signIn()
+
+    // 426: non-WebSocket upgrade request
+    const noUpgradeRes = await jsonFetch('/api/v1/runners/runner_missing/channel', authorization)
+    expect(noUpgradeRes.status).toBe(426)
+    await expect(noUpgradeRes.json()).resolves.toMatchObject({
+      error: { type: 'conflict' },
+    })
+
+    // 404: runner not found with upgrade header
+    const missingRes = await SELF.fetch('https://example.com/api/v1/runners/runner_missing/channel', {
+      headers: { authorization, upgrade: 'websocket' },
+    })
+    expect(missingRes.status).toBe(404)
+
+    // 101: valid runner → WebSocket upgrade accepted
+    const runnerRes = await jsonFetch('/api/v1/runners', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Channel test runner' }),
+    })
+    expect(runnerRes.status).toBe(201)
+    const runner = (await runnerRes.json()) as { id: string }
+
+    const channelRes = await SELF.fetch(`https://example.com/api/v1/runners/${runner.id}/channel`, {
+      headers: { authorization, upgrade: 'websocket' },
+    })
+    expect(channelRes.status).toBe(101)
+    expect(channelRes.webSocket).toBeTruthy()
+    const socket = channelRes.webSocket as WebSocket
+    socket.accept()
+    socket.close()
+  })
+
   it('binds OIDC runner tokens to their registered runner', async () => {
     const operatorAuthorization = await signIn()
     const runnerAuthorization = operatorAuthorization.replace('e2e:', 'e2e-runner:')

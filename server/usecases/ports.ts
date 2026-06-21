@@ -2366,6 +2366,11 @@ export interface SessionRepo {
   // paths that hand the session to the runtime gateway.
   findRuntimeRow(projectId: string, sessionId: string): Promise<SessionRuntimeRow | null>
   readConnection(projectId: string, sessionId: string): Promise<SessionConnectionRecord | null>
+  // The Session DO instance name a session's relay traffic routes to: the runner
+  // id for a CLI relay session (one per-runner DO multiplexes its sessions), else
+  // the sessionId (ama/cloud). Lets the browser socket + dispatch reach the live
+  // runner channel even after the session's lease has ended.
+  resolveRelayDoName(sessionId: string): Promise<string>
 
   updateFields(
     projectId: string,

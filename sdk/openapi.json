@@ -3166,6 +3166,21 @@
         },
         "additionalProperties": false
       },
+      "RunnerChannelMetadata": {
+        "type": "object",
+        "properties": {
+          "upgrade": {
+            "type": "string",
+            "enum": [
+              "websocket"
+            ],
+            "example": "websocket"
+          }
+        },
+        "required": [
+          "upgrade"
+        ]
+      },
       "WorkItemListResponse": {
         "type": "object",
         "properties": {
@@ -3450,21 +3465,6 @@
           }
         },
         "additionalProperties": false
-      },
-      "LeaseChannelMetadata": {
-        "type": "object",
-        "properties": {
-          "upgrade": {
-            "type": "string",
-            "enum": [
-              "websocket"
-            ],
-            "example": "websocket"
-          }
-        },
-        "required": [
-          "upgrade"
-        ]
       },
       "PolicyListResponse": {
         "type": "object",
@@ -9576,6 +9576,86 @@
         }
       }
     },
+    "/api/v1/runners/{runnerId}/channel": {
+      "get": {
+        "operationId": "connectRunnerChannel",
+        "tags": [
+          "Runners"
+        ],
+        "summary": "Open the runner relay WebSocket channel",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "runner_abc123"
+            },
+            "required": true,
+            "name": "runnerId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "101": {
+            "description": "Runner relay channel accepted as a WebSocket upgrade"
+          },
+          "200": {
+            "description": "Runner relay channel metadata for OpenAPI clients",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunnerChannelMetadata"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Runner not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "WebSocket upgrade required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/work-items": {
       "get": {
         "operationId": "listWorkItems",
@@ -10116,106 +10196,6 @@
           },
           "409": {
             "description": "Conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/leases/{leaseId}/channel": {
-      "get": {
-        "operationId": "connectLeaseSessionChannel",
-        "tags": [
-          "Leases"
-        ],
-        "summary": "Open a claimed runner session WebSocket channel",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "example": "lease_abc123"
-            },
-            "required": true,
-            "name": "leaseId",
-            "in": "path"
-          }
-        ],
-        "responses": {
-          "101": {
-            "description": "Runner session channel accepted as a WebSocket upgrade"
-          },
-          "200": {
-            "description": "Runner session channel metadata for OpenAPI clients",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LeaseChannelMetadata"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Lease not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "426": {
-            "description": "WebSocket upgrade required",
             "content": {
               "application/json": {
                 "schema": {

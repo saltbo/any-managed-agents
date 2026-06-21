@@ -302,6 +302,22 @@ export function createSessionRepo(db: Db): SessionRepo {
       return row ? serializeConnection(row) : null
     },
 
+    // The Session DO instance a session's relay traffic routes to: the runner that
+    // ran it. Every session runs its loop on a runner and relays over that runner's
+    // per-runner channel (idFromName(runnerId)), so a completed session still reads
+    // while the runner is online. Resolved from the session's latest work item;
+    // falls back to the sessionId when no runner has it (a cloud-hosted session, or
+    // one not yet dispatched).
+    async resolveRelayDoName(sessionId) {
+      const workItem = await db
+        .select({ runnerId: workItems.runnerId })
+        .from(workItems)
+        .where(and(eq(workItems.sessionId, sessionId), isNotNull(workItems.runnerId)))
+        .orderBy(desc(workItems.createdAt))
+        .get()
+      return workItem?.runnerId ?? sessionId
+    },
+
     async updateFields(projectId, sessionId, fields, updatedAt) {
       await db
         .update(sessions)

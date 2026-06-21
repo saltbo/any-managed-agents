@@ -470,15 +470,20 @@ function serializeConnection(record: SessionConnectionRecord): z.infer<typeof Se
   return record as z.infer<typeof SessionConnectionSchema>
 }
 
-// Forwards an authorised browser WebSocket upgrade to the per-session Session DO,
-// carrying the owning-user scope as query params (the DO trusts the upgrade since
-// the route already verified ownership). Mirrors the runner channel upgrade.
+// Forwards an authorised browser WebSocket upgrade to the Session DO, carrying the
+// owning-user scope as query params (the DO trusts the upgrade since the route
+// already verified ownership). The instance is `doName`: a CLI relay session's
+// per-runner instance (shared across the runner's sessions, so a completed session
+// still reads while the runner is online) or its own per-session instance for ama.
+// The sessionId always rides in the scope so the DO multiplexes the browser to the
+// right session. Mirrors the runner channel upgrade.
 function upgradeSessionBrowserSocket(
   env: Env,
   request: Request,
+  doName: string,
   scope: { sessionId: string; organizationId: string; projectId: string; userId: string },
 ) {
-  const stub = env.SESSION.get(env.SESSION.idFromName(scope.sessionId))
+  const stub = env.SESSION.get(env.SESSION.idFromName(doName))
   const url = new URL('https://session-object/browser')
   url.searchParams.set('sessionId', scope.sessionId)
   url.searchParams.set('organizationId', scope.organizationId)
@@ -1077,7 +1082,8 @@ export function registerSessionRoutes(routes: SessionRoutes) {
       if (c.req.header('upgrade')?.toLowerCase() !== 'websocket') {
         return c.json(serializeConnection(connection), 200)
       }
-      return upgradeSessionBrowserSocket(c.env, c.req.raw, {
+      const doName = await deps.sessions.resolveRelayDoName(sessionId)
+      return upgradeSessionBrowserSocket(c.env, c.req.raw, doName, {
         sessionId,
         organizationId: auth.organization.id,
         projectId: auth.project.id,

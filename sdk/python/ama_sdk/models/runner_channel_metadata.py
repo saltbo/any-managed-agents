@@ -8,25 +8,25 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
-from ..models.lease_channel_metadata_upgrade import LeaseChannelMetadataUpgrade
+from ..models.runner_channel_metadata_upgrade import RunnerChannelMetadataUpgrade
 
 
 
 
 
 
-T = TypeVar("T", bound="LeaseChannelMetadata")
+T = TypeVar("T", bound="RunnerChannelMetadata")
 
 
 
 @_attrs_define
-class LeaseChannelMetadata:
+class RunnerChannelMetadata:
     """ 
         Attributes:
-            upgrade (LeaseChannelMetadataUpgrade):  Example: websocket.
+            upgrade (RunnerChannelMetadataUpgrade):  Example: websocket.
      """
 
-    upgrade: LeaseChannelMetadataUpgrade
+    upgrade: RunnerChannelMetadataUpgrade
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
@@ -50,18 +50,18 @@ class LeaseChannelMetadata:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        upgrade = LeaseChannelMetadataUpgrade(d.pop("upgrade"))
+        upgrade = RunnerChannelMetadataUpgrade(d.pop("upgrade"))
 
 
 
 
-        lease_channel_metadata = cls(
+        runner_channel_metadata = cls(
             upgrade=upgrade,
         )
 
 
-        lease_channel_metadata.additional_properties = d
-        return lease_channel_metadata
+        runner_channel_metadata.additional_properties = d
+        return runner_channel_metadata
 
     @property
     def additional_keys(self) -> list[str]:

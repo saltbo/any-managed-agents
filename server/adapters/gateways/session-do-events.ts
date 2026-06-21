@@ -19,8 +19,8 @@ export interface SessionEventOverrides {
   correlationId?: string | null
 }
 
-async function callSessionObject<T>(env: Env, sessionId: string, path: string, body: unknown): Promise<T> {
-  const stub = env.SESSION.get(env.SESSION.idFromName(sessionId))
+async function callSessionObject<T>(env: Env, doName: string, path: string, body: unknown): Promise<T> {
+  const stub = env.SESSION.get(env.SESSION.idFromName(doName))
   const response = await stub.fetch(`https://session-object${path}`, {
     method: 'POST',
     body: JSON.stringify(body),
@@ -49,7 +49,10 @@ export interface SessionDoEventStore {
   archive(scope: SessionEventScope): Promise<void>
 }
 
-export function createSessionDoEventStore(env: Env): SessionDoEventStore {
+export function createSessionDoEventStore(
+  env: Env,
+  resolveDoName: (sessionId: string) => Promise<string>,
+): SessionDoEventStore {
   return {
     async append(scope, canonicalEvent, overrides) {
       return await callSessionObject(env, scope.sessionId, '/events/append', { scope, canonicalEvent, overrides })
@@ -58,9 +61,11 @@ export function createSessionDoEventStore(env: Env): SessionDoEventStore {
       return await callSessionObject<SessionEventPage>(env, sessionId, '/events/query', { sessionId, query })
     },
     async relayQuery(sessionId, query) {
+      // A relay session lives on its runner's per-runner DO, not its per-session one;
+      // the sessionId rides in the body so that DO multiplexes the read.
       return await callSessionObject<SessionEventPage & { runnerUnavailable?: boolean }>(
         env,
-        sessionId,
+        await resolveDoName(sessionId),
         '/events/relay-query',
         { sessionId, query },
       )

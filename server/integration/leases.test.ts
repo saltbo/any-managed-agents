@@ -129,17 +129,6 @@ async function claimLease(authorization: string, workItemId: string, runnerId: s
   })
 }
 
-async function openLeaseChannel(authorization: string, leaseId: string) {
-  const res = await SELF.fetch(`https://example.com/api/v1/leases/${leaseId}/channel`, {
-    headers: { authorization, upgrade: 'websocket' },
-  })
-  expect(res.status).toBe(101)
-  expect(res.webSocket).toBeTruthy()
-  const socket = res.webSocket as WebSocket
-  socket.accept()
-  return socket
-}
-
 describe('[CF] /api/v1/leases', () => {
   beforeEach(async () => {
     await setupOidcProvider()
@@ -194,14 +183,6 @@ describe('[CF] /api/v1/leases', () => {
     const conflictRes = await claimLease(authorization, workItem.id, runner.id)
     expect(conflictRes.status).toBe(409)
 
-    const channel = await openLeaseChannel(authorization, leaseId)
-    const runningSessionRes = await jsonFetch(`/api/v1/sessions/${session.id}`, authorization)
-    await expect(runningSessionRes.json()).resolves.toMatchObject({
-      id: session.id,
-      state: 'running',
-      stateReason: null,
-    })
-
     const renewRes = await jsonFetch(`/api/v1/leases/${leaseId}`, authorization, {
       method: 'PATCH',
       body: JSON.stringify({ leaseDurationSeconds: 120 }),
@@ -244,7 +225,6 @@ describe('[CF] /api/v1/leases', () => {
       state: 'idle',
       stateReason: null,
     })
-    channel.close()
   })
 
   it('rejects claims for inactive runners, missing work, and over-capacity runners', async () => {
@@ -318,9 +298,6 @@ describe('[CF] /api/v1/leases', () => {
     const claimRes = await claimLease(authorization, workItem.id, runner.id)
     expect(claimRes.status).toBe(201)
     const lease = (await claimRes.json()) as { id: string }
-
-    const channel = await openLeaseChannel(authorization, lease.id)
-    channel.close()
 
     const renewRes = await jsonFetch(`/api/v1/leases/${lease.id}`, authorization, {
       method: 'PATCH',
@@ -466,39 +443,5 @@ describe('[CF] /api/v1/leases', () => {
     const completedListRes = await jsonFetch(`/api/v1/leases?runnerId=${otherRunner.id}&state=completed`, authorization)
     const completedList = (await completedListRes.json()) as { data: Array<{ id: string; state: string }> }
     expect(completedList.data).toEqual([expect.objectContaining({ id: secondLease.id, state: 'completed' })])
-  })
-
-  it('guards the lease channel against non-upgrade requests and finished leases', async () => {
-    const authorization = await signIn()
-    const environment = await createSelfHostedEnvironment(authorization)
-    const agent = await createAgent(authorization)
-    const runner = await registerActiveRunner(authorization, environment.id)
-    const session = await createSelfHostedSession(authorization, agent.id, environment.id)
-    const workItem = await availableWorkItem(authorization, session.id)
-    const claimRes = await claimLease(authorization, workItem.id, runner.id)
-    expect(claimRes.status).toBe(201)
-    const lease = (await claimRes.json()) as { id: string }
-
-    const noUpgradeRes = await jsonFetch(`/api/v1/leases/${lease.id}/channel`, authorization)
-    expect(noUpgradeRes.status).toBe(426)
-
-    const missingLeaseRes = await SELF.fetch('https://example.com/api/v1/leases/lease_missing/channel', {
-      headers: { authorization, upgrade: 'websocket' },
-    })
-    expect(missingLeaseRes.status).toBe(404)
-
-    const completeRes = await jsonFetch(`/api/v1/leases/${lease.id}`, authorization, {
-      method: 'PATCH',
-      body: JSON.stringify({ state: 'completed', result: { ok: true } }),
-    })
-    expect(completeRes.status).toBe(200)
-
-    const staleChannelRes = await SELF.fetch(`https://example.com/api/v1/leases/${lease.id}/channel`, {
-      headers: { authorization, upgrade: 'websocket' },
-    })
-    expect(staleChannelRes.status).toBe(409)
-    await expect(staleChannelRes.json()).resolves.toMatchObject({
-      error: { type: 'conflict', message: 'Runner lease no longer owns a self-hosted session' },
-    })
   })
 })

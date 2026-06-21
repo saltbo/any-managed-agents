@@ -358,6 +358,14 @@ export const putRunnerHeartbeat = (options) => (options.client ?? client).put({
     }
 });
 /**
+ * Open the runner relay WebSocket channel
+ */
+export const connectRunnerChannel = (options) => (options.client ?? client).get({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/runners/{runnerId}/channel',
+    ...options
+});
+/**
  * List queued self-hosted work items
  */
 export const listWorkItems = (options) => (options?.client ?? client).get({
@@ -412,14 +420,6 @@ export const updateLease = (options) => (options.client ?? client).patch({
         'Content-Type': 'application/json',
         ...options.headers
     }
-});
-/**
- * Open a claimed runner session WebSocket channel
- */
-export const connectLeaseSessionChannel = (options) => (options.client ?? client).get({
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/leases/{leaseId}/channel',
-    ...options
 });
 /**
  * List scoped governance policies

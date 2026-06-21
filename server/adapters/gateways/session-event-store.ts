@@ -44,27 +44,6 @@ export function createCloudLoopChecker(db: Db): CloudLoopChecker {
   }
 }
 
-// CLI runtimes (claude-code/codex/copilot) loop on a self-hosted runner, so their
-// events are relay-only — read from the runner, never stored in the cloud; `ama`
-// is the cloud loop. Reads the runtime stamped in session metadata at create;
-// cached like the cloud-loop checker so the per-event firehose pays one lookup.
-const CLI_RELAY_RUNTIMES = new Set(['claude-code', 'codex', 'copilot'])
-
-export function createCliRuntimeChecker(db: Db): CloudLoopChecker {
-  const cache = new Map<string, boolean>()
-  return async (sessionId: string) => {
-    const cached = cache.get(sessionId)
-    if (cached !== undefined) {
-      return cached
-    }
-    const row = await db.select({ metadata: sessions.metadata }).from(sessions).where(eq(sessions.id, sessionId)).get()
-    const metadata = row?.metadata ? (JSON.parse(row.metadata) as Record<string, unknown>) : {}
-    const relay = typeof metadata.runtime === 'string' && CLI_RELAY_RUNTIMES.has(metadata.runtime)
-    cache.set(sessionId, relay)
-    return relay
-  }
-}
-
 // The D1 delegates the router falls back to for non-DO sessions: the existing
 // repo methods, passed in by the composition root (no new D1 query/append code).
 export interface SessionEventD1Delegates {
@@ -80,7 +59,6 @@ export interface SessionEventD1Delegates {
 export function createSessionEventStore(
   db: Db,
   isCloudLoop: CloudLoopChecker,
-  isRunnerRelay: CloudLoopChecker,
   doStore: SessionDoEventStore,
   d1: SessionEventD1Delegates,
 ): SessionEventStore {
@@ -94,12 +72,9 @@ export function createSessionEventStore(
       await usage.recordProviderSignals(scope, id, canonicalEvent)
       return id
     }
-    if (await isRunnerRelay(scope.sessionId)) {
-      // Relay-only: the runner store-and-serves this event; the cloud keeps no
-      // copy and serves history by relaying a backfill to the live runner.
-      return 'relay'
-    }
-    return await d1.append(scope, canonicalEvent, overrides)
+    // Every other session runs its loop on a runner and is relay-only: the runner
+    // store-and-serves the event; the cloud keeps no copy.
+    return 'relay'
   }
 
   return {
@@ -118,13 +93,11 @@ export function createSessionEventStore(
       if (await isCloudLoop(sessionId)) {
         return await doStore.query(sessionId, query)
       }
-      if (await isRunnerRelay(sessionId)) {
-        const relayed = await doStore.relayQuery(sessionId, query)
-        // Runner offline ⇒ fall back to D1: a pre-migration legacy CLI task still
-        // reads its D1 rows; a completed relay session reads nothing (accepted).
-        if (!relayed.runnerUnavailable) {
-          return { rows: relayed.rows, hasMore: relayed.hasMore }
-        }
+      // Relay the read to the session's runner; runner offline ⇒ fall back to D1 (a
+      // pre-migration session's rows, or nothing for a completed relay session).
+      const relayed = await doStore.relayQuery(sessionId, query)
+      if (!relayed.runnerUnavailable) {
+        return { rows: relayed.rows, hasMore: relayed.hasMore }
       }
       return await d1.queryEvents(sessionId, query)
     },

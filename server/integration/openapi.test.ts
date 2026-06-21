@@ -135,7 +135,7 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths).toHaveProperty('/api/v1/runners/{runnerId}/heartbeat')
     expect(doc.paths).toHaveProperty('/api/v1/leases')
     expect(doc.paths).toHaveProperty('/api/v1/leases/{leaseId}')
-    expect(doc.paths).toHaveProperty('/api/v1/leases/{leaseId}/channel')
+    expect(doc.paths).not.toHaveProperty('/api/v1/leases/{leaseId}/channel')
     expect(doc.paths).toHaveProperty('/api/v1/work-items')
     expect(doc.paths).toHaveProperty('/api/v1/work-items/{workItemId}')
     expect(doc.paths).not.toHaveProperty('/api/runners/work-items')
@@ -173,7 +173,6 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths['/api/v1/leases']).toHaveProperty('get')
     expect(doc.paths['/api/v1/leases']).toHaveProperty('post')
     expect(doc.paths['/api/v1/leases/{leaseId}']).toHaveProperty('patch')
-    expect(doc.paths['/api/v1/leases/{leaseId}/channel']).toHaveProperty('get')
     expect(doc.paths['/api/v1/work-items']).toHaveProperty('get')
 
     expect(doc.paths['/api/v1/vaults']).toHaveProperty('get')

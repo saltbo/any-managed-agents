@@ -1,6 +1,8 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
 import { RUNNER_AUTH_MODES } from '@server/domain/runner-queue'
+import type { Context } from 'hono'
 import { isRunnerOidcAuth, requireAuth } from '../auth/session'
+import type { Env } from '../env'
 import { errorResponse } from '../errors'
 import {
   AuthenticatedOperation,
@@ -318,6 +320,77 @@ const putHeartbeatRoute = createRoute({
   },
 })
 
+const RunnerChannelMetadataSchema = z
+  .object({ upgrade: z.literal('websocket').openapi({ example: 'websocket' }) })
+  .openapi('RunnerChannelMetadata')
+
+const connectRunnerChannelRoute = createRoute({
+  method: 'get',
+  path: '/{runnerId}/channel',
+  operationId: 'connectRunnerChannel',
+  tags: ['Runners'],
+  summary: 'Open the runner relay WebSocket channel',
+  ...AuthenticatedOperation,
+  request: { params: ParamsSchema },
+  responses: {
+    101: { description: 'Runner relay channel accepted as a WebSocket upgrade' },
+    200: {
+      description: 'Runner relay channel metadata for OpenAPI clients',
+      content: { 'application/json': { schema: RunnerChannelMetadataSchema } },
+    },
+    401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    403: { description: 'Forbidden', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    404: { description: 'Runner not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    426: {
+      description: 'WebSocket upgrade required',
+      content: { 'application/json': { schema: ErrorResponseSchema } },
+    },
+  },
+})
+
+// The runner relay channel owns the WebSocket upgrade: authorise the runner, then
+// forward the upgrade to the per-runner Session DO (idFromName(runnerId)). One
+// channel per runner multiplexes every CLI session it hosts — the sessionId rides
+// per-frame — so the channel outlives any single lease and a completed session
+// still reads while the runner is online. Non-upgrade callers get the metadata.
+async function connectRunnerChannel(c: Context<DepsEnv>) {
+  if (c.req.header('upgrade')?.toLowerCase() !== 'websocket') {
+    return errorResponse(c, 426, 'conflict', 'Runner relay channel requires a WebSocket upgrade')
+  }
+  const runnerId = c.req.param('runnerId')
+  if (!runnerId) {
+    return errorResponse(c, 400, 'validation_error', 'Runner id is required')
+  }
+  const deps = c.get('deps')
+  const auth = await requireAuth(c)
+  if (auth instanceof Response) {
+    return auth
+  }
+  const runner = await deps.runners.find(auth.project.id, runnerId)
+  if (!runner) {
+    return errorResponse(c, 404, 'not_found', 'Runner not found')
+  }
+  if (!runnerOperationAuthorized(c.env, auth, runner)) {
+    return runnerForbidden(c)
+  }
+  return upgradeRunnerRelayChannel(c.env, c.req.raw, runnerId, auth.organization.id, auth.project.id)
+}
+
+function upgradeRunnerRelayChannel(
+  env: Env,
+  request: Request,
+  runnerId: string,
+  organizationId: string,
+  projectId: string,
+) {
+  const stub = env.SESSION.get(env.SESSION.idFromName(runnerId))
+  const url = new URL('https://session-object/runner-connect')
+  url.searchParams.set('runnerId', runnerId)
+  url.searchParams.set('organizationId', organizationId)
+  url.searchParams.set('projectId', projectId)
+  return stub.fetch(new Request(url, request))
+}
+
 function validationOr(c: Parameters<Parameters<RunnerRoutes['openapi']>[1]>[0], error: unknown) {
   if (error instanceof RunnerValidationError) {
     return c.json(
@@ -520,4 +593,5 @@ export function registerRunnerRoutes(routes: RunnerRoutes) {
         return validationOr(c, error)
       }
     })
+    .openapi(connectRunnerChannelRoute, connectRunnerChannel)
 }

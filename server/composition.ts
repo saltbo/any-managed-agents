@@ -7,11 +7,7 @@ import { createRunnerChannel } from './adapters/gateways/runner-channel'
 import { createRuntimeSecretEnvGateway } from './adapters/gateways/runtime-secret-env'
 import { createSecretStoreGateway } from './adapters/gateways/secret-store'
 import { createSessionDoEventStore } from './adapters/gateways/session-do-events'
-import {
-  createCliRuntimeChecker,
-  createCloudLoopChecker,
-  createSessionEventStore,
-} from './adapters/gateways/session-event-store'
+import { createCloudLoopChecker, createSessionEventStore } from './adapters/gateways/session-event-store'
 import { createSessionEventPort } from './adapters/gateways/session-events'
 import { createAgentRepo } from './adapters/repos/agents'
 import { createAuditReadRepo } from './adapters/repos/audit-records'
@@ -50,10 +46,9 @@ export function createDeps(env: Env): Deps {
   // pre-migration cloud + self-hosted CLI → the existing D1 repo methods. The DO
   // gateway + cloud-loop checker are shared with the MCP event port so the
   // per-session lookup is cached once.
-  const sessionDoEvents = createSessionDoEventStore(env)
+  const sessionDoEvents = createSessionDoEventStore(env, (sessionId) => sessions.resolveRelayDoName(sessionId))
   const isCloudLoop = createCloudLoopChecker(db)
-  const isRunnerRelay = createCliRuntimeChecker(db)
-  const sessionEventStore = createSessionEventStore(db, isCloudLoop, isRunnerRelay, sessionDoEvents, {
+  const sessionEventStore = createSessionEventStore(db, isCloudLoop, sessionDoEvents, {
     append: (scope, canonicalEvent, overrides) =>
       sessionOrchestration.appendCanonicalEvent(scope, canonicalEvent, overrides),
     queryEvents: (sessionId, query) => sessions.queryEvents(sessionId, query),
@@ -85,7 +80,7 @@ export function createDeps(env: Env): Deps {
     leases: createLeaseRepo(db),
     runtimeSecretEnv: createRuntimeSecretEnvGateway(env, db),
     cloudTurnQueue: createCloudTurnQueue(env),
-    runnerChannel: createRunnerChannel(env),
+    runnerChannel: createRunnerChannel(env, (sessionId) => sessions.resolveRelayDoName(sessionId)),
     sandboxRuntime: createSandboxRuntimeHost(env),
     sessionOrchestration,
     sessions,

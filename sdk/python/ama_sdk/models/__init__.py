@@ -169,8 +169,6 @@ from .health_response import HealthResponse
 from .health_response_runtime import HealthResponseRuntime
 from .health_response_status import HealthResponseStatus
 from .lease import Lease
-from .lease_channel_metadata import LeaseChannelMetadata
-from .lease_channel_metadata_upgrade import LeaseChannelMetadataUpgrade
 from .lease_list_response import LeaseListResponse
 from .lease_state import LeaseState
 from .list_agents_archived import ListAgentsArchived
@@ -229,6 +227,8 @@ from .replace_policy_request_metadata import ReplacePolicyRequestMetadata
 from .resource_ref_type_1 import ResourceRefType1
 from .runner import Runner
 from .runner_auth_mode import RunnerAuthMode
+from .runner_channel_metadata import RunnerChannelMetadata
+from .runner_channel_metadata_upgrade import RunnerChannelMetadataUpgrade
 from .runner_credential_ref import RunnerCredentialRef
 from .runner_heartbeat import RunnerHeartbeat
 from .runner_heartbeat_state import RunnerHeartbeatState
@@ -565,8 +565,6 @@ __all__ = (
     "HealthResponseRuntime",
     "HealthResponseStatus",
     "Lease",
-    "LeaseChannelMetadata",
-    "LeaseChannelMetadataUpgrade",
     "LeaseListResponse",
     "LeaseState",
     "ListAgentsArchived",
@@ -625,6 +623,8 @@ __all__ = (
     "ResourceRefType1",
     "Runner",
     "RunnerAuthMode",
+    "RunnerChannelMetadata",
+    "RunnerChannelMetadataUpgrade",
     "RunnerCredentialRef",
     "RunnerHeartbeat",
     "RunnerHeartbeatState",

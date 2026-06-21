@@ -822,21 +822,6 @@ func (e LeaseState) Valid() bool {
 	}
 }
 
-// Defines values for LeaseChannelMetadataUpgrade.
-const (
-	Websocket LeaseChannelMetadataUpgrade = "websocket"
-)
-
-// Valid indicates whether the value is a known member of the LeaseChannelMetadataUpgrade enum.
-func (e LeaseChannelMetadataUpgrade) Valid() bool {
-	switch e {
-	case Websocket:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for PolicyMcpPolicyConnectorApprovalModes.
 const (
 	PolicyMcpPolicyConnectorApprovalModesNone            PolicyMcpPolicyConnectorApprovalModes = "none"
@@ -1029,6 +1014,21 @@ func (e RunnerState) Valid() bool {
 	case RunnerStateDraining:
 		return true
 	case RunnerStateOffline:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RunnerChannelMetadataUpgrade.
+const (
+	Websocket RunnerChannelMetadataUpgrade = "websocket"
+)
+
+// Valid indicates whether the value is a known member of the RunnerChannelMetadataUpgrade enum.
+func (e RunnerChannelMetadataUpgrade) Valid() bool {
+	switch e {
+	case Websocket:
 		return true
 	default:
 		return false
@@ -3073,14 +3073,6 @@ type Lease struct {
 // LeaseState defines model for Lease.State.
 type LeaseState string
 
-// LeaseChannelMetadata defines model for LeaseChannelMetadata.
-type LeaseChannelMetadata struct {
-	Upgrade LeaseChannelMetadataUpgrade `json:"upgrade"`
-}
-
-// LeaseChannelMetadataUpgrade defines model for LeaseChannelMetadata.Upgrade.
-type LeaseChannelMetadataUpgrade string
-
 // LeaseListResponse defines model for LeaseListResponse.
 type LeaseListResponse struct {
 	Data       []Lease        `json:"data"`
@@ -3301,6 +3293,14 @@ type RunnerAuthMode string
 
 // RunnerState defines model for Runner.State.
 type RunnerState string
+
+// RunnerChannelMetadata defines model for RunnerChannelMetadata.
+type RunnerChannelMetadata struct {
+	Upgrade RunnerChannelMetadataUpgrade `json:"upgrade"`
+}
+
+// RunnerChannelMetadataUpgrade defines model for RunnerChannelMetadata.Upgrade.
+type RunnerChannelMetadataUpgrade string
 
 // RunnerHeartbeat defines model for RunnerHeartbeat.
 type RunnerHeartbeat struct {
@@ -5627,9 +5627,6 @@ type ClientInterface interface {
 
 	UpdateLease(ctx context.Context, leaseId string, body UpdateLeaseJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ConnectLeaseSessionChannel request
-	ConnectLeaseSessionChannel(ctx context.Context, leaseId string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// ListPolicies request
 	ListPolicies(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -5690,6 +5687,9 @@ type ClientInterface interface {
 	UpdateRunnerWithBody(ctx context.Context, runnerId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	UpdateRunner(ctx context.Context, runnerId string, body UpdateRunnerJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ConnectRunnerChannel request
+	ConnectRunnerChannel(ctx context.Context, runnerId string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ReadRunnerHeartbeat request
 	ReadRunnerHeartbeat(ctx context.Context, runnerId string, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -6582,18 +6582,6 @@ func (c *APIClient) UpdateLease(ctx context.Context, leaseId string, body Update
 	return c.Client.Do(req)
 }
 
-func (c *APIClient) ConnectLeaseSessionChannel(ctx context.Context, leaseId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewConnectLeaseSessionChannelRequest(c.Server, leaseId)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
 func (c *APIClient) ListPolicies(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListPoliciesRequest(c.Server)
 	if err != nil {
@@ -6848,6 +6836,18 @@ func (c *APIClient) UpdateRunnerWithBody(ctx context.Context, runnerId string, c
 
 func (c *APIClient) UpdateRunner(ctx context.Context, runnerId string, body UpdateRunnerJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateRunnerRequest(c.Server, runnerId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *APIClient) ConnectRunnerChannel(ctx context.Context, runnerId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewConnectRunnerChannelRequest(c.Server, runnerId)
 	if err != nil {
 		return nil, err
 	}
@@ -9906,40 +9906,6 @@ func NewUpdateLeaseRequestWithBody(server string, leaseId string, contentType st
 	return req, nil
 }
 
-// NewConnectLeaseSessionChannelRequest generates requests for ConnectLeaseSessionChannel
-func NewConnectLeaseSessionChannelRequest(server string, leaseId string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "leaseId", leaseId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/leases/%s/channel", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
 // NewListPoliciesRequest generates requests for ListPolicies
 func NewListPoliciesRequest(server string) (*http.Request, error) {
 	var err error
@@ -10666,6 +10632,40 @@ func NewUpdateRunnerRequestWithBody(server string, runnerId string, contentType 
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewConnectRunnerChannelRequest generates requests for ConnectRunnerChannel
+func NewConnectRunnerChannelRequest(server string, runnerId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "runnerId", runnerId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/runners/%s/channel", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -13379,9 +13379,6 @@ type ClientWithResponsesInterface interface {
 
 	UpdateLeaseWithResponse(ctx context.Context, leaseId string, body UpdateLeaseJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateLeaseResponse, error)
 
-	// ConnectLeaseSessionChannelWithResponse request
-	ConnectLeaseSessionChannelWithResponse(ctx context.Context, leaseId string, reqEditors ...RequestEditorFn) (*ConnectLeaseSessionChannelResponse, error)
-
 	// ListPoliciesWithResponse request
 	ListPoliciesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListPoliciesResponse, error)
 
@@ -13442,6 +13439,9 @@ type ClientWithResponsesInterface interface {
 	UpdateRunnerWithBodyWithResponse(ctx context.Context, runnerId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateRunnerResponse, error)
 
 	UpdateRunnerWithResponse(ctx context.Context, runnerId string, body UpdateRunnerJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateRunnerResponse, error)
+
+	// ConnectRunnerChannelWithResponse request
+	ConnectRunnerChannelWithResponse(ctx context.Context, runnerId string, reqEditors ...RequestEditorFn) (*ConnectRunnerChannelResponse, error)
 
 	// ReadRunnerHeartbeatWithResponse request
 	ReadRunnerHeartbeatWithResponse(ctx context.Context, runnerId string, reqEditors ...RequestEditorFn) (*ReadRunnerHeartbeatResponse, error)
@@ -15112,42 +15112,6 @@ func (r UpdateLeaseResponse) ContentType() string {
 	return ""
 }
 
-type ConnectLeaseSessionChannelResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *LeaseChannelMetadata
-	JSON400      *GeneratedErrorResponse
-	JSON401      *GeneratedErrorResponse
-	JSON403      *GeneratedErrorResponse
-	JSON404      *GeneratedErrorResponse
-	JSON409      *GeneratedErrorResponse
-	JSON426      *GeneratedErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r ConnectLeaseSessionChannelResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ConnectLeaseSessionChannelResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ConnectLeaseSessionChannelResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
 type ListPoliciesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -15688,6 +15652,40 @@ func (r UpdateRunnerResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r UpdateRunnerResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ConnectRunnerChannelResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RunnerChannelMetadata
+	JSON401      *GeneratedErrorResponse
+	JSON403      *GeneratedErrorResponse
+	JSON404      *GeneratedErrorResponse
+	JSON426      *GeneratedErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r ConnectRunnerChannelResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ConnectRunnerChannelResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ConnectRunnerChannelResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -17550,15 +17548,6 @@ func (c *ClientWithResponses) UpdateLeaseWithResponse(ctx context.Context, lease
 	return ParseUpdateLeaseResponse(rsp)
 }
 
-// ConnectLeaseSessionChannelWithResponse request returning *ConnectLeaseSessionChannelResponse
-func (c *ClientWithResponses) ConnectLeaseSessionChannelWithResponse(ctx context.Context, leaseId string, reqEditors ...RequestEditorFn) (*ConnectLeaseSessionChannelResponse, error) {
-	rsp, err := c.ConnectLeaseSessionChannel(ctx, leaseId, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseConnectLeaseSessionChannelResponse(rsp)
-}
-
 // ListPoliciesWithResponse request returning *ListPoliciesResponse
 func (c *ClientWithResponses) ListPoliciesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListPoliciesResponse, error) {
 	rsp, err := c.ListPolicies(ctx, reqEditors...)
@@ -17750,6 +17739,15 @@ func (c *ClientWithResponses) UpdateRunnerWithResponse(ctx context.Context, runn
 		return nil, err
 	}
 	return ParseUpdateRunnerResponse(rsp)
+}
+
+// ConnectRunnerChannelWithResponse request returning *ConnectRunnerChannelResponse
+func (c *ClientWithResponses) ConnectRunnerChannelWithResponse(ctx context.Context, runnerId string, reqEditors ...RequestEditorFn) (*ConnectRunnerChannelResponse, error) {
+	rsp, err := c.ConnectRunnerChannel(ctx, runnerId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseConnectRunnerChannelResponse(rsp)
 }
 
 // ReadRunnerHeartbeatWithResponse request returning *ReadRunnerHeartbeatResponse
@@ -20222,74 +20220,6 @@ func ParseUpdateLeaseResponse(rsp *http.Response) (*UpdateLeaseResponse, error) 
 	return response, nil
 }
 
-// ParseConnectLeaseSessionChannelResponse parses an HTTP response from a ConnectLeaseSessionChannelWithResponse call
-func ParseConnectLeaseSessionChannelResponse(rsp *http.Response) (*ConnectLeaseSessionChannelResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ConnectLeaseSessionChannelResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest LeaseChannelMetadata
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest GeneratedErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest GeneratedErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest GeneratedErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest GeneratedErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
-		var dest GeneratedErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON409 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 426:
-		var dest GeneratedErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON426 = &dest
-
-	}
-
-	return response, nil
-}
-
 // ParseListPoliciesResponse parses an HTTP response from a ListPoliciesWithResponse call
 func ParseListPoliciesResponse(rsp *http.Response) (*ListPoliciesResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -20978,6 +20908,60 @@ func ParseUpdateRunnerResponse(rsp *http.Response) (*UpdateRunnerResponse, error
 			return nil, err
 		}
 		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseConnectRunnerChannelResponse parses an HTTP response from a ConnectRunnerChannelWithResponse call
+func ParseConnectRunnerChannelResponse(rsp *http.Response) (*ConnectRunnerChannelResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ConnectRunnerChannelResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RunnerChannelMetadata
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 426:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON426 = &dest
 
 	}
 

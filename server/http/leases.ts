@@ -1,7 +1,5 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
-import type { Context } from 'hono'
 import { isRunnerOidcAuth, requireAuth } from '../auth/session'
-import type { Env } from '../env'
 import { errorResponse } from '../errors'
 import {
   AuthenticatedOperation,
@@ -59,12 +57,6 @@ const UpdateLeaseSchema = z
   })
   .strict()
   .openapi('UpdateLeaseRequest')
-
-const LeaseChannelMetadataSchema = z
-  .object({
-    upgrade: z.literal('websocket').openapi({ example: 'websocket' }),
-  })
-  .openapi('LeaseChannelMetadata')
 
 const LeaseParamsSchema = z.object({
   leaseId: z.string().openapi({ param: { name: 'leaseId', in: 'path' }, example: 'lease_abc123' }),
@@ -186,107 +178,6 @@ const updateLeaseRoute = createRoute({
     409: { description: 'Conflict', content: { 'application/json': { schema: ErrorResponseSchema } } },
   },
 })
-
-const leaseChannelRoute = createRoute({
-  method: 'get',
-  path: '/{leaseId}/channel',
-  operationId: 'connectLeaseSessionChannel',
-  tags: ['Leases'],
-  summary: 'Open a claimed runner session WebSocket channel',
-  ...AuthenticatedOperation,
-  request: { params: LeaseParamsSchema },
-  responses: {
-    101: { description: 'Runner session channel accepted as a WebSocket upgrade' },
-    200: {
-      description: 'Runner session channel metadata for OpenAPI clients',
-      content: { 'application/json': { schema: LeaseChannelMetadataSchema } },
-    },
-    400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
-    401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
-    403: { description: 'Forbidden', content: { 'application/json': { schema: ErrorResponseSchema } } },
-    404: { description: 'Lease not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
-    409: { description: 'Conflict', content: { 'application/json': { schema: ErrorResponseSchema } } },
-    426: {
-      description: 'WebSocket upgrade required',
-      content: { 'application/json': { schema: ErrorResponseSchema } },
-    },
-  },
-})
-
-// The channel route owns the WebSocket upgrade: it authorizes the runner, has
-// the lease repo prepare the channel + session transition, then forwards the
-// upgrade to the per-session Durable Object, rolling back the DB state if the
-// upgrade fails. Response objects (the 101 upgrade) never enter the usecase.
-async function connectLeaseSessionChannel(c: Context<DepsEnv>) {
-  if (c.req.header('upgrade')?.toLowerCase() !== 'websocket') {
-    return errorResponse(c, 426, 'conflict', 'Runner session channel requires a WebSocket upgrade')
-  }
-  const leaseId = c.req.param('leaseId')
-  if (!leaseId) {
-    return errorResponse(c, 400, 'validation_error', 'Lease id is required')
-  }
-  const deps = c.get('deps')
-  const auth = await requireAuth(c)
-  if (auth instanceof Response) {
-    return auth
-  }
-  const lease = await deps.leases.find(auth.project.id, leaseId)
-  if (!lease) {
-    return errorResponse(c, 404, 'not_found', 'Lease not found')
-  }
-  const runner = await deps.runners.find(auth.project.id, lease.runnerId)
-  if (!runner) {
-    return errorResponse(c, 404, 'not_found', 'Runner not found')
-  }
-  if (!runnerOperationAuthorized(c.env, auth, runner)) {
-    return runnerForbidden(c)
-  }
-  const timestamp = new Date().toISOString()
-  const prepared = await deps.leases.prepareSessionChannel(
-    { organizationId: auth.organization.id, projectId: auth.project.id },
-    leaseId,
-    timestamp,
-  )
-  if (!prepared.ok) {
-    return errorResponse(c, prepared.status, prepared.status === 404 ? 'not_found' : 'conflict', prepared.message)
-  }
-  const response = await upgradeRunnerSessionChannel(
-    c.env,
-    c.req.raw,
-    leaseId,
-    prepared,
-    auth.organization.id,
-    auth.project.id,
-  )
-  if (response.status === 101) {
-    return response
-  }
-  await deps.leases.rollbackSessionChannel(auth.project.id, prepared.channelId, prepared.sessionId, timestamp)
-  return response
-}
-
-// Forwards the WebSocket upgrade to the per-session runner channel Durable
-// Object, carrying the prepared channel identity as query params.
-async function upgradeRunnerSessionChannel(
-  env: Env,
-  request: Request,
-  leaseId: string,
-  prepared: { channelId: string; sessionId: string; workItemId: string; runnerId: string },
-  organizationId: string,
-  projectId: string,
-) {
-  const id = env.SESSION.idFromName(prepared.sessionId)
-  const stub = env.SESSION.get(id)
-  const url = new URL('https://session-object/connect')
-  url.searchParams.set('channelId', prepared.channelId)
-  url.searchParams.set('sessionId', prepared.sessionId)
-  url.searchParams.set('workItemId', prepared.workItemId)
-  url.searchParams.set('leaseId', leaseId)
-  url.searchParams.set('runnerId', prepared.runnerId)
-  url.searchParams.set('organizationId', organizationId)
-  url.searchParams.set('projectId', projectId)
-  return stub.fetch(new Request(url, request))
-}
 
 // Registration order is load-bearing: requireAuth is the per-route auth wall and
 // static segments register before parameter segments. The assembler in app.ts
@@ -440,5 +331,4 @@ export function registerLeaseRoutes(routes: LeaseRoutes) {
       }
       return c.json(serializeLease(updated), 200)
     })
-    .openapi(leaseChannelRoute, connectLeaseSessionChannel)
 }

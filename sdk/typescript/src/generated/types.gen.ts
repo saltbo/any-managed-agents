@@ -717,6 +717,10 @@ export type PutRunnerHeartbeatRequest = {
     };
 };
 
+export type RunnerChannelMetadata = {
+    upgrade: 'websocket';
+};
+
 export type WorkItemListResponse = {
     data: Array<WorkItem>;
     pagination: ListPagination;
@@ -785,10 +789,6 @@ export type UpdateLeaseRequest = {
     error?: {
         [key: string]: unknown;
     };
-};
-
-export type LeaseChannelMetadata = {
-    upgrade: 'websocket';
 };
 
 export type PolicyListResponse = {
@@ -2898,6 +2898,45 @@ export type PutRunnerHeartbeatResponses = {
 
 export type PutRunnerHeartbeatResponse = PutRunnerHeartbeatResponses[keyof PutRunnerHeartbeatResponses];
 
+export type ConnectRunnerChannelData = {
+    body?: never;
+    path: {
+        runnerId: string;
+    };
+    query?: never;
+    url: '/api/v1/runners/{runnerId}/channel';
+};
+
+export type ConnectRunnerChannelErrors = {
+    /**
+     * Authentication required
+     */
+    401: ErrorResponse;
+    /**
+     * Forbidden
+     */
+    403: ErrorResponse;
+    /**
+     * Runner not found
+     */
+    404: ErrorResponse;
+    /**
+     * WebSocket upgrade required
+     */
+    426: ErrorResponse;
+};
+
+export type ConnectRunnerChannelError = ConnectRunnerChannelErrors[keyof ConnectRunnerChannelErrors];
+
+export type ConnectRunnerChannelResponses = {
+    /**
+     * Runner relay channel metadata for OpenAPI clients
+     */
+    200: RunnerChannelMetadata;
+};
+
+export type ConnectRunnerChannelResponse = ConnectRunnerChannelResponses[keyof ConnectRunnerChannelResponses];
+
 export type ListWorkItemsData = {
     body?: never;
     path?: never;
@@ -3127,53 +3166,6 @@ export type UpdateLeaseResponses = {
 };
 
 export type UpdateLeaseResponse = UpdateLeaseResponses[keyof UpdateLeaseResponses];
-
-export type ConnectLeaseSessionChannelData = {
-    body?: never;
-    path: {
-        leaseId: string;
-    };
-    query?: never;
-    url: '/api/v1/leases/{leaseId}/channel';
-};
-
-export type ConnectLeaseSessionChannelErrors = {
-    /**
-     * Validation error
-     */
-    400: ErrorResponse;
-    /**
-     * Authentication required
-     */
-    401: ErrorResponse;
-    /**
-     * Forbidden
-     */
-    403: ErrorResponse;
-    /**
-     * Lease not found
-     */
-    404: ErrorResponse;
-    /**
-     * Conflict
-     */
-    409: ErrorResponse;
-    /**
-     * WebSocket upgrade required
-     */
-    426: ErrorResponse;
-};
-
-export type ConnectLeaseSessionChannelError = ConnectLeaseSessionChannelErrors[keyof ConnectLeaseSessionChannelErrors];
-
-export type ConnectLeaseSessionChannelResponses = {
-    /**
-     * Runner session channel metadata for OpenAPI clients
-     */
-    200: LeaseChannelMetadata;
-};
-
-export type ConnectLeaseSessionChannelResponse = ConnectLeaseSessionChannelResponses[keyof ConnectLeaseSessionChannelResponses];
 
 export type ListPoliciesData = {
     body?: never;

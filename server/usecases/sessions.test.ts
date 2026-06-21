@@ -135,6 +135,7 @@ function fakeDeps(
     listApprovals: async () => [],
     findApproval: async () => null,
     activeSessionLeaseForRunner: async () => null,
+    resolveRelayDoName: async (sessionId) => sessionId,
     ...overrides.sessions,
   }
   const runtime: Required<RuntimeSessionOverrides> = {

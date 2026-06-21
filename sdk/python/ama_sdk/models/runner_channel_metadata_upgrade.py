@@ -1,6 +1,6 @@
 from enum import Enum
 
-class LeaseChannelMetadataUpgrade(str, Enum):
+class RunnerChannelMetadataUpgrade(str, Enum):
     WEBSOCKET = "websocket"
 
     def __str__(self) -> str:
