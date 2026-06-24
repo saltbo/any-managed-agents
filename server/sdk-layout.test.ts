@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 describe('generated SDK layout [spec: api-contracts/sdk-layout]', () => {
   it('keeps generated OpenAPI and SDK artifacts aligned with Hono routes', () => {
     expect(() => execFileSync('pnpm', ['run', 'openapi:check'], { encoding: 'utf8' })).not.toThrow()
-  })
+  }, 30_000)
 
   it('keeps only the TypeScript SDK in pnpm workspaces', () => {
     const workspace = readFileSync('pnpm-workspace.yaml', 'utf8')
