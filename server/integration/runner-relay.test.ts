@@ -9,7 +9,7 @@
 //
 // Tests:
 // 1. Fan-out multiplexing: runner.event sent by the runner channel fans out to
-//    the browser socket watching that session.
+//    the browser socket watching that session and persists for later backfill.
 // 2. Reconnect guard: a second runner channel open (reconnect) supersedes the
 //    first. The first socket's close handler must NOT tear down the newly
 //    installed socket (the DO guards teardown by socket identity). Proved by
@@ -225,6 +225,46 @@ describe('[CF] per-runner relay end-to-end', () => {
     expect((live.event as { type: string }).type).toBe('message_end')
 
     runnerCh.ws.close()
+    browser.ws.close()
+  })
+
+  it('backfills runner relay history after the runner channel disconnects [spec: runners/relay-history]', async () => {
+    const authorization = await signIn()
+    const environment = await createSelfHostedEnvironment(authorization)
+    const agent = await createAgent(authorization)
+    const runner = await registerRunner(authorization, environment.id)
+
+    const session = await createCliRelaySession(authorization, agent.id, environment.id)
+    await heartbeatRunner(authorization, runner.id)
+    await claimSessionLease(authorization, session.id, runner.id)
+
+    const runnerCh = await openRunnerChannel(authorization, runner.id)
+    await runnerCh.waitForFrame((f) => f.type === 'runner.channel.accepted', 'runner.channel.accepted')
+    runnerCh.ws.send(
+      JSON.stringify({
+        type: 'runner.event',
+        sessionId: session.id,
+        eventId: 'history-1',
+        event: { type: 'message_end', payload: { role: 'assistant', text: 'persisted relay history' }, metadata: {} },
+        relaySequence: 1,
+        relayId: 'event_history',
+        relayCreatedAt: '2026-06-20T00:00:00.000Z',
+      }),
+    )
+    await runnerCh.waitForFrame((f) => f.type === 'runner.event.accepted' && f.eventId === 'history-1', 'event ack')
+    runnerCh.ws.close()
+
+    const browser = await openBrowserSocket(authorization, session.id)
+    browser.ws.send(JSON.stringify({ type: 'backfill', requestId: 'history', order: 'asc', limit: 100 }))
+    const backfill = await browser.waitForFrame((f) => f.type === 'backfill', 'history backfill')
+    expect(backfill.events).toEqual([
+      expect.objectContaining({
+        id: 'event_history',
+        sequence: 1,
+        type: 'message_end',
+      }),
+    ])
+
     browser.ws.close()
   })
 

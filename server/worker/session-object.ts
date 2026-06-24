@@ -14,6 +14,7 @@ import type { SessionEventQuery } from '../usecases/ports'
 import { decideRelayPermissionRequest } from '../usecases/runtime/runner-channel-ingest'
 import {
   appendCanonicalEventToSql,
+  appendRelayedEventToSql,
   countSessionEvents,
   ensureSessionEventSchema,
   exportSessionEventsJsonl,
@@ -138,6 +139,10 @@ export class SessionObject implements DurableObject {
   // (the only store) and canonicalise its log in memory — the cloud keeps no copy.
   // Runner offline ⇒ runnerUnavailable, so the event-store router falls back to D1.
   private async relayQuery(body: { sessionId: string; query: SessionEventQuery }): Promise<Response> {
+    const stored = queryEventsFromSql(this.eventSql(), body.sessionId, body.query)
+    if (stored.rows.length > 0 || stored.hasMore) {
+      return Response.json(stored)
+    }
     const scope = this.channelScope()
     if (!this.socket || !scope || this.socket.readyState !== WebSocket.OPEN) {
       return Response.json({ rows: [], hasMore: false, runnerUnavailable: true })
@@ -389,7 +394,8 @@ export class SessionObject implements DurableObject {
         thread = newRelayThreadState()
         this.relayThreads.set(sessionId, thread)
       }
-      const row = stepRelayEvent(
+      const row = appendRelayedEventToSql(
+        this.eventSql(),
         {
           id: relayId,
           sequence: relaySequence,

@@ -56,6 +56,13 @@ Feature: Runners
     Then AMA queues session work without creating a Cloudflare Sandbox
     And the session stays pending with a waiting-for-runner reason until a runner claims it
 
+  @runners/relay-history @api
+  Scenario: Keep self-hosted runner session events readable after the live channel ends
+    Given a self-hosted runner emits canonical session events over its relay channel
+    When the runner channel disconnects and a browser later requests session backfill
+    Then AMA returns the stored session events from its control plane
+    And the browser does not depend on the runner being online to inspect completed history
+
   @runners/work-items @api
   Scenario: List and read queued session work with redacted payload secrets
     Given a self-hosted session has queued work

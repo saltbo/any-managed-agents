@@ -292,6 +292,34 @@ export function stepRelayEvent(raw: RelayedRunnerEvent, scope: SessionEventScope
   }
 }
 
+export function appendRelayedEventToSql(
+  sql: SqlStorage,
+  raw: RelayedRunnerEvent,
+  scope: SessionEventScope,
+  state: RelayThreadState,
+): EventRow {
+  const row = stepRelayEvent(raw, scope, state)
+  sql.exec(
+    `INSERT OR IGNORE INTO session_events
+      (id, organization_id, project_id, session_id, sequence, type, visibility, role, parent_event_id, correlation_id, payload, metadata, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    row.id,
+    row.organization_id,
+    row.project_id,
+    row.session_id,
+    row.sequence,
+    row.type,
+    row.visibility,
+    row.role,
+    row.parent_event_id,
+    row.correlation_id,
+    row.payload,
+    row.metadata,
+    row.created_at,
+  )
+  return row
+}
+
 export function queryRelayedEvents(
   rawEvents: RelayedRunnerEvent[],
   scope: SessionEventScope,
