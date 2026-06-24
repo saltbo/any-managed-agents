@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 )
 
 func TestRunOnceDispatchesCopilotRuntimeThroughAdapter(t *testing.T) {
+	workDir := t.TempDir()
 	// Copilot is a CLI relay runtime: events flow over the per-runner hub channel,
 	// not a per-lease channel. Seed the hub channel so the hub connects immediately.
 	hubChannel := newFakeRunnerSessionChannel(ama.JSON{"type": "runner.channel.accepted"})
@@ -27,9 +29,10 @@ func TestRunOnceDispatchesCopilotRuntimeThroughAdapter(t *testing.T) {
 	}
 	daemon := testDaemon(client, &fakeAdapter{})
 	daemon.RuntimeAdapter = runtimeAdapter
+	daemon.Config.WorkDir = workDir
 	done := make(chan error, 1)
 	go func() { done <- daemon.RunOnce(context.Background()) }()
-	// Wait for at least runner.session.started to be relayed over the hub channel.
+	// Wait for at least one event to be relayed over the hub channel.
 	waitForRunnerWriteCount(t, hubChannel, 1, done)
 	if err := <-done; err != nil {
 		t.Fatalf("expected copilot run success, got %v", err)
@@ -51,7 +54,6 @@ func TestRunOnceDispatchesCopilotRuntimeThroughAdapter(t *testing.T) {
 	}
 	gotTypes := hubChannel.writtenEvents()
 	for _, want := range []string{
-		"runner.session.started",
 		"runtime.metadata",
 		"message_end",
 		"tool_execution_start",
@@ -62,6 +64,16 @@ func TestRunOnceDispatchesCopilotRuntimeThroughAdapter(t *testing.T) {
 		if !containsString(gotTypes, want) {
 			t.Fatalf("expected channel event %s in %v", want, gotTypes)
 		}
+	}
+	storedEvents, err := readSessionEventLog(sessionEventLogPath(filepath.Join(workDir, "sessions", "session_1")))
+	if err != nil {
+		t.Fatalf("expected stored session events, got %v", err)
+	}
+	serializedStoredEvents := mustJSON(t, storedEvents)
+	if !strings.Contains(serializedStoredEvents, "runner.session.started") ||
+		!strings.Contains(serializedStoredEvents, `"role":"user"`) ||
+		!strings.Contains(serializedStoredEvents, `"text":"copilot prompt"`) {
+		t.Fatalf("expected initial prompt to be durable in runner log, got %s", serializedStoredEvents)
 	}
 	for _, message := range hubChannel.writtenMessages() {
 		if message["type"] != "runner.event" || message["eventId"] == "" {

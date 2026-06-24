@@ -48,14 +48,25 @@ type sessionCommandRouter struct {
 	mu                 sync.Mutex
 	sendPrompt         func(message string) error
 	pendingPrompts     []string
+	recordPrompt       func(message string)
 	sendStop           func(reason string) error
 	pendingStop        *string
 	sendPermission     func(permissionId string, allowed bool, reason string) error
 	pendingPermissions []RunnerSessionCommand
 }
 
-func newSessionCommandRouter(sessionID string) *sessionCommandRouter {
-	return &sessionCommandRouter{sessionID: sessionID}
+func newSessionCommandRouter(sessionID string, recordPrompt ...func(message string)) *sessionCommandRouter {
+	router := &sessionCommandRouter{sessionID: sessionID}
+	if len(recordPrompt) > 0 {
+		router.recordPrompt = recordPrompt[0]
+	}
+	return router
+}
+
+func (r *sessionCommandRouter) recordDeliveredPrompt(message string) {
+	if r.recordPrompt != nil {
+		r.recordPrompt(message)
+	}
 }
 
 func (r *sessionCommandRouter) deliverPrompt(message string) {
@@ -69,7 +80,9 @@ func (r *sessionCommandRouter) deliverPrompt(message string) {
 	r.mu.Unlock()
 	if err := send(message); err != nil {
 		slog.Warn("runner failed to forward prompt to live runtime", "sessionId", r.sessionID, "error", err)
+		return
 	}
+	r.recordDeliveredPrompt(message)
 }
 
 func (r *sessionCommandRouter) deliverStop(reason string) {
@@ -111,7 +124,9 @@ func (r *sessionCommandRouter) registerPromptSender(send func(message string) er
 	for _, message := range pending {
 		if err := send(message); err != nil {
 			slog.Warn("runner failed to forward buffered prompt to live runtime", "sessionId", r.sessionID, "error", err)
+			continue
 		}
+		r.recordDeliveredPrompt(message)
 	}
 }
 

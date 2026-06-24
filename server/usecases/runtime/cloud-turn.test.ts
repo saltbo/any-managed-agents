@@ -24,6 +24,7 @@ const {
   enqueueCloudTurnMock,
   cloudTurnsRunInlineMock,
   recordAuditMock,
+  appendCanonicalEventMock,
   findSessionMock,
   sessionEventStreamMock,
   updateSessionWhenStateMock,
@@ -36,6 +37,7 @@ const {
   enqueueCloudTurnMock: vi.fn(),
   cloudTurnsRunInlineMock: vi.fn(() => false),
   recordAuditMock: vi.fn(),
+  appendCanonicalEventMock: vi.fn(async () => 'event_test'),
   findSessionMock: vi.fn(),
   sessionEventStreamMock: vi.fn(() => [] as unknown[]),
   updateSessionWhenStateMock: vi.fn<
@@ -73,7 +75,7 @@ const deps: CloudTurnDeps = {
   sessionOrchestration: store as never,
   sessionEventStore: {
     eventStream: sessionEventStreamMock,
-    appendCanonicalEvent: vi.fn(async () => 'event_test'),
+    appendCanonicalEvent: appendCanonicalEventMock,
     queryEvents: vi.fn(),
     archive: vi.fn(),
   } as never,
@@ -128,6 +130,7 @@ describe('consumeCloudTurnMessage — cloud-command turn path [spec: runtime/clo
     runSessionTurnMock.mockReset()
     enqueueCloudTurnMock.mockReset()
     recordAuditMock.mockReset()
+    appendCanonicalEventMock.mockClear()
     updateSessionWhenStateMock.mockClear()
     updateSessionWhenStateMock.mockReturnValue(true)
     sessionEventStreamMock.mockReturnValue([])
@@ -199,6 +202,36 @@ describe('consumeCloudTurnMessage — cloud-command turn path [spec: runtime/clo
 
     const input = runSessionTurnMock.mock.calls[0]?.[0]
     expect(input?.model).toBe('@cf/override')
+  })
+
+  it('records the user prompt as a canonical transcript event before running a prompt turn', async () => {
+    runSessionTurnMock.mockResolvedValue({ status: 'idle' })
+    findSessionMock.mockResolvedValue(fakeSession({ state: 'idle' }))
+
+    await consumeCloudTurnMessage(deps, {
+      type: 'session.turn',
+      sessionId: 'session_1',
+      organizationId: 'org_1',
+      projectId: 'proj_1',
+      prompt: 'continue the task',
+      auditAction: 'session.command',
+    })
+
+    expect(appendCanonicalEventMock).toHaveBeenCalledWith(
+      { organizationId: 'org_1', projectId: 'proj_1', sessionId: 'session_1' },
+      expect.objectContaining({
+        type: 'message_end',
+        role: 'user',
+        payload: expect.objectContaining({
+          message: expect.objectContaining({
+            role: 'user',
+            content: [expect.objectContaining({ type: 'text', text: 'continue the task' })],
+          }),
+        }),
+        metadata: expect.objectContaining({ source: 'user-prompt', auditAction: 'session.command' }),
+      }),
+    )
+    expect(runSessionTurnMock).toHaveBeenCalledWith(expect.objectContaining({ prompt: 'continue the task' }))
   })
 
   it('parks the session idle with a policy-denied reason when the turn is policy-denied', async () => {
@@ -307,7 +340,7 @@ describe('startSessionRuntimeForRow — startup partial-failure (H5 FIX 1)', () 
     sessionOrchestration: store as never,
     sessionEventStore: {
       eventStream: sessionEventStreamMock,
-      appendCanonicalEvent: vi.fn(async () => 'event_test'),
+      appendCanonicalEvent: appendCanonicalEventMock,
       queryEvents: vi.fn(),
       archive: vi.fn(),
     } as never,

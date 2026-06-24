@@ -417,13 +417,13 @@ func TestRunOnceCancelsSessionChannelWhenContextIsCancelled(t *testing.T) {
 	daemon := testDaemon(client, &fakeAdapter{})
 	// AMA runs via the bridge runtime adapter; block it until the run context is
 	// cancelled so this exercises the channel cancellation path.
-	daemon.RuntimeAdapter = &fakeRuntimeAdapter{waitForCancel: true}
+	runtimeAdapter := &fakeRuntimeAdapter{waitForCancel: true}
+	daemon.RuntimeAdapter = runtimeAdapter
 	done := make(chan error, 1)
 	go func() {
 		done <- daemon.RunOnce(ctx)
 	}()
-	// Wait for runner.session.started to be relayed over the hub channel.
-	waitForRunnerWriteCount(t, hubChannel, 1, done)
+	waitForRuntimeRequest(t, runtimeAdapter, done)
 	cancel()
 	select {
 	case err := <-done:
@@ -542,6 +542,8 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 		t.Fatalf("expected safe codex environment, got %s", serializedEvents)
 	}
 	if !strings.Contains(serializedEvents, "prompt:build the feature") ||
+		!strings.Contains(serializedEvents, `"role":"user"`) ||
+		!strings.Contains(serializedEvents, `"text":"build the feature"`) ||
 		!strings.Contains(serializedEvents, "provider_codex") ||
 		!strings.Contains(serializedEvents, "gpt-5.3-codex") ||
 		!strings.Contains(serializedEvents, "diagnostic line") {
@@ -626,9 +628,13 @@ func TestRunOnceLaunchesClaudeCodeRuntimeAndCompletesLease(t *testing.T) {
 		t.Fatalf("expected completed lease update, got %#v", client.updates)
 	}
 	got := hubChannel.writtenEvents()
-	want := []string{"runner.session.started", "message_end"}
+	want := []string{"runner.session.started", "message_end", "message_end"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("expected channel events %v, got %v", want, got)
+	}
+	serializedEvents := mustJSON(t, hubChannel.writtenMessages())
+	if !strings.Contains(serializedEvents, `"role":"user"`) || !strings.Contains(serializedEvents, `"text":"Run Claude Code"`) {
+		t.Fatalf("expected initial prompt to be recorded as a user event, got %s", serializedEvents)
 	}
 }
 
@@ -679,6 +685,24 @@ func waitForRunnerWriteCount(t *testing.T, channel *fakeRunnerSessionChannel, co
 			t.Fatalf("run finished before write %d: %v", count, err)
 		case <-deadline:
 			t.Fatalf("timed out waiting for write %d", count)
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+}
+
+func waitForRuntimeRequest(t *testing.T, adapter *fakeRuntimeAdapter, done <-chan error) {
+	t.Helper()
+	deadline := time.After(time.Second)
+	for {
+		if adapter.request.SessionID != "" {
+			return
+		}
+		select {
+		case err := <-done:
+			t.Fatalf("run finished before runtime request: %v", err)
+		case <-deadline:
+			t.Fatal("timed out waiting for runtime request")
 		default:
 			time.Sleep(time.Millisecond)
 		}

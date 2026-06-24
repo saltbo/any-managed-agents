@@ -804,10 +804,20 @@ func (d *RunnerDaemon) runRelaySessionStart(ctx context.Context, lease *Lease, p
 		}
 		return err
 	}
+	// The relay sink stores then fans each event live, fire-and-forget — the event
+	// is durable on disk so a momentary disconnect drops only the live fan.
+	relay := func(relayCtx context.Context, eventType string, eventPayload ama.JSON, stamp *relayStamp) error {
+		hub.relayEvent(relayCtx, payload.SessionID, eventType, eventPayload, stamp)
+		return nil
+	}
 	// Register the live command router so the hub routes this session's prompts/
 	// stop/permission by sessionId; unregister on end. Backfill does not need
 	// registration (the hub reads the disk log), so history outlives the lease.
-	cmdRouter := newSessionCommandRouter(payload.SessionID)
+	cmdRouter := newSessionCommandRouter(payload.SessionID, func(message string) {
+		if err := d.relayStoredEvent(context.Background(), store, relay, "message_end", userPromptEventPayload(message)); err != nil {
+			slog.Warn("runner failed to record delivered prompt event", "sessionId", payload.SessionID, "error", err)
+		}
+	})
 	hub.register(payload.SessionID, cmdRouter)
 	defer hub.unregister(payload.SessionID)
 
@@ -827,17 +837,19 @@ func (d *RunnerDaemon) runRelaySessionStart(ctx context.Context, lease *Lease, p
 		return nil
 	}
 
-	// The relay sink stores then fans each event live, fire-and-forget — the event
-	// is durable on disk so a momentary disconnect drops only the live fan.
-	relay := func(relayCtx context.Context, eventType string, eventPayload ama.JSON, stamp *relayStamp) error {
-		hub.relayEvent(relayCtx, payload.SessionID, eventType, eventPayload, stamp)
-		return nil
-	}
 	if err := d.relayStoredEvent(leaseCtx, store, relay, "runner.session.started", d.sessionStartedPayload(payload)); err != nil {
 		if finishErr := d.finishFailed(context.Background(), lease, err, nil); finishErr != nil {
 			return finishErr
 		}
 		return err
+	}
+	if prompt := initialPrompt(payload); prompt != "" {
+		if err := d.relayStoredEvent(leaseCtx, store, relay, "message_end", userPromptEventPayload(prompt)); err != nil {
+			if finishErr := d.finishFailed(context.Background(), lease, err, nil); finishErr != nil {
+				return finishErr
+			}
+			return err
+		}
 	}
 
 	result, runErr, timedOut := d.runRuntimeAndRelay(leaseCtx, payload, store, cmdRouter, resumeTokens, relay)
@@ -864,6 +876,17 @@ func (d *RunnerDaemon) relayStoredEvent(ctx context.Context, store *sessionEvent
 		return err
 	}
 	return relay(ctx, eventType, payload, &relayStamp{sequence: stored.Sequence, id: stored.ID, createdAt: stored.CreatedAt})
+}
+
+func userPromptEventPayload(message string) ama.JSON {
+	return ama.JSON{
+		"message": ama.JSON{
+			"role": "user",
+			"content": []ama.JSON{
+				{"type": "text", "text": message},
+			},
+		},
+	}
 }
 
 // runRuntimeAndRelay prepares the workspace + runtime adapter and runs it, storing

@@ -25,6 +25,24 @@ export async function appendRuntimeEvent(
   )
 }
 
+export async function appendUserPromptEvent(
+  deps: { sessionEventStore: SessionEventStore },
+  values: { auth: AuthScope; sessionId: string; prompt: string; metadata?: Record<string, unknown> },
+) {
+  return appendRuntimeEvent(deps, {
+    auth: values.auth,
+    sessionId: values.sessionId,
+    event: {
+      type: 'message_end',
+      message: {
+        role: 'user',
+        content: [{ type: 'text', text: values.prompt }],
+      },
+    },
+    metadata: { source: 'user-prompt', ...(values.metadata ?? {}) },
+  })
+}
+
 export async function markInitialPromptFailed(
   deps: { sessionOrchestration: SessionOrchestrationStore; audit: AuditPort },
   auth: AuthScope,

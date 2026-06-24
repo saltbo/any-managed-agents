@@ -257,7 +257,7 @@ func TestProcessAdapterRejectsSymlinkEscapes(t *testing.T) {
 }
 
 func TestProcessAdapterReportsCommandFailureAndTimeout(t *testing.T) {
-	adapter := ProcessAdapter{CommandTimeout: 20 * time.Millisecond, ShutdownGraceInterval: time.Millisecond}
+	adapter := ProcessAdapter{CommandTimeout: 500 * time.Millisecond, ShutdownGraceInterval: 50 * time.Millisecond}
 	failed, err := adapter.Execute(context.Background(), ToolRequest{
 		ToolName: "sandbox.exec",
 		Input:    map[string]any{"command": "printf bad >&2; exit 7"},

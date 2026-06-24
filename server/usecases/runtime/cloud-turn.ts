@@ -52,7 +52,7 @@ import type {
   SessionRow,
 } from '../ports'
 import type { ToolApprovalGate } from './approval-gate'
-import { appendRuntimeEvent, loadRuntimeMessages, markInitialPromptFailed } from './events'
+import { appendRuntimeEvent, appendUserPromptEvent, loadRuntimeMessages, markInitialPromptFailed } from './events'
 import { mcpConnectorIds, resolveMcpSnapshot } from './provisioning'
 import { buildSessionTurnCallbacks, type SessionTurnCallbacks } from './turn-callbacks'
 
@@ -240,6 +240,14 @@ export async function executeCloudSessionTurn(
       agentSnapshot,
       modelConfig,
     )
+    if (work.prompt !== undefined) {
+      await appendUserPromptEvent(deps, {
+        auth,
+        sessionId: session.id,
+        prompt: work.prompt,
+        metadata: { auditAction },
+      })
+    }
     callbacks = buildSessionTurnCallbacks(deps, {
       auth,
       session,

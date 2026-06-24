@@ -47,6 +47,58 @@ func TestSessionCommandRouterDeliversPromptAfterSenderRegistered(t *testing.T) {
 	}
 }
 
+func TestSessionCommandRouterRecordsPromptAfterDelivery(t *testing.T) {
+	var recorded []string
+	router := newSessionCommandRouter("session_1", func(message string) {
+		recorded = append(recorded, message)
+	})
+
+	var received []string
+	router.registerPromptSender(func(message string) error {
+		received = append(received, message)
+		return nil
+	})
+	router.deliverPrompt("live prompt")
+
+	if len(received) != 1 || received[0] != "live prompt" {
+		t.Fatalf("expected prompt delivered, got %v", received)
+	}
+	if len(recorded) != 1 || recorded[0] != "live prompt" {
+		t.Fatalf("expected delivered prompt recorded, got %v", recorded)
+	}
+}
+
+func TestSessionCommandRouterRecordsBufferedPromptAfterDelivery(t *testing.T) {
+	var recorded []string
+	router := newSessionCommandRouter("session_1", func(message string) {
+		recorded = append(recorded, message)
+	})
+	router.deliverPrompt("buffered prompt")
+
+	router.registerPromptSender(func(message string) error {
+		return nil
+	})
+
+	if len(recorded) != 1 || recorded[0] != "buffered prompt" {
+		t.Fatalf("expected buffered prompt recorded after flush, got %v", recorded)
+	}
+}
+
+func TestSessionCommandRouterDoesNotRecordPromptWhenDeliveryFails(t *testing.T) {
+	var recorded []string
+	router := newSessionCommandRouter("session_1", func(message string) {
+		recorded = append(recorded, message)
+	})
+	router.registerPromptSender(func(message string) error {
+		return errors.New("send failed")
+	})
+	router.deliverPrompt("failed prompt")
+
+	if len(recorded) != 0 {
+		t.Fatalf("expected failed prompt not recorded, got %v", recorded)
+	}
+}
+
 func TestSessionCommandRouterBuffersStopBeforeSenderRegistered(t *testing.T) {
 	router := newSessionCommandRouter("session_1")
 	router.deliverStop("timeout")

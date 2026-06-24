@@ -1245,6 +1245,17 @@ describe('[CF] /api/v1/sessions', () => {
         expect.objectContaining({
           type: 'message_end',
           payload: expect.objectContaining({
+            message: expect.objectContaining({
+              role: 'user',
+              content: [
+                expect.objectContaining({ type: 'text', text: 'Research current Canadian banking bonus offers.' }),
+              ],
+            }),
+          }),
+        }),
+        expect.objectContaining({
+          type: 'message_end',
+          payload: expect.objectContaining({
             message: expect.objectContaining({ role: 'assistant' }),
           }),
         }),
