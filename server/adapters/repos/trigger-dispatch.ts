@@ -39,6 +39,8 @@ function dueTriggerFrom(row: TriggerRow): DueTrigger {
     runtime: RuntimeSchema.parse(row.runtime),
     promptTemplate: row.promptTemplate,
     resourceRefs: parseJson<Record<string, unknown>[]>(row.resourceRefs, []),
+    env: parseJson<Record<string, string>>(row.env, {}),
+    secretEnv: parseJson(row.secretEnv, [] as DueTrigger['secretEnv']),
     metadata: parseJson<Record<string, unknown>>(row.metadata, {}),
     nextDueAt: row.nextDueAt,
     intervalSeconds: row.intervalSeconds,

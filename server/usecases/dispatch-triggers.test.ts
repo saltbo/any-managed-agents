@@ -44,6 +44,8 @@ function dueTrigger(overrides: Partial<DueTrigger> = {}): DueTrigger {
     runtime: 'ama',
     promptTemplate: 'Run the analysis',
     resourceRefs: [],
+    env: {},
+    secretEnv: [],
     metadata: {},
     nextDueAt: '2026-01-01T00:00:00.000Z',
     intervalSeconds: 3600,
@@ -430,6 +432,26 @@ describe('[spec: triggers/dispatch] dispatchDueScheduledTriggers — environment
     await dispatchDueScheduledTriggers(deps)
     expect(dispatchedEnvironmentId).toBe('env_pinned')
   })
+
+  it('passes scheduled trigger env and secretEnv through to createSession', async () => {
+    const secretEnv = [{ name: 'AK_AGENT_KEY', credentialRef: { credentialId: 'cred_1', versionId: 'ver_1' } }]
+    const trigger = dueTrigger({
+      env: { AK_AGENT_ID: 'agent_1', AK_SESSION_ID: 'ak_session_1' },
+      secretEnv,
+    })
+    let capturedOptions: Record<string, unknown> | null = null
+    const deps = fakeDeps({
+      triggerDispatch: { dueTriggers: async () => [trigger] },
+      sessionRuntime: {
+        createSession: async (_deps, _auth, input) => {
+          capturedOptions = input.options as unknown as Record<string, unknown>
+          return { ok: true, value: sessionRecord() }
+        },
+      },
+    })
+    await dispatchDueScheduledTriggers(deps)
+    expect(capturedOptions).toMatchObject({ env: trigger.env, secretEnv })
+  })
 })
 
 describe('[spec: triggers/dispatch] dispatchDueScheduledTriggers — skipped (already claimed)', () => {
@@ -652,6 +674,32 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
     expect(result.state).toBe('session_created')
     expect(result.sessionId).toBe('sess_http')
     expect(initialPrompt).toBe('Handle T-123 from portal')
+  })
+
+  it('passes HTTP trigger env and secretEnv through to createSession', async () => {
+    const secretEnv = [{ name: 'AK_AGENT_KEY', credentialRef: { credentialId: 'cred_1', versionId: 'ver_1' } }]
+    const trigger = httpTrigger({
+      env: { AK_AGENT_ID: 'agent_1', AK_SESSION_ID: 'ak_session_1' },
+      secretEnv,
+    })
+    let capturedOptions: Record<string, unknown> | null = null
+    const deps = fakeDeps({
+      sessionRuntime: {
+        createSession: async (_deps, _auth, input) => {
+          capturedOptions = input.options as unknown as Record<string, unknown>
+          return { ok: true, value: sessionRecord({ id: 'sess_http' }) }
+        },
+      },
+    })
+    await dispatchHttpTrigger(deps, auth, {
+      trigger,
+      context: {
+        body: { ticket: { id: 'T-123' } },
+        query: { source: 'portal' },
+        headers: {},
+      },
+    })
+    expect(capturedOptions).toMatchObject({ env: trigger.env, secretEnv })
   })
 
   it('rejects a missing template variable before claiming a run', async () => {

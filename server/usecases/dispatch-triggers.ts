@@ -134,9 +134,6 @@ async function dispatchTrigger(deps: Deps, trigger: DueTrigger, heartbeatAt: str
       scheduledFor: run.scheduledFor,
       correlationId: run.correlationId,
     }
-    // The trigger's execution spec uses the v1 secret env shape; the scheduler
-    // path dispatches the session with empty runtime env (resource/prompt/
-    // runtime carry through while env is left to the agent/provider defaults).
     const result = await createSession(deps, auth, {
       agentId: trigger.agentId,
       // Null when the trigger is unpinned; createSession resolves an environment
@@ -148,6 +145,8 @@ async function dispatchTrigger(deps: Deps, trigger: DueTrigger, heartbeatAt: str
         resourceRefs: trigger.resourceRefs,
         runtime: trigger.runtime,
         initialPrompt: trigger.promptTemplate,
+        env: trigger.env,
+        secretEnv: trigger.secretEnv,
       },
       requestId: run.correlationId,
     })
@@ -285,6 +284,8 @@ export async function dispatchHttpTrigger(
       resourceRefs: trigger.resourceRefs,
       runtime: trigger.runtime,
       initialPrompt: renderedPrompt,
+      env: trigger.env,
+      secretEnv: trigger.secretEnv,
     },
     requestId: run.correlationId,
   })

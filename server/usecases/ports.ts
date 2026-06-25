@@ -1452,6 +1452,8 @@ export interface DueTrigger {
   runtime: RuntimeName
   promptTemplate: string
   resourceRefs: Record<string, unknown>[]
+  env: Record<string, string>
+  secretEnv: SecretEnvEntry[]
   metadata: Record<string, unknown>
   nextDueAt: string
   intervalSeconds: number
