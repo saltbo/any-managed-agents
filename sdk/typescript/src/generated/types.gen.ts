@@ -1169,6 +1169,7 @@ export type AuditRecord = {
 export type Trigger = {
     id: string;
     projectId: string;
+    type: 'scheduled' | 'http';
     agentId: string;
     environmentId: string | null;
     runtime: Runtime;
@@ -1183,9 +1184,9 @@ export type Trigger = {
         type: 'interval';
         intervalSeconds: number;
         windowSeconds: number;
-    };
+    } | null;
     enabled: boolean;
-    nextDueAt: string;
+    nextDueAt: string | null;
     lastDispatchedAt: string | null;
     lastRunId: string | null;
     metadata: {
@@ -1224,6 +1225,7 @@ export type SecretEnvEntry = {
 };
 
 export type CreateTriggerRequest = {
+    type?: 'scheduled' | 'http';
     agentId: string;
     environmentId?: string;
     runtime: Runtime;
@@ -1234,11 +1236,11 @@ export type CreateTriggerRequest = {
         [key: string]: string;
     };
     secretEnv?: Array<SecretEnvEntry>;
-    schedule: {
+    schedule?: {
         type?: 'interval';
         intervalSeconds: number;
         windowSeconds?: number;
-    };
+    } | null;
     enabled?: boolean;
     nextDueAt?: string;
     metadata?: {
@@ -1252,6 +1254,7 @@ export type TriggerListResponse = {
 };
 
 export type UpdateTriggerRequest = {
+    type?: 'scheduled' | 'http';
     agentId?: string;
     environmentId?: string;
     runtime?: Runtime;
@@ -1266,7 +1269,7 @@ export type UpdateTriggerRequest = {
         type?: 'interval';
         intervalSeconds: number;
         windowSeconds?: number;
-    };
+    } | null;
     enabled?: boolean;
     archived?: boolean;
     nextDueAt?: string;
@@ -1284,8 +1287,9 @@ export type TriggerRun = {
     id: string;
     projectId: string;
     triggerId: string;
-    scheduledFor: string;
-    heartbeatAt: string;
+    scheduledFor: string | null;
+    heartbeatAt: string | null;
+    triggeredAt: string;
     state: 'claimed' | 'session_created' | 'failed';
     idempotencyKey: string;
     sessionId: string | null;
@@ -1296,6 +1300,10 @@ export type TriggerRun = {
     };
     createdAt: string;
     updatedAt: string;
+};
+
+export type CreateHttpTriggerRunRequest = {
+    [key: string]: unknown;
 };
 
 export type Session = {
@@ -4339,6 +4347,45 @@ export type ListTriggerRunsResponses = {
 };
 
 export type ListTriggerRunsResponse = ListTriggerRunsResponses[keyof ListTriggerRunsResponses];
+
+export type CreateTriggerRunData = {
+    body: CreateHttpTriggerRunRequest;
+    path: {
+        triggerId: string;
+    };
+    query?: never;
+    url: '/api/v1/triggers/{triggerId}/runs';
+};
+
+export type CreateTriggerRunErrors = {
+    /**
+     * Validation error
+     */
+    400: ErrorResponse;
+    /**
+     * Authentication required
+     */
+    401: ErrorResponse;
+    /**
+     * Trigger not found
+     */
+    404: ErrorResponse;
+    /**
+     * Conflict
+     */
+    409: ErrorResponse;
+};
+
+export type CreateTriggerRunError = CreateTriggerRunErrors[keyof CreateTriggerRunErrors];
+
+export type CreateTriggerRunResponses = {
+    /**
+     * Created trigger run
+     */
+    201: TriggerRun;
+};
+
+export type CreateTriggerRunResponse = CreateTriggerRunResponses[keyof CreateTriggerRunResponses];
 
 export type ReadTriggerRunData = {
     body?: never;

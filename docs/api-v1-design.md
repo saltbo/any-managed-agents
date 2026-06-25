@@ -161,7 +161,8 @@ GET|PATCH        /api/v1/sessions/{sessionId}/approvals/{approvalId}
 ```
 GET|POST         /api/v1/triggers
 GET|PATCH        /api/v1/triggers/{triggerId}             paused → enabled:boolean；归档 = PATCH
-GET              /api/v1/triggers/{triggerId}/runs[/{runId}]
+GET|POST         /api/v1/triggers/{triggerId}/runs        POST 仅 HTTP trigger 创建 run
+GET              /api/v1/triggers/{triggerId}/runs/{runId}
 ```
 
 ### Vaults

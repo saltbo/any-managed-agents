@@ -18,6 +18,7 @@ function trigger(overrides: Partial<Trigger> = {}): Trigger {
   return {
     id: 'trigger_1',
     projectId: 'project_1',
+    type: 'scheduled',
     agentId: 'agent_1',
     environmentId: 'env_1',
     runtime: 'codex',
@@ -214,6 +215,23 @@ describe('[spec: triggers/console-list] TriggersView', () => {
     )
 
     expect(screen.getByText('—')).toBeTruthy()
+  })
+
+  it('shows HTTP triggers without schedule timing', () => {
+    const triggers = [trigger({ type: 'http', schedule: null, nextDueAt: null })]
+    render(
+      <MemoryRouter>
+        <TriggersView
+          triggers={triggers}
+          pagination={pagination(triggers)}
+          onPause={vi.fn()}
+          onResume={vi.fn()}
+          onDelete={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+    expect(screen.getByText('HTTP POST')).toBeTruthy()
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0)
   })
 
   it('calls onPause when the pause button is clicked', () => {
@@ -668,6 +686,44 @@ describe('[spec: triggers/create] CreateTriggerSheet', () => {
     expect(schedule.intervalSeconds).toBe(60)
   })
 
+  it('posts an HTTP trigger without schedule timing', async () => {
+    stubPointerEvents()
+    let postedBody: Record<string, unknown> | null = null
+    renderSheet([
+      http.post('*/api/v1/triggers', async ({ request }) => {
+        postedBody = (await request.json()) as Record<string, unknown>
+        return HttpResponse.json(trigger({ id: 'trigger_new', type: 'http', schedule: null, nextDueAt: null }), {
+          status: 201,
+        })
+      }),
+      http.get('*/api/v1/triggers', () =>
+        HttpResponse.json({ data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }),
+      ),
+    ])
+
+    const typeSelect = screen.getByRole('combobox', { name: 'Trigger type' }) as HTMLElement
+    typeSelect.focus()
+    fireEvent.pointerDown(typeSelect, { button: 0, ctrlKey: false, pointerId: 1, pointerType: 'mouse' })
+    fireEvent.mouseDown(typeSelect)
+    fireEvent.keyDown(typeSelect, { key: 'ArrowDown' })
+    fireEvent.click(await screen.findByRole('option', { name: 'HTTP POST' }))
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Webhook trigger' } })
+    fireEvent.change(screen.getByLabelText('Prompt template'), {
+      target: { value: 'Handle {{ body.ticket.id }}' },
+    })
+    const submitButton = await waitForFormReady()
+    fireEvent.click(submitButton)
+
+    await waitFor(() => expect(postedBody).not.toBeNull())
+    expect(postedBody).toMatchObject({
+      type: 'http',
+      name: 'Webhook trigger',
+      promptTemplate: 'Handle {{ body.ticket.id }}',
+      schedule: null,
+    })
+  })
+
   it('updates the runtime when a different runtime is selected', async () => {
     stubPointerEvents()
     let postedBody: Record<string, unknown> | null = null
@@ -682,8 +738,8 @@ describe('[spec: triggers/create] CreateTriggerSheet', () => {
     ])
     const submitButton = await fillRequiredFields()
 
-    // Runtime is the 3rd combobox in the DOM (Agent=0, Environment=1, Runtime=2)
-    const runtimeSelect = screen.getAllByRole('combobox')[2] as HTMLElement
+    // Runtime is the 4th combobox in the DOM (Type=0, Agent=1, Environment=2, Runtime=3)
+    const runtimeSelect = screen.getAllByRole('combobox')[3] as HTMLElement
     runtimeSelect.focus()
     fireEvent.pointerDown(runtimeSelect, { button: 0, ctrlKey: false, pointerId: 1, pointerType: 'mouse' })
     fireEvent.mouseDown(runtimeSelect)

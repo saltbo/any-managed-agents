@@ -30,8 +30,9 @@ class TriggerRun:
             id (str):  Example: trigrun_abc123.
             project_id (str):  Example: project_abc123.
             trigger_id (str):  Example: trigger_abc123.
-            scheduled_for (datetime.datetime):  Example: 2026-05-26T12:00:00.000Z.
-            heartbeat_at (datetime.datetime):  Example: 2026-05-26T12:01:00.000Z.
+            scheduled_for (datetime.datetime | None):  Example: 2026-05-26T12:00:00.000Z.
+            heartbeat_at (datetime.datetime | None):  Example: 2026-05-26T12:01:00.000Z.
+            triggered_at (datetime.datetime):  Example: 2026-05-26T12:01:00.000Z.
             state (TriggerRunState):  Example: session_created.
             idempotency_key (str):  Example: trigger_abc123:2026-05-26T12:00:00.000Z.
             session_id (None | str):  Example: session_abc123.
@@ -45,8 +46,9 @@ class TriggerRun:
     id: str
     project_id: str
     trigger_id: str
-    scheduled_for: datetime.datetime
-    heartbeat_at: datetime.datetime
+    scheduled_for: datetime.datetime | None
+    heartbeat_at: datetime.datetime | None
+    triggered_at: datetime.datetime
     state: TriggerRunState
     idempotency_key: str
     session_id: None | str
@@ -69,9 +71,19 @@ class TriggerRun:
 
         trigger_id = self.trigger_id
 
-        scheduled_for = self.scheduled_for.isoformat()
+        scheduled_for: None | str
+        if isinstance(self.scheduled_for, datetime.datetime):
+            scheduled_for = self.scheduled_for.isoformat()
+        else:
+            scheduled_for = self.scheduled_for
 
-        heartbeat_at = self.heartbeat_at.isoformat()
+        heartbeat_at: None | str
+        if isinstance(self.heartbeat_at, datetime.datetime):
+            heartbeat_at = self.heartbeat_at.isoformat()
+        else:
+            heartbeat_at = self.heartbeat_at
+
+        triggered_at = self.triggered_at.isoformat()
 
         state = self.state.value
 
@@ -100,6 +112,7 @@ class TriggerRun:
             "triggerId": trigger_id,
             "scheduledFor": scheduled_for,
             "heartbeatAt": heartbeat_at,
+            "triggeredAt": triggered_at,
             "state": state,
             "idempotencyKey": idempotency_key,
             "sessionId": session_id,
@@ -124,12 +137,43 @@ class TriggerRun:
 
         trigger_id = d.pop("triggerId")
 
-        scheduled_for = datetime.datetime.fromisoformat(d.pop("scheduledFor"))
+        def _parse_scheduled_for(data: object) -> datetime.datetime | None:
+            if data is None:
+                return data
+            try:
+                if not isinstance(data, str):
+                    raise TypeError()
+                scheduled_for_type_0 = datetime.datetime.fromisoformat(data)
 
 
 
+                return scheduled_for_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            return cast(datetime.datetime | None, data)
 
-        heartbeat_at = datetime.datetime.fromisoformat(d.pop("heartbeatAt"))
+        scheduled_for = _parse_scheduled_for(d.pop("scheduledFor"))
+
+
+        def _parse_heartbeat_at(data: object) -> datetime.datetime | None:
+            if data is None:
+                return data
+            try:
+                if not isinstance(data, str):
+                    raise TypeError()
+                heartbeat_at_type_0 = datetime.datetime.fromisoformat(data)
+
+
+
+                return heartbeat_at_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            return cast(datetime.datetime | None, data)
+
+        heartbeat_at = _parse_heartbeat_at(d.pop("heartbeatAt"))
+
+
+        triggered_at = datetime.datetime.fromisoformat(d.pop("triggeredAt"))
 
 
 
@@ -180,6 +224,7 @@ class TriggerRun:
             trigger_id=trigger_id,
             scheduled_for=scheduled_for,
             heartbeat_at=heartbeat_at,
+            triggered_at=triggered_at,
             state=state,
             idempotency_key=idempotency_key,
             session_id=session_id,

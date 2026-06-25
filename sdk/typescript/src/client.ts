@@ -209,6 +209,22 @@ export function createAmaClient(config: AmaClientConfig) {
       update: (triggerId: string, body: types.UpdateTriggerRequest) => unwrap(ops.updateTrigger({ client, path: { triggerId }, body })),
       delete: (triggerId: string) => unwrap(ops.deleteTrigger({ client, path: { triggerId } })),
       listRuns: (triggerId: string, query?: types.ListTriggerRunsData['query']) => unwrap(ops.listTriggerRuns({ client, path: { triggerId }, query })),
+      createRun: (triggerId: string, body: types.CreateHttpTriggerRunRequest, options?: { headers?: Record<string, string> }) =>
+        unwrap(ops.createTriggerRun({ client, path: { triggerId }, body, headers: options?.headers })),
+    },
+
+    memoryStores: {
+      list: (query?: types.ListMemoryStoresData['query']) => unwrap(ops.listMemoryStores({ client, query })),
+      create: (body: types.CreateMemoryStoreRequest) => unwrap(ops.createMemoryStore({ client, body })),
+      get: (storeId: string) => unwrap(ops.readMemoryStore({ client, path: { storeId } })),
+      update: (storeId: string, body: types.UpdateMemoryStoreRequest) => unwrap(ops.updateMemoryStore({ client, path: { storeId }, body })),
+      listMemories: (storeId: string, query?: types.ListMemoryStoreMemoriesData['query']) =>
+        unwrap(ops.listMemoryStoreMemories({ client, path: { storeId }, query })),
+      createMemory: (storeId: string, body: types.CreateMemoryStoreMemoryRequest) =>
+        unwrap(ops.createMemoryStoreMemory({ client, path: { storeId }, body })),
+      updateMemory: (storeId: string, memoryId: string, body: types.UpdateMemoryStoreMemoryRequest) =>
+        unwrap(ops.updateMemoryStoreMemory({ client, path: { storeId, memoryId }, body })),
+      deleteMemory: (storeId: string, memoryId: string) => unwrap(ops.deleteMemoryStoreMemory({ client, path: { storeId, memoryId } })),
     },
 
     runners: {

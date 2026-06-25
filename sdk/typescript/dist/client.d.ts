@@ -76,6 +76,19 @@ export declare function createAmaClient(config: AmaClientConfig): {
         update: (triggerId: string, body: types.UpdateTriggerRequest) => Promise<types.Trigger>;
         delete: (triggerId: string) => Promise<void>;
         listRuns: (triggerId: string, query?: types.ListTriggerRunsData["query"]) => Promise<types.TriggerRunListResponse>;
+        createRun: (triggerId: string, body: types.CreateHttpTriggerRunRequest, options?: {
+            headers?: Record<string, string>;
+        }) => Promise<types.TriggerRun>;
+    };
+    memoryStores: {
+        list: (query?: types.ListMemoryStoresData["query"]) => Promise<types.MemoryStoreListResponse>;
+        create: (body: types.CreateMemoryStoreRequest) => Promise<types.MemoryStore>;
+        get: (storeId: string) => Promise<types.MemoryStore>;
+        update: (storeId: string, body: types.UpdateMemoryStoreRequest) => Promise<types.MemoryStore>;
+        listMemories: (storeId: string, query?: types.ListMemoryStoreMemoriesData["query"]) => Promise<types.MemoryStoreMemoryListResponse>;
+        createMemory: (storeId: string, body: types.CreateMemoryStoreMemoryRequest) => Promise<types.MemoryStoreMemory>;
+        updateMemory: (storeId: string, memoryId: string, body: types.UpdateMemoryStoreMemoryRequest) => Promise<types.MemoryStoreMemory>;
+        deleteMemory: (storeId: string, memoryId: string) => Promise<void>;
     };
     runners: {
         list: (query?: types.ListRunnersData["query"]) => Promise<types.RunnerListResponse>;

@@ -555,6 +555,24 @@ func (e CreateTriggerRequestScheduleType) Valid() bool {
 	}
 }
 
+// Defines values for CreateTriggerRequestType.
+const (
+	CreateTriggerRequestTypeHttp      CreateTriggerRequestType = "http"
+	CreateTriggerRequestTypeScheduled CreateTriggerRequestType = "scheduled"
+)
+
+// Valid indicates whether the value is a known member of the CreateTriggerRequestType enum.
+func (e CreateTriggerRequestType) Valid() bool {
+	switch e {
+	case CreateTriggerRequestTypeHttp:
+		return true
+	case CreateTriggerRequestTypeScheduled:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CreateVaultCredentialRequestSecretProvider.
 const (
 	CreateVaultCredentialRequestSecretProviderAmaManaged        CreateVaultCredentialRequestSecretProvider = "ama-managed"
@@ -1440,6 +1458,24 @@ func (e TriggerScheduleType) Valid() bool {
 	}
 }
 
+// Defines values for TriggerType.
+const (
+	TriggerTypeHttp      TriggerType = "http"
+	TriggerTypeScheduled TriggerType = "scheduled"
+)
+
+// Valid indicates whether the value is a known member of the TriggerType enum.
+func (e TriggerType) Valid() bool {
+	switch e {
+	case TriggerTypeHttp:
+		return true
+	case TriggerTypeScheduled:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TriggerRunState.
 const (
 	TriggerRunStateClaimed        TriggerRunState = "claimed"
@@ -1596,6 +1632,24 @@ const (
 func (e UpdateTriggerRequestScheduleType) Valid() bool {
 	switch e {
 	case Interval:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateTriggerRequestType.
+const (
+	Http      UpdateTriggerRequestType = "http"
+	Scheduled UpdateTriggerRequestType = "scheduled"
+)
+
+// Valid indicates whether the value is a known member of the UpdateTriggerRequestType enum.
+func (e UpdateTriggerRequestType) Valid() bool {
+	switch e {
+	case Http:
+		return true
+	case Scheduled:
 		return true
 	default:
 		return false
@@ -2763,6 +2817,9 @@ type CreateFederatedTenantRequest struct {
 	Metadata         *map[string]interface{} `json:"metadata,omitempty"`
 }
 
+// CreateHttpTriggerRunRequest defines model for CreateHttpTriggerRunRequest.
+type CreateHttpTriggerRunRequest map[string]*interface{}
+
 // CreateLeaseRequest defines model for CreateLeaseRequest.
 type CreateLeaseRequest struct {
 	LeaseDurationSeconds *int   `json:"leaseDurationSeconds,omitempty"`
@@ -2859,16 +2916,20 @@ type CreateTriggerRequest struct {
 	PromptTemplate string                  `json:"promptTemplate"`
 	ResourceRefs   *[]ResourceRef          `json:"resourceRefs,omitempty"`
 	Runtime        Runtime                 `json:"runtime"`
-	Schedule       struct {
+	Schedule       *struct {
 		IntervalSeconds int                               `json:"intervalSeconds"`
 		Type            *CreateTriggerRequestScheduleType `json:"type,omitempty"`
 		WindowSeconds   *int                              `json:"windowSeconds,omitempty"`
-	} `json:"schedule"`
-	SecretEnv *[]SecretEnvEntry `json:"secretEnv,omitempty"`
+	} `json:"schedule,omitempty"`
+	SecretEnv *[]SecretEnvEntry         `json:"secretEnv,omitempty"`
+	Type      *CreateTriggerRequestType `json:"type,omitempty"`
 }
 
 // CreateTriggerRequestScheduleType defines model for CreateTriggerRequest.Schedule.Type.
 type CreateTriggerRequestScheduleType string
+
+// CreateTriggerRequestType defines model for CreateTriggerRequest.Type.
+type CreateTriggerRequestType string
 
 // CreateVaultCredentialRequest defines model for CreateVaultCredentialRequest.
 type CreateVaultCredentialRequest struct {
@@ -3755,22 +3816,26 @@ type Trigger struct {
 	LastRunId        *string                `json:"lastRunId"`
 	Metadata         map[string]interface{} `json:"metadata"`
 	Name             string                 `json:"name"`
-	NextDueAt        time.Time              `json:"nextDueAt"`
+	NextDueAt        *time.Time             `json:"nextDueAt"`
 	ProjectId        string                 `json:"projectId"`
 	PromptTemplate   string                 `json:"promptTemplate"`
 	ResourceRefs     []ResourceRef          `json:"resourceRefs"`
 	Runtime          Runtime                `json:"runtime"`
-	Schedule         struct {
+	Schedule         *struct {
 		IntervalSeconds int                 `json:"intervalSeconds"`
 		Type            TriggerScheduleType `json:"type"`
 		WindowSeconds   int                 `json:"windowSeconds"`
 	} `json:"schedule"`
 	SecretEnv []SecretEnvEntry `json:"secretEnv"`
+	Type      TriggerType      `json:"type"`
 	UpdatedAt time.Time        `json:"updatedAt"`
 }
 
 // TriggerScheduleType defines model for Trigger.Schedule.Type.
 type TriggerScheduleType string
+
+// TriggerType defines model for Trigger.Type.
+type TriggerType string
 
 // TriggerListResponse defines model for TriggerListResponse.
 type TriggerListResponse struct {
@@ -3783,15 +3848,16 @@ type TriggerRun struct {
 	CorrelationId  string                 `json:"correlationId"`
 	CreatedAt      time.Time              `json:"createdAt"`
 	ErrorMessage   *string                `json:"errorMessage"`
-	HeartbeatAt    time.Time              `json:"heartbeatAt"`
+	HeartbeatAt    *time.Time             `json:"heartbeatAt"`
 	Id             string                 `json:"id"`
 	IdempotencyKey string                 `json:"idempotencyKey"`
 	Metadata       map[string]interface{} `json:"metadata"`
 	ProjectId      string                 `json:"projectId"`
-	ScheduledFor   time.Time              `json:"scheduledFor"`
+	ScheduledFor   *time.Time             `json:"scheduledFor"`
 	SessionId      *string                `json:"sessionId"`
 	State          TriggerRunState        `json:"state"`
 	TriggerId      string                 `json:"triggerId"`
+	TriggeredAt    time.Time              `json:"triggeredAt"`
 	UpdatedAt      time.Time              `json:"updatedAt"`
 }
 
@@ -3962,11 +4028,15 @@ type UpdateTriggerRequest struct {
 		Type            *UpdateTriggerRequestScheduleType `json:"type,omitempty"`
 		WindowSeconds   *int                              `json:"windowSeconds,omitempty"`
 	} `json:"schedule,omitempty"`
-	SecretEnv *[]SecretEnvEntry `json:"secretEnv,omitempty"`
+	SecretEnv *[]SecretEnvEntry         `json:"secretEnv,omitempty"`
+	Type      *UpdateTriggerRequestType `json:"type,omitempty"`
 }
 
 // UpdateTriggerRequestScheduleType defines model for UpdateTriggerRequest.Schedule.Type.
 type UpdateTriggerRequestScheduleType string
+
+// UpdateTriggerRequestType defines model for UpdateTriggerRequest.Type.
+type UpdateTriggerRequestType string
 
 // UpdateVaultCredentialRequest defines model for UpdateVaultCredentialRequest.
 type UpdateVaultCredentialRequest struct {
@@ -4575,6 +4645,9 @@ type CreateTriggerJSONRequestBody = CreateTriggerRequest
 
 // UpdateTriggerJSONRequestBody defines body for UpdateTrigger for application/json ContentType.
 type UpdateTriggerJSONRequestBody = UpdateTriggerRequest
+
+// CreateTriggerRunJSONRequestBody defines body for CreateTriggerRun for application/json ContentType.
+type CreateTriggerRunJSONRequestBody = CreateHttpTriggerRunRequest
 
 // CreateVaultJSONRequestBody defines body for CreateVault for application/json ContentType.
 type CreateVaultJSONRequestBody = CreateVaultRequest
@@ -5991,6 +6064,11 @@ type ClientInterface interface {
 
 	// ListTriggerRuns request
 	ListTriggerRuns(ctx context.Context, triggerId string, params *ListTriggerRunsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateTriggerRunWithBody request with any body
+	CreateTriggerRunWithBody(ctx context.Context, triggerId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CreateTriggerRun(ctx context.Context, triggerId string, body CreateTriggerRunJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ReadTriggerRun request
 	ReadTriggerRun(ctx context.Context, triggerId string, runId string, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -7571,6 +7649,30 @@ func (c *APIClient) UpdateTrigger(ctx context.Context, triggerId string, body Up
 
 func (c *APIClient) ListTriggerRuns(ctx context.Context, triggerId string, params *ListTriggerRunsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListTriggerRunsRequest(c.Server, triggerId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *APIClient) CreateTriggerRunWithBody(ctx context.Context, triggerId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateTriggerRunRequestWithBody(c.Server, triggerId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *APIClient) CreateTriggerRun(ctx context.Context, triggerId string, body CreateTriggerRunJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateTriggerRunRequest(c.Server, triggerId, body)
 	if err != nil {
 		return nil, err
 	}
@@ -12751,6 +12853,53 @@ func NewListTriggerRunsRequest(server string, triggerId string, params *ListTrig
 	return req, nil
 }
 
+// NewCreateTriggerRunRequest calls the generic CreateTriggerRun builder with application/json body
+func NewCreateTriggerRunRequest(server string, triggerId string, body CreateTriggerRunJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateTriggerRunRequestWithBody(server, triggerId, "application/json", bodyReader)
+}
+
+// NewCreateTriggerRunRequestWithBody generates requests for CreateTriggerRun with any type of body
+func NewCreateTriggerRunRequestWithBody(server string, triggerId string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "triggerId", triggerId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/triggers/%s/runs", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewReadTriggerRunRequest generates requests for ReadTriggerRun
 func NewReadTriggerRunRequest(server string, triggerId string, runId string) (*http.Request, error) {
 	var err error
@@ -14369,6 +14518,11 @@ type ClientWithResponsesInterface interface {
 
 	// ListTriggerRunsWithResponse request
 	ListTriggerRunsWithResponse(ctx context.Context, triggerId string, params *ListTriggerRunsParams, reqEditors ...RequestEditorFn) (*ListTriggerRunsResponse, error)
+
+	// CreateTriggerRunWithBodyWithResponse request with any body
+	CreateTriggerRunWithBodyWithResponse(ctx context.Context, triggerId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateTriggerRunResponse, error)
+
+	CreateTriggerRunWithResponse(ctx context.Context, triggerId string, body CreateTriggerRunJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateTriggerRunResponse, error)
 
 	// ReadTriggerRunWithResponse request
 	ReadTriggerRunWithResponse(ctx context.Context, triggerId string, runId string, reqEditors ...RequestEditorFn) (*ReadTriggerRunResponse, error)
@@ -17524,6 +17678,40 @@ func (r ListTriggerRunsResponse) ContentType() string {
 	return ""
 }
 
+type CreateTriggerRunResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *TriggerRun
+	JSON400      *GeneratedErrorResponse
+	JSON401      *GeneratedErrorResponse
+	JSON404      *GeneratedErrorResponse
+	JSON409      *GeneratedErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateTriggerRunResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateTriggerRunResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateTriggerRunResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ReadTriggerRunResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -19220,6 +19408,23 @@ func (c *ClientWithResponses) ListTriggerRunsWithResponse(ctx context.Context, t
 		return nil, err
 	}
 	return ParseListTriggerRunsResponse(rsp)
+}
+
+// CreateTriggerRunWithBodyWithResponse request with arbitrary body returning *CreateTriggerRunResponse
+func (c *ClientWithResponses) CreateTriggerRunWithBodyWithResponse(ctx context.Context, triggerId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateTriggerRunResponse, error) {
+	rsp, err := c.CreateTriggerRunWithBody(ctx, triggerId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateTriggerRunResponse(rsp)
+}
+
+func (c *ClientWithResponses) CreateTriggerRunWithResponse(ctx context.Context, triggerId string, body CreateTriggerRunJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateTriggerRunResponse, error) {
+	rsp, err := c.CreateTriggerRun(ctx, triggerId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateTriggerRunResponse(rsp)
 }
 
 // ReadTriggerRunWithResponse request returning *ReadTriggerRunResponse
@@ -23564,6 +23769,60 @@ func ParseListTriggerRunsResponse(rsp *http.Response) (*ListTriggerRunsResponse,
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateTriggerRunResponse parses an HTTP response from a CreateTriggerRunWithResponse call
+func ParseCreateTriggerRunResponse(rsp *http.Response) (*CreateTriggerRunResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateTriggerRunResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest TriggerRun
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	}
 

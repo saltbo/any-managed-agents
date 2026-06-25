@@ -592,6 +592,10 @@ export const triggers = sqliteTable(
     // dispatch (dispatch-triggers.resolveEnvironmentForRuntime) instead of
     // baking one in at creation time.
     environmentId: text('environment_id').references(() => environments.id),
+    // Mirrors TriggerType (server/usecases/ports.ts).
+    triggerType: text('trigger_type', { enum: ['scheduled', 'http'] })
+      .notNull()
+      .default('scheduled'),
     // Mirrors RuntimeSchema (server/contracts/environment-contracts.ts) — keep in lockstep.
     runtime: text('runtime', { enum: ['ama', 'claude-code', 'codex', 'copilot'] }).notNull(),
     name: text('name').notNull(),
@@ -602,10 +606,10 @@ export const triggers = sqliteTable(
     // a value-object array, not relational state. Existence is validated at session
     // creation (resolveSecretEnvEntries), not by FK. Kept as JSON deliberately.
     secretEnv: text('secret_env').notNull().default('[]'),
-    intervalSeconds: integer('interval_seconds').notNull(),
-    windowSeconds: integer('window_seconds').notNull().default(0),
+    intervalSeconds: integer('interval_seconds'),
+    windowSeconds: integer('window_seconds').default(0),
     enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
-    nextDueAt: text('next_due_at').notNull(),
+    nextDueAt: text('next_due_at'),
     lastDispatchedAt: text('last_dispatched_at'),
     // Intentional non-FK pointer to trigger_runs.id. Avoids a triggers<->trigger_runs
     // circular FK (trigger_runs.trigger_id already FKs triggers); a convenience
@@ -625,6 +629,11 @@ export const triggers = sqliteTable(
     // enum types the column; check enforces it in D1/SQLite, in parity with every
     // other hardened enum column. Mirrors RuntimeSchema (contracts/environment-contracts).
     check('ck_triggers_runtime', sql`${table.runtime} in ('ama','claude-code','codex','copilot')`),
+    check('ck_triggers_type', sql`${table.triggerType} in ('scheduled','http')`),
+    check(
+      'ck_triggers_schedule_shape',
+      sql`(${table.triggerType} = 'scheduled' and ${table.intervalSeconds} is not null and ${table.nextDueAt} is not null) or (${table.triggerType} = 'http' and ${table.intervalSeconds} is null and ${table.nextDueAt} is null)`,
+    ),
   ],
 )
 
@@ -639,8 +648,9 @@ export const triggerRuns = sqliteTable(
     triggerId: text('trigger_id')
       .notNull()
       .references(() => triggers.id),
-    scheduledFor: text('scheduled_for').notNull(),
-    heartbeatAt: text('heartbeat_at').notNull(),
+    scheduledFor: text('scheduled_for'),
+    heartbeatAt: text('heartbeat_at'),
+    triggeredAt: text('triggered_at').notNull(),
     // Mirrors RUN_STATES (server/http/triggers.ts).
     state: text('state', { enum: ['claimed', 'session_created', 'failed'] }).notNull(),
     idempotencyKey: text('idempotency_key').notNull(),

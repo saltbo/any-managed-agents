@@ -1,6 +1,18 @@
+import {
+  type HttpTriggerTemplateContext,
+  PromptTemplateRenderError,
+  renderHttpPromptTemplate,
+} from '@server/domain/trigger'
 import { redactSensitiveValue } from '@server/redaction'
 import type { Deps } from './deps'
-import type { AuthScope, ClaimedRun, DueTrigger } from './ports'
+import {
+  type AuthScope,
+  type ClaimedRun,
+  type DueTrigger,
+  TriggerConflictError,
+  type TriggerRecord,
+  TriggerValidationError,
+} from './ports'
 import { createSession } from './runtime/sessions'
 
 export interface ScheduleDispatchResult {
@@ -22,6 +34,23 @@ export interface ScheduleDispatchResult {
 function safeMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
   return redactSensitiveValue(message) as string
+}
+
+function runResult(
+  run: ClaimedRun,
+  triggerId: string,
+  status: string,
+  sessionId: string | null,
+  errorMessage: string | null,
+) {
+  return {
+    runId: run.id,
+    triggerId,
+    scheduledFor: run.scheduledFor,
+    status,
+    sessionId,
+    errorMessage,
+  }
 }
 
 // The scheduler dispatches as a synthetic system actor; the audit gateway maps
@@ -53,6 +82,26 @@ async function recordDispatch(
     metadata: outcome.ok
       ? { runId: run.id, scheduledFor: run.scheduledFor, sessionId: outcome.sessionId }
       : { runId: run.id, scheduledFor: run.scheduledFor, message: outcome.message },
+  })
+}
+
+async function recordHttpDispatch(
+  deps: Deps,
+  auth: AuthScope,
+  trigger: TriggerRecord,
+  run: ClaimedRun,
+  outcome: { ok: true; sessionId: string } | { ok: false; message: string },
+) {
+  await deps.audit.record(auth, {
+    action: 'http_trigger.dispatch',
+    resourceType: 'trigger',
+    resourceId: trigger.id,
+    outcome: outcome.ok ? 'success' : 'failure',
+    correlationId: run.correlationId,
+    ...(outcome.ok ? { sessionId: outcome.sessionId } : {}),
+    metadata: outcome.ok
+      ? { runId: run.id, triggeredAt: run.scheduledFor, sessionId: outcome.sessionId }
+      : { runId: run.id, triggeredAt: run.scheduledFor, message: outcome.message },
   })
 }
 
@@ -106,38 +155,17 @@ async function dispatchTrigger(deps: Deps, trigger: DueTrigger, heartbeatAt: str
     if (!result.ok) {
       const message = result.error.message
       await failRun(deps, auth, trigger, run, message)
-      return {
-        runId: run.id,
-        triggerId: trigger.id,
-        scheduledFor: run.scheduledFor,
-        status: 'failed',
-        sessionId: null,
-        errorMessage: message,
-      }
+      return runResult(run, trigger.id, 'failed', null, message)
     }
 
     const session = result.value
     await deps.triggerDispatch.markRunSessionCreated(trigger, run, session.id, sessionMetadata)
     await recordDispatch(deps, auth, trigger, run, { ok: true, sessionId: session.id })
-    return {
-      runId: run.id,
-      triggerId: trigger.id,
-      scheduledFor: run.scheduledFor,
-      status: 'session_created',
-      sessionId: session.id,
-      errorMessage: null,
-    }
+    return runResult(run, trigger.id, 'session_created', session.id, null)
   } catch (error) {
     const message = safeMessage(error)
     await failRun(deps, auth, trigger, run, message)
-    return {
-      runId: run.id,
-      triggerId: trigger.id,
-      scheduledFor: run.scheduledFor,
-      status: 'failed',
-      sessionId: null,
-      errorMessage: message,
-    }
+    return runResult(run, trigger.id, 'failed', null, message)
   }
 }
 
@@ -193,4 +221,96 @@ export async function dispatchDueScheduledTriggers(
   }
 
   return result
+}
+
+export interface HttpTriggerDispatchInput {
+  trigger: TriggerRecord
+  context: HttpTriggerTemplateContext
+  idempotencyKey?: string | null
+}
+
+export async function dispatchHttpTrigger(
+  deps: Deps,
+  auth: AuthScope,
+  input: HttpTriggerDispatchInput,
+): Promise<{
+  runId: string
+  triggerId: string
+  triggeredAt: string
+  state: 'session_created' | 'failed'
+  sessionId: string | null
+  errorMessage: string | null
+}> {
+  const { trigger } = input
+  if (trigger.type !== 'http') {
+    throw new TriggerConflictError('Only HTTP triggers can create runs from requests')
+  }
+  if (trigger.archivedAt !== null) {
+    throw new TriggerConflictError('Archived triggers cannot be dispatched')
+  }
+  if (!trigger.enabled) {
+    throw new TriggerConflictError('Disabled triggers cannot be dispatched')
+  }
+
+  const triggeredAt = new Date().toISOString()
+  let renderedPrompt: string
+  try {
+    renderedPrompt = renderHttpPromptTemplate(trigger.promptTemplate, input.context)
+  } catch (error) {
+    if (error instanceof PromptTemplateRenderError) {
+      throw new TriggerValidationError('Invalid trigger prompt template', { promptTemplate: error.message })
+    }
+    throw error
+  }
+
+  const run = await deps.triggerDispatch.claimHttpRun(trigger, triggeredAt, input.idempotencyKey ?? null)
+  if (!run) {
+    throw new TriggerConflictError('HTTP trigger run already exists for this idempotency key')
+  }
+
+  const sessionMetadata = {
+    ...trigger.metadata,
+    source: 'http-trigger',
+    httpTriggerId: trigger.id,
+    httpRunId: run.id,
+    triggeredAt,
+    correlationId: run.correlationId,
+  }
+  const result = await createSession(deps, auth, {
+    agentId: trigger.agentId,
+    environmentId: trigger.environmentId,
+    options: {
+      title: trigger.name,
+      metadata: sessionMetadata,
+      resourceRefs: trigger.resourceRefs,
+      runtime: trigger.runtime,
+      initialPrompt: renderedPrompt,
+    },
+    requestId: run.correlationId,
+  })
+
+  if (!result.ok) {
+    const message = result.error.message
+    await deps.triggerDispatch.markRunFailed(trigger, run, message)
+    await recordHttpDispatch(deps, auth, trigger, run, { ok: false, message })
+    return {
+      runId: run.id,
+      triggerId: trigger.id,
+      triggeredAt,
+      state: 'failed',
+      sessionId: null,
+      errorMessage: message,
+    }
+  }
+
+  await deps.triggerDispatch.markRunSessionCreated(trigger, run, result.value.id, sessionMetadata)
+  await recordHttpDispatch(deps, auth, trigger, run, { ok: true, sessionId: result.value.id })
+  return {
+    runId: run.id,
+    triggerId: trigger.id,
+    triggeredAt,
+    state: 'session_created',
+    sessionId: result.value.id,
+    errorMessage: null,
+  }
 }

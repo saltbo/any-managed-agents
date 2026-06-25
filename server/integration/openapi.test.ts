@@ -210,6 +210,7 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths['/api/v1/triggers/{triggerId}']).toHaveProperty('get')
     expect(doc.paths['/api/v1/triggers/{triggerId}']).toHaveProperty('patch')
     expect(doc.paths['/api/v1/triggers/{triggerId}/runs']).toHaveProperty('get')
+    expect(doc.paths['/api/v1/triggers/{triggerId}/runs']).toHaveProperty('post')
 
     expect(doc.paths['/api/v1/health'].get.security).toBeUndefined()
     expect(doc.paths['/api/v1/auth/config'].get.security).toBeUndefined()
@@ -242,6 +243,7 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths['/api/v1/triggers/{triggerId}'].get.operationId).toBe('readTrigger')
     expect(doc.paths['/api/v1/triggers/{triggerId}'].patch.operationId).toBe('updateTrigger')
     expect(doc.paths['/api/v1/triggers/{triggerId}/runs'].get.operationId).toBe('listTriggerRuns')
+    expect(doc.paths['/api/v1/triggers/{triggerId}/runs'].post.operationId).toBe('createTriggerRun')
 
     expect(
       doc.paths['/api/v1/triggers/{triggerId}'].get.parameters?.map(
@@ -374,8 +376,9 @@ describe('[CF] OpenAPI documentation', () => {
     // environmentId is optional: an unpinned trigger resolves an environment per
     // dispatch, so it must NOT be in the required set.
     expect(createTriggerSchema?.required).toEqual(
-      expect.arrayContaining(['agentId', 'runtime', 'name', 'promptTemplate', 'schedule']),
+      expect.arrayContaining(['agentId', 'runtime', 'name', 'promptTemplate']),
     )
+    expect(createTriggerSchema?.required).not.toContain('schedule')
     expect(createTriggerSchema?.required).not.toContain('environmentId')
 
     const triggerRunProperties = (
@@ -384,8 +387,9 @@ describe('[CF] OpenAPI documentation', () => {
       }
     )?.properties
     expect(triggerRunProperties).toMatchObject({
-      scheduledFor: { type: 'string' },
-      heartbeatAt: { type: 'string' },
+      scheduledFor: { type: 'string', nullable: true },
+      heartbeatAt: { type: 'string', nullable: true },
+      triggeredAt: { type: 'string' },
       state: { type: 'string' },
       idempotencyKey: { type: 'string' },
       sessionId: { type: 'string', nullable: true },

@@ -1,6 +1,6 @@
 from enum import Enum
 
-class CreateTriggerRequestScheduleType(str, Enum):
+class CreateTriggerRequestScheduleType0Type(str, Enum):
     INTERVAL = "interval"
 
     def __str__(self) -> str:

@@ -104,17 +104,18 @@ export interface TriggerSchedule {
 export interface Trigger {
   id: string
   projectId: string
+  type: 'scheduled' | 'http'
   agentId: string
-  environmentId: string
+  environmentId: string | null
   runtime: RuntimeName
   name: string
   promptTemplate: string
   resourceRefs: SessionResourceRef[]
   env: Record<string, string>
   secretEnv: SecretEnvEntry[]
-  schedule: TriggerSchedule
+  schedule: TriggerSchedule | null
   enabled: boolean
-  nextDueAt: string
+  nextDueAt: string | null
   lastDispatchedAt: string | null
   lastRunId: string | null
   metadata: Record<string, unknown>
@@ -128,8 +129,9 @@ export interface TriggerRun {
   id: string
   projectId: string
   triggerId: string
-  scheduledFor: string
-  heartbeatAt: string
+  scheduledFor: string | null
+  heartbeatAt: string | null
+  triggeredAt: string
   state: 'claimed' | 'session_created' | 'failed'
   idempotencyKey: string
   sessionId: string | null
@@ -754,6 +756,7 @@ export interface EnvironmentInput {
 }
 
 export interface TriggerInput {
+  type?: Trigger['type']
   agentId?: string
   environmentId?: string
   runtime?: RuntimeName
@@ -762,18 +765,19 @@ export interface TriggerInput {
   resourceRefs?: SessionResourceRef[]
   env?: Record<string, string>
   secretEnv?: SecretEnvEntry[]
-  schedule?: Partial<Omit<TriggerSchedule, 'type'>>
+  schedule?: Partial<Omit<TriggerSchedule, 'type'>> | null
   nextDueAt?: string
   metadata?: Record<string, unknown>
 }
 
 export interface CreateTriggerInput {
+  type?: Trigger['type']
   agentId: string
-  environmentId: string
+  environmentId?: string
   runtime: RuntimeName
   name: string
   promptTemplate: string
-  schedule: { type: 'interval'; intervalSeconds: number }
+  schedule?: { type: 'interval'; intervalSeconds: number } | null
   enabled?: boolean
   resourceRefs?: SessionResourceRef[]
   env?: Record<string, string>
