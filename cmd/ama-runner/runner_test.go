@@ -551,6 +551,60 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 	}
 }
 
+func TestRunOnceCompletesSessionLeaseWithWritableMemoryStoreSnapshot(t *testing.T) {
+	workDir := t.TempDir()
+	lease := codexSessionStartLease("update the heartbeat")
+	lease.workItem.Payload["resourceRefs"] = []any{ama.JSON{
+		"type":      "memory_store",
+		"storeId":   "memstore_1",
+		"name":      "Maintainer memory",
+		"access":    "read_write",
+		"mountPath": "/workspace/.ama/memory-stores/memstore_1",
+		"memories": []any{ama.JSON{
+			"path":    "ak-maintainer-heartbeat.md",
+			"content": "initial heartbeat\n",
+		}},
+	}}
+	hubChannel := newFakeRunnerSessionChannel(ama.JSON{"type": "runner.channel.accepted"})
+	client := &fakeControlPlane{lease: lease, hubChannel: hubChannel}
+	runtimeAdapter := &fakeRuntimeAdapter{
+		result: ama.JSON{"exitCode": 0},
+		inspect: func(request RuntimeRequest) error {
+			memoryPath := filepath.Join(request.WorkDir, ".ama", "memory-stores", "memstore_1", "ak-maintainer-heartbeat.md")
+			data, err := os.ReadFile(memoryPath)
+			if err != nil {
+				return err
+			}
+			if string(data) != "initial heartbeat\n" {
+				return fmt.Errorf("expected initial memory content, got %q", string(data))
+			}
+			return os.WriteFile(memoryPath, []byte("updated heartbeat\n"), 0o644)
+		},
+	}
+	daemon := testDaemon(client, &fakeAdapter{})
+	daemon.RuntimeAdapter = runtimeAdapter
+	daemon.Config.WorkDir = workDir
+	done := make(chan error, 1)
+	go func() { done <- daemon.RunOnce(context.Background()) }()
+	waitForRunnerWriteCount(t, hubChannel, 1, done)
+	if err := <-done; err != nil {
+		t.Fatalf("expected codex run success, got %v", err)
+	}
+	if len(client.updates) != 1 || client.updates[0].State != "completed" {
+		t.Fatalf("expected completed lease update, got %#v", client.updates)
+	}
+	stores, ok := client.updates[0].Result["memoryStores"].([]amaJSONMemoryStore)
+	if !ok || len(stores) != 1 {
+		t.Fatalf("expected memoryStores result, got %#v", client.updates[0].Result)
+	}
+	if stores[0].StoreID != "memstore_1" || len(stores[0].Memories) != 1 {
+		t.Fatalf("expected one memstore snapshot, got %#v", stores)
+	}
+	if got := stores[0].Memories[0]; got.Path != "ak-maintainer-heartbeat.md" || got.Content != "updated heartbeat\n" {
+		t.Fatalf("expected updated memory content, got %#v", got)
+	}
+}
+
 func TestRunOnceFailsCodexLeaseOnRuntimeAdapterFailure(t *testing.T) {
 	workDir := t.TempDir()
 	lease := codexSessionStartLease("fail")

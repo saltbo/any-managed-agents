@@ -988,6 +988,18 @@ func (d *RunnerDaemon) runRuntimeAndRelay(
 		}
 		return relay(ctx, eventType, eventPayload, &relayStamp{sequence: stored.Sequence, id: stored.ID, createdAt: stored.CreatedAt})
 	})
+	if runErr == nil || successfulRuntimeResult(result) {
+		memoryStores, memoryErr := readWritableMemoryStoreSnapshots(workspace)
+		if memoryErr != nil {
+			return nil, memoryErr, errors.Is(runCtx.Err(), context.DeadlineExceeded)
+		}
+		if len(memoryStores) > 0 {
+			if result == nil {
+				result = ama.JSON{}
+			}
+			result["memoryStores"] = memoryStores
+		}
+	}
 	return result, runErr, errors.Is(runCtx.Err(), context.DeadlineExceeded)
 }
 

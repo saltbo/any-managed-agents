@@ -247,6 +247,91 @@ func TestPrepareRuntimeWorkspaceMountsGitHubRepositoryWorktree(t *testing.T) {
 	}
 }
 
+func TestPrepareRuntimeWorkspaceMountsMemoryStoreFiles(t *testing.T) {
+	workDir := t.TempDir()
+	description := "maintainer notes"
+	workspace, err := prepareRuntimeWorkspace(context.Background(), workDir, "session_1", []ResourceRef{{
+		Type:        "memory_store",
+		StoreID:     "memstore_1",
+		Name:        "Maintainer memory",
+		Description: &description,
+		Access:      "read_write",
+		MountPath:   "/workspace/.ama/memory-stores/memstore_1",
+		Memories: []MemorySnapshot{{
+			Path:    "ak-maintainer-heartbeat.md",
+			Content: "initial heartbeat\n",
+		}},
+	}}, nil)
+	if err != nil {
+		t.Fatalf("expected workspace preparation success, got %v", err)
+	}
+	memoryPath := filepath.Join(workspace.Root, ".ama", "memory-stores", "memstore_1", "ak-maintainer-heartbeat.md")
+	data, err := os.ReadFile(memoryPath)
+	if err != nil || string(data) != "initial heartbeat\n" {
+		t.Fatalf("expected mounted memory content, got %q err=%v", string(data), err)
+	}
+	if err := os.WriteFile(memoryPath, []byte("updated heartbeat\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	snapshots, err := readWritableMemoryStoreSnapshots(workspace)
+	if err != nil {
+		t.Fatalf("expected memory snapshot readback, got %v", err)
+	}
+	if len(snapshots) != 1 || snapshots[0].StoreID != "memstore_1" || len(snapshots[0].Memories) != 1 {
+		t.Fatalf("expected one memory store snapshot, got %#v", snapshots)
+	}
+	if got := snapshots[0].Memories[0]; got.Path != "ak-maintainer-heartbeat.md" || got.Content != "updated heartbeat\n" {
+		t.Fatalf("expected updated memory snapshot, got %#v", got)
+	}
+	manifest, err := os.ReadFile(filepath.Join(workspace.Root, ".ama", "resources.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(manifest), `"type": "memory_store"`) ||
+		!strings.Contains(string(manifest), `"status": "mounted"`) ||
+		strings.Contains(string(manifest), "initial heartbeat") {
+		t.Fatalf("expected mounted memory manifest without memory content, got %s", string(manifest))
+	}
+}
+
+func TestPrepareRuntimeWorkspaceRejectsUnsafeMemoryPath(t *testing.T) {
+	_, err := prepareRuntimeWorkspace(context.Background(), t.TempDir(), "session_1", []ResourceRef{{
+		Type:      "memory_store",
+		StoreID:   "memstore_1",
+		Access:    "read_write",
+		MountPath: "/workspace/.ama/memory-stores/memstore_1",
+		Memories: []MemorySnapshot{{
+			Path:    "../outside.md",
+			Content: "bad",
+		}},
+	}}, nil)
+	if err == nil || !strings.Contains(err.Error(), "memory path must stay inside") {
+		t.Fatalf("expected unsafe memory path error, got %v", err)
+	}
+}
+
+func TestCleanupRuntimeWorkspaceRemovesReadOnlyMemoryStore(t *testing.T) {
+	workspace, err := prepareRuntimeWorkspace(context.Background(), t.TempDir(), "session_1", []ResourceRef{{
+		Type:      "memory_store",
+		StoreID:   "memstore_1",
+		Access:    "read_only",
+		MountPath: "/workspace/.ama/memory-stores/memstore_1",
+		Memories: []MemorySnapshot{{
+			Path:    "ak-maintainer-heartbeat.md",
+			Content: "initial heartbeat\n",
+		}},
+	}}, nil)
+	if err != nil {
+		t.Fatalf("expected workspace preparation success, got %v", err)
+	}
+	if err := cleanupRuntimeWorkspace(context.Background(), workspace); err != nil {
+		t.Fatalf("expected read-only memory workspace cleanup success, got %v", err)
+	}
+	if _, err := os.Stat(workspace.Root); !os.IsNotExist(err) {
+		t.Fatalf("expected session root cleanup, got err=%v", err)
+	}
+}
+
 func TestPrepareRuntimeWorkspaceConfiguresSessionScopedGitCredentialFromGHToken(t *testing.T) {
 	workDir := t.TempDir()
 	sourceDir := filepath.Join(t.TempDir(), "source")

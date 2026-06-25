@@ -16,25 +16,42 @@ import (
 const runtimeWorkspaceRetention = 24 * time.Hour
 
 type ResourceRef struct {
-	Type      string `json:"type"`
-	Owner     string `json:"owner"`
-	Repo      string `json:"repo"`
-	Ref       string `json:"ref"`
-	MountPath string `json:"mountPath"`
+	Type        string           `json:"type"`
+	Owner       string           `json:"owner"`
+	Repo        string           `json:"repo"`
+	Ref         string           `json:"ref"`
+	MountPath   string           `json:"mountPath"`
+	StoreID     string           `json:"storeId"`
+	Name        string           `json:"name"`
+	Description *string          `json:"description"`
+	Access      string           `json:"access"`
+	Memories    []MemorySnapshot `json:"memories"`
 	// credentialRef in the work-item payload is declarative metadata (the vault
 	// reference); the runner resolves the git token from runtimeEnv, so the field
 	// is intentionally not bound — json.Unmarshal ignores it.
 }
 
 type PreparedWorkspace struct {
-	Root      string
-	Cwd       string
-	worktrees []preparedWorktree
+	Root         string
+	Cwd          string
+	worktrees    []preparedWorktree
+	memoryStores []preparedMemoryStore
 }
 
 type preparedWorktree struct {
 	cacheDir string
 	path     string
+}
+
+type preparedMemoryStore struct {
+	storeID string
+	path    string
+	access  string
+}
+
+type MemorySnapshot struct {
+	Path    string `json:"path"`
+	Content string `json:"content"`
 }
 
 var repositoryCacheLocks sync.Map
@@ -49,13 +66,18 @@ func repositoryCacheLock(cacheDir string) *sync.Mutex {
 }
 
 type mountedResource struct {
-	Type      string `json:"type"`
-	Owner     string `json:"owner,omitempty"`
-	Repo      string `json:"repo,omitempty"`
-	Ref       string `json:"ref,omitempty"`
-	MountPath string `json:"mountPath,omitempty"`
-	LocalPath string `json:"localPath,omitempty"`
-	Status    string `json:"status"`
+	Type        string           `json:"type"`
+	Owner       string           `json:"owner,omitempty"`
+	Repo        string           `json:"repo,omitempty"`
+	Ref         string           `json:"ref,omitempty"`
+	StoreID     string           `json:"storeId,omitempty"`
+	Name        string           `json:"name,omitempty"`
+	Description *string          `json:"description,omitempty"`
+	Access      string           `json:"access,omitempty"`
+	MountPath   string           `json:"mountPath,omitempty"`
+	LocalPath   string           `json:"localPath,omitempty"`
+	Memories    []MemorySnapshot `json:"memories,omitempty"`
+	Status      string           `json:"status"`
 }
 
 func prepareRuntimeWorkspace(ctx context.Context, workDir string, sessionID string, resourceRefs []ResourceRef, runtimeEnv map[string]string) (PreparedWorkspace, error) {
@@ -63,14 +85,16 @@ func prepareRuntimeWorkspace(ctx context.Context, workDir string, sessionID stri
 	if err != nil {
 		return PreparedWorkspace{}, err
 	}
-	resources := githubRepositoryResources(resourceRefs)
-	mounted := make([]mountedResource, 0, len(resources))
-	worktrees := make([]preparedWorktree, 0, len(resources))
+	githubResources := githubRepositoryResources(resourceRefs)
+	memoryResources := memoryStoreResources(resourceRefs)
+	mounted := make([]mountedResource, 0, len(githubResources)+len(memoryResources))
+	worktrees := make([]preparedWorktree, 0, len(githubResources))
+	memoryStores := make([]preparedMemoryStore, 0, len(memoryResources))
 	cwd := root
-	for index, resource := range resources {
+	for index, resource := range githubResources {
 		localPath, cacheDir, err := materializeGitHubRepository(ctx, workDir, root, resource)
 		if err != nil {
-			_ = cleanupRuntimeWorkspace(context.Background(), PreparedWorkspace{Root: root, Cwd: cwd, worktrees: worktrees})
+			_ = cleanupRuntimeWorkspace(context.Background(), PreparedWorkspace{Root: root, Cwd: cwd, worktrees: worktrees, memoryStores: memoryStores})
 			return PreparedWorkspace{}, err
 		}
 		if index == 0 {
@@ -87,15 +111,34 @@ func prepareRuntimeWorkspace(ctx context.Context, workDir string, sessionID stri
 		})
 		worktrees = append(worktrees, preparedWorktree{cacheDir: cacheDir, path: localPath})
 	}
+	for _, resource := range memoryResources {
+		localPath, err := materializeMemoryStore(root, resource)
+		if err != nil {
+			_ = cleanupRuntimeWorkspace(context.Background(), PreparedWorkspace{Root: root, Cwd: cwd, worktrees: worktrees, memoryStores: memoryStores})
+			return PreparedWorkspace{}, err
+		}
+		mounted = append(mounted, mountedResource{
+			Type:        resource.Type,
+			StoreID:     resource.StoreID,
+			Name:        resource.Name,
+			Description: resource.Description,
+			Access:      resource.Access,
+			MountPath:   resource.MountPath,
+			LocalPath:   localPath,
+			Memories:    memoryManifestEntries(resource.Memories),
+			Status:      "mounted",
+		})
+		memoryStores = append(memoryStores, preparedMemoryStore{storeID: resource.StoreID, path: localPath, access: resource.Access})
+	}
 	if err := configureWorkspaceGitCredential(ctx, root, worktrees, workspaceGitHubToken(runtimeEnv)); err != nil {
-		_ = cleanupRuntimeWorkspace(context.Background(), PreparedWorkspace{Root: root, Cwd: cwd, worktrees: worktrees})
+		_ = cleanupRuntimeWorkspace(context.Background(), PreparedWorkspace{Root: root, Cwd: cwd, worktrees: worktrees, memoryStores: memoryStores})
 		return PreparedWorkspace{}, err
 	}
 	if err := writeWorkspaceManifest(root, mounted); err != nil {
-		_ = cleanupRuntimeWorkspace(context.Background(), PreparedWorkspace{Root: root, Cwd: cwd, worktrees: worktrees})
+		_ = cleanupRuntimeWorkspace(context.Background(), PreparedWorkspace{Root: root, Cwd: cwd, worktrees: worktrees, memoryStores: memoryStores})
 		return PreparedWorkspace{}, err
 	}
-	return PreparedWorkspace{Root: root, Cwd: cwd, worktrees: worktrees}, nil
+	return PreparedWorkspace{Root: root, Cwd: cwd, worktrees: worktrees, memoryStores: memoryStores}, nil
 }
 
 // workspaceGitHubToken mirrors the cloud workspace token resolution:
@@ -156,6 +199,11 @@ func configureWorktreeCredentialHelper(ctx context.Context, worktreePath string,
 
 func cleanupRuntimeWorkspace(ctx context.Context, workspace PreparedWorkspace) error {
 	var errs []string
+	for _, memoryStore := range workspace.memoryStores {
+		if err := resetMemoryStorePermissions(memoryStore.path); err != nil {
+			errs = append(errs, err.Error())
+		}
+	}
 	for i := len(workspace.worktrees) - 1; i >= 0; i-- {
 		worktree := workspace.worktrees[i]
 		if !fileExists(filepath.Join(worktree.cacheDir, ".git")) {
@@ -235,16 +283,25 @@ func staleRuntimeWorkspace(workDir string, root string) PreparedWorkspace {
 		return workspace
 	}
 	for _, resource := range manifest.Resources {
-		if resource.Type != "github_repository" || resource.LocalPath == "" {
+		if resource.LocalPath == "" {
 			continue
 		}
-		if !safeGitHubSegment(resource.Owner) || !safeGitHubSegment(resource.Repo) {
-			continue
+		switch resource.Type {
+		case "github_repository":
+			if !safeGitHubSegment(resource.Owner) || !safeGitHubSegment(resource.Repo) {
+				continue
+			}
+			workspace.worktrees = append(workspace.worktrees, preparedWorktree{
+				cacheDir: filepath.Join(workDir, "repositories", resource.Owner, resource.Repo),
+				path:     resource.LocalPath,
+			})
+		case "memory_store":
+			workspace.memoryStores = append(workspace.memoryStores, preparedMemoryStore{
+				storeID: resource.StoreID,
+				path:    resource.LocalPath,
+				access:  resource.Access,
+			})
 		}
-		workspace.worktrees = append(workspace.worktrees, preparedWorktree{
-			cacheDir: filepath.Join(workDir, "repositories", resource.Owner, resource.Repo),
-			path:     resource.LocalPath,
-		})
 	}
 	return workspace
 }
@@ -434,6 +491,24 @@ func githubRepositoryResources(resourceRefs []ResourceRef) []ResourceRef {
 	return resources
 }
 
+func memoryStoreResources(resourceRefs []ResourceRef) []ResourceRef {
+	resources := make([]ResourceRef, 0, len(resourceRefs))
+	for _, resource := range resourceRefs {
+		if resource.Type == "memory_store" {
+			resources = append(resources, resource)
+		}
+	}
+	return resources
+}
+
+func memoryManifestEntries(memories []MemorySnapshot) []MemorySnapshot {
+	entries := make([]MemorySnapshot, 0, len(memories))
+	for _, memory := range memories {
+		entries = append(entries, MemorySnapshot{Path: memory.Path})
+	}
+	return entries
+}
+
 func materializeGitHubRepository(ctx context.Context, workDir string, sessionRoot string, resource ResourceRef) (string, string, error) {
 	if !safeGitHubSegment(resource.Owner) || !safeGitHubSegment(resource.Repo) {
 		return "", "", fmt.Errorf("github repository resource must include safe owner and repo")
@@ -463,6 +538,144 @@ func materializeGitHubRepository(ctx context.Context, workDir string, sessionRoo
 		return "", "", err
 	}
 	return mountPath, cacheDir, nil
+}
+
+func materializeMemoryStore(sessionRoot string, resource ResourceRef) (string, error) {
+	if strings.TrimSpace(resource.StoreID) == "" {
+		return "", fmt.Errorf("memory store resource must include storeId")
+	}
+	mountPath, err := localMemoryStoreMountPath(sessionRoot, resource)
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(mountPath, 0o755); err != nil {
+		return "", err
+	}
+	for _, memory := range resource.Memories {
+		relative, err := cleanMemoryPath(memory.Path)
+		if err != nil {
+			return "", err
+		}
+		fullPath := filepath.Join(mountPath, relative)
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+			return "", err
+		}
+		if err := os.WriteFile(fullPath, []byte(memory.Content), 0o644); err != nil {
+			return "", err
+		}
+	}
+	if resource.Access == "read_only" {
+		if err := filepath.WalkDir(mountPath, func(path string, entry os.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if entry.IsDir() {
+				return os.Chmod(path, 0o555)
+			}
+			return os.Chmod(path, 0o444)
+		}); err != nil {
+			return "", err
+		}
+	}
+	return mountPath, nil
+}
+
+func resetMemoryStorePermissions(root string) error {
+	if strings.TrimSpace(root) == "" || !fileExists(root) {
+		return nil
+	}
+	return filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return os.Chmod(path, 0o755)
+		}
+		return os.Chmod(path, 0o644)
+	})
+}
+
+func localMemoryStoreMountPath(sessionRoot string, resource ResourceRef) (string, error) {
+	relative := strings.TrimSpace(resource.MountPath)
+	if strings.HasPrefix(relative, "/workspace/") {
+		relative = strings.TrimPrefix(relative, "/workspace/")
+	}
+	if relative == "" || relative == "/workspace" {
+		relative = filepath.Join(".ama", "memory-stores", resource.StoreID)
+	}
+	if filepath.IsAbs(relative) {
+		return "", fmt.Errorf("memory store mount path must be under /workspace")
+	}
+	clean := filepath.Clean(relative)
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("memory store mount path must stay inside the session workspace")
+	}
+	resolved := filepath.Join(sessionRoot, clean)
+	if err := ensureUnderWorkspace(sessionRoot, resolved); err != nil {
+		return "", err
+	}
+	return resolved, nil
+}
+
+func readWritableMemoryStoreSnapshots(workspace PreparedWorkspace) ([]amaJSONMemoryStore, error) {
+	stores := make([]amaJSONMemoryStore, 0, len(workspace.memoryStores))
+	for _, store := range workspace.memoryStores {
+		if store.access != "read_write" {
+			continue
+		}
+		memories, err := readMemoryFiles(store.path)
+		if err != nil {
+			return nil, err
+		}
+		stores = append(stores, amaJSONMemoryStore{StoreID: store.storeID, Memories: memories})
+	}
+	return stores, nil
+}
+
+type amaJSONMemoryStore struct {
+	StoreID  string           `json:"storeId"`
+	Memories []MemorySnapshot `json:"memories"`
+}
+
+func readMemoryFiles(root string) ([]MemorySnapshot, error) {
+	memories := []MemorySnapshot{}
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		clean, err := cleanMemoryPath(relative)
+		if err != nil {
+			return err
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		memories = append(memories, MemorySnapshot{Path: filepath.ToSlash(clean), Content: string(content)})
+		return nil
+	})
+	return memories, err
+}
+
+func cleanMemoryPath(path string) (string, error) {
+	if strings.TrimSpace(path) == "" {
+		return "", fmt.Errorf("memory path is required")
+	}
+	if filepath.IsAbs(path) || strings.HasPrefix(path, "/") {
+		return "", fmt.Errorf("memory path must be relative")
+	}
+	clean := filepath.Clean(filepath.FromSlash(path))
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("memory path must stay inside the memory store")
+	}
+	return clean, nil
 }
 
 func ensureRepositoryCache(ctx context.Context, cacheDir string, resource ResourceRef) error {

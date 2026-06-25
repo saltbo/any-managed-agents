@@ -1,3 +1,4 @@
+import { normalizeMemoryPath } from '@server/domain/memory-store'
 import type {
   ClaimLeaseInput,
   FinishLeaseInput,
@@ -12,13 +13,23 @@ import type {
 import { canonicalAmaSessionEventFromRuntimeEvent } from '@shared/session-events'
 import { and, desc, eq, gt, inArray, isNull, lt, lte, max, or, sql } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
-import { leases, runners, sessionChannels, sessionEvents, sessions, workItems } from '../../db/schema'
+import {
+  leases,
+  memoryStoreMemories,
+  memoryStores,
+  runners,
+  sessionChannels,
+  sessionEvents,
+  sessions,
+  workItems,
+} from '../../db/schema'
 import { insertCanonicalSessionEvent } from '../../db/session-event-store'
 import { redactSensitiveValue } from '../../redaction'
 
 type Db = ReturnType<typeof drizzle>
 type LeaseRow = typeof leases.$inferSelect
 type WorkItemRow = typeof workItems.$inferSelect
+type MemoryStoreSnapshot = { storeId: string; memories: Array<{ path: string; content: string }> }
 
 const DEFAULT_LEASE_DURATION_SECONDS = 60
 
@@ -36,6 +47,77 @@ function parseJson<T>(value: string | null) {
 
 function stringify(value: unknown) {
   return JSON.stringify(redactSensitiveValue(value))
+}
+
+function memoryStoreSnapshotsFromResult(result: Record<string, unknown> | undefined): MemoryStoreSnapshot[] {
+  if (!result || !Array.isArray(result.memoryStores)) {
+    return []
+  }
+  const snapshots: MemoryStoreSnapshot[] = []
+  for (const value of result.memoryStores) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      continue
+    }
+    const raw = value as Record<string, unknown>
+    if (typeof raw.storeId !== 'string' || !Array.isArray(raw.memories)) {
+      continue
+    }
+    const memories = raw.memories
+      .filter((memory): memory is Record<string, unknown> =>
+        Boolean(memory && typeof memory === 'object' && !Array.isArray(memory)),
+      )
+      .map((memory) => ({
+        path: normalizeMemoryPath(String(memory.path ?? '')),
+        content: String(memory.content ?? ''),
+      }))
+    snapshots.push({ storeId: raw.storeId, memories })
+  }
+  return snapshots
+}
+
+async function replaceMemoryStoreSnapshots(
+  db: Db,
+  projectId: string,
+  snapshots: MemoryStoreSnapshot[],
+  updatedAt: string,
+) {
+  for (const snapshot of snapshots) {
+    const store = await db
+      .select({ id: memoryStores.id })
+      .from(memoryStores)
+      .where(
+        and(
+          eq(memoryStores.id, snapshot.storeId),
+          eq(memoryStores.projectId, projectId),
+          isNull(memoryStores.archivedAt),
+        ),
+      )
+      .get()
+    if (!store) {
+      throw new Error(`Memory store ${snapshot.storeId} is not active`)
+    }
+    await db.batch([
+      db
+        .delete(memoryStoreMemories)
+        .where(and(eq(memoryStoreMemories.projectId, projectId), eq(memoryStoreMemories.storeId, snapshot.storeId))),
+      ...snapshot.memories.map((memory) =>
+        db.insert(memoryStoreMemories).values({
+          id: newId('memory'),
+          projectId,
+          storeId: snapshot.storeId,
+          path: memory.path,
+          content: memory.content,
+          metadata: '{}',
+          createdAt: updatedAt,
+          updatedAt,
+        }),
+      ),
+      db
+        .update(memoryStores)
+        .set({ updatedAt })
+        .where(and(eq(memoryStores.id, snapshot.storeId), eq(memoryStores.projectId, projectId))),
+    ])
+  }
 }
 
 function recordFrom(lease: LeaseRow): LeaseRecord {
@@ -537,6 +619,14 @@ export function createLeaseRepo(db: Db): LeaseRepo {
       } else {
         // Completion: the lease ends and its outcome lands on the work item —
         // the leases table carries no result/error columns.
+        if (input.state === 'completed') {
+          await replaceMemoryStoreSnapshots(
+            db,
+            input.projectId,
+            memoryStoreSnapshotsFromResult(input.result),
+            timestamp,
+          )
+        }
         const result = input.result ? stringify(input.result) : null
         const error = input.error ? stringify(input.error) : null
         const completedWorkItem = await db
