@@ -56,6 +56,7 @@ type RunnerDaemon struct {
 	activeLeases           int
 	usageMu                sync.Mutex
 	runtimeUsage           []ama.RuntimeUsage
+	runtimeUsageLimits     map[string]string
 	capabilityMu           sync.Mutex
 	advertisedCapabilities []string
 	advertisedInventory    []v1RuntimeInventory
@@ -178,33 +179,64 @@ func (d *RunnerDaemon) currentCapabilities() []string {
 
 func (d *RunnerDaemon) currentRuntimeInventory() []v1RuntimeInventory {
 	d.capabilityMu.Lock()
-	defer d.capabilityMu.Unlock()
-	return d.advertisedInventory
+	inventory := append([]v1RuntimeInventory(nil), d.advertisedInventory...)
+	d.capabilityMu.Unlock()
+
+	d.usageMu.Lock()
+	limits := make(map[string]string, len(d.runtimeUsageLimits))
+	for runtime, detail := range d.runtimeUsageLimits {
+		limits[runtime] = detail
+	}
+	d.usageMu.Unlock()
+
+	return runtimeInventoryWithUsageLimits(inventory, limits)
 }
 
 const runtimeUsageRefreshInterval = 5 * time.Minute
 
-func (d *RunnerDaemon) setRuntimeUsage(usage []ama.RuntimeUsage) {
+func (d *RunnerDaemon) setRuntimeUsageSnapshot(snapshot *runtimeUsageSnapshot) {
+	if snapshot == nil {
+		return
+	}
 	d.usageMu.Lock()
 	defer d.usageMu.Unlock()
-	d.runtimeUsage = usage
+	d.runtimeUsage = snapshot.Usage
+	d.runtimeUsageLimits = snapshot.Limited
 }
 
 func (d *RunnerDaemon) getRuntimeUsage() []ama.RuntimeUsage {
 	d.usageMu.Lock()
 	defer d.usageMu.Unlock()
-	return d.runtimeUsage
+	return append([]ama.RuntimeUsage(nil), d.runtimeUsage...)
+}
+
+func runtimeInventoryWithUsageLimits(inventory []v1RuntimeInventory, limits map[string]string) []v1RuntimeInventory {
+	if len(limits) == 0 {
+		return inventory
+	}
+	result := append([]v1RuntimeInventory(nil), inventory...)
+	for i, entry := range result {
+		if entry.State != "ready" {
+			continue
+		}
+		detail, limited := limits[entry.Runtime]
+		if !limited {
+			continue
+		}
+		result[i].State = "limited"
+		result[i].Detail = detail
+	}
+	return result
+}
+
+func (d *RunnerDaemon) refreshRuntimeUsage(ctx context.Context) {
+	d.setRuntimeUsageSnapshot(collectRuntimeUsage(ctx))
 }
 
 // runUsageCollector refreshes the cached per-runtime quota windows on a slow
 // schedule so each heartbeat can report them without spawning the bridge.
 func (d *RunnerDaemon) runUsageCollector(ctx context.Context) {
-	refresh := func() {
-		if usage := collectRuntimeUsage(ctx); usage != nil {
-			d.setRuntimeUsage(usage)
-		}
-	}
-	refresh()
+	d.refreshRuntimeUsage(ctx)
 	ticker := time.NewTicker(runtimeUsageRefreshInterval)
 	defer ticker.Stop()
 	for {
@@ -212,7 +244,7 @@ func (d *RunnerDaemon) runUsageCollector(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			refresh()
+			d.refreshRuntimeUsage(ctx)
 		}
 	}
 }

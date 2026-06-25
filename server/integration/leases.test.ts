@@ -162,6 +162,15 @@ describe('[CF] /api/v1/leases', () => {
     expect(lease.workItem).toBeUndefined()
     const leaseId = lease.id as string
 
+    const runningSessionRes = await jsonFetch(`/api/v1/sessions/${session.id}`, authorization)
+    expect(runningSessionRes.status).toBe(200)
+    await expect(runningSessionRes.json()).resolves.toMatchObject({
+      id: session.id,
+      state: 'running',
+      stateReason: null,
+      startedAt: expect.any(String),
+    })
+
     const leasedWorkRes = await jsonFetch(`/api/v1/work-items/${workItem.id}`, authorization)
     expect(leasedWorkRes.status).toBe(200)
     const leasedWork = (await leasedWorkRes.json()) as {
@@ -225,6 +234,46 @@ describe('[CF] /api/v1/leases', () => {
       state: 'idle',
       stateReason: null,
     })
+  })
+
+  it('queues a prompt on the same self-hosted session while its leased work item is still running', async () => {
+    const authorization = await signIn()
+    const environment = await createSelfHostedEnvironment(authorization)
+    const agent = await createAgent(authorization)
+    const runner = await registerActiveRunner(authorization, environment.id)
+    const session = await createSelfHostedSession(authorization, agent.id, environment.id)
+    const workItem = await availableWorkItem(authorization, session.id)
+
+    const claimRes = await claimLease(authorization, workItem.id, runner.id)
+    expect(claimRes.status).toBe(201)
+
+    const messageRes = await jsonFetch(`/api/v1/sessions/${session.id}/messages`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ type: 'prompt', content: 'Reviewer rejected this task; resume it.' }),
+    })
+    expect(messageRes.status).toBe(201)
+    await expect(messageRes.json()).resolves.toMatchObject({
+      sessionId: session.id,
+      type: 'prompt',
+      delivery: 'queued',
+      state: 'accepted',
+    })
+
+    const availableRes = await jsonFetch(`/api/v1/work-items?state=available&sessionId=${session.id}`, authorization)
+    expect(availableRes.status).toBe(200)
+    const available = (await availableRes.json()) as { data: Array<{ sessionId: string; state: string; payload: Record<string, unknown> }> }
+    expect(available.data).toEqual([
+      expect.objectContaining({
+        sessionId: session.id,
+        state: 'available',
+        payload: expect.objectContaining({
+          type: 'session.start',
+          sessionId: session.id,
+          initialPrompt: 'Reviewer rejected this task; resume it.',
+          resume: true,
+        }),
+      }),
+    ])
   })
 
   it('rejects claims for inactive runners, missing work, and over-capacity runners', async () => {

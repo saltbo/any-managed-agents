@@ -395,12 +395,13 @@ export function createLeaseRepo(db: Db): LeaseRepo {
       if (claimed.sessionId) {
         await db
           .update(sessions)
-          .set({ state: 'pending', stateReason: 'waiting-for-runner', updatedAt: timestamp })
+          .set({ state: 'running', stateReason: null, startedAt: timestamp, updatedAt: timestamp })
           .where(
             and(
               eq(sessions.id, claimed.sessionId),
               eq(sessions.projectId, input.projectId),
               eq(sessions.state, 'pending'),
+              eq(sessions.stateReason, 'waiting-for-runner'),
             ),
           )
       }

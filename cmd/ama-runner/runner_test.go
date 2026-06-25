@@ -1241,6 +1241,42 @@ func TestHeartbeatReportsRuntimeInventoryWithStatusAndDiagnostics(t *testing.T) 
 	}
 }
 
+func TestHeartbeatMarksClaudeCodeLimitedWhenUsageProbeUnavailable(t *testing.T) {
+	client := &fakeControlPlane{}
+	daemon := testDaemon(client, &fakeAdapter{})
+	daemon.LookPath = lookPathFinding("claude")
+	daemon.DetectRuntime = func(_ context.Context, runtimeName string) runtimeProbe {
+		if runtimeName != "claude-code" {
+			return runtimeProbe{}
+		}
+		return runtimeProbe{
+			Models:  []string{"claude-sonnet-4-6"},
+			Status:  "ready",
+			Version: "2.1.185",
+			Detail:  "host CLI enumerated 1 models",
+		}
+	}
+	daemon.setRuntimeUsageSnapshot(&runtimeUsageSnapshot{
+		Limited: map[string]string{"claude-code": claudeCodeUsageUnavailableDetail},
+	})
+
+	if err := daemon.heartbeat(context.Background()); err != nil {
+		t.Fatalf("expected heartbeat success, got %v", err)
+	}
+
+	inventory := client.heartbeats[0].RuntimeInventory
+	byRuntime := map[string]v1RuntimeInventory{}
+	for _, entry := range inventory {
+		byRuntime[entry.Runtime] = entry
+	}
+	if got := byRuntime["claude-code"]; got.State != "limited" || got.Detail != claudeCodeUsageUnavailableDetail {
+		t.Fatalf("expected usage-unavailable claude-code to be limited, got %#v", got)
+	}
+	if !containsString(client.heartbeats[0].Capabilities, "runtime-provider-model:claude-code:*:claude-sonnet-4-6") {
+		t.Fatalf("expected model capability to remain advertised for diagnostics and recovery, got %v", client.heartbeats[0].Capabilities)
+	}
+}
+
 func TestHeartbeatAdvertisesNoExternalRuntimesWhenNoCLIsAreInstalled(t *testing.T) {
 	client := &fakeControlPlane{}
 	daemon := testDaemon(client, &fakeAdapter{})

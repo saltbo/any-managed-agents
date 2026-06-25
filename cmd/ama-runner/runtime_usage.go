@@ -13,10 +13,18 @@ import (
 // usageRuntimes are the runtimes whose host provider quota the bridge can resolve.
 var usageRuntimes = []string{"claude-code", "codex", "copilot"}
 
+const claudeCodeUsageUnavailableDetail = "Claude Code quota usage unavailable; scheduling paused until the usage probe succeeds"
+
+type runtimeUsageSnapshot struct {
+	Usage   []ama.RuntimeUsage
+	Limited map[string]string
+}
+
 // collectRuntimeUsage spawns the embedded bridge once per runtime to resolve the
-// host provider account's quota/rate-limit windows. Runtimes without
-// credentials (or with no limited quota) are omitted.
-func collectRuntimeUsage(ctx context.Context) []ama.RuntimeUsage {
+// host provider account's quota/rate-limit windows. Runtimes without limited
+// quota are omitted. Claude Code is quota-governed for scheduling, so an
+// unavailable usage probe is reported as a temporary runtime limit.
+func collectRuntimeUsage(ctx context.Context) *runtimeUsageSnapshot {
 	bridgePath, err := materializeRuntimeBridge()
 	if err != nil {
 		return nil
@@ -30,14 +38,18 @@ func collectRuntimeUsage(ctx context.Context) []ama.RuntimeUsage {
 		return nil
 	}
 	var usage []ama.RuntimeUsage
+	limited := map[string]string{}
 	for _, runtime := range usageRuntimes {
 		windows := fetchRuntimeUsageWindows(ctx, nodePath, bridgePath, hostHome, runtime)
 		if len(windows) == 0 {
+			if runtime == "claude-code" {
+				limited[runtime] = claudeCodeUsageUnavailableDetail
+			}
 			continue
 		}
 		usage = append(usage, ama.RuntimeUsage{Runtime: runtime, Windows: windows})
 	}
-	return usage
+	return &runtimeUsageSnapshot{Usage: usage, Limited: limited}
 }
 
 func fetchRuntimeUsageWindows(ctx context.Context, nodePath, bridgePath, hostHome, runtime string) []ama.RuntimeUsageWindow {

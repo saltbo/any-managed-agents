@@ -45,6 +45,7 @@ Feature: Runners
     When the operator registers a runner and sends a heartbeat
     Then the runner stores only safe metadata and never the raw credential value
     And the heartbeat reports supported runtimes with version, availability state, and safe diagnostics
+    And quota-governed runtimes whose usage probe is unavailable are reported as limited
     And disabled runners cannot heartbeat themselves active and every runner endpoint requires authentication
 
   # ── Work queue and leases (api: assembled server, channel, lifecycle) ──
