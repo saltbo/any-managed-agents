@@ -76,6 +76,7 @@ export declare function createAmaClient(config: AmaClientConfig): {
         update: (triggerId: string, body: types.UpdateTriggerRequest) => Promise<types.Trigger>;
         delete: (triggerId: string) => Promise<void>;
         listRuns: (triggerId: string, query?: types.ListTriggerRunsData["query"]) => Promise<types.TriggerRunListResponse>;
+        createRun: (triggerId: string, body: types.CreateHttpTriggerRunRequest) => Promise<types.TriggerRun>;
     };
     runners: {
         list: (query?: types.ListRunnersData["query"]) => Promise<types.RunnerListResponse>;

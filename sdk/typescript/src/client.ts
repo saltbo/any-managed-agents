@@ -209,6 +209,8 @@ export function createAmaClient(config: AmaClientConfig) {
       update: (triggerId: string, body: types.UpdateTriggerRequest) => unwrap(ops.updateTrigger({ client, path: { triggerId }, body })),
       delete: (triggerId: string) => unwrap(ops.deleteTrigger({ client, path: { triggerId } })),
       listRuns: (triggerId: string, query?: types.ListTriggerRunsData['query']) => unwrap(ops.listTriggerRuns({ client, path: { triggerId }, query })),
+      createRun: (triggerId: string, body: types.CreateHttpTriggerRunRequest) =>
+        unwrap(ops.createTriggerRun({ client, path: { triggerId }, body })),
     },
 
     runners: {
