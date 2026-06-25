@@ -409,6 +409,47 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
     expect(screen.queryByText(/legacy-provider|legacy-model/)).toBeNull()
   })
 
+  it('renders memory store resources without exposing memory contents', () => {
+    const session = buildSession({
+      resourceRefs: [
+        {
+          type: 'memory_store',
+          storeId: 'memstore_1',
+          name: 'Team memory',
+          description: 'Shared runbook',
+          access: 'read_write',
+          mountPath: '/workspace/.ama/memory-stores/memstore_1',
+          memories: [{ path: 'guide.md', content: 'secret content' }, 'legacy-memory'],
+        },
+      ],
+    })
+
+    render(
+      <MemoryRouter>
+        <SessionDetailView
+          session={session}
+          agentName="Coding agent"
+          environmentName="Node workspace"
+          events={[]}
+          runtime={buildRuntimeState({ messages: [], tools: [], debugEvents: [], error: null })}
+          onStop={vi.fn()}
+          onArchive={vi.fn()}
+          onRefreshEvents={vi.fn()}
+          chatMessage=""
+          setChatMessage={vi.fn()}
+          onSendMessage={vi.fn()}
+          onAbortRuntime={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getAllByLabelText('Open session resources')[0]!)
+    expect(screen.getByText('Session resources')).toBeTruthy()
+    expect(screen.getByText(/memstore_1/)).toBeTruthy()
+    expect(screen.getByText(/guide.md/)).toBeTruthy()
+    expect(screen.queryByText(/secret content/)).toBeNull()
+  })
+
   it('renders transcript timestamps in message metadata without exposing raw payloads in transcript mode', () => {
     const runtime = buildRuntimeState()
     const persistedEvents = [buildPersistedEvent()]

@@ -203,6 +203,27 @@ describe('[spec: triggers/lifecycle] updateTrigger', () => {
       status: 404,
     })
   })
+
+  it('converts a scheduled trigger to HTTP and clears timing', async () => {
+    const result = await updateTrigger(fakeDeps(), auth, triggerRecord(), { type: 'http', schedule: null })
+    expect(result.trigger.type).toBe('http')
+    expect(result.trigger.schedule).toBeNull()
+    expect(result.trigger.nextDueAt).toBeNull()
+  })
+
+  it('rejects an HTTP trigger update with schedule timing', async () => {
+    await expect(
+      updateTrigger(fakeDeps(), auth, triggerRecord({ type: 'http', schedule: null, nextDueAt: null }), {
+        schedule: { intervalSeconds: 60 },
+      }),
+    ).rejects.toBeInstanceOf(TriggerValidationError)
+  })
+
+  it('rejects clearing schedule timing on a scheduled trigger', async () => {
+    await expect(updateTrigger(fakeDeps(), auth, triggerRecord(), { schedule: null })).rejects.toBeInstanceOf(
+      TriggerValidationError,
+    )
+  })
 })
 
 describe('[spec: triggers/delete] deleteTrigger', () => {
