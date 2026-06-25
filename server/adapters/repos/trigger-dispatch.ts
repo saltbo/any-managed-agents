@@ -1,5 +1,5 @@
 import { RuntimeSchema } from '@server/contracts/environment-contracts'
-import type { ClaimedRun, DueTrigger, TriggerDispatchRepo } from '@server/usecases/ports'
+import type { ClaimedRun, DueTrigger, TriggerDispatchRepo, TriggerRecord } from '@server/usecases/ports'
 import { and, asc, eq, isNull, lte } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
 import { projects, triggerRuns, triggers } from '../../db/schema'
@@ -15,7 +15,20 @@ function parseJson<T>(value: string | null, fallback: T) {
   return value ? (JSON.parse(value) as T) : fallback
 }
 
+function uniqueConstraintError(error: unknown): boolean {
+  if (String(error).toUpperCase().includes('UNIQUE')) {
+    return true
+  }
+  if (error && typeof error === 'object' && 'cause' in error) {
+    return uniqueConstraintError((error as { cause?: unknown }).cause)
+  }
+  return false
+}
+
 function dueTriggerFrom(row: TriggerRow): DueTrigger {
+  if (row.nextDueAt === null || row.intervalSeconds === null) {
+    throw new Error('Scheduled trigger is missing schedule timing')
+  }
   return {
     id: row.id,
     organizationId: row.organizationId,
@@ -48,11 +61,27 @@ async function advanceTrigger(db: Db, trigger: DueTrigger, run: ClaimedRun, time
     .where(eq(triggers.id, trigger.id))
 }
 
+async function advanceRunTrigger(db: Db, trigger: DueTrigger | TriggerRecord, run: ClaimedRun, timestamp: string) {
+  if ('intervalSeconds' in trigger) {
+    await advanceTrigger(db, trigger, run, timestamp)
+    return
+  }
+  await db
+    .update(triggers)
+    .set({
+      lastDispatchedAt: timestamp,
+      lastRunId: run.id,
+      updatedAt: timestamp,
+    })
+    .where(eq(triggers.id, trigger.id))
+}
+
 export function createTriggerDispatchRepo(db: Db): TriggerDispatchRepo {
   return {
     async dueTriggers(options): Promise<DueTrigger[]> {
       const filters = [
         // active = enabled and not archived (status enum replaced per api-v1)
+        eq(triggers.triggerType, 'scheduled'),
         eq(triggers.enabled, true),
         isNull(triggers.archivedAt),
         lte(triggers.nextDueAt, options.heartbeatAt),
@@ -81,6 +110,7 @@ export function createTriggerDispatchRepo(db: Db): TriggerDispatchRepo {
           triggerId: trigger.id,
           scheduledFor,
           heartbeatAt,
+          triggeredAt: heartbeatAt,
           state: 'claimed',
           idempotencyKey,
           sessionId: null,
@@ -91,12 +121,45 @@ export function createTriggerDispatchRepo(db: Db): TriggerDispatchRepo {
           updatedAt: timestamp,
         })
       } catch (error) {
-        if (String(error).includes('UNIQUE')) {
+        if (uniqueConstraintError(error)) {
           return null
         }
         throw error
       }
       return { id: runId, scheduledFor, correlationId }
+    },
+
+    async claimHttpRun(trigger, triggeredAt, rawIdempotencyKey): Promise<ClaimedRun | null> {
+      const runId = newId('httprun')
+      const idempotencyKey = rawIdempotencyKey
+        ? `http:${trigger.id}:${rawIdempotencyKey}`
+        : `http:${trigger.id}:${runId}`
+      const correlationId = `http:${idempotencyKey}`
+      try {
+        await db.insert(triggerRuns).values({
+          id: runId,
+          organizationId: trigger.organizationId,
+          projectId: trigger.projectId,
+          triggerId: trigger.id,
+          scheduledFor: null,
+          heartbeatAt: null,
+          triggeredAt,
+          state: 'claimed',
+          idempotencyKey,
+          sessionId: null,
+          correlationId,
+          errorMessage: null,
+          metadata: '{}',
+          createdAt: triggeredAt,
+          updatedAt: triggeredAt,
+        })
+      } catch (error) {
+        if (uniqueConstraintError(error)) {
+          return null
+        }
+        throw error
+      }
+      return { id: runId, scheduledFor: triggeredAt, correlationId }
     },
 
     async projectName(projectId): Promise<string | null> {
@@ -110,7 +173,7 @@ export function createTriggerDispatchRepo(db: Db): TriggerDispatchRepo {
         .update(triggerRuns)
         .set({ state: 'failed', errorMessage: message, updatedAt: timestamp })
         .where(eq(triggerRuns.id, run.id))
-      await advanceTrigger(db, trigger, run, timestamp)
+      await advanceRunTrigger(db, trigger, run, timestamp)
     },
 
     async markRunSessionCreated(trigger, run, sessionId, sessionMetadata): Promise<void> {
@@ -124,7 +187,7 @@ export function createTriggerDispatchRepo(db: Db): TriggerDispatchRepo {
           updatedAt: timestamp,
         })
         .where(eq(triggerRuns.id, run.id))
-      await advanceTrigger(db, trigger, run, timestamp)
+      await advanceRunTrigger(db, trigger, run, timestamp)
     },
   }
 }

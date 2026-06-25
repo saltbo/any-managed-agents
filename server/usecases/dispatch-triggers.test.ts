@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Deps } from './deps'
-import type { ClaimedRun, DueTrigger, SessionRecord } from './ports'
+import type { AuthScope, ClaimedRun, DueTrigger, SessionRecord, TriggerRecord } from './ports'
 
 // dispatchDueScheduledTriggers now calls the runtime createSession usecase
 // directly (the SessionRuntimeGateway indirection was removed). Mock that module
@@ -16,7 +16,7 @@ vi.mock('./runtime/sessions', () => ({
   markExpiredPending: vi.fn(),
 }))
 
-import { dispatchDueScheduledTriggers } from './dispatch-triggers'
+import { dispatchDueScheduledTriggers, dispatchHttpTrigger } from './dispatch-triggers'
 import * as runtimeSessions from './runtime/sessions'
 
 type RuntimeSessionOverrides = { createSession?: typeof runtimeSessions.createSession }
@@ -24,6 +24,14 @@ type RuntimeSessionOverrides = { createSession?: typeof runtimeSessions.createSe
 beforeEach(() => {
   vi.clearAllMocks()
 })
+
+const auth: AuthScope = {
+  organization: { id: 'org_1', name: 'Org' },
+  project: { id: 'project_1', name: 'Project' },
+  user: { id: 'user_1' },
+  roles: [],
+  permissions: [],
+}
 
 function dueTrigger(overrides: Partial<DueTrigger> = {}): DueTrigger {
   return {
@@ -39,6 +47,34 @@ function dueTrigger(overrides: Partial<DueTrigger> = {}): DueTrigger {
     metadata: {},
     nextDueAt: '2026-01-01T00:00:00.000Z',
     intervalSeconds: 3600,
+    ...overrides,
+  }
+}
+
+function httpTrigger(overrides: Partial<TriggerRecord> = {}): TriggerRecord {
+  return {
+    id: 'trigger_http',
+    organizationId: 'org_1',
+    projectId: 'project_1',
+    type: 'http',
+    name: 'HTTP Agent',
+    agentId: 'agent_1',
+    environmentId: 'env_1',
+    runtime: 'ama',
+    promptTemplate: 'Handle {{ body.ticket.id }} from {{ query.source }}',
+    resourceRefs: [],
+    env: {},
+    secretEnv: [],
+    schedule: null,
+    enabled: true,
+    nextDueAt: null,
+    lastDispatchedAt: null,
+    lastRunId: null,
+    metadata: {},
+    createdByUserId: 'user_1',
+    archivedAt: null,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
     ...overrides,
   }
 }
@@ -98,6 +134,7 @@ function fakeDeps(
   const triggerDispatch: Deps['triggerDispatch'] = {
     dueTriggers: async () => [],
     claimRun: async () => claimedRun(),
+    claimHttpRun: async () => claimedRun({ id: 'httprun_1', scheduledFor: '2026-01-01T00:00:00.000Z' }),
     projectName: async () => 'My Project',
     markRunFailed: async () => {},
     markRunSessionCreated: async () => {},
@@ -590,6 +627,79 @@ describe('[spec: triggers/dispatch] dispatchDueScheduledTriggers — outer excep
     })
     const result = await dispatchDueScheduledTriggers(deps)
     expect(result.runs[0]!.errorMessage).toBe('string-error')
+  })
+})
+
+describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
+  it('creates a session with a prompt rendered from request fields', async () => {
+    let initialPrompt: string | undefined
+    const deps = fakeDeps({
+      sessionRuntime: {
+        createSession: async (_deps, _auth, input) => {
+          initialPrompt = input.options.initialPrompt
+          return { ok: true, value: sessionRecord({ id: 'sess_http' }) }
+        },
+      },
+    })
+    const result = await dispatchHttpTrigger(deps, auth, {
+      trigger: httpTrigger(),
+      context: {
+        body: { ticket: { id: 'T-123' } },
+        query: { source: 'portal' },
+        headers: {},
+      },
+    })
+    expect(result.state).toBe('session_created')
+    expect(result.sessionId).toBe('sess_http')
+    expect(initialPrompt).toBe('Handle T-123 from portal')
+  })
+
+  it('rejects a missing template variable before claiming a run', async () => {
+    let claimed = false
+    const deps = fakeDeps({
+      triggerDispatch: {
+        claimHttpRun: async () => {
+          claimed = true
+          return claimedRun()
+        },
+      },
+    })
+    await expect(
+      dispatchHttpTrigger(deps, auth, {
+        trigger: httpTrigger(),
+        context: { body: {}, query: { source: 'portal' }, headers: {} },
+      }),
+    ).rejects.toMatchObject({ name: 'TriggerValidationError' })
+    expect(claimed).toBe(false)
+  })
+
+  it('rejects scheduled triggers at the HTTP dispatch entry', async () => {
+    await expect(
+      dispatchHttpTrigger(fakeDeps(), auth, {
+        trigger: { ...httpTrigger(), type: 'scheduled', schedule: { intervalSeconds: 3600, windowSeconds: 0 } },
+        context: { body: {}, query: {}, headers: {} },
+      }),
+    ).rejects.toMatchObject({ name: 'TriggerConflictError' })
+  })
+
+  it('rejects disabled HTTP triggers', async () => {
+    await expect(
+      dispatchHttpTrigger(fakeDeps(), auth, {
+        trigger: httpTrigger({ enabled: false }),
+        context: { body: {}, query: {}, headers: {} },
+      }),
+    ).rejects.toMatchObject({ name: 'TriggerConflictError' })
+  })
+
+  it('rejects duplicate idempotency keys', async () => {
+    const deps = fakeDeps({ triggerDispatch: { claimHttpRun: async () => null } })
+    await expect(
+      dispatchHttpTrigger(deps, auth, {
+        trigger: httpTrigger(),
+        context: { body: { ticket: { id: 'T-123' } }, query: { source: 'portal' }, headers: {} },
+        idempotencyKey: 'same-key',
+      }),
+    ).rejects.toMatchObject({ name: 'TriggerConflictError' })
   })
 })
 

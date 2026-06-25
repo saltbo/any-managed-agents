@@ -4955,6 +4955,14 @@
             "type": "string",
             "example": "project_abc123"
           },
+          "type": {
+            "type": "string",
+            "enum": [
+              "scheduled",
+              "http"
+            ],
+            "example": "scheduled"
+          },
           "agentId": {
             "type": "string",
             "example": "agent_abc123"
@@ -5013,6 +5021,7 @@
           },
           "schedule": {
             "type": "object",
+            "nullable": true,
             "properties": {
               "type": {
                 "type": "string",
@@ -5046,6 +5055,7 @@
           },
           "nextDueAt": {
             "type": "string",
+            "nullable": true,
             "format": "date-time",
             "example": "2026-05-26T12:00:00.000Z"
           },
@@ -5092,6 +5102,7 @@
         "required": [
           "id",
           "projectId",
+          "type",
           "agentId",
           "environmentId",
           "runtime",
@@ -5231,6 +5242,14 @@
       "CreateTriggerRequest": {
         "type": "object",
         "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "scheduled",
+              "http"
+            ],
+            "example": "scheduled"
+          },
           "agentId": {
             "type": "string",
             "minLength": 1,
@@ -5296,6 +5315,7 @@
           },
           "schedule": {
             "type": "object",
+            "nullable": true,
             "properties": {
               "type": {
                 "type": "string",
@@ -5345,8 +5365,7 @@
           "agentId",
           "runtime",
           "name",
-          "promptTemplate",
-          "schedule"
+          "promptTemplate"
         ],
         "additionalProperties": false
       },
@@ -5371,6 +5390,14 @@
       "UpdateTriggerRequest": {
         "type": "object",
         "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "scheduled",
+              "http"
+            ],
+            "example": "http"
+          },
           "agentId": {
             "type": "string",
             "minLength": 1,
@@ -5436,6 +5463,7 @@
           },
           "schedule": {
             "type": "object",
+            "nullable": true,
             "properties": {
               "type": {
                 "type": "string",
@@ -5522,10 +5550,17 @@
           },
           "scheduledFor": {
             "type": "string",
+            "nullable": true,
             "format": "date-time",
             "example": "2026-05-26T12:00:00.000Z"
           },
           "heartbeatAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": "2026-05-26T12:01:00.000Z"
+          },
+          "triggeredAt": {
             "type": "string",
             "format": "date-time",
             "example": "2026-05-26T12:01:00.000Z"
@@ -5581,6 +5616,7 @@
           "triggerId",
           "scheduledFor",
           "heartbeatAt",
+          "triggeredAt",
           "state",
           "idempotencyKey",
           "sessionId",
@@ -5590,6 +5626,18 @@
           "createdAt",
           "updatedAt"
         ]
+      },
+      "CreateHttpTriggerRunRequest": {
+        "type": "object",
+        "additionalProperties": {
+          "nullable": true
+        },
+        "example": {
+          "customer": {
+            "name": "Ada"
+          },
+          "ticketId": "T-123"
+        }
       },
       "Session": {
         "type": "object",
@@ -12947,6 +12995,92 @@
           },
           "404": {
             "description": "Trigger not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createTriggerRun",
+        "tags": [
+          "Triggers"
+        ],
+        "summary": "Create an HTTP trigger run",
+        "description": "Creates a run for an HTTP trigger using the JSON body, query string, and allowed request headers as prompt template variables.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "trigger_abc123"
+            },
+            "required": true,
+            "name": "triggerId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateHttpTriggerRunRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created trigger run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TriggerRun"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Trigger not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
             "content": {
               "application/json": {
                 "schema": {

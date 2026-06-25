@@ -90,6 +90,7 @@ from .create_environment_request_variables import CreateEnvironmentRequestVariab
 from .create_environment_request_variables_additional_property import CreateEnvironmentRequestVariablesAdditionalProperty
 from .create_federated_tenant_request import CreateFederatedTenantRequest
 from .create_federated_tenant_request_metadata import CreateFederatedTenantRequestMetadata
+from .create_http_trigger_run_request import CreateHttpTriggerRunRequest
 from .create_lease_request import CreateLeaseRequest
 from .create_memory_store_memory_request import CreateMemoryStoreMemoryRequest
 from .create_memory_store_memory_request_metadata import CreateMemoryStoreMemoryRequestMetadata
@@ -113,8 +114,9 @@ from .create_tool_call_request_input import CreateToolCallRequestInput
 from .create_trigger_request import CreateTriggerRequest
 from .create_trigger_request_env import CreateTriggerRequestEnv
 from .create_trigger_request_metadata import CreateTriggerRequestMetadata
-from .create_trigger_request_schedule import CreateTriggerRequestSchedule
-from .create_trigger_request_schedule_type import CreateTriggerRequestScheduleType
+from .create_trigger_request_schedule_type_0 import CreateTriggerRequestScheduleType0
+from .create_trigger_request_schedule_type_0_type import CreateTriggerRequestScheduleType0Type
+from .create_trigger_request_type import CreateTriggerRequestType
 from .create_vault_credential_request import CreateVaultCredentialRequest
 from .create_vault_credential_request_connector_binding import CreateVaultCredentialRequestConnectorBinding
 from .create_vault_credential_request_metadata import CreateVaultCredentialRequestMetadata
@@ -335,8 +337,9 @@ from .trigger_run import TriggerRun
 from .trigger_run_list_response import TriggerRunListResponse
 from .trigger_run_metadata import TriggerRunMetadata
 from .trigger_run_state import TriggerRunState
-from .trigger_schedule import TriggerSchedule
-from .trigger_schedule_type import TriggerScheduleType
+from .trigger_schedule_type_0 import TriggerScheduleType0
+from .trigger_schedule_type_0_type import TriggerScheduleType0Type
+from .trigger_type import TriggerType
 from .update_agent_request import UpdateAgentRequest
 from .update_agent_request_metadata import UpdateAgentRequestMetadata
 from .update_budget_request import UpdateBudgetRequest
@@ -374,8 +377,9 @@ from .update_session_request_state import UpdateSessionRequestState
 from .update_trigger_request import UpdateTriggerRequest
 from .update_trigger_request_env import UpdateTriggerRequestEnv
 from .update_trigger_request_metadata import UpdateTriggerRequestMetadata
-from .update_trigger_request_schedule import UpdateTriggerRequestSchedule
-from .update_trigger_request_schedule_type import UpdateTriggerRequestScheduleType
+from .update_trigger_request_schedule_type_0 import UpdateTriggerRequestScheduleType0
+from .update_trigger_request_schedule_type_0_type import UpdateTriggerRequestScheduleType0Type
+from .update_trigger_request_type import UpdateTriggerRequestType
 from .update_vault_credential_request import UpdateVaultCredentialRequest
 from .update_vault_credential_request_metadata import UpdateVaultCredentialRequestMetadata
 from .update_vault_credential_request_state import UpdateVaultCredentialRequestState
@@ -504,6 +508,7 @@ __all__ = (
     "CreateEnvironmentRequestVariablesAdditionalProperty",
     "CreateFederatedTenantRequest",
     "CreateFederatedTenantRequestMetadata",
+    "CreateHttpTriggerRunRequest",
     "CreateLeaseRequest",
     "CreateMemoryStoreMemoryRequest",
     "CreateMemoryStoreMemoryRequestMetadata",
@@ -527,8 +532,9 @@ __all__ = (
     "CreateTriggerRequest",
     "CreateTriggerRequestEnv",
     "CreateTriggerRequestMetadata",
-    "CreateTriggerRequestSchedule",
-    "CreateTriggerRequestScheduleType",
+    "CreateTriggerRequestScheduleType0",
+    "CreateTriggerRequestScheduleType0Type",
+    "CreateTriggerRequestType",
     "CreateVaultCredentialRequest",
     "CreateVaultCredentialRequestConnectorBinding",
     "CreateVaultCredentialRequestMetadata",
@@ -749,8 +755,9 @@ __all__ = (
     "TriggerRunListResponse",
     "TriggerRunMetadata",
     "TriggerRunState",
-    "TriggerSchedule",
-    "TriggerScheduleType",
+    "TriggerScheduleType0",
+    "TriggerScheduleType0Type",
+    "TriggerType",
     "UpdateAgentRequest",
     "UpdateAgentRequestMetadata",
     "UpdateBudgetRequest",
@@ -788,8 +795,9 @@ __all__ = (
     "UpdateTriggerRequest",
     "UpdateTriggerRequestEnv",
     "UpdateTriggerRequestMetadata",
-    "UpdateTriggerRequestSchedule",
-    "UpdateTriggerRequestScheduleType",
+    "UpdateTriggerRequestScheduleType0",
+    "UpdateTriggerRequestScheduleType0Type",
+    "UpdateTriggerRequestType",
     "UpdateVaultCredentialRequest",
     "UpdateVaultCredentialRequestMetadata",
     "UpdateVaultCredentialRequestState",

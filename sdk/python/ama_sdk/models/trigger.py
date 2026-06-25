@@ -9,6 +9,7 @@ from attrs import field as _attrs_field
 from ..types import UNSET, Unset
 
 from ..models.runtime import Runtime
+from ..models.trigger_type import TriggerType
 from typing import cast
 import datetime
 
@@ -19,7 +20,7 @@ if TYPE_CHECKING:
   from ..models.secret_env_entry import SecretEnvEntry
   from ..models.trigger_env import TriggerEnv
   from ..models.trigger_metadata import TriggerMetadata
-  from ..models.trigger_schedule import TriggerSchedule
+  from ..models.trigger_schedule_type_0 import TriggerScheduleType0
 
 
 
@@ -35,6 +36,7 @@ class Trigger:
         Attributes:
             id (str):  Example: trigger_abc123.
             project_id (str):  Example: project_abc123.
+            type_ (TriggerType):  Example: scheduled.
             agent_id (str):  Example: agent_abc123.
             environment_id (None | str):  Example: env_abc123.
             runtime (Runtime):  Example: codex.
@@ -45,9 +47,10 @@ class Trigger:
             env (TriggerEnv):  Example: {'AK_API_URL': 'https://ak.example.com'}.
             secret_env (list[SecretEnvEntry]):  Example: [{'name': 'AK_AGENT_KEY', 'credentialRef': {'credentialId':
                 'vaultcred_abc123'}}].
-            schedule (TriggerSchedule):  Example: {'type': 'interval', 'intervalSeconds': 86400, 'windowSeconds': 0}.
+            schedule (None | TriggerScheduleType0):  Example: {'type': 'interval', 'intervalSeconds': 86400,
+                'windowSeconds': 0}.
             enabled (bool):  Example: True.
-            next_due_at (datetime.datetime):  Example: 2026-05-26T12:00:00.000Z.
+            next_due_at (datetime.datetime | None):  Example: 2026-05-26T12:00:00.000Z.
             last_dispatched_at (datetime.datetime | None):
             last_run_id (None | str):  Example: trigrun_abc123.
             metadata (TriggerMetadata):  Example: {'owner': 'growth'}.
@@ -59,6 +62,7 @@ class Trigger:
 
     id: str
     project_id: str
+    type_: TriggerType
     agent_id: str
     environment_id: None | str
     runtime: Runtime
@@ -67,9 +71,9 @@ class Trigger:
     resource_refs: list[GitHubRepositoryResourceRef | MemoryStoreResourceRef | ResourceRefType1]
     env: TriggerEnv
     secret_env: list[SecretEnvEntry]
-    schedule: TriggerSchedule
+    schedule: None | TriggerScheduleType0
     enabled: bool
-    next_due_at: datetime.datetime
+    next_due_at: datetime.datetime | None
     last_dispatched_at: datetime.datetime | None
     last_run_id: None | str
     metadata: TriggerMetadata
@@ -90,10 +94,12 @@ class Trigger:
         from ..models.secret_env_entry import SecretEnvEntry
         from ..models.trigger_env import TriggerEnv
         from ..models.trigger_metadata import TriggerMetadata
-        from ..models.trigger_schedule import TriggerSchedule
+        from ..models.trigger_schedule_type_0 import TriggerScheduleType0
         id = self.id
 
         project_id = self.project_id
+
+        type_ = self.type_.value
 
         agent_id = self.agent_id
 
@@ -129,11 +135,19 @@ class Trigger:
 
 
 
-        schedule = self.schedule.to_dict()
+        schedule: dict[str, Any] | None
+        if isinstance(self.schedule, TriggerScheduleType0):
+            schedule = self.schedule.to_dict()
+        else:
+            schedule = self.schedule
 
         enabled = self.enabled
 
-        next_due_at = self.next_due_at.isoformat()
+        next_due_at: None | str
+        if isinstance(self.next_due_at, datetime.datetime):
+            next_due_at = self.next_due_at.isoformat()
+        else:
+            next_due_at = self.next_due_at
 
         last_dispatched_at: None | str
         if isinstance(self.last_dispatched_at, datetime.datetime):
@@ -165,6 +179,7 @@ class Trigger:
         field_dict.update({
             "id": id,
             "projectId": project_id,
+            "type": type_,
             "agentId": agent_id,
             "environmentId": environment_id,
             "runtime": runtime,
@@ -197,11 +212,16 @@ class Trigger:
         from ..models.secret_env_entry import SecretEnvEntry
         from ..models.trigger_env import TriggerEnv
         from ..models.trigger_metadata import TriggerMetadata
-        from ..models.trigger_schedule import TriggerSchedule
+        from ..models.trigger_schedule_type_0 import TriggerScheduleType0
         d = dict(src_dict)
         id = d.pop("id")
 
         project_id = d.pop("projectId")
+
+        type_ = TriggerType(d.pop("type"))
+
+
+
 
         agent_id = d.pop("agentId")
 
@@ -274,16 +294,42 @@ class Trigger:
             secret_env.append(secret_env_item)
 
 
-        schedule = TriggerSchedule.from_dict(d.pop("schedule"))
+        def _parse_schedule(data: object) -> None | TriggerScheduleType0:
+            if data is None:
+                return data
+            try:
+                if not isinstance(data, dict):
+                    raise TypeError()
+                schedule_type_0 = TriggerScheduleType0.from_dict(data)
 
 
+
+                return schedule_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            return cast(None | TriggerScheduleType0, data)
+
+        schedule = _parse_schedule(d.pop("schedule"))
 
 
         enabled = d.pop("enabled")
 
-        next_due_at = datetime.datetime.fromisoformat(d.pop("nextDueAt"))
+        def _parse_next_due_at(data: object) -> datetime.datetime | None:
+            if data is None:
+                return data
+            try:
+                if not isinstance(data, str):
+                    raise TypeError()
+                next_due_at_type_0 = datetime.datetime.fromisoformat(data)
 
 
+
+                return next_due_at_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            return cast(datetime.datetime | None, data)
+
+        next_due_at = _parse_next_due_at(d.pop("nextDueAt"))
 
 
         def _parse_last_dispatched_at(data: object) -> datetime.datetime | None:
@@ -356,6 +402,7 @@ class Trigger:
         trigger = cls(
             id=id,
             project_id=project_id,
+            type_=type_,
             agent_id=agent_id,
             environment_id=environment_id,
             runtime=runtime,

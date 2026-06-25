@@ -726,6 +726,20 @@ export const listTriggerRuns = (options) => (options.client ?? client).get({
     ...options
 });
 /**
+ * Create an HTTP trigger run
+ *
+ * Creates a run for an HTTP trigger using the JSON body, query string, and allowed request headers as prompt template variables.
+ */
+export const createTriggerRun = (options) => (options.client ?? client).post({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/triggers/{triggerId}/runs',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+/**
  * Read a trigger run
  */
 export const readTriggerRun = (options) => (options.client ?? client).get({

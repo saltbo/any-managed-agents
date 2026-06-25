@@ -19,6 +19,7 @@ const auth: AuthScope = {
 
 function baseConfig(overrides: Partial<TriggerConfig> = {}): TriggerConfig {
   return {
+    type: 'scheduled',
     agentId: 'agent_1',
     environmentId: 'env_1',
     runtime: 'ama',
@@ -39,6 +40,7 @@ function triggerRecord(overrides: Partial<TriggerRecord> = {}): TriggerRecord {
   return {
     ...baseConfig(),
     id: 'trigger_1',
+    organizationId: 'org_1',
     projectId: 'project_1',
     lastDispatchedAt: null,
     lastRunId: null,
@@ -78,6 +80,17 @@ describe('[spec: triggers/create] createTrigger', () => {
     expect(trigger.nextDueAt).toBe('2026-05-26T12:00:00.000Z')
   })
 
+  it('creates an HTTP trigger without schedule timing [spec: triggers/http-create]', async () => {
+    const trigger = await createTrigger(fakeDeps(), auth, {
+      agentId: 'agent_1',
+      environmentId: 'env_1',
+      config: { ...baseConfig({ type: 'http', schedule: null, nextDueAt: null }), nextDueAt: null },
+    })
+    expect(trigger.type).toBe('http')
+    expect(trigger.schedule).toBeNull()
+    expect(trigger.nextDueAt).toBeNull()
+  })
+
   it('derives nextDueAt from the interval when omitted', async () => {
     const trigger = await createTrigger(fakeDeps(), auth, {
       agentId: 'agent_1',
@@ -85,6 +98,26 @@ describe('[spec: triggers/create] createTrigger', () => {
       config: { ...baseConfig(), nextDueAt: null },
     })
     expect(trigger.nextDueAt).toEqual(expect.any(String))
+  })
+
+  it('rejects scheduled triggers without schedule timing', async () => {
+    await expect(
+      createTrigger(fakeDeps(), auth, {
+        agentId: 'agent_1',
+        environmentId: 'env_1',
+        config: { ...baseConfig({ schedule: null }), nextDueAt: null },
+      }),
+    ).rejects.toBeInstanceOf(TriggerValidationError)
+  })
+
+  it('rejects HTTP triggers with schedule timing', async () => {
+    await expect(
+      createTrigger(fakeDeps(), auth, {
+        agentId: 'agent_1',
+        environmentId: 'env_1',
+        config: { ...baseConfig({ type: 'http' }), nextDueAt: null },
+      }),
+    ).rejects.toBeInstanceOf(TriggerValidationError)
   })
 
   it('rejects secret metadata [spec: triggers/validation]', async () => {
@@ -139,7 +172,7 @@ describe('[spec: triggers/lifecycle] updateTrigger', () => {
       schedule: { intervalSeconds: 1800 },
     })
     expect(result.trigger.name).toBe('Renamed')
-    expect(result.trigger.schedule.intervalSeconds).toBe(1800)
+    expect(result.trigger.schedule?.intervalSeconds).toBe(1800)
     expect(result.archived).toBe(false)
   })
 

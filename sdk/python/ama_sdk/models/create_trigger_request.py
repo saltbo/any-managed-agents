@@ -8,6 +8,7 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
+from ..models.create_trigger_request_type import CreateTriggerRequestType
 from ..models.runtime import Runtime
 from ..types import UNSET, Unset
 from typing import cast
@@ -16,7 +17,7 @@ import datetime
 if TYPE_CHECKING:
   from ..models.create_trigger_request_env import CreateTriggerRequestEnv
   from ..models.create_trigger_request_metadata import CreateTriggerRequestMetadata
-  from ..models.create_trigger_request_schedule import CreateTriggerRequestSchedule
+  from ..models.create_trigger_request_schedule_type_0 import CreateTriggerRequestScheduleType0
   from ..models.git_hub_repository_resource_ref import GitHubRepositoryResourceRef
   from ..models.memory_store_resource_ref import MemoryStoreResourceRef
   from ..models.resource_ref_type_1 import ResourceRefType1
@@ -38,13 +39,14 @@ class CreateTriggerRequest:
             runtime (Runtime):  Example: codex.
             name (str):  Example: Daily research heartbeat.
             prompt_template (str):  Example: Research current Canadian banking bonus offers..
-            schedule (CreateTriggerRequestSchedule):
+            type_ (CreateTriggerRequestType | Unset):  Example: scheduled.
             environment_id (str | Unset):  Example: env_abc123.
             resource_refs (list[GitHubRepositoryResourceRef | MemoryStoreResourceRef | ResourceRefType1] | Unset):  Example:
                 [{'type': 'github_repository', 'owner': 'openai', 'repo': 'openai'}].
             env (CreateTriggerRequestEnv | Unset):  Example: {'AK_API_URL': 'https://ak.example.com'}.
             secret_env (list[SecretEnvEntry] | Unset):  Example: [{'name': 'AK_AGENT_KEY', 'credentialRef': {'credentialId':
                 'vaultcred_abc123'}}].
+            schedule (CreateTriggerRequestScheduleType0 | None | Unset):
             enabled (bool | Unset):  Example: True.
             next_due_at (datetime.datetime | Unset):  Example: 2026-05-26T12:00:00.000Z.
             metadata (CreateTriggerRequestMetadata | Unset):  Example: {'owner': 'growth'}.
@@ -54,11 +56,12 @@ class CreateTriggerRequest:
     runtime: Runtime
     name: str
     prompt_template: str
-    schedule: CreateTriggerRequestSchedule
+    type_: CreateTriggerRequestType | Unset = UNSET
     environment_id: str | Unset = UNSET
     resource_refs: list[GitHubRepositoryResourceRef | MemoryStoreResourceRef | ResourceRefType1] | Unset = UNSET
     env: CreateTriggerRequestEnv | Unset = UNSET
     secret_env: list[SecretEnvEntry] | Unset = UNSET
+    schedule: CreateTriggerRequestScheduleType0 | None | Unset = UNSET
     enabled: bool | Unset = UNSET
     next_due_at: datetime.datetime | Unset = UNSET
     metadata: CreateTriggerRequestMetadata | Unset = UNSET
@@ -70,7 +73,7 @@ class CreateTriggerRequest:
     def to_dict(self) -> dict[str, Any]:
         from ..models.create_trigger_request_env import CreateTriggerRequestEnv
         from ..models.create_trigger_request_metadata import CreateTriggerRequestMetadata
-        from ..models.create_trigger_request_schedule import CreateTriggerRequestSchedule
+        from ..models.create_trigger_request_schedule_type_0 import CreateTriggerRequestScheduleType0
         from ..models.git_hub_repository_resource_ref import GitHubRepositoryResourceRef
         from ..models.memory_store_resource_ref import MemoryStoreResourceRef
         from ..models.resource_ref_type_1 import ResourceRefType1
@@ -83,7 +86,10 @@ class CreateTriggerRequest:
 
         prompt_template = self.prompt_template
 
-        schedule = self.schedule.to_dict()
+        type_: str | Unset = UNSET
+        if not isinstance(self.type_, Unset):
+            type_ = self.type_.value
+
 
         environment_id = self.environment_id
 
@@ -116,6 +122,14 @@ class CreateTriggerRequest:
 
 
 
+        schedule: dict[str, Any] | None | Unset
+        if isinstance(self.schedule, Unset):
+            schedule = UNSET
+        elif isinstance(self.schedule, CreateTriggerRequestScheduleType0):
+            schedule = self.schedule.to_dict()
+        else:
+            schedule = self.schedule
+
         enabled = self.enabled
 
         next_due_at: str | Unset = UNSET
@@ -134,8 +148,9 @@ class CreateTriggerRequest:
             "runtime": runtime,
             "name": name,
             "promptTemplate": prompt_template,
-            "schedule": schedule,
         })
+        if type_ is not UNSET:
+            field_dict["type"] = type_
         if environment_id is not UNSET:
             field_dict["environmentId"] = environment_id
         if resource_refs is not UNSET:
@@ -144,6 +159,8 @@ class CreateTriggerRequest:
             field_dict["env"] = env
         if secret_env is not UNSET:
             field_dict["secretEnv"] = secret_env
+        if schedule is not UNSET:
+            field_dict["schedule"] = schedule
         if enabled is not UNSET:
             field_dict["enabled"] = enabled
         if next_due_at is not UNSET:
@@ -159,7 +176,7 @@ class CreateTriggerRequest:
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.create_trigger_request_env import CreateTriggerRequestEnv
         from ..models.create_trigger_request_metadata import CreateTriggerRequestMetadata
-        from ..models.create_trigger_request_schedule import CreateTriggerRequestSchedule
+        from ..models.create_trigger_request_schedule_type_0 import CreateTriggerRequestScheduleType0
         from ..models.git_hub_repository_resource_ref import GitHubRepositoryResourceRef
         from ..models.memory_store_resource_ref import MemoryStoreResourceRef
         from ..models.resource_ref_type_1 import ResourceRefType1
@@ -176,7 +193,12 @@ class CreateTriggerRequest:
 
         prompt_template = d.pop("promptTemplate")
 
-        schedule = CreateTriggerRequestSchedule.from_dict(d.pop("schedule"))
+        _type_ = d.pop("type", UNSET)
+        type_: CreateTriggerRequestType | Unset
+        if isinstance(_type_,  Unset):
+            type_ = UNSET
+        else:
+            type_ = CreateTriggerRequestType(_type_)
 
 
 
@@ -244,6 +266,26 @@ class CreateTriggerRequest:
                 secret_env.append(secret_env_item)
 
 
+        def _parse_schedule(data: object) -> CreateTriggerRequestScheduleType0 | None | Unset:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            try:
+                if not isinstance(data, dict):
+                    raise TypeError()
+                schedule_type_0 = CreateTriggerRequestScheduleType0.from_dict(data)
+
+
+
+                return schedule_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            return cast(CreateTriggerRequestScheduleType0 | None | Unset, data)
+
+        schedule = _parse_schedule(d.pop("schedule", UNSET))
+
+
         enabled = d.pop("enabled", UNSET)
 
         _next_due_at = d.pop("nextDueAt", UNSET)
@@ -271,11 +313,12 @@ class CreateTriggerRequest:
             runtime=runtime,
             name=name,
             prompt_template=prompt_template,
-            schedule=schedule,
+            type_=type_,
             environment_id=environment_id,
             resource_refs=resource_refs,
             env=env,
             secret_env=secret_env,
+            schedule=schedule,
             enabled=enabled,
             next_due_at=next_due_at,
             metadata=metadata,

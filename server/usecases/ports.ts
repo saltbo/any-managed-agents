@@ -1326,12 +1326,15 @@ export interface TriggerSchedule {
   windowSeconds: number
 }
 
+export type TriggerType = 'scheduled' | 'http'
+
 export interface SecretEnvEntry {
   name: string
   credentialRef: { credentialId: string; versionId?: string }
 }
 
 export interface TriggerConfig {
+  type: TriggerType
   agentId: string
   // Null pins no environment; the dispatcher resolves a runner-capable one per
   // run via TriggerDispatchRepo.resolveEnvironmentForRuntime.
@@ -1342,14 +1345,15 @@ export interface TriggerConfig {
   resourceRefs: Record<string, unknown>[]
   env: Record<string, string>
   secretEnv: SecretEnvEntry[]
-  schedule: TriggerSchedule
+  schedule: TriggerSchedule | null
   enabled: boolean
-  nextDueAt: string
+  nextDueAt: string | null
   metadata: Record<string, unknown>
 }
 
 export interface TriggerRecord extends TriggerConfig {
   id: string
+  organizationId: string
   projectId: string
   lastDispatchedAt: string | null
   lastRunId: string | null
@@ -1363,8 +1367,9 @@ export interface TriggerRunRecord {
   id: string
   projectId: string
   triggerId: string
-  scheduledFor: string
-  heartbeatAt: string
+  scheduledFor: string | null
+  heartbeatAt: string | null
+  triggeredAt: string
   state: 'claimed' | 'session_created' | 'failed'
   idempotencyKey: string
   sessionId: string | null
@@ -1469,10 +1474,11 @@ export interface TriggerDispatchRepo {
   dueTriggers(options: { heartbeatAt: string; projectId?: string; limit: number }): Promise<DueTrigger[]>
   // Returns null when the idempotency key collides (run already claimed).
   claimRun(trigger: DueTrigger, heartbeatAt: string): Promise<ClaimedRun | null>
+  claimHttpRun(trigger: TriggerRecord, triggeredAt: string, idempotencyKey: string | null): Promise<ClaimedRun | null>
   projectName(projectId: string): Promise<string | null>
-  markRunFailed(trigger: DueTrigger, run: ClaimedRun, message: string): Promise<void>
+  markRunFailed(trigger: DueTrigger | TriggerRecord, run: ClaimedRun, message: string): Promise<void>
   markRunSessionCreated(
-    trigger: DueTrigger,
+    trigger: DueTrigger | TriggerRecord,
     run: ClaimedRun,
     sessionId: string,
     sessionMetadata: Record<string, unknown>,

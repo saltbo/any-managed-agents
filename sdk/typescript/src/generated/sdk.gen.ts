@@ -2,7 +2,7 @@
 
 import { client } from './client.gen.js';
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client/index.js';
-import type { ConnectRunnerChannelData, ConnectRunnerChannelErrors, ConnectRunnerChannelResponses, ConnectSessionSocketData, ConnectSessionSocketErrors, ConnectSessionSocketResponses, CreateAgentData, CreateAgentErrors, CreateAgentResponses, CreateAuthSessionData, CreateAuthSessionErrors, CreateAuthSessionResponses, CreateBudgetData, CreateBudgetErrors, CreateBudgetResponses, CreateConnectionData, CreateConnectionErrors, CreateConnectionResponses, CreateEnvironmentData, CreateEnvironmentErrors, CreateEnvironmentResponses, CreateFederatedTenantData, CreateFederatedTenantErrors, CreateFederatedTenantResponses, CreateLeaseData, CreateLeaseErrors, CreateLeaseResponses, CreateMemoryStoreData, CreateMemoryStoreErrors, CreateMemoryStoreMemoryData, CreateMemoryStoreMemoryErrors, CreateMemoryStoreMemoryResponses, CreateMemoryStoreResponses, CreatePolicyData, CreatePolicyErrors, CreatePolicyResponses, CreateProjectData, CreateProjectErrors, CreateProjectResponses, CreateRunnerData, CreateRunnerErrors, CreateRunnerResponses, CreateSessionData, CreateSessionErrors, CreateSessionEventsData, CreateSessionEventsErrors, CreateSessionEventsResponses, CreateSessionMessageData, CreateSessionMessageErrors, CreateSessionMessageResponses, CreateSessionResponses, CreateToolCallData, CreateToolCallErrors, CreateToolCallResponses, CreateTriggerData, CreateTriggerErrors, CreateTriggerResponses, CreateVaultCredentialData, CreateVaultCredentialErrors, CreateVaultCredentialResponses, CreateVaultCredentialVersionData, CreateVaultCredentialVersionErrors, CreateVaultCredentialVersionResponses, CreateVaultData, CreateVaultErrors, CreateVaultResponses, DecideSessionApprovalData, DecideSessionApprovalErrors, DecideSessionApprovalResponses, DeleteBudgetData, DeleteBudgetErrors, DeleteBudgetResponses, DeleteCurrentAuthSessionData, DeleteCurrentAuthSessionResponses, DeleteFederatedTenantData, DeleteFederatedTenantErrors, DeleteFederatedTenantResponses, DeleteMemoryStoreMemoryData, DeleteMemoryStoreMemoryErrors, DeleteMemoryStoreMemoryResponses, DeletePolicyData, DeletePolicyErrors, DeletePolicyResponses, DeleteTriggerData, DeleteTriggerErrors, DeleteTriggerResponses, DeleteVaultCredentialVersionData, DeleteVaultCredentialVersionErrors, DeleteVaultCredentialVersionResponses, GetHealthData, GetHealthResponses, ListAgentHandoffCandidatesData, ListAgentHandoffCandidatesErrors, ListAgentHandoffCandidatesResponses, ListAgentsData, ListAgentsErrors, ListAgentsResponses, ListAgentVersionsData, ListAgentVersionsErrors, ListAgentVersionsResponses, ListAuditRecordsData, ListAuditRecordsErrors, ListAuditRecordsResponses, ListBudgetsData, ListBudgetsErrors, ListBudgetsResponses, ListConnectionsData, ListConnectionsErrors, ListConnectionsResponses, ListConnectionToolsData, ListConnectionToolsErrors, ListConnectionToolsResponses, ListConnectorsData, ListConnectorsErrors, ListConnectorsResponses, ListEnvironmentsData, ListEnvironmentsErrors, ListEnvironmentsResponses, ListEnvironmentVersionsData, ListEnvironmentVersionsErrors, ListEnvironmentVersionsResponses, ListFederatedTenantsData, ListFederatedTenantsErrors, ListFederatedTenantsResponses, ListLeasesData, ListLeasesErrors, ListLeasesResponses, ListMemoryStoreMemoriesData, ListMemoryStoreMemoriesErrors, ListMemoryStoreMemoriesResponses, ListMemoryStoresData, ListMemoryStoresErrors, ListMemoryStoresResponses, ListModelsData, ListModelsErrors, ListModelsResponses, ListPoliciesData, ListPoliciesErrors, ListPoliciesResponses, ListProjectsData, ListProjectsErrors, ListProjectsResponses, ListProviderModelsData, ListProviderModelsErrors, ListProviderModelsResponses, ListProvidersData, ListProvidersErrors, ListProvidersResponses, ListRunnersData, ListRunnersErrors, ListRunnersResponses, ListSessionApprovalsData, ListSessionApprovalsErrors, ListSessionApprovalsResponses, ListSessionEventsData, ListSessionEventsErrors, ListSessionEventsResponses, ListSessionMessagesData, ListSessionMessagesErrors, ListSessionMessagesResponses, ListSessionsData, ListSessionsErrors, ListSessionsResponses, ListToolCallsData, ListToolCallsErrors, ListToolCallsResponses, ListTriggerRunsData, ListTriggerRunsErrors, ListTriggerRunsResponses, ListTriggersData, ListTriggersErrors, ListTriggersResponses, ListUsageRecordsData, ListUsageRecordsErrors, ListUsageRecordsResponses, ListVaultCredentialsData, ListVaultCredentialsErrors, ListVaultCredentialsResponses, ListVaultCredentialVersionsData, ListVaultCredentialVersionsErrors, ListVaultCredentialVersionsResponses, ListVaultsData, ListVaultsErrors, ListVaultsResponses, ListWorkItemsData, ListWorkItemsErrors, ListWorkItemsResponses, PutRunnerHeartbeatData, PutRunnerHeartbeatErrors, PutRunnerHeartbeatResponses, ReadAgentData, ReadAgentErrors, ReadAgentMemoryData, ReadAgentMemoryErrors, ReadAgentMemoryResponses, ReadAgentResponses, ReadAgentVersionData, ReadAgentVersionErrors, ReadAgentVersionResponses, ReadAuditRecordData, ReadAuditRecordErrors, ReadAuditRecordResponses, ReadAuthConfigData, ReadAuthConfigResponses, ReadBudgetData, ReadBudgetErrors, ReadBudgetResponses, ReadConnectionData, ReadConnectionErrors, ReadConnectionResponses, ReadConnectorData, ReadConnectorErrors, ReadConnectorResponses, ReadCurrentAuthSessionData, ReadCurrentAuthSessionErrors, ReadCurrentAuthSessionResponses, ReadEffectivePolicyData, ReadEffectivePolicyErrors, ReadEffectivePolicyResponses, ReadEnvironmentData, ReadEnvironmentErrors, ReadEnvironmentResponses, ReadEnvironmentVersionData, ReadEnvironmentVersionErrors, ReadEnvironmentVersionResponses, ReadFederatedTenantData, ReadFederatedTenantErrors, ReadFederatedTenantResponses, ReadLeaseData, ReadLeaseErrors, ReadLeaseResponses, ReadMemoryStoreData, ReadMemoryStoreErrors, ReadMemoryStoreResponses, ReadPolicyData, ReadPolicyErrors, ReadPolicyResponses, ReadProjectData, ReadProjectErrors, ReadProjectResponses, ReadProviderData, ReadProviderErrors, ReadProviderResponses, ReadRunnerData, ReadRunnerErrors, ReadRunnerHeartbeatData, ReadRunnerHeartbeatErrors, ReadRunnerHeartbeatResponses, ReadRunnerResponses, ReadSessionApprovalData, ReadSessionApprovalErrors, ReadSessionApprovalResponses, ReadSessionConnectionData, ReadSessionConnectionErrors, ReadSessionConnectionResponses, ReadSessionData, ReadSessionErrors, ReadSessionMessageData, ReadSessionMessageErrors, ReadSessionMessageResponses, ReadSessionResponses, ReadToolCallData, ReadToolCallErrors, ReadToolCallResponses, ReadTriggerData, ReadTriggerErrors, ReadTriggerResponses, ReadTriggerRunData, ReadTriggerRunErrors, ReadTriggerRunResponses, ReadUsageRecordData, ReadUsageRecordErrors, ReadUsageRecordResponses, ReadUsageSummaryData, ReadUsageSummaryErrors, ReadUsageSummaryResponses, ReadVaultCredentialData, ReadVaultCredentialErrors, ReadVaultCredentialResponses, ReadVaultCredentialVersionData, ReadVaultCredentialVersionErrors, ReadVaultCredentialVersionResponses, ReadVaultData, ReadVaultErrors, ReadVaultResponses, ReadWorkItemData, ReadWorkItemErrors, ReadWorkItemResponses, RefreshCatalogData, RefreshCatalogErrors, RefreshCatalogResponses, ReplaceAgentMemoryData, ReplaceAgentMemoryErrors, ReplaceAgentMemoryResponses, ReplacePolicyData, ReplacePolicyErrors, ReplacePolicyResponses, UpdateAgentData, UpdateAgentErrors, UpdateAgentResponses, UpdateBudgetData, UpdateBudgetErrors, UpdateBudgetResponses, UpdateConnectionData, UpdateConnectionErrors, UpdateConnectionResponses, UpdateEnvironmentData, UpdateEnvironmentErrors, UpdateEnvironmentResponses, UpdateFederatedTenantData, UpdateFederatedTenantErrors, UpdateFederatedTenantResponses, UpdateLeaseData, UpdateLeaseErrors, UpdateLeaseResponses, UpdateMemoryStoreData, UpdateMemoryStoreErrors, UpdateMemoryStoreMemoryData, UpdateMemoryStoreMemoryErrors, UpdateMemoryStoreMemoryResponses, UpdateMemoryStoreResponses, UpdateRunnerData, UpdateRunnerErrors, UpdateRunnerResponses, UpdateSessionData, UpdateSessionErrors, UpdateSessionResponses, UpdateTriggerData, UpdateTriggerErrors, UpdateTriggerResponses, UpdateVaultCredentialData, UpdateVaultCredentialErrors, UpdateVaultCredentialResponses, UpdateVaultData, UpdateVaultErrors, UpdateVaultResponses } from './types.gen.js';
+import type { ConnectRunnerChannelData, ConnectRunnerChannelErrors, ConnectRunnerChannelResponses, ConnectSessionSocketData, ConnectSessionSocketErrors, ConnectSessionSocketResponses, CreateAgentData, CreateAgentErrors, CreateAgentResponses, CreateAuthSessionData, CreateAuthSessionErrors, CreateAuthSessionResponses, CreateBudgetData, CreateBudgetErrors, CreateBudgetResponses, CreateConnectionData, CreateConnectionErrors, CreateConnectionResponses, CreateEnvironmentData, CreateEnvironmentErrors, CreateEnvironmentResponses, CreateFederatedTenantData, CreateFederatedTenantErrors, CreateFederatedTenantResponses, CreateLeaseData, CreateLeaseErrors, CreateLeaseResponses, CreatePolicyData, CreatePolicyErrors, CreatePolicyResponses, CreateProjectData, CreateProjectErrors, CreateProjectResponses, CreateRunnerData, CreateRunnerErrors, CreateRunnerResponses, CreateSessionData, CreateSessionErrors, CreateSessionEventsData, CreateSessionEventsErrors, CreateSessionEventsResponses, CreateSessionMessageData, CreateSessionMessageErrors, CreateSessionMessageResponses, CreateSessionResponses, CreateToolCallData, CreateToolCallErrors, CreateToolCallResponses, CreateTriggerData, CreateTriggerErrors, CreateTriggerResponses, CreateTriggerRunData, CreateTriggerRunErrors, CreateTriggerRunResponses, CreateVaultCredentialData, CreateVaultCredentialErrors, CreateVaultCredentialResponses, CreateVaultCredentialVersionData, CreateVaultCredentialVersionErrors, CreateVaultCredentialVersionResponses, CreateVaultData, CreateVaultErrors, CreateVaultResponses, DecideSessionApprovalData, DecideSessionApprovalErrors, DecideSessionApprovalResponses, DeleteBudgetData, DeleteBudgetErrors, DeleteBudgetResponses, DeleteCurrentAuthSessionData, DeleteCurrentAuthSessionResponses, DeleteFederatedTenantData, DeleteFederatedTenantErrors, DeleteFederatedTenantResponses, DeletePolicyData, DeletePolicyErrors, DeletePolicyResponses, DeleteTriggerData, DeleteTriggerErrors, DeleteTriggerResponses, DeleteVaultCredentialVersionData, DeleteVaultCredentialVersionErrors, DeleteVaultCredentialVersionResponses, GetHealthData, GetHealthResponses, ListAgentHandoffCandidatesData, ListAgentHandoffCandidatesErrors, ListAgentHandoffCandidatesResponses, ListAgentsData, ListAgentsErrors, ListAgentsResponses, ListAgentVersionsData, ListAgentVersionsErrors, ListAgentVersionsResponses, ListAuditRecordsData, ListAuditRecordsErrors, ListAuditRecordsResponses, ListBudgetsData, ListBudgetsErrors, ListBudgetsResponses, ListConnectionsData, ListConnectionsErrors, ListConnectionsResponses, ListConnectionToolsData, ListConnectionToolsErrors, ListConnectionToolsResponses, ListConnectorsData, ListConnectorsErrors, ListConnectorsResponses, ListEnvironmentsData, ListEnvironmentsErrors, ListEnvironmentsResponses, ListEnvironmentVersionsData, ListEnvironmentVersionsErrors, ListEnvironmentVersionsResponses, ListFederatedTenantsData, ListFederatedTenantsErrors, ListFederatedTenantsResponses, ListLeasesData, ListLeasesErrors, ListLeasesResponses, ListModelsData, ListModelsErrors, ListModelsResponses, ListPoliciesData, ListPoliciesErrors, ListPoliciesResponses, ListProjectsData, ListProjectsErrors, ListProjectsResponses, ListProviderModelsData, ListProviderModelsErrors, ListProviderModelsResponses, ListProvidersData, ListProvidersErrors, ListProvidersResponses, ListRunnersData, ListRunnersErrors, ListRunnersResponses, ListSessionApprovalsData, ListSessionApprovalsErrors, ListSessionApprovalsResponses, ListSessionEventsData, ListSessionEventsErrors, ListSessionEventsResponses, ListSessionMessagesData, ListSessionMessagesErrors, ListSessionMessagesResponses, ListSessionsData, ListSessionsErrors, ListSessionsResponses, ListToolCallsData, ListToolCallsErrors, ListToolCallsResponses, ListTriggerRunsData, ListTriggerRunsErrors, ListTriggerRunsResponses, ListTriggersData, ListTriggersErrors, ListTriggersResponses, ListUsageRecordsData, ListUsageRecordsErrors, ListUsageRecordsResponses, ListVaultCredentialsData, ListVaultCredentialsErrors, ListVaultCredentialsResponses, ListVaultCredentialVersionsData, ListVaultCredentialVersionsErrors, ListVaultCredentialVersionsResponses, ListVaultsData, ListVaultsErrors, ListVaultsResponses, ListWorkItemsData, ListWorkItemsErrors, ListWorkItemsResponses, PutRunnerHeartbeatData, PutRunnerHeartbeatErrors, PutRunnerHeartbeatResponses, ReadAgentData, ReadAgentErrors, ReadAgentMemoryData, ReadAgentMemoryErrors, ReadAgentMemoryResponses, ReadAgentResponses, ReadAgentVersionData, ReadAgentVersionErrors, ReadAgentVersionResponses, ReadAuditRecordData, ReadAuditRecordErrors, ReadAuditRecordResponses, ReadAuthConfigData, ReadAuthConfigResponses, ReadBudgetData, ReadBudgetErrors, ReadBudgetResponses, ReadConnectionData, ReadConnectionErrors, ReadConnectionResponses, ReadConnectorData, ReadConnectorErrors, ReadConnectorResponses, ReadCurrentAuthSessionData, ReadCurrentAuthSessionErrors, ReadCurrentAuthSessionResponses, ReadEffectivePolicyData, ReadEffectivePolicyErrors, ReadEffectivePolicyResponses, ReadEnvironmentData, ReadEnvironmentErrors, ReadEnvironmentResponses, ReadEnvironmentVersionData, ReadEnvironmentVersionErrors, ReadEnvironmentVersionResponses, ReadFederatedTenantData, ReadFederatedTenantErrors, ReadFederatedTenantResponses, ReadLeaseData, ReadLeaseErrors, ReadLeaseResponses, ReadPolicyData, ReadPolicyErrors, ReadPolicyResponses, ReadProjectData, ReadProjectErrors, ReadProjectResponses, ReadProviderData, ReadProviderErrors, ReadProviderResponses, ReadRunnerData, ReadRunnerErrors, ReadRunnerHeartbeatData, ReadRunnerHeartbeatErrors, ReadRunnerHeartbeatResponses, ReadRunnerResponses, ReadSessionApprovalData, ReadSessionApprovalErrors, ReadSessionApprovalResponses, ReadSessionConnectionData, ReadSessionConnectionErrors, ReadSessionConnectionResponses, ReadSessionData, ReadSessionErrors, ReadSessionMessageData, ReadSessionMessageErrors, ReadSessionMessageResponses, ReadSessionResponses, ReadToolCallData, ReadToolCallErrors, ReadToolCallResponses, ReadTriggerData, ReadTriggerErrors, ReadTriggerResponses, ReadTriggerRunData, ReadTriggerRunErrors, ReadTriggerRunResponses, ReadUsageRecordData, ReadUsageRecordErrors, ReadUsageRecordResponses, ReadUsageSummaryData, ReadUsageSummaryErrors, ReadUsageSummaryResponses, ReadVaultCredentialData, ReadVaultCredentialErrors, ReadVaultCredentialResponses, ReadVaultCredentialVersionData, ReadVaultCredentialVersionErrors, ReadVaultCredentialVersionResponses, ReadVaultData, ReadVaultErrors, ReadVaultResponses, ReadWorkItemData, ReadWorkItemErrors, ReadWorkItemResponses, RefreshCatalogData, RefreshCatalogErrors, RefreshCatalogResponses, ReplaceAgentMemoryData, ReplaceAgentMemoryErrors, ReplaceAgentMemoryResponses, ReplacePolicyData, ReplacePolicyErrors, ReplacePolicyResponses, UpdateAgentData, UpdateAgentErrors, UpdateAgentResponses, UpdateBudgetData, UpdateBudgetErrors, UpdateBudgetResponses, UpdateConnectionData, UpdateConnectionErrors, UpdateConnectionResponses, UpdateEnvironmentData, UpdateEnvironmentErrors, UpdateEnvironmentResponses, UpdateFederatedTenantData, UpdateFederatedTenantErrors, UpdateFederatedTenantResponses, UpdateLeaseData, UpdateLeaseErrors, UpdateLeaseResponses, UpdateRunnerData, UpdateRunnerErrors, UpdateRunnerResponses, UpdateSessionData, UpdateSessionErrors, UpdateSessionResponses, UpdateTriggerData, UpdateTriggerErrors, UpdateTriggerResponses, UpdateVaultCredentialData, UpdateVaultCredentialErrors, UpdateVaultCredentialResponses, UpdateVaultData, UpdateVaultErrors, UpdateVaultResponses } from './types.gen.js';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -822,6 +822,21 @@ export const listTriggerRuns = <ThrowOnError extends boolean = false>(options: O
 });
 
 /**
+ * Create an HTTP trigger run
+ *
+ * Creates a run for an HTTP trigger using the JSON body, query string, and allowed request headers as prompt template variables.
+ */
+export const createTriggerRun = <ThrowOnError extends boolean = false>(options: Options<CreateTriggerRunData, ThrowOnError>): RequestResult<CreateTriggerRunResponses, CreateTriggerRunErrors, ThrowOnError> => (options.client ?? client).post<CreateTriggerRunResponses, CreateTriggerRunErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/triggers/{triggerId}/runs',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
  * Read a trigger run
  */
 export const readTriggerRun = <ThrowOnError extends boolean = false>(options: Options<ReadTriggerRunData, ThrowOnError>): RequestResult<ReadTriggerRunResponses, ReadTriggerRunErrors, ThrowOnError> => (options.client ?? client).get<ReadTriggerRunResponses, ReadTriggerRunErrors, ThrowOnError>({
@@ -977,94 +992,6 @@ export const readSessionApproval = <ThrowOnError extends boolean = false>(option
 export const decideSessionApproval = <ThrowOnError extends boolean = false>(options: Options<DecideSessionApprovalData, ThrowOnError>): RequestResult<DecideSessionApprovalResponses, DecideSessionApprovalErrors, ThrowOnError> => (options.client ?? client).patch<DecideSessionApprovalResponses, DecideSessionApprovalErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/api/v1/sessions/{sessionId}/approvals/{approvalId}',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * List memory stores
- */
-export const listMemoryStores = <ThrowOnError extends boolean = false>(options?: Options<ListMemoryStoresData, ThrowOnError>): RequestResult<ListMemoryStoresResponses, ListMemoryStoresErrors, ThrowOnError> => (options?.client ?? client).get<ListMemoryStoresResponses, ListMemoryStoresErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/memory-stores',
-    ...options
-});
-
-/**
- * Create a memory store
- */
-export const createMemoryStore = <ThrowOnError extends boolean = false>(options: Options<CreateMemoryStoreData, ThrowOnError>): RequestResult<CreateMemoryStoreResponses, CreateMemoryStoreErrors, ThrowOnError> => (options.client ?? client).post<CreateMemoryStoreResponses, CreateMemoryStoreErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/memory-stores',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Read a memory store
- */
-export const readMemoryStore = <ThrowOnError extends boolean = false>(options: Options<ReadMemoryStoreData, ThrowOnError>): RequestResult<ReadMemoryStoreResponses, ReadMemoryStoreErrors, ThrowOnError> => (options.client ?? client).get<ReadMemoryStoreResponses, ReadMemoryStoreErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/memory-stores/{storeId}',
-    ...options
-});
-
-/**
- * Update or archive a memory store
- */
-export const updateMemoryStore = <ThrowOnError extends boolean = false>(options: Options<UpdateMemoryStoreData, ThrowOnError>): RequestResult<UpdateMemoryStoreResponses, UpdateMemoryStoreErrors, ThrowOnError> => (options.client ?? client).patch<UpdateMemoryStoreResponses, UpdateMemoryStoreErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/memory-stores/{storeId}',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * List memories in a memory store
- */
-export const listMemoryStoreMemories = <ThrowOnError extends boolean = false>(options: Options<ListMemoryStoreMemoriesData, ThrowOnError>): RequestResult<ListMemoryStoreMemoriesResponses, ListMemoryStoreMemoriesErrors, ThrowOnError> => (options.client ?? client).get<ListMemoryStoreMemoriesResponses, ListMemoryStoreMemoriesErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/memory-stores/{storeId}/memories',
-    ...options
-});
-
-/**
- * Create a memory in a memory store
- */
-export const createMemoryStoreMemory = <ThrowOnError extends boolean = false>(options: Options<CreateMemoryStoreMemoryData, ThrowOnError>): RequestResult<CreateMemoryStoreMemoryResponses, CreateMemoryStoreMemoryErrors, ThrowOnError> => (options.client ?? client).post<CreateMemoryStoreMemoryResponses, CreateMemoryStoreMemoryErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/memory-stores/{storeId}/memories',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Delete a memory
- */
-export const deleteMemoryStoreMemory = <ThrowOnError extends boolean = false>(options: Options<DeleteMemoryStoreMemoryData, ThrowOnError>): RequestResult<DeleteMemoryStoreMemoryResponses, DeleteMemoryStoreMemoryErrors, ThrowOnError> => (options.client ?? client).delete<DeleteMemoryStoreMemoryResponses, DeleteMemoryStoreMemoryErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/memory-stores/{storeId}/memories/{memoryId}',
-    ...options
-});
-
-/**
- * Update a memory
- */
-export const updateMemoryStoreMemory = <ThrowOnError extends boolean = false>(options: Options<UpdateMemoryStoreMemoryData, ThrowOnError>): RequestResult<UpdateMemoryStoreMemoryResponses, UpdateMemoryStoreMemoryErrors, ThrowOnError> => (options.client ?? client).patch<UpdateMemoryStoreMemoryResponses, UpdateMemoryStoreMemoryErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/memory-stores/{storeId}/memories/{memoryId}',
     ...options,
     headers: {
         'Content-Type': 'application/json',

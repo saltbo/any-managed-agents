@@ -12,6 +12,7 @@ import {
   parseListCursor,
   SecretEnvEntrySchema,
 } from '../openapi'
+import { dispatchHttpTrigger } from '../usecases/dispatch-triggers'
 import {
   type SecretEnvEntry,
   TriggerConflictError,
@@ -25,6 +26,7 @@ import { requestId } from './request-context'
 type TriggerRoutes = OpenAPIHono<DepsEnv>
 
 const RUN_STATES = ['claimed', 'session_created', 'failed'] as const
+const TRIGGER_TYPES = ['scheduled', 'http'] as const
 const JsonObjectSchema = z.record(z.string(), z.unknown())
 const EnvSchema = z.record(z.string(), z.string())
 
@@ -32,6 +34,7 @@ const TriggerSchema = z
   .object({
     id: z.string().openapi({ example: 'trigger_abc123' }),
     projectId: z.string().openapi({ example: 'project_abc123' }),
+    type: z.enum(TRIGGER_TYPES).openapi({ example: 'scheduled' }),
     agentId: z.string().openapi({ example: 'agent_abc123' }),
     environmentId: z.string().nullable().openapi({ example: 'env_abc123' }),
     runtime: RuntimeSchema.openapi({ example: 'codex' }),
@@ -50,9 +53,10 @@ const TriggerSchema = z
         intervalSeconds: z.number().int().openapi({ example: 86400 }),
         windowSeconds: z.number().int().openapi({ example: 0 }),
       })
+      .nullable()
       .openapi({ example: { type: 'interval', intervalSeconds: 86400, windowSeconds: 0 } }),
     enabled: z.boolean().openapi({ example: true }),
-    nextDueAt: z.string().datetime().openapi({ example: '2026-05-26T12:00:00.000Z' }),
+    nextDueAt: z.string().datetime().nullable().openapi({ example: '2026-05-26T12:00:00.000Z' }),
     lastDispatchedAt: z.string().datetime().nullable().openapi({ example: null }),
     lastRunId: z.string().nullable().openapi({ example: 'trigrun_abc123' }),
     metadata: JsonObjectSchema.openapi({ example: { owner: 'growth' } }),
@@ -68,8 +72,9 @@ const TriggerRunSchema = z
     id: z.string().openapi({ example: 'trigrun_abc123' }),
     projectId: z.string().openapi({ example: 'project_abc123' }),
     triggerId: z.string().openapi({ example: 'trigger_abc123' }),
-    scheduledFor: z.string().datetime().openapi({ example: '2026-05-26T12:00:00.000Z' }),
-    heartbeatAt: z.string().datetime().openapi({ example: '2026-05-26T12:01:00.000Z' }),
+    scheduledFor: z.string().datetime().nullable().openapi({ example: '2026-05-26T12:00:00.000Z' }),
+    heartbeatAt: z.string().datetime().nullable().openapi({ example: '2026-05-26T12:01:00.000Z' }),
+    triggeredAt: z.string().datetime().openapi({ example: '2026-05-26T12:01:00.000Z' }),
     state: z.enum(RUN_STATES).openapi({ example: 'session_created' }),
     idempotencyKey: z.string().openapi({ example: 'trigger_abc123:2026-05-26T12:00:00.000Z' }),
     sessionId: z.string().nullable().openapi({ example: 'session_abc123' }),
@@ -91,6 +96,7 @@ const SchedulePayloadSchema = z
 
 const CreateTriggerSchema = z
   .object({
+    type: z.enum(TRIGGER_TYPES).optional().openapi({ example: 'scheduled' }),
     agentId: z.string().min(1).openapi({ example: 'agent_abc123' }),
     // Optional: omit to leave the trigger unpinned and let each dispatch resolve
     // a runner-capable environment for the runtime.
@@ -115,7 +121,7 @@ const CreateTriggerSchema = z
       .openapi({
         example: [{ name: 'AK_AGENT_KEY', credentialRef: { credentialId: 'vaultcred_abc123' } }],
       }),
-    schedule: SchedulePayloadSchema,
+    schedule: SchedulePayloadSchema.nullable().optional(),
     enabled: z.boolean().optional().openapi({ example: true }),
     nextDueAt: z.string().datetime().optional().openapi({ example: '2026-05-26T12:00:00.000Z' }),
     metadata: JsonObjectSchema.optional().openapi({ example: { owner: 'growth' } }),
@@ -125,6 +131,7 @@ const CreateTriggerSchema = z
 
 const UpdateTriggerSchema = z
   .object({
+    type: z.enum(TRIGGER_TYPES).optional().openapi({ example: 'http' }),
     agentId: z.string().min(1).optional().openapi({ example: 'agent_abc123' }),
     environmentId: z.string().min(1).optional().openapi({ example: 'env_abc123' }),
     runtime: RuntimeSchema.optional().openapi({ example: 'codex' }),
@@ -147,7 +154,7 @@ const UpdateTriggerSchema = z
       .openapi({
         example: [{ name: 'AK_AGENT_KEY', credentialRef: { credentialId: 'vaultcred_abc123' } }],
       }),
-    schedule: SchedulePayloadSchema.optional(),
+    schedule: SchedulePayloadSchema.nullable().optional(),
     enabled: z.boolean().optional().openapi({ example: false }),
     archived: z.boolean().optional().openapi({ example: true }),
     nextDueAt: z.string().datetime().optional().openapi({ example: '2026-05-27T12:00:00.000Z' }),
@@ -185,6 +192,9 @@ const ListQuerySchema = listQuerySchema().extend({ enabled: enabledQuery })
 const RunsQuerySchema = listQuerySchema().omit({ archived: true }).extend({ state: runStateQuery })
 const TriggerListResponseSchema = listResponseSchema('TriggerListResponse', TriggerSchema)
 const TriggerRunListResponseSchema = listResponseSchema('TriggerRunListResponse', TriggerRunSchema)
+const CreateHttpTriggerRunRequestSchema = JsonObjectSchema.openapi('CreateHttpTriggerRunRequest', {
+  example: { customer: { name: 'Ada' }, ticketId: 'T-123' },
+})
 
 function errorBody(type: string, message: string, details?: Record<string, unknown>) {
   return { error: { type, message, ...(details ? { details } : {}) } } as const
@@ -206,6 +216,7 @@ function serializeTrigger(record: TriggerRecord) {
   return {
     id: record.id,
     projectId: record.projectId,
+    type: record.type,
     agentId: record.agentId,
     environmentId: record.environmentId,
     runtime: record.runtime,
@@ -214,11 +225,13 @@ function serializeTrigger(record: TriggerRecord) {
     resourceRefs: record.resourceRefs as ResourceRef[],
     env: record.env,
     secretEnv: record.secretEnv,
-    schedule: {
-      type: 'interval' as const,
-      intervalSeconds: record.schedule.intervalSeconds,
-      windowSeconds: record.schedule.windowSeconds,
-    },
+    schedule: record.schedule
+      ? {
+          type: 'interval' as const,
+          intervalSeconds: record.schedule.intervalSeconds,
+          windowSeconds: record.schedule.windowSeconds,
+        }
+      : null,
     enabled: record.enabled,
     nextDueAt: record.nextDueAt,
     lastDispatchedAt: record.lastDispatchedAt,
@@ -238,6 +251,7 @@ function serializeRun(record: TriggerRunRecord) {
     triggerId: record.triggerId,
     scheduledFor: record.scheduledFor,
     heartbeatAt: record.heartbeatAt,
+    triggeredAt: record.triggeredAt,
     state: record.state,
     idempotencyKey: record.idempotencyKey,
     sessionId: record.sessionId,
@@ -247,6 +261,19 @@ function serializeRun(record: TriggerRunRecord) {
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   }
+}
+
+const TEMPLATE_HEADER_DENYLIST = new Set(['authorization', 'cookie', 'set-cookie', 'proxy-authorization'])
+
+function promptHeaders(headers: Headers): Record<string, string> {
+  const safe: Record<string, string> = {}
+  headers.forEach((value, key) => {
+    const normalized = key.toLowerCase()
+    if (!TEMPLATE_HEADER_DENYLIST.has(normalized)) {
+      safe[normalized] = value
+    }
+  })
+  return safe
 }
 
 const createRouteDefinition = createRoute({
@@ -350,6 +377,28 @@ const listRunsRouteDefinition = createRoute({
   },
 })
 
+const createRunRouteDefinition = createRoute({
+  method: 'post',
+  path: '/{triggerId}/runs',
+  operationId: 'createTriggerRun',
+  tags: ['Triggers'],
+  summary: 'Create an HTTP trigger run',
+  description:
+    'Creates a run for an HTTP trigger using the JSON body, query string, and allowed request headers as prompt template variables.',
+  ...AuthenticatedOperation,
+  request: {
+    params: TriggerParamsSchema,
+    body: { required: true, content: { 'application/json': { schema: CreateHttpTriggerRunRequestSchema } } },
+  },
+  responses: {
+    201: { description: 'Created trigger run', content: { 'application/json': { schema: TriggerRunSchema } } },
+    400: { description: 'Validation error', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    401: { description: 'Authentication required', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    404: { description: 'Trigger not found', content: { 'application/json': { schema: ErrorResponseSchema } } },
+    409: { description: 'Conflict', content: { 'application/json': { schema: ErrorResponseSchema } } },
+  },
+})
+
 const readRunRouteDefinition = createRoute({
   method: 'get',
   path: '/{triggerId}/runs/{runId}',
@@ -379,20 +428,25 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
       }
       const scope = auth
       try {
+        const triggerType = body.type ?? 'scheduled'
         const trigger = await createTrigger(deps, scope, {
           agentId: body.agentId,
           environmentId: body.environmentId ?? null,
           config: {
+            type: triggerType,
             runtime: body.runtime,
             name: body.name,
             promptTemplate: body.promptTemplate,
             resourceRefs: body.resourceRefs ?? [],
             env: body.env ?? {},
             secretEnv: normalizeSecretEnv(body.secretEnv ?? []),
-            schedule: {
-              intervalSeconds: body.schedule.intervalSeconds,
-              windowSeconds: body.schedule.windowSeconds ?? 0,
-            },
+            schedule:
+              triggerType === 'scheduled' && body.schedule
+                ? {
+                    intervalSeconds: body.schedule.intervalSeconds,
+                    windowSeconds: body.schedule.windowSeconds ?? 0,
+                  }
+                : null,
             enabled: body.enabled ?? true,
             nextDueAt: body.nextDueAt ?? null,
             metadata: body.metadata ?? {},
@@ -546,6 +600,36 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
         200,
       )
     })
+    .openapi(createRunRouteDefinition, async (c) => {
+      const deps = c.get('deps')
+      const auth = await requireAuth(c)
+      if (auth instanceof Response) {
+        return auth
+      }
+      const { triggerId } = c.req.valid('param')
+      const trigger = await deps.triggers.find(auth.project.id, triggerId)
+      if (!trigger) {
+        return c.json(errorBody('not_found', 'Trigger not found'), 404)
+      }
+      try {
+        const result = await dispatchHttpTrigger(deps, auth, {
+          trigger,
+          context: {
+            body: c.req.valid('json'),
+            query: c.req.query(),
+            headers: promptHeaders(c.req.raw.headers),
+          },
+          idempotencyKey: c.req.header('idempotency-key') ?? null,
+        })
+        const run = await deps.triggers.findRun(auth.project.id, triggerId, result.runId)
+        if (!run) {
+          throw new Error('HTTP trigger run was not persisted')
+        }
+        return c.json(serializeRun(run), 201)
+      } catch (error) {
+        return conflictOrValidation(c, error)
+      }
+    })
     .openapi(readRunRouteDefinition, async (c) => {
       const deps = c.get('deps')
       const auth = await requireAuth(c)
@@ -569,6 +653,7 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
 
 function patchFromBody(body: z.infer<typeof UpdateTriggerSchema>): UpdateTriggerPatch {
   return {
+    ...(body.type !== undefined ? { type: body.type } : {}),
     ...(body.agentId !== undefined ? { agentId: body.agentId } : {}),
     ...(body.environmentId !== undefined ? { environmentId: body.environmentId } : {}),
     ...(body.runtime !== undefined ? { runtime: body.runtime } : {}),
@@ -577,14 +662,18 @@ function patchFromBody(body: z.infer<typeof UpdateTriggerSchema>): UpdateTrigger
     ...(body.resourceRefs !== undefined ? { resourceRefs: body.resourceRefs } : {}),
     ...(body.env !== undefined ? { env: body.env } : {}),
     ...(body.secretEnv !== undefined ? { secretEnv: normalizeSecretEnv(body.secretEnv) } : {}),
-    ...(body.schedule !== undefined
-      ? {
-          schedule: {
-            ...(body.schedule.intervalSeconds !== undefined ? { intervalSeconds: body.schedule.intervalSeconds } : {}),
-            ...(body.schedule.windowSeconds !== undefined ? { windowSeconds: body.schedule.windowSeconds } : {}),
-          },
-        }
-      : {}),
+    ...(body.schedule === null
+      ? { schedule: null }
+      : body.schedule !== undefined
+        ? {
+            schedule: {
+              ...(body.schedule.intervalSeconds !== undefined
+                ? { intervalSeconds: body.schedule.intervalSeconds }
+                : {}),
+              ...(body.schedule.windowSeconds !== undefined ? { windowSeconds: body.schedule.windowSeconds } : {}),
+            },
+          }
+        : {}),
     ...(body.enabled !== undefined ? { enabled: body.enabled } : {}),
     ...(body.archived !== undefined ? { archived: body.archived } : {}),
     ...(body.nextDueAt !== undefined ? { nextDueAt: body.nextDueAt } : {}),

@@ -20,6 +20,13 @@ export function formatInterval(intervalSeconds: number) {
   return `every ${intervalSeconds}s`
 }
 
+function triggerTiming(trigger: Trigger) {
+  if (trigger.type === 'http') {
+    return 'HTTP POST'
+  }
+  return trigger.schedule ? formatInterval(trigger.schedule.intervalSeconds) : '—'
+}
+
 export function TriggersView({
   triggers,
   pagination,
@@ -46,7 +53,7 @@ export function TriggersView({
         <TableRow>
           <TableHead>Trigger</TableHead>
           <TableHead>Agent</TableHead>
-          <TableHead>Schedule</TableHead>
+          <TableHead>Type</TableHead>
           <TableHead>Status</TableHead>
           <TableHead>Next due</TableHead>
           <TableHead>Last run</TableHead>
@@ -65,11 +72,11 @@ export function TriggersView({
               </div>
             </TableCell>
             <TableCell className="max-w-48 truncate">{trigger.agentId}</TableCell>
-            <TableCell>{formatInterval(trigger.schedule.intervalSeconds)}</TableCell>
+            <TableCell>{triggerTiming(trigger)}</TableCell>
             <TableCell>
               <StatusBadge value={trigger.enabled ? 'active' : 'paused'} />
             </TableCell>
-            <TableCell>{formatRelativeTime(trigger.nextDueAt)}</TableCell>
+            <TableCell>{trigger.nextDueAt ? formatRelativeTime(trigger.nextDueAt) : '—'}</TableCell>
             <TableCell>{trigger.lastDispatchedAt ? formatRelativeTime(trigger.lastDispatchedAt) : '—'}</TableCell>
             <TableCell>
               <div className="flex justify-end gap-2">

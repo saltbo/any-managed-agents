@@ -9,6 +9,7 @@ from attrs import field as _attrs_field
 from ..types import UNSET, Unset
 
 from ..models.runtime import Runtime
+from ..models.update_trigger_request_type import UpdateTriggerRequestType
 from ..types import UNSET, Unset
 from typing import cast
 import datetime
@@ -20,7 +21,7 @@ if TYPE_CHECKING:
   from ..models.secret_env_entry import SecretEnvEntry
   from ..models.update_trigger_request_env import UpdateTriggerRequestEnv
   from ..models.update_trigger_request_metadata import UpdateTriggerRequestMetadata
-  from ..models.update_trigger_request_schedule import UpdateTriggerRequestSchedule
+  from ..models.update_trigger_request_schedule_type_0 import UpdateTriggerRequestScheduleType0
 
 
 
@@ -34,6 +35,7 @@ T = TypeVar("T", bound="UpdateTriggerRequest")
 class UpdateTriggerRequest:
     """ 
         Attributes:
+            type_ (UpdateTriggerRequestType | Unset):  Example: http.
             agent_id (str | Unset):  Example: agent_abc123.
             environment_id (str | Unset):  Example: env_abc123.
             runtime (Runtime | Unset):  Example: codex.
@@ -44,13 +46,14 @@ class UpdateTriggerRequest:
             env (UpdateTriggerRequestEnv | Unset):  Example: {'AK_API_URL': 'https://ak.example.com'}.
             secret_env (list[SecretEnvEntry] | Unset):  Example: [{'name': 'AK_AGENT_KEY', 'credentialRef': {'credentialId':
                 'vaultcred_abc123'}}].
-            schedule (UpdateTriggerRequestSchedule | Unset):
+            schedule (None | Unset | UpdateTriggerRequestScheduleType0):
             enabled (bool | Unset):
             archived (bool | Unset):  Example: True.
             next_due_at (datetime.datetime | Unset):  Example: 2026-05-27T12:00:00.000Z.
             metadata (UpdateTriggerRequestMetadata | Unset):  Example: {'owner': 'growth'}.
      """
 
+    type_: UpdateTriggerRequestType | Unset = UNSET
     agent_id: str | Unset = UNSET
     environment_id: str | Unset = UNSET
     runtime: Runtime | Unset = UNSET
@@ -59,7 +62,7 @@ class UpdateTriggerRequest:
     resource_refs: list[GitHubRepositoryResourceRef | MemoryStoreResourceRef | ResourceRefType1] | Unset = UNSET
     env: UpdateTriggerRequestEnv | Unset = UNSET
     secret_env: list[SecretEnvEntry] | Unset = UNSET
-    schedule: UpdateTriggerRequestSchedule | Unset = UNSET
+    schedule: None | Unset | UpdateTriggerRequestScheduleType0 = UNSET
     enabled: bool | Unset = UNSET
     archived: bool | Unset = UNSET
     next_due_at: datetime.datetime | Unset = UNSET
@@ -76,7 +79,12 @@ class UpdateTriggerRequest:
         from ..models.secret_env_entry import SecretEnvEntry
         from ..models.update_trigger_request_env import UpdateTriggerRequestEnv
         from ..models.update_trigger_request_metadata import UpdateTriggerRequestMetadata
-        from ..models.update_trigger_request_schedule import UpdateTriggerRequestSchedule
+        from ..models.update_trigger_request_schedule_type_0 import UpdateTriggerRequestScheduleType0
+        type_: str | Unset = UNSET
+        if not isinstance(self.type_, Unset):
+            type_ = self.type_.value
+
+
         agent_id = self.agent_id
 
         environment_id = self.environment_id
@@ -119,9 +127,13 @@ class UpdateTriggerRequest:
 
 
 
-        schedule: dict[str, Any] | Unset = UNSET
-        if not isinstance(self.schedule, Unset):
+        schedule: dict[str, Any] | None | Unset
+        if isinstance(self.schedule, Unset):
+            schedule = UNSET
+        elif isinstance(self.schedule, UpdateTriggerRequestScheduleType0):
             schedule = self.schedule.to_dict()
+        else:
+            schedule = self.schedule
 
         enabled = self.enabled
 
@@ -140,6 +152,8 @@ class UpdateTriggerRequest:
 
         field_dict.update({
         })
+        if type_ is not UNSET:
+            field_dict["type"] = type_
         if agent_id is not UNSET:
             field_dict["agentId"] = agent_id
         if environment_id is not UNSET:
@@ -179,8 +193,18 @@ class UpdateTriggerRequest:
         from ..models.secret_env_entry import SecretEnvEntry
         from ..models.update_trigger_request_env import UpdateTriggerRequestEnv
         from ..models.update_trigger_request_metadata import UpdateTriggerRequestMetadata
-        from ..models.update_trigger_request_schedule import UpdateTriggerRequestSchedule
+        from ..models.update_trigger_request_schedule_type_0 import UpdateTriggerRequestScheduleType0
         d = dict(src_dict)
+        _type_ = d.pop("type", UNSET)
+        type_: UpdateTriggerRequestType | Unset
+        if isinstance(_type_,  Unset):
+            type_ = UNSET
+        else:
+            type_ = UpdateTriggerRequestType(_type_)
+
+
+
+
         agent_id = d.pop("agentId", UNSET)
 
         environment_id = d.pop("environmentId", UNSET)
@@ -260,14 +284,24 @@ class UpdateTriggerRequest:
                 secret_env.append(secret_env_item)
 
 
-        _schedule = d.pop("schedule", UNSET)
-        schedule: UpdateTriggerRequestSchedule | Unset
-        if isinstance(_schedule,  Unset):
-            schedule = UNSET
-        else:
-            schedule = UpdateTriggerRequestSchedule.from_dict(_schedule)
+        def _parse_schedule(data: object) -> None | Unset | UpdateTriggerRequestScheduleType0:
+            if data is None:
+                return data
+            if isinstance(data, Unset):
+                return data
+            try:
+                if not isinstance(data, dict):
+                    raise TypeError()
+                schedule_type_0 = UpdateTriggerRequestScheduleType0.from_dict(data)
 
 
+
+                return schedule_type_0
+            except (TypeError, ValueError, AttributeError, KeyError):
+                pass
+            return cast(None | Unset | UpdateTriggerRequestScheduleType0, data)
+
+        schedule = _parse_schedule(d.pop("schedule", UNSET))
 
 
         enabled = d.pop("enabled", UNSET)
@@ -295,6 +329,7 @@ class UpdateTriggerRequest:
 
 
         update_trigger_request = cls(
+            type_=type_,
             agent_id=agent_id,
             environment_id=environment_id,
             runtime=runtime,

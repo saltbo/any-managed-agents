@@ -1,17 +1,25 @@
 Feature: Triggers
-  Heartbeat-driven schedules wake agents by creating sessions with initial
-  prompts. A trigger snapshots its agent, environment, runtime, prompt template,
-  and schedule; a local heartbeat dispatcher creates one scheduled session per
-  due occurrence with idempotent run correlation.
+  Heartbeat-driven schedules and authenticated HTTP requests wake agents by
+  creating sessions with initial prompts. A trigger snapshots its agent,
+  environment, runtime, prompt template, and trigger source; scheduled triggers
+  use a local heartbeat dispatcher, while HTTP triggers render prompt variables
+  from the request that creates the run.
 
   # ── Definition lifecycle (usecase: business rules, cheapest layer) ──
 
   @triggers/create @usecase
   Scenario: Create a trigger from usable references
     Given a signed-in user with an active agent and environment
-    When the user creates a trigger with a prompt template and schedule
+    When the user creates a scheduled trigger with a prompt template and schedule
     Then the trigger is stored enabled with a derived next-due time when omitted
     And a missing agent or archived environment is rejected before storing
+
+  @triggers/http-create @usecase
+  Scenario: Create an HTTP trigger from usable references
+    Given a signed-in user with an active agent and environment
+    When the user creates an HTTP trigger with a prompt template
+    Then the trigger is stored enabled without schedule timing
+    And the HTTP trigger can render prompt variables from request fields
 
   @triggers/lifecycle @usecase
   Scenario: Update, archive, and restore a trigger
@@ -51,6 +59,13 @@ Feature: Triggers
     Then one scheduled run creates a session with the initial prompt and schedule run metadata
     And duplicate heartbeat dispatch does not create another session for the same occurrence
     And the run exposes its session, state, scheduled time, correlation id, and idempotency key
+
+  @triggers/http-dispatch @api
+  Scenario: HTTP dispatch creates a session from request fields
+    Given a signed-in user with an active HTTP trigger
+    When the user posts JSON to the trigger runs collection
+    Then one run creates a session with a prompt rendered from body, query, and allowed headers
+    And missing template variables fail the run request without creating a session
 
   @triggers/inactive @api
   Scenario: Inactive triggers do not dispatch

@@ -104,15 +104,16 @@ async function createTrigger(
   expect(res.status).toBe(201)
   return (await res.json()) as {
     id: string
+    type: 'scheduled' | 'http'
     name: string
-    nextDueAt: string
+    nextDueAt: string | null
     enabled: boolean
     archivedAt: string | null
     metadata: Record<string, unknown>
     resourceRefs: Record<string, unknown>[]
     env: Record<string, string>
     secretEnv: Array<{ name: string; credentialRef: { credentialId: string; versionId?: string } }>
-    schedule: { intervalSeconds: number; windowSeconds: number }
+    schedule: { intervalSeconds: number; windowSeconds: number } | null
   }
 }
 
@@ -438,6 +439,7 @@ describe('[CF] /api/v1/triggers', () => {
         sessionId: string
         state: string
         scheduledFor: string
+        triggeredAt: string
         correlationId: string
         idempotencyKey: string
       }>
@@ -447,6 +449,7 @@ describe('[CF] /api/v1/triggers', () => {
       sessionId,
       state: 'session_created',
       scheduledFor: dueAt,
+      triggeredAt: heartbeatAt,
       correlationId: `schedule:${trigger.id}:${dueAt}`,
       idempotencyKey: `${trigger.id}:${dueAt}`,
     })
@@ -477,6 +480,68 @@ describe('[CF] /api/v1/triggers', () => {
     const failedRunsRes = await jsonFetch(`/api/v1/triggers/${trigger.id}/runs?state=failed`, authorization)
     expect(failedRunsRes.status).toBe(200)
     await expect(failedRunsRes.json()).resolves.toMatchObject({ data: [] })
+  })
+
+  it('creates an HTTP trigger run from request fields [spec: triggers/http-dispatch]', async () => {
+    const authorization = await signIn()
+    const agent = await createAgent(authorization)
+    const environment = await createEnvironment(authorization)
+    const trigger = await createTrigger(authorization, agent.id, environment.id, {
+      type: 'http',
+      name: 'Ticket webhook',
+      promptTemplate: 'Handle ticket {{ body.ticket.id }} from {{ query.source }} via {{ headers.x-source }}.',
+      schedule: null,
+      nextDueAt: undefined,
+    })
+    expect(trigger).toMatchObject({
+      type: 'http',
+      schedule: null,
+      nextDueAt: null,
+    })
+
+    const runRes = await jsonFetch(`/api/v1/triggers/${trigger.id}/runs?source=portal`, authorization, {
+      method: 'POST',
+      headers: { 'x-source': 'zendesk', 'idempotency-key': 'ticket-123' },
+      body: JSON.stringify({ ticket: { id: 'T-123' } }),
+    })
+    expect(runRes.status).toBe(201)
+    const run = (await runRes.json()) as {
+      id: string
+      triggerId: string
+      state: string
+      sessionId: string | null
+      scheduledFor: string | null
+      heartbeatAt: string | null
+      triggeredAt: string
+      correlationId: string
+      idempotencyKey: string
+    }
+    expect(run).toMatchObject({
+      triggerId: trigger.id,
+      state: 'session_created',
+      scheduledFor: null,
+      heartbeatAt: null,
+      idempotencyKey: `http:${trigger.id}:ticket-123`,
+    })
+    expect(run.sessionId).toEqual(expect.any(String))
+    expect(run.triggeredAt).toEqual(expect.any(String))
+
+    const duplicateRunRes = await jsonFetch(`/api/v1/triggers/${trigger.id}/runs?source=portal`, authorization, {
+      method: 'POST',
+      headers: { 'x-source': 'zendesk', 'idempotency-key': 'ticket-123' },
+      body: JSON.stringify({ ticket: { id: 'T-123' } }),
+    })
+    expect(duplicateRunRes.status).toBe(409)
+
+    const invalidRunRes = await jsonFetch(`/api/v1/triggers/${trigger.id}/runs?source=portal`, authorization, {
+      method: 'POST',
+      headers: { 'x-source': 'zendesk' },
+      body: JSON.stringify({ ticket: {} }),
+    })
+    expect(invalidRunRes.status).toBe(400)
+    await expect(invalidRunRes.json()).resolves.toMatchObject({
+      error: { type: 'validation_error' },
+    })
   })
 
   it('does not dispatch paused or archived triggers [spec: triggers/inactive]', async () => {

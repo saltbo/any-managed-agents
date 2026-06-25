@@ -8,30 +8,30 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
-from ..models.trigger_schedule_type import TriggerScheduleType
+from ..models.trigger_schedule_type_0_type import TriggerScheduleType0Type
 
 
 
 
 
 
-T = TypeVar("T", bound="TriggerSchedule")
+T = TypeVar("T", bound="TriggerScheduleType0")
 
 
 
 @_attrs_define
-class TriggerSchedule:
+class TriggerScheduleType0:
     """ 
         Example:
             {'type': 'interval', 'intervalSeconds': 86400, 'windowSeconds': 0}
 
         Attributes:
-            type_ (TriggerScheduleType):
+            type_ (TriggerScheduleType0Type):
             interval_seconds (int):  Example: 86400.
             window_seconds (int):
      """
 
-    type_: TriggerScheduleType
+    type_: TriggerScheduleType0Type
     interval_seconds: int
     window_seconds: int
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
@@ -63,7 +63,7 @@ class TriggerSchedule:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        type_ = TriggerScheduleType(d.pop("type"))
+        type_ = TriggerScheduleType0Type(d.pop("type"))
 
 
 
@@ -72,15 +72,15 @@ class TriggerSchedule:
 
         window_seconds = d.pop("windowSeconds")
 
-        trigger_schedule = cls(
+        trigger_schedule_type_0 = cls(
             type_=type_,
             interval_seconds=interval_seconds,
             window_seconds=window_seconds,
         )
 
 
-        trigger_schedule.additional_properties = d
-        return trigger_schedule
+        trigger_schedule_type_0.additional_properties = d
+        return trigger_schedule_type_0
 
     @property
     def additional_keys(self) -> list[str]:

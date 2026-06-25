@@ -25,6 +25,7 @@ const INTERVAL_UNITS = {
 type IntervalUnit = keyof typeof INTERVAL_UNITS
 
 interface TriggerFormState {
+  type: 'scheduled' | 'http'
   name: string
   agentId: string
   environmentId: string
@@ -36,6 +37,7 @@ interface TriggerFormState {
 }
 
 const emptyTrigger: TriggerFormState = {
+  type: 'scheduled',
   name: '',
   agentId: '',
   environmentId: '',
@@ -76,12 +78,13 @@ export function CreateTriggerSheet({ open, onOpenChange }: { open: boolean; onOp
   const createTrigger = useMutation({
     mutationFn: () =>
       api.createTrigger({
+        type: form.type,
         agentId: form.agentId,
-        environmentId: form.environmentId,
+        ...(form.environmentId ? { environmentId: form.environmentId } : {}),
         runtime: form.runtime,
         name: form.name,
         promptTemplate: form.promptTemplate,
-        schedule: { type: 'interval', intervalSeconds: intervalSeconds(form) },
+        schedule: form.type === 'scheduled' ? { type: 'interval', intervalSeconds: intervalSeconds(form) } : null,
         enabled: form.enabled,
       }),
     onSuccess: () => {
@@ -111,7 +114,11 @@ export function CreateTriggerSheet({ open, onOpenChange }: { open: boolean; onOp
   }
 
   const canSubmit = Boolean(
-    form.name.trim() && form.agentId && form.environmentId && form.promptTemplate.trim() && form.intervalValue.trim(),
+    form.name.trim() &&
+      form.agentId &&
+      form.environmentId &&
+      form.promptTemplate.trim() &&
+      (form.type === 'http' || form.intervalValue.trim()),
   )
 
   return (
@@ -125,6 +132,26 @@ export function CreateTriggerSheet({ open, onOpenChange }: { open: boolean; onOp
           <form className="flex flex-col gap-4" onSubmit={submit}>
             <FieldGroup>
               <TextField label="Name" value={form.name} onChange={(name) => setForm({ ...form, name })} />
+              <Field>
+                <FieldLabel>Type</FieldLabel>
+                <Select
+                  value={form.type}
+                  onValueChange={(type) => setForm({ ...form, type: type as TriggerFormState['type'] })}
+                >
+                  <SelectTrigger aria-label="Trigger type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem value="scheduled">scheduled</SelectItem>
+                      <SelectItem value="http">HTTP POST</SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <FieldDescription>
+                  Scheduled triggers run on an interval. HTTP triggers run when a POST creates a run.
+                </FieldDescription>
+              </Field>
               <Field>
                 <FieldLabel>Agent</FieldLabel>
                 <Select value={form.agentId} onValueChange={(agentId) => setForm({ ...form, agentId })}>
@@ -186,40 +213,54 @@ export function CreateTriggerSheet({ open, onOpenChange }: { open: boolean; onOp
               </Field>
               <TextAreaField
                 label="Prompt template"
-                description="The prompt the agent runs on each scheduled dispatch."
+                description={
+                  form.type === 'http'
+                    ? 'Use variables like {{ body.ticket.id }}, {{ query.source }}, or {{ headers.x-source }}.'
+                    : 'The prompt the agent runs on each scheduled dispatch.'
+                }
                 value={form.promptTemplate}
                 onChange={(promptTemplate) => setForm({ ...form, promptTemplate })}
               />
-              <Field>
-                <FieldLabel htmlFor="field-interval">Interval</FieldLabel>
-                <div className="flex gap-2">
-                  <Input
-                    id="field-interval"
-                    type="number"
-                    min={1}
-                    aria-label="Interval value"
-                    value={form.intervalValue}
-                    onChange={(event) => setForm({ ...form, intervalValue: event.target.value })}
-                    className="w-28"
-                  />
-                  <Select
-                    value={form.intervalUnit}
-                    onValueChange={(intervalUnit) => setForm({ ...form, intervalUnit: intervalUnit as IntervalUnit })}
-                  >
-                    <SelectTrigger className="w-40" aria-label="Interval unit">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectItem value="minutes">minutes</SelectItem>
-                        <SelectItem value="hours">hours</SelectItem>
-                        <SelectItem value="days">days</SelectItem>
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <FieldDescription>The minimum effective granularity is 1 minute.</FieldDescription>
-              </Field>
+              {form.type === 'scheduled' ? (
+                <Field>
+                  <FieldLabel htmlFor="field-interval">Interval</FieldLabel>
+                  <div className="flex gap-2">
+                    <Input
+                      id="field-interval"
+                      type="number"
+                      min={1}
+                      aria-label="Interval value"
+                      value={form.intervalValue}
+                      onChange={(event) => setForm({ ...form, intervalValue: event.target.value })}
+                      className="w-28"
+                    />
+                    <Select
+                      value={form.intervalUnit}
+                      onValueChange={(intervalUnit) => setForm({ ...form, intervalUnit: intervalUnit as IntervalUnit })}
+                    >
+                      <SelectTrigger className="w-40" aria-label="Interval unit">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value="minutes">minutes</SelectItem>
+                          <SelectItem value="hours">hours</SelectItem>
+                          <SelectItem value="days">days</SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <FieldDescription>The minimum effective granularity is 1 minute.</FieldDescription>
+                </Field>
+              ) : (
+                <Field>
+                  <FieldLabel>HTTP entry</FieldLabel>
+                  <FieldDescription>
+                    POST JSON to /api/v1/triggers/&lt;triggerId&gt;/runs with an authenticated AMA session or bearer
+                    token.
+                  </FieldDescription>
+                </Field>
+              )}
               <Field>
                 <FieldLabel>Status</FieldLabel>
                 <Select

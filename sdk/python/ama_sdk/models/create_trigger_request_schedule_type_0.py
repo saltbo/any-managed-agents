@@ -8,7 +8,7 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
-from ..models.update_trigger_request_schedule_type import UpdateTriggerRequestScheduleType
+from ..models.create_trigger_request_schedule_type_0_type import CreateTriggerRequestScheduleType0Type
 from ..types import UNSET, Unset
 
 
@@ -16,21 +16,21 @@ from ..types import UNSET, Unset
 
 
 
-T = TypeVar("T", bound="UpdateTriggerRequestSchedule")
+T = TypeVar("T", bound="CreateTriggerRequestScheduleType0")
 
 
 
 @_attrs_define
-class UpdateTriggerRequestSchedule:
+class CreateTriggerRequestScheduleType0:
     """ 
         Attributes:
             interval_seconds (int):  Example: 86400.
-            type_ (UpdateTriggerRequestScheduleType | Unset):  Example: interval.
+            type_ (CreateTriggerRequestScheduleType0Type | Unset):  Example: interval.
             window_seconds (int | Unset):
      """
 
     interval_seconds: int
-    type_: UpdateTriggerRequestScheduleType | Unset = UNSET
+    type_: CreateTriggerRequestScheduleType0Type | Unset = UNSET
     window_seconds: int | Unset = UNSET
 
 
@@ -68,22 +68,22 @@ class UpdateTriggerRequestSchedule:
         interval_seconds = d.pop("intervalSeconds")
 
         _type_ = d.pop("type", UNSET)
-        type_: UpdateTriggerRequestScheduleType | Unset
+        type_: CreateTriggerRequestScheduleType0Type | Unset
         if isinstance(_type_,  Unset):
             type_ = UNSET
         else:
-            type_ = UpdateTriggerRequestScheduleType(_type_)
+            type_ = CreateTriggerRequestScheduleType0Type(_type_)
 
 
 
 
         window_seconds = d.pop("windowSeconds", UNSET)
 
-        update_trigger_request_schedule = cls(
+        create_trigger_request_schedule_type_0 = cls(
             interval_seconds=interval_seconds,
             type_=type_,
             window_seconds=window_seconds,
         )
 
-        return update_trigger_request_schedule
+        return create_trigger_request_schedule_type_0
 

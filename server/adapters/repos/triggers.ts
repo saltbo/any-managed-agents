@@ -31,9 +31,12 @@ function parseJson<T>(value: string | null, fallback: T) {
 }
 
 function recordFrom(row: TriggerRow): TriggerRecord {
+  const type = row.triggerType ?? 'scheduled'
   return {
     id: row.id,
+    organizationId: row.organizationId,
     projectId: row.projectId,
+    type,
     agentId: row.agentId,
     environmentId: row.environmentId,
     runtime: row.runtime as RuntimeName,
@@ -42,7 +45,10 @@ function recordFrom(row: TriggerRow): TriggerRecord {
     resourceRefs: parseJson<Record<string, unknown>[]>(row.resourceRefs, []),
     env: parseJson<Record<string, string>>(row.env, {}),
     secretEnv: parseJson<SecretEnvEntry[]>(row.secretEnv, []),
-    schedule: { intervalSeconds: row.intervalSeconds, windowSeconds: row.windowSeconds },
+    schedule:
+      type === 'scheduled'
+        ? { intervalSeconds: row.intervalSeconds ?? 0, windowSeconds: row.windowSeconds ?? 0 }
+        : null,
     enabled: row.enabled,
     nextDueAt: row.nextDueAt,
     lastDispatchedAt: row.lastDispatchedAt,
@@ -62,6 +68,7 @@ function runRecordFrom(row: RunRow): TriggerRunRecord {
     triggerId: row.triggerId,
     scheduledFor: row.scheduledFor,
     heartbeatAt: row.heartbeatAt,
+    triggeredAt: row.triggeredAt,
     state: row.state as TriggerRunRecord['state'],
     idempotencyKey: row.idempotencyKey,
     sessionId: row.sessionId,
@@ -75,6 +82,7 @@ function runRecordFrom(row: RunRow): TriggerRunRecord {
 
 function configColumns(config: CreateTriggerInput['config']) {
   return {
+    triggerType: config.type,
     agentId: config.agentId,
     environmentId: config.environmentId,
     runtime: config.runtime,
@@ -83,8 +91,8 @@ function configColumns(config: CreateTriggerInput['config']) {
     resourceRefs: stringify(config.resourceRefs),
     env: stringify(config.env),
     secretEnv: stringify(config.secretEnv),
-    intervalSeconds: config.schedule.intervalSeconds,
-    windowSeconds: config.schedule.windowSeconds,
+    intervalSeconds: config.schedule?.intervalSeconds ?? null,
+    windowSeconds: config.schedule?.windowSeconds ?? null,
     enabled: config.enabled,
     nextDueAt: config.nextDueAt,
     metadata: stringify(config.metadata),

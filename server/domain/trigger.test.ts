@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { hasSecretMaterial, nextDueFromInterval } from './trigger'
+import { hasSecretMaterial, nextDueFromInterval, PromptTemplateRenderError, renderHttpPromptTemplate } from './trigger'
 
 describe('nextDueFromInterval', () => {
   it('computes the next due date from a given timestamp', () => {
@@ -46,5 +46,40 @@ describe('hasSecretMaterial', () => {
   it('detects secret-looking keys at any depth in nested objects', () => {
     expect(hasSecretMaterial({ nested: { deep: { secret: 'x' } } })).toBe(true)
     expect(hasSecretMaterial({ nested: { deep: { safe: 'ok' } } })).toBe(false)
+  })
+})
+
+describe('renderHttpPromptTemplate', () => {
+  it('renders body, query, and header variables', () => {
+    const prompt = renderHttpPromptTemplate(
+      'Handle {{ body.ticket.id }} for {{ query.team }} via {{ headers.x-source }}.',
+      {
+        body: { ticket: { id: 'T-123' } },
+        query: { team: 'support' },
+        headers: { 'x-source': 'webhook' },
+      },
+    )
+    expect(prompt).toBe('Handle T-123 for support via webhook.')
+  })
+
+  it('stringifies object values when a path resolves to an object', () => {
+    const prompt = renderHttpPromptTemplate('Payload: {{ body.payload }}', {
+      body: { payload: { ok: true } },
+      query: {},
+      headers: {},
+    })
+    expect(prompt).toBe('Payload: {"ok":true}')
+  })
+
+  it('fails when a variable is missing', () => {
+    expect(() => renderHttpPromptTemplate('Handle {{ body.ticket.id }}', { body: {}, query: {}, headers: {} })).toThrow(
+      PromptTemplateRenderError,
+    )
+  })
+
+  it('fails when a variable reads an unsupported root', () => {
+    expect(() => renderHttpPromptTemplate('Handle {{ secrets.token }}', { body: {}, query: {}, headers: {} })).toThrow(
+      PromptTemplateRenderError,
+    )
   })
 })
