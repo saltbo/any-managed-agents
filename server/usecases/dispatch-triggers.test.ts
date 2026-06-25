@@ -691,6 +691,15 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
     ).rejects.toMatchObject({ name: 'TriggerConflictError' })
   })
 
+  it('rejects archived HTTP triggers', async () => {
+    await expect(
+      dispatchHttpTrigger(fakeDeps(), auth, {
+        trigger: httpTrigger({ archivedAt: '2026-01-02T00:00:00.000Z' }),
+        context: { body: {}, query: {}, headers: {} },
+      }),
+    ).rejects.toMatchObject({ name: 'TriggerConflictError' })
+  })
+
   it('rejects duplicate idempotency keys', async () => {
     const deps = fakeDeps({ triggerDispatch: { claimHttpRun: async () => null } })
     await expect(
@@ -700,6 +709,51 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
         idempotencyKey: 'same-key',
       }),
     ).rejects.toMatchObject({ name: 'TriggerConflictError' })
+  })
+
+  it('marks an HTTP run failed when session creation fails', async () => {
+    let markedMessage: string | null = null
+    let auditOutcome: string | null = null
+    const deps = fakeDeps({
+      triggerDispatch: {
+        markRunFailed: async (_trigger, _run, message) => {
+          markedMessage = message
+        },
+      },
+      sessionRuntime: {
+        createSession: async () => ({
+          ok: false,
+          error: { status: 400, code: 'validation', message: 'Invalid agent' },
+        }),
+      },
+      audit: {
+        record: async (_auth, entry) => {
+          auditOutcome = (entry as { outcome?: string }).outcome ?? null
+        },
+      },
+    })
+    const result = await dispatchHttpTrigger(deps, auth, {
+      trigger: httpTrigger(),
+      context: { body: { ticket: { id: 'T-123' } }, query: { source: 'portal' }, headers: {} },
+    })
+    expect(result).toMatchObject({ state: 'failed', sessionId: null, errorMessage: 'Invalid agent' })
+    expect(markedMessage).toBe('Invalid agent')
+    expect(auditOutcome).toBe('failure')
+  })
+
+  it('propagates unexpected template rendering errors', async () => {
+    const body = {}
+    Object.defineProperty(body, 'ticket', {
+      get() {
+        throw new Error('getter failed')
+      },
+    })
+    await expect(
+      dispatchHttpTrigger(fakeDeps(), auth, {
+        trigger: httpTrigger(),
+        context: { body, query: { source: 'portal' }, headers: {} },
+      }),
+    ).rejects.toThrow('getter failed')
   })
 })
 

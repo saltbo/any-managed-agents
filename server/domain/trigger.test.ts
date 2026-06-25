@@ -71,6 +71,15 @@ describe('renderHttpPromptTemplate', () => {
     expect(prompt).toBe('Payload: {"ok":true}')
   })
 
+  it('renders array, null, number, and boolean values', () => {
+    const prompt = renderHttpPromptTemplate('{{ body.items.1 }} {{ body.none }} {{ body.count }} {{ body.ok }}', {
+      body: { items: ['first', 'second'], none: null, count: 3, ok: false },
+      query: {},
+      headers: {},
+    })
+    expect(prompt).toBe('second  3 false')
+  })
+
   it('fails when a variable is missing', () => {
     expect(() => renderHttpPromptTemplate('Handle {{ body.ticket.id }}', { body: {}, query: {}, headers: {} })).toThrow(
       PromptTemplateRenderError,
@@ -80,6 +89,24 @@ describe('renderHttpPromptTemplate', () => {
   it('fails when a variable reads an unsupported root', () => {
     expect(() => renderHttpPromptTemplate('Handle {{ secrets.token }}', { body: {}, query: {}, headers: {} })).toThrow(
       PromptTemplateRenderError,
+    )
+  })
+
+  it('fails when a variable path segment is invalid', () => {
+    expect(() =>
+      renderHttpPromptTemplate('Handle {{ body.ticket["id"] }}', { body: {}, query: {}, headers: {} }),
+    ).toThrow(PromptTemplateRenderError)
+  })
+
+  it('propagates unexpected read errors', () => {
+    const body = {}
+    Object.defineProperty(body, 'ticket', {
+      get() {
+        throw new Error('getter failed')
+      },
+    })
+    expect(() => renderHttpPromptTemplate('Handle {{ body.ticket.id }}', { body, query: {}, headers: {} })).toThrow(
+      'getter failed',
     )
   })
 })
