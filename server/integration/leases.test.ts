@@ -261,7 +261,9 @@ describe('[CF] /api/v1/leases', () => {
 
     const availableRes = await jsonFetch(`/api/v1/work-items?state=available&sessionId=${session.id}`, authorization)
     expect(availableRes.status).toBe(200)
-    const available = (await availableRes.json()) as { data: Array<{ sessionId: string; state: string; payload: Record<string, unknown> }> }
+    const available = (await availableRes.json()) as {
+      data: Array<{ sessionId: string; state: string; payload: Record<string, unknown> }>
+    }
     expect(available.data).toEqual([
       expect.objectContaining({
         sessionId: session.id,
