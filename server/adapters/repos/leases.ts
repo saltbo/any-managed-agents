@@ -94,7 +94,7 @@ async function replaceMemoryStoreSnapshots(
       )
       .get()
     if (!store) {
-      throw new Error(`Memory store ${snapshot.storeId} is not active`)
+      continue
     }
     await db.batch([
       db

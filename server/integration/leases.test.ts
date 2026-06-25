@@ -284,6 +284,50 @@ describe('[CF] /api/v1/leases', () => {
     })
   })
 
+  it('ignores snapshots for archived memory stores when self-hosted work completes', async () => {
+    const authorization = await signIn()
+    const environment = await createSelfHostedEnvironment(authorization)
+    const agent = await createAgent(authorization)
+    const memoryStoreRes = await jsonFetch('/api/v1/memory-stores', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ name: `Archived maintainer memory ${crypto.randomUUID()}` }),
+    })
+    expect(memoryStoreRes.status).toBe(201)
+    const memoryStore = (await memoryStoreRes.json()) as { id: string }
+    const runner = await registerActiveRunner(authorization, environment.id)
+    const session = await createSelfHostedSession(authorization, agent.id, environment.id, {
+      resourceRefs: [{ type: 'memory_store', storeId: memoryStore.id, access: 'read_write' }],
+    })
+    const workItem = await availableWorkItem(authorization, session.id)
+    const claimRes = await claimLease(authorization, workItem.id, runner.id)
+    expect(claimRes.status).toBe(201)
+    const lease = (await claimRes.json()) as { id: string }
+
+    const archiveRes = await jsonFetch(`/api/v1/memory-stores/${memoryStore.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({ archived: true }),
+    })
+    expect(archiveRes.status).toBe(200)
+
+    const completeRes = await jsonFetch(`/api/v1/leases/${lease.id}`, authorization, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        state: 'completed',
+        result: {
+          exitCode: 0,
+          memoryStores: [
+            {
+              storeId: memoryStore.id,
+              memories: [{ path: 'ak-maintainer-heartbeat.md', content: 'late heartbeat\n' }],
+            },
+          ],
+        },
+      }),
+    })
+    expect(completeRes.status).toBe(200)
+    await expect(completeRes.json()).resolves.toMatchObject({ state: 'completed' })
+  })
+
   it('queues a prompt on the same self-hosted session while its leased work item is still running', async () => {
     const authorization = await signIn()
     const environment = await createSelfHostedEnvironment(authorization)
