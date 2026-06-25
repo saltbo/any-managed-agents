@@ -5132,6 +5132,9 @@
             "additionalProperties": {
               "nullable": true
             }
+          },
+          {
+            "$ref": "#/components/schemas/MemoryStoreResourceRef"
           }
         ]
       },
@@ -5174,6 +5177,36 @@
           "type",
           "owner",
           "repo"
+        ],
+        "additionalProperties": false
+      },
+      "MemoryStoreResourceRef": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "memory_store"
+            ]
+          },
+          "storeId": {
+            "type": "string",
+            "minLength": 1,
+            "example": "memstore_abc123"
+          },
+          "access": {
+            "type": "string",
+            "enum": [
+              "read_only",
+              "read_write"
+            ],
+            "example": "read_only"
+          }
+        },
+        "required": [
+          "type",
+          "storeId",
+          "access"
         ],
         "additionalProperties": false
       },
@@ -6475,6 +6508,258 @@
           "decision"
         ],
         "additionalProperties": false
+      },
+      "MemoryStoreListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MemoryStore"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/ListPagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ]
+      },
+      "MemoryStore": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "memstore_abc123"
+          },
+          "projectId": {
+            "type": "string",
+            "example": "project_abc123"
+          },
+          "name": {
+            "type": "string",
+            "example": "Team conventions"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "example": "Shared repository and review preferences."
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "owner": "platform"
+            }
+          },
+          "archivedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time",
+            "example": null
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-06-25T00:00:00.000Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-06-25T00:00:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "projectId",
+          "name",
+          "description",
+          "metadata",
+          "archivedAt",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateMemoryStoreRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "example": "Team conventions"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000,
+            "example": "Shared repository and review preferences."
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "owner": "platform"
+            }
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "UpdateMemoryStoreRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "example": "Team conventions"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000,
+            "example": "Shared repository and review preferences."
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {
+              "owner": "platform"
+            }
+          },
+          "archived": {
+            "type": "boolean",
+            "example": true
+          }
+        }
+      },
+      "MemoryStoreMemoryListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MemoryStoreMemory"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/ListPagination"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ]
+      },
+      "MemoryStoreMemory": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "memory_abc123"
+          },
+          "storeId": {
+            "type": "string",
+            "example": "memstore_abc123"
+          },
+          "projectId": {
+            "type": "string",
+            "example": "project_abc123"
+          },
+          "path": {
+            "type": "string",
+            "example": "guides/review.md"
+          },
+          "content": {
+            "type": "string",
+            "example": "Review for correctness first."
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {}
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-06-25T00:00:00.000Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-06-25T00:00:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "storeId",
+          "projectId",
+          "path",
+          "content",
+          "metadata",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateMemoryStoreMemoryRequest": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300,
+            "example": "guides/review.md"
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128000,
+            "example": "Review for correctness first."
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {}
+          }
+        },
+        "required": [
+          "path",
+          "content"
+        ]
+      },
+      "UpdateMemoryStoreMemoryRequest": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 300
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128000
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            },
+            "example": {}
+          }
+        }
       },
       "VaultListResponse": {
         "type": "object",
@@ -13938,6 +14223,635 @@
           },
           "409": {
             "description": "Approval already decided",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/memory-stores": {
+      "get": {
+        "operationId": "listMemoryStores",
+        "tags": [
+          "Memory Stores"
+        ],
+        "summary": "List memory stores",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ],
+              "description": "Filter by lifecycle. Defaults to false (live resources only).",
+              "example": "false"
+            },
+            "required": false,
+            "description": "Filter by lifecycle. Defaults to false (live resources only).",
+            "name": "archived",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120,
+              "example": "research"
+            },
+            "required": false,
+            "name": "search",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "example": "2026-05-01T00:00:00.000Z"
+            },
+            "required": false,
+            "name": "createdFrom",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "example": "2026-05-31T23:59:59.999Z"
+            },
+            "required": false,
+            "name": "createdTo",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "example": 50
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512,
+              "example": "eyJjcmVhdGVkQXQiOiIyMDI2LTA1LTIyVDAwOjAwOjAwLjAwMFoiLCJpZCI6ImFnZW50X2FiYzEyMyJ9"
+            },
+            "required": false,
+            "name": "cursor",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Memory store list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryStoreListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createMemoryStore",
+        "tags": [
+          "Memory Stores"
+        ],
+        "summary": "Create a memory store",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMemoryStoreRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created memory store",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryStore"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/memory-stores/{storeId}": {
+      "get": {
+        "operationId": "readMemoryStore",
+        "tags": [
+          "Memory Stores"
+        ],
+        "summary": "Read a memory store",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "memstore_abc123"
+            },
+            "required": true,
+            "name": "storeId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Memory store",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryStore"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Memory store not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateMemoryStore",
+        "tags": [
+          "Memory Stores"
+        ],
+        "summary": "Update or archive a memory store",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "memstore_abc123"
+            },
+            "required": true,
+            "name": "storeId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMemoryStoreRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated memory store",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryStore"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Memory store not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/memory-stores/{storeId}/memories": {
+      "get": {
+        "operationId": "listMemoryStoreMemories",
+        "tags": [
+          "Memory Stores"
+        ],
+        "summary": "List memories in a memory store",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "memstore_abc123"
+            },
+            "required": true,
+            "name": "storeId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "example": 50
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512,
+              "example": "eyJjcmVhdGVkQXQiOiIyMDI2LTA1LTIyVDAwOjAwOjAwLjAwMFoiLCJpZCI6ImFnZW50X2FiYzEyMyJ9"
+            },
+            "required": false,
+            "name": "cursor",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Memory list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryStoreMemoryListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Memory store not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createMemoryStoreMemory",
+        "tags": [
+          "Memory Stores"
+        ],
+        "summary": "Create a memory in a memory store",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "memstore_abc123"
+            },
+            "required": true,
+            "name": "storeId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMemoryStoreMemoryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created memory",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryStoreMemory"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Memory store not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Memory path conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/memory-stores/{storeId}/memories/{memoryId}": {
+      "patch": {
+        "operationId": "updateMemoryStoreMemory",
+        "tags": [
+          "Memory Stores"
+        ],
+        "summary": "Update a memory",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "memstore_abc123"
+            },
+            "required": true,
+            "name": "storeId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "example": "memory_abc123"
+            },
+            "required": true,
+            "name": "memoryId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMemoryStoreMemoryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated memory",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryStoreMemory"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Memory not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Memory path conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteMemoryStoreMemory",
+        "tags": [
+          "Memory Stores"
+        ],
+        "summary": "Delete a memory",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "example": "memstore_abc123"
+            },
+            "required": true,
+            "name": "storeId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "example": "memory_abc123"
+            },
+            "required": true,
+            "name": "memoryId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Memory deleted"
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Memory not found",
             "content": {
               "application/json": {
                 "schema": {

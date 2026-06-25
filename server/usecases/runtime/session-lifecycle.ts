@@ -74,6 +74,7 @@ async function stopSessionRow(
   await store.updateSession(auth.project.id, session.id, { state: 'stopped', updatedAt: stoppingAt })
 
   try {
+    await syncWritableMemoryStores(deps, auth, session)
     await deps.sandboxRuntime.stopCloudSession(session.sandboxId)
   } catch (error) {
     const safeError = safeRuntimeError(error)
@@ -126,6 +127,32 @@ async function stopSessionRow(
     throw new Error('Stopped session row is required')
   }
   return { ok: true, session: stopped }
+}
+
+async function syncWritableMemoryStores(deps: LifecycleDeps, auth: AuthScope, session: SessionRow) {
+  if (!session.sandboxId) {
+    return
+  }
+  const resourceRefs = JSON.parse(session.resourceRefs) as Record<string, unknown>[]
+  const writableRefs = resourceRefs.filter(
+    (resourceRef) => resourceRef.type === 'memory_store' && resourceRef.access === 'read_write',
+  )
+  if (writableRefs.length === 0) {
+    return
+  }
+  const snapshots = await deps.sandboxRuntime.readMemoryStoreMemories({
+    sandboxId: session.sandboxId,
+    resourceRefs: writableRefs,
+  })
+  const updatedAt = now()
+  for (const snapshot of snapshots) {
+    await deps.sessionOrchestration.replaceMemoryStoreMemories(
+      auth.project.id,
+      snapshot.storeId,
+      snapshot.memories,
+      updatedAt,
+    )
+  }
 }
 
 // On terminal stop, snapshot a cloud (ama) session's Session DO event log to its

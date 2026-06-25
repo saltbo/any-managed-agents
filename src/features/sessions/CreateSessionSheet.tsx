@@ -36,8 +36,14 @@ export function CreateSessionSheet({
     queryFn: () => api.listEnvironments(),
     enabled: open,
   })
+  const memoryStoresQuery = useQuery({
+    queryKey: queryKeys.memoryStores.list(false),
+    queryFn: () => api.listMemoryStores(),
+    enabled: open,
+  })
   const agents = agentsQuery.data?.data ?? EMPTY_RESOURCES
   const environments = environmentsQuery.data?.data ?? EMPTY_RESOURCES
+  const memoryStores = memoryStoresQuery.data?.data ?? EMPTY_RESOURCES
   const createSession = useMutation({
     mutationFn: () =>
       api.createSession({
@@ -90,7 +96,14 @@ export function CreateSessionSheet({
           <SheetDescription>Select the agent, environment, and runtime for this session.</SheetDescription>
         </SheetHeader>
         <div className="px-4 pb-4">
-          <SessionForm value={form} setValue={setForm} agents={agents} environments={environments} onSubmit={submit} />
+          <SessionForm
+            value={form}
+            setValue={setForm}
+            agents={agents}
+            environments={environments}
+            memoryStores={memoryStores}
+            onSubmit={submit}
+          />
           {createSession.error ? (
             <p className="mt-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {formatCreateSessionError(createSession.error)}

@@ -44,6 +44,12 @@ export const queryKeys = {
       ['vaults', 'detail', id, 'credentials', { includeArchived }] as const,
     audit: (id: string) => ['vaults', 'detail', id, 'audit'] as const,
   },
+  memoryStores: {
+    all: ['memory-stores'] as const,
+    list: (includeArchived = false) => ['memory-stores', 'list', { includeArchived }] as const,
+    detail: (id: string) => ['memory-stores', 'detail', id] as const,
+    memories: (id: string) => ['memory-stores', 'detail', id, 'memories'] as const,
+  },
   connectors: {
     all: ['connectors'] as const,
     list: (filters: Record<string, string> = {}) => ['connectors', 'list', filters] as const,

@@ -1,5 +1,6 @@
 import type { AgentMessage } from '@earendil-works/pi-agent-core'
 import { getModel, type Model } from '@earendil-works/pi-ai'
+import { normalizeMemoryPath } from '@server/domain/memory-store'
 import { runtimeEndpointPath } from '@server/domain/runtime/driver'
 import type { SandboxRuntimeHost } from '@server/usecases/ports'
 import {
@@ -112,7 +113,7 @@ async function getSandboxBinding() {
 export { runtimeEndpointPath }
 
 export function workspaceResourceManifest(resourceRefs: Record<string, unknown>[] = []) {
-  const resources = resourceRefs
+  const githubResources = resourceRefs
     .filter((resourceRef) => resourceRef.type === 'github_repository')
     .map((resourceRef) => ({
       type: 'github_repository',
@@ -126,10 +127,27 @@ export function workspaceResourceManifest(resourceRefs: Record<string, unknown>[
       status: 'declared',
     }))
     .sort((left, right) => String(left.mountPath).localeCompare(String(right.mountPath)))
+  const memoryStoreResources = resourceRefs
+    .filter((resourceRef) => resourceRef.type === 'memory_store')
+    .map((resourceRef) => ({
+      type: 'memory_store',
+      storeId: resourceRef.storeId,
+      name: resourceRef.name,
+      description: resourceRef.description ?? null,
+      access: resourceRef.access,
+      mountPath: resourceRef.mountPath,
+      memories: Array.isArray(resourceRef.memories)
+        ? resourceRef.memories.map((memory) => ({
+            path: typeof memory === 'object' && memory ? (memory as Record<string, unknown>).path : null,
+          }))
+        : [],
+      status: 'declared',
+    }))
+    .sort((left, right) => String(left.mountPath).localeCompare(String(right.mountPath)))
   return {
     version: 1,
     workspaceRoot: '/workspace',
-    resources,
+    resources: [...githubResources, ...memoryStoreResources],
   }
 }
 
@@ -181,7 +199,10 @@ async function prepareCloudWorkspace(
   }
 
   const resources = []
-  for (const resource of manifest.resources) {
+  const githubResources = manifest.resources.filter((resource) => resource.type === 'github_repository') as Array<
+    Record<string, unknown>
+  >
+  for (const resource of githubResources) {
     const owner = String(resource.owner ?? '')
     const repo = String(resource.repo ?? '')
     if (!GITHUB_NAME_RE.test(owner) || !GITHUB_NAME_RE.test(repo)) {
@@ -199,6 +220,37 @@ async function prepareCloudWorkspace(
       await execOrThrow(sandbox, `git -C ${shellQuote(mountPath)} checkout ${shellQuote(resource.ref)}`)
     }
     resources.push({ ...resource, mountPath, status: 'cloned' })
+  }
+  for (const resourceRef of values.resourceRefs.filter((resourceRef) => resourceRef.type === 'memory_store')) {
+    const mountPath = String(resourceRef.mountPath ?? '')
+    if (!mountPath.startsWith('/workspace/.ama/memory-stores/')) {
+      throw new Error(`Invalid memory_store mount path: ${mountPath}`)
+    }
+    await execOrThrow(sandbox, `mkdir -p ${shellQuote(mountPath)}`)
+    const memories = Array.isArray(resourceRef.memories) ? resourceRef.memories : []
+    for (const memory of memories) {
+      if (!memory || typeof memory !== 'object') {
+        continue
+      }
+      const record = memory as Record<string, unknown>
+      const path = String(record.path ?? '')
+      const content = String(record.content ?? '')
+      if (!path || path.startsWith('/') || path.includes('..')) {
+        throw new Error(`Invalid memory path: ${path}`)
+      }
+      const fullPath = `${mountPath}/${path}`
+      const parentPath = fullPath.slice(0, fullPath.lastIndexOf('/'))
+      await execOrThrow(sandbox, `mkdir -p ${shellQuote(parentPath)}`)
+      await sandbox.writeFile(fullPath, content, { encoding: 'utf-8' })
+    }
+    if (resourceRef.access === 'read_only') {
+      await execOrThrow(sandbox, `chmod -R a-w ${shellQuote(mountPath)}`)
+    }
+    const declared = manifest.resources.find(
+      (resource) =>
+        resource.type === 'memory_store' && 'storeId' in resource && resource.storeId === resourceRef.storeId,
+    )
+    resources.push({ ...(declared ?? resourceRef), mountPath, status: 'mounted' })
   }
   await sandbox.writeFile('/workspace/.ama/resources.json', JSON.stringify({ ...manifest, resources }), {
     encoding: 'utf-8',
@@ -266,6 +318,46 @@ export async function startSessionRuntime(
 
 export async function stopSessionRuntime(env: Env, sandboxId: string) {
   await toolExecutor(env).stop?.(sandboxId)
+}
+
+export async function readMemoryStoreMemories(
+  env: Env,
+  input: { sandboxId: string; resourceRefs: Record<string, unknown>[] },
+) {
+  if (env.AMA_RUNTIME_MODE === 'test') {
+    return []
+  }
+  const getSandbox = await getSandboxBinding()
+  const sandbox = getSandbox(env.SANDBOX, input.sandboxId, { keepAlive: true, normalizeId: true })
+  const stores: Array<{ storeId: string; memories: Array<{ path: string; content: string }> }> = []
+  for (const resourceRef of input.resourceRefs) {
+    if (resourceRef.type !== 'memory_store' || resourceRef.access !== 'read_write') {
+      continue
+    }
+    const storeId = String(resourceRef.storeId ?? '')
+    const mountPath = String(resourceRef.mountPath ?? '')
+    if (!storeId || !mountPath.startsWith('/workspace/.ama/memory-stores/')) {
+      continue
+    }
+    const listed = await sandbox.exec(`find ${shellQuote(mountPath)} -type f -print | sort`)
+    if (typeof listed.exitCode === 'number' && listed.exitCode !== 0) {
+      throw new Error(`Memory store readback failed: ${listed.stderr || listed.stdout || storeId}`)
+    }
+    const memories = []
+    for (const filePath of (listed.stdout ?? '').split('\n').filter(Boolean)) {
+      if (!filePath.startsWith(`${mountPath}/`)) {
+        continue
+      }
+      const relativePath = normalizeMemoryPath(filePath.slice(mountPath.length + 1))
+      const content = await sandbox.exec(`cat ${shellQuote(filePath)}`)
+      if (typeof content.exitCode === 'number' && content.exitCode !== 0) {
+        throw new Error(`Memory file readback failed: ${content.stderr || relativePath}`)
+      }
+      memories.push({ path: relativePath, content: content.stdout ?? '' })
+    }
+    stores.push({ storeId, memories })
+  }
+  return stores
 }
 
 export function runtimeToolCalls(body: unknown) {
@@ -378,6 +470,9 @@ export function createSandboxRuntimeHost(env: Env): SandboxRuntimeHost {
   return {
     startCloudSession(input) {
       return startSessionRuntime(env, input)
+    },
+    readMemoryStoreMemories(input) {
+      return readMemoryStoreMemories(env, input)
     },
     stopCloudSession(sandboxId) {
       return stopSessionRuntime(env, sandboxId)

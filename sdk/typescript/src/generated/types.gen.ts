@@ -1201,7 +1201,7 @@ export type Runtime = 'ama' | 'claude-code' | 'codex' | 'copilot';
 
 export type ResourceRef = GitHubRepositoryResourceRef | {
     [key: string]: unknown;
-};
+} | MemoryStoreResourceRef;
 
 export type GitHubRepositoryResourceRef = {
     type: 'github_repository';
@@ -1210,6 +1210,12 @@ export type GitHubRepositoryResourceRef = {
     ref?: string;
     mountPath?: string;
     credentialRef?: CredentialRef;
+};
+
+export type MemoryStoreResourceRef = {
+    type: 'memory_store';
+    storeId: string;
+    access: 'read_only' | 'read_write';
 };
 
 export type SecretEnvEntry = {
@@ -1525,6 +1531,75 @@ export type SessionApprovalDecisionRequest = {
      * Caller-provided custom tool result recorded instead of executing the tool
      */
     result?: {
+        [key: string]: unknown;
+    };
+};
+
+export type MemoryStoreListResponse = {
+    data: Array<MemoryStore>;
+    pagination: ListPagination;
+};
+
+export type MemoryStore = {
+    id: string;
+    projectId: string;
+    name: string;
+    description: string | null;
+    metadata: {
+        [key: string]: unknown;
+    };
+    archivedAt: string | null;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type CreateMemoryStoreRequest = {
+    name: string;
+    description?: string;
+    metadata?: {
+        [key: string]: unknown;
+    };
+};
+
+export type UpdateMemoryStoreRequest = {
+    name?: string;
+    description?: string;
+    metadata?: {
+        [key: string]: unknown;
+    };
+    archived?: boolean;
+};
+
+export type MemoryStoreMemoryListResponse = {
+    data: Array<MemoryStoreMemory>;
+    pagination: ListPagination;
+};
+
+export type MemoryStoreMemory = {
+    id: string;
+    storeId: string;
+    projectId: string;
+    path: string;
+    content: string;
+    metadata: {
+        [key: string]: unknown;
+    };
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type CreateMemoryStoreMemoryRequest = {
+    path: string;
+    content: string;
+    metadata?: {
+        [key: string]: unknown;
+    };
+};
+
+export type UpdateMemoryStoreMemoryRequest = {
+    path?: string;
+    content?: string;
+    metadata?: {
         [key: string]: unknown;
     };
 };
@@ -4807,6 +4882,289 @@ export type DecideSessionApprovalResponses = {
 };
 
 export type DecideSessionApprovalResponse = DecideSessionApprovalResponses[keyof DecideSessionApprovalResponses];
+
+export type ListMemoryStoresData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Filter by lifecycle. Defaults to false (live resources only).
+         */
+        archived?: 'true' | 'false';
+        search?: string;
+        createdFrom?: string;
+        createdTo?: string;
+        limit?: number;
+        cursor?: string;
+    };
+    url: '/api/v1/memory-stores';
+};
+
+export type ListMemoryStoresErrors = {
+    /**
+     * Validation error
+     */
+    400: ErrorResponse;
+    /**
+     * Authentication required
+     */
+    401: ErrorResponse;
+};
+
+export type ListMemoryStoresError = ListMemoryStoresErrors[keyof ListMemoryStoresErrors];
+
+export type ListMemoryStoresResponses = {
+    /**
+     * Memory store list
+     */
+    200: MemoryStoreListResponse;
+};
+
+export type ListMemoryStoresResponse = ListMemoryStoresResponses[keyof ListMemoryStoresResponses];
+
+export type CreateMemoryStoreData = {
+    body: CreateMemoryStoreRequest;
+    path?: never;
+    query?: never;
+    url: '/api/v1/memory-stores';
+};
+
+export type CreateMemoryStoreErrors = {
+    /**
+     * Validation error
+     */
+    400: ErrorResponse;
+    /**
+     * Authentication required
+     */
+    401: ErrorResponse;
+};
+
+export type CreateMemoryStoreError = CreateMemoryStoreErrors[keyof CreateMemoryStoreErrors];
+
+export type CreateMemoryStoreResponses = {
+    /**
+     * Created memory store
+     */
+    201: MemoryStore;
+};
+
+export type CreateMemoryStoreResponse = CreateMemoryStoreResponses[keyof CreateMemoryStoreResponses];
+
+export type ReadMemoryStoreData = {
+    body?: never;
+    path: {
+        storeId: string;
+    };
+    query?: never;
+    url: '/api/v1/memory-stores/{storeId}';
+};
+
+export type ReadMemoryStoreErrors = {
+    /**
+     * Authentication required
+     */
+    401: ErrorResponse;
+    /**
+     * Memory store not found
+     */
+    404: ErrorResponse;
+};
+
+export type ReadMemoryStoreError = ReadMemoryStoreErrors[keyof ReadMemoryStoreErrors];
+
+export type ReadMemoryStoreResponses = {
+    /**
+     * Memory store
+     */
+    200: MemoryStore;
+};
+
+export type ReadMemoryStoreResponse = ReadMemoryStoreResponses[keyof ReadMemoryStoreResponses];
+
+export type UpdateMemoryStoreData = {
+    body: UpdateMemoryStoreRequest;
+    path: {
+        storeId: string;
+    };
+    query?: never;
+    url: '/api/v1/memory-stores/{storeId}';
+};
+
+export type UpdateMemoryStoreErrors = {
+    /**
+     * Validation error
+     */
+    400: ErrorResponse;
+    /**
+     * Authentication required
+     */
+    401: ErrorResponse;
+    /**
+     * Memory store not found
+     */
+    404: ErrorResponse;
+};
+
+export type UpdateMemoryStoreError = UpdateMemoryStoreErrors[keyof UpdateMemoryStoreErrors];
+
+export type UpdateMemoryStoreResponses = {
+    /**
+     * Updated memory store
+     */
+    200: MemoryStore;
+};
+
+export type UpdateMemoryStoreResponse = UpdateMemoryStoreResponses[keyof UpdateMemoryStoreResponses];
+
+export type ListMemoryStoreMemoriesData = {
+    body?: never;
+    path: {
+        storeId: string;
+    };
+    query?: {
+        limit?: number;
+        cursor?: string;
+    };
+    url: '/api/v1/memory-stores/{storeId}/memories';
+};
+
+export type ListMemoryStoreMemoriesErrors = {
+    /**
+     * Validation error
+     */
+    400: ErrorResponse;
+    /**
+     * Authentication required
+     */
+    401: ErrorResponse;
+    /**
+     * Memory store not found
+     */
+    404: ErrorResponse;
+};
+
+export type ListMemoryStoreMemoriesError = ListMemoryStoreMemoriesErrors[keyof ListMemoryStoreMemoriesErrors];
+
+export type ListMemoryStoreMemoriesResponses = {
+    /**
+     * Memory list
+     */
+    200: MemoryStoreMemoryListResponse;
+};
+
+export type ListMemoryStoreMemoriesResponse = ListMemoryStoreMemoriesResponses[keyof ListMemoryStoreMemoriesResponses];
+
+export type CreateMemoryStoreMemoryData = {
+    body: CreateMemoryStoreMemoryRequest;
+    path: {
+        storeId: string;
+    };
+    query?: never;
+    url: '/api/v1/memory-stores/{storeId}/memories';
+};
+
+export type CreateMemoryStoreMemoryErrors = {
+    /**
+     * Validation error
+     */
+    400: ErrorResponse;
+    /**
+     * Authentication required
+     */
+    401: ErrorResponse;
+    /**
+     * Memory store not found
+     */
+    404: ErrorResponse;
+    /**
+     * Memory path conflict
+     */
+    409: ErrorResponse;
+};
+
+export type CreateMemoryStoreMemoryError = CreateMemoryStoreMemoryErrors[keyof CreateMemoryStoreMemoryErrors];
+
+export type CreateMemoryStoreMemoryResponses = {
+    /**
+     * Created memory
+     */
+    201: MemoryStoreMemory;
+};
+
+export type CreateMemoryStoreMemoryResponse = CreateMemoryStoreMemoryResponses[keyof CreateMemoryStoreMemoryResponses];
+
+export type DeleteMemoryStoreMemoryData = {
+    body?: never;
+    path: {
+        storeId: string;
+        memoryId: string;
+    };
+    query?: never;
+    url: '/api/v1/memory-stores/{storeId}/memories/{memoryId}';
+};
+
+export type DeleteMemoryStoreMemoryErrors = {
+    /**
+     * Authentication required
+     */
+    401: ErrorResponse;
+    /**
+     * Memory not found
+     */
+    404: ErrorResponse;
+};
+
+export type DeleteMemoryStoreMemoryError = DeleteMemoryStoreMemoryErrors[keyof DeleteMemoryStoreMemoryErrors];
+
+export type DeleteMemoryStoreMemoryResponses = {
+    /**
+     * Memory deleted
+     */
+    204: void;
+};
+
+export type DeleteMemoryStoreMemoryResponse = DeleteMemoryStoreMemoryResponses[keyof DeleteMemoryStoreMemoryResponses];
+
+export type UpdateMemoryStoreMemoryData = {
+    body: UpdateMemoryStoreMemoryRequest;
+    path: {
+        storeId: string;
+        memoryId: string;
+    };
+    query?: never;
+    url: '/api/v1/memory-stores/{storeId}/memories/{memoryId}';
+};
+
+export type UpdateMemoryStoreMemoryErrors = {
+    /**
+     * Validation error
+     */
+    400: ErrorResponse;
+    /**
+     * Authentication required
+     */
+    401: ErrorResponse;
+    /**
+     * Memory not found
+     */
+    404: ErrorResponse;
+    /**
+     * Memory path conflict
+     */
+    409: ErrorResponse;
+};
+
+export type UpdateMemoryStoreMemoryError = UpdateMemoryStoreMemoryErrors[keyof UpdateMemoryStoreMemoryErrors];
+
+export type UpdateMemoryStoreMemoryResponses = {
+    /**
+     * Updated memory
+     */
+    200: MemoryStoreMemory;
+};
+
+export type UpdateMemoryStoreMemoryResponse = UpdateMemoryStoreMemoryResponses[keyof UpdateMemoryStoreMemoryResponses];
 
 export type ListVaultsData = {
     body?: never;

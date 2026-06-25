@@ -370,10 +370,22 @@ export type GitHubRepositoryResourceRef = {
   repo: string
   ref?: string
   mountPath?: string
-  credentialRef?: string
+  credentialRef?: CredentialRef
 }
 
-export type SessionResourceRef = GitHubRepositoryResourceRef | Record<string, unknown>
+export type MemoryStoreAccess = 'read_only' | 'read_write'
+
+export type MemoryStoreResourceRef = {
+  type: 'memory_store'
+  storeId: string
+  access: MemoryStoreAccess
+  name?: string
+  description?: string | null
+  mountPath?: string
+  memories?: Array<{ path: string; content?: string }>
+}
+
+export type SessionResourceRef = GitHubRepositoryResourceRef | MemoryStoreResourceRef | Record<string, unknown>
 
 // A provider is now a global model vendor (anthropic, openai, …); the catalog is
 // shared across all projects and refreshed by the scheduled discovery job.
@@ -418,6 +430,28 @@ export interface Vault {
   scope: 'project' | 'organization'
   metadata: Record<string, unknown>
   archivedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface MemoryStore {
+  id: string
+  projectId: string
+  name: string
+  description: string | null
+  metadata: Record<string, unknown>
+  archivedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface MemoryStoreMemory {
+  id: string
+  storeId: string
+  projectId: string
+  path: string
+  content: string
+  metadata: Record<string, unknown>
   createdAt: string
   updatedAt: string
 }
@@ -784,6 +818,18 @@ export interface VaultInput {
   scope?: 'project' | 'organization'
 }
 
+export interface MemoryStoreInput {
+  name: string
+  description?: string
+  metadata?: Record<string, unknown>
+}
+
+export interface MemoryStoreMemoryInput {
+  path: string
+  content: string
+  metadata?: Record<string, unknown>
+}
+
 export interface VaultCredentialSecretInput {
   provider?: 'ama-managed' | 'cloudflare-secrets' | 'external-vault'
   secretValue?: string
@@ -1031,6 +1077,46 @@ export const api = {
         json: { state: 'revoked', ...(revokeReason ? { revokeReason } : {}) },
       }),
     ),
+  listMemoryStores: (options: ListOptions = {}) =>
+    rpcRequest<ListResponse<MemoryStore>>(
+      v1['memory-stores'].$get(queryArg<(typeof v1)['memory-stores']['$get']>(options)),
+    ),
+  readMemoryStore: (id: string) =>
+    rpcRequest<MemoryStore>(v1['memory-stores'][':storeId'].$get({ param: { storeId: id } })),
+  createMemoryStore: (input: MemoryStoreInput) => rpcRequest<MemoryStore>(v1['memory-stores'].$post({ json: input })),
+  updateMemoryStore: (id: string, input: Partial<MemoryStoreInput> & { archived?: boolean }) =>
+    rpcRequest<MemoryStore>(
+      v1['memory-stores'][':storeId'].$patch({
+        param: { storeId: id },
+        json: input as RpcJson<(typeof v1)['memory-stores'][':storeId']['$patch']>,
+      }),
+    ),
+  archiveMemoryStore: (id: string) =>
+    rpcRequest<MemoryStore>(
+      v1['memory-stores'][':storeId'].$patch({ param: { storeId: id }, json: { archived: true } }),
+    ),
+  listMemoryStoreMemories: (storeId: string, options: ListOptions = {}) =>
+    rpcRequest<ListResponse<MemoryStoreMemory>>(
+      v1['memory-stores'][':storeId'].memories.$get(
+        paramQueryArg<(typeof v1)['memory-stores'][':storeId']['memories']['$get']>({ storeId }, options),
+      ),
+    ),
+  createMemoryStoreMemory: (storeId: string, input: MemoryStoreMemoryInput) =>
+    rpcRequest<MemoryStoreMemory>(
+      v1['memory-stores'][':storeId'].memories.$post({
+        param: { storeId },
+        json: input as RpcJson<(typeof v1)['memory-stores'][':storeId']['memories']['$post']>,
+      }),
+    ),
+  updateMemoryStoreMemory: (storeId: string, memoryId: string, input: Partial<MemoryStoreMemoryInput>) =>
+    rpcRequest<MemoryStoreMemory>(
+      v1['memory-stores'][':storeId'].memories[':memoryId'].$patch({
+        param: { storeId, memoryId },
+        json: input as RpcJson<(typeof v1)['memory-stores'][':storeId']['memories'][':memoryId']['$patch']>,
+      }),
+    ),
+  deleteMemoryStoreMemory: (storeId: string, memoryId: string) =>
+    rpcRequest<void>(v1['memory-stores'][':storeId'].memories[':memoryId'].$delete({ param: { storeId, memoryId } })),
   listConnectors: (options: ConnectorListOptions = {}) =>
     rpcRequest<ListResponse<Connector>>(v1.connectors.$get(queryArg<typeof v1.connectors.$get>(options))),
   readConnector: (connectorId: string) =>

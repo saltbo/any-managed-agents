@@ -3,6 +3,7 @@ import {
   ArrowRight,
   Bot,
   Boxes,
+  Brain,
   Check,
   ChevronsUpDown,
   Clock,
@@ -151,6 +152,7 @@ function DesktopNav() {
       <NavButton icon={<MessageSquare size={17} />} to="/sessions" label="Sessions" />
       <NavButton icon={<Boxes size={17} />} to="/providers" label="Providers" />
       <NavButton icon={<Vault size={17} />} to="/vaults" label="Vaults" />
+      <NavButton icon={<Brain size={17} />} to="/memory-stores" label="Memory" />
       <NavButton icon={<PlugZap size={17} />} to="/mcp" label="MCP" />
       <NavButton icon={<Code2 size={17} />} to="/usage" label="Usage" />
       <NavButton icon={<DatabaseZap size={17} />} to="/audit" label="Audit" />
@@ -213,6 +215,7 @@ function MobileNav() {
       <MobileNavButton icon={<MessageSquare size={16} />} to="/sessions" label="Sessions" />
       <MobileNavButton icon={<Boxes size={16} />} to="/providers" label="Providers" />
       <MobileNavButton icon={<Vault size={16} />} to="/vaults" label="Vaults" />
+      <MobileNavButton icon={<Brain size={16} />} to="/memory-stores" label="Memory" />
       <MobileNavButton icon={<PlugZap size={16} />} to="/mcp" label="MCP" />
       <MobileNavButton icon={<Code2 size={16} />} to="/usage" label="Usage" />
       <MobileNavButton icon={<DatabaseZap size={16} />} to="/audit" label="Audit" />

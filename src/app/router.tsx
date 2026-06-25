@@ -10,6 +10,8 @@ import { EnvironmentDetailPage } from '@/features/environments/EnvironmentDetail
 import { EnvironmentsPage } from '@/features/environments/EnvironmentsPage'
 import { McpConnectorPage } from '@/features/mcp/McpConnectorPage'
 import { McpPage } from '@/features/mcp/McpPage'
+import { MemoryStoreDetailPage } from '@/features/memory-stores/MemoryStoreDetailPage'
+import { MemoryStoresPage } from '@/features/memory-stores/MemoryStoresPage'
 import { ProvidersPage } from '@/features/providers/ProvidersPage'
 import { QuickstartPage } from '@/features/quickstart/QuickstartPage'
 import { SessionDetailPage } from '@/features/sessions/SessionDetailPage'
@@ -43,6 +45,8 @@ export function createAppRouter() {
         { path: 'providers', element: <ProvidersPage /> },
         { path: 'vaults', element: <VaultsPage /> },
         { path: 'vaults/:vaultId', element: <VaultDetailPage /> },
+        { path: 'memory-stores', element: <MemoryStoresPage /> },
+        { path: 'memory-stores/:storeId', element: <MemoryStoreDetailPage /> },
         { path: 'mcp', element: <McpPage /> },
         { path: 'mcp/:connectorId', element: <McpConnectorPage /> },
         { path: 'usage', element: <UsagePage /> },

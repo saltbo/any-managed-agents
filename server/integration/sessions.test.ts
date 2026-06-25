@@ -560,7 +560,7 @@ describe('[CF] /api/v1/sessions', () => {
     expect(emptyPatchRes.status).toBe(400)
   })
 
-  it('queues self-hosted sessions for runner lease support', async () => {
+  it('queues self-hosted sessions for runner lease support [spec: sessions/memory-store-resources]', async () => {
     const authorization = await signIn()
     const credential = await connectMcp(authorization, 'github')
     const environment = await createEnvironment(authorization, {
@@ -579,6 +579,17 @@ describe('[CF] /api/v1/sessions', () => {
       skills: [],
       mcpConnectors: [],
     })
+    const memoryStoreRes = await jsonFetch('/api/v1/memory-stores', authorization, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Team memory', description: 'Review conventions' }),
+    })
+    expect(memoryStoreRes.status).toBe(201)
+    const memoryStore = (await memoryStoreRes.json()) as { id: string }
+    const memoryRes = await jsonFetch(`/api/v1/memory-stores/${memoryStore.id}/memories`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ path: 'guides/review.md', content: 'Review for correctness first.' }),
+    })
+    expect(memoryRes.status).toBe(201)
 
     const createRes = await jsonFetch('/api/v1/sessions', authorization, {
       method: 'POST',
@@ -586,7 +597,10 @@ describe('[CF] /api/v1/sessions', () => {
         agentId: agent.id,
         environmentId: environment.id,
         runtime: 'ama',
-        resourceRefs: [{ type: 'github_repository', owner: 'saltbo', repo: 'agent-kanban', ref: 'main' }],
+        resourceRefs: [
+          { type: 'github_repository', owner: 'saltbo', repo: 'agent-kanban', ref: 'main' },
+          { type: 'memory_store', storeId: memoryStore.id, access: 'read_write' },
+        ],
         secretEnv: [
           {
             name: 'AK_AGENT_KEY',
@@ -602,9 +616,21 @@ describe('[CF] /api/v1/sessions', () => {
       stateReason: string | null
       environmentSnapshot: { hostingMode: string }
       secretEnv: Array<{ name: string; credentialRef: Record<string, string> }>
+      resourceRefs: Array<Record<string, unknown>>
       metadata: Record<string, unknown>
       runtimeMetadata: Record<string, unknown>
     }
+    expect(created.resourceRefs).toContainEqual(
+      expect.objectContaining({
+        type: 'memory_store',
+        storeId: memoryStore.id,
+        name: 'Team memory',
+        description: 'Review conventions',
+        access: 'read_write',
+        mountPath: `/workspace/.ama/memory-stores/${memoryStore.id}`,
+        memories: [{ path: 'guides/review.md', content: 'Review for correctness first.' }],
+      }),
+    )
     expect(created).toMatchObject({
       state: 'pending',
       stateReason: 'waiting-for-runner',
@@ -662,6 +688,7 @@ describe('[CF] /api/v1/sessions', () => {
       runtimeEnv: Record<string, string>
       runtimeSecretEnv: Array<{ name: string; credentialRef: Record<string, string> }>
       provider: string
+      agentSnapshot: { instructions: string }
     }
     expect(storedPayload.resourceRefs).toEqual([
       {
@@ -671,7 +698,19 @@ describe('[CF] /api/v1/sessions', () => {
         ref: 'main',
         mountPath: '/workspace/repos/saltbo/agent-kanban',
       },
+      {
+        type: 'memory_store',
+        storeId: memoryStore.id,
+        name: 'Team memory',
+        description: 'Review conventions',
+        access: 'read_write',
+        mountPath: `/workspace/.ama/memory-stores/${memoryStore.id}`,
+        memories: [{ path: 'guides/review.md', content: 'Review for correctness first.' }],
+      },
     ])
+    expect(storedPayload.agentSnapshot.instructions).toContain('Attached memory stores:')
+    expect(storedPayload.agentSnapshot.instructions).toContain('Team memory')
+    expect(storedPayload.agentSnapshot.instructions).not.toContain('Review for correctness first.')
     expect(storedPayload.provider).toBe('workers-ai')
     expect(storedPayload.runtimeEnv).not.toHaveProperty('AK_AGENT_KEY')
     expect(storedPayload.runtimeSecretEnv).toEqual([

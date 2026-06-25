@@ -27,6 +27,8 @@ import {
   environments,
   environmentVersions,
   leases,
+  memoryStoreMemories,
+  memoryStores,
   runners,
   sessionApprovals,
   sessionChannels,
@@ -37,6 +39,7 @@ import {
   workItems,
 } from '../../db/schema'
 import { insertCanonicalSessionEvent } from '../../db/session-event-store'
+import { memoryStoreMountPath } from '../../domain/memory-store'
 
 type Db = ReturnType<typeof drizzle>
 
@@ -243,6 +246,57 @@ export function createRuntimeOrchestrationRepo(db: Db): SessionOrchestrationStor
         .where(and(eq(agentMemories.agentId, agentId), eq(agentMemories.projectId, projectId)))
         .get()
       return memory?.content ?? null
+    },
+
+    async findActiveMemoryStoreResource(projectId, storeId, access) {
+      const store = await db
+        .select()
+        .from(memoryStores)
+        .where(
+          and(eq(memoryStores.id, storeId), eq(memoryStores.projectId, projectId), isNull(memoryStores.archivedAt)),
+        )
+        .get()
+      if (!store) {
+        return null
+      }
+      const memories = await db
+        .select({ path: memoryStoreMemories.path, content: memoryStoreMemories.content })
+        .from(memoryStoreMemories)
+        .where(and(eq(memoryStoreMemories.storeId, storeId), eq(memoryStoreMemories.projectId, projectId)))
+        .orderBy(asc(memoryStoreMemories.path))
+      return {
+        type: 'memory_store',
+        storeId,
+        name: store.name,
+        description: store.description,
+        access,
+        mountPath: memoryStoreMountPath(storeId),
+        memories,
+      }
+    },
+
+    async replaceMemoryStoreMemories(projectId, storeId, memories, updatedAt) {
+      await db.batch([
+        db
+          .delete(memoryStoreMemories)
+          .where(and(eq(memoryStoreMemories.projectId, projectId), eq(memoryStoreMemories.storeId, storeId))),
+        ...memories.map((memory) =>
+          db.insert(memoryStoreMemories).values({
+            id: `memory_${crypto.randomUUID().replaceAll('-', '')}`,
+            projectId,
+            storeId,
+            path: memory.path,
+            content: memory.content,
+            metadata: '{}',
+            createdAt: updatedAt,
+            updatedAt,
+          }),
+        ),
+        db
+          .update(memoryStores)
+          .set({ updatedAt })
+          .where(and(eq(memoryStores.id, storeId), eq(memoryStores.projectId, projectId))),
+      ])
     },
 
     async findEnvironment(projectId: string, environmentId: string): Promise<EnvironmentRow | null> {

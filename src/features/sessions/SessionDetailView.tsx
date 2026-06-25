@@ -237,6 +237,12 @@ export function SessionDetailView({
                 <MetaGrid>
                   <Meta label="Count" value={String(session.resourceRefs.length)} />
                   <Meta label="GitHub repositories" value={String(githubResources(session).length)} />
+                  <Meta
+                    label="Memory stores"
+                    value={
+                      memoryStoreResources(session).length === 0 ? 'None' : String(memoryStoreResources(session).length)
+                    }
+                  />
                   <Meta label="Workspace manifest" value="/workspace/.ama/resources.json" />
                   <Meta label="Setup status" value="Declared for runtime executor setup" />
                 </MetaGrid>
@@ -293,7 +299,26 @@ function githubResources(session: Session) {
   return session.resourceRefs.filter((resource) => resource.type === 'github_repository')
 }
 
+function memoryStoreResources(session: Session) {
+  return session.resourceRefs.filter((resource) => resource.type === 'memory_store')
+}
+
 function safeResourceView(resource: Record<string, unknown>) {
+  if (resource.type === 'memory_store') {
+    return {
+      type: resource.type,
+      storeId: resource.storeId,
+      name: resource.name,
+      description: resource.description,
+      access: resource.access,
+      mountPath: resource.mountPath,
+      memories: Array.isArray(resource.memories)
+        ? resource.memories.map((memory) =>
+            memory && typeof memory === 'object' ? { path: (memory as Record<string, unknown>).path } : memory,
+          )
+        : [],
+    }
+  }
   if (resource.type !== 'github_repository') {
     return resource
   }

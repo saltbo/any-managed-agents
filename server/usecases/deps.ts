@@ -11,6 +11,7 @@ import type {
   FederatedTenantRepo,
   LeaseRepo,
   McpGateway,
+  MemoryStoreRepo,
   PolicyPort,
   PolicyRepo,
   ProjectRepo,
@@ -57,6 +58,7 @@ export interface Deps {
   policies: PolicyRepo
   budgets: BudgetRepo
   mcp: McpGateway
+  memoryStores?: MemoryStoreRepo
   sessionEvents: SessionEventPort
   audit: AuditPort
   policy: PolicyPort

@@ -14,6 +14,7 @@ import { registerEnvironmentRoutes } from './http/environments'
 import { registerFederatedTenantRoutes } from './http/federated-tenants'
 import health from './http/health'
 import { registerLeaseRoutes } from './http/leases'
+import { registerMemoryStoreRoutes } from './http/memory-stores'
 import { registerPolicyRoutes } from './http/policies'
 import { registerProjectRoutes } from './http/projects'
 import { registerProviderRoutes } from './http/providers'
@@ -88,6 +89,7 @@ export function createApp() {
   const auditRecords = registerAuditRecordRoutes(createDepsApiRouter())
   const sessionsRoutes = registerSessionRoutes(createDepsApiRouter())
   const vaults = registerVaultRoutes(createDepsApiRouter())
+  const memoryStores = registerMemoryStoreRoutes(createDepsApiRouter())
 
   const routes = app
     .route('/api/v1/health', health)
@@ -112,6 +114,7 @@ export function createApp() {
     .route('/api/v1/audit-records', auditRecords)
     .route('/api/v1/triggers', triggers)
     .route('/api/v1/sessions', sessionsRoutes)
+    .route('/api/v1/memory-stores', memoryStores)
     .route('/api/v1/vaults', vaults)
 
   routes.openAPIRegistry.registerComponent('securitySchemes', 'bearerAuth', ApiSecuritySchemes.bearerAuth)

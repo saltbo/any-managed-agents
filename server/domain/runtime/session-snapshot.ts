@@ -1,4 +1,5 @@
 import type { AgentVersionRow, EnvironmentVersionRow } from '@shared/runtime-rows'
+import { isMemoryStoreAccess, memoryStoreMountPath, memoryStoreSystemPromptBlock } from '../memory-store'
 import { hasEmbeddedCredentialUrl, normalizeMountPath } from '../session'
 
 // Snapshot serialization (DB row → immutable session snapshot) and resource-ref
@@ -21,6 +22,11 @@ export type GitHubRepositoryResourceRef = {
   ref?: string
   mountPath?: string
   credentialRef?: { credentialId: string; versionId?: string }
+}
+export type MemoryStoreResourceRef = {
+  type: 'memory_store'
+  storeId: string
+  access: 'read_only' | 'read_write'
 }
 
 export function serializeAgentVersion(row: AgentVersionRow, providerId: string) {
@@ -49,6 +55,30 @@ export type SerializedAgentVersion = ReturnType<typeof serializeAgentVersion>
 
 export function parseAgentSnapshot(value: string | null) {
   return parseJson<SerializedAgentVersion>(value)
+}
+
+export function agentSnapshotWithMemoryStoreContext(
+  agentSnapshot: SerializedAgentVersion,
+  resourceRefs: ResourceRef[],
+): SerializedAgentVersion {
+  const block = memoryStoreSystemPromptBlock(
+    resourceRefs
+      .filter((resourceRef) => resourceRef.type === 'memory_store')
+      .map((resourceRef) => ({
+        name: String(resourceRef.name ?? ''),
+        description: typeof resourceRef.description === 'string' ? resourceRef.description : null,
+        mountPath: String(resourceRef.mountPath ?? ''),
+        access: resourceRef.access === 'read_write' ? 'read_write' : 'read_only',
+      })),
+  )
+  if (!block) {
+    return agentSnapshot
+  }
+  const instructions = agentSnapshot.instructions?.trim()
+  return {
+    ...agentSnapshot,
+    instructions: instructions ? `${instructions}\n\n${block}` : block,
+  }
 }
 
 export function serializeEnvironmentVersion(row: EnvironmentVersionRow) {
@@ -92,7 +122,30 @@ export function normalizeResourceRefs(resourceRefs: ResourceRef[]) {
       return { fields: { [`resourceRefs.${index}`]: 'URLs with embedded credentials are not allowed.' } }
     }
     if (resourceRef.type !== 'github_repository') {
-      normalized.push(resourceRef)
+      if (resourceRef.type !== 'memory_store') {
+        normalized.push(resourceRef)
+        continue
+      }
+      if ('mountPath' in resourceRef) {
+        return { fields: { [`resourceRefs.${index}.mountPath`]: 'Memory store mount paths are managed by AMA.' } }
+      }
+      const parsed = resourceRef as MemoryStoreResourceRef
+      if (typeof parsed.storeId !== 'string' || parsed.storeId.trim().length === 0) {
+        return { fields: { [`resourceRefs.${index}.storeId`]: 'Memory store id is required.' } }
+      }
+      if (!isMemoryStoreAccess(parsed.access)) {
+        return { fields: { [`resourceRefs.${index}.access`]: 'Use read_only or read_write.' } }
+      }
+      const mountPath = memoryStoreMountPath(parsed.storeId)
+      if (mountPaths.has(mountPath)) {
+        return { fields: { [`resourceRefs.${index}.storeId`]: 'Memory store must be unique within a session.' } }
+      }
+      mountPaths.add(mountPath)
+      normalized.push({
+        type: 'memory_store',
+        storeId: parsed.storeId,
+        access: parsed.access,
+      })
       continue
     }
     const parsed = resourceRef as GitHubRepositoryResourceRef

@@ -1,4 +1,5 @@
 import { z } from '@hono/zod-openapi'
+import { MEMORY_STORE_ACCESS } from '../domain/memory-store'
 import { CredentialRefSchema } from '../openapi'
 
 // Workspace resource references and the shared execution-spec building blocks
@@ -50,12 +51,24 @@ export const GitHubRepositoryResourceRefSchema = z
   .strict()
   .openapi('GitHubRepositoryResourceRef')
 
-const LegacyResourceRefSchema = JsonObjectSchema.refine((value) => value.type !== 'github_repository', {
-  message: 'GitHub repository resources must use the github_repository schema.',
-})
+export const MemoryStoreResourceRefSchema = z
+  .object({
+    type: z.literal('memory_store'),
+    storeId: z.string().min(1).openapi({ example: 'memstore_abc123' }),
+    access: z.enum(MEMORY_STORE_ACCESS).openapi({ example: 'read_only' }),
+  })
+  .strict()
+  .openapi('MemoryStoreResourceRef')
+
+const LegacyResourceRefSchema = JsonObjectSchema.refine(
+  (value) => value.type !== 'github_repository' && value.type !== 'memory_store',
+  {
+    message: 'Known resource types must use their strict schema.',
+  },
+)
 
 export const ResourceRefSchema = z
-  .union([GitHubRepositoryResourceRefSchema, LegacyResourceRefSchema])
+  .union([GitHubRepositoryResourceRefSchema, LegacyResourceRefSchema, MemoryStoreResourceRefSchema])
   .openapi('ResourceRef')
 
 export type ResourceRef = z.infer<typeof ResourceRefSchema>

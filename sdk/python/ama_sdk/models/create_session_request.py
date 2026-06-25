@@ -17,6 +17,7 @@ if TYPE_CHECKING:
   from ..models.create_session_request_metadata import CreateSessionRequestMetadata
   from ..models.create_session_request_runtime_config import CreateSessionRequestRuntimeConfig
   from ..models.git_hub_repository_resource_ref import GitHubRepositoryResourceRef
+  from ..models.memory_store_resource_ref import MemoryStoreResourceRef
   from ..models.resource_ref_type_1 import ResourceRefType1
   from ..models.secret_env_entry import SecretEnvEntry
 
@@ -38,8 +39,8 @@ class CreateSessionRequest:
             runtime_config (CreateSessionRequestRuntimeConfig | Unset):  Example: {'sandboxMode': 'workspace-write'}.
             title (str | Unset):  Example: Implement billing export.
             metadata (CreateSessionRequestMetadata | Unset):  Example: {'ticket': 'AMA-123'}.
-            resource_refs (list[GitHubRepositoryResourceRef | ResourceRefType1] | Unset):  Example: [{'type':
-                'github_repository', 'owner': 'saltbo', 'repo': 'any-managed-agents', 'ref': 'main'}].
+            resource_refs (list[GitHubRepositoryResourceRef | MemoryStoreResourceRef | ResourceRefType1] | Unset):  Example:
+                [{'type': 'github_repository', 'owner': 'saltbo', 'repo': 'any-managed-agents', 'ref': 'main'}].
             env (CreateSessionRequestEnv | Unset):  Example: {'AK_API_URL': 'https://ak.example.com', 'AK_AGENT_ID':
                 'agent_abc123'}.
             secret_env (list[SecretEnvEntry] | Unset):  Example: [{'name': 'AK_AGENT_KEY', 'credentialRef': {'credentialId':
@@ -55,7 +56,7 @@ class CreateSessionRequest:
     runtime_config: CreateSessionRequestRuntimeConfig | Unset = UNSET
     title: str | Unset = UNSET
     metadata: CreateSessionRequestMetadata | Unset = UNSET
-    resource_refs: list[GitHubRepositoryResourceRef | ResourceRefType1] | Unset = UNSET
+    resource_refs: list[GitHubRepositoryResourceRef | MemoryStoreResourceRef | ResourceRefType1] | Unset = UNSET
     env: CreateSessionRequestEnv | Unset = UNSET
     secret_env: list[SecretEnvEntry] | Unset = UNSET
     initial_prompt: str | Unset = UNSET
@@ -70,6 +71,7 @@ class CreateSessionRequest:
         from ..models.create_session_request_metadata import CreateSessionRequestMetadata
         from ..models.create_session_request_runtime_config import CreateSessionRequestRuntimeConfig
         from ..models.git_hub_repository_resource_ref import GitHubRepositoryResourceRef
+        from ..models.memory_store_resource_ref import MemoryStoreResourceRef
         from ..models.resource_ref_type_1 import ResourceRefType1
         from ..models.secret_env_entry import SecretEnvEntry
         agent_id = self.agent_id
@@ -94,6 +96,8 @@ class CreateSessionRequest:
             for resource_refs_item_data in self.resource_refs:
                 resource_refs_item: dict[str, Any]
                 if isinstance(resource_refs_item_data, GitHubRepositoryResourceRef):
+                    resource_refs_item = resource_refs_item_data.to_dict()
+                elif isinstance(resource_refs_item_data, ResourceRefType1):
                     resource_refs_item = resource_refs_item_data.to_dict()
                 else:
                     resource_refs_item = resource_refs_item_data.to_dict()
@@ -155,6 +159,7 @@ class CreateSessionRequest:
         from ..models.create_session_request_metadata import CreateSessionRequestMetadata
         from ..models.create_session_request_runtime_config import CreateSessionRequestRuntimeConfig
         from ..models.git_hub_repository_resource_ref import GitHubRepositoryResourceRef
+        from ..models.memory_store_resource_ref import MemoryStoreResourceRef
         from ..models.resource_ref_type_1 import ResourceRefType1
         from ..models.secret_env_entry import SecretEnvEntry
         d = dict(src_dict)
@@ -190,11 +195,11 @@ class CreateSessionRequest:
 
 
         _resource_refs = d.pop("resourceRefs", UNSET)
-        resource_refs: list[GitHubRepositoryResourceRef | ResourceRefType1] | Unset = UNSET
+        resource_refs: list[GitHubRepositoryResourceRef | MemoryStoreResourceRef | ResourceRefType1] | Unset = UNSET
         if _resource_refs is not UNSET:
             resource_refs = []
             for resource_refs_item_data in _resource_refs:
-                def _parse_resource_refs_item(data: object) -> GitHubRepositoryResourceRef | ResourceRefType1:
+                def _parse_resource_refs_item(data: object) -> GitHubRepositoryResourceRef | MemoryStoreResourceRef | ResourceRefType1:
                     try:
                         if not isinstance(data, dict):
                             raise TypeError()
@@ -205,13 +210,23 @@ class CreateSessionRequest:
                         return componentsschemas_resource_ref_type_0
                     except (TypeError, ValueError, AttributeError, KeyError):
                         pass
+                    try:
+                        if not isinstance(data, dict):
+                            raise TypeError()
+                        componentsschemas_resource_ref_type_1 = ResourceRefType1.from_dict(data)
+
+
+
+                        return componentsschemas_resource_ref_type_1
+                    except (TypeError, ValueError, AttributeError, KeyError):
+                        pass
                     if not isinstance(data, dict):
                         raise TypeError()
-                    componentsschemas_resource_ref_type_1 = ResourceRefType1.from_dict(data)
+                    componentsschemas_resource_ref_type_2 = MemoryStoreResourceRef.from_dict(data)
 
 
 
-                    return componentsschemas_resource_ref_type_1
+                    return componentsschemas_resource_ref_type_2
 
                 resource_refs_item = _parse_resource_refs_item(resource_refs_item_data)
 

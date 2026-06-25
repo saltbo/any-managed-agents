@@ -19,6 +19,7 @@ import type { RuntimeName } from '@server/contracts/environment-contracts'
 import { isRuntimeName, runtimeDriver, runtimeDriverName } from '@server/domain/runtime/driver'
 import { resolveSessionProviderModel } from '@server/domain/runtime/provider'
 import {
+  agentSnapshotWithMemoryStoreContext,
   type NormalizedEnvironmentSnapshot,
   parseAgentSnapshot,
   parseJson,
@@ -96,6 +97,7 @@ export async function startSessionRuntimeForRow(
 ) {
   const store = deps.sessionOrchestration
   const { pending, agentSnapshot, environmentSnapshot, runtime, runtimeConfig, resourceRefs, initialPrompt } = input
+  const runtimeAgentSnapshot = agentSnapshotWithMemoryStoreContext(agentSnapshot, resourceRefs)
   const sessionEnv = input.env
   const sessionSecretEnv = input.secretEnv ?? []
   const sessionId = pending.id
@@ -119,7 +121,7 @@ export async function startSessionRuntimeForRow(
         runtime: runtimeName,
         provider: agentSnapshot.providerId,
         model: agentSnapshot.model,
-        agentSnapshot,
+        agentSnapshot: runtimeAgentSnapshot,
         environmentSnapshot: runtimeEnvironmentSnapshot,
         mcpSnapshot,
         resourceRefs,
@@ -233,6 +235,8 @@ export async function executeCloudSessionTurn(
     if (!agentSnapshot) {
       throw new Error('Session agent snapshot is required')
     }
+    const resourceRefs = parseJson<ResourceRef[]>(session.resourceRefs) ?? []
+    const runtimeAgentSnapshot = agentSnapshotWithMemoryStoreContext(agentSnapshot, resourceRefs)
     const modelConfig = parseJson<Record<string, unknown>>(session.modelConfig) ?? {}
     const messages = await loadRuntimeMessages(deps, session.id)
     const { provider: turnProvider, model: turnModel } = resolveSessionProviderModel(
@@ -288,7 +292,7 @@ export async function executeCloudSessionTurn(
       sandboxId: session.sandboxId ?? '',
       provider: turnProvider,
       model: turnModel,
-      agentSnapshot,
+      agentSnapshot: runtimeAgentSnapshot,
       ...(work.prompt !== undefined ? { prompt: work.prompt } : {}),
       ...(work.continuation ? { continuation: true } : {}),
       messages,

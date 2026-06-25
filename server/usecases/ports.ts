@@ -7,6 +7,7 @@ import type {
 } from '@server/domain/connection'
 import type { ConnectorAvailability, ConnectorCatalogEntry, ConnectorCatalogTool } from '@server/domain/connector'
 import type { EnvironmentConfig } from '@server/domain/environment'
+import type { MemoryStoreAccess } from '@server/domain/memory-store'
 import type { CatalogModel } from '@server/domain/model-catalog'
 import type { ModelAvailability, ModelCatalogState } from '@server/domain/provider'
 import type { RunnerAuthMode } from '@server/domain/runner-queue'
@@ -553,6 +554,101 @@ export interface VersionListQuery {
 export interface ListPageResult<T> {
   rows: T[]
   hasMore: boolean
+}
+
+export interface MemoryStoreRecord {
+  id: string
+  projectId: string
+  name: string
+  description: string | null
+  metadata: Record<string, unknown>
+  archivedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface MemoryStoreMemoryRecord {
+  id: string
+  storeId: string
+  projectId: string
+  path: string
+  content: string
+  metadata: Record<string, unknown>
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ResolvedMemoryStoreResource {
+  type: 'memory_store'
+  storeId: string
+  name: string
+  description: string | null
+  access: MemoryStoreAccess
+  mountPath: string
+  memories: Array<{ path: string; content: string }>
+}
+
+export interface MemoryStoreListQuery {
+  projectId: string
+  archived: boolean
+  search?: string
+  createdFrom?: string
+  createdTo?: string
+  limit: number
+  cursor: { createdAt: string; id: string } | null
+}
+
+export interface MemoryStoreMemoryListQuery {
+  projectId: string
+  storeId: string
+  limit: number
+  cursor: { createdAt: string; id: string } | null
+}
+
+export interface CreateMemoryStoreInput {
+  projectId: string
+  name: string
+  description: string | null
+  metadata: Record<string, unknown>
+}
+
+export interface UpdateMemoryStoreFields {
+  name: string
+  description: string | null
+  metadata: Record<string, unknown>
+  archivedAt: string | null
+}
+
+export interface CreateMemoryStoreMemoryInput {
+  storeId: string
+  projectId: string
+  path: string
+  content: string
+  metadata: Record<string, unknown>
+}
+
+export interface UpdateMemoryStoreMemoryFields {
+  path: string
+  content: string
+  metadata: Record<string, unknown>
+}
+
+export interface MemoryStoreRepo {
+  list(query: MemoryStoreListQuery): Promise<ListPageResult<MemoryStoreRecord>>
+  find(projectId: string, storeId: string): Promise<MemoryStoreRecord | null>
+  insert(input: CreateMemoryStoreInput, createdAt: string): Promise<MemoryStoreRecord>
+  update(projectId: string, storeId: string, fields: UpdateMemoryStoreFields, updatedAt: string): Promise<void>
+  listMemories(query: MemoryStoreMemoryListQuery): Promise<ListPageResult<MemoryStoreMemoryRecord>>
+  findMemory(projectId: string, storeId: string, memoryId: string): Promise<MemoryStoreMemoryRecord | null>
+  insertMemory(input: CreateMemoryStoreMemoryInput, createdAt: string): Promise<MemoryStoreMemoryRecord>
+  updateMemory(
+    projectId: string,
+    storeId: string,
+    memoryId: string,
+    fields: UpdateMemoryStoreMemoryFields,
+    updatedAt: string,
+  ): Promise<void>
+  deleteMemory(projectId: string, storeId: string, memoryId: string): Promise<void>
 }
 
 export interface VaultVisibility {
@@ -1986,6 +2082,10 @@ export type SessionTurnInput = {
 // reach for by capability.
 export interface SandboxRuntimeHost {
   startCloudSession(input: SandboxRuntimeStartInput): Promise<SandboxRuntimeStartResult>
+  readMemoryStoreMemories(input: {
+    sandboxId: string
+    resourceRefs: Record<string, unknown>[]
+  }): Promise<Array<{ storeId: string; memories: Array<{ path: string; content: string }> }>>
   stopCloudSession(sandboxId: string): Promise<void>
   executeToolCalls(input: { sessionId: string; sandboxId: string; body: unknown }): Promise<unknown[]>
   // Executes a single sandbox tool — the approval-decision continuation runs the
@@ -2062,6 +2162,17 @@ export interface SessionOrchestrationStore {
   findAgent(projectId: string, agentId: string): Promise<AgentRow | null>
   findAgentVersion(agentId: string, versionId: string): Promise<AgentVersionRow | null>
   agentMemoryContent(projectId: string, agentId: string): Promise<string | null>
+  findActiveMemoryStoreResource(
+    projectId: string,
+    storeId: string,
+    access: MemoryStoreAccess,
+  ): Promise<ResolvedMemoryStoreResource | null>
+  replaceMemoryStoreMemories(
+    projectId: string,
+    storeId: string,
+    memories: Array<{ path: string; content: string }>,
+    updatedAt: string,
+  ): Promise<void>
   findEnvironment(projectId: string, environmentId: string): Promise<EnvironmentRow | null>
   findEnvironmentVersion(projectId: string, versionId: string): Promise<EnvironmentVersionRow | null>
 

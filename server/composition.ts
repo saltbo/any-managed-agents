@@ -17,6 +17,7 @@ import { createConnectorRepo } from './adapters/repos/connectors'
 import { createEnvironmentRepo } from './adapters/repos/environments'
 import { createFederatedTenantRepo } from './adapters/repos/federated-tenants'
 import { createLeaseRepo } from './adapters/repos/leases'
+import { createMemoryStoreRepo } from './adapters/repos/memory-stores'
 import { createPolicyRepo } from './adapters/repos/policies'
 import { createProjectRepo } from './adapters/repos/projects'
 import { createProviderRepo } from './adapters/repos/providers'
@@ -66,6 +67,7 @@ export function createDeps(env: Env): Deps {
     policies: createPolicyRepo(db),
     budgets: createBudgetRepo(db),
     mcp: createMcpGateway(env, db),
+    memoryStores: createMemoryStoreRepo(db),
     sessionEvents: createSessionEventPort(sessionEventStore),
     audit,
     policy,

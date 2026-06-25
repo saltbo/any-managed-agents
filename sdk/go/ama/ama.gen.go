@@ -822,6 +822,39 @@ func (e LeaseState) Valid() bool {
 	}
 }
 
+// Defines values for MemoryStoreResourceRefAccess.
+const (
+	ReadOnly  MemoryStoreResourceRefAccess = "read_only"
+	ReadWrite MemoryStoreResourceRefAccess = "read_write"
+)
+
+// Valid indicates whether the value is a known member of the MemoryStoreResourceRefAccess enum.
+func (e MemoryStoreResourceRefAccess) Valid() bool {
+	switch e {
+	case ReadOnly:
+		return true
+	case ReadWrite:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MemoryStoreResourceRefType.
+const (
+	MemoryStoreResourceRefTypeMemoryStore MemoryStoreResourceRefType = "memory_store"
+)
+
+// Valid indicates whether the value is a known member of the MemoryStoreResourceRefType enum.
+func (e MemoryStoreResourceRefType) Valid() bool {
+	switch e {
+	case MemoryStoreResourceRefTypeMemoryStore:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PolicyMcpPolicyConnectorApprovalModes.
 const (
 	PolicyMcpPolicyConnectorApprovalModesNone            PolicyMcpPolicyConnectorApprovalModes = "none"
@@ -1899,6 +1932,24 @@ func (e ListLeasesParamsState) Valid() bool {
 	}
 }
 
+// Defines values for ListMemoryStoresParamsArchived.
+const (
+	ListMemoryStoresParamsArchivedFalse ListMemoryStoresParamsArchived = "false"
+	ListMemoryStoresParamsArchivedTrue  ListMemoryStoresParamsArchived = "true"
+)
+
+// Valid indicates whether the value is a known member of the ListMemoryStoresParamsArchived enum.
+func (e ListMemoryStoresParamsArchived) Valid() bool {
+	switch e {
+	case ListMemoryStoresParamsArchivedFalse:
+		return true
+	case ListMemoryStoresParamsArchivedTrue:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ListRunnersParamsArchived.
 const (
 	ListRunnersParamsArchivedFalse ListRunnersParamsArchived = "false"
@@ -2180,16 +2231,16 @@ func (e ReadUsageSummaryParamsGroupBy) Valid() bool {
 
 // Defines values for ListVaultsParamsArchived.
 const (
-	False ListVaultsParamsArchived = "false"
-	True  ListVaultsParamsArchived = "true"
+	ListVaultsParamsArchivedFalse ListVaultsParamsArchived = "false"
+	ListVaultsParamsArchivedTrue  ListVaultsParamsArchived = "true"
 )
 
 // Valid indicates whether the value is a known member of the ListVaultsParamsArchived enum.
 func (e ListVaultsParamsArchived) Valid() bool {
 	switch e {
-	case False:
+	case ListVaultsParamsArchivedFalse:
 		return true
-	case True:
+	case ListVaultsParamsArchivedTrue:
 		return true
 	default:
 		return false
@@ -2719,6 +2770,20 @@ type CreateLeaseRequest struct {
 	WorkItemId           string `json:"workItemId"`
 }
 
+// CreateMemoryStoreMemoryRequest defines model for CreateMemoryStoreMemoryRequest.
+type CreateMemoryStoreMemoryRequest struct {
+	Content  string                   `json:"content"`
+	Metadata *map[string]*interface{} `json:"metadata,omitempty"`
+	Path     string                   `json:"path"`
+}
+
+// CreateMemoryStoreRequest defines model for CreateMemoryStoreRequest.
+type CreateMemoryStoreRequest struct {
+	Description *string                  `json:"description,omitempty"`
+	Metadata    *map[string]*interface{} `json:"metadata,omitempty"`
+	Name        string                   `json:"name"`
+}
+
 // CreatePolicyRequest defines model for CreatePolicyRequest.
 type CreatePolicyRequest struct {
 	McpPolicy     *PolicyMcpPolicy        `json:"mcpPolicy,omitempty"`
@@ -3085,6 +3150,55 @@ type ListPagination struct {
 	Limit      int     `json:"limit"`
 	NextCursor *string `json:"nextCursor"`
 }
+
+// MemoryStore defines model for MemoryStore.
+type MemoryStore struct {
+	ArchivedAt  *time.Time              `json:"archivedAt"`
+	CreatedAt   time.Time               `json:"createdAt"`
+	Description *string                 `json:"description"`
+	Id          string                  `json:"id"`
+	Metadata    map[string]*interface{} `json:"metadata"`
+	Name        string                  `json:"name"`
+	ProjectId   string                  `json:"projectId"`
+	UpdatedAt   time.Time               `json:"updatedAt"`
+}
+
+// MemoryStoreListResponse defines model for MemoryStoreListResponse.
+type MemoryStoreListResponse struct {
+	Data       []MemoryStore  `json:"data"`
+	Pagination ListPagination `json:"pagination"`
+}
+
+// MemoryStoreMemory defines model for MemoryStoreMemory.
+type MemoryStoreMemory struct {
+	Content   string                  `json:"content"`
+	CreatedAt time.Time               `json:"createdAt"`
+	Id        string                  `json:"id"`
+	Metadata  map[string]*interface{} `json:"metadata"`
+	Path      string                  `json:"path"`
+	ProjectId string                  `json:"projectId"`
+	StoreId   string                  `json:"storeId"`
+	UpdatedAt time.Time               `json:"updatedAt"`
+}
+
+// MemoryStoreMemoryListResponse defines model for MemoryStoreMemoryListResponse.
+type MemoryStoreMemoryListResponse struct {
+	Data       []MemoryStoreMemory `json:"data"`
+	Pagination ListPagination      `json:"pagination"`
+}
+
+// MemoryStoreResourceRef defines model for MemoryStoreResourceRef.
+type MemoryStoreResourceRef struct {
+	Access  MemoryStoreResourceRefAccess `json:"access"`
+	StoreId string                       `json:"storeId"`
+	Type    MemoryStoreResourceRefType   `json:"type"`
+}
+
+// MemoryStoreResourceRefAccess defines model for MemoryStoreResourceRef.Access.
+type MemoryStoreResourceRefAccess string
+
+// MemoryStoreResourceRefType defines model for MemoryStoreResourceRef.Type.
+type MemoryStoreResourceRefType string
 
 // Policy defines model for Policy.
 type Policy struct {
@@ -3791,6 +3905,21 @@ type UpdateLeaseRequest struct {
 // UpdateLeaseRequestState Lease transition. `interrupted` is an action, not a resting state: it requeues the work item for recovery and the lease settles as `expired` in the resource.
 type UpdateLeaseRequestState string
 
+// UpdateMemoryStoreMemoryRequest defines model for UpdateMemoryStoreMemoryRequest.
+type UpdateMemoryStoreMemoryRequest struct {
+	Content  *string                  `json:"content,omitempty"`
+	Metadata *map[string]*interface{} `json:"metadata,omitempty"`
+	Path     *string                  `json:"path,omitempty"`
+}
+
+// UpdateMemoryStoreRequest defines model for UpdateMemoryStoreRequest.
+type UpdateMemoryStoreRequest struct {
+	Archived    *bool                    `json:"archived,omitempty"`
+	Description *string                  `json:"description,omitempty"`
+	Metadata    *map[string]*interface{} `json:"metadata,omitempty"`
+	Name        *string                  `json:"name,omitempty"`
+}
+
 // UpdateRunnerRequest defines model for UpdateRunnerRequest.
 type UpdateRunnerRequest struct {
 	Archived      *bool                     `json:"archived,omitempty"`
@@ -4153,6 +4282,26 @@ type ListLeasesParams struct {
 // ListLeasesParamsState defines parameters for ListLeases.
 type ListLeasesParamsState string
 
+// ListMemoryStoresParams defines parameters for ListMemoryStores.
+type ListMemoryStoresParams struct {
+	// Archived Filter by lifecycle. Defaults to false (live resources only).
+	Archived    *ListMemoryStoresParamsArchived `form:"archived,omitempty" json:"archived,omitempty"`
+	Search      *string                         `form:"search,omitempty" json:"search,omitempty"`
+	CreatedFrom *time.Time                      `form:"createdFrom,omitempty" json:"createdFrom,omitempty"`
+	CreatedTo   *time.Time                      `form:"createdTo,omitempty" json:"createdTo,omitempty"`
+	Limit       *int                            `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor      *string                         `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// ListMemoryStoresParamsArchived defines parameters for ListMemoryStores.
+type ListMemoryStoresParamsArchived string
+
+// ListMemoryStoreMemoriesParams defines parameters for ListMemoryStoreMemories.
+type ListMemoryStoreMemoriesParams struct {
+	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // ListProjectsParams defines parameters for ListProjects.
 type ListProjectsParams struct {
 	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
@@ -4375,6 +4524,18 @@ type CreateLeaseJSONRequestBody = CreateLeaseRequest
 
 // UpdateLeaseJSONRequestBody defines body for UpdateLease for application/json ContentType.
 type UpdateLeaseJSONRequestBody = UpdateLeaseRequest
+
+// CreateMemoryStoreJSONRequestBody defines body for CreateMemoryStore for application/json ContentType.
+type CreateMemoryStoreJSONRequestBody = CreateMemoryStoreRequest
+
+// UpdateMemoryStoreJSONRequestBody defines body for UpdateMemoryStore for application/json ContentType.
+type UpdateMemoryStoreJSONRequestBody = UpdateMemoryStoreRequest
+
+// CreateMemoryStoreMemoryJSONRequestBody defines body for CreateMemoryStoreMemory for application/json ContentType.
+type CreateMemoryStoreMemoryJSONRequestBody = CreateMemoryStoreMemoryRequest
+
+// UpdateMemoryStoreMemoryJSONRequestBody defines body for UpdateMemoryStoreMemory for application/json ContentType.
+type UpdateMemoryStoreMemoryJSONRequestBody = UpdateMemoryStoreMemoryRequest
 
 // CreatePolicyJSONRequestBody defines body for CreatePolicy for application/json ContentType.
 type CreatePolicyJSONRequestBody = CreatePolicyRequest
@@ -5311,6 +5472,32 @@ func (t *ResourceRef) MergeResourceRef1(v ResourceRef1) error {
 	return err
 }
 
+// AsMemoryStoreResourceRef returns the union data inside the ResourceRef as a MemoryStoreResourceRef
+func (t ResourceRef) AsMemoryStoreResourceRef() (MemoryStoreResourceRef, error) {
+	var body MemoryStoreResourceRef
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromMemoryStoreResourceRef overwrites any union data inside the ResourceRef as the provided MemoryStoreResourceRef
+func (t *ResourceRef) FromMemoryStoreResourceRef(v MemoryStoreResourceRef) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeMemoryStoreResourceRef performs a merge with any union data inside the ResourceRef, using the provided MemoryStoreResourceRef
+func (t *ResourceRef) MergeMemoryStoreResourceRef(v MemoryStoreResourceRef) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
 func (t ResourceRef) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	return b, err
@@ -5626,6 +5813,38 @@ type ClientInterface interface {
 	UpdateLeaseWithBody(ctx context.Context, leaseId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	UpdateLease(ctx context.Context, leaseId string, body UpdateLeaseJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListMemoryStores request
+	ListMemoryStores(ctx context.Context, params *ListMemoryStoresParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateMemoryStoreWithBody request with any body
+	CreateMemoryStoreWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CreateMemoryStore(ctx context.Context, body CreateMemoryStoreJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReadMemoryStore request
+	ReadMemoryStore(ctx context.Context, storeId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateMemoryStoreWithBody request with any body
+	UpdateMemoryStoreWithBody(ctx context.Context, storeId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	UpdateMemoryStore(ctx context.Context, storeId string, body UpdateMemoryStoreJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListMemoryStoreMemories request
+	ListMemoryStoreMemories(ctx context.Context, storeId string, params *ListMemoryStoreMemoriesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateMemoryStoreMemoryWithBody request with any body
+	CreateMemoryStoreMemoryWithBody(ctx context.Context, storeId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CreateMemoryStoreMemory(ctx context.Context, storeId string, body CreateMemoryStoreMemoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteMemoryStoreMemory request
+	DeleteMemoryStoreMemory(ctx context.Context, storeId string, memoryId string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateMemoryStoreMemoryWithBody request with any body
+	UpdateMemoryStoreMemoryWithBody(ctx context.Context, storeId string, memoryId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	UpdateMemoryStoreMemory(ctx context.Context, storeId string, memoryId string, body UpdateMemoryStoreMemoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListPolicies request
 	ListPolicies(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -6572,6 +6791,150 @@ func (c *APIClient) UpdateLeaseWithBody(ctx context.Context, leaseId string, con
 
 func (c *APIClient) UpdateLease(ctx context.Context, leaseId string, body UpdateLeaseJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateLeaseRequest(c.Server, leaseId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *APIClient) ListMemoryStores(ctx context.Context, params *ListMemoryStoresParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListMemoryStoresRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *APIClient) CreateMemoryStoreWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateMemoryStoreRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *APIClient) CreateMemoryStore(ctx context.Context, body CreateMemoryStoreJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateMemoryStoreRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *APIClient) ReadMemoryStore(ctx context.Context, storeId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReadMemoryStoreRequest(c.Server, storeId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *APIClient) UpdateMemoryStoreWithBody(ctx context.Context, storeId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateMemoryStoreRequestWithBody(c.Server, storeId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *APIClient) UpdateMemoryStore(ctx context.Context, storeId string, body UpdateMemoryStoreJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateMemoryStoreRequest(c.Server, storeId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *APIClient) ListMemoryStoreMemories(ctx context.Context, storeId string, params *ListMemoryStoreMemoriesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListMemoryStoreMemoriesRequest(c.Server, storeId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *APIClient) CreateMemoryStoreMemoryWithBody(ctx context.Context, storeId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateMemoryStoreMemoryRequestWithBody(c.Server, storeId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *APIClient) CreateMemoryStoreMemory(ctx context.Context, storeId string, body CreateMemoryStoreMemoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateMemoryStoreMemoryRequest(c.Server, storeId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *APIClient) DeleteMemoryStoreMemory(ctx context.Context, storeId string, memoryId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteMemoryStoreMemoryRequest(c.Server, storeId, memoryId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *APIClient) UpdateMemoryStoreMemoryWithBody(ctx context.Context, storeId string, memoryId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateMemoryStoreMemoryRequestWithBody(c.Server, storeId, memoryId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *APIClient) UpdateMemoryStoreMemory(ctx context.Context, storeId string, memoryId string, body UpdateMemoryStoreMemoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateMemoryStoreMemoryRequest(c.Server, storeId, memoryId, body)
 	if err != nil {
 		return nil, err
 	}
@@ -9887,6 +10250,456 @@ func NewUpdateLeaseRequestWithBody(server string, leaseId string, contentType st
 	}
 
 	operationPath := fmt.Sprintf("/api/v1/leases/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewListMemoryStoresRequest generates requests for ListMemoryStores
+func NewListMemoryStoresRequest(server string, params *ListMemoryStoresParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/memory-stores")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Archived != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "archived", *params.Archived, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Search != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "search", *params.Search, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.CreatedFrom != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "createdFrom", *params.CreatedFrom, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.CreatedTo != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "createdTo", *params.CreatedTo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateMemoryStoreRequest calls the generic CreateMemoryStore builder with application/json body
+func NewCreateMemoryStoreRequest(server string, body CreateMemoryStoreJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateMemoryStoreRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCreateMemoryStoreRequestWithBody generates requests for CreateMemoryStore with any type of body
+func NewCreateMemoryStoreRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/memory-stores")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewReadMemoryStoreRequest generates requests for ReadMemoryStore
+func NewReadMemoryStoreRequest(server string, storeId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "storeId", storeId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/memory-stores/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUpdateMemoryStoreRequest calls the generic UpdateMemoryStore builder with application/json body
+func NewUpdateMemoryStoreRequest(server string, storeId string, body UpdateMemoryStoreJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateMemoryStoreRequestWithBody(server, storeId, "application/json", bodyReader)
+}
+
+// NewUpdateMemoryStoreRequestWithBody generates requests for UpdateMemoryStore with any type of body
+func NewUpdateMemoryStoreRequestWithBody(server string, storeId string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "storeId", storeId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/memory-stores/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewListMemoryStoreMemoriesRequest generates requests for ListMemoryStoreMemories
+func NewListMemoryStoreMemoriesRequest(server string, storeId string, params *ListMemoryStoreMemoriesParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "storeId", storeId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/memory-stores/%s/memories", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateMemoryStoreMemoryRequest calls the generic CreateMemoryStoreMemory builder with application/json body
+func NewCreateMemoryStoreMemoryRequest(server string, storeId string, body CreateMemoryStoreMemoryJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateMemoryStoreMemoryRequestWithBody(server, storeId, "application/json", bodyReader)
+}
+
+// NewCreateMemoryStoreMemoryRequestWithBody generates requests for CreateMemoryStoreMemory with any type of body
+func NewCreateMemoryStoreMemoryRequestWithBody(server string, storeId string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "storeId", storeId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/memory-stores/%s/memories", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewDeleteMemoryStoreMemoryRequest generates requests for DeleteMemoryStoreMemory
+func NewDeleteMemoryStoreMemoryRequest(server string, storeId string, memoryId string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "storeId", storeId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "memoryId", memoryId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/memory-stores/%s/memories/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUpdateMemoryStoreMemoryRequest calls the generic UpdateMemoryStoreMemory builder with application/json body
+func NewUpdateMemoryStoreMemoryRequest(server string, storeId string, memoryId string, body UpdateMemoryStoreMemoryJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateMemoryStoreMemoryRequestWithBody(server, storeId, memoryId, "application/json", bodyReader)
+}
+
+// NewUpdateMemoryStoreMemoryRequestWithBody generates requests for UpdateMemoryStoreMemory with any type of body
+func NewUpdateMemoryStoreMemoryRequestWithBody(server string, storeId string, memoryId string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "storeId", storeId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "memoryId", memoryId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/memory-stores/%s/memories/%s", pathParam0, pathParam1)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -13379,6 +14192,38 @@ type ClientWithResponsesInterface interface {
 
 	UpdateLeaseWithResponse(ctx context.Context, leaseId string, body UpdateLeaseJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateLeaseResponse, error)
 
+	// ListMemoryStoresWithResponse request
+	ListMemoryStoresWithResponse(ctx context.Context, params *ListMemoryStoresParams, reqEditors ...RequestEditorFn) (*ListMemoryStoresResponse, error)
+
+	// CreateMemoryStoreWithBodyWithResponse request with any body
+	CreateMemoryStoreWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateMemoryStoreResponse, error)
+
+	CreateMemoryStoreWithResponse(ctx context.Context, body CreateMemoryStoreJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateMemoryStoreResponse, error)
+
+	// ReadMemoryStoreWithResponse request
+	ReadMemoryStoreWithResponse(ctx context.Context, storeId string, reqEditors ...RequestEditorFn) (*ReadMemoryStoreResponse, error)
+
+	// UpdateMemoryStoreWithBodyWithResponse request with any body
+	UpdateMemoryStoreWithBodyWithResponse(ctx context.Context, storeId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateMemoryStoreResponse, error)
+
+	UpdateMemoryStoreWithResponse(ctx context.Context, storeId string, body UpdateMemoryStoreJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateMemoryStoreResponse, error)
+
+	// ListMemoryStoreMemoriesWithResponse request
+	ListMemoryStoreMemoriesWithResponse(ctx context.Context, storeId string, params *ListMemoryStoreMemoriesParams, reqEditors ...RequestEditorFn) (*ListMemoryStoreMemoriesResponse, error)
+
+	// CreateMemoryStoreMemoryWithBodyWithResponse request with any body
+	CreateMemoryStoreMemoryWithBodyWithResponse(ctx context.Context, storeId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateMemoryStoreMemoryResponse, error)
+
+	CreateMemoryStoreMemoryWithResponse(ctx context.Context, storeId string, body CreateMemoryStoreMemoryJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateMemoryStoreMemoryResponse, error)
+
+	// DeleteMemoryStoreMemoryWithResponse request
+	DeleteMemoryStoreMemoryWithResponse(ctx context.Context, storeId string, memoryId string, reqEditors ...RequestEditorFn) (*DeleteMemoryStoreMemoryResponse, error)
+
+	// UpdateMemoryStoreMemoryWithBodyWithResponse request with any body
+	UpdateMemoryStoreMemoryWithBodyWithResponse(ctx context.Context, storeId string, memoryId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateMemoryStoreMemoryResponse, error)
+
+	UpdateMemoryStoreMemoryWithResponse(ctx context.Context, storeId string, memoryId string, body UpdateMemoryStoreMemoryJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateMemoryStoreMemoryResponse, error)
+
 	// ListPoliciesWithResponse request
 	ListPoliciesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListPoliciesResponse, error)
 
@@ -15106,6 +15951,267 @@ func (r UpdateLeaseResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r UpdateLeaseResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListMemoryStoresResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *MemoryStoreListResponse
+	JSON400      *GeneratedErrorResponse
+	JSON401      *GeneratedErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r ListMemoryStoresResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListMemoryStoresResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListMemoryStoresResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreateMemoryStoreResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *MemoryStore
+	JSON400      *GeneratedErrorResponse
+	JSON401      *GeneratedErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateMemoryStoreResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateMemoryStoreResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateMemoryStoreResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ReadMemoryStoreResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *MemoryStore
+	JSON401      *GeneratedErrorResponse
+	JSON404      *GeneratedErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r ReadMemoryStoreResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReadMemoryStoreResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReadMemoryStoreResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type UpdateMemoryStoreResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *MemoryStore
+	JSON400      *GeneratedErrorResponse
+	JSON401      *GeneratedErrorResponse
+	JSON404      *GeneratedErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateMemoryStoreResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateMemoryStoreResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UpdateMemoryStoreResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListMemoryStoreMemoriesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *MemoryStoreMemoryListResponse
+	JSON400      *GeneratedErrorResponse
+	JSON401      *GeneratedErrorResponse
+	JSON404      *GeneratedErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r ListMemoryStoreMemoriesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListMemoryStoreMemoriesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListMemoryStoreMemoriesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CreateMemoryStoreMemoryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *MemoryStoreMemory
+	JSON400      *GeneratedErrorResponse
+	JSON401      *GeneratedErrorResponse
+	JSON404      *GeneratedErrorResponse
+	JSON409      *GeneratedErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateMemoryStoreMemoryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateMemoryStoreMemoryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateMemoryStoreMemoryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type DeleteMemoryStoreMemoryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON401      *GeneratedErrorResponse
+	JSON404      *GeneratedErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteMemoryStoreMemoryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteMemoryStoreMemoryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteMemoryStoreMemoryResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type UpdateMemoryStoreMemoryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *MemoryStoreMemory
+	JSON400      *GeneratedErrorResponse
+	JSON401      *GeneratedErrorResponse
+	JSON404      *GeneratedErrorResponse
+	JSON409      *GeneratedErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateMemoryStoreMemoryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateMemoryStoreMemoryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UpdateMemoryStoreMemoryResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -17546,6 +18652,110 @@ func (c *ClientWithResponses) UpdateLeaseWithResponse(ctx context.Context, lease
 		return nil, err
 	}
 	return ParseUpdateLeaseResponse(rsp)
+}
+
+// ListMemoryStoresWithResponse request returning *ListMemoryStoresResponse
+func (c *ClientWithResponses) ListMemoryStoresWithResponse(ctx context.Context, params *ListMemoryStoresParams, reqEditors ...RequestEditorFn) (*ListMemoryStoresResponse, error) {
+	rsp, err := c.ListMemoryStores(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListMemoryStoresResponse(rsp)
+}
+
+// CreateMemoryStoreWithBodyWithResponse request with arbitrary body returning *CreateMemoryStoreResponse
+func (c *ClientWithResponses) CreateMemoryStoreWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateMemoryStoreResponse, error) {
+	rsp, err := c.CreateMemoryStoreWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateMemoryStoreResponse(rsp)
+}
+
+func (c *ClientWithResponses) CreateMemoryStoreWithResponse(ctx context.Context, body CreateMemoryStoreJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateMemoryStoreResponse, error) {
+	rsp, err := c.CreateMemoryStore(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateMemoryStoreResponse(rsp)
+}
+
+// ReadMemoryStoreWithResponse request returning *ReadMemoryStoreResponse
+func (c *ClientWithResponses) ReadMemoryStoreWithResponse(ctx context.Context, storeId string, reqEditors ...RequestEditorFn) (*ReadMemoryStoreResponse, error) {
+	rsp, err := c.ReadMemoryStore(ctx, storeId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReadMemoryStoreResponse(rsp)
+}
+
+// UpdateMemoryStoreWithBodyWithResponse request with arbitrary body returning *UpdateMemoryStoreResponse
+func (c *ClientWithResponses) UpdateMemoryStoreWithBodyWithResponse(ctx context.Context, storeId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateMemoryStoreResponse, error) {
+	rsp, err := c.UpdateMemoryStoreWithBody(ctx, storeId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateMemoryStoreResponse(rsp)
+}
+
+func (c *ClientWithResponses) UpdateMemoryStoreWithResponse(ctx context.Context, storeId string, body UpdateMemoryStoreJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateMemoryStoreResponse, error) {
+	rsp, err := c.UpdateMemoryStore(ctx, storeId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateMemoryStoreResponse(rsp)
+}
+
+// ListMemoryStoreMemoriesWithResponse request returning *ListMemoryStoreMemoriesResponse
+func (c *ClientWithResponses) ListMemoryStoreMemoriesWithResponse(ctx context.Context, storeId string, params *ListMemoryStoreMemoriesParams, reqEditors ...RequestEditorFn) (*ListMemoryStoreMemoriesResponse, error) {
+	rsp, err := c.ListMemoryStoreMemories(ctx, storeId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListMemoryStoreMemoriesResponse(rsp)
+}
+
+// CreateMemoryStoreMemoryWithBodyWithResponse request with arbitrary body returning *CreateMemoryStoreMemoryResponse
+func (c *ClientWithResponses) CreateMemoryStoreMemoryWithBodyWithResponse(ctx context.Context, storeId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateMemoryStoreMemoryResponse, error) {
+	rsp, err := c.CreateMemoryStoreMemoryWithBody(ctx, storeId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateMemoryStoreMemoryResponse(rsp)
+}
+
+func (c *ClientWithResponses) CreateMemoryStoreMemoryWithResponse(ctx context.Context, storeId string, body CreateMemoryStoreMemoryJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateMemoryStoreMemoryResponse, error) {
+	rsp, err := c.CreateMemoryStoreMemory(ctx, storeId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateMemoryStoreMemoryResponse(rsp)
+}
+
+// DeleteMemoryStoreMemoryWithResponse request returning *DeleteMemoryStoreMemoryResponse
+func (c *ClientWithResponses) DeleteMemoryStoreMemoryWithResponse(ctx context.Context, storeId string, memoryId string, reqEditors ...RequestEditorFn) (*DeleteMemoryStoreMemoryResponse, error) {
+	rsp, err := c.DeleteMemoryStoreMemory(ctx, storeId, memoryId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteMemoryStoreMemoryResponse(rsp)
+}
+
+// UpdateMemoryStoreMemoryWithBodyWithResponse request with arbitrary body returning *UpdateMemoryStoreMemoryResponse
+func (c *ClientWithResponses) UpdateMemoryStoreMemoryWithBodyWithResponse(ctx context.Context, storeId string, memoryId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateMemoryStoreMemoryResponse, error) {
+	rsp, err := c.UpdateMemoryStoreMemoryWithBody(ctx, storeId, memoryId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateMemoryStoreMemoryResponse(rsp)
+}
+
+func (c *ClientWithResponses) UpdateMemoryStoreMemoryWithResponse(ctx context.Context, storeId string, memoryId string, body UpdateMemoryStoreMemoryJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateMemoryStoreMemoryResponse, error) {
+	rsp, err := c.UpdateMemoryStoreMemory(ctx, storeId, memoryId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateMemoryStoreMemoryResponse(rsp)
 }
 
 // ListPoliciesWithResponse request returning *ListPoliciesResponse
@@ -20200,6 +21410,361 @@ func ParseUpdateLeaseResponse(rsp *http.Response) (*UpdateLeaseResponse, error) 
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListMemoryStoresResponse parses an HTTP response from a ListMemoryStoresWithResponse call
+func ParseListMemoryStoresResponse(rsp *http.Response) (*ListMemoryStoresResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListMemoryStoresResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest MemoryStoreListResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateMemoryStoreResponse parses an HTTP response from a CreateMemoryStoreWithResponse call
+func ParseCreateMemoryStoreResponse(rsp *http.Response) (*CreateMemoryStoreResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateMemoryStoreResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest MemoryStore
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReadMemoryStoreResponse parses an HTTP response from a ReadMemoryStoreWithResponse call
+func ParseReadMemoryStoreResponse(rsp *http.Response) (*ReadMemoryStoreResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReadMemoryStoreResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest MemoryStore
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateMemoryStoreResponse parses an HTTP response from a UpdateMemoryStoreWithResponse call
+func ParseUpdateMemoryStoreResponse(rsp *http.Response) (*UpdateMemoryStoreResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateMemoryStoreResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest MemoryStore
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListMemoryStoreMemoriesResponse parses an HTTP response from a ListMemoryStoreMemoriesWithResponse call
+func ParseListMemoryStoreMemoriesResponse(rsp *http.Response) (*ListMemoryStoreMemoriesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListMemoryStoreMemoriesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest MemoryStoreMemoryListResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateMemoryStoreMemoryResponse parses an HTTP response from a CreateMemoryStoreMemoryWithResponse call
+func ParseCreateMemoryStoreMemoryResponse(rsp *http.Response) (*CreateMemoryStoreMemoryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateMemoryStoreMemoryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest MemoryStoreMemory
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteMemoryStoreMemoryResponse parses an HTTP response from a DeleteMemoryStoreMemoryWithResponse call
+func ParseDeleteMemoryStoreMemoryResponse(rsp *http.Response) (*DeleteMemoryStoreMemoryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteMemoryStoreMemoryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUpdateMemoryStoreMemoryResponse parses an HTTP response from a UpdateMemoryStoreMemoryWithResponse call
+func ParseUpdateMemoryStoreMemoryResponse(rsp *http.Response) (*UpdateMemoryStoreMemoryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateMemoryStoreMemoryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest MemoryStoreMemory
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest GeneratedErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest GeneratedErrorResponse

@@ -15,6 +15,7 @@ import datetime
 
 if TYPE_CHECKING:
   from ..models.git_hub_repository_resource_ref import GitHubRepositoryResourceRef
+  from ..models.memory_store_resource_ref import MemoryStoreResourceRef
   from ..models.resource_ref_type_1 import ResourceRefType1
   from ..models.secret_env_entry import SecretEnvEntry
   from ..models.update_trigger_request_env import UpdateTriggerRequestEnv
@@ -38,8 +39,8 @@ class UpdateTriggerRequest:
             runtime (Runtime | Unset):  Example: codex.
             name (str | Unset):  Example: Daily research heartbeat.
             prompt_template (str | Unset):  Example: Research current Canadian banking bonus offers..
-            resource_refs (list[GitHubRepositoryResourceRef | ResourceRefType1] | Unset):  Example: [{'type':
-                'github_repository', 'owner': 'openai', 'repo': 'openai'}].
+            resource_refs (list[GitHubRepositoryResourceRef | MemoryStoreResourceRef | ResourceRefType1] | Unset):  Example:
+                [{'type': 'github_repository', 'owner': 'openai', 'repo': 'openai'}].
             env (UpdateTriggerRequestEnv | Unset):  Example: {'AK_API_URL': 'https://ak.example.com'}.
             secret_env (list[SecretEnvEntry] | Unset):  Example: [{'name': 'AK_AGENT_KEY', 'credentialRef': {'credentialId':
                 'vaultcred_abc123'}}].
@@ -55,7 +56,7 @@ class UpdateTriggerRequest:
     runtime: Runtime | Unset = UNSET
     name: str | Unset = UNSET
     prompt_template: str | Unset = UNSET
-    resource_refs: list[GitHubRepositoryResourceRef | ResourceRefType1] | Unset = UNSET
+    resource_refs: list[GitHubRepositoryResourceRef | MemoryStoreResourceRef | ResourceRefType1] | Unset = UNSET
     env: UpdateTriggerRequestEnv | Unset = UNSET
     secret_env: list[SecretEnvEntry] | Unset = UNSET
     schedule: UpdateTriggerRequestSchedule | Unset = UNSET
@@ -70,6 +71,7 @@ class UpdateTriggerRequest:
 
     def to_dict(self) -> dict[str, Any]:
         from ..models.git_hub_repository_resource_ref import GitHubRepositoryResourceRef
+        from ..models.memory_store_resource_ref import MemoryStoreResourceRef
         from ..models.resource_ref_type_1 import ResourceRefType1
         from ..models.secret_env_entry import SecretEnvEntry
         from ..models.update_trigger_request_env import UpdateTriggerRequestEnv
@@ -94,6 +96,8 @@ class UpdateTriggerRequest:
             for resource_refs_item_data in self.resource_refs:
                 resource_refs_item: dict[str, Any]
                 if isinstance(resource_refs_item_data, GitHubRepositoryResourceRef):
+                    resource_refs_item = resource_refs_item_data.to_dict()
+                elif isinstance(resource_refs_item_data, ResourceRefType1):
                     resource_refs_item = resource_refs_item_data.to_dict()
                 else:
                     resource_refs_item = resource_refs_item_data.to_dict()
@@ -170,6 +174,7 @@ class UpdateTriggerRequest:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.git_hub_repository_resource_ref import GitHubRepositoryResourceRef
+        from ..models.memory_store_resource_ref import MemoryStoreResourceRef
         from ..models.resource_ref_type_1 import ResourceRefType1
         from ..models.secret_env_entry import SecretEnvEntry
         from ..models.update_trigger_request_env import UpdateTriggerRequestEnv
@@ -195,11 +200,11 @@ class UpdateTriggerRequest:
         prompt_template = d.pop("promptTemplate", UNSET)
 
         _resource_refs = d.pop("resourceRefs", UNSET)
-        resource_refs: list[GitHubRepositoryResourceRef | ResourceRefType1] | Unset = UNSET
+        resource_refs: list[GitHubRepositoryResourceRef | MemoryStoreResourceRef | ResourceRefType1] | Unset = UNSET
         if _resource_refs is not UNSET:
             resource_refs = []
             for resource_refs_item_data in _resource_refs:
-                def _parse_resource_refs_item(data: object) -> GitHubRepositoryResourceRef | ResourceRefType1:
+                def _parse_resource_refs_item(data: object) -> GitHubRepositoryResourceRef | MemoryStoreResourceRef | ResourceRefType1:
                     try:
                         if not isinstance(data, dict):
                             raise TypeError()
@@ -210,13 +215,23 @@ class UpdateTriggerRequest:
                         return componentsschemas_resource_ref_type_0
                     except (TypeError, ValueError, AttributeError, KeyError):
                         pass
+                    try:
+                        if not isinstance(data, dict):
+                            raise TypeError()
+                        componentsschemas_resource_ref_type_1 = ResourceRefType1.from_dict(data)
+
+
+
+                        return componentsschemas_resource_ref_type_1
+                    except (TypeError, ValueError, AttributeError, KeyError):
+                        pass
                     if not isinstance(data, dict):
                         raise TypeError()
-                    componentsschemas_resource_ref_type_1 = ResourceRefType1.from_dict(data)
+                    componentsschemas_resource_ref_type_2 = MemoryStoreResourceRef.from_dict(data)
 
 
 
-                    return componentsschemas_resource_ref_type_1
+                    return componentsschemas_resource_ref_type_2
 
                 resource_refs_item = _parse_resource_refs_item(resource_refs_item_data)
 

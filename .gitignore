@@ -27,5 +27,6 @@ skills-lock.json
 .claude/agents/
 .claude/worktrees/
 .codex/agents/
+.codex/worktrees/
 .gemini/agents/
 cmd/ama-runner/ama-runner

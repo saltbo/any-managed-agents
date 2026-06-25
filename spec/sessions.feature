@@ -43,6 +43,14 @@ Feature: Sessions
     And repository resources are declared in the deterministic workspace manifest
     And raw credentials are rejected from the request body
 
+  @sessions/memory-store-resources @api
+  Scenario: Create a session with attached memory stores
+    Given a project has an active memory store with memories
+    When the user creates a session with memory store resource refs and access modes
+    Then AMA resolves managed mount paths and snapshots memory store contents into the session
+    And store names, descriptions, access modes, and mount paths are included in the runtime system prompt context
+    And memory contents are mounted as files instead of injected into the prompt
+
   @sessions/reject-dependencies @api
   Scenario: Reject unavailable or unsupported session dependencies
     When a session is created against an archived agent or environment, a disabled provider, a blocked sandbox policy, or an unsupported runtime/provider/model

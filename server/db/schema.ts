@@ -194,6 +194,45 @@ export const agentMemories = sqliteTable(
   (table) => [index('idx_agent_memories_project_updated').on(table.projectId, table.updatedAt, table.agentId)],
 )
 
+export const memoryStores = sqliteTable(
+  'memory_stores',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id),
+    name: text('name').notNull(),
+    description: text('description'),
+    metadata: text('metadata').notNull().default('{}'),
+    archivedAt: text('archived_at'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [index('idx_memory_stores_project_created').on(table.projectId, table.createdAt, table.id)],
+)
+
+export const memoryStoreMemories = sqliteTable(
+  'memory_store_memories',
+  {
+    id: text('id').primaryKey(),
+    storeId: text('store_id')
+      .notNull()
+      .references(() => memoryStores.id),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id),
+    path: text('path').notNull(),
+    content: text('content').notNull(),
+    metadata: text('metadata').notNull().default('{}'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('idx_memory_store_memories_store_path').on(table.storeId, table.path),
+    index('idx_memory_store_memories_store_created').on(table.storeId, table.createdAt, table.id),
+  ],
+)
+
 export const environments = sqliteTable(
   'environments',
   {

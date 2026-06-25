@@ -874,6 +874,86 @@ export const decideSessionApproval = (options) => (options.client ?? client).pat
     }
 });
 /**
+ * List memory stores
+ */
+export const listMemoryStores = (options) => (options?.client ?? client).get({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/memory-stores',
+    ...options
+});
+/**
+ * Create a memory store
+ */
+export const createMemoryStore = (options) => (options.client ?? client).post({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/memory-stores',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+/**
+ * Read a memory store
+ */
+export const readMemoryStore = (options) => (options.client ?? client).get({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/memory-stores/{storeId}',
+    ...options
+});
+/**
+ * Update or archive a memory store
+ */
+export const updateMemoryStore = (options) => (options.client ?? client).patch({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/memory-stores/{storeId}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+/**
+ * List memories in a memory store
+ */
+export const listMemoryStoreMemories = (options) => (options.client ?? client).get({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/memory-stores/{storeId}/memories',
+    ...options
+});
+/**
+ * Create a memory in a memory store
+ */
+export const createMemoryStoreMemory = (options) => (options.client ?? client).post({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/memory-stores/{storeId}/memories',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+/**
+ * Delete a memory
+ */
+export const deleteMemoryStoreMemory = (options) => (options.client ?? client).delete({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/memory-stores/{storeId}/memories/{memoryId}',
+    ...options
+});
+/**
+ * Update a memory
+ */
+export const updateMemoryStoreMemory = (options) => (options.client ?? client).patch({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/api/v1/memory-stores/{storeId}/memories/{memoryId}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+/**
  * List vaults
  */
 export const listVaults = (options) => (options?.client ?? client).get({

@@ -2,11 +2,12 @@ import { useQuery } from '@tanstack/react-query'
 import { Bot, Boxes, MessageSquare, Server } from 'lucide-react'
 import type { FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { type Agent, api, type Environment } from '@/lib/api'
+import { type Agent, api, type Environment, type MemoryStore, type MemoryStoreAccess } from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 import { isArchived } from './format'
 import type { AgentFormState, EnvironmentFormState, SessionFormState, VaultFormState } from './types'
@@ -233,12 +234,14 @@ export function SessionForm({
   setValue,
   agents,
   environments,
+  memoryStores = [],
   onSubmit,
 }: {
   value: SessionFormState
   setValue: (value: SessionFormState) => void
   agents: Agent[]
   environments: Environment[]
+  memoryStores?: MemoryStore[]
   onSubmit: (event: FormEvent) => void
 }) {
   const activeAgents = agents.filter((agent) => !isArchived(agent))
@@ -332,6 +335,9 @@ export function SessionForm({
           value={value.resourceRefs}
           onChange={(resourceRefs) => setValue({ ...value, resourceRefs })}
         />
+        {memoryStores.length > 0 ? (
+          <MemoryStoreAttachmentField memoryStores={memoryStores} value={value} setValue={setValue} />
+        ) : null}
       </FieldGroup>
       <Button type="submit" disabled={!canSubmit}>
         <MessageSquare data-icon="inline-start" />
@@ -339,6 +345,84 @@ export function SessionForm({
       </Button>
     </form>
   )
+}
+
+function MemoryStoreAttachmentField({
+  memoryStores,
+  value,
+  setValue,
+}: {
+  memoryStores: MemoryStore[]
+  value: SessionFormState
+  setValue: (value: SessionFormState) => void
+}) {
+  const refs = parseResourceRefs(value.resourceRefs)
+  const memoryRefs = refs.filter((ref) => ref.type === 'memory_store')
+  function updateMemoryStore(storeId: string, checked: boolean | 'indeterminate') {
+    const nextRefs = refs.filter((ref) => !(ref.type === 'memory_store' && ref.storeId === storeId))
+    if (checked === true) {
+      nextRefs.push({ type: 'memory_store', storeId, access: 'read_only' })
+    }
+    setValue({ ...value, resourceRefs: JSON.stringify(nextRefs, null, 2) })
+  }
+  function updateAccess(storeId: string, access: MemoryStoreAccess) {
+    const nextRefs = refs.map((ref) =>
+      ref.type === 'memory_store' && ref.storeId === storeId ? { ...ref, access } : ref,
+    )
+    setValue({ ...value, resourceRefs: JSON.stringify(nextRefs, null, 2) })
+  }
+  return (
+    <Field>
+      <FieldLabel>Memory stores</FieldLabel>
+      <div className="space-y-2 rounded-md border p-3">
+        {memoryStores.map((store) => {
+          const attached = memoryRefs.find((ref) => ref.storeId === store.id)
+          return (
+            <div key={store.id} className="flex flex-wrap items-center gap-3">
+              <Checkbox
+                id={`memory-store-${store.id}`}
+                checked={Boolean(attached)}
+                onCheckedChange={(checked) => updateMemoryStore(store.id, checked)}
+              />
+              <label htmlFor={`memory-store-${store.id}`} className="min-w-0 flex-1 text-sm font-medium">
+                <span className="block truncate">{store.name}</span>
+                {store.description ? (
+                  <span className="block truncate text-xs font-normal text-muted-foreground">{store.description}</span>
+                ) : null}
+              </label>
+              <Select
+                value={attached?.access === 'read_write' ? 'read_write' : 'read_only'}
+                disabled={!attached}
+                onValueChange={(access) => updateAccess(store.id, access as MemoryStoreAccess)}
+              >
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="read_only">Read only</SelectItem>
+                    <SelectItem value="read_write">Read write</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </div>
+          )
+        })}
+      </div>
+      <FieldDescription>AMA manages the mount path for attached memory stores.</FieldDescription>
+    </Field>
+  )
+}
+
+function parseResourceRefs(
+  value: string,
+): Array<Record<string, unknown> & { type?: string; storeId?: string; access?: string }> {
+  try {
+    const parsed = JSON.parse(value) as unknown
+    return Array.isArray(parsed) ? (parsed as Array<Record<string, unknown>>) : []
+  } catch {
+    return []
+  }
 }
 
 function hostingModeLabel(value: Environment['hostingMode']) {

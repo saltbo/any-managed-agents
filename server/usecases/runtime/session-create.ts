@@ -17,6 +17,7 @@
 import type { RuntimeName } from '@server/contracts/environment-contracts'
 import { runtimeDriverName, runtimeEndpointPath } from '@server/domain/runtime/driver'
 import {
+  agentSnapshotWithMemoryStoreContext,
   type GitHubRepositoryResourceRef,
   type NormalizedEnvironmentSnapshot,
   normalizeEnvironmentSnapshot,
@@ -109,6 +110,31 @@ async function validateResourceCredentialRefs(
     }
   }
   return null
+}
+
+async function resolveMemoryStoreResourceRefs(
+  store: SessionOrchestrationStore,
+  auth: AuthScope,
+  resourceRefs: ResourceRef[],
+): Promise<{ resourceRefs: ResourceRef[] } | { fields: Record<string, string> }> {
+  const resolved: ResourceRef[] = []
+  for (const [index, resourceRef] of resourceRefs.entries()) {
+    if (resourceRef.type !== 'memory_store') {
+      resolved.push(resourceRef)
+      continue
+    }
+    const storeId = typeof resourceRef.storeId === 'string' ? resourceRef.storeId : ''
+    const access = resourceRef.access
+    if (access !== 'read_only' && access !== 'read_write') {
+      return { fields: { [`resourceRefs.${index}.access`]: 'Use read_only or read_write.' } }
+    }
+    const memoryStore = await store.findActiveMemoryStoreResource(auth.project.id, storeId, access)
+    if (!memoryStore) {
+      return { fields: { [`resourceRefs.${index}.storeId`]: 'Memory store must exist and be active.' } }
+    }
+    resolved.push(memoryStore as unknown as ResourceRef)
+  }
+  return { resourceRefs: resolved }
 }
 
 async function resolveSecretEnvEntries(
@@ -437,6 +463,18 @@ export async function createSessionForAgent(
       },
     }
   }
+  const resolvedResources = await resolveMemoryStoreResourceRefs(store, auth, normalizedResources.resourceRefs)
+  if ('fields' in resolvedResources) {
+    return {
+      ok: false,
+      error: {
+        status: 400,
+        code: 'validation_error',
+        message: 'Invalid session memory store reference',
+        fields: resolvedResources.fields,
+      },
+    }
+  }
   const resolvedSecretEnv = await resolveSecretEnvEntries(store, auth, options.secretEnv ?? [])
   if ('fields' in resolvedSecretEnv) {
     return {
@@ -456,6 +494,7 @@ export async function createSessionForAgent(
   const timestamp = now()
   const id = crypto.randomUUID()
   const agentSnapshot = serializeAgentVersion(agentVersion, providerId)
+  const runtimeAgentSnapshot = agentSnapshotWithMemoryStoreContext(agentSnapshot, resolvedResources.resourceRefs)
   const baseEnvironmentSnapshot = normalizeEnvironmentSnapshot(serializeEnvironmentVersion(environmentVersion))
   const runtimeConfig = options.runtimeConfig ?? baseEnvironmentSnapshot?.runtimeConfig ?? {}
   const environmentSnapshot = baseEnvironmentSnapshot
@@ -536,7 +575,7 @@ export async function createSessionForAgent(
     environmentVersionId: environmentVersion.id,
     environmentSnapshot: environmentSnapshot ? stringify(environmentSnapshot) : null,
     title: options.title ?? null,
-    resourceRefs: stringify(normalizedResources.resourceRefs),
+    resourceRefs: stringify(resolvedResources.resourceRefs),
     env: stringify(mergedEnv),
     secretEnv: stringify(mergedSecretEnv),
     projectId: auth.project.id,
@@ -581,11 +620,11 @@ export async function createSessionForAgent(
     if (hostingMode === 'self_hosted') {
       await enqueueSelfHostedSessionWork(deps, auth, {
         session: pending,
-        agentSnapshot,
+        agentSnapshot: runtimeAgentSnapshot,
         environmentSnapshot,
         runtime,
         runtimeConfig,
-        resourceRefs: normalizedResources.resourceRefs,
+        resourceRefs: resolvedResources.resourceRefs,
         env: mergedEnv,
         secretEnv: mergedSecretEnv,
         ...(initialPrompt !== undefined ? { initialPrompt } : {}),
@@ -601,7 +640,7 @@ export async function createSessionForAgent(
         projectId: auth.project.id,
         runtime,
         runtimeConfig,
-        resourceRefs: normalizedResources.resourceRefs,
+        resourceRefs: resolvedResources.resourceRefs,
         runtimeEnv: mergedEnv,
         runtimeSecretEnv: mergedSecretEnv,
         ...(initialPrompt !== undefined ? { initialPrompt } : {}),
@@ -615,7 +654,7 @@ export async function createSessionForAgent(
       environmentSnapshot,
       runtime,
       runtimeConfig,
-      resourceRefs: normalizedResources.resourceRefs,
+      resourceRefs: resolvedResources.resourceRefs,
       env: mergedEnv,
       secretEnv: mergedSecretEnv,
       ...(initialPrompt !== undefined ? { initialPrompt } : {}),

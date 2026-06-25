@@ -91,6 +91,10 @@ from .create_environment_request_variables_additional_property import CreateEnvi
 from .create_federated_tenant_request import CreateFederatedTenantRequest
 from .create_federated_tenant_request_metadata import CreateFederatedTenantRequestMetadata
 from .create_lease_request import CreateLeaseRequest
+from .create_memory_store_memory_request import CreateMemoryStoreMemoryRequest
+from .create_memory_store_memory_request_metadata import CreateMemoryStoreMemoryRequestMetadata
+from .create_memory_store_request import CreateMemoryStoreRequest
+from .create_memory_store_request_metadata import CreateMemoryStoreRequestMetadata
 from .create_policy_request import CreatePolicyRequest
 from .create_policy_request_metadata import CreatePolicyRequestMetadata
 from .create_project_request import CreateProjectRequest
@@ -176,6 +180,7 @@ from .list_connections_state import ListConnectionsState
 from .list_connectors_availability import ListConnectorsAvailability
 from .list_environments_archived import ListEnvironmentsArchived
 from .list_leases_state import ListLeasesState
+from .list_memory_stores_archived import ListMemoryStoresArchived
 from .list_pagination import ListPagination
 from .list_runners_archived import ListRunnersArchived
 from .list_runners_state import ListRunnersState
@@ -191,6 +196,15 @@ from .list_vault_credential_versions_state import ListVaultCredentialVersionsSta
 from .list_vault_credentials_state import ListVaultCredentialsState
 from .list_vaults_archived import ListVaultsArchived
 from .list_work_items_state import ListWorkItemsState
+from .memory_store import MemoryStore
+from .memory_store_list_response import MemoryStoreListResponse
+from .memory_store_memory import MemoryStoreMemory
+from .memory_store_memory_list_response import MemoryStoreMemoryListResponse
+from .memory_store_memory_metadata import MemoryStoreMemoryMetadata
+from .memory_store_metadata import MemoryStoreMetadata
+from .memory_store_resource_ref import MemoryStoreResourceRef
+from .memory_store_resource_ref_access import MemoryStoreResourceRefAccess
+from .memory_store_resource_ref_type import MemoryStoreResourceRefType
 from .policy import Policy
 from .policy_decision import PolicyDecision
 from .policy_list_response import PolicyListResponse
@@ -347,6 +361,10 @@ from .update_lease_request import UpdateLeaseRequest
 from .update_lease_request_error import UpdateLeaseRequestError
 from .update_lease_request_result import UpdateLeaseRequestResult
 from .update_lease_request_state import UpdateLeaseRequestState
+from .update_memory_store_memory_request import UpdateMemoryStoreMemoryRequest
+from .update_memory_store_memory_request_metadata import UpdateMemoryStoreMemoryRequestMetadata
+from .update_memory_store_request import UpdateMemoryStoreRequest
+from .update_memory_store_request_metadata import UpdateMemoryStoreRequestMetadata
 from .update_runner_request import UpdateRunnerRequest
 from .update_runner_request_metadata import UpdateRunnerRequestMetadata
 from .update_runner_request_state import UpdateRunnerRequestState
@@ -487,6 +505,10 @@ __all__ = (
     "CreateFederatedTenantRequest",
     "CreateFederatedTenantRequestMetadata",
     "CreateLeaseRequest",
+    "CreateMemoryStoreMemoryRequest",
+    "CreateMemoryStoreMemoryRequestMetadata",
+    "CreateMemoryStoreRequest",
+    "CreateMemoryStoreRequestMetadata",
     "CreatePolicyRequest",
     "CreatePolicyRequestMetadata",
     "CreateProjectRequest",
@@ -572,6 +594,7 @@ __all__ = (
     "ListConnectorsAvailability",
     "ListEnvironmentsArchived",
     "ListLeasesState",
+    "ListMemoryStoresArchived",
     "ListPagination",
     "ListRunnersArchived",
     "ListRunnersState",
@@ -587,6 +610,15 @@ __all__ = (
     "ListVaultCredentialVersionsState",
     "ListVaultsArchived",
     "ListWorkItemsState",
+    "MemoryStore",
+    "MemoryStoreListResponse",
+    "MemoryStoreMemory",
+    "MemoryStoreMemoryListResponse",
+    "MemoryStoreMemoryMetadata",
+    "MemoryStoreMetadata",
+    "MemoryStoreResourceRef",
+    "MemoryStoreResourceRefAccess",
+    "MemoryStoreResourceRefType",
     "Policy",
     "PolicyDecision",
     "PolicyListResponse",
@@ -743,6 +775,10 @@ __all__ = (
     "UpdateLeaseRequestError",
     "UpdateLeaseRequestResult",
     "UpdateLeaseRequestState",
+    "UpdateMemoryStoreMemoryRequest",
+    "UpdateMemoryStoreMemoryRequestMetadata",
+    "UpdateMemoryStoreRequest",
+    "UpdateMemoryStoreRequestMetadata",
     "UpdateRunnerRequest",
     "UpdateRunnerRequestMetadata",
     "UpdateRunnerRequestState",
