@@ -132,7 +132,7 @@ async function resolveMemoryStoreResourceRefs(
     if (!memoryStore) {
       return { fields: { [`resourceRefs.${index}.storeId`]: 'Memory store must exist and be active.' } }
     }
-    resolved.push(memoryStore as unknown as ResourceRef)
+    resolved.push({ ...memoryStore })
   }
   return { resourceRefs: resolved }
 }
