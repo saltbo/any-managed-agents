@@ -52,6 +52,7 @@ function sessionRow(overrides: Partial<SessionRuntimeRow> = {}): SessionRuntimeR
     state: 'idle',
     archivedAt: null,
     sandboxId: null,
+    resourceRefs: [],
     metadata: {},
     ...overrides,
   }
@@ -118,6 +119,7 @@ function fakeDeps(
   const sessions: Deps['sessions'] = {
     list: async () => ({ rows: [], hasMore: false }),
     find: async () => sessionRecord(),
+    findActiveHttpTriggerSession: async () => null,
     findRuntimeRow: async () => sessionRow(),
     readConnection: async () => null,
     updateFields: async () => sessionRecord(),

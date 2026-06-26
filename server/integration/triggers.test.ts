@@ -544,6 +544,46 @@ describe('[CF] /api/v1/triggers', () => {
     })
   })
 
+  it('reuses the existing HTTP trigger session when request body carries the same key [spec: triggers/http-dispatch]', async () => {
+    const authorization = await signIn()
+    const agent = await createAgent(authorization)
+    const environment = await createEnvironment(authorization)
+    const trigger = await createTrigger(authorization, agent.id, environment.id, {
+      type: 'http',
+      name: 'Issue webhook',
+      promptTemplate: 'Handle {{ body.event }} {{ body.key }}: {{ body.comment.body }}.',
+      schedule: null,
+      nextDueAt: undefined,
+    })
+
+    const firstRunRes = await jsonFetch(`/api/v1/triggers/${trigger.id}/runs`, authorization, {
+      method: 'POST',
+      headers: { 'idempotency-key': 'delivery-1' },
+      body: JSON.stringify({
+        key: 'github:owner/repo:issue:123',
+        event: 'issues',
+        comment: { body: 'Initial issue opened' },
+      }),
+    })
+    expect(firstRunRes.status).toBe(201)
+    const firstRun = (await firstRunRes.json()) as { sessionId: string | null }
+
+    const secondRunRes = await jsonFetch(`/api/v1/triggers/${trigger.id}/runs`, authorization, {
+      method: 'POST',
+      headers: { 'idempotency-key': 'delivery-2' },
+      body: JSON.stringify({
+        key: 'github:owner/repo:issue:123',
+        event: 'issue_comment',
+        comment: { body: 'Follow-up from the issue thread' },
+      }),
+    })
+    expect(secondRunRes.status).toBe(201)
+    const secondRun = (await secondRunRes.json()) as { sessionId: string | null }
+
+    expect(firstRun.sessionId).toEqual(expect.any(String))
+    expect(secondRun.sessionId).toBe(firstRun.sessionId)
+  })
+
   it('does not dispatch paused or archived triggers [spec: triggers/inactive]', async () => {
     const authorization = await signIn()
     const agent = await createAgent(authorization)

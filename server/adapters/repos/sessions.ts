@@ -18,7 +18,7 @@ import {
   canonicalAmaSessionEventFromRuntimeEvent,
   isAmaSessionEventType,
 } from '@shared/session-events'
-import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, like, lt, lte, or } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, like, lt, lte, or, sql } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
 import type { RuntimeName } from '../../contracts/environment-contracts'
 import { leases, runners, sessionApprovals, sessionEvents, sessionMessages, sessions, workItems } from '../../db/schema'
@@ -214,6 +214,7 @@ function runtimeRow(row: SessionRow): SessionRuntimeRow {
     state: row.state,
     archivedAt: row.archivedAt,
     sandboxId: row.sandboxId,
+    resourceRefs: parseJson<Record<string, unknown>[]>(row.resourceRefs) ?? [],
     metadata: parseJson<Record<string, unknown>>(row.metadata) ?? {},
   }
 }
@@ -282,6 +283,25 @@ export function createSessionRepo(db: Db): SessionRepo {
         .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, projectId)))
         .get()
       return row ? serializeSession(row) : null
+    },
+
+    async findActiveHttpTriggerSession(projectId, triggerId, key) {
+      const row = await db
+        .select()
+        .from(sessions)
+        .where(
+          and(
+            eq(sessions.projectId, projectId),
+            isNull(sessions.archivedAt),
+            inArray(sessions.state, ['idle', 'running']),
+            eq(sql<string>`json_extract(${sessions.metadata}, '$.source')`, 'http-trigger'),
+            eq(sql<string>`json_extract(${sessions.metadata}, '$.httpTriggerId')`, triggerId),
+            eq(sql<string>`json_extract(${sessions.metadata}, '$.key')`, key),
+          ),
+        )
+        .orderBy(desc(sessions.createdAt), desc(sessions.id))
+        .get()
+      return row ? runtimeRow(row) : null
     },
 
     async findRuntimeRow(projectId, sessionId) {

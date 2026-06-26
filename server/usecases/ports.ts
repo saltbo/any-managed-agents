@@ -2472,6 +2472,7 @@ export interface SessionRuntimeRow {
   state: string
   archivedAt: string | null
   sandboxId: string | null
+  resourceRefs: Record<string, unknown>[]
   metadata: Record<string, unknown>
 }
 
@@ -2481,6 +2482,7 @@ export interface SessionRuntimeRow {
 export interface SessionRepo {
   list(query: SessionListQuery): Promise<SessionListPage>
   find(projectId: string, sessionId: string): Promise<SessionRecord | null>
+  findActiveHttpTriggerSession(projectId: string, triggerId: string, key: string): Promise<SessionRuntimeRow | null>
   // The raw row (with internal columns) for runtime operations. Used by write
   // paths that hand the session to the runtime gateway.
   findRuntimeRow(projectId: string, sessionId: string): Promise<SessionRuntimeRow | null>

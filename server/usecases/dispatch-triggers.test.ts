@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Deps } from './deps'
-import type { AuthScope, ClaimedRun, DueTrigger, SessionRecord, TriggerRecord } from './ports'
+import type { AuthScope, ClaimedRun, DueTrigger, SessionMessageRecord, SessionRecord, TriggerRecord } from './ports'
 
 // dispatchDueScheduledTriggers now calls the runtime createSession usecase
 // directly (the SessionRuntimeGateway indirection was removed). Mock that module
@@ -126,10 +126,26 @@ function sessionRecord(overrides: Partial<SessionRecord> = {}): SessionRecord {
   }
 }
 
+function sessionMessageRecord(overrides: Partial<SessionMessageRecord> = {}): SessionMessageRecord {
+  return {
+    id: 'msg_1',
+    sessionId: 'sess_existing',
+    type: 'prompt',
+    content: 'message',
+    delivery: 'queued',
+    state: 'accepted',
+    error: null,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
 function fakeDeps(
   overrides: {
     triggerDispatch?: Partial<Deps['triggerDispatch']>
     sessionRuntime?: RuntimeSessionOverrides
+    sessions?: Partial<Deps['sessions']>
     audit?: Partial<Deps['audit']>
   } = {},
 ): Deps {
@@ -145,6 +161,17 @@ function fakeDeps(
   vi.mocked(runtimeSessions.createSession).mockImplementation(
     overrides.sessionRuntime?.createSession ?? (async () => ({ ok: true, value: sessionRecord() })),
   )
+  vi.mocked(runtimeSessions.dispatchPrompt).mockImplementation(async () => ({
+    ok: true,
+    delivery: 'queued',
+    state: 'accepted',
+  }))
+  const sessionsRepo = {
+    findActiveHttpTriggerSession: async () => null,
+    insertMessage: async (record: Parameters<Deps['sessions']['insertMessage']>[0]) =>
+      sessionMessageRecord({ sessionId: record.sessionId, content: record.content }),
+    ...overrides.sessions,
+  } as Deps['sessions']
   return {
     agents: undefined as unknown as Deps['agents'],
     environments: undefined as unknown as Deps['environments'],
@@ -172,7 +199,7 @@ function fakeDeps(
     sandboxRuntime: undefined as unknown as Deps['sandboxRuntime'],
     sessionOrchestration: undefined as unknown as Deps['sessionOrchestration'],
     sessionEventStore: undefined as unknown as Deps['sessionEventStore'],
-    sessions: undefined as unknown as Deps['sessions'],
+    sessions: sessionsRepo,
     createApprovalGate: undefined as unknown as Deps['createApprovalGate'],
     rereadStartedSession: false,
     audit: { record: async () => {}, ...overrides.audit },
@@ -674,6 +701,192 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
     expect(result.state).toBe('session_created')
     expect(result.sessionId).toBe('sess_http')
     expect(initialPrompt).toBe('Handle T-123 from portal')
+  })
+
+  it('reuses an active HTTP trigger session when request body carries the same key', async () => {
+    let markedSessionId: string | null = null
+    let messageContent: string | null = null
+    const deps = fakeDeps({
+      triggerDispatch: {
+        markRunSessionCreated: async (_trigger, _run, sessionId) => {
+          markedSessionId = sessionId
+        },
+      },
+      sessions: {
+        findActiveHttpTriggerSession: async (_projectId, _triggerId, key) =>
+          key === 'github:owner/repo:issue:123'
+            ? {
+                id: 'sess_existing',
+                projectId: 'project_1',
+                organizationId: 'org_1',
+                state: 'idle',
+                archivedAt: null,
+                sandboxId: 'sandbox_1',
+                resourceRefs: [],
+                metadata: { source: 'http-trigger', httpTriggerId: 'http_trigger_1', key },
+              }
+            : null,
+        insertMessage: async (record) => {
+          messageContent = record.content
+          return sessionMessageRecord({ sessionId: record.sessionId, content: record.content })
+        },
+      },
+    })
+    const result = await dispatchHttpTrigger(deps, auth, {
+      trigger: httpTrigger({ id: 'http_trigger_1' }),
+      context: {
+        body: { key: 'github:owner/repo:issue:123', ticket: { id: 'T-123' } },
+        query: { source: 'portal' },
+        headers: {},
+      },
+    })
+
+    expect(result).toMatchObject({ state: 'session_created', sessionId: 'sess_existing' })
+    expect(markedSessionId).toBe('sess_existing')
+    expect(messageContent).toBe('Handle T-123 from portal')
+    expect(runtimeSessions.createSession).not.toHaveBeenCalled()
+  })
+
+  it('creates a new keyed HTTP trigger session when the existing session lacks current resources', async () => {
+    let createdResourceRefs: Record<string, unknown>[] | null = null
+    let messageContent: string | null = null
+    const memoryRef = { type: 'memory_store', storeId: 'memstore_1', access: 'read_write' }
+    const deps = fakeDeps({
+      sessionRuntime: {
+        createSession: async (_deps, _auth, input) => {
+          createdResourceRefs = input.options.resourceRefs ?? null
+          return { ok: true, value: sessionRecord({ id: 'sess_with_memory' }) }
+        },
+      },
+      sessions: {
+        findActiveHttpTriggerSession: async (_projectId, _triggerId, key) =>
+          key === 'github:owner/repo:issue:123'
+            ? {
+                id: 'sess_without_memory',
+                projectId: 'project_1',
+                organizationId: 'org_1',
+                state: 'idle',
+                archivedAt: null,
+                sandboxId: 'sandbox_1',
+                resourceRefs: [],
+                metadata: { source: 'http-trigger', httpTriggerId: 'http_trigger_1', key },
+              }
+            : null,
+        insertMessage: async (record) => {
+          messageContent = record.content
+          return sessionMessageRecord({ sessionId: record.sessionId, content: record.content })
+        },
+      },
+    })
+
+    const result = await dispatchHttpTrigger(deps, auth, {
+      trigger: httpTrigger({ id: 'http_trigger_1', resourceRefs: [memoryRef] }),
+      context: {
+        body: { key: 'github:owner/repo:issue:123', ticket: { id: 'T-123' } },
+        query: { source: 'portal' },
+        headers: {},
+      },
+    })
+
+    expect(result).toMatchObject({ state: 'session_created', sessionId: 'sess_with_memory' })
+    expect(createdResourceRefs).toEqual([memoryRef])
+    expect(messageContent).toBeNull()
+  })
+
+  it('reuses a keyed HTTP trigger session when resolved memory resources cover the trigger resources', async () => {
+    let markedSessionId: string | null = null
+    let messageContent: string | null = null
+    const memoryRef = { type: 'memory_store', storeId: 'memstore_1', access: 'read_write' }
+    const deps = fakeDeps({
+      triggerDispatch: {
+        markRunSessionCreated: async (_trigger, _run, sessionId) => {
+          markedSessionId = sessionId
+        },
+      },
+      sessions: {
+        findActiveHttpTriggerSession: async (_projectId, _triggerId, key) =>
+          key === 'github:owner/repo:issue:123'
+            ? {
+                id: 'sess_with_memory',
+                projectId: 'project_1',
+                organizationId: 'org_1',
+                state: 'idle',
+                archivedAt: null,
+                sandboxId: 'sandbox_1',
+                resourceRefs: [
+                  {
+                    type: 'memory_store',
+                    storeId: 'memstore_1',
+                    access: 'read_write',
+                    name: 'Maintainer Memory',
+                    description: 'Memory store snapshot',
+                    mountPath: '/workspace/.ama/memory-stores/memstore_1',
+                    memories: [],
+                  },
+                ],
+                metadata: { source: 'http-trigger', httpTriggerId: 'http_trigger_1', key },
+              }
+            : null,
+        insertMessage: async (record) => {
+          messageContent = record.content
+          return sessionMessageRecord({ sessionId: record.sessionId, content: record.content })
+        },
+      },
+    })
+
+    const result = await dispatchHttpTrigger(deps, auth, {
+      trigger: httpTrigger({ id: 'http_trigger_1', resourceRefs: [memoryRef] }),
+      context: {
+        body: { key: 'github:owner/repo:issue:123', ticket: { id: 'T-123' } },
+        query: { source: 'portal' },
+        headers: {},
+      },
+    })
+
+    expect(result).toMatchObject({ state: 'session_created', sessionId: 'sess_with_memory' })
+    expect(markedSessionId).toBe('sess_with_memory')
+    expect(messageContent).toBe('Handle T-123 from portal')
+    expect(runtimeSessions.createSession).not.toHaveBeenCalled()
+  })
+
+  it('creates a new keyed HTTP trigger session when the existing memory access is too narrow', async () => {
+    let createdResourceRefs: Record<string, unknown>[] | null = null
+    const memoryRef = { type: 'memory_store', storeId: 'memstore_1', access: 'read_write' }
+    const deps = fakeDeps({
+      sessionRuntime: {
+        createSession: async (_deps, _auth, input) => {
+          createdResourceRefs = input.options.resourceRefs ?? null
+          return { ok: true, value: sessionRecord({ id: 'sess_read_write_memory' }) }
+        },
+      },
+      sessions: {
+        findActiveHttpTriggerSession: async (_projectId, _triggerId, key) =>
+          key === 'github:owner/repo:issue:123'
+            ? {
+                id: 'sess_read_only_memory',
+                projectId: 'project_1',
+                organizationId: 'org_1',
+                state: 'idle',
+                archivedAt: null,
+                sandboxId: 'sandbox_1',
+                resourceRefs: [{ type: 'memory_store', storeId: 'memstore_1', access: 'read_only' }],
+                metadata: { source: 'http-trigger', httpTriggerId: 'http_trigger_1', key },
+              }
+            : null,
+      },
+    })
+
+    const result = await dispatchHttpTrigger(deps, auth, {
+      trigger: httpTrigger({ id: 'http_trigger_1', resourceRefs: [memoryRef] }),
+      context: {
+        body: { key: 'github:owner/repo:issue:123', ticket: { id: 'T-123' } },
+        query: { source: 'portal' },
+        headers: {},
+      },
+    })
+
+    expect(result).toMatchObject({ state: 'session_created', sessionId: 'sess_read_write_memory' })
+    expect(createdResourceRefs).toEqual([memoryRef])
   })
 
   it('passes HTTP trigger env and secretEnv through to createSession', async () => {
