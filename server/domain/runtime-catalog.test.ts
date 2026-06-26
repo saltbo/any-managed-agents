@@ -50,6 +50,11 @@ describe('runtimeRequiredRunnerCapability', () => {
     )
   })
 
+  it('requires the bare runtime capability for non-ama runtimes when no model is pinned', () => {
+    expect(runtimeRequiredRunnerCapability('codex', 'openai', null)).toBe('codex')
+    expect(runtimeRequiredRunnerCapability('copilot', 'github')).toBe('copilot')
+  })
+
   it('normalizes provider to wildcard for wildcard-provider catalog entries', () => {
     // claude-code has providerModels with provider: '*', so capability uses '*' as provider
     expect(runtimeRequiredRunnerCapability('claude-code', 'anthropic', 'claude-opus-4')).toBe(
