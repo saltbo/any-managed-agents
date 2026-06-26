@@ -519,10 +519,13 @@ export class SessionObject implements DurableObject {
   ): Promise<Record<string, unknown>> {
     const requestId = `sandbox_${crypto.randomUUID()}`
     return new Promise<Record<string, unknown>>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pendingSandboxRequests.delete(requestId)
-        reject(new Error('runner sandbox request timed out'))
-      }, Math.max(1, timeoutMs))
+      const timer = setTimeout(
+        () => {
+          this.pendingSandboxRequests.delete(requestId)
+          reject(new Error('runner sandbox request timed out'))
+        },
+        Math.max(1, timeoutMs),
+      )
       this.pendingSandboxRequests.set(requestId, { resolve, reject, timer })
       this.socket?.send(
         JSON.stringify({

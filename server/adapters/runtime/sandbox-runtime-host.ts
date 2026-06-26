@@ -2,7 +2,7 @@ import type { AgentMessage } from '@earendil-works/pi-agent-core'
 import { getModel, type Model } from '@earendil-works/pi-ai'
 import { normalizeMemoryPath } from '@server/domain/memory-store'
 import { runtimeEndpointPath } from '@server/domain/runtime/driver'
-import type { SandboxRuntimeHost } from '@server/usecases/ports'
+import type { RunnerChannel, SandboxRuntimeHost } from '@server/usecases/ports'
 import {
   isRuntimePolicyDenied,
   isRuntimeTurnCancelled,
@@ -10,15 +10,13 @@ import {
   RuntimePolicyDeniedError,
   RuntimeTurnCancelledError,
 } from '../../../runtime-core/errors'
-import type { RuntimeToolPolicyDecision, RuntimeToolPolicyInput } from '../../../runtime-core/ports'
-import type { ToolExecutor } from '../../../runtime-core/ports'
+import type { RuntimeToolPolicyDecision, RuntimeToolPolicyInput, ToolExecutor } from '../../../runtime-core/ports'
 import { runTurn, runtimeMessagesFromEvents } from '../../../runtime-core/turn-engine'
 import { canonicalProvider } from '../../domain/runtime/provider'
 import type { Env } from '../../env'
 import type { RuntimeSecretEnvEntry } from '../gateways/runtime-secret-env'
 import { toolExecutor } from './sandbox-tool-executor'
 import { workersAiModelClient } from './workers-ai-model-client'
-import type { RunnerChannel } from '@server/usecases/ports'
 
 // Canonical home is runtime-core/ports; re-exported so existing importers keep
 // their import paths.
