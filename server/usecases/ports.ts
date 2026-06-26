@@ -1985,6 +1985,15 @@ export interface RunnerChannel {
   isAccepted(sessionId: string): Promise<boolean>
   // Dispatches a command to the runner over the channel; true when accepted.
   dispatch(sessionId: string, command: Record<string, unknown>): Promise<boolean>
+  // Executes one sandbox tool against the runner-owned workspace for AMA cloud-loop sessions.
+  executeSandboxTool(input: ToolExecutionInput): Promise<ToolExecutionResult>
+  // Stops a runner-owned sandbox workspace for AMA cloud-loop sessions.
+  stopSandbox(sessionId: string): Promise<void>
+  // Reads writable memory-store files from a runner-owned sandbox workspace.
+  readMemoryStoreMemories(input: {
+    sessionId: string
+    resourceRefs: Record<string, unknown>[]
+  }): Promise<Array<{ storeId: string; memories: Array<{ path: string; content: string }> }>>
 }
 
 // --- sandbox runtime host (cloud session execution) ---
@@ -2091,6 +2100,7 @@ export type SessionTurnInput = {
 export interface SandboxRuntimeHost {
   startCloudSession(input: SandboxRuntimeStartInput): Promise<SandboxRuntimeStartResult>
   readMemoryStoreMemories(input: {
+    sessionId: string
     sandboxId: string
     resourceRefs: Record<string, unknown>[]
   }): Promise<Array<{ storeId: string; memories: Array<{ path: string; content: string }> }>>
@@ -2492,6 +2502,9 @@ export interface SessionRepo {
   // the sessionId (ama/cloud). Lets the browser socket + dispatch reach the live
   // runner channel even after the session's lease has ended.
   resolveRelayDoName(sessionId: string): Promise<string>
+  // The sandbox executor backend for a cloud-loop session. Null means the
+  // default Cloudflare Sandbox backend.
+  resolveSandboxBackend(sessionId: string): Promise<string | null>
 
   updateFields(
     projectId: string,

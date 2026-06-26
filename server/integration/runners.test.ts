@@ -1,9 +1,9 @@
 import { SELF } from 'cloudflare:test'
-import { runtimeProviderModelCapability } from '@server/domain/runtime-catalog'
+import { AMA_RUNNER_SANDBOX_CAPABILITY } from '@server/domain/runtime-catalog'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { expectAuthRequired, setupOidcProvider, signIn, signInUser } from './auth'
 
-const DEFAULT_AMA_RUNNER_CAPABILITY = runtimeProviderModelCapability('ama', 'workers-ai', '@cf/moonshotai/kimi-k2.6')
+const DEFAULT_AMA_RUNNER_CAPABILITY = AMA_RUNNER_SANDBOX_CAPABILITY
 
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {

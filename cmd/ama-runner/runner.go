@@ -131,14 +131,11 @@ func modelsFromProbes(probes map[string]runtimeProbe) map[string][]string {
 	return models
 }
 
-// runnerRuntimeInventory reports availability for every runtime the runner can
-// host: the embedded ama runtime is always ready, runtimes whose CLI is not on
-// PATH are missing, and detected CLIs carry the bridge probe's status, version,
-// and safe diagnostic detail.
+// runnerRuntimeInventory reports availability for every external runtime the
+// runner can host. AMA is intentionally absent: its loop runs in the control
+// plane, while this runner advertises the separate ama-sandbox capability.
 func runnerRuntimeInventory(availableRuntimes []string, probes map[string]runtimeProbe) []v1RuntimeInventory {
-	inventory := []v1RuntimeInventory{
-		{Runtime: "ama", Version: runnerVersion, State: "ready", Detail: "embedded ama runtime"},
-	}
+	inventory := []v1RuntimeInventory{}
 	for _, cli := range runtimeCLIBinaries() {
 		if !slices.Contains(availableRuntimes, cli.Runtime) {
 			inventory = append(inventory, v1RuntimeInventory{
@@ -284,12 +281,22 @@ type ToolCall struct {
 type RunnerChannelMessage struct {
 	Type       string               `json:"type"`
 	EventID    string               `json:"eventId"`
+	RequestID  string               `json:"requestId"`
 	Message    string               `json:"message"`
 	SessionID  string               `json:"sessionId"`
 	RunnerID   string               `json:"runnerId"`
 	LeaseID    string               `json:"leaseId"`
 	WorkItemID string               `json:"workItemId"`
 	Command    RunnerSessionCommand `json:"command"`
+	Request    RunnerSandboxRequest `json:"request"`
+}
+
+type RunnerSandboxRequest struct {
+	Type         string         `json:"type"`
+	ToolCallID   string         `json:"toolCallId"`
+	ToolName     string         `json:"toolName"`
+	Input        map[string]any `json:"input"`
+	ResourceRefs []ResourceRef  `json:"resourceRefs"`
 }
 
 type RunnerSessionCommand struct {
@@ -499,7 +506,7 @@ func (d *RunnerDaemon) startRelayHub(ctx context.Context) {
 	if d.relayHub != nil {
 		return
 	}
-	d.relayHub = newRelayHub(d.Channels, d.RunnerID, d.Config.SandboxAdapter, d.Config.WorkDir)
+	d.relayHub = newRelayHub(d.Channels, d.RunnerID, d.Config.SandboxAdapter, d.Config.WorkDir, d.Adapter)
 	go d.relayHub.run(ctx)
 }
 
@@ -769,17 +776,91 @@ func (d *RunnerDaemon) completeSessionStart(ctx context.Context, lease *Lease, p
 		}
 		return err
 	}
-	// Every runtime runs its loop on the runner and relays over the single
-	// per-runner channel — the channel outlives the lease, so a completed session
-	// still serves history while the runner is online.
+	if payload.Runtime == "ama" {
+		return d.completeAMASandboxStart(ctx, lease, payload)
+	}
 	return d.runRelaySessionStart(ctx, lease, payload)
 }
 
 // isSupportedSessionRuntime reports whether the runner can host a session for this
-// runtime. Every supported runtime runs its loop locally and relays over the
-// per-runner channel.
+// runtime. AMA is sandbox-only; external runtimes run their loop locally.
 func isSupportedSessionRuntime(runtime string) bool {
 	return runtime == "ama" || runtime == "claude-code" || runtime == "codex" || runtime == "copilot"
+}
+
+func (d *RunnerDaemon) completeAMASandboxStart(ctx context.Context, lease *Lease, payload WorkPayload) error {
+	hub := d.relayHub
+	if hub == nil {
+		err := fmt.Errorf("runner relay channel is not started")
+		if finishErr := d.finishFailed(ctx, lease, err, nil); finishErr != nil {
+			return finishErr
+		}
+		return err
+	}
+	if d.Adapter == nil {
+		err := fmt.Errorf("runner sandbox adapter is not configured")
+		if finishErr := d.finishFailed(ctx, lease, err, nil); finishErr != nil {
+			return finishErr
+		}
+		return err
+	}
+	leaseCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	renewErrors := make(chan error, 1)
+	go d.renewLease(leaseCtx, lease, cancel, renewErrors, nil)
+
+	workspace, err := prepareRuntimeWorkspace(leaseCtx, d.Config.WorkDir, payload.SessionID, payload.ResourceRefs, payload.RuntimeEnv)
+	if err != nil {
+		if finishErr := d.finishFailed(ctx, lease, err, nil); finishErr != nil {
+			return finishErr
+		}
+		return err
+	}
+	if err := prepareAgentWorkspace(leaseCtx, workspace.Cwd, payload.Runtime, payload.AgentSnapshot); err != nil {
+		_ = cleanupRuntimeWorkspace(context.Background(), workspace)
+		if finishErr := d.finishFailed(ctx, lease, err, nil); finishErr != nil {
+			return finishErr
+		}
+		return err
+	}
+	router := newSessionCommandRouter(payload.SessionID)
+	router.registerSandbox(workspace, d.Adapter)
+	hub.register(payload.SessionID, router)
+	if err := d.uploadEvent(leaseCtx, payload.SessionID, "runner.sandbox.ready", ama.JSON{
+		"sessionId": payload.SessionID,
+		"runtime":   payload.Runtime,
+		"executor":  d.Config.SandboxAdapter,
+	}); err != nil {
+		hub.unregister(payload.SessionID)
+		_ = cleanupRuntimeWorkspace(context.Background(), workspace)
+		if finishErr := d.finishFailed(ctx, lease, err, nil); finishErr != nil {
+			return finishErr
+		}
+		return err
+	}
+	_, err = d.Client.UpdateLease(leaseCtx, lease.ID, UpdateLeaseRequest{
+		State: "completed",
+		Result: ama.JSON{
+			"sessionId":    payload.SessionID,
+			"runtime":      payload.Runtime,
+			"sandboxReady": true,
+			"workspace":    workspace.Cwd,
+		},
+	})
+	if err != nil {
+		hub.unregister(payload.SessionID)
+		_ = cleanupRuntimeWorkspace(context.Background(), workspace)
+		return err
+	}
+	cancel()
+	select {
+	case renewErr := <-renewErrors:
+		if renewErr != nil && !isCompletedLeaseRenewalRace(renewErr) {
+			return renewErr
+		}
+	default:
+	}
+	return nil
 }
 
 // sessionStartedPayload is the runner.session.started event body relayed at the

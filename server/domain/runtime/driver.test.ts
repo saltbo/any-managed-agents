@@ -18,7 +18,7 @@ describe('[spec: runtime/driver-select] runtime drivers', () => {
 
   it('names cloud and self-hosted runtime drivers canonically', () => {
     expect(runtimeDriverName('ama', 'cloud')).toBe('ama-cloud')
-    expect(runtimeDriverName('ama', 'self_hosted')).toBe('ama-self-hosted')
+    expect(runtimeDriverName('ama', 'self_hosted')).toBe('ama-cloud')
     expect(runtimeDriverName('claude-code', 'self_hosted')).toBe('claude-code-self-hosted')
     expect(runtimeDriverName('codex', 'self_hosted')).toBe('codex-self-hosted')
     expect(runtimeDriverName('copilot', 'self_hosted')).toBe('copilot-self-hosted')

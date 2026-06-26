@@ -359,6 +359,12 @@ export function createSessionRepo(db: Db): SessionRepo {
       return workItem?.runnerId ?? sessionId
     },
 
+    async resolveSandboxBackend(sessionId) {
+      const row = await db.select({ metadata: sessions.metadata }).from(sessions).where(eq(sessions.id, sessionId)).get()
+      const metadata = row?.metadata ? (JSON.parse(row.metadata) as Record<string, unknown>) : {}
+      return typeof metadata.sandboxBackend === 'string' ? metadata.sandboxBackend : null
+    },
+
     async updateFields(projectId, sessionId, fields, updatedAt) {
       await db
         .update(sessions)

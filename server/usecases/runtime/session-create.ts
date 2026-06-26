@@ -33,6 +33,7 @@ import { runtimeRequiredRunnerCapability } from '@server/domain/runtime-catalog'
 import { environmentHostingMode } from '@server/domain/runtime-session'
 import { composeInitialPrompt, hasSecretMaterial } from '@server/domain/session'
 import { safeRuntimeError } from '@server/runtime-error'
+import { SESSION_DO_EVENT_STORE } from '@shared/session-events'
 import type { AgentRow, AuthScope, CloudTurnSecretEnvEntry, SessionOrchestrationStore, SessionRow } from '../ports'
 import type { CloudTurnDeps } from './cloud-turn'
 import { startSessionRuntimeForRow } from './cloud-turn'
@@ -500,6 +501,7 @@ export async function createSessionForAgent(
   const environmentSnapshot = baseEnvironmentSnapshot
   const hostingMode = environmentHostingMode(environmentSnapshot)
   const runtime = options.runtime
+  const usesCloudLoop = runtime === 'ama'
   if (
     !(await validateRuntimeProviderModel(
       deps,
@@ -527,7 +529,7 @@ export async function createSessionForAgent(
       },
     }
   }
-  const sandboxId = hostingMode === 'cloud' ? id.toLowerCase() : null
+  const sandboxId = usesCloudLoop ? id.toLowerCase() : null
   if (hostingMode === 'cloud') {
     const sandboxDecision = await policy.evaluateSandboxRuntime(auth, {
       session: {
@@ -583,7 +585,7 @@ export async function createSessionForAgent(
     sandboxId,
     piRuntimeId: null,
     piProcessId: null,
-    runtimeEndpointPath: hostingMode === 'cloud' ? runtimeEndpointPath(id) : null,
+    runtimeEndpointPath: usesCloudLoop ? runtimeEndpointPath(id) : null,
     modelProvider: providerId,
     modelConfig: stringify({ provider: providerId, ...(agentSnapshot.model ? { model: agentSnapshot.model } : {}) }),
     state: 'pending',
@@ -597,7 +599,22 @@ export async function createSessionForAgent(
       runtime,
       runtimeConfig,
       runtimeDriver: runtimeDriverName(runtime, hostingMode),
-      ...(hostingMode === 'self_hosted' ? { runnerState: 'queued', runnerProtocol: 'ama-runner-work' } : {}),
+      ...(usesCloudLoop
+        ? {
+            runtimeBackend: 'ama-cloud',
+            runtimeProtocol: 'ama-runtime-rpc',
+            eventStore: SESSION_DO_EVENT_STORE,
+            loop: 'cloud-session-runtime',
+            sandboxBackend: hostingMode === 'self_hosted' ? 'runner-sandbox' : 'cloudflare-sandbox',
+          }
+        : {}),
+      ...(hostingMode === 'self_hosted'
+        ? {
+            runnerState: 'queued',
+            runnerProtocol: 'ama-runner-work',
+            ...(runtime === 'ama' ? { runnerRole: 'sandbox-executor' } : { runnerRole: 'runtime-loop' }),
+          }
+        : {}),
     }),
     startedAt: null,
     stoppedAt: null,

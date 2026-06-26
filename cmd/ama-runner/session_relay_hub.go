@@ -3,8 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
+	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,6 +21,53 @@ import (
 type resumeTokenBox struct {
 	mu    sync.Mutex
 	token string
+}
+
+func readWorkspaceMemoryStores(workspaceRoot string, resourceRefs []ResourceRef) ([]ama.JSON, error) {
+	stores := []ama.JSON{}
+	for _, resource := range resourceRefs {
+		if resource.Type != "memory_store" || resource.Access != "read_write" {
+			continue
+		}
+		mountPath := strings.TrimPrefix(resource.MountPath, "/workspace/")
+		if mountPath == "" || strings.HasPrefix(mountPath, "..") {
+			return nil, errors.New("invalid memory store mount path")
+		}
+		localRoot := filepath.Join(workspaceRoot, mountPath)
+		if err := ensureUnderWorkspace(workspaceRoot, localRoot); err != nil {
+			return nil, err
+		}
+		memories := []ama.JSON{}
+		err := filepath.WalkDir(localRoot, func(path string, entry os.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if entry.IsDir() {
+				return nil
+			}
+			relative, err := filepath.Rel(localRoot, path)
+			if err != nil {
+				return err
+			}
+			content, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			memories = append(memories, ama.JSON{"path": filepath.ToSlash(relative), "content": string(content)})
+			return nil
+		})
+		if os.IsNotExist(err) {
+			err = nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		sort.Slice(memories, func(i, j int) bool {
+			return memories[i]["path"].(string) < memories[j]["path"].(string)
+		})
+		stores = append(stores, ama.JSON{"storeId": resource.StoreID, "memories": memories})
+	}
+	return stores, nil
 }
 
 func (b *resumeTokenBox) Set(token string) {
@@ -53,6 +104,8 @@ type sessionCommandRouter struct {
 	pendingStop        *string
 	sendPermission     func(permissionId string, allowed bool, reason string) error
 	pendingPermissions []RunnerSessionCommand
+	sandboxWorkspace   *PreparedWorkspace
+	sandboxAdapter     SandboxAdapter
 }
 
 func newSessionCommandRouter(sessionID string, recordPrompt ...func(message string)) *sessionCommandRouter {
@@ -161,6 +214,64 @@ func (r *sessionCommandRouter) registerPermissionSender(send func(permissionId s
 	}
 }
 
+func (r *sessionCommandRouter) registerSandbox(workspace PreparedWorkspace, adapter SandboxAdapter) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.sandboxWorkspace = &workspace
+	r.sandboxAdapter = adapter
+}
+
+func (r *sessionCommandRouter) closeSandbox(ctx context.Context) error {
+	r.mu.Lock()
+	workspace := r.sandboxWorkspace
+	r.sandboxWorkspace = nil
+	r.mu.Unlock()
+	if workspace == nil {
+		return nil
+	}
+	return cleanupRuntimeWorkspace(ctx, *workspace)
+}
+
+func (r *sessionCommandRouter) executeSandbox(ctx context.Context, request RunnerSandboxRequest) (ama.JSON, error) {
+	r.mu.Lock()
+	workspace := r.sandboxWorkspace
+	adapter := r.sandboxAdapter
+	r.mu.Unlock()
+	if workspace == nil || adapter == nil {
+		return nil, errors.New("runner sandbox is not registered for session")
+	}
+	switch request.Type {
+	case "sandbox.execute":
+		started := time.Now()
+		result, err := adapter.Execute(ctx, ToolRequest{
+			ToolCallID: request.ToolCallID,
+			ToolName:   request.ToolName,
+			Input:      request.Input,
+			WorkDir:    workspace.Cwd,
+		})
+		response := ama.JSON{
+			"toolCallId": request.ToolCallID,
+			"toolName":   request.ToolName,
+			"output":     result.Output,
+			"durationMs": time.Since(started).Milliseconds(),
+		}
+		if err != nil {
+			response["error"] = ama.JSON{"message": err.Error()}
+		}
+		return response, nil
+	case "sandbox.stop":
+		return ama.JSON{"ok": true}, r.closeSandbox(ctx)
+	case "sandbox.readMemoryStores":
+		stores, err := readWorkspaceMemoryStores(workspace.Root, request.ResourceRefs)
+		if err != nil {
+			return nil, err
+		}
+		return ama.JSON{"stores": stores}, nil
+	default:
+		return nil, errors.New("unsupported runner sandbox request")
+	}
+}
+
 // RunnerChannelOpener dials the per-runner relay channel
 // (GET /api/v1/runners/{runnerId}/channel). Implemented by the same v1 opener that
 // dials per-lease ama channels.
@@ -182,6 +293,7 @@ type relayHub struct {
 	opener   RunnerChannelOpener
 	runnerID string
 	executor string
+	adapter  SandboxAdapter
 	// storeDir is {WorkDir}/sessions; a session's log is storeDir/{sessionId}/events.jsonl.
 	storeDir string
 
@@ -198,11 +310,16 @@ type relayHub struct {
 	conn    RunnerSessionChannel
 }
 
-func newRelayHub(opener RunnerChannelOpener, runnerID string, executor string, workDir string) *relayHub {
+func newRelayHub(opener RunnerChannelOpener, runnerID string, executor string, workDir string, adapter ...SandboxAdapter) *relayHub {
+	var sandboxAdapter SandboxAdapter
+	if len(adapter) > 0 {
+		sandboxAdapter = adapter[0]
+	}
 	return &relayHub{
 		opener:   opener,
 		runnerID: runnerID,
 		executor: executor,
+		adapter:  sandboxAdapter,
 		storeDir: filepath.Join(workDir, "sessions"),
 		sessions: map[string]*sessionCommandRouter{},
 	}
@@ -285,10 +402,43 @@ func (h *relayHub) readLoop(ctx context.Context, conn RunnerSessionChannel) erro
 			h.handleBackfillRequest(ctx, conn, message)
 		case "session.command":
 			h.routeCommand(message)
+		case "sandbox.request":
+			h.handleSandboxRequest(ctx, conn, message)
 		default:
 			// runner.event.accepted / session.channel.error are advisory here: events
 			// are fire-and-forget; runner.channel.accepted is the handshake, already seen.
 		}
+	}
+}
+
+func (h *relayHub) handleSandboxRequest(ctx context.Context, conn RunnerSessionChannel, message RunnerChannelMessage) {
+	response := ama.JSON{
+		"type":      "sandbox.response",
+		"requestId": message.RequestID,
+		"sessionId": message.SessionID,
+		"runnerId":  h.runnerID,
+	}
+	h.mu.Lock()
+	router := h.sessions[message.SessionID]
+	h.mu.Unlock()
+	if router == nil {
+		response["ok"] = false
+		response["error"] = "runner sandbox session is not active"
+	} else {
+		result, err := router.executeSandbox(ctx, message.Request)
+		if err != nil {
+			response["ok"] = false
+			response["error"] = err.Error()
+		} else {
+			response["ok"] = true
+			response["result"] = result
+		}
+	}
+	h.writeMu.Lock()
+	err := conn.WriteJSON(ctx, response)
+	h.writeMu.Unlock()
+	if err != nil {
+		slog.Warn("runner failed to write sandbox response", "sessionId", message.SessionID, "error", err)
 	}
 }
 
@@ -361,8 +511,14 @@ func (h *relayHub) register(sessionID string, router *sessionCommandRouter) {
 
 func (h *relayHub) unregister(sessionID string) {
 	h.mu.Lock()
+	router := h.sessions[sessionID]
 	delete(h.sessions, sessionID)
 	h.mu.Unlock()
+	if router != nil {
+		if err := router.closeSandbox(context.Background()); err != nil {
+			slog.Warn("runner failed to clean up sandbox workspace", "sessionId", sessionID, "error", err)
+		}
+	}
 }
 
 // relayEvent dispatches one stored event live to the cloud, fire-and-forget: the

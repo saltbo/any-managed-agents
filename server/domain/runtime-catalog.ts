@@ -1,4 +1,5 @@
 export const RUNTIME_PROVIDER_MODEL_CAPABILITY_PREFIX = 'runtime-provider-model'
+export const AMA_RUNNER_SANDBOX_CAPABILITY = 'ama-sandbox'
 
 export type RuntimeHostingMode = 'cloud' | 'self_hosted'
 export type RuntimeName = 'ama' | 'claude-code' | 'codex' | 'copilot'
@@ -59,6 +60,9 @@ export function runtimeProviderModelCapability(runtime: RuntimeName, provider: s
 }
 
 export function runtimeRequiredRunnerCapability(runtime: RuntimeName, provider: string, model?: string | null) {
+  if (runtime === 'ama') {
+    return AMA_RUNNER_SANDBOX_CAPABILITY
+  }
   if (!model) {
     return runtime
   }
@@ -96,6 +100,9 @@ export function runnerSupportsRuntimeProviderModel(
   provider: string,
   model?: string | null,
 ) {
+  if (runtime === 'ama') {
+    return capabilities.includes(AMA_RUNNER_SANDBOX_CAPABILITY)
+  }
   if (!model) {
     return (
       capabilities.includes(runtime) ||

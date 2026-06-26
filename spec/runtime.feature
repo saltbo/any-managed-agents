@@ -30,6 +30,14 @@ Feature: Runtime
     Then model output is produced and tool calls are dispatched through the executor
     And the next turn context is reconstructed from persisted canonical events
 
+  @runtime/self-hosted-ama-cloud-loop @usecase
+  Scenario: Run self-hosted AMA through the cloud turn loop with a runner sandbox
+    Given an AMA session uses a self-hosted environment
+    When the runner claims the session work
+    Then the runner prepares only the sandbox workspace and tool executor
+    And AMA runs the same cloud turn loop, model calls, turn leases, and canonical event store used by cloud sessions
+    And sandbox tools are executed through the runner-backed sandbox channel
+
   @runtime/cooperative-cancellation @usecase
   Scenario: Cancel a running session without starting more work
     Given a session is running model, tool, or sandbox work

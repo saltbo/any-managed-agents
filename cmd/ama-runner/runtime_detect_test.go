@@ -31,8 +31,7 @@ func TestRunnerCapabilitiesFallBackToPinnedModelWhenEnumerationFails(t *testing.
 	got := runnerCapabilities([]string{"claude-code", "codex", "copilot"}, nil)
 	want := []string{
 		"sandbox.exec",
-		"ama",
-		"runtime-provider-model:ama:workers-ai:@cf/moonshotai/kimi-k2.6",
+		"ama-sandbox",
 		"claude-code",
 		"runtime-provider-model:claude-code:*:claude-sonnet-4-6",
 		"codex",
@@ -52,8 +51,7 @@ func TestRunnerCapabilitiesDeclareOneCapabilityPerEnumeratedModel(t *testing.T) 
 	})
 	want := []string{
 		"sandbox.exec",
-		"ama",
-		"runtime-provider-model:ama:workers-ai:@cf/moonshotai/kimi-k2.6",
+		"ama-sandbox",
 		"codex",
 		"runtime-provider-model:codex:*:gpt-5.3-codex",
 		"runtime-provider-model:codex:*:gpt-5.3-codex-mini",

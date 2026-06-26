@@ -47,8 +47,6 @@ type RuntimeAdapter interface {
 
 func runtimeAdapterFor(runtimeName string, commandTimeout time.Duration, shutdownGraceInterval time.Duration) (RuntimeAdapter, error) {
 	switch runtimeName {
-	case "ama":
-		return SDKBridgeRuntimeAdapter{Runtime: "ama", CommandTimeout: commandTimeout, ShutdownGraceInterval: shutdownGraceInterval}, nil
 	case "codex":
 		return SDKBridgeRuntimeAdapter{Runtime: "codex", CommandTimeout: commandTimeout, ShutdownGraceInterval: shutdownGraceInterval}, nil
 	case "claude-code":

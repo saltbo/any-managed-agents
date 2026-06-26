@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  AMA_RUNNER_SANDBOX_CAPABILITY,
   RUNTIME_CATALOG,
   RUNTIME_PROVIDER_MODEL_CAPABILITY_PREFIX,
   runnerSupportsRuntimeProviderModel,
@@ -41,9 +42,12 @@ describe('runtimeProviderModelCapability', () => {
 })
 
 describe('runtimeRequiredRunnerCapability', () => {
-  it('returns just the runtime name when model is absent', () => {
-    expect(runtimeRequiredRunnerCapability('ama', 'workers-ai', null)).toBe('ama')
-    expect(runtimeRequiredRunnerCapability('ama', 'workers-ai', undefined)).toBe('ama')
+  it('requires the runner sandbox capability for ama regardless of model', () => {
+    expect(runtimeRequiredRunnerCapability('ama', 'workers-ai', null)).toBe(AMA_RUNNER_SANDBOX_CAPABILITY)
+    expect(runtimeRequiredRunnerCapability('ama', 'workers-ai', undefined)).toBe(AMA_RUNNER_SANDBOX_CAPABILITY)
+    expect(runtimeRequiredRunnerCapability('ama', 'moonshotai', '@cf/moonshotai/kimi-k2.6')).toBe(
+      AMA_RUNNER_SANDBOX_CAPABILITY,
+    )
   })
 
   it('normalizes provider to wildcard for wildcard-provider catalog entries', () => {
@@ -57,12 +61,6 @@ describe('runtimeRequiredRunnerCapability', () => {
     // codex and copilot also have provider:'*' and model:'*'
     expect(runtimeRequiredRunnerCapability('codex', 'openai', 'gpt-4o')).toBe(
       runtimeProviderModelCapability('codex', '*', 'gpt-4o'),
-    )
-  })
-
-  it('normalizes ama to a wildcard provider (the catalog no longer pins models)', () => {
-    expect(runtimeRequiredRunnerCapability('ama', 'moonshotai', '@cf/moonshotai/kimi-k2.6')).toBe(
-      runtimeProviderModelCapability('ama', '*', '@cf/moonshotai/kimi-k2.6'),
     )
   })
 
@@ -116,9 +114,16 @@ describe('runnerSupportsRuntimeProviderModel', () => {
     expect(runnerSupportsRuntimeProviderModel(['claude-code'], 'claude-code', 'anthropic', 'claude-opus-4')).toBe(true)
   })
 
-  it('applies transitional bare-runtime fallback for ama (now a wildcard runtime)', () => {
-    // ama is a wildcard-model runtime now, so bare 'ama' grants model-specific work
-    expect(runnerSupportsRuntimeProviderModel(['ama'], 'ama', 'workers-ai', '@cf/moonshotai/kimi-k2.6')).toBe(true)
+  it('requires ama-sandbox for ama because the runner does not host the loop', () => {
+    expect(runnerSupportsRuntimeProviderModel(['ama'], 'ama', 'workers-ai', '@cf/moonshotai/kimi-k2.6')).toBe(false)
+    expect(
+      runnerSupportsRuntimeProviderModel(
+        [AMA_RUNNER_SANDBOX_CAPABILITY],
+        'ama',
+        'workers-ai',
+        '@cf/moonshotai/kimi-k2.6',
+      ),
+    ).toBe(true)
   })
 
   it('returns false when model is given but runner has no matching capability', () => {

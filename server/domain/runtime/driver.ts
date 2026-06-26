@@ -65,6 +65,9 @@ export function runtimeDriver(runtime: RuntimeName) {
 }
 
 export function runtimeDriverName(runtime: RuntimeName, hostingMode: RuntimeHostingMode) {
+  if (runtime === 'ama') {
+    return 'ama-cloud'
+  }
   return hostingMode === 'cloud' ? runtimeDriver(runtime).cloudBackend : `${runtime}-self-hosted`
 }
 
@@ -96,7 +99,7 @@ export function runtimeMetadata(values: {
   const runtimeBackend =
     typeof metadata.runtimeBackend === 'string'
       ? metadata.runtimeBackend
-      : values.hostingMode === 'cloud'
+      : values.runtime === 'ama' || values.hostingMode === 'cloud'
         ? driver.cloudBackend
         : null
   const runtimeProtocol =
@@ -104,7 +107,7 @@ export function runtimeMetadata(values: {
       ? metadata.runtimeProtocol
       : typeof metadata.runnerProtocol === 'string'
         ? metadata.runnerProtocol
-        : values.hostingMode === 'cloud'
+        : values.runtime === 'ama' || values.hostingMode === 'cloud'
           ? driver.cloudProtocol
           : null
   return {

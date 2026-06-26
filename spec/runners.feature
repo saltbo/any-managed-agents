@@ -1,9 +1,10 @@
 Feature: Runners
   Self-hosted environments are serviced by registered runtime runners that lease
   AMA-owned session work. AMA queues work without a Cloudflare Sandbox, runners
-  claim leases for eligible work, run the session over a runner-owned channel,
-  and the work queue recovers expired leases. AMA stays the control plane and
-  canonical event store; runner-local runtime endpoints are never exposed.
+  claim leases for eligible work, provide sandbox execution for AMA sessions,
+  run external runtimes over a runner-owned channel, and the work queue recovers
+  expired leases. AMA stays the control plane and canonical event store;
+  runner-local runtime endpoints are never exposed.
 
   # ── Eligibility and registration (domain + usecase: matching, binding) ──
 

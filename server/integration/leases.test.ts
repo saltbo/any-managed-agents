@@ -1,12 +1,10 @@
 import { SELF } from 'cloudflare:test'
 import { env } from 'cloudflare:workers'
-import { runtimeProviderModelCapability } from '@server/domain/runtime-catalog'
+import { AMA_RUNNER_SANDBOX_CAPABILITY } from '@server/domain/runtime-catalog'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { seedPlatformProvider, setupOidcProvider, signIn } from './auth'
 
-// ama is a wildcard runtime, so its required runner capability normalizes the
-// provider segment to '*' regardless of the agent's vendor.
-const DEFAULT_AMA_RUNNER_CAPABILITY = runtimeProviderModelCapability('ama', '*', '@cf/moonshotai/kimi-k2.6')
+const DEFAULT_AMA_RUNNER_CAPABILITY = AMA_RUNNER_SANDBOX_CAPABILITY
 
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
@@ -347,8 +345,8 @@ describe('[CF] /api/v1/leases', () => {
     await expect(messageRes.json()).resolves.toMatchObject({
       sessionId: session.id,
       type: 'prompt',
-      delivery: 'queued',
-      state: 'accepted',
+      delivery: 'live',
+      state: 'delivered',
     })
 
     const availableRes = await jsonFetch(`/api/v1/work-items?state=available&sessionId=${session.id}`, authorization)
@@ -356,18 +354,7 @@ describe('[CF] /api/v1/leases', () => {
     const available = (await availableRes.json()) as {
       data: Array<{ sessionId: string; state: string; payload: Record<string, unknown> }>
     }
-    expect(available.data).toEqual([
-      expect.objectContaining({
-        sessionId: session.id,
-        state: 'available',
-        payload: expect.objectContaining({
-          type: 'session.start',
-          sessionId: session.id,
-          initialPrompt: 'Reviewer rejected this task; resume it.',
-          resume: true,
-        }),
-      }),
-    ])
+    expect(available.data).toEqual([])
   })
 
   it('rejects claims for inactive runners, missing work, and over-capacity runners', async () => {

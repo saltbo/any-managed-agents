@@ -664,6 +664,7 @@ export function createRuntimeOrchestrationRepo(db: Db): SessionOrchestrationStor
               and(eq(sessions.state, 'running'), isNotNull(sessions.sandboxId)),
               and(eq(sessions.state, 'pending'), isNull(sessions.stateReason)),
             ),
+            notLike(sessions.metadata, '%"sandboxBackend":"runner-sandbox"%'),
             lt(sessions.updatedAt, threshold),
           ),
         )
@@ -680,6 +681,7 @@ export function createRuntimeOrchestrationRepo(db: Db): SessionOrchestrationStor
           and(
             or(inArray(sessions.state, terminalStates as SessionStateColumn[]), isNotNull(sessions.archivedAt)),
             isNotNull(sessions.sandboxId),
+            notLike(sessions.metadata, '%"sandboxBackend":"runner-sandbox"%'),
             notLike(sessions.metadata, '%"sandboxDestroyedAt"%'),
           ),
         )

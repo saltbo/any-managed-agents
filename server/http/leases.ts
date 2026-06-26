@@ -11,6 +11,7 @@ import {
 } from '../openapi'
 import { claimLease } from '../usecases/leases'
 import { type LeaseRecord, RunnerConflictError, RunnerValidationError } from '../usecases/ports'
+import { dispatchInitialPrompt } from '../usecases/runtime/cloud-turn'
 import { runnerForbidden, runnerOperationAuthorized } from './runner-auth'
 
 type LeaseRoutes = OpenAPIHono<DepsEnv>
@@ -312,6 +313,7 @@ export function registerLeaseRoutes(routes: LeaseRoutes) {
           )
         }
       }
+      const rawPayload = await deps.workItems.rawPayload(auth.project.id, lease.workItemId)
       const updated = await deps.leases.finish(
         {
           organizationId: auth.organization.id,
@@ -328,6 +330,19 @@ export function registerLeaseRoutes(routes: LeaseRoutes) {
       )
       if (!updated) {
         return errorResponse(c, 409, 'conflict', 'Lease is no longer active')
+      }
+      if (
+        requestedState === 'completed' &&
+        rawPayload?.type === 'session.start' &&
+        rawPayload.runtime === 'ama' &&
+        typeof rawPayload.sessionId === 'string' &&
+        typeof rawPayload.initialPrompt === 'string' &&
+        rawPayload.initialPrompt
+      ) {
+        const session = await deps.sessionOrchestration.findSession(auth.project.id, rawPayload.sessionId)
+        if (session?.state === 'idle') {
+          await dispatchInitialPrompt(deps, auth, session, rawPayload.initialPrompt)
+        }
       }
       return c.json(serializeLease(updated), 200)
     })

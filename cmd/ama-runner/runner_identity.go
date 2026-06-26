@@ -208,8 +208,7 @@ func runtimeFallbackModels() map[string]string {
 func runnerCapabilities(availableRuntimes []string, modelsByRuntime map[string][]string) []string {
 	capabilities := []string{
 		"sandbox.exec",
-		"ama",
-		"runtime-provider-model:ama:workers-ai:@cf/moonshotai/kimi-k2.6",
+		"ama-sandbox",
 	}
 	fallbackModels := runtimeFallbackModels()
 	for _, runtimeName := range availableRuntimes {

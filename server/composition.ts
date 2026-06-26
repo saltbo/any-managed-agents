@@ -55,6 +55,11 @@ export function createDeps(env: Env): Deps {
     queryEvents: (sessionId, query) => sessions.queryEvents(sessionId, query),
     eventStream: (sessionId) => sessionOrchestration.sessionEventStream(sessionId),
   })
+  const runnerChannel = createRunnerChannel(env, (sessionId) => sessions.resolveRelayDoName(sessionId))
+  const sandboxRuntime = createSandboxRuntimeHost(env, {
+    runnerChannel,
+    resolveSandboxBackend: (sessionId) => sessions.resolveSandboxBackend(sessionId),
+  })
   return {
     agents: createAgentRepo(db),
     environments: createEnvironmentRepo(db),
@@ -82,8 +87,8 @@ export function createDeps(env: Env): Deps {
     leases: createLeaseRepo(db),
     runtimeSecretEnv: createRuntimeSecretEnvGateway(env, db),
     cloudTurnQueue: createCloudTurnQueue(env),
-    runnerChannel: createRunnerChannel(env, (sessionId) => sessions.resolveRelayDoName(sessionId)),
-    sandboxRuntime: createSandboxRuntimeHost(env),
+    runnerChannel,
+    sandboxRuntime,
     sessionOrchestration,
     sessions,
     sessionEventStore,

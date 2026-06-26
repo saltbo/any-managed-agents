@@ -1,11 +1,9 @@
 import { SELF } from 'cloudflare:test'
-import { runtimeProviderModelCapability } from '@server/domain/runtime-catalog'
+import { AMA_RUNNER_SANDBOX_CAPABILITY } from '@server/domain/runtime-catalog'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { seedPlatformProvider, setupOidcProvider, signIn } from './auth'
 
-// ama is a wildcard runtime, so its required runner capability normalizes the
-// provider segment to '*' regardless of the agent's vendor.
-const DEFAULT_AMA_RUNNER_CAPABILITY = runtimeProviderModelCapability('ama', '*', '@cf/moonshotai/kimi-k2.6')
+const DEFAULT_AMA_RUNNER_CAPABILITY = AMA_RUNNER_SANDBOX_CAPABILITY
 
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {

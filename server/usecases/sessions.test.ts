@@ -137,6 +137,7 @@ function fakeDeps(
     findApproval: async () => null,
     activeSessionLeaseForRunner: async () => null,
     resolveRelayDoName: async (sessionId) => sessionId,
+    resolveSandboxBackend: async () => null,
     ...overrides.sessions,
   }
   const runtime: Required<RuntimeSessionOverrides> = {

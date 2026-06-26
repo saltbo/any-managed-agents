@@ -1,4 +1,5 @@
 import {
+  AMA_RUNNER_SANDBOX_CAPABILITY,
   RUNTIME_PROVIDER_MODEL_CAPABILITY_PREFIX,
   transitionalRuntimeLevelRuntimes,
 } from '@server/domain/runtime-catalog'
@@ -134,6 +135,9 @@ export function runnerRuntimeReady(
   }
   const required = requiredRunnerCapability(payload)
   if (required === null) {
+    return true
+  }
+  if (required === AMA_RUNNER_SANDBOX_CAPABILITY) {
     return true
   }
   const readyRuntimes = [...new Set(inventory.filter((entry) => entry.state === 'ready').map((entry) => entry.runtime))]

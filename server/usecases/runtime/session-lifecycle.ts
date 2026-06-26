@@ -65,7 +65,7 @@ async function stopSessionRow(
   if (session.state === 'stopped') {
     return { ok: true, session }
   }
-  if (!session.sandboxId) {
+  if (sessionSandboxBackend(session) === 'runner-sandbox' || !session.sandboxId) {
     return await stopSelfHostedSession(deps, auth, session, requestId, reason)
   }
 
@@ -141,6 +141,7 @@ async function syncWritableMemoryStores(deps: LifecycleDeps, auth: AuthScope, se
     return
   }
   const snapshots = await deps.sandboxRuntime.readMemoryStoreMemories({
+    sessionId: session.id,
     sandboxId: session.sandboxId,
     resourceRefs: writableRefs,
   })
@@ -153,6 +154,11 @@ async function syncWritableMemoryStores(deps: LifecycleDeps, auth: AuthScope, se
       updatedAt,
     )
   }
+}
+
+function sessionSandboxBackend(session: SessionRow): string | null {
+  const metadata = session.metadata ? (JSON.parse(session.metadata) as Record<string, unknown>) : {}
+  return typeof metadata.sandboxBackend === 'string' ? metadata.sandboxBackend : null
 }
 
 // On terminal stop, snapshot a cloud (ama) session's Session DO event log to its
@@ -180,7 +186,11 @@ async function stopSelfHostedSession(
 ): Promise<StopSessionResult> {
   const store = deps.sessionOrchestration
   const stoppedAt = now()
-  await deps.runnerChannel.dispatch(session.id, { type: 'stop', reason })
+  if (sessionSandboxBackend(session) === 'runner-sandbox') {
+    await deps.runnerChannel.stopSandbox(session.id).catch(() => undefined)
+  } else {
+    await deps.runnerChannel.dispatch(session.id, { type: 'stop', reason })
+  }
   const activeWorkItems = await store.activeSessionWorkItems(auth.project.id, session.id)
 
   if (activeWorkItems.length) {
@@ -228,6 +238,7 @@ async function stopSelfHostedSession(
     event: { type: 'session_stop', reason },
     metadata: { source: 'control-plane', hostingMode: 'self_hosted' },
   })
+  await archiveTerminalSession(deps, auth, session.id)
 
   const stopped = await store.findSession(auth.project.id, session.id)
   if (!stopped) {
@@ -247,7 +258,7 @@ export async function archiveSession(
   if (!session) {
     return { ok: false, error: { status: 404, code: 'not_found', message: 'Session not found' } }
   }
-  if (session.sandboxId && session.state !== 'stopped') {
+  if ((session.sandboxId || sessionSandboxBackend(session) === 'runner-sandbox') && session.state !== 'stopped') {
     const stopped = await stopSessionRow(deps, auth, session, requestId)
     if (!stopped.ok) {
       return stopped

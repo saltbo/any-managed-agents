@@ -11,12 +11,14 @@ import {
   RuntimeTurnCancelledError,
 } from '../../../runtime-core/errors'
 import type { RuntimeToolPolicyDecision, RuntimeToolPolicyInput } from '../../../runtime-core/ports'
+import type { ToolExecutor } from '../../../runtime-core/ports'
 import { runTurn, runtimeMessagesFromEvents } from '../../../runtime-core/turn-engine'
 import { canonicalProvider } from '../../domain/runtime/provider'
 import type { Env } from '../../env'
 import type { RuntimeSecretEnvEntry } from '../gateways/runtime-secret-env'
 import { toolExecutor } from './sandbox-tool-executor'
 import { workersAiModelClient } from './workers-ai-model-client'
+import type { RunnerChannel } from '@server/usecases/ports'
 
 // Canonical home is runtime-core/ports; re-exported so existing importers keep
 // their import paths.
@@ -439,7 +441,11 @@ function runtimeModel(model: string) {
 // model, build the Cloudflare tool executor and model client, and map the
 // optional SessionTurnInput callbacks to the engine's ports (absent callbacks
 // become permissive defaults — no gating, no liveness check, never pause).
-export async function runSessionTurn(env: Env, input: SessionTurnInput): Promise<SessionTurnResult> {
+export async function runSessionTurn(
+  env: Env,
+  input: SessionTurnInput,
+  executor = toolExecutor(env),
+): Promise<SessionTurnResult> {
   const provider = piProviderName(input.provider)
   const modelId = resolveRuntimeModel(env, input.model)
   const model = runtimeModel(modelId)
@@ -458,7 +464,7 @@ export async function runSessionTurn(env: Env, input: SessionTurnInput): Promise
     toolResults: { resolve: input.resolveToolResult ?? (async () => null) },
     liveness: { ensureActive: input.ensureActive ?? (async () => {}) },
     ...(input.shouldPause ? { budget: { shouldPause: input.shouldPause } } : {}),
-    executor: toolExecutor(env),
+    executor,
     modelClient: workersAiModelClient(env),
   })
 }
@@ -466,25 +472,70 @@ export async function runSessionTurn(env: Env, input: SessionTurnInput): Promise
 // Binds the env-bound cloud sandbox host behind the SandboxRuntimeHost port.
 // The free functions above stay exported for the current runtime callers (via
 // the session-runtime shim); this factory is the Deps-wired surface.
-export function createSandboxRuntimeHost(env: Env): SandboxRuntimeHost {
+export function createSandboxRuntimeHost(
+  env: Env,
+  options: {
+    runnerChannel?: RunnerChannel
+    resolveSandboxBackend?: (sessionId: string) => Promise<string | null>
+  } = {},
+): SandboxRuntimeHost {
+  const cloudExecutor = toolExecutor(env)
+  const executorForSession = async (sessionId: string) => {
+    const backend = await options.resolveSandboxBackend?.(sessionId)
+    if (backend === 'runner-sandbox') {
+      if (!options.runnerChannel) {
+        throw new Error('Runner sandbox channel is not configured')
+      }
+      return { execute: (input) => options.runnerChannel!.executeSandboxTool(input) } satisfies ToolExecutor
+    }
+    return cloudExecutor
+  }
+
   return {
     startCloudSession(input) {
       return startSessionRuntime(env, input)
     },
-    readMemoryStoreMemories(input) {
+    async readMemoryStoreMemories(input) {
+      if ((await options.resolveSandboxBackend?.(input.sessionId)) === 'runner-sandbox') {
+        if (!options.runnerChannel) {
+          throw new Error('Runner sandbox channel is not configured')
+        }
+        return await options.runnerChannel.readMemoryStoreMemories({
+          sessionId: input.sessionId,
+          resourceRefs: input.resourceRefs,
+        })
+      }
       return readMemoryStoreMemories(env, input)
     },
     stopCloudSession(sandboxId) {
       return stopSessionRuntime(env, sandboxId)
     },
-    executeToolCalls(input) {
+    async executeToolCalls(input) {
+      if ((await options.resolveSandboxBackend?.(input.sessionId)) === 'runner-sandbox') {
+        const body = input.body as { toolCalls?: RuntimeToolCall[] }
+        const calls = runtimeToolCalls(body)
+        const results = []
+        for (const [index, call] of calls.entries()) {
+          results.push(
+            await (await executorForSession(input.sessionId)).execute({
+              sessionId: input.sessionId,
+              sandboxId: input.sandboxId,
+              toolCallId: typeof call.id === 'string' ? call.id : `tool_${index + 1}`,
+              toolName: typeof call.name === 'string' ? call.name : 'tool',
+              input: call.input ?? {},
+              cwd: '/workspace',
+            }),
+          )
+        }
+        return results
+      }
       return executeRuntimeToolCalls(env, input)
     },
-    executeTool(input) {
-      return toolExecutor(env).execute(input)
+    async executeTool(input) {
+      return await (await executorForSession(input.sessionId)).execute(input)
     },
-    runTurn(input) {
-      return runSessionTurn(env, input)
+    async runTurn(input) {
+      return await runSessionTurn(env, input, await executorForSession(input.sessionId))
     },
   }
 }

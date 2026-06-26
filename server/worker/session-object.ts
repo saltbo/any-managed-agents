@@ -49,6 +49,14 @@ export class SessionObject implements DurableObject {
       timer: ReturnType<typeof setTimeout>
     }
   >()
+  private readonly pendingSandboxRequests = new Map<
+    string,
+    {
+      resolve: (result: Record<string, unknown>) => void
+      reject: (error: Error) => void
+      timer: ReturnType<typeof setTimeout>
+    }
+  >()
   // The per-runner relay identity (runnerId + org/project; no single session — the
   // sessions this channel multiplexes ride per-frame). relayThreads threads the live
   // fan independently per sessionId so each session canonicalises as its own stream.
@@ -72,6 +80,9 @@ export class SessionObject implements DurableObject {
     }
     if (url.pathname === '/dispatch' && request.method === 'POST') {
       return this.dispatch(await request.json())
+    }
+    if (url.pathname === '/request' && request.method === 'POST') {
+      return this.requestRunnerSandbox(await request.json())
     }
     if (url.pathname === '/status') {
       return Response.json({ active: this.isActive() })
@@ -304,6 +315,7 @@ export class SessionObject implements DurableObject {
       this.socket.close(4000, 'Superseded runner channel')
     }
     this.rejectPendingBackfills('runner channel superseded')
+    this.rejectPendingSandboxRequests('runner channel superseded')
     const pair = new WebSocketPair()
     const [client, server] = Object.values(pair) as [WebSocket, WebSocket]
     server.accept()
@@ -331,6 +343,7 @@ export class SessionObject implements DurableObject {
     this.runnerScope = null
     this.relayThreads.clear()
     this.rejectPendingBackfills('runner channel closed')
+    this.rejectPendingSandboxRequests('runner channel closed')
   }
 
   private rejectPendingBackfills(reason: string): void {
@@ -339,6 +352,14 @@ export class SessionObject implements DurableObject {
       pending.reject(new Error(reason))
     }
     this.pendingBackfills.clear()
+  }
+
+  private rejectPendingSandboxRequests(reason: string): void {
+    for (const pending of this.pendingSandboxRequests.values()) {
+      clearTimeout(pending.timer)
+      pending.reject(new Error(reason))
+    }
+    this.pendingSandboxRequests.clear()
   }
 
   // The per-runner runner socket reader. Relay-only: no cloud append, no per-lease
@@ -360,6 +381,10 @@ export class SessionObject implements DurableObject {
     }
     if (frame.type === 'session.backfill_response') {
       this.resolveBackfill(frame)
+      return
+    }
+    if (frame.type === 'sandbox.response') {
+      this.resolveSandboxResponse(frame)
       return
     }
     if (frame.type !== 'runner.event') {
@@ -455,6 +480,82 @@ export class SessionObject implements DurableObject {
       }),
     )
     return Response.json({ active: true }, { status: 202 })
+  }
+
+  private async requestRunnerSandbox(body: {
+    sessionId?: string
+    request?: unknown
+    timeoutMs?: number
+  }): Promise<Response> {
+    if (
+      !this.socket ||
+      !this.runnerScope ||
+      this.socket.readyState !== WebSocket.OPEN ||
+      typeof body.sessionId !== 'string' ||
+      !body.request ||
+      typeof body.request !== 'object'
+    ) {
+      return Response.json({ ok: false, error: 'Runner sandbox channel is unavailable' }, { status: 409 })
+    }
+    try {
+      const result = await this.sendSandboxRequest(
+        body.sessionId,
+        body.request as Record<string, unknown>,
+        typeof body.timeoutMs === 'number' ? body.timeoutMs : 120_000,
+      )
+      return Response.json({ ok: true, result })
+    } catch (error) {
+      return Response.json(
+        { ok: false, error: error instanceof Error ? error.message : 'Runner sandbox request failed' },
+        { status: 502 },
+      )
+    }
+  }
+
+  private sendSandboxRequest(
+    sessionId: string,
+    request: Record<string, unknown>,
+    timeoutMs: number,
+  ): Promise<Record<string, unknown>> {
+    const requestId = `sandbox_${crypto.randomUUID()}`
+    return new Promise<Record<string, unknown>>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingSandboxRequests.delete(requestId)
+        reject(new Error('runner sandbox request timed out'))
+      }, Math.max(1, timeoutMs))
+      this.pendingSandboxRequests.set(requestId, { resolve, reject, timer })
+      this.socket?.send(
+        JSON.stringify({
+          type: 'sandbox.request',
+          requestId,
+          sessionId,
+          runnerId: this.runnerScope?.runnerId,
+          request,
+        }),
+      )
+    })
+  }
+
+  private resolveSandboxResponse(record: Record<string, unknown>): void {
+    const requestId = typeof record.requestId === 'string' ? record.requestId : null
+    if (!requestId) {
+      return
+    }
+    const pending = this.pendingSandboxRequests.get(requestId)
+    if (!pending) {
+      return
+    }
+    clearTimeout(pending.timer)
+    this.pendingSandboxRequests.delete(requestId)
+    if (record.ok === false) {
+      pending.reject(new Error(typeof record.error === 'string' ? record.error : 'runner sandbox request failed'))
+      return
+    }
+    pending.resolve(
+      record.result && typeof record.result === 'object' && !Array.isArray(record.result)
+        ? (record.result as Record<string, unknown>)
+        : {},
+    )
   }
 
   // "runner online ⇒ available": an open runner socket is the liveness signal, never

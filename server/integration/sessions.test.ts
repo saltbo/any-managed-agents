@@ -1,13 +1,11 @@
 import { SELF } from 'cloudflare:test'
 import { env } from 'cloudflare:workers'
-import { runtimeProviderModelCapability } from '@server/domain/runtime-catalog'
+import { AMA_RUNNER_SANDBOX_CAPABILITY, runtimeProviderModelCapability } from '@server/domain/runtime-catalog'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { runtimeErrorMessage } from '../http/sessions'
 import { defaultClaims, seedPlatformProvider, setupOidcProvider, signIn } from './auth'
 
-// ama is a wildcard runtime, so its required runner capability normalizes the
-// provider segment to '*' regardless of the agent's vendor.
-const DEFAULT_AMA_RUNNER_CAPABILITY = runtimeProviderModelCapability('ama', '*', '@cf/moonshotai/kimi-k2.6')
+const DEFAULT_AMA_RUNNER_CAPABILITY = AMA_RUNNER_SANDBOX_CAPABILITY
 
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
@@ -560,7 +558,7 @@ describe('[CF] /api/v1/sessions', () => {
     expect(emptyPatchRes.status).toBe(400)
   })
 
-  it('queues self-hosted sessions for runner lease support [spec: sessions/memory-store-resources]', async () => {
+  it('queues self-hosted sessions for runner lease support [spec: sessions/memory-store-resources] [spec: runtime/self-hosted-ama-cloud-loop]', async () => {
     const authorization = await signIn()
     const credential = await connectMcp(authorization, 'github')
     const environment = await createEnvironment(authorization, {
@@ -641,18 +639,22 @@ describe('[CF] /api/v1/sessions', () => {
       metadata: {
         hostingMode: 'self_hosted',
         runtime: 'ama',
-        runtimeDriver: 'ama-self-hosted',
+        runtimeDriver: 'ama-cloud',
+        runtimeBackend: 'ama-cloud',
+        runtimeProtocol: 'ama-runtime-rpc',
+        sandboxBackend: 'runner-sandbox',
         runnerState: 'queued',
         runnerProtocol: 'ama-runner-work',
+        runnerRole: 'sandbox-executor',
       },
       runtimeMetadata: {
         hostingMode: 'self_hosted',
         runtime: 'ama',
         provider: 'workers-ai',
         model: null,
-        driver: 'ama-self-hosted',
-        backend: null,
-        protocol: 'ama-runner-work',
+        driver: 'ama-cloud',
+        backend: 'ama-cloud',
+        protocol: 'ama-runtime-rpc',
       },
     })
 
