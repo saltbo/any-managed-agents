@@ -746,6 +746,56 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
     expect(runtimeSessions.createSession).not.toHaveBeenCalled()
   })
 
+  it('queues a message when reusing a pending HTTP trigger session with the same key', async () => {
+    let markedSessionId: string | null = null
+    let inserted: Parameters<Deps['sessions']['insertMessage']>[0] | null = null
+    const deps = fakeDeps({
+      triggerDispatch: {
+        markRunSessionCreated: async (_trigger, _run, sessionId) => {
+          markedSessionId = sessionId
+        },
+      },
+      sessions: {
+        findActiveHttpTriggerSession: async (_projectId, _triggerId, key) =>
+          key === 'github:owner/repo:issue:123'
+            ? {
+                id: 'sess_pending',
+                projectId: 'project_1',
+                organizationId: 'org_1',
+                state: 'pending',
+                archivedAt: null,
+                sandboxId: null,
+                metadata: { source: 'http-trigger', httpTriggerId: 'http_trigger_1', key },
+              }
+            : null,
+        insertMessage: async (record) => {
+          inserted = record
+          return sessionMessageRecord({ sessionId: record.sessionId, content: record.content })
+        },
+      },
+    })
+
+    const result = await dispatchHttpTrigger(deps, auth, {
+      trigger: httpTrigger({ id: 'http_trigger_1' }),
+      context: {
+        body: { key: 'github:owner/repo:issue:123', ticket: { id: 'T-123' } },
+        query: { source: 'portal' },
+        headers: {},
+      },
+    })
+
+    expect(result).toMatchObject({ state: 'session_created', sessionId: 'sess_pending' })
+    expect(markedSessionId).toBe('sess_pending')
+    expect(inserted).toMatchObject({
+      sessionId: 'sess_pending',
+      content: 'Handle T-123 from portal',
+      delivery: 'queued',
+      state: 'accepted',
+    })
+    expect(runtimeSessions.dispatchPrompt).not.toHaveBeenCalled()
+    expect(runtimeSessions.createSession).not.toHaveBeenCalled()
+  })
+
   it('fails the HTTP run when sending to a reused keyed session fails', async () => {
     let markedMessage: string | null = null
     let auditOutcome: string | null = null

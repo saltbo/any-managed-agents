@@ -290,7 +290,21 @@ export async function dispatchHttpTrigger(
     : null
 
   if (existingSession) {
-    const outcome = await sendSessionMessage(deps, auth, existingSession, renderedPrompt)
+    const outcome =
+      existingSession.state === 'pending'
+        ? {
+            ok: true as const,
+            message: await deps.sessions.insertMessage({
+              organizationId: auth.organization.id,
+              projectId: auth.project.id,
+              sessionId: existingSession.id,
+              content: renderedPrompt,
+              delivery: 'queued',
+              state: 'accepted',
+              createdAt: new Date().toISOString(),
+            }),
+          }
+        : await sendSessionMessage(deps, auth, existingSession, renderedPrompt)
     if (!outcome.ok) {
       const message = outcome.message
       await deps.triggerDispatch.markRunFailed(trigger, run, message)
