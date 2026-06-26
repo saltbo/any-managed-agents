@@ -715,6 +715,7 @@ export interface ListOptions {
 
 export interface SessionListOptions extends ListOptions {
   state?: string
+  labelSelector?: string
 }
 
 export interface TriggerListOptions extends ListOptions {

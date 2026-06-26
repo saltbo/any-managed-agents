@@ -4400,13 +4400,14 @@ type ListRunnersParamsState string
 // ListSessionsParams defines parameters for ListSessions.
 type ListSessionsParams struct {
 	// Archived Filter by lifecycle. Defaults to false (live resources only).
-	Archived    *ListSessionsParamsArchived `form:"archived,omitempty" json:"archived,omitempty"`
-	Search      *string                     `form:"search,omitempty" json:"search,omitempty"`
-	CreatedFrom *time.Time                  `form:"createdFrom,omitempty" json:"createdFrom,omitempty"`
-	CreatedTo   *time.Time                  `form:"createdTo,omitempty" json:"createdTo,omitempty"`
-	Limit       *int                        `form:"limit,omitempty" json:"limit,omitempty"`
-	Cursor      *string                     `form:"cursor,omitempty" json:"cursor,omitempty"`
-	State       *ListSessionsParamsState    `form:"state,omitempty" json:"state,omitempty"`
+	Archived      *ListSessionsParamsArchived `form:"archived,omitempty" json:"archived,omitempty"`
+	Search        *string                     `form:"search,omitempty" json:"search,omitempty"`
+	CreatedFrom   *time.Time                  `form:"createdFrom,omitempty" json:"createdFrom,omitempty"`
+	CreatedTo     *time.Time                  `form:"createdTo,omitempty" json:"createdTo,omitempty"`
+	Limit         *int                        `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor        *string                     `form:"cursor,omitempty" json:"cursor,omitempty"`
+	State         *ListSessionsParamsState    `form:"state,omitempty" json:"state,omitempty"`
+	LabelSelector *string                     `form:"labelSelector,omitempty" json:"labelSelector,omitempty"`
 }
 
 // ListSessionsParamsArchived defines parameters for ListSessions.
@@ -11769,6 +11770,18 @@ func NewListSessionsRequest(server string, params *ListSessionsParams) (*http.Re
 		if params.State != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "state", *params.State, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.LabelSelector != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "labelSelector", *params.LabelSelector, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {

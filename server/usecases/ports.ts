@@ -2395,6 +2395,7 @@ export interface SessionListQuery {
   archived: boolean
   state?: string
   search?: string
+  labelSelector?: string
   createdFrom?: string
   createdTo?: string
   limit: number

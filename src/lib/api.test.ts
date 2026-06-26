@@ -108,6 +108,22 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
     expect(headerValue(headers, 'x-ama-client')).toBe('web-rpc')
   })
 
+  it('serializes session label selectors', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
+      return new Response(JSON.stringify({ data: [], pagination: { limit: 50, nextCursor: null, hasMore: false } }), {
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await api.listSessions({ labelSelector: 'maintainerId=maint_123' })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/sessions?labelSelector=maintainerId%3Dmaint_123',
+      expect.objectContaining({ method: 'GET' }),
+    )
+  })
+
   // ---------------------------------------------------------------------------
   // ApiError
   // ---------------------------------------------------------------------------

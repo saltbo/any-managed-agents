@@ -90,10 +90,10 @@ Feature: Sessions
     And events and immutable snapshots remain readable
 
   @sessions/list @api
-  Scenario: List sessions with pagination, state, search, and date filters
+  Scenario: List sessions with pagination, state, search, label selector, and date filters
     Given a project has sessions
-    When the user lists sessions with a page size, state, search term, and date range
-    Then the response paginates with cursors and applies state, search, and date filters
+    When the user lists sessions with a page size, state, search term, metadata label selector, and date range
+    Then the response paginates with cursors and applies state, search, metadata label selector, and date filters
     And results are scoped to the signed-in project
 
   @sessions/auth-tenancy @api

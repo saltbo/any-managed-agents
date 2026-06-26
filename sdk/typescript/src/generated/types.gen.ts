@@ -4433,6 +4433,7 @@ export type ListSessionsData = {
         limit?: number;
         cursor?: string;
         state?: 'pending' | 'running' | 'idle' | 'stopped' | 'error';
+        labelSelector?: string;
     };
     url: '/api/v1/sessions';
 };

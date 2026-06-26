@@ -1428,6 +1428,41 @@ describe('[CF] /api/v1/sessions', () => {
     expect(dateList.data.map((session) => session.id)).toEqual(expect.arrayContaining([first.id, second.id]))
   })
 
+  it('filters sessions by metadata label selector [spec: sessions/list]', async () => {
+    const authorization = await signIn()
+    await connectMcp(authorization, 'github')
+    const environment = await createEnvironment(authorization)
+    const agent = await createAgent(authorization)
+
+    const firstRes = await jsonFetch('/api/v1/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtime: 'ama',
+        metadata: { labels: { maintainerId: 'maintainer_a' } },
+      }),
+    })
+    const first = (await firstRes.json()) as { id: string }
+    const secondRes = await jsonFetch('/api/v1/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtime: 'ama',
+        metadata: { labels: { maintainerId: 'maintainer_b' } },
+      }),
+    })
+    const second = (await secondRes.json()) as { id: string }
+
+    const filteredRes = await jsonFetch('/api/v1/sessions?labelSelector=maintainerId%3Dmaintainer_a', authorization)
+    expect(filteredRes.status).toBe(200)
+    const filtered = (await filteredRes.json()) as { data: Array<{ id: string; metadata: Record<string, unknown> }> }
+    expect(filtered.data.map((session) => session.id)).toContain(first.id)
+    expect(filtered.data.map((session) => session.id)).not.toContain(second.id)
+    expect(filtered.data[0]?.metadata).toMatchObject({ labels: { maintainerId: 'maintainer_a' } })
+  })
+
   it('enforces auth and project tenancy for session lifecycle [spec: sessions/auth-tenancy]', async () => {
     const unauthenticatedRes = await SELF.fetch('https://example.com/api/v1/sessions')
     expect(unauthenticatedRes.status).toBe(401)

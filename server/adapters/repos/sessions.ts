@@ -222,6 +222,27 @@ function eventTypeFilter(type: string | undefined) {
   return type ? eq(sessionEvents.type, type) : undefined
 }
 
+function parseLabelSelector(selector: string | undefined) {
+  if (!selector) return []
+  return selector
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const separator = part.indexOf('=')
+      if (separator === -1) return { key: part, value: null }
+      return { key: part.slice(0, separator).trim(), value: part.slice(separator + 1).trim() }
+    })
+}
+
+function labelSelectorFilters(selector: string | undefined) {
+  return parseLabelSelector(selector).map(({ key, value }) => {
+    const path = `$.labels."${key.replaceAll('"', '\\"')}"`
+    const label = sql<string>`json_extract(${sessions.metadata}, ${path})`
+    return value === null ? sql`${label} is not null` : eq(label, value)
+  })
+}
+
 function eventSequenceFilter(cursor: number, order: EventOrder) {
   return order === 'asc' ? gt(sessionEvents.sequence, cursor) : lt(sessionEvents.sequence, cursor)
 }
@@ -256,6 +277,7 @@ export function createSessionRepo(db: Db): SessionRepo {
         query.archived ? isNotNull(sessions.archivedAt) : isNull(sessions.archivedAt),
         query.state ? eq(sessions.state, query.state as SessionRow['state']) : undefined,
         query.search ? like(sessions.agentId, `%${query.search}%`) : undefined,
+        ...labelSelectorFilters(query.labelSelector),
         query.createdFrom ? gte(sessions.createdAt, query.createdFrom) : undefined,
         query.createdTo ? lte(sessions.createdAt, query.createdTo) : undefined,
         query.cursor

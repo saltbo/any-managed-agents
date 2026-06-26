@@ -27,6 +27,7 @@ def _get_kwargs(
     limit: int | Unset = UNSET,
     cursor: str | Unset = UNSET,
     state: ListSessionsState | Unset = UNSET,
+    label_selector: str | Unset = UNSET,
 
 ) -> dict[str, Any]:
     
@@ -62,6 +63,8 @@ def _get_kwargs(
         json_state = state.value
 
     params["state"] = json_state
+
+    params["labelSelector"] = label_selector
 
 
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
@@ -125,6 +128,7 @@ def sync_detailed(
     limit: int | Unset = UNSET,
     cursor: str | Unset = UNSET,
     state: ListSessionsState | Unset = UNSET,
+    label_selector: str | Unset = UNSET,
 
 ) -> Response[ErrorResponse | SessionListResponse]:
     """ List sessions
@@ -139,6 +143,7 @@ def sync_detailed(
         cursor (str | Unset):  Example:
             eyJjcmVhdGVkQXQiOiIyMDI2LTA1LTIyVDAwOjAwOjAwLjAwMFoiLCJpZCI6ImFnZW50X2FiYzEyMyJ9.
         state (ListSessionsState | Unset):  Example: idle.
+        label_selector (str | Unset):  Example: maintainerId=maint_abc123.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -157,6 +162,7 @@ created_to=created_to,
 limit=limit,
 cursor=cursor,
 state=state,
+label_selector=label_selector,
 
     )
 
@@ -176,6 +182,7 @@ def sync(
     limit: int | Unset = UNSET,
     cursor: str | Unset = UNSET,
     state: ListSessionsState | Unset = UNSET,
+    label_selector: str | Unset = UNSET,
 
 ) -> ErrorResponse | SessionListResponse | None:
     """ List sessions
@@ -190,6 +197,7 @@ def sync(
         cursor (str | Unset):  Example:
             eyJjcmVhdGVkQXQiOiIyMDI2LTA1LTIyVDAwOjAwOjAwLjAwMFoiLCJpZCI6ImFnZW50X2FiYzEyMyJ9.
         state (ListSessionsState | Unset):  Example: idle.
+        label_selector (str | Unset):  Example: maintainerId=maint_abc123.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -209,6 +217,7 @@ created_to=created_to,
 limit=limit,
 cursor=cursor,
 state=state,
+label_selector=label_selector,
 
     ).parsed
 
@@ -222,6 +231,7 @@ async def asyncio_detailed(
     limit: int | Unset = UNSET,
     cursor: str | Unset = UNSET,
     state: ListSessionsState | Unset = UNSET,
+    label_selector: str | Unset = UNSET,
 
 ) -> Response[ErrorResponse | SessionListResponse]:
     """ List sessions
@@ -236,6 +246,7 @@ async def asyncio_detailed(
         cursor (str | Unset):  Example:
             eyJjcmVhdGVkQXQiOiIyMDI2LTA1LTIyVDAwOjAwOjAwLjAwMFoiLCJpZCI6ImFnZW50X2FiYzEyMyJ9.
         state (ListSessionsState | Unset):  Example: idle.
+        label_selector (str | Unset):  Example: maintainerId=maint_abc123.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -254,6 +265,7 @@ created_to=created_to,
 limit=limit,
 cursor=cursor,
 state=state,
+label_selector=label_selector,
 
     )
 
@@ -273,6 +285,7 @@ async def asyncio(
     limit: int | Unset = UNSET,
     cursor: str | Unset = UNSET,
     state: ListSessionsState | Unset = UNSET,
+    label_selector: str | Unset = UNSET,
 
 ) -> ErrorResponse | SessionListResponse | None:
     """ List sessions
@@ -287,6 +300,7 @@ async def asyncio(
         cursor (str | Unset):  Example:
             eyJjcmVhdGVkQXQiOiIyMDI2LTA1LTIyVDAwOjAwOjAwLjAwMFoiLCJpZCI6ImFnZW50X2FiYzEyMyJ9.
         state (ListSessionsState | Unset):  Example: idle.
+        label_selector (str | Unset):  Example: maintainerId=maint_abc123.
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -306,5 +320,6 @@ created_to=created_to,
 limit=limit,
 cursor=cursor,
 state=state,
+label_selector=label_selector,
 
     )).parsed

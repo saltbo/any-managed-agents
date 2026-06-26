@@ -389,6 +389,12 @@ const ListQuerySchema = listQuerySchema().extend({
     .enum(SESSION_STATES)
     .optional()
     .openapi({ param: { name: 'state', in: 'query' }, example: 'idle' }),
+  labelSelector: z
+    .string()
+    .min(1)
+    .max(500)
+    .optional()
+    .openapi({ param: { name: 'labelSelector', in: 'query' }, example: 'maintainerId=maint_abc123' }),
 })
 const MessageListQuerySchema = z.object({
   limit: z.coerce
@@ -984,7 +990,16 @@ export function registerSessionRoutes(routes: SessionRoutes) {
         return auth
       }
       await markRuntimeExpiredPending(deps, auth)
-      const { archived, state, search, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
+      const {
+        archived,
+        state,
+        search,
+        labelSelector,
+        createdFrom,
+        createdTo,
+        limit = 50,
+        cursor,
+      } = c.req.valid('query')
       let parsedCursor: ReturnType<typeof parseListCursor> | null = null
       try {
         parsedCursor = cursor ? parseListCursor(cursor) : null
@@ -998,6 +1013,7 @@ export function registerSessionRoutes(routes: SessionRoutes) {
         archived: archived === 'true',
         ...(state ? { state } : {}),
         ...(search ? { search } : {}),
+        ...(labelSelector ? { labelSelector } : {}),
         ...(createdFrom ? { createdFrom } : {}),
         ...(createdTo ? { createdTo } : {}),
         limit,
