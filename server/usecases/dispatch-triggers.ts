@@ -285,7 +285,9 @@ export async function dispatchHttpTrigger(
     correlationId: run.correlationId,
   }
   const key = httpTriggerSessionKey(input.context.body)
-  const existingSession = key ? await deps.sessions.findActiveHttpTriggerSession(auth.project.id, trigger.id, key) : null
+  const existingSession = key
+    ? await deps.sessions.findActiveHttpTriggerSession(auth.project.id, trigger.id, key)
+    : null
 
   if (existingSession) {
     const outcome = await sendSessionMessage(deps, auth, existingSession, renderedPrompt)
