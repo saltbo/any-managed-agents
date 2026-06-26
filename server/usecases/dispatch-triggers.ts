@@ -350,7 +350,7 @@ export async function dispatchHttpTrigger(
     }
   }
 
-  await deps.triggerDispatch.markRunSessionCreated(trigger, run, result.value.id, sessionMetadata)
+  await deps.triggerDispatch.markRunSessionCreated(trigger, run, result.value.id, key ? { ...sessionMetadata, key } : sessionMetadata)
   await recordHttpDispatch(deps, auth, trigger, run, { ok: true, sessionId: result.value.id })
   return {
     runId: run.id,

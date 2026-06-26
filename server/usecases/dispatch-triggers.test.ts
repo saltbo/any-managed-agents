@@ -827,6 +827,32 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
     expect(capturedOptions).toMatchObject({ env: trigger.env, secretEnv })
   })
 
+  it('records the HTTP session key on newly created trigger run metadata', async () => {
+    let markedMetadata: Record<string, unknown> | null = null
+    const deps = fakeDeps({
+      triggerDispatch: {
+        markRunSessionCreated: async (_trigger, _run, _sessionId, metadata) => {
+          markedMetadata = metadata
+        },
+      },
+    })
+
+    await dispatchHttpTrigger(deps, auth, {
+      trigger: httpTrigger({ id: 'http_trigger_1' }),
+      context: {
+        body: { key: 'github:owner/repo:issue:123', ticket: { id: 'T-123' } },
+        query: { source: 'portal' },
+        headers: {},
+      },
+    })
+
+    expect(markedMetadata).toMatchObject({
+      source: 'http-trigger',
+      httpTriggerId: 'http_trigger_1',
+      key: 'github:owner/repo:issue:123',
+    })
+  })
+
   it('rejects a missing template variable before claiming a run', async () => {
     let claimed = false
     const deps = fakeDeps({

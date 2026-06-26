@@ -314,7 +314,7 @@ export function createSessionRepo(db: Db): SessionRepo {
           and(
             eq(sessions.projectId, projectId),
             isNull(sessions.archivedAt),
-            inArray(sessions.state, ['idle', 'running']),
+            inArray(sessions.state, ['pending', 'idle', 'running']),
             eq(sql<string>`json_extract(${sessions.metadata}, '$.source')`, 'http-trigger'),
             eq(sql<string>`json_extract(${sessions.metadata}, '$.httpTriggerId')`, triggerId),
             eq(sql<string>`json_extract(${sessions.metadata}, '$.key')`, key),
