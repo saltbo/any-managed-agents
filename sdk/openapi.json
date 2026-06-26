@@ -5569,10 +5569,10 @@
             "type": "string",
             "enum": [
               "claimed",
-              "session_created",
+              "dispatched",
               "failed"
             ],
-            "example": "session_created"
+            "example": "dispatched"
           },
           "idempotencyKey": {
             "type": "string",
@@ -12952,10 +12952,10 @@
               "type": "string",
               "enum": [
                 "claimed",
-                "session_created",
+                "dispatched",
                 "failed"
               ],
-              "example": "session_created"
+              "example": "dispatched"
             },
             "required": false,
             "name": "state",

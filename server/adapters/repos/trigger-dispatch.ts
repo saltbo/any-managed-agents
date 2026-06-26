@@ -178,12 +178,12 @@ export function createTriggerDispatchRepo(db: Db): TriggerDispatchRepo {
       await advanceRunTrigger(db, trigger, run, timestamp)
     },
 
-    async markRunSessionCreated(trigger, run, sessionId, sessionMetadata): Promise<void> {
+    async markRunDispatched(trigger, run, sessionId, sessionMetadata): Promise<void> {
       const timestamp = new Date().toISOString()
       await db
         .update(triggerRuns)
         .set({
-          state: 'session_created',
+          state: 'dispatched',
           sessionId,
           metadata: JSON.stringify({ sessionMetadata }),
           updatedAt: timestamp,

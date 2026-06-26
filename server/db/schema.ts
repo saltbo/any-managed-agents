@@ -652,7 +652,7 @@ export const triggerRuns = sqliteTable(
     heartbeatAt: text('heartbeat_at'),
     triggeredAt: text('triggered_at').notNull(),
     // Mirrors RUN_STATES (server/http/triggers.ts).
-    state: text('state', { enum: ['claimed', 'session_created', 'failed'] }).notNull(),
+    state: text('state', { enum: ['claimed', 'dispatched', 'failed'] }).notNull(),
     idempotencyKey: text('idempotency_key').notNull(),
     sessionId: text('session_id').references(() => sessions.id),
     correlationId: text('correlation_id').notNull(),
@@ -666,7 +666,7 @@ export const triggerRuns = sqliteTable(
     uniqueIndex('idx_trigger_runs_idempotency_key').on(table.idempotencyKey),
     index('idx_trigger_runs_trigger_created').on(table.triggerId, table.createdAt, table.id),
     index('idx_trigger_runs_project_created').on(table.projectId, table.createdAt, table.id),
-    check('ck_trigger_runs_state', sql`${table.state} in ('claimed','session_created','failed')`),
+    check('ck_trigger_runs_state', sql`${table.state} in ('claimed','dispatched','failed')`),
   ],
 )
 

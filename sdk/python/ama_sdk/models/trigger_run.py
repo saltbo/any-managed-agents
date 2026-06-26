@@ -33,7 +33,7 @@ class TriggerRun:
             scheduled_for (datetime.datetime | None):  Example: 2026-05-26T12:00:00.000Z.
             heartbeat_at (datetime.datetime | None):  Example: 2026-05-26T12:01:00.000Z.
             triggered_at (datetime.datetime):  Example: 2026-05-26T12:01:00.000Z.
-            state (TriggerRunState):  Example: session_created.
+            state (TriggerRunState):  Example: dispatched.
             idempotency_key (str):  Example: trigger_abc123:2026-05-26T12:00:00.000Z.
             session_id (None | str):  Example: session_abc123.
             correlation_id (str):  Example: schedule:trigger_abc123:2026-05-26T12:00:00.000Z.

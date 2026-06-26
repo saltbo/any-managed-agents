@@ -1370,7 +1370,7 @@ export interface TriggerRunRecord {
   scheduledFor: string | null
   heartbeatAt: string | null
   triggeredAt: string
-  state: 'claimed' | 'session_created' | 'failed'
+  state: 'claimed' | 'dispatched' | 'failed'
   idempotencyKey: string
   sessionId: string | null
   correlationId: string
@@ -1394,7 +1394,7 @@ export interface TriggerListQuery {
 export interface TriggerRunListQuery {
   projectId: string
   triggerId: string
-  state?: 'claimed' | 'session_created' | 'failed'
+  state?: 'claimed' | 'dispatched' | 'failed'
   search?: string
   createdFrom?: string
   createdTo?: string
@@ -1479,7 +1479,7 @@ export interface TriggerDispatchRepo {
   claimHttpRun(trigger: TriggerRecord, triggeredAt: string, idempotencyKey: string | null): Promise<ClaimedRun | null>
   projectName(projectId: string): Promise<string | null>
   markRunFailed(trigger: DueTrigger | TriggerRecord, run: ClaimedRun, message: string): Promise<void>
-  markRunSessionCreated(
+  markRunDispatched(
     trigger: DueTrigger | TriggerRecord,
     run: ClaimedRun,
     sessionId: string,

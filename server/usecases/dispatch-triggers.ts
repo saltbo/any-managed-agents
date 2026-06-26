@@ -19,7 +19,7 @@ import { sendSessionMessage } from './sessions'
 export interface ScheduleDispatchResult {
   heartbeatAt: string
   claimed: number
-  sessionCreated: number
+  dispatched: number
   failed: number
   skipped: number
   runs: Array<{
@@ -167,9 +167,9 @@ async function dispatchTrigger(deps: Deps, trigger: DueTrigger, heartbeatAt: str
     }
 
     const session = result.value
-    await deps.triggerDispatch.markRunSessionCreated(trigger, run, session.id, sessionMetadata)
+    await deps.triggerDispatch.markRunDispatched(trigger, run, session.id, sessionMetadata)
     await recordDispatch(deps, auth, trigger, run, { ok: true, sessionId: session.id })
-    return runResult(run, trigger.id, 'session_created', session.id, null)
+    return runResult(run, trigger.id, 'dispatched', session.id, null)
   } catch (error) {
     const message = safeMessage(error)
     await failRun(deps, auth, trigger, run, message)
@@ -195,7 +195,7 @@ export async function dispatchDueScheduledTriggers(
   const result: ScheduleDispatchResult = {
     heartbeatAt,
     claimed: 0,
-    sessionCreated: 0,
+    dispatched: 0,
     failed: 0,
     skipped: 0,
     runs: [],
@@ -209,8 +209,8 @@ export async function dispatchDueScheduledTriggers(
         continue
       }
       result.claimed += 1
-      if (run.status === 'session_created') {
-        result.sessionCreated += 1
+      if (run.status === 'dispatched') {
+        result.dispatched += 1
       } else {
         result.failed += 1
       }
@@ -245,7 +245,7 @@ export async function dispatchHttpTrigger(
   runId: string
   triggerId: string
   triggeredAt: string
-  state: 'session_created' | 'failed'
+  state: 'dispatched' | 'failed'
   sessionId: string | null
   errorMessage: string | null
 }> {
@@ -319,7 +319,7 @@ export async function dispatchHttpTrigger(
       }
     }
 
-    await deps.triggerDispatch.markRunSessionCreated(trigger, run, existingSession.id, {
+    await deps.triggerDispatch.markRunDispatched(trigger, run, existingSession.id, {
       ...sessionMetadata,
       key,
       reusedSession: true,
@@ -329,7 +329,7 @@ export async function dispatchHttpTrigger(
       runId: run.id,
       triggerId: trigger.id,
       triggeredAt,
-      state: 'session_created',
+      state: 'dispatched',
       sessionId: existingSession.id,
       errorMessage: null,
     }
@@ -364,13 +364,13 @@ export async function dispatchHttpTrigger(
     }
   }
 
-  await deps.triggerDispatch.markRunSessionCreated(trigger, run, result.value.id, key ? { ...sessionMetadata, key } : sessionMetadata)
+  await deps.triggerDispatch.markRunDispatched(trigger, run, result.value.id, key ? { ...sessionMetadata, key } : sessionMetadata)
   await recordHttpDispatch(deps, auth, trigger, run, { ok: true, sessionId: result.value.id })
   return {
     runId: run.id,
     triggerId: trigger.id,
     triggeredAt,
-    state: 'session_created',
+    state: 'dispatched',
     sessionId: result.value.id,
     errorMessage: null,
   }

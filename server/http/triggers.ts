@@ -25,7 +25,7 @@ import { requestId } from './request-context'
 
 type TriggerRoutes = OpenAPIHono<DepsEnv>
 
-const RUN_STATES = ['claimed', 'session_created', 'failed'] as const
+const RUN_STATES = ['claimed', 'dispatched', 'failed'] as const
 const TRIGGER_TYPES = ['scheduled', 'http'] as const
 const JsonObjectSchema = z.record(z.string(), z.unknown())
 const EnvSchema = z.record(z.string(), z.string())
@@ -75,7 +75,7 @@ const TriggerRunSchema = z
     scheduledFor: z.string().datetime().nullable().openapi({ example: '2026-05-26T12:00:00.000Z' }),
     heartbeatAt: z.string().datetime().nullable().openapi({ example: '2026-05-26T12:01:00.000Z' }),
     triggeredAt: z.string().datetime().openapi({ example: '2026-05-26T12:01:00.000Z' }),
-    state: z.enum(RUN_STATES).openapi({ example: 'session_created' }),
+    state: z.enum(RUN_STATES).openapi({ example: 'dispatched' }),
     idempotencyKey: z.string().openapi({ example: 'trigger_abc123:2026-05-26T12:00:00.000Z' }),
     sessionId: z.string().nullable().openapi({ example: 'session_abc123' }),
     correlationId: z.string().openapi({ example: 'schedule:trigger_abc123:2026-05-26T12:00:00.000Z' }),
@@ -185,7 +185,7 @@ const runStateQuery = z
   .optional()
   .openapi({
     param: { name: 'state', in: 'query' },
-    example: 'session_created',
+    example: 'dispatched',
   })
 
 const ListQuerySchema = listQuerySchema().extend({ enabled: enabledQuery })

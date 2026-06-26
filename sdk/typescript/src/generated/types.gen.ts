@@ -1290,7 +1290,7 @@ export type TriggerRun = {
     scheduledFor: string | null;
     heartbeatAt: string | null;
     triggeredAt: string;
-    state: 'claimed' | 'session_created' | 'failed';
+    state: 'claimed' | 'dispatched' | 'failed';
     idempotencyKey: string;
     sessionId: string | null;
     correlationId: string;
@@ -4317,7 +4317,7 @@ export type ListTriggerRunsData = {
         createdTo?: string;
         limit?: number;
         cursor?: string;
-        state?: 'claimed' | 'session_created' | 'failed';
+        state?: 'claimed' | 'dispatched' | 'failed';
     };
     url: '/api/v1/triggers/{triggerId}/runs';
 };

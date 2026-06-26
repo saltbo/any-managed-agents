@@ -408,13 +408,13 @@ describe('[CF] /api/v1/triggers', () => {
     expect(dispatchRes.status).toBe(200)
     const dispatch = (await dispatchRes.json()) as {
       claimed: number
-      sessionCreated: number
+      dispatched: number
       skipped: number
       runs: Array<{ runId: string; sessionId: string; scheduledFor: string }>
     }
     expect(dispatch).toMatchObject({
       claimed: 1,
-      sessionCreated: 1,
+      dispatched: 1,
       skipped: 0,
     })
     const sessionId = dispatch.runs[0]?.sessionId
@@ -427,7 +427,7 @@ describe('[CF] /api/v1/triggers', () => {
     expect(duplicateDispatchRes.status).toBe(200)
     await expect(duplicateDispatchRes.json()).resolves.toMatchObject({
       claimed: 0,
-      sessionCreated: 0,
+      dispatched: 0,
       runs: [],
     })
 
@@ -447,7 +447,7 @@ describe('[CF] /api/v1/triggers', () => {
     expect(runs.data).toHaveLength(1)
     expect(runs.data[0]).toMatchObject({
       sessionId,
-      state: 'session_created',
+      state: 'dispatched',
       scheduledFor: dueAt,
       triggeredAt: heartbeatAt,
       correlationId: `schedule:${trigger.id}:${dueAt}`,
@@ -461,19 +461,19 @@ describe('[CF] /api/v1/triggers', () => {
       id: runs.data[0].id,
       triggerId: trigger.id,
       sessionId,
-      state: 'session_created',
+      state: 'dispatched',
     })
 
     const missingRunRes = await jsonFetch(`/api/v1/triggers/${trigger.id}/runs/trigrun_missing`, authorization)
     expect(missingRunRes.status).toBe(404)
 
     const filteredRunsRes = await jsonFetch(
-      `/api/v1/triggers/${trigger.id}/runs?state=session_created&search=${encodeURIComponent(trigger.id)}&limit=1`,
+      `/api/v1/triggers/${trigger.id}/runs?state=dispatched&search=${encodeURIComponent(trigger.id)}&limit=1`,
       authorization,
     )
     expect(filteredRunsRes.status).toBe(200)
     await expect(filteredRunsRes.json()).resolves.toMatchObject({
-      data: [expect.objectContaining({ sessionId, state: 'session_created' })],
+      data: [expect.objectContaining({ sessionId, state: 'dispatched' })],
       pagination: expect.objectContaining({ hasMore: false }),
     })
 
@@ -518,7 +518,7 @@ describe('[CF] /api/v1/triggers', () => {
     }
     expect(run).toMatchObject({
       triggerId: trigger.id,
-      state: 'session_created',
+      state: 'dispatched',
       scheduledFor: null,
       heartbeatAt: null,
       idempotencyKey: `http:${trigger.id}:ticket-123`,
@@ -613,7 +613,7 @@ describe('[CF] /api/v1/triggers', () => {
       body: JSON.stringify({ heartbeatAt: '2026-05-26T12:01:00.000Z' }),
     })
     expect(dispatchRes.status).toBe(200)
-    await expect(dispatchRes.json()).resolves.toMatchObject({ claimed: 0, sessionCreated: 0 })
+    await expect(dispatchRes.json()).resolves.toMatchObject({ claimed: 0, dispatched: 0 })
 
     const pausedRunsRes = await jsonFetch(`/api/v1/triggers/${paused.id}/runs`, authorization)
     await expect(pausedRunsRes.json()).resolves.toMatchObject({ data: [] })
@@ -649,10 +649,10 @@ describe('[CF] /api/v1/triggers', () => {
     })
     expect(dispatchRes.status).toBe(200)
     const dispatch = (await dispatchRes.json()) as {
-      sessionCreated: number
+      dispatched: number
       runs: Array<{ sessionId: string }>
     }
-    expect(dispatch).toMatchObject({ claimed: 1, sessionCreated: 1 })
+    expect(dispatch).toMatchObject({ claimed: 1, dispatched: 1 })
 
     // The dispatched session must land in the environment the runner serves.
     const sessionId = dispatch.runs[0]?.sessionId
@@ -688,11 +688,11 @@ describe('[CF] /api/v1/triggers', () => {
     })
     expect(dispatchRes.status).toBe(200)
     const dispatch = (await dispatchRes.json()) as {
-      sessionCreated: number
+      dispatched: number
       failed: number
       runs: Array<{ status: string; errorMessage: string | null }>
     }
-    expect(dispatch).toMatchObject({ claimed: 1, sessionCreated: 0, failed: 1 })
+    expect(dispatch).toMatchObject({ claimed: 1, dispatched: 0, failed: 1 })
     // createSession (not the dispatcher) now owns resolution, so the run fails
     // with its "no runner environment" message.
     expect(dispatch.runs[0]?.errorMessage).toContain('No environment has an active runner')
@@ -715,7 +715,7 @@ describe('[CF] /api/v1/triggers', () => {
       body: JSON.stringify({ heartbeatAt: '2026-05-26T12:01:00.000Z' }),
     })
     expect(dispatchRes.status).toBe(200)
-    await expect(dispatchRes.json()).resolves.toMatchObject({ claimed: 1, sessionCreated: 1 })
+    await expect(dispatchRes.json()).resolves.toMatchObject({ claimed: 1, dispatched: 1 })
 
     const runsBeforeRes = await jsonFetch(`/api/v1/triggers/${trigger.id}/runs`, authorization)
     const runsBefore = (await runsBeforeRes.json()) as { data: Array<{ id: string }> }

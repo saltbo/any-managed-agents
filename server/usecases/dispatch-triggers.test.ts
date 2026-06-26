@@ -155,7 +155,7 @@ function fakeDeps(
     claimHttpRun: async () => claimedRun({ id: 'httprun_1', scheduledFor: '2026-01-01T00:00:00.000Z' }),
     projectName: async () => 'My Project',
     markRunFailed: async () => {},
-    markRunSessionCreated: async () => {},
+    markRunDispatched: async () => {},
     ...overrides.triggerDispatch,
   }
   vi.mocked(runtimeSessions.createSession).mockImplementation(
@@ -233,7 +233,7 @@ describe('[spec: triggers/dispatch] dispatchDueScheduledTriggers — empty queue
   it('returns zero counts when no triggers are due', async () => {
     const result = await dispatchDueScheduledTriggers(fakeDeps())
     expect(result.claimed).toBe(0)
-    expect(result.sessionCreated).toBe(0)
+    expect(result.dispatched).toBe(0)
     expect(result.failed).toBe(0)
     expect(result.skipped).toBe(0)
     expect(result.runs).toHaveLength(0)
@@ -325,7 +325,7 @@ describe('[spec: triggers/dispatch] dispatchDueScheduledTriggers — empty queue
 })
 
 describe('[spec: triggers/dispatch] dispatchDueScheduledTriggers — successful dispatch', () => {
-  it('increments claimed and sessionCreated for a successfully dispatched trigger', async () => {
+  it('increments claimed and dispatched for a successfully dispatched trigger', async () => {
     const trigger = dueTrigger()
     const deps = fakeDeps({
       triggerDispatch: {
@@ -334,12 +334,12 @@ describe('[spec: triggers/dispatch] dispatchDueScheduledTriggers — successful 
     })
     const result = await dispatchDueScheduledTriggers(deps)
     expect(result.claimed).toBe(1)
-    expect(result.sessionCreated).toBe(1)
+    expect(result.dispatched).toBe(1)
     expect(result.failed).toBe(0)
     expect(result.skipped).toBe(0)
   })
 
-  it('records a run entry with session_created status', async () => {
+  it('records a run entry with dispatched status', async () => {
     const trigger = dueTrigger()
     const deps = fakeDeps({
       triggerDispatch: {
@@ -348,19 +348,19 @@ describe('[spec: triggers/dispatch] dispatchDueScheduledTriggers — successful 
     })
     const result = await dispatchDueScheduledTriggers(deps)
     expect(result.runs).toHaveLength(1)
-    expect(result.runs[0]!.status).toBe('session_created')
+    expect(result.runs[0]!.status).toBe('dispatched')
     expect(result.runs[0]!.sessionId).toBe('sess_1')
     expect(result.runs[0]!.triggerId).toBe('trigger_1')
     expect(result.runs[0]!.errorMessage).toBeNull()
   })
 
-  it('marks the run as session_created in the repo', async () => {
+  it('marks the run as dispatched in the repo', async () => {
     const trigger = dueTrigger()
     let marked = false
     const deps = fakeDeps({
       triggerDispatch: {
         dueTriggers: async () => [trigger],
-        markRunSessionCreated: async () => {
+        markRunDispatched: async () => {
           marked = true
         },
       },
@@ -392,7 +392,7 @@ describe('[spec: triggers/dispatch] dispatchDueScheduledTriggers — successful 
     const deps = fakeDeps({
       triggerDispatch: {
         dueTriggers: async () => [trigger],
-        markRunSessionCreated: async (_t, _r, _sid, meta) => {
+        markRunDispatched: async (_t, _r, _sid, meta) => {
           capturedMetadata = meta
         },
       },
@@ -440,7 +440,7 @@ describe('[spec: triggers/dispatch] dispatchDueScheduledTriggers — environment
       },
     })
     const result = await dispatchDueScheduledTriggers(deps)
-    expect(result.sessionCreated).toBe(1)
+    expect(result.dispatched).toBe(1)
     expect(dispatchedEnvironmentId).toBeNull()
   })
 
@@ -514,7 +514,7 @@ describe('[spec: triggers/dispatch] dispatchDueScheduledTriggers — failed disp
     const result = await dispatchDueScheduledTriggers(deps)
     expect(result.failed).toBe(1)
     expect(result.claimed).toBe(1)
-    expect(result.sessionCreated).toBe(0)
+    expect(result.dispatched).toBe(0)
     expect(result.runs[0]!.status).toBe('failed')
     expect(result.runs[0]!.errorMessage).toBe('Agent not found')
     expect(result.runs[0]!.sessionId).toBeNull()
@@ -645,7 +645,7 @@ describe('[spec: triggers/dispatch] dispatchDueScheduledTriggers — outer excep
     })
     const result = await dispatchDueScheduledTriggers(deps)
     expect(result.failed).toBe(1)
-    expect(result.sessionCreated).toBe(1)
+    expect(result.dispatched).toBe(1)
     expect(result.claimed).toBe(1)
   })
 
@@ -698,7 +698,7 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
         headers: {},
       },
     })
-    expect(result.state).toBe('session_created')
+    expect(result.state).toBe('dispatched')
     expect(result.sessionId).toBe('sess_http')
     expect(initialPrompt).toBe('Handle T-123 from portal')
   })
@@ -708,7 +708,7 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
     let messageContent: string | null = null
     const deps = fakeDeps({
       triggerDispatch: {
-        markRunSessionCreated: async (_trigger, _run, sessionId) => {
+        markRunDispatched: async (_trigger, _run, sessionId) => {
           markedSessionId = sessionId
         },
       },
@@ -740,7 +740,7 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
       },
     })
 
-    expect(result).toMatchObject({ state: 'session_created', sessionId: 'sess_existing' })
+    expect(result).toMatchObject({ state: 'dispatched', sessionId: 'sess_existing' })
     expect(markedSessionId).toBe('sess_existing')
     expect(messageContent).toBe('Handle T-123 from portal')
     expect(runtimeSessions.createSession).not.toHaveBeenCalled()
@@ -751,7 +751,7 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
     let inserted: Parameters<Deps['sessions']['insertMessage']>[0] | null = null
     const deps = fakeDeps({
       triggerDispatch: {
-        markRunSessionCreated: async (_trigger, _run, sessionId) => {
+        markRunDispatched: async (_trigger, _run, sessionId) => {
           markedSessionId = sessionId
         },
       },
@@ -784,7 +784,7 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
       },
     })
 
-    expect(result).toMatchObject({ state: 'session_created', sessionId: 'sess_pending' })
+    expect(result).toMatchObject({ state: 'dispatched', sessionId: 'sess_pending' })
     expect(markedSessionId).toBe('sess_pending')
     expect(inserted).toMatchObject({
       sessionId: 'sess_pending',
@@ -881,7 +881,7 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
     let markedMetadata: Record<string, unknown> | null = null
     const deps = fakeDeps({
       triggerDispatch: {
-        markRunSessionCreated: async (_trigger, _run, _sessionId, metadata) => {
+        markRunDispatched: async (_trigger, _run, _sessionId, metadata) => {
           markedMetadata = metadata
         },
       },

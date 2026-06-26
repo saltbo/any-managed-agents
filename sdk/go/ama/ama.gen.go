@@ -1478,9 +1478,9 @@ func (e TriggerType) Valid() bool {
 
 // Defines values for TriggerRunState.
 const (
-	TriggerRunStateClaimed        TriggerRunState = "claimed"
-	TriggerRunStateFailed         TriggerRunState = "failed"
-	TriggerRunStateSessionCreated TriggerRunState = "session_created"
+	TriggerRunStateClaimed    TriggerRunState = "claimed"
+	TriggerRunStateDispatched TriggerRunState = "dispatched"
+	TriggerRunStateFailed     TriggerRunState = "failed"
 )
 
 // Valid indicates whether the value is a known member of the TriggerRunState enum.
@@ -1488,9 +1488,9 @@ func (e TriggerRunState) Valid() bool {
 	switch e {
 	case TriggerRunStateClaimed:
 		return true
-	case TriggerRunStateFailed:
+	case TriggerRunStateDispatched:
 		return true
-	case TriggerRunStateSessionCreated:
+	case TriggerRunStateFailed:
 		return true
 	default:
 		return false
@@ -2243,9 +2243,9 @@ func (e ListTriggersParamsEnabled) Valid() bool {
 
 // Defines values for ListTriggerRunsParamsState.
 const (
-	ListTriggerRunsParamsStateClaimed        ListTriggerRunsParamsState = "claimed"
-	ListTriggerRunsParamsStateFailed         ListTriggerRunsParamsState = "failed"
-	ListTriggerRunsParamsStateSessionCreated ListTriggerRunsParamsState = "session_created"
+	ListTriggerRunsParamsStateClaimed    ListTriggerRunsParamsState = "claimed"
+	ListTriggerRunsParamsStateDispatched ListTriggerRunsParamsState = "dispatched"
+	ListTriggerRunsParamsStateFailed     ListTriggerRunsParamsState = "failed"
 )
 
 // Valid indicates whether the value is a known member of the ListTriggerRunsParamsState enum.
@@ -2253,9 +2253,9 @@ func (e ListTriggerRunsParamsState) Valid() bool {
 	switch e {
 	case ListTriggerRunsParamsStateClaimed:
 		return true
-	case ListTriggerRunsParamsStateFailed:
+	case ListTriggerRunsParamsStateDispatched:
 		return true
-	case ListTriggerRunsParamsStateSessionCreated:
+	case ListTriggerRunsParamsStateFailed:
 		return true
 	default:
 		return false
