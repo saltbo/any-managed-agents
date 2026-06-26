@@ -80,6 +80,42 @@ describe('renderHttpPromptTemplate', () => {
     expect(prompt).toBe('second  3 false')
   })
 
+  it('renders conditional blocks for truthy paths', () => {
+    const prompt = renderHttpPromptTemplate('{{#if body.comment.id}}Comment {{ body.comment.id }}{{/if}}', {
+      body: { comment: { id: 123 } },
+      query: {},
+      headers: {},
+    })
+    expect(prompt).toBe('Comment 123')
+  })
+
+  it('renders else branch for missing or falsey condition paths', () => {
+    const prompt = renderHttpPromptTemplate('{{#if body.review.id}}Review{{else}}No review{{/if}}', {
+      body: { review: { id: null } },
+      query: {},
+      headers: {},
+    })
+    expect(prompt).toBe('No review')
+  })
+
+  it('supports equality conditions', () => {
+    const prompt = renderHttpPromptTemplate('{{#if eq body.event "issues"}}Issue {{ body.subject.number }}{{/if}}', {
+      body: { event: 'issues', subject: { number: 42 } },
+      query: {},
+      headers: {},
+    })
+    expect(prompt).toBe('Issue 42')
+  })
+
+  it('does not render variables inside skipped conditional branches', () => {
+    const prompt = renderHttpPromptTemplate('{{#if eq body.event "pull_request"}}{{ body.missing.value }}{{else}}Issue{{/if}}', {
+      body: { event: 'issues' },
+      query: {},
+      headers: {},
+    })
+    expect(prompt).toBe('Issue')
+  })
+
   it('fails when a variable is missing', () => {
     expect(() => renderHttpPromptTemplate('Handle {{ body.ticket.id }}', { body: {}, query: {}, headers: {} })).toThrow(
       PromptTemplateRenderError,
@@ -95,6 +131,12 @@ describe('renderHttpPromptTemplate', () => {
   it('fails when a variable path segment is invalid', () => {
     expect(() =>
       renderHttpPromptTemplate('Handle {{ body.ticket["id"] }}', { body: {}, query: {}, headers: {} }),
+    ).toThrow(PromptTemplateRenderError)
+  })
+
+  it('fails when a conditional expression is invalid', () => {
+    expect(() =>
+      renderHttpPromptTemplate('{{#if matches body.event "issues"}}Issue{{/if}}', { body: {}, query: {}, headers: {} }),
     ).toThrow(PromptTemplateRenderError)
   })
 
