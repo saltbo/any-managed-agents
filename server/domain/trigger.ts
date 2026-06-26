@@ -44,7 +44,8 @@ export interface HttpTriggerTemplateContext {
 }
 
 const TEMPLATE_EXPRESSION = /{{\s*([^{}]+?)\s*}}/g
-const CONDITIONAL_BLOCK = /\{\{#if\s+([^{}]+?)\}\}((?:(?!\{\{#if).)*?)(?:\{\{else\}\}((?:(?!\{\{#if).)*?))?\{\{\/if\}\}/gs
+const CONDITIONAL_BLOCK =
+  /\{\{#if\s+([^{}]+?)\}\}((?:(?!\{\{#if).)*?)(?:\{\{else\}\}((?:(?!\{\{#if).)*?))?\{\{\/if\}\}/gs
 const PATH_SEGMENT = /^[A-Za-z_][A-Za-z0-9_-]*$/
 
 function readPath(source: unknown, path: string[]): unknown {
@@ -77,7 +78,10 @@ function parsePathExpression(expression: string) {
   const segments = expression.split('.')
   const root = segments[0]
   if ((root !== 'body' && root !== 'query' && root !== 'headers') || segments.length < 2) {
-    throw new PromptTemplateRenderError('Prompt template variables must read body, query, or headers paths.', expression)
+    throw new PromptTemplateRenderError(
+      'Prompt template variables must read body, query, or headers paths.',
+      expression,
+    )
   }
   if (!segments.every((segment) => PATH_SEGMENT.test(segment) || /^\d+$/.test(segment))) {
     throw new PromptTemplateRenderError('Prompt template variable path is invalid.', expression)
@@ -100,10 +104,7 @@ function truthy(value: unknown) {
 
 function parseLiteral(value: string) {
   const trimmed = value.trim()
-  if (
-    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-    (trimmed.startsWith("'") && trimmed.endsWith("'"))
-  ) {
+  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
     return trimmed.slice(1, -1)
   }
   if (trimmed === 'true') return true
@@ -117,7 +118,7 @@ function tokenizeCondition(expression: string) {
   return expression.match(/"[^"]*"|'[^']*'|\S+/g) ?? []
 }
 
-function evaluateCondition(expression: string, context: HttpTriggerTemplateContext) {
+function evaluateCondition(expression: string, context: HttpTriggerTemplateContext): boolean {
   const tokens = tokenizeCondition(expression.trim())
   if (tokens.length === 1) {
     return truthy(readTemplatePath(tokens[0]!, context))
@@ -134,8 +135,10 @@ function renderConditionalBlocks(template: string, context: HttpTriggerTemplateC
   let rendered = template
   while (CONDITIONAL_BLOCK.test(rendered)) {
     CONDITIONAL_BLOCK.lastIndex = 0
-    rendered = rendered.replace(CONDITIONAL_BLOCK, (_match, rawExpression: string, ifContent: string, elseContent = '') =>
-      evaluateCondition(rawExpression.trim(), context) ? ifContent : elseContent,
+    rendered = rendered.replace(
+      CONDITIONAL_BLOCK,
+      (_match: string, rawExpression: string, ifContent: string, elseContent: string | undefined): string =>
+        evaluateCondition(rawExpression.trim(), context) ? ifContent : (elseContent ?? ''),
     )
   }
   if (rendered.includes('{{#if') || rendered.includes('{{/if}}') || rendered.includes('{{else}}')) {

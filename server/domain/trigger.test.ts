@@ -107,13 +107,45 @@ describe('renderHttpPromptTemplate', () => {
     expect(prompt).toBe('Issue 42')
   })
 
+  it('[spec: triggers/http-create] supports literal comparisons in conditional prompt templates', () => {
+    const prompt = renderHttpPromptTemplate(
+      [
+        '{{#if eq body.ok true}}ok{{/if}}',
+        '{{#if eq body.disabled false}}disabled{{/if}}',
+        '{{#if eq body.count 3}}count{{/if}}',
+        '{{#if eq body.none null}}none{{/if}}',
+        '{{#if eq body.status open}}open{{/if}}',
+        '{{#if eq body.notNumber NaN}}nan{{/if}}',
+        '{{#if ne body.event "pull_request"}}not-pr{{/if}}',
+      ].join(' '),
+      {
+        body: { ok: true, disabled: false, count: 3, none: null, status: 'open', notNumber: 'NaN', event: 'issues' },
+        query: {},
+        headers: {},
+      },
+    )
+    expect(prompt).toBe('ok disabled count none open nan not-pr')
+  })
+
   it('does not render variables inside skipped conditional branches', () => {
-    const prompt = renderHttpPromptTemplate('{{#if eq body.event "pull_request"}}{{ body.missing.value }}{{else}}Issue{{/if}}', {
-      body: { event: 'issues' },
+    const prompt = renderHttpPromptTemplate(
+      '{{#if eq body.event "pull_request"}}{{ body.missing.value }}{{else}}Issue{{/if}}',
+      {
+        body: { event: 'issues' },
+        query: {},
+        headers: {},
+      },
+    )
+    expect(prompt).toBe('Issue')
+  })
+
+  it('[spec: triggers/http-create] renders empty content for false conditional blocks without else branches', () => {
+    const prompt = renderHttpPromptTemplate('Start{{#if body.review.id}}Review{{/if}}End', {
+      body: { review: { id: null } },
       query: {},
       headers: {},
     })
-    expect(prompt).toBe('Issue')
+    expect(prompt).toBe('StartEnd')
   })
 
   it('fails when a variable is missing', () => {
@@ -137,6 +169,26 @@ describe('renderHttpPromptTemplate', () => {
   it('fails when a conditional expression is invalid', () => {
     expect(() =>
       renderHttpPromptTemplate('{{#if matches body.event "issues"}}Issue{{/if}}', { body: {}, query: {}, headers: {} }),
+    ).toThrow(PromptTemplateRenderError)
+  })
+
+  it('[spec: triggers/http-create] fails when a conditional block is malformed', () => {
+    expect(() =>
+      renderHttpPromptTemplate('{{#if body.event}}Issue', {
+        body: { event: 'issues' },
+        query: {},
+        headers: {},
+      }),
+    ).toThrow(PromptTemplateRenderError)
+  })
+
+  it('[spec: triggers/http-create] fails when a conditional expression is blank', () => {
+    expect(() =>
+      renderHttpPromptTemplate('{{#if    }}Issue{{/if}}', {
+        body: {},
+        query: {},
+        headers: {},
+      }),
     ).toThrow(PromptTemplateRenderError)
   })
 

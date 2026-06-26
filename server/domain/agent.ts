@@ -129,7 +129,9 @@ export function validateToolAttachments(
 export function validateSkills(skills: string[]): FieldErrors | null {
   for (const skill of skills) {
     if (
-      !/^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}(?:#[A-Za-z0-9][A-Za-z0-9._/-]{0,127})?@[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$/.test(skill) ||
+      !/^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}(?:#[A-Za-z0-9][A-Za-z0-9._/-]{0,127})?@[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$/.test(
+        skill,
+      ) ||
       /[\s?{}"'\\]/.test(skill)
     ) {
       return { skills: `Skill must be a stable <source>@<skill> reference: ${skill}` }
