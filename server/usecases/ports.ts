@@ -2472,7 +2472,6 @@ export interface SessionRuntimeRow {
   state: string
   archivedAt: string | null
   sandboxId: string | null
-  resourceRefs: Record<string, unknown>[]
   metadata: Record<string, unknown>
 }
 

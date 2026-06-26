@@ -52,7 +52,6 @@ function sessionRow(overrides: Partial<SessionRuntimeRow> = {}): SessionRuntimeR
     state: 'idle',
     archivedAt: null,
     sandboxId: null,
-    resourceRefs: [],
     metadata: {},
     ...overrides,
   }

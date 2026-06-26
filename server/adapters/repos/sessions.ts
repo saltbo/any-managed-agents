@@ -214,7 +214,6 @@ function runtimeRow(row: SessionRow): SessionRuntimeRow {
     state: row.state,
     archivedAt: row.archivedAt,
     sandboxId: row.sandboxId,
-    resourceRefs: parseJson<Record<string, unknown>[]>(row.resourceRefs) ?? [],
     metadata: parseJson<Record<string, unknown>>(row.metadata) ?? {},
   }
 }

@@ -9,7 +9,6 @@ import {
   type AuthScope,
   type ClaimedRun,
   type DueTrigger,
-  type SessionRuntimeRow,
   TriggerConflictError,
   type TriggerRecord,
   TriggerValidationError,
@@ -113,107 +112,6 @@ function httpTriggerSessionKey(body: unknown): string | null {
   }
   const key = (body as Record<string, unknown>).key
   return typeof key === 'string' && key.trim().length > 0 ? key : null
-}
-
-function recordValue(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null
-}
-
-function stringValue(value: unknown): string | null {
-  return typeof value === 'string' && value.trim().length > 0 ? value : null
-}
-
-function stableResourceRefKey(value: unknown): string {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return JSON.stringify(value)
-  }
-  const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b))
-  return JSON.stringify(Object.fromEntries(entries))
-}
-
-function credentialRefKey(value: unknown): string | null {
-  const record = recordValue(value)
-  if (!record) {
-    return null
-  }
-  const credentialId = stringValue(record.credentialId)
-  if (!credentialId) {
-    return null
-  }
-  const versionId = stringValue(record.versionId)
-  return versionId ? `${credentialId}:${versionId}` : credentialId
-}
-
-function accessCovers(sessionAccess: unknown, triggerAccess: unknown): boolean {
-  if (triggerAccess === 'read_only') {
-    return sessionAccess === 'read_only' || sessionAccess === 'read_write'
-  }
-  return triggerAccess === 'read_write' && sessionAccess === 'read_write'
-}
-
-function memoryStoreResourceCovers(sessionRef: Record<string, unknown>, triggerRef: Record<string, unknown>): boolean {
-  return (
-    sessionRef.type === 'memory_store' &&
-    triggerRef.type === 'memory_store' &&
-    stringValue(sessionRef.storeId) === stringValue(triggerRef.storeId) &&
-    accessCovers(sessionRef.access, triggerRef.access)
-  )
-}
-
-function optionalStringFieldMatches(
-  sessionRef: Record<string, unknown>,
-  triggerRef: Record<string, unknown>,
-  field: string,
-): boolean {
-  const sessionValue = stringValue(sessionRef[field])
-  const triggerValue = stringValue(triggerRef[field])
-  return sessionValue === triggerValue
-}
-
-function githubRepositoryResourceCovers(
-  sessionRef: Record<string, unknown>,
-  triggerRef: Record<string, unknown>,
-): boolean {
-  if (sessionRef.type !== 'github_repository' || triggerRef.type !== 'github_repository') {
-    return false
-  }
-  if (stringValue(sessionRef.owner) !== stringValue(triggerRef.owner)) {
-    return false
-  }
-  if (stringValue(sessionRef.repo) !== stringValue(triggerRef.repo)) {
-    return false
-  }
-  if (!optionalStringFieldMatches(sessionRef, triggerRef, 'mountPath')) {
-    return false
-  }
-  if (!optionalStringFieldMatches(sessionRef, triggerRef, 'ref')) {
-    return false
-  }
-  return credentialRefKey(sessionRef.credentialRef) === credentialRefKey(triggerRef.credentialRef)
-}
-
-function resourceRefCovers(sessionRef: unknown, triggerRef: unknown): boolean {
-  const sessionRecord = recordValue(sessionRef)
-  const triggerRecord = recordValue(triggerRef)
-  if (!sessionRecord || !triggerRecord) {
-    return stableResourceRefKey(sessionRef) === stableResourceRefKey(triggerRef)
-  }
-  if (triggerRecord.type === 'memory_store') {
-    return memoryStoreResourceCovers(sessionRecord, triggerRecord)
-  }
-  if (triggerRecord.type === 'github_repository') {
-    return githubRepositoryResourceCovers(sessionRecord, triggerRecord)
-  }
-  return stableResourceRefKey(sessionRef) === stableResourceRefKey(triggerRef)
-}
-
-function sessionCoversTriggerResources(session: SessionRuntimeRow, trigger: TriggerRecord): boolean {
-  if (trigger.resourceRefs.length === 0) {
-    return true
-  }
-  return trigger.resourceRefs.every((resourceRef) =>
-    session.resourceRefs.some((sessionRef) => resourceRefCovers(sessionRef, resourceRef)),
-  )
 }
 
 async function failRun(deps: Deps, auth: AuthScope, trigger: DueTrigger, run: ClaimedRun, message: string) {
@@ -387,11 +285,9 @@ export async function dispatchHttpTrigger(
     correlationId: run.correlationId,
   }
   const key = httpTriggerSessionKey(input.context.body)
-  const existingSession: SessionRuntimeRow | null = key
-    ? await deps.sessions.findActiveHttpTriggerSession(auth.project.id, trigger.id, key)
-    : null
+  const existingSession = key ? await deps.sessions.findActiveHttpTriggerSession(auth.project.id, trigger.id, key) : null
 
-  if (existingSession && sessionCoversTriggerResources(existingSession, trigger)) {
+  if (existingSession) {
     const outcome = await sendSessionMessage(deps, auth, existingSession, renderedPrompt)
     if (!outcome.ok) {
       const message = outcome.message
