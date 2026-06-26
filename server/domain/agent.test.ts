@@ -102,6 +102,9 @@ describe('[spec: agents/validation] validateSkills', () => {
     expect(validateSkills(['missing-style'])).toMatchObject({ skills: expect.stringContaining('stable') })
     expect(validateSkills(['ama@code review'])).toMatchObject({ skills: expect.any(String) })
     expect(validateSkills(['ama@code-review'])).toBeNull()
+    expect(validateSkills(['saltbo/agent-kanban#codex/ama-runtime-integration@ak-maintainer'])).toBeNull()
+    expect(validateSkills(['ama#@code-review'])).toMatchObject({ skills: expect.any(String) })
+    expect(validateSkills(['ama#bad ref@code-review'])).toMatchObject({ skills: expect.any(String) })
   })
 
   it('rejects secret-looking skills', () => {
