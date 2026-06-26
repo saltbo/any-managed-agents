@@ -2137,7 +2137,9 @@ export type {
   ConnectionToolRow,
   EnvironmentRow,
   EnvironmentVersionRow,
+  SessionUpdate,
   SessionRow,
+  WorkItemInsert,
 } from '@shared/runtime-rows'
 
 // Runtime-internal persistence boundary. The env-bound session execution engine
@@ -2162,6 +2164,13 @@ export interface SessionOrchestrationStore {
     sessionId: string,
     expected: string | string[],
     fields: SessionUpdate,
+  ): Promise<boolean>
+  queueSessionWorkWhenState(
+    projectId: string,
+    sessionId: string,
+    expected: string | string[],
+    fields: SessionUpdate,
+    workItem: WorkItemInsert,
   ): Promise<boolean>
 
   // ── per-session turn lease ──

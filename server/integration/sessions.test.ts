@@ -1775,6 +1775,62 @@ describe('[CF] /api/v1/sessions', () => {
     expect(exactLease).toBeTruthy()
   })
 
+  it('queues self-hosted session messages as resume work atomically [spec: sessions/prompt]', async () => {
+    const authorization = await signIn()
+    const model = 'gpt-5.3-codex'
+    const { providerId } = await createProviderModel(authorization, model)
+    const environment = await createEnvironment(authorization, { hostingMode: 'self_hosted', mcpPolicy: {} })
+    const agent = await createAgent(authorization, { providerId, model, mcpConnectors: [] })
+
+    const createRes = await jsonFetch('/api/v1/sessions', authorization, {
+      method: 'POST',
+      body: JSON.stringify({
+        agentId: agent.id,
+        environmentId: environment.id,
+        runtime: 'codex',
+        initialPrompt: 'Initial self-hosted task.',
+      }),
+    })
+    expect(createRes.status).toBe(201)
+    const created = (await createRes.json()) as { id: string }
+    await env.DB.prepare(
+      "UPDATE work_items SET state = 'succeeded', result = ?, updated_at = ? WHERE session_id = ?",
+    )
+      .bind(JSON.stringify({ resumeToken: 'resume-token-1' }), new Date().toISOString(), created.id)
+      .run()
+    await env.DB.prepare("UPDATE sessions SET state = 'running', state_reason = NULL, updated_at = ? WHERE id = ?")
+      .bind(new Date().toISOString(), created.id)
+      .run()
+
+    const messageRes = await jsonFetch(`/api/v1/sessions/${created.id}/messages`, authorization, {
+      method: 'POST',
+      body: JSON.stringify({ type: 'prompt', content: 'Fix the rejected review.' }),
+    })
+
+    expect(messageRes.status).toBe(201)
+    await expect(messageRes.json()).resolves.toMatchObject({
+      sessionId: created.id,
+      delivery: 'queued',
+      state: 'accepted',
+    })
+    const sessionRes = await jsonFetch(`/api/v1/sessions/${created.id}`, authorization)
+    await expect(sessionRes.json()).resolves.toMatchObject({ id: created.id, state: 'pending', stateReason: 'waiting-for-runner' })
+
+    const workItemsRes = await jsonFetch(`/api/v1/work-items?sessionId=${created.id}`, authorization)
+    expect(workItemsRes.status).toBe(200)
+    const workItems = (await workItemsRes.json()) as { data: Array<{ state: string; payload: Record<string, unknown> }> }
+    expect(workItems.data).toContainEqual(
+      expect.objectContaining({
+        state: 'available',
+        payload: expect.objectContaining({
+          initialPrompt: 'Fix the rejected review.',
+          resume: true,
+          resumeToken: 'resume-token-1',
+        }),
+      }),
+    )
+  })
+
   it('rejects sessions when the agent provider was disabled after the agent was saved', async () => {
     const authorization = await signIn()
     const model = 'gpt-5.3-codex'

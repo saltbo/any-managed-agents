@@ -24,7 +24,7 @@ import type { safeRuntimeError } from '@server/runtime-error'
 import type { AuthScope, CloudTurnSecretEnvEntry, RunnerChannel, SessionRow } from '../ports'
 import type { CloudTurnDeps } from './cloud-turn'
 import { executeCloudSessionTurn } from './cloud-turn'
-import { enqueueSelfHostedSessionWork, latestRunnerResumeToken } from './session-create'
+import { latestRunnerResumeToken, queueSelfHostedSessionWorkWhenState } from './session-create'
 
 type MessageDelivery = 'live' | 'queued'
 type MessageState = 'accepted' | 'delivered' | 'failed'
@@ -116,7 +116,6 @@ async function queueSelfHostedSessionPrompt(
   session: SessionRow,
   content: string,
 ): Promise<PromptDispatchOutcome> {
-  const store = deps.sessionOrchestration
   const agentSnapshot = parseAgentSnapshot(session.agentSnapshot)
   if (!agentSnapshot) {
     return { ok: false, status: 409, message: 'Session agent snapshot is required' }
@@ -125,27 +124,33 @@ async function queueSelfHostedSessionPrompt(
     parseJson<ReturnType<typeof serializeEnvironmentVersion>>(session.environmentSnapshot),
   )
   const submittedAt = now()
-  const queued = await store.updateSessionWhenState(auth.project.id, session.id, ['idle', 'running'], {
-    state: 'pending',
-    stateReason: 'waiting-for-runner',
-    updatedAt: submittedAt,
-  })
+  const sessionMetadata = parseJson<Record<string, unknown>>(session.metadata) ?? {}
+  const queued = await queueSelfHostedSessionWorkWhenState(
+    deps,
+    auth,
+    {
+      session,
+      agentSnapshot,
+      environmentSnapshot,
+      runtime: sessionRuntimeFromMetadata(sessionMetadata),
+      runtimeConfig: sessionRuntimeConfig(sessionMetadata),
+      resourceRefs: parseJson<ResourceRef[]>(session.resourceRefs) ?? [],
+      env: parseJson<Record<string, string>>(session.env) ?? {},
+      secretEnv: parseJson<CloudTurnSecretEnvEntry[]>(session.secretEnv) ?? [],
+      initialPrompt: content,
+      resume: true,
+      resumeToken: await latestRunnerResumeToken(deps, auth, session.id),
+    },
+    ['idle', 'running'],
+    {
+      state: 'pending',
+      stateReason: 'waiting-for-runner',
+      updatedAt: submittedAt,
+    },
+    submittedAt,
+  )
   if (!queued) {
     return { ok: false, status: 409, message: 'Session runtime is no longer active' }
   }
-  const sessionMetadata = parseJson<Record<string, unknown>>(session.metadata) ?? {}
-  await enqueueSelfHostedSessionWork(deps, auth, {
-    session,
-    agentSnapshot,
-    environmentSnapshot,
-    runtime: sessionRuntimeFromMetadata(sessionMetadata),
-    runtimeConfig: sessionRuntimeConfig(sessionMetadata),
-    resourceRefs: parseJson<ResourceRef[]>(session.resourceRefs) ?? [],
-    env: parseJson<Record<string, string>>(session.env) ?? {},
-    secretEnv: parseJson<CloudTurnSecretEnvEntry[]>(session.secretEnv) ?? [],
-    initialPrompt: content,
-    resume: true,
-    resumeToken: await latestRunnerResumeToken(deps, auth, session.id),
-  })
   return { ok: true, delivery: 'queued', state: 'accepted' }
 }

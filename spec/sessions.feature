@@ -72,6 +72,7 @@ Feature: Sessions
     When the user sends a prompt through the sessions API
     Then the runtime accepts it and message, tool, sandbox, usage, lifecycle, and error events are stored in sequence
     And the session returns to idle with a result or moves to error with a safe reason
+    And self-hosted prompt resumption persists the queued work item and pending session state atomically
 
   @sessions/stop @api
   Scenario: Stop a running session cooperatively

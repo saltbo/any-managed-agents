@@ -34,7 +34,15 @@ import { environmentHostingMode } from '@server/domain/runtime-session'
 import { composeInitialPrompt, hasSecretMaterial } from '@server/domain/session'
 import { safeRuntimeError } from '@server/runtime-error'
 import { SESSION_DO_EVENT_STORE } from '@shared/session-events'
-import type { AgentRow, AuthScope, CloudTurnSecretEnvEntry, SessionOrchestrationStore, SessionRow } from '../ports'
+import type {
+  AgentRow,
+  AuthScope,
+  CloudTurnSecretEnvEntry,
+  SessionOrchestrationStore,
+  SessionRow,
+  SessionUpdate,
+  WorkItemInsert,
+} from '../ports'
 import type { CloudTurnDeps } from './cloud-turn'
 import { startSessionRuntimeForRow } from './cloud-turn'
 import { validateRuntimeProviderModel } from './provisioning'
@@ -227,6 +235,31 @@ export async function enqueueSelfHostedSessionWork(
   },
 ) {
   const timestamp = now()
+  await deps.sessionOrchestration.insertWorkItem(selfHostedSessionWorkItem(auth, values, timestamp))
+}
+
+export async function queueSelfHostedSessionWorkWhenState(
+  deps: Pick<CreateSessionDeps, 'sessionOrchestration'>,
+  auth: AuthScope,
+  values: Parameters<typeof enqueueSelfHostedSessionWork>[2],
+  expected: string | string[],
+  sessionUpdate: SessionUpdate,
+  timestamp = now(),
+) {
+  return await deps.sessionOrchestration.queueSessionWorkWhenState(
+    auth.project.id,
+    values.session.id,
+    expected,
+    sessionUpdate,
+    selfHostedSessionWorkItem(auth, values, timestamp),
+  )
+}
+
+function selfHostedSessionWorkItem(
+  auth: AuthScope,
+  values: Parameters<typeof enqueueSelfHostedSessionWork>[2],
+  timestamp: string,
+): WorkItemInsert {
   const payload = {
     protocol: 'ama-runner-work',
     type: 'session.start',
@@ -250,7 +283,7 @@ export async function enqueueSelfHostedSessionWork(
         ? runtimeRequiredRunnerCapability(values.runtime, values.agentSnapshot.providerId, values.agentSnapshot.model)
         : null,
   }
-  await deps.sessionOrchestration.insertWorkItem({
+  return {
     id: newId('work'),
     organizationId: auth.organization.id,
     projectId: auth.project.id,
@@ -269,7 +302,7 @@ export async function enqueueSelfHostedSessionWork(
     availableAt: timestamp,
     createdAt: timestamp,
     updatedAt: timestamp,
-  })
+  }
 }
 
 export async function latestRunnerResumeToken(

@@ -66,6 +66,12 @@ type SessionStateColumn = (typeof sessions.$inferSelect)['state']
 type WorkItemInsertColumns = typeof workItems.$inferInsert
 type SessionApprovalInsertColumns = typeof sessionApprovals.$inferInsert
 
+function sessionStateGuard(expected: string | string[]) {
+  return Array.isArray(expected)
+    ? or(...expected.map((state) => eq(sessions.state, state as SessionStateColumn)))
+    : eq(sessions.state, expected as SessionStateColumn)
+}
+
 // Runtime-internal persistence boundary. The env-bound session execution engine
 // (server/runtime/*) routes every drizzle read/write here so the runtime layer
 // itself stays drizzle-free. This repo is intentionally runtime-shaped (raw
@@ -131,9 +137,7 @@ export function createRuntimeOrchestrationRepo(db: Db): SessionOrchestrationStor
       expected: string | string[],
       fields: SessionUpdate,
     ): Promise<boolean> {
-      const stateGuard = Array.isArray(expected)
-        ? or(...expected.map((state) => eq(sessions.state, state as SessionStateColumn)))
-        : eq(sessions.state, expected as SessionStateColumn)
+      const stateGuard = sessionStateGuard(expected)
       const updated = await db
         .update(sessions)
         .set(fields as SessionUpdateColumns)
@@ -141,6 +145,61 @@ export function createRuntimeOrchestrationRepo(db: Db): SessionOrchestrationStor
         .returning({ id: sessions.id })
         .get()
       return Boolean(updated)
+    },
+
+    async queueSessionWorkWhenState(
+      projectId: string,
+      sessionId: string,
+      expected: string | string[],
+      fields: SessionUpdate,
+      workItem: WorkItemInsert,
+    ): Promise<boolean> {
+      if (typeof fields.state !== 'string' || typeof fields.updatedAt !== 'string') {
+        throw new Error('Queued session work requires state and updatedAt session fields')
+      }
+      const [updated, inserted] = await db.batch([
+        db
+          .update(sessions)
+          .set(fields as SessionUpdateColumns)
+          .where(and(eq(sessions.id, sessionId), eq(sessions.projectId, projectId), sessionStateGuard(expected)))
+          .returning({ id: sessions.id }),
+        db
+          .insert(workItems)
+          .select(
+            db
+              .select({
+                id: sql<string>`${workItem.id}`.as('id'),
+                organizationId: sql<string>`${workItem.organizationId}`.as('organization_id'),
+                projectId: sql<string>`${workItem.projectId}`.as('project_id'),
+                sessionId: sql<string | null>`${workItem.sessionId ?? null}`.as('session_id'),
+                environmentId: sql<string | null>`${workItem.environmentId ?? null}`.as('environment_id'),
+                runnerId: sql<string | null>`${workItem.runnerId ?? null}`.as('runner_id'),
+                leaseId: sql<string | null>`${workItem.leaseId ?? null}`.as('lease_id'),
+                type: sql<string>`${workItem.type}`.as('type'),
+                state: sql<string>`${workItem.state ?? 'available'}`.as('state'),
+                priority: sql<number>`${workItem.priority ?? 0}`.as('priority'),
+                attempts: sql<number>`${workItem.attempts ?? 0}`.as('attempts'),
+                maxAttempts: sql<number>`${workItem.maxAttempts ?? 3}`.as('max_attempts'),
+                payload: sql<string>`${workItem.payload}`.as('payload'),
+                result: sql<string | null>`${workItem.result ?? null}`.as('result'),
+                error: sql<string | null>`${workItem.error ?? null}`.as('error'),
+                availableAt: sql<string>`${workItem.availableAt}`.as('available_at'),
+                createdAt: sql<string>`${workItem.createdAt}`.as('created_at'),
+                updatedAt: sql<string>`${workItem.updatedAt}`.as('updated_at'),
+              })
+              .from(sessions)
+              .where(
+                and(
+                  eq(sessions.id, sessionId),
+                  eq(sessions.projectId, projectId),
+                  eq(sessions.state, fields.state as SessionStateColumn),
+                  eq(sessions.updatedAt, fields.updatedAt),
+                ),
+              ),
+          )
+          .returning({ id: workItems.id }),
+      ])
+      return updated.length > 0 && inserted.length > 0
     },
 
     // ── per-session turn lease (serializes concurrent cloud turns) ────────────
