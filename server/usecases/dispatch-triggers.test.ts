@@ -703,6 +703,59 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
     expect(initialPrompt).toBe('Handle T-123 from portal')
   })
 
+  it('adds request metadata from the HTTP body to newly created session metadata and run metadata', async () => {
+    let sessionMetadata: Record<string, unknown> | undefined
+    let runMetadata: Record<string, unknown> | undefined
+    const deps = fakeDeps({
+      sessionRuntime: {
+        createSession: async (_deps, _auth, input) => {
+          sessionMetadata = input.options.metadata
+          return { ok: true, value: sessionRecord({ id: 'sess_http' }) }
+        },
+      },
+      triggerDispatch: {
+        markRunDispatched: async (_trigger, _run, _sessionId, metadata) => {
+          runMetadata = metadata
+        },
+      },
+    })
+
+    await dispatchHttpTrigger(deps, auth, {
+      trigger: httpTrigger({ metadata: { labels: { maintainerId: 'maintainer_1' }, retained: true } }),
+      context: {
+        body: {
+          key: 'github:owner/repo:issue:123',
+          ticket: { id: 'T-123' },
+          metadata: {
+            labels: { subject: 'github-issue' },
+            github: {
+              repository: 'owner/repo',
+              type: 'issue',
+              number: 123,
+              url: 'https://github.com/owner/repo/issues/123',
+            },
+          },
+        },
+        query: { source: 'portal' },
+        headers: {},
+      },
+    })
+
+    expect(sessionMetadata).toMatchObject({
+      retained: true,
+      labels: { maintainerId: 'maintainer_1', subject: 'github-issue' },
+      github: {
+        repository: 'owner/repo',
+        type: 'issue',
+        number: 123,
+        url: 'https://github.com/owner/repo/issues/123',
+      },
+      source: 'http-trigger',
+      key: 'github:owner/repo:issue:123',
+    })
+    expect(runMetadata).toMatchObject(sessionMetadata!)
+  })
+
   it('reuses an active HTTP trigger session when request body carries the same key', async () => {
     let markedSessionId: string | null = null
     let messageContent: string | null = null
@@ -744,6 +797,61 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
     expect(markedSessionId).toBe('sess_existing')
     expect(messageContent).toBe('Handle T-123 from portal')
     expect(runtimeSessions.createSession).not.toHaveBeenCalled()
+  })
+
+  it('records request metadata on runs that reuse an existing keyed session', async () => {
+    let markedMetadata: Record<string, unknown> | null = null
+    const deps = fakeDeps({
+      triggerDispatch: {
+        markRunDispatched: async (_trigger, _run, _sessionId, metadata) => {
+          markedMetadata = metadata
+        },
+      },
+      sessions: {
+        findActiveHttpTriggerSession: async () => ({
+          id: 'sess_existing',
+          projectId: 'project_1',
+          organizationId: 'org_1',
+          state: 'idle',
+          archivedAt: null,
+          sandboxId: 'sandbox_1',
+          metadata: {},
+        }),
+      },
+    })
+
+    await dispatchHttpTrigger(deps, auth, {
+      trigger: httpTrigger({ id: 'http_trigger_1' }),
+      context: {
+        body: {
+          key: 'github:owner/repo:pull:456',
+          ticket: { id: 'T-123' },
+          metadata: {
+            github: {
+              repository: 'owner/repo',
+              type: 'pull',
+              number: 456,
+              url: 'https://github.com/owner/repo/pull/456',
+            },
+          },
+        },
+        query: { source: 'portal' },
+        headers: {},
+      },
+    })
+
+    expect(markedMetadata).toMatchObject({
+      source: 'http-trigger',
+      httpTriggerId: 'http_trigger_1',
+      key: 'github:owner/repo:pull:456',
+      reusedSession: true,
+      github: {
+        repository: 'owner/repo',
+        type: 'pull',
+        number: 456,
+        url: 'https://github.com/owner/repo/pull/456',
+      },
+    })
   })
 
   it('queues a message when reusing a pending HTTP trigger session with the same key', async () => {

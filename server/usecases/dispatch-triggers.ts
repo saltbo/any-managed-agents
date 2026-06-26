@@ -114,6 +114,24 @@ function httpTriggerSessionKey(body: unknown): string | null {
   return typeof key === 'string' && key.trim().length > 0 ? key : null
 }
 
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null
+}
+
+function mergeLabels(base: unknown, next: unknown): Record<string, unknown> | undefined {
+  const baseLabels = recordValue(base)
+  const nextLabels = recordValue(next)
+  if (!baseLabels && !nextLabels) return undefined
+  return { ...(baseLabels ?? {}), ...(nextLabels ?? {}) }
+}
+
+function httpTriggerBodyMetadata(body: unknown): Record<string, unknown> {
+  const bodyObject = recordValue(body)
+  const requestMetadata = recordValue(bodyObject?.metadata)
+  if (!requestMetadata) return {}
+  return requestMetadata
+}
+
 async function failRun(deps: Deps, auth: AuthScope, trigger: DueTrigger, run: ClaimedRun, message: string) {
   await deps.triggerDispatch.markRunFailed(trigger, run, message)
   await recordDispatch(deps, auth, trigger, run, { ok: false, message })
@@ -276,8 +294,12 @@ export async function dispatchHttpTrigger(
     throw new TriggerConflictError('HTTP trigger run already exists for this idempotency key')
   }
 
+  const requestMetadata = httpTriggerBodyMetadata(input.context.body)
+  const labels = mergeLabels(trigger.metadata.labels, requestMetadata.labels)
   const sessionMetadata = {
     ...trigger.metadata,
+    ...requestMetadata,
+    ...(labels ? { labels } : {}),
     source: 'http-trigger',
     httpTriggerId: trigger.id,
     httpRunId: run.id,
