@@ -746,6 +746,61 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
     expect(runtimeSessions.createSession).not.toHaveBeenCalled()
   })
 
+  it('fails the HTTP run when sending to a reused keyed session fails', async () => {
+    let markedMessage: string | null = null
+    let auditOutcome: string | null = null
+    const deps = fakeDeps({
+      triggerDispatch: {
+        markRunFailed: async (_trigger, _run, message) => {
+          markedMessage = message
+        },
+      },
+      sessions: {
+        findActiveHttpTriggerSession: async () => ({
+          id: 'sess_existing',
+          projectId: 'project_1',
+          organizationId: 'org_1',
+          state: 'idle',
+          archivedAt: null,
+          sandboxId: 'sandbox_1',
+          metadata: {
+            source: 'http-trigger',
+            httpTriggerId: 'http_trigger_1',
+            key: 'github:owner/repo:issue:123',
+          },
+        }),
+      },
+      audit: {
+        record: async (_auth, entry) => {
+          auditOutcome = (entry as { outcome?: string }).outcome ?? null
+        },
+      },
+    })
+    vi.mocked(runtimeSessions.dispatchPrompt).mockImplementation(async () => ({
+      ok: false,
+      status: 409,
+      message: 'Session is not accepting prompts',
+    }))
+
+    const result = await dispatchHttpTrigger(deps, auth, {
+      trigger: httpTrigger({ id: 'http_trigger_1' }),
+      context: {
+        body: { key: 'github:owner/repo:issue:123', ticket: { id: 'T-123' } },
+        query: { source: 'portal' },
+        headers: {},
+      },
+    })
+
+    expect(result).toMatchObject({
+      state: 'failed',
+      sessionId: null,
+      errorMessage: 'Session is not accepting prompts',
+    })
+    expect(markedMessage).toBe('Session is not accepting prompts')
+    expect(auditOutcome).toBe('failure')
+    expect(runtimeSessions.createSession).not.toHaveBeenCalled()
+  })
+
   it('passes HTTP trigger env and secretEnv through to createSession', async () => {
     const secretEnv = [{ name: 'AK_AGENT_KEY', credentialRef: { credentialId: 'cred_1', versionId: 'ver_1' } }]
     const trigger = httpTrigger({
