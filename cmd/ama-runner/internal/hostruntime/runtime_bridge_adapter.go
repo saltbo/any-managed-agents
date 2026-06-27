@@ -1,0 +1,402 @@
+package hostruntime
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"crypto/sha256"
+	_ "embed"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	goruntime "runtime"
+	"sync"
+	"syscall"
+	"time"
+
+	ama "github.com/saltbo/any-managed-agents/sdk/go/ama"
+)
+
+//go:embed runtime_bridge_bundle.mjs
+var embeddedRuntimeBridge []byte
+
+type SDKBridgeRuntimeAdapter struct {
+	Runtime string
+	// CommandTimeout is intentionally not applied to full runtime sessions.
+	// Agent sessions can run for hours; cancellation is driven by the lease
+	// context, runner shutdown, or an explicit session stop.
+	CommandTimeout        time.Duration
+	ShutdownGraceInterval time.Duration
+}
+
+type bridgeEnvelope struct {
+	Type        string       `json:"type"`
+	RequestID   string       `json:"requestId,omitempty"`
+	EventType   string       `json:"eventType,omitempty"`
+	Payload     ama.JSON     `json:"payload,omitempty"`
+	Metadata    ama.JSON     `json:"metadata,omitempty"`
+	Result      ama.JSON     `json:"result,omitempty"`
+	Error       *bridgeError `json:"error,omitempty"`
+	ResumeToken string       `json:"resumeToken,omitempty"`
+}
+
+type bridgeError struct {
+	Message string `json:"message"`
+	Code    string `json:"code,omitempty"`
+	Details any    `json:"details,omitempty"`
+}
+
+const (
+	eventTypeRuntimeMetadata = "runtime.metadata"
+	eventTypeRuntimeOutput   = "runtime.output"
+)
+
+func (a SDKBridgeRuntimeAdapter) Run(ctx context.Context, request Request, write EventWriter) (ama.JSON, error) {
+	if request.Runtime != a.Runtime {
+		return nil, fmt.Errorf("unsupported SDK bridge runtime %q", request.Runtime)
+	}
+	nodePath, err := exec.LookPath("node")
+	if err != nil {
+		return nil, fmt.Errorf("%s runtime requires Node.js to run the embedded SDK bridge", request.Runtime)
+	}
+	bridgePath, err := materializeRuntimeBridge()
+	if err != nil {
+		return nil, err
+	}
+	commandCtx, cancel := a.commandContext(ctx)
+	defer cancel()
+
+	env, err := CommandEnvironment(request)
+	if err != nil {
+		return nil, err
+	}
+	env = appendRuntimeBridgeHostEnv(env)
+	cmd := exec.CommandContext(commandCtx, nodePath, bridgePath)
+	cmd.Dir = request.WorkDir
+	cmd.Env = env
+	if goruntime.GOOS != "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	}
+	stdinWriter, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, err
+	}
+	stdin := &bridgeStdin{writer: stdinWriter}
+	stdoutReader, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	stderrReader, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, err
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	processDone := make(chan struct{})
+	go func() {
+		select {
+		case <-commandCtx.Done():
+			a.stopProcess(cmd)
+		case <-processDone:
+		}
+	}()
+	defer close(processDone)
+
+	requestID := "run_" + request.SessionID
+	var writeMu sync.Mutex
+	writeSerialized := func(eventType string, payload ama.JSON) error {
+		writeMu.Lock()
+		defer writeMu.Unlock()
+		return write(eventType, payload)
+	}
+	var stderrText bytes.Buffer
+	stderrDone := make(chan error, 1)
+	go func() {
+		stderrDone <- streamBridgeStderr(stderrReader, &stderrText, request.Runtime, writeSerialized)
+	}()
+	stdoutScanner := bridgeScanner(stdoutReader)
+	if err := waitBridgeReady(stdoutScanner); err != nil {
+		a.stopProcess(cmd)
+		_ = cmd.Wait()
+		<-stderrDone
+		if stderrText.Len() > 0 {
+			return nil, fmt.Errorf("%w: %s", err, stderrText.String())
+		}
+		return nil, err
+	}
+	if err := writeSerialized(eventTypeRuntimeMetadata, ama.JSON{"data": ama.JSON{"runtime": request.Runtime, "stage": "sdk_bridge_started", "status": "running"}}); err != nil {
+		a.stopProcess(cmd)
+		_ = cmd.Wait()
+		return nil, err
+	}
+
+	runRequest := ama.JSON{
+		"type":          "run",
+		"requestId":     requestID,
+		"runtime":       request.Runtime,
+		"sessionId":     request.SessionID,
+		"cwd":           request.WorkDir,
+		"env":           envMap(env),
+		"prompt":        request.InitialPrompt,
+		"provider":      request.Provider,
+		"agentSnapshot": request.AgentSnapshot,
+		"runtimeConfig": request.RuntimeConfig,
+		"resume":        request.Resume,
+		"resumeToken":   request.ResumeToken,
+	}
+	if request.Model != "" {
+		runRequest["model"] = request.Model
+	}
+	if err := stdin.WriteJSON(runRequest); err != nil {
+		a.stopProcess(cmd)
+		_ = cmd.Wait()
+		return nil, err
+	}
+	if request.RegisterControlSender != nil {
+		request.RegisterControlSender(func(command BridgeControlFrame) error {
+			return stdin.WriteJSON(bridgeControl(requestID, command))
+		})
+	}
+
+	var result ama.JSON
+	readErr := readBridgeMessages(stdoutScanner, requestID, writeSerialized, request.OnResumeToken, &result)
+	_ = stdin.Close()
+	waitErr := cmd.Wait()
+	stderrErr := <-stderrDone
+
+	final := ama.JSON{"stderr": stderrText.String(), "exitCode": exitCode(waitErr)}
+	for key, value := range result {
+		final[key] = value
+	}
+	if readErr != nil {
+		final["error"] = readErr.Error()
+		// A bridge-reported runtime error is a failed run even when the bridge
+		// process itself exits cleanly.
+		if exitCode(waitErr) == 0 {
+			final["exitCode"] = 1
+		}
+		return final, readErr
+	}
+	if stderrErr != nil && bridgePipeClosedAfterResult(stderrErr, result) {
+		stderrErr = nil
+	}
+	if stderrErr != nil {
+		final["error"] = stderrErr.Error()
+		return final, stderrErr
+	}
+	if commandCtx.Err() != nil {
+		final["error"] = commandCtx.Err().Error()
+		return final, commandCtx.Err()
+	}
+	if waitErr != nil {
+		final["error"] = waitErr.Error()
+		return final, fmt.Errorf("%s SDK bridge exited with code %d", request.Runtime, exitCode(waitErr))
+	}
+	if err := writeSerialized(eventTypeRuntimeMetadata, ama.JSON{"data": ama.JSON{"runtime": request.Runtime, "stage": "sdk_bridge_exited", "status": "completed"}}); err != nil {
+		final["finalEventError"] = err.Error()
+	}
+	return final, nil
+}
+
+func (a SDKBridgeRuntimeAdapter) commandContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithCancel(ctx)
+}
+
+func bridgeScanner(reader io.Reader) *bufio.Scanner {
+	scanner := bufio.NewScanner(reader)
+	buffer := make([]byte, 0, 64*1024)
+	scanner.Buffer(buffer, 1024*1024)
+	return scanner
+}
+
+func waitBridgeReady(scanner *bufio.Scanner) error {
+	if !scanner.Scan() {
+		if err := scanner.Err(); err != nil {
+			return err
+		}
+		return fmt.Errorf("runtime SDK bridge exited before ready")
+	}
+	var envelope bridgeEnvelope
+	if err := json.Unmarshal([]byte(scanner.Text()), &envelope); err != nil {
+		return fmt.Errorf("invalid runtime SDK bridge ready message: %w", err)
+	}
+	if envelope.Type != "ready" {
+		return fmt.Errorf("runtime SDK bridge did not send ready message")
+	}
+	return nil
+}
+
+func readBridgeMessages(scanner *bufio.Scanner, requestID string, write EventWriter, onResumeToken func(string), result *ama.JSON) error {
+	for scanner.Scan() {
+		var envelope bridgeEnvelope
+		if err := json.Unmarshal([]byte(scanner.Text()), &envelope); err != nil {
+			return fmt.Errorf("invalid runtime SDK bridge message: %w", err)
+		}
+		if envelope.RequestID != "" && envelope.RequestID != requestID {
+			continue
+		}
+		switch envelope.Type {
+		case "resumeToken":
+			if onResumeToken != nil && envelope.ResumeToken != "" {
+				onResumeToken(envelope.ResumeToken)
+			}
+		case "sessionEvent":
+			if envelope.EventType == "" {
+				return fmt.Errorf("runtime SDK bridge event missing type")
+			}
+			if envelope.Payload == nil {
+				envelope.Payload = ama.JSON{}
+			}
+			if err := write(envelope.EventType, envelope.Payload); err != nil {
+				return err
+			}
+		case "result":
+			*result = envelope.Result
+			return nil
+		case "error":
+			if envelope.Error == nil {
+				return fmt.Errorf("runtime SDK bridge failed")
+			}
+			return fmt.Errorf("%s", envelope.Error.Message)
+		default:
+			return fmt.Errorf("unsupported runtime SDK bridge message type %q", envelope.Type)
+		}
+	}
+	return scanner.Err()
+}
+
+func bridgePipeClosedAfterResult(err error, result ama.JSON) bool {
+	return err != nil && result != nil && errors.Is(err, os.ErrClosed)
+}
+
+// bridgeStdin serializes writes to the bridge's stdin so the initial run
+// request, injected prompt controls, and the final close cannot interleave.
+type bridgeStdin struct {
+	mu     sync.Mutex
+	writer io.WriteCloser
+	closed bool
+}
+
+func (s *bridgeStdin) WriteJSON(value ama.JSON) error {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return fmt.Errorf("runtime SDK bridge stdin is closed")
+	}
+	if _, err := s.writer.Write(append(data, '\n')); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *bridgeStdin) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return nil
+	}
+	s.closed = true
+	return s.writer.Close()
+}
+
+func bridgeControl(requestID string, command BridgeControlFrame) ama.JSON {
+	frame := ama.JSON{
+		"type":      command.Type,
+		"requestId": requestID,
+	}
+	if command.Message != "" {
+		frame["message"] = command.Message
+	}
+	if command.PermissionID != "" {
+		frame["permissionId"] = command.PermissionID
+	}
+	if command.Type == "permissionDecision" || command.Allowed {
+		frame["allowed"] = command.Allowed
+	}
+	if command.Reason != "" {
+		frame["reason"] = command.Reason
+	}
+	return frame
+}
+
+func streamBridgeStderr(reader io.Reader, output *bytes.Buffer, runtimeName string, write EventWriter) error {
+	scanner := bufio.NewScanner(reader)
+	for scanner.Scan() {
+		line := scanner.Text()
+		output.WriteString(line)
+		output.WriteByte('\n')
+		if err := write(eventTypeRuntimeOutput, ama.JSON{"stream": "stderr", "content": line, "runtime": runtimeName}); err != nil {
+			return err
+		}
+	}
+	return scanner.Err()
+}
+
+func materializeRuntimeBridge() (string, error) {
+	hash := sha256.Sum256(embeddedRuntimeBridge)
+	name := "ama-runtime-bridge-" + hex.EncodeToString(hash[:8]) + ".mjs"
+	root, err := os.UserCacheDir()
+	if err != nil {
+		root = os.TempDir()
+	}
+	dir := filepath.Join(root, "ama-runner")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	path := filepath.Join(dir, name)
+	if existing, err := os.ReadFile(path); err == nil && bytes.Equal(existing, embeddedRuntimeBridge) {
+		return path, nil
+	}
+	if err := os.WriteFile(path, embeddedRuntimeBridge, 0o755); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func envMap(env []string) map[string]string {
+	result := make(map[string]string, len(env))
+	for _, item := range env {
+		for index, char := range item {
+			if char == '=' {
+				result[item[:index]] = item[index+1:]
+				break
+			}
+		}
+	}
+	return result
+}
+
+func appendRuntimeBridgeHostEnv(env []string) []string {
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		env = append(env, "AMA_RUNTIME_BRIDGE_HOST_HOME="+home)
+	}
+	for _, key := range []string{"VOLTA_HOME", "NODE_PATH", "PNPM_HOME", "NVM_DIR", "AMA_RUNTIME_BRIDGE_TEST_MODE"} {
+		if value, ok := os.LookupEnv(key); ok && value != "" {
+			env = append(env, key+"="+value)
+		}
+	}
+	return env
+}
+
+func (a SDKBridgeRuntimeAdapter) stopProcess(cmd *exec.Cmd) {
+	if cmd.Process == nil {
+		return
+	}
+	if goruntime.GOOS != "windows" {
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+		time.Sleep(a.ShutdownGraceInterval)
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		return
+	}
+	_ = cmd.Process.Kill()
+}

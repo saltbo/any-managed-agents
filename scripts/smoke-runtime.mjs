@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import readline from 'node:readline'
 
-const BUNDLE = join(process.cwd(), 'cmd', 'ama-runner', 'runtime_bridge_bundle.mjs')
+const BUNDLE = join(process.cwd(), 'cmd', 'ama-runner', 'internal', 'hostruntime', 'runtime_bridge_bundle.mjs')
 let passed = 0
 let failed = 0
 
@@ -52,7 +52,13 @@ function startBridge() {
       return
     }
     outputs.push(msg)
-    if (msg.type === 'event') events.push(msg.event)
+    if (msg.type === 'sessionEvent') {
+      events.push({
+        type: msg.eventType,
+        payload: msg.payload,
+        ...(msg.metadata ? { metadata: msg.metadata } : {}),
+      })
+    }
     notify()
   })
   child.stderr.on('data', () => {})
