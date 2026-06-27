@@ -105,7 +105,7 @@ func runtimeWorkspace(workDir string, sessionID string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	sessionDir := filepath.Join(resolvedRoot, "sessions", sessionID)
+	sessionDir := filepath.Join(resolvedRoot, runtimeSessionsDirName, sessionID)
 	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
 		return "", err
 	}
@@ -116,7 +116,18 @@ func runtimeWorkspace(workDir string, sessionID string) (string, error) {
 	if err := ensureUnderWorkspace(resolvedRoot, resolvedSessionDir); err != nil {
 		return "", err
 	}
-	return resolvedSessionDir, nil
+	workspaceDir := filepath.Join(resolvedSessionDir, runtimeWorkspaceDirName)
+	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
+		return "", err
+	}
+	resolvedWorkspaceDir, err := filepath.EvalSymlinks(workspaceDir)
+	if err != nil {
+		return "", err
+	}
+	if err := ensureUnderWorkspace(resolvedSessionDir, resolvedWorkspaceDir); err != nil {
+		return "", err
+	}
+	return resolvedWorkspaceDir, nil
 }
 
 func exitCode(err error) int {

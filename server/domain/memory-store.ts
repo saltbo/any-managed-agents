@@ -35,19 +35,3 @@ export function normalizeMemoryPath(path: string): string {
 export function isMemoryStoreAccess(value: unknown): value is MemoryStoreAccess {
   return value === 'read_only' || value === 'read_write'
 }
-
-export function memoryStoreSystemPromptBlock(
-  stores: Array<{ name: string; description: string | null; mountPath: string; access: MemoryStoreAccess }>,
-): string | null {
-  if (stores.length === 0) {
-    return null
-  }
-  const lines = ['Attached memory stores:']
-  for (const store of stores) {
-    lines.push(`- ${store.name} (${store.access}) at ${store.mountPath}`)
-    if (store.description?.trim()) {
-      lines.push(`  Description: ${store.description.trim()}`)
-    }
-  }
-  return lines.join('\n')
-}

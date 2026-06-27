@@ -108,14 +108,13 @@ Be strict about error handling.
 	}
 }
 
-func TestPrepareAgentWorkspaceKeepsSubagentPromptSummary(t *testing.T) {
+func TestPrepareAgentWorkspaceDoesNotWriteSystemPromptFile(t *testing.T) {
 	cwd := t.TempDir()
 	if err := prepareAgentWorkspace(context.Background(), cwd, "codex", reviewerSnapshot()); err != nil {
 		t.Fatalf("expected workspace preparation success, got %v", err)
 	}
-	prompt, err := os.ReadFile(filepath.Join(cwd, ".ama", "system-prompt.md"))
-	if err != nil || !strings.Contains(string(prompt), "Available subagents: @reviewer (reviewer)") {
-		t.Fatalf("expected subagent summary to stay in the system prompt, got %q err=%v", prompt, err)
+	if _, err := os.Stat(filepath.Join(cwd, ".ama", "system-prompt.md")); !os.IsNotExist(err) {
+		t.Fatalf("expected no system prompt file in workspace, got err=%v", err)
 	}
 }
 

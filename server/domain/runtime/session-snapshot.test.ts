@@ -56,6 +56,13 @@ describe('[spec: sessions/memory-store-resources] memory store resource refs', (
   it('adds store metadata to the runtime system prompt without memory contents', () => {
     const augmented = agentSnapshotWithMemoryStoreContext(agentSnapshot(), [
       {
+        type: 'github_repository',
+        owner: 'saltbo',
+        repo: 'agent-kanban',
+        ref: 'main',
+        mountPath: '/workspace/repos/saltbo/agent-kanban',
+      },
+      {
         type: 'memory_store',
         storeId: 'memstore_1',
         name: 'Team memory',
@@ -66,9 +73,11 @@ describe('[spec: sessions/memory-store-resources] memory store resource refs', (
       },
     ])
     expect(augmented.instructions).toContain('Base instructions.')
+    expect(augmented.instructions).toContain('Workspace layout:')
+    expect(augmented.instructions).toContain('saltbo/agent-kanban at repos/saltbo/agent-kanban')
     expect(augmented.instructions).toContain('Team memory')
     expect(augmented.instructions).toContain('Review conventions.')
-    expect(augmented.instructions).toContain('/workspace/.ama/memory-stores/memstore_1')
+    expect(augmented.instructions).toContain('.ama/memory-stores/memstore_1')
     expect(augmented.instructions).not.toContain('secret memory content')
   })
 })

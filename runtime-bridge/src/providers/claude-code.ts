@@ -150,10 +150,7 @@ export const claudeCodeProvider: RuntimeProvider = {
   execute(request: RuntimeProviderRequest): Promise<RuntimeProviderHandle> {
     const abortController = new AbortController()
     const claudePath = resolveCliPath('claude')
-    const systemPrompt =
-      typeof request.runtimeConfig?.systemPromptFile === 'string'
-        ? readFileSync(request.runtimeConfig.systemPromptFile, 'utf8')
-        : agentSystemPrompt(request)
+    const systemPrompt = agentSystemPrompt(request)
     // The AMA session id is a UUID, so it doubles as Claude Code's own session id
     // for both fresh runs and resumes — keeping the Claude session 1:1 with AMA.
     let resumeToken = request.resumeToken ?? request.sessionId

@@ -198,7 +198,6 @@ async function prepareCloudWorkspace(
     })
   }
 
-  const resources = []
   const githubResources = manifest.resources.filter((resource) => resource.type === 'github_repository') as Array<
     Record<string, unknown>
   >
@@ -209,7 +208,9 @@ async function prepareCloudWorkspace(
       throw new Error(`Invalid github_repository resource: ${owner}/${repo}`)
     }
     const mountPath =
-      typeof resource.mountPath === 'string' && resource.mountPath ? resource.mountPath : `/workspace/${repo}`
+      typeof resource.mountPath === 'string' && resource.mountPath
+        ? resource.mountPath
+        : `/workspace/repos/${owner}/${repo}`
     if (!mountPath.startsWith('/workspace/')) {
       throw new Error(`github_repository mountPath must stay under /workspace: ${mountPath}`)
     }
@@ -219,10 +220,9 @@ async function prepareCloudWorkspace(
     if (typeof resource.ref === 'string' && resource.ref) {
       await execOrThrow(sandbox, `git -C ${shellQuote(mountPath)} checkout ${shellQuote(resource.ref)}`)
     }
-    resources.push({ ...resource, mountPath, status: 'cloned' })
   }
   for (const resourceRef of values.resourceRefs.filter((resourceRef) => resourceRef.type === 'memory_store')) {
-    const mountPath = String(resourceRef.mountPath ?? '')
+    const mountPath = String(resourceRef.mountPath ?? `/workspace/.ama/memory-stores/${resourceRef.storeId}`)
     if (!mountPath.startsWith('/workspace/.ama/memory-stores/')) {
       throw new Error(`Invalid memory_store mount path: ${mountPath}`)
     }
@@ -246,48 +246,17 @@ async function prepareCloudWorkspace(
     if (resourceRef.access === 'read_only') {
       await execOrThrow(sandbox, `chmod -R a-w ${shellQuote(mountPath)}`)
     }
-    const declared = manifest.resources.find(
-      (resource) =>
-        resource.type === 'memory_store' && 'storeId' in resource && resource.storeId === resourceRef.storeId,
-    )
-    resources.push({ ...(declared ?? resourceRef), mountPath, status: 'mounted' })
   }
-  await sandbox.writeFile('/workspace/.ama/resources.json', JSON.stringify({ ...manifest, resources }), {
-    encoding: 'utf-8',
-  })
 }
 
 export async function startSessionRuntime(
   env: Env,
   input: SessionRuntimeStartInput,
 ): Promise<SessionRuntimeStartResult> {
-  const model = resolveRuntimeModel(env, input.model)
+  resolveRuntimeModel(env, input.model)
   if (env.AMA_RUNTIME_MODE !== 'test') {
     const getSandbox = await getSandboxBinding()
     const sandbox = getSandbox(env.SANDBOX, input.sandboxId, { keepAlive: true, normalizeId: true })
-    await sandbox.exec('mkdir -p /workspace/.ama')
-    await sandbox.writeFile(
-      '/workspace/.ama/session.json',
-      JSON.stringify({
-        sessionId: input.sessionId,
-        sandboxId: input.sandboxId,
-        provider: input.provider,
-        model,
-        runtime: input.runtime ?? 'ama',
-        agentSnapshot: input.agentSnapshot,
-        environmentSnapshot: input.environmentSnapshot,
-        mcpSnapshot: input.mcpSnapshot ?? { connectors: [] },
-        runtimeEnv: input.runtimeEnv ?? {},
-        runtimeSecretEnv: input.runtimeSecretEnv ?? [],
-      }),
-      { encoding: 'utf-8' },
-    )
-    await sandbox.writeFile('/workspace/.ama/runtime-env.json', JSON.stringify(input.runtimeEnv ?? {}), {
-      encoding: 'utf-8',
-    })
-    await sandbox.writeFile('/workspace/.ama/runtime-secret-env.json', JSON.stringify(input.runtimeSecretEnv ?? []), {
-      encoding: 'utf-8',
-    })
     const sessionEnv = { ...(input.runtimeEnv ?? {}), ...(input.resolvedSecretEnv ?? {}) }
     if (Object.keys(sessionEnv).length > 0) {
       await sandbox.setEnvVars(sessionEnv)
@@ -309,9 +278,6 @@ export async function startSessionRuntime(
       loop: 'cloud-session-runtime',
       executor: 'cloudflare-sandbox',
       piCorePackage: '@earendil-works/pi-agent-core',
-      resourceManifestPath: '/workspace/.ama/resources.json',
-      runtimeEnvPath: '/workspace/.ama/runtime-env.json',
-      runtimeSecretEnvPath: '/workspace/.ama/runtime-secret-env.json',
     },
   }
 }

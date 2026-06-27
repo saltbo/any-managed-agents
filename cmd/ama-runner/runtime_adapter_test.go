@@ -167,7 +167,7 @@ func TestRuntimeWorkspaceSafety(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected workspace creation success, got %v", err)
 	}
-	if !strings.HasSuffix(workspace, filepath.Join("sessions", "session_1")) {
+	if !strings.HasSuffix(workspace, filepath.Join("sessions", "session_1", "workspace")) {
 		t.Fatalf("expected session workspace path, got %q", workspace)
 	}
 	if _, err := runtimeWorkspace(workDir, "../outside-session"); err == nil || !strings.Contains(err.Error(), "single path segment") {
@@ -212,28 +212,35 @@ func TestPrepareRuntimeWorkspaceMountsGitHubRepositoryWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected workspace preparation success, got %v", err)
 	}
-	if !strings.HasSuffix(workspace.Root, filepath.Join("sessions", "session_1")) {
+	if !strings.HasSuffix(workspace.SessionDir, filepath.Join("sessions", "session_1")) {
+		t.Fatalf("expected session private dir, got %q", workspace.SessionDir)
+	}
+	if !strings.HasSuffix(workspace.Root, filepath.Join("sessions", "session_1", "workspace")) {
 		t.Fatalf("expected session root, got %q", workspace.Root)
 	}
-	if !strings.HasSuffix(workspace.Cwd, filepath.Join("sessions", "session_1", "repos", "saltbo", "zpan")) {
-		t.Fatalf("expected repo worktree cwd, got %q", workspace.Cwd)
+	if workspace.Cwd != workspace.Root {
+		t.Fatalf("expected workspace root cwd, got %q", workspace.Cwd)
 	}
-	if data, err := os.ReadFile(filepath.Join(workspace.Cwd, "README.md")); err != nil || string(data) != "zpan\n" {
+	repoPath := filepath.Join(workspace.Root, "repos", "saltbo", "zpan")
+	if data, err := os.ReadFile(filepath.Join(repoPath, "README.md")); err != nil || string(data) != "zpan\n" {
 		t.Fatalf("expected mounted repo content, got %q err=%v", string(data), err)
 	}
-	gitFile, err := os.Stat(filepath.Join(workspace.Cwd, ".git"))
+	gitFile, err := os.Stat(filepath.Join(repoPath, ".git"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if gitFile.IsDir() {
 		t.Fatal("expected git worktree metadata file, got a full clone")
 	}
-	manifest, err := os.ReadFile(filepath.Join(workspace.Root, ".ama", "resources.json"))
+	if _, err := os.Stat(filepath.Join(workspace.Root, ".ama", "resources.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected no workspace resource manifest, got err=%v", err)
+	}
+	state, err := os.ReadFile(filepath.Join(workspace.SessionDir, runtimeSessionStateFileName))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(manifest), `"status": "mounted"`) || !strings.Contains(string(manifest), workspace.Cwd) {
-		t.Fatalf("expected mounted resource manifest, got %s", string(manifest))
+	if !strings.Contains(string(state), `"status": "mounted"`) || !strings.Contains(string(state), repoPath) {
+		t.Fatalf("expected mounted resource state, got %s", string(state))
 	}
 	if err := cleanupRuntimeWorkspace(context.Background(), workspace); err != nil {
 		t.Fatalf("expected workspace cleanup success, got %v", err)
@@ -242,7 +249,7 @@ func TestPrepareRuntimeWorkspaceMountsGitHubRepositoryWorktree(t *testing.T) {
 		t.Fatalf("expected session root cleanup, got err=%v", err)
 	}
 	worktrees := runGitOutput(t, cacheDir, "worktree", "list", "--porcelain")
-	if strings.Contains(worktrees, workspace.Cwd) {
+	if strings.Contains(worktrees, repoPath) {
 		t.Fatalf("expected git worktree metadata cleanup, got %s", worktrees)
 	}
 }
@@ -283,14 +290,17 @@ func TestPrepareRuntimeWorkspaceMountsMemoryStoreFiles(t *testing.T) {
 	if got := snapshots[0].Memories[0]; got.Path != "ak-maintainer-heartbeat.md" || got.Content != "updated heartbeat\n" {
 		t.Fatalf("expected updated memory snapshot, got %#v", got)
 	}
-	manifest, err := os.ReadFile(filepath.Join(workspace.Root, ".ama", "resources.json"))
+	if _, err := os.Stat(filepath.Join(workspace.Root, ".ama", "resources.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected no workspace resource manifest, got err=%v", err)
+	}
+	state, err := os.ReadFile(filepath.Join(workspace.SessionDir, runtimeSessionStateFileName))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(manifest), `"type": "memory_store"`) ||
-		!strings.Contains(string(manifest), `"status": "mounted"`) ||
-		strings.Contains(string(manifest), "initial heartbeat") {
-		t.Fatalf("expected mounted memory manifest without memory content, got %s", string(manifest))
+	if !strings.Contains(string(state), `"type": "memory_store"`) ||
+		!strings.Contains(string(state), `"status": "mounted"`) ||
+		strings.Contains(string(state), "initial heartbeat") {
+		t.Fatalf("expected mounted memory state without memory content, got %s", string(state))
 	}
 }
 
@@ -365,7 +375,7 @@ func TestPrepareRuntimeWorkspaceConfiguresSessionScopedGitCredentialFromGHToken(
 	if err != nil {
 		t.Fatalf("expected workspace preparation success, got %v", err)
 	}
-	credentialsPath := filepath.Join(workspace.Root, ".git-credentials")
+	credentialsPath := filepath.Join(workspace.SessionDir, "git-credentials")
 	credentials, err := os.ReadFile(credentialsPath)
 	if err != nil {
 		t.Fatalf("expected session credential store, got %v", err)
@@ -380,7 +390,8 @@ func TestPrepareRuntimeWorkspaceConfiguresSessionScopedGitCredentialFromGHToken(
 	if info.Mode().Perm() != 0o600 {
 		t.Fatalf("expected credential store mode 0600, got %v", info.Mode().Perm())
 	}
-	helpers := runGitOutput(t, workspace.Cwd, "config", "--worktree", "--get-all", "credential.helper")
+	repoPath := filepath.Join(workspace.Root, "repos", "saltbo", "zpan")
+	helpers := runGitOutput(t, repoPath, "config", "--worktree", "--get-all", "credential.helper")
 	if !strings.Contains(helpers, fmt.Sprintf("store --file %q", credentialsPath)) {
 		t.Fatalf("expected worktree credential helper pointing at the session store, got %q", helpers)
 	}
@@ -395,11 +406,11 @@ func TestPrepareRuntimeWorkspaceConfiguresSessionScopedGitCredentialFromGHToken(
 		t.Fatalf("expected second workspace preparation success, got %v", err)
 	}
 	leakCheck := exec.Command("git", "config", "--worktree", "--get-all", "credential.helper")
-	leakCheck.Dir = second.Cwd
+	leakCheck.Dir = filepath.Join(second.Root, "repos", "saltbo", "zpan")
 	if output, err := leakCheck.CombinedOutput(); err == nil && strings.TrimSpace(string(output)) != "" {
 		t.Fatalf("expected no credential helper leak into other sessions, got %q", string(output))
 	}
-	if _, err := os.Stat(filepath.Join(second.Root, ".git-credentials")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(second.SessionDir, "git-credentials")); !os.IsNotExist(err) {
 		t.Fatalf("expected no credential store without GH_TOKEN, got err=%v", err)
 	}
 	for _, prepared := range []PreparedWorkspace{workspace, second} {
@@ -458,7 +469,8 @@ func TestPrepareRuntimeWorkspaceSerializesSharedRepositoryCache(t *testing.T) {
 		t.Fatalf("expected concurrent workspace preparation success, got %v", err)
 	}
 	for workspace := range workspaces {
-		if data, err := os.ReadFile(filepath.Join(workspace.Cwd, "README.md")); err != nil || string(data) != "zpan\n" {
+		repoPath := filepath.Join(workspace.Root, "repos", "saltbo", "zpan")
+		if data, err := os.ReadFile(filepath.Join(repoPath, "README.md")); err != nil || string(data) != "zpan\n" {
 			t.Fatalf("expected mounted repo content, got %q err=%v", string(data), err)
 		}
 		if err := cleanupRuntimeWorkspace(context.Background(), workspace); err != nil {

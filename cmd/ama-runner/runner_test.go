@@ -462,12 +462,14 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 	runtimeAdapter := &fakeRuntimeAdapter{
 		result: ama.JSON{"exitCode": 0, "providerThreadId": "codex_thread_1"},
 		inspect: func(request RuntimeRequest) error {
-			if _, err := os.Stat(filepath.Join(request.WorkDir, ".ama", "agent.json")); err != nil {
-				return fmt.Errorf("expected agent snapshot manifest in workspace: %w", err)
+			if _, err := os.Stat(filepath.Join(request.WorkDir, ".ama", "agent.json")); !os.IsNotExist(err) {
+				return fmt.Errorf("expected no agent snapshot manifest in workspace, got err=%v", err)
 			}
-			systemPrompt, err := os.ReadFile(filepath.Join(request.WorkDir, ".ama", "system-prompt.md"))
-			if err != nil || !strings.Contains(string(systemPrompt), "Follow the AK worker protocol.") || !strings.Contains(string(systemPrompt), "Available subagents: @reviewer (reviewer)") {
-				return fmt.Errorf("expected agent system prompt manifest, got %q err=%v", string(systemPrompt), err)
+			if _, err := os.Stat(filepath.Join(request.WorkDir, ".ama", "system-prompt.md")); !os.IsNotExist(err) {
+				return fmt.Errorf("expected no system prompt file in workspace, got err=%v", err)
+			}
+			if _, err := os.Stat(filepath.Join(request.WorkDir, ".ama", "resources.json")); !os.IsNotExist(err) {
+				return fmt.Errorf("expected no resource manifest in workspace, got err=%v", err)
 			}
 			return nil
 		},
@@ -498,7 +500,7 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 		runtimeAdapter.request.Model != "gpt-5.3-codex" {
 		t.Fatalf("expected runtime request metadata, got %#v", runtimeAdapter.request)
 	}
-	if runtimeAdapter.request.WorkDir == workDir || !strings.HasSuffix(runtimeAdapter.request.WorkDir, filepath.Join("sessions", "session_1")) {
+	if runtimeAdapter.request.WorkDir == workDir || !strings.HasSuffix(runtimeAdapter.request.WorkDir, filepath.Join("sessions", "session_1", "workspace")) {
 		t.Fatalf("expected isolated session workspace, got %q from root %q", runtimeAdapter.request.WorkDir, workDir)
 	}
 	if runtimeAdapter.request.RuntimeConfig["model"] != "gpt-5.3-codex" {
@@ -507,7 +509,7 @@ func TestRunOnceDispatchesCodexRuntimeThroughAdapterAndCompletesSessionLease(t *
 	if runtimeAdapter.request.AgentSnapshot["instructions"] != "Follow the AK worker protocol." {
 		t.Fatalf("expected agent snapshot to reach adapter, got %#v", runtimeAdapter.request.AgentSnapshot)
 	}
-	if _, err := os.Stat(filepath.Join(runtimeAdapter.request.WorkDir, ".ama", "agent.json")); err != nil {
+	if _, err := os.Stat(runtimeAdapter.request.WorkDir); err != nil {
 		t.Fatalf("expected completed session workspace to remain inspectable, got %v", err)
 	}
 	if len(client.updates) != 1 || client.updates[0].State != "completed" {

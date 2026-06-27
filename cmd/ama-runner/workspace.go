@@ -14,6 +14,9 @@ import (
 )
 
 const runtimeWorkspaceRetention = 24 * time.Hour
+const runtimeSessionsDirName = "sessions"
+const runtimeWorkspaceDirName = "workspace"
+const runtimeSessionStateFileName = "state.json"
 
 type ResourceRef struct {
 	Type        string           `json:"type"`
@@ -32,6 +35,7 @@ type ResourceRef struct {
 }
 
 type PreparedWorkspace struct {
+	SessionDir   string
 	Root         string
 	Cwd          string
 	worktrees    []preparedWorktree
@@ -85,20 +89,18 @@ func prepareRuntimeWorkspace(ctx context.Context, workDir string, sessionID stri
 	if err != nil {
 		return PreparedWorkspace{}, err
 	}
+	sessionDir := filepath.Dir(root)
 	githubResources := githubRepositoryResources(resourceRefs)
 	memoryResources := memoryStoreResources(resourceRefs)
 	mounted := make([]mountedResource, 0, len(githubResources)+len(memoryResources))
 	worktrees := make([]preparedWorktree, 0, len(githubResources))
 	memoryStores := make([]preparedMemoryStore, 0, len(memoryResources))
 	cwd := root
-	for index, resource := range githubResources {
+	for _, resource := range githubResources {
 		localPath, cacheDir, err := materializeGitHubRepository(ctx, workDir, root, resource)
 		if err != nil {
-			_ = cleanupRuntimeWorkspace(context.Background(), PreparedWorkspace{Root: root, Cwd: cwd, worktrees: worktrees, memoryStores: memoryStores})
+			_ = cleanupRuntimeWorkspace(context.Background(), PreparedWorkspace{SessionDir: sessionDir, Root: root, Cwd: cwd, worktrees: worktrees, memoryStores: memoryStores})
 			return PreparedWorkspace{}, err
-		}
-		if index == 0 {
-			cwd = localPath
 		}
 		mounted = append(mounted, mountedResource{
 			Type:      resource.Type,
@@ -114,7 +116,7 @@ func prepareRuntimeWorkspace(ctx context.Context, workDir string, sessionID stri
 	for _, resource := range memoryResources {
 		localPath, err := materializeMemoryStore(root, resource)
 		if err != nil {
-			_ = cleanupRuntimeWorkspace(context.Background(), PreparedWorkspace{Root: root, Cwd: cwd, worktrees: worktrees, memoryStores: memoryStores})
+			_ = cleanupRuntimeWorkspace(context.Background(), PreparedWorkspace{SessionDir: sessionDir, Root: root, Cwd: cwd, worktrees: worktrees, memoryStores: memoryStores})
 			return PreparedWorkspace{}, err
 		}
 		mounted = append(mounted, mountedResource{
@@ -130,15 +132,15 @@ func prepareRuntimeWorkspace(ctx context.Context, workDir string, sessionID stri
 		})
 		memoryStores = append(memoryStores, preparedMemoryStore{storeID: resource.StoreID, path: localPath, access: resource.Access})
 	}
-	if err := configureWorkspaceGitCredential(ctx, root, worktrees, workspaceGitHubToken(runtimeEnv)); err != nil {
-		_ = cleanupRuntimeWorkspace(context.Background(), PreparedWorkspace{Root: root, Cwd: cwd, worktrees: worktrees, memoryStores: memoryStores})
+	if err := configureWorkspaceGitCredential(ctx, sessionDir, worktrees, workspaceGitHubToken(runtimeEnv)); err != nil {
+		_ = cleanupRuntimeWorkspace(context.Background(), PreparedWorkspace{SessionDir: sessionDir, Root: root, Cwd: cwd, worktrees: worktrees, memoryStores: memoryStores})
 		return PreparedWorkspace{}, err
 	}
-	if err := writeWorkspaceManifest(root, mounted); err != nil {
-		_ = cleanupRuntimeWorkspace(context.Background(), PreparedWorkspace{Root: root, Cwd: cwd, worktrees: worktrees, memoryStores: memoryStores})
+	if err := writeSessionState(sessionDir, root, mounted); err != nil {
+		_ = cleanupRuntimeWorkspace(context.Background(), PreparedWorkspace{SessionDir: sessionDir, Root: root, Cwd: cwd, worktrees: worktrees, memoryStores: memoryStores})
 		return PreparedWorkspace{}, err
 	}
-	return PreparedWorkspace{Root: root, Cwd: cwd, worktrees: worktrees, memoryStores: memoryStores}, nil
+	return PreparedWorkspace{SessionDir: sessionDir, Root: root, Cwd: cwd, worktrees: worktrees, memoryStores: memoryStores}, nil
 }
 
 // workspaceGitHubToken mirrors the cloud workspace token resolution:
@@ -157,11 +159,11 @@ func workspaceGitHubToken(runtimeEnv map[string]string) string {
 // agent already receives GH_TOKEN via runtimeEnv, which covers gh; this
 // covers git itself. Worktree-scoped config keeps the credential out of the
 // shared repository cache and never touches the host's global config.
-func configureWorkspaceGitCredential(ctx context.Context, sessionRoot string, worktrees []preparedWorktree, token string) error {
+func configureWorkspaceGitCredential(ctx context.Context, sessionDir string, worktrees []preparedWorktree, token string) error {
 	if token == "" || len(worktrees) == 0 {
 		return nil
 	}
-	credentialsPath := filepath.Join(sessionRoot, ".git-credentials")
+	credentialsPath := filepath.Join(sessionDir, "git-credentials")
 	credential := "https://x-access-token:" + token + "@github.com\n"
 	if err := os.WriteFile(credentialsPath, []byte(credential), 0o600); err != nil {
 		return err
@@ -236,7 +238,7 @@ func cleanupStaleRuntimeWorkspaces(ctx context.Context, workDir string, retentio
 	if retention <= 0 {
 		return nil
 	}
-	sessionsDir := filepath.Join(workDir, "sessions")
+	sessionsDir := filepath.Join(workDir, runtimeSessionsDirName)
 	entries, err := os.ReadDir(sessionsDir)
 	if os.IsNotExist(err) {
 		return nil
@@ -263,6 +265,9 @@ func cleanupStaleRuntimeWorkspaces(ctx context.Context, workDir string, retentio
 		if err := cleanupRuntimeWorkspace(ctx, workspace); err != nil {
 			errs = append(errs, err.Error())
 		}
+		if err := os.RemoveAll(root); err != nil {
+			errs = append(errs, err.Error())
+		}
 	}
 	if len(errs) > 0 {
 		return fmt.Errorf("cleanup stale runtime workspaces failed: %s", strings.Join(errs, "; "))
@@ -270,9 +275,26 @@ func cleanupStaleRuntimeWorkspaces(ctx context.Context, workDir string, retentio
 	return nil
 }
 
-func staleRuntimeWorkspace(workDir string, root string) PreparedWorkspace {
-	workspace := PreparedWorkspace{Root: root, Cwd: root}
-	data, err := os.ReadFile(filepath.Join(root, ".ama", "resources.json"))
+func staleRuntimeWorkspace(workDir string, sessionDir string) PreparedWorkspace {
+	workspaceRoot := filepath.Join(sessionDir, runtimeWorkspaceDirName)
+	workspace := PreparedWorkspace{SessionDir: sessionDir, Root: workspaceRoot, Cwd: workspaceRoot}
+	data, err := os.ReadFile(filepath.Join(sessionDir, runtimeSessionStateFileName))
+	if err != nil {
+		return staleRuntimeWorkspaceFromLegacyManifest(workDir, sessionDir)
+	}
+	var state struct {
+		Resources []mountedResource `json:"resources"`
+	}
+	if err := json.Unmarshal(data, &state); err != nil {
+		return workspace
+	}
+	addMountedResources(workDir, &workspace, state.Resources)
+	return workspace
+}
+
+func staleRuntimeWorkspaceFromLegacyManifest(workDir string, sessionDir string) PreparedWorkspace {
+	workspace := PreparedWorkspace{SessionDir: sessionDir, Root: sessionDir, Cwd: sessionDir}
+	data, err := os.ReadFile(filepath.Join(sessionDir, ".ama", "resources.json"))
 	if err != nil {
 		return workspace
 	}
@@ -282,7 +304,12 @@ func staleRuntimeWorkspace(workDir string, root string) PreparedWorkspace {
 	if err := json.Unmarshal(data, &manifest); err != nil {
 		return workspace
 	}
-	for _, resource := range manifest.Resources {
+	addMountedResources(workDir, &workspace, manifest.Resources)
+	return workspace
+}
+
+func addMountedResources(workDir string, workspace *PreparedWorkspace, resources []mountedResource) {
+	for _, resource := range resources {
 		if resource.LocalPath == "" {
 			continue
 		}
@@ -303,28 +330,11 @@ func staleRuntimeWorkspace(workDir string, root string) PreparedWorkspace {
 			})
 		}
 	}
-	return workspace
 }
 
 func prepareAgentWorkspace(ctx context.Context, cwd string, runtimeName string, agentSnapshot map[string]any) error {
 	if agentSnapshot == nil {
 		return nil
-	}
-	amaDir := filepath.Join(cwd, ".ama")
-	if err := os.MkdirAll(amaDir, 0o755); err != nil {
-		return err
-	}
-	snapshot, err := json.MarshalIndent(agentSnapshot, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(filepath.Join(amaDir, "agent.json"), snapshot, 0o644); err != nil {
-		return err
-	}
-	if prompt := agentSystemPrompt(agentSnapshot); prompt != "" {
-		if err := os.WriteFile(filepath.Join(amaDir, "system-prompt.md"), []byte(prompt), 0o644); err != nil {
-			return err
-		}
 	}
 	for _, skill := range agentSkillRefs(agentSnapshot) {
 		if err := installAgentSkill(ctx, cwd, runtimeName, skill); err != nil {
@@ -729,20 +739,19 @@ func localMountPath(sessionRoot string, resource ResourceRef) (string, error) {
 	return resolved, nil
 }
 
-func writeWorkspaceManifest(sessionRoot string, resources []mountedResource) error {
-	amaDir := filepath.Join(sessionRoot, ".ama")
-	if err := os.MkdirAll(amaDir, 0o755); err != nil {
+func writeSessionState(sessionDir string, workspaceRoot string, resources []mountedResource) error {
+	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(map[string]any{
 		"version":       1,
-		"workspaceRoot": sessionRoot,
+		"workspaceRoot": workspaceRoot,
 		"resources":     resources,
 	}, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(amaDir, "resources.json"), data, 0o644)
+	return os.WriteFile(filepath.Join(sessionDir, runtimeSessionStateFileName), data, 0o600)
 }
 
 func safeGitHubSegment(value string) bool {

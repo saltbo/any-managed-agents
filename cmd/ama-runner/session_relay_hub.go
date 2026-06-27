@@ -320,7 +320,7 @@ func newRelayHub(opener RunnerChannelOpener, runnerID string, executor string, w
 		runnerID: runnerID,
 		executor: executor,
 		adapter:  sandboxAdapter,
-		storeDir: filepath.Join(workDir, "sessions"),
+		storeDir: filepath.Join(workDir, runtimeSessionsDirName),
 		sessions: map[string]*sessionCommandRouter{},
 	}
 }

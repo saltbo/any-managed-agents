@@ -135,9 +135,6 @@ describe('session-runtime', () => {
         loop: 'cloud-session-runtime',
         executor: 'cloudflare-sandbox',
         piCorePackage: '@earendil-works/pi-agent-core',
-        resourceManifestPath: '/workspace/.ama/resources.json',
-        runtimeEnvPath: '/workspace/.ama/runtime-env.json',
-        runtimeSecretEnvPath: '/workspace/.ama/runtime-secret-env.json',
       }),
     })
   })
@@ -485,7 +482,7 @@ describe('session-runtime', () => {
     )
   })
 
-  it('initializes sandbox workspace metadata in live mode without starting a Pi process', async () => {
+  it('initializes sandbox workspace metadata in live mode without starting a Pi process [spec: runtime/workspace-contract]', async () => {
     await expect(
       startSessionRuntime({ AMA_RUNTIME_MODE: 'live', SANDBOX: {} } as Env, {
         sessionId: 'session_123',
@@ -516,20 +513,10 @@ describe('session-runtime', () => {
         runtimeBackend: 'ama-cloud',
         runtimeProtocol: 'ama-runtime-rpc',
         loop: 'cloud-session-runtime',
-        runtimeEnvPath: '/workspace/.ama/runtime-env.json',
-        runtimeSecretEnvPath: '/workspace/.ama/runtime-secret-env.json',
       }),
     })
 
     expect(getSandboxMock).toHaveBeenCalledWith({}, 'sandbox_123', { keepAlive: true, normalizeId: true })
-    expect(mockSandbox.exec).toHaveBeenCalledWith('mkdir -p /workspace/.ama')
-    expect(mockSandbox.writeFile).toHaveBeenCalledWith(
-      '/workspace/.ama/session.json',
-      expect.stringContaining(
-        '"runtimeSecretEnv":[{"name":"AK_AGENT_KEY","credentialRef":{"credentialId":"cred_abc123"}}]',
-      ),
-      { encoding: 'utf-8' },
-    )
     expect(mockSandbox.setEnvVars).toHaveBeenCalledWith({
       AK_API_URL: 'https://ak.example.com',
       AK_AGENT_ID: 'agent_123',
@@ -542,33 +529,11 @@ describe('session-runtime', () => {
       "git -C '/workspace/repos/saltbo/any-managed-agents' checkout 'main'",
       undefined,
     )
-    expect(mockSandbox.writeFile).toHaveBeenCalledWith(
-      '/workspace/.ama/resources.json',
-      JSON.stringify({
-        version: 1,
-        workspaceRoot: '/workspace',
-        resources: [
-          {
-            type: 'github_repository',
-            owner: 'saltbo',
-            repo: 'any-managed-agents',
-            mountPath: '/workspace/repos/saltbo/any-managed-agents',
-            ref: 'main',
-            status: 'cloned',
-          },
-        ],
-      }),
-      { encoding: 'utf-8' },
-    )
-    expect(mockSandbox.writeFile).toHaveBeenCalledWith(
-      '/workspace/.ama/runtime-env.json',
-      JSON.stringify({ AK_API_URL: 'https://ak.example.com', AK_AGENT_ID: 'agent_123' }),
-      { encoding: 'utf-8' },
-    )
-    expect(mockSandbox.writeFile).toHaveBeenCalledWith(
-      '/workspace/.ama/runtime-secret-env.json',
-      JSON.stringify([{ name: 'AK_AGENT_KEY', credentialRef: { credentialId: 'cred_abc123' } }]),
-      { encoding: 'utf-8' },
+    expect(mockSandbox.exec).not.toHaveBeenCalledWith('mkdir -p /workspace/.ama')
+    expect(mockSandbox.writeFile).not.toHaveBeenCalledWith(
+      expect.stringMatching(/^\/workspace\/\.ama\/(session|resources|runtime-env|runtime-secret-env)\.json$/),
+      expect.anything(),
+      expect.anything(),
     )
   })
 

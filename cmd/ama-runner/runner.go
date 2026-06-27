@@ -910,7 +910,7 @@ func (d *RunnerDaemon) runRelaySessionStart(ctx context.Context, lease *Lease, p
 		}
 		return err
 	}
-	store, err := openSessionEventStore(filepath.Join(d.Config.WorkDir, "sessions", payload.SessionID))
+	store, err := openSessionEventStore(filepath.Join(d.Config.WorkDir, runtimeSessionsDirName, payload.SessionID))
 	if err != nil {
 		if finishErr := d.finishFailed(ctx, lease, fmt.Errorf("open session event store: %w", err), nil); finishErr != nil {
 			return finishErr

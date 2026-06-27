@@ -710,8 +710,10 @@ describe('[CF] /api/v1/sessions', () => {
         memories: [{ path: 'guides/review.md', content: 'Review for correctness first.' }],
       },
     ])
-    expect(storedPayload.agentSnapshot.instructions).toContain('Attached memory stores:')
+    expect(storedPayload.agentSnapshot.instructions).toContain('Workspace layout:')
+    expect(storedPayload.agentSnapshot.instructions).toContain('saltbo/agent-kanban at repos/saltbo/agent-kanban')
     expect(storedPayload.agentSnapshot.instructions).toContain('Team memory')
+    expect(storedPayload.agentSnapshot.instructions).toContain(`.ama/memory-stores/${memoryStore.id}`)
     expect(storedPayload.agentSnapshot.instructions).not.toContain('Review for correctness first.')
     expect(storedPayload.provider).toBe('workers-ai')
     expect(storedPayload.runtimeEnv).not.toHaveProperty('AK_AGENT_KEY')

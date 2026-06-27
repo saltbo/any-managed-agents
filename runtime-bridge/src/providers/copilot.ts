@@ -1,5 +1,4 @@
 import { execSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
 import '@github/copilot/sdk'
 import type { SessionEvent } from '@github/copilot-sdk'
 import { approveAll, CopilotClient } from '@github/copilot-sdk'
@@ -91,10 +90,7 @@ function* mapCopilotEvent(event: SessionEvent, state: CopilotState): Generator<A
 export const copilotProvider: RuntimeProvider = {
   name: 'copilot',
   async execute(request: RuntimeProviderRequest): Promise<RuntimeProviderHandle> {
-    const systemPrompt =
-      typeof request.runtimeConfig?.systemPromptFile === 'string'
-        ? readFileSync(request.runtimeConfig.systemPromptFile, 'utf8')
-        : agentSystemPrompt(request)
+    const systemPrompt = agentSystemPrompt(request)
     // Without an explicit cliPath the SDK resolves @github/copilot via
     // import.meta.resolve, which throws when the bridge runs from the runner's
     // materialized temp dir (no node_modules). Point it at the host CLI instead.

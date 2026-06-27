@@ -170,11 +170,12 @@ func processCommandEnvironment(workDir string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	homeDir, err := prepareProcessEnvironmentDir(root, ".home")
+	envRoot := processEnvironmentRoot(root)
+	homeDir, err := prepareProcessEnvironmentDir(envRoot, ".home")
 	if err != nil {
 		return nil, err
 	}
-	tempDir, err := prepareProcessEnvironmentDir(root, ".tmp")
+	tempDir, err := prepareProcessEnvironmentDir(envRoot, ".tmp")
 	if err != nil {
 		return nil, err
 	}
@@ -191,6 +192,17 @@ func processCommandEnvironment(workDir string) ([]string, error) {
 		}
 	}
 	return env, nil
+}
+
+func processEnvironmentRoot(workDir string) string {
+	if filepath.Base(workDir) != runtimeWorkspaceDirName {
+		return workDir
+	}
+	sessionDir := filepath.Dir(workDir)
+	if filepath.Base(filepath.Dir(sessionDir)) != runtimeSessionsDirName {
+		return workDir
+	}
+	return sessionDir
 }
 
 func prepareProcessEnvironmentDir(root string, name string) (string, error) {

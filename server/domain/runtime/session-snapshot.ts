@@ -1,5 +1,5 @@
 import type { AgentVersionRow, EnvironmentVersionRow } from '@shared/runtime-rows'
-import { isMemoryStoreAccess, memoryStoreMountPath, memoryStoreSystemPromptBlock } from '../memory-store'
+import { isMemoryStoreAccess, memoryStoreMountPath } from '../memory-store'
 import { hasEmbeddedCredentialUrl, normalizeMountPath } from '../session'
 
 // Snapshot serialization (DB row → immutable session snapshot) and resource-ref
@@ -61,16 +61,7 @@ export function agentSnapshotWithMemoryStoreContext(
   agentSnapshot: SerializedAgentVersion,
   resourceRefs: ResourceRef[],
 ): SerializedAgentVersion {
-  const block = memoryStoreSystemPromptBlock(
-    resourceRefs
-      .filter((resourceRef) => resourceRef.type === 'memory_store')
-      .map((resourceRef) => ({
-        name: String(resourceRef.name ?? ''),
-        description: typeof resourceRef.description === 'string' ? resourceRef.description : null,
-        mountPath: String(resourceRef.mountPath ?? ''),
-        access: resourceRef.access === 'read_write' ? 'read_write' : 'read_only',
-      })),
-  )
+  const block = workspaceSystemPromptBlock(resourceRefs)
   if (!block) {
     return agentSnapshot
   }
@@ -79,6 +70,50 @@ export function agentSnapshotWithMemoryStoreContext(
     ...agentSnapshot,
     instructions: instructions ? `${instructions}\n\n${block}` : block,
   }
+}
+
+function workspaceSystemPromptBlock(resourceRefs: ResourceRef[]): string | null {
+  const repositories = resourceRefs
+    .filter((resourceRef) => resourceRef.type === 'github_repository')
+    .map((resourceRef) => {
+      const owner = String(resourceRef.owner ?? '')
+      const repo = String(resourceRef.repo ?? '')
+      const mountPath = relativeWorkspacePath(String(resourceRef.mountPath ?? `/workspace/repos/${owner}/${repo}`))
+      return `- ${owner}/${repo} at ${mountPath}`
+    })
+  const memoryStores = resourceRefs
+    .filter((resourceRef) => resourceRef.type === 'memory_store')
+    .map((resourceRef) => {
+      const name = String(resourceRef.name ?? '').trim()
+      const storeId = String(resourceRef.storeId ?? '')
+      const access = resourceRef.access === 'read_write' ? 'read_write' : 'read_only'
+      const mountPath = relativeWorkspacePath(String(resourceRef.mountPath ?? memoryStoreMountPath(storeId)))
+      const description = typeof resourceRef.description === 'string' && resourceRef.description.trim()
+        ? `\n  Description: ${resourceRef.description.trim()}`
+        : ''
+      return `- ${name || storeId} (${access}) at ${mountPath}${description}`
+    })
+  if (repositories.length === 0 && memoryStores.length === 0) {
+    return null
+  }
+  const lines = ['Workspace layout:', '- The current working directory is this session workspace root.']
+  if (repositories.length > 0) {
+    lines.push('- Repositories:', ...repositories.map((repository) => `  ${repository}`))
+  }
+  if (memoryStores.length > 0) {
+    lines.push('- Memory stores:', ...memoryStores.map((store) => `  ${store}`))
+  }
+  return lines.join('\n')
+}
+
+function relativeWorkspacePath(path: string): string {
+  if (path === '/workspace') {
+    return '.'
+  }
+  if (path.startsWith('/workspace/')) {
+    return path.slice('/workspace/'.length)
+  }
+  return path
 }
 
 export function serializeEnvironmentVersion(row: EnvironmentVersionRow) {

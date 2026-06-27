@@ -38,6 +38,16 @@ Feature: Runtime
     And AMA runs the same cloud turn loop, model calls, turn leases, and canonical event store used by cloud sessions
     And sandbox tools are executed through the runner-backed sandbox channel
 
+  @runtime/workspace-contract @usecase
+  Scenario: Keep runner-private state out of the agent workspace
+    Given a runtime session mounts repositories, memory stores, credentials, and runner state
+    When the agent runtime starts in the session workspace
+    Then the current working directory is the agent-visible workspace root
+    And repositories are mounted under workspace-relative repos/<owner>/<repo> paths
+    And memory stores are mounted under workspace-relative .ama/memory-stores/<store-id> paths
+    And runner-owned state, credentials, process home, process temp, event logs, and control-plane manifests remain outside the agent-visible workspace
+    And the runtime prompt describes the workspace layout using workspace-relative paths
+
   @runtime/cooperative-cancellation @usecase
   Scenario: Cancel a running session without starting more work
     Given a session is running model, tool, or sandbox work

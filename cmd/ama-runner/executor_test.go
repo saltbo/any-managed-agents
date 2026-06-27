@@ -79,6 +79,63 @@ func TestProcessAdapterDoesNotExposeDaemonAMAEnvironment(t *testing.T) {
 	}
 }
 
+func TestProcessCommandEnvironmentUsesSessionPrivateDirsForRuntimeWorkspace(t *testing.T) {
+	sessionDir := filepath.Join(t.TempDir(), "sessions", "session_1")
+	workDir := filepath.Join(sessionDir, runtimeWorkspaceDirName)
+	if err := os.MkdirAll(workDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	env, err := processCommandEnvironment(workDir)
+	if err != nil {
+		t.Fatalf("expected command environment success, got %v", err)
+	}
+	resolvedSessionDir, err := filepath.EvalSymlinks(sessionDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessionHome := filepath.Join(resolvedSessionDir, ".home")
+	sessionTemp := filepath.Join(resolvedSessionDir, ".tmp")
+	joined := strings.Join(env, "\n")
+	for _, expected := range []string{"HOME=" + sessionHome, "TMPDIR=" + sessionTemp, "TEMP=" + sessionTemp, "TMP=" + sessionTemp} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("expected session-scoped environment %q, got %q", expected, joined)
+		}
+	}
+	for _, unexpected := range []string{
+		filepath.Join(workDir, ".home"),
+		filepath.Join(workDir, ".tmp"),
+	} {
+		if strings.Contains(joined, unexpected) {
+			t.Fatalf("expected no workspace-local process directory %q, got %q", unexpected, joined)
+		}
+	}
+}
+
+func TestProcessCommandEnvironmentKeepsOrdinaryWorkspaceDirsLocal(t *testing.T) {
+	parent := t.TempDir()
+	workDir := filepath.Join(parent, runtimeWorkspaceDirName)
+	if err := os.MkdirAll(workDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	env, err := processCommandEnvironment(workDir)
+	if err != nil {
+		t.Fatalf("expected command environment success, got %v", err)
+	}
+	resolvedWorkDir, err := filepath.EvalSymlinks(workDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(env, "\n")
+	for _, expected := range []string{
+		"HOME=" + filepath.Join(resolvedWorkDir, ".home"),
+		"TMPDIR=" + filepath.Join(resolvedWorkDir, ".tmp"),
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("expected workspace-local environment %q, got %q", expected, joined)
+		}
+	}
+}
+
 func TestProcessCommandEnvironmentFailsWhenWorkspaceHomeOrTempCannotBeCreated(t *testing.T) {
 	fileWorkDir := filepath.Join(t.TempDir(), "workspace-file")
 	if err := os.WriteFile(fileWorkDir, []byte("not a directory"), 0o644); err != nil {

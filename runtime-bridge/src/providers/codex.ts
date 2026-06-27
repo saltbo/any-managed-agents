@@ -124,12 +124,13 @@ export const codexProvider: RuntimeProvider = {
     let resumeToken = request.resumeToken
     const abortController = new AbortController()
     const codexPathOverride = resolveCliPath('codex')
+    const systemPrompt = agentSystemPrompt(request)
     const codex = new Codex({
       env: sdkEnv(request),
       // Managed sessions must not inherit the host user's personal Codex Apps
       // connectors (e.g. the GitHub connector creates PRs as the host user
       // instead of with the session's GH_TOKEN credential).
-      config: { features: { apps: false } },
+      config: { features: { apps: false }, ...(systemPrompt ? { developer_instructions: systemPrompt } : {}) },
       ...(codexPathOverride ? { codexPathOverride } : {}),
     })
     const model = resolveModel(request)
@@ -142,9 +143,7 @@ export const codexProvider: RuntimeProvider = {
     }
     const thread =
       request.resume && resumeToken ? codex.resumeThread(resumeToken, threadOptions) : codex.startThread(threadOptions)
-    const systemPrompt = agentSystemPrompt(request)
-    const prompt = systemPrompt ? `${systemPrompt}\n\nUser task:\n${request.prompt}` : request.prompt
-    const streamed = await thread.runStreamed(prompt, { signal: abortController.signal })
+    const streamed = await thread.runStreamed(request.prompt, { signal: abortController.signal })
     const events = (async function* () {
       for await (const event of streamed.events) {
         if (event.type === 'thread.started') resumeToken = event.thread_id
