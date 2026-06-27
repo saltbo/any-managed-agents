@@ -2,7 +2,7 @@
 //
 // Both cloud-side turn entrypoints — the CLOUD_TURNS queue path
 // (executeCloudSessionTurn) and the runtime-endpoint proxy
-// (recordRuntimeMessageOutcome) — drive the same runtime-core engine over the
+// (recordRuntimeMessageOutcome) — drive the same AMA turn engine over the
 // SAME callback bundle: the suppress→ensureActive→append event sink, the
 // approval-gate tool-result resolver, and the policy+gate approveToolCall with
 // its denial recording.
@@ -16,7 +16,6 @@
 // the tool-approvals layer stays the single owner of the gate construction).
 
 import { parseJson } from '@server/domain/runtime/session-snapshot'
-import { RuntimeTurnCancelledError } from '../../../runtime-core/errors'
 import type {
   AuthScope,
   PolicyPort,
@@ -26,6 +25,7 @@ import type {
   SessionRow,
 } from '../ports'
 import type { ToolApprovalGate } from './approval-gate'
+import { RuntimeTurnCancelledError } from './engine/errors'
 import { appendRuntimeEvent } from './events'
 
 export async function assertRuntimeSessionRunning(

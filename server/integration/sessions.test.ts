@@ -645,7 +645,7 @@ describe('[CF] /api/v1/sessions', () => {
         sandboxBackend: 'runner-sandbox',
         runnerState: 'queued',
         runnerProtocol: 'ama-runner-work',
-        runnerRole: 'sandbox-executor',
+        runnerWorkKind: 'sandbox-tool-executor',
       },
       runtimeMetadata: {
         hostingMode: 'self_hosted',
@@ -1795,9 +1795,7 @@ describe('[CF] /api/v1/sessions', () => {
     })
     expect(createRes.status).toBe(201)
     const created = (await createRes.json()) as { id: string }
-    await env.DB.prepare(
-      "UPDATE work_items SET state = 'succeeded', result = ?, updated_at = ? WHERE session_id = ?",
-    )
+    await env.DB.prepare("UPDATE work_items SET state = 'succeeded', result = ?, updated_at = ? WHERE session_id = ?")
       .bind(JSON.stringify({ resumeToken: 'resume-token-1' }), new Date().toISOString(), created.id)
       .run()
     await env.DB.prepare("UPDATE sessions SET state = 'running', state_reason = NULL, updated_at = ? WHERE id = ?")
@@ -1816,11 +1814,17 @@ describe('[CF] /api/v1/sessions', () => {
       state: 'accepted',
     })
     const sessionRes = await jsonFetch(`/api/v1/sessions/${created.id}`, authorization)
-    await expect(sessionRes.json()).resolves.toMatchObject({ id: created.id, state: 'pending', stateReason: 'waiting-for-runner' })
+    await expect(sessionRes.json()).resolves.toMatchObject({
+      id: created.id,
+      state: 'pending',
+      stateReason: 'waiting-for-runner',
+    })
 
     const workItemsRes = await jsonFetch(`/api/v1/work-items?sessionId=${created.id}`, authorization)
     expect(workItemsRes.status).toBe(200)
-    const workItems = (await workItemsRes.json()) as { data: Array<{ state: string; payload: Record<string, unknown> }> }
+    const workItems = (await workItemsRes.json()) as {
+      data: Array<{ state: string; payload: Record<string, unknown> }>
+    }
     expect(workItems.data).toContainEqual(
       expect.objectContaining({
         state: 'available',

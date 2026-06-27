@@ -401,12 +401,10 @@ func TestRunnerIdentityStateUsesStateDirAndMachineID(t *testing.T) {
 	}
 }
 
-// The legacy "runner executes cloud-pushed sandbox tool calls over the session
-// channel" path (runAMASession) is retired now that AMA runs the shared
-// runtime-core engine inside the embedded runtime-bridge subprocess. AMA routes
-// through runExternalSession like the other bridge runtimes; runAMASession
-// itself is still unit-tested directly below. The two former full-flow command
-// tests were removed because that behavior no longer exists on the AMA path.
+// AMA no longer hosts its full loop inside the runner. For AMA sessions, the
+// cloud loop sends sandbox tool requests over the runner channel; external
+// runtimes still run through the bridge subprocess. The old runner-local AMA
+// full-loop path is intentionally absent from the full-flow tests.
 
 func TestRunOnceCancelsSessionChannelWhenContextIsCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())

@@ -1,10 +1,10 @@
-import { RuntimeTurnCancelledError } from '../../../runtime-core/errors'
-import type { ToolExecutionInput, ToolExecutionResult, ToolExecutor } from '../../../runtime-core/ports'
 import type { Env } from '../../env'
+import { RuntimeTurnCancelledError } from '../../usecases/runtime/engine/errors'
+import type { ToolExecutionInput, ToolExecutionResult, ToolExecutor } from '../../usecases/runtime/engine/ports'
 
-// Worker-host adapter for the runtime-core ToolExecutor port: executes sandbox
+// Worker-host adapter for the AMA turn engine ToolExecutor port: executes sandbox
 // tools against the Cloudflare Sandbox (or a deterministic in-process simulator
-// in test mode). The canonical port types live in runtime-core/ports; re-exported
+// in test mode). The canonical port types live in the engine/contracts; re-exported
 // here so existing importers keep their paths.
 export type { ToolExecutionInput, ToolExecutionResult, ToolExecutor }
 

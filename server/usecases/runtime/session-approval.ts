@@ -6,7 +6,7 @@
 // turn loop.
 //
 // Deps-first: state writes go through deps.sessionOrchestration, audit through
-// deps.audit, tool execution through deps.sandboxRuntime.executeTool, and the
+// deps.audit, tool execution through deps.sandboxExecutor.executeTool, and the
 // resumed turn through the cloud-turn usecase (inline) or deps.cloudTurnQueue
 // (queued). The pure approval-state read lives in domain/runtime/approval-state.
 // The module is infra-free. Logic is verbatim from the former
@@ -15,7 +15,7 @@
 import { type SessionApprovalGrants, sessionApprovalState } from '@server/domain/runtime/approval-state'
 import { parseJson } from '@server/domain/runtime/session-snapshot'
 import { now, stringify } from '@server/domain/runtime/util'
-import type { AuthScope } from '../ports'
+import type { AuthScope, SessionSandboxExecutor } from '../ports'
 import { writeSessionApprovalState } from './approval-gate'
 import type { CloudTurnDeps } from './cloud-turn'
 import { executeCloudSessionTurn } from './cloud-turn'
@@ -29,9 +29,9 @@ type SessionRuntimeError = {
   detail?: Record<string, unknown>
 }
 
-// The approval continuation resumes the cloud turn loop, so it needs the full
-// CloudTurnDeps.
-export type ApprovalDeps = CloudTurnDeps
+// The approval continuation resumes the cloud turn loop and may execute one
+// approved sandbox tool before resuming.
+export type ApprovalDeps = CloudTurnDeps & { sandboxExecutor: SessionSandboxExecutor }
 
 export type ApprovalDecisionResult =
   | { ok: true; approval: ApprovalRowOutput }
@@ -151,7 +151,7 @@ export async function decideSessionApproval(
   if (approved && body.result) {
     resultOutput = body.result
   } else if (approved) {
-    const executed = await deps.sandboxRuntime.executeTool({
+    const executed = await deps.sandboxExecutor.executeTool({
       sessionId: session.id,
       sandboxId: session.sandboxId ?? '',
       toolCallId: pending.toolCallId,

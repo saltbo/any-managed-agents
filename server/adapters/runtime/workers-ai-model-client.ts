@@ -1,14 +1,18 @@
 import type { AssistantMessage, Context, Model, ToolCall, Usage } from '@earendil-works/pi-ai'
-import { isRuntimeTurnCancelled, ProviderCallError, RuntimeTurnCancelledError } from '../../../runtime-core/errors'
-import type { ModelClient } from '../../../runtime-core/ports'
-import { assistantMessage, ZERO_USAGE } from '../../../runtime-core/turn-engine'
 import { extractProviderUsage, normalizeProviderError, providerFamily } from '../../domain/provider-adapter'
 import { aiGatewayFor } from '../../domain/runtime-catalog'
 import type { Env } from '../../env'
+import {
+  isRuntimeTurnCancelled,
+  ProviderCallError,
+  RuntimeTurnCancelledError,
+} from '../../usecases/runtime/engine/errors'
+import type { ModelClient } from '../../usecases/runtime/engine/ports'
+import { assistantMessage, ZERO_USAGE } from '../../usecases/runtime/engine/turn-engine'
 
 // The Worker host's ModelClient adapter: Workers AI egress with deterministic
 // test-mode simulation. Owns the OpenAI request/response mapping and
-// provider-error normalization so the runtime-core turn engine stays
+// provider-error normalization so the AMA turn engine stays
 // platform-free. Failures are normalized through the provider adapter before
 // they leave this seam.
 

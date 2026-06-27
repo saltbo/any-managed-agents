@@ -1004,7 +1004,7 @@ func userPromptEventPayload(message string) ama.JSON {
 
 // runRuntimeAndRelay prepares the workspace + runtime adapter and runs it, storing
 // every event to the local log and relaying it live via `relay`; cmdRouter receives
-// the runtime's prompt/stop/permission senders. Shared by the ama (per-lease) and
+// the runtime's standard bridge control sender. Shared by the ama (per-lease) and
 // CLI (per-runner) session paths. Returns the result, the run error, and whether
 // the per-session deadline fired (the finalizer fails — never interrupts — on that).
 func (d *RunnerDaemon) runRuntimeAndRelay(
@@ -1042,21 +1042,19 @@ func (d *RunnerDaemon) runRuntimeAndRelay(
 	defer cancelDeadline()
 	var writeMu sync.Mutex
 	result, runErr := adapter.Run(runCtx, RuntimeRequest{
-		SessionID:                payload.SessionID,
-		Runtime:                  payload.Runtime,
-		RuntimeConfig:            payload.RuntimeConfig,
-		RuntimeEnv:               payload.RuntimeEnv,
-		Provider:                 payload.Provider,
-		Model:                    payload.Model,
-		AgentSnapshot:            payload.AgentSnapshot,
-		InitialPrompt:            initialPrompt(payload),
-		Resume:                   payload.Resume,
-		ResumeToken:              payload.ResumeToken,
-		WorkDir:                  workspace.Cwd,
-		OnResumeToken:            resumeTokens.Set,
-		RegisterPromptSender:     cmdRouter.registerPromptSender,
-		RegisterStopSender:       cmdRouter.registerStopSender,
-		RegisterPermissionSender: cmdRouter.registerPermissionSender,
+		SessionID:             payload.SessionID,
+		Runtime:               payload.Runtime,
+		RuntimeConfig:         payload.RuntimeConfig,
+		RuntimeEnv:            payload.RuntimeEnv,
+		Provider:              payload.Provider,
+		Model:                 payload.Model,
+		AgentSnapshot:         payload.AgentSnapshot,
+		InitialPrompt:         initialPrompt(payload),
+		Resume:                payload.Resume,
+		ResumeToken:           payload.ResumeToken,
+		WorkDir:               workspace.Cwd,
+		OnResumeToken:         resumeTokens.Set,
+		RegisterControlSender: cmdRouter.registerControlSender,
 	}, func(eventType string, eventPayload ama.JSON) error {
 		writeMu.Lock()
 		defer writeMu.Unlock()

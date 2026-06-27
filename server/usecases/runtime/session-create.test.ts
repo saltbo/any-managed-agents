@@ -122,7 +122,8 @@ const deps: CreateSessionDeps = {
     evaluateSandboxRuntime: (auth: unknown, values: unknown) =>
       evaluateSandboxRuntimePolicyMock(auth as never, values as never),
   } as never,
-  sandboxRuntime: {} as never,
+  cloudRuntime: {} as never,
+  amaTurnExecutor: {} as never,
   cloudTurnQueue: {
     enqueue: (message: unknown) => enqueueCloudTurnMock(message),
     runsInline: () => cloudTurnsRunInlineMock(),

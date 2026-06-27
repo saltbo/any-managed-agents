@@ -8,8 +8,8 @@
 import { now } from '@server/domain/runtime/util'
 import type { SessionRow } from '@shared/runtime-rows'
 import { canonicalAmaSessionEventFromRuntimeEvent } from '@shared/session-events'
-import { runtimeMessagesFromEvents } from '../../../runtime-core/transcript'
 import type { AuditPort, AuthScope, SessionEventStore, SessionOrchestrationStore } from '../ports'
+import { runtimeMessagesFromEvents } from './engine/transcript'
 
 export async function appendRuntimeEvent(
   deps: { sessionEventStore: SessionEventStore },

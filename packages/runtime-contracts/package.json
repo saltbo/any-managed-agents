@@ -1,0 +1,14 @@
+{
+  "name": "@ama/runtime-contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./bridge-protocol": "./src/bridge-protocol.ts",
+    "./runtime-names": "./src/runtime-names.ts",
+    "./sandbox-tools": "./src/sandbox-tools.ts",
+    "./session-events": "./src/session-events.ts",
+    "./workspace-manifest": "./src/workspace-manifest.ts"
+  }
+}

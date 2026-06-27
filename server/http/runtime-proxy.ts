@@ -1,7 +1,6 @@
 import type { OpenAPIHono } from '@hono/zod-openapi'
 import { canonicalAmaSessionEventFromRuntimeEvent } from '@shared/session-events'
 import type { Context, Env as HonoEnv } from 'hono'
-import { isRuntimeTurnCancelled } from '../../runtime-core/errors'
 import { requireAuth } from '../auth/session'
 import {
   parseRuntimeProxyRoute,
@@ -25,6 +24,7 @@ import {
   recordRuntimeMessageOutcome,
   recordRuntimeMessageSubmission,
 } from '../usecases/runtime'
+import { isRuntimeTurnCancelled } from '../usecases/runtime/engine/errors'
 import { requestId } from './request-context'
 
 // The /api/v1/runtime data-plane proxy. Its wire shape is dictated by external
@@ -386,9 +386,9 @@ export async function handleRuntimeProxyRequest(c: Context<DepsEnv>): Promise<Re
     }
   }
   if (operation?.operation === 'command' && request.method === 'POST' && c.env.AMA_RUNTIME_MODE === 'test') {
-    let result: Awaited<ReturnType<Deps['sandboxRuntime']['executeToolCalls']>>
+    let result: Awaited<ReturnType<Deps['sandboxExecutor']['executeToolCalls']>>
     try {
-      result = await deps.sandboxRuntime.executeToolCalls({
+      result = await deps.sandboxExecutor.executeToolCalls({
         sessionId: session.id,
         sandboxId: session.sandboxId,
         body: {

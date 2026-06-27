@@ -3,7 +3,7 @@
   "compilerOptions": {
     "types": ["@cloudflare/workers-types", "node"]
   },
-  "include": ["**/*", "../runtime-core", "../e2e", "../drizzle.config.ts", "../vitest*.ts"],
+  "include": ["**/*", "../packages/runtime-contracts/src", "../e2e", "../drizzle.config.ts", "../vitest*.ts"],
   "exclude": [
     "integration/**/*.test.ts",
     "integration/apply-migrations.ts",

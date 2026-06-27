@@ -18,12 +18,12 @@ import (
 
 func TestSessionCommandRouterBuffersPromptBeforeSenderRegistered(t *testing.T) {
 	router := newSessionCommandRouter("session_1")
-	router.deliverPrompt("first prompt")
-	router.deliverPrompt("second prompt")
+	router.deliverControl(BridgeControlFrame{Type: "send", Message: "first prompt"})
+	router.deliverControl(BridgeControlFrame{Type: "send", Message: "second prompt"})
 
 	var received []string
-	router.registerPromptSender(func(message string) error {
-		received = append(received, message)
+	router.registerControlSender(func(command BridgeControlFrame) error {
+		received = append(received, command.Message)
 		return nil
 	})
 
@@ -36,11 +36,11 @@ func TestSessionCommandRouterDeliversPromptAfterSenderRegistered(t *testing.T) {
 	router := newSessionCommandRouter("session_1")
 
 	var received []string
-	router.registerPromptSender(func(message string) error {
-		received = append(received, message)
+	router.registerControlSender(func(command BridgeControlFrame) error {
+		received = append(received, command.Message)
 		return nil
 	})
-	router.deliverPrompt("live prompt")
+	router.deliverControl(BridgeControlFrame{Type: "send", Message: "live prompt"})
 
 	if len(received) != 1 || received[0] != "live prompt" {
 		t.Fatalf("expected live prompt delivered immediately, got %v", received)
@@ -54,11 +54,11 @@ func TestSessionCommandRouterRecordsPromptAfterDelivery(t *testing.T) {
 	})
 
 	var received []string
-	router.registerPromptSender(func(message string) error {
-		received = append(received, message)
+	router.registerControlSender(func(command BridgeControlFrame) error {
+		received = append(received, command.Message)
 		return nil
 	})
-	router.deliverPrompt("live prompt")
+	router.deliverControl(BridgeControlFrame{Type: "send", Message: "live prompt"})
 
 	if len(received) != 1 || received[0] != "live prompt" {
 		t.Fatalf("expected prompt delivered, got %v", received)
@@ -73,9 +73,9 @@ func TestSessionCommandRouterRecordsBufferedPromptAfterDelivery(t *testing.T) {
 	router := newSessionCommandRouter("session_1", func(message string) {
 		recorded = append(recorded, message)
 	})
-	router.deliverPrompt("buffered prompt")
+	router.deliverControl(BridgeControlFrame{Type: "send", Message: "buffered prompt"})
 
-	router.registerPromptSender(func(message string) error {
+	router.registerControlSender(func(command BridgeControlFrame) error {
 		return nil
 	})
 
@@ -89,10 +89,10 @@ func TestSessionCommandRouterDoesNotRecordPromptWhenDeliveryFails(t *testing.T) 
 	router := newSessionCommandRouter("session_1", func(message string) {
 		recorded = append(recorded, message)
 	})
-	router.registerPromptSender(func(message string) error {
+	router.registerControlSender(func(command BridgeControlFrame) error {
 		return errors.New("send failed")
 	})
-	router.deliverPrompt("failed prompt")
+	router.deliverControl(BridgeControlFrame{Type: "send", Message: "failed prompt"})
 
 	if len(recorded) != 0 {
 		t.Fatalf("expected failed prompt not recorded, got %v", recorded)
@@ -101,11 +101,11 @@ func TestSessionCommandRouterDoesNotRecordPromptWhenDeliveryFails(t *testing.T) 
 
 func TestSessionCommandRouterBuffersStopBeforeSenderRegistered(t *testing.T) {
 	router := newSessionCommandRouter("session_1")
-	router.deliverStop("timeout")
+	router.deliverControl(BridgeControlFrame{Type: "abort", Reason: "timeout"})
 
 	var received string
-	router.registerStopSender(func(reason string) error {
-		received = reason
+	router.registerControlSender(func(command BridgeControlFrame) error {
+		received = command.Reason
 		return nil
 	})
 
@@ -118,11 +118,11 @@ func TestSessionCommandRouterDeliversStopAfterSenderRegistered(t *testing.T) {
 	router := newSessionCommandRouter("session_1")
 
 	var received string
-	router.registerStopSender(func(reason string) error {
-		received = reason
+	router.registerControlSender(func(command BridgeControlFrame) error {
+		received = command.Reason
 		return nil
 	})
-	router.deliverStop("user cancelled")
+	router.deliverControl(BridgeControlFrame{Type: "abort", Reason: "user cancelled"})
 
 	if received != "user cancelled" {
 		t.Fatalf("expected live stop delivered immediately, got %q", received)
@@ -131,18 +131,19 @@ func TestSessionCommandRouterDeliversStopAfterSenderRegistered(t *testing.T) {
 
 func TestSessionCommandRouterBuffersPermissionBeforeSenderRegistered(t *testing.T) {
 	router := newSessionCommandRouter("session_1")
-	cmd := RunnerSessionCommand{
+	cmd := BridgeControlFrame{
+		Type:         "permissionDecision",
 		PermissionID: "perm_1",
 		Allowed:      true,
 		Reason:       "approved",
 	}
-	router.deliverPermission(cmd)
+	router.deliverControl(cmd)
 
 	var gotID string
 	var gotAllowed bool
 	var gotReason string
-	router.registerPermissionSender(func(permissionId string, allowed bool, reason string) error {
-		gotID, gotAllowed, gotReason = permissionId, allowed, reason
+	router.registerControlSender(func(command BridgeControlFrame) error {
+		gotID, gotAllowed, gotReason = command.PermissionID, command.Allowed, command.Reason
 		return nil
 	})
 
@@ -155,84 +156,83 @@ func TestSessionCommandRouterDeliversPermissionAfterSenderRegistered(t *testing.
 	router := newSessionCommandRouter("session_1")
 
 	var gotID string
-	router.registerPermissionSender(func(permissionId string, allowed bool, reason string) error {
-		gotID = permissionId
+	router.registerControlSender(func(command BridgeControlFrame) error {
+		gotID = command.PermissionID
 		return nil
 	})
-	router.deliverPermission(RunnerSessionCommand{PermissionID: "perm_2", Allowed: false, Reason: "denied"})
+	router.deliverControl(BridgeControlFrame{Type: "permissionDecision", PermissionID: "perm_2", Allowed: false, Reason: "denied"})
 
 	if gotID != "perm_2" {
 		t.Fatalf("expected live permission delivered immediately, got %q", gotID)
 	}
 }
 
-func TestSessionCommandRouterOnlyBuffersFirstStop(t *testing.T) {
-	// Only the last stop before registration is buffered (pendingStop is *string).
+func TestSessionCommandRouterBuffersAbortControlsInOrder(t *testing.T) {
 	router := newSessionCommandRouter("session_1")
-	router.deliverStop("first")
-	router.deliverStop("second")
+	router.deliverControl(BridgeControlFrame{Type: "abort", Reason: "first"})
+	router.deliverControl(BridgeControlFrame{Type: "abort", Reason: "second"})
 
 	var received []string
-	router.registerStopSender(func(reason string) error {
-		received = append(received, reason)
+	router.registerControlSender(func(command BridgeControlFrame) error {
+		received = append(received, command.Reason)
 		return nil
 	})
 
-	if len(received) != 1 {
-		t.Fatalf("expected exactly one stop flushed, got %v", received)
+	if len(received) != 2 || received[0] != "first" || received[1] != "second" {
+		t.Fatalf("expected abort controls flushed in order, got %v", received)
 	}
 }
 
 // --- relayHub unit tests ---
 
 func TestSessionCommandRouterDeliverPromptLogsWhenSendErrors(t *testing.T) {
-	// deliverPrompt must not return the error — it logs a warning and moves on.
+	// deliverControl must not return the error — it logs a warning and moves on.
 	router := newSessionCommandRouter("session_1")
-	router.registerPromptSender(func(message string) error {
+	router.registerControlSender(func(command BridgeControlFrame) error {
 		return errors.New("send failed")
 	})
 	// Must not panic or return error — just log and continue.
-	router.deliverPrompt("failing prompt")
+	router.deliverControl(BridgeControlFrame{Type: "send", Message: "failing prompt"})
 }
 
 func TestSessionCommandRouterDeliverStopLogsWhenSendErrors(t *testing.T) {
 	router := newSessionCommandRouter("session_1")
-	router.registerStopSender(func(reason string) error {
+	router.registerControlSender(func(command BridgeControlFrame) error {
 		return errors.New("stop send failed")
 	})
-	router.deliverStop("abort")
+	router.deliverControl(BridgeControlFrame{Type: "abort", Reason: "abort"})
 }
 
 func TestSessionCommandRouterDeliverPermissionLogsWhenSendErrors(t *testing.T) {
 	router := newSessionCommandRouter("session_1")
-	router.registerPermissionSender(func(permissionId string, allowed bool, reason string) error {
+	router.registerControlSender(func(command BridgeControlFrame) error {
 		return errors.New("permission send failed")
 	})
-	router.deliverPermission(RunnerSessionCommand{PermissionID: "perm_err", Allowed: true})
+	router.deliverControl(BridgeControlFrame{Type: "permissionDecision", PermissionID: "perm_err", Allowed: true})
 }
 
-func TestSessionCommandRouterRegisterPromptSenderLogsFlushError(t *testing.T) {
+func TestSessionCommandRouterRegisterControlSenderLogsFlushError(t *testing.T) {
 	// Buffer a prompt before sender is registered; flush should log the error.
 	router := newSessionCommandRouter("session_1")
-	router.deliverPrompt("buffered prompt")
-	// registerPromptSender calls send for each buffered prompt; if it errors, log and continue.
-	router.registerPromptSender(func(message string) error {
+	router.deliverControl(BridgeControlFrame{Type: "send", Message: "buffered prompt"})
+	// registerControlSender calls send for each buffered control; if it errors, log and continue.
+	router.registerControlSender(func(command BridgeControlFrame) error {
 		return errors.New("flush send failed")
 	})
 }
 
-func TestSessionCommandRouterRegisterStopSenderLogsFlushError(t *testing.T) {
+func TestSessionCommandRouterRegisterAbortControlLogsFlushError(t *testing.T) {
 	router := newSessionCommandRouter("session_1")
-	router.deliverStop("buffered stop")
-	router.registerStopSender(func(reason string) error {
+	router.deliverControl(BridgeControlFrame{Type: "abort", Reason: "buffered stop"})
+	router.registerControlSender(func(command BridgeControlFrame) error {
 		return errors.New("stop flush failed")
 	})
 }
 
-func TestSessionCommandRouterRegisterPermissionSenderLogsFlushError(t *testing.T) {
+func TestSessionCommandRouterRegisterPermissionControlLogsFlushError(t *testing.T) {
 	router := newSessionCommandRouter("session_1")
-	router.deliverPermission(RunnerSessionCommand{PermissionID: "perm_flush"})
-	router.registerPermissionSender(func(permissionId string, allowed bool, reason string) error {
+	router.deliverControl(BridgeControlFrame{Type: "permissionDecision", PermissionID: "perm_flush"})
+	router.registerControlSender(func(command BridgeControlFrame) error {
 		return errors.New("permission flush failed")
 	})
 }
@@ -301,15 +301,15 @@ func TestRelayHubRoutesCommandToRegisteredSession(t *testing.T) {
 	hub.register("session_1", router)
 
 	var received string
-	router.registerPromptSender(func(message string) error {
-		received = message
+	router.registerControlSender(func(command BridgeControlFrame) error {
+		received = command.Message
 		return nil
 	})
 
 	hub.routeCommand(RunnerChannelMessage{
 		Type:      "session.command",
 		SessionID: "session_1",
-		Command:   RunnerSessionCommand{Type: "prompt", Message: "build it"},
+		Command:   RunnerSessionCommand{Type: "send", Message: "build it"},
 	})
 
 	if received != "build it" {
@@ -323,15 +323,15 @@ func TestRelayHubRoutesStopCommandToRegisteredSession(t *testing.T) {
 	hub.register("session_1", router)
 
 	var received string
-	router.registerStopSender(func(reason string) error {
-		received = reason
+	router.registerControlSender(func(command BridgeControlFrame) error {
+		received = command.Reason
 		return nil
 	})
 
 	hub.routeCommand(RunnerChannelMessage{
 		Type:      "session.command",
 		SessionID: "session_1",
-		Command:   RunnerSessionCommand{Type: "stop", Reason: "user cancelled"},
+		Command:   RunnerSessionCommand{Type: "abort", Reason: "user cancelled"},
 	})
 
 	if received != "user cancelled" {
@@ -346,15 +346,15 @@ func TestRelayHubRoutesPermissionCommandToRegisteredSession(t *testing.T) {
 
 	var gotID string
 	var gotAllowed bool
-	router.registerPermissionSender(func(permissionId string, allowed bool, reason string) error {
-		gotID, gotAllowed = permissionId, allowed
+	router.registerControlSender(func(command BridgeControlFrame) error {
+		gotID, gotAllowed = command.PermissionID, command.Allowed
 		return nil
 	})
 
 	hub.routeCommand(RunnerChannelMessage{
 		Type:      "session.command",
 		SessionID: "session_1",
-		Command:   RunnerSessionCommand{Type: "permission_decision", PermissionID: "perm_3", Allowed: true},
+		Command:   RunnerSessionCommand{Type: "permissionDecision", PermissionID: "perm_3", Allowed: true},
 	})
 
 	if gotID != "perm_3" || !gotAllowed {
@@ -368,7 +368,7 @@ func TestRelayHubDropsCommandForUnregisteredSession(t *testing.T) {
 	hub.routeCommand(RunnerChannelMessage{
 		Type:      "session.command",
 		SessionID: "ghost_session",
-		Command:   RunnerSessionCommand{Type: "prompt", Message: "hello"},
+		Command:   RunnerSessionCommand{Type: "send", Message: "hello"},
 	})
 }
 
@@ -377,7 +377,7 @@ func TestRelayHubDropsCommandWithEmptySessionID(t *testing.T) {
 	// A command with no sessionId must be silently dropped
 	hub.routeCommand(RunnerChannelMessage{
 		Type:    "session.command",
-		Command: RunnerSessionCommand{Type: "prompt", Message: "hello"},
+		Command: RunnerSessionCommand{Type: "send", Message: "hello"},
 	})
 }
 
@@ -398,15 +398,15 @@ func TestRelayHubDropsPromptCommandWithEmptyMessage(t *testing.T) {
 	router := newSessionCommandRouter("session_1")
 	hub.register("session_1", router)
 	var received []string
-	router.registerPromptSender(func(message string) error {
-		received = append(received, message)
+	router.registerControlSender(func(command BridgeControlFrame) error {
+		received = append(received, command.Message)
 		return nil
 	})
 	// Empty message must be dropped
 	hub.routeCommand(RunnerChannelMessage{
 		Type:      "session.command",
 		SessionID: "session_1",
-		Command:   RunnerSessionCommand{Type: "prompt", Message: ""},
+		Command:   RunnerSessionCommand{Type: "send", Message: ""},
 	})
 	if len(received) != 0 {
 		t.Fatalf("expected empty prompt to be dropped, got %v", received)

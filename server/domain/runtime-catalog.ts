@@ -42,8 +42,8 @@ export const RUNTIME_CATALOG: readonly RuntimeCatalogEntry[] = [
 ]
 
 // Runtimes whose bridge reliably accepts mid-run prompt injection over the
-// runner session channel. Only ama qualifies: it runs the shared runtime-core
-// engine and loops a continuation turn per injected prompt. The SDK-session
+// runner session channel. Only ama qualifies: it runs through the AMA cloud
+// loop and can continue a turn per injected prompt. The SDK-session
 // runtimes (claude-code, copilot) and the one-prompt-per-process runtime
 // (codex) cannot — a prompt injected as a turn ends (e.g. a reject arriving
 // right after the agent submitted review) races the SDK loop exit and is

@@ -3,9 +3,9 @@
 // hosting-mode + provider/model support and its cloud backend/protocol labels.
 //
 // Cloud session startup is a capability flag (supportsCloudStartup), not a
-// function reference: the effectful startCloudSession lives behind the
-// SandboxRuntimeHost port, so the domain driver stays free of any
-// adapters/session-runtime import and domain-stays-pure holds.
+// function reference: the effectful startCloudSession lives behind a usecase
+// port, so the domain driver stays free of any adapters/session-runtime import
+// and domain-stays-pure holds.
 
 import {
   type RuntimeHostingMode,
@@ -21,7 +21,7 @@ export type RuntimeDriver = {
   supportsHostingMode: (hostingMode: RuntimeHostingMode) => boolean
   supportsCloudProviderModel: (provider: string, model: string | null) => boolean
   // Whether the runtime can boot a cloud sandbox session. The effectful startup
-  // lives behind the SandboxRuntimeHost port; this flag gates that call.
+  // lives behind a usecase port; this flag gates that call.
   supportsCloudStartup: boolean
 }
 

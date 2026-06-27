@@ -29,7 +29,7 @@ import { createTriggerRepo } from './adapters/repos/triggers'
 import { createUsageRepo } from './adapters/repos/usage-records'
 import { createVaultRepo } from './adapters/repos/vaults'
 import { createWorkItemRepo } from './adapters/repos/work-items'
-import { createSandboxRuntimeHost } from './adapters/runtime/sandbox-runtime-host'
+import { createRuntimeExecutionAdapters } from './adapters/runtime/sandbox-runtime-host'
 import { createDb } from './db/client'
 import type { Env } from './env'
 import type { Deps } from './usecases/deps'
@@ -56,7 +56,7 @@ export function createDeps(env: Env): Deps {
     eventStream: (sessionId) => sessionOrchestration.sessionEventStream(sessionId),
   })
   const runnerChannel = createRunnerChannel(env, (sessionId) => sessions.resolveRelayDoName(sessionId))
-  const sandboxRuntime = createSandboxRuntimeHost(env, {
+  const runtimeExecution = createRuntimeExecutionAdapters(env, {
     runnerChannel,
     resolveSandboxBackend: (sessionId) => sessions.resolveSandboxBackend(sessionId),
   })
@@ -88,7 +88,7 @@ export function createDeps(env: Env): Deps {
     runtimeSecretEnv: createRuntimeSecretEnvGateway(env, db),
     cloudTurnQueue: createCloudTurnQueue(env),
     runnerChannel,
-    sandboxRuntime,
+    ...runtimeExecution,
     sessionOrchestration,
     sessions,
     sessionEventStore,

@@ -1998,17 +1998,16 @@ export interface RunnerChannel {
 
 // --- sandbox runtime host (cloud session execution) ---
 
-// ports.ts may name the runtime-core execution contract: runtime-core/ sits
-// outside the depcruise scope (it is host-agnostic, framework-free, shared by
-// the Worker and the runner), so importing its types here keeps the port honest
-// without dragging infrastructure into usecases.
+// ports.ts may name the AMA cloud-loop execution contract. The engine lives
+// under usecases/runtime because it is server-owned business execution, while
+// stable tool/event shapes come from packages/runtime-contracts.
 import type { AgentMessage } from '@earendil-works/pi-agent-core'
 import type {
   RuntimeToolPolicyDecision,
   RuntimeToolPolicyInput,
   ToolExecutionInput,
   ToolExecutionResult,
-} from '../../runtime-core/ports'
+} from './runtime/engine/ports'
 
 export type { RuntimeToolPolicyDecision, RuntimeToolPolicyInput, ToolExecutionInput, ToolExecutionResult }
 
@@ -2091,24 +2090,35 @@ export type SessionTurnInput = {
   resolveToolResult?: (input: RuntimeToolPolicyInput) => Promise<Record<string, unknown> | null>
 }
 
-// Cloud sandbox runtime host boundary. Wraps the @cloudflare/sandbox + turn
-// engine host: model resolve, sandbox start/stop, workspace prep, the model
-// turn loop, and tool-call execution. The only implementation lives in
-// adapters/runtime. The SessionTurnInput callback bundle carries runtime-core
-// message types; this port covers the host operations the runtime clusters
-// reach for by capability.
-export interface SandboxRuntimeHost {
+// Starts and tears down cloud-owned AMA session sandboxes. Runner-owned
+// sandboxes are stopped through RunnerChannel because their lifecycle is owned
+// by the self-hosted runner channel.
+export interface CloudRuntimeLifecycle {
   startCloudSession(input: SandboxRuntimeStartInput): Promise<SandboxRuntimeStartResult>
+  stopCloudSession(sandboxId: string): Promise<void>
+}
+
+// Reads writable runtime workspace resources before a session is stopped.
+export interface RuntimeWorkspaceReader {
   readMemoryStoreMemories(input: {
     sessionId: string
     sandboxId: string
     resourceRefs: Record<string, unknown>[]
   }): Promise<Array<{ storeId: string; memories: Array<{ path: string; content: string }> }>>
-  stopCloudSession(sandboxId: string): Promise<void>
+}
+
+// Executes tools inside the session sandbox. The sandbox may be cloud-owned or
+// runner-owned; the adapter resolves the concrete backend per session.
+export interface SessionSandboxExecutor {
   executeToolCalls(input: { sessionId: string; sandboxId: string; body: unknown }): Promise<unknown[]>
   // Executes a single sandbox tool — the approval-decision continuation runs the
-  // approved tool through this seam instead of the model-turn loop.
+  // approved tool here instead of through the model-turn loop.
   executeTool(input: ToolExecutionInput): Promise<ToolExecutionResult>
+}
+
+// Runs one AMA cloud-loop model turn. This is server-owned runtime behavior:
+// runner AMA mode only supplies the sandbox where tools execute.
+export interface AmaTurnExecutor {
   runTurn(input: SessionTurnInput): Promise<SessionTurnResult>
 }
 
@@ -2137,8 +2147,8 @@ export type {
   ConnectionToolRow,
   EnvironmentRow,
   EnvironmentVersionRow,
-  SessionUpdate,
   SessionRow,
+  SessionUpdate,
   WorkItemInsert,
 } from '@shared/runtime-rows'
 

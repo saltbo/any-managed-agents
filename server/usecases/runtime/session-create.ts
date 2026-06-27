@@ -645,7 +645,7 @@ export async function createSessionForAgent(
         ? {
             runnerState: 'queued',
             runnerProtocol: 'ama-runner-work',
-            ...(runtime === 'ama' ? { runnerRole: 'sandbox-executor' } : { runnerRole: 'runtime-loop' }),
+            runnerWorkKind: runtime === 'ama' ? 'sandbox-tool-executor' : 'runtime-bridge',
           }
         : {}),
     }),

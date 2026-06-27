@@ -10,10 +10,11 @@
 // VERBATIM logic: the lease CAS, the continuation-depth cap, the soft-budget
 // pause, and the message-dispatch control flow are byte-for-byte the same as the
 // former server/runtime/cloud-turn module. Only dependency ACQUISITION changed —
-// the orchestration store, sandbox runtime host, queue, audit, secret-env, and
-// the event/turn-callbacks/provisioning helpers all arrive as ports/usecases on
+// the orchestration store, runtime lifecycle/turn executor, queue, audit,
+// secret-env, and the event/turn-callbacks/provisioning helpers arrive as ports/usecases on
 // `deps` instead of being built from env/db. The module is infra-free: it
-// reaches for ports + domain + shared + runtime-core + sibling usecases only.
+// reaches for ports + domain + shared contracts + the AMA turn engine + sibling
+// usecases only.
 
 import type { RuntimeName } from '@server/contracts/environment-contracts'
 import { isRuntimeName, runtimeDriver, runtimeDriverName } from '@server/domain/runtime/driver'
@@ -37,22 +38,23 @@ import {
 import { now, RUNTIME_START_TIMEOUT_MS, stringify, withTimeout } from '@server/domain/runtime/util'
 import { safeRuntimeError } from '@server/runtime-error'
 import { SESSION_DO_EVENT_STORE } from '@shared/session-events'
-import { isRuntimePolicyDenied, isRuntimeTurnCancelled } from '../../../runtime-core/errors'
 import type {
+  AmaTurnExecutor,
   AuditPort,
   AuthScope,
+  CloudRuntimeLifecycle,
   CloudTurnMessage,
   CloudTurnQueue,
   CloudTurnSecretEnvEntry,
   PolicyPort,
   ProviderRepo,
   RuntimeSecretEnvGateway,
-  SandboxRuntimeHost,
   SessionEventStore,
   SessionOrchestrationStore,
   SessionRow,
 } from '../ports'
 import type { ToolApprovalGate } from './approval-gate'
+import { isRuntimePolicyDenied, isRuntimeTurnCancelled } from './engine/errors'
 import { appendRuntimeEvent, appendUserPromptEvent, loadRuntimeMessages, markInitialPromptFailed } from './events'
 import { mcpConnectorIds, resolveMcpSnapshot } from './provisioning'
 import { buildSessionTurnCallbacks, type SessionTurnCallbacks } from './turn-callbacks'
@@ -74,7 +76,8 @@ export type CloudTurnDeps = {
   policy: PolicyPort
   providers: ProviderRepo
   audit: AuditPort
-  sandboxRuntime: SandboxRuntimeHost
+  cloudRuntime: CloudRuntimeLifecycle
+  amaTurnExecutor: AmaTurnExecutor
   cloudTurnQueue: CloudTurnQueue
   runtimeSecretEnv: RuntimeSecretEnvGateway
   createApprovalGate: CreateApprovalGate
@@ -115,7 +118,7 @@ export async function startSessionRuntimeForRow(
       sessionSecretEnv,
     )
     const startedRuntime = await withTimeout(
-      deps.sandboxRuntime.startCloudSession({
+      deps.cloudRuntime.startCloudSession({
         sessionId,
         sandboxId,
         runtime: runtimeName,
@@ -135,7 +138,7 @@ export async function startSessionRuntimeForRow(
     const current = await store.findSession(auth.project.id, sessionId)
     if (current?.state !== 'pending') {
       if (current?.state !== 'idle') {
-        await deps.sandboxRuntime.stopCloudSession(sandboxId).catch(() => undefined)
+        await deps.cloudRuntime.stopCloudSession(sandboxId).catch(() => undefined)
       }
       return
     }
@@ -168,7 +171,7 @@ export async function startSessionRuntimeForRow(
       // The row left 'pending' between the re-read and this CAS (concurrent stop
       // or a duplicate session.start). The just-provisioned sandbox is recorded
       // on no row, so tear it down here — let a teardown error reach the catch.
-      await deps.sandboxRuntime.stopCloudSession(sandboxId)
+      await deps.cloudRuntime.stopCloudSession(sandboxId)
       return
     }
     await deps.audit.record(auth, {
@@ -210,7 +213,7 @@ export async function startSessionRuntimeForRow(
       sessionId,
       metadata: { ...safeError },
     })
-    await deps.sandboxRuntime.stopCloudSession(sandboxId).catch(() => undefined)
+    await deps.cloudRuntime.stopCloudSession(sandboxId).catch(() => undefined)
   }
 }
 
@@ -287,7 +290,7 @@ export async function executeCloudSessionTurn(
       },
     })
     const startedAt = Date.now()
-    const result = await deps.sandboxRuntime.runTurn({
+    const result = await deps.amaTurnExecutor.runTurn({
       sessionId: session.id,
       sandboxId: session.sandboxId ?? '',
       provider: turnProvider,

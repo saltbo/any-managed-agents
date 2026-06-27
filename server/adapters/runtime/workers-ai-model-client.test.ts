@@ -1,7 +1,7 @@
 import type { Context, Model } from '@earendil-works/pi-ai'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ProviderCallError, RuntimeTurnCancelledError } from '../../../runtime-core/errors'
 import type { Env } from '../../env'
+import { ProviderCallError, RuntimeTurnCancelledError } from '../../usecases/runtime/engine/errors'
 import { workersAiModelClient } from './workers-ai-model-client'
 
 // Minimal valid model object — workers-ai provider.

@@ -1,16 +1,17 @@
 // Runtime-endpoint proxy turn lifecycle + sandbox-policy effects, deps-first.
 //
 // This is the effectful half of the old runtime-proxy-policy + the proxy turn
-// driver: the message submission/outcome lifecycle that drives the runtime-core
-// engine through deps.sandboxRuntime.runTurn over the shared callback bundle,
+// driver: the message submission/outcome lifecycle that drives the AMA turn
+// engine
+// engine through deps.amaTurnExecutor.runTurn over the shared callback bundle,
 // the policy-denial recording (event + audit), and the per-request sandbox
 // operation evaluation. The pure parse/route helpers stay in
 // domain/runtime/proxy-route; only the effectful composition lives here.
 //
 // Deps-first: persistence + event append go through deps.sessionOrchestration,
 // audit through deps.audit, sandbox/network policy through deps.policy, and the
-// model turn through deps.sandboxRuntime. No Env: the runtime mode rides in as a
-// value so the usecase stays infra-free.
+// model turn through deps.amaTurnExecutor. No Env: the runtime mode rides in as
+// a value so the usecase stays infra-free.
 
 import { parseRuntimeAgentSnapshot, resolveSessionProviderModel } from '@server/domain/runtime/provider'
 import {
@@ -20,18 +21,18 @@ import {
 } from '@server/domain/runtime/proxy-route'
 import { now } from '@server/domain/runtime/util'
 import { safeRuntimeError } from '@server/runtime-error'
-import { isRuntimePolicyDenied, isRuntimeTurnCancelled, RuntimePolicyDeniedError } from '../../../runtime-core/errors'
 import type {
+  AmaTurnExecutor,
   AuditPort,
   AuthScope,
   PolicyDecisionResult,
   PolicyPort,
-  SandboxRuntimeHost,
   SessionEventStore,
   SessionOrchestrationStore,
   SessionRow,
 } from '../ports'
 import type { ToolApprovalGate } from './approval-gate'
+import { isRuntimePolicyDenied, isRuntimeTurnCancelled, RuntimePolicyDeniedError } from './engine/errors'
 import { appendRuntimeEvent, loadRuntimeMessages } from './events'
 import { buildSessionTurnCallbacks, type SessionTurnCallbacks } from './turn-callbacks'
 
@@ -136,7 +137,7 @@ type ProxyTurnDeps = {
   sessionEventStore: SessionEventStore
   policy: PolicyPort
   audit: AuditPort
-  sandboxRuntime: SandboxRuntimeHost
+  amaTurnExecutor: AmaTurnExecutor
   // The approval gate factory threaded into buildSessionTurnCallbacks.
   createApprovalGate: (values: {
     auth: AuthScope
@@ -208,9 +209,9 @@ export async function recordRuntimeMessageOutcome(
       })
     },
   })
-  let result: Awaited<ReturnType<SandboxRuntimeHost['runTurn']>>
+  let result: Awaited<ReturnType<AmaTurnExecutor['runTurn']>>
   try {
-    result = await deps.sandboxRuntime.runTurn({
+    result = await deps.amaTurnExecutor.runTurn({
       sessionId: session.id,
       sandboxId: session.sandboxId ?? '',
       provider,

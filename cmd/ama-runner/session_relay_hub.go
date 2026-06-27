@@ -88,24 +88,20 @@ func (b *resumeTokenBox) Get() string {
 	return b.token
 }
 
-// sessionCommandRouter delivers mid-run commands (prompt/stop/permission) into one
-// live session's runtime. The per-runner relayHub is the single reader of the shared
+// sessionCommandRouter delivers standard bridge control frames into one live
+// session's runtime. The per-runner relayHub is the single reader of the shared
 // runner socket and routes a session.command to the matching router by sessionId.
 // Commands that arrive before the runtime registered its senders are buffered and
 // flushed on registration.
 type sessionCommandRouter struct {
 	sessionID string
 
-	mu                 sync.Mutex
-	sendPrompt         func(message string) error
-	pendingPrompts     []string
-	recordPrompt       func(message string)
-	sendStop           func(reason string) error
-	pendingStop        *string
-	sendPermission     func(permissionId string, allowed bool, reason string) error
-	pendingPermissions []RunnerSessionCommand
-	sandboxWorkspace   *PreparedWorkspace
-	sandboxAdapter     SandboxAdapter
+	mu               sync.Mutex
+	sendControl      func(BridgeControlFrame) error
+	pendingControls  []BridgeControlFrame
+	recordPrompt     func(message string)
+	sandboxWorkspace *PreparedWorkspace
+	sandboxAdapter   SandboxAdapter
 }
 
 func newSessionCommandRouter(sessionID string, recordPrompt ...func(message string)) *sessionCommandRouter {
@@ -122,95 +118,52 @@ func (r *sessionCommandRouter) recordDeliveredPrompt(message string) {
 	}
 }
 
-func (r *sessionCommandRouter) deliverPrompt(message string) {
+func (r *sessionCommandRouter) deliverControl(command BridgeControlFrame) {
 	r.mu.Lock()
-	send := r.sendPrompt
+	send := r.sendControl
 	if send == nil {
-		r.pendingPrompts = append(r.pendingPrompts, message)
+		r.pendingControls = append(r.pendingControls, command)
 		r.mu.Unlock()
 		return
 	}
 	r.mu.Unlock()
-	if err := send(message); err != nil {
-		slog.Warn("runner failed to forward prompt to live runtime", "sessionId", r.sessionID, "error", err)
+	if err := send(command); err != nil {
+		slog.Warn("runner failed to forward control frame to live runtime", "sessionId", r.sessionID, "type", command.Type, "error", err)
 		return
 	}
-	r.recordDeliveredPrompt(message)
+	r.recordDeliveredCommand(command)
 }
 
-func (r *sessionCommandRouter) deliverStop(reason string) {
-	r.mu.Lock()
-	send := r.sendStop
-	if send == nil {
-		r.pendingStop = &reason
-		r.mu.Unlock()
-		return
-	}
-	r.mu.Unlock()
-	if err := send(reason); err != nil {
-		slog.Warn("runner failed to abort live runtime", "sessionId", r.sessionID, "error", err)
+func (r *sessionCommandRouter) recordDeliveredCommand(command BridgeControlFrame) {
+	if command.Type == "send" && command.Message != "" {
+		r.recordDeliveredPrompt(command.Message)
 	}
 }
 
-func (r *sessionCommandRouter) deliverPermission(command RunnerSessionCommand) {
+// registerControlSender is handed to the runtime adapter as
+// RuntimeRequest.RegisterControlSender; buffered controls flush immediately.
+func (r *sessionCommandRouter) registerControlSender(send func(BridgeControlFrame) error) {
 	r.mu.Lock()
-	send := r.sendPermission
-	if send == nil {
-		r.pendingPermissions = append(r.pendingPermissions, command)
-		r.mu.Unlock()
-		return
-	}
-	r.mu.Unlock()
-	if err := send(command.PermissionID, command.Allowed, command.Reason); err != nil {
-		slog.Warn("runner failed to forward permission decision to live runtime", "sessionId", r.sessionID, "error", err)
-	}
-}
-
-// registerPromptSender is handed to the runtime adapter as
-// RuntimeRequest.RegisterPromptSender; buffered prompts flush immediately.
-func (r *sessionCommandRouter) registerPromptSender(send func(message string) error) {
-	r.mu.Lock()
-	pending := r.pendingPrompts
-	r.pendingPrompts = nil
-	r.sendPrompt = send
-	r.mu.Unlock()
-	for _, message := range pending {
-		if err := send(message); err != nil {
-			slog.Warn("runner failed to forward buffered prompt to live runtime", "sessionId", r.sessionID, "error", err)
-			continue
-		}
-		r.recordDeliveredPrompt(message)
-	}
-}
-
-// registerStopSender is handed to the runtime adapter as
-// RuntimeRequest.RegisterStopSender; a stop that arrived before the runtime was
-// ready aborts immediately on registration.
-func (r *sessionCommandRouter) registerStopSender(send func(reason string) error) {
-	r.mu.Lock()
-	pending := r.pendingStop
-	r.pendingStop = nil
-	r.sendStop = send
-	r.mu.Unlock()
-	if pending != nil {
-		if err := send(*pending); err != nil {
-			slog.Warn("runner failed to abort live runtime for buffered stop", "sessionId", r.sessionID, "error", err)
-		}
-	}
-}
-
-// registerPermissionSender mirrors registerPromptSender for AMA permission
-// decisions; buffered decisions flush on registration.
-func (r *sessionCommandRouter) registerPermissionSender(send func(permissionId string, allowed bool, reason string) error) {
-	r.mu.Lock()
-	pending := r.pendingPermissions
-	r.pendingPermissions = nil
-	r.sendPermission = send
+	pending := r.pendingControls
+	r.pendingControls = nil
+	r.sendControl = send
 	r.mu.Unlock()
 	for _, command := range pending {
-		if err := send(command.PermissionID, command.Allowed, command.Reason); err != nil {
-			slog.Warn("runner failed to forward buffered permission decision", "sessionId", r.sessionID, "error", err)
+		if err := send(command); err != nil {
+			slog.Warn("runner failed to forward buffered control frame", "sessionId", r.sessionID, "type", command.Type, "error", err)
+			continue
 		}
+		r.recordDeliveredCommand(command)
+	}
+}
+
+func bridgeControlFrame(command RunnerSessionCommand) BridgeControlFrame {
+	return BridgeControlFrame{
+		Type:         command.Type,
+		Message:      command.Message,
+		PermissionID: command.PermissionID,
+		Allowed:      command.Allowed,
+		Reason:       command.Reason,
 	}
 }
 
@@ -457,17 +410,17 @@ func (h *relayHub) routeCommand(message RunnerChannelMessage) {
 		return
 	}
 	switch message.Command.Type {
-	case "permission_decision":
-		router.deliverPermission(message.Command)
-	case "stop":
-		slog.Info("runner received stop command; aborting runtime handle",
+	case "permissionDecision":
+		router.deliverControl(bridgeControlFrame(message.Command))
+	case "abort":
+		slog.Info("runner received abort command; aborting runtime handle",
 			"sessionId", message.SessionID, "reason", message.Command.Reason)
-		router.deliverStop(message.Command.Reason)
-	case "prompt":
+		router.deliverControl(bridgeControlFrame(message.Command))
+	case "send":
 		if message.Command.Message == "" {
 			return
 		}
-		router.deliverPrompt(message.Command.Message)
+		router.deliverControl(bridgeControlFrame(message.Command))
 	default:
 		slog.Warn("runner relay command is not a recognised type; dropping", "commandType", message.Command.Type)
 	}

@@ -5,18 +5,18 @@
 // runner load), archiving / unarchiving, and expiring pending cloud sessions
 // whose startup window elapsed.
 //
-// Deps-first: the store, audit, sandbox runtime host, and runner channel arrive
-// as ports on `deps`; canonical events go through the events usecase. The module
-// is infra-free. Logic is verbatim from the former server/runtime/session-lifecycle
-// module; only dependency acquisition changed.
+// Deps-first: the store, audit, cloud runtime lifecycle, runtime workspace
+// reader, and runner channel arrive as ports on `deps`; canonical events go
+// through the events usecase. The module is infra-free.
 
 import { now, RUNTIME_START_TIMEOUT_MS, requestIdFrom, stringify } from '@server/domain/runtime/util'
 import { safeRuntimeError } from '@server/runtime-error'
 import type {
   AuditPort,
   AuthScope,
+  CloudRuntimeLifecycle,
   RunnerChannel,
-  SandboxRuntimeHost,
+  RuntimeWorkspaceReader,
   SessionEventStore,
   SessionOrchestrationStore,
   SessionRow,
@@ -27,7 +27,8 @@ type LifecycleDeps = {
   sessionOrchestration: SessionOrchestrationStore
   sessionEventStore: SessionEventStore
   audit: AuditPort
-  sandboxRuntime: SandboxRuntimeHost
+  cloudRuntime: CloudRuntimeLifecycle
+  runtimeWorkspace: RuntimeWorkspaceReader
   runnerChannel: RunnerChannel
 }
 
@@ -75,7 +76,7 @@ async function stopSessionRow(
 
   try {
     await syncWritableMemoryStores(deps, auth, session)
-    await deps.sandboxRuntime.stopCloudSession(session.sandboxId)
+    await deps.cloudRuntime.stopCloudSession(session.sandboxId)
   } catch (error) {
     const safeError = safeRuntimeError(error)
     const failedAt = now()
@@ -140,7 +141,7 @@ async function syncWritableMemoryStores(deps: LifecycleDeps, auth: AuthScope, se
   if (writableRefs.length === 0) {
     return
   }
-  const snapshots = await deps.sandboxRuntime.readMemoryStoreMemories({
+  const snapshots = await deps.runtimeWorkspace.readMemoryStoreMemories({
     sessionId: session.id,
     sandboxId: session.sandboxId,
     resourceRefs: writableRefs,
@@ -189,7 +190,7 @@ async function stopSelfHostedSession(
   if (sessionSandboxBackend(session) === 'runner-sandbox') {
     await deps.runnerChannel.stopSandbox(session.id).catch(() => undefined)
   } else {
-    await deps.runnerChannel.dispatch(session.id, { type: 'stop', reason })
+    await deps.runnerChannel.dispatch(session.id, { type: 'abort', reason })
   }
   const activeWorkItems = await store.activeSessionWorkItems(auth.project.id, session.id)
 

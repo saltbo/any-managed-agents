@@ -62,7 +62,7 @@ export async function dispatchSessionPrompt(
       runtimeSupportsLivePrompts(sessionRuntimeFromMetadata(metadata)) &&
       (await deps.runnerChannel.isAccepted(session.id))
     ) {
-      const delivered = await deps.runnerChannel.dispatch(session.id, { type: 'prompt', message: content })
+      const delivered = await deps.runnerChannel.dispatch(session.id, { type: 'send', message: content })
       if (delivered) {
         await deps.audit.record(auth, {
           action: 'session.command',

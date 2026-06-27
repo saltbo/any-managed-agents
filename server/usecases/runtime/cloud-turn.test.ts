@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { RuntimePolicyDeniedError } from '../../../runtime-core/errors'
 import {
   type CloudTurnDeps,
   consumeCloudTurnMessage,
   markCloudTurnDeadLettered,
   startSessionRuntimeForRow,
 } from './cloud-turn'
+import { RuntimePolicyDeniedError } from './engine/errors'
 
 // Characterization (golden-master) tests for the cloud-command / queue turn
 // path: consumeCloudTurnMessage → executeCloudSessionTurn. The integration
@@ -89,7 +89,8 @@ const deps: CloudTurnDeps = {
   // shape the assertions filter on).
   audit: { record: (auth: unknown, entry: unknown) => recordAuditMock(auth, entry) } as never,
   policy: {} as never,
-  sandboxRuntime: { runTurn: (input: unknown) => runSessionTurnMock(input as never) } as never,
+  cloudRuntime: {} as never,
+  amaTurnExecutor: { runTurn: (input: unknown) => runSessionTurnMock(input as never) } as never,
   cloudTurnQueue: cloudTurnQueue as never,
   runtimeSecretEnv: { resolve: async () => ({}) } as never,
   // runTurn is mocked, so the built callbacks are never exercised; a minimal gate
@@ -354,11 +355,11 @@ describe('startSessionRuntimeForRow — startup partial-failure (H5 FIX 1)', () 
     // the snapshot needs. Simpler: the usecase calls resolveMcpSnapshot(deps, ...),
     // which reads store.connectedConnections — stub that to an empty list.
     policy: { evaluateMcpTool: async () => ({ allowed: true }) } as never,
-    sandboxRuntime: {
+    cloudRuntime: {
       startCloudSession: (input: unknown) => startSessionRuntimeMock(env, input),
       stopCloudSession: (sandboxId: unknown) => stopSessionRuntimeMock(env, sandboxId),
-      runTurn: (input: unknown) => runSessionTurnMock(input as never),
     } as never,
+    amaTurnExecutor: { runTurn: (input: unknown) => runSessionTurnMock(input as never) } as never,
     cloudTurnQueue: cloudTurnQueue as never,
     runtimeSecretEnv: { resolve: () => resolveRuntimeSecretEnvMock() } as never,
     createApprovalGate: () =>

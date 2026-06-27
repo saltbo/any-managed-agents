@@ -59,7 +59,7 @@ describe('[spec: runtime/runner-channel] decideRelayPermissionRequest — relay-
     }
   }
 
-  it('returns a session.command permission_decision reply for a known session', async () => {
+  it('returns a session.command permissionDecision reply for a known session', async () => {
     const deps = fakeDeps(true)
     const reply = await decideRelayPermissionRequest(deps as never, scope, {
       permissionId: 'perm_1',
@@ -70,7 +70,7 @@ describe('[spec: runtime/runner-channel] decideRelayPermissionRequest — relay-
     expect(reply?.type).toBe('session.command')
     expect(reply?.sessionId).toBe('sess_1')
     expect(reply?.runnerId).toBe('runner_1')
-    expect(reply?.command.type).toBe('permission_decision')
+    expect(reply?.command.type).toBe('permissionDecision')
     expect(reply?.command.allowed).toBe(true)
   })
 

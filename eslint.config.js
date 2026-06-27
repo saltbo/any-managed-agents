@@ -14,7 +14,7 @@ export default tseslint.config(
       '**/.wrangler/**',
       'sdk/**',
       'cmd/**',
-      'runtime-bridge/**',
+      'packages/runtime-bridge/**',
       'migrations/**',
       'src/**',
       'e2e/**',

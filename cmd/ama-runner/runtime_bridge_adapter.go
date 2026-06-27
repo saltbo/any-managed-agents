@@ -31,26 +31,20 @@ type SDKBridgeRuntimeAdapter struct {
 }
 
 type bridgeEnvelope struct {
-	Type        string          `json:"type"`
-	RequestID   string          `json:"requestId,omitempty"`
-	Event       json.RawMessage `json:"event,omitempty"`
-	Result      ama.JSON        `json:"result,omitempty"`
-	Error       *bridgeError    `json:"error,omitempty"`
-	Level       string          `json:"level,omitempty"`
-	Message     string          `json:"message,omitempty"`
-	ResumeToken string          `json:"resumeToken,omitempty"`
+	Type        string       `json:"type"`
+	RequestID   string       `json:"requestId,omitempty"`
+	EventType   string       `json:"eventType,omitempty"`
+	Payload     ama.JSON     `json:"payload,omitempty"`
+	Metadata    ama.JSON     `json:"metadata,omitempty"`
+	Result      ama.JSON     `json:"result,omitempty"`
+	Error       *bridgeError `json:"error,omitempty"`
+	ResumeToken string       `json:"resumeToken,omitempty"`
 }
 
 type bridgeError struct {
 	Message string `json:"message"`
 	Code    string `json:"code,omitempty"`
 	Details any    `json:"details,omitempty"`
-}
-
-type bridgeEvent struct {
-	Type     string   `json:"type"`
-	Payload  ama.JSON `json:"payload"`
-	Metadata ama.JSON `json:"metadata,omitempty"`
 }
 
 func (a SDKBridgeRuntimeAdapter) Run(ctx context.Context, request RuntimeRequest, write RuntimeEventWriter) (ama.JSON, error) {
@@ -155,25 +149,9 @@ func (a SDKBridgeRuntimeAdapter) Run(ctx context.Context, request RuntimeRequest
 		_ = cmd.Wait()
 		return nil, err
 	}
-	if request.RegisterPromptSender != nil {
-		request.RegisterPromptSender(func(message string) error {
-			return stdin.WriteJSON(bridgeSendControl(requestID, message))
-		})
-	}
-	if request.RegisterStopSender != nil {
-		request.RegisterStopSender(func(_ string) error {
-			return stdin.WriteJSON(bridgeAbortControl(requestID))
-		})
-	}
-	if request.RegisterPermissionSender != nil {
-		request.RegisterPermissionSender(func(permissionId string, allowed bool, reason string) error {
-			return stdin.WriteJSON(ama.JSON{
-				"type":         "permissionDecision",
-				"requestId":    requestID,
-				"permissionId": permissionId,
-				"allowed":      allowed,
-				"reason":       reason,
-			})
+	if request.RegisterControlSender != nil {
+		request.RegisterControlSender(func(command BridgeControlFrame) error {
+			return stdin.WriteJSON(bridgeControl(requestID, command))
 		})
 	}
 
@@ -259,18 +237,14 @@ func readBridgeMessages(scanner *bufio.Scanner, requestID string, write RuntimeE
 			if onResumeToken != nil && envelope.ResumeToken != "" {
 				onResumeToken(envelope.ResumeToken)
 			}
-		case "event":
-			var event bridgeEvent
-			if err := json.Unmarshal(envelope.Event, &event); err != nil {
-				return fmt.Errorf("invalid runtime SDK bridge event: %w", err)
-			}
-			if event.Type == "" {
+		case "sessionEvent":
+			if envelope.EventType == "" {
 				return fmt.Errorf("runtime SDK bridge event missing type")
 			}
-			if event.Payload == nil {
-				event.Payload = ama.JSON{}
+			if envelope.Payload == nil {
+				envelope.Payload = ama.JSON{}
 			}
-			if err := write(event.Type, event.Payload); err != nil {
+			if err := write(envelope.EventType, envelope.Payload); err != nil {
 				return err
 			}
 		case "result":
@@ -281,10 +255,6 @@ func readBridgeMessages(scanner *bufio.Scanner, requestID string, write RuntimeE
 				return fmt.Errorf("runtime SDK bridge failed")
 			}
 			return fmt.Errorf("%s", envelope.Error.Message)
-		case "log":
-			if err := write(EventTypeRuntimeOutput, ama.JSON{"stream": "bridge", "content": envelope.Message}); err != nil {
-				return err
-			}
 		default:
 			return fmt.Errorf("unsupported runtime SDK bridge message type %q", envelope.Type)
 		}
@@ -330,12 +300,24 @@ func (s *bridgeStdin) Close() error {
 	return s.writer.Close()
 }
 
-func bridgeSendControl(requestID string, message string) ama.JSON {
-	return ama.JSON{"type": "send", "requestId": requestID, "message": message}
-}
-
-func bridgeAbortControl(requestID string) ama.JSON {
-	return ama.JSON{"type": "abort", "requestId": requestID}
+func bridgeControl(requestID string, command BridgeControlFrame) ama.JSON {
+	frame := ama.JSON{
+		"type":      command.Type,
+		"requestId": requestID,
+	}
+	if command.Message != "" {
+		frame["message"] = command.Message
+	}
+	if command.PermissionID != "" {
+		frame["permissionId"] = command.PermissionID
+	}
+	if command.Type == "permissionDecision" || command.Allowed {
+		frame["allowed"] = command.Allowed
+	}
+	if command.Reason != "" {
+		frame["reason"] = command.Reason
+	}
+	return frame
 }
 
 func streamBridgeStderr(reader io.Reader, output *bytes.Buffer, runtimeName string, write RuntimeEventWriter) error {

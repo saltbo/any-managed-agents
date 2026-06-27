@@ -1,9 +1,11 @@
 import type {
   AgentRepo,
+  AmaTurnExecutor,
   AuditPort,
   AuditReadRepo,
   AuthScope,
   BudgetRepo,
+  CloudRuntimeLifecycle,
   CloudTurnQueue,
   ConnectionRepo,
   ConnectorRepo,
@@ -20,12 +22,13 @@ import type {
   RunnerChannel,
   RunnerRepo,
   RuntimeSecretEnvGateway,
-  SandboxRuntimeHost,
+  RuntimeWorkspaceReader,
   SecretStoreGateway,
   SessionEventPort,
   SessionEventStore,
   SessionOrchestrationStore,
   SessionRepo,
+  SessionSandboxExecutor,
   TriggerDispatchRepo,
   TriggerRepo,
   UsageRepo,
@@ -74,7 +77,10 @@ export interface Deps {
   runtimeSecretEnv: RuntimeSecretEnvGateway
   cloudTurnQueue: CloudTurnQueue
   runnerChannel: RunnerChannel
-  sandboxRuntime: SandboxRuntimeHost
+  cloudRuntime: CloudRuntimeLifecycle
+  runtimeWorkspace: RuntimeWorkspaceReader
+  sandboxExecutor: SessionSandboxExecutor
+  amaTurnExecutor: AmaTurnExecutor
   sessionOrchestration: SessionOrchestrationStore
   sessions: SessionRepo
   // "Storage follows the loop": cloud-loop (ama) events live in the Session DO,

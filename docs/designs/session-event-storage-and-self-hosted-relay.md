@@ -64,13 +64,11 @@ Three problems:
     **relay-only**: events live only on the runner; the cloud stores no copy; the
     `Session` DO bridges browser WS ⇄ runner WS. **Runner offline ⇒ history
     unavailable, accepted** (locality over availability — confirmed product call).
-- **The `ama` loop moves to the cloud — part of this goal (not a follow-up).**
-  Today `ama` runs its turn engine on the local runner
-  (`runtime-bridge/src/providers/ama.ts`). This goal relocates the `ama` loop to
-  the cloud turn driver and decouples it from the Sandbox: the cloud loop runs
-  and **dispatches tool execution to a Sandbox that may be Cloudflare-hosted or
-  self-hosted** (for `ama`, the runner becomes a dispatched sandbox host, not a
-  loop host). CLI runtimes keep their local loop.
+- **The `ama` loop lives in the cloud.** The server-owned turn engine runs in the
+  cloud turn driver and is decoupled from the Sandbox: the cloud loop runs and
+  **dispatches tool execution to a Sandbox that may be Cloudflare-hosted or
+  self-hosted** (for `ama`, the runner is a dispatched sandbox host, not a loop
+  host). CLI runtimes keep their local loop.
 - **UX honesty.** The `ama` runtime stores the transcript in the cloud even when
   its Sandbox is self-hosted. Data locality is available only via a local-loop
   (CLI) runtime; surface this so a user self-hosting a sandbox does not assume
@@ -334,14 +332,13 @@ binding.
   integration` all green; `go build ./... && go vet ./... && go test ./...`
   green in both `sdk/go` and `cmd/ama-runner`.
 
-**Phase 1b — Relocate the `ama` loop to the cloud + dispatched Sandbox**
-(any-managed-agents; in this goal, not a follow-up). Move the `ama` turn engine
-off the local runner (`runtime-bridge/src/providers/ama.ts`) to the cloud turn
-driver; decouple the loop from the Sandbox so the cloud loop **dispatches tool
-execution to a Sandbox that may be the Cloudflare `Sandbox` or a self-hosted
-runner-sandbox** (for `ama`, the runner becomes a dispatched sandbox host, not a
-loop host). `ama` events are written to the `Session` DO store regardless of
-Sandbox location. CLI runtimes keep their local loop unchanged.
+**Phase 1b — Cloud `ama` loop + dispatched Sandbox** (any-managed-agents). Keep
+the `ama` turn engine in the cloud turn driver; decouple the loop from the
+Sandbox so the cloud loop **dispatches tool execution to a Sandbox that may be
+the Cloudflare `Sandbox` or a self-hosted runner-sandbox** (for `ama`, the
+runner is a dispatched sandbox host, not a loop host). `ama` events are written
+to the `Session` DO store regardless of Sandbox location. CLI runtimes keep
+their local loop unchanged.
 - Gate: the Phase 1 server gates stay green; an `ama` session runs end to end
   with (a) a Cloudflare Sandbox and (b) a self-hosted runner-sandbox, both
   rendering events from the cloud store.

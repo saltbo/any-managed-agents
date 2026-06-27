@@ -539,10 +539,10 @@ func TestBridgeProtocolReadsReadyEventsResultsErrorsAndLogs(t *testing.T) {
 	output := strings.Join([]string{
 		`{"type":"ready"}`,
 		`{"type":"resumeToken","requestId":"run_session_1","resumeToken":"thread_1"}`,
-		`{"type":"event","requestId":"run_session_1","event":{"type":"message_end","payload":{"message":{"role":"assistant","content":"ok"}}}}`,
+		`{"type":"sessionEvent","requestId":"run_session_1","eventType":"message_end","payload":{"message":{"role":"assistant","content":"ok"}}}`,
 		`{"type":"resumeToken","requestId":"other","resumeToken":"ignored"}`,
-		`{"type":"log","requestId":"run_session_1","message":"bridge diagnostic"}`,
-		`{"type":"event","requestId":"other","event":{"type":"message_end","payload":{"message":{"role":"assistant","content":"ignored"}}}}`,
+		`{"type":"sessionEvent","requestId":"run_session_1","eventType":"runtime.output","payload":{"stream":"bridge","content":"bridge diagnostic"}}`,
+		`{"type":"sessionEvent","requestId":"other","eventType":"message_end","payload":{"message":{"role":"assistant","content":"ignored"}}}`,
 		`{"type":"result","requestId":"run_session_1","result":{"exitCode":0,"providerThreadId":"thread_1"}}`,
 	}, "\n")
 	scanner := bridgeScanner(strings.NewReader(output))
@@ -578,7 +578,7 @@ func TestBridgeProtocolErrorBranches(t *testing.T) {
 	}
 	scanner := bridgeScanner(strings.NewReader(strings.Join([]string{
 		`{"type":"ready"}`,
-		`{"type":"event","requestId":"run_session_1","event":{"payload":{}}}`,
+		`{"type":"sessionEvent","requestId":"run_session_1","payload":{}}`,
 	}, "\n")))
 	if err := waitBridgeReady(scanner); err != nil {
 		t.Fatal(err)
@@ -592,7 +592,7 @@ func TestBridgeProtocolErrorBranches(t *testing.T) {
 		t.Fatalf("expected bridge error, got %v", err)
 	}
 	writeErr := errors.New("write failed")
-	scanner = bridgeScanner(strings.NewReader(`{"type":"log","requestId":"run_session_1","message":"diag"}` + "\n"))
+	scanner = bridgeScanner(strings.NewReader(`{"type":"sessionEvent","requestId":"run_session_1","eventType":"runtime.output","payload":{"content":"diag"}}` + "\n"))
 	if err := readBridgeMessages(scanner, "run_session_1", func(string, ama.JSON) error { return writeErr }, nil, &result); !errors.Is(err, writeErr) {
 		t.Fatalf("expected writer error, got %v", err)
 	}

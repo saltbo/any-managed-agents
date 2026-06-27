@@ -61,7 +61,7 @@ export async function decideRelayPermissionRequest(
     sessionId: scope.sessionId,
     runnerId: scope.runnerId,
     command: {
-      type: 'permission_decision',
+      type: 'permissionDecision',
       permissionId,
       allowed: decision.allowed,
       reason: decision.message ?? '',

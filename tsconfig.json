@@ -16,6 +16,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
+      "@ama/runtime-contracts": ["packages/runtime-contracts/src/index.ts"],
+      "@ama/runtime-contracts/*": ["packages/runtime-contracts/src/*"],
       "@server/*": ["server/*"],
       "@shared/*": ["shared/*"]
     }

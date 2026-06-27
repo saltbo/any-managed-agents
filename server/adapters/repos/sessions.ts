@@ -343,12 +343,10 @@ export function createSessionRepo(db: Db): SessionRepo {
       return row ? serializeConnection(row) : null
     },
 
-    // The Session DO instance a session's relay traffic routes to: the runner that
-    // ran it. Every session runs its loop on a runner and relays over that runner's
-    // per-runner channel (idFromName(runnerId)), so a completed session still reads
-    // while the runner is online. Resolved from the session's latest work item;
-    // falls back to the sessionId when no runner has it (a cloud-hosted session, or
-    // one not yet dispatched).
+    // The Session DO instance that owns relay traffic. External runtime sessions
+    // route through the runner that claimed the latest work item. AMA cloud-loop
+    // sessions fall back to the session DO by session id unless they are using a
+    // runner-backed sandbox channel for tool execution.
     async resolveRelayDoName(sessionId) {
       const workItem = await db
         .select({ runnerId: workItems.runnerId })

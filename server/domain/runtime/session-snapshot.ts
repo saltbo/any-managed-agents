@@ -88,9 +88,10 @@ function workspaceSystemPromptBlock(resourceRefs: ResourceRef[]): string | null 
       const storeId = String(resourceRef.storeId ?? '')
       const access = resourceRef.access === 'read_write' ? 'read_write' : 'read_only'
       const mountPath = relativeWorkspacePath(String(resourceRef.mountPath ?? memoryStoreMountPath(storeId)))
-      const description = typeof resourceRef.description === 'string' && resourceRef.description.trim()
-        ? `\n  Description: ${resourceRef.description.trim()}`
-        : ''
+      const description =
+        typeof resourceRef.description === 'string' && resourceRef.description.trim()
+          ? `\n  Description: ${resourceRef.description.trim()}`
+          : ''
       return `- ${name || storeId} (${access}) at ${mountPath}${description}`
     })
   if (repositories.length === 0 && memoryStores.length === 0) {

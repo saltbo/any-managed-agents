@@ -27,16 +27,17 @@ type RuntimeRequest struct {
 	// OnResumeToken is invoked as soon as the runtime learns (or rotates) its
 	// resume token, so the runner can persist it before the run completes.
 	OnResumeToken func(resumeToken string)
-	// RegisterPromptSender hands the runner a function that injects a prompt
-	// into the live runtime. Adapters that support mid-run input call it once
-	// the runtime is ready to receive prompts.
-	RegisterPromptSender func(send func(message string) error)
-	// RegisterStopSender hands the runner a function that aborts the live
-	// runtime handle when AMA sends a stop command over the session channel.
-	RegisterStopSender func(send func(reason string) error)
-	// RegisterPermissionSender hands the runner a function that forwards an
-	// AMA permission decision to the live runtime handle.
-	RegisterPermissionSender func(send func(permissionId string, allowed bool, reason string) error)
+	// RegisterControlSender hands the runner a function that forwards standard
+	// bridge control frames (send/abort/permissionDecision) into the live runtime.
+	RegisterControlSender func(send func(BridgeControlFrame) error)
+}
+
+type BridgeControlFrame struct {
+	Type         string
+	Message      string
+	PermissionID string
+	Allowed      bool
+	Reason       string
 }
 
 type RuntimeEventWriter func(eventType string, payload ama.JSON) error

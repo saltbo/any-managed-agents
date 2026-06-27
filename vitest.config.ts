@@ -7,6 +7,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@ama/runtime-contracts': path.resolve(__dirname, './packages/runtime-contracts/src'),
       '@server': path.resolve(__dirname, './server'),
       '@shared': path.resolve(__dirname, './shared'),
     },
@@ -83,8 +84,7 @@ export default defineConfig({
             'server/worker/**/*.test.ts',
             'server/*.test.ts',
             'shared/**/*.test.ts',
-            'runtime-core/**/*.test.ts',
-            'runtime-bridge/src/**/*.test.ts',
+            'packages/runtime-bridge/src/**/*.test.ts',
           ],
         },
       },
