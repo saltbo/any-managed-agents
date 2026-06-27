@@ -31,8 +31,10 @@
     "openapi:check": "tsx scripts/generate-openapi-and-sdks.ts --check",
     "contract:generate": "tsx scripts/generate-go-contract.ts",
     "contract:check": "tsx scripts/generate-go-contract.ts --check",
-    "test:smoke": "pnpm run smoke:runtime",
-    "smoke:runtime": "npm run bridge:build && node scripts/smoke-runtime.mjs"
+    "test:smoke": "pnpm run smoke:ama",
+    "smoke:ama": "node scripts/smoke-ama.mjs",
+    "smoke:bridge": "pnpm run bridge:build && node scripts/smoke-runtime.mjs",
+    "smoke:runtime": "pnpm run smoke:bridge"
   },
   "engines": {
     "node": ">=24"

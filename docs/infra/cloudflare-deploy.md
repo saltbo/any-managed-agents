@@ -99,7 +99,7 @@ work item payloads, lease state, safe result/error metadata, and secret
 references only. Do not expose runner host ports, runner-local preview URLs, or
 runner-local filesystem paths as product endpoints.
 
-## Local E2E And Staging Smoke
+## Local E2E And Smoke
 
 Run browser e2e against the local dev server in local development and CI. This
 path must not consume real model quota or depend on deployed origins:
@@ -108,33 +108,25 @@ path must not consume real model quota or depend on deployed origins:
 pnpm run test:e2e
 ```
 
-After deploying staging, run the real runtime smoke against the staging origin:
+Run the full AMA smoke on a host that has at least one supported runtime CLI
+installed and authenticated (`codex`, `claude`, or `copilot`):
 
 ```bash
-AMA_STAGING_ORIGIN=https://any-managed-agents-staging.saltbo.workers.dev \
-AMA_E2E_ACCESS_TOKEN="$OIDC_ACCESS_TOKEN" \
 pnpm run test:smoke
 ```
 
-`AMA_STAGING_ORIGIN` defaults to the staging Workers host. Auth input precedence is
-explicit: `AMA_E2E_ACCESS_TOKEN` is used first, `AMA_E2E_STORAGE_STATE` second, and
-`AMA_E2E_EMAIL` plus `AMA_E2E_PASSWORD` third. Set only one auth method in CI
-unless intentionally overriding a lower precedence method.
+`test:smoke` starts a real `ama-runner` process against a local v1 control-plane
+stub and runs the selected local runtime through the embedded bridge. The control
+plane is fake; runner startup, lease claim, workspace preparation, runtime
+execution, local event storage, live relay, backfill, Codex follow-up prompts,
+runner interruption/resume, lease completion, and memory-store writeback are
+real. Set `AMA_SMOKE_RUNTIME=codex|claude-code|copilot` to force a specific
+runtime. Set `AMA_SMOKE_GITHUB_REPO=owner/repo` to also exercise real GitHub
+repository clone/mount and session-scoped git credential isolation. This may
+consume real runtime/model quota and, when GitHub is enabled, external network.
 
-- `AMA_E2E_ACCESS_TOKEN`: a OIDC provider-issued OIDC access token.
-- `AMA_E2E_STORAGE_STATE`: Playwright storage state from a real OIDC provider login.
-  The documented `.secrets/` directory is ignored by git.
-- `AMA_E2E_EMAIL` and `AMA_E2E_PASSWORD`: credentials for the browser login
-  flow.
-
-The staging smoke never queries or mutates auth databases. It verifies
-`/api/projects`, creates an environment, agent, and session through public `/api`
-routes, opens the session detail page, sends multiple runtime messages through
-the UI/WebSocket, checks transcript, tool, debug error, and reload dedupe
-behavior, then archives the smoke resources. Keep the access token or storage state in
-the CI secret manager, write it only to an ignored runtime path, and avoid
-printing it in logs. Do not run this as the default e2e path because session
-startup may consume runtime and model quota.
+`pnpm run smoke:bridge` is the cheap deterministic bridge check used by GitHub
+Actions. It is not a full AMA smoke.
 
 ## Cloudflare build settings
 

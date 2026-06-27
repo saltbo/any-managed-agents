@@ -37,6 +37,10 @@ function resolveModel(request: RuntimeProviderRequest): string | undefined {
   return request.model
 }
 
+function positiveNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined
+}
+
 function itemId(item: Record<string, unknown>) {
   return typeof item.id === 'string' && item.id ? item.id : `codex-tool-${Date.now()}`
 }
@@ -123,6 +127,9 @@ export const codexProvider: RuntimeProvider = {
   async execute(request: RuntimeProviderRequest): Promise<RuntimeProviderHandle> {
     let resumeToken = request.resumeToken
     const abortController = new AbortController()
+    let stopped = false
+    const queuedPrompts: string[] = [request.prompt]
+    let wakePrompt: (() => void) | undefined
     const codexPathOverride = resolveCliPath('codex')
     const systemPrompt = agentSystemPrompt(request)
     const codex = new Codex({
@@ -143,20 +150,45 @@ export const codexProvider: RuntimeProvider = {
     }
     const thread =
       request.resume && resumeToken ? codex.resumeThread(resumeToken, threadOptions) : codex.startThread(threadOptions)
-    const streamed = await thread.runStreamed(request.prompt, { signal: abortController.signal })
+    const idleKeepAliveMs = positiveNumber(request.runtimeConfig?.codexIdleKeepAliveMs)
+    const nextPrompt = async (): Promise<string | undefined> => {
+      const queued = queuedPrompts.shift()
+      if (queued !== undefined) return queued
+      if (!idleKeepAliveMs || stopped) return undefined
+      return await new Promise<string | undefined>((resolve) => {
+        const timer = setTimeout(() => {
+          wakePrompt = undefined
+          resolve(undefined)
+        }, idleKeepAliveMs)
+        wakePrompt = () => {
+          clearTimeout(timer)
+          wakePrompt = undefined
+          resolve(queuedPrompts.shift())
+        }
+      })
+    }
     const events = (async function* () {
-      for await (const event of streamed.events) {
-        if (event.type === 'thread.started') resumeToken = event.thread_id
-        yield* mapThreadEvent(event)
+      while (!stopped) {
+        const prompt = await nextPrompt()
+        if (prompt === undefined) return
+        const streamed = await thread.runStreamed(prompt, { signal: abortController.signal })
+        for await (const event of streamed.events) {
+          if (event.type === 'thread.started') resumeToken = event.thread_id
+          yield* mapThreadEvent(event)
+        }
       }
     })()
     return {
       events,
       async abort() {
+        stopped = true
+        wakePrompt?.()
         abortController.abort()
       },
-      async send() {
-        throw new Error('Codex multi-turn send is not implemented')
+      async send(message: string) {
+        if (stopped) throw new Error('Codex runtime is stopped')
+        queuedPrompts.push(message)
+        wakePrompt?.()
       },
       getResumeToken() {
         return resumeToken

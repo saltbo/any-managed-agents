@@ -85,10 +85,29 @@ describe('codexProvider', () => {
     expect(codexOptions.config.developer_instructions).toContain('Skills: saltbo/agent-kanban@ak-maintainer')
     expect(codexOptions.config.developer_instructions).toContain('Available subagents: @reviewer (reviewer)')
     expect(codexOptions.config).not.toHaveProperty('instructions')
-    expect(runStreamedMock).toHaveBeenCalledWith('USER_TASK', { signal: expect.any(AbortSignal) })
-
     for await (const _event of handle.events) {
       // drain the stream so async generator cleanup runs
     }
+    expect(runStreamedMock).toHaveBeenCalledWith('USER_TASK', { signal: expect.any(AbortSignal) })
+  })
+
+  it('continues the same Codex thread for injected prompts', async () => {
+    runStreamedMock
+      .mockResolvedValueOnce({ events: events() })
+      .mockResolvedValueOnce({ events: events() })
+    startThreadMock.mockReturnValue({ runStreamed: runStreamedMock })
+
+    const handle = await codexProvider.execute(request({ runtimeConfig: { codexIdleKeepAliveMs: 10 } }))
+    const drained = (async () => {
+      for await (const _event of handle.events) {
+        // drain events
+      }
+    })()
+    await handle.send('FOLLOW_UP')
+    await drained
+
+    expect(startThreadMock).toHaveBeenCalledTimes(1)
+    expect(runStreamedMock).toHaveBeenNthCalledWith(1, 'USER_TASK', { signal: expect.any(AbortSignal) })
+    expect(runStreamedMock).toHaveBeenNthCalledWith(2, 'FOLLOW_UP', { signal: expect.any(AbortSignal) })
   })
 })
