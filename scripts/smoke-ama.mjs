@@ -439,7 +439,7 @@ function createControlPlane(runtime, githubConfig) {
               type: 'session.command',
               sessionId: SESSION_ID,
               command: {
-                type: 'prompt',
+                type: 'send',
                 message: [
                   'Continue the same Codex thread for the AMA smoke follow-up.',
                   `Write exactly "${FOLLOW_UP_MARKER}\\n" to ama-smoke-followup.txt in the workspace root.`,
