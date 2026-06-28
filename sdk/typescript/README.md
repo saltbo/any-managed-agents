@@ -8,13 +8,15 @@ is no hand-written client surface to drift from the contract.
 ## Layout
 
 - `src/generated/` — output of `@hey-api/openapi-ts`. Do not edit by hand.
-- `src/client.ts` — the stable, hand-maintained **facade** consumers code
+- `src/client.ts` — the stable generated **facade** consumers code
   against (`createAmaClient(...).<resource>.<verb>(...)`). It delegates to the
   generated functions, so the generated layer can be re-shaped — or the
   generator swapped — without changing these call signatures.
 - `src/index.ts` — public barrel: exports the facade plus the raw generated
   operations/models as an escape hatch.
 - `openapi-ts.config.ts` — generator config (input `../openapi.json`).
+- `../spec/resources.json` — shared facade resource/method shape used by the
+  TypeScript, Go, and Python SDKs.
 
 ## Regenerate
 
@@ -68,8 +70,8 @@ try {
 
 `body`, `query`, and the returned data are fully typed from the OpenAPI schemas.
 The generated operation functions (`createAgent`, `readSession`, …) and
-`createClient`/`createConfig` are also exported for operations the facade does
-not wrap yet, reachable as `client.raw` too.
+`createClient`/`createConfig` are also exported as an escape hatch, reachable as
+`client.raw` too.
 
 The web console does not import this package; console code uses the
 project-local Hono RPC client in `src/lib/api.ts`.

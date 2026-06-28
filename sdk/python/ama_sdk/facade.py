@@ -1,0 +1,612 @@
+from __future__ import annotations
+
+from typing import Any
+
+from .client import AuthenticatedClient, Client
+from .api.agents import create_agent as create_agent_api
+from .api.agents import list_agent_handoff_candidates as list_agent_handoff_candidates_api
+from .api.agents import list_agent_versions as list_agent_versions_api
+from .api.agents import list_agents as list_agents_api
+from .api.agents import read_agent as read_agent_api
+from .api.agents import read_agent_memory as read_agent_memory_api
+from .api.agents import read_agent_version as read_agent_version_api
+from .api.agents import replace_agent_memory as replace_agent_memory_api
+from .api.agents import update_agent as update_agent_api
+from .api.audit import list_audit_records as list_audit_records_api
+from .api.audit import read_audit_record as read_audit_record_api
+from .api.auth import create_auth_session as create_auth_session_api
+from .api.auth import create_federated_tenant as create_federated_tenant_api
+from .api.auth import delete_current_auth_session as delete_current_auth_session_api
+from .api.auth import delete_federated_tenant as delete_federated_tenant_api
+from .api.auth import list_federated_tenants as list_federated_tenants_api
+from .api.auth import read_auth_config as read_auth_config_api
+from .api.auth import read_current_auth_session as read_current_auth_session_api
+from .api.auth import read_federated_tenant as read_federated_tenant_api
+from .api.auth import update_federated_tenant as update_federated_tenant_api
+from .api.connections import create_connection as create_connection_api
+from .api.connections import create_tool_call as create_tool_call_api
+from .api.connections import list_connection_tools as list_connection_tools_api
+from .api.connections import list_connections as list_connections_api
+from .api.connections import list_tool_calls as list_tool_calls_api
+from .api.connections import read_connection as read_connection_api
+from .api.connections import read_tool_call as read_tool_call_api
+from .api.connections import update_connection as update_connection_api
+from .api.connectors import list_connectors as list_connectors_api
+from .api.connectors import read_connector as read_connector_api
+from .api.environments import create_environment as create_environment_api
+from .api.environments import list_environment_versions as list_environment_versions_api
+from .api.environments import list_environments as list_environments_api
+from .api.environments import read_environment as read_environment_api
+from .api.environments import read_environment_version as read_environment_version_api
+from .api.environments import update_environment as update_environment_api
+from .api.governance import create_budget as create_budget_api
+from .api.governance import create_policy as create_policy_api
+from .api.governance import delete_budget as delete_budget_api
+from .api.governance import delete_policy as delete_policy_api
+from .api.governance import list_budgets as list_budgets_api
+from .api.governance import list_policies as list_policies_api
+from .api.governance import read_budget as read_budget_api
+from .api.governance import read_effective_policy as read_effective_policy_api
+from .api.governance import read_policy as read_policy_api
+from .api.governance import replace_policy as replace_policy_api
+from .api.governance import update_budget as update_budget_api
+from .api.leases import create_lease as create_lease_api
+from .api.leases import list_leases as list_leases_api
+from .api.leases import read_lease as read_lease_api
+from .api.leases import update_lease as update_lease_api
+from .api.memory_stores import create_memory_store as create_memory_store_api
+from .api.memory_stores import create_memory_store_memory as create_memory_store_memory_api
+from .api.memory_stores import delete_memory_store_memory as delete_memory_store_memory_api
+from .api.memory_stores import list_memory_store_memories as list_memory_store_memories_api
+from .api.memory_stores import list_memory_stores as list_memory_stores_api
+from .api.memory_stores import read_memory_store as read_memory_store_api
+from .api.memory_stores import update_memory_store as update_memory_store_api
+from .api.memory_stores import update_memory_store_memory as update_memory_store_memory_api
+from .api.projects import create_project as create_project_api
+from .api.projects import list_projects as list_projects_api
+from .api.projects import read_project as read_project_api
+from .api.providers import list_models as list_models_api
+from .api.providers import list_provider_models as list_provider_models_api
+from .api.providers import list_providers as list_providers_api
+from .api.providers import read_provider as read_provider_api
+from .api.providers import refresh_catalog as refresh_catalog_api
+from .api.runners import connect_runner_channel as connect_runner_channel_api
+from .api.runners import create_runner as create_runner_api
+from .api.runners import list_runners as list_runners_api
+from .api.runners import put_runner_heartbeat as put_runner_heartbeat_api
+from .api.runners import read_runner as read_runner_api
+from .api.runners import read_runner_heartbeat as read_runner_heartbeat_api
+from .api.runners import update_runner as update_runner_api
+from .api.sessions import connect_session_socket as connect_session_socket_api
+from .api.sessions import create_session as create_session_api
+from .api.sessions import create_session_events as create_session_events_api
+from .api.sessions import create_session_message as create_session_message_api
+from .api.sessions import decide_session_approval as decide_session_approval_api
+from .api.sessions import list_session_approvals as list_session_approvals_api
+from .api.sessions import list_session_events as list_session_events_api
+from .api.sessions import list_session_messages as list_session_messages_api
+from .api.sessions import list_sessions as list_sessions_api
+from .api.sessions import read_session as read_session_api
+from .api.sessions import read_session_approval as read_session_approval_api
+from .api.sessions import read_session_connection as read_session_connection_api
+from .api.sessions import read_session_message as read_session_message_api
+from .api.sessions import update_session as update_session_api
+from .api.system import get_health as get_health_api
+from .api.triggers import create_trigger as create_trigger_api
+from .api.triggers import create_trigger_run as create_trigger_run_api
+from .api.triggers import delete_trigger as delete_trigger_api
+from .api.triggers import list_trigger_runs as list_trigger_runs_api
+from .api.triggers import list_triggers as list_triggers_api
+from .api.triggers import read_trigger as read_trigger_api
+from .api.triggers import read_trigger_run as read_trigger_run_api
+from .api.triggers import update_trigger as update_trigger_api
+from .api.usage import list_usage_records as list_usage_records_api
+from .api.usage import read_usage_record as read_usage_record_api
+from .api.usage import read_usage_summary as read_usage_summary_api
+from .api.vaults import create_vault as create_vault_api
+from .api.vaults import create_vault_credential as create_vault_credential_api
+from .api.vaults import create_vault_credential_version as create_vault_credential_version_api
+from .api.vaults import delete_vault_credential_version as delete_vault_credential_version_api
+from .api.vaults import list_vault_credential_versions as list_vault_credential_versions_api
+from .api.vaults import list_vault_credentials as list_vault_credentials_api
+from .api.vaults import list_vaults as list_vaults_api
+from .api.vaults import read_vault as read_vault_api
+from .api.vaults import read_vault_credential as read_vault_credential_api
+from .api.vaults import read_vault_credential_version as read_vault_credential_version_api
+from .api.vaults import update_vault as update_vault_api
+from .api.vaults import update_vault_credential as update_vault_credential_api
+from .api.work_items import list_work_items as list_work_items_api
+from .api.work_items import read_work_item as read_work_item_api
+
+
+class AmaApiError(Exception):
+    def __init__(self, status: int | None, response_text: str, body: Any) -> None:
+        super().__init__(f"AMA API request failed{'' if status is None else f' with HTTP {status}'}")
+        self.status = status
+        self.response_text = response_text
+        self.body = body
+
+
+class AmaClient:
+    def __init__(
+        self,
+        base_url: str,
+        access_token: str | None = None,
+        project_id: str | None = None,
+        headers: dict[str, str] | None = None,
+        client: AuthenticatedClient | Client | None = None,
+    ) -> None:
+        merged_headers = dict(headers or {})
+        if project_id:
+            merged_headers["x-ama-project-id"] = project_id
+        self._client = client or _new_generated_client(base_url, access_token, merged_headers)
+        self.system = _SystemResource(self._client)
+        self.auth = _AuthResource(self._client)
+        self.projects = _ProjectsResource(self._client)
+        self.agents = _AgentsResource(self._client)
+        self.environments = _EnvironmentsResource(self._client)
+        self.providers = _ProvidersResource(self._client)
+        self.runners = _RunnersResource(self._client)
+        self.work_items = _WorkItemsResource(self._client)
+        self.leases = _LeasesResource(self._client)
+        self.policies = _PoliciesResource(self._client)
+        self.budgets = _BudgetsResource(self._client)
+        self.connectors = _ConnectorsResource(self._client)
+        self.connections = _ConnectionsResource(self._client)
+        self.audit = _AuditResource(self._client)
+        self.triggers = _TriggersResource(self._client)
+        self.sessions = _SessionsResource(self._client)
+        self.memory_stores = _MemoryStoresResource(self._client)
+        self.vaults = _VaultsResource(self._client)
+        self.usage = _UsageResource(self._client)
+
+    @property
+    def raw(self) -> AuthenticatedClient | Client:
+        return self._client
+
+
+def create_ama_client(
+    base_url: str,
+    access_token: str | None = None,
+    project_id: str | None = None,
+    headers: dict[str, str] | None = None,
+) -> AmaClient:
+    return AmaClient(base_url=base_url, access_token=access_token, project_id=project_id, headers=headers)
+
+
+def _new_generated_client(base_url: str, access_token: str | None, headers: dict[str, str]) -> AuthenticatedClient | Client:
+    if access_token:
+        return AuthenticatedClient(base_url=base_url, token=access_token, headers=headers)
+    return Client(base_url=base_url, headers=headers)
+
+
+def _unwrap(response: Any) -> Any:
+    status = int(response.status_code)
+    if 200 <= status <= 299:
+        return response.parsed
+    body = response.parsed
+    response_text = getattr(body, "error", None)
+    if response_text is not None and getattr(response_text, "message", None):
+        text = response_text.message
+    else:
+        text = response.content.decode("utf-8", errors="replace") if response.content else ""
+    raise AmaApiError(status, text, body)
+
+
+class _SystemResource:
+    def __init__(self, client: AuthenticatedClient | Client) -> None:
+        self._client = client
+
+    def health(self) -> Any:
+        return _unwrap(get_health_api.sync_detailed(client=self._client))
+
+class _AuthResource:
+    def __init__(self, client: AuthenticatedClient | Client) -> None:
+        self._client = client
+
+    def config(self, **query: Any) -> Any:
+        return _unwrap(read_auth_config_api.sync_detailed(client=self._client, **query))
+
+    def create_session(self, body: Any) -> Any:
+        return _unwrap(create_auth_session_api.sync_detailed(client=self._client, body=body))
+
+    def current_session(self) -> Any:
+        return _unwrap(read_current_auth_session_api.sync_detailed(client=self._client))
+
+    def delete_current_session(self) -> Any:
+        return _unwrap(delete_current_auth_session_api.sync_detailed(client=self._client))
+
+    def list_federated_tenants(self, **query: Any) -> Any:
+        return _unwrap(list_federated_tenants_api.sync_detailed(client=self._client, **query))
+
+    def create_federated_tenant(self, body: Any) -> Any:
+        return _unwrap(create_federated_tenant_api.sync_detailed(client=self._client, body=body))
+
+    def get_federated_tenant(self, tenant_id: str) -> Any:
+        return _unwrap(read_federated_tenant_api.sync_detailed(tenant_id=tenant_id, client=self._client))
+
+    def update_federated_tenant(self, tenant_id: str, body: Any) -> Any:
+        return _unwrap(update_federated_tenant_api.sync_detailed(tenant_id=tenant_id, client=self._client, body=body))
+
+    def delete_federated_tenant(self, tenant_id: str) -> Any:
+        return _unwrap(delete_federated_tenant_api.sync_detailed(tenant_id=tenant_id, client=self._client))
+
+class _ProjectsResource:
+    def __init__(self, client: AuthenticatedClient | Client) -> None:
+        self._client = client
+
+    def list(self, **query: Any) -> Any:
+        return _unwrap(list_projects_api.sync_detailed(client=self._client, **query))
+
+    def create(self, body: Any) -> Any:
+        return _unwrap(create_project_api.sync_detailed(client=self._client, body=body))
+
+    def get(self, project_id: str) -> Any:
+        return _unwrap(read_project_api.sync_detailed(project_id=project_id, client=self._client))
+
+class _AgentsResource:
+    def __init__(self, client: AuthenticatedClient | Client) -> None:
+        self._client = client
+
+    def list(self, **query: Any) -> Any:
+        return _unwrap(list_agents_api.sync_detailed(client=self._client, **query))
+
+    def create(self, body: Any) -> Any:
+        return _unwrap(create_agent_api.sync_detailed(client=self._client, body=body))
+
+    def get(self, agent_id: str) -> Any:
+        return _unwrap(read_agent_api.sync_detailed(agent_id=agent_id, client=self._client))
+
+    def update(self, agent_id: str, body: Any) -> Any:
+        return _unwrap(update_agent_api.sync_detailed(agent_id=agent_id, client=self._client, body=body))
+
+    def list_handoff_candidates(self, agent_id: str, **query: Any) -> Any:
+        return _unwrap(list_agent_handoff_candidates_api.sync_detailed(agent_id=agent_id, client=self._client, **query))
+
+    def get_memory(self, agent_id: str) -> Any:
+        return _unwrap(read_agent_memory_api.sync_detailed(agent_id=agent_id, client=self._client))
+
+    def replace_memory(self, agent_id: str, body: Any) -> Any:
+        return _unwrap(replace_agent_memory_api.sync_detailed(agent_id=agent_id, client=self._client, body=body))
+
+    def list_versions(self, agent_id: str) -> Any:
+        return _unwrap(list_agent_versions_api.sync_detailed(agent_id=agent_id, client=self._client))
+
+    def get_version(self, agent_id: str, version: int) -> Any:
+        return _unwrap(read_agent_version_api.sync_detailed(agent_id=agent_id, version=version, client=self._client))
+
+class _EnvironmentsResource:
+    def __init__(self, client: AuthenticatedClient | Client) -> None:
+        self._client = client
+
+    def list(self, **query: Any) -> Any:
+        return _unwrap(list_environments_api.sync_detailed(client=self._client, **query))
+
+    def create(self, body: Any) -> Any:
+        return _unwrap(create_environment_api.sync_detailed(client=self._client, body=body))
+
+    def get(self, environment_id: str) -> Any:
+        return _unwrap(read_environment_api.sync_detailed(environment_id=environment_id, client=self._client))
+
+    def update(self, environment_id: str, body: Any) -> Any:
+        return _unwrap(update_environment_api.sync_detailed(environment_id=environment_id, client=self._client, body=body))
+
+    def list_versions(self, environment_id: str) -> Any:
+        return _unwrap(list_environment_versions_api.sync_detailed(environment_id=environment_id, client=self._client))
+
+    def get_version(self, environment_id: str, version: int) -> Any:
+        return _unwrap(read_environment_version_api.sync_detailed(environment_id=environment_id, version=version, client=self._client))
+
+class _ProvidersResource:
+    def __init__(self, client: AuthenticatedClient | Client) -> None:
+        self._client = client
+
+    def list(self) -> Any:
+        return _unwrap(list_providers_api.sync_detailed(client=self._client))
+
+    def list_models(self) -> Any:
+        return _unwrap(list_models_api.sync_detailed(client=self._client))
+
+    def refresh_catalog(self) -> Any:
+        return _unwrap(refresh_catalog_api.sync_detailed(client=self._client))
+
+    def get(self, provider_id: str) -> Any:
+        return _unwrap(read_provider_api.sync_detailed(provider_id=provider_id, client=self._client))
+
+    def list_provider_models(self, provider_id: str) -> Any:
+        return _unwrap(list_provider_models_api.sync_detailed(provider_id=provider_id, client=self._client))
+
+class _RunnersResource:
+    def __init__(self, client: AuthenticatedClient | Client) -> None:
+        self._client = client
+
+    def list(self, **query: Any) -> Any:
+        return _unwrap(list_runners_api.sync_detailed(client=self._client, **query))
+
+    def create(self, body: Any) -> Any:
+        return _unwrap(create_runner_api.sync_detailed(client=self._client, body=body))
+
+    def get(self, runner_id: str) -> Any:
+        return _unwrap(read_runner_api.sync_detailed(runner_id=runner_id, client=self._client))
+
+    def update(self, runner_id: str, body: Any) -> Any:
+        return _unwrap(update_runner_api.sync_detailed(runner_id=runner_id, client=self._client, body=body))
+
+    def channel(self, runner_id: str) -> Any:
+        return _unwrap(connect_runner_channel_api.sync_detailed(runner_id=runner_id, client=self._client))
+
+    def get_heartbeat(self, runner_id: str) -> Any:
+        return _unwrap(read_runner_heartbeat_api.sync_detailed(runner_id=runner_id, client=self._client))
+
+    def put_heartbeat(self, runner_id: str, body: Any) -> Any:
+        return _unwrap(put_runner_heartbeat_api.sync_detailed(runner_id=runner_id, client=self._client, body=body))
+
+class _WorkItemsResource:
+    def __init__(self, client: AuthenticatedClient | Client) -> None:
+        self._client = client
+
+    def list(self, **query: Any) -> Any:
+        return _unwrap(list_work_items_api.sync_detailed(client=self._client, **query))
+
+    def get(self, work_item_id: str) -> Any:
+        return _unwrap(read_work_item_api.sync_detailed(work_item_id=work_item_id, client=self._client))
+
+class _LeasesResource:
+    def __init__(self, client: AuthenticatedClient | Client) -> None:
+        self._client = client
+
+    def list(self, **query: Any) -> Any:
+        return _unwrap(list_leases_api.sync_detailed(client=self._client, **query))
+
+    def create(self, body: Any) -> Any:
+        return _unwrap(create_lease_api.sync_detailed(client=self._client, body=body))
+
+    def get(self, lease_id: str) -> Any:
+        return _unwrap(read_lease_api.sync_detailed(lease_id=lease_id, client=self._client))
+
+    def update(self, lease_id: str, body: Any) -> Any:
+        return _unwrap(update_lease_api.sync_detailed(lease_id=lease_id, client=self._client, body=body))
+
+class _PoliciesResource:
+    def __init__(self, client: AuthenticatedClient | Client) -> None:
+        self._client = client
+
+    def list(self) -> Any:
+        return _unwrap(list_policies_api.sync_detailed(client=self._client))
+
+    def create(self, body: Any) -> Any:
+        return _unwrap(create_policy_api.sync_detailed(client=self._client, body=body))
+
+    def get(self, policy_id: str) -> Any:
+        return _unwrap(read_policy_api.sync_detailed(policy_id=policy_id, client=self._client))
+
+    def replace(self, policy_id: str, body: Any) -> Any:
+        return _unwrap(replace_policy_api.sync_detailed(policy_id=policy_id, client=self._client, body=body))
+
+    def delete(self, policy_id: str) -> Any:
+        return _unwrap(delete_policy_api.sync_detailed(policy_id=policy_id, client=self._client))
+
+    def effective(self, **query: Any) -> Any:
+        return _unwrap(read_effective_policy_api.sync_detailed(client=self._client, **query))
+
+class _BudgetsResource:
+    def __init__(self, client: AuthenticatedClient | Client) -> None:
+        self._client = client
+
+    def list(self) -> Any:
+        return _unwrap(list_budgets_api.sync_detailed(client=self._client))
+
+    def create(self, body: Any) -> Any:
+        return _unwrap(create_budget_api.sync_detailed(client=self._client, body=body))
+
+    def get(self, budget_id: str) -> Any:
+        return _unwrap(read_budget_api.sync_detailed(budget_id=budget_id, client=self._client))
+
+    def update(self, budget_id: str, body: Any) -> Any:
+        return _unwrap(update_budget_api.sync_detailed(budget_id=budget_id, client=self._client, body=body))
+
+    def delete(self, budget_id: str) -> Any:
+        return _unwrap(delete_budget_api.sync_detailed(budget_id=budget_id, client=self._client))
+
+class _ConnectorsResource:
+    def __init__(self, client: AuthenticatedClient | Client) -> None:
+        self._client = client
+
+    def list(self, **query: Any) -> Any:
+        return _unwrap(list_connectors_api.sync_detailed(client=self._client, **query))
+
+    def get(self, connector_id: str) -> Any:
+        return _unwrap(read_connector_api.sync_detailed(connector_id=connector_id, client=self._client))
+
+class _ConnectionsResource:
+    def __init__(self, client: AuthenticatedClient | Client) -> None:
+        self._client = client
+
+    def list(self, **query: Any) -> Any:
+        return _unwrap(list_connections_api.sync_detailed(client=self._client, **query))
+
+    def create(self, body: Any) -> Any:
+        return _unwrap(create_connection_api.sync_detailed(client=self._client, body=body))
+
+    def get(self, connection_id: str) -> Any:
+        return _unwrap(read_connection_api.sync_detailed(connection_id=connection_id, client=self._client))
+
+    def update(self, connection_id: str, body: Any) -> Any:
+        return _unwrap(update_connection_api.sync_detailed(connection_id=connection_id, client=self._client, body=body))
+
+    def list_tools(self, connection_id: str) -> Any:
+        return _unwrap(list_connection_tools_api.sync_detailed(connection_id=connection_id, client=self._client))
+
+    def list_tool_calls(self, connection_id: str, tool_name: str, **query: Any) -> Any:
+        return _unwrap(list_tool_calls_api.sync_detailed(connection_id=connection_id, tool_name=tool_name, client=self._client, **query))
+
+    def create_tool_call(self, connection_id: str, tool_name: str, body: Any) -> Any:
+        return _unwrap(create_tool_call_api.sync_detailed(connection_id=connection_id, tool_name=tool_name, client=self._client, body=body))
+
+    def get_tool_call(self, connection_id: str, tool_name: str, call_id: str) -> Any:
+        return _unwrap(read_tool_call_api.sync_detailed(connection_id=connection_id, tool_name=tool_name, call_id=call_id, client=self._client))
+
+class _AuditResource:
+    def __init__(self, client: AuthenticatedClient | Client) -> None:
+        self._client = client
+
+    def list_records(self, **query: Any) -> Any:
+        return _unwrap(list_audit_records_api.sync_detailed(client=self._client, **query))
+
+    def get_record(self, record_id: str) -> Any:
+        return _unwrap(read_audit_record_api.sync_detailed(record_id=record_id, client=self._client))
+
+class _TriggersResource:
+    def __init__(self, client: AuthenticatedClient | Client) -> None:
+        self._client = client
+
+    def list(self, **query: Any) -> Any:
+        return _unwrap(list_triggers_api.sync_detailed(client=self._client, **query))
+
+    def create(self, body: Any) -> Any:
+        return _unwrap(create_trigger_api.sync_detailed(client=self._client, body=body))
+
+    def get(self, trigger_id: str) -> Any:
+        return _unwrap(read_trigger_api.sync_detailed(trigger_id=trigger_id, client=self._client))
+
+    def update(self, trigger_id: str, body: Any) -> Any:
+        return _unwrap(update_trigger_api.sync_detailed(trigger_id=trigger_id, client=self._client, body=body))
+
+    def delete(self, trigger_id: str) -> Any:
+        return _unwrap(delete_trigger_api.sync_detailed(trigger_id=trigger_id, client=self._client))
+
+    def list_runs(self, trigger_id: str, **query: Any) -> Any:
+        return _unwrap(list_trigger_runs_api.sync_detailed(trigger_id=trigger_id, client=self._client, **query))
+
+    def create_run(self, trigger_id: str, body: Any) -> Any:
+        return _unwrap(create_trigger_run_api.sync_detailed(trigger_id=trigger_id, client=self._client, body=body))
+
+    def get_run(self, trigger_id: str, run_id: str) -> Any:
+        return _unwrap(read_trigger_run_api.sync_detailed(trigger_id=trigger_id, run_id=run_id, client=self._client))
+
+class _SessionsResource:
+    def __init__(self, client: AuthenticatedClient | Client) -> None:
+        self._client = client
+
+    def list(self, **query: Any) -> Any:
+        return _unwrap(list_sessions_api.sync_detailed(client=self._client, **query))
+
+    def create(self, body: Any) -> Any:
+        return _unwrap(create_session_api.sync_detailed(client=self._client, body=body))
+
+    def get(self, session_id: str) -> Any:
+        return _unwrap(read_session_api.sync_detailed(session_id=session_id, client=self._client))
+
+    def update(self, session_id: str, body: Any) -> Any:
+        return _unwrap(update_session_api.sync_detailed(session_id=session_id, client=self._client, body=body))
+
+    def connection(self, session_id: str) -> Any:
+        return _unwrap(read_session_connection_api.sync_detailed(session_id=session_id, client=self._client))
+
+    def socket(self, session_id: str) -> Any:
+        return _unwrap(connect_session_socket_api.sync_detailed(session_id=session_id, client=self._client))
+
+    def list_messages(self, session_id: str, **query: Any) -> Any:
+        return _unwrap(list_session_messages_api.sync_detailed(session_id=session_id, client=self._client, **query))
+
+    def create_message(self, session_id: str, body: Any) -> Any:
+        return _unwrap(create_session_message_api.sync_detailed(session_id=session_id, client=self._client, body=body))
+
+    def get_message(self, session_id: str, message_id: str) -> Any:
+        return _unwrap(read_session_message_api.sync_detailed(session_id=session_id, message_id=message_id, client=self._client))
+
+    def list_events(self, session_id: str, **query: Any) -> Any:
+        return _unwrap(list_session_events_api.sync_detailed(session_id=session_id, client=self._client, **query))
+
+    def create_events(self, session_id: str, body: Any) -> Any:
+        return _unwrap(create_session_events_api.sync_detailed(session_id=session_id, client=self._client, body=body))
+
+    def list_approvals(self, session_id: str) -> Any:
+        return _unwrap(list_session_approvals_api.sync_detailed(session_id=session_id, client=self._client))
+
+    def get_approval(self, session_id: str, approval_id: str) -> Any:
+        return _unwrap(read_session_approval_api.sync_detailed(session_id=session_id, approval_id=approval_id, client=self._client))
+
+    def decide_approval(self, session_id: str, approval_id: str, body: Any) -> Any:
+        return _unwrap(decide_session_approval_api.sync_detailed(session_id=session_id, approval_id=approval_id, client=self._client, body=body))
+
+class _MemoryStoresResource:
+    def __init__(self, client: AuthenticatedClient | Client) -> None:
+        self._client = client
+
+    def list(self, **query: Any) -> Any:
+        return _unwrap(list_memory_stores_api.sync_detailed(client=self._client, **query))
+
+    def create(self, body: Any) -> Any:
+        return _unwrap(create_memory_store_api.sync_detailed(client=self._client, body=body))
+
+    def get(self, store_id: str) -> Any:
+        return _unwrap(read_memory_store_api.sync_detailed(store_id=store_id, client=self._client))
+
+    def update(self, store_id: str, body: Any) -> Any:
+        return _unwrap(update_memory_store_api.sync_detailed(store_id=store_id, client=self._client, body=body))
+
+    def list_memories(self, store_id: str, **query: Any) -> Any:
+        return _unwrap(list_memory_store_memories_api.sync_detailed(store_id=store_id, client=self._client, **query))
+
+    def create_memory(self, store_id: str, body: Any) -> Any:
+        return _unwrap(create_memory_store_memory_api.sync_detailed(store_id=store_id, client=self._client, body=body))
+
+    def update_memory(self, store_id: str, memory_id: str, body: Any) -> Any:
+        return _unwrap(update_memory_store_memory_api.sync_detailed(store_id=store_id, memory_id=memory_id, client=self._client, body=body))
+
+    def delete_memory(self, store_id: str, memory_id: str) -> Any:
+        return _unwrap(delete_memory_store_memory_api.sync_detailed(store_id=store_id, memory_id=memory_id, client=self._client))
+
+class _VaultsResource:
+    def __init__(self, client: AuthenticatedClient | Client) -> None:
+        self._client = client
+
+    def list(self, **query: Any) -> Any:
+        return _unwrap(list_vaults_api.sync_detailed(client=self._client, **query))
+
+    def create(self, body: Any) -> Any:
+        return _unwrap(create_vault_api.sync_detailed(client=self._client, body=body))
+
+    def get(self, vault_id: str) -> Any:
+        return _unwrap(read_vault_api.sync_detailed(vault_id=vault_id, client=self._client))
+
+    def update(self, vault_id: str, body: Any) -> Any:
+        return _unwrap(update_vault_api.sync_detailed(vault_id=vault_id, client=self._client, body=body))
+
+    def list_credentials(self, vault_id: str, **query: Any) -> Any:
+        return _unwrap(list_vault_credentials_api.sync_detailed(vault_id=vault_id, client=self._client, **query))
+
+    def create_credential(self, vault_id: str, body: Any) -> Any:
+        return _unwrap(create_vault_credential_api.sync_detailed(vault_id=vault_id, client=self._client, body=body))
+
+    def get_credential(self, vault_id: str, credential_id: str) -> Any:
+        return _unwrap(read_vault_credential_api.sync_detailed(vault_id=vault_id, credential_id=credential_id, client=self._client))
+
+    def update_credential(self, vault_id: str, credential_id: str, body: Any) -> Any:
+        return _unwrap(update_vault_credential_api.sync_detailed(vault_id=vault_id, credential_id=credential_id, client=self._client, body=body))
+
+    def list_credential_versions(self, vault_id: str, credential_id: str, **query: Any) -> Any:
+        return _unwrap(list_vault_credential_versions_api.sync_detailed(vault_id=vault_id, credential_id=credential_id, client=self._client, **query))
+
+    def create_credential_version(self, vault_id: str, credential_id: str, body: Any) -> Any:
+        return _unwrap(create_vault_credential_version_api.sync_detailed(vault_id=vault_id, credential_id=credential_id, client=self._client, body=body))
+
+    def get_credential_version(self, vault_id: str, credential_id: str, version_id: str) -> Any:
+        return _unwrap(read_vault_credential_version_api.sync_detailed(vault_id=vault_id, credential_id=credential_id, version_id=version_id, client=self._client))
+
+    def delete_credential_version(self, vault_id: str, credential_id: str, version_id: str) -> Any:
+        return _unwrap(delete_vault_credential_version_api.sync_detailed(vault_id=vault_id, credential_id=credential_id, version_id=version_id, client=self._client))
+
+class _UsageResource:
+    def __init__(self, client: AuthenticatedClient | Client) -> None:
+        self._client = client
+
+    def list_records(self, **query: Any) -> Any:
+        return _unwrap(list_usage_records_api.sync_detailed(client=self._client, **query))
+
+    def get_record(self, record_id: str) -> Any:
+        return _unwrap(read_usage_record_api.sync_detailed(record_id=record_id, client=self._client))
+
+    def summary(self, **query: Any) -> Any:
+        return _unwrap(read_usage_summary_api.sync_detailed(client=self._client, **query))

@@ -1,29 +1,17 @@
-// Stable, hand-maintained facade over the generated client.
-//
-// External consumers code against `createAmaClient(...).<resource>.<verb>(...)`.
-// Each method is a thin delegation to a function in ./generated (produced by
-// @hey-api/openapi-ts). The generated layer may be re-shaped — or the generator
-// swapped entirely — without changing this public surface: only the one-line
-// bodies here move. This is the contract consumers depend on, not sdk.gen.ts.
-//
-// Adding an operation is a one-liner; see the patterns below.
+// Stable facade generated from sdk/spec/resources.json.
+// The generated OpenAPI layer owns HTTP shapes; this file owns public SDK shape.
 
 import { createClient, createConfig } from './generated/client/index.js'
 import * as ops from './generated/sdk.gen.js'
 import type * as types from './generated/types.gen.js'
 
 export interface AmaClientConfig {
-  /** AMA control-plane origin, e.g. https://ama.example.com */
   baseUrl: string
-  /** OIDC access token; sent as `Authorization: Bearer <token>`. */
   accessToken?: string
-  /** Sent as `x-ama-project-id` to scope project-bound operations. */
   projectId?: string
-  /** Extra headers merged last. */
   headers?: Record<string, string>
 }
 
-/** Thrown on any non-2xx response. `status` lets callers branch on 404/409/etc. */
 export class AmaApiError extends Error {
   constructor(
     readonly status: number | undefined,
@@ -35,9 +23,6 @@ export class AmaApiError extends Error {
   }
 }
 
-// The generated functions resolve to { data, error, response } where `data` is
-// `T | undefined` across the success/error union. Typing the param as
-// `T | undefined` makes inference recover the bare success type `T`.
 async function unwrap<TData>(call: Promise<{ data: TData | undefined; error?: unknown; response?: Response }>): Promise<TData> {
   const { data, error, response } = await call
   if (response?.ok && error === undefined) {
@@ -45,106 +30,6 @@ async function unwrap<TData>(call: Promise<{ data: TData | undefined; error?: un
   }
   const body = error ?? data
   throw new AmaApiError(response?.status, typeof body === 'string' ? body : JSON.stringify(body ?? {}), body)
-}
-
-/**
- * A live session WebSocket. `events` is the async-iterable of pushed
- * {@link types.SessionEvent}s; `backfill` requests a replay; `send` posts a typed
- * client frame; `close` tears the socket down. The frame payloads are all typed
- * against the generated schemas — OpenAPI can't describe the socket protocol, so
- * the transport is the one piece hand-wrapped here (mirrors the Go SDK).
- */
-export interface SessionStream {
-  events: AsyncIterable<types.SessionEvent>
-  send(frame: types.SessionClientFrame): Promise<void>
-  backfill(options?: { cursor?: number; limit?: number; eventType?: string; visibility?: string }): Promise<types.SessionBackfillResponse>
-  close(): void
-}
-
-type SessionStreamFrame =
-  | { type: 'event'; event: types.SessionEvent }
-  | (types.SessionBackfillResponse & { type: 'backfill' })
-  | { type: 'runner_unavailable'; message: string }
-
-function createSessionStream(config: AmaClientConfig, sessionId: string): SessionStream {
-  const url = new URL(`/api/v1/sessions/${sessionId}/socket`, config.baseUrl)
-  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
-  // Browsers can't set an Authorization header on a WebSocket; AMA's auth wall
-  // also accepts the token as an access_token query param, so use that.
-  if (config.accessToken) {
-    url.searchParams.set('access_token', config.accessToken)
-  }
-  const socket = new WebSocket(url.toString())
-
-  const buffered: types.SessionEvent[] = []
-  const waiters: Array<(result: IteratorResult<types.SessionEvent>) => void> = []
-  const backfillWaiters = new Map<string, (response: types.SessionBackfillResponse) => void>()
-  let done = false
-
-  const drainDone = () => {
-    done = true
-    for (const resolve of waiters.splice(0)) {
-      resolve({ value: undefined, done: true })
-    }
-  }
-
-  socket.addEventListener('message', (event: MessageEvent) => {
-    const frame = JSON.parse(typeof event.data === 'string' ? event.data : '') as SessionStreamFrame
-    if (frame.type === 'event') {
-      const waiter = waiters.shift()
-      if (waiter) {
-        waiter({ value: frame.event, done: false })
-      } else {
-        buffered.push(frame.event)
-      }
-    } else if (frame.type === 'backfill') {
-      const resolve = frame.requestId ? backfillWaiters.get(frame.requestId) : undefined
-      if (frame.requestId) {
-        backfillWaiters.delete(frame.requestId)
-      }
-      resolve?.(frame)
-    }
-  })
-  socket.addEventListener('close', drainDone)
-
-  const ready = new Promise<void>((resolve, reject) => {
-    socket.addEventListener('open', () => resolve())
-    socket.addEventListener('error', () => reject(new Error('Session socket failed to open')))
-  })
-
-  let backfillSeq = 0
-  return {
-    events: {
-      [Symbol.asyncIterator]() {
-        return {
-          next(): Promise<IteratorResult<types.SessionEvent>> {
-            const value = buffered.shift()
-            if (value !== undefined) {
-              return Promise.resolve({ value, done: false })
-            }
-            if (done) {
-              return Promise.resolve({ value: undefined, done: true })
-            }
-            return new Promise((resolve) => waiters.push(resolve))
-          },
-        }
-      },
-    },
-    async send(frame) {
-      await ready
-      socket.send(JSON.stringify(frame))
-    },
-    async backfill(options = {}) {
-      await ready
-      const requestId = `bf_${(backfillSeq += 1)}`
-      const response = new Promise<types.SessionBackfillResponse>((resolve) => backfillWaiters.set(requestId, resolve))
-      socket.send(JSON.stringify({ type: 'backfill', requestId, ...options }))
-      return response
-    },
-    close() {
-      socket.close()
-    },
-  }
 }
 
 export type AmaClient = ReturnType<typeof createAmaClient>
@@ -162,55 +47,145 @@ export function createAmaClient(config: AmaClientConfig) {
   )
 
   return {
-    /** Escape hatch: the raw generated client for operations not yet on the facade. */
     raw: client,
 
-    agents: {
-      create: (body: types.CreateAgentRequest) => unwrap(ops.createAgent({ client, body })),
-      get: (agentId: string) => unwrap(ops.readAgent({ client, path: { agentId } })),
-      update: (agentId: string, body: types.UpdateAgentRequest) => unwrap(ops.updateAgent({ client, path: { agentId }, body })),
-      list: (query?: types.ListAgentsData['query']) => unwrap(ops.listAgents({ client, query })),
+    system: {
+      health: () => unwrap(ops.getHealth({ client })),
     },
 
-    environments: {
-      create: (body: types.CreateEnvironmentRequest) => unwrap(ops.createEnvironment({ client, body })),
-      get: (environmentId: string) => unwrap(ops.readEnvironment({ client, path: { environmentId } })),
-      update: (environmentId: string, body: types.UpdateEnvironmentRequest) => unwrap(ops.updateEnvironment({ client, path: { environmentId }, body })),
-      list: (query?: types.ListEnvironmentsData['query']) => unwrap(ops.listEnvironments({ client, query })),
+    auth: {
+      config: (query?: types.ReadAuthConfigData['query']) => unwrap(ops.readAuthConfig({ client, query })),
+      createSession: (body: types.CreateAuthSessionRequest) => unwrap(ops.createAuthSession({ client, body })),
+      currentSession: () => unwrap(ops.readCurrentAuthSession({ client })),
+      deleteCurrentSession: () => unwrap(ops.deleteCurrentAuthSession({ client })),
+      listFederatedTenants: (query?: types.ListFederatedTenantsData['query']) => unwrap(ops.listFederatedTenants({ client, query })),
+      createFederatedTenant: (body: types.CreateFederatedTenantRequest) => unwrap(ops.createFederatedTenant({ client, body })),
+      getFederatedTenant: (tenantId: string) => unwrap(ops.readFederatedTenant({ client, path: { tenantId } })),
+      updateFederatedTenant: (tenantId: string, body: types.UpdateFederatedTenantRequest) => unwrap(ops.updateFederatedTenant({ client, path: { tenantId }, body })),
+      deleteFederatedTenant: (tenantId: string) => unwrap(ops.deleteFederatedTenant({ client, path: { tenantId } })),
     },
 
     projects: {
+      list: (query?: types.ListProjectsData['query']) => unwrap(ops.listProjects({ client, query })),
       create: (body: types.CreateProjectRequest) => unwrap(ops.createProject({ client, body })),
       get: (projectId: string) => unwrap(ops.readProject({ client, path: { projectId } })),
     },
 
-    sessions: {
-      create: (body: types.CreateSessionRequest) => unwrap(ops.createSession({ client, body })),
-      get: (sessionId: string) => unwrap(ops.readSession({ client, path: { sessionId } })),
-      update: (sessionId: string, body: types.UpdateSessionRequest) => unwrap(ops.updateSession({ client, path: { sessionId }, body })),
-      list: (query?: types.ListSessionsData['query']) => unwrap(ops.listSessions({ client, query })),
-      connection: (sessionId: string) => unwrap(ops.readSessionConnection({ client, path: { sessionId } })),
-      /** Open the live session WebSocket: pushed events + backfill replay + typed input frames. */
-      stream: (sessionId: string): SessionStream => createSessionStream(config, sessionId),
-      listEvents: (sessionId: string, query?: types.ListSessionEventsData['query']) => unwrap(ops.listSessionEvents({ client, path: { sessionId }, query })),
-      createMessage: (sessionId: string, body: types.CreateSessionMessageRequest) => unwrap(ops.createSessionMessage({ client, path: { sessionId }, body })),
+    agents: {
+      list: (query?: types.ListAgentsData['query']) => unwrap(ops.listAgents({ client, query })),
+      create: (body: types.CreateAgentRequest) => unwrap(ops.createAgent({ client, body })),
+      get: (agentId: string) => unwrap(ops.readAgent({ client, path: { agentId } })),
+      update: (agentId: string, body: types.UpdateAgentRequest) => unwrap(ops.updateAgent({ client, path: { agentId }, body })),
+      listHandoffCandidates: (agentId: string, query?: types.ListAgentHandoffCandidatesData['query']) => unwrap(ops.listAgentHandoffCandidates({ client, path: { agentId }, query })),
+      getMemory: (agentId: string) => unwrap(ops.readAgentMemory({ client, path: { agentId } })),
+      replaceMemory: (agentId: string, body: types.ReplaceAgentMemoryRequest) => unwrap(ops.replaceAgentMemory({ client, path: { agentId }, body })),
+      listVersions: (agentId: string) => unwrap(ops.listAgentVersions({ client, path: { agentId } })),
+      getVersion: (agentId: string, version: number) => unwrap(ops.readAgentVersion({ client, path: { agentId, version } })),
     },
 
-    vaults: {
-      create: (body: types.CreateVaultRequest) => unwrap(ops.createVault({ client, body })),
-      createCredential: (vaultId: string, body: types.CreateVaultCredentialRequest) => unwrap(ops.createVaultCredential({ client, path: { vaultId }, body })),
-      updateCredential: (vaultId: string, credentialId: string, body: types.UpdateVaultCredentialRequest) =>
-        unwrap(ops.updateVaultCredential({ client, path: { vaultId, credentialId }, body })),
+    environments: {
+      list: (query?: types.ListEnvironmentsData['query']) => unwrap(ops.listEnvironments({ client, query })),
+      create: (body: types.CreateEnvironmentRequest) => unwrap(ops.createEnvironment({ client, body })),
+      get: (environmentId: string) => unwrap(ops.readEnvironment({ client, path: { environmentId } })),
+      update: (environmentId: string, body: types.UpdateEnvironmentRequest) => unwrap(ops.updateEnvironment({ client, path: { environmentId }, body })),
+      listVersions: (environmentId: string) => unwrap(ops.listEnvironmentVersions({ client, path: { environmentId } })),
+      getVersion: (environmentId: string, version: number) => unwrap(ops.readEnvironmentVersion({ client, path: { environmentId, version } })),
+    },
+
+    providers: {
+      list: () => unwrap(ops.listProviders({ client })),
+      listModels: () => unwrap(ops.listModels({ client })),
+      refreshCatalog: () => unwrap(ops.refreshCatalog({ client })),
+      get: (providerId: string) => unwrap(ops.readProvider({ client, path: { providerId } })),
+      listProviderModels: (providerId: string) => unwrap(ops.listProviderModels({ client, path: { providerId } })),
+    },
+
+    runners: {
+      list: (query?: types.ListRunnersData['query']) => unwrap(ops.listRunners({ client, query })),
+      create: (body: types.CreateRunnerRequest) => unwrap(ops.createRunner({ client, body })),
+      get: (runnerId: string) => unwrap(ops.readRunner({ client, path: { runnerId } })),
+      update: (runnerId: string, body: types.UpdateRunnerRequest) => unwrap(ops.updateRunner({ client, path: { runnerId }, body })),
+      channel: (runnerId: string) => unwrap(ops.connectRunnerChannel({ client, path: { runnerId } })),
+      getHeartbeat: (runnerId: string) => unwrap(ops.readRunnerHeartbeat({ client, path: { runnerId } })),
+      putHeartbeat: (runnerId: string, body: types.PutRunnerHeartbeatRequest) => unwrap(ops.putRunnerHeartbeat({ client, path: { runnerId }, body })),
+    },
+
+    workItems: {
+      list: (query?: types.ListWorkItemsData['query']) => unwrap(ops.listWorkItems({ client, query })),
+      get: (workItemId: string) => unwrap(ops.readWorkItem({ client, path: { workItemId } })),
+    },
+
+    leases: {
+      list: (query?: types.ListLeasesData['query']) => unwrap(ops.listLeases({ client, query })),
+      create: (body: types.CreateLeaseRequest) => unwrap(ops.createLease({ client, body })),
+      get: (leaseId: string) => unwrap(ops.readLease({ client, path: { leaseId } })),
+      update: (leaseId: string, body: types.UpdateLeaseRequest) => unwrap(ops.updateLease({ client, path: { leaseId }, body })),
+    },
+
+    policies: {
+      list: () => unwrap(ops.listPolicies({ client })),
+      create: (body: types.CreatePolicyRequest) => unwrap(ops.createPolicy({ client, body })),
+      get: (policyId: string) => unwrap(ops.readPolicy({ client, path: { policyId } })),
+      replace: (policyId: string, body: types.ReplacePolicyRequest) => unwrap(ops.replacePolicy({ client, path: { policyId }, body })),
+      delete: (policyId: string) => unwrap(ops.deletePolicy({ client, path: { policyId } })),
+      effective: (query?: types.ReadEffectivePolicyData['query']) => unwrap(ops.readEffectivePolicy({ client, query })),
+    },
+
+    budgets: {
+      list: () => unwrap(ops.listBudgets({ client })),
+      create: (body: types.CreateBudgetRequest) => unwrap(ops.createBudget({ client, body })),
+      get: (budgetId: string) => unwrap(ops.readBudget({ client, path: { budgetId } })),
+      update: (budgetId: string, body: types.UpdateBudgetRequest) => unwrap(ops.updateBudget({ client, path: { budgetId }, body })),
+      delete: (budgetId: string) => unwrap(ops.deleteBudget({ client, path: { budgetId } })),
+    },
+
+    connectors: {
+      list: (query?: types.ListConnectorsData['query']) => unwrap(ops.listConnectors({ client, query })),
+      get: (connectorId: string) => unwrap(ops.readConnector({ client, path: { connectorId } })),
+    },
+
+    connections: {
+      list: (query?: types.ListConnectionsData['query']) => unwrap(ops.listConnections({ client, query })),
+      create: (body: types.CreateConnectionRequest) => unwrap(ops.createConnection({ client, body })),
+      get: (connectionId: string) => unwrap(ops.readConnection({ client, path: { connectionId } })),
+      update: (connectionId: string, body: types.UpdateConnectionRequest) => unwrap(ops.updateConnection({ client, path: { connectionId }, body })),
+      listTools: (connectionId: string) => unwrap(ops.listConnectionTools({ client, path: { connectionId } })),
+      listToolCalls: (connectionId: string, toolName: string, query?: types.ListToolCallsData['query']) => unwrap(ops.listToolCalls({ client, path: { connectionId, toolName }, query })),
+      createToolCall: (connectionId: string, toolName: string, body: types.CreateToolCallRequest) => unwrap(ops.createToolCall({ client, path: { connectionId, toolName }, body })),
+      getToolCall: (connectionId: string, toolName: string, callId: string) => unwrap(ops.readToolCall({ client, path: { connectionId, toolName, callId } })),
+    },
+
+    audit: {
+      listRecords: (query?: types.ListAuditRecordsData['query']) => unwrap(ops.listAuditRecords({ client, query })),
+      getRecord: (recordId: string) => unwrap(ops.readAuditRecord({ client, path: { recordId } })),
     },
 
     triggers: {
+      list: (query?: types.ListTriggersData['query']) => unwrap(ops.listTriggers({ client, query })),
       create: (body: types.CreateTriggerRequest) => unwrap(ops.createTrigger({ client, body })),
       get: (triggerId: string) => unwrap(ops.readTrigger({ client, path: { triggerId } })),
       update: (triggerId: string, body: types.UpdateTriggerRequest) => unwrap(ops.updateTrigger({ client, path: { triggerId }, body })),
       delete: (triggerId: string) => unwrap(ops.deleteTrigger({ client, path: { triggerId } })),
       listRuns: (triggerId: string, query?: types.ListTriggerRunsData['query']) => unwrap(ops.listTriggerRuns({ client, path: { triggerId }, query })),
-      createRun: (triggerId: string, body: types.CreateHttpTriggerRunRequest, options?: { headers?: Record<string, string> }) =>
-        unwrap(ops.createTriggerRun({ client, path: { triggerId }, body, headers: options?.headers })),
+      createRun: (triggerId: string, body: types.CreateHttpTriggerRunRequest, options?: { headers?: Record<string, string> }) => unwrap(ops.createTriggerRun({ client, path: { triggerId }, body, headers: options?.headers })),
+      getRun: (triggerId: string, runId: string) => unwrap(ops.readTriggerRun({ client, path: { triggerId, runId } })),
+    },
+
+    sessions: {
+      list: (query?: types.ListSessionsData['query']) => unwrap(ops.listSessions({ client, query })),
+      create: (body: types.CreateSessionRequest) => unwrap(ops.createSession({ client, body })),
+      get: (sessionId: string) => unwrap(ops.readSession({ client, path: { sessionId } })),
+      update: (sessionId: string, body: types.UpdateSessionRequest) => unwrap(ops.updateSession({ client, path: { sessionId }, body })),
+      connection: (sessionId: string) => unwrap(ops.readSessionConnection({ client, path: { sessionId } })),
+      socket: (sessionId: string) => unwrap(ops.connectSessionSocket({ client, path: { sessionId } })),
+      listMessages: (sessionId: string, query?: types.ListSessionMessagesData['query']) => unwrap(ops.listSessionMessages({ client, path: { sessionId }, query })),
+      createMessage: (sessionId: string, body: types.CreateSessionMessageRequest) => unwrap(ops.createSessionMessage({ client, path: { sessionId }, body })),
+      getMessage: (sessionId: string, messageId: string) => unwrap(ops.readSessionMessage({ client, path: { sessionId, messageId } })),
+      listEvents: (sessionId: string, query?: types.ListSessionEventsData['query']) => unwrap(ops.listSessionEvents({ client, path: { sessionId }, query })),
+      createEvents: (sessionId: string, body: types.CreateSessionEventsRequest) => unwrap(ops.createSessionEvents({ client, path: { sessionId }, body })),
+      listApprovals: (sessionId: string) => unwrap(ops.listSessionApprovals({ client, path: { sessionId } })),
+      getApproval: (sessionId: string, approvalId: string) => unwrap(ops.readSessionApproval({ client, path: { sessionId, approvalId } })),
+      decideApproval: (sessionId: string, approvalId: string, body: types.SessionApprovalDecisionRequest) => unwrap(ops.decideSessionApproval({ client, path: { sessionId, approvalId }, body })),
     },
 
     memoryStores: {
@@ -218,30 +193,31 @@ export function createAmaClient(config: AmaClientConfig) {
       create: (body: types.CreateMemoryStoreRequest) => unwrap(ops.createMemoryStore({ client, body })),
       get: (storeId: string) => unwrap(ops.readMemoryStore({ client, path: { storeId } })),
       update: (storeId: string, body: types.UpdateMemoryStoreRequest) => unwrap(ops.updateMemoryStore({ client, path: { storeId }, body })),
-      listMemories: (storeId: string, query?: types.ListMemoryStoreMemoriesData['query']) =>
-        unwrap(ops.listMemoryStoreMemories({ client, path: { storeId }, query })),
-      createMemory: (storeId: string, body: types.CreateMemoryStoreMemoryRequest) =>
-        unwrap(ops.createMemoryStoreMemory({ client, path: { storeId }, body })),
-      updateMemory: (storeId: string, memoryId: string, body: types.UpdateMemoryStoreMemoryRequest) =>
-        unwrap(ops.updateMemoryStoreMemory({ client, path: { storeId, memoryId }, body })),
+      listMemories: (storeId: string, query?: types.ListMemoryStoreMemoriesData['query']) => unwrap(ops.listMemoryStoreMemories({ client, path: { storeId }, query })),
+      createMemory: (storeId: string, body: types.CreateMemoryStoreMemoryRequest) => unwrap(ops.createMemoryStoreMemory({ client, path: { storeId }, body })),
+      updateMemory: (storeId: string, memoryId: string, body: types.UpdateMemoryStoreMemoryRequest) => unwrap(ops.updateMemoryStoreMemory({ client, path: { storeId, memoryId }, body })),
       deleteMemory: (storeId: string, memoryId: string) => unwrap(ops.deleteMemoryStoreMemory({ client, path: { storeId, memoryId } })),
     },
 
-    runners: {
-      list: (query?: types.ListRunnersData['query']) => unwrap(ops.listRunners({ client, query })),
+    vaults: {
+      list: (query?: types.ListVaultsData['query']) => unwrap(ops.listVaults({ client, query })),
+      create: (body: types.CreateVaultRequest) => unwrap(ops.createVault({ client, body })),
+      get: (vaultId: string) => unwrap(ops.readVault({ client, path: { vaultId } })),
+      update: (vaultId: string, body: types.UpdateVaultRequest) => unwrap(ops.updateVault({ client, path: { vaultId }, body })),
+      listCredentials: (vaultId: string, query?: types.ListVaultCredentialsData['query']) => unwrap(ops.listVaultCredentials({ client, path: { vaultId }, query })),
+      createCredential: (vaultId: string, body: types.CreateVaultCredentialRequest) => unwrap(ops.createVaultCredential({ client, path: { vaultId }, body })),
+      getCredential: (vaultId: string, credentialId: string) => unwrap(ops.readVaultCredential({ client, path: { vaultId, credentialId } })),
+      updateCredential: (vaultId: string, credentialId: string, body: types.UpdateVaultCredentialRequest) => unwrap(ops.updateVaultCredential({ client, path: { vaultId, credentialId }, body })),
+      listCredentialVersions: (vaultId: string, credentialId: string, query?: types.ListVaultCredentialVersionsData['query']) => unwrap(ops.listVaultCredentialVersions({ client, path: { vaultId, credentialId }, query })),
+      createCredentialVersion: (vaultId: string, credentialId: string, body: types.CreateVaultCredentialVersionRequest) => unwrap(ops.createVaultCredentialVersion({ client, path: { vaultId, credentialId }, body })),
+      getCredentialVersion: (vaultId: string, credentialId: string, versionId: string) => unwrap(ops.readVaultCredentialVersion({ client, path: { vaultId, credentialId, versionId } })),
+      deleteCredentialVersion: (vaultId: string, credentialId: string, versionId: string) => unwrap(ops.deleteVaultCredentialVersion({ client, path: { vaultId, credentialId, versionId } })),
     },
 
     usage: {
       listRecords: (query?: types.ListUsageRecordsData['query']) => unwrap(ops.listUsageRecords({ client, query })),
+      getRecord: (recordId: string) => unwrap(ops.readUsageRecord({ client, path: { recordId } })),
       summary: (query?: types.ReadUsageSummaryData['query']) => unwrap(ops.readUsageSummary({ client, query })),
-    },
-
-    models: {
-      list: (query?: types.ListModelsData['query']) => unwrap(ops.listModels({ client, query })),
-    },
-
-    federatedTenants: {
-      create: (body: types.CreateFederatedTenantRequest) => unwrap(ops.createFederatedTenant({ client, body })),
     },
   }
 }

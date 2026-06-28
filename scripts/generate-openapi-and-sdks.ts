@@ -5,6 +5,7 @@
 //   sdk/typescript     <- @hey-api/openapi-ts        (pnpm run generate)
 //   sdk/go             <- oapi-codegen               (oapi-codegen -config ...)
 //   sdk/python         <- openapi-python-client      (openapi-python-client generate ...)
+//   sdk/spec           <- stable facade shape shared by all language SDKs
 //
 // `--check` regenerates everything and fails if any committed artifact drifts,
 // which is how CI verifies the SDKs stay in sync with the contract. It requires
@@ -35,6 +36,7 @@ async function main() {
   generateTypeScriptSdk()
   generateGoSdk()
   generatePythonSdk()
+  generateSdkFacades()
 
   // 3. In check mode, fail if regeneration changed any committed artifact.
   if (check) {
@@ -66,6 +68,10 @@ function generatePythonSdk() {
     sdkDir,
   )
   execFileSync('touch', ['ama_sdk/py.typed'], { cwd: sdkDir, stdio: 'inherit' })
+}
+
+function generateSdkFacades() {
+  run('node', ['scripts/generate-sdk-facades.mjs'], ROOT)
 }
 
 async function routeGeneratedOpenApi() {

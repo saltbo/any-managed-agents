@@ -1,76 +1,118 @@
 import type * as types from './generated/types.gen.js';
 export interface AmaClientConfig {
-    /** AMA control-plane origin, e.g. https://ama.example.com */
     baseUrl: string;
-    /** OIDC access token; sent as `Authorization: Bearer <token>`. */
     accessToken?: string;
-    /** Sent as `x-ama-project-id` to scope project-bound operations. */
     projectId?: string;
-    /** Extra headers merged last. */
     headers?: Record<string, string>;
 }
-/** Thrown on any non-2xx response. `status` lets callers branch on 404/409/etc. */
 export declare class AmaApiError extends Error {
     readonly status: number | undefined;
     readonly responseText: string;
     readonly body: unknown;
     constructor(status: number | undefined, responseText: string, body: unknown);
 }
-/**
- * A live session WebSocket. `events` is the async-iterable of pushed
- * {@link types.SessionEvent}s; `backfill` requests a replay; `send` posts a typed
- * client frame; `close` tears the socket down. The frame payloads are all typed
- * against the generated schemas — OpenAPI can't describe the socket protocol, so
- * the transport is the one piece hand-wrapped here (mirrors the Go SDK).
- */
-export interface SessionStream {
-    events: AsyncIterable<types.SessionEvent>;
-    send(frame: types.SessionClientFrame): Promise<void>;
-    backfill(options?: {
-        cursor?: number;
-        limit?: number;
-        eventType?: string;
-        visibility?: string;
-    }): Promise<types.SessionBackfillResponse>;
-    close(): void;
-}
 export type AmaClient = ReturnType<typeof createAmaClient>;
 export declare function createAmaClient(config: AmaClientConfig): {
-    /** Escape hatch: the raw generated client for operations not yet on the facade. */
     raw: import("./generated/client/types.gen.js").Client;
-    agents: {
-        create: (body: types.CreateAgentRequest) => Promise<types.Agent>;
-        get: (agentId: string) => Promise<types.Agent>;
-        update: (agentId: string, body: types.UpdateAgentRequest) => Promise<types.Agent>;
-        list: (query?: types.ListAgentsData["query"]) => Promise<types.AgentListResponse>;
+    system: {
+        health: () => Promise<types.HealthResponse>;
     };
-    environments: {
-        create: (body: types.CreateEnvironmentRequest) => Promise<types.Environment>;
-        get: (environmentId: string) => Promise<types.Environment>;
-        update: (environmentId: string, body: types.UpdateEnvironmentRequest) => Promise<types.Environment>;
-        list: (query?: types.ListEnvironmentsData["query"]) => Promise<types.EnvironmentListResponse>;
+    auth: {
+        config: (query?: types.ReadAuthConfigData["query"]) => Promise<types.AuthConfig>;
+        createSession: (body: types.CreateAuthSessionRequest) => Promise<types.AuthSession>;
+        currentSession: () => Promise<types.AuthSession>;
+        deleteCurrentSession: () => Promise<void>;
+        listFederatedTenants: (query?: types.ListFederatedTenantsData["query"]) => Promise<types.FederatedTenantListResponse>;
+        createFederatedTenant: (body: types.CreateFederatedTenantRequest) => Promise<types.FederatedTenant>;
+        getFederatedTenant: (tenantId: string) => Promise<types.FederatedTenant>;
+        updateFederatedTenant: (tenantId: string, body: types.UpdateFederatedTenantRequest) => Promise<types.FederatedTenant>;
+        deleteFederatedTenant: (tenantId: string) => Promise<void>;
     };
     projects: {
+        list: (query?: types.ListProjectsData["query"]) => Promise<types.ProjectListResponse>;
         create: (body: types.CreateProjectRequest) => Promise<types.Project>;
         get: (projectId: string) => Promise<types.Project>;
     };
-    sessions: {
-        create: (body: types.CreateSessionRequest) => Promise<types.Session>;
-        get: (sessionId: string) => Promise<types.Session>;
-        update: (sessionId: string, body: types.UpdateSessionRequest) => Promise<types.Session>;
-        list: (query?: types.ListSessionsData["query"]) => Promise<types.SessionListResponse>;
-        connection: (sessionId: string) => Promise<types.SessionConnection>;
-        /** Open the live session WebSocket: pushed events + backfill replay + typed input frames. */
-        stream: (sessionId: string) => SessionStream;
-        listEvents: (sessionId: string, query?: types.ListSessionEventsData["query"]) => Promise<types.SessionEventListResponse>;
-        createMessage: (sessionId: string, body: types.CreateSessionMessageRequest) => Promise<types.SessionMessage>;
+    agents: {
+        list: (query?: types.ListAgentsData["query"]) => Promise<types.AgentListResponse>;
+        create: (body: types.CreateAgentRequest) => Promise<types.Agent>;
+        get: (agentId: string) => Promise<types.Agent>;
+        update: (agentId: string, body: types.UpdateAgentRequest) => Promise<types.Agent>;
+        listHandoffCandidates: (agentId: string, query?: types.ListAgentHandoffCandidatesData["query"]) => Promise<types.AgentHandoffCandidateListResponse>;
+        getMemory: (agentId: string) => Promise<types.AgentMemory>;
+        replaceMemory: (agentId: string, body: types.ReplaceAgentMemoryRequest) => Promise<types.AgentMemory>;
+        listVersions: (agentId: string) => Promise<types.AgentVersionListResponse>;
+        getVersion: (agentId: string, version: number) => Promise<types.AgentVersion>;
     };
-    vaults: {
-        create: (body: types.CreateVaultRequest) => Promise<types.Vault>;
-        createCredential: (vaultId: string, body: types.CreateVaultCredentialRequest) => Promise<types.VaultCredential>;
-        updateCredential: (vaultId: string, credentialId: string, body: types.UpdateVaultCredentialRequest) => Promise<types.VaultCredential>;
+    environments: {
+        list: (query?: types.ListEnvironmentsData["query"]) => Promise<types.EnvironmentListResponse>;
+        create: (body: types.CreateEnvironmentRequest) => Promise<types.Environment>;
+        get: (environmentId: string) => Promise<types.Environment>;
+        update: (environmentId: string, body: types.UpdateEnvironmentRequest) => Promise<types.Environment>;
+        listVersions: (environmentId: string) => Promise<types.EnvironmentVersionListResponse>;
+        getVersion: (environmentId: string, version: number) => Promise<types.EnvironmentVersion>;
+    };
+    providers: {
+        list: () => Promise<types.ProviderListResponse>;
+        listModels: () => Promise<types.ProviderModelListResponse>;
+        refreshCatalog: () => Promise<types.CatalogRefreshResult>;
+        get: (providerId: string) => Promise<types.Provider>;
+        listProviderModels: (providerId: string) => Promise<types.ProviderModelListResponse>;
+    };
+    runners: {
+        list: (query?: types.ListRunnersData["query"]) => Promise<types.RunnerListResponse>;
+        create: (body: types.CreateRunnerRequest) => Promise<types.Runner>;
+        get: (runnerId: string) => Promise<types.Runner>;
+        update: (runnerId: string, body: types.UpdateRunnerRequest) => Promise<types.Runner>;
+        channel: (runnerId: string) => Promise<types.RunnerChannelMetadata>;
+        getHeartbeat: (runnerId: string) => Promise<types.RunnerHeartbeat>;
+        putHeartbeat: (runnerId: string, body: types.PutRunnerHeartbeatRequest) => Promise<types.RunnerHeartbeat>;
+    };
+    workItems: {
+        list: (query?: types.ListWorkItemsData["query"]) => Promise<types.WorkItemListResponse>;
+        get: (workItemId: string) => Promise<types.WorkItem>;
+    };
+    leases: {
+        list: (query?: types.ListLeasesData["query"]) => Promise<types.LeaseListResponse>;
+        create: (body: types.CreateLeaseRequest) => Promise<types.Lease>;
+        get: (leaseId: string) => Promise<types.Lease>;
+        update: (leaseId: string, body: types.UpdateLeaseRequest) => Promise<types.Lease>;
+    };
+    policies: {
+        list: () => Promise<types.PolicyListResponse>;
+        create: (body: types.CreatePolicyRequest) => Promise<types.Policy>;
+        get: (policyId: string) => Promise<types.Policy>;
+        replace: (policyId: string, body: types.ReplacePolicyRequest) => Promise<types.Policy>;
+        delete: (policyId: string) => Promise<void>;
+        effective: (query?: types.ReadEffectivePolicyData["query"]) => Promise<types.EffectivePolicy>;
+    };
+    budgets: {
+        list: () => Promise<types.BudgetListResponse>;
+        create: (body: types.CreateBudgetRequest) => Promise<types.Budget>;
+        get: (budgetId: string) => Promise<types.Budget>;
+        update: (budgetId: string, body: types.UpdateBudgetRequest) => Promise<types.Budget>;
+        delete: (budgetId: string) => Promise<void>;
+    };
+    connectors: {
+        list: (query?: types.ListConnectorsData["query"]) => Promise<types.ConnectorListResponse>;
+        get: (connectorId: string) => Promise<types.Connector>;
+    };
+    connections: {
+        list: (query?: types.ListConnectionsData["query"]) => Promise<types.ConnectionListResponse>;
+        create: (body: types.CreateConnectionRequest) => Promise<types.Connection>;
+        get: (connectionId: string) => Promise<types.Connection>;
+        update: (connectionId: string, body: types.UpdateConnectionRequest) => Promise<types.Connection>;
+        listTools: (connectionId: string) => Promise<types.ConnectionToolListResponse>;
+        listToolCalls: (connectionId: string, toolName: string, query?: types.ListToolCallsData["query"]) => Promise<types.ToolCallListResponse>;
+        createToolCall: (connectionId: string, toolName: string, body: types.CreateToolCallRequest) => Promise<types.ToolCall>;
+        getToolCall: (connectionId: string, toolName: string, callId: string) => Promise<types.ToolCall>;
+    };
+    audit: {
+        listRecords: (query?: types.ListAuditRecordsData["query"]) => Promise<types.AuditRecordListResponse>;
+        getRecord: (recordId: string) => Promise<types.AuditRecord>;
     };
     triggers: {
+        list: (query?: types.ListTriggersData["query"]) => Promise<types.TriggerListResponse>;
         create: (body: types.CreateTriggerRequest) => Promise<types.Trigger>;
         get: (triggerId: string) => Promise<types.Trigger>;
         update: (triggerId: string, body: types.UpdateTriggerRequest) => Promise<types.Trigger>;
@@ -79,6 +121,23 @@ export declare function createAmaClient(config: AmaClientConfig): {
         createRun: (triggerId: string, body: types.CreateHttpTriggerRunRequest, options?: {
             headers?: Record<string, string>;
         }) => Promise<types.TriggerRun>;
+        getRun: (triggerId: string, runId: string) => Promise<types.TriggerRun>;
+    };
+    sessions: {
+        list: (query?: types.ListSessionsData["query"]) => Promise<types.SessionListResponse>;
+        create: (body: types.CreateSessionRequest) => Promise<types.Session>;
+        get: (sessionId: string) => Promise<types.Session>;
+        update: (sessionId: string, body: types.UpdateSessionRequest) => Promise<types.Session>;
+        connection: (sessionId: string) => Promise<types.SessionConnection>;
+        socket: (sessionId: string) => Promise<types.SessionConnection>;
+        listMessages: (sessionId: string, query?: types.ListSessionMessagesData["query"]) => Promise<types.SessionMessageListResponse>;
+        createMessage: (sessionId: string, body: types.CreateSessionMessageRequest) => Promise<types.SessionMessage>;
+        getMessage: (sessionId: string, messageId: string) => Promise<types.SessionMessage>;
+        listEvents: (sessionId: string, query?: types.ListSessionEventsData["query"]) => Promise<types.SessionEventListResponse>;
+        createEvents: (sessionId: string, body: types.CreateSessionEventsRequest) => Promise<types.SessionEventsAccepted>;
+        listApprovals: (sessionId: string) => Promise<types.SessionApprovalListResponse>;
+        getApproval: (sessionId: string, approvalId: string) => Promise<types.SessionApproval>;
+        decideApproval: (sessionId: string, approvalId: string, body: types.SessionApprovalDecisionRequest) => Promise<types.SessionApproval>;
     };
     memoryStores: {
         list: (query?: types.ListMemoryStoresData["query"]) => Promise<types.MemoryStoreListResponse>;
@@ -90,17 +149,41 @@ export declare function createAmaClient(config: AmaClientConfig): {
         updateMemory: (storeId: string, memoryId: string, body: types.UpdateMemoryStoreMemoryRequest) => Promise<types.MemoryStoreMemory>;
         deleteMemory: (storeId: string, memoryId: string) => Promise<void>;
     };
-    runners: {
-        list: (query?: types.ListRunnersData["query"]) => Promise<types.RunnerListResponse>;
+    vaults: {
+        list: (query?: types.ListVaultsData["query"]) => Promise<types.VaultListResponse>;
+        create: (body: types.CreateVaultRequest) => Promise<types.Vault>;
+        get: (vaultId: string) => Promise<types.Vault>;
+        update: (vaultId: string, body: types.UpdateVaultRequest) => Promise<types.Vault>;
+        listCredentials: (vaultId: string, query?: types.ListVaultCredentialsData["query"]) => Promise<types.VaultCredentialListResponse>;
+        createCredential: (vaultId: string, body: types.CreateVaultCredentialRequest) => Promise<types.VaultCredential>;
+        getCredential: (vaultId: string, credentialId: string) => Promise<types.VaultCredential>;
+        updateCredential: (vaultId: string, credentialId: string, body: types.UpdateVaultCredentialRequest) => Promise<types.VaultCredential>;
+        listCredentialVersions: (vaultId: string, credentialId: string, query?: types.ListVaultCredentialVersionsData["query"]) => Promise<types.VaultCredentialVersionListResponse>;
+        createCredentialVersion: (vaultId: string, credentialId: string, body: types.CreateVaultCredentialVersionRequest) => Promise<types.VaultCredential>;
+        getCredentialVersion: (vaultId: string, credentialId: string, versionId: string) => Promise<{
+            id: string;
+            credentialId: string;
+            vaultId: string;
+            projectId: string | null;
+            version: number;
+            provider: "ama-managed" | "cloudflare-secrets" | "external-vault";
+            secretRef: string;
+            externalVaultPath: string | null;
+            referenceName: string;
+            state: "active" | "superseded" | "revoked";
+            hasSecret: boolean;
+            metadata: {
+                [key: string]: unknown;
+            };
+            createdAt: string;
+            supersededAt: string | null;
+            revokedAt: string | null;
+        } | null>;
+        deleteCredentialVersion: (vaultId: string, credentialId: string, versionId: string) => Promise<void>;
     };
     usage: {
         listRecords: (query?: types.ListUsageRecordsData["query"]) => Promise<types.UsageRecordListResponse>;
+        getRecord: (recordId: string) => Promise<types.UsageRecord>;
         summary: (query?: types.ReadUsageSummaryData["query"]) => Promise<types.UsageSummary>;
-    };
-    models: {
-        list: (query?: types.ListModelsData["query"]) => Promise<types.ProviderModelListResponse>;
-    };
-    federatedTenants: {
-        create: (body: types.CreateFederatedTenantRequest) => Promise<types.FederatedTenant>;
     };
 };

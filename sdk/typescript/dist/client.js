@@ -1,15 +1,7 @@
-// Stable, hand-maintained facade over the generated client.
-//
-// External consumers code against `createAmaClient(...).<resource>.<verb>(...)`.
-// Each method is a thin delegation to a function in ./generated (produced by
-// @hey-api/openapi-ts). The generated layer may be re-shaped — or the generator
-// swapped entirely — without changing this public surface: only the one-line
-// bodies here move. This is the contract consumers depend on, not sdk.gen.ts.
-//
-// Adding an operation is a one-liner; see the patterns below.
+// Stable facade generated from sdk/spec/resources.json.
+// The generated OpenAPI layer owns HTTP shapes; this file owns public SDK shape.
 import { createClient, createConfig } from './generated/client/index.js';
 import * as ops from './generated/sdk.gen.js';
-/** Thrown on any non-2xx response. `status` lets callers branch on 404/409/etc. */
 export class AmaApiError extends Error {
     status;
     responseText;
@@ -22,9 +14,6 @@ export class AmaApiError extends Error {
         this.name = 'AmaApiError';
     }
 }
-// The generated functions resolve to { data, error, response } where `data` is
-// `T | undefined` across the success/error union. Typing the param as
-// `T | undefined` makes inference recover the bare success type `T`.
 async function unwrap(call) {
     const { data, error, response } = await call;
     if (response?.ok && error === undefined) {
@@ -32,83 +21,6 @@ async function unwrap(call) {
     }
     const body = error ?? data;
     throw new AmaApiError(response?.status, typeof body === 'string' ? body : JSON.stringify(body ?? {}), body);
-}
-function createSessionStream(config, sessionId) {
-    const url = new URL(`/api/v1/sessions/${sessionId}/socket`, config.baseUrl);
-    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-    // Browsers can't set an Authorization header on a WebSocket; AMA's auth wall
-    // also accepts the token as an access_token query param, so use that.
-    if (config.accessToken) {
-        url.searchParams.set('access_token', config.accessToken);
-    }
-    const socket = new WebSocket(url.toString());
-    const buffered = [];
-    const waiters = [];
-    const backfillWaiters = new Map();
-    let done = false;
-    const drainDone = () => {
-        done = true;
-        for (const resolve of waiters.splice(0)) {
-            resolve({ value: undefined, done: true });
-        }
-    };
-    socket.addEventListener('message', (event) => {
-        const frame = JSON.parse(typeof event.data === 'string' ? event.data : '');
-        if (frame.type === 'event') {
-            const waiter = waiters.shift();
-            if (waiter) {
-                waiter({ value: frame.event, done: false });
-            }
-            else {
-                buffered.push(frame.event);
-            }
-        }
-        else if (frame.type === 'backfill') {
-            const resolve = frame.requestId ? backfillWaiters.get(frame.requestId) : undefined;
-            if (frame.requestId) {
-                backfillWaiters.delete(frame.requestId);
-            }
-            resolve?.(frame);
-        }
-    });
-    socket.addEventListener('close', drainDone);
-    const ready = new Promise((resolve, reject) => {
-        socket.addEventListener('open', () => resolve());
-        socket.addEventListener('error', () => reject(new Error('Session socket failed to open')));
-    });
-    let backfillSeq = 0;
-    return {
-        events: {
-            [Symbol.asyncIterator]() {
-                return {
-                    next() {
-                        const value = buffered.shift();
-                        if (value !== undefined) {
-                            return Promise.resolve({ value, done: false });
-                        }
-                        if (done) {
-                            return Promise.resolve({ value: undefined, done: true });
-                        }
-                        return new Promise((resolve) => waiters.push(resolve));
-                    },
-                };
-            },
-        },
-        async send(frame) {
-            await ready;
-            socket.send(JSON.stringify(frame));
-        },
-        async backfill(options = {}) {
-            await ready;
-            const requestId = `bf_${(backfillSeq += 1)}`;
-            const response = new Promise((resolve) => backfillWaiters.set(requestId, resolve));
-            socket.send(JSON.stringify({ type: 'backfill', requestId, ...options }));
-            return response;
-        },
-        close() {
-            socket.close();
-        },
-    };
 }
 export function createAmaClient(config) {
     const client = createClient(createConfig({
@@ -120,47 +32,129 @@ export function createAmaClient(config) {
         },
     }));
     return {
-        /** Escape hatch: the raw generated client for operations not yet on the facade. */
         raw: client,
-        agents: {
-            create: (body) => unwrap(ops.createAgent({ client, body })),
-            get: (agentId) => unwrap(ops.readAgent({ client, path: { agentId } })),
-            update: (agentId, body) => unwrap(ops.updateAgent({ client, path: { agentId }, body })),
-            list: (query) => unwrap(ops.listAgents({ client, query })),
+        system: {
+            health: () => unwrap(ops.getHealth({ client })),
         },
-        environments: {
-            create: (body) => unwrap(ops.createEnvironment({ client, body })),
-            get: (environmentId) => unwrap(ops.readEnvironment({ client, path: { environmentId } })),
-            update: (environmentId, body) => unwrap(ops.updateEnvironment({ client, path: { environmentId }, body })),
-            list: (query) => unwrap(ops.listEnvironments({ client, query })),
+        auth: {
+            config: (query) => unwrap(ops.readAuthConfig({ client, query })),
+            createSession: (body) => unwrap(ops.createAuthSession({ client, body })),
+            currentSession: () => unwrap(ops.readCurrentAuthSession({ client })),
+            deleteCurrentSession: () => unwrap(ops.deleteCurrentAuthSession({ client })),
+            listFederatedTenants: (query) => unwrap(ops.listFederatedTenants({ client, query })),
+            createFederatedTenant: (body) => unwrap(ops.createFederatedTenant({ client, body })),
+            getFederatedTenant: (tenantId) => unwrap(ops.readFederatedTenant({ client, path: { tenantId } })),
+            updateFederatedTenant: (tenantId, body) => unwrap(ops.updateFederatedTenant({ client, path: { tenantId }, body })),
+            deleteFederatedTenant: (tenantId) => unwrap(ops.deleteFederatedTenant({ client, path: { tenantId } })),
         },
         projects: {
+            list: (query) => unwrap(ops.listProjects({ client, query })),
             create: (body) => unwrap(ops.createProject({ client, body })),
             get: (projectId) => unwrap(ops.readProject({ client, path: { projectId } })),
         },
-        sessions: {
-            create: (body) => unwrap(ops.createSession({ client, body })),
-            get: (sessionId) => unwrap(ops.readSession({ client, path: { sessionId } })),
-            update: (sessionId, body) => unwrap(ops.updateSession({ client, path: { sessionId }, body })),
-            list: (query) => unwrap(ops.listSessions({ client, query })),
-            connection: (sessionId) => unwrap(ops.readSessionConnection({ client, path: { sessionId } })),
-            /** Open the live session WebSocket: pushed events + backfill replay + typed input frames. */
-            stream: (sessionId) => createSessionStream(config, sessionId),
-            listEvents: (sessionId, query) => unwrap(ops.listSessionEvents({ client, path: { sessionId }, query })),
-            createMessage: (sessionId, body) => unwrap(ops.createSessionMessage({ client, path: { sessionId }, body })),
+        agents: {
+            list: (query) => unwrap(ops.listAgents({ client, query })),
+            create: (body) => unwrap(ops.createAgent({ client, body })),
+            get: (agentId) => unwrap(ops.readAgent({ client, path: { agentId } })),
+            update: (agentId, body) => unwrap(ops.updateAgent({ client, path: { agentId }, body })),
+            listHandoffCandidates: (agentId, query) => unwrap(ops.listAgentHandoffCandidates({ client, path: { agentId }, query })),
+            getMemory: (agentId) => unwrap(ops.readAgentMemory({ client, path: { agentId } })),
+            replaceMemory: (agentId, body) => unwrap(ops.replaceAgentMemory({ client, path: { agentId }, body })),
+            listVersions: (agentId) => unwrap(ops.listAgentVersions({ client, path: { agentId } })),
+            getVersion: (agentId, version) => unwrap(ops.readAgentVersion({ client, path: { agentId, version } })),
         },
-        vaults: {
-            create: (body) => unwrap(ops.createVault({ client, body })),
-            createCredential: (vaultId, body) => unwrap(ops.createVaultCredential({ client, path: { vaultId }, body })),
-            updateCredential: (vaultId, credentialId, body) => unwrap(ops.updateVaultCredential({ client, path: { vaultId, credentialId }, body })),
+        environments: {
+            list: (query) => unwrap(ops.listEnvironments({ client, query })),
+            create: (body) => unwrap(ops.createEnvironment({ client, body })),
+            get: (environmentId) => unwrap(ops.readEnvironment({ client, path: { environmentId } })),
+            update: (environmentId, body) => unwrap(ops.updateEnvironment({ client, path: { environmentId }, body })),
+            listVersions: (environmentId) => unwrap(ops.listEnvironmentVersions({ client, path: { environmentId } })),
+            getVersion: (environmentId, version) => unwrap(ops.readEnvironmentVersion({ client, path: { environmentId, version } })),
+        },
+        providers: {
+            list: () => unwrap(ops.listProviders({ client })),
+            listModels: () => unwrap(ops.listModels({ client })),
+            refreshCatalog: () => unwrap(ops.refreshCatalog({ client })),
+            get: (providerId) => unwrap(ops.readProvider({ client, path: { providerId } })),
+            listProviderModels: (providerId) => unwrap(ops.listProviderModels({ client, path: { providerId } })),
+        },
+        runners: {
+            list: (query) => unwrap(ops.listRunners({ client, query })),
+            create: (body) => unwrap(ops.createRunner({ client, body })),
+            get: (runnerId) => unwrap(ops.readRunner({ client, path: { runnerId } })),
+            update: (runnerId, body) => unwrap(ops.updateRunner({ client, path: { runnerId }, body })),
+            channel: (runnerId) => unwrap(ops.connectRunnerChannel({ client, path: { runnerId } })),
+            getHeartbeat: (runnerId) => unwrap(ops.readRunnerHeartbeat({ client, path: { runnerId } })),
+            putHeartbeat: (runnerId, body) => unwrap(ops.putRunnerHeartbeat({ client, path: { runnerId }, body })),
+        },
+        workItems: {
+            list: (query) => unwrap(ops.listWorkItems({ client, query })),
+            get: (workItemId) => unwrap(ops.readWorkItem({ client, path: { workItemId } })),
+        },
+        leases: {
+            list: (query) => unwrap(ops.listLeases({ client, query })),
+            create: (body) => unwrap(ops.createLease({ client, body })),
+            get: (leaseId) => unwrap(ops.readLease({ client, path: { leaseId } })),
+            update: (leaseId, body) => unwrap(ops.updateLease({ client, path: { leaseId }, body })),
+        },
+        policies: {
+            list: () => unwrap(ops.listPolicies({ client })),
+            create: (body) => unwrap(ops.createPolicy({ client, body })),
+            get: (policyId) => unwrap(ops.readPolicy({ client, path: { policyId } })),
+            replace: (policyId, body) => unwrap(ops.replacePolicy({ client, path: { policyId }, body })),
+            delete: (policyId) => unwrap(ops.deletePolicy({ client, path: { policyId } })),
+            effective: (query) => unwrap(ops.readEffectivePolicy({ client, query })),
+        },
+        budgets: {
+            list: () => unwrap(ops.listBudgets({ client })),
+            create: (body) => unwrap(ops.createBudget({ client, body })),
+            get: (budgetId) => unwrap(ops.readBudget({ client, path: { budgetId } })),
+            update: (budgetId, body) => unwrap(ops.updateBudget({ client, path: { budgetId }, body })),
+            delete: (budgetId) => unwrap(ops.deleteBudget({ client, path: { budgetId } })),
+        },
+        connectors: {
+            list: (query) => unwrap(ops.listConnectors({ client, query })),
+            get: (connectorId) => unwrap(ops.readConnector({ client, path: { connectorId } })),
+        },
+        connections: {
+            list: (query) => unwrap(ops.listConnections({ client, query })),
+            create: (body) => unwrap(ops.createConnection({ client, body })),
+            get: (connectionId) => unwrap(ops.readConnection({ client, path: { connectionId } })),
+            update: (connectionId, body) => unwrap(ops.updateConnection({ client, path: { connectionId }, body })),
+            listTools: (connectionId) => unwrap(ops.listConnectionTools({ client, path: { connectionId } })),
+            listToolCalls: (connectionId, toolName, query) => unwrap(ops.listToolCalls({ client, path: { connectionId, toolName }, query })),
+            createToolCall: (connectionId, toolName, body) => unwrap(ops.createToolCall({ client, path: { connectionId, toolName }, body })),
+            getToolCall: (connectionId, toolName, callId) => unwrap(ops.readToolCall({ client, path: { connectionId, toolName, callId } })),
+        },
+        audit: {
+            listRecords: (query) => unwrap(ops.listAuditRecords({ client, query })),
+            getRecord: (recordId) => unwrap(ops.readAuditRecord({ client, path: { recordId } })),
         },
         triggers: {
+            list: (query) => unwrap(ops.listTriggers({ client, query })),
             create: (body) => unwrap(ops.createTrigger({ client, body })),
             get: (triggerId) => unwrap(ops.readTrigger({ client, path: { triggerId } })),
             update: (triggerId, body) => unwrap(ops.updateTrigger({ client, path: { triggerId }, body })),
             delete: (triggerId) => unwrap(ops.deleteTrigger({ client, path: { triggerId } })),
             listRuns: (triggerId, query) => unwrap(ops.listTriggerRuns({ client, path: { triggerId }, query })),
             createRun: (triggerId, body, options) => unwrap(ops.createTriggerRun({ client, path: { triggerId }, body, headers: options?.headers })),
+            getRun: (triggerId, runId) => unwrap(ops.readTriggerRun({ client, path: { triggerId, runId } })),
+        },
+        sessions: {
+            list: (query) => unwrap(ops.listSessions({ client, query })),
+            create: (body) => unwrap(ops.createSession({ client, body })),
+            get: (sessionId) => unwrap(ops.readSession({ client, path: { sessionId } })),
+            update: (sessionId, body) => unwrap(ops.updateSession({ client, path: { sessionId }, body })),
+            connection: (sessionId) => unwrap(ops.readSessionConnection({ client, path: { sessionId } })),
+            socket: (sessionId) => unwrap(ops.connectSessionSocket({ client, path: { sessionId } })),
+            listMessages: (sessionId, query) => unwrap(ops.listSessionMessages({ client, path: { sessionId }, query })),
+            createMessage: (sessionId, body) => unwrap(ops.createSessionMessage({ client, path: { sessionId }, body })),
+            getMessage: (sessionId, messageId) => unwrap(ops.readSessionMessage({ client, path: { sessionId, messageId } })),
+            listEvents: (sessionId, query) => unwrap(ops.listSessionEvents({ client, path: { sessionId }, query })),
+            createEvents: (sessionId, body) => unwrap(ops.createSessionEvents({ client, path: { sessionId }, body })),
+            listApprovals: (sessionId) => unwrap(ops.listSessionApprovals({ client, path: { sessionId } })),
+            getApproval: (sessionId, approvalId) => unwrap(ops.readSessionApproval({ client, path: { sessionId, approvalId } })),
+            decideApproval: (sessionId, approvalId, body) => unwrap(ops.decideSessionApproval({ client, path: { sessionId, approvalId }, body })),
         },
         memoryStores: {
             list: (query) => unwrap(ops.listMemoryStores({ client, query })),
@@ -172,18 +166,24 @@ export function createAmaClient(config) {
             updateMemory: (storeId, memoryId, body) => unwrap(ops.updateMemoryStoreMemory({ client, path: { storeId, memoryId }, body })),
             deleteMemory: (storeId, memoryId) => unwrap(ops.deleteMemoryStoreMemory({ client, path: { storeId, memoryId } })),
         },
-        runners: {
-            list: (query) => unwrap(ops.listRunners({ client, query })),
+        vaults: {
+            list: (query) => unwrap(ops.listVaults({ client, query })),
+            create: (body) => unwrap(ops.createVault({ client, body })),
+            get: (vaultId) => unwrap(ops.readVault({ client, path: { vaultId } })),
+            update: (vaultId, body) => unwrap(ops.updateVault({ client, path: { vaultId }, body })),
+            listCredentials: (vaultId, query) => unwrap(ops.listVaultCredentials({ client, path: { vaultId }, query })),
+            createCredential: (vaultId, body) => unwrap(ops.createVaultCredential({ client, path: { vaultId }, body })),
+            getCredential: (vaultId, credentialId) => unwrap(ops.readVaultCredential({ client, path: { vaultId, credentialId } })),
+            updateCredential: (vaultId, credentialId, body) => unwrap(ops.updateVaultCredential({ client, path: { vaultId, credentialId }, body })),
+            listCredentialVersions: (vaultId, credentialId, query) => unwrap(ops.listVaultCredentialVersions({ client, path: { vaultId, credentialId }, query })),
+            createCredentialVersion: (vaultId, credentialId, body) => unwrap(ops.createVaultCredentialVersion({ client, path: { vaultId, credentialId }, body })),
+            getCredentialVersion: (vaultId, credentialId, versionId) => unwrap(ops.readVaultCredentialVersion({ client, path: { vaultId, credentialId, versionId } })),
+            deleteCredentialVersion: (vaultId, credentialId, versionId) => unwrap(ops.deleteVaultCredentialVersion({ client, path: { vaultId, credentialId, versionId } })),
         },
         usage: {
             listRecords: (query) => unwrap(ops.listUsageRecords({ client, query })),
+            getRecord: (recordId) => unwrap(ops.readUsageRecord({ client, path: { recordId } })),
             summary: (query) => unwrap(ops.readUsageSummary({ client, query })),
-        },
-        models: {
-            list: (query) => unwrap(ops.listModels({ client, query })),
-        },
-        federatedTenants: {
-            create: (body) => unwrap(ops.createFederatedTenant({ client, body })),
         },
     };
 }

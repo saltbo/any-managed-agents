@@ -508,14 +508,16 @@ func (r LeaseWorker) uploadSessionEvent(ctx context.Context, sessionID string, e
 	if sessionID == "" {
 		return nil
 	}
-	_, err := r.Client.Sessions.CreateEvents(ctx, sessionID, []ama.SessionEventInput{{
-		Type:    eventType,
-		Payload: payload,
-		Metadata: lo.ToPtr(ama.JSON{
-			"runnerId": r.RunnerID,
-			"executor": r.Config.SandboxAdapter,
-		}),
-	}})
+	_, err := r.Client.Sessions.CreateEvents(ctx, sessionID, ama.CreateSessionEventsRequest{
+		Events: []ama.SessionEventInput{{
+			Type:    eventType,
+			Payload: payload,
+			Metadata: lo.ToPtr(ama.JSON{
+				"runnerId": r.RunnerID,
+				"executor": r.Config.SandboxAdapter,
+			}),
+		}},
+	})
 	return err
 }
 
