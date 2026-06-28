@@ -5,54 +5,6 @@ import { client } from './client.gen.js';
  */
 export const getHealth = (options) => (options?.client ?? client).get({ url: '/api/v1/health', ...options });
 /**
- * List federated tenants for the current project
- */
-export const listFederatedTenants = (options) => (options?.client ?? client).get({
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/auth/federated-tenants',
-    ...options
-});
-/**
- * Authorize an external issuer tenant for the current project
- */
-export const createFederatedTenant = (options) => (options.client ?? client).post({
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/auth/federated-tenants',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-/**
- * Delete a federated tenant
- */
-export const deleteFederatedTenant = (options) => (options.client ?? client).delete({
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/auth/federated-tenants/{tenantId}',
-    ...options
-});
-/**
- * Read a federated tenant
- */
-export const readFederatedTenant = (options) => (options.client ?? client).get({
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/auth/federated-tenants/{tenantId}',
-    ...options
-});
-/**
- * Update a federated tenant
- */
-export const updateFederatedTenant = (options) => (options.client ?? client).patch({
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/auth/federated-tenants/{tenantId}',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-/**
  * Discover available sign-in methods for an organization
  */
 export const readAuthConfig = (options) => (options?.client ?? client).get({ url: '/api/v1/auth/config', ...options });
@@ -420,64 +372,6 @@ export const updateLease = (options) => (options.client ?? client).patch({
         'Content-Type': 'application/json',
         ...options.headers
     }
-});
-/**
- * List scoped governance policies
- */
-export const listPolicies = (options) => (options?.client ?? client).get({
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/policies',
-    ...options
-});
-/**
- * Create a scoped governance policy
- */
-export const createPolicy = (options) => (options.client ?? client).post({
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/policies',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-/**
- * Delete a governance policy
- */
-export const deletePolicy = (options) => (options.client ?? client).delete({
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/policies/{policyId}',
-    ...options
-});
-/**
- * Read a governance policy
- */
-export const readPolicy = (options) => (options.client ?? client).get({
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/policies/{policyId}',
-    ...options
-});
-/**
- * Replace a governance policy
- */
-export const replacePolicy = (options) => (options.client ?? client).put({
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/policies/{policyId}',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-/**
- * Read the effective governance policy
- *
- * Merges organization, team, and project policies with enabled budgets. Pass teamId to resolve the policy as a member of that team. Pass providerId and modelId together to attach a policy decision for that provider/model pair.
- */
-export const readEffectivePolicy = (options) => (options?.client ?? client).get({
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/effective-policy',
-    ...options
 });
 /**
  * List budgets

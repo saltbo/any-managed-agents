@@ -12,13 +12,6 @@
           { "name": "currentSession", "operationId": "readCurrentAuthSession" },
           { "name": "deleteCurrentSession", "operationId": "deleteCurrentAuthSession" }
         ] },
-        { "name": "federatedTenants", "methods": [
-          { "name": "list", "operationId": "listFederatedTenants" },
-          { "name": "create", "operationId": "createFederatedTenant" },
-          { "name": "get", "operationId": "readFederatedTenant" },
-          { "name": "update", "operationId": "updateFederatedTenant" },
-          { "name": "delete", "operationId": "deleteFederatedTenant" }
-        ] },
         { "name": "projects", "methods": [
           { "name": "list", "operationId": "listProjects" },
           { "name": "create", "operationId": "createProject" },
@@ -55,14 +48,6 @@
           { "name": "create", "operationId": "createRunner" },
           { "name": "get", "operationId": "readRunner" },
           { "name": "update", "operationId": "updateRunner" }
-        ] },
-        { "name": "policies", "methods": [
-          { "name": "list", "operationId": "listPolicies" },
-          { "name": "create", "operationId": "createPolicy" },
-          { "name": "get", "operationId": "readPolicy" },
-          { "name": "replace", "operationId": "replacePolicy" },
-          { "name": "delete", "operationId": "deletePolicy" },
-          { "name": "effective", "operationId": "readEffectivePolicy" }
         ] },
         { "name": "budgets", "methods": [
           { "name": "list", "operationId": "listBudgets" },

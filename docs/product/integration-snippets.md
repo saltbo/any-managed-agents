@@ -66,7 +66,7 @@ Common control-plane workflows map to these OpenAPI operations:
 | Sessions | `listSessions`, `createSession`, `readSession`, `updateSession`, `readSessionConnection`, `connectSessionSocket`, `listSessionMessages`, `createSessionMessage`, `readSessionMessage`, `listSessionEvents`, approval operations | `/api/v1/sessions` |
 | Providers | `listProviders`, `listModels`, `refreshCatalog`, `readProvider`, `listProviderModels` | `/api/v1/providers` |
 | Vaults | `listVaults`, `createVault`, `readVault`, `updateVault`, credential and version operations | `/api/v1/vaults` |
-| Policies and budgets | policy operations, budget operations, `readEffectivePolicy` | `/api/v1/policies`, `/api/v1/budgets` |
+| Budgets | budget operations | `/api/v1/budgets` |
 | Usage | `listUsageRecords`, `readUsageRecord`, `readUsageSummary` | `/api/v1/usage` |
 | Audit | `listAuditRecords`, `readAuditRecord` | `/api/v1/audit-records` |
 

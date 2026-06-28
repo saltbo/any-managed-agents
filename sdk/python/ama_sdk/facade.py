@@ -21,14 +21,9 @@ from .api.agents import update_agent as update_agent_api
 from .api.audit import list_audit_records as list_audit_records_api
 from .api.audit import read_audit_record as read_audit_record_api
 from .api.auth import create_auth_session as create_auth_session_api
-from .api.auth import create_federated_tenant as create_federated_tenant_api
 from .api.auth import delete_current_auth_session as delete_current_auth_session_api
-from .api.auth import delete_federated_tenant as delete_federated_tenant_api
-from .api.auth import list_federated_tenants as list_federated_tenants_api
 from .api.auth import read_auth_config as read_auth_config_api
 from .api.auth import read_current_auth_session as read_current_auth_session_api
-from .api.auth import read_federated_tenant as read_federated_tenant_api
-from .api.auth import update_federated_tenant as update_federated_tenant_api
 from .api.connections import create_connection as create_connection_api
 from .api.connections import create_tool_call as create_tool_call_api
 from .api.connections import list_connection_tools as list_connection_tools_api
@@ -46,15 +41,9 @@ from .api.environments import read_environment as read_environment_api
 from .api.environments import read_environment_version as read_environment_version_api
 from .api.environments import update_environment as update_environment_api
 from .api.governance import create_budget as create_budget_api
-from .api.governance import create_policy as create_policy_api
 from .api.governance import delete_budget as delete_budget_api
-from .api.governance import delete_policy as delete_policy_api
 from .api.governance import list_budgets as list_budgets_api
-from .api.governance import list_policies as list_policies_api
 from .api.governance import read_budget as read_budget_api
-from .api.governance import read_effective_policy as read_effective_policy_api
-from .api.governance import read_policy as read_policy_api
-from .api.governance import replace_policy as replace_policy_api
 from .api.governance import update_budget as update_budget_api
 from .api.leases import create_lease as create_lease_api
 from .api.leases import list_leases as list_leases_api
@@ -277,13 +266,11 @@ class AmaClient:
         self._core = _ClientCore(base_url, access_token, project_id, headers, client)
         self.system = _SystemResource(self._core)
         self.auth = _AuthResource(self._core)
-        self.federated_tenants = _FederatedTenantsResource(self._core)
         self.projects = _ProjectsResource(self._core)
         self.agents = _AgentsResource(self._core)
         self.environments = _EnvironmentsResource(self._core)
         self.providers = _ProvidersResource(self._core)
         self.runners = _RunnersResource(self._core)
-        self.policies = _PoliciesResource(self._core)
         self.budgets = _BudgetsResource(self._core)
         self.connectors = _ConnectorsResource(self._core)
         self.connections = _ConnectionsResource(self._core)
@@ -407,26 +394,6 @@ class _AuthResource:
     def delete_current_session(self) -> Any:
         return _unwrap(delete_current_auth_session_api.sync_detailed(client=self._client))
 
-class _FederatedTenantsResource:
-    def __init__(self, owner: _ClientCore) -> None:
-        self._owner = owner
-        self._client = owner.raw
-
-    def list(self, **query: Any) -> Any:
-        return _unwrap(list_federated_tenants_api.sync_detailed(client=self._client, **query))
-
-    def create(self, body: Any) -> Any:
-        return _unwrap(create_federated_tenant_api.sync_detailed(client=self._client, body=body))
-
-    def get(self, tenant_id: str) -> Any:
-        return _unwrap(read_federated_tenant_api.sync_detailed(tenant_id=tenant_id, client=self._client))
-
-    def update(self, tenant_id: str, body: Any) -> Any:
-        return _unwrap(update_federated_tenant_api.sync_detailed(tenant_id=tenant_id, client=self._client, body=body))
-
-    def delete(self, tenant_id: str) -> Any:
-        return _unwrap(delete_federated_tenant_api.sync_detailed(tenant_id=tenant_id, client=self._client))
-
 class _ProjectsResource:
     def __init__(self, owner: _ClientCore) -> None:
         self._owner = owner
@@ -532,29 +499,6 @@ class _RunnersResource:
 
     def update(self, runner_id: str, body: Any) -> Any:
         return _unwrap(update_runner_api.sync_detailed(runner_id=runner_id, client=self._client, body=body))
-
-class _PoliciesResource:
-    def __init__(self, owner: _ClientCore) -> None:
-        self._owner = owner
-        self._client = owner.raw
-
-    def list(self) -> Any:
-        return _unwrap(list_policies_api.sync_detailed(client=self._client))
-
-    def create(self, body: Any) -> Any:
-        return _unwrap(create_policy_api.sync_detailed(client=self._client, body=body))
-
-    def get(self, policy_id: str) -> Any:
-        return _unwrap(read_policy_api.sync_detailed(policy_id=policy_id, client=self._client))
-
-    def replace(self, policy_id: str, body: Any) -> Any:
-        return _unwrap(replace_policy_api.sync_detailed(policy_id=policy_id, client=self._client, body=body))
-
-    def delete(self, policy_id: str) -> Any:
-        return _unwrap(delete_policy_api.sync_detailed(policy_id=policy_id, client=self._client))
-
-    def effective(self, **query: Any) -> Any:
-        return _unwrap(read_effective_policy_api.sync_detailed(client=self._client, **query))
 
 class _BudgetsResource:
     def __init__(self, owner: _ClientCore) -> None:

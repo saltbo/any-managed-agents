@@ -187,56 +187,6 @@ export type HealthResponse = {
     runnerScopes: string | null;
     timestamp: string;
 };
-export type FederatedTenantListResponse = {
-    data: Array<FederatedTenant>;
-    pagination: ListPagination;
-};
-export type FederatedTenant = {
-    id: string;
-    issuer: string;
-    externalTenantId: string;
-    projectId: string;
-    environmentId: string | null;
-    capabilities: Array<string>;
-    enabled: boolean;
-    metadata: {
-        [key: string]: unknown;
-    };
-    createdAt: string;
-    updatedAt: string;
-};
-export type ListPagination = {
-    limit: number;
-    nextCursor: string | null;
-    hasMore: boolean;
-};
-export type ErrorResponse = {
-    error: {
-        type: string;
-        message: string;
-        issues?: Array<unknown>;
-        details?: {
-            [key: string]: unknown;
-        };
-    };
-};
-export type CreateFederatedTenantRequest = {
-    issuer: string;
-    externalTenantId: string;
-    environmentId?: string;
-    capabilities?: Array<string>;
-    metadata?: {
-        [key: string]: unknown;
-    };
-};
-export type UpdateFederatedTenantRequest = {
-    enabled?: boolean;
-    capabilities?: Array<string>;
-    environmentId?: string | null;
-    metadata?: {
-        [key: string]: unknown;
-    };
-};
 export type AuthConfig = {
     methods: Array<AuthMethod>;
 };
@@ -263,6 +213,16 @@ export type AuthProject = {
     id: string;
     name: string;
 };
+export type ErrorResponse = {
+    error: {
+        type: string;
+        message: string;
+        issues?: Array<unknown>;
+        details?: {
+            [key: string]: unknown;
+        };
+    };
+};
 export type CreateAuthSessionRequest = {
     accessToken: string;
 };
@@ -275,6 +235,11 @@ export type Project = {
     name: string;
     createdAt: string;
     updatedAt: string;
+};
+export type ListPagination = {
+    limit: number;
+    nextCursor: string | null;
+    hasMore: boolean;
 };
 export type CreateProjectRequest = {
     name: string;
@@ -819,107 +784,6 @@ export type UpdateLeaseRequest = {
     error?: {
         [key: string]: unknown;
     };
-};
-export type PolicyListResponse = {
-    data: Array<Policy>;
-    pagination: ListPagination;
-};
-export type Policy = {
-    id: string;
-    projectId: string;
-    scope: PolicyScope;
-    toolPolicy: ToolPolicy;
-    mcpPolicy: PolicyMcpPolicy;
-    sandboxPolicy: SandboxPolicy;
-    metadata: {
-        [key: string]: unknown;
-    };
-    createdAt: string;
-    updatedAt: string;
-};
-export type PolicyScope = {
-    level: 'organization' | 'team' | 'project';
-    teamId?: string;
-};
-export type ToolPolicy = {
-    allowedTools?: Array<string>;
-    blockedTools?: Array<string>;
-    requireApprovalTools?: Array<string>;
-    defaultEffect?: 'allow' | 'deny';
-    [key: string]: unknown;
-};
-export type PolicyMcpPolicy = {
-    allowedConnectors?: Array<string>;
-    blockedConnectors?: Array<string>;
-    requireApprovalConnectors?: Array<string>;
-    requireApprovalTools?: Array<string>;
-    connectorApprovalModes?: {
-        [key: string]: 'none' | 'require_approval';
-    };
-    defaultEffect?: 'allow' | 'deny';
-    [key: string]: unknown;
-};
-export type SandboxPolicy = {
-    enabled?: boolean;
-    status?: string;
-    network?: string | boolean;
-    allowedHosts?: Array<string>;
-    blockedCommands?: Array<string>;
-    allowedCommands?: Array<string>;
-    [key: string]: unknown;
-};
-export type CreatePolicyRequest = {
-    scope: PolicyScope;
-    toolPolicy?: ToolPolicy;
-    mcpPolicy?: PolicyMcpPolicy;
-    sandboxPolicy?: SandboxPolicy;
-    metadata?: {
-        [key: string]: unknown;
-    };
-};
-export type ReplacePolicyRequest = {
-    scope?: PolicyScope;
-    toolPolicy?: ToolPolicy;
-    mcpPolicy?: PolicyMcpPolicy;
-    sandboxPolicy?: SandboxPolicy;
-    metadata?: {
-        [key: string]: unknown;
-    };
-};
-export type EffectivePolicy = {
-    source: {
-        type: string;
-        id: string;
-    };
-    sources: Array<{
-        scope: string;
-        id: string;
-        teamId: string | null;
-    }>;
-    toolPolicy: ToolPolicy;
-    mcpPolicy: PolicyMcpPolicy;
-    sandboxPolicy: SandboxPolicy;
-    budgets: Array<EffectiveBudget>;
-    decision?: PolicyDecision;
-};
-export type EffectiveBudget = {
-    id: string;
-    scope: 'project' | 'provider' | 'model';
-    providerId: string | null;
-    modelId: string | null;
-    limitType: 'tokens' | 'cost_micros' | 'sessions';
-    limitValue: number;
-    window: 'day' | 'month';
-    enabled: boolean;
-    metadata: {
-        [key: string]: unknown;
-    };
-};
-export type PolicyDecision = {
-    allowed: boolean;
-    category: string;
-    rule: string | null;
-    message: string;
 };
 export type BudgetListResponse = {
     data: Array<Budget>;
@@ -1688,135 +1552,6 @@ export type GetHealthResponses = {
     200: HealthResponse;
 };
 export type GetHealthResponse = GetHealthResponses[keyof GetHealthResponses];
-export type ListFederatedTenantsData = {
-    body?: never;
-    path?: never;
-    query?: {
-        limit?: number;
-        cursor?: string;
-    };
-    url: '/api/v1/auth/federated-tenants';
-};
-export type ListFederatedTenantsErrors = {
-    /**
-     * Validation error
-     */
-    400: ErrorResponse;
-    /**
-     * Authentication required
-     */
-    401: ErrorResponse;
-};
-export type ListFederatedTenantsError = ListFederatedTenantsErrors[keyof ListFederatedTenantsErrors];
-export type ListFederatedTenantsResponses = {
-    /**
-     * Federated tenants for the current project
-     */
-    200: FederatedTenantListResponse;
-};
-export type ListFederatedTenantsResponse = ListFederatedTenantsResponses[keyof ListFederatedTenantsResponses];
-export type CreateFederatedTenantData = {
-    body: CreateFederatedTenantRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/auth/federated-tenants';
-};
-export type CreateFederatedTenantErrors = {
-    /**
-     * Authentication required
-     */
-    401: ErrorResponse;
-    /**
-     * A federated tenant with the same issuer and external tenant id already exists
-     */
-    409: ErrorResponse;
-};
-export type CreateFederatedTenantError = CreateFederatedTenantErrors[keyof CreateFederatedTenantErrors];
-export type CreateFederatedTenantResponses = {
-    /**
-     * Created federated tenant
-     */
-    201: FederatedTenant;
-};
-export type CreateFederatedTenantResponse = CreateFederatedTenantResponses[keyof CreateFederatedTenantResponses];
-export type DeleteFederatedTenantData = {
-    body?: never;
-    path: {
-        tenantId: string;
-    };
-    query?: never;
-    url: '/api/v1/auth/federated-tenants/{tenantId}';
-};
-export type DeleteFederatedTenantErrors = {
-    /**
-     * Authentication required
-     */
-    401: ErrorResponse;
-    /**
-     * Federated tenant not found
-     */
-    404: ErrorResponse;
-};
-export type DeleteFederatedTenantError = DeleteFederatedTenantErrors[keyof DeleteFederatedTenantErrors];
-export type DeleteFederatedTenantResponses = {
-    /**
-     * Federated tenant deleted
-     */
-    204: void;
-};
-export type DeleteFederatedTenantResponse = DeleteFederatedTenantResponses[keyof DeleteFederatedTenantResponses];
-export type ReadFederatedTenantData = {
-    body?: never;
-    path: {
-        tenantId: string;
-    };
-    query?: never;
-    url: '/api/v1/auth/federated-tenants/{tenantId}';
-};
-export type ReadFederatedTenantErrors = {
-    /**
-     * Authentication required
-     */
-    401: ErrorResponse;
-    /**
-     * Federated tenant not found
-     */
-    404: ErrorResponse;
-};
-export type ReadFederatedTenantError = ReadFederatedTenantErrors[keyof ReadFederatedTenantErrors];
-export type ReadFederatedTenantResponses = {
-    /**
-     * Federated tenant
-     */
-    200: FederatedTenant;
-};
-export type ReadFederatedTenantResponse = ReadFederatedTenantResponses[keyof ReadFederatedTenantResponses];
-export type UpdateFederatedTenantData = {
-    body: UpdateFederatedTenantRequest;
-    path: {
-        tenantId: string;
-    };
-    query?: never;
-    url: '/api/v1/auth/federated-tenants/{tenantId}';
-};
-export type UpdateFederatedTenantErrors = {
-    /**
-     * Authentication required
-     */
-    401: ErrorResponse;
-    /**
-     * Federated tenant not found
-     */
-    404: ErrorResponse;
-};
-export type UpdateFederatedTenantError = UpdateFederatedTenantErrors[keyof UpdateFederatedTenantErrors];
-export type UpdateFederatedTenantResponses = {
-    /**
-     * Updated federated tenant
-     */
-    200: FederatedTenant;
-};
-export type UpdateFederatedTenantResponse = UpdateFederatedTenantResponses[keyof UpdateFederatedTenantResponses];
 export type ReadAuthConfigData = {
     body?: never;
     path?: never;
@@ -2959,164 +2694,6 @@ export type UpdateLeaseResponses = {
     200: Lease;
 };
 export type UpdateLeaseResponse = UpdateLeaseResponses[keyof UpdateLeaseResponses];
-export type ListPoliciesData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/v1/policies';
-};
-export type ListPoliciesErrors = {
-    /**
-     * Authentication required
-     */
-    401: ErrorResponse;
-};
-export type ListPoliciesError = ListPoliciesErrors[keyof ListPoliciesErrors];
-export type ListPoliciesResponses = {
-    /**
-     * Policies
-     */
-    200: PolicyListResponse;
-};
-export type ListPoliciesResponse = ListPoliciesResponses[keyof ListPoliciesResponses];
-export type CreatePolicyData = {
-    body: CreatePolicyRequest;
-    path?: never;
-    query?: never;
-    url: '/api/v1/policies';
-};
-export type CreatePolicyErrors = {
-    /**
-     * Validation error
-     */
-    400: ErrorResponse;
-    /**
-     * Authentication required
-     */
-    401: ErrorResponse;
-    /**
-     * A policy already exists for this scope
-     */
-    409: ErrorResponse;
-};
-export type CreatePolicyError = CreatePolicyErrors[keyof CreatePolicyErrors];
-export type CreatePolicyResponses = {
-    /**
-     * Created policy
-     */
-    201: Policy;
-};
-export type CreatePolicyResponse = CreatePolicyResponses[keyof CreatePolicyResponses];
-export type DeletePolicyData = {
-    body?: never;
-    path: {
-        policyId: string;
-    };
-    query?: never;
-    url: '/api/v1/policies/{policyId}';
-};
-export type DeletePolicyErrors = {
-    /**
-     * Authentication required
-     */
-    401: ErrorResponse;
-    /**
-     * Policy not found
-     */
-    404: ErrorResponse;
-};
-export type DeletePolicyError = DeletePolicyErrors[keyof DeletePolicyErrors];
-export type DeletePolicyResponses = {
-    /**
-     * Policy deleted
-     */
-    204: void;
-};
-export type DeletePolicyResponse = DeletePolicyResponses[keyof DeletePolicyResponses];
-export type ReadPolicyData = {
-    body?: never;
-    path: {
-        policyId: string;
-    };
-    query?: never;
-    url: '/api/v1/policies/{policyId}';
-};
-export type ReadPolicyErrors = {
-    /**
-     * Authentication required
-     */
-    401: ErrorResponse;
-    /**
-     * Policy not found
-     */
-    404: ErrorResponse;
-};
-export type ReadPolicyError = ReadPolicyErrors[keyof ReadPolicyErrors];
-export type ReadPolicyResponses = {
-    /**
-     * Policy
-     */
-    200: Policy;
-};
-export type ReadPolicyResponse = ReadPolicyResponses[keyof ReadPolicyResponses];
-export type ReplacePolicyData = {
-    body: ReplacePolicyRequest;
-    path: {
-        policyId: string;
-    };
-    query?: never;
-    url: '/api/v1/policies/{policyId}';
-};
-export type ReplacePolicyErrors = {
-    /**
-     * Validation error
-     */
-    400: ErrorResponse;
-    /**
-     * Authentication required
-     */
-    401: ErrorResponse;
-    /**
-     * Policy not found
-     */
-    404: ErrorResponse;
-};
-export type ReplacePolicyError = ReplacePolicyErrors[keyof ReplacePolicyErrors];
-export type ReplacePolicyResponses = {
-    /**
-     * Replaced policy
-     */
-    200: Policy;
-};
-export type ReplacePolicyResponse = ReplacePolicyResponses[keyof ReplacePolicyResponses];
-export type ReadEffectivePolicyData = {
-    body?: never;
-    path?: never;
-    query?: {
-        teamId?: string;
-        providerId?: string;
-        modelId?: string;
-    };
-    url: '/api/v1/effective-policy';
-};
-export type ReadEffectivePolicyErrors = {
-    /**
-     * Validation error
-     */
-    400: ErrorResponse;
-    /**
-     * Authentication required
-     */
-    401: ErrorResponse;
-};
-export type ReadEffectivePolicyError = ReadEffectivePolicyErrors[keyof ReadEffectivePolicyErrors];
-export type ReadEffectivePolicyResponses = {
-    /**
-     * Effective policy
-     */
-    200: EffectivePolicy;
-};
-export type ReadEffectivePolicyResponse = ReadEffectivePolicyResponses[keyof ReadEffectivePolicyResponses];
 export type ListBudgetsData = {
     body?: never;
     path?: never;

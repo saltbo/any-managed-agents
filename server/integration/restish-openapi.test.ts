@@ -59,8 +59,6 @@ describe('[CF] restish/OpenAPI control-plane path [spec: api-contracts/restish]'
         'listSessions',
         'listProviders',
         'listVaults',
-        'listPolicies',
-        'readEffectivePolicy',
         'listUsageRecords',
         'readUsageSummary',
         'listAuditRecords',

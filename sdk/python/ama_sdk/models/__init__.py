@@ -88,16 +88,12 @@ from .create_environment_request_resource_limits import CreateEnvironmentRequest
 from .create_environment_request_runtime_config import CreateEnvironmentRequestRuntimeConfig
 from .create_environment_request_variables import CreateEnvironmentRequestVariables
 from .create_environment_request_variables_additional_property import CreateEnvironmentRequestVariablesAdditionalProperty
-from .create_federated_tenant_request import CreateFederatedTenantRequest
-from .create_federated_tenant_request_metadata import CreateFederatedTenantRequestMetadata
 from .create_http_trigger_run_request import CreateHttpTriggerRunRequest
 from .create_lease_request import CreateLeaseRequest
 from .create_memory_store_memory_request import CreateMemoryStoreMemoryRequest
 from .create_memory_store_memory_request_metadata import CreateMemoryStoreMemoryRequestMetadata
 from .create_memory_store_request import CreateMemoryStoreRequest
 from .create_memory_store_request_metadata import CreateMemoryStoreRequestMetadata
-from .create_policy_request import CreatePolicyRequest
-from .create_policy_request_metadata import CreatePolicyRequestMetadata
 from .create_project_request import CreateProjectRequest
 from .create_runner_request import CreateRunnerRequest
 from .create_runner_request_auth_mode import CreateRunnerRequestAuthMode
@@ -130,14 +126,6 @@ from .create_vault_request import CreateVaultRequest
 from .create_vault_request_metadata import CreateVaultRequestMetadata
 from .create_vault_request_scope import CreateVaultRequestScope
 from .credential_ref import CredentialRef
-from .effective_budget import EffectiveBudget
-from .effective_budget_limit_type import EffectiveBudgetLimitType
-from .effective_budget_metadata import EffectiveBudgetMetadata
-from .effective_budget_scope import EffectiveBudgetScope
-from .effective_budget_window import EffectiveBudgetWindow
-from .effective_policy import EffectivePolicy
-from .effective_policy_source import EffectivePolicySource
-from .effective_policy_sources_item import EffectivePolicySourcesItem
 from .environment import Environment
 from .environment_hosting_mode import EnvironmentHostingMode
 from .environment_list_response import EnvironmentListResponse
@@ -166,9 +154,6 @@ from .environment_version_variables_additional_property import EnvironmentVersio
 from .error_response import ErrorResponse
 from .error_response_error import ErrorResponseError
 from .error_response_error_details import ErrorResponseErrorDetails
-from .federated_tenant import FederatedTenant
-from .federated_tenant_list_response import FederatedTenantListResponse
-from .federated_tenant_metadata import FederatedTenantMetadata
 from .git_hub_repository_resource_ref import GitHubRepositoryResourceRef
 from .git_hub_repository_resource_ref_type import GitHubRepositoryResourceRefType
 from .health_response import HealthResponse
@@ -207,16 +192,6 @@ from .memory_store_metadata import MemoryStoreMetadata
 from .memory_store_resource_ref import MemoryStoreResourceRef
 from .memory_store_resource_ref_access import MemoryStoreResourceRefAccess
 from .memory_store_resource_ref_type import MemoryStoreResourceRefType
-from .policy import Policy
-from .policy_decision import PolicyDecision
-from .policy_list_response import PolicyListResponse
-from .policy_mcp_policy import PolicyMcpPolicy
-from .policy_mcp_policy_connector_approval_modes import PolicyMcpPolicyConnectorApprovalModes
-from .policy_mcp_policy_connector_approval_modes_additional_property import PolicyMcpPolicyConnectorApprovalModesAdditionalProperty
-from .policy_mcp_policy_default_effect import PolicyMcpPolicyDefaultEffect
-from .policy_metadata import PolicyMetadata
-from .policy_scope import PolicyScope
-from .policy_scope_level import PolicyScopeLevel
 from .project import Project
 from .project_list_response import ProjectListResponse
 from .provider import Provider
@@ -238,8 +213,6 @@ from .put_runner_heartbeat_request_state import PutRunnerHeartbeatRequestState
 from .read_usage_summary_group_by import ReadUsageSummaryGroupBy
 from .replace_agent_memory_request import ReplaceAgentMemoryRequest
 from .replace_agent_memory_request_metadata import ReplaceAgentMemoryRequestMetadata
-from .replace_policy_request import ReplacePolicyRequest
-from .replace_policy_request_metadata import ReplacePolicyRequestMetadata
 from .resource_ref_type_1 import ResourceRefType1
 from .runner import Runner
 from .runner_auth_mode import RunnerAuthMode
@@ -277,7 +250,6 @@ from .runner_work_payload_runtime_secret_env_item import RunnerWorkPayloadRuntim
 from .runtime import Runtime
 from .runtime_usage import RuntimeUsage
 from .runtime_usage_window import RuntimeUsageWindow
-from .sandbox_policy import SandboxPolicy
 from .secret_env_entry import SecretEnvEntry
 from .session import Session
 from .session_abort_frame import SessionAbortFrame
@@ -342,8 +314,6 @@ from .tool_call_input import ToolCallInput
 from .tool_call_list_response import ToolCallListResponse
 from .tool_call_output_type_0 import ToolCallOutputType0
 from .tool_call_state import ToolCallState
-from .tool_policy import ToolPolicy
-from .tool_policy_default_effect import ToolPolicyDefaultEffect
 from .trigger import Trigger
 from .trigger_env import TriggerEnv
 from .trigger_list_response import TriggerListResponse
@@ -373,8 +343,6 @@ from .update_environment_request_resource_limits import UpdateEnvironmentRequest
 from .update_environment_request_runtime_config import UpdateEnvironmentRequestRuntimeConfig
 from .update_environment_request_variables import UpdateEnvironmentRequestVariables
 from .update_environment_request_variables_additional_property import UpdateEnvironmentRequestVariablesAdditionalProperty
-from .update_federated_tenant_request import UpdateFederatedTenantRequest
-from .update_federated_tenant_request_metadata import UpdateFederatedTenantRequestMetadata
 from .update_lease_request import UpdateLeaseRequest
 from .update_lease_request_error import UpdateLeaseRequestError
 from .update_lease_request_result import UpdateLeaseRequestResult
@@ -522,16 +490,12 @@ __all__ = (
     "CreateEnvironmentRequestRuntimeConfig",
     "CreateEnvironmentRequestVariables",
     "CreateEnvironmentRequestVariablesAdditionalProperty",
-    "CreateFederatedTenantRequest",
-    "CreateFederatedTenantRequestMetadata",
     "CreateHttpTriggerRunRequest",
     "CreateLeaseRequest",
     "CreateMemoryStoreMemoryRequest",
     "CreateMemoryStoreMemoryRequestMetadata",
     "CreateMemoryStoreRequest",
     "CreateMemoryStoreRequestMetadata",
-    "CreatePolicyRequest",
-    "CreatePolicyRequestMetadata",
     "CreateProjectRequest",
     "CreateRunnerRequest",
     "CreateRunnerRequestAuthMode",
@@ -564,14 +528,6 @@ __all__ = (
     "CreateVaultRequestMetadata",
     "CreateVaultRequestScope",
     "CredentialRef",
-    "EffectiveBudget",
-    "EffectiveBudgetLimitType",
-    "EffectiveBudgetMetadata",
-    "EffectiveBudgetScope",
-    "EffectiveBudgetWindow",
-    "EffectivePolicy",
-    "EffectivePolicySource",
-    "EffectivePolicySourcesItem",
     "Environment",
     "EnvironmentHostingMode",
     "EnvironmentListResponse",
@@ -600,9 +556,6 @@ __all__ = (
     "ErrorResponse",
     "ErrorResponseError",
     "ErrorResponseErrorDetails",
-    "FederatedTenant",
-    "FederatedTenantListResponse",
-    "FederatedTenantMetadata",
     "GitHubRepositoryResourceRef",
     "GitHubRepositoryResourceRefType",
     "HealthResponse",
@@ -641,16 +594,6 @@ __all__ = (
     "MemoryStoreResourceRef",
     "MemoryStoreResourceRefAccess",
     "MemoryStoreResourceRefType",
-    "Policy",
-    "PolicyDecision",
-    "PolicyListResponse",
-    "PolicyMcpPolicy",
-    "PolicyMcpPolicyConnectorApprovalModes",
-    "PolicyMcpPolicyConnectorApprovalModesAdditionalProperty",
-    "PolicyMcpPolicyDefaultEffect",
-    "PolicyMetadata",
-    "PolicyScope",
-    "PolicyScopeLevel",
     "Project",
     "ProjectListResponse",
     "Provider",
@@ -672,8 +615,6 @@ __all__ = (
     "ReadUsageSummaryGroupBy",
     "ReplaceAgentMemoryRequest",
     "ReplaceAgentMemoryRequestMetadata",
-    "ReplacePolicyRequest",
-    "ReplacePolicyRequestMetadata",
     "ResourceRefType1",
     "Runner",
     "RunnerAuthMode",
@@ -711,7 +652,6 @@ __all__ = (
     "Runtime",
     "RuntimeUsage",
     "RuntimeUsageWindow",
-    "SandboxPolicy",
     "SecretEnvEntry",
     "Session",
     "SessionAbortFrame",
@@ -776,8 +716,6 @@ __all__ = (
     "ToolCallListResponse",
     "ToolCallOutputType0",
     "ToolCallState",
-    "ToolPolicy",
-    "ToolPolicyDefaultEffect",
     "Trigger",
     "TriggerEnv",
     "TriggerListResponse",
@@ -807,8 +745,6 @@ __all__ = (
     "UpdateEnvironmentRequestRuntimeConfig",
     "UpdateEnvironmentRequestVariables",
     "UpdateEnvironmentRequestVariablesAdditionalProperty",
-    "UpdateFederatedTenantRequest",
-    "UpdateFederatedTenantRequestMetadata",
     "UpdateLeaseRequest",
     "UpdateLeaseRequestError",
     "UpdateLeaseRequestResult",

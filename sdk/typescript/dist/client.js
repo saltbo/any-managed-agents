@@ -178,13 +178,6 @@ export function createAmaClient(config) {
             currentSession: () => unwrap(ops.readCurrentAuthSession({ client })),
             deleteCurrentSession: () => unwrap(ops.deleteCurrentAuthSession({ client })),
         },
-        federatedTenants: {
-            list: (query) => unwrap(ops.listFederatedTenants({ client, query })),
-            create: (body) => unwrap(ops.createFederatedTenant({ client, body })),
-            get: (tenantId) => unwrap(ops.readFederatedTenant({ client, path: { tenantId } })),
-            update: (tenantId, body) => unwrap(ops.updateFederatedTenant({ client, path: { tenantId }, body })),
-            delete: (tenantId) => unwrap(ops.deleteFederatedTenant({ client, path: { tenantId } })),
-        },
         projects: {
             list: (query) => unwrap(ops.listProjects({ client, query })),
             create: (body) => unwrap(ops.createProject({ client, body })),
@@ -221,14 +214,6 @@ export function createAmaClient(config) {
             create: (body) => unwrap(ops.createRunner({ client, body })),
             get: (runnerId) => unwrap(ops.readRunner({ client, path: { runnerId } })),
             update: (runnerId, body) => unwrap(ops.updateRunner({ client, path: { runnerId }, body })),
-        },
-        policies: {
-            list: () => unwrap(ops.listPolicies({ client })),
-            create: (body) => unwrap(ops.createPolicy({ client, body })),
-            get: (policyId) => unwrap(ops.readPolicy({ client, path: { policyId } })),
-            replace: (policyId, body) => unwrap(ops.replacePolicy({ client, path: { policyId }, body })),
-            delete: (policyId) => unwrap(ops.deletePolicy({ client, path: { policyId } })),
-            effective: (query) => unwrap(ops.readEffectivePolicy({ client, query })),
         },
         budgets: {
             list: () => unwrap(ops.listBudgets({ client })),

@@ -634,66 +634,6 @@ func (e CreateVaultRequestScope) Valid() bool {
 	}
 }
 
-// Defines values for EffectiveBudgetLimitType.
-const (
-	CostMicros EffectiveBudgetLimitType = "cost_micros"
-	Sessions   EffectiveBudgetLimitType = "sessions"
-	Tokens     EffectiveBudgetLimitType = "tokens"
-)
-
-// Valid indicates whether the value is a known member of the EffectiveBudgetLimitType enum.
-func (e EffectiveBudgetLimitType) Valid() bool {
-	switch e {
-	case CostMicros:
-		return true
-	case Sessions:
-		return true
-	case Tokens:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for EffectiveBudgetScope.
-const (
-	EffectiveBudgetScopeModel    EffectiveBudgetScope = "model"
-	EffectiveBudgetScopeProject  EffectiveBudgetScope = "project"
-	EffectiveBudgetScopeProvider EffectiveBudgetScope = "provider"
-)
-
-// Valid indicates whether the value is a known member of the EffectiveBudgetScope enum.
-func (e EffectiveBudgetScope) Valid() bool {
-	switch e {
-	case EffectiveBudgetScopeModel:
-		return true
-	case EffectiveBudgetScopeProject:
-		return true
-	case EffectiveBudgetScopeProvider:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for EffectiveBudgetWindow.
-const (
-	EffectiveBudgetWindowDay   EffectiveBudgetWindow = "day"
-	EffectiveBudgetWindowMonth EffectiveBudgetWindow = "month"
-)
-
-// Valid indicates whether the value is a known member of the EffectiveBudgetWindow enum.
-func (e EffectiveBudgetWindow) Valid() bool {
-	switch e {
-	case EffectiveBudgetWindowDay:
-		return true
-	case EffectiveBudgetWindowMonth:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for EnvironmentHostingMode.
 const (
 	Cloud      EnvironmentHostingMode = "cloud"
@@ -868,63 +808,6 @@ const (
 func (e MemoryStoreResourceRefType) Valid() bool {
 	switch e {
 	case MemoryStoreResourceRefTypeMemoryStore:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for PolicyMcpPolicyConnectorApprovalModes.
-const (
-	PolicyMcpPolicyConnectorApprovalModesNone            PolicyMcpPolicyConnectorApprovalModes = "none"
-	PolicyMcpPolicyConnectorApprovalModesRequireApproval PolicyMcpPolicyConnectorApprovalModes = "require_approval"
-)
-
-// Valid indicates whether the value is a known member of the PolicyMcpPolicyConnectorApprovalModes enum.
-func (e PolicyMcpPolicyConnectorApprovalModes) Valid() bool {
-	switch e {
-	case PolicyMcpPolicyConnectorApprovalModesNone:
-		return true
-	case PolicyMcpPolicyConnectorApprovalModesRequireApproval:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for PolicyMcpPolicyDefaultEffect.
-const (
-	PolicyMcpPolicyDefaultEffectAllow PolicyMcpPolicyDefaultEffect = "allow"
-	PolicyMcpPolicyDefaultEffectDeny  PolicyMcpPolicyDefaultEffect = "deny"
-)
-
-// Valid indicates whether the value is a known member of the PolicyMcpPolicyDefaultEffect enum.
-func (e PolicyMcpPolicyDefaultEffect) Valid() bool {
-	switch e {
-	case PolicyMcpPolicyDefaultEffectAllow:
-		return true
-	case PolicyMcpPolicyDefaultEffectDeny:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for PolicyScopeLevel.
-const (
-	PolicyScopeLevelOrganization PolicyScopeLevel = "organization"
-	PolicyScopeLevelProject      PolicyScopeLevel = "project"
-	PolicyScopeLevelTeam         PolicyScopeLevel = "team"
-)
-
-// Valid indicates whether the value is a known member of the PolicyScopeLevel enum.
-func (e PolicyScopeLevel) Valid() bool {
-	switch e {
-	case PolicyScopeLevelOrganization:
-		return true
-	case PolicyScopeLevelProject:
-		return true
-	case PolicyScopeLevelTeam:
 		return true
 	default:
 		return false
@@ -1263,16 +1146,16 @@ func (e SessionApprovalDecisionRequestDecision) Valid() bool {
 
 // Defines values for SessionApprovalFrameDecision.
 const (
-	SessionApprovalFrameDecisionApprove SessionApprovalFrameDecision = "approve"
-	SessionApprovalFrameDecisionReject  SessionApprovalFrameDecision = "reject"
+	Approve SessionApprovalFrameDecision = "approve"
+	Reject  SessionApprovalFrameDecision = "reject"
 )
 
 // Valid indicates whether the value is a known member of the SessionApprovalFrameDecision enum.
 func (e SessionApprovalFrameDecision) Valid() bool {
 	switch e {
-	case SessionApprovalFrameDecisionApprove:
+	case Approve:
 		return true
-	case SessionApprovalFrameDecisionReject:
+	case Reject:
 		return true
 	default:
 		return false
@@ -1579,24 +1462,6 @@ func (e ToolCallState) Valid() bool {
 	}
 }
 
-// Defines values for ToolPolicyDefaultEffect.
-const (
-	Allow ToolPolicyDefaultEffect = "allow"
-	Deny  ToolPolicyDefaultEffect = "deny"
-)
-
-// Valid indicates whether the value is a known member of the ToolPolicyDefaultEffect enum.
-func (e ToolPolicyDefaultEffect) Valid() bool {
-	switch e {
-	case Allow:
-		return true
-	case Deny:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for TriggerScheduleType.
 const (
 	TriggerScheduleTypeInterval TriggerScheduleType = "interval"
@@ -1653,16 +1518,16 @@ func (e TriggerRunState) Valid() bool {
 
 // Defines values for UpdateBudgetRequestWindow.
 const (
-	UpdateBudgetRequestWindowDay   UpdateBudgetRequestWindow = "day"
-	UpdateBudgetRequestWindowMonth UpdateBudgetRequestWindow = "month"
+	Day   UpdateBudgetRequestWindow = "day"
+	Month UpdateBudgetRequestWindow = "month"
 )
 
 // Valid indicates whether the value is a known member of the UpdateBudgetRequestWindow enum.
 func (e UpdateBudgetRequestWindow) Valid() bool {
 	switch e {
-	case UpdateBudgetRequestWindowDay:
+	case Day:
 		return true
-	case UpdateBudgetRequestWindowMonth:
+	case Month:
 		return true
 	default:
 		return false
@@ -1671,22 +1536,22 @@ func (e UpdateBudgetRequestWindow) Valid() bool {
 
 // Defines values for UpdateConnectionRequestApprovalMode.
 const (
-	AlwaysRequired UpdateConnectionRequestApprovalMode = "always_required"
-	None           UpdateConnectionRequestApprovalMode = "none"
-	PerCall        UpdateConnectionRequestApprovalMode = "per_call"
-	ProjectPolicy  UpdateConnectionRequestApprovalMode = "project_policy"
+	UpdateConnectionRequestApprovalModeAlwaysRequired UpdateConnectionRequestApprovalMode = "always_required"
+	UpdateConnectionRequestApprovalModeNone           UpdateConnectionRequestApprovalMode = "none"
+	UpdateConnectionRequestApprovalModePerCall        UpdateConnectionRequestApprovalMode = "per_call"
+	UpdateConnectionRequestApprovalModeProjectPolicy  UpdateConnectionRequestApprovalMode = "project_policy"
 )
 
 // Valid indicates whether the value is a known member of the UpdateConnectionRequestApprovalMode enum.
 func (e UpdateConnectionRequestApprovalMode) Valid() bool {
 	switch e {
-	case AlwaysRequired:
+	case UpdateConnectionRequestApprovalModeAlwaysRequired:
 		return true
-	case None:
+	case UpdateConnectionRequestApprovalModeNone:
 		return true
-	case PerCall:
+	case UpdateConnectionRequestApprovalModePerCall:
 		return true
-	case ProjectPolicy:
+	case UpdateConnectionRequestApprovalModeProjectPolicy:
 		return true
 	default:
 		return false
@@ -2962,15 +2827,6 @@ type CreateEnvironmentRequest struct {
 	} `json:"variables,omitempty"`
 }
 
-// CreateFederatedTenantRequest defines model for CreateFederatedTenantRequest.
-type CreateFederatedTenantRequest struct {
-	Capabilities     *[]string               `json:"capabilities,omitempty"`
-	EnvironmentId    *string                 `json:"environmentId,omitempty"`
-	ExternalTenantId string                  `json:"externalTenantId"`
-	Issuer           string                  `json:"issuer"`
-	Metadata         *map[string]interface{} `json:"metadata,omitempty"`
-}
-
 // CreateHttpTriggerRunRequest defines model for CreateHttpTriggerRunRequest.
 type CreateHttpTriggerRunRequest map[string]*interface{}
 
@@ -2993,15 +2849,6 @@ type CreateMemoryStoreRequest struct {
 	Description *string                  `json:"description,omitempty"`
 	Metadata    *map[string]*interface{} `json:"metadata,omitempty"`
 	Name        string                   `json:"name"`
-}
-
-// CreatePolicyRequest defines model for CreatePolicyRequest.
-type CreatePolicyRequest struct {
-	McpPolicy     *PolicyMcpPolicy        `json:"mcpPolicy,omitempty"`
-	Metadata      *map[string]interface{} `json:"metadata,omitempty"`
-	SandboxPolicy *SandboxPolicy          `json:"sandboxPolicy,omitempty"`
-	Scope         PolicyScope             `json:"scope"`
-	ToolPolicy    *ToolPolicy             `json:"toolPolicy,omitempty"`
 }
 
 // CreateProjectRequest defines model for CreateProjectRequest.
@@ -3135,46 +2982,6 @@ type CredentialRef struct {
 	VersionId    *string `json:"versionId,omitempty"`
 }
 
-// EffectiveBudget defines model for EffectiveBudget.
-type EffectiveBudget struct {
-	Enabled    bool                     `json:"enabled"`
-	Id         string                   `json:"id"`
-	LimitType  EffectiveBudgetLimitType `json:"limitType"`
-	LimitValue int                      `json:"limitValue"`
-	Metadata   map[string]interface{}   `json:"metadata"`
-	ModelId    *string                  `json:"modelId"`
-	ProviderId *string                  `json:"providerId"`
-	Scope      EffectiveBudgetScope     `json:"scope"`
-	Window     EffectiveBudgetWindow    `json:"window"`
-}
-
-// EffectiveBudgetLimitType defines model for EffectiveBudget.LimitType.
-type EffectiveBudgetLimitType string
-
-// EffectiveBudgetScope defines model for EffectiveBudget.Scope.
-type EffectiveBudgetScope string
-
-// EffectiveBudgetWindow defines model for EffectiveBudget.Window.
-type EffectiveBudgetWindow string
-
-// EffectivePolicy defines model for EffectivePolicy.
-type EffectivePolicy struct {
-	Budgets       []EffectiveBudget `json:"budgets"`
-	Decision      *PolicyDecision   `json:"decision,omitempty"`
-	McpPolicy     PolicyMcpPolicy   `json:"mcpPolicy"`
-	SandboxPolicy SandboxPolicy     `json:"sandboxPolicy"`
-	Source        struct {
-		Id   string `json:"id"`
-		Type string `json:"type"`
-	} `json:"source"`
-	Sources []struct {
-		Id     string  `json:"id"`
-		Scope  string  `json:"scope"`
-		TeamId *string `json:"teamId"`
-	} `json:"sources"`
-	ToolPolicy ToolPolicy `json:"toolPolicy"`
-}
-
 // Environment defines model for Environment.
 type Environment struct {
 	ArchivedAt           *time.Time               `json:"archivedAt"`
@@ -3287,26 +3094,6 @@ type ErrorResponse struct {
 	} `json:"error"`
 }
 
-// FederatedTenant defines model for FederatedTenant.
-type FederatedTenant struct {
-	Capabilities     []string               `json:"capabilities"`
-	CreatedAt        time.Time              `json:"createdAt"`
-	Enabled          bool                   `json:"enabled"`
-	EnvironmentId    *string                `json:"environmentId"`
-	ExternalTenantId string                 `json:"externalTenantId"`
-	Id               string                 `json:"id"`
-	Issuer           string                 `json:"issuer"`
-	Metadata         map[string]interface{} `json:"metadata"`
-	ProjectId        string                 `json:"projectId"`
-	UpdatedAt        time.Time              `json:"updatedAt"`
-}
-
-// FederatedTenantListResponse defines model for FederatedTenantListResponse.
-type FederatedTenantListResponse struct {
-	Data       []FederatedTenant `json:"data"`
-	Pagination ListPagination    `json:"pagination"`
-}
-
 // GitHubRepositoryResourceRef defines model for GitHubRepositoryResourceRef.
 type GitHubRepositoryResourceRef struct {
 	CredentialRef *CredentialRef                  `json:"credentialRef,omitempty"`
@@ -3415,59 +3202,6 @@ type MemoryStoreResourceRefAccess string
 // MemoryStoreResourceRefType defines model for MemoryStoreResourceRef.Type.
 type MemoryStoreResourceRefType string
 
-// Policy defines model for Policy.
-type Policy struct {
-	CreatedAt     time.Time              `json:"createdAt"`
-	Id            string                 `json:"id"`
-	McpPolicy     PolicyMcpPolicy        `json:"mcpPolicy"`
-	Metadata      map[string]interface{} `json:"metadata"`
-	ProjectId     string                 `json:"projectId"`
-	SandboxPolicy SandboxPolicy          `json:"sandboxPolicy"`
-	Scope         PolicyScope            `json:"scope"`
-	ToolPolicy    ToolPolicy             `json:"toolPolicy"`
-	UpdatedAt     time.Time              `json:"updatedAt"`
-}
-
-// PolicyDecision defines model for PolicyDecision.
-type PolicyDecision struct {
-	Allowed  bool    `json:"allowed"`
-	Category string  `json:"category"`
-	Message  string  `json:"message"`
-	Rule     *string `json:"rule"`
-}
-
-// PolicyListResponse defines model for PolicyListResponse.
-type PolicyListResponse struct {
-	Data       []Policy       `json:"data"`
-	Pagination ListPagination `json:"pagination"`
-}
-
-// PolicyMcpPolicy defines model for PolicyMcpPolicy.
-type PolicyMcpPolicy struct {
-	AllowedConnectors         *[]string                                         `json:"allowedConnectors,omitempty"`
-	BlockedConnectors         *[]string                                         `json:"blockedConnectors,omitempty"`
-	ConnectorApprovalModes    *map[string]PolicyMcpPolicyConnectorApprovalModes `json:"connectorApprovalModes,omitempty"`
-	DefaultEffect             *PolicyMcpPolicyDefaultEffect                     `json:"defaultEffect,omitempty"`
-	RequireApprovalConnectors *[]string                                         `json:"requireApprovalConnectors,omitempty"`
-	RequireApprovalTools      *[]string                                         `json:"requireApprovalTools,omitempty"`
-	AdditionalProperties      map[string]interface{}                            `json:"-"`
-}
-
-// PolicyMcpPolicyConnectorApprovalModes defines model for PolicyMcpPolicy.ConnectorApprovalModes.
-type PolicyMcpPolicyConnectorApprovalModes string
-
-// PolicyMcpPolicyDefaultEffect defines model for PolicyMcpPolicy.DefaultEffect.
-type PolicyMcpPolicyDefaultEffect string
-
-// PolicyScope defines model for PolicyScope.
-type PolicyScope struct {
-	Level  PolicyScopeLevel `json:"level"`
-	TeamId *string          `json:"teamId,omitempty"`
-}
-
-// PolicyScopeLevel defines model for PolicyScope.Level.
-type PolicyScopeLevel string
-
 // Project defines model for Project.
 type Project struct {
 	CreatedAt time.Time `json:"createdAt"`
@@ -3573,15 +3307,6 @@ type PutRunnerHeartbeatRequestState string
 type ReplaceAgentMemoryRequest struct {
 	Content  string                  `json:"content"`
 	Metadata *map[string]interface{} `json:"metadata,omitempty"`
-}
-
-// ReplacePolicyRequest defines model for ReplacePolicyRequest.
-type ReplacePolicyRequest struct {
-	McpPolicy     *PolicyMcpPolicy        `json:"mcpPolicy,omitempty"`
-	Metadata      *map[string]interface{} `json:"metadata,omitempty"`
-	SandboxPolicy *SandboxPolicy          `json:"sandboxPolicy,omitempty"`
-	Scope         *PolicyScope            `json:"scope,omitempty"`
-	ToolPolicy    *ToolPolicy             `json:"toolPolicy,omitempty"`
 }
 
 // ResourceRef defines model for ResourceRef.
@@ -3782,28 +3507,6 @@ type RuntimeUsageWindow struct {
 	Label       string  `json:"label"`
 	ResetsAt    string  `json:"resetsAt"`
 	Utilization float32 `json:"utilization"`
-}
-
-// SandboxPolicy defines model for SandboxPolicy.
-type SandboxPolicy struct {
-	AllowedCommands      *[]string              `json:"allowedCommands,omitempty"`
-	AllowedHosts         *[]string              `json:"allowedHosts,omitempty"`
-	BlockedCommands      *[]string              `json:"blockedCommands,omitempty"`
-	Enabled              *bool                  `json:"enabled,omitempty"`
-	Network              *SandboxPolicy_Network `json:"network,omitempty"`
-	Status               *string                `json:"status,omitempty"`
-	AdditionalProperties map[string]interface{} `json:"-"`
-}
-
-// SandboxPolicyNetwork0 defines model for .
-type SandboxPolicyNetwork0 = string
-
-// SandboxPolicyNetwork1 defines model for .
-type SandboxPolicyNetwork1 = bool
-
-// SandboxPolicy_Network defines model for SandboxPolicy.Network.
-type SandboxPolicy_Network struct {
-	union json.RawMessage
 }
 
 // SecretEnvEntry defines model for SecretEnvEntry.
@@ -4142,18 +3845,6 @@ type ToolCallListResponse struct {
 	Pagination ListPagination `json:"pagination"`
 }
 
-// ToolPolicy defines model for ToolPolicy.
-type ToolPolicy struct {
-	AllowedTools         *[]string                `json:"allowedTools,omitempty"`
-	BlockedTools         *[]string                `json:"blockedTools,omitempty"`
-	DefaultEffect        *ToolPolicyDefaultEffect `json:"defaultEffect,omitempty"`
-	RequireApprovalTools *[]string                `json:"requireApprovalTools,omitempty"`
-	AdditionalProperties map[string]interface{}   `json:"-"`
-}
-
-// ToolPolicyDefaultEffect defines model for ToolPolicy.DefaultEffect.
-type ToolPolicyDefaultEffect string
-
 // Trigger defines model for Trigger.
 type Trigger struct {
 	AgentId          string                 `json:"agentId"`
@@ -4298,14 +3989,6 @@ type UpdateEnvironmentRequest struct {
 		Description *string `json:"description,omitempty"`
 		Required    *bool   `json:"required,omitempty"`
 	} `json:"variables,omitempty"`
-}
-
-// UpdateFederatedTenantRequest defines model for UpdateFederatedTenantRequest.
-type UpdateFederatedTenantRequest struct {
-	Capabilities  *[]string               `json:"capabilities,omitempty"`
-	Enabled       *bool                   `json:"enabled,omitempty"`
-	EnvironmentId *string                 `json:"environmentId,omitempty"`
-	Metadata      *map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // UpdateLeaseRequest defines model for UpdateLeaseRequest.
@@ -4639,12 +4322,6 @@ type ReadAuthConfigParams struct {
 	Organization *string `form:"organization,omitempty" json:"organization,omitempty"`
 }
 
-// ListFederatedTenantsParams defines parameters for ListFederatedTenants.
-type ListFederatedTenantsParams struct {
-	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
-	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
-}
-
 // ListConnectionsParams defines parameters for ListConnections.
 type ListConnectionsParams struct {
 	State  *ListConnectionsParamsState `form:"state,omitempty" json:"state,omitempty"`
@@ -4674,13 +4351,6 @@ type ListConnectorsParams struct {
 
 // ListConnectorsParamsAvailability defines parameters for ListConnectors.
 type ListConnectorsParamsAvailability string
-
-// ReadEffectivePolicyParams defines parameters for ReadEffectivePolicy.
-type ReadEffectivePolicyParams struct {
-	TeamId     *string `form:"teamId,omitempty" json:"teamId,omitempty"`
-	ProviderId *string `form:"providerId,omitempty" json:"providerId,omitempty"`
-	ModelId    *string `form:"modelId,omitempty" json:"modelId,omitempty"`
-}
 
 // ListEnvironmentsParams defines parameters for ListEnvironments.
 type ListEnvironmentsParams struct {
@@ -4915,12 +4585,6 @@ type UpdateAgentJSONRequestBody = UpdateAgentRequest
 // ReplaceAgentMemoryJSONRequestBody defines body for ReplaceAgentMemory for application/json ContentType.
 type ReplaceAgentMemoryJSONRequestBody = ReplaceAgentMemoryRequest
 
-// CreateFederatedTenantJSONRequestBody defines body for CreateFederatedTenant for application/json ContentType.
-type CreateFederatedTenantJSONRequestBody = CreateFederatedTenantRequest
-
-// UpdateFederatedTenantJSONRequestBody defines body for UpdateFederatedTenant for application/json ContentType.
-type UpdateFederatedTenantJSONRequestBody = UpdateFederatedTenantRequest
-
 // CreateAuthSessionJSONRequestBody defines body for CreateAuthSession for application/json ContentType.
 type CreateAuthSessionJSONRequestBody = CreateAuthSessionRequest
 
@@ -4962,12 +4626,6 @@ type CreateMemoryStoreMemoryJSONRequestBody = CreateMemoryStoreMemoryRequest
 
 // UpdateMemoryStoreMemoryJSONRequestBody defines body for UpdateMemoryStoreMemory for application/json ContentType.
 type UpdateMemoryStoreMemoryJSONRequestBody = UpdateMemoryStoreMemoryRequest
-
-// CreatePolicyJSONRequestBody defines body for CreatePolicy for application/json ContentType.
-type CreatePolicyJSONRequestBody = CreatePolicyRequest
-
-// ReplacePolicyJSONRequestBody defines body for ReplacePolicy for application/json ContentType.
-type ReplacePolicyJSONRequestBody = ReplacePolicyRequest
 
 // CreateProjectJSONRequestBody defines body for CreateProject for application/json ContentType.
 type CreateProjectJSONRequestBody = CreateProjectRequest
@@ -5367,149 +5025,6 @@ func (a AgentSubagent) MarshalJSON() ([]byte, error) {
 	return json.Marshal(object)
 }
 
-// Getter for additional properties for PolicyMcpPolicy. Returns the specified
-// element and whether it was found
-func (a PolicyMcpPolicy) Get(fieldName string) (value interface{}, found bool) {
-	if a.AdditionalProperties != nil {
-		value, found = a.AdditionalProperties[fieldName]
-	}
-	return
-}
-
-// Setter for additional properties for PolicyMcpPolicy
-func (a *PolicyMcpPolicy) Set(fieldName string, value interface{}) {
-	if a.AdditionalProperties == nil {
-		a.AdditionalProperties = make(map[string]interface{})
-	}
-	a.AdditionalProperties[fieldName] = value
-}
-
-// Override default JSON handling for PolicyMcpPolicy to handle AdditionalProperties
-func (a *PolicyMcpPolicy) UnmarshalJSON(b []byte) error {
-	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
-	if err != nil {
-		return err
-	}
-
-	if raw, found := object["allowedConnectors"]; found {
-		err = json.Unmarshal(raw, &a.AllowedConnectors)
-		if err != nil {
-			return fmt.Errorf("error reading 'allowedConnectors': %w", err)
-		}
-		delete(object, "allowedConnectors")
-	}
-
-	if raw, found := object["blockedConnectors"]; found {
-		err = json.Unmarshal(raw, &a.BlockedConnectors)
-		if err != nil {
-			return fmt.Errorf("error reading 'blockedConnectors': %w", err)
-		}
-		delete(object, "blockedConnectors")
-	}
-
-	if raw, found := object["connectorApprovalModes"]; found {
-		err = json.Unmarshal(raw, &a.ConnectorApprovalModes)
-		if err != nil {
-			return fmt.Errorf("error reading 'connectorApprovalModes': %w", err)
-		}
-		delete(object, "connectorApprovalModes")
-	}
-
-	if raw, found := object["defaultEffect"]; found {
-		err = json.Unmarshal(raw, &a.DefaultEffect)
-		if err != nil {
-			return fmt.Errorf("error reading 'defaultEffect': %w", err)
-		}
-		delete(object, "defaultEffect")
-	}
-
-	if raw, found := object["requireApprovalConnectors"]; found {
-		err = json.Unmarshal(raw, &a.RequireApprovalConnectors)
-		if err != nil {
-			return fmt.Errorf("error reading 'requireApprovalConnectors': %w", err)
-		}
-		delete(object, "requireApprovalConnectors")
-	}
-
-	if raw, found := object["requireApprovalTools"]; found {
-		err = json.Unmarshal(raw, &a.RequireApprovalTools)
-		if err != nil {
-			return fmt.Errorf("error reading 'requireApprovalTools': %w", err)
-		}
-		delete(object, "requireApprovalTools")
-	}
-
-	if len(object) != 0 {
-		a.AdditionalProperties = make(map[string]interface{})
-		for fieldName, fieldBuf := range object {
-			var fieldVal interface{}
-			err := json.Unmarshal(fieldBuf, &fieldVal)
-			if err != nil {
-				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
-			}
-			a.AdditionalProperties[fieldName] = fieldVal
-		}
-	}
-	return nil
-}
-
-// Override default JSON handling for PolicyMcpPolicy to handle AdditionalProperties
-func (a PolicyMcpPolicy) MarshalJSON() ([]byte, error) {
-	var err error
-	object := make(map[string]json.RawMessage)
-
-	if a.AllowedConnectors != nil {
-		object["allowedConnectors"], err = json.Marshal(a.AllowedConnectors)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'allowedConnectors': %w", err)
-		}
-	}
-
-	if a.BlockedConnectors != nil {
-		object["blockedConnectors"], err = json.Marshal(a.BlockedConnectors)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'blockedConnectors': %w", err)
-		}
-	}
-
-	if a.ConnectorApprovalModes != nil {
-		object["connectorApprovalModes"], err = json.Marshal(a.ConnectorApprovalModes)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'connectorApprovalModes': %w", err)
-		}
-	}
-
-	if a.DefaultEffect != nil {
-		object["defaultEffect"], err = json.Marshal(a.DefaultEffect)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'defaultEffect': %w", err)
-		}
-	}
-
-	if a.RequireApprovalConnectors != nil {
-		object["requireApprovalConnectors"], err = json.Marshal(a.RequireApprovalConnectors)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'requireApprovalConnectors': %w", err)
-		}
-	}
-
-	if a.RequireApprovalTools != nil {
-		object["requireApprovalTools"], err = json.Marshal(a.RequireApprovalTools)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'requireApprovalTools': %w", err)
-		}
-	}
-
-	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
-		}
-	}
-	return json.Marshal(object)
-}
-
 // Getter for additional properties for ProviderModelPricing. Returns the specified
 // element and whether it was found
 func (a ProviderModelPricing) Get(fieldName string) (value interface{}, found bool) {
@@ -5581,262 +5096,6 @@ func (a ProviderModelPricing) MarshalJSON() ([]byte, error) {
 		object["outputMicrosPerToken"], err = json.Marshal(a.OutputMicrosPerToken)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'outputMicrosPerToken': %w", err)
-		}
-	}
-
-	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
-		}
-	}
-	return json.Marshal(object)
-}
-
-// Getter for additional properties for SandboxPolicy. Returns the specified
-// element and whether it was found
-func (a SandboxPolicy) Get(fieldName string) (value interface{}, found bool) {
-	if a.AdditionalProperties != nil {
-		value, found = a.AdditionalProperties[fieldName]
-	}
-	return
-}
-
-// Setter for additional properties for SandboxPolicy
-func (a *SandboxPolicy) Set(fieldName string, value interface{}) {
-	if a.AdditionalProperties == nil {
-		a.AdditionalProperties = make(map[string]interface{})
-	}
-	a.AdditionalProperties[fieldName] = value
-}
-
-// Override default JSON handling for SandboxPolicy to handle AdditionalProperties
-func (a *SandboxPolicy) UnmarshalJSON(b []byte) error {
-	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
-	if err != nil {
-		return err
-	}
-
-	if raw, found := object["allowedCommands"]; found {
-		err = json.Unmarshal(raw, &a.AllowedCommands)
-		if err != nil {
-			return fmt.Errorf("error reading 'allowedCommands': %w", err)
-		}
-		delete(object, "allowedCommands")
-	}
-
-	if raw, found := object["allowedHosts"]; found {
-		err = json.Unmarshal(raw, &a.AllowedHosts)
-		if err != nil {
-			return fmt.Errorf("error reading 'allowedHosts': %w", err)
-		}
-		delete(object, "allowedHosts")
-	}
-
-	if raw, found := object["blockedCommands"]; found {
-		err = json.Unmarshal(raw, &a.BlockedCommands)
-		if err != nil {
-			return fmt.Errorf("error reading 'blockedCommands': %w", err)
-		}
-		delete(object, "blockedCommands")
-	}
-
-	if raw, found := object["enabled"]; found {
-		err = json.Unmarshal(raw, &a.Enabled)
-		if err != nil {
-			return fmt.Errorf("error reading 'enabled': %w", err)
-		}
-		delete(object, "enabled")
-	}
-
-	if raw, found := object["network"]; found {
-		err = json.Unmarshal(raw, &a.Network)
-		if err != nil {
-			return fmt.Errorf("error reading 'network': %w", err)
-		}
-		delete(object, "network")
-	}
-
-	if raw, found := object["status"]; found {
-		err = json.Unmarshal(raw, &a.Status)
-		if err != nil {
-			return fmt.Errorf("error reading 'status': %w", err)
-		}
-		delete(object, "status")
-	}
-
-	if len(object) != 0 {
-		a.AdditionalProperties = make(map[string]interface{})
-		for fieldName, fieldBuf := range object {
-			var fieldVal interface{}
-			err := json.Unmarshal(fieldBuf, &fieldVal)
-			if err != nil {
-				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
-			}
-			a.AdditionalProperties[fieldName] = fieldVal
-		}
-	}
-	return nil
-}
-
-// Override default JSON handling for SandboxPolicy to handle AdditionalProperties
-func (a SandboxPolicy) MarshalJSON() ([]byte, error) {
-	var err error
-	object := make(map[string]json.RawMessage)
-
-	if a.AllowedCommands != nil {
-		object["allowedCommands"], err = json.Marshal(a.AllowedCommands)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'allowedCommands': %w", err)
-		}
-	}
-
-	if a.AllowedHosts != nil {
-		object["allowedHosts"], err = json.Marshal(a.AllowedHosts)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'allowedHosts': %w", err)
-		}
-	}
-
-	if a.BlockedCommands != nil {
-		object["blockedCommands"], err = json.Marshal(a.BlockedCommands)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'blockedCommands': %w", err)
-		}
-	}
-
-	if a.Enabled != nil {
-		object["enabled"], err = json.Marshal(a.Enabled)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'enabled': %w", err)
-		}
-	}
-
-	if a.Network != nil {
-		object["network"], err = json.Marshal(a.Network)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'network': %w", err)
-		}
-	}
-
-	if a.Status != nil {
-		object["status"], err = json.Marshal(a.Status)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'status': %w", err)
-		}
-	}
-
-	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
-		}
-	}
-	return json.Marshal(object)
-}
-
-// Getter for additional properties for ToolPolicy. Returns the specified
-// element and whether it was found
-func (a ToolPolicy) Get(fieldName string) (value interface{}, found bool) {
-	if a.AdditionalProperties != nil {
-		value, found = a.AdditionalProperties[fieldName]
-	}
-	return
-}
-
-// Setter for additional properties for ToolPolicy
-func (a *ToolPolicy) Set(fieldName string, value interface{}) {
-	if a.AdditionalProperties == nil {
-		a.AdditionalProperties = make(map[string]interface{})
-	}
-	a.AdditionalProperties[fieldName] = value
-}
-
-// Override default JSON handling for ToolPolicy to handle AdditionalProperties
-func (a *ToolPolicy) UnmarshalJSON(b []byte) error {
-	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
-	if err != nil {
-		return err
-	}
-
-	if raw, found := object["allowedTools"]; found {
-		err = json.Unmarshal(raw, &a.AllowedTools)
-		if err != nil {
-			return fmt.Errorf("error reading 'allowedTools': %w", err)
-		}
-		delete(object, "allowedTools")
-	}
-
-	if raw, found := object["blockedTools"]; found {
-		err = json.Unmarshal(raw, &a.BlockedTools)
-		if err != nil {
-			return fmt.Errorf("error reading 'blockedTools': %w", err)
-		}
-		delete(object, "blockedTools")
-	}
-
-	if raw, found := object["defaultEffect"]; found {
-		err = json.Unmarshal(raw, &a.DefaultEffect)
-		if err != nil {
-			return fmt.Errorf("error reading 'defaultEffect': %w", err)
-		}
-		delete(object, "defaultEffect")
-	}
-
-	if raw, found := object["requireApprovalTools"]; found {
-		err = json.Unmarshal(raw, &a.RequireApprovalTools)
-		if err != nil {
-			return fmt.Errorf("error reading 'requireApprovalTools': %w", err)
-		}
-		delete(object, "requireApprovalTools")
-	}
-
-	if len(object) != 0 {
-		a.AdditionalProperties = make(map[string]interface{})
-		for fieldName, fieldBuf := range object {
-			var fieldVal interface{}
-			err := json.Unmarshal(fieldBuf, &fieldVal)
-			if err != nil {
-				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
-			}
-			a.AdditionalProperties[fieldName] = fieldVal
-		}
-	}
-	return nil
-}
-
-// Override default JSON handling for ToolPolicy to handle AdditionalProperties
-func (a ToolPolicy) MarshalJSON() ([]byte, error) {
-	var err error
-	object := make(map[string]json.RawMessage)
-
-	if a.AllowedTools != nil {
-		object["allowedTools"], err = json.Marshal(a.AllowedTools)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'allowedTools': %w", err)
-		}
-	}
-
-	if a.BlockedTools != nil {
-		object["blockedTools"], err = json.Marshal(a.BlockedTools)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'blockedTools': %w", err)
-		}
-	}
-
-	if a.DefaultEffect != nil {
-		object["defaultEffect"], err = json.Marshal(a.DefaultEffect)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'defaultEffect': %w", err)
-		}
-	}
-
-	if a.RequireApprovalTools != nil {
-		object["requireApprovalTools"], err = json.Marshal(a.RequireApprovalTools)
-		if err != nil {
-			return nil, fmt.Errorf("error marshaling 'requireApprovalTools': %w", err)
 		}
 	}
 
@@ -5933,68 +5192,6 @@ func (t ResourceRef) MarshalJSON() ([]byte, error) {
 }
 
 func (t *ResourceRef) UnmarshalJSON(b []byte) error {
-	err := t.union.UnmarshalJSON(b)
-	return err
-}
-
-// AsSandboxPolicyNetwork0 returns the union data inside the SandboxPolicy_Network as a SandboxPolicyNetwork0
-func (t SandboxPolicy_Network) AsSandboxPolicyNetwork0() (SandboxPolicyNetwork0, error) {
-	var body SandboxPolicyNetwork0
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromSandboxPolicyNetwork0 overwrites any union data inside the SandboxPolicy_Network as the provided SandboxPolicyNetwork0
-func (t *SandboxPolicy_Network) FromSandboxPolicyNetwork0(v SandboxPolicyNetwork0) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeSandboxPolicyNetwork0 performs a merge with any union data inside the SandboxPolicy_Network, using the provided SandboxPolicyNetwork0
-func (t *SandboxPolicy_Network) MergeSandboxPolicyNetwork0(v SandboxPolicyNetwork0) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsSandboxPolicyNetwork1 returns the union data inside the SandboxPolicy_Network as a SandboxPolicyNetwork1
-func (t SandboxPolicy_Network) AsSandboxPolicyNetwork1() (SandboxPolicyNetwork1, error) {
-	var body SandboxPolicyNetwork1
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromSandboxPolicyNetwork1 overwrites any union data inside the SandboxPolicy_Network as the provided SandboxPolicyNetwork1
-func (t *SandboxPolicy_Network) FromSandboxPolicyNetwork1(v SandboxPolicyNetwork1) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeSandboxPolicyNetwork1 performs a merge with any union data inside the SandboxPolicy_Network, using the provided SandboxPolicyNetwork1
-func (t *SandboxPolicy_Network) MergeSandboxPolicyNetwork1(v SandboxPolicyNetwork1) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-func (t SandboxPolicy_Network) MarshalJSON() ([]byte, error) {
-	b, err := t.union.MarshalJSON()
-	return b, err
-}
-
-func (t *SandboxPolicy_Network) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }
@@ -6293,25 +5490,6 @@ type ClientInterface interface {
 	// ReadAuthConfig request
 	ReadAuthConfig(ctx context.Context, params *ReadAuthConfigParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ListFederatedTenants request
-	ListFederatedTenants(ctx context.Context, params *ListFederatedTenantsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// CreateFederatedTenantWithBody request with any body
-	CreateFederatedTenantWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	CreateFederatedTenant(ctx context.Context, body CreateFederatedTenantJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// DeleteFederatedTenant request
-	DeleteFederatedTenant(ctx context.Context, tenantId string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ReadFederatedTenant request
-	ReadFederatedTenant(ctx context.Context, tenantId string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// UpdateFederatedTenantWithBody request with any body
-	UpdateFederatedTenantWithBody(ctx context.Context, tenantId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	UpdateFederatedTenant(ctx context.Context, tenantId string, body UpdateFederatedTenantJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// CreateAuthSessionWithBody request with any body
 	CreateAuthSessionWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -6377,9 +5555,6 @@ type ClientInterface interface {
 
 	// ReadConnector request
 	ReadConnector(ctx context.Context, connectorId string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ReadEffectivePolicy request
-	ReadEffectivePolicy(ctx context.Context, params *ReadEffectivePolicyParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListEnvironments request
 	ListEnvironments(ctx context.Context, params *ListEnvironmentsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -6453,25 +5628,6 @@ type ClientInterface interface {
 	UpdateMemoryStoreMemoryWithBody(ctx context.Context, storeId string, memoryId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	UpdateMemoryStoreMemory(ctx context.Context, storeId string, memoryId string, body UpdateMemoryStoreMemoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ListPolicies request
-	ListPolicies(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// CreatePolicyWithBody request with any body
-	CreatePolicyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	CreatePolicy(ctx context.Context, body CreatePolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// DeletePolicy request
-	DeletePolicy(ctx context.Context, policyId string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ReadPolicy request
-	ReadPolicy(ctx context.Context, policyId string, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// ReplacePolicyWithBody request with any body
-	ReplacePolicyWithBody(ctx context.Context, policyId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	ReplacePolicy(ctx context.Context, policyId string, body ReplacePolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListProjects request
 	ListProjects(ctx context.Context, params *ListProjectsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -6850,90 +6006,6 @@ func (c *APIClient) ReadAuthConfig(ctx context.Context, params *ReadAuthConfigPa
 	return c.Client.Do(req)
 }
 
-func (c *APIClient) ListFederatedTenants(ctx context.Context, params *ListFederatedTenantsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewListFederatedTenantsRequest(c.Server, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) CreateFederatedTenantWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewCreateFederatedTenantRequestWithBody(c.Server, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) CreateFederatedTenant(ctx context.Context, body CreateFederatedTenantJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewCreateFederatedTenantRequest(c.Server, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) DeleteFederatedTenant(ctx context.Context, tenantId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDeleteFederatedTenantRequest(c.Server, tenantId)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) ReadFederatedTenant(ctx context.Context, tenantId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewReadFederatedTenantRequest(c.Server, tenantId)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) UpdateFederatedTenantWithBody(ctx context.Context, tenantId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewUpdateFederatedTenantRequestWithBody(c.Server, tenantId, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) UpdateFederatedTenant(ctx context.Context, tenantId string, body UpdateFederatedTenantJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewUpdateFederatedTenantRequest(c.Server, tenantId, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
 func (c *APIClient) CreateAuthSessionWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCreateAuthSessionRequestWithBody(c.Server, contentType, body)
 	if err != nil {
@@ -7212,18 +6284,6 @@ func (c *APIClient) ListConnectors(ctx context.Context, params *ListConnectorsPa
 
 func (c *APIClient) ReadConnector(ctx context.Context, connectorId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewReadConnectorRequest(c.Server, connectorId)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) ReadEffectivePolicy(ctx context.Context, params *ReadEffectivePolicyParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewReadEffectivePolicyRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -7548,90 +6608,6 @@ func (c *APIClient) UpdateMemoryStoreMemoryWithBody(ctx context.Context, storeId
 
 func (c *APIClient) UpdateMemoryStoreMemory(ctx context.Context, storeId string, memoryId string, body UpdateMemoryStoreMemoryJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateMemoryStoreMemoryRequest(c.Server, storeId, memoryId, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) ListPolicies(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewListPoliciesRequest(c.Server)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) CreatePolicyWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewCreatePolicyRequestWithBody(c.Server, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) CreatePolicy(ctx context.Context, body CreatePolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewCreatePolicyRequest(c.Server, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) DeletePolicy(ctx context.Context, policyId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewDeletePolicyRequest(c.Server, policyId)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) ReadPolicy(ctx context.Context, policyId string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewReadPolicyRequest(c.Server, policyId)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) ReplacePolicyWithBody(ctx context.Context, policyId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewReplacePolicyRequestWithBody(c.Server, policyId, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *APIClient) ReplacePolicy(ctx context.Context, policyId string, body ReplacePolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewReplacePolicyRequest(c.Server, policyId, body)
 	if err != nil {
 		return nil, err
 	}
@@ -9208,227 +8184,6 @@ func NewReadAuthConfigRequest(server string, params *ReadAuthConfigParams) (*htt
 	return req, nil
 }
 
-// NewListFederatedTenantsRequest generates requests for ListFederatedTenants
-func NewListFederatedTenantsRequest(server string, params *ListFederatedTenantsParams) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/auth/federated-tenants")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	if params != nil {
-		// queryValues collects non-styled parameters (passthrough, JSON)
-		// that are safe to round-trip through url.Values.Encode().
-		queryValues := queryURL.Query()
-		// rawQueryFragments collects pre-encoded query fragments from
-		// styled parameters, preserving literal commas as delimiters
-		// per the OpenAPI spec (e.g. "color=blue,black,brown").
-		var rawQueryFragments []string
-
-		if params.Limit != nil {
-
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
-				return nil, err
-			} else {
-				for _, qp := range strings.Split(queryFrag, "&") {
-					rawQueryFragments = append(rawQueryFragments, qp)
-				}
-			}
-
-		}
-
-		if params.Cursor != nil {
-
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
-				return nil, err
-			} else {
-				for _, qp := range strings.Split(queryFrag, "&") {
-					rawQueryFragments = append(rawQueryFragments, qp)
-				}
-			}
-
-		}
-
-		if encoded := queryValues.Encode(); encoded != "" {
-			rawQueryFragments = append(rawQueryFragments, encoded)
-		}
-		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
-	}
-
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewCreateFederatedTenantRequest calls the generic CreateFederatedTenant builder with application/json body
-func NewCreateFederatedTenantRequest(server string, body CreateFederatedTenantJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewCreateFederatedTenantRequestWithBody(server, "application/json", bodyReader)
-}
-
-// NewCreateFederatedTenantRequestWithBody generates requests for CreateFederatedTenant with any type of body
-func NewCreateFederatedTenantRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/auth/federated-tenants")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewDeleteFederatedTenantRequest generates requests for DeleteFederatedTenant
-func NewDeleteFederatedTenantRequest(server string, tenantId string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "tenantId", tenantId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/auth/federated-tenants/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewReadFederatedTenantRequest generates requests for ReadFederatedTenant
-func NewReadFederatedTenantRequest(server string, tenantId string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "tenantId", tenantId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/auth/federated-tenants/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewUpdateFederatedTenantRequest calls the generic UpdateFederatedTenant builder with application/json body
-func NewUpdateFederatedTenantRequest(server string, tenantId string, body UpdateFederatedTenantJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewUpdateFederatedTenantRequestWithBody(server, tenantId, "application/json", bodyReader)
-}
-
-// NewUpdateFederatedTenantRequestWithBody generates requests for UpdateFederatedTenant with any type of body
-func NewUpdateFederatedTenantRequestWithBody(server string, tenantId string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "tenantId", tenantId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/auth/federated-tenants/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
 // NewCreateAuthSessionRequest calls the generic CreateAuthSession builder with application/json body
 func NewCreateAuthSessionRequest(server string, body CreateAuthSessionJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -10270,84 +9025,6 @@ func NewReadConnectorRequest(server string, connectorId string) (*http.Request, 
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewReadEffectivePolicyRequest generates requests for ReadEffectivePolicy
-func NewReadEffectivePolicyRequest(server string, params *ReadEffectivePolicyParams) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/effective-policy")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	if params != nil {
-		// queryValues collects non-styled parameters (passthrough, JSON)
-		// that are safe to round-trip through url.Values.Encode().
-		queryValues := queryURL.Query()
-		// rawQueryFragments collects pre-encoded query fragments from
-		// styled parameters, preserving literal commas as delimiters
-		// per the OpenAPI spec (e.g. "color=blue,black,brown").
-		var rawQueryFragments []string
-
-		if params.TeamId != nil {
-
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "teamId", *params.TeamId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
-				return nil, err
-			} else {
-				for _, qp := range strings.Split(queryFrag, "&") {
-					rawQueryFragments = append(rawQueryFragments, qp)
-				}
-			}
-
-		}
-
-		if params.ProviderId != nil {
-
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "providerId", *params.ProviderId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
-				return nil, err
-			} else {
-				for _, qp := range strings.Split(queryFrag, "&") {
-					rawQueryFragments = append(rawQueryFragments, qp)
-				}
-			}
-
-		}
-
-		if params.ModelId != nil {
-
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "modelId", *params.ModelId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
-				return nil, err
-			} else {
-				for _, qp := range strings.Split(queryFrag, "&") {
-					rawQueryFragments = append(rawQueryFragments, qp)
-				}
-			}
-
-		}
-
-		if encoded := queryValues.Encode(); encoded != "" {
-			rawQueryFragments = append(rawQueryFragments, encoded)
-		}
-		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
 	}
 
 	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
@@ -11347,188 +10024,6 @@ func NewUpdateMemoryStoreMemoryRequestWithBody(server string, storeId string, me
 	}
 
 	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewListPoliciesRequest generates requests for ListPolicies
-func NewListPoliciesRequest(server string) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/policies")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewCreatePolicyRequest calls the generic CreatePolicy builder with application/json body
-func NewCreatePolicyRequest(server string, body CreatePolicyJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewCreatePolicyRequestWithBody(server, "application/json", bodyReader)
-}
-
-// NewCreatePolicyRequestWithBody generates requests for CreatePolicy with any type of body
-func NewCreatePolicyRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/policies")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewDeletePolicyRequest generates requests for DeletePolicy
-func NewDeletePolicyRequest(server string, policyId string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "policyId", policyId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/policies/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewReadPolicyRequest generates requests for ReadPolicy
-func NewReadPolicyRequest(server string, policyId string) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "policyId", policyId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/policies/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewReplacePolicyRequest calls the generic ReplacePolicy builder with application/json body
-func NewReplacePolicyRequest(server string, policyId string, body ReplacePolicyJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewReplacePolicyRequestWithBody(server, policyId, "application/json", bodyReader)
-}
-
-// NewReplacePolicyRequestWithBody generates requests for ReplacePolicy with any type of body
-func NewReplacePolicyRequestWithBody(server string, policyId string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "policyId", policyId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/v1/policies/%s", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
@@ -14759,25 +13254,6 @@ type ClientWithResponsesInterface interface {
 	// ReadAuthConfigWithResponse request
 	ReadAuthConfigWithResponse(ctx context.Context, params *ReadAuthConfigParams, reqEditors ...RequestEditorFn) (*ReadAuthConfigResponse, error)
 
-	// ListFederatedTenantsWithResponse request
-	ListFederatedTenantsWithResponse(ctx context.Context, params *ListFederatedTenantsParams, reqEditors ...RequestEditorFn) (*ListFederatedTenantsResponse, error)
-
-	// CreateFederatedTenantWithBodyWithResponse request with any body
-	CreateFederatedTenantWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateFederatedTenantResponse, error)
-
-	CreateFederatedTenantWithResponse(ctx context.Context, body CreateFederatedTenantJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateFederatedTenantResponse, error)
-
-	// DeleteFederatedTenantWithResponse request
-	DeleteFederatedTenantWithResponse(ctx context.Context, tenantId string, reqEditors ...RequestEditorFn) (*DeleteFederatedTenantResponse, error)
-
-	// ReadFederatedTenantWithResponse request
-	ReadFederatedTenantWithResponse(ctx context.Context, tenantId string, reqEditors ...RequestEditorFn) (*ReadFederatedTenantResponse, error)
-
-	// UpdateFederatedTenantWithBodyWithResponse request with any body
-	UpdateFederatedTenantWithBodyWithResponse(ctx context.Context, tenantId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateFederatedTenantResponse, error)
-
-	UpdateFederatedTenantWithResponse(ctx context.Context, tenantId string, body UpdateFederatedTenantJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateFederatedTenantResponse, error)
-
 	// CreateAuthSessionWithBodyWithResponse request with any body
 	CreateAuthSessionWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateAuthSessionResponse, error)
 
@@ -14843,9 +13319,6 @@ type ClientWithResponsesInterface interface {
 
 	// ReadConnectorWithResponse request
 	ReadConnectorWithResponse(ctx context.Context, connectorId string, reqEditors ...RequestEditorFn) (*ReadConnectorResponse, error)
-
-	// ReadEffectivePolicyWithResponse request
-	ReadEffectivePolicyWithResponse(ctx context.Context, params *ReadEffectivePolicyParams, reqEditors ...RequestEditorFn) (*ReadEffectivePolicyResponse, error)
 
 	// ListEnvironmentsWithResponse request
 	ListEnvironmentsWithResponse(ctx context.Context, params *ListEnvironmentsParams, reqEditors ...RequestEditorFn) (*ListEnvironmentsResponse, error)
@@ -14919,25 +13392,6 @@ type ClientWithResponsesInterface interface {
 	UpdateMemoryStoreMemoryWithBodyWithResponse(ctx context.Context, storeId string, memoryId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateMemoryStoreMemoryResponse, error)
 
 	UpdateMemoryStoreMemoryWithResponse(ctx context.Context, storeId string, memoryId string, body UpdateMemoryStoreMemoryJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateMemoryStoreMemoryResponse, error)
-
-	// ListPoliciesWithResponse request
-	ListPoliciesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListPoliciesResponse, error)
-
-	// CreatePolicyWithBodyWithResponse request with any body
-	CreatePolicyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreatePolicyResponse, error)
-
-	CreatePolicyWithResponse(ctx context.Context, body CreatePolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*CreatePolicyResponse, error)
-
-	// DeletePolicyWithResponse request
-	DeletePolicyWithResponse(ctx context.Context, policyId string, reqEditors ...RequestEditorFn) (*DeletePolicyResponse, error)
-
-	// ReadPolicyWithResponse request
-	ReadPolicyWithResponse(ctx context.Context, policyId string, reqEditors ...RequestEditorFn) (*ReadPolicyResponse, error)
-
-	// ReplacePolicyWithBodyWithResponse request with any body
-	ReplacePolicyWithBodyWithResponse(ctx context.Context, policyId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReplacePolicyResponse, error)
-
-	ReplacePolicyWithResponse(ctx context.Context, policyId string, body ReplacePolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*ReplacePolicyResponse, error)
 
 	// ListProjectsWithResponse request
 	ListProjectsWithResponse(ctx context.Context, params *ListProjectsParams, reqEditors ...RequestEditorFn) (*ListProjectsResponse, error)
@@ -15525,165 +13979,6 @@ func (r ReadAuthConfigResponse) ContentType() string {
 	return ""
 }
 
-type ListFederatedTenantsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *FederatedTenantListResponse
-	JSON400      *ErrorResponse
-	JSON401      *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r ListFederatedTenantsResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ListFederatedTenantsResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ListFederatedTenantsResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type CreateFederatedTenantResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON201      *FederatedTenant
-	JSON401      *ErrorResponse
-	JSON409      *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r CreateFederatedTenantResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r CreateFederatedTenantResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r CreateFederatedTenantResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type DeleteFederatedTenantResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON401      *ErrorResponse
-	JSON404      *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r DeleteFederatedTenantResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r DeleteFederatedTenantResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r DeleteFederatedTenantResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type ReadFederatedTenantResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *FederatedTenant
-	JSON401      *ErrorResponse
-	JSON404      *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r ReadFederatedTenantResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ReadFederatedTenantResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ReadFederatedTenantResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type UpdateFederatedTenantResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *FederatedTenant
-	JSON401      *ErrorResponse
-	JSON404      *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r UpdateFederatedTenantResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r UpdateFederatedTenantResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r UpdateFederatedTenantResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
 type CreateAuthSessionResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -16259,38 +14554,6 @@ func (r ReadConnectorResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r ReadConnectorResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type ReadEffectivePolicyResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *EffectivePolicy
-	JSON400      *ErrorResponse
-	JSON401      *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r ReadEffectivePolicyResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ReadEffectivePolicyResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ReadEffectivePolicyResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -16913,166 +15176,6 @@ func (r UpdateMemoryStoreMemoryResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r UpdateMemoryStoreMemoryResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type ListPoliciesResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *PolicyListResponse
-	JSON401      *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r ListPoliciesResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ListPoliciesResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ListPoliciesResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type CreatePolicyResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON201      *Policy
-	JSON400      *ErrorResponse
-	JSON401      *ErrorResponse
-	JSON409      *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r CreatePolicyResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r CreatePolicyResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r CreatePolicyResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type DeletePolicyResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON401      *ErrorResponse
-	JSON404      *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r DeletePolicyResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r DeletePolicyResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r DeletePolicyResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type ReadPolicyResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *Policy
-	JSON401      *ErrorResponse
-	JSON404      *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r ReadPolicyResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ReadPolicyResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ReadPolicyResponse) ContentType() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Header.Get("Content-Type")
-	}
-	return ""
-}
-
-type ReplacePolicyResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *Policy
-	JSON400      *ErrorResponse
-	JSON401      *ErrorResponse
-	JSON404      *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r ReplacePolicyResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r ReplacePolicyResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
-func (r ReplacePolicyResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -18978,67 +17081,6 @@ func (c *ClientWithResponses) ReadAuthConfigWithResponse(ctx context.Context, pa
 	return ParseReadAuthConfigResponse(rsp)
 }
 
-// ListFederatedTenantsWithResponse request returning *ListFederatedTenantsResponse
-func (c *ClientWithResponses) ListFederatedTenantsWithResponse(ctx context.Context, params *ListFederatedTenantsParams, reqEditors ...RequestEditorFn) (*ListFederatedTenantsResponse, error) {
-	rsp, err := c.ListFederatedTenants(ctx, params, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseListFederatedTenantsResponse(rsp)
-}
-
-// CreateFederatedTenantWithBodyWithResponse request with arbitrary body returning *CreateFederatedTenantResponse
-func (c *ClientWithResponses) CreateFederatedTenantWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateFederatedTenantResponse, error) {
-	rsp, err := c.CreateFederatedTenantWithBody(ctx, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseCreateFederatedTenantResponse(rsp)
-}
-
-func (c *ClientWithResponses) CreateFederatedTenantWithResponse(ctx context.Context, body CreateFederatedTenantJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateFederatedTenantResponse, error) {
-	rsp, err := c.CreateFederatedTenant(ctx, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseCreateFederatedTenantResponse(rsp)
-}
-
-// DeleteFederatedTenantWithResponse request returning *DeleteFederatedTenantResponse
-func (c *ClientWithResponses) DeleteFederatedTenantWithResponse(ctx context.Context, tenantId string, reqEditors ...RequestEditorFn) (*DeleteFederatedTenantResponse, error) {
-	rsp, err := c.DeleteFederatedTenant(ctx, tenantId, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseDeleteFederatedTenantResponse(rsp)
-}
-
-// ReadFederatedTenantWithResponse request returning *ReadFederatedTenantResponse
-func (c *ClientWithResponses) ReadFederatedTenantWithResponse(ctx context.Context, tenantId string, reqEditors ...RequestEditorFn) (*ReadFederatedTenantResponse, error) {
-	rsp, err := c.ReadFederatedTenant(ctx, tenantId, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseReadFederatedTenantResponse(rsp)
-}
-
-// UpdateFederatedTenantWithBodyWithResponse request with arbitrary body returning *UpdateFederatedTenantResponse
-func (c *ClientWithResponses) UpdateFederatedTenantWithBodyWithResponse(ctx context.Context, tenantId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateFederatedTenantResponse, error) {
-	rsp, err := c.UpdateFederatedTenantWithBody(ctx, tenantId, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseUpdateFederatedTenantResponse(rsp)
-}
-
-func (c *ClientWithResponses) UpdateFederatedTenantWithResponse(ctx context.Context, tenantId string, body UpdateFederatedTenantJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateFederatedTenantResponse, error) {
-	rsp, err := c.UpdateFederatedTenant(ctx, tenantId, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseUpdateFederatedTenantResponse(rsp)
-}
-
 // CreateAuthSessionWithBodyWithResponse request with arbitrary body returning *CreateAuthSessionResponse
 func (c *ClientWithResponses) CreateAuthSessionWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateAuthSessionResponse, error) {
 	rsp, err := c.CreateAuthSessionWithBody(ctx, contentType, body, reqEditors...)
@@ -19247,15 +17289,6 @@ func (c *ClientWithResponses) ReadConnectorWithResponse(ctx context.Context, con
 		return nil, err
 	}
 	return ParseReadConnectorResponse(rsp)
-}
-
-// ReadEffectivePolicyWithResponse request returning *ReadEffectivePolicyResponse
-func (c *ClientWithResponses) ReadEffectivePolicyWithResponse(ctx context.Context, params *ReadEffectivePolicyParams, reqEditors ...RequestEditorFn) (*ReadEffectivePolicyResponse, error) {
-	rsp, err := c.ReadEffectivePolicy(ctx, params, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseReadEffectivePolicyResponse(rsp)
 }
 
 // ListEnvironmentsWithResponse request returning *ListEnvironmentsResponse
@@ -19491,67 +17524,6 @@ func (c *ClientWithResponses) UpdateMemoryStoreMemoryWithResponse(ctx context.Co
 		return nil, err
 	}
 	return ParseUpdateMemoryStoreMemoryResponse(rsp)
-}
-
-// ListPoliciesWithResponse request returning *ListPoliciesResponse
-func (c *ClientWithResponses) ListPoliciesWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListPoliciesResponse, error) {
-	rsp, err := c.ListPolicies(ctx, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseListPoliciesResponse(rsp)
-}
-
-// CreatePolicyWithBodyWithResponse request with arbitrary body returning *CreatePolicyResponse
-func (c *ClientWithResponses) CreatePolicyWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreatePolicyResponse, error) {
-	rsp, err := c.CreatePolicyWithBody(ctx, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseCreatePolicyResponse(rsp)
-}
-
-func (c *ClientWithResponses) CreatePolicyWithResponse(ctx context.Context, body CreatePolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*CreatePolicyResponse, error) {
-	rsp, err := c.CreatePolicy(ctx, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseCreatePolicyResponse(rsp)
-}
-
-// DeletePolicyWithResponse request returning *DeletePolicyResponse
-func (c *ClientWithResponses) DeletePolicyWithResponse(ctx context.Context, policyId string, reqEditors ...RequestEditorFn) (*DeletePolicyResponse, error) {
-	rsp, err := c.DeletePolicy(ctx, policyId, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseDeletePolicyResponse(rsp)
-}
-
-// ReadPolicyWithResponse request returning *ReadPolicyResponse
-func (c *ClientWithResponses) ReadPolicyWithResponse(ctx context.Context, policyId string, reqEditors ...RequestEditorFn) (*ReadPolicyResponse, error) {
-	rsp, err := c.ReadPolicy(ctx, policyId, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseReadPolicyResponse(rsp)
-}
-
-// ReplacePolicyWithBodyWithResponse request with arbitrary body returning *ReplacePolicyResponse
-func (c *ClientWithResponses) ReplacePolicyWithBodyWithResponse(ctx context.Context, policyId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ReplacePolicyResponse, error) {
-	rsp, err := c.ReplacePolicyWithBody(ctx, policyId, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseReplacePolicyResponse(rsp)
-}
-
-func (c *ClientWithResponses) ReplacePolicyWithResponse(ctx context.Context, policyId string, body ReplacePolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*ReplacePolicyResponse, error) {
-	rsp, err := c.ReplacePolicy(ctx, policyId, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseReplacePolicyResponse(rsp)
 }
 
 // ListProjectsWithResponse request returning *ListProjectsResponse
@@ -20694,199 +18666,6 @@ func ParseReadAuthConfigResponse(rsp *http.Response) (*ReadAuthConfigResponse, e
 	return response, nil
 }
 
-// ParseListFederatedTenantsResponse parses an HTTP response from a ListFederatedTenantsWithResponse call
-func ParseListFederatedTenantsResponse(rsp *http.Response) (*ListFederatedTenantsResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ListFederatedTenantsResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest FederatedTenantListResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseCreateFederatedTenantResponse parses an HTTP response from a CreateFederatedTenantWithResponse call
-func ParseCreateFederatedTenantResponse(rsp *http.Response) (*CreateFederatedTenantResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &CreateFederatedTenantResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest FederatedTenant
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON201 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON409 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseDeleteFederatedTenantResponse parses an HTTP response from a DeleteFederatedTenantWithResponse call
-func ParseDeleteFederatedTenantResponse(rsp *http.Response) (*DeleteFederatedTenantResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &DeleteFederatedTenantResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseReadFederatedTenantResponse parses an HTTP response from a ReadFederatedTenantWithResponse call
-func ParseReadFederatedTenantResponse(rsp *http.Response) (*ReadFederatedTenantResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ReadFederatedTenantResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest FederatedTenant
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseUpdateFederatedTenantResponse parses an HTTP response from a UpdateFederatedTenantWithResponse call
-func ParseUpdateFederatedTenantResponse(rsp *http.Response) (*UpdateFederatedTenantResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &UpdateFederatedTenantResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest FederatedTenant
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	}
-
-	return response, nil
-}
-
 // ParseCreateAuthSessionResponse parses an HTTP response from a CreateAuthSessionWithResponse call
 func ParseCreateAuthSessionResponse(rsp *http.Response) (*CreateAuthSessionResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -21633,46 +19412,6 @@ func ParseReadConnectorResponse(rsp *http.Response) (*ReadConnectorResponse, err
 			return nil, err
 		}
 		response.JSON404 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseReadEffectivePolicyResponse parses an HTTP response from a ReadEffectivePolicyWithResponse call
-func ParseReadEffectivePolicyResponse(rsp *http.Response) (*ReadEffectivePolicyResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ReadEffectivePolicyResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest EffectivePolicy
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
 
 	}
 
@@ -22531,206 +20270,6 @@ func ParseUpdateMemoryStoreMemoryResponse(rsp *http.Response) (*UpdateMemoryStor
 			return nil, err
 		}
 		response.JSON409 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseListPoliciesResponse parses an HTTP response from a ListPoliciesWithResponse call
-func ParseListPoliciesResponse(rsp *http.Response) (*ListPoliciesResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ListPoliciesResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest PolicyListResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseCreatePolicyResponse parses an HTTP response from a CreatePolicyWithResponse call
-func ParseCreatePolicyResponse(rsp *http.Response) (*CreatePolicyResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &CreatePolicyResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest Policy
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON201 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON409 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseDeletePolicyResponse parses an HTTP response from a DeletePolicyWithResponse call
-func ParseDeletePolicyResponse(rsp *http.Response) (*DeletePolicyResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &DeletePolicyResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseReadPolicyResponse parses an HTTP response from a ReadPolicyWithResponse call
-func ParseReadPolicyResponse(rsp *http.Response) (*ReadPolicyResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ReadPolicyResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Policy
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseReplacePolicyResponse parses an HTTP response from a ReplacePolicyWithResponse call
-func ParseReplacePolicyResponse(rsp *http.Response) (*ReplacePolicyResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &ReplacePolicyResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest Policy
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
 
 	}
 

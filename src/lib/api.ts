@@ -549,61 +549,6 @@ export interface Connection {
   updatedAt: string
 }
 
-export interface PolicyScope {
-  level: 'organization' | 'team' | 'project'
-  teamId?: string
-}
-
-export interface Policy {
-  id: string
-  projectId: string
-  scope: PolicyScope
-  toolPolicy: Record<string, unknown>
-  mcpPolicy: Record<string, unknown>
-  sandboxPolicy: Record<string, unknown>
-  metadata: Record<string, unknown>
-  createdAt: string
-  updatedAt: string
-}
-
-export interface PolicyDecision {
-  allowed: boolean
-  category: string
-  rule: string | null
-  message: string
-}
-
-export interface EffectiveRule {
-  providerId?: string
-  modelId?: string
-  effect: 'allow' | 'deny'
-  reason?: string
-}
-
-export interface EffectiveBudget {
-  id: string
-  scope: string
-  providerId: string | null
-  modelId: string | null
-  limitType: string
-  limitValue: number
-  window: string
-  enabled: boolean
-  metadata: Record<string, unknown>
-}
-
-export interface EffectivePolicy {
-  source: Record<string, unknown>
-  sources: Record<string, unknown>[]
-  providerRules: EffectiveRule[]
-  modelRules: EffectiveRule[]
-  toolPolicy: Record<string, unknown>
-  mcpPolicy: Record<string, unknown>
-  sandboxPolicy: Record<string, unknown>
-  budgets: EffectiveBudget[]
-  decision?: PolicyDecision
-}
-
 export interface Budget {
   id: string
   scope: 'project' | 'provider' | 'model'
@@ -678,19 +623,6 @@ export interface AuditRecord {
   before: Record<string, unknown>
   after: Record<string, unknown>
   createdAt: string
-}
-
-export interface FederatedTenant {
-  id: string
-  issuer: string
-  externalTenantId: string
-  projectId: string
-  environmentId: string | null
-  capabilities: string[]
-  enabled: boolean
-  metadata: Record<string, unknown>
-  createdAt: string
-  updatedAt: string
 }
 
 export interface ListPagination {
@@ -868,12 +800,6 @@ export interface UsageSummaryOptions {
   groupBy?: string
   from?: string
   to?: string
-}
-
-export interface EffectivePolicyOptions {
-  teamId?: string
-  providerId?: string
-  modelId?: string
 }
 
 export class ApiError extends Error {
@@ -1136,11 +1062,6 @@ export const api = {
         json: { state: 'disconnected' },
       }),
     ),
-  listPolicies: () => rpcRequest<ListResponse<Policy>>(v1.policies.$get(queryArg<typeof v1.policies.$get>({}))),
-  readEffectivePolicy: (options: EffectivePolicyOptions = {}) =>
-    rpcRequest<EffectivePolicy>(
-      v1['effective-policy'].$get(queryArg<(typeof v1)['effective-policy']['$get']>(options)),
-    ),
   listBudgets: () => rpcRequest<ListResponse<Budget>>(v1.budgets.$get(queryArg<typeof v1.budgets.$get>({}))),
   readUsageSummary: (options: UsageSummaryOptions = {}) =>
     rpcRequest<UsageSummary>(v1['usage-summary'].$get(queryArg<(typeof v1)['usage-summary']['$get']>(options))),
@@ -1154,8 +1075,4 @@ export const api = {
     ),
   readAuditRecord: (id: string) =>
     rpcRequest<AuditRecord>(v1['audit-records'][':recordId'].$get({ param: { recordId: id } })),
-  listFederatedTenants: () =>
-    rpcRequest<ListResponse<FederatedTenant>>(
-      v1.auth['federated-tenants'].$get(queryArg<(typeof v1.auth)['federated-tenants']['$get']>({})),
-    ),
 }

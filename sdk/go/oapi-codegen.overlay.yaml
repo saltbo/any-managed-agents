@@ -8,15 +8,9 @@ info:
 # interface{}, which does not compile. Removing the nullable flag yields plain
 # interface{}.
 actions:
-  - target: $.components.schemas['FederatedTenant']['properties']['metadata'].additionalProperties.nullable
-    remove: true
   - target: $.components.schemas['ErrorResponse']['properties']['error']['properties']['issues'].items.nullable
     remove: true
   - target: $.components.schemas['ErrorResponse']['properties']['error']['properties']['details'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['CreateFederatedTenantRequest']['properties']['metadata'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['UpdateFederatedTenantRequest']['properties']['metadata'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['Agent']['properties']['metadata'].additionalProperties.nullable
     remove: true
@@ -93,20 +87,6 @@ actions:
   - target: $.components.schemas['UpdateLeaseRequest']['properties']['result'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['UpdateLeaseRequest']['properties']['error'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['Policy']['properties']['metadata'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['ToolPolicy'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['PolicyMcpPolicy'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['SandboxPolicy'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['CreatePolicyRequest']['properties']['metadata'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['ReplacePolicyRequest']['properties']['metadata'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['EffectiveBudget']['properties']['metadata'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['Budget']['properties']['metadata'].additionalProperties.nullable
     remove: true

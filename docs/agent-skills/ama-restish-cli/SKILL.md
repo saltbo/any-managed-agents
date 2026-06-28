@@ -42,7 +42,6 @@ Use OpenAPI operation names or documented `/api/v1` paths. Do not invent local c
 | Sessions | `listSessions`, `readSession`, `readSessionConnection`, `listSessionEvents`, `connectSessionSocket`, message and approval operations | `createSession`, `updateSession`, `createSessionMessage` | use `updateSession` state fields |
 | Providers | `listProviders`, `listModels`, `readProvider`, `listProviderModels` | `refreshCatalog` | n/a |
 | Vaults | `listVaults`, `readVault`, `listVaultCredentials`, `readVaultCredential`, `listVaultCredentialVersions`, `readVaultCredentialVersion` | `createVault`, `updateVault`, `createVaultCredential`, `updateVaultCredential`, `createVaultCredentialVersion` | `deleteVaultCredentialVersion` |
-| Policies | `listPolicies`, `readPolicy`, `readEffectivePolicy` | `createPolicy`, `replacePolicy` | `deletePolicy` |
 | Budgets | `listBudgets`, `readBudget` | `createBudget`, `updateBudget` | `deleteBudget` |
 | Usage | `listUsageRecords`, `readUsageRecord`, `readUsageSummary` | n/a | n/a |
 | Audit | `listAuditRecords`, `readAuditRecord` | n/a | n/a |
@@ -65,7 +64,6 @@ restish ama list-session-events sessionId:"session_abc123" --rsh-output-format j
 
 restish ama list-providers --rsh-output-format json
 restish ama list-vaults --rsh-output-format json
-restish ama read-effective-policy --rsh-output-format json
 restish ama read-usage-summary --rsh-output-format json
 restish ama list-audit-records --rsh-output-format json
 ```
@@ -76,7 +74,7 @@ If SDK artifacts change, run `pnpm run openapi:generate` and `pnpm run openapi:c
 
 ## Safety Boundaries
 
-- Confirm ids before destructive `update*` state changes, `deletePolicy`, or `deleteVaultCredentialVersion`.
+- Confirm ids before destructive `update*` state changes or `deleteVaultCredentialVersion`.
 - Treat vault values and auth tokens as secrets. Never paste raw secret values into notes, commits, or screenshots.
 - Runtime interaction remains behind AMA session endpoints and canonical AMA events. Discover a session's `runtimeEndpointPath` with `readSession`, then use AMA runtime helpers for task traffic.
 - Do not add a `bin`, shell wrapper, package-manager global command, or project-specific command surface for AMA control-plane work.

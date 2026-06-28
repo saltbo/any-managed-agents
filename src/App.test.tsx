@@ -7,7 +7,6 @@ import type {
   AuthContext,
   Connection,
   Connector,
-  EffectivePolicy,
   Environment,
   Provider,
   Session,
@@ -348,20 +347,6 @@ function mcpConnection(overrides: Partial<Connection> = {}): Connection {
   }
 }
 
-function governancePolicy(overrides: Partial<EffectivePolicy> = {}): EffectivePolicy {
-  return {
-    source: {},
-    sources: [],
-    providerRules: [],
-    modelRules: [],
-    toolPolicy: {},
-    mcpPolicy: { defaultEffect: 'allow' },
-    sandboxPolicy: {},
-    budgets: [],
-    ...overrides,
-  }
-}
-
 function usageSummary(overrides: Partial<UsageSummary> = {}): UsageSummary {
   return {
     groupBy: 'provider',
@@ -424,7 +409,6 @@ function mockConsoleApi(seed?: {
     credentials: [credential()],
     mcpConnectors: [mcpConnector()],
     mcpConnections: [mcpConnection()],
-    governancePolicy: governancePolicy(),
     usageSummary: usageSummary(),
     auditRecords: [auditRecord()],
   }
@@ -542,9 +526,6 @@ function mockConsoleApi(seed?: {
     }
     if (url === '/api/v1/connections' && method === 'GET') {
       return jsonResponse({ data: state.mcpConnections })
-    }
-    if (url.startsWith('/api/v1/effective-policy') && method === 'GET') {
-      return jsonResponse(state.governancePolicy)
     }
     if (url.startsWith('/api/v1/usage-summary') && method === 'GET') {
       return jsonResponse(state.usageSummary)
@@ -808,7 +789,7 @@ describe('App', () => {
     expect(await screen.findByText('agent.create')).toBeTruthy()
 
     fireEvent.click(primaryNav().getByRole('link', { name: 'Settings' }))
-    expect(await screen.findByText('Effective governance')).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Settings' })).toBeTruthy()
   })
 
   it('boots directly into environment and session detail routes', async () => {
@@ -1082,9 +1063,6 @@ describe('App', () => {
       }
       if (url === '/api/v1/connections') {
         return jsonResponse({ data: [] })
-      }
-      if (url.startsWith('/api/v1/effective-policy')) {
-        return jsonResponse(governancePolicy())
       }
       if (url.startsWith('/api/v1/usage-summary')) {
         return jsonResponse(usageSummary())

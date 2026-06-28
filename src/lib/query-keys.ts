@@ -59,9 +59,6 @@ export const queryKeys = {
     all: ['connections'] as const,
     list: ['connections', 'list'] as const,
   },
-  governance: {
-    effectivePolicy: ['governance', 'effective-policy'] as const,
-  },
   usage: {
     summary: (filters: object = {}) => ['usage', 'summary', filters] as const,
   },

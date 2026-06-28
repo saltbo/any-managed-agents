@@ -39,13 +39,6 @@ export declare function createAmaClient(config: AmaClientConfig): {
         currentSession: () => Promise<types.AuthSession>;
         deleteCurrentSession: () => Promise<void>;
     };
-    federatedTenants: {
-        list: (query?: types.ListFederatedTenantsData["query"]) => Promise<types.FederatedTenantListResponse>;
-        create: (body: types.CreateFederatedTenantRequest) => Promise<types.FederatedTenant>;
-        get: (tenantId: string) => Promise<types.FederatedTenant>;
-        update: (tenantId: string, body: types.UpdateFederatedTenantRequest) => Promise<types.FederatedTenant>;
-        delete: (tenantId: string) => Promise<void>;
-    };
     projects: {
         list: (query?: types.ListProjectsData["query"]) => Promise<types.ProjectListResponse>;
         create: (body: types.CreateProjectRequest) => Promise<types.Project>;
@@ -82,14 +75,6 @@ export declare function createAmaClient(config: AmaClientConfig): {
         create: (body: types.CreateRunnerRequest) => Promise<types.Runner>;
         get: (runnerId: string) => Promise<types.Runner>;
         update: (runnerId: string, body: types.UpdateRunnerRequest) => Promise<types.Runner>;
-    };
-    policies: {
-        list: () => Promise<types.PolicyListResponse>;
-        create: (body: types.CreatePolicyRequest) => Promise<types.Policy>;
-        get: (policyId: string) => Promise<types.Policy>;
-        replace: (policyId: string, body: types.ReplacePolicyRequest) => Promise<types.Policy>;
-        delete: (policyId: string) => Promise<void>;
-        effective: (query?: types.ReadEffectivePolicyData["query"]) => Promise<types.EffectivePolicy>;
     };
     budgets: {
         list: () => Promise<types.BudgetListResponse>;

@@ -13,9 +13,8 @@ async function jsonFetch(path: string, authorization: string, init: RequestInit 
   })
 }
 
-// Governance, usage, and audit coverage moved to policies.test.ts,
-// budgets.test.ts, effective-policy.test.ts, usage-records.test.ts,
-// usage-summary.test.ts, and audit.test.ts.
+// Governance, usage, and audit coverage lives in focused tests:
+// budgets.test.ts, usage-records.test.ts, usage-summary.test.ts, and audit.test.ts.
 describe('[CF] providers', () => {
   beforeEach(async () => {
     await setupOidcProvider()

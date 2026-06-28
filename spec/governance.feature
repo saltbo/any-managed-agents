@@ -66,14 +66,6 @@ Feature: Governance
 
   # ── API contract (api: assembled server, tenancy, validation) ──
 
-  @governance/policy-api @api
-  Scenario: Manage policies through the control plane
-    Given a signed-in admin
-    When the admin drives the policies API end to end
-    Then create, list, read, replace, and delete are supported with pagination
-    And duplicate scopes return conflict and invalid team scopes return validation errors
-    And responses never expose the organization id
-
   @governance/budget-api @api
   Scenario: Manage budgets through the control plane
     Given a signed-in admin
@@ -81,16 +73,7 @@ Feature: Governance
     Then budgets default to enabled and never expose a status field
     And provider- and model-scoped budgets require their identifier
 
-  @governance/effective-policy-api @api
-  Scenario: Read effective policy and policy decisions through the control plane
-    Given a signed-in admin with policies and budgets configured
-    When the admin reads effective policy and requests a provider and model decision
-    Then the merged policy and enabled budgets are returned
-    And a denied decision is explained by policy category and safe rule reference
-    And the denial writes a safe audit record with no secret values
-    And providerId or modelId on their own are rejected
-
-  @governance/policy-change-current @api
+  @governance/policy-change-current @usecase
   Scenario: New policy applies to later effective resolution
     Given a session was created under an older policy
     When governance policy changes

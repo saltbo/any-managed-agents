@@ -878,36 +878,9 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
   })
 
   // ---------------------------------------------------------------------------
-  // Governance API (policies, effective-policy, budgets)
+  // Governance API (budgets)
   // ---------------------------------------------------------------------------
   describe('governance API', () => {
-    it('listPolicies calls /api/v1/policies', async () => {
-      const fetchMock = makeJsonFetch(listPage)
-      vi.stubGlobal('fetch', fetchMock)
-      await api.listPolicies()
-      const url = fetchMock.mock.calls[0]?.[0] as string
-      expect(url).toContain('/api/v1/policies')
-    })
-
-    it('readEffectivePolicy calls /api/v1/effective-policy', async () => {
-      const policy = {
-        source: {},
-        sources: [],
-        providerRules: [],
-        modelRules: [],
-        toolPolicy: {},
-        mcpPolicy: {},
-        sandboxPolicy: {},
-        budgets: [],
-      }
-      const fetchMock = makeJsonFetch(policy)
-      vi.stubGlobal('fetch', fetchMock)
-      const result = await api.readEffectivePolicy({ providerId: 'prov_1' })
-      const url = fetchMock.mock.calls[0]?.[0] as string
-      expect(url).toContain('/api/v1/effective-policy')
-      expect(result.providerRules).toEqual([])
-    })
-
     it('listBudgets calls /api/v1/budgets', async () => {
       const fetchMock = makeJsonFetch(listPage)
       vi.stubGlobal('fetch', fetchMock)
@@ -991,19 +964,6 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
       const url = fetchMock.mock.calls[0]?.[0] as string
       expect(url).toContain('/api/v1/audit-records/rec_1')
       expect(result.id).toBe('rec_1')
-    })
-  })
-
-  // ---------------------------------------------------------------------------
-  // Federated Tenants API
-  // ---------------------------------------------------------------------------
-  describe('federated tenants API', () => {
-    it('listFederatedTenants calls /api/v1/auth/federated-tenants', async () => {
-      const fetchMock = makeJsonFetch(listPage)
-      vi.stubGlobal('fetch', fetchMock)
-      await api.listFederatedTenants()
-      const url = fetchMock.mock.calls[0]?.[0] as string
-      expect(url).toContain('/api/v1/auth/federated-tenants')
     })
   })
 })

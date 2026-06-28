@@ -146,8 +146,7 @@ function clearedSessionCookieHeader(secure: boolean): string {
 // Registration order is load-bearing: static segments (/config, /sessions)
 // register before parameter segments and the auth wall guards
 // /sessions/current. The assembler in app.ts calls this at the auth resource's
-// original mount position (AFTER federated-tenants so /federated-tenants is not
-// swallowed by this router).
+// original mount position.
 export function registerAuthRoutes(routes: AuthRoutes) {
   return routes
     .openapi(readAuthConfigRoute, (c) => {

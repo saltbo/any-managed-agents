@@ -1,6 +1,7 @@
 import { SELF } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultClaims, seedPlatformProvider, setupOidcProvider, signIn } from './auth'
+import { seedPolicy } from './policy-seed'
 
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
@@ -567,14 +568,11 @@ describe('[CF] /api/v1/agents', () => {
 
   it('stores the tool attachment contract on agent versions and rejects policy-blocked tools', async () => {
     const authorization = await signIn()
-    const policyRes = await jsonFetch('/api/v1/policies', authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        scope: { level: 'project' },
-        toolPolicy: { blockedTools: ['repo.delete'] },
-      }),
+    await seedPolicy({
+      authorization,
+      scope: { level: 'project' },
+      toolPolicy: { blockedTools: ['repo.delete'] },
     })
-    expect(policyRes.status).toBe(201)
 
     const governanceBlockedRes = await jsonFetch('/api/v1/agents', authorization, {
       method: 'POST',

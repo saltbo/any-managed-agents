@@ -76,7 +76,7 @@ describe('[spec: governance/effective-policy] readEffectivePolicy', () => {
     )
   })
 
-  it('resolves the policy as a member of the requested team', async () => {
+  it('resolves the policy as a member of the requested team [spec: governance/policy-change-current]', async () => {
     const scopedTeams: (string[] | undefined)[] = []
     await readEffectivePolicy(fakeDeps({ scopedTeams }), auth, { teamId: 'team_platform' })
     expect(scopedTeams).toEqual([['team_platform']])

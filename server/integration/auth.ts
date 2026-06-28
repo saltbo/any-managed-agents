@@ -1,5 +1,6 @@
 import { env } from 'cloudflare:workers'
 import { expect, vi } from 'vitest'
+import type { Env } from '../env'
 
 // Providers are a global vendor catalog (no org/project). Tests that pin an
 // agent to a provider/model need the row to exist so the agent.providerId FK
@@ -15,24 +16,27 @@ export const PLATFORM_MODEL_ID = '@cf/moonshotai/kimi-k2.6'
 export async function seedPlatformProvider(
   options: { providerId?: string; slug?: string; displayName?: string; modelId?: string; enabled?: boolean } = {},
 ) {
+  const db = (env as unknown as Env).DB
   const providerId = options.providerId ?? PLATFORM_PROVIDER_ID
   const slug = options.slug ?? PLATFORM_PROVIDER_ID
   const displayName = options.displayName ?? 'Workers AI'
   const modelId = options.modelId ?? PLATFORM_MODEL_ID
   const enabled = options.enabled ?? true
   const timestamp = new Date().toISOString()
-  await env.DB.prepare(
-    `INSERT INTO providers (id, slug, display_name, enabled, metadata, model_catalog_state, last_error, created_at, updated_at)
+  await db
+    .prepare(
+      `INSERT INTO providers (id, slug, display_name, enabled, metadata, model_catalog_state, last_error, created_at, updated_at)
      VALUES (?, ?, ?, ?, '{}', 'ready', NULL, ?, ?)
      ON CONFLICT(id) DO UPDATE SET enabled = excluded.enabled, updated_at = excluded.updated_at`,
-  )
+    )
     .bind(providerId, slug, displayName, enabled ? 1 : 0, timestamp, timestamp)
     .run()
-  await env.DB.prepare(
-    `INSERT INTO provider_models (id, provider_id, model_id, display_name, capabilities, context_window, pricing, availability, metadata, created_at, updated_at)
+  await db
+    .prepare(
+      `INSERT INTO provider_models (id, provider_id, model_id, display_name, capabilities, context_window, pricing, availability, metadata, created_at, updated_at)
      VALUES (?, ?, ?, ?, '["text"]', NULL, '{}', 'available', '{}', ?, ?)
      ON CONFLICT(provider_id, model_id) DO NOTHING`,
-  )
+    )
     .bind(
       `${providerId}_${modelId}`.replaceAll(/[^A-Za-z0-9_-]/g, '_'),
       providerId,

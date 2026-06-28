@@ -4,6 +4,7 @@ import { AMA_RUNNER_SANDBOX_CAPABILITY, runtimeProviderModelCapability } from '@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { runtimeErrorMessage } from '../http/sessions'
 import { defaultClaims, seedPlatformProvider, setupOidcProvider, signIn } from './auth'
+import { seedPolicy } from './policy-seed'
 
 const DEFAULT_AMA_RUNNER_CAPABILITY = AMA_RUNNER_SANDBOX_CAPABILITY
 
@@ -159,11 +160,7 @@ async function connectMcp(authorization: string, connectorId: string) {
 }
 
 async function setProjectPolicy(authorization: string, policy: Record<string, unknown>) {
-  const res = await jsonFetch('/api/v1/policies', authorization, {
-    method: 'POST',
-    body: JSON.stringify({ scope: { level: 'project' }, ...policy }),
-  })
-  expect([200, 201]).toContain(res.status)
+  await seedPolicy({ authorization, scope: { level: 'project' }, ...policy })
 }
 
 describe('[CF] /api/v1/sessions', () => {

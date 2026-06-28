@@ -1,6 +1,7 @@
 import { SELF } from 'cloudflare:test'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultClaims, seedPlatformProvider, setupOidcProvider, signIn } from './auth'
+import { seedPolicy } from './policy-seed'
 
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
@@ -159,11 +160,7 @@ async function createSession(authorization: string, tools = ['mcp:github.repo.re
 }
 
 async function setProjectMcpPolicy(authorization: string, mcpPolicy: Record<string, unknown>) {
-  const policyRes = await jsonFetch('/api/v1/policies', authorization, {
-    method: 'POST',
-    body: JSON.stringify({ scope: { level: 'project' }, mcpPolicy }),
-  })
-  expect(policyRes.status).toBe(201)
+  await seedPolicy({ authorization, scope: { level: 'project' }, mcpPolicy })
 }
 
 async function connectGithub(

@@ -223,14 +223,6 @@ export function createAmaClient(config: AmaClientConfig) {
       deleteCurrentSession: () => unwrap(ops.deleteCurrentAuthSession({ client })),
     },
 
-    federatedTenants: {
-      list: (query?: types.ListFederatedTenantsData['query']) => unwrap(ops.listFederatedTenants({ client, query })),
-      create: (body: types.CreateFederatedTenantRequest) => unwrap(ops.createFederatedTenant({ client, body })),
-      get: (tenantId: string) => unwrap(ops.readFederatedTenant({ client, path: { tenantId } })),
-      update: (tenantId: string, body: types.UpdateFederatedTenantRequest) => unwrap(ops.updateFederatedTenant({ client, path: { tenantId }, body })),
-      delete: (tenantId: string) => unwrap(ops.deleteFederatedTenant({ client, path: { tenantId } })),
-    },
-
     projects: {
       list: (query?: types.ListProjectsData['query']) => unwrap(ops.listProjects({ client, query })),
       create: (body: types.CreateProjectRequest) => unwrap(ops.createProject({ client, body })),
@@ -271,15 +263,6 @@ export function createAmaClient(config: AmaClientConfig) {
       create: (body: types.CreateRunnerRequest) => unwrap(ops.createRunner({ client, body })),
       get: (runnerId: string) => unwrap(ops.readRunner({ client, path: { runnerId } })),
       update: (runnerId: string, body: types.UpdateRunnerRequest) => unwrap(ops.updateRunner({ client, path: { runnerId }, body })),
-    },
-
-    policies: {
-      list: () => unwrap(ops.listPolicies({ client })),
-      create: (body: types.CreatePolicyRequest) => unwrap(ops.createPolicy({ client, body })),
-      get: (policyId: string) => unwrap(ops.readPolicy({ client, path: { policyId } })),
-      replace: (policyId: string, body: types.ReplacePolicyRequest) => unwrap(ops.replacePolicy({ client, path: { policyId }, body })),
-      delete: (policyId: string) => unwrap(ops.deletePolicy({ client, path: { policyId } })),
-      effective: (query?: types.ReadEffectivePolicyData['query']) => unwrap(ops.readEffectivePolicy({ client, query })),
     },
 
     budgets: {

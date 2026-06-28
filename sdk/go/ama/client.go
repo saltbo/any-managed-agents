@@ -42,25 +42,23 @@ type clientCore struct {
 }
 
 type Client struct {
-	core             *clientCore
-	System           SystemService
-	Auth             AuthService
-	FederatedTenants FederatedTenantsService
-	Projects         ProjectsService
-	Agents           AgentsService
-	Environments     EnvironmentsService
-	Providers        ProvidersService
-	Runners          RunnersService
-	Policies         PoliciesService
-	Budgets          BudgetsService
-	Connectors       ConnectorsService
-	Connections      ConnectionsService
-	Audit            AuditService
-	Triggers         TriggersService
-	Sessions         SessionsService
-	MemoryStores     MemoryStoresService
-	Vaults           VaultsService
-	Usage            UsageService
+	core         *clientCore
+	System       SystemService
+	Auth         AuthService
+	Projects     ProjectsService
+	Agents       AgentsService
+	Environments EnvironmentsService
+	Providers    ProvidersService
+	Runners      RunnersService
+	Budgets      BudgetsService
+	Connectors   ConnectorsService
+	Connections  ConnectionsService
+	Audit        AuditService
+	Triggers     TriggersService
+	Sessions     SessionsService
+	MemoryStores MemoryStoresService
+	Vaults       VaultsService
+	Usage        UsageService
 }
 
 type RunnerClient struct {
@@ -80,13 +78,11 @@ func New(config ClientConfig) (*Client, error) {
 	client := &Client{core: core}
 	client.System = SystemService{client: core}
 	client.Auth = AuthService{client: core}
-	client.FederatedTenants = FederatedTenantsService{client: core}
 	client.Projects = ProjectsService{client: core}
 	client.Agents = AgentsService{client: core}
 	client.Environments = EnvironmentsService{client: core}
 	client.Providers = ProvidersService{client: core}
 	client.Runners = RunnersService{client: core}
-	client.Policies = PoliciesService{client: core}
 	client.Budgets = BudgetsService{client: core}
 	client.Connectors = ConnectorsService{client: core}
 	client.Connections = ConnectionsService{client: core}
@@ -311,50 +307,6 @@ func (s AuthService) DeleteCurrentSession(ctx context.Context) error {
 		return err
 	}
 	return unwrapEmpty(response.StatusCode(), response.Body)
-}
-
-type FederatedTenantsService struct {
-	client *clientCore
-}
-
-func (s FederatedTenantsService) List(ctx context.Context, params *ListFederatedTenantsParams) (*FederatedTenantListResponse, error) {
-	response, err := s.client.raw.ListFederatedTenantsWithResponse(ctx, params)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON400, response.JSON401)
-}
-
-func (s FederatedTenantsService) Create(ctx context.Context, body CreateFederatedTenantRequest) (*FederatedTenant, error) {
-	response, err := s.client.raw.CreateFederatedTenantWithResponse(ctx, body)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON201, response.JSON401, response.JSON409)
-}
-
-func (s FederatedTenantsService) Get(ctx context.Context, tenantID string) (*FederatedTenant, error) {
-	response, err := s.client.raw.ReadFederatedTenantWithResponse(ctx, tenantID)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON401, response.JSON404)
-}
-
-func (s FederatedTenantsService) Update(ctx context.Context, tenantID string, body UpdateFederatedTenantRequest) (*FederatedTenant, error) {
-	response, err := s.client.raw.UpdateFederatedTenantWithResponse(ctx, tenantID, body)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON401, response.JSON404)
-}
-
-func (s FederatedTenantsService) Delete(ctx context.Context, tenantID string) error {
-	response, err := s.client.raw.DeleteFederatedTenantWithResponse(ctx, tenantID)
-	if err != nil {
-		return err
-	}
-	return unwrapEmpty(response.StatusCode(), response.Body, response.JSON401, response.JSON404)
 }
 
 type ProjectsService struct {
@@ -591,58 +543,6 @@ func (s RunnersService) Update(ctx context.Context, runnerID string, body Update
 		return nil, err
 	}
 	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON400, response.JSON401, response.JSON403, response.JSON404, response.JSON409)
-}
-
-type PoliciesService struct {
-	client *clientCore
-}
-
-func (s PoliciesService) List(ctx context.Context) (*PolicyListResponse, error) {
-	response, err := s.client.raw.ListPoliciesWithResponse(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON401)
-}
-
-func (s PoliciesService) Create(ctx context.Context, body CreatePolicyRequest) (*Policy, error) {
-	response, err := s.client.raw.CreatePolicyWithResponse(ctx, body)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON201, response.JSON400, response.JSON401, response.JSON409)
-}
-
-func (s PoliciesService) Get(ctx context.Context, policyID string) (*Policy, error) {
-	response, err := s.client.raw.ReadPolicyWithResponse(ctx, policyID)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON401, response.JSON404)
-}
-
-func (s PoliciesService) Replace(ctx context.Context, policyID string, body ReplacePolicyRequest) (*Policy, error) {
-	response, err := s.client.raw.ReplacePolicyWithResponse(ctx, policyID, body)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON400, response.JSON401, response.JSON404)
-}
-
-func (s PoliciesService) Delete(ctx context.Context, policyID string) error {
-	response, err := s.client.raw.DeletePolicyWithResponse(ctx, policyID)
-	if err != nil {
-		return err
-	}
-	return unwrapEmpty(response.StatusCode(), response.Body, response.JSON401, response.JSON404)
-}
-
-func (s PoliciesService) Effective(ctx context.Context, params *ReadEffectivePolicyParams) (*EffectivePolicy, error) {
-	response, err := s.client.raw.ReadEffectivePolicyWithResponse(ctx, params)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON400, response.JSON401)
 }
 
 type BudgetsService struct {

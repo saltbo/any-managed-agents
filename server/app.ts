@@ -10,13 +10,10 @@ import { registerBudgetRoutes } from './http/budgets'
 import { registerConnectionRoutes } from './http/connections'
 import { registerConnectorRoutes } from './http/connectors'
 import e2e from './http/e2e'
-import { registerEffectivePolicyRoutes } from './http/effective-policy'
 import { registerEnvironmentRoutes } from './http/environments'
-import { registerFederatedTenantRoutes } from './http/federated-tenants'
 import health from './http/health'
 import { registerLeaseRoutes } from './http/leases'
 import { registerMemoryStoreRoutes } from './http/memory-stores'
-import { registerPolicyRoutes } from './http/policies'
 import { registerProjectRoutes } from './http/projects'
 import { registerProviderRoutes } from './http/providers'
 import { registerRunnerRoutes } from './http/runners'
@@ -71,7 +68,6 @@ export function createApp() {
   // a sub-router mounted at the resource's original chain position, so the
   // assembled route order and AppType stay identical.
   const auth = registerAuthRoutes(createDepsApiRouter())
-  const federatedTenants = registerFederatedTenantRoutes(createDepsApiRouter())
   const projects = registerProjectRoutes(createDepsApiRouter())
   const triggers = registerTriggerRoutes(createDepsApiRouter())
   const agents = registerAgentRoutes(createDepsApiRouter())
@@ -82,8 +78,6 @@ export function createApp() {
   const leases = registerLeaseRoutes(createDepsApiRouter())
   const connectors = registerConnectorRoutes(createDepsApiRouter())
   const connections = registerConnectionRoutes(createDepsApiRouter())
-  const policies = registerPolicyRoutes(createDepsApiRouter())
-  const effectivePolicy = registerEffectivePolicyRoutes(createDepsApiRouter())
   const budgets = registerBudgetRoutes(createDepsApiRouter())
   const usageRecords = registerUsageRecordRoutes(createDepsApiRouter())
   const usageSummary = registerUsageSummaryRoutes(createDepsApiRouter())
@@ -95,7 +89,6 @@ export function createApp() {
   const routes = app
     .route('/api/v1/health', health)
     .route('/api/v1/e2e', e2e)
-    .route('/api/v1/auth/federated-tenants', federatedTenants)
     .route('/api/v1/auth', auth)
     .route('/api/v1/projects', projects)
     .route('/api/v1/agents', agents)
@@ -105,8 +98,6 @@ export function createApp() {
     .route('/api/v1/runners', runners)
     .route('/api/v1/work-items', workItems)
     .route('/api/v1/leases', leases)
-    .route('/api/v1/policies', policies)
-    .route('/api/v1/effective-policy', effectivePolicy)
     .route('/api/v1/budgets', budgets)
     .route('/api/v1/connectors', connectors)
     .route('/api/v1/connections', connections)
