@@ -54,11 +54,11 @@ async function createRuntimeCredential(authorization: string) {
     body: JSON.stringify({
       name: 'AK agent session key',
       type: 'session_env_secret',
-      secret: { provider: 'cloudflare-secrets', secretValue: 'raw-ak-agent-key' },
+      secret: { secretValue: 'raw-ak-agent-key' },
     }),
   })
   expect(credentialRes.status).toBe(201)
-  return (await credentialRes.json()) as { id: string; activeVersionId: string }
+  return (await credentialRes.json()) as { id: string; activeVersionId: string; activeVersion: { secretRef: string } }
 }
 
 async function registerActiveRunner(authorization: string, environmentId: string) {
@@ -110,9 +110,10 @@ async function createTrigger(
     enabled: boolean
     archivedAt: string | null
     metadata: Record<string, unknown>
-    resourceRefs: Record<string, unknown>[]
+    volumes: Record<string, unknown>[]
+    volumeMounts: Record<string, unknown>[]
     env: Record<string, string>
-    secretEnv: Array<{ name: string; credentialRef: { credentialId: string; versionId?: string } }>
+    envFrom: Array<{ name: string; credentialRef: { credentialId: string; versionId?: string } }>
     schedule: { intervalSeconds: number; windowSeconds: number } | null
   }
 }
@@ -283,7 +284,7 @@ describe('[CF] /api/v1/triggers', () => {
         type: 'validation_error',
         details: {
           fields: {
-            metadata: 'Secret material must be stored in vault references.',
+            metadata: 'Secret material must be stored in secret references.',
           },
         },
       },
@@ -337,7 +338,7 @@ describe('[CF] /api/v1/triggers', () => {
         type: 'validation_error',
         details: {
           fields: {
-            metadata: 'Secret material must be stored in vault references.',
+            metadata: 'Secret material must be stored in secret references.',
           },
         },
       },
@@ -367,12 +368,14 @@ describe('[CF] /api/v1/triggers', () => {
         runtime: 'ama',
         name: 'Banking bonus heartbeat',
         promptTemplate: 'Research current Canadian banking bonus offers.',
-        resourceRefs: [{ type: 'github_repository', owner: 'saltbo', repo: 'agent-kanban' }],
+        volumes: [{ name: 'repo', type: 'github_repository', owner: 'saltbo', repo: 'agent-kanban' }],
+        volumeMounts: [{ name: 'repo', mountPath: '/workspace/repos/saltbo/agent-kanban' }],
         env: { AK_API_URL: 'http://localhost:8788', AK_WORKER: agent.id },
-        secretEnv: [
+        envFrom: [
           {
+            type: 'secret',
             name: 'AK_AGENT_KEY',
-            credentialRef: { credentialId: credential.id, versionId: credential.activeVersionId },
+            secretRef: credential.activeVersion.secretRef,
           },
         ],
         schedule: { type: 'interval', intervalSeconds: 3600 },
@@ -390,12 +393,14 @@ describe('[CF] /api/v1/triggers', () => {
     expect(trigger).toMatchObject({
       enabled: true,
       nextDueAt: dueAt,
-      resourceRefs: [{ type: 'github_repository', owner: 'saltbo', repo: 'agent-kanban' }],
+      volumes: [{ name: 'repo', type: 'github_repository', owner: 'saltbo', repo: 'agent-kanban' }],
+      volumeMounts: [{ name: 'repo', mountPath: '/workspace/repos/saltbo/agent-kanban' }],
       env: { AK_API_URL: 'http://localhost:8788', AK_WORKER: agent.id },
-      secretEnv: [
+      envFrom: [
         {
+          type: 'secret',
           name: 'AK_AGENT_KEY',
-          credentialRef: { credentialId: credential.id, versionId: credential.activeVersionId },
+          secretRef: credential.activeVersion.secretRef,
         },
       ],
       schedule: { intervalSeconds: 3600 },
@@ -658,7 +663,7 @@ describe('[CF] /api/v1/triggers', () => {
     const sessionId = dispatch.runs[0]?.sessionId
     const sessionRes = await jsonFetch(`/api/v1/sessions/${sessionId}`, authorization)
     expect(sessionRes.status).toBe(200)
-    await expect(sessionRes.json()).resolves.toMatchObject({ environmentId: environment.id })
+    await expect(sessionRes.json()).resolves.toMatchObject({ spec: { environmentId: environment.id } })
   })
 
   it('fails an unpinned trigger run when no runner environment is available [spec: triggers/dispatch]', async () => {

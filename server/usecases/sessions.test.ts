@@ -1,12 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Session, SessionMessage } from '@server/domain/session'
 import type { Deps } from './deps'
-import {
-  type AuthScope,
-  type SessionMessageRecord,
-  type SessionRecord,
-  type SessionRuntimeRow,
-  SessionValidationError,
-} from './ports'
+import { type AuthScope, type RuntimeSessionHandle, SessionValidationError } from './ports'
 
 // The session write usecases now call the runtime session usecases directly
 // (the SessionRuntimeGateway indirection was removed). Mock that module so these
@@ -44,7 +39,7 @@ const auth: AuthScope = {
   permissions: [],
 }
 
-function sessionRow(overrides: Partial<SessionRuntimeRow> = {}): SessionRuntimeRow {
+function sessionRow(overrides: Partial<RuntimeSessionHandle> = {}): RuntimeSessionHandle {
   return {
     id: 'sess_1',
     projectId: 'project_1',
@@ -57,43 +52,74 @@ function sessionRow(overrides: Partial<SessionRuntimeRow> = {}): SessionRuntimeR
   }
 }
 
-function sessionRecord(overrides: Partial<SessionRecord> = {}): SessionRecord {
+function sessionRecord(overrides: Partial<Session> = {}): Session {
   return {
-    id: 'sess_1',
-    projectId: 'project_1',
-    agentId: 'agent_1',
-    agentVersionId: 'agentver_1',
-    agentSnapshot: {},
-    environmentId: null,
-    environmentVersionId: null,
-    environmentSnapshot: null,
-    title: null,
-    resourceRefs: [],
-    env: {},
-    secretEnv: [],
-    runtimeMetadata: {
-      hostingMode: 'cloud',
-      runtime: 'cloudflare',
-      runtimeConfig: {},
-      provider: 'workers-ai',
-      model: null,
-      driver: null,
-      backend: null,
-      protocol: null,
+    metadata: {
+      uid: 'sess_1',
+      pid: 'project_1',
+      name: 'sess_1',
+      labels: {},
+      annotations: {},
+      createdBy: 'user_1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      archivedAt: null,
     },
-    state: 'idle',
-    stateReason: null,
-    metadata: {},
-    startedAt: null,
-    stoppedAt: null,
-    archivedAt: null,
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
+    spec: {
+      agentId: 'agent_1',
+      environmentId: null,
+      runtime: 'ama',
+      env: {},
+      envFrom: [],
+      volumes: [],
+      volumeMounts: [],
+    },
+    status: {
+      phase: 'idle',
+      reason: null,
+      conditions: [],
+      bindings: {
+        agent: {
+          versionId: 'agentver_1',
+          snapshot: {
+            id: 'agentver_1',
+            agentId: 'agent_1',
+            projectId: 'project_1',
+            version: 1,
+            instructions: null,
+            providerId: 'workers-ai',
+            model: null,
+            skills: [],
+            subagents: [],
+            role: null,
+            capabilityTags: [],
+            handoffPolicy: {},
+            memoryPolicy: {},
+            tools: [],
+            mcpConnectors: [],
+            metadata: {},
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+        },
+        environment: { id: null, versionId: null, snapshot: null },
+        runtime: 'ama',
+      },
+      placement: {
+        hostingMode: 'cloud',
+        provider: 'workers-ai',
+        model: null,
+        driver: null,
+        backend: null,
+        protocol: null,
+      },
+      startedAt: null,
+      stoppedAt: null,
+    },
     ...overrides,
   }
 }
 
-function messageRecord(overrides: Partial<SessionMessageRecord> = {}): SessionMessageRecord {
+function messageRecord(overrides: Partial<SessionMessage> = {}): SessionMessage {
   return {
     id: 'msg_1',
     sessionId: 'sess_1',
@@ -124,7 +150,7 @@ function fakeDeps(
     updateFields: async () => sessionRecord(),
     listMessages: async () => ({ rows: [], hasMore: false }),
     findMessage: async () => null,
-    insertMessage: async (record): Promise<SessionMessageRecord> =>
+    insertMessage: async (record): Promise<SessionMessage> =>
       messageRecord({
         content: record.content,
         delivery: record.delivery,
@@ -142,8 +168,13 @@ function fakeDeps(
   }
   const runtime: Required<RuntimeSessionOverrides> = {
     createSession: async () => ({ ok: true, value: sessionRecord() }),
-    stopSession: async () => ({ ok: true, value: sessionRecord({ state: 'stopped' }) }),
-    archiveSession: async () => ({ ok: true, value: sessionRecord({ archivedAt: '2026-01-02T00:00:00.000Z' }) }),
+    stopSession: async () => ({ ok: true, value: sessionRecord({ status: { ...sessionRecord().status, phase: 'stopped' } }) }),
+    archiveSession: async () => ({
+      ok: true,
+      value: sessionRecord({
+        metadata: { ...sessionRecord().metadata, archivedAt: '2026-01-02T00:00:00.000Z' },
+      }),
+    }),
     unarchiveSession: async () => sessionRecord(),
     dispatchPrompt: async () => ({ ok: true, delivery: 'live', state: 'accepted' }),
     decideApproval: async () => ({
@@ -196,7 +227,7 @@ function fakeDeps(
     runners: undefined as unknown as Deps['runners'],
     workItems: undefined as unknown as Deps['workItems'],
     leases: undefined as unknown as Deps['leases'],
-    runtimeSecretEnv: undefined as unknown as Deps['runtimeSecretEnv'],
+    runtimeSecrets: undefined as unknown as Deps['runtimeSecrets'],
     cloudTurnQueue: undefined as unknown as Deps['cloudTurnQueue'],
     runnerChannel: undefined as unknown as Deps['runnerChannel'],
     cloudRuntime: undefined as unknown as Deps['cloudRuntime'],
@@ -261,7 +292,7 @@ describe('[spec: sessions/archive] updateSession — archived session', () => {
       fakeDeps(),
       auth,
       sessionRow({ archivedAt: '2026-01-02T00:00:00.000Z' }),
-      { title: 'New' },
+      { name: 'New' },
       null,
     )
     expect(result.ok).toBe(false)
@@ -290,7 +321,7 @@ describe('[spec: sessions/archive] updateSession — archived session', () => {
       fakeDeps(),
       auth,
       sessionRow({ archivedAt: '2026-01-02T00:00:00.000Z' }),
-      { archived: false, title: 'oops' },
+      { archived: false, name: 'oops' },
       null,
     )
     expect(result.ok).toBe(false)
@@ -300,26 +331,26 @@ describe('[spec: sessions/archive] updateSession — archived session', () => {
   })
 })
 
-describe('[spec: sessions/archive] updateSession — title and metadata edits', () => {
-  it('updates only title when title is provided', async () => {
+describe('[spec: sessions/archive] updateSession — name and metadata edits', () => {
+  it('updates only name when name is provided', async () => {
     const updated: string[] = []
     const deps = fakeDeps({
       sessions: {
         updateFields: async (_pid, _sid, fields) => {
           updated.push(JSON.stringify(fields))
-          return sessionRecord({ title: fields.title ?? null })
+          return sessionRecord({ metadata: { ...sessionRecord().metadata, name: fields.title ?? 'sess_1' } })
         },
         findRuntimeRow: async () => sessionRow(),
-        find: async () => sessionRecord({ title: 'New title' }),
+        find: async () => sessionRecord({ metadata: { ...sessionRecord().metadata, name: 'New title' } }),
       },
     })
-    const result = await updateSession(deps, auth, sessionRow(), { title: 'New title' }, null)
+    const result = await updateSession(deps, auth, sessionRow(), { name: 'New title' }, null)
     expect(result.ok).toBe(true)
     expect(updated).toHaveLength(1)
     expect(JSON.parse(updated[0] ?? '')).toMatchObject({ title: 'New title' })
   })
 
-  it('skips null title from the fields payload', async () => {
+  it('skips null name from the fields payload', async () => {
     const updated: object[] = []
     const deps = fakeDeps({
       sessions: {
@@ -331,7 +362,7 @@ describe('[spec: sessions/archive] updateSession — title and metadata edits', 
         find: async () => sessionRecord(),
       },
     })
-    await updateSession(deps, auth, sessionRow(), { title: null }, null)
+    await updateSession(deps, auth, sessionRow(), { name: null }, null)
     expect(updated[0]).not.toHaveProperty('title')
   })
 
@@ -347,20 +378,21 @@ describe('[spec: sessions/archive] updateSession — title and metadata edits', 
       sessions: {
         updateFields: async (_pid, _sid, fields) => {
           mergedMetadata = fields.metadata
-          return sessionRecord({ metadata: fields.metadata ?? {} })
+          return sessionRecord()
         },
-        findRuntimeRow: async () => sessionRow({ metadata: { keep: 'yes', remove: 'old' } }),
+        findRuntimeRow: async () =>
+          sessionRow({ metadata: { runtime: 'ama', annotations: { keep: 'yes', remove: 'old' } } }),
         find: async () => sessionRecord(),
       },
     })
     await updateSession(
       deps,
       auth,
-      sessionRow({ metadata: { keep: 'yes', remove: 'old' } }),
+      sessionRow({ metadata: { runtime: 'ama', annotations: { keep: 'yes', remove: 'old' } } }),
       { metadata: { remove: null } },
       null,
     )
-    expect(mergedMetadata).toEqual({ keep: 'yes' })
+    expect(mergedMetadata).toEqual({ runtime: 'ama', labels: {}, annotations: { keep: 'yes' } })
   })
 
   it('throws when updateFields returns null', async () => {
@@ -369,7 +401,7 @@ describe('[spec: sessions/archive] updateSession — title and metadata edits', 
         updateFields: async () => null,
       },
     })
-    await expect(updateSession(deps, auth, sessionRow(), { title: 'X' }, null)).rejects.toThrow(
+    await expect(updateSession(deps, auth, sessionRow(), { name: 'X' }, null)).rejects.toThrow(
       'Updated session row is required',
     )
   })
@@ -381,7 +413,7 @@ describe('[spec: sessions/archive] updateSession — title and metadata edits', 
         findRuntimeRow: async () => null,
       },
     })
-    await expect(updateSession(deps, auth, sessionRow(), { title: 'X' }, null)).rejects.toThrow(
+    await expect(updateSession(deps, auth, sessionRow(), { name: 'X' }, null)).rejects.toThrow(
       'Updated session row is required',
     )
   })
@@ -394,7 +426,7 @@ describe('[spec: sessions/stop] updateSession — stop transition', () => {
       sessionRuntime: {
         stopSession: async () => {
           stopped = true
-          return { ok: true, value: sessionRecord({ state: 'stopped' }) }
+          return { ok: true, value: sessionRecord({ status: { ...sessionRecord().status, phase: 'stopped' } }) }
         },
       },
     })
@@ -420,10 +452,15 @@ describe('[spec: sessions/stop] updateSession — stop transition', () => {
     let archived = false
     const deps = fakeDeps({
       sessionRuntime: {
-        stopSession: async () => ({ ok: true, value: sessionRecord({ state: 'stopped' }) }),
+        stopSession: async () => ({ ok: true, value: sessionRecord({ status: { ...sessionRecord().status, phase: 'stopped' } }) }),
         archiveSession: async () => {
           archived = true
-          return { ok: true, value: sessionRecord({ archivedAt: '2026-01-02T00:00:00.000Z' }) }
+          return {
+            ok: true,
+            value: sessionRecord({
+              metadata: { ...sessionRecord().metadata, archivedAt: '2026-01-02T00:00:00.000Z' },
+            }),
+          }
         },
       },
       sessions: {
@@ -438,7 +475,7 @@ describe('[spec: sessions/stop] updateSession — stop transition', () => {
   it('throws when findRuntimeRow returns null after stop+archive', async () => {
     const deps = fakeDeps({
       sessionRuntime: {
-        stopSession: async () => ({ ok: true, value: sessionRecord({ state: 'stopped' }) }),
+        stopSession: async () => ({ ok: true, value: sessionRecord({ status: { ...sessionRecord().status, phase: 'stopped' } }) }),
       },
       sessions: {
         findRuntimeRow: async () => null,
@@ -457,7 +494,12 @@ describe('[spec: sessions/archive] updateSession — archive without stop', () =
       sessionRuntime: {
         archiveSession: async () => {
           archived = true
-          return { ok: true, value: sessionRecord({ archivedAt: '2026-01-02T00:00:00.000Z' }) }
+          return {
+            ok: true,
+            value: sessionRecord({
+              metadata: { ...sessionRecord().metadata, archivedAt: '2026-01-02T00:00:00.000Z' },
+            }),
+          }
         },
       },
     })
@@ -516,7 +558,7 @@ describe('[spec: sessions/prompt] sendSessionMessage', () => {
     let inserted: string | null = null
     const deps = fakeDeps({
       sessions: {
-        insertMessage: async (record): Promise<SessionMessageRecord> => {
+        insertMessage: async (record): Promise<SessionMessage> => {
           inserted = record.content
           return messageRecord({ content: record.content })
         },
@@ -587,7 +629,7 @@ describe('[spec: sessions/prompt] sendSessionMessage', () => {
         dispatchPrompt: async () => ({ ok: true, delivery: 'queued', state: 'accepted' }),
       },
       sessions: {
-        insertMessage: async (record): Promise<SessionMessageRecord> => {
+        insertMessage: async (record): Promise<SessionMessage> => {
           capturedDelivery = record.delivery
           capturedState = record.state
           return messageRecord({ delivery: record.delivery, state: record.state })

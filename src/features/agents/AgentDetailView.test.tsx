@@ -5,6 +5,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import type { Agent, AgentVersion, Session, SessionAgentSnapshot } from '@/lib/api'
+import { buildTestSession, type TestSessionOverrides } from '@/testing/session'
 import { AgentDetailView } from './AgentDetailView'
 
 const now = '2026-05-23T00:00:00.000Z'
@@ -85,40 +86,8 @@ function buildSessionAgentSnapshot(overrides: Partial<SessionAgentSnapshot> = {}
   }
 }
 
-function buildSession(overrides: Partial<Session> = {}): Session {
-  return {
-    id: 'session_1',
-    projectId: 'project_1',
-    agentId: 'agent_1',
-    agentVersionId: 'agentver_1',
-    agentSnapshot: buildSessionAgentSnapshot(),
-    environmentId: 'env_1',
-    environmentVersionId: 'envver_1',
-    environmentSnapshot: null,
-    title: 'Test session',
-    resourceRefs: [],
-    env: {},
-    secretEnv: [],
-    runtimeMetadata: {
-      hostingMode: 'cloud',
-      runtime: 'ama',
-      runtimeConfig: {},
-      provider: 'workers-ai',
-      model: '@cf/moonshotai/kimi-k2.6',
-      driver: 'ama-cloud',
-      backend: 'ama-cloud',
-      protocol: 'ama-runtime-rpc',
-    },
-    state: 'idle',
-    stateReason: null,
-    metadata: {},
-    startedAt: now,
-    stoppedAt: null,
-    archivedAt: null,
-    createdAt: now,
-    updatedAt: now,
-    ...overrides,
-  }
+function buildSession(overrides: TestSessionOverrides = {}): Session {
+  return buildTestSession({ agentSnapshot: buildSessionAgentSnapshot(), name: 'Test session', ...overrides })
 }
 
 describe('[spec: agents/console-detail] AgentDetailView', () => {

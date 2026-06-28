@@ -7,7 +7,15 @@ import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from '@/c
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { type Agent, api, type Environment, type MemoryStore, type MemoryStoreAccess } from '@/lib/api'
+import {
+  type Agent,
+  api,
+  type Environment,
+  type MemoryStore,
+  type MemoryStoreAccess,
+  type Volume,
+  type VolumeMount,
+} from '@/lib/api'
 import { queryKeys } from '@/lib/query-keys'
 import { isArchived } from './format'
 import type { AgentFormState, EnvironmentFormState, SessionFormState, VaultFormState } from './types'
@@ -318,10 +326,10 @@ export function SessionForm({
           <FieldDescription>Runtime is selected per session.</FieldDescription>
         </Field>
         <TextField
-          label="Title"
-          description="Optional short label used in session lists and detail headers."
-          value={value.title}
-          onChange={(title) => setValue({ ...value, title })}
+          label="Name"
+          description="Optional short name used in session lists and detail headers."
+          value={value.name}
+          onChange={(name) => setValue({ ...value, name })}
         />
         <TextAreaField
           label="Metadata"
@@ -330,10 +338,16 @@ export function SessionForm({
           onChange={(metadata) => setValue({ ...value, metadata })}
         />
         <TextAreaField
-          label="Resource refs"
-          description='JSON array of safe refs, such as {"type":"github_repository","owner":"org","repo":"repo"}.'
-          value={value.resourceRefs}
-          onChange={(resourceRefs) => setValue({ ...value, resourceRefs })}
+          label="Volumes"
+          description='JSON array of mountable inputs, such as {"name":"source","type":"github_repository","owner":"org","repo":"repo"}.'
+          value={value.volumes}
+          onChange={(volumes) => setValue({ ...value, volumes })}
+        />
+        <TextAreaField
+          label="Volume mounts"
+          description='JSON array of mounts, such as {"name":"source","mountPath":"/workspace/repos/org/repo","readOnly":true}.'
+          value={value.volumeMounts}
+          onChange={(volumeMounts) => setValue({ ...value, volumeMounts })}
         />
         {memoryStores.length > 0 ? (
           <MemoryStoreAttachmentField memoryStores={memoryStores} value={value} setValue={setValue} />
@@ -356,27 +370,35 @@ function MemoryStoreAttachmentField({
   value: SessionFormState
   setValue: (value: SessionFormState) => void
 }) {
-  const refs = parseResourceRefs(value.resourceRefs)
-  const memoryRefs = refs.filter((ref) => ref.type === 'memory_store')
+  const volumes = parseVolumes(value.volumes)
+  const volumeMounts = parseVolumeMounts(value.volumeMounts)
+  const memoryVolumes = volumes.filter((volume) => volume.type === 'memory_store')
   function updateMemoryStore(storeId: string, checked: boolean | 'indeterminate') {
-    const nextRefs = refs.filter((ref) => !(ref.type === 'memory_store' && ref.storeId === storeId))
+    const name = memoryVolumeName(storeId)
+    const nextVolumes = volumes.filter((volume) => !(volume.type === 'memory_store' && volume.storeId === storeId))
+    const nextMounts = volumeMounts.filter((mount) => mount.name !== name)
     if (checked === true) {
-      nextRefs.push({ type: 'memory_store', storeId, access: 'read_only' })
+      nextVolumes.push({ name, type: 'memory_store', storeId, access: 'read_only' })
+      nextMounts.push({ name, mountPath: `/workspace/.ama/memory-stores/${storeId}`, readOnly: true })
     }
-    setValue({ ...value, resourceRefs: JSON.stringify(nextRefs, null, 2) })
+    setValue({ ...value, volumes: JSON.stringify(nextVolumes, null, 2), volumeMounts: JSON.stringify(nextMounts, null, 2) })
   }
   function updateAccess(storeId: string, access: MemoryStoreAccess) {
-    const nextRefs = refs.map((ref) =>
-      ref.type === 'memory_store' && ref.storeId === storeId ? { ...ref, access } : ref,
+    const name = memoryVolumeName(storeId)
+    const nextVolumes = volumes.map((volume) =>
+      volume.type === 'memory_store' && volume.storeId === storeId ? { ...volume, access } : volume,
     )
-    setValue({ ...value, resourceRefs: JSON.stringify(nextRefs, null, 2) })
+    const nextMounts = volumeMounts.map((mount) =>
+      mount.name === name ? { ...mount, readOnly: access !== 'read_write' } : mount,
+    )
+    setValue({ ...value, volumes: JSON.stringify(nextVolumes, null, 2), volumeMounts: JSON.stringify(nextMounts, null, 2) })
   }
   return (
     <Field>
       <FieldLabel>Memory stores</FieldLabel>
       <div className="space-y-2 rounded-md border p-3">
         {memoryStores.map((store) => {
-          const attached = memoryRefs.find((ref) => ref.storeId === store.id)
+          const attached = memoryVolumes.find((volume) => volume.storeId === store.id)
           return (
             <div key={store.id} className="flex flex-wrap items-center gap-3">
               <Checkbox
@@ -414,15 +436,26 @@ function MemoryStoreAttachmentField({
   )
 }
 
-function parseResourceRefs(
-  value: string,
-): Array<Record<string, unknown> & { type?: string; storeId?: string; access?: string }> {
+function parseVolumes(value: string): Array<Volume & { storeId?: string; access?: string }> {
   try {
     const parsed = JSON.parse(value) as unknown
-    return Array.isArray(parsed) ? (parsed as Array<Record<string, unknown>>) : []
+    return Array.isArray(parsed) ? (parsed as Array<Volume & { storeId?: string; access?: string }>) : []
   } catch {
     return []
   }
+}
+
+function parseVolumeMounts(value: string): VolumeMount[] {
+  try {
+    const parsed = JSON.parse(value) as unknown
+    return Array.isArray(parsed) ? (parsed as VolumeMount[]) : []
+  } catch {
+    return []
+  }
+}
+
+function memoryVolumeName(storeId: string) {
+  return `memory-${storeId}`
 }
 
 function hostingModeLabel(value: Environment['hostingMode']) {

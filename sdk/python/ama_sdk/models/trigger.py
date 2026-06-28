@@ -14,13 +14,14 @@ from typing import cast
 import datetime
 
 if TYPE_CHECKING:
-  from ..models.git_hub_repository_resource_ref import GitHubRepositoryResourceRef
-  from ..models.memory_store_resource_ref import MemoryStoreResourceRef
-  from ..models.resource_ref_type_1 import ResourceRefType1
-  from ..models.secret_env_entry import SecretEnvEntry
+  from ..models.env_from_entry import EnvFromEntry
+  from ..models.git_hub_repository_volume import GitHubRepositoryVolume
+  from ..models.memory_store_volume import MemoryStoreVolume
+  from ..models.secret_volume import SecretVolume
   from ..models.trigger_env import TriggerEnv
   from ..models.trigger_metadata import TriggerMetadata
   from ..models.trigger_schedule_type_0 import TriggerScheduleType0
+  from ..models.volume_mount import VolumeMount
 
 
 
@@ -42,11 +43,13 @@ class Trigger:
             runtime (Runtime):  Example: codex.
             name (str):  Example: Daily research heartbeat.
             prompt_template (str):  Example: Research current Canadian banking bonus offers..
-            resource_refs (list[GitHubRepositoryResourceRef | MemoryStoreResourceRef | ResourceRefType1]):  Example:
-                [{'type': 'github_repository', 'owner': 'openai', 'repo': 'openai'}].
             env (TriggerEnv):  Example: {'AK_API_URL': 'https://ak.example.com'}.
-            secret_env (list[SecretEnvEntry]):  Example: [{'name': 'AK_AGENT_KEY', 'credentialRef': {'credentialId':
-                'vaultcred_abc123'}}].
+            env_from (list[EnvFromEntry]):  Example: [{'type': 'secret', 'name': 'AK_AGENT_KEY', 'secretRef':
+                'ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123'}].
+            volumes (list[GitHubRepositoryVolume | MemoryStoreVolume | SecretVolume]):  Example: [{'name': 'project-
+                secrets', 'type': 'secret', 'secretRef': 'ama://vaults/vault_abc123'}].
+            volume_mounts (list[VolumeMount]):  Example: [{'name': 'project-secrets', 'mountPath':
+                '/workspace/.ama/secrets/project', 'readOnly': True}].
             schedule (None | TriggerScheduleType0):  Example: {'type': 'interval', 'intervalSeconds': 86400,
                 'windowSeconds': 0}.
             enabled (bool):  Example: True.
@@ -68,9 +71,10 @@ class Trigger:
     runtime: Runtime
     name: str
     prompt_template: str
-    resource_refs: list[GitHubRepositoryResourceRef | MemoryStoreResourceRef | ResourceRefType1]
     env: TriggerEnv
-    secret_env: list[SecretEnvEntry]
+    env_from: list[EnvFromEntry]
+    volumes: list[GitHubRepositoryVolume | MemoryStoreVolume | SecretVolume]
+    volume_mounts: list[VolumeMount]
     schedule: None | TriggerScheduleType0
     enabled: bool
     next_due_at: datetime.datetime | None
@@ -88,13 +92,14 @@ class Trigger:
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.git_hub_repository_resource_ref import GitHubRepositoryResourceRef
-        from ..models.memory_store_resource_ref import MemoryStoreResourceRef
-        from ..models.resource_ref_type_1 import ResourceRefType1
-        from ..models.secret_env_entry import SecretEnvEntry
+        from ..models.env_from_entry import EnvFromEntry
+        from ..models.git_hub_repository_volume import GitHubRepositoryVolume
+        from ..models.memory_store_volume import MemoryStoreVolume
+        from ..models.secret_volume import SecretVolume
         from ..models.trigger_env import TriggerEnv
         from ..models.trigger_metadata import TriggerMetadata
         from ..models.trigger_schedule_type_0 import TriggerScheduleType0
+        from ..models.volume_mount import VolumeMount
         id = self.id
 
         project_id = self.project_id
@@ -112,26 +117,33 @@ class Trigger:
 
         prompt_template = self.prompt_template
 
-        resource_refs = []
-        for resource_refs_item_data in self.resource_refs:
-            resource_refs_item: dict[str, Any]
-            if isinstance(resource_refs_item_data, GitHubRepositoryResourceRef):
-                resource_refs_item = resource_refs_item_data.to_dict()
-            elif isinstance(resource_refs_item_data, ResourceRefType1):
-                resource_refs_item = resource_refs_item_data.to_dict()
-            else:
-                resource_refs_item = resource_refs_item_data.to_dict()
-
-            resource_refs.append(resource_refs_item)
-
-
-
         env = self.env.to_dict()
 
-        secret_env = []
-        for secret_env_item_data in self.secret_env:
-            secret_env_item = secret_env_item_data.to_dict()
-            secret_env.append(secret_env_item)
+        env_from = []
+        for env_from_item_data in self.env_from:
+            env_from_item = env_from_item_data.to_dict()
+            env_from.append(env_from_item)
+
+
+
+        volumes = []
+        for volumes_item_data in self.volumes:
+            volumes_item: dict[str, Any]
+            if isinstance(volumes_item_data, SecretVolume):
+                volumes_item = volumes_item_data.to_dict()
+            elif isinstance(volumes_item_data, GitHubRepositoryVolume):
+                volumes_item = volumes_item_data.to_dict()
+            else:
+                volumes_item = volumes_item_data.to_dict()
+
+            volumes.append(volumes_item)
+
+
+
+        volume_mounts = []
+        for volume_mounts_item_data in self.volume_mounts:
+            volume_mounts_item = volume_mounts_item_data.to_dict()
+            volume_mounts.append(volume_mounts_item)
 
 
 
@@ -185,9 +197,10 @@ class Trigger:
             "runtime": runtime,
             "name": name,
             "promptTemplate": prompt_template,
-            "resourceRefs": resource_refs,
             "env": env,
-            "secretEnv": secret_env,
+            "envFrom": env_from,
+            "volumes": volumes,
+            "volumeMounts": volume_mounts,
             "schedule": schedule,
             "enabled": enabled,
             "nextDueAt": next_due_at,
@@ -206,13 +219,14 @@ class Trigger:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.git_hub_repository_resource_ref import GitHubRepositoryResourceRef
-        from ..models.memory_store_resource_ref import MemoryStoreResourceRef
-        from ..models.resource_ref_type_1 import ResourceRefType1
-        from ..models.secret_env_entry import SecretEnvEntry
+        from ..models.env_from_entry import EnvFromEntry
+        from ..models.git_hub_repository_volume import GitHubRepositoryVolume
+        from ..models.memory_store_volume import MemoryStoreVolume
+        from ..models.secret_volume import SecretVolume
         from ..models.trigger_env import TriggerEnv
         from ..models.trigger_metadata import TriggerMetadata
         from ..models.trigger_schedule_type_0 import TriggerScheduleType0
+        from ..models.volume_mount import VolumeMount
         d = dict(src_dict)
         id = d.pop("id")
 
@@ -242,56 +256,66 @@ class Trigger:
 
         prompt_template = d.pop("promptTemplate")
 
-        resource_refs = []
-        _resource_refs = d.pop("resourceRefs")
-        for resource_refs_item_data in (_resource_refs):
-            def _parse_resource_refs_item(data: object) -> GitHubRepositoryResourceRef | MemoryStoreResourceRef | ResourceRefType1:
-                try:
-                    if not isinstance(data, dict):
-                        raise TypeError()
-                    componentsschemas_resource_ref_type_0 = GitHubRepositoryResourceRef.from_dict(data)
-
-
-
-                    return componentsschemas_resource_ref_type_0
-                except (TypeError, ValueError, AttributeError, KeyError):
-                    pass
-                try:
-                    if not isinstance(data, dict):
-                        raise TypeError()
-                    componentsschemas_resource_ref_type_1 = ResourceRefType1.from_dict(data)
-
-
-
-                    return componentsschemas_resource_ref_type_1
-                except (TypeError, ValueError, AttributeError, KeyError):
-                    pass
-                if not isinstance(data, dict):
-                    raise TypeError()
-                componentsschemas_resource_ref_type_2 = MemoryStoreResourceRef.from_dict(data)
-
-
-
-                return componentsschemas_resource_ref_type_2
-
-            resource_refs_item = _parse_resource_refs_item(resource_refs_item_data)
-
-            resource_refs.append(resource_refs_item)
-
-
         env = TriggerEnv.from_dict(d.pop("env"))
 
 
 
 
-        secret_env = []
-        _secret_env = d.pop("secretEnv")
-        for secret_env_item_data in (_secret_env):
-            secret_env_item = SecretEnvEntry.from_dict(secret_env_item_data)
+        env_from = []
+        _env_from = d.pop("envFrom")
+        for env_from_item_data in (_env_from):
+            env_from_item = EnvFromEntry.from_dict(env_from_item_data)
 
 
 
-            secret_env.append(secret_env_item)
+            env_from.append(env_from_item)
+
+
+        volumes = []
+        _volumes = d.pop("volumes")
+        for volumes_item_data in (_volumes):
+            def _parse_volumes_item(data: object) -> GitHubRepositoryVolume | MemoryStoreVolume | SecretVolume:
+                try:
+                    if not isinstance(data, dict):
+                        raise TypeError()
+                    componentsschemas_volume_type_0 = SecretVolume.from_dict(data)
+
+
+
+                    return componentsschemas_volume_type_0
+                except (TypeError, ValueError, AttributeError, KeyError):
+                    pass
+                try:
+                    if not isinstance(data, dict):
+                        raise TypeError()
+                    componentsschemas_volume_type_1 = GitHubRepositoryVolume.from_dict(data)
+
+
+
+                    return componentsschemas_volume_type_1
+                except (TypeError, ValueError, AttributeError, KeyError):
+                    pass
+                if not isinstance(data, dict):
+                    raise TypeError()
+                componentsschemas_volume_type_2 = MemoryStoreVolume.from_dict(data)
+
+
+
+                return componentsschemas_volume_type_2
+
+            volumes_item = _parse_volumes_item(volumes_item_data)
+
+            volumes.append(volumes_item)
+
+
+        volume_mounts = []
+        _volume_mounts = d.pop("volumeMounts")
+        for volume_mounts_item_data in (_volume_mounts):
+            volume_mounts_item = VolumeMount.from_dict(volume_mounts_item_data)
+
+
+
+            volume_mounts.append(volume_mounts_item)
 
 
         def _parse_schedule(data: object) -> None | TriggerScheduleType0:
@@ -408,9 +432,10 @@ class Trigger:
             runtime=runtime,
             name=name,
             prompt_template=prompt_template,
-            resource_refs=resource_refs,
             env=env,
-            secret_env=secret_env,
+            env_from=env_from,
+            volumes=volumes,
+            volume_mounts=volume_mounts,
             schedule=schedule,
             enabled=enabled,
             next_due_at=next_due_at,

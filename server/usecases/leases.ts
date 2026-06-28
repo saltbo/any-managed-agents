@@ -1,4 +1,5 @@
 import { runnerCapabilityEligible, runnerRuntimeReady } from '@server/domain/runner-queue'
+import type { EnvFromEntry, Volume, VolumeMount } from '@server/domain/runtime/execution-inputs'
 import type { Deps } from './deps'
 import {
   type AuthScope,
@@ -76,13 +77,18 @@ export async function claimLease(
   const payload = candidate.rawPayload
   if (
     payload.type === 'session.start' &&
-    Array.isArray(payload.runtimeSecretEnv) &&
-    payload.runtimeSecretEnv.length > 0
+    ((Array.isArray(payload.envFrom) && payload.envFrom.length > 0) ||
+      (Array.isArray(payload.volumeMounts) && payload.volumeMounts.length > 0))
   ) {
     try {
-      await deps.runtimeSecretEnv.resolve(
+      await deps.runtimeSecrets.resolveEnv(
         { organizationId: auth.organization.id, projectId: auth.project.id },
-        payload.runtimeSecretEnv,
+        payload.envFrom as EnvFromEntry[],
+      )
+      await deps.runtimeSecrets.resolveVolumes(
+        { organizationId: auth.organization.id, projectId: auth.project.id },
+        Array.isArray(payload.volumes) ? (payload.volumes as Volume[]) : [],
+        Array.isArray(payload.volumeMounts) ? (payload.volumeMounts as VolumeMount[]) : [],
       )
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Runner secret resolution failed'
@@ -100,9 +106,9 @@ export async function claimLease(
   return claimed.lease
 }
 
-// Materializes the raw work-item payload for the lease-holding runner, resolving
-// vault secret env into runtimeEnv. Non-session-start payloads and payloads
-// without secret env pass through unchanged.
+// Materializes the raw work-item payload for the lease-holding runner. Secret
+// refs are projected into runtimeEnv and resolved volume files; raw refs stay
+// server-side.
 export async function materializeWorkItemPayload(
   deps: Deps,
   scope: { organizationId: string; projectId: string },
@@ -112,14 +118,18 @@ export async function materializeWorkItemPayload(
   if (payload.type !== 'session.start') {
     return payload
   }
-  const runtimeSecretEnv = Array.isArray(payload.runtimeSecretEnv) ? payload.runtimeSecretEnv : []
-  if (runtimeSecretEnv.length === 0) {
-    return payload
+  const envFrom = Array.isArray(payload.envFrom) ? (payload.envFrom as EnvFromEntry[]) : []
+  const volumes = Array.isArray(payload.volumes) ? (payload.volumes as Volume[]) : []
+  const volumeMounts = Array.isArray(payload.volumeMounts) ? (payload.volumeMounts as VolumeMount[]) : []
+  const { envFrom: _envFrom, volumes: _volumes, volumeMounts: _volumeMounts, ...runtimePayload } = payload
+  if (envFrom.length === 0 && volumeMounts.length === 0) {
+    return runtimePayload
   }
   const runtimeEnv =
     payload.runtimeEnv && typeof payload.runtimeEnv === 'object' && !Array.isArray(payload.runtimeEnv)
       ? { ...(payload.runtimeEnv as Record<string, string>) }
       : {}
-  const resolved = await deps.runtimeSecretEnv.resolve(scope, runtimeSecretEnv)
-  return { ...payload, runtimeEnv: { ...runtimeEnv, ...resolved } }
+  const resolvedEnv = await deps.runtimeSecrets.resolveEnv(scope, envFrom)
+  const resolvedVolumes = await deps.runtimeSecrets.resolveVolumes(scope, volumes, volumeMounts)
+  return { ...runtimePayload, runtimeEnv: { ...runtimeEnv, ...resolvedEnv }, resolvedVolumes }
 }

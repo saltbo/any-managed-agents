@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Session, SessionMessage } from '@server/domain/session'
 import type { Deps } from './deps'
-import type { AuthScope, ClaimedRun, DueTrigger, SessionMessageRecord, SessionRecord, TriggerRecord } from './ports'
+import type { AuthScope, ClaimedRun, DueTrigger, TriggerRecord } from './ports'
 
 // dispatchDueScheduledTriggers now calls the runtime createSession usecase
 // directly (the SessionRuntimeGateway indirection was removed). Mock that module
@@ -43,9 +44,10 @@ function dueTrigger(overrides: Partial<DueTrigger> = {}): DueTrigger {
     environmentId: 'env_1',
     runtime: 'ama',
     promptTemplate: 'Run the analysis',
-    resourceRefs: [],
     env: {},
-    secretEnv: [],
+    envFrom: [],
+    volumes: [],
+    volumeMounts: [],
     metadata: {},
     nextDueAt: '2026-01-01T00:00:00.000Z',
     intervalSeconds: 3600,
@@ -64,9 +66,10 @@ function httpTrigger(overrides: Partial<TriggerRecord> = {}): TriggerRecord {
     environmentId: 'env_1',
     runtime: 'ama',
     promptTemplate: 'Handle {{ body.ticket.id }} from {{ query.source }}',
-    resourceRefs: [],
     env: {},
-    secretEnv: [],
+    envFrom: [],
+    volumes: [],
+    volumeMounts: [],
     schedule: null,
     enabled: true,
     nextDueAt: null,
@@ -90,43 +93,74 @@ function claimedRun(overrides: Partial<ClaimedRun> = {}): ClaimedRun {
   }
 }
 
-function sessionRecord(overrides: Partial<SessionRecord> = {}): SessionRecord {
+function sessionRecord(overrides: Partial<Session> = {}): Session {
   return {
-    id: 'sess_1',
-    projectId: 'project_1',
-    agentId: 'agent_1',
-    agentVersionId: 'agentver_1',
-    agentSnapshot: {},
-    environmentId: 'env_1',
-    environmentVersionId: null,
-    environmentSnapshot: null,
-    title: null,
-    resourceRefs: [],
-    env: {},
-    secretEnv: [],
-    runtimeMetadata: {
-      hostingMode: 'cloud',
-      runtime: 'ama',
-      runtimeConfig: {},
-      provider: 'workers-ai',
-      model: null,
-      driver: null,
-      backend: null,
-      protocol: null,
+    metadata: {
+      uid: 'sess_1',
+      pid: 'project_1',
+      name: 'sess_1',
+      labels: {},
+      annotations: {},
+      createdBy: 'user_1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      archivedAt: null,
     },
-    state: 'pending',
-    stateReason: null,
-    metadata: {},
-    startedAt: null,
-    stoppedAt: null,
-    archivedAt: null,
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
+    spec: {
+      agentId: 'agent_1',
+      environmentId: 'env_1',
+      runtime: 'ama',
+      env: {},
+      envFrom: [],
+      volumes: [],
+      volumeMounts: [],
+    },
+    status: {
+      phase: 'pending',
+      reason: null,
+      conditions: [],
+      bindings: {
+        agent: {
+          versionId: 'agentver_1',
+          snapshot: {
+            id: 'agentver_1',
+            agentId: 'agent_1',
+            projectId: 'project_1',
+            version: 1,
+            instructions: null,
+            providerId: 'workers-ai',
+            model: null,
+            skills: [],
+            subagents: [],
+            role: null,
+            capabilityTags: [],
+            handoffPolicy: {},
+            memoryPolicy: {},
+            tools: [],
+            mcpConnectors: [],
+            metadata: {},
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+        },
+        environment: { id: 'env_1', versionId: null, snapshot: null },
+        runtime: 'ama',
+      },
+      placement: {
+        hostingMode: 'cloud',
+        provider: 'workers-ai',
+        model: null,
+        driver: null,
+        backend: null,
+        protocol: null,
+      },
+      startedAt: null,
+      stoppedAt: null,
+    },
     ...overrides,
   }
 }
 
-function sessionMessageRecord(overrides: Partial<SessionMessageRecord> = {}): SessionMessageRecord {
+function sessionMessageRecord(overrides: Partial<SessionMessage> = {}): SessionMessage {
   return {
     id: 'msg_1',
     sessionId: 'sess_existing',
@@ -193,7 +227,7 @@ function fakeDeps(
     runners: undefined as unknown as Deps['runners'],
     workItems: undefined as unknown as Deps['workItems'],
     leases: undefined as unknown as Deps['leases'],
-    runtimeSecretEnv: undefined as unknown as Deps['runtimeSecretEnv'],
+    runtimeSecrets: undefined as unknown as Deps['runtimeSecrets'],
     cloudTurnQueue: undefined as unknown as Deps['cloudTurnQueue'],
     runnerChannel: undefined as unknown as Deps['runnerChannel'],
     cloudRuntime: undefined as unknown as Deps['cloudRuntime'],
@@ -463,11 +497,13 @@ describe('[spec: triggers/dispatch] dispatchDueScheduledTriggers — environment
     expect(dispatchedEnvironmentId).toBe('env_pinned')
   })
 
-  it('passes scheduled trigger env and secretEnv through to createSession', async () => {
-    const secretEnv = [{ name: 'AK_AGENT_KEY', credentialRef: { credentialId: 'cred_1', versionId: 'ver_1' } }]
+  it('passes scheduled trigger env and envFrom through to createSession', async () => {
+    const envFrom = [
+      { type: 'secret' as const, name: 'AK_AGENT_KEY', secretRef: 'ama://vaults/vault_1/credentials/cred_1/versions/ver_1' },
+    ]
     const trigger = dueTrigger({
       env: { AK_AGENT_ID: 'agent_1', AK_SESSION_ID: 'ak_session_1' },
-      secretEnv,
+      envFrom,
     })
     let capturedOptions: Record<string, unknown> | null = null
     const deps = fakeDeps({
@@ -480,7 +516,7 @@ describe('[spec: triggers/dispatch] dispatchDueScheduledTriggers — environment
       },
     })
     await dispatchDueScheduledTriggers(deps)
-    expect(capturedOptions).toMatchObject({ env: trigger.env, secretEnv })
+    expect(capturedOptions).toMatchObject({ env: trigger.env, envFrom })
   })
 })
 
@@ -689,7 +725,7 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
       sessionRuntime: {
         createSession: async (_deps, _auth, input) => {
           initialPrompt = input.options.initialPrompt
-          return { ok: true, value: sessionRecord({ id: 'sess_http' }) }
+          return { ok: true, value: sessionRecord({ metadata: { ...sessionRecord().metadata, uid: 'sess_http' } }) }
         },
       },
     })
@@ -713,7 +749,7 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
       sessionRuntime: {
         createSession: async (_deps, _auth, input) => {
           sessionMetadata = input.options.metadata
-          return { ok: true, value: sessionRecord({ id: 'sess_http' }) }
+          return { ok: true, value: sessionRecord({ metadata: { ...sessionRecord().metadata, uid: 'sess_http' } }) }
         },
       },
       triggerDispatch: {
@@ -962,18 +998,20 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
     expect(runtimeSessions.createSession).not.toHaveBeenCalled()
   })
 
-  it('passes HTTP trigger env and secretEnv through to createSession', async () => {
-    const secretEnv = [{ name: 'AK_AGENT_KEY', credentialRef: { credentialId: 'cred_1', versionId: 'ver_1' } }]
+  it('passes HTTP trigger env and envFrom through to createSession', async () => {
+    const envFrom = [
+      { type: 'secret' as const, name: 'AK_AGENT_KEY', secretRef: 'ama://vaults/vault_1/credentials/cred_1/versions/ver_1' },
+    ]
     const trigger = httpTrigger({
       env: { AK_AGENT_ID: 'agent_1', AK_SESSION_ID: 'ak_session_1' },
-      secretEnv,
+      envFrom,
     })
     let capturedOptions: Record<string, unknown> | null = null
     const deps = fakeDeps({
       sessionRuntime: {
         createSession: async (_deps, _auth, input) => {
           capturedOptions = input.options as unknown as Record<string, unknown>
-          return { ok: true, value: sessionRecord({ id: 'sess_http' }) }
+          return { ok: true, value: sessionRecord({ metadata: { ...sessionRecord().metadata, uid: 'sess_http' } }) }
         },
       },
     })
@@ -985,7 +1023,7 @@ describe('[spec: triggers/http-dispatch] dispatchHttpTrigger', () => {
         headers: {},
       },
     })
-    expect(capturedOptions).toMatchObject({ env: trigger.env, secretEnv })
+    expect(capturedOptions).toMatchObject({ env: trigger.env, envFrom })
   })
 
   it('records the HTTP session key on newly created trigger run metadata', async () => {

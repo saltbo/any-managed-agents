@@ -12,6 +12,23 @@ import type { CatalogModel } from '@server/domain/model-catalog'
 import type { ModelAvailability, ModelCatalogState } from '@server/domain/provider'
 import type { RunnerAuthMode } from '@server/domain/runner-queue'
 import type {
+  EnvFromEntry,
+  MemoryStoreVolume,
+  ResolvedVolumeMount,
+  Volume,
+  VolumeMount,
+} from '@server/domain/runtime/execution-inputs'
+import type {
+  MessageDelivery,
+  MessageState,
+  Session,
+  SessionApproval,
+  SessionConnection,
+  SessionEvent,
+  SessionMessage,
+  SessionState,
+} from '@server/domain/session'
+import type {
   CredentialState,
   SecretMaterial,
   SecretProvider,
@@ -19,6 +36,22 @@ import type {
   VaultScope,
   VersionState,
 } from '@server/domain/vault'
+
+export type {
+  EnvFromEntry,
+  ResolvedVolumeFile,
+  ResolvedVolumeMount,
+  Volume,
+  VolumeMount,
+} from '@server/domain/runtime/execution-inputs'
+
+export type {
+  Session,
+  SessionApproval,
+  SessionConnection,
+  SessionEvent,
+  SessionMessage,
+}
 
 // A port-level error so the http layer can map orchestration validation
 // failures to a 400 without importing usecases internals or adapters. The
@@ -509,11 +542,10 @@ export interface CredentialVersionRecord {
   version: number
   provider: SecretProvider
   secretRef: string
-  externalVaultPath: string | null
   referenceName: string
   state: VersionState
   hasSecret: boolean
-  // Includes stored secret material (encryptedSecretValue, cloudflareSecretId).
+  // Includes stored secret material (encryptedSecretValue).
   // Never serialize the raw metadata — strip stored secret keys first.
   metadata: Record<string, unknown>
   createdAt: string
@@ -740,13 +772,10 @@ export interface VaultRepo {
   versionHasActiveReferences(version: CredentialVersionRecord): Promise<boolean>
 }
 
-// Secret-store boundary (crypto + Cloudflare secrets). Stores a secret value
-// for a credential version (returns stored metadata, e.g. ciphertext +
-// cloudflareSecretId) and deletes a stored secret. The only fetch caller for
-// vault secret material. Throws on invalid material or transport failure.
+// Secret-store boundary. Stores a secret value for a credential version and
+// returns stored metadata such as ciphertext. Throws on invalid material.
 export interface SecretStoreGateway {
   store(reference: SecretReference, values: SecretMaterial): Promise<Record<string, unknown> | undefined>
-  delete(version: { provider: string; hasSecret: boolean; metadata: Record<string, unknown> }): Promise<void>
 }
 
 // --- connectors ---
@@ -1328,11 +1357,6 @@ export interface TriggerSchedule {
 
 export type TriggerType = 'scheduled' | 'http'
 
-export interface SecretEnvEntry {
-  name: string
-  credentialRef: { credentialId: string; versionId?: string }
-}
-
 export interface TriggerConfig {
   type: TriggerType
   agentId: string
@@ -1342,9 +1366,10 @@ export interface TriggerConfig {
   runtime: RuntimeName
   name: string
   promptTemplate: string
-  resourceRefs: Record<string, unknown>[]
   env: Record<string, string>
-  secretEnv: SecretEnvEntry[]
+  envFrom: EnvFromEntry[]
+  volumes: Volume[]
+  volumeMounts: VolumeMount[]
   schedule: TriggerSchedule | null
   enabled: boolean
   nextDueAt: string | null
@@ -1451,9 +1476,10 @@ export interface DueTrigger {
   environmentId: string | null
   runtime: RuntimeName
   promptTemplate: string
-  resourceRefs: Record<string, unknown>[]
   env: Record<string, string>
-  secretEnv: SecretEnvEntry[]
+  envFrom: EnvFromEntry[]
+  volumes: Volume[]
+  volumeMounts: VolumeMount[]
   metadata: Record<string, unknown>
   nextDueAt: string
   intervalSeconds: number
@@ -1902,24 +1928,21 @@ export interface LeaseChannelConflict {
   message: string
 }
 
-// Runtime secret-env boundary: resolves vault credential references into raw
-// secret values for runtime dispatch. Used by the lease claim guard (to fail
-// fast on an unresolvable credential) and work-item payload materialization.
-// Resolved values never touch D1, events, audit, or logs. Throws on an
-// unresolvable reference.
-export interface RuntimeSecretEnvGateway {
-  resolve(scope: { organizationId: string; projectId: string }, items: unknown): Promise<Record<string, string>>
+// Runtime secret boundary: resolves secret refs into runtime-only projections.
+// Plain values are never persisted, logged, audited, or surfaced in events.
+export interface RuntimeSecretGateway {
+  resolveEnv(
+    scope: { organizationId: string; projectId: string },
+    items: EnvFromEntry[],
+  ): Promise<Record<string, string>>
+  resolveVolumes(
+    scope: { organizationId: string; projectId: string },
+    volumes: Volume[],
+    volumeMounts: VolumeMount[],
+  ): Promise<ResolvedVolumeMount[]>
 }
 
 // --- cloud turn queue (usecase ↔ queue worker contract) ---
-
-// A runtime secret-env entry as it rides on a cloud-turn message: a vault
-// credential reference resolved to a raw value only inside the queue consumer.
-// Mirrors the gateway adapter's RuntimeSecretEnvEntry without importing it.
-export interface CloudTurnSecretEnvEntry {
-  name: string
-  credentialRef: { credentialId: string; versionId?: string }
-}
 
 // Cloud session work runs from a queue consumer instead of HTTP waitUntil:
 // a turn that shells out (installs, builds, sleeps) or a sandbox cold boot
@@ -1958,9 +1981,10 @@ export type CloudSessionStartMessage = {
   projectId: string
   runtime: string
   runtimeConfig: Record<string, unknown>
-  resourceRefs: Array<Record<string, unknown>>
   runtimeEnv: Record<string, string>
-  runtimeSecretEnv: CloudTurnSecretEnvEntry[]
+  envFrom: EnvFromEntry[]
+  volumes: Volume[]
+  volumeMounts: VolumeMount[]
   initialPrompt?: string
 }
 
@@ -1992,7 +2016,8 @@ export interface RunnerChannel {
   // Reads writable memory-store files from a runner-owned sandbox workspace.
   readMemoryStoreMemories(input: {
     sessionId: string
-    resourceRefs: Record<string, unknown>[]
+    volumes: MemoryStoreVolume[]
+    volumeMounts: VolumeMount[]
   }): Promise<Array<{ storeId: string; memories: Array<{ path: string; content: string }> }>>
 }
 
@@ -2021,12 +2046,12 @@ export interface SandboxRuntimeStartInput {
   agentSnapshot: Record<string, unknown>
   environmentSnapshot: Record<string, unknown> | null
   mcpSnapshot?: Record<string, unknown>
-  resourceRefs?: Record<string, unknown>[]
+  volumes?: Volume[]
+  volumeMounts?: VolumeMount[]
+  // Already materialized runtime environment: direct env merged with resolved
+  // secret refs before crossing into the runtime host.
   runtimeEnv?: Record<string, string>
-  runtimeSecretEnv?: CloudTurnSecretEnvEntry[]
-  // Secret env values already resolved from the vault by the control plane.
-  // Applied to the sandbox session env but never written to workspace files.
-  resolvedSecretEnv?: Record<string, string>
+  resolvedVolumes?: ResolvedVolumeMount[]
 }
 
 export interface SandboxRuntimeStartResult {
@@ -2103,7 +2128,8 @@ export interface RuntimeWorkspaceReader {
   readMemoryStoreMemories(input: {
     sessionId: string
     sandboxId: string
-    resourceRefs: Record<string, unknown>[]
+    volumes: MemoryStoreVolume[]
+    volumeMounts: VolumeMount[]
   }): Promise<Array<{ storeId: string; memories: Array<{ path: string; content: string }> }>>
 }
 
@@ -2234,25 +2260,16 @@ export interface SessionOrchestrationStore {
   // ── credential validation ──
   activeCredentialVersionExists(organizationId: string, projectId: string, versionId: string): Promise<boolean>
   activeCredentialExists(organizationId: string, projectId: string, credentialId: string): Promise<boolean>
-  activeCredentialForSecretEnv(
+  secretVersionForResolution(
     organizationId: string,
     projectId: string,
-    credentialId: string,
-  ): Promise<{ id: string; activeVersionId: string | null } | null>
-  activeVersionForCredentialExists(credentialId: string, versionId: string): Promise<boolean>
-
-  // ── secret-env resolution ──
-  credentialForResolution(
+    secretRef: string,
+  ): Promise<{ state: string; metadata: string; secretRef: string } | null>
+  vaultVersionsForResolution(
     organizationId: string,
     projectId: string,
-    credentialId: string,
-  ): Promise<{ state: string; activeVersionId: string | null } | null>
-  credentialVersionForResolution(
-    organizationId: string,
-    projectId: string,
-    credentialId: string,
-    versionId: string,
-  ): Promise<{ state: string; metadata: string; externalVaultPath: string | null; secretRef: string } | null>
+    secretRef: string,
+  ): Promise<{ name: string; state: string; metadata: string; secretRef: string }[] | null>
 
   // ── work-item enqueue + resume ──
   insertWorkItem(row: WorkItemInsert): Promise<void>
@@ -2327,98 +2344,6 @@ export interface SessionOrchestrationStore {
 
 // --- sessions ---
 
-// The session DTO that crosses the wire. Internal plumbing columns
-// (durableObjectName, sandboxId, runtimeEndpointPath, organizationId,
-// createdByUserId, piRuntimeId, piProcessId, modelConfig) never reach this
-// record — the repo strips them. runtimeMetadata, hostingMode, runtime, and
-// model are derived inside the repo from the stored snapshot + metadata so the
-// http layer serializes by identity.
-export interface SessionRuntimeMetadata {
-  hostingMode: string
-  runtime: string
-  runtimeConfig: Record<string, unknown>
-  provider: string
-  model: string | null
-  driver: string | null
-  backend: string | null
-  protocol: string | null
-}
-
-export interface SessionRecord {
-  id: string
-  projectId: string
-  agentId: string
-  agentVersionId: string
-  agentSnapshot: Record<string, unknown>
-  environmentId: string | null
-  environmentVersionId: string | null
-  environmentSnapshot: Record<string, unknown> | null
-  title: string | null
-  resourceRefs: Record<string, unknown>[]
-  env: Record<string, string>
-  secretEnv: Array<{ name: string; credentialRef: { credentialId: string; versionId?: string } }>
-  runtimeMetadata: SessionRuntimeMetadata
-  state: string
-  stateReason: string | null
-  metadata: Record<string, unknown>
-  startedAt: string | null
-  stoppedAt: string | null
-  archivedAt: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-export interface SessionConnectionRecord {
-  sessionId: string
-  transport: string | null
-  path: string | null
-  state: string
-  stateReason: string | null
-}
-
-export interface SessionMessageRecord {
-  id: string
-  sessionId: string
-  type: 'prompt'
-  content: string
-  delivery: string
-  state: string
-  error: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-export interface SessionEventRecord {
-  id: string
-  projectId: string
-  sessionId: string
-  sequence: number
-  type: string
-  visibility: string
-  role: string | null
-  parentEventId: string | null
-  correlationId: string | null
-  payload: Record<string, unknown>
-  metadata: Record<string, unknown>
-  createdAt: string
-}
-
-export interface SessionApprovalRecord {
-  id: string
-  sessionId: string
-  toolCallId: string
-  toolName: string
-  input: Record<string, unknown>
-  relatedEventIds: string[]
-  state: string
-  reason: string | null
-  result: Record<string, unknown> | null
-  requestedAt: string
-  decidedAt: string | null
-  createdAt: string
-  updatedAt: string
-}
-
 export interface SessionListQuery {
   projectId: string
   archived: boolean
@@ -2442,7 +2367,7 @@ export interface SessionEventQuery {
 }
 
 export interface SessionEventPage {
-  rows: SessionEventRecord[]
+  rows: SessionEvent[]
   hasMore: boolean
 }
 
@@ -2456,7 +2381,7 @@ export interface SessionEventOverrides {
 // "Storage follows the loop": the canonical event store that routes cloud-loop
 // (ama) sessions to the per-session Session DO (SQLite hot + R2 cold) and leaves
 // pre-migration cloud + self-hosted CLI sessions on D1. One contract over both
-// backends; the read shape (SessionEventRecord/Page) is identical either way.
+// backends; the read shape (SessionEvent/Page) is identical either way.
 export interface SessionEventStore {
   appendCanonicalEvent(
     scope: { organizationId: string; projectId: string; sessionId: string },
@@ -2482,24 +2407,23 @@ export interface SessionMessageListQuery {
 }
 
 export interface SessionMessageListPage {
-  rows: SessionMessageRecord[]
+  rows: SessionMessage[]
   hasMore: boolean
 }
 
 export interface SessionListPage {
-  rows: SessionRecord[]
+  rows: Session[]
   hasMore: boolean
 }
 
-// The raw session row the runtime usecases need to act on a session (stop,
-// dispatch, decide). It carries the internal columns the DTO hides. The repo
-// is the only place the row is read; the usecase passes it straight to the
-// runtime usecases and never inspects the internal fields.
-export interface SessionRuntimeRow {
+// Minimal internal handle for runtime/write usecases. It is not the public
+// Session resource; it carries only the ownership/state/runtime columns needed
+// before mutating or dispatching work.
+export interface RuntimeSessionHandle {
   id: string
   projectId: string | null
   organizationId: string | null
-  state: string
+  state: SessionState
   archivedAt: string | null
   sandboxId: string | null
   metadata: Record<string, unknown>
@@ -2510,12 +2434,16 @@ export interface SessionRuntimeRow {
 // REST surface. Returns DTO records with internal columns stripped.
 export interface SessionRepo {
   list(query: SessionListQuery): Promise<SessionListPage>
-  find(projectId: string, sessionId: string): Promise<SessionRecord | null>
-  findActiveHttpTriggerSession(projectId: string, triggerId: string, key: string): Promise<SessionRuntimeRow | null>
+  find(projectId: string, sessionId: string): Promise<Session | null>
+  findActiveHttpTriggerSession(
+    projectId: string,
+    triggerId: string,
+    key: string,
+  ): Promise<RuntimeSessionHandle | null>
   // The raw row (with internal columns) for runtime operations. Used by write
   // paths that hand the session to the runtime gateway.
-  findRuntimeRow(projectId: string, sessionId: string): Promise<SessionRuntimeRow | null>
-  readConnection(projectId: string, sessionId: string): Promise<SessionConnectionRecord | null>
+  findRuntimeRow(projectId: string, sessionId: string): Promise<RuntimeSessionHandle | null>
+  readConnection(projectId: string, sessionId: string): Promise<SessionConnection | null>
   // The Session DO instance name a session's relay traffic routes to: the runner
   // id for a CLI relay session (one per-runner DO multiplexes its sessions), else
   // the sessionId (ama/cloud). Lets the browser socket + dispatch reach the live
@@ -2530,19 +2458,19 @@ export interface SessionRepo {
     sessionId: string,
     fields: { title?: string; metadata?: Record<string, unknown> },
     updatedAt: string,
-  ): Promise<SessionRecord | null>
+  ): Promise<Session | null>
 
   listMessages(query: SessionMessageListQuery): Promise<SessionMessageListPage>
-  findMessage(projectId: string, sessionId: string, messageId: string): Promise<SessionMessageRecord | null>
+  findMessage(projectId: string, sessionId: string, messageId: string): Promise<SessionMessage | null>
   insertMessage(record: {
     organizationId: string
     projectId: string
     sessionId: string
     content: string
-    delivery: string
-    state: string
+    delivery: MessageDelivery
+    state: MessageState
     createdAt: string
-  }): Promise<SessionMessageRecord>
+  }): Promise<SessionMessage>
 
   queryEvents(sessionId: string, query: SessionEventQuery): Promise<SessionEventPage>
   insertEvents(
@@ -2550,8 +2478,8 @@ export interface SessionRepo {
     events: Array<{ type: string; payload: Record<string, unknown>; metadata: Record<string, unknown> }>,
   ): Promise<number>
 
-  listApprovals(projectId: string, sessionId: string): Promise<SessionApprovalRecord[]>
-  findApproval(projectId: string, sessionId: string, approvalId: string): Promise<SessionApprovalRecord | null>
+  listApprovals(projectId: string, sessionId: string): Promise<SessionApproval[]>
+  findApproval(projectId: string, sessionId: string, approvalId: string): Promise<SessionApproval | null>
 
   // Event-ingest runner gate: resolves the active, unexpired lease a runner
   // identity holds for this session (work item leased to the same runner), or
@@ -2598,18 +2526,18 @@ export type SessionRuntimeOutcome<T> = { ok: true; value: T } | { ok: false; err
 
 export type PromptDispatchResult =
   | { ok: false; status: 409 | 500; message: string; runtimeError?: Record<string, unknown> }
-  | { ok: true; delivery: string; state: string }
+  | { ok: true; delivery: MessageDelivery; state: MessageState }
 
 export interface SessionCreateOptions {
-  title?: string
+  name?: string
   metadata?: Record<string, unknown>
-  resourceRefs?: Record<string, unknown>[]
-  runtime: string
+  volumes?: Volume[]
+  volumeMounts?: VolumeMount[]
+  runtime: RuntimeName
   runtimeConfig?: Record<string, unknown>
   env?: Record<string, string>
-  secretEnv?: Array<{ name: string; credentialRef: { credentialId: string; versionId?: string } }>
+  envFrom?: EnvFromEntry[]
   initialPrompt?: string
-  providerAccessOverride?: boolean
 }
 
 export type { AgentToolAttachment, ConnectorCatalogTool, SecretMaterial }

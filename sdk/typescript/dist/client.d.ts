@@ -33,6 +33,9 @@ export declare function createAmaClient(config: AmaClientConfig): {
     system: {
         health: () => Promise<types.HealthResponse>;
     };
+    configz: {
+        get: () => Promise<types.PublicConfig>;
+    };
     auth: {
         config: (query?: types.ReadAuthConfigData["query"]) => Promise<types.AuthConfig>;
         createSession: (body: types.CreateAuthSessionRequest) => Promise<types.AuthSession>;
@@ -155,9 +158,8 @@ export declare function createAmaClient(config: AmaClientConfig): {
             vaultId: string;
             projectId: string | null;
             version: number;
-            provider: "ama-managed" | "cloudflare-secrets" | "external-vault";
+            provider: "ama";
             secretRef: string;
-            externalVaultPath: string | null;
             referenceName: string;
             state: "active" | "superseded" | "revoked";
             hasSecret: boolean;

@@ -5,7 +5,7 @@ import {
   hasSecretMaterial,
   hostingModeFromSandbox,
   hostingModeFromSnapshot,
-  mergeMetadataUpdate,
+  mergeSessionUserMetadata,
   normalizeMountPath,
   sessionAcceptsPrompts,
   sessionIsTerminal,
@@ -54,9 +54,18 @@ describe('[spec: sessions/workspace-safety] secret material detection', () => {
   })
 })
 
-describe('mergeMetadataUpdate', () => {
-  it('merges set keys and removes keys set to null', () => {
-    expect(mergeMetadataUpdate({ a: 1, b: 2 }, { b: null, c: 3 })).toEqual({ a: 1, c: 3 })
+describe('mergeSessionUserMetadata', () => {
+  it('merges labels and annotations without disturbing runtime metadata', () => {
+    expect(
+      mergeSessionUserMetadata(
+        { runtime: 'ama', labels: { lane: 'old' }, annotations: { keep: 'yes', remove: 'old' } },
+        { labels: { lane: 'new' }, remove: null, ticket: 'AMA-1' },
+      ),
+    ).toEqual({
+      runtime: 'ama',
+      labels: { lane: 'new' },
+      annotations: { keep: 'yes', ticket: 'AMA-1' },
+    })
   })
 })
 

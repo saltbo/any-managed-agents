@@ -19,9 +19,10 @@ export interface SessionRow {
   environmentVersionId: string | null
   environmentSnapshot: string | null
   title: string | null
-  resourceRefs: string
   env: string
-  secretEnv: string
+  envFrom: string
+  volumes: string
+  volumeMounts: string
   projectId: string
   durableObjectName: string
   sandboxId: string | null
@@ -56,9 +57,10 @@ export interface SessionInsert {
   environmentVersionId?: string | null
   environmentSnapshot?: string | null
   title?: string | null
-  resourceRefs?: string
   env?: string
-  secretEnv?: string
+  envFrom?: string
+  volumes?: string
+  volumeMounts?: string
   projectId: string
   durableObjectName: string
   sandboxId?: string | null

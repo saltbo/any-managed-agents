@@ -228,26 +228,32 @@ function createWorkItem(runtime, githubConfig) {
     ...runtime.runtimeConfig,
     ...(runtime.name === 'codex' ? { codexIdleKeepAliveMs: 5000 } : {}),
   }
-  const resourceRefs = [
+  const volumes = [
     ...(githubConfig
       ? [
           {
+            name: 'repo',
             type: 'github_repository',
             owner: githubConfig.owner,
             repo: githubConfig.repo,
             ref: githubConfig.ref,
-            mountPath: `/workspace/repos/${githubConfig.owner}/${githubConfig.repo}`,
           },
         ]
       : []),
     {
+      name: 'memory',
       type: 'memory_store',
       storeId: MEMORY_STORE_ID,
-      name: 'AMA smoke memory',
+      description: 'AMA smoke memory',
       access: 'read_write',
-      mountPath: `/workspace/.ama/memory-stores/${MEMORY_STORE_ID}`,
       memories: [{ path: 'heartbeat.md', content: 'AMA_SMOKE_MEMORY_INITIAL\n' }],
     },
+  ]
+  const volumeMounts = [
+    ...(githubConfig
+      ? [{ name: 'repo', mountPath: `/workspace/repos/${githubConfig.owner}/${githubConfig.repo}` }]
+      : []),
+    { name: 'memory', mountPath: `/workspace/.ama/memory-stores/${MEMORY_STORE_ID}` },
   ]
 
   return {
@@ -272,7 +278,8 @@ function createWorkItem(runtime, githubConfig) {
       runtimeDriver: `${runtime.name}-self-hosted`,
       requiredRunnerCapability: runtime.name,
       runtimeEnv: githubConfig ? { GH_TOKEN: githubConfig.token } : {},
-      resourceRefs,
+      volumes,
+      volumeMounts,
       agentSnapshot: {
         instructions: [
           'These developer instructions are part of the AMA smoke test.',
@@ -504,7 +511,8 @@ function createResumeControlPlane(runtime) {
       runtimeDriver: `${runtime.name}-self-hosted`,
       requiredRunnerCapability: runtime.name,
       runtimeEnv: {},
-      resourceRefs: [],
+      volumes: [],
+      volumeMounts: [],
       agentSnapshot: { instructions: 'AMA resume smoke. Follow the user prompt exactly.' },
       initialPrompt: resume
         ? [

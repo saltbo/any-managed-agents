@@ -14,6 +14,7 @@ import type { SessionRuntimeState } from '@/features/sessions/session-runtime'
 import * as sessionRuntimeModule from '@/features/sessions/use-session-runtime'
 import type { Agent, Environment, Session, SessionConnection, SessionEvent } from '@/lib/api'
 import { HttpResponse, http, server } from '@/test/msw'
+import { buildTestSession, type TestSessionOverrides } from '@/testing/session'
 import { QuickstartSessionStep } from './QuickstartSessionStep'
 
 // ─── Fixtures ───
@@ -99,40 +100,8 @@ const defaultAgentSnapshot: import('@/lib/api').SessionAgentSnapshot = {
   createdAt: '2026-05-23T00:00:00.000Z',
 }
 
-function buildSession(overrides: Partial<Session> = {}): Session {
-  return {
-    id: 'session_1',
-    projectId: 'project_1',
-    agentId: 'agent_1',
-    agentVersionId: 'agentver_1',
-    agentSnapshot: defaultAgentSnapshot,
-    environmentId: 'env_1',
-    environmentVersionId: 'envver_1',
-    environmentSnapshot: null,
-    title: 'Quickstart session',
-    resourceRefs: [],
-    env: {},
-    secretEnv: [],
-    runtimeMetadata: {
-      hostingMode: 'cloud',
-      runtime: 'ama',
-      runtimeConfig: { image: 'node:24' },
-      provider: 'workers-ai',
-      model: '@cf/moonshotai/kimi-k2.6',
-      driver: 'ama-cloud',
-      backend: 'ama-cloud',
-      protocol: 'ama-runtime-rpc',
-    },
-    state: 'idle',
-    stateReason: null,
-    metadata: {},
-    startedAt: now,
-    stoppedAt: null,
-    archivedAt: null,
-    createdAt: now,
-    updatedAt: now,
-    ...overrides,
-  }
+function buildSession(overrides: TestSessionOverrides = {}): Session {
+  return buildTestSession({ agentSnapshot: defaultAgentSnapshot, name: 'Quickstart session', ...overrides })
 }
 
 function buildSessionEvent(overrides: Partial<SessionEvent> = {}): SessionEvent {
@@ -479,7 +448,7 @@ describe('QuickstartSessionStep — session preview loading', () => {
 describe('QuickstartSessionStep — session preview empty transcript', () => {
   it('renders session preview after session loads', async () => {
     mockRuntime()
-    server.use(...sessionPreviewHandlers({ session: buildSession({ state: 'idle' }) }))
+    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }) }))
     renderStep({
       agent: buildAgent(),
       environment: buildEnvironment(),
@@ -494,7 +463,7 @@ describe('QuickstartSessionStep — session preview empty transcript', () => {
 
   it('shows empty transcript message when no events yet', async () => {
     mockRuntime()
-    server.use(...sessionPreviewHandlers({ session: buildSession({ state: 'idle' }) }))
+    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }) }))
     renderStep({
       agent: buildAgent(),
       environment: buildEnvironment(),
@@ -508,7 +477,7 @@ describe('QuickstartSessionStep — session preview empty transcript', () => {
 
   it('renders session id in meta', async () => {
     mockRuntime()
-    server.use(...sessionPreviewHandlers({ session: buildSession({ id: 'sess_xyz', state: 'idle' }) }))
+    server.use(...sessionPreviewHandlers({ session: buildSession({ id: 'sess_xyz', phase: 'idle' }) }))
     renderStep({
       agent: buildAgent(),
       environment: buildEnvironment(),
@@ -523,7 +492,7 @@ describe('QuickstartSessionStep — session preview empty transcript', () => {
 
   it('renders runtime connection status label', async () => {
     mockRuntime({ connection: 'connecting' })
-    server.use(...sessionPreviewHandlers({ session: buildSession({ state: 'idle' }) }))
+    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }) }))
     renderStep({
       agent: buildAgent(),
       environment: buildEnvironment(),
@@ -538,7 +507,7 @@ describe('QuickstartSessionStep — session preview empty transcript', () => {
 
   it('renders pending runtime endpoint when connection data is not loaded', async () => {
     mockRuntime()
-    server.use(...sessionPreviewHandlers({ session: buildSession({ state: 'idle' }), connection: null }))
+    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }), connection: null }))
     renderStep({
       agent: buildAgent(),
       environment: buildEnvironment(),
@@ -552,7 +521,7 @@ describe('QuickstartSessionStep — session preview empty transcript', () => {
 
   it('renders Transcript tab as default', async () => {
     mockRuntime()
-    server.use(...sessionPreviewHandlers({ session: buildSession({ state: 'idle' }) }))
+    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }) }))
     renderStep({
       agent: buildAgent(),
       environment: buildEnvironment(),
@@ -568,7 +537,7 @@ describe('QuickstartSessionStep — session preview empty transcript', () => {
 
   it('renders textarea with safe example prompt prefilled', async () => {
     mockRuntime()
-    server.use(...sessionPreviewHandlers({ session: buildSession({ state: 'idle' }) }))
+    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }) }))
     renderStep({
       agent: buildAgent(),
       environment: buildEnvironment(),
@@ -584,7 +553,7 @@ describe('QuickstartSessionStep — session preview empty transcript', () => {
 
   it('updates textarea value when user types', async () => {
     mockRuntime()
-    server.use(...sessionPreviewHandlers({ session: buildSession({ state: 'idle' }) }))
+    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }) }))
     renderStep({
       agent: buildAgent(),
       environment: buildEnvironment(),
@@ -601,7 +570,7 @@ describe('QuickstartSessionStep — session preview empty transcript', () => {
 
   it('Send first task button is disabled when runtime is not open', async () => {
     mockRuntime({ connection: 'closed' })
-    server.use(...sessionPreviewHandlers({ session: buildSession({ state: 'idle' }) }))
+    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }) }))
     renderStep({
       agent: buildAgent(),
       environment: buildEnvironment(),
@@ -624,7 +593,7 @@ describe('QuickstartSessionStep — session preview empty transcript', () => {
       state: 'idle',
       stateReason: null,
     }
-    server.use(...sessionPreviewHandlers({ session: buildSession({ state: 'idle' }), connection }))
+    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }), connection }))
     renderStep({
       agent: buildAgent(),
       environment: buildEnvironment(),
@@ -650,7 +619,7 @@ describe('QuickstartSessionStep — session preview empty transcript', () => {
       state: 'idle',
       stateReason: null,
     }
-    server.use(...sessionPreviewHandlers({ session: buildSession({ state: 'idle' }), connection }))
+    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }), connection }))
     renderStep({
       agent: buildAgent(),
       environment: buildEnvironment(),
@@ -675,7 +644,7 @@ describe('QuickstartSessionStep — session preview empty transcript', () => {
       state: 'idle',
       stateReason: null,
     }
-    server.use(...sessionPreviewHandlers({ session: buildSession({ state: 'idle' }), connection }))
+    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }), connection }))
     renderStep({
       agent: buildAgent(),
       environment: buildEnvironment(),
@@ -701,7 +670,7 @@ describe('QuickstartSessionStep — session preview empty transcript', () => {
       state: 'idle',
       stateReason: null,
     }
-    server.use(...sessionPreviewHandlers({ session: buildSession({ state: 'running' }), connection }))
+    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'running' }), connection }))
     renderStep({
       agent: buildAgent(),
       environment: buildEnvironment(),
@@ -733,7 +702,7 @@ describe('QuickstartSessionStep — session preview with messages', () => {
         },
       ],
     })
-    server.use(...sessionPreviewHandlers({ session: buildSession({ state: 'idle' }), events: [buildSessionEvent()] }))
+    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }), events: [buildSessionEvent()] }))
     renderStep({
       agent: buildAgent(),
       environment: buildEnvironment(),
@@ -767,7 +736,7 @@ describe('QuickstartSessionStep — session preview with messages', () => {
         },
       ],
     })
-    server.use(...sessionPreviewHandlers({ session: buildSession({ state: 'idle' }) }))
+    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }) }))
     renderStep({
       agent: buildAgent(),
       environment: buildEnvironment(),
@@ -787,7 +756,7 @@ describe('QuickstartSessionStep — session preview with messages', () => {
 describe('QuickstartSessionStep — debug tab', () => {
   it('renders debug tab and shows empty debug state', async () => {
     mockRuntime()
-    server.use(...sessionPreviewHandlers({ session: buildSession({ state: 'idle' }) }))
+    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }) }))
     renderStep({
       agent: buildAgent(),
       environment: buildEnvironment(),
@@ -812,7 +781,7 @@ describe('QuickstartSessionStep — debug tab', () => {
     mockRuntime({
       debugEvents: [{ id: 'dbg_1', type: 'agent_start', payload: { test: true }, createdAt: now }],
     })
-    server.use(...sessionPreviewHandlers({ session: buildSession({ state: 'idle' }) }))
+    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }) }))
     renderStep({
       agent: buildAgent(),
       environment: buildEnvironment(),
@@ -893,7 +862,7 @@ describe('QuickstartSessionStep — session preview with mixed transcript', () =
         },
       ],
     })
-    server.use(...sessionPreviewHandlers({ session: buildSession({ state: 'idle' }), events: [buildSessionEvent()] }))
+    server.use(...sessionPreviewHandlers({ session: buildSession({ phase: 'idle' }), events: [buildSessionEvent()] }))
     renderStep({
       agent: buildAgent(),
       environment: buildEnvironment(),

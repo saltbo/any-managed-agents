@@ -15,15 +15,20 @@
 // server/runtime/session-create module; only dependency acquisition changed.
 
 import type { RuntimeName } from '@server/contracts/environment-contracts'
+import type {
+  EnvFromEntry,
+  GitHubRepositoryVolume,
+  MemoryStoreVolume,
+  Volume,
+  VolumeMount,
+} from '@server/domain/runtime/execution-inputs'
 import { runtimeDriverName, runtimeEndpointPath } from '@server/domain/runtime/driver'
 import {
-  agentSnapshotWithMemoryStoreContext,
-  type GitHubRepositoryResourceRef,
+  agentSnapshotWithWorkspaceContext,
   type NormalizedEnvironmentSnapshot,
   normalizeEnvironmentSnapshot,
-  normalizeResourceRefs,
+  normalizeWorkspaceVolumes,
   parseJson,
-  type ResourceRef,
   type SerializedAgentVersion,
   serializeAgentVersion,
   serializeEnvironmentVersion,
@@ -31,13 +36,13 @@ import {
 import { newId, now, requestIdFrom, stringify } from '@server/domain/runtime/util'
 import { runtimeRequiredRunnerCapability } from '@server/domain/runtime-catalog'
 import { environmentHostingMode } from '@server/domain/runtime-session'
-import { composeInitialPrompt, hasSecretMaterial } from '@server/domain/session'
+import { composeInitialPrompt, hasSecretMaterial, sessionUserMetadata } from '@server/domain/session'
 import { safeRuntimeError } from '@server/runtime-error'
 import { SESSION_DO_EVENT_STORE } from '@shared/session-events'
 import type {
   AgentRow,
   AuthScope,
-  CloudTurnSecretEnvEntry,
+  SessionCreateOptions,
   SessionOrchestrationStore,
   SessionRow,
   SessionUpdate,
@@ -48,9 +53,7 @@ import { startSessionRuntimeForRow } from './cloud-turn'
 import { validateRuntimeProviderModel } from './provisioning'
 
 const ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
-
-type SecretEnvEntry = { name: string; credentialRef: { credentialId: string; versionId?: string } }
-type ResolvedSecretEnvEntry = { name: string; credentialRef: { credentialId: string; versionId: string } }
+const VOLUME_NAME_PATTERN = /^[A-Za-z0-9._-]+$/
 
 // The create flow delegates the inline cloud launch to the cloud-turn usecase,
 // so it needs the full CloudTurnDeps. The self-hosted / queued paths use the
@@ -70,28 +73,18 @@ type SessionRuntimeError = {
   detail?: Record<string, unknown>
 }
 
-export interface CreateSessionOptions {
-  title?: string
-  metadata?: Record<string, unknown>
-  resourceRefs?: ResourceRef[]
-  runtime: RuntimeName
-  runtimeConfig?: Record<string, unknown>
-  env?: Record<string, string>
-  secretEnv?: SecretEnvEntry[]
-  initialPrompt?: string
-  providerAccessOverride?: boolean
-}
+export type CreateSessionOptions = SessionCreateOptions
 
 export type CreateSessionResult = { ok: true; session: SessionRow } | { ok: false; error: SessionRuntimeError }
 
 async function validateResourceCredentialRefs(
   store: SessionOrchestrationStore,
   auth: AuthScope,
-  resourceRefs: ResourceRef[],
+  volumes: Volume[],
 ) {
-  const credentialRefs = resourceRefs
-    .filter((resourceRef): resourceRef is GitHubRepositoryResourceRef => resourceRef.type === 'github_repository')
-    .map((resourceRef) => resourceRef.credentialRef)
+  const credentialRefs = volumes
+    .filter((volume): volume is GitHubRepositoryVolume => volume.type === 'github_repository')
+    .map((volume) => volume.credentialRef)
     .filter((credentialRef): credentialRef is { credentialId: string; versionId?: string } => credentialRef != null)
   const seen = new Set<string>()
   for (const credentialRef of credentialRefs) {
@@ -121,40 +114,51 @@ async function validateResourceCredentialRefs(
   return null
 }
 
-async function resolveMemoryStoreResourceRefs(
+async function resolveMemoryStoreVolumes(
   store: SessionOrchestrationStore,
   auth: AuthScope,
-  resourceRefs: ResourceRef[],
-): Promise<{ resourceRefs: ResourceRef[] } | { fields: Record<string, string> }> {
-  const resolved: ResourceRef[] = []
-  for (const [index, resourceRef] of resourceRefs.entries()) {
-    if (resourceRef.type !== 'memory_store') {
-      resolved.push(resourceRef)
+  volumes: Volume[],
+): Promise<{ volumes: Volume[] } | { fields: Record<string, string> }> {
+  const resolved: Volume[] = []
+  for (const [index, volume] of volumes.entries()) {
+    if (volume.type !== 'memory_store') {
+      resolved.push(volume)
       continue
     }
-    const storeId = typeof resourceRef.storeId === 'string' ? resourceRef.storeId : ''
-    const access = resourceRef.access
+    const storeId = typeof volume.storeId === 'string' ? volume.storeId : ''
+    const access = volume.access
     if (access !== 'read_only' && access !== 'read_write') {
-      return { fields: { [`resourceRefs.${index}.access`]: 'Use read_only or read_write.' } }
+      return { fields: { [`volumes.${index}.access`]: 'Use read_only or read_write.' } }
     }
     const memoryStore = await store.findActiveMemoryStoreResource(auth.project.id, storeId, access)
     if (!memoryStore) {
-      return { fields: { [`resourceRefs.${index}.storeId`]: 'Memory store must exist and be active.' } }
+      return { fields: { [`volumes.${index}.storeId`]: 'Memory store must exist and be active.' } }
     }
-    resolved.push({ ...memoryStore })
+    resolved.push({
+      name: volume.name,
+      type: 'memory_store',
+      storeId,
+      access,
+      storeName: memoryStore.name,
+      ...(memoryStore.description ? { description: memoryStore.description } : {}),
+      memories: memoryStore.memories,
+    } satisfies MemoryStoreVolume)
   }
-  return { resourceRefs: resolved }
+  return { volumes: resolved }
 }
 
 async function resolveSecretEnvEntries(
   store: SessionOrchestrationStore,
   auth: AuthScope,
-  secretEnv: SecretEnvEntry[],
-): Promise<{ entries: ResolvedSecretEnvEntry[] } | { fields: Record<string, string> }> {
-  const entries: ResolvedSecretEnvEntry[] = []
+  envFrom: EnvFromEntry[],
+): Promise<{ entries: EnvFromEntry[] } | { fields: Record<string, string> }> {
+  const entries: EnvFromEntry[] = []
   const names = new Set<string>()
-  for (const [index, entry] of secretEnv.entries()) {
-    const field = `secretEnv.${index}`
+  for (const [index, entry] of envFrom.entries()) {
+    const field = `envFrom.${index}`
+    if (entry.type !== 'secret') {
+      return { fields: { [`${field}.type`]: 'Use secret.' } }
+    }
     if (!ENV_NAME_PATTERN.test(entry.name)) {
       return { fields: { [`${field}.name`]: 'Use a valid environment variable name.' } }
     }
@@ -162,34 +166,82 @@ async function resolveSecretEnvEntries(
       return { fields: { [`${field}.name`]: 'Secret environment variable names must be unique.' } }
     }
     names.add(entry.name)
-    const credential = await store.activeCredentialForSecretEnv(
-      auth.organization.id,
-      auth.project.id,
-      entry.credentialRef.credentialId,
-    )
-    if (!credential) {
+    const secretRef = entry.secretRef
+    const version = await store.secretVersionForResolution(auth.organization.id, auth.project.id, secretRef)
+    if (!version || version.state !== 'active') {
       return {
         fields: {
-          [`${field}.credentialRef.credentialId`]:
-            'Credential must exist, be active, and belong to this project or organization.',
+          [`${field}.secretRef`]: 'Secret reference must exist, be active, and belong to this project or organization.',
         },
       }
     }
-    const versionId = entry.credentialRef.versionId ?? credential.activeVersionId
-    if (!versionId) {
-      return { fields: { [`${field}.credentialRef.credentialId`]: 'Credential has no active version to resolve.' } }
-    }
-    if (!(await store.activeVersionForCredentialExists(credential.id, versionId))) {
-      return {
-        fields: {
-          [`${field}.credentialRef.versionId`]:
-            'Credential version must exist, be active, and belong to the credential.',
-        },
-      }
-    }
-    entries.push({ name: entry.name, credentialRef: { credentialId: credential.id, versionId } })
+    entries.push({ type: 'secret', name: entry.name, secretRef: version.secretRef })
   }
   return { entries }
+}
+
+async function validateDeclaredVolumes(
+  store: SessionOrchestrationStore,
+  auth: AuthScope,
+  volumes: Volume[],
+  volumeMounts: VolumeMount[],
+): Promise<{ volumes: Volume[]; volumeMounts: VolumeMount[] } | { fields: Record<string, string> }> {
+  const volumeNames = new Set<string>()
+  const normalizedVolumes: Volume[] = []
+  for (const [index, volume] of volumes.entries()) {
+    const field = `volumes.${index}`
+    if (!VOLUME_NAME_PATTERN.test(volume.name) || volume.name === '.' || volume.name === '..') {
+      return { fields: { [`${field}.name`]: 'Use a safe volume name.' } }
+    }
+    if (volumeNames.has(volume.name)) {
+      return { fields: { [`${field}.name`]: 'Volume names must be unique.' } }
+    }
+    volumeNames.add(volume.name)
+    if (volume.type !== 'secret') {
+      normalizedVolumes.push(volume)
+      continue
+    }
+    const version = await store.secretVersionForResolution(auth.organization.id, auth.project.id, volume.secretRef)
+    if (version) {
+      if (version.state !== 'active') {
+        return { fields: { [`${field}.secretRef`]: 'Secret reference must be active.' } }
+      }
+      normalizedVolumes.push({ ...volume, secretRef: version.secretRef })
+      continue
+    }
+    const vaultVersions = await store.vaultVersionsForResolution(auth.organization.id, auth.project.id, volume.secretRef)
+    if (!vaultVersions) {
+      return {
+        fields: { [`${field}.secretRef`]: 'Secret reference must point to an active credential version or vault.' },
+      }
+    }
+    normalizedVolumes.push(volume)
+  }
+
+  const mountedNames = new Set<string>()
+  const normalizedMounts: VolumeMount[] = []
+  for (const [index, mount] of volumeMounts.entries()) {
+    const field = `volumeMounts.${index}`
+    if (!volumeNames.has(mount.name)) {
+      return { fields: { [`${field}.name`]: 'Volume mount must reference a declared volume.' } }
+    }
+    if (mountedNames.has(mount.name)) {
+      return { fields: { [`${field}.name`]: 'Volume can only be mounted once.' } }
+    }
+    mountedNames.add(mount.name)
+    if (!mount.mountPath.startsWith('/workspace/') || mount.mountPath.includes('..')) {
+      return { fields: { [`${field}.mountPath`]: 'Volume mount path must stay under /workspace.' } }
+    }
+    normalizedMounts.push({ name: mount.name, mountPath: mount.mountPath, readOnly: mount.readOnly ?? true })
+  }
+
+  for (const volumeName of volumeNames) {
+    if (!mountedNames.has(volumeName)) {
+      return { fields: { volumes: `Volume ${volumeName} must have a matching volume mount.` } }
+    }
+  }
+
+  return { volumes: normalizedVolumes, volumeMounts: normalizedMounts }
 }
 
 // ── Session reads ───────────────────────────────────────────────────────────
@@ -226,9 +278,10 @@ export async function enqueueSelfHostedSessionWork(
     environmentSnapshot: NormalizedEnvironmentSnapshot | null
     runtime: RuntimeName
     runtimeConfig: Record<string, unknown>
-    resourceRefs?: ResourceRef[]
     env?: Record<string, string>
-    secretEnv?: CloudTurnSecretEnvEntry[]
+    envFrom?: EnvFromEntry[]
+    volumes?: Volume[]
+    volumeMounts?: VolumeMount[]
     initialPrompt?: string
     resume?: boolean
     resumeToken?: string | null
@@ -267,14 +320,15 @@ function selfHostedSessionWorkItem(
     hostingMode: values.environmentSnapshot?.hostingMode ?? 'self_hosted',
     runtime: values.runtime,
     runtimeConfig: values.runtimeConfig,
-    resourceRefs: values.resourceRefs ?? [],
     provider: values.agentSnapshot.providerId,
     ...(values.agentSnapshot.model ? { model: values.agentSnapshot.model } : {}),
     runtimeDriver: runtimeDriverName(values.runtime, 'self_hosted'),
     agentSnapshot: values.agentSnapshot,
     environmentSnapshot: values.environmentSnapshot,
     runtimeEnv: values.env ?? {},
-    runtimeSecretEnv: values.secretEnv ?? [],
+    envFrom: values.envFrom ?? [],
+    volumes: values.volumes ?? [],
+    volumeMounts: values.volumeMounts ?? [],
     initialPrompt: values.initialPrompt ?? null,
     resume: values.resume ?? false,
     resumeToken: values.resumeToken ?? null,
@@ -341,7 +395,7 @@ export async function createSessionForAgent(
   const policy = deps.policy
   if (
     hasSecretMaterial(options.metadata) ||
-    hasSecretMaterial(options.resourceRefs) ||
+    hasSecretMaterial(options.volumes) ||
     hasSecretMaterial(options.runtimeConfig) ||
     hasSecretMaterial(options.env)
   ) {
@@ -352,23 +406,23 @@ export async function createSessionForAgent(
         code: 'validation_error',
         message: 'Invalid session configuration',
         fields: {
-          metadata: 'Secret material must be stored in vault references.',
-          resourceRefs: 'Resource references must not contain secret material.',
-          runtimeConfig: 'Secret material must be stored in vault references.',
+          metadata: 'Secret material must be stored in secret references.',
+          volumes: 'Volumes must not contain secret material.',
+          runtimeConfig: 'Secret material must be stored in secret references.',
           env: 'Session environment variables must not contain raw secret material.',
         },
       },
     }
   }
-  const normalizedResources = normalizeResourceRefs(options.resourceRefs ?? [])
-  if ('fields' in normalizedResources) {
+  const normalizedWorkspaceVolumes = normalizeWorkspaceVolumes(options.volumes ?? [], options.volumeMounts ?? [])
+  if ('fields' in normalizedWorkspaceVolumes) {
     return {
       ok: false,
       error: {
         status: 400,
         code: 'validation_error',
-        message: 'Invalid session resource references',
-        fields: normalizedResources.fields,
+        message: 'Invalid session volumes',
+        fields: normalizedWorkspaceVolumes.fields,
       },
     }
   }
@@ -401,7 +455,7 @@ export async function createSessionForAgent(
   const { decision: policyDecision, override: policyOverride } = await policy.evaluateProviderForSession(auth, {
     providerId,
     modelId: agentVersion.model,
-    adminOverride: options.providerAccessOverride === true,
+    adminOverride: false,
   })
   if (!policyDecision.allowed) {
     await audit.record(auth, {
@@ -448,7 +502,6 @@ export async function createSessionForAgent(
         agentId,
         providerId,
         modelId: agentVersion.model,
-        providerAccessOverride: true,
         overriddenDecision: policyOverride,
       },
     })
@@ -485,50 +538,71 @@ export async function createSessionForAgent(
       error: { status: 409, code: 'conflict', message: 'Selected environment is archived or unavailable' },
     }
   }
-  const credentialError = await validateResourceCredentialRefs(store, auth, normalizedResources.resourceRefs)
+  const credentialError = await validateResourceCredentialRefs(store, auth, normalizedWorkspaceVolumes.volumes)
   if (credentialError) {
     return {
       ok: false,
       error: {
         status: 400,
         code: 'validation_error',
-        message: 'Invalid session resource credential reference',
+        message: 'Invalid session volume credential reference',
         fields: credentialError,
       },
     }
   }
-  const resolvedResources = await resolveMemoryStoreResourceRefs(store, auth, normalizedResources.resourceRefs)
-  if ('fields' in resolvedResources) {
+  const resolvedWorkspaceVolumes = await resolveMemoryStoreVolumes(store, auth, normalizedWorkspaceVolumes.volumes)
+  if ('fields' in resolvedWorkspaceVolumes) {
     return {
       ok: false,
       error: {
         status: 400,
         code: 'validation_error',
-        message: 'Invalid session memory store reference',
-        fields: resolvedResources.fields,
+        message: 'Invalid session memory store volume',
+        fields: resolvedWorkspaceVolumes.fields,
       },
     }
   }
-  const resolvedSecretEnv = await resolveSecretEnvEntries(store, auth, options.secretEnv ?? [])
-  if ('fields' in resolvedSecretEnv) {
+  const validatedEnvFrom = await resolveSecretEnvEntries(store, auth, options.envFrom ?? [])
+  if ('fields' in validatedEnvFrom) {
     return {
       ok: false,
       error: {
         status: 400,
         code: 'validation_error',
         message: 'Invalid session secret environment references',
-        fields: resolvedSecretEnv.fields,
+        fields: validatedEnvFrom.fields,
       },
     }
   }
 
   const mergedEnv = options.env ?? {}
-  const mergedSecretEnv = resolvedSecretEnv.entries
+  const mergedEnvFrom = validatedEnvFrom.entries
+  const validatedVolumes = await validateDeclaredVolumes(
+    store,
+    auth,
+    resolvedWorkspaceVolumes.volumes,
+    normalizedWorkspaceVolumes.volumeMounts,
+  )
+  if ('fields' in validatedVolumes) {
+    return {
+      ok: false,
+      error: {
+        status: 400,
+        code: 'validation_error',
+        message: 'Invalid session volumes',
+        fields: validatedVolumes.fields,
+      },
+    }
+  }
 
   const timestamp = now()
   const id = crypto.randomUUID()
   const agentSnapshot = serializeAgentVersion(agentVersion, providerId)
-  const runtimeAgentSnapshot = agentSnapshotWithMemoryStoreContext(agentSnapshot, resolvedResources.resourceRefs)
+  const runtimeAgentSnapshot = agentSnapshotWithWorkspaceContext(
+    agentSnapshot,
+    validatedVolumes.volumes,
+    validatedVolumes.volumeMounts,
+  )
   const baseEnvironmentSnapshot = normalizeEnvironmentSnapshot(serializeEnvironmentVersion(environmentVersion))
   const runtimeConfig = options.runtimeConfig ?? baseEnvironmentSnapshot?.runtimeConfig ?? {}
   const environmentSnapshot = baseEnvironmentSnapshot
@@ -599,6 +673,7 @@ export async function createSessionForAgent(
       }
     }
   }
+  const userMetadata = sessionUserMetadata(options.metadata)
   const pending = {
     id,
     agentId,
@@ -609,10 +684,11 @@ export async function createSessionForAgent(
     environmentId,
     environmentVersionId: environmentVersion.id,
     environmentSnapshot: environmentSnapshot ? stringify(environmentSnapshot) : null,
-    title: options.title ?? null,
-    resourceRefs: stringify(resolvedResources.resourceRefs),
+    title: options.name ?? null,
     env: stringify(mergedEnv),
-    secretEnv: stringify(mergedSecretEnv),
+    envFrom: stringify(mergedEnvFrom),
+    volumes: stringify(validatedVolumes.volumes),
+    volumeMounts: stringify(validatedVolumes.volumeMounts),
     projectId: auth.project.id,
     durableObjectName: `org_${auth.organization.id}:project_${auth.project.id}:session_${id}`,
     sandboxId,
@@ -627,7 +703,8 @@ export async function createSessionForAgent(
     turnLeaseExpiresAt: null,
     continuationDepth: 0,
     metadata: stringify({
-      ...(options.metadata ?? {}),
+      labels: userMetadata.labels,
+      annotations: userMetadata.annotations,
       hostingMode,
       runtime,
       runtimeConfig,
@@ -674,9 +751,10 @@ export async function createSessionForAgent(
         environmentSnapshot,
         runtime,
         runtimeConfig,
-        resourceRefs: resolvedResources.resourceRefs,
         env: mergedEnv,
-        secretEnv: mergedSecretEnv,
+        envFrom: mergedEnvFrom,
+        volumes: validatedVolumes.volumes,
+        volumeMounts: validatedVolumes.volumeMounts,
         ...(initialPrompt !== undefined ? { initialPrompt } : {}),
       })
       return { ok: true, session: pending }
@@ -690,9 +768,10 @@ export async function createSessionForAgent(
         projectId: auth.project.id,
         runtime,
         runtimeConfig,
-        resourceRefs: resolvedResources.resourceRefs,
         runtimeEnv: mergedEnv,
-        runtimeSecretEnv: mergedSecretEnv,
+        envFrom: mergedEnvFrom,
+        volumes: validatedVolumes.volumes,
+        volumeMounts: validatedVolumes.volumeMounts,
         ...(initialPrompt !== undefined ? { initialPrompt } : {}),
       })
       return { ok: true, session: pending }
@@ -704,9 +783,10 @@ export async function createSessionForAgent(
       environmentSnapshot,
       runtime,
       runtimeConfig,
-      resourceRefs: resolvedResources.resourceRefs,
       env: mergedEnv,
-      secretEnv: mergedSecretEnv,
+      envFrom: mergedEnvFrom,
+      volumes: validatedVolumes.volumes,
+      volumeMounts: validatedVolumes.volumeMounts,
       ...(initialPrompt !== undefined ? { initialPrompt } : {}),
     })
     if (!deps.rereadStartedSession) {

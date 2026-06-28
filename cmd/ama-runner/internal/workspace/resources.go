@@ -14,15 +14,15 @@ import (
 	"github.com/samber/lo"
 )
 
-func githubRepositoryResources(resourceRefs []protocol.ResourceRef) []protocol.ResourceRef {
-	return lo.Filter(resourceRefs, func(resource protocol.ResourceRef, _ int) bool {
-		return resource.Type == "github_repository"
+func githubRepositoryVolumes(volumes []protocol.Volume) []protocol.Volume {
+	return lo.Filter(volumes, func(volume protocol.Volume, _ int) bool {
+		return volume.Type == "github_repository"
 	})
 }
 
-func memoryStoreResources(resourceRefs []protocol.ResourceRef) []protocol.ResourceRef {
-	return lo.Filter(resourceRefs, func(resource protocol.ResourceRef, _ int) bool {
-		return resource.Type == "memory_store"
+func memoryStoreVolumes(volumes []protocol.Volume) []protocol.Volume {
+	return lo.Filter(volumes, func(volume protocol.Volume, _ int) bool {
+		return volume.Type == "memory_store"
 	})
 }
 
@@ -32,28 +32,28 @@ func memoryManifestEntries(memories []protocol.MemorySnapshot) []protocol.Memory
 	})
 }
 
-func materializeGitHubRepository(ctx context.Context, workDir string, sessionRoot string, resource protocol.ResourceRef) (string, string, error) {
-	if !safeGitHubSegment(resource.Owner) || !safeGitHubSegment(resource.Repo) {
-		return "", "", fmt.Errorf("github repository resource must include safe owner and repo")
+func materializeGitHubRepository(ctx context.Context, workDir string, sessionRoot string, volume protocol.Volume, mounts []protocol.VolumeMount) (string, string, error) {
+	if !safeGitHubSegment(volume.Owner) || !safeGitHubSegment(volume.Repo) {
+		return "", "", fmt.Errorf("github repository volume must include safe owner and repo")
 	}
-	mountPath, err := localMountPath(sessionRoot, resource)
+	mountPath, err := localMountPath(sessionRoot, mountPathForVolume(volume.Name, mounts, defaultGitHubMountPath(volume)))
 	if err != nil {
 		return "", "", err
 	}
 	if err := os.MkdirAll(filepath.Dir(mountPath), 0o755); err != nil {
 		return "", "", err
 	}
-	cacheDir := filepath.Join(workDir, "repositories", resource.Owner, resource.Repo)
+	cacheDir := filepath.Join(workDir, "repositories", volume.Owner, volume.Repo)
 	lock := repositoryCacheLock(cacheDir)
 	lock.Lock()
 	defer lock.Unlock()
-	if err := ensureRepositoryCache(ctx, cacheDir, resource); err != nil {
+	if err := ensureRepositoryCache(ctx, cacheDir, volume); err != nil {
 		return "", "", err
 	}
 	if fileExists(mountPath) {
 		return mountPath, cacheDir, nil
 	}
-	targetRef, err := resolveWorktreeRef(ctx, cacheDir, resource.Ref)
+	targetRef, err := resolveWorktreeRef(ctx, cacheDir, volume.Ref)
 	if err != nil {
 		return "", "", err
 	}
@@ -63,18 +63,18 @@ func materializeGitHubRepository(ctx context.Context, workDir string, sessionRoo
 	return mountPath, cacheDir, nil
 }
 
-func materializeMemoryStore(sessionRoot string, resource protocol.ResourceRef) (string, error) {
-	if strings.TrimSpace(resource.StoreID) == "" {
-		return "", fmt.Errorf("memory store resource must include storeId")
+func materializeMemoryStore(sessionRoot string, volume protocol.Volume, mounts []protocol.VolumeMount) (string, error) {
+	if strings.TrimSpace(volume.StoreID) == "" {
+		return "", fmt.Errorf("memory store volume must include storeId")
 	}
-	mountPath, err := localMemoryStoreMountPath(sessionRoot, resource)
+	mountPath, err := localMountPath(sessionRoot, mountPathForVolume(volume.Name, mounts, defaultMemoryStoreMountPath(volume)))
 	if err != nil {
 		return "", err
 	}
 	if err := os.MkdirAll(mountPath, 0o755); err != nil {
 		return "", err
 	}
-	for _, memory := range resource.Memories {
+	for _, memory := range volume.Memories {
 		relative, err := cleanMemoryPath(memory.Path)
 		if err != nil {
 			return "", err
@@ -87,7 +87,7 @@ func materializeMemoryStore(sessionRoot string, resource protocol.ResourceRef) (
 			return "", err
 		}
 	}
-	if resource.Access == "read_only" {
+	if volume.Access == "read_only" {
 		if err := filepath.WalkDir(mountPath, func(path string, entry os.DirEntry, walkErr error) error {
 			if walkErr != nil {
 				return walkErr
@@ -101,6 +101,41 @@ func materializeMemoryStore(sessionRoot string, resource protocol.ResourceRef) (
 		}
 	}
 	return mountPath, nil
+}
+
+func materializeResolvedVolume(sessionRoot string, volume protocol.ResolvedVolumeMount) (string, error) {
+	mountPath, err := localMountPathForWorkspacePath(sessionRoot, volume.MountPath)
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(mountPath, 0o700); err != nil {
+		return "", err
+	}
+	for _, file := range volume.Files {
+		relative, err := cleanMemoryPath(file.Path)
+		if err != nil {
+			return "", err
+		}
+		fullPath := filepath.Join(mountPath, relative)
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0o700); err != nil {
+			return "", err
+		}
+		if err := os.WriteFile(fullPath, []byte(file.Content), 0o400); err != nil {
+			return "", err
+		}
+	}
+	if !volume.ReadOnly {
+		return mountPath, nil
+	}
+	return mountPath, filepath.WalkDir(mountPath, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return os.Chmod(path, 0o500)
+		}
+		return os.Chmod(path, 0o400)
+	})
 }
 
 func resetMemoryStorePermissions(root string) error {
@@ -118,20 +153,20 @@ func resetMemoryStorePermissions(root string) error {
 	})
 }
 
-func localMemoryStoreMountPath(sessionRoot string, resource protocol.ResourceRef) (string, error) {
-	relative := strings.TrimSpace(resource.MountPath)
+func localMountPathForWorkspacePath(sessionRoot string, mountPath string) (string, error) {
+	relative := strings.TrimSpace(mountPath)
 	if strings.HasPrefix(relative, "/workspace/") {
 		relative = strings.TrimPrefix(relative, "/workspace/")
 	}
 	if relative == "" || relative == "/workspace" {
-		relative = filepath.Join(".ama", "memory-stores", resource.StoreID)
+		return "", fmt.Errorf("secret volume mount path is required")
 	}
 	if filepath.IsAbs(relative) {
-		return "", fmt.Errorf("memory store mount path must be under /workspace")
+		return "", fmt.Errorf("secret volume mount path must be under /workspace")
 	}
 	clean := filepath.Clean(relative)
 	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(os.PathSeparator)) {
-		return "", fmt.Errorf("memory store mount path must stay inside the session workspace")
+		return "", fmt.Errorf("secret volume mount path must stay inside the session workspace")
 	}
 	resolved := filepath.Join(sessionRoot, clean)
 	if err := ensureUnderWorkspace(sessionRoot, resolved); err != nil {
@@ -186,14 +221,14 @@ func cleanMemoryPath(path string) (string, error) {
 	return clean, nil
 }
 
-func ensureRepositoryCache(ctx context.Context, cacheDir string, resource protocol.ResourceRef) error {
+func ensureRepositoryCache(ctx context.Context, cacheDir string, volume protocol.Volume) error {
 	if fileExists(filepath.Join(cacheDir, ".git")) {
 		return git(ctx, cacheDir, "fetch", "--prune", "origin")
 	}
 	if err := os.MkdirAll(filepath.Dir(cacheDir), 0o755); err != nil {
 		return err
 	}
-	cloneURL := (&url.URL{Scheme: "https", Host: "github.com", Path: resource.Owner + "/" + resource.Repo + ".git"}).String()
+	cloneURL := (&url.URL{Scheme: "https", Host: "github.com", Path: volume.Owner + "/" + volume.Repo + ".git"}).String()
 	return git(ctx, filepath.Dir(cacheDir), "clone", cloneURL, cacheDir)
 }
 
@@ -215,15 +250,12 @@ func resolveWorktreeRef(ctx context.Context, cacheDir string, requestedRef strin
 	return "HEAD", nil
 }
 
-func localMountPath(sessionRoot string, resource protocol.ResourceRef) (string, error) {
-	relative := strings.TrimSpace(resource.MountPath)
+func localMountPath(sessionRoot string, mountPath string) (string, error) {
+	relative := strings.TrimSpace(mountPath)
 	if strings.HasPrefix(relative, "/workspace/") {
 		relative = strings.TrimPrefix(relative, "/workspace/")
 	}
-	if relative == "" || relative == "/workspace" {
-		relative = filepath.Join("repos", resource.Owner, resource.Repo)
-	}
-	if filepath.IsAbs(relative) {
+	if relative == "" || relative == "/workspace" || filepath.IsAbs(relative) {
 		return "", fmt.Errorf("mount path must be under /workspace")
 	}
 	clean := filepath.Clean(relative)
@@ -237,14 +269,31 @@ func localMountPath(sessionRoot string, resource protocol.ResourceRef) (string, 
 	return resolved, nil
 }
 
-func writeSessionState(sessionDir string, workspaceRoot string, resources []mountedResource) error {
+func mountPathForVolume(name string, mounts []protocol.VolumeMount, fallback string) string {
+	for _, mount := range mounts {
+		if mount.Name == name {
+			return mount.MountPath
+		}
+	}
+	return fallback
+}
+
+func defaultGitHubMountPath(volume protocol.Volume) string {
+	return filepath.Join("repos", volume.Owner, volume.Repo)
+}
+
+func defaultMemoryStoreMountPath(volume protocol.Volume) string {
+	return filepath.Join(".ama", "memory-stores", volume.StoreID)
+}
+
+func writeSessionState(sessionDir string, workspaceRoot string, volumes []mountedVolume) error {
 	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(map[string]any{
 		"version":       1,
 		"workspaceRoot": workspaceRoot,
-		"resources":     resources,
+		"volumes":       volumes,
 	}, "", "  ")
 	if err != nil {
 		return err

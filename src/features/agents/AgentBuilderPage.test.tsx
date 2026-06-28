@@ -10,6 +10,7 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { Agent, Environment, Session, SessionEvent } from '@/lib/api'
 import { HttpResponse, http, server } from '@/test/msw'
+import { buildTestSession, type TestSessionOverrides } from '@/testing/session'
 import { AgentBuilderPage } from './AgentBuilderPage'
 
 const now = '2026-05-23T00:00:00.000Z'
@@ -66,58 +67,8 @@ function buildEnvironment(overrides: Partial<Environment> = {}): Environment {
   }
 }
 
-function buildSession(overrides: Partial<Session> = {}): Session {
-  return {
-    id: 'session_1',
-    projectId: 'project_1',
-    agentId: 'agent_1',
-    agentVersionId: 'agentver_1',
-    agentSnapshot: {
-      id: 'agentver_1',
-      agentId: 'agent_1',
-      projectId: 'project_1',
-      version: 1,
-      instructions: 'Do the work',
-      providerId: 'workers-ai',
-      model: '@cf/moonshotai/kimi-k2.6',
-      skills: [],
-      subagents: [],
-      role: null,
-      capabilityTags: [],
-      handoffPolicy: {},
-      memoryPolicy: {},
-      tools: [],
-      mcpConnectors: [],
-      metadata: {},
-      createdAt: now,
-    },
-    environmentId: 'env_1',
-    environmentVersionId: 'envver_1',
-    environmentSnapshot: null,
-    title: 'Test session',
-    resourceRefs: [],
-    env: {},
-    secretEnv: [],
-    runtimeMetadata: {
-      hostingMode: 'cloud',
-      runtime: 'ama',
-      runtimeConfig: {},
-      provider: 'workers-ai',
-      model: '@cf/moonshotai/kimi-k2.6',
-      driver: 'ama-cloud',
-      backend: 'ama-cloud',
-      protocol: 'ama-runtime-rpc',
-    },
-    state: 'idle',
-    stateReason: null,
-    metadata: {},
-    startedAt: now,
-    stoppedAt: null,
-    archivedAt: null,
-    createdAt: now,
-    updatedAt: now,
-    ...overrides,
-  }
+function buildSession(overrides: TestSessionOverrides = {}): Session {
+  return buildTestSession({ name: 'Test session', ...overrides })
 }
 
 const emptyList = { data: [], pagination: { limit: 50, hasMore: false, nextCursor: null } }
@@ -503,7 +454,7 @@ describe('[spec: agents/builder] AgentBuilderPage', () => {
     const env = buildEnvironment()
     let agentCreated = false
     let agentPatched = false
-    setupDefaultHandlers({ environments: [env], sessionResponse: { ...session, state: 'idle' } })
+    setupDefaultHandlers({ environments: [env], sessionResponse: buildSession({ id: session.metadata.uid, phase: 'idle' }) })
     server.use(
       http.post('*/api/v1/agents', () => {
         agentCreated = true

@@ -28,7 +28,7 @@ export function EnvironmentDetailView({
   if (!environment) {
     return <EmptyState title="Environment not found" body="The requested environment is not in the current project." />
   }
-  const boundSessions = sessions.filter((session) => session.environmentId === environment.id)
+  const boundSessions = sessions.filter((session) => session.spec.environmentId === environment.id)
   return (
     <div className="grid gap-4">
       <DetailSection

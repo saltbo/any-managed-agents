@@ -485,7 +485,9 @@ CREATE TABLE `sessions` (
 	`title` text,
 	`resource_refs` text DEFAULT '[]' NOT NULL,
 	`env` text DEFAULT '{}' NOT NULL,
-	`secret_env` text DEFAULT '[]' NOT NULL,
+	`env_from` text DEFAULT '[]' NOT NULL,
+	`volumes` text DEFAULT '[]' NOT NULL,
+	`volume_mounts` text DEFAULT '[]' NOT NULL,
 	`project_id` text NOT NULL,
 	`durable_object_name` text NOT NULL,
 	`sandbox_id` text,
@@ -574,7 +576,9 @@ CREATE TABLE `triggers` (
 	`prompt_template` text NOT NULL,
 	`resource_refs` text DEFAULT '[]' NOT NULL,
 	`env` text DEFAULT '{}' NOT NULL,
-	`secret_env` text DEFAULT '[]' NOT NULL,
+	`env_from` text DEFAULT '[]' NOT NULL,
+	`volumes` text DEFAULT '[]' NOT NULL,
+	`volume_mounts` text DEFAULT '[]' NOT NULL,
 	`interval_seconds` integer NOT NULL,
 	`window_seconds` integer DEFAULT 0 NOT NULL,
 	`enabled` integer DEFAULT true NOT NULL,
@@ -631,7 +635,6 @@ CREATE TABLE `vault_credential_versions` (
 	`version` integer NOT NULL,
 	`provider` text NOT NULL,
 	`secret_ref` text NOT NULL,
-	`external_vault_path` text,
 	`reference_name` text NOT NULL,
 	`state` text DEFAULT 'active' NOT NULL,
 	`has_secret` integer DEFAULT true NOT NULL,
@@ -643,7 +646,7 @@ CREATE TABLE `vault_credential_versions` (
 	FOREIGN KEY (`vault_id`) REFERENCES `vaults`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE no action,
 	CONSTRAINT "ck_vault_credential_versions_state" CHECK("vault_credential_versions"."state" in ('active','superseded','revoked')),
-	CONSTRAINT "ck_vault_credential_versions_provider" CHECK("vault_credential_versions"."provider" in ('ama-managed','cloudflare-secrets','external-vault'))
+	CONSTRAINT "ck_vault_credential_versions_provider" CHECK("vault_credential_versions"."provider" in ('ama'))
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `idx_vault_credential_versions_unique_credential_version` ON `vault_credential_versions` (`credential_id`,`version`);--> statement-breakpoint

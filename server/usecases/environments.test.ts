@@ -104,7 +104,7 @@ function fakeDeps(overrides: { repo?: Partial<Deps['environments']> } = {}): Dep
     runners: undefined as unknown as Deps['runners'],
     workItems: undefined as unknown as Deps['workItems'],
     leases: undefined as unknown as Deps['leases'],
-    runtimeSecretEnv: undefined as unknown as Deps['runtimeSecretEnv'],
+    runtimeSecrets: undefined as unknown as Deps['runtimeSecrets'],
     cloudTurnQueue: undefined as unknown as Deps['cloudTurnQueue'],
     runnerChannel: undefined as unknown as Deps['runnerChannel'],
     cloudRuntime: undefined as unknown as Deps['cloudRuntime'],

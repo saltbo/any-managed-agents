@@ -14,12 +14,12 @@ from ..types import UNSET, Unset
 
 
 
-T = TypeVar("T", bound="SessionEnv")
+T = TypeVar("T", bound="SessionSpecEnv")
 
 
 
 @_attrs_define
-class SessionEnv:
+class SessionSpecEnv:
     """ 
         Example:
             {'AK_API_URL': 'https://ak.example.com'}
@@ -44,12 +44,12 @@ class SessionEnv:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        session_env = cls(
+        session_spec_env = cls(
         )
 
 
-        session_env.additional_properties = d
-        return session_env
+        session_spec_env.additional_properties = d
+        return session_spec_env
 
     @property
     def additional_keys(self) -> list[str]:

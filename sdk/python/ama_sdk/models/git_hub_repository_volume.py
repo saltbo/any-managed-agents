@@ -8,7 +8,7 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
-from ..models.git_hub_repository_resource_ref_type import GitHubRepositoryResourceRefType
+from ..models.git_hub_repository_volume_type import GitHubRepositoryVolumeType
 from ..types import UNSET, Unset
 from typing import cast
 
@@ -19,27 +19,27 @@ if TYPE_CHECKING:
 
 
 
-T = TypeVar("T", bound="GitHubRepositoryResourceRef")
+T = TypeVar("T", bound="GitHubRepositoryVolume")
 
 
 
 @_attrs_define
-class GitHubRepositoryResourceRef:
+class GitHubRepositoryVolume:
     """ 
         Attributes:
-            type_ (GitHubRepositoryResourceRefType):
+            name (str):  Example: source.
+            type_ (GitHubRepositoryVolumeType):
             owner (str):
             repo (str):
             ref (str | Unset):
-            mount_path (str | Unset):
             credential_ref (CredentialRef | Unset):
      """
 
-    type_: GitHubRepositoryResourceRefType
+    name: str
+    type_: GitHubRepositoryVolumeType
     owner: str
     repo: str
     ref: str | Unset = UNSET
-    mount_path: str | Unset = UNSET
     credential_ref: CredentialRef | Unset = UNSET
 
 
@@ -48,6 +48,8 @@ class GitHubRepositoryResourceRef:
 
     def to_dict(self) -> dict[str, Any]:
         from ..models.credential_ref import CredentialRef
+        name = self.name
+
         type_ = self.type_.value
 
         owner = self.owner
@@ -55,8 +57,6 @@ class GitHubRepositoryResourceRef:
         repo = self.repo
 
         ref = self.ref
-
-        mount_path = self.mount_path
 
         credential_ref: dict[str, Any] | Unset = UNSET
         if not isinstance(self.credential_ref, Unset):
@@ -66,14 +66,13 @@ class GitHubRepositoryResourceRef:
         field_dict: dict[str, Any] = {}
 
         field_dict.update({
+            "name": name,
             "type": type_,
             "owner": owner,
             "repo": repo,
         })
         if ref is not UNSET:
             field_dict["ref"] = ref
-        if mount_path is not UNSET:
-            field_dict["mountPath"] = mount_path
         if credential_ref is not UNSET:
             field_dict["credentialRef"] = credential_ref
 
@@ -85,7 +84,9 @@ class GitHubRepositoryResourceRef:
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.credential_ref import CredentialRef
         d = dict(src_dict)
-        type_ = GitHubRepositoryResourceRefType(d.pop("type"))
+        name = d.pop("name")
+
+        type_ = GitHubRepositoryVolumeType(d.pop("type"))
 
 
 
@@ -95,8 +96,6 @@ class GitHubRepositoryResourceRef:
         repo = d.pop("repo")
 
         ref = d.pop("ref", UNSET)
-
-        mount_path = d.pop("mountPath", UNSET)
 
         _credential_ref = d.pop("credentialRef", UNSET)
         credential_ref: CredentialRef | Unset
@@ -108,14 +107,14 @@ class GitHubRepositoryResourceRef:
 
 
 
-        git_hub_repository_resource_ref = cls(
+        git_hub_repository_volume = cls(
+            name=name,
             type_=type_,
             owner=owner,
             repo=repo,
             ref=ref,
-            mount_path=mount_path,
             credential_ref=credential_ref,
         )
 
-        return git_hub_repository_resource_ref
+        return git_hub_repository_volume
 

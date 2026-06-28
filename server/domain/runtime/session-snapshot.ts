@@ -1,8 +1,16 @@
 import type { AgentVersionRow, EnvironmentVersionRow } from '@shared/runtime-rows'
 import { isMemoryStoreAccess, memoryStoreMountPath } from '../memory-store'
-import { hasEmbeddedCredentialUrl, normalizeMountPath } from '../session'
+import {
+  isGitHubRepositoryVolume,
+  isMemoryStoreVolume,
+  type GitHubRepositoryVolume,
+  type MemoryStoreVolume,
+  type Volume,
+  type VolumeMount,
+  volumeMountPath,
+} from './execution-inputs'
 
-// Snapshot serialization (DB row → immutable session snapshot) and resource-ref
+// Snapshot serialization (DB row -> immutable session snapshot) and volume
 // normalization for the session runtime data plane. Pure shaping/validation with
 // no env or D1 dependency, factored out of the orchestration module.
 
@@ -12,21 +20,6 @@ export function parseJson<T>(value: string | null) {
 
 export function objectValue(value: unknown) {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
-}
-
-export type ResourceRef = Record<string, unknown>
-export type GitHubRepositoryResourceRef = {
-  type: 'github_repository'
-  owner: string
-  repo: string
-  ref?: string
-  mountPath?: string
-  credentialRef?: { credentialId: string; versionId?: string }
-}
-export type MemoryStoreResourceRef = {
-  type: 'memory_store'
-  storeId: string
-  access: 'read_only' | 'read_write'
 }
 
 export function serializeAgentVersion(row: AgentVersionRow, providerId: string) {
@@ -57,11 +50,12 @@ export function parseAgentSnapshot(value: string | null) {
   return parseJson<SerializedAgentVersion>(value)
 }
 
-export function agentSnapshotWithMemoryStoreContext(
+export function agentSnapshotWithWorkspaceContext(
   agentSnapshot: SerializedAgentVersion,
-  resourceRefs: ResourceRef[],
+  volumes: Volume[],
+  volumeMounts: VolumeMount[],
 ): SerializedAgentVersion {
-  const block = workspaceSystemPromptBlock(resourceRefs)
+  const block = workspaceSystemPromptBlock(volumes, volumeMounts)
   if (!block) {
     return agentSnapshot
   }
@@ -72,27 +66,26 @@ export function agentSnapshotWithMemoryStoreContext(
   }
 }
 
-function workspaceSystemPromptBlock(resourceRefs: ResourceRef[]): string | null {
-  const repositories = resourceRefs
-    .filter((resourceRef) => resourceRef.type === 'github_repository')
-    .map((resourceRef) => {
-      const owner = String(resourceRef.owner ?? '')
-      const repo = String(resourceRef.repo ?? '')
-      const mountPath = relativeWorkspacePath(String(resourceRef.mountPath ?? `/workspace/repos/${owner}/${repo}`))
+function workspaceSystemPromptBlock(volumes: Volume[], volumeMounts: VolumeMount[]): string | null {
+  const repositories = volumes
+    .filter(isGitHubRepositoryVolume)
+    .map((volume) => {
+      const owner = String(volume.owner ?? '')
+      const repo = String(volume.repo ?? '')
+      const mountPath = relativeWorkspacePath(volumeMountPath(volume.name, volumeMounts) ?? `/workspace/repos/${owner}/${repo}`)
       return `- ${owner}/${repo} at ${mountPath}`
     })
-  const memoryStores = resourceRefs
-    .filter((resourceRef) => resourceRef.type === 'memory_store')
-    .map((resourceRef) => {
-      const name = String(resourceRef.name ?? '').trim()
-      const storeId = String(resourceRef.storeId ?? '')
-      const access = resourceRef.access === 'read_write' ? 'read_write' : 'read_only'
-      const mountPath = relativeWorkspacePath(String(resourceRef.mountPath ?? memoryStoreMountPath(storeId)))
+  const memoryStores = volumes
+    .filter(isMemoryStoreVolume)
+    .map((volume) => {
+      const storeId = String(volume.storeId ?? '')
+      const access = volume.access === 'read_write' ? 'read_write' : 'read_only'
+      const mountPath = relativeWorkspacePath(volumeMountPath(volume.name, volumeMounts) ?? memoryStoreMountPath(storeId))
       const description =
-        typeof resourceRef.description === 'string' && resourceRef.description.trim()
-          ? `\n  Description: ${resourceRef.description.trim()}`
+        typeof volume.description === 'string' && volume.description.trim()
+          ? `\n  Description: ${volume.description.trim()}`
           : ''
-      return `- ${name || storeId} (${access}) at ${mountPath}${description}`
+      return `- ${volume.storeName || volume.name || storeId} (${access}) at ${mountPath}${description}`
     })
   if (repositories.length === 0 && memoryStores.length === 0) {
     return null
@@ -150,59 +143,95 @@ export function normalizeEnvironmentSnapshot(
   } as NormalizedEnvironmentSnapshot
 }
 
-export function normalizeResourceRefs(resourceRefs: ResourceRef[]) {
-  const normalized: ResourceRef[] = []
+export function normalizeWorkspaceVolumes(volumes: Volume[], volumeMounts: VolumeMount[]) {
+  const normalizedVolumes: Volume[] = []
+  const normalizedMounts: VolumeMount[] = []
   const mountPaths = new Set<string>()
-  for (const [index, resourceRef] of resourceRefs.entries()) {
-    if (hasEmbeddedCredentialUrl(resourceRef)) {
-      return { fields: { [`resourceRefs.${index}`]: 'URLs with embedded credentials are not allowed.' } }
+  const volumeNames = new Set<string>()
+  for (const [index, mount] of volumeMounts.entries()) {
+    const normalizedPath = normalizeWorkspaceMountPath(mount.mountPath)
+    if (!normalizedPath) {
+      return { fields: { [`volumeMounts.${index}.mountPath`]: 'Volume mount path must stay under /workspace.' } }
     }
-    if (resourceRef.type !== 'github_repository') {
-      if (resourceRef.type !== 'memory_store') {
-        normalized.push(resourceRef)
+    normalizedMounts.push({ ...mount, mountPath: normalizedPath })
+  }
+  for (const [index, volume] of volumes.entries()) {
+    if (volumeNames.has(volume.name)) {
+      return { fields: { [`volumes.${index}.name`]: 'Volume names must be unique.' } }
+    }
+    volumeNames.add(volume.name)
+    if (!isGitHubRepositoryVolume(volume)) {
+      if (!isMemoryStoreVolume(volume)) {
+        normalizedVolumes.push(volume)
         continue
       }
-      if ('mountPath' in resourceRef) {
-        return { fields: { [`resourceRefs.${index}.mountPath`]: 'Memory store mount paths are managed by AMA.' } }
-      }
-      const parsed = resourceRef as MemoryStoreResourceRef
+      const parsed = volume
       if (typeof parsed.storeId !== 'string' || parsed.storeId.trim().length === 0) {
-        return { fields: { [`resourceRefs.${index}.storeId`]: 'Memory store id is required.' } }
+        return { fields: { [`volumes.${index}.storeId`]: 'Memory store id is required.' } }
       }
       if (!isMemoryStoreAccess(parsed.access)) {
-        return { fields: { [`resourceRefs.${index}.access`]: 'Use read_only or read_write.' } }
+        return { fields: { [`volumes.${index}.access`]: 'Use read_only or read_write.' } }
       }
-      const mountPath = memoryStoreMountPath(parsed.storeId)
+      const mountIndex = normalizedMounts.findIndex((mount) => mount.name === parsed.name)
+      if (mountIndex === -1) {
+        return { fields: { [`volumes.${index}.name`]: 'Memory store volume must have a matching volume mount.' } }
+      }
+      const mountPath = normalizedMounts[mountIndex]!.mountPath
+      if (!mountPath.startsWith('/workspace/.ama/memory-stores/')) {
+        return { fields: { [`volumeMounts.${mountIndex}.mountPath`]: 'Memory store mounts must stay under /workspace/.ama/memory-stores.' } }
+      }
       if (mountPaths.has(mountPath)) {
-        return { fields: { [`resourceRefs.${index}.storeId`]: 'Memory store must be unique within a session.' } }
+        return { fields: { [`volumeMounts.${mountIndex}.mountPath`]: 'Mount path must be unique within a session.' } }
       }
       mountPaths.add(mountPath)
-      normalized.push({
+      normalizedVolumes.push({
+        name: parsed.name,
         type: 'memory_store',
         storeId: parsed.storeId,
         access: parsed.access,
+        ...(parsed.description ? { description: parsed.description } : {}),
+        ...(parsed.memories ? { memories: parsed.memories } : {}),
       })
       continue
     }
-    const parsed = resourceRef as GitHubRepositoryResourceRef
-    let mountPath: string
-    try {
-      mountPath = normalizeMountPath(parsed)
-    } catch (error) {
-      return { fields: { [`resourceRefs.${index}.mountPath`]: error instanceof Error ? error.message : String(error) } }
+    const parsed = volume
+    const mountIndex = normalizedMounts.findIndex((mount) => mount.name === parsed.name)
+    if (mountIndex === -1) {
+      return { fields: { [`volumes.${index}.name`]: 'Repository volume must have a matching volume mount.' } }
+    }
+    const mountPath = normalizedMounts[mountIndex]!.mountPath
+    if (!mountPath.startsWith('/workspace/') || mountPath.startsWith('/workspace/.ama/')) {
+      return { fields: { [`volumeMounts.${mountIndex}.mountPath`]: 'Repository mount path must stay under /workspace outside /workspace/.ama.' } }
     }
     if (mountPaths.has(mountPath)) {
-      return { fields: { [`resourceRefs.${index}.mountPath`]: 'Mount path must be unique within a session.' } }
+      return { fields: { [`volumeMounts.${mountIndex}.mountPath`]: 'Mount path must be unique within a session.' } }
     }
     mountPaths.add(mountPath)
-    normalized.push({
+    normalizedVolumes.push({
+      name: parsed.name,
       type: 'github_repository',
       owner: parsed.owner,
       repo: parsed.repo,
-      mountPath,
       ...(parsed.ref ? { ref: parsed.ref } : {}),
       ...(parsed.credentialRef ? { credentialRef: parsed.credentialRef } : {}),
     })
   }
-  return { resourceRefs: normalized }
+  return { volumes: normalizedVolumes, volumeMounts: normalizedMounts }
+}
+
+function normalizeWorkspaceMountPath(path: string) {
+  const trimmed = path.trim()
+  if (!trimmed || /[\p{C}\\]/u.test(trimmed)) {
+    return null
+  }
+  const absolute = trimmed.startsWith('/') ? trimmed : `/workspace/${trimmed}`
+  if (!absolute.startsWith('/workspace/')) {
+    return null
+  }
+  const relativePath = absolute.slice('/workspace/'.length)
+  const segments = relativePath.split('/')
+  if (segments.some((segment) => segment.length === 0 || segment === '.' || segment === '..')) {
+    return null
+  }
+  return `/workspace/${segments.join('/')}`
 }

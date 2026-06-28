@@ -27,13 +27,13 @@ T = TypeVar("T", bound="UpdateSessionRequest")
 class UpdateSessionRequest:
     """ 
         Attributes:
-            title (None | str | Unset):  Example: Implement billing export.
+            name (None | str | Unset):  Example: Implement billing export.
             metadata (UpdateSessionRequestMetadata | Unset):  Example: {'ticket': 'AMA-123'}.
             state (UpdateSessionRequestState | Unset):  Example: stopped.
             archived (bool | Unset):  Example: True.
      """
 
-    title: None | str | Unset = UNSET
+    name: None | str | Unset = UNSET
     metadata: UpdateSessionRequestMetadata | Unset = UNSET
     state: UpdateSessionRequestState | Unset = UNSET
     archived: bool | Unset = UNSET
@@ -44,11 +44,11 @@ class UpdateSessionRequest:
 
     def to_dict(self) -> dict[str, Any]:
         from ..models.update_session_request_metadata import UpdateSessionRequestMetadata
-        title: None | str | Unset
-        if isinstance(self.title, Unset):
-            title = UNSET
+        name: None | str | Unset
+        if isinstance(self.name, Unset):
+            name = UNSET
         else:
-            title = self.title
+            name = self.name
 
         metadata: dict[str, Any] | Unset = UNSET
         if not isinstance(self.metadata, Unset):
@@ -66,8 +66,8 @@ class UpdateSessionRequest:
 
         field_dict.update({
         })
-        if title is not UNSET:
-            field_dict["title"] = title
+        if name is not UNSET:
+            field_dict["name"] = name
         if metadata is not UNSET:
             field_dict["metadata"] = metadata
         if state is not UNSET:
@@ -83,14 +83,14 @@ class UpdateSessionRequest:
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.update_session_request_metadata import UpdateSessionRequestMetadata
         d = dict(src_dict)
-        def _parse_title(data: object) -> None | str | Unset:
+        def _parse_name(data: object) -> None | str | Unset:
             if data is None:
                 return data
             if isinstance(data, Unset):
                 return data
             return cast(None | str | Unset, data)
 
-        title = _parse_title(d.pop("title", UNSET))
+        name = _parse_name(d.pop("name", UNSET))
 
 
         _metadata = d.pop("metadata", UNSET)
@@ -116,7 +116,7 @@ class UpdateSessionRequest:
         archived = d.pop("archived", UNSET)
 
         update_session_request = cls(
-            title=title,
+            name=name,
             metadata=metadata,
             state=state,
             archived=archived,

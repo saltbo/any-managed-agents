@@ -217,6 +217,16 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
   // Auth API
   // ---------------------------------------------------------------------------
   describe('auth API', () => {
+    it('readConfigz calls /api/v1/configz', async () => {
+      const config = { auth: { oidc: { issuer: 'https://auth.example.com', clientId: 'client_1', scope: 'openid' } } }
+      const fetchMock = makeJsonFetch(config)
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.readConfigz()
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/configz')
+      expect(result).toEqual(config)
+    })
+
     it('readAuthConfig calls /api/v1/auth/config', async () => {
       const fetchMock = makeJsonFetch({ methods: [] })
       vi.stubGlobal('fetch', fetchMock)
@@ -455,27 +465,39 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
   // ---------------------------------------------------------------------------
   describe('sessions API', () => {
     const sessionFixture = {
-      id: 'sess_1',
-      projectId: 'p1',
-      agentId: 'agent_1',
-      agentVersionId: 'av_1',
-      agentSnapshot: {} as never,
-      environmentId: null,
-      environmentVersionId: null,
-      environmentSnapshot: null,
-      title: null,
-      resourceRefs: [],
-      env: {},
-      secretEnv: [],
-      runtimeMetadata: {} as never,
-      state: 'running' as const,
-      stateReason: null,
-      metadata: {},
-      startedAt: null,
-      stoppedAt: null,
-      archivedAt: null,
-      createdAt: '',
-      updatedAt: '',
+      metadata: {
+        uid: 'sess_1',
+        pid: 'p1',
+        name: 'sess_1',
+        labels: {},
+        annotations: {},
+        createdBy: null,
+        createdAt: '',
+        updatedAt: '',
+        archivedAt: null,
+      },
+      spec: {
+        agentId: 'agent_1',
+        environmentId: null,
+        runtime: 'ama',
+        env: {},
+        envFrom: [],
+        volumes: [],
+        volumeMounts: [],
+      },
+      status: {
+        phase: 'running' as const,
+        reason: null,
+        conditions: [],
+        bindings: {
+          agent: { versionId: 'av_1', snapshot: {} as never },
+          environment: { id: null, versionId: null, snapshot: null },
+          runtime: 'ama',
+        },
+        placement: null,
+        startedAt: null,
+        stoppedAt: null,
+      },
     }
 
     it('createSession posts JSON', async () => {
@@ -492,7 +514,7 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
       const result = await api.readSession('sess_1')
       const url = fetchMock.mock.calls[0]?.[0] as string
       expect(url).toContain('/api/v1/sessions/sess_1')
-      expect(result.id).toBe('sess_1')
+      expect(result.metadata.uid).toBe('sess_1')
     })
 
     it('readSessionConnection calls the connection sub-resource', async () => {
@@ -504,17 +526,23 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
     })
 
     it('stopSession patches with state:stopped', async () => {
-      const fetchMock = makeJsonFetch({ ...sessionFixture, state: 'stopped' as const })
+      const fetchMock = makeJsonFetch({
+        ...sessionFixture,
+        status: { ...sessionFixture.status, phase: 'stopped' as const },
+      })
       vi.stubGlobal('fetch', fetchMock)
       const result = await api.stopSession('sess_1')
-      expect(result.state).toBe('stopped')
+      expect(result.status.phase).toBe('stopped')
     })
 
     it('archiveSession patches with archived:true', async () => {
-      const fetchMock = makeJsonFetch({ ...sessionFixture, archivedAt: '2026-01-01' })
+      const fetchMock = makeJsonFetch({
+        ...sessionFixture,
+        metadata: { ...sessionFixture.metadata, archivedAt: '2026-01-01' },
+      })
       vi.stubGlobal('fetch', fetchMock)
       const result = await api.archiveSession('sess_1')
-      expect(result.archivedAt).toBeTruthy()
+      expect(result.metadata.archivedAt).toBeTruthy()
     })
 
     it('sendSessionMessage posts to messages sub-resource', async () => {
@@ -708,7 +736,7 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
       }
       const fetchMock = makeJsonFetch(cred)
       vi.stubGlobal('fetch', fetchMock)
-      await api.createVaultCredential('vault_1', { name: 'API Key', type: 'api_key', secret: {} })
+      await api.createVaultCredential('vault_1', { name: 'API Key', type: 'api_key', secret: { secretValue: 'raw' } })
       const [, init] = fetchMock.mock.calls[0]!
       expect(init?.method).toBe('POST')
     })
@@ -720,9 +748,8 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
         vaultId: 'vault_1',
         projectId: 'p1',
         version: 2,
-        provider: 'ama-managed' as const,
+        provider: 'ama' as const,
         secretRef: 'ref',
-        externalVaultPath: null,
         referenceName: 'ref',
         state: 'active' as const,
         hasSecret: true,

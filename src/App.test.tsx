@@ -10,11 +10,13 @@ import type {
   Environment,
   Provider,
   Session,
+  SessionEnvironmentSnapshot,
   SessionEvent,
   UsageSummary,
   Vault,
   VaultCredential,
 } from './lib/api'
+import { buildTestSession, type TestSessionOverrides } from './testing/session'
 
 const now = '2026-05-23T00:00:00.000Z'
 const authContext: AuthContext = {
@@ -128,6 +130,27 @@ function environment(overrides: Partial<Environment> = {}): Environment {
   }
 }
 
+function sessionEnvironmentSnapshot(overrides: Partial<SessionEnvironmentSnapshot> = {}): SessionEnvironmentSnapshot {
+  return {
+    id: 'envver_1',
+    environmentId: 'env_1',
+    projectId: 'project_1',
+    version: 1,
+    packages: [],
+    variables: {},
+    credentialRefs: [],
+    hostingMode: 'cloud',
+    networkPolicy: { mode: 'unrestricted' },
+    mcpPolicy: {},
+    packageManagerPolicy: {},
+    resourceLimits: {},
+    runtimeConfig: { image: 'node:24' },
+    metadata: {},
+    createdAt: now,
+    ...overrides,
+  }
+}
+
 function agent(overrides: Partial<Agent> = {}): Agent {
   return {
     id: 'agent_1',
@@ -158,62 +181,8 @@ function agent(overrides: Partial<Agent> = {}): Agent {
   }
 }
 
-function session(overrides: Partial<Session> = {}): Session {
-  return {
-    id: 'session_1',
-    projectId: 'project_1',
-    agentId: 'agent_1',
-    agentVersionId: 'agentver_1',
-    agentSnapshot: {
-      id: 'agentver_1',
-      agentId: 'agent_1',
-      projectId: 'project_1',
-      version: 1,
-      instructions: 'Do the work',
-      providerId: 'workers-ai',
-      model: '@cf/moonshotai/kimi-k2.6',
-      skills: ['ama@coding-agent'],
-      subagents: [],
-      role: null,
-      capabilityTags: [],
-      handoffPolicy: {},
-      memoryPolicy: { enabled: false },
-      tools: [{ name: 'read' }, { name: 'write' }],
-      mcpConnectors: [],
-      metadata: {},
-      createdAt: now,
-    },
-    environmentId: 'env_1',
-    environmentVersionId: 'envver_1',
-    environmentSnapshot: {
-      ...environment(),
-      environmentId: 'env_1',
-      version: 1,
-    },
-    title: null,
-    resourceRefs: [],
-    env: {},
-    secretEnv: [],
-    runtimeMetadata: {
-      hostingMode: 'cloud',
-      runtime: 'ama',
-      runtimeConfig: { image: 'node:24' },
-      provider: 'workers-ai',
-      model: '@cf/moonshotai/kimi-k2.6',
-      driver: 'ama-cloud',
-      backend: 'ama-cloud',
-      protocol: 'ama-runtime-rpc',
-    },
-    state: 'idle',
-    stateReason: null,
-    metadata: {},
-    startedAt: now,
-    stoppedAt: null,
-    archivedAt: null,
-    createdAt: now,
-    updatedAt: now,
-    ...overrides,
-  }
+function session(overrides: TestSessionOverrides = {}): Session {
+  return buildTestSession({ environmentSnapshot: sessionEnvironmentSnapshot(), ...overrides })
 }
 
 function event(overrides: Partial<SessionEvent> = {}): SessionEvent {
@@ -281,9 +250,8 @@ function credential(overrides: Partial<VaultCredential> = {}): VaultCredential {
       vaultId: 'vault_1',
       projectId: 'project_1',
       version: 1,
-      provider: 'cloudflare-secrets',
-      secretRef: 'cloudflare-secret:WORKERS_AI',
-      externalVaultPath: null,
+      provider: 'ama',
+      secretRef: 'ama://vaults/vault_1/credentials/cred_1/versions/ver_1',
       referenceName: 'WORKERS_AI',
       state: 'active',
       hasSecret: true,
@@ -555,22 +523,24 @@ function mockConsoleApi(seed?: {
     }
     if (url.startsWith('/api/v1/agents/') && url.endsWith('/versions') && method === 'GET') {
       const found = state.agents.find((item) => url === `/api/v1/agents/${item.id}/versions`)
-      return found ? jsonResponse({ data: [session({ agentId: found.id }).agentSnapshot] }) : jsonResponse({ data: [] })
+      return found
+        ? jsonResponse({ data: [session({ agentId: found.id }).status.bindings.agent.snapshot] })
+        : jsonResponse({ data: [] })
     }
     if (url === '/api/v1/sessions' && method === 'POST') {
       const body = JSON.parse(String(init?.body ?? '{}')) as {
         agentId: string
         environmentId: string
-        title?: string
-        metadata?: Record<string, unknown>
-        resourceRefs?: Record<string, unknown>[]
+        name?: string
+        metadata?: Record<string, string>
+        volumes?: Session['spec']['volumes']
       }
       const created = session({
         agentId: body.agentId,
         environmentId: body.environmentId,
-        title: body.title ?? null,
-        metadata: body.metadata ?? {},
-        resourceRefs: body.resourceRefs ?? [],
+        ...(typeof body.name === 'string' ? { name: body.name } : {}),
+        metadata: { ...session().metadata, annotations: body.metadata ?? {} },
+        spec: { ...session().spec, volumes: body.volumes ?? [] },
       })
       state.sessions = [created]
       return jsonResponse(created)
@@ -584,13 +554,13 @@ function mockConsoleApi(seed?: {
     }
     if (url.startsWith('/api/v1/sessions/') && url.endsWith('/connection') && method === 'GET') {
       const sessionId = url.split('/')[4]
-      const found = [...state.detailSessions, ...state.sessions].find((item) => item.id === sessionId)
+      const found = [...state.detailSessions, ...state.sessions].find((item) => item.metadata.uid === sessionId)
       return jsonResponse({
         sessionId,
         transport: 'ama-runtime-rpc',
         path: `/api/v1/runtime/sessions/${sessionId}/rpc`,
-        state: found?.state ?? 'idle',
-        stateReason: found?.stateReason ?? null,
+        state: found?.status.phase ?? 'idle',
+        stateReason: found?.status.reason ?? null,
       })
     }
     if (url.startsWith('/api/v1/sessions/') && url.includes('/events') && method === 'GET') {
@@ -604,12 +574,14 @@ function mockConsoleApi(seed?: {
         state.sessions = [archived]
         return jsonResponse(archived)
       }
-      const stopped = session({ state: 'stopped', stoppedAt: now })
+      const stopped = session({ phase: 'stopped', stoppedAt: now })
       state.sessions = [stopped]
       return jsonResponse(stopped)
     }
     if (url.startsWith('/api/v1/sessions/') && method === 'GET') {
-      const found = [...state.detailSessions, ...state.sessions].find((item) => url === `/api/v1/sessions/${item.id}`)
+      const found = [...state.detailSessions, ...state.sessions].find(
+        (item) => url === `/api/v1/sessions/${item.metadata.uid}`,
+      )
       return found ? jsonResponse(found) : jsonResponse({ error: { message: 'Session not found' } }, 404)
     }
 
@@ -796,26 +768,29 @@ describe('App', () => {
     mockConsoleApi({
       environments: [environment()],
       agents: [agent()],
-      sessions: [session(), session({ id: 'session_stale' })],
+      sessions: [session(), session({ id: 'session_stale', name: 'session_stale' })],
       detailSessions: [
         session({
           id: 'session_stale',
+          name: 'session_stale',
         }),
         session({
           id: 'session_archived',
-          state: 'stopped',
+          name: 'session_archived',
+          phase: 'stopped',
           archivedAt: now,
         }),
         session({
           id: 'session_self_hosted',
-          state: 'pending',
-          stateReason: 'waiting-for-runner',
-          environmentSnapshot: {
-            ...environment({ hostingMode: 'self_hosted', networkPolicy: { mode: 'unrestricted' } }),
-            environmentId: 'env_1',
-            version: 1,
+          name: 'session_self_hosted',
+          phase: 'pending',
+          reason: 'waiting-for-runner',
+          environmentSnapshot: sessionEnvironmentSnapshot({ hostingMode: 'self_hosted' }),
+          spec: { ...session().spec, runtime: 'ama' },
+          status: {
+            ...session().status,
+            placement: { ...session().status.placement!, hostingMode: 'self_hosted' },
           },
-          metadata: { hostingMode: 'self_hosted', runtime: 'ama', runnerState: 'queued' },
         }),
       ],
       events: [
@@ -839,7 +814,7 @@ describe('App', () => {
     window.history.pushState({}, '', '/sessions/session_1')
     const sessionRoute = render(<App />)
 
-    expect(await screen.findByRole('heading', { name: 'session_1' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Test session' })).toBeTruthy()
     expect(await screen.findByRole('tab', { name: 'Transcript' })).toBeTruthy()
     expect(document.querySelector('[data-console-content="full-bleed"]')).toBeTruthy()
     expect(document.querySelector('[data-console-surface="full-bleed"]')).toBeTruthy()
@@ -923,9 +898,9 @@ describe('App', () => {
       environments: [environment()],
       agents: [agent()],
       sessions: [
-        session({ state: 'error', stateReason: 'Runtime crashed' }),
-        session({ id: 'session_stopped', state: 'stopped', stoppedAt: now }),
-        session({ id: 'session_archived', state: 'stopped', archivedAt: now }),
+        session({ name: 'First run workflow', phase: 'error', reason: 'Runtime crashed' }),
+        session({ id: 'session_stopped', name: 'Stopped workflow', phase: 'stopped', stoppedAt: now }),
+        session({ id: 'session_archived', name: 'Archived workflow', phase: 'stopped', archivedAt: now }),
       ],
       events: [event({ type: 'runtime.error', payload: { message: 'Runtime crashed' } })],
     })
@@ -941,7 +916,7 @@ describe('App', () => {
     // unlike the active error/stopped rows which each keep one.
     expect(screen.getAllByRole('button', { name: 'Archive' })).toHaveLength(2)
 
-    fireEvent.click(screen.getByRole('link', { name: 'session_1' }))
+    fireEvent.click(screen.getByRole('link', { name: 'First run workflow' }))
     expect(await screen.findByRole('tab', { name: 'Transcript' })).toBeTruthy()
     await confirmAction('Stop session')
     expectToast(await screen.findByText('Session stopped'))
@@ -1097,7 +1072,7 @@ describe('App', () => {
     fireEvent.click(primaryNav().getByRole('link', { name: 'Sessions' }))
     expect(await screen.findByRole('heading', { name: 'Sessions' })).toBeTruthy()
     expect(screen.queryByRole('tab', { name: 'Transcript' })).toBeNull()
-    fireEvent.click(screen.getByRole('link', { name: 'session_1' }))
+    fireEvent.click(screen.getByRole('link', { name: 'Test session' }))
 
     expect(await screen.findByRole('tab', { name: 'Transcript' })).toBeTruthy()
     await waitFor(() => expect(socketUrls.length).toBeGreaterThan(0))
@@ -1162,53 +1137,4 @@ const agentFixture = {
   updatedAt: '2026-05-23T00:00:00.000Z',
 }
 
-const sessionFixture = {
-  id: 'session_1',
-  projectId: 'project_1',
-  agentId: 'agent_1',
-  agentVersionId: 'agentver_1',
-  agentSnapshot: {
-    id: 'agentver_1',
-    agentId: 'agent_1',
-    projectId: 'project_1',
-    version: 1,
-    instructions: 'Do the work',
-    providerId: 'workers-ai',
-    model: '@cf/moonshotai/kimi-k2.6',
-    skills: ['ama@coding-agent'],
-    subagents: [],
-    role: null,
-    capabilityTags: [],
-    handoffPolicy: {},
-    memoryPolicy: { enabled: false },
-    tools: [{ name: 'read' }, { name: 'write' }],
-    mcpConnectors: [],
-    metadata: {},
-    createdAt: '2026-05-23T00:00:00.000Z',
-  },
-  environmentId: 'env_1',
-  environmentVersionId: 'envver_1',
-  environmentSnapshot: null,
-  title: null,
-  resourceRefs: [],
-  env: {},
-  secretEnv: [],
-  runtimeMetadata: {
-    hostingMode: 'cloud',
-    runtime: 'ama',
-    runtimeConfig: {},
-    provider: 'workers-ai',
-    model: '@cf/moonshotai/kimi-k2.6',
-    driver: 'ama-cloud',
-    backend: 'ama-cloud',
-    protocol: 'ama-runtime-rpc',
-  },
-  state: 'idle',
-  stateReason: null,
-  metadata: {},
-  startedAt: '2026-05-23T00:00:00.000Z',
-  stoppedAt: null,
-  archivedAt: null,
-  createdAt: '2026-05-23T00:00:00.000Z',
-  updatedAt: '2026-05-23T00:00:00.000Z',
-}
+const sessionFixture = session({ id: 'session_1', environmentSnapshot: null })

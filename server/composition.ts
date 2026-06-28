@@ -4,7 +4,7 @@ import { createMcpGateway } from './adapters/gateways/mcp'
 import { createPolicyPort } from './adapters/gateways/policy'
 import { createProviderCatalogGateway } from './adapters/gateways/provider-catalog'
 import { createRunnerChannel } from './adapters/gateways/runner-channel'
-import { createRuntimeSecretEnvGateway } from './adapters/gateways/runtime-secret-env'
+import { createRuntimeSecretGateway } from './adapters/gateways/runtime-secrets'
 import { createSecretStoreGateway } from './adapters/gateways/secret-store'
 import { createSessionDoEventStore } from './adapters/gateways/session-do-events'
 import { createCloudLoopChecker, createSessionEventStore } from './adapters/gateways/session-event-store'
@@ -85,7 +85,7 @@ export function createDeps(env: Env): Deps {
     runners: createRunnerRepo(db),
     workItems: createWorkItemRepo(db),
     leases: createLeaseRepo(db),
-    runtimeSecretEnv: createRuntimeSecretEnvGateway(env, db),
+    runtimeSecrets: createRuntimeSecretGateway(env, db),
     cloudTurnQueue: createCloudTurnQueue(env),
     runnerChannel,
     ...runtimeExecution,

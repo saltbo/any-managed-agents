@@ -15,13 +15,14 @@ from typing import cast
 import datetime
 
 if TYPE_CHECKING:
-  from ..models.git_hub_repository_resource_ref import GitHubRepositoryResourceRef
-  from ..models.memory_store_resource_ref import MemoryStoreResourceRef
-  from ..models.resource_ref_type_1 import ResourceRefType1
-  from ..models.secret_env_entry import SecretEnvEntry
+  from ..models.env_from_entry import EnvFromEntry
+  from ..models.git_hub_repository_volume import GitHubRepositoryVolume
+  from ..models.memory_store_volume import MemoryStoreVolume
+  from ..models.secret_volume import SecretVolume
   from ..models.update_trigger_request_env import UpdateTriggerRequestEnv
   from ..models.update_trigger_request_metadata import UpdateTriggerRequestMetadata
   from ..models.update_trigger_request_schedule_type_0 import UpdateTriggerRequestScheduleType0
+  from ..models.volume_mount import VolumeMount
 
 
 
@@ -41,11 +42,11 @@ class UpdateTriggerRequest:
             runtime (Runtime | Unset):  Example: codex.
             name (str | Unset):  Example: Daily research heartbeat.
             prompt_template (str | Unset):  Example: Research current Canadian banking bonus offers..
-            resource_refs (list[GitHubRepositoryResourceRef | MemoryStoreResourceRef | ResourceRefType1] | Unset):  Example:
-                [{'type': 'github_repository', 'owner': 'openai', 'repo': 'openai'}].
             env (UpdateTriggerRequestEnv | Unset):  Example: {'AK_API_URL': 'https://ak.example.com'}.
-            secret_env (list[SecretEnvEntry] | Unset):  Example: [{'name': 'AK_AGENT_KEY', 'credentialRef': {'credentialId':
-                'vaultcred_abc123'}}].
+            env_from (list[EnvFromEntry] | Unset):  Example: [{'type': 'secret', 'name': 'AK_AGENT_KEY', 'secretRef':
+                'ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123'}].
+            volumes (list[GitHubRepositoryVolume | MemoryStoreVolume | SecretVolume] | Unset):
+            volume_mounts (list[VolumeMount] | Unset):
             schedule (None | Unset | UpdateTriggerRequestScheduleType0):
             enabled (bool | Unset):
             archived (bool | Unset):  Example: True.
@@ -59,9 +60,10 @@ class UpdateTriggerRequest:
     runtime: Runtime | Unset = UNSET
     name: str | Unset = UNSET
     prompt_template: str | Unset = UNSET
-    resource_refs: list[GitHubRepositoryResourceRef | MemoryStoreResourceRef | ResourceRefType1] | Unset = UNSET
     env: UpdateTriggerRequestEnv | Unset = UNSET
-    secret_env: list[SecretEnvEntry] | Unset = UNSET
+    env_from: list[EnvFromEntry] | Unset = UNSET
+    volumes: list[GitHubRepositoryVolume | MemoryStoreVolume | SecretVolume] | Unset = UNSET
+    volume_mounts: list[VolumeMount] | Unset = UNSET
     schedule: None | Unset | UpdateTriggerRequestScheduleType0 = UNSET
     enabled: bool | Unset = UNSET
     archived: bool | Unset = UNSET
@@ -73,13 +75,14 @@ class UpdateTriggerRequest:
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.git_hub_repository_resource_ref import GitHubRepositoryResourceRef
-        from ..models.memory_store_resource_ref import MemoryStoreResourceRef
-        from ..models.resource_ref_type_1 import ResourceRefType1
-        from ..models.secret_env_entry import SecretEnvEntry
+        from ..models.env_from_entry import EnvFromEntry
+        from ..models.git_hub_repository_volume import GitHubRepositoryVolume
+        from ..models.memory_store_volume import MemoryStoreVolume
+        from ..models.secret_volume import SecretVolume
         from ..models.update_trigger_request_env import UpdateTriggerRequestEnv
         from ..models.update_trigger_request_metadata import UpdateTriggerRequestMetadata
         from ..models.update_trigger_request_schedule_type_0 import UpdateTriggerRequestScheduleType0
+        from ..models.volume_mount import VolumeMount
         type_: str | Unset = UNSET
         if not isinstance(self.type_, Unset):
             type_ = self.type_.value
@@ -98,32 +101,41 @@ class UpdateTriggerRequest:
 
         prompt_template = self.prompt_template
 
-        resource_refs: list[dict[str, Any]] | Unset = UNSET
-        if not isinstance(self.resource_refs, Unset):
-            resource_refs = []
-            for resource_refs_item_data in self.resource_refs:
-                resource_refs_item: dict[str, Any]
-                if isinstance(resource_refs_item_data, GitHubRepositoryResourceRef):
-                    resource_refs_item = resource_refs_item_data.to_dict()
-                elif isinstance(resource_refs_item_data, ResourceRefType1):
-                    resource_refs_item = resource_refs_item_data.to_dict()
-                else:
-                    resource_refs_item = resource_refs_item_data.to_dict()
-
-                resource_refs.append(resource_refs_item)
-
-
-
         env: dict[str, Any] | Unset = UNSET
         if not isinstance(self.env, Unset):
             env = self.env.to_dict()
 
-        secret_env: list[dict[str, Any]] | Unset = UNSET
-        if not isinstance(self.secret_env, Unset):
-            secret_env = []
-            for secret_env_item_data in self.secret_env:
-                secret_env_item = secret_env_item_data.to_dict()
-                secret_env.append(secret_env_item)
+        env_from: list[dict[str, Any]] | Unset = UNSET
+        if not isinstance(self.env_from, Unset):
+            env_from = []
+            for env_from_item_data in self.env_from:
+                env_from_item = env_from_item_data.to_dict()
+                env_from.append(env_from_item)
+
+
+
+        volumes: list[dict[str, Any]] | Unset = UNSET
+        if not isinstance(self.volumes, Unset):
+            volumes = []
+            for volumes_item_data in self.volumes:
+                volumes_item: dict[str, Any]
+                if isinstance(volumes_item_data, SecretVolume):
+                    volumes_item = volumes_item_data.to_dict()
+                elif isinstance(volumes_item_data, GitHubRepositoryVolume):
+                    volumes_item = volumes_item_data.to_dict()
+                else:
+                    volumes_item = volumes_item_data.to_dict()
+
+                volumes.append(volumes_item)
+
+
+
+        volume_mounts: list[dict[str, Any]] | Unset = UNSET
+        if not isinstance(self.volume_mounts, Unset):
+            volume_mounts = []
+            for volume_mounts_item_data in self.volume_mounts:
+                volume_mounts_item = volume_mounts_item_data.to_dict()
+                volume_mounts.append(volume_mounts_item)
 
 
 
@@ -164,12 +176,14 @@ class UpdateTriggerRequest:
             field_dict["name"] = name
         if prompt_template is not UNSET:
             field_dict["promptTemplate"] = prompt_template
-        if resource_refs is not UNSET:
-            field_dict["resourceRefs"] = resource_refs
         if env is not UNSET:
             field_dict["env"] = env
-        if secret_env is not UNSET:
-            field_dict["secretEnv"] = secret_env
+        if env_from is not UNSET:
+            field_dict["envFrom"] = env_from
+        if volumes is not UNSET:
+            field_dict["volumes"] = volumes
+        if volume_mounts is not UNSET:
+            field_dict["volumeMounts"] = volume_mounts
         if schedule is not UNSET:
             field_dict["schedule"] = schedule
         if enabled is not UNSET:
@@ -187,13 +201,14 @@ class UpdateTriggerRequest:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.git_hub_repository_resource_ref import GitHubRepositoryResourceRef
-        from ..models.memory_store_resource_ref import MemoryStoreResourceRef
-        from ..models.resource_ref_type_1 import ResourceRefType1
-        from ..models.secret_env_entry import SecretEnvEntry
+        from ..models.env_from_entry import EnvFromEntry
+        from ..models.git_hub_repository_volume import GitHubRepositoryVolume
+        from ..models.memory_store_volume import MemoryStoreVolume
+        from ..models.secret_volume import SecretVolume
         from ..models.update_trigger_request_env import UpdateTriggerRequestEnv
         from ..models.update_trigger_request_metadata import UpdateTriggerRequestMetadata
         from ..models.update_trigger_request_schedule_type_0 import UpdateTriggerRequestScheduleType0
+        from ..models.volume_mount import VolumeMount
         d = dict(src_dict)
         _type_ = d.pop("type", UNSET)
         type_: UpdateTriggerRequestType | Unset
@@ -223,45 +238,6 @@ class UpdateTriggerRequest:
 
         prompt_template = d.pop("promptTemplate", UNSET)
 
-        _resource_refs = d.pop("resourceRefs", UNSET)
-        resource_refs: list[GitHubRepositoryResourceRef | MemoryStoreResourceRef | ResourceRefType1] | Unset = UNSET
-        if _resource_refs is not UNSET:
-            resource_refs = []
-            for resource_refs_item_data in _resource_refs:
-                def _parse_resource_refs_item(data: object) -> GitHubRepositoryResourceRef | MemoryStoreResourceRef | ResourceRefType1:
-                    try:
-                        if not isinstance(data, dict):
-                            raise TypeError()
-                        componentsschemas_resource_ref_type_0 = GitHubRepositoryResourceRef.from_dict(data)
-
-
-
-                        return componentsschemas_resource_ref_type_0
-                    except (TypeError, ValueError, AttributeError, KeyError):
-                        pass
-                    try:
-                        if not isinstance(data, dict):
-                            raise TypeError()
-                        componentsschemas_resource_ref_type_1 = ResourceRefType1.from_dict(data)
-
-
-
-                        return componentsschemas_resource_ref_type_1
-                    except (TypeError, ValueError, AttributeError, KeyError):
-                        pass
-                    if not isinstance(data, dict):
-                        raise TypeError()
-                    componentsschemas_resource_ref_type_2 = MemoryStoreResourceRef.from_dict(data)
-
-
-
-                    return componentsschemas_resource_ref_type_2
-
-                resource_refs_item = _parse_resource_refs_item(resource_refs_item_data)
-
-                resource_refs.append(resource_refs_item)
-
-
         _env = d.pop("env", UNSET)
         env: UpdateTriggerRequestEnv | Unset
         if isinstance(_env,  Unset):
@@ -272,16 +248,67 @@ class UpdateTriggerRequest:
 
 
 
-        _secret_env = d.pop("secretEnv", UNSET)
-        secret_env: list[SecretEnvEntry] | Unset = UNSET
-        if _secret_env is not UNSET:
-            secret_env = []
-            for secret_env_item_data in _secret_env:
-                secret_env_item = SecretEnvEntry.from_dict(secret_env_item_data)
+        _env_from = d.pop("envFrom", UNSET)
+        env_from: list[EnvFromEntry] | Unset = UNSET
+        if _env_from is not UNSET:
+            env_from = []
+            for env_from_item_data in _env_from:
+                env_from_item = EnvFromEntry.from_dict(env_from_item_data)
 
 
 
-                secret_env.append(secret_env_item)
+                env_from.append(env_from_item)
+
+
+        _volumes = d.pop("volumes", UNSET)
+        volumes: list[GitHubRepositoryVolume | MemoryStoreVolume | SecretVolume] | Unset = UNSET
+        if _volumes is not UNSET:
+            volumes = []
+            for volumes_item_data in _volumes:
+                def _parse_volumes_item(data: object) -> GitHubRepositoryVolume | MemoryStoreVolume | SecretVolume:
+                    try:
+                        if not isinstance(data, dict):
+                            raise TypeError()
+                        componentsschemas_volume_type_0 = SecretVolume.from_dict(data)
+
+
+
+                        return componentsschemas_volume_type_0
+                    except (TypeError, ValueError, AttributeError, KeyError):
+                        pass
+                    try:
+                        if not isinstance(data, dict):
+                            raise TypeError()
+                        componentsschemas_volume_type_1 = GitHubRepositoryVolume.from_dict(data)
+
+
+
+                        return componentsschemas_volume_type_1
+                    except (TypeError, ValueError, AttributeError, KeyError):
+                        pass
+                    if not isinstance(data, dict):
+                        raise TypeError()
+                    componentsschemas_volume_type_2 = MemoryStoreVolume.from_dict(data)
+
+
+
+                    return componentsschemas_volume_type_2
+
+                volumes_item = _parse_volumes_item(volumes_item_data)
+
+                volumes.append(volumes_item)
+
+
+        _volume_mounts = d.pop("volumeMounts", UNSET)
+        volume_mounts: list[VolumeMount] | Unset = UNSET
+        if _volume_mounts is not UNSET:
+            volume_mounts = []
+            for volume_mounts_item_data in _volume_mounts:
+                volume_mounts_item = VolumeMount.from_dict(volume_mounts_item_data)
+
+
+
+                volume_mounts.append(volume_mounts_item)
 
 
         def _parse_schedule(data: object) -> None | Unset | UpdateTriggerRequestScheduleType0:
@@ -335,9 +362,10 @@ class UpdateTriggerRequest:
             runtime=runtime,
             name=name,
             prompt_template=prompt_template,
-            resource_refs=resource_refs,
             env=env,
-            secret_env=secret_env,
+            env_from=env_from,
+            volumes=volumes,
+            volume_mounts=volume_mounts,
             schedule=schedule,
             enabled=enabled,
             archived=archived,

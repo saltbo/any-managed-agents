@@ -11,21 +11,48 @@ export const RunnerMemorySnapshotSchema = z
   .strict()
   .openapi('RunnerMemorySnapshot')
 
-export const RunnerResourceRefSchema = z
+export const RunnerResolvedVolumeFileSchema = z
   .object({
-    type: z.string().openapi({ example: 'github_repository' }),
+    path: z.string().openapi({ example: 'GITHUB_TOKEN' }),
+    content: z.string().openapi({ example: 'secret-value' }),
+  })
+  .strict()
+  .openapi('RunnerResolvedVolumeFile')
+
+export const RunnerResolvedVolumeMountSchema = z
+  .object({
+    name: z.string().openapi({ example: 'github-token' }),
+    mountPath: z.string().openapi({ example: '/workspace/.ama/secrets/github-token' }),
+    readOnly: z.boolean().openapi({ example: true }),
+    files: z.array(RunnerResolvedVolumeFileSchema),
+  })
+  .strict()
+  .openapi('RunnerResolvedVolumeMount')
+
+export const RunnerVolumeSchema = z
+  .object({
+    name: z.string().openapi({ example: 'source' }),
+    type: z.enum(['secret', 'github_repository', 'memory_store']).openapi({ example: 'github_repository' }),
+    secretRef: z.string().optional(),
     owner: z.string().optional().openapi({ example: 'saltbo' }),
     repo: z.string().optional().openapi({ example: 'any-managed-agents' }),
     ref: z.string().optional().openapi({ example: 'main' }),
-    mountPath: z.string().optional().openapi({ example: 'repo' }),
     storeId: z.string().optional().openapi({ example: 'memstore_abc123' }),
-    name: z.string().optional().openapi({ example: 'Project memory' }),
     description: z.string().nullable().optional(),
     access: z.string().optional().openapi({ example: 'read_write' }),
     memories: z.array(RunnerMemorySnapshotSchema).optional(),
   })
   .strict()
-  .openapi('RunnerResourceRef')
+  .openapi('RunnerVolume')
+
+export const RunnerVolumeMountSchema = z
+  .object({
+    name: z.string().openapi({ example: 'source' }),
+    mountPath: z.string().openapi({ example: '/workspace/repos/saltbo/any-managed-agents' }),
+    readOnly: z.boolean().optional(),
+  })
+  .strict()
+  .openapi('RunnerVolumeMount')
 
 export const RunnerToolCallSchema = z
   .object({
@@ -46,7 +73,6 @@ export const RunnerWorkPayloadSchema = z
     hostingMode: z.string().optional().openapi({ example: 'self_hosted' }),
     runtime: z.string().optional().openapi({ example: 'codex' }),
     runtimeConfig: JsonObjectSchema.optional(),
-    resourceRefs: z.array(RunnerResourceRefSchema).optional(),
     provider: z.string().optional().openapi({ example: 'provider_codex' }),
     model: z.string().optional().openapi({ example: 'gpt-5.3-codex' }),
     agentSnapshot: JsonObjectSchema.optional(),
@@ -54,7 +80,9 @@ export const RunnerWorkPayloadSchema = z
     runtimeDriver: z.string().optional().openapi({ example: 'codex-self-hosted' }),
     requiredRunnerCapability: z.string().nullable().optional(),
     runtimeEnv: StringMapSchema.optional(),
-    runtimeSecretEnv: z.array(JsonObjectSchema).optional(),
+    volumes: z.array(RunnerVolumeSchema).optional(),
+    volumeMounts: z.array(RunnerVolumeMountSchema).optional(),
+    resolvedVolumes: z.array(RunnerResolvedVolumeMountSchema).optional(),
     initialPrompt: z.string().nullable().optional(),
     resume: z.boolean().optional(),
     resumeToken: z.string().nullable().optional(),
@@ -104,7 +132,8 @@ export const RunnerSandboxRequestSchema = z
     toolCallId: z.string().optional().openapi({ example: 'call_abc123' }),
     toolName: z.string().optional().openapi({ example: 'sandbox.exec' }),
     input: JsonObjectSchema.optional(),
-    resourceRefs: z.array(RunnerResourceRefSchema).optional(),
+    volumes: z.array(RunnerVolumeSchema).optional(),
+    volumeMounts: z.array(RunnerVolumeMountSchema).optional(),
   })
   .strict()
   .openapi('RunnerSandboxRequest')
@@ -127,7 +156,10 @@ export const RunnerChannelMessageSchema = z
 
 export const RUNNER_PROTOCOL_SCHEMAS = {
   RunnerMemorySnapshot: RunnerMemorySnapshotSchema,
-  RunnerResourceRef: RunnerResourceRefSchema,
+  RunnerResolvedVolumeFile: RunnerResolvedVolumeFileSchema,
+  RunnerResolvedVolumeMount: RunnerResolvedVolumeMountSchema,
+  RunnerVolume: RunnerVolumeSchema,
+  RunnerVolumeMount: RunnerVolumeMountSchema,
   RunnerToolCall: RunnerToolCallSchema,
   RunnerWorkPayload: RunnerWorkPayloadSchema,
   RunnerRuntimeToolCall: RunnerRuntimeToolCallSchema,

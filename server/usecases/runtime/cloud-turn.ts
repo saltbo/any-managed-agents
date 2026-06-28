@@ -17,14 +17,19 @@
 // usecases only.
 
 import type { RuntimeName } from '@server/contracts/environment-contracts'
+import {
+  materializedRuntimeInputs,
+  type EnvFromEntry,
+  type Volume,
+  type VolumeMount,
+} from '@server/domain/runtime/execution-inputs'
 import { isRuntimeName, runtimeDriver, runtimeDriverName } from '@server/domain/runtime/driver'
 import { resolveSessionProviderModel } from '@server/domain/runtime/provider'
 import {
-  agentSnapshotWithMemoryStoreContext,
+  agentSnapshotWithWorkspaceContext,
   type NormalizedEnvironmentSnapshot,
   parseAgentSnapshot,
   parseJson,
-  type ResourceRef,
   type SerializedAgentVersion,
 } from '@server/domain/runtime/session-snapshot'
 import { cloudTurnSystemAuth } from '@server/domain/runtime/system-auth'
@@ -45,10 +50,9 @@ import type {
   CloudRuntimeLifecycle,
   CloudTurnMessage,
   CloudTurnQueue,
-  CloudTurnSecretEnvEntry,
   PolicyPort,
   ProviderRepo,
-  RuntimeSecretEnvGateway,
+  RuntimeSecretGateway,
   SessionEventStore,
   SessionOrchestrationStore,
   SessionRow,
@@ -79,7 +83,7 @@ export type CloudTurnDeps = {
   cloudRuntime: CloudRuntimeLifecycle
   amaTurnExecutor: AmaTurnExecutor
   cloudTurnQueue: CloudTurnQueue
-  runtimeSecretEnv: RuntimeSecretEnvGateway
+  runtimeSecrets: RuntimeSecretGateway
   createApprovalGate: CreateApprovalGate
 }
 
@@ -92,17 +96,20 @@ export async function startSessionRuntimeForRow(
     environmentSnapshot: NormalizedEnvironmentSnapshot | null
     runtime: RuntimeName
     runtimeConfig: Record<string, unknown>
-    resourceRefs: ResourceRef[]
     env?: Record<string, string>
-    secretEnv?: CloudTurnSecretEnvEntry[]
+    envFrom?: EnvFromEntry[]
+    volumes?: Volume[]
+    volumeMounts?: VolumeMount[]
     initialPrompt?: string
   },
 ) {
   const store = deps.sessionOrchestration
-  const { pending, agentSnapshot, environmentSnapshot, runtime, runtimeConfig, resourceRefs, initialPrompt } = input
-  const runtimeAgentSnapshot = agentSnapshotWithMemoryStoreContext(agentSnapshot, resourceRefs)
+  const { pending, agentSnapshot, environmentSnapshot, runtime, runtimeConfig, initialPrompt } = input
   const sessionEnv = input.env
-  const sessionSecretEnv = input.secretEnv ?? []
+  const sessionSecretEnv = input.envFrom ?? []
+  const sessionVolumes = input.volumes ?? []
+  const sessionVolumeMounts = input.volumeMounts ?? []
+  const runtimeAgentSnapshot = agentSnapshotWithWorkspaceContext(agentSnapshot, sessionVolumes, sessionVolumeMounts)
   const sessionId = pending.id
   const sandboxId = pending.sandboxId ?? sessionId.toLowerCase()
   const runtimeName = runtime
@@ -113,10 +120,16 @@ export async function startSessionRuntimeForRow(
   try {
     const mcpSnapshot = await resolveMcpSnapshot(deps, auth, sessionId, agentSnapshot, environmentSnapshot)
     const runtimeEnvironmentSnapshot = environmentSnapshot ? { ...environmentSnapshot, runtimeConfig } : null
-    const resolvedSecretEnv = await deps.runtimeSecretEnv.resolve(
+    const resolvedEnv = await deps.runtimeSecrets.resolveEnv(
       { organizationId: auth.organization.id, projectId: auth.project.id },
       sessionSecretEnv,
     )
+    const resolvedVolumes = await deps.runtimeSecrets.resolveVolumes(
+      { organizationId: auth.organization.id, projectId: auth.project.id },
+      sessionVolumes,
+      sessionVolumeMounts,
+    )
+    const runtimeInputs = materializedRuntimeInputs(sessionEnv ?? {}, resolvedEnv, resolvedVolumes)
     const startedRuntime = await withTimeout(
       deps.cloudRuntime.startCloudSession({
         sessionId,
@@ -127,10 +140,10 @@ export async function startSessionRuntimeForRow(
         agentSnapshot: runtimeAgentSnapshot,
         environmentSnapshot: runtimeEnvironmentSnapshot,
         mcpSnapshot,
-        resourceRefs,
-        runtimeEnv: sessionEnv ?? {},
-        runtimeSecretEnv: sessionSecretEnv,
-        resolvedSecretEnv,
+        volumes: sessionVolumes,
+        volumeMounts: sessionVolumeMounts,
+        runtimeEnv: runtimeInputs.env,
+        resolvedVolumes: runtimeInputs.volumes,
       }),
       RUNTIME_START_TIMEOUT_MS,
       'Session runtime startup timed out',
@@ -238,8 +251,9 @@ export async function executeCloudSessionTurn(
     if (!agentSnapshot) {
       throw new Error('Session agent snapshot is required')
     }
-    const resourceRefs = parseJson<ResourceRef[]>(session.resourceRefs) ?? []
-    const runtimeAgentSnapshot = agentSnapshotWithMemoryStoreContext(agentSnapshot, resourceRefs)
+    const volumes = parseJson<Volume[]>(session.volumes) ?? []
+    const volumeMounts = parseJson<VolumeMount[]>(session.volumeMounts) ?? []
+    const runtimeAgentSnapshot = agentSnapshotWithWorkspaceContext(agentSnapshot, volumes, volumeMounts)
     const modelConfig = parseJson<Record<string, unknown>>(session.modelConfig) ?? {}
     const messages = await loadRuntimeMessages(deps, session.id)
     const { provider: turnProvider, model: turnModel } = resolveSessionProviderModel(
@@ -450,9 +464,10 @@ export async function consumeCloudTurnMessage(deps: CloudTurnDeps, message: Clou
       environmentSnapshot: parseJson<NormalizedEnvironmentSnapshot>(session.environmentSnapshot),
       runtime: message.runtime,
       runtimeConfig: message.runtimeConfig,
-      resourceRefs: message.resourceRefs,
       env: message.runtimeEnv,
-      secretEnv: message.runtimeSecretEnv,
+      envFrom: message.envFrom,
+      volumes: message.volumes,
+      volumeMounts: message.volumeMounts,
       ...(message.initialPrompt !== undefined ? { initialPrompt: message.initialPrompt } : {}),
     })
     return

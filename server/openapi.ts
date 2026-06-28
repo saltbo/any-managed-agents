@@ -48,8 +48,8 @@ export function listResponseSchema<T extends z.ZodType>(name: string, itemSchema
     .openapi(name)
 }
 
-// Vault credential reference: the only way secrets are referenced anywhere
-// in the API (docs/api-v1-design.md §1.4).
+// Vault credential reference: control-plane resource selector used by
+// environments, connectors, and other AMA-owned resources.
 export const CredentialRefSchema = z
   .object({
     credentialId: z.string().min(1).openapi({ example: 'vaultcred_abc123' }),
@@ -57,12 +57,17 @@ export const CredentialRefSchema = z
   })
   .openapi('CredentialRef')
 
-export const SecretEnvEntrySchema = z
+export const EnvFromEntrySchema = z
   .object({
+    type: z.literal('secret').openapi({ example: 'secret' }),
     name: z.string().min(1).max(120).openapi({ example: 'GITHUB_TOKEN' }),
-    credentialRef: CredentialRefSchema,
+    secretRef: z
+      .string()
+      .min(1)
+      .openapi({ example: 'ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123' }),
   })
-  .openapi('SecretEnvEntry')
+  .strict()
+  .openapi('EnvFromEntry')
 
 const limitQuery = z.coerce
   .number()

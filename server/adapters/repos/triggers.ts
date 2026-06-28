@@ -2,7 +2,7 @@ import type { RuntimeName } from '@server/contracts/environment-contracts'
 import type {
   CreateTriggerInput,
   ListPageResult,
-  SecretEnvEntry,
+  EnvFromEntry,
   TriggerListQuery,
   TriggerRecord,
   TriggerRepo,
@@ -42,9 +42,10 @@ function recordFrom(row: TriggerRow): TriggerRecord {
     runtime: row.runtime as RuntimeName,
     name: row.name,
     promptTemplate: row.promptTemplate,
-    resourceRefs: parseJson<Record<string, unknown>[]>(row.resourceRefs, []),
     env: parseJson<Record<string, string>>(row.env, {}),
-    secretEnv: parseJson<SecretEnvEntry[]>(row.secretEnv, []),
+    envFrom: parseJson<EnvFromEntry[]>(row.envFrom, []),
+    volumes: parseJson<TriggerRecord['volumes']>(row.volumes, []),
+    volumeMounts: parseJson<TriggerRecord['volumeMounts']>(row.volumeMounts, []),
     schedule:
       type === 'scheduled'
         ? { intervalSeconds: row.intervalSeconds ?? 0, windowSeconds: row.windowSeconds ?? 0 }
@@ -88,9 +89,10 @@ function configColumns(config: CreateTriggerInput['config']) {
     runtime: config.runtime,
     name: config.name,
     promptTemplate: config.promptTemplate,
-    resourceRefs: stringify(config.resourceRefs),
     env: stringify(config.env),
-    secretEnv: stringify(config.secretEnv),
+    envFrom: stringify(config.envFrom),
+    volumes: stringify(config.volumes),
+    volumeMounts: stringify(config.volumeMounts),
     intervalSeconds: config.schedule?.intervalSeconds ?? null,
     windowSeconds: config.schedule?.windowSeconds ?? null,
     enabled: config.enabled,

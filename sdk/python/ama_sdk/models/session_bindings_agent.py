@@ -8,21 +8,29 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
+from typing import cast
+
+if TYPE_CHECKING:
+  from ..models.session_agent_snapshot import SessionAgentSnapshot
 
 
 
 
 
-
-T = TypeVar("T", bound="SessionRuntimeMetadataRuntimeConfig")
+T = TypeVar("T", bound="SessionBindingsAgent")
 
 
 
 @_attrs_define
-class SessionRuntimeMetadataRuntimeConfig:
+class SessionBindingsAgent:
     """ 
+        Attributes:
+            version_id (str):  Example: agentver_abc123.
+            snapshot (SessionAgentSnapshot):
      """
 
+    version_id: str
+    snapshot: SessionAgentSnapshot
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
@@ -30,9 +38,18 @@ class SessionRuntimeMetadataRuntimeConfig:
 
 
     def to_dict(self) -> dict[str, Any]:
-        
+        from ..models.session_agent_snapshot import SessionAgentSnapshot
+        version_id = self.version_id
+
+        snapshot = self.snapshot.to_dict()
+
+
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
+        field_dict.update({
+            "versionId": version_id,
+            "snapshot": snapshot,
+        })
 
         return field_dict
 
@@ -40,13 +57,23 @@ class SessionRuntimeMetadataRuntimeConfig:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
+        from ..models.session_agent_snapshot import SessionAgentSnapshot
         d = dict(src_dict)
-        session_runtime_metadata_runtime_config = cls(
+        version_id = d.pop("versionId")
+
+        snapshot = SessionAgentSnapshot.from_dict(d.pop("snapshot"))
+
+
+
+
+        session_bindings_agent = cls(
+            version_id=version_id,
+            snapshot=snapshot,
         )
 
 
-        session_runtime_metadata_runtime_config.additional_properties = d
-        return session_runtime_metadata_runtime_config
+        session_bindings_agent.additional_properties = d
+        return session_bindings_agent
 
     @property
     def additional_keys(self) -> list[str]:

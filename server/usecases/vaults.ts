@@ -9,8 +9,8 @@ import {
   VaultVersionReferencedError,
 } from './ports'
 
-// Merges the safe reference metadata with the stored secret metadata (ciphertext,
-// cloudflareSecretId) the gateway returned.
+// Merges the safe reference metadata with the stored secret metadata
+// (ciphertext) the gateway returned.
 function versionMetadata(
   reference: { metadata: Record<string, unknown> },
   stored: Record<string, unknown> | undefined,
@@ -41,9 +41,10 @@ export async function createCredential(
 ): Promise<CreateCredentialResult> {
   const timestamp = new Date().toISOString()
   const credentialId = newId('vaultcred')
+  const versionId = newId('vaultver')
   let reference: ReturnType<typeof secretReference>
   try {
-    reference = secretReference(credentialId, 1, input.secret)
+    reference = secretReference({ vaultId: vault.id, credentialId, versionId }, 1, input.secret)
   } catch (error) {
     throw secretError(error)
   }
@@ -64,7 +65,7 @@ export async function createCredential(
       metadata: input.metadata,
     },
     {
-      id: newId('vaultver'),
+      id: versionId,
       credentialId,
       vaultId: vault.id,
       organizationId: vault.organizationId,
@@ -88,16 +89,21 @@ export async function rotateCredential(
   let reference: ReturnType<typeof secretReference>
   let stored: Record<string, unknown> | undefined
   let nextVersion: number
+  const versionId = newId('vaultver')
   try {
     nextVersion = (await deps.vaults.latestVersionNumber(credential.id)) + 1
-    reference = secretReference(credential.id, nextVersion, secret)
+    reference = secretReference(
+      { vaultId: credential.vaultId, credentialId: credential.id, versionId },
+      nextVersion,
+      secret,
+    )
     stored = await deps.secretStore.store(reference, secret)
   } catch (error) {
     throw secretError(error)
   }
   const version = await deps.vaults.insertVersionRotation(
     {
-      id: newId('vaultver'),
+      id: versionId,
       credentialId: credential.id,
       vaultId: credential.vaultId,
       organizationId: credential.organizationId,
@@ -114,8 +120,7 @@ export async function rotateCredential(
 
 // Deletes an unused credential version. The active version and versions pinned
 // by live runtime metadata cannot be deleted; raises
-// VaultVersionReferencedError, mapped to 409. Cloudflare secret deletion is a
-// boundary; failures become VaultSecretError (400).
+// VaultVersionReferencedError, mapped to 409.
 export async function deleteCredentialVersion(
   deps: Deps,
   credential: CredentialRecord,
@@ -126,15 +131,6 @@ export async function deleteCredentialVersion(
   }
   if (await deps.vaults.versionHasActiveReferences(version)) {
     throw new VaultVersionReferencedError('Credential version is referenced by active runtime metadata')
-  }
-  try {
-    await deps.secretStore.delete({
-      provider: version.provider,
-      hasSecret: version.hasSecret,
-      metadata: version.metadata,
-    })
-  } catch (error) {
-    throw secretError(error)
   }
   await deps.vaults.deleteVersion(version.id)
 }

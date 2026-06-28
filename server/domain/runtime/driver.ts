@@ -82,7 +82,7 @@ export function sessionSocketPath(sessionId: string) {
   return `/api/v1/sessions/${sessionId}/socket`
 }
 
-export function runtimeMetadata(values: {
+export function runtimePlacement(values: {
   hostingMode: RuntimeHostingMode
   runtime: RuntimeName
   runtimeConfig: Record<string, unknown>

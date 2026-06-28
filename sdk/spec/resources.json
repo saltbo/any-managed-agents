@@ -6,6 +6,9 @@
         { "name": "system", "methods": [
           { "name": "health", "operationId": "getHealth" }
         ] },
+        { "name": "configz", "methods": [
+          { "name": "get", "operationId": "readConfigz" }
+        ] },
         { "name": "auth", "methods": [
           { "name": "config", "operationId": "readAuthConfig" },
           { "name": "createSession", "operationId": "createAuthSession" },

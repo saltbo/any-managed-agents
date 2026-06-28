@@ -9,27 +9,22 @@ from attrs import field as _attrs_field
 from ..types import UNSET, Unset
 
 from ..models.environment_hosting_mode import EnvironmentHostingMode
-from ..models.runtime import Runtime
 from typing import cast
 
-if TYPE_CHECKING:
-  from ..models.session_runtime_metadata_runtime_config import SessionRuntimeMetadataRuntimeConfig
 
 
 
 
 
-T = TypeVar("T", bound="SessionRuntimeMetadata")
+T = TypeVar("T", bound="SessionPlacementType0")
 
 
 
 @_attrs_define
-class SessionRuntimeMetadata:
+class SessionPlacementType0:
     """ 
         Attributes:
             hosting_mode (EnvironmentHostingMode):  Example: cloud.
-            runtime (Runtime):  Example: codex.
-            runtime_config (SessionRuntimeMetadataRuntimeConfig):
             provider (str):  Example: workers-ai.
             model (None | str):  Example: @cf/moonshotai/kimi-k2.6.
             driver (None | str):  Example: ama-cloud.
@@ -38,8 +33,6 @@ class SessionRuntimeMetadata:
      """
 
     hosting_mode: EnvironmentHostingMode
-    runtime: Runtime
-    runtime_config: SessionRuntimeMetadataRuntimeConfig
     provider: str
     model: None | str
     driver: None | str
@@ -52,12 +45,7 @@ class SessionRuntimeMetadata:
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.session_runtime_metadata_runtime_config import SessionRuntimeMetadataRuntimeConfig
         hosting_mode = self.hosting_mode.value
-
-        runtime = self.runtime.value
-
-        runtime_config = self.runtime_config.to_dict()
 
         provider = self.provider
 
@@ -78,8 +66,6 @@ class SessionRuntimeMetadata:
         field_dict.update(self.additional_properties)
         field_dict.update({
             "hostingMode": hosting_mode,
-            "runtime": runtime,
-            "runtimeConfig": runtime_config,
             "provider": provider,
             "model": model,
             "driver": driver,
@@ -93,19 +79,8 @@ class SessionRuntimeMetadata:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.session_runtime_metadata_runtime_config import SessionRuntimeMetadataRuntimeConfig
         d = dict(src_dict)
         hosting_mode = EnvironmentHostingMode(d.pop("hostingMode"))
-
-
-
-
-        runtime = Runtime(d.pop("runtime"))
-
-
-
-
-        runtime_config = SessionRuntimeMetadataRuntimeConfig.from_dict(d.pop("runtimeConfig"))
 
 
 
@@ -144,10 +119,8 @@ class SessionRuntimeMetadata:
         protocol = _parse_protocol(d.pop("protocol"))
 
 
-        session_runtime_metadata = cls(
+        session_placement_type_0 = cls(
             hosting_mode=hosting_mode,
-            runtime=runtime,
-            runtime_config=runtime_config,
             provider=provider,
             model=model,
             driver=driver,
@@ -156,8 +129,8 @@ class SessionRuntimeMetadata:
         )
 
 
-        session_runtime_metadata.additional_properties = d
-        return session_runtime_metadata
+        session_placement_type_0.additional_properties = d
+        return session_placement_type_0
 
     @property
     def additional_keys(self) -> list[str]:

@@ -78,36 +78,36 @@ describe('route schema and handler alignment [spec: api-contracts/schema-alignme
       // PATCH /sessions/{id}/approvals/{id} body.decision
       'decision',
       'env',
+      'envFrom',
       'environmentId',
       // POST /sessions/{id}/events body.events
       'events',
       'initialPrompt',
       'metadata',
-      'providerAccessOverride',
+      'name',
       'reason',
-      'resourceRefs',
       'result',
       'runtime',
       'runtimeConfig',
-      'secretEnv',
       'state',
-      'title',
+      'volumeMounts',
+      'volumes',
     ])
 
     expect(schemaFields(doc, 'CreateSessionRequest')).toEqual([
       'agentId',
       'env',
+      'envFrom',
       'environmentId',
       'initialPrompt',
       'metadata',
-      'providerAccessOverride',
-      'resourceRefs',
+      'name',
       'runtime',
       'runtimeConfig',
-      'secretEnv',
-      'title',
+      'volumeMounts',
+      'volumes',
     ])
-    expect(schemaFields(doc, 'UpdateSessionRequest')).toEqual(['archived', 'metadata', 'state', 'title'])
+    expect(schemaFields(doc, 'UpdateSessionRequest')).toEqual(['archived', 'metadata', 'name', 'state'])
     expect(schemaFields(doc, 'CreateSessionMessageRequest')).toEqual(['content', 'type'])
     expect(schemaFields(doc, 'SessionApprovalDecisionRequest')).toEqual(['decision', 'reason', 'result'])
   })

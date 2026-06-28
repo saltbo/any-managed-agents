@@ -126,13 +126,13 @@ async function createSessionThroughSdk(
     agentId: String(obj(agent).id),
     environmentId: String(obj(environment).id),
     runtime: 'ama',
-    title: `${runId} external session`,
+    name: `${runId} external session`,
     metadata: externalMetadata(refs),
     ...extra,
   })) as Json
   // Cloud sessions reach `idle` synchronously in the integration pool, so we just
   // read the session back rather than polling a runtime drive-to-idle loop.
-  const session = await readSession(ama, String(created.id))
+  const session = await readSession(ama, String(obj(created.metadata).uid))
   return { created, session }
 }
 
@@ -211,40 +211,42 @@ describe('[CF] generated SDK contract', () => {
     const refs = externalRefs(runId)
     const agent = await createAgentThroughSdk(ama, runId, refs)
     const environment = await createEnvironmentThroughSdk(ama, runId, refs)
-    const resourceRefs = [{ type: 'github_repository', owner: 'saltbo', repo: 'any-managed-agents', ref: 'main' }]
+    const volumes = [{ name: 'repo', type: 'github_repository', owner: 'saltbo', repo: 'any-managed-agents', ref: 'main' }]
 
     const { created, session } = await createSessionThroughSdk(ama, runId, refs, agent, environment, {
-      resourceRefs,
+      volumes,
+      volumeMounts: [{ name: 'repo', mountPath: '/workspace/repos/saltbo/any-managed-agents' }],
       initialPrompt: `Start the external product work item for ${runId}.`,
     })
-    const sessionId = String(obj(session).id)
+    const sessionId = String(obj(session.metadata).uid)
 
     // Snapshots pin the selected agent/environment and are immutable after creation.
     const before = await readSession(ama, sessionId)
-    expect(obj(before.agentSnapshot).agentId).toBe(obj(agent).id)
-    expect(typeof obj(before.agentSnapshot).version).toBe('number')
-    expect(obj(before.environmentSnapshot).environmentId).toBe(obj(environment).id)
+    expect(obj(obj(obj(obj(before.status).bindings).agent).snapshot).agentId).toBe(obj(agent).id)
+    expect(typeof obj(obj(obj(obj(before.status).bindings).agent).snapshot).version).toBe('number')
+    expect(obj(obj(obj(obj(before.status).bindings).environment).snapshot).environmentId).toBe(obj(environment).id)
     await ama.agents.update(String(obj(agent).id), {
       instructions: 'Changed after session creation — the snapshot must not follow.',
     })
     const after = await readSession(ama, sessionId)
-    expect(after.agentSnapshot).toEqual(before.agentSnapshot)
-    expect(after.environmentSnapshot).toEqual(before.environmentSnapshot)
+    expect(obj(obj(after.status).bindings).agent).toEqual(obj(obj(before.status).bindings).agent)
+    expect(obj(obj(after.status).bindings).environment).toEqual(obj(obj(before.status).bindings).environment)
 
     // The runtime/provider/model were validated before runtime work started.
-    const runtimeMetadata = obj((await readSession(ama, sessionId)).runtimeMetadata)
-    expect(runtimeMetadata.runtime).toBe('ama')
-    expect(runtimeMetadata.hostingMode).toBe('cloud')
-    expect(runtimeMetadata.provider).toBeTruthy()
+    const sessionStatus = obj((await readSession(ama, sessionId)).status)
+    const placement = obj(sessionStatus.placement)
+    expect(obj((await readSession(ama, sessionId)).spec).runtime).toBe('ama')
+    expect(placement.hostingMode).toBe('cloud')
+    expect(placement.provider).toBeTruthy()
 
     // Stable id/status/runtime + the canonical event endpoint advertised on the connection resource.
-    expect(typeof created.id === 'string' && (created.id as string).length > 0).toBe(true)
-    const fetched = await readSession(ama, String(created.id))
-    expect(fetched.id).toBe(created.id)
-    expect('stateReason' in fetched).toBe(true)
-    const connection = (await ama.sessions.getConnection(String(created.id))) as Json
+    expect(typeof obj(created.metadata).uid === 'string' && (obj(created.metadata).uid as string).length > 0).toBe(true)
+    const fetched = await readSession(ama, String(obj(created.metadata).uid))
+    expect(obj(fetched.metadata).uid).toBe(obj(created.metadata).uid)
+    expect('reason' in obj(fetched.status)).toBe(true)
+    const connection = (await ama.sessions.getConnection(String(obj(created.metadata).uid))) as Json
     expect(connection.transport).toBe('websocket')
-    expect(connection.path).toBe(`/api/v1/sessions/${created.id}/socket`)
+    expect(connection.path).toBe(`/api/v1/sessions/${obj(created.metadata).uid}/socket`)
     const eventsOperation = operations.find((op) => op.operationId === 'listSessionEvents')
     expect(eventsOperation?.path).toBe('/api/v1/sessions/{sessionId}/events')
 
@@ -265,7 +267,7 @@ describe('[CF] generated SDK contract', () => {
     const agent = await createAgentThroughSdk(ama, runId, refs)
     const environment = await createEnvironmentThroughSdk(ama, runId, refs)
     const { session } = await createSessionThroughSdk(ama, runId, refs, agent, environment, {})
-    const sessionId = String(obj(session).id)
+    const sessionId = String(obj(session.metadata).uid)
 
     const command = (await ama.sessions.createMessage(sessionId, {
       type: 'prompt',
@@ -275,7 +277,7 @@ describe('[CF] generated SDK contract', () => {
 
     // The follow-up is an addressable message routed on AMA-relative channels.
     expect(typeof command.id === 'string' && (command.id as string).length > 0).toBe(true)
-    expect(command.sessionId).toBe(obj(stopped).id)
+    expect(command.sessionId).toBe(obj(obj(stopped).metadata).uid)
     expect(command.type).toBe('prompt')
     expect(['live', 'queued'].includes(String(command.delivery))).toBe(true)
     expect(['accepted', 'delivered'].includes(String(command.state))).toBe(true)
@@ -288,7 +290,7 @@ describe('[CF] generated SDK contract', () => {
       expect(isAmaSessionEventType(String(event.type)), `non-canonical event type "${event.type}"`).toBe(true)
     }
     expect(events.data.some((e) => e.type === 'session_stop')).toBe(true)
-    expect((await readSession(ama, sessionId)).state).toBe('stopped')
+    expect(obj(await readSession(ama, sessionId)).status).toMatchObject({ phase: 'stopped' })
 
     // The SDK inventory only targets AMA control-plane endpoints; nothing leaks a local endpoint.
     for (const op of operations) {

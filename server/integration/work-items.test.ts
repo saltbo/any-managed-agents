@@ -25,7 +25,9 @@ async function createSelfHostedEnvironment(authorization: string) {
       networkPolicy: { mode: 'unrestricted' },
     }),
   })
-  expect(res.status).toBe(201)
+  if (res.status !== 201) {
+    throw new Error(`Session creation failed: ${res.status} ${await res.text()}`)
+  }
   return (await res.json()) as { id: string }
 }
 
@@ -56,14 +58,12 @@ async function createSessionSecretEnv(authorization: string) {
     body: JSON.stringify({
       name: 'AK agent session key',
       type: 'session_env_secret',
-      secret: { provider: 'cloudflare-secrets', secretValue: 'raw-ak-agent-key' },
+      secret: { secretValue: 'raw-ak-agent-key' },
     }),
   })
   expect(credentialRes.status).toBe(201)
-  const credential = (await credentialRes.json()) as { id: string; activeVersion: { id: string } }
-  return [
-    { name: 'AK_AGENT_KEY', credentialRef: { credentialId: credential.id, versionId: credential.activeVersion.id } },
-  ]
+  const credential = (await credentialRes.json()) as { activeVersion: { secretRef: string } }
+  return [{ type: 'secret', name: 'AK_AGENT_KEY', secretRef: credential.activeVersion.secretRef }]
 }
 
 async function createSelfHostedSession(
@@ -82,8 +82,14 @@ async function createSelfHostedSession(
       ...executionOverrides,
     }),
   })
-  expect(res.status).toBe(201)
-  return (await res.json()) as { id: string; state: string; stateReason: string }
+  if (res.status !== 201) {
+    throw new Error(`Session creation failed: ${res.status} ${await res.text()}`)
+  }
+  const session = (await res.json()) as {
+    metadata: { uid: string }
+    status: { phase: string; reason: string | null }
+  }
+  return { ...session, id: session.metadata.uid, state: session.status.phase, stateReason: session.status.reason }
 }
 
 describe('[CF] /api/v1/work-items', () => {
@@ -96,10 +102,10 @@ describe('[CF] /api/v1/work-items', () => {
     const authorization = await signIn()
     const environment = await createSelfHostedEnvironment(authorization)
     const agent = await createAgent(authorization)
-    const secretEnv = await createSessionSecretEnv(authorization)
+    const envFrom = await createSessionSecretEnv(authorization)
     const session = await createSelfHostedSession(authorization, agent.id, environment.id, {
       env: { AK_API_URL: 'https://ak.example.test' },
-      secretEnv,
+      envFrom,
     })
     expect(session).toMatchObject({ state: 'pending', stateReason: 'waiting-for-runner' })
 

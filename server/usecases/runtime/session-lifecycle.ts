@@ -9,6 +9,12 @@
 // reader, and runner channel arrive as ports on `deps`; canonical events go
 // through the events usecase. The module is infra-free.
 
+import {
+  isMemoryStoreVolume,
+  type MemoryStoreVolume,
+  type Volume,
+  type VolumeMount,
+} from '@server/domain/runtime/execution-inputs'
 import { now, RUNTIME_START_TIMEOUT_MS, requestIdFrom, stringify } from '@server/domain/runtime/util'
 import { safeRuntimeError } from '@server/runtime-error'
 import type {
@@ -134,17 +140,19 @@ async function syncWritableMemoryStores(deps: LifecycleDeps, auth: AuthScope, se
   if (!session.sandboxId) {
     return
   }
-  const resourceRefs = JSON.parse(session.resourceRefs) as Record<string, unknown>[]
-  const writableRefs = resourceRefs.filter(
-    (resourceRef) => resourceRef.type === 'memory_store' && resourceRef.access === 'read_write',
+  const volumes = JSON.parse(session.volumes) as Volume[]
+  const volumeMounts = JSON.parse(session.volumeMounts) as VolumeMount[]
+  const writableVolumes = volumes.filter(
+    (volume): volume is MemoryStoreVolume => isMemoryStoreVolume(volume) && volume.access === 'read_write',
   )
-  if (writableRefs.length === 0) {
+  if (writableVolumes.length === 0) {
     return
   }
   const snapshots = await deps.runtimeWorkspace.readMemoryStoreMemories({
     sessionId: session.id,
     sandboxId: session.sandboxId,
-    resourceRefs: writableRefs,
+    volumes: writableVolumes,
+    volumeMounts,
   })
   const updatedAt = now()
   for (const snapshot of snapshots) {

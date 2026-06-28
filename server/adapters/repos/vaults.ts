@@ -1,5 +1,5 @@
 import type { SecretProvider, VaultScope, VersionState } from '@server/domain/vault'
-import { credentialRefPinsVersion } from '@server/domain/vault'
+import { credentialRefPinsVersion, secretRefPinsVersion } from '@server/domain/vault'
 import type {
   CreateCredentialInput,
   CreateVaultInput,
@@ -81,9 +81,8 @@ function credentialRecordFrom(row: CredentialRow): CredentialRecord {
   }
 }
 
-// The version record carries the full stored metadata (encryptedSecretValue,
-// cloudflareSecretId). The http serializer strips stored secret keys before it
-// crosses the wire.
+// The version record carries the full stored metadata (encryptedSecretValue).
+// The http serializer strips stored secret keys before it crosses the wire.
 function versionRecordFrom(row: CredentialVersionRow): CredentialVersionRecord {
   return {
     id: row.id,
@@ -94,7 +93,6 @@ function versionRecordFrom(row: CredentialVersionRow): CredentialVersionRecord {
     version: row.version,
     provider: row.provider as SecretProvider,
     secretRef: row.secretRef,
-    externalVaultPath: row.externalVaultPath,
     referenceName: row.referenceName,
     state: row.state as VersionState,
     hasSecret: row.hasSecret,
@@ -116,7 +114,6 @@ function versionColumns(version: InsertVersionInput) {
   return {
     provider: version.reference.provider,
     secretRef: version.reference.secretRef,
-    externalVaultPath: version.reference.externalVaultPath,
     referenceName: version.reference.referenceName,
     hasSecret: version.reference.hasSecret,
     metadata: stringify(version.metadata),
@@ -424,15 +421,19 @@ export function createVaultRepo(db: Db): VaultRepo {
         or(eq(sessions.state, ACTIVE_SESSION_STATES[0]), eq(sessions.state, ACTIVE_SESSION_STATES[1])),
       ].filter((filter) => filter !== undefined)
       const sessionReferences = await db
-        .select({ secretEnv: sessions.secretEnv, environmentSnapshot: sessions.environmentSnapshot })
+        .select({ envFrom: sessions.envFrom, volumes: sessions.volumes, environmentSnapshot: sessions.environmentSnapshot })
         .from(sessions)
         .where(and(...sessionFilters))
       return sessionReferences.some((row) => {
-        const secretEnvPins = parseRefArray(row.secretEnv).some((entry) => {
-          const ref = entry && typeof entry === 'object' ? (entry as { credentialRef?: unknown }).credentialRef : null
-          return credentialRefPinsVersion(ref, version)
+        const envFromPins = parseRefArray(row.envFrom).some((entry) => {
+          const ref = entry && typeof entry === 'object' ? (entry as { secretRef?: unknown }).secretRef : null
+          return secretRefPinsVersion(ref, version)
         })
-        if (secretEnvPins) {
+        const volumePins = parseRefArray(row.volumes).some((entry) => {
+          const ref = entry && typeof entry === 'object' ? (entry as { secretRef?: unknown }).secretRef : null
+          return secretRefPinsVersion(ref, version)
+        })
+        if (envFromPins || volumePins) {
           return true
         }
         const snapshot = row.environmentSnapshot

@@ -9,75 +9,30 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it } from 'vitest'
 import { HttpResponse, http, server } from '@/test/msw'
+import { buildTestSession } from '@/testing/session'
 import { useSessionActions } from './use-session-actions'
 
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
 
-const now = '2026-05-23T00:00:00.000Z'
-
 function buildStoppedSession() {
-  return {
+  return buildTestSession({
     id: 'session_1',
-    projectId: 'project_1',
-    agentId: 'agent_1',
-    agentVersionId: 'agentver_1',
-    agentSnapshot: {
-      id: 'agentver_1',
-      agentId: 'agent_1',
-      projectId: 'project_1',
-      version: 1,
-      instructions: 'Do work',
-      providerId: 'workers-ai',
-      model: '@cf/meta/llama',
-      skills: [],
-      subagents: [],
-      role: null,
-      capabilityTags: [],
-      handoffPolicy: {},
-      memoryPolicy: { enabled: false },
-      tools: [],
-      mcpConnectors: [],
-      metadata: {},
-      createdAt: now,
-    },
-    environmentId: 'env_1',
-    environmentVersionId: null,
-    environmentSnapshot: null,
-    title: null,
-    resourceRefs: [],
-    env: {},
-    secretEnv: [],
-    runtimeMetadata: {
-      hostingMode: 'cloud',
-      runtime: 'ama',
-      runtimeConfig: {},
-      provider: 'workers-ai',
-      model: '@cf/meta/llama',
-      driver: 'ama-cloud',
-      backend: 'ama-cloud',
-      protocol: 'ama-runtime-rpc',
-    },
-    state: 'stopped',
-    stateReason: null,
-    metadata: {},
-    startedAt: now,
+    phase: 'stopped',
     stoppedAt: '2026-05-23T00:00:01.000Z',
-    archivedAt: null,
-    createdAt: now,
     updatedAt: '2026-05-23T00:00:01.000Z',
-  }
+  })
 }
 
 function buildArchivedSession() {
-  return {
-    ...buildStoppedSession(),
-    state: 'idle',
+  return buildTestSession({
+    id: 'session_1',
+    phase: 'idle',
     stoppedAt: null,
     archivedAt: '2026-05-23T00:00:02.000Z',
     updatedAt: '2026-05-23T00:00:02.000Z',
-  }
+  })
 }
 
 // ---------------------------------------------------------------------------

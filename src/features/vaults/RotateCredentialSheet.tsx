@@ -24,8 +24,7 @@ export function RotateCredentialSheet({
   const queryClient = useQueryClient()
   const [secretValue, setSecretValue] = useState('')
   const rotateCredential = useMutation({
-    mutationFn: (credentialId: string) =>
-      api.rotateVaultCredential(vaultId, credentialId, { provider: 'ama-managed', secretValue }),
+    mutationFn: (credentialId: string) => api.rotateVaultCredential(vaultId, credentialId, { secretValue }),
     onSuccess: () => {
       onOpenChange(false)
       setSecretValue('')

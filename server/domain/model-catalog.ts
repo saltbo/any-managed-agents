@@ -20,9 +20,9 @@ export interface CatalogModel extends DiscoveredProviderModel {
 }
 
 // CF marks these `function_calling: true` (the model accepts a `tools` param)
-// but they do not emit usable tool_calls in this harness — verified by probing
-// through the runtime-ai proxy. The flag means "accepts tools", not "drives a
-// tool loop", so a thin denylist still guards the agent runtime.
+// but they do not emit usable tool_calls in this harness. The flag means
+// "accepts tools", not "drives a tool loop", so a thin denylist still guards
+// the agent runtime.
 export const TOOL_CALL_DENYLIST: ReadonlySet<string> = new Set([
   '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
   '@cf/meta/llama-4-scout-17b-16e-instruct',

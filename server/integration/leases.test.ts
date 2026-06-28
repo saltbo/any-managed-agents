@@ -57,14 +57,12 @@ async function createSessionSecretEnv(authorization: string) {
     body: JSON.stringify({
       name: 'AK agent session key',
       type: 'session_env_secret',
-      secret: { provider: 'cloudflare-secrets', secretValue: 'raw-ak-agent-key' },
+      secret: { secretValue: 'raw-ak-agent-key' },
     }),
   })
   expect(credentialRes.status).toBe(201)
-  const credential = (await credentialRes.json()) as { id: string; activeVersion: { id: string } }
-  return [
-    { name: 'AK_AGENT_KEY', credentialRef: { credentialId: credential.id, versionId: credential.activeVersion.id } },
-  ]
+  const credential = (await credentialRes.json()) as { activeVersion: { secretRef: string } }
+  return [{ type: 'secret', name: 'AK_AGENT_KEY', secretRef: credential.activeVersion.secretRef }]
 }
 
 async function createSelfHostedSession(
@@ -83,8 +81,15 @@ async function createSelfHostedSession(
       ...executionOverrides,
     }),
   })
-  expect(res.status).toBe(201)
-  return (await res.json()) as { id: string; state: string; stateReason: string }
+  const body = await res.clone().text()
+  expect(res.status, body).toBe(201)
+  const session = (await res.json()) as { metadata: { uid: string }; status: { phase: string; reason: string | null } }
+  return {
+    ...session,
+    id: session.metadata.uid,
+    state: session.status.phase,
+    stateReason: session.status.reason,
+  }
 }
 
 async function registerActiveRunner(
@@ -138,10 +143,10 @@ describe('[CF] /api/v1/leases', () => {
     const environment = await createSelfHostedEnvironment(authorization)
     const agent = await createAgent(authorization)
     const runner = await registerActiveRunner(authorization, environment.id)
-    const secretEnv = await createSessionSecretEnv(authorization)
+    const envFrom = await createSessionSecretEnv(authorization)
     const session = await createSelfHostedSession(authorization, agent.id, environment.id, {
       env: { AK_API_URL: 'https://ak.example.test' },
-      secretEnv,
+      envFrom,
     })
 
     const workItem = await availableWorkItem(authorization, session.id)
@@ -163,10 +168,8 @@ describe('[CF] /api/v1/leases', () => {
     const runningSessionRes = await jsonFetch(`/api/v1/sessions/${session.id}`, authorization)
     expect(runningSessionRes.status).toBe(200)
     await expect(runningSessionRes.json()).resolves.toMatchObject({
-      id: session.id,
-      state: 'running',
-      stateReason: null,
-      startedAt: expect.any(String),
+      metadata: { uid: session.id },
+      status: { phase: 'running', reason: null, startedAt: expect.any(String) },
     })
 
     const leasedWorkRes = await jsonFetch(`/api/v1/work-items/${workItem.id}`, authorization)
@@ -228,9 +231,8 @@ describe('[CF] /api/v1/leases', () => {
 
     const completedSessionRes = await jsonFetch(`/api/v1/sessions/${session.id}`, authorization)
     await expect(completedSessionRes.json()).resolves.toMatchObject({
-      id: session.id,
-      state: 'idle',
-      stateReason: null,
+      metadata: { uid: session.id },
+      status: { phase: 'idle', reason: null },
     })
   })
 
@@ -251,7 +253,8 @@ describe('[CF] /api/v1/leases', () => {
     expect(memoryRes.status).toBe(201)
     const runner = await registerActiveRunner(authorization, environment.id)
     const session = await createSelfHostedSession(authorization, agent.id, environment.id, {
-      resourceRefs: [{ type: 'memory_store', storeId: memoryStore.id, access: 'read_write' }],
+      volumes: [{ name: 'memory', type: 'memory_store', storeId: memoryStore.id, access: 'read_write' }],
+      volumeMounts: [{ name: 'memory', mountPath: `/workspace/.ama/memory-stores/${memoryStore.id}` }],
     })
     const workItem = await availableWorkItem(authorization, session.id)
     const claimRes = await claimLease(authorization, workItem.id, runner.id)
@@ -294,7 +297,8 @@ describe('[CF] /api/v1/leases', () => {
     const memoryStore = (await memoryStoreRes.json()) as { id: string }
     const runner = await registerActiveRunner(authorization, environment.id)
     const session = await createSelfHostedSession(authorization, agent.id, environment.id, {
-      resourceRefs: [{ type: 'memory_store', storeId: memoryStore.id, access: 'read_write' }],
+      volumes: [{ name: 'memory', type: 'memory_store', storeId: memoryStore.id, access: 'read_write' }],
+      volumeMounts: [{ name: 'memory', mountPath: `/workspace/.ama/memory-stores/${memoryStore.id}` }],
     })
     const workItem = await availableWorkItem(authorization, session.id)
     const claimRes = await claimLease(authorization, workItem.id, runner.id)
@@ -458,9 +462,8 @@ describe('[CF] /api/v1/leases', () => {
 
     const sessionRes = await jsonFetch(`/api/v1/sessions/${session.id}`, authorization)
     await expect(sessionRes.json()).resolves.toMatchObject({
-      id: session.id,
-      state: 'pending',
-      stateReason: 'waiting-for-runner-recovery',
+      metadata: { uid: session.id },
+      status: { phase: 'pending', reason: 'waiting-for-runner-recovery' },
     })
   })
 
@@ -491,9 +494,8 @@ describe('[CF] /api/v1/leases', () => {
 
     const sessionRes = await jsonFetch(`/api/v1/sessions/${session.id}`, authorization)
     await expect(sessionRes.json()).resolves.toMatchObject({
-      id: session.id,
-      state: 'error',
-      stateReason: 'runner-failed',
+      metadata: { uid: session.id },
+      status: { phase: 'error', reason: 'runner-failed' },
     })
 
     // A finished lease can no longer be renewed or completed again.

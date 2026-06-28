@@ -107,10 +107,16 @@ export function matchesSearch(fields: Array<string | null | undefined>, query: s
   return !normalized || fields.some((field) => field?.toLowerCase().includes(normalized))
 }
 
-export function isArchived(resource: { archivedAt: string | null }) {
-  return resource.archivedAt !== null
+type ArchivableResource = { archivedAt: string | null } | { metadata: { archivedAt: string | null } }
+
+function archivedAt(resource: ArchivableResource) {
+  return 'archivedAt' in resource ? resource.archivedAt : resource.metadata.archivedAt
 }
 
-export function archivedLabel(resource: { archivedAt: string | null }) {
-  return resource.archivedAt === null ? 'active' : 'archived'
+export function isArchived(resource: ArchivableResource) {
+  return archivedAt(resource) !== null
+}
+
+export function archivedLabel(resource: ArchivableResource) {
+  return archivedAt(resource) === null ? 'active' : 'archived'
 }

@@ -56,13 +56,13 @@ export function QuickstartSessionStep({
         agentId: agent.id,
         environmentId: environment.id,
         runtime: 'ama',
-        title: `${agent.name} quickstart session`,
+        name: `${agent.name} quickstart session`,
       })
     },
     onSuccess: async (session) => {
       toast.success('Test session created')
       await queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all })
-      onSessionCreated(session.id)
+      onSessionCreated(session.metadata.uid)
     },
     /* v8 ignore start -- error is always an Error instance in practice */
     onError: (error) => toast.error(errorMessage(error)),
@@ -127,14 +127,14 @@ function QuickstartSessionPreview({ sessionId }: { sessionId: string }) {
     queryKey: queryKeys.sessions.detail(sessionId),
     queryFn: () => api.readSession(sessionId),
     refetchInterval: (query) =>
-      query.state.data && ['pending', 'running'].includes(query.state.data.state) ? 750 : false,
+      query.state.data && ['pending', 'running'].includes(query.state.data.status.phase) ? 750 : false,
   })
   const eventsQuery = useQuery({
     queryKey: queryKeys.sessions.events(sessionId),
     queryFn: () => api.listSessionEvents(sessionId, { limit: 200, order: 'asc' }),
     refetchInterval: (query) => {
       const hasAssistantMessage = (query.state.data?.data ?? []).some((event) => event.type === 'message_end')
-      const state = sessionQuery.data?.state
+      const state = sessionQuery.data?.status.phase
       const terminal = state !== undefined && !['pending', 'running'].includes(state)
       return terminal && hasAssistantMessage ? false : 1000
     },
@@ -142,7 +142,7 @@ function QuickstartSessionPreview({ sessionId }: { sessionId: string }) {
   const connectionQuery = useQuery({
     queryKey: ['sessions', 'detail', sessionId, 'connection'],
     queryFn: () => api.readSessionConnection(sessionId),
-    enabled: sessionQuery.data?.state === 'idle' || sessionQuery.data?.state === 'running',
+    enabled: sessionQuery.data?.status.phase === 'idle' || sessionQuery.data?.status.phase === 'running',
   })
   const onEventsChanged = useCallback(() => {
     /* v8 ignore start -- called by the runtime hook which is mocked in tests */
@@ -179,11 +179,11 @@ function QuickstartSessionPreview({ sessionId }: { sessionId: string }) {
     <div className="grid gap-3 rounded-lg border p-3">
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span className="font-medium">Session preview</span>
-        <StatusBadge value={session.state} detail={session.stateReason} />
-        <OpenPageLink to={`/sessions/${session.id}`} label="Open session detail" />
+        <StatusBadge value={session.status.phase} detail={session.status.reason} />
+        <OpenPageLink to={`/sessions/${session.metadata.uid}`} label="Open session detail" />
       </div>
       <MetaGrid>
-        <Meta label="Session id" value={session.id} />
+        <Meta label="Session id" value={session.metadata.uid} />
         <Meta label="Runtime endpoint" value={connectionQuery.data?.path ?? 'Pending runtime endpoint'} />
       </MetaGrid>
       <Tabs defaultValue="transcript">

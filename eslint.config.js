@@ -28,10 +28,6 @@ export default tseslint.config(
       // AMA_E2E_TEST_AUTH-gated test endpoint; design §1.8 exempts /api/e2e/* from
       // the v1 contract, and it builds partial test fixtures like real test files.
       'server/http/e2e.ts',
-      // External-protocol adapter endpoint (design §1.8): an OpenAI-compatible
-      // inference passthrough whose wire shape is dictated by Workers AI, not by
-      // the AMA v1 contract.
-      'server/http/runtime-ai.ts',
     ],
   },
   {

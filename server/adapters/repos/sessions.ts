@@ -1,16 +1,11 @@
 import type {
-  SessionApprovalRecord,
-  SessionConnectionRecord,
   SessionEventQuery,
-  SessionEventRecord,
   SessionListPage,
   SessionListQuery,
   SessionMessageListPage,
   SessionMessageListQuery,
-  SessionMessageRecord,
-  SessionRecord,
   SessionRepo,
-  SessionRuntimeRow,
+  RuntimeSessionHandle,
 } from '@server/usecases/ports'
 import {
   AMA_SESSION_EVENT_TYPES,
@@ -23,8 +18,22 @@ import type { drizzle } from 'drizzle-orm/d1'
 import type { RuntimeName } from '../../contracts/environment-contracts'
 import { leases, runners, sessionApprovals, sessionEvents, sessionMessages, sessions, workItems } from '../../db/schema'
 import { insertCanonicalSessionEvent } from '../../db/session-event-store'
-import { runtimeMetadata, sessionSocketPath } from '../../domain/runtime/driver'
-import { hostingModeFromSnapshot } from '../../domain/session'
+import { runtimePlacement, sessionSocketPath } from '../../domain/runtime/driver'
+import {
+  hostingModeFromSnapshot,
+  type ApprovalState,
+  type MessageDelivery,
+  type MessageState,
+  type Session,
+  type SessionApproval,
+  type SessionAgentSnapshot,
+  type SessionConnection,
+  type SessionEnvironmentSnapshot,
+  type SessionEvent,
+  type SessionMessage,
+  sessionEventVisibility,
+  type SessionState,
+} from '../../domain/session'
 import { redactSensitiveValue } from '../../redaction'
 
 type Db = ReturnType<typeof drizzle>
@@ -60,6 +69,34 @@ function snapshotRuntime(metadata: Record<string, unknown>): RuntimeName {
   return runtime as RuntimeName
 }
 
+function sessionState(value: string): SessionState {
+  if (value === 'pending' || value === 'running' || value === 'idle' || value === 'stopped' || value === 'error') {
+    return value
+  }
+  throw new Error(`Invalid session state: ${value}`)
+}
+
+function messageDelivery(value: string): MessageDelivery {
+  if (value === 'live' || value === 'queued') {
+    return value
+  }
+  throw new Error(`Invalid session message delivery: ${value}`)
+}
+
+function messageState(value: string): MessageState {
+  if (value === 'accepted' || value === 'delivered' || value === 'failed') {
+    return value
+  }
+  throw new Error(`Invalid session message state: ${value}`)
+}
+
+function approvalState(value: string): ApprovalState {
+  if (value === 'pending' || value === 'approved' || value === 'denied') {
+    return value
+  }
+  throw new Error(`Invalid session approval state: ${value}`)
+}
+
 function sessionModel(modelConfig: Record<string, unknown>, agentSnapshot: SerializedAgentVersion) {
   return typeof modelConfig.model === 'string'
     ? modelConfig.model
@@ -80,7 +117,7 @@ function normalizeEnvironmentSnapshot(snapshot: Record<string, unknown> | null):
   }
 }
 
-function serializeSession(row: SessionRow): SessionRecord {
+function serializeSession(row: SessionRow): Session {
   const agentSnapshot = parseAgentSnapshot(row.agentSnapshot)
   if (!agentSnapshot) {
     throw new Error('Session agent snapshot is required')
@@ -92,40 +129,67 @@ function serializeSession(row: SessionRow): SessionRecord {
   const runtime = snapshotRuntime(metadata)
   const provider = row.modelProvider ?? agentSnapshot.providerId
   const model = sessionModel(modelConfig, agentSnapshot)
+  const placement = runtimePlacement({
+    hostingMode,
+    runtime,
+    runtimeConfig: objectValue(metadata.runtimeConfig),
+    provider,
+    model,
+    metadata,
+  })
 
   return {
-    id: row.id,
-    projectId: row.projectId,
-    agentId: row.agentId,
-    agentVersionId: row.agentVersionId ?? '',
-    agentSnapshot: agentSnapshot as Record<string, unknown>,
-    environmentId: row.environmentId,
-    environmentVersionId: row.environmentVersionId,
-    environmentSnapshot,
-    title: row.title,
-    resourceRefs: parseJson<Record<string, unknown>[]>(row.resourceRefs) ?? [],
-    env: parseJson<Record<string, string>>(row.env) ?? {},
-    secretEnv: parseJson<SessionRecord['secretEnv']>(row.secretEnv) ?? [],
-    runtimeMetadata: runtimeMetadata({
-      hostingMode,
+    metadata: {
+      uid: row.id,
+      pid: row.projectId,
+      name: row.title ?? row.id,
+      labels: objectValue(metadata.labels) as Record<string, string>,
+      annotations: objectValue(metadata.annotations) as Record<string, string>,
+      createdBy: row.createdByUserId,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      archivedAt: row.archivedAt,
+    },
+    spec: {
+      agentId: row.agentId,
+      environmentId: row.environmentId,
       runtime,
-      runtimeConfig: objectValue(metadata.runtimeConfig),
-      provider,
-      model,
-      metadata,
-    }),
-    state: row.state,
-    stateReason: row.stateReason,
-    metadata,
-    startedAt: row.startedAt,
-    stoppedAt: row.stoppedAt,
-    archivedAt: row.archivedAt,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
+      env: parseJson<Record<string, string>>(row.env) ?? {},
+      envFrom: parseJson<Session['spec']['envFrom']>(row.envFrom) ?? [],
+      volumes: parseJson<Session['spec']['volumes']>(row.volumes) ?? [],
+      volumeMounts: parseJson<Session['spec']['volumeMounts']>(row.volumeMounts) ?? [],
+    },
+    status: {
+      phase: sessionState(row.state),
+      reason: row.stateReason,
+      conditions: [],
+      bindings: {
+        agent: {
+          versionId: row.agentVersionId ?? '',
+          snapshot: agentSnapshot as unknown as SessionAgentSnapshot,
+        },
+        environment: {
+          id: row.environmentId,
+          versionId: row.environmentVersionId,
+          snapshot: environmentSnapshot as SessionEnvironmentSnapshot | null,
+        },
+        runtime,
+      },
+      placement: {
+        hostingMode: placement.hostingMode,
+        provider: placement.provider,
+        model: placement.model,
+        driver: placement.driver,
+        backend: placement.backend,
+        protocol: placement.protocol,
+      },
+      startedAt: row.startedAt,
+      stoppedAt: row.stoppedAt,
+    },
   }
 }
 
-function serializeConnection(row: SessionRow): SessionConnectionRecord {
+function serializeConnection(row: SessionRow): SessionConnection {
   // Browser session transport is a single WebSocket to the per-session Session DO
   // (live events server→browser, backfill replay on request, and inbound
   // prompt/abort/steer/approval). SSE + POST /messages remain as REST fallbacks.
@@ -135,26 +199,26 @@ function serializeConnection(row: SessionRow): SessionConnectionRecord {
     sessionId: row.id,
     transport: 'websocket',
     path: sessionSocketPath(row.id),
-    state: row.state,
+    state: sessionState(row.state),
     stateReason: row.stateReason,
   }
 }
 
-function serializeMessage(row: SessionMessageRow): SessionMessageRecord {
+function serializeMessage(row: SessionMessageRow): SessionMessage {
   return {
     id: row.id,
     sessionId: row.sessionId,
     type: row.type as 'prompt',
     content: row.content,
-    delivery: row.delivery,
-    state: row.state,
+    delivery: messageDelivery(row.delivery),
+    state: messageState(row.state),
     error: row.error,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   }
 }
 
-function serializeApproval(row: SessionApprovalRow): SessionApprovalRecord {
+function serializeApproval(row: SessionApprovalRow): SessionApproval {
   return {
     id: row.id,
     sessionId: row.sessionId,
@@ -162,7 +226,7 @@ function serializeApproval(row: SessionApprovalRow): SessionApprovalRecord {
     toolName: row.toolName,
     input: parseJson<Record<string, unknown>>(row.input) ?? {},
     relatedEventIds: parseJson<string[]>(row.relatedEventIds) ?? [],
-    state: row.state,
+    state: approvalState(row.state),
     reason: row.reason,
     result: parseJson<Record<string, unknown>>(row.result),
     requestedAt: row.requestedAt,
@@ -172,7 +236,7 @@ function serializeApproval(row: SessionApprovalRow): SessionApprovalRecord {
   }
 }
 
-function serializeEvent(row: SessionEventRow): SessionEventRecord {
+function serializeEvent(row: SessionEventRow): SessionEvent {
   const rawPayload = JSON.parse(row.payload) as Record<string, unknown>
   const rawMetadata = JSON.parse(row.metadata) as Record<string, unknown>
   const event = isAmaSessionEventType(row.type)
@@ -196,7 +260,7 @@ function serializeEvent(row: SessionEventRow): SessionEventRecord {
     sessionId: row.sessionId,
     sequence: row.sequence,
     type: event.type,
-    visibility: event.visibility,
+    visibility: sessionEventVisibility(event.visibility),
     role: event.role,
     parentEventId: row.parentEventId,
     correlationId: row.correlationId,
@@ -206,12 +270,12 @@ function serializeEvent(row: SessionEventRow): SessionEventRecord {
   }
 }
 
-function runtimeRow(row: SessionRow): SessionRuntimeRow {
+function runtimeRow(row: SessionRow): RuntimeSessionHandle {
   return {
     id: row.id,
     projectId: row.projectId,
     organizationId: row.organizationId,
-    state: row.state,
+    state: sessionState(row.state),
     archivedAt: row.archivedAt,
     sandboxId: row.sandboxId,
     metadata: parseJson<Record<string, unknown>>(row.metadata) ?? {},
@@ -315,9 +379,9 @@ export function createSessionRepo(db: Db): SessionRepo {
             eq(sessions.projectId, projectId),
             isNull(sessions.archivedAt),
             inArray(sessions.state, ['pending', 'idle', 'running']),
-            eq(sql<string>`json_extract(${sessions.metadata}, '$.source')`, 'http-trigger'),
-            eq(sql<string>`json_extract(${sessions.metadata}, '$.httpTriggerId')`, triggerId),
-            eq(sql<string>`json_extract(${sessions.metadata}, '$.key')`, key),
+            eq(sql<string>`json_extract(${sessions.metadata}, '$.annotations.source')`, 'http-trigger'),
+            eq(sql<string>`json_extract(${sessions.metadata}, '$.annotations.httpTriggerId')`, triggerId),
+            eq(sql<string>`json_extract(${sessions.metadata}, '$.annotations.key')`, key),
           ),
         )
         .orderBy(desc(sessions.createdAt), desc(sessions.id))

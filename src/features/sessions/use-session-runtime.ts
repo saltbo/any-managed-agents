@@ -26,10 +26,11 @@ export function useSessionRuntimeSession({
   const sessionIdRef = useRef<string | null>(null)
   // The runtime connection details (transport + path) come from the dedicated
   // connection resource, fetched only while the runtime is actually active.
-  const live = session !== null && (session.state === 'idle' || session.state === 'running')
+  const live = session !== null && (session.status.phase === 'idle' || session.status.phase === 'running')
+  const sessionId = session?.metadata.uid ?? ''
   const connectionQuery = useQuery({
-    queryKey: ['sessions', 'detail', session?.id ?? '', 'connection'],
-    queryFn: () => api.readSessionConnection(session?.id as string),
+    queryKey: ['sessions', 'detail', sessionId, 'connection'],
+    queryFn: () => api.readSessionConnection(sessionId),
     enabled: live,
   })
   const runtimePath = connectionQuery.data?.path ?? null
@@ -38,13 +39,13 @@ export function useSessionRuntimeSession({
   const endpoint = useMemo(() => (live && runtimePath ? runtimeWebSocketUrl(runtimePath) : null), [live, runtimePath])
 
   useEffect(() => {
-    if (sessionIdRef.current !== (session?.id ?? null)) {
-      sessionIdRef.current = session?.id ?? null
+    if (sessionIdRef.current !== (session?.metadata.uid ?? null)) {
+      sessionIdRef.current = session?.metadata.uid ?? null
       dispatch({ type: 'reset' })
     }
     dispatch({
       type: 'persisted_events',
-      events: session ? events.filter((event) => event.sessionId === session.id) : [],
+      events: session ? events.filter((event) => event.sessionId === session.metadata.uid) : [],
     })
   }, [events, session])
 

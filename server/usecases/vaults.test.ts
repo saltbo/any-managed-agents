@@ -54,9 +54,8 @@ function version(overrides: Partial<CredentialVersionRecord> = {}): CredentialVe
     organizationId: 'org_1',
     projectId: 'project_1',
     version: 2,
-    provider: 'cloudflare-secrets',
-    secretRef: 'cloudflare-secret:X',
-    externalVaultPath: null,
+    provider: 'ama',
+    secretRef: 'ama://vaults/vault_x/credentials/cred_x/versions/ver_x',
     referenceName: 'X',
     state: 'active',
     hasSecret: true,
@@ -95,7 +94,6 @@ function fakeDeps(
   }
   const secretStore: Deps['secretStore'] = {
     store: async () => ({ encryptedSecretValue: 'cipher' }),
-    delete: async () => {},
     ...overrides.secretStore,
   }
   return {
@@ -119,7 +117,7 @@ function fakeDeps(
     runners: undefined as unknown as Deps['runners'],
     workItems: undefined as unknown as Deps['workItems'],
     leases: undefined as unknown as Deps['leases'],
-    runtimeSecretEnv: undefined as unknown as Deps['runtimeSecretEnv'],
+    runtimeSecrets: undefined as unknown as Deps['runtimeSecrets'],
     cloudTurnQueue: undefined as unknown as Deps['cloudTurnQueue'],
     runnerChannel: undefined as unknown as Deps['runnerChannel'],
     cloudRuntime: undefined as unknown as Deps['cloudRuntime'],
@@ -202,7 +200,7 @@ describe('[spec: vaults/credential-create] createCredential', () => {
         type: 'api_key',
         connectorBinding: {},
         metadata: {},
-        secret: { provider: 'external-vault' },
+        secret: {},
       }),
     ).rejects.toBeInstanceOf(VaultSecretError)
   })
@@ -272,27 +270,18 @@ describe('[spec: vaults/credential-delete] deleteCredentialVersion', () => {
     ).rejects.toBeInstanceOf(VaultVersionReferencedError)
   })
 
-  it('deletes the stored secret then the version row', async () => {
-    const order: string[] = []
+  it('deletes the version row after reference checks pass', async () => {
+    let deletedVersionId: string | null = null
     const deps = fakeDeps({
-      secretStore: { delete: async () => void order.push('secret') },
-      vaults: { versionHasActiveReferences: async () => false, deleteVersion: async () => void order.push('row') },
-    })
-    await deleteCredentialVersion(deps, credential({ activeVersionId: 'vaultver_1' }), version())
-    expect(order).toEqual(['secret', 'row'])
-  })
-
-  it('maps a secret-store delete failure to a VaultSecretError', async () => {
-    const deps = fakeDeps({
-      secretStore: {
-        delete: async () => {
-          throw new Error('Cloudflare secret deletion failed')
+      vaults: {
+        versionHasActiveReferences: async () => false,
+        deleteVersion: async (versionId) => {
+          deletedVersionId = versionId
         },
       },
     })
-    await expect(
-      deleteCredentialVersion(deps, credential({ activeVersionId: 'vaultver_1' }), version()),
-    ).rejects.toBeInstanceOf(VaultSecretError)
+    await deleteCredentialVersion(deps, credential({ activeVersionId: 'vaultver_1' }), version())
+    expect(deletedVersionId).toBe('vaultver_2')
   })
 
   it('uses a fallback message when the secret-store throws a non-Error during rotation', async () => {
@@ -304,21 +293,6 @@ describe('[spec: vaults/credential-delete] deleteCredentialVersion', () => {
       },
     })
     const error = await rotateCredential(deps, credential(), { secretValue: 'raw' }).catch((e) => e)
-    expect(error).toBeInstanceOf(VaultSecretError)
-    expect(error.message).toBe('Invalid secret reference')
-  })
-
-  it('uses a fallback message when the secret-store throws a non-Error during delete', async () => {
-    const deps = fakeDeps({
-      secretStore: {
-        delete: async () => {
-          throw 'string failure'
-        },
-      },
-    })
-    const error = await deleteCredentialVersion(deps, credential({ activeVersionId: 'vaultver_1' }), version()).catch(
-      (e) => e,
-    )
     expect(error).toBeInstanceOf(VaultSecretError)
     expect(error.message).toBe('Invalid secret reference')
   })

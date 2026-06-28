@@ -7,8 +7,9 @@ import {
   EnvironmentNetworkPolicySchema,
   RuntimeSchema,
 } from '../contracts/environment-contracts'
-import { ResourceRefSchema } from '../contracts/execution-spec'
+import { VolumeMountSchema, VolumeSchema } from '../contracts/execution-spec'
 import { type PendingSessionApproval, sessionApprovalState } from '../domain/runtime/approval-state'
+import type { Session, SessionApproval, SessionConnection, SessionEvent, SessionMessage } from '../domain/session'
 import type { Env } from '../env'
 import { type ErrorType, errorResponse } from '../errors'
 import {
@@ -22,15 +23,10 @@ import {
   listResponseSchema,
   negotiateMediaType,
   parseListCursor,
-  SecretEnvEntrySchema,
+  EnvFromEntrySchema,
 } from '../openapi'
 import { redactSensitiveValue } from '../redaction'
 import {
-  type SessionApprovalRecord,
-  type SessionConnectionRecord,
-  type SessionEventRecord,
-  type SessionMessageRecord,
-  type SessionRecord,
   type SessionRuntimeError,
   SessionValidationError,
 } from '../usecases/ports'
@@ -96,48 +92,97 @@ const EnvironmentVersionSnapshotSchema = z
   })
   .openapi('SessionEnvironmentSnapshot')
 
-const SessionRuntimeMetadataSchema = z
+const SessionPlacementSchema = z
   .object({
     hostingMode: EnvironmentHostingModeSchema,
-    runtime: RuntimeSchema,
-    runtimeConfig: JsonObjectSchema,
     provider: z.string().openapi({ example: 'workers-ai' }),
     model: z.string().nullable().openapi({ example: '@cf/moonshotai/kimi-k2.6' }),
     driver: z.string().nullable().openapi({ example: 'ama-cloud' }),
     backend: z.string().nullable().openapi({ example: 'ama-cloud' }),
     protocol: z.string().nullable().openapi({ example: 'ama-runtime-rpc' }),
   })
-  .openapi('SessionRuntimeMetadata')
+  .openapi('SessionPlacement')
+
+const SessionMetadataSchema = z
+  .object({
+    uid: z.string().openapi({ example: 'session_abc123' }),
+    pid: z.string().openapi({ example: 'project_abc123' }),
+    name: z.string().openapi({ example: 'Implement billing export' }),
+    labels: z.record(z.string(), z.string()),
+    annotations: z.record(z.string(), z.string()),
+    createdBy: z.string().nullable(),
+    createdAt: z.string().datetime(),
+    updatedAt: z.string().datetime(),
+    archivedAt: z.string().datetime().nullable(),
+  })
+  .openapi('SessionMetadata')
+
+const SessionSpecSchema = z
+  .object({
+    agentId: z.string().openapi({ example: 'agent_abc123' }),
+    environmentId: z.string().nullable().openapi({ example: 'env_abc123' }),
+    runtime: RuntimeSchema,
+    env: z.record(z.string(), z.string()).openapi({ example: { AK_API_URL: 'https://ak.example.com' } }),
+    envFrom: z.array(EnvFromEntrySchema).openapi({
+      example: [
+        {
+          type: 'secret',
+          name: 'AK_AGENT_KEY',
+          secretRef: 'ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123',
+        },
+      ],
+    }),
+    volumes: z.array(VolumeSchema).openapi({
+      example: [{ name: 'source', type: 'github_repository', owner: 'saltbo', repo: 'any-managed-agents' }],
+    }),
+    volumeMounts: z.array(VolumeMountSchema).openapi({
+      example: [{ name: 'source', mountPath: '/workspace/repos/saltbo/any-managed-agents', readOnly: true }],
+    }),
+  })
+  .openapi('SessionSpec')
+
+const SessionConditionSchema = z
+  .object({
+    type: z.enum(['Scheduled', 'RuntimeReady', 'Running', 'Completed']),
+    status: z.enum(['True', 'False', 'Unknown']),
+    reason: z.string().nullable(),
+    message: z.string().nullable(),
+    lastTransitionAt: z.string().datetime(),
+  })
+  .openapi('SessionCondition')
+
+const SessionBindingsSchema = z
+  .object({
+    agent: z.object({
+      versionId: z.string().openapi({ example: 'agentver_abc123' }),
+      snapshot: AgentVersionSnapshotSchema,
+    }),
+    environment: z.object({
+      id: z.string().nullable().openapi({ example: 'env_abc123' }),
+      versionId: z.string().nullable().openapi({ example: 'envver_abc123' }),
+      snapshot: EnvironmentVersionSnapshotSchema.nullable(),
+    }),
+    runtime: RuntimeSchema,
+  })
+  .openapi('SessionBindings')
+
+const SessionStatusSchema = z
+  .object({
+    phase: z.enum(SESSION_STATES).openapi({ example: 'idle' }),
+    reason: z.string().nullable(),
+    conditions: z.array(SessionConditionSchema),
+    bindings: SessionBindingsSchema,
+    placement: SessionPlacementSchema.nullable(),
+    startedAt: z.string().datetime().nullable(),
+    stoppedAt: z.string().datetime().nullable(),
+  })
+  .openapi('SessionStatus')
 
 const SessionSchema = z
   .object({
-    id: z.string().openapi({ example: 'session_abc123' }),
-    projectId: z.string().openapi({ example: 'project_abc123' }),
-    agentId: z.string().openapi({ example: 'agent_abc123' }),
-    agentVersionId: z.string().openapi({ example: 'agentver_abc123' }),
-    agentSnapshot: AgentVersionSnapshotSchema,
-    environmentId: z.string().nullable().openapi({ example: 'env_abc123' }),
-    environmentVersionId: z.string().nullable().openapi({ example: 'envver_abc123' }),
-    environmentSnapshot: EnvironmentVersionSnapshotSchema.nullable(),
-    title: z.string().nullable().openapi({ example: 'Implement billing export' }),
-    resourceRefs: z
-      .array(ResourceRefSchema)
-      .openapi({ example: [{ type: 'github_repository', owner: 'saltbo', repo: 'any-managed-agents', ref: 'main' }] }),
-    env: z.record(z.string(), z.string()).openapi({ example: { AK_API_URL: 'https://ak.example.com' } }),
-    secretEnv: z.array(SecretEnvEntrySchema).openapi({
-      example: [
-        { name: 'AK_AGENT_KEY', credentialRef: { credentialId: 'vaultcred_abc123', versionId: 'vaultver_abc123' } },
-      ],
-    }),
-    runtimeMetadata: SessionRuntimeMetadataSchema,
-    state: z.enum(SESSION_STATES).openapi({ example: 'idle' }),
-    stateReason: z.string().nullable(),
-    metadata: JsonObjectSchema,
-    startedAt: z.string().datetime().nullable(),
-    stoppedAt: z.string().datetime().nullable(),
-    archivedAt: z.string().datetime().nullable(),
-    createdAt: z.string().datetime(),
-    updatedAt: z.string().datetime(),
+    metadata: SessionMetadataSchema,
+    spec: SessionSpecSchema,
+    status: SessionStatusSchema,
   })
   .openapi('Session')
 
@@ -238,22 +283,27 @@ const CreateSessionSchema = z
     environmentId: z.string().min(1).optional().openapi({ example: 'env_abc123' }),
     runtime: RuntimeSchema.openapi({ example: 'codex' }),
     runtimeConfig: JsonObjectSchema.optional().openapi({ example: { sandboxMode: 'workspace-write' } }),
-    title: z.string().min(1).max(160).optional().openapi({ example: 'Implement billing export' }),
+    name: z.string().min(1).max(160).optional().openapi({ example: 'Implement billing export' }),
     metadata: JsonObjectSchema.optional().openapi({ example: { ticket: 'AMA-123' } }),
-    resourceRefs: z
-      .array(ResourceRefSchema)
-      .max(50)
-      .optional()
-      .openapi({ example: [{ type: 'github_repository', owner: 'saltbo', repo: 'any-managed-agents', ref: 'main' }] }),
     env: z
       .record(z.string(), z.string())
       .optional()
       .openapi({ example: { AK_API_URL: 'https://ak.example.com', AK_AGENT_ID: 'agent_abc123' } }),
-    secretEnv: z
-      .array(SecretEnvEntrySchema)
+    envFrom: z
+      .array(EnvFromEntrySchema)
       .max(50)
       .optional()
-      .openapi({ example: [{ name: 'AK_AGENT_KEY', credentialRef: { credentialId: 'vaultcred_abc123' } }] }),
+      .openapi({
+        example: [
+          {
+            type: 'secret',
+            name: 'AK_AGENT_KEY',
+            secretRef: 'ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123',
+          },
+        ],
+      }),
+    volumes: z.array(VolumeSchema).max(50).optional(),
+    volumeMounts: z.array(VolumeMountSchema).max(50).optional(),
     initialPrompt: z
       .string()
       .trim()
@@ -261,14 +311,13 @@ const CreateSessionSchema = z
       .max(16000)
       .optional()
       .openapi({ example: 'Research Canadian banking bonus offers and summarize current opportunities.' }),
-    providerAccessOverride: z.boolean().optional().openapi({ example: false }),
   })
   .strict()
   .openapi('CreateSessionRequest')
 
 const UpdateSessionSchema = z
   .object({
-    title: z.string().min(1).max(160).nullable().optional().openapi({ example: 'Implement billing export' }),
+    name: z.string().min(1).max(160).nullable().optional().openapi({ example: 'Implement billing export' }),
     metadata: JsonObjectSchema.optional().openapi({ example: { ticket: 'AMA-123' } }),
     state: z.literal('stopped').optional().openapi({ example: 'stopped' }),
     archived: z.boolean().optional().openapi({ example: true }),
@@ -276,11 +325,11 @@ const UpdateSessionSchema = z
   .strict()
   .refine(
     (body) =>
-      body.title !== undefined ||
+      body.name !== undefined ||
       body.metadata !== undefined ||
       body.state !== undefined ||
       body.archived !== undefined,
-    { message: 'Provide at least one of title, metadata, state, or archived.' },
+    { message: 'Provide at least one of name, metadata, state, or archived.' },
   )
   .openapi('UpdateSessionRequest')
 
@@ -444,36 +493,34 @@ const SessionApprovalListResponseSchema = listResponseSchema('SessionApprovalLis
 // snapshots), so serialization is identity with a cast to the schema-inferred
 // type so the typed-response routes accept them.
 
-function serializeSession(record: SessionRecord): z.infer<typeof SessionSchema> {
-  // The JSON snapshot columns are typed loosely on the record but structurally
-  // match these schemas (the repo builds them from the same serializers), so each
-  // loose field is narrowed at this boundary instead of laundering the whole DTO.
+function serializeSession(record: Session): z.infer<typeof SessionSchema> {
   return {
-    id: record.id,
-    projectId: record.projectId,
-    agentId: record.agentId,
-    agentVersionId: record.agentVersionId,
-    agentSnapshot: record.agentSnapshot as z.infer<typeof AgentVersionSnapshotSchema>,
-    environmentId: record.environmentId,
-    environmentVersionId: record.environmentVersionId,
-    environmentSnapshot: record.environmentSnapshot as z.infer<typeof EnvironmentVersionSnapshotSchema> | null,
-    title: record.title,
-    resourceRefs: record.resourceRefs as z.infer<typeof ResourceRefSchema>[],
-    env: record.env,
-    secretEnv: record.secretEnv,
-    runtimeMetadata: record.runtimeMetadata as z.infer<typeof SessionRuntimeMetadataSchema>,
-    state: record.state as z.infer<typeof SessionSchema>['state'],
-    stateReason: record.stateReason,
     metadata: record.metadata,
-    startedAt: record.startedAt,
-    stoppedAt: record.stoppedAt,
-    archivedAt: record.archivedAt,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
+    spec: {
+      ...record.spec,
+      volumes: record.spec.volumes as z.infer<typeof VolumeSchema>[],
+      volumeMounts: record.spec.volumeMounts as z.infer<typeof VolumeMountSchema>[],
+    },
+    status: {
+      ...record.status,
+      bindings: {
+        agent: {
+          versionId: record.status.bindings.agent.versionId,
+          snapshot: record.status.bindings.agent.snapshot as z.infer<typeof AgentVersionSnapshotSchema>,
+        },
+        environment: {
+          id: record.status.bindings.environment.id,
+          versionId: record.status.bindings.environment.versionId,
+          snapshot: record.status.bindings.environment.snapshot as z.infer<typeof EnvironmentVersionSnapshotSchema> | null,
+        },
+        runtime: record.status.bindings.runtime,
+      },
+      placement: record.status.placement,
+    },
   }
 }
 
-function serializeConnection(record: SessionConnectionRecord): z.infer<typeof SessionConnectionSchema> {
+function asSessionConnectionResponse(record: SessionConnection): z.infer<typeof SessionConnectionSchema> {
   return record as z.infer<typeof SessionConnectionSchema>
 }
 
@@ -499,19 +546,19 @@ function upgradeSessionBrowserSocket(
   return stub.fetch(new Request(url, request))
 }
 
-function serializeMessage(record: SessionMessageRecord): z.infer<typeof SessionMessageSchema> {
+function asSessionMessageResponse(record: SessionMessage): z.infer<typeof SessionMessageSchema> {
   return record as z.infer<typeof SessionMessageSchema>
 }
 
-function serializeApprovalRecord(record: SessionApprovalRecord): z.infer<typeof SessionApprovalSchema> {
+function asSessionApprovalResponse(record: SessionApproval): z.infer<typeof SessionApprovalSchema> {
   return record as z.infer<typeof SessionApprovalSchema>
 }
 
-function serializeEvent(record: SessionEventRecord): z.infer<typeof SessionEventSchema> {
+function asSessionEventResponse(record: SessionEvent): z.infer<typeof SessionEventSchema> {
   return record as z.infer<typeof SessionEventSchema>
 }
 
-function serializePendingApproval(
+function pendingApprovalResponse(
   sessionId: string,
   pending: PendingSessionApproval,
 ): z.infer<typeof SessionApprovalSchema> {
@@ -565,7 +612,10 @@ async function eventsJsonResponse(c: Context<DepsEnv>, sessionId: string, query:
   const page = await deps.sessionEventStore.queryEvents(sessionId, eventsQueryFor(query, limit))
   const last = page.rows.at(-1)
   const nextCursor = page.hasMore && last ? String(last.sequence) : null
-  return c.json({ data: page.rows.map(serializeEvent), pagination: { limit, nextCursor, hasMore: page.hasMore } }, 200)
+  return c.json(
+    { data: page.rows.map(asSessionEventResponse), pagination: { limit, nextCursor, hasMore: page.hasMore } },
+    200,
+  )
 }
 
 async function eventsCsvResponse(c: Context<DepsEnv>, sessionId: string, query: EventsQuery) {
@@ -726,7 +776,7 @@ const updateSessionRoute = createRoute({
   tags: ['Sessions'],
   summary: 'Update a session',
   description:
-    'Partial update: title and metadata edits, the stop transition (state: "stopped"), and lifecycle archiving (archived: true|false).',
+    'Partial update: name and metadata edits, the stop transition (state: "stopped"), and lifecycle archiving (archived: true|false).',
   ...AuthenticatedOperation,
   request: {
     params: ParamsSchema,
@@ -967,15 +1017,15 @@ export function registerSessionRoutes(routes: SessionRoutes) {
         agentId: body.agentId,
         ...(body.environmentId !== undefined ? { environmentId: body.environmentId } : {}),
         options: {
-          ...(body.title !== undefined ? { title: body.title } : {}),
+          ...(body.name !== undefined ? { name: body.name } : {}),
           ...(body.metadata !== undefined ? { metadata: body.metadata } : {}),
-          ...(body.resourceRefs !== undefined ? { resourceRefs: body.resourceRefs } : {}),
           runtime: body.runtime,
           ...(body.runtimeConfig !== undefined ? { runtimeConfig: body.runtimeConfig } : {}),
           ...(body.env !== undefined ? { env: body.env } : {}),
-          ...(body.secretEnv !== undefined ? { secretEnv: body.secretEnv as SessionRecord['secretEnv'] } : {}),
+          ...(body.envFrom !== undefined ? { envFrom: body.envFrom } : {}),
+          ...(body.volumes !== undefined ? { volumes: body.volumes } : {}),
+          ...(body.volumeMounts !== undefined ? { volumeMounts: body.volumeMounts } : {}),
           ...(body.initialPrompt !== undefined ? { initialPrompt: body.initialPrompt } : {}),
-          ...(body.providerAccessOverride !== undefined ? { providerAccessOverride: body.providerAccessOverride } : {}),
         },
         requestId: requestId(c),
       })
@@ -1021,7 +1071,9 @@ export function registerSessionRoutes(routes: SessionRoutes) {
         cursor: parsedCursor,
       })
       const last = page.rows.at(-1)
-      const nextCursor = page.hasMore && last ? formatListCursor({ createdAt: last.createdAt, id: last.id }) : null
+      const nextCursor = page.hasMore && last
+        ? formatListCursor({ createdAt: last.metadata.createdAt, id: last.metadata.uid })
+        : null
       return c.json(
         { data: page.rows.map(serializeSession), pagination: { limit, nextCursor, hasMore: page.hasMore } },
         200,
@@ -1054,7 +1106,7 @@ export function registerSessionRoutes(routes: SessionRoutes) {
         return errorResponse(c, 404, 'not_found', 'Session not found')
       }
       const patch: UpdateSessionPatch = {
-        ...(body.title !== undefined ? { title: body.title } : {}),
+        ...(body.name !== undefined ? { name: body.name } : {}),
         ...(body.metadata !== undefined ? { metadata: body.metadata } : {}),
         ...(body.state !== undefined ? { state: body.state } : {}),
         ...(body.archived !== undefined ? { archived: body.archived } : {}),
@@ -1080,7 +1132,7 @@ export function registerSessionRoutes(routes: SessionRoutes) {
       if (!connection) {
         return errorResponse(c, 404, 'not_found', 'Session not found')
       }
-      return c.json(serializeConnection(connection), 200)
+      return c.json(asSessionConnectionResponse(connection), 200)
     })
     .openapi(connectSessionSocketRoute, async (c) => {
       // Authorise that the connecting user owns the session, then forward the
@@ -1097,7 +1149,7 @@ export function registerSessionRoutes(routes: SessionRoutes) {
         return errorResponse(c, 404, 'not_found', 'Session not found')
       }
       if (c.req.header('upgrade')?.toLowerCase() !== 'websocket') {
-        return c.json(serializeConnection(connection), 200)
+        return c.json(asSessionConnectionResponse(connection), 200)
       }
       const runtimeRow = await deps.sessions.findRuntimeRow(auth.project.id, sessionId)
       const doName =
@@ -1138,7 +1190,7 @@ export function registerSessionRoutes(routes: SessionRoutes) {
       const last = page.rows.at(-1)
       const nextCursor = page.hasMore && last ? formatListCursor({ createdAt: last.createdAt, id: last.id }) : null
       return c.json(
-        { data: page.rows.map(serializeMessage), pagination: { limit, nextCursor, hasMore: page.hasMore } },
+        { data: page.rows.map(asSessionMessageResponse), pagination: { limit, nextCursor, hasMore: page.hasMore } },
         200,
       )
     })
@@ -1166,7 +1218,7 @@ export function registerSessionRoutes(routes: SessionRoutes) {
           },
         )
       }
-      return c.json(serializeMessage(outcome.message), 201)
+      return c.json(asSessionMessageResponse(outcome.message), 201)
     })
     .openapi(readSessionMessageRoute, async (c) => {
       const { sessionId, messageId } = c.req.valid('param')
@@ -1183,7 +1235,7 @@ export function registerSessionRoutes(routes: SessionRoutes) {
       if (!message) {
         return errorResponse(c, 404, 'not_found', 'Session message not found')
       }
-      return c.json(serializeMessage(message), 200)
+      return c.json(asSessionMessageResponse(message), 200)
     })
     .openapi(listEventsRoute, async (c) => {
       const { sessionId } = c.req.valid('param')
@@ -1262,8 +1314,8 @@ export function registerSessionRoutes(routes: SessionRoutes) {
       const { pending } = sessionApprovalState(session.metadata)
       const decided = await deps.sessions.listApprovals(auth.project.id, sessionId)
       const data = [
-        ...(pending ? [serializePendingApproval(sessionId, pending)] : []),
-        ...decided.map(serializeApprovalRecord),
+        ...(pending ? [pendingApprovalResponse(sessionId, pending)] : []),
+        ...decided.map(asSessionApprovalResponse),
       ]
       return c.json({ data, pagination: { limit: data.length, nextCursor: null, hasMore: false } }, 200)
     })
@@ -1280,11 +1332,11 @@ export function registerSessionRoutes(routes: SessionRoutes) {
       }
       const decided = await deps.sessions.findApproval(auth.project.id, sessionId, approvalId)
       if (decided) {
-        return c.json(serializeApprovalRecord(decided), 200)
+        return c.json(asSessionApprovalResponse(decided), 200)
       }
       const { pending } = sessionApprovalState(session.metadata)
       if (pending?.id === approvalId) {
-        return c.json(serializePendingApproval(sessionId, pending), 200)
+        return c.json(pendingApprovalResponse(sessionId, pending), 200)
       }
       return errorResponse(c, 404, 'not_found', 'Session approval not found')
     })
@@ -1311,7 +1363,7 @@ export function registerSessionRoutes(routes: SessionRoutes) {
       if (!outcome.ok) {
         return runtimeErrorResponse(c, outcome.error) as never
       }
-      return c.json(serializeApprovalRecord(outcome.value), 200)
+      return c.json(asSessionApprovalResponse(outcome.value), 200)
     })
 }
 

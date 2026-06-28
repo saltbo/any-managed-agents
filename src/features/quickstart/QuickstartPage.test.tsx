@@ -19,6 +19,7 @@ import type {
   SessionEvent,
 } from '@/lib/api'
 import { HttpResponse, http, server } from '@/test/msw'
+import { buildTestSession, type TestSessionOverrides } from '@/testing/session'
 import { QuickstartPage } from './QuickstartPage'
 
 // ─── Fixtures ───
@@ -119,40 +120,8 @@ const defaultAgentSnapshot: SessionAgentSnapshot = {
   createdAt: '2026-05-23T00:00:00.000Z',
 }
 
-function buildSession(overrides: Partial<Session> = {}): Session {
-  return {
-    id: 'session_1',
-    projectId: 'project_1',
-    agentId: 'agent_1',
-    agentVersionId: 'agentver_1',
-    agentSnapshot: defaultAgentSnapshot,
-    environmentId: 'env_1',
-    environmentVersionId: 'envver_1',
-    environmentSnapshot: null,
-    title: 'Quickstart session',
-    resourceRefs: [],
-    env: {},
-    secretEnv: [],
-    runtimeMetadata: {
-      hostingMode: 'cloud',
-      runtime: 'ama',
-      runtimeConfig: { image: 'node:24' },
-      provider: 'workers-ai',
-      model: '@cf/moonshotai/kimi-k2.6',
-      driver: 'ama-cloud',
-      backend: 'ama-cloud',
-      protocol: 'ama-runtime-rpc',
-    },
-    state: 'idle',
-    stateReason: null,
-    metadata: {},
-    startedAt: now,
-    stoppedAt: null,
-    archivedAt: null,
-    createdAt: now,
-    updatedAt: now,
-    ...overrides,
-  }
+function buildSession(overrides: TestSessionOverrides = {}): Session {
+  return buildTestSession({ agentSnapshot: defaultAgentSnapshot, name: 'Quickstart session', ...overrides })
 }
 
 // ─── MSW handler helpers ───
@@ -206,7 +175,7 @@ function handlers({
       return HttpResponse.json(session, { status: 201 })
     }),
     http.get('*/api/v1/sessions/:sessionId', ({ params }) => {
-      const session = sessionDetail ?? sessions.find((s) => s.id === params.sessionId) ?? null
+      const session = sessionDetail ?? sessions.find((s) => s.metadata.uid === params.sessionId) ?? null
       return session ? HttpResponse.json(session) : new HttpResponse(null, { status: 404 })
     }),
     http.get('*/api/v1/sessions/:sessionId/events', () => HttpResponse.json(listEnvelope(sessionEvents))),
@@ -406,7 +375,7 @@ describe('QuickstartPage loaded — step navigation', () => {
         providers: [buildProvider()],
         agents: [buildAgent()],
         environments: [buildEnvironment()],
-        sessions: [buildSession({ state: 'stopped' })],
+        sessions: [buildSession({ phase: 'stopped' })],
       }),
     )
     renderPage('/quickstart?step=integration')
@@ -530,7 +499,7 @@ describe('QuickstartPage integration step — integration examples', () => {
         providers: [buildProvider()],
         agents: [buildAgent()],
         environments: [buildEnvironment()],
-        sessions: [buildSession({ state: 'idle' })],
+        sessions: [buildSession({ phase: 'idle' })],
       }),
     )
     renderPage('/quickstart?step=integration')
@@ -541,8 +510,8 @@ describe('QuickstartPage integration step — integration examples', () => {
 
   it('prefers session matching previewSessionId param for integration examples', async () => {
     const sessions = [
-      buildSession({ id: 'session_other', state: 'idle' }),
-      buildSession({ id: 'session_preview', state: 'idle', agentId: 'agent_preview' }),
+      buildSession({ id: 'session_other', phase: 'idle' }),
+      buildSession({ id: 'session_preview', phase: 'idle', agentId: 'agent_preview' }),
     ]
     server.use(
       ...handlers({
@@ -562,7 +531,7 @@ describe('QuickstartPage integration step — integration examples', () => {
         providers: [buildProvider()],
         agents: [buildAgent()],
         environments: [buildEnvironment()],
-        sessions: [buildSession({ state: 'stopped' })],
+        sessions: [buildSession({ phase: 'stopped' })],
       }),
     )
     renderPage('/quickstart?step=integration')
@@ -575,7 +544,7 @@ describe('QuickstartPage integration step — integration examples', () => {
         providers: [buildProvider()],
         agents: [buildAgent()],
         environments: [buildEnvironment()],
-        sessions: [buildSession({ state: 'error' })],
+        sessions: [buildSession({ phase: 'error' })],
       }),
     )
     renderPage('/quickstart?step=integration')

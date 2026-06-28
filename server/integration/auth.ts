@@ -59,8 +59,6 @@ interface TestClaims {
   permissions: string[]
 }
 
-const cloudflareSecretWrites: unknown[] = []
-const cloudflareSecretDeletes: string[] = []
 let counter = 0
 
 export function defaultClaims(): TestClaims {
@@ -76,36 +74,12 @@ export function defaultClaims(): TestClaims {
 }
 
 export async function setupOidcProvider() {
-  cloudflareSecretWrites.length = 0
-  cloudflareSecretDeletes.length = 0
-
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = new URL(input instanceof Request ? input.url : input.toString())
-      if (url.hostname === 'api.cloudflare.com' && url.pathname.includes('/secrets_store/stores/')) {
-        if (init?.method === 'POST') {
-          const secrets = JSON.parse(String(init.body)) as Array<{ name: string }>
-          cloudflareSecretWrites.push(secrets)
-          return Response.json({ success: true, result: secrets.map((secret) => ({ id: `secret_${secret.name}` })) })
-        }
-
-        if (init?.method === 'DELETE') {
-          cloudflareSecretDeletes.push(url.pathname.split('/').at(-1) ?? '')
-          return Response.json({ success: true, result: null })
-        }
-      }
-
+    vi.fn(async () => {
       return new Response('not found', { status: 404 })
     }),
   )
-}
-
-export function cloudflareSecretRequests() {
-  return {
-    writes: [...cloudflareSecretWrites],
-    deletes: [...cloudflareSecretDeletes],
-  }
 }
 
 export async function signIn(claims = defaultClaims()) {

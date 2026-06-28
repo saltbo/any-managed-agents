@@ -10,19 +10,18 @@
 // only how the runtime deps are acquired changed (the global Deps instead of an
 // env/db-bound gateway).
 
+import type { Session, SessionApproval } from '@server/domain/session'
 import type { Deps } from '../deps'
 import type {
   AuthScope,
   PromptDispatchResult,
-  SessionApprovalRecord,
+  RuntimeSessionHandle,
   SessionCreateOptions,
-  SessionRecord,
   SessionRuntimeError,
   SessionRuntimeOutcome,
-  SessionRuntimeRow,
 } from '../ports'
 import { decideSessionApproval } from './session-approval'
-import { type CreateSessionOptions, createSessionForAgent } from './session-create'
+import { createSessionForAgent } from './session-create'
 import {
   archiveSession as archiveSessionRuntime,
   markExpiredPendingSessions,
@@ -31,13 +30,9 @@ import {
 } from './session-lifecycle'
 import { dispatchSessionPrompt } from './session-prompt'
 
-function mapError(error: SessionRuntimeError): SessionRuntimeError {
-  return error
-}
-
 // Re-reads the session through the repo so the DTO crossing the boundary is the
 // one canonical serialization (the repo strips internal columns).
-async function reread(deps: Deps, projectId: string, sessionId: string): Promise<SessionRecord> {
+async function reread(deps: Deps, projectId: string, sessionId: string): Promise<Session> {
   const record = await deps.sessions.find(projectId, sessionId)
   if (!record) {
     throw new Error('Session row is required after a runtime operation')
@@ -56,17 +51,17 @@ export async function createSession(
     options: SessionCreateOptions
     requestId: string | null
   },
-): Promise<SessionRuntimeOutcome<SessionRecord>> {
+): Promise<SessionRuntimeOutcome<Session>> {
   const result = await createSessionForAgent(
     deps,
     auth,
     input.agentId,
     input.environmentId ?? null,
-    input.options as CreateSessionOptions,
+    input.options,
     input.requestId,
   )
   if (!result.ok) {
-    return { ok: false, error: mapError(result.error) }
+    return result
   }
   return { ok: true, value: await reread(deps, auth.project.id, result.session.id) }
 }
@@ -74,13 +69,13 @@ export async function createSession(
 export async function stopSession(
   deps: Deps,
   auth: AuthScope,
-  session: SessionRuntimeRow,
+  session: RuntimeSessionHandle,
   requestId: string | null,
   reason?: string,
-): Promise<SessionRuntimeOutcome<SessionRecord>> {
+): Promise<SessionRuntimeOutcome<Session>> {
   const result = await stopSessionRuntime(deps, auth, session.id, requestId, reason)
   if (!result.ok) {
-    return { ok: false, error: mapError(result.error) }
+    return result
   }
   return { ok: true, value: await reread(deps, auth.project.id, session.id) }
 }
@@ -88,12 +83,12 @@ export async function stopSession(
 export async function archiveSession(
   deps: Deps,
   auth: AuthScope,
-  session: SessionRuntimeRow,
+  session: RuntimeSessionHandle,
   requestId: string | null,
-): Promise<SessionRuntimeOutcome<SessionRecord>> {
+): Promise<SessionRuntimeOutcome<Session>> {
   const result = await archiveSessionRuntime(deps, auth, session.id, requestId)
   if (!result.ok) {
-    return { ok: false, error: mapError(result.error) }
+    return result
   }
   return { ok: true, value: await reread(deps, auth.project.id, session.id) }
 }
@@ -101,9 +96,9 @@ export async function archiveSession(
 export async function unarchiveSession(
   deps: Deps,
   auth: AuthScope,
-  session: SessionRuntimeRow,
+  session: RuntimeSessionHandle,
   requestId: string | null,
-): Promise<SessionRecord> {
+): Promise<Session> {
   await unarchiveSessionRuntime(deps, auth, session.id, requestId)
   return await reread(deps, auth.project.id, session.id)
 }
@@ -111,7 +106,7 @@ export async function unarchiveSession(
 export async function dispatchPrompt(
   deps: Deps,
   auth: AuthScope,
-  session: SessionRuntimeRow,
+  session: RuntimeSessionHandle,
   content: string,
 ): Promise<PromptDispatchResult> {
   const outcome = await dispatchSessionPrompt(deps, auth, session.id, content)
@@ -129,13 +124,13 @@ export async function dispatchPrompt(
 export async function decideApproval(
   deps: Deps,
   auth: AuthScope,
-  session: SessionRuntimeRow,
+  session: RuntimeSessionHandle,
   approvalId: string,
   body: { decision: 'approve' | 'deny'; reason?: string; result?: Record<string, unknown> },
-): Promise<SessionRuntimeOutcome<SessionApprovalRecord>> {
+): Promise<SessionRuntimeOutcome<SessionApproval>> {
   const result = await decideSessionApproval(deps, auth, session.id, approvalId, body)
   if (!result.ok) {
-    return { ok: false, error: mapError(result.error) }
+    return result
   }
   // The decided approval row carries JSON columns; surface the same record
   // shape the repo produces for read endpoints.

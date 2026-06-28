@@ -118,14 +118,14 @@ from .create_vault_credential_request_connector_binding import CreateVaultCreden
 from .create_vault_credential_request_metadata import CreateVaultCredentialRequestMetadata
 from .create_vault_credential_request_secret import CreateVaultCredentialRequestSecret
 from .create_vault_credential_request_secret_metadata import CreateVaultCredentialRequestSecretMetadata
-from .create_vault_credential_request_secret_provider import CreateVaultCredentialRequestSecretProvider
 from .create_vault_credential_version_request import CreateVaultCredentialVersionRequest
 from .create_vault_credential_version_request_metadata import CreateVaultCredentialVersionRequestMetadata
-from .create_vault_credential_version_request_provider import CreateVaultCredentialVersionRequestProvider
 from .create_vault_request import CreateVaultRequest
 from .create_vault_request_metadata import CreateVaultRequestMetadata
 from .create_vault_request_scope import CreateVaultRequestScope
 from .credential_ref import CredentialRef
+from .env_from_entry import EnvFromEntry
+from .env_from_entry_type import EnvFromEntryType
 from .environment import Environment
 from .environment_hosting_mode import EnvironmentHostingMode
 from .environment_list_response import EnvironmentListResponse
@@ -154,8 +154,8 @@ from .environment_version_variables_additional_property import EnvironmentVersio
 from .error_response import ErrorResponse
 from .error_response_error import ErrorResponseError
 from .error_response_error_details import ErrorResponseErrorDetails
-from .git_hub_repository_resource_ref import GitHubRepositoryResourceRef
-from .git_hub_repository_resource_ref_type import GitHubRepositoryResourceRefType
+from .git_hub_repository_volume import GitHubRepositoryVolume
+from .git_hub_repository_volume_type import GitHubRepositoryVolumeType
 from .health_response import HealthResponse
 from .health_response_runtime import HealthResponseRuntime
 from .health_response_status import HealthResponseStatus
@@ -189,9 +189,9 @@ from .memory_store_memory import MemoryStoreMemory
 from .memory_store_memory_list_response import MemoryStoreMemoryListResponse
 from .memory_store_memory_metadata import MemoryStoreMemoryMetadata
 from .memory_store_metadata import MemoryStoreMetadata
-from .memory_store_resource_ref import MemoryStoreResourceRef
-from .memory_store_resource_ref_access import MemoryStoreResourceRefAccess
-from .memory_store_resource_ref_type import MemoryStoreResourceRefType
+from .memory_store_volume import MemoryStoreVolume
+from .memory_store_volume_access import MemoryStoreVolumeAccess
+from .memory_store_volume_type import MemoryStoreVolumeType
 from .project import Project
 from .project_list_response import ProjectListResponse
 from .provider import Provider
@@ -207,13 +207,15 @@ from .provider_model_list_response import ProviderModelListResponse
 from .provider_model_list_response_pagination import ProviderModelListResponsePagination
 from .provider_model_metadata import ProviderModelMetadata
 from .provider_model_pricing import ProviderModelPricing
+from .public_auth_config import PublicAuthConfig
+from .public_config import PublicConfig
+from .public_oidc_config_type_0 import PublicOidcConfigType0
 from .put_runner_heartbeat_request import PutRunnerHeartbeatRequest
 from .put_runner_heartbeat_request_metadata import PutRunnerHeartbeatRequestMetadata
 from .put_runner_heartbeat_request_state import PutRunnerHeartbeatRequestState
 from .read_usage_summary_group_by import ReadUsageSummaryGroupBy
 from .replace_agent_memory_request import ReplaceAgentMemoryRequest
 from .replace_agent_memory_request_metadata import ReplaceAgentMemoryRequestMetadata
-from .resource_ref_type_1 import ResourceRefType1
 from .runner import Runner
 from .runner_auth_mode import RunnerAuthMode
 from .runner_channel_message import RunnerChannelMessage
@@ -225,7 +227,8 @@ from .runner_heartbeat_state import RunnerHeartbeatState
 from .runner_list_response import RunnerListResponse
 from .runner_memory_snapshot import RunnerMemorySnapshot
 from .runner_metadata import RunnerMetadata
-from .runner_resource_ref import RunnerResourceRef
+from .runner_resolved_volume_file import RunnerResolvedVolumeFile
+from .runner_resolved_volume_mount import RunnerResolvedVolumeMount
 from .runner_runtime_inventory import RunnerRuntimeInventory
 from .runner_runtime_inventory_state import RunnerRuntimeInventoryState
 from .runner_runtime_request import RunnerRuntimeRequest
@@ -239,6 +242,9 @@ from .runner_state import RunnerState
 from .runner_tool_call import RunnerToolCall
 from .runner_tool_call_arguments import RunnerToolCallArguments
 from .runner_tool_call_input import RunnerToolCallInput
+from .runner_volume import RunnerVolume
+from .runner_volume_mount import RunnerVolumeMount
+from .runner_volume_type import RunnerVolumeType
 from .runner_work_payload import RunnerWorkPayload
 from .runner_work_payload_agent_snapshot import RunnerWorkPayloadAgentSnapshot
 from .runner_work_payload_environment_snapshot_type_0 import RunnerWorkPayloadEnvironmentSnapshotType0
@@ -246,11 +252,11 @@ from .runner_work_payload_input import RunnerWorkPayloadInput
 from .runner_work_payload_protocol import RunnerWorkPayloadProtocol
 from .runner_work_payload_runtime_config import RunnerWorkPayloadRuntimeConfig
 from .runner_work_payload_runtime_env import RunnerWorkPayloadRuntimeEnv
-from .runner_work_payload_runtime_secret_env_item import RunnerWorkPayloadRuntimeSecretEnvItem
 from .runtime import Runtime
 from .runtime_usage import RuntimeUsage
 from .runtime_usage_window import RuntimeUsageWindow
-from .secret_env_entry import SecretEnvEntry
+from .secret_volume import SecretVolume
+from .secret_volume_type import SecretVolumeType
 from .session import Session
 from .session_abort_frame import SessionAbortFrame
 from .session_abort_frame_type import SessionAbortFrameType
@@ -275,9 +281,14 @@ from .session_backfill_request_frame import SessionBackfillRequestFrame
 from .session_backfill_request_frame_type import SessionBackfillRequestFrameType
 from .session_backfill_response import SessionBackfillResponse
 from .session_backfill_response_type import SessionBackfillResponseType
+from .session_bindings import SessionBindings
+from .session_bindings_agent import SessionBindingsAgent
+from .session_bindings_environment import SessionBindingsEnvironment
+from .session_condition import SessionCondition
+from .session_condition_status import SessionConditionStatus
+from .session_condition_type import SessionConditionType
 from .session_connection import SessionConnection
 from .session_connection_state import SessionConnectionState
-from .session_env import SessionEnv
 from .session_environment_json_object import SessionEnvironmentJsonObject
 from .session_environment_snapshot_type_0 import SessionEnvironmentSnapshotType0
 from .session_event import SessionEvent
@@ -299,13 +310,17 @@ from .session_message_list_response import SessionMessageListResponse
 from .session_message_state import SessionMessageState
 from .session_message_type import SessionMessageType
 from .session_metadata import SessionMetadata
+from .session_metadata_annotations import SessionMetadataAnnotations
+from .session_metadata_labels import SessionMetadataLabels
+from .session_placement_type_0 import SessionPlacementType0
 from .session_prompt_frame import SessionPromptFrame
 from .session_prompt_frame_type import SessionPromptFrameType
 from .session_runner_unavailable import SessionRunnerUnavailable
 from .session_runner_unavailable_type import SessionRunnerUnavailableType
-from .session_runtime_metadata import SessionRuntimeMetadata
-from .session_runtime_metadata_runtime_config import SessionRuntimeMetadataRuntimeConfig
-from .session_state import SessionState
+from .session_spec import SessionSpec
+from .session_spec_env import SessionSpecEnv
+from .session_status import SessionStatus
+from .session_status_phase import SessionStatusPhase
 from .session_steer_frame import SessionSteerFrame
 from .session_steer_frame_type import SessionSteerFrameType
 from .tool_call import ToolCall
@@ -394,6 +409,7 @@ from .vault_json_object import VaultJsonObject
 from .vault_list_response import VaultListResponse
 from .vault_metadata import VaultMetadata
 from .vault_scope import VaultScope
+from .volume_mount import VolumeMount
 from .work_item import WorkItem
 from .work_item_error_type_0 import WorkItemErrorType0
 from .work_item_list_response import WorkItemListResponse
@@ -520,14 +536,14 @@ __all__ = (
     "CreateVaultCredentialRequestMetadata",
     "CreateVaultCredentialRequestSecret",
     "CreateVaultCredentialRequestSecretMetadata",
-    "CreateVaultCredentialRequestSecretProvider",
     "CreateVaultCredentialVersionRequest",
     "CreateVaultCredentialVersionRequestMetadata",
-    "CreateVaultCredentialVersionRequestProvider",
     "CreateVaultRequest",
     "CreateVaultRequestMetadata",
     "CreateVaultRequestScope",
     "CredentialRef",
+    "EnvFromEntry",
+    "EnvFromEntryType",
     "Environment",
     "EnvironmentHostingMode",
     "EnvironmentListResponse",
@@ -556,8 +572,8 @@ __all__ = (
     "ErrorResponse",
     "ErrorResponseError",
     "ErrorResponseErrorDetails",
-    "GitHubRepositoryResourceRef",
-    "GitHubRepositoryResourceRefType",
+    "GitHubRepositoryVolume",
+    "GitHubRepositoryVolumeType",
     "HealthResponse",
     "HealthResponseRuntime",
     "HealthResponseStatus",
@@ -591,9 +607,9 @@ __all__ = (
     "MemoryStoreMemoryListResponse",
     "MemoryStoreMemoryMetadata",
     "MemoryStoreMetadata",
-    "MemoryStoreResourceRef",
-    "MemoryStoreResourceRefAccess",
-    "MemoryStoreResourceRefType",
+    "MemoryStoreVolume",
+    "MemoryStoreVolumeAccess",
+    "MemoryStoreVolumeType",
     "Project",
     "ProjectListResponse",
     "Provider",
@@ -609,13 +625,15 @@ __all__ = (
     "ProviderModelListResponsePagination",
     "ProviderModelMetadata",
     "ProviderModelPricing",
+    "PublicAuthConfig",
+    "PublicConfig",
+    "PublicOidcConfigType0",
     "PutRunnerHeartbeatRequest",
     "PutRunnerHeartbeatRequestMetadata",
     "PutRunnerHeartbeatRequestState",
     "ReadUsageSummaryGroupBy",
     "ReplaceAgentMemoryRequest",
     "ReplaceAgentMemoryRequestMetadata",
-    "ResourceRefType1",
     "Runner",
     "RunnerAuthMode",
     "RunnerChannelMessage",
@@ -627,7 +645,8 @@ __all__ = (
     "RunnerListResponse",
     "RunnerMemorySnapshot",
     "RunnerMetadata",
-    "RunnerResourceRef",
+    "RunnerResolvedVolumeFile",
+    "RunnerResolvedVolumeMount",
     "RunnerRuntimeInventory",
     "RunnerRuntimeInventoryState",
     "RunnerRuntimeRequest",
@@ -641,6 +660,9 @@ __all__ = (
     "RunnerToolCall",
     "RunnerToolCallArguments",
     "RunnerToolCallInput",
+    "RunnerVolume",
+    "RunnerVolumeMount",
+    "RunnerVolumeType",
     "RunnerWorkPayload",
     "RunnerWorkPayloadAgentSnapshot",
     "RunnerWorkPayloadEnvironmentSnapshotType0",
@@ -648,11 +670,11 @@ __all__ = (
     "RunnerWorkPayloadProtocol",
     "RunnerWorkPayloadRuntimeConfig",
     "RunnerWorkPayloadRuntimeEnv",
-    "RunnerWorkPayloadRuntimeSecretEnvItem",
     "Runtime",
     "RuntimeUsage",
     "RuntimeUsageWindow",
-    "SecretEnvEntry",
+    "SecretVolume",
+    "SecretVolumeType",
     "Session",
     "SessionAbortFrame",
     "SessionAbortFrameType",
@@ -677,9 +699,14 @@ __all__ = (
     "SessionBackfillRequestFrameType",
     "SessionBackfillResponse",
     "SessionBackfillResponseType",
+    "SessionBindings",
+    "SessionBindingsAgent",
+    "SessionBindingsEnvironment",
+    "SessionCondition",
+    "SessionConditionStatus",
+    "SessionConditionType",
     "SessionConnection",
     "SessionConnectionState",
-    "SessionEnv",
     "SessionEnvironmentJsonObject",
     "SessionEnvironmentSnapshotType0",
     "SessionEvent",
@@ -701,13 +728,17 @@ __all__ = (
     "SessionMessageState",
     "SessionMessageType",
     "SessionMetadata",
+    "SessionMetadataAnnotations",
+    "SessionMetadataLabels",
+    "SessionPlacementType0",
     "SessionPromptFrame",
     "SessionPromptFrameType",
     "SessionRunnerUnavailable",
     "SessionRunnerUnavailableType",
-    "SessionRuntimeMetadata",
-    "SessionRuntimeMetadataRuntimeConfig",
-    "SessionState",
+    "SessionSpec",
+    "SessionSpecEnv",
+    "SessionStatus",
+    "SessionStatusPhase",
     "SessionSteerFrame",
     "SessionSteerFrameType",
     "ToolCall",
@@ -796,6 +827,7 @@ __all__ = (
     "VaultListResponse",
     "VaultMetadata",
     "VaultScope",
+    "VolumeMount",
     "WorkItem",
     "WorkItemErrorType0",
     "WorkItemListResponse",

@@ -27,7 +27,7 @@ async function connectMcp(authorization: string) {
       name: 'GitHub token',
       type: 'api_key',
       connectorBinding: { connectorId: 'github', name: 'token' },
-      secret: { provider: 'cloudflare-secrets', secretValue: 'raw-github-token' },
+      secret: { secretValue: 'raw-github-token' },
     }),
   })
   expect(credentialRes.status).toBe(201)

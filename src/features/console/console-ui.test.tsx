@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Agent, AuthContext, Project, Session } from '@/lib/api'
 import { HttpResponse, http, server } from '@/test/msw'
+import { buildTestSession, type TestSessionOverrides } from '@/testing/session'
 import { ConsoleLayout } from './ConsoleLayout'
 import { ConsoleShell } from './ConsoleShell'
 import { CreateProjectSheet } from './CreateProjectSheet'
@@ -66,31 +67,8 @@ function buildAgent(overrides: Partial<Agent> = {}): Agent {
   }
 }
 
-function buildSession(overrides: Partial<Session> = {}): Session {
-  return {
-    id: 'session_1',
-    projectId: 'project_1',
-    agentId: 'agent_1',
-    agentVersionId: 'agentver_1',
-    agentSnapshot: {} as Session['agentSnapshot'],
-    environmentId: null,
-    environmentVersionId: null,
-    environmentSnapshot: null,
-    title: 'Test session',
-    resourceRefs: [],
-    env: {},
-    secretEnv: [],
-    runtimeMetadata: {} as Session['runtimeMetadata'],
-    state: 'idle',
-    stateReason: null,
-    metadata: {},
-    startedAt: '2026-05-23T00:00:00.000Z',
-    stoppedAt: null,
-    archivedAt: null,
-    createdAt: '2026-05-23T00:00:00.000Z',
-    updatedAt: '2026-05-23T00:00:00.000Z',
-    ...overrides,
-  }
+function buildSession(overrides: TestSessionOverrides = {}): Session {
+  return buildTestSession({ name: 'Test session', ...overrides })
 }
 
 // MSW helper: serve a projects list envelope (the real api client calls GET /api/v1/projects)
@@ -292,9 +270,10 @@ describe('[spec: console/related-resources-table] RelatedResourcesTable', () => 
       </MemoryRouter>,
     )
 
-    const link = screen.getAllByRole('link', { name: 'session_1' })[0] as HTMLAnchorElement
+    const link = screen.getAllByRole('link', { name: 'Test session' })[0] as HTMLAnchorElement
     expect(link).toBeTruthy()
     expect(link.getAttribute('href')).toBe('/sessions/session_1')
+    expect(screen.getByText('session_1')).toBeTruthy()
     expect(screen.getByText('idle')).toBeTruthy()
   })
 

@@ -14,14 +14,14 @@ import {
   normalizeEnvironmentSnapshot,
   parseAgentSnapshot,
   parseJson,
-  type ResourceRef,
   type serializeEnvironmentVersion,
 } from '@server/domain/runtime/session-snapshot'
+import type { EnvFromEntry, Volume, VolumeMount } from '@server/domain/runtime/execution-inputs'
 import { now } from '@server/domain/runtime/util'
 import { runtimeSupportsLivePrompts } from '@server/domain/runtime-catalog'
 import { sessionRuntimeConfig, sessionRuntimeFromMetadata } from '@server/domain/runtime-session'
 import type { safeRuntimeError } from '@server/runtime-error'
-import type { AuthScope, CloudTurnSecretEnvEntry, RunnerChannel, SessionRow } from '../ports'
+import type { AuthScope, RunnerChannel, SessionRow } from '../ports'
 import type { CloudTurnDeps } from './cloud-turn'
 import { executeCloudSessionTurn } from './cloud-turn'
 import { latestRunnerResumeToken, queueSelfHostedSessionWorkWhenState } from './session-create'
@@ -134,9 +134,10 @@ async function queueSelfHostedSessionPrompt(
       environmentSnapshot,
       runtime: sessionRuntimeFromMetadata(sessionMetadata),
       runtimeConfig: sessionRuntimeConfig(sessionMetadata),
-      resourceRefs: parseJson<ResourceRef[]>(session.resourceRefs) ?? [],
       env: parseJson<Record<string, string>>(session.env) ?? {},
-      secretEnv: parseJson<CloudTurnSecretEnvEntry[]>(session.secretEnv) ?? [],
+      envFrom: parseJson<EnvFromEntry[]>(session.envFrom) ?? [],
+      volumes: parseJson<Volume[]>(session.volumes) ?? [],
+      volumeMounts: parseJson<VolumeMount[]>(session.volumeMounts) ?? [],
       initialPrompt: content,
       resume: true,
       resumeToken: await latestRunnerResumeToken(deps, auth, session.id),

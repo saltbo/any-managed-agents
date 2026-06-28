@@ -25,9 +25,10 @@ export interface SessionFormState {
   agentId: string
   environmentId: string
   runtime: 'ama' | 'claude-code' | 'codex' | 'copilot'
-  title: string
+  name: string
   metadata: string
-  resourceRefs: string
+  volumes: string
+  volumeMounts: string
 }
 
 export interface VaultFormState {

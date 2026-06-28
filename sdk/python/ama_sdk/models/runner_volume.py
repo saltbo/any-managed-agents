@@ -8,6 +8,7 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
+from ..models.runner_volume_type import RunnerVolumeType
 from ..types import UNSET, Unset
 from typing import cast
 
@@ -18,33 +19,33 @@ if TYPE_CHECKING:
 
 
 
-T = TypeVar("T", bound="RunnerResourceRef")
+T = TypeVar("T", bound="RunnerVolume")
 
 
 
 @_attrs_define
-class RunnerResourceRef:
+class RunnerVolume:
     """ 
         Attributes:
-            type_ (str):  Example: github_repository.
+            name (str):  Example: source.
+            type_ (RunnerVolumeType):  Example: github_repository.
+            secret_ref (str | Unset):
             owner (str | Unset):  Example: saltbo.
             repo (str | Unset):  Example: any-managed-agents.
             ref (str | Unset):  Example: main.
-            mount_path (str | Unset):  Example: repo.
             store_id (str | Unset):  Example: memstore_abc123.
-            name (str | Unset):  Example: Project memory.
             description (None | str | Unset):
             access (str | Unset):  Example: read_write.
             memories (list[RunnerMemorySnapshot] | Unset):
      """
 
-    type_: str
+    name: str
+    type_: RunnerVolumeType
+    secret_ref: str | Unset = UNSET
     owner: str | Unset = UNSET
     repo: str | Unset = UNSET
     ref: str | Unset = UNSET
-    mount_path: str | Unset = UNSET
     store_id: str | Unset = UNSET
-    name: str | Unset = UNSET
     description: None | str | Unset = UNSET
     access: str | Unset = UNSET
     memories: list[RunnerMemorySnapshot] | Unset = UNSET
@@ -55,7 +56,11 @@ class RunnerResourceRef:
 
     def to_dict(self) -> dict[str, Any]:
         from ..models.runner_memory_snapshot import RunnerMemorySnapshot
-        type_ = self.type_
+        name = self.name
+
+        type_ = self.type_.value
+
+        secret_ref = self.secret_ref
 
         owner = self.owner
 
@@ -63,11 +68,7 @@ class RunnerResourceRef:
 
         ref = self.ref
 
-        mount_path = self.mount_path
-
         store_id = self.store_id
-
-        name = self.name
 
         description: None | str | Unset
         if isinstance(self.description, Unset):
@@ -90,20 +91,19 @@ class RunnerResourceRef:
         field_dict: dict[str, Any] = {}
 
         field_dict.update({
+            "name": name,
             "type": type_,
         })
+        if secret_ref is not UNSET:
+            field_dict["secretRef"] = secret_ref
         if owner is not UNSET:
             field_dict["owner"] = owner
         if repo is not UNSET:
             field_dict["repo"] = repo
         if ref is not UNSET:
             field_dict["ref"] = ref
-        if mount_path is not UNSET:
-            field_dict["mountPath"] = mount_path
         if store_id is not UNSET:
             field_dict["storeId"] = store_id
-        if name is not UNSET:
-            field_dict["name"] = name
         if description is not UNSET:
             field_dict["description"] = description
         if access is not UNSET:
@@ -119,7 +119,14 @@ class RunnerResourceRef:
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         from ..models.runner_memory_snapshot import RunnerMemorySnapshot
         d = dict(src_dict)
-        type_ = d.pop("type")
+        name = d.pop("name")
+
+        type_ = RunnerVolumeType(d.pop("type"))
+
+
+
+
+        secret_ref = d.pop("secretRef", UNSET)
 
         owner = d.pop("owner", UNSET)
 
@@ -127,11 +134,7 @@ class RunnerResourceRef:
 
         ref = d.pop("ref", UNSET)
 
-        mount_path = d.pop("mountPath", UNSET)
-
         store_id = d.pop("storeId", UNSET)
-
-        name = d.pop("name", UNSET)
 
         def _parse_description(data: object) -> None | str | Unset:
             if data is None:
@@ -157,18 +160,18 @@ class RunnerResourceRef:
                 memories.append(memories_item)
 
 
-        runner_resource_ref = cls(
+        runner_volume = cls(
+            name=name,
             type_=type_,
+            secret_ref=secret_ref,
             owner=owner,
             repo=repo,
             ref=ref,
-            mount_path=mount_path,
             store_id=store_id,
-            name=name,
             description=description,
             access=access,
             memories=memories,
         )
 
-        return runner_resource_ref
+        return runner_volume
 

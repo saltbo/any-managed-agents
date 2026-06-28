@@ -46,7 +46,7 @@ const {
   resolveSessionProviderIdMock: vi.fn(async () => 'anthropic'),
   validateRuntimeProviderModelMock: vi.fn(async () => true),
   resolveSessionProviderConfigMock: vi.fn(async () => ({ ok: true, config: null })),
-  providerRuntimeEnvMock: vi.fn(() => ({ env: {}, secretEnv: [] })),
+  providerRuntimeEnvMock: vi.fn(() => ({ env: {}, envFrom: [] })),
   serializeAgentVersionMock: vi.fn(() => ({ id: 'agentver_1', providerId: 'anthropic', model: '@cf/x' })),
   serializeEnvironmentVersionMock: vi.fn(() => ({ id: 'envver_1', hostingMode: 'cloud', runtimeConfig: {} })),
   insertSessionMock: vi.fn(async () => undefined),
@@ -128,7 +128,7 @@ const deps: CreateSessionDeps = {
     enqueue: (message: unknown) => enqueueCloudTurnMock(message),
     runsInline: () => cloudTurnsRunInlineMock(),
   } as never,
-  runtimeSecretEnv: { resolve: async () => ({}) } as never,
+  runtimeSecrets: { resolveEnv: async () => ({}), resolveVolumes: async () => [] } as never,
   createApprovalGate: () => ({}) as never,
   rereadStartedSession: false,
 }

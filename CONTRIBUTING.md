@@ -31,12 +31,12 @@ This is a clean-room implementation. Do not copy source, specs, UI text, databas
 ```bash
 git clone https://github.com/saltbo/any-managed-agents.git
 cd any-managed-agents
-npm install
-cp .env.example .env
-npm run dev
+pnpm install
+cp .env.example .dev.vars
+pnpm dev
 ```
 
-For local API and browser checks, configure OIDC issuer/client values, `AMA_SESSION_SECRET`, and Workers AI settings. Live runtime sessions require the Cloudflare Sandbox container image built from this repository's `Dockerfile`.
+For local API and browser checks, configure OIDC issuer/client values, `AMA_SESSION_SECRET`, and Workers AI settings in `.dev.vars`. `pnpm dev` uses local development variables. Live runtime sessions require the Cloudflare Sandbox container image built from this repository's `Dockerfile`.
 
 ## Common Commands
 
@@ -116,6 +116,8 @@ Expected configuration names use generic OIDC terminology, for example:
 - `OIDC_ISSUER`
 - `OIDC_CLIENT_ID`
 - `OIDC_CLIENT_SECRET`
+- `OIDC_INTROSPECTION_CLIENT_ID`
+- `OIDC_INTROSPECTION_CLIENT_SECRET`
 - `AMA_SESSION_SECRET`
 
 ## UI Contributions

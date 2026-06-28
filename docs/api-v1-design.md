@@ -58,7 +58,7 @@ v1 不兼容旧版（旧路径全部删除，无兼容层）。
   （DB 内部列可保留，不进 API schema）。
 - 禁止 `any` 类型黑洞：`AuthSession`、`UsageSummary.totals` 等补全类型。
 - 共享结构 `ExecutionSpec`（Session 与 Trigger 复用）：
-  `{ runtime, runtimeConfig, resourceRefs[], env, secretEnv: [{name, credentialRef}] }`。
+  `{ runtime, runtimeConfig, env, envFrom: [{name, secretRef}], volumes[], volumeMounts[] }`。
 - 版本/快照统一：`AgentVersion` 即快照 schema，Session 引用
   `agentVersionId`（删除独立的 SessionAgentSnapshot schema，内联时同构）。
   Environment 同理。
@@ -71,8 +71,6 @@ v1 不兼容旧版（旧路径全部删除，无兼容层）。
   GET，名词资源，不算违例。
 - 外部协议适配面（不进 v1 spec，类比"不是我们管辖的 API"）：
   - `/runtime/sessions/{sessionId}/*`：会话运行时代理（隧道 ACP 等协议）。
-  - `/api/runtime/workers-ai/v1/chat/completions`：OpenAI 兼容推理端点，
-    shape 由 OpenAI 协议决定。
   - `/api/e2e/*`：`AMA_E2E_TEST_AUTH` 门控的测试端点。
 
 ## 2. 路径总表
@@ -137,7 +135,7 @@ schema：删 `hasCredential`、`credentialSecretRef`；增 `credentialRef`；
 
 ```
 GET|POST         /api/v1/sessions
-GET|PATCH        /api/v1/sessions/{sessionId}             PATCH 可改 title/metadata/
+GET|PATCH        /api/v1/sessions/{sessionId}             PATCH 可改 name/metadata/
                                                           state(→stopped)/archived
 GET              /api/v1/sessions/{sessionId}/connection  运行时连接信息（原 reconnect）
 GET|POST         /api/v1/sessions/{sessionId}/messages    原 commands；POST → 201

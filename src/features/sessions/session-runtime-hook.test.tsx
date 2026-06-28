@@ -31,6 +31,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Session, SessionEvent } from '@/lib/api'
 import * as oidcModule from '@/lib/oidc'
 import { HttpResponse, http, server } from '@/test/msw'
+import { buildTestSession, type TestSessionOverrides } from '@/testing/session'
 import { useSessionRuntimeSession } from './use-session-runtime'
 
 // ---------------------------------------------------------------------------
@@ -94,58 +95,8 @@ const now = '2026-05-23T00:00:00.000Z'
 
 const NO_EVENTS: SessionEvent[] = []
 
-function buildSession(overrides: Partial<Session> = {}): Session {
-  return {
-    id: 'session_1',
-    projectId: 'project_1',
-    agentId: 'agent_1',
-    agentVersionId: 'agentver_1',
-    agentSnapshot: {
-      id: 'agentver_1',
-      agentId: 'agent_1',
-      projectId: 'project_1',
-      version: 1,
-      instructions: 'Do work',
-      providerId: 'workers-ai',
-      model: '@cf/meta/llama',
-      skills: [],
-      subagents: [],
-      role: null,
-      capabilityTags: [],
-      handoffPolicy: {},
-      memoryPolicy: { enabled: false },
-      tools: [],
-      mcpConnectors: [],
-      metadata: {},
-      createdAt: now,
-    },
-    environmentId: 'env_1',
-    environmentVersionId: null,
-    environmentSnapshot: null,
-    title: 'Test session',
-    resourceRefs: [],
-    env: {},
-    secretEnv: [],
-    runtimeMetadata: {
-      hostingMode: 'cloud',
-      runtime: 'ama',
-      runtimeConfig: {},
-      provider: 'workers-ai',
-      model: '@cf/meta/llama',
-      driver: 'ama-cloud',
-      backend: 'ama-cloud',
-      protocol: 'ama-runtime-rpc',
-    },
-    state: 'idle',
-    stateReason: null,
-    metadata: {},
-    startedAt: now,
-    stoppedAt: null,
-    archivedAt: null,
-    createdAt: now,
-    updatedAt: now,
-    ...overrides,
-  }
+function buildSession(overrides: TestSessionOverrides = {}): Session {
+  return buildTestSession({ name: 'Test session', ...overrides })
 }
 
 function buildEvent(overrides: Partial<SessionEvent> = {}): SessionEvent {
@@ -234,13 +185,13 @@ function makeCallbackRef(fn: () => void = () => {}): React.MutableRefObject<() =
   return { current: fn }
 }
 
-async function renderLive(sessionState: Session['state'] = 'idle', cbRef = makeCallbackRef()) {
+async function renderLive(sessionState: Session['status']['phase'] = 'idle', cbRef = makeCallbackRef()) {
   server.use(connectionHandler())
   const queryClient = makeQueryClient()
   const result = render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter>
-        <RuntimeHarness session={buildSession({ state: sessionState })} events={NO_EVENTS} onEventsChangedRef={cbRef} />
+        <RuntimeHarness session={buildSession({ phase: sessionState })} events={NO_EVENTS} onEventsChangedRef={cbRef} />
       </MemoryRouter>
     </QueryClientProvider>,
   )
@@ -293,7 +244,7 @@ describe('useSessionRuntimeSession — null/stopped session', () => {
     render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
-          <RuntimeHarness session={buildSession({ state: 'stopped' })} events={events} onEventsChangedRef={cbRef} />
+          <RuntimeHarness session={buildSession({ phase: 'stopped' })} events={events} onEventsChangedRef={cbRef} />
         </MemoryRouter>
       </QueryClientProvider>,
     )
@@ -435,7 +386,7 @@ describe('useSessionRuntimeSession — send commands', () => {
     render(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
-          <RuntimeHarness session={buildSession({ state: 'idle' })} events={NO_EVENTS} onEventsChangedRef={cbRef} />
+          <RuntimeHarness session={buildSession({ phase: 'idle' })} events={NO_EVENTS} onEventsChangedRef={cbRef} />
         </MemoryRouter>
       </QueryClientProvider>,
     )
@@ -507,7 +458,7 @@ describe('useSessionRuntimeSession — session change (reset)', () => {
     await new Promise((resolve) => setTimeout(resolve, 100))
 
     // Re-render with session_2 — this triggers the sessionIdRef !== check
-    const session2 = buildSession({ id: 'session_2', state: 'stopped' })
+    const session2 = buildSession({ id: 'session_2', phase: 'stopped' })
     rerender(
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>

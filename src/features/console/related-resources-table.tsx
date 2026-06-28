@@ -37,27 +37,31 @@ export function RelatedResourcesTable({
           ) : (
             items.map((item) => {
               const isAgent = 'name' in item
+              const id = isAgent ? item.id : item.metadata.uid
+              const name = isAgent ? item.name : item.metadata.name
               return (
-                <TableRow key={item.id}>
+                <TableRow key={id}>
                   <TableCell className="min-w-0">
                     <Link
                       className="block truncate font-medium hover:underline"
-                      to={isAgent ? `/agents/${item.id}` : `/sessions/${item.id}`}
+                      to={isAgent ? `/agents/${id}` : `/sessions/${id}`}
                     >
-                      {isAgent ? item.name : item.id}
+                      {name}
                     </Link>
-                    <span className="mt-1 block truncate text-xs text-muted-foreground">{item.id}</span>
+                    <span className="mt-1 block truncate text-xs text-muted-foreground">{id}</span>
                   </TableCell>
                   <TableCell>
-                    <StatusBadge value={isAgent ? archivedLabel(item) : item.state} />
+                    <StatusBadge value={isAgent ? archivedLabel(item) : item.status.phase} />
                   </TableCell>
                   <TableCell className="hidden min-w-0 md:table-cell">
-                    <span className="block truncate">{formatDate(isAgent ? item.updatedAt : item.startedAt)}</span>
+                    <span className="block truncate">
+                      {formatDate(isAgent ? item.updatedAt : item.status.startedAt)}
+                    </span>
                   </TableCell>
                   <TableCell className="hidden md:table-cell">
                     <div className="flex justify-end">
                       <Button asChild variant="outline" size="sm">
-                        <Link to={isAgent ? `/agents/${item.id}` : `/sessions/${item.id}`}>Open</Link>
+                        <Link to={isAgent ? `/agents/${id}` : `/sessions/${id}`}>Open</Link>
                       </Button>
                     </div>
                   </TableCell>

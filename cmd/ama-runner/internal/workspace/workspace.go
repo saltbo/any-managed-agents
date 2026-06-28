@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -22,10 +21,12 @@ const WorkspaceDirName = "workspace"
 const SessionStateFileName = "state.json"
 
 type PrepareRequest struct {
-	WorkDir      string
-	SessionID    string
-	ResourceRefs []protocol.ResourceRef
-	RuntimeEnv   map[string]string
+	WorkDir         string
+	SessionID       string
+	Volumes         []protocol.Volume
+	VolumeMounts    []protocol.VolumeMount
+	ResolvedVolumes []protocol.ResolvedVolumeMount
+	RuntimeEnv      map[string]string
 }
 
 type Workspace struct {
@@ -58,7 +59,7 @@ func repositoryCacheLock(cacheDir string) *sync.Mutex {
 	return lock.(*sync.Mutex)
 }
 
-type mountedResource struct {
+type mountedVolume struct {
 	Type        string                    `json:"type"`
 	Owner       string                    `json:"owner,omitempty"`
 	Repo        string                    `json:"repo,omitempty"`
@@ -78,50 +79,68 @@ func Prepare(ctx context.Context, request PrepareRequest) (*Workspace, error) {
 	if err != nil {
 		return nil, err
 	}
-	githubResources := githubRepositoryResources(request.ResourceRefs)
-	memoryResources := memoryStoreResources(request.ResourceRefs)
-	mounted := make([]mountedResource, 0, len(githubResources)+len(memoryResources))
-	worktrees := make([]preparedWorktree, 0, len(githubResources))
-	memoryStores := make([]preparedMemoryStore, 0, len(memoryResources))
-	for _, resource := range githubResources {
-		localPath, cacheDir, err := materializeGitHubRepository(ctx, request.WorkDir, workspace.Root, resource)
+	githubVolumes := githubRepositoryVolumes(request.Volumes)
+	memoryVolumes := memoryStoreVolumes(request.Volumes)
+	mounted := make([]mountedVolume, 0, len(githubVolumes)+len(memoryVolumes)+len(request.ResolvedVolumes))
+	worktrees := make([]preparedWorktree, 0, len(githubVolumes))
+	memoryStores := make([]preparedMemoryStore, 0, len(memoryVolumes))
+	for _, volume := range githubVolumes {
+		localPath, cacheDir, err := materializeGitHubRepository(ctx, request.WorkDir, workspace.Root, volume, request.VolumeMounts)
 		if err != nil {
 			workspace.worktrees = worktrees
 			workspace.memoryStores = memoryStores
 			_ = workspace.Cleanup(context.Background())
 			return nil, err
 		}
-		mounted = append(mounted, mountedResource{
-			Type:      resource.Type,
-			Owner:     resource.Owner,
-			Repo:      resource.Repo,
-			Ref:       resource.Ref,
-			MountPath: resource.MountPath,
+		mounted = append(mounted, mountedVolume{
+			Type:      volume.Type,
+			Name:      volume.Name,
+			Owner:     volume.Owner,
+			Repo:      volume.Repo,
+			Ref:       volume.Ref,
+			MountPath: mountPathForVolume(volume.Name, request.VolumeMounts, defaultGitHubMountPath(volume)),
 			LocalPath: localPath,
 			Status:    "mounted",
 		})
 		worktrees = append(worktrees, preparedWorktree{cacheDir: cacheDir, path: localPath})
 	}
-	for _, resource := range memoryResources {
-		localPath, err := materializeMemoryStore(workspace.Root, resource)
+	for _, volume := range memoryVolumes {
+		localPath, err := materializeMemoryStore(workspace.Root, volume, request.VolumeMounts)
 		if err != nil {
 			workspace.worktrees = worktrees
 			workspace.memoryStores = memoryStores
 			_ = workspace.Cleanup(context.Background())
 			return nil, err
 		}
-		mounted = append(mounted, mountedResource{
-			Type:        resource.Type,
-			StoreID:     resource.StoreID,
-			Name:        resource.Name,
-			Description: resource.Description,
-			Access:      resource.Access,
-			MountPath:   resource.MountPath,
+		mountPath := mountPathForVolume(volume.Name, request.VolumeMounts, defaultMemoryStoreMountPath(volume))
+		mounted = append(mounted, mountedVolume{
+			Type:        volume.Type,
+			StoreID:     volume.StoreID,
+			Name:        volume.Name,
+			Description: volume.Description,
+			Access:      volume.Access,
+			MountPath:   mountPath,
 			LocalPath:   localPath,
-			Memories:    memoryManifestEntries(resource.Memories),
+			Memories:    memoryManifestEntries(volume.Memories),
 			Status:      "mounted",
 		})
-		memoryStores = append(memoryStores, preparedMemoryStore{storeID: resource.StoreID, path: localPath, access: resource.Access})
+		memoryStores = append(memoryStores, preparedMemoryStore{storeID: volume.StoreID, path: localPath, access: volume.Access})
+	}
+	for _, volume := range request.ResolvedVolumes {
+		localPath, err := materializeResolvedVolume(workspace.Root, volume)
+		if err != nil {
+			workspace.worktrees = worktrees
+			workspace.memoryStores = memoryStores
+			_ = workspace.Cleanup(context.Background())
+			return nil, err
+		}
+		mounted = append(mounted, mountedVolume{
+			Type:      "secret",
+			Name:      volume.Name,
+			MountPath: volume.MountPath,
+			LocalPath: localPath,
+			Status:    "mounted",
+		})
 	}
 	workspace.worktrees = worktrees
 	workspace.memoryStores = memoryStores
@@ -215,38 +234,6 @@ func (w *Workspace) AgentSystemPrompt(agentSnapshot map[string]any) string {
 		sections = append(sections, section)
 	}
 	return strings.Join(sections, "\n\n")
-}
-
-func (w *Workspace) ReadMemoryStores(resourceRefs []protocol.ResourceRef) ([]MemoryStoreSnapshot, error) {
-	if w == nil {
-		return nil, errors.New("workspace is not prepared")
-	}
-	stores := []MemoryStoreSnapshot{}
-	for _, resource := range resourceRefs {
-		if resource.Type != "memory_store" || resource.Access != "read_write" {
-			continue
-		}
-		mountPath := strings.TrimPrefix(resource.MountPath, "/workspace/")
-		if mountPath == "" || strings.HasPrefix(mountPath, "..") {
-			return nil, errors.New("invalid memory store mount path")
-		}
-		localRoot := filepath.Join(w.Root, mountPath)
-		if err := ensureUnderWorkspace(w.Root, localRoot); err != nil {
-			return nil, err
-		}
-		memories, err := readMemoryFiles(localRoot)
-		if os.IsNotExist(err) {
-			err = nil
-		}
-		if err != nil {
-			return nil, err
-		}
-		sort.Slice(memories, func(i, j int) bool {
-			return memories[i].Path < memories[j].Path
-		})
-		stores = append(stores, MemoryStoreSnapshot{StoreID: resource.StoreID, Memories: memories})
-	}
-	return stores, nil
 }
 
 func (w *Workspace) ReadWritableMemoryStores() ([]MemoryStoreSnapshot, error) {
@@ -407,53 +394,37 @@ func staleWorkspace(workDir string, sessionDir string) *Workspace {
 	workspace := &Workspace{Dir: sessionDir, Root: workspaceRoot, Cwd: workspaceRoot}
 	data, err := os.ReadFile(filepath.Join(sessionDir, SessionStateFileName))
 	if err != nil {
-		return staleWorkspaceFromLegacyManifest(workDir, sessionDir)
+		return workspace
 	}
 	var state struct {
-		Resources []mountedResource `json:"resources"`
+		Volumes []mountedVolume `json:"volumes"`
 	}
 	if err := json.Unmarshal(data, &state); err != nil {
 		return workspace
 	}
-	addMountedResources(workDir, workspace, state.Resources)
+	addMountedVolumes(workDir, workspace, state.Volumes)
 	return workspace
 }
 
-func staleWorkspaceFromLegacyManifest(workDir string, sessionDir string) *Workspace {
-	workspace := &Workspace{Dir: sessionDir, Root: sessionDir, Cwd: sessionDir}
-	data, err := os.ReadFile(filepath.Join(sessionDir, ".ama", "resources.json"))
-	if err != nil {
-		return workspace
-	}
-	var manifest struct {
-		Resources []mountedResource `json:"resources"`
-	}
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		return workspace
-	}
-	addMountedResources(workDir, workspace, manifest.Resources)
-	return workspace
-}
-
-func addMountedResources(workDir string, workspace *Workspace, resources []mountedResource) {
-	for _, resource := range resources {
-		if resource.LocalPath == "" {
+func addMountedVolumes(workDir string, workspace *Workspace, volumes []mountedVolume) {
+	for _, volume := range volumes {
+		if volume.LocalPath == "" {
 			continue
 		}
-		switch resource.Type {
+		switch volume.Type {
 		case "github_repository":
-			if !safeGitHubSegment(resource.Owner) || !safeGitHubSegment(resource.Repo) {
+			if !safeGitHubSegment(volume.Owner) || !safeGitHubSegment(volume.Repo) {
 				continue
 			}
 			workspace.worktrees = append(workspace.worktrees, preparedWorktree{
-				cacheDir: filepath.Join(workDir, "repositories", resource.Owner, resource.Repo),
-				path:     resource.LocalPath,
+				cacheDir: filepath.Join(workDir, "repositories", volume.Owner, volume.Repo),
+				path:     volume.LocalPath,
 			})
 		case "memory_store":
 			workspace.memoryStores = append(workspace.memoryStores, preparedMemoryStore{
-				storeID: resource.StoreID,
-				path:    resource.LocalPath,
-				access:  resource.Access,
+				storeID: volume.StoreID,
+				path:    volume.LocalPath,
+				access:  volume.Access,
 			})
 		}
 	}

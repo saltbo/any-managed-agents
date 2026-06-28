@@ -8,6 +8,7 @@ import { EnvironmentDetailView } from '@/features/environments/EnvironmentDetail
 import { EnvironmentsView } from '@/features/environments/EnvironmentsView'
 import type { Environment, Session } from '@/lib/api'
 import { createCollection, HttpResponse, http, resourceHandlers, server } from '@/test/msw'
+import { buildTestSession, type TestSessionOverrides } from '@/testing/session'
 import { CreateEnvironmentSheet } from './CreateEnvironmentSheet'
 import { EnvironmentDetailPage } from './EnvironmentDetailPage'
 import { EnvironmentsPage } from './EnvironmentsPage'
@@ -40,13 +41,8 @@ function environment(overrides: Partial<Environment> = {}): Environment {
   }
 }
 
-function buildSession(overrides: Partial<Session> = {}): Session {
-  return {
-    id: 'session_1',
-    projectId: 'project_1',
-    environmentId: 'env_1',
-    ...overrides,
-  } as Session
+function buildSession(overrides: TestSessionOverrides = {}): Session {
+  return buildTestSession({ environmentId: 'env_1', ...overrides })
 }
 
 function pagination<T>(items: T[]): ClientPagination<T> {
@@ -96,7 +92,6 @@ function stubPointerEvents() {
 // CRUD surface (EnvironmentsPage, EnvironmentDetailPage, CreateEnvironmentSheet).
 function setupEnvironmentHandlers(envs: Environment[] = [], sessions: Session[] = []) {
   const envCollection = createCollection<Environment>(envs)
-  const sessionCollection = createCollection<Session>(sessions)
 
   server.use(
     ...resourceHandlers('environments', envCollection, (body, idx) =>
@@ -105,13 +100,13 @@ function setupEnvironmentHandlers(envs: Environment[] = [], sessions: Session[] 
     // sessions list — EnvironmentDetailPage reads it
     http.get('*/api/v1/sessions', () =>
       HttpResponse.json({
-        data: sessionCollection.list(),
+        data: sessions,
         pagination: { limit: 50, hasMore: false, nextCursor: null },
       }),
     ),
   )
 
-  return { envCollection, sessionCollection }
+  return { envCollection, sessions }
 }
 
 // ─── EnvironmentsView ────────────────────────────────────────────────────────
@@ -707,7 +702,6 @@ describe('[spec: environments/console-page] EnvironmentsPage', () => {
 describe('[spec: environments/console-detail-page] EnvironmentDetailPage', () => {
   function renderDetailPage(env: Environment | null, sessions: Session[] = []) {
     const envCollection = createCollection<Environment>(env ? [env] : [])
-    const sessionCollection = createCollection<Session>(sessions)
 
     server.use(
       ...resourceHandlers('environments', envCollection, (body, idx) =>
@@ -715,7 +709,7 @@ describe('[spec: environments/console-detail-page] EnvironmentDetailPage', () =>
       ),
       http.get('*/api/v1/sessions', () =>
         HttpResponse.json({
-          data: sessionCollection.list(),
+          data: sessions,
           pagination: { limit: 50, hasMore: false, nextCursor: null },
         }),
       ),

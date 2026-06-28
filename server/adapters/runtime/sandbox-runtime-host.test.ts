@@ -36,7 +36,7 @@ import {
   runtimeToolCalls,
   startSessionRuntime,
   stopSessionRuntime,
-  workspaceResourceManifest,
+  workspaceVolumeManifest,
 } from './sandbox-runtime-host'
 
 describe('session-runtime', () => {
@@ -139,35 +139,38 @@ describe('session-runtime', () => {
     })
   })
 
-  it('builds a deterministic workspace resource manifest', () => {
+  it('builds a deterministic workspace volume manifest', () => {
     expect(
-      workspaceResourceManifest([
-        {
-          type: 'github_repository',
-          owner: 'saltbo',
-          repo: 'zeta',
-          ref: 'main',
-          mountPath: '/workspace/repos/saltbo/zeta',
-        },
-        {
-          type: 'repository',
-          id: 'legacy_repo',
-        },
-        {
-          type: 'github_repository',
-          owner: 'saltbo',
-          repo: 'alpha',
-          ref: 'release',
-          mountPath: '/workspace/repos/saltbo/alpha',
-          credentialRef: { credentialId: 'vaultcred_123' },
-        },
-      ]),
+      workspaceVolumeManifest(
+        [
+          {
+            name: 'zeta',
+            type: 'github_repository',
+            owner: 'saltbo',
+            repo: 'zeta',
+            ref: 'main',
+          },
+          {
+            name: 'alpha',
+            type: 'github_repository',
+            owner: 'saltbo',
+            repo: 'alpha',
+            ref: 'release',
+            credentialRef: { credentialId: 'vaultcred_123' },
+          },
+        ],
+        [
+          { name: 'zeta', mountPath: '/workspace/repos/saltbo/zeta' },
+          { name: 'alpha', mountPath: '/workspace/repos/saltbo/alpha' },
+        ],
+      ),
     ).toEqual({
       version: 1,
       workspaceRoot: '/workspace',
-      resources: [
+      volumes: [
         {
           type: 'github_repository',
+          name: 'alpha',
           owner: 'saltbo',
           repo: 'alpha',
           ref: 'release',
@@ -177,6 +180,7 @@ describe('session-runtime', () => {
         },
         {
           type: 'github_repository',
+          name: 'zeta',
           owner: 'saltbo',
           repo: 'zeta',
           ref: 'main',
@@ -493,16 +497,10 @@ describe('session-runtime', () => {
         environmentSnapshot: { runtimeConfig: { image: 'ama-tool-executor' } },
         mcpSnapshot: { connectors: ['github'] },
         runtimeEnv: { AK_API_URL: 'https://ak.example.com', AK_AGENT_ID: 'agent_123' },
-        runtimeSecretEnv: [{ name: 'AK_AGENT_KEY', credentialRef: { credentialId: 'cred_abc123' } }],
-        resourceRefs: [
-          {
-            type: 'github_repository',
-            owner: 'saltbo',
-            repo: 'any-managed-agents',
-            ref: 'main',
-            mountPath: '/workspace/repos/saltbo/any-managed-agents',
-          },
+        volumes: [
+          { name: 'source', type: 'github_repository', owner: 'saltbo', repo: 'any-managed-agents', ref: 'main' },
         ],
+        volumeMounts: [{ name: 'source', mountPath: '/workspace/repos/saltbo/any-managed-agents' }],
       }),
     ).resolves.toMatchObject({
       sandboxId: 'sandbox_123',
@@ -531,7 +529,7 @@ describe('session-runtime', () => {
     )
     expect(mockSandbox.exec).not.toHaveBeenCalledWith('mkdir -p /workspace/.ama')
     expect(mockSandbox.writeFile).not.toHaveBeenCalledWith(
-      expect.stringMatching(/^\/workspace\/\.ama\/(session|resources|runtime-env|runtime-secret-env)\.json$/),
+      expect.stringMatching(/^\/workspace\/\.ama\/(session|resources|runtime-env)\.json$/),
       expect.anything(),
       expect.anything(),
     )

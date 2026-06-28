@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { runtimeDriver, runtimeDriverName, runtimeMetadata } from './driver'
+import { runtimeDriver, runtimeDriverName, runtimePlacement } from './driver'
 
 describe('[spec: runtime/driver-select] runtime drivers', () => {
   it('selects supported runtime drivers and rejects unknown names', () => {
@@ -26,7 +26,7 @@ describe('[spec: runtime/driver-select] runtime drivers', () => {
 
   it('builds canonical cloud runtime metadata', () => {
     expect(
-      runtimeMetadata({
+      runtimePlacement({
         hostingMode: 'cloud',
         runtime: 'ama',
         runtimeConfig: { image: 'ama-tool-executor' },
@@ -47,7 +47,7 @@ describe('[spec: runtime/driver-select] runtime drivers', () => {
 
   it('builds canonical self-hosted runtime metadata from runner protocol state', () => {
     expect(
-      runtimeMetadata({
+      runtimePlacement({
         hostingMode: 'self_hosted',
         runtime: 'codex',
         runtimeConfig: { mode: 'sdk-bridge' },
@@ -69,7 +69,7 @@ describe('[spec: runtime/driver-select] runtime drivers', () => {
 
   it('preserves persisted runtime driver metadata over defaults', () => {
     expect(
-      runtimeMetadata({
+      runtimePlacement({
         hostingMode: 'cloud',
         runtime: 'ama',
         runtimeConfig: {},

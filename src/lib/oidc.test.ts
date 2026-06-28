@@ -1,13 +1,6 @@
 import type { User } from 'oidc-client-ts'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-// Stub __AMA_OIDC_CONFIG__ before the module is imported.
-vi.stubGlobal('__AMA_OIDC_CONFIG__', {
-  authority: 'https://auth.example.com',
-  clientId: 'test-client-id',
-  scope: 'openid email profile',
-})
-
 // Shared mock functions — these are closed over by the class below and captured
 // at module-evaluation time, so they survive vi.clearAllMocks() (which only
 // clears call history, not the function reference).
@@ -35,19 +28,31 @@ vi.mock('oidc-client-ts', () => {
 // The vi.mock factory above is hoisted and stays registered across resets.
 async function freshOidc() {
   vi.resetModules()
-  // Re-register the global after resetModules (it wipes define stubs too).
-  vi.stubGlobal('__AMA_OIDC_CONFIG__', {
-    authority: 'https://auth.example.com',
-    clientId: 'test-client-id',
-    scope: 'openid email profile',
-  })
   return import('./oidc')
+}
+
+function configzResponse(
+  body = {
+    auth: { oidc: { issuer: 'https://auth.example.com', clientId: 'test-client-id', scope: 'openid email profile' } },
+  },
+) {
+  return new Response(JSON.stringify(body), { status: 200 })
+}
+
+function configzFetch() {
+  return vi.fn(async (input: RequestInfo | URL) => {
+    if (String(input) === '/api/v1/configz') {
+      return configzResponse()
+    }
+    return new Response(JSON.stringify({}), { status: 200 })
+  })
 }
 
 describe('oidc helpers', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     window.localStorage.clear()
+    vi.stubGlobal('fetch', configzFetch())
   })
 
   afterEach(() => {
@@ -230,10 +235,16 @@ describe('oidc helpers', () => {
       } as unknown as User
       mockSigninRedirectCallback.mockResolvedValueOnce(fakeUser)
 
-      const fetchMock = vi.fn(async () => new Response(JSON.stringify({}), { status: 200 }))
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input) === '/api/v1/configz') {
+          return configzResponse()
+        }
+        return new Response(JSON.stringify({}), { status: 200 })
+      })
       vi.stubGlobal('fetch', fetchMock)
 
       const result = await completeSignIn()
+      expect(fetchMock).toHaveBeenCalledWith('/api/v1/configz')
       expect(fetchMock).toHaveBeenCalledWith(
         '/api/v1/auth/sessions',
         expect.objectContaining({
@@ -254,7 +265,12 @@ describe('oidc helpers', () => {
       mockSigninRedirectCallback.mockResolvedValueOnce(fakeUser)
       vi.stubGlobal(
         'fetch',
-        vi.fn(async () => new Response(JSON.stringify({}), { status: 200 })),
+        vi.fn(async (input: RequestInfo | URL) => {
+          if (String(input) === '/api/v1/configz') {
+            return configzResponse()
+          }
+          return new Response(JSON.stringify({}), { status: 200 })
+        }),
       )
       const result = await completeSignIn()
       expect(result).toBe('/')
@@ -266,7 +282,12 @@ describe('oidc helpers', () => {
       mockSigninRedirectCallback.mockResolvedValueOnce(fakeUser)
       vi.stubGlobal(
         'fetch',
-        vi.fn(async () => new Response(JSON.stringify({}), { status: 200 })),
+        vi.fn(async (input: RequestInfo | URL) => {
+          if (String(input) === '/api/v1/configz') {
+            return configzResponse()
+          }
+          return new Response(JSON.stringify({}), { status: 200 })
+        }),
       )
       const result = await completeSignIn()
       expect(result).toBe('/')
@@ -281,7 +302,12 @@ describe('oidc helpers', () => {
       mockSigninRedirectCallback.mockResolvedValueOnce(fakeUser)
       vi.stubGlobal(
         'fetch',
-        vi.fn(async () => new Response(JSON.stringify({}), { status: 200 })),
+        vi.fn(async (input: RequestInfo | URL) => {
+          if (String(input) === '/api/v1/configz') {
+            return configzResponse()
+          }
+          return new Response(JSON.stringify({}), { status: 200 })
+        }),
       )
       const result = await completeSignIn()
       expect(result).toBe('/')
@@ -293,7 +319,12 @@ describe('oidc helpers', () => {
       mockSigninRedirectCallback.mockResolvedValueOnce(fakeUser)
       vi.stubGlobal(
         'fetch',
-        vi.fn(async () => new Response(JSON.stringify({ error: { message: 'Unauthorized' } }), { status: 401 })),
+        vi.fn(async (input: RequestInfo | URL) => {
+          if (String(input) === '/api/v1/configz') {
+            return configzResponse()
+          }
+          return new Response(JSON.stringify({ error: { message: 'Unauthorized' } }), { status: 401 })
+        }),
       )
       await expect(completeSignIn()).rejects.toThrow('Unauthorized')
     })
@@ -304,7 +335,12 @@ describe('oidc helpers', () => {
       mockSigninRedirectCallback.mockResolvedValueOnce(fakeUser)
       vi.stubGlobal(
         'fetch',
-        vi.fn(async () => new Response('not-json', { status: 500 })),
+        vi.fn(async (input: RequestInfo | URL) => {
+          if (String(input) === '/api/v1/configz') {
+            return configzResponse()
+          }
+          return new Response('not-json', { status: 500 })
+        }),
       )
       await expect(completeSignIn()).rejects.toThrow('Failed to create session')
     })
@@ -316,14 +352,22 @@ describe('oidc helpers', () => {
   describe('getOidcManager', () => {
     it('throws when OIDC config has no authority', async () => {
       vi.resetModules()
-      vi.stubGlobal('__AMA_OIDC_CONFIG__', { authority: '', clientId: 'cid', scope: 'openid' })
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => configzResponse({ auth: { oidc: { issuer: '', clientId: 'cid', scope: 'openid' } } })),
+      )
       const { getOidcManager } = await import('./oidc')
       await expect(getOidcManager()).rejects.toThrow('OIDC browser configuration is missing')
     })
 
     it('throws when OIDC config has no clientId', async () => {
       vi.resetModules()
-      vi.stubGlobal('__AMA_OIDC_CONFIG__', { authority: 'https://auth.example.com', clientId: '', scope: 'openid' })
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () =>
+          configzResponse({ auth: { oidc: { issuer: 'https://auth.example.com', clientId: '', scope: 'openid' } } }),
+        ),
+      )
       const { getOidcManager } = await import('./oidc')
       await expect(getOidcManager()).rejects.toThrow('OIDC browser configuration is missing')
     })

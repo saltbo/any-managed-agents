@@ -6,25 +6,42 @@ interface OidcConfigResponse {
   scope: string
 }
 
-declare const __AMA_OIDC_CONFIG__: OidcConfigResponse
-
 let managerPromise: Promise<UserManager> | undefined
 let userPromise: Promise<User | null> | undefined
+let configPromise: Promise<OidcConfigResponse> | undefined
 
-function oidcConfig() {
-  if (!__AMA_OIDC_CONFIG__.authority || !__AMA_OIDC_CONFIG__.clientId) {
+async function readOidcConfig() {
+  const response = await fetch('/api/v1/configz')
+  if (!response.ok) {
+    throw new Error('Failed to load browser configuration')
+  }
+  const body = (await response.json()) as {
+    auth?: { oidc?: { issuer?: string; clientId?: string; scope?: string } | null }
+  }
+  const oidc = body.auth?.oidc
+  if (!oidc?.issuer || !oidc.clientId) {
     throw new Error('OIDC browser configuration is missing')
   }
+  return {
+    authority: oidc.issuer,
+    clientId: oidc.clientId,
+    scope: oidc.scope ?? 'openid email profile',
+  }
+}
+
+async function oidcConfig() {
+  configPromise ??= readOidcConfig()
+  const config = await configPromise
   const origin = window.location.origin
   return {
-    ...__AMA_OIDC_CONFIG__,
+    ...config,
     redirectUri: `${origin}/auth/callback`,
     postLogoutRedirectUri: `${origin}/`,
   }
 }
 
 export async function getOidcManager() {
-  managerPromise ??= Promise.resolve(oidcConfig()).then(
+  managerPromise ??= oidcConfig().then(
     (config) =>
       new UserManager({
         authority: config.authority,

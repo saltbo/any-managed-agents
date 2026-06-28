@@ -27,26 +27,27 @@ const RULES: Rule[] = [
     id: 'as-unknown-as',
     description: 'Double cast `as unknown as` bypasses the type checker entirely.',
     pattern: /\bas unknown as\b/g,
-    // Remaining: server/http/runtime-ai.ts only — a §1.8 external-protocol
-    // boundary where the Workers AI binding is mistyped. Everything else is gone.
-    baseline: 1,
+    baseline: 0,
   },
   {
     id: 'json-blackhole',
     description: 'Contract-less `z.record(z.string(), z.unknown())` schema shape.',
     pattern: /z\.record\(z\.string\(\),\s*z\.unknown\(\)\)/g,
     // Counts the per-file `JsonObjectSchema` const, a proxy for opaque shapes.
-    // 20 includes the shared execution-spec.ts legacy-resource-ref Record (a
-    // genuinely freeform shape). Opaque field *usages* dropped sharply this pass
-    // (lastError, pricing, policy docs, agent policies, resourceLimits, trigger
-    // resourceRefs, session.env all became typed); the remaining consts back
-    // legitimately freeform fields (metadata, runtimeConfig, legacy refs).
-    baseline: 20,
+    // Opaque field usages dropped sharply this pass (lastError, pricing, policy
+    // docs, agent policies, resourceLimits, session env); the remaining consts
+    // back legitimately freeform fields such as metadata and runtimeConfig.
+    baseline: 18,
   },
 ]
 
 function isProductionTs(path: string): boolean {
-  return path.endsWith('.ts') && !path.endsWith('.test.ts') && !path.endsWith('.test.tsx')
+  return (
+    path.endsWith('.ts') &&
+    !path.endsWith('.test.ts') &&
+    !path.endsWith('.test.tsx') &&
+    !path.includes(`${join('server', 'integration')}${path.includes('/') ? '/' : '\\'}`)
+  )
 }
 
 function walk(dir: string): string[] {

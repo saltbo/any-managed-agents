@@ -10,7 +10,7 @@ export function useSessionActions() {
   const stopSession = useMutation({
     mutationFn: api.stopSession,
     onSuccess: (session: Session) => {
-      queryClient.setQueryData(queryKeys.sessions.detail(session.id), session)
+      queryClient.setQueryData(queryKeys.sessions.detail(session.metadata.uid), session)
       toast.success('Session stopped')
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all })
     },

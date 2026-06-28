@@ -24,6 +24,7 @@ from .api.auth import create_auth_session as create_auth_session_api
 from .api.auth import delete_current_auth_session as delete_current_auth_session_api
 from .api.auth import read_auth_config as read_auth_config_api
 from .api.auth import read_current_auth_session as read_current_auth_session_api
+from .api.config import read_configz as read_configz_api
 from .api.connections import create_connection as create_connection_api
 from .api.connections import create_tool_call as create_tool_call_api
 from .api.connections import list_connection_tools as list_connection_tools_api
@@ -265,6 +266,7 @@ class AmaClient:
     ) -> None:
         self._core = _ClientCore(base_url, access_token, project_id, headers, client)
         self.system = _SystemResource(self._core)
+        self.configz = _ConfigzResource(self._core)
         self.auth = _AuthResource(self._core)
         self.projects = _ProjectsResource(self._core)
         self.agents = _AgentsResource(self._core)
@@ -376,6 +378,14 @@ class _SystemResource:
 
     def health(self) -> Any:
         return _unwrap(get_health_api.sync_detailed(client=self._client))
+
+class _ConfigzResource:
+    def __init__(self, owner: _ClientCore) -> None:
+        self._owner = owner
+        self._client = owner.raw
+
+    def get(self) -> Any:
+        return _unwrap(read_configz_api.sync_detailed(client=self._client))
 
 class _AuthResource:
     def __init__(self, owner: _ClientCore) -> None:

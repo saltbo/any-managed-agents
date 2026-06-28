@@ -13,14 +13,15 @@ from ..types import UNSET, Unset
 from typing import cast
 
 if TYPE_CHECKING:
-  from ..models.runner_resource_ref import RunnerResourceRef
+  from ..models.runner_resolved_volume_mount import RunnerResolvedVolumeMount
   from ..models.runner_tool_call import RunnerToolCall
+  from ..models.runner_volume import RunnerVolume
+  from ..models.runner_volume_mount import RunnerVolumeMount
   from ..models.runner_work_payload_agent_snapshot import RunnerWorkPayloadAgentSnapshot
   from ..models.runner_work_payload_environment_snapshot_type_0 import RunnerWorkPayloadEnvironmentSnapshotType0
   from ..models.runner_work_payload_input import RunnerWorkPayloadInput
   from ..models.runner_work_payload_runtime_config import RunnerWorkPayloadRuntimeConfig
   from ..models.runner_work_payload_runtime_env import RunnerWorkPayloadRuntimeEnv
-  from ..models.runner_work_payload_runtime_secret_env_item import RunnerWorkPayloadRuntimeSecretEnvItem
 
 
 
@@ -40,7 +41,6 @@ class RunnerWorkPayload:
             hosting_mode (str | Unset):  Example: self_hosted.
             runtime (str | Unset):  Example: codex.
             runtime_config (RunnerWorkPayloadRuntimeConfig | Unset):
-            resource_refs (list[RunnerResourceRef] | Unset):
             provider (str | Unset):  Example: provider_codex.
             model (str | Unset):  Example: gpt-5.3-codex.
             agent_snapshot (RunnerWorkPayloadAgentSnapshot | Unset):
@@ -48,7 +48,9 @@ class RunnerWorkPayload:
             runtime_driver (str | Unset):  Example: codex-self-hosted.
             required_runner_capability (None | str | Unset):
             runtime_env (RunnerWorkPayloadRuntimeEnv | Unset):
-            runtime_secret_env (list[RunnerWorkPayloadRuntimeSecretEnvItem] | Unset):
+            volumes (list[RunnerVolume] | Unset):
+            volume_mounts (list[RunnerVolumeMount] | Unset):
+            resolved_volumes (list[RunnerResolvedVolumeMount] | Unset):
             initial_prompt (None | str | Unset):
             resume (bool | Unset):
             resume_token (None | str | Unset):
@@ -65,7 +67,6 @@ class RunnerWorkPayload:
     hosting_mode: str | Unset = UNSET
     runtime: str | Unset = UNSET
     runtime_config: RunnerWorkPayloadRuntimeConfig | Unset = UNSET
-    resource_refs: list[RunnerResourceRef] | Unset = UNSET
     provider: str | Unset = UNSET
     model: str | Unset = UNSET
     agent_snapshot: RunnerWorkPayloadAgentSnapshot | Unset = UNSET
@@ -73,7 +74,9 @@ class RunnerWorkPayload:
     runtime_driver: str | Unset = UNSET
     required_runner_capability: None | str | Unset = UNSET
     runtime_env: RunnerWorkPayloadRuntimeEnv | Unset = UNSET
-    runtime_secret_env: list[RunnerWorkPayloadRuntimeSecretEnvItem] | Unset = UNSET
+    volumes: list[RunnerVolume] | Unset = UNSET
+    volume_mounts: list[RunnerVolumeMount] | Unset = UNSET
+    resolved_volumes: list[RunnerResolvedVolumeMount] | Unset = UNSET
     initial_prompt: None | str | Unset = UNSET
     resume: bool | Unset = UNSET
     resume_token: None | str | Unset = UNSET
@@ -88,14 +91,15 @@ class RunnerWorkPayload:
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.runner_resource_ref import RunnerResourceRef
+        from ..models.runner_resolved_volume_mount import RunnerResolvedVolumeMount
         from ..models.runner_tool_call import RunnerToolCall
+        from ..models.runner_volume import RunnerVolume
+        from ..models.runner_volume_mount import RunnerVolumeMount
         from ..models.runner_work_payload_agent_snapshot import RunnerWorkPayloadAgentSnapshot
         from ..models.runner_work_payload_environment_snapshot_type_0 import RunnerWorkPayloadEnvironmentSnapshotType0
         from ..models.runner_work_payload_input import RunnerWorkPayloadInput
         from ..models.runner_work_payload_runtime_config import RunnerWorkPayloadRuntimeConfig
         from ..models.runner_work_payload_runtime_env import RunnerWorkPayloadRuntimeEnv
-        from ..models.runner_work_payload_runtime_secret_env_item import RunnerWorkPayloadRuntimeSecretEnvItem
         protocol: str | Unset = UNSET
         if not isinstance(self.protocol, Unset):
             protocol = self.protocol.value
@@ -112,15 +116,6 @@ class RunnerWorkPayload:
         runtime_config: dict[str, Any] | Unset = UNSET
         if not isinstance(self.runtime_config, Unset):
             runtime_config = self.runtime_config.to_dict()
-
-        resource_refs: list[dict[str, Any]] | Unset = UNSET
-        if not isinstance(self.resource_refs, Unset):
-            resource_refs = []
-            for resource_refs_item_data in self.resource_refs:
-                resource_refs_item = resource_refs_item_data.to_dict()
-                resource_refs.append(resource_refs_item)
-
-
 
         provider = self.provider
 
@@ -150,12 +145,30 @@ class RunnerWorkPayload:
         if not isinstance(self.runtime_env, Unset):
             runtime_env = self.runtime_env.to_dict()
 
-        runtime_secret_env: list[dict[str, Any]] | Unset = UNSET
-        if not isinstance(self.runtime_secret_env, Unset):
-            runtime_secret_env = []
-            for runtime_secret_env_item_data in self.runtime_secret_env:
-                runtime_secret_env_item = runtime_secret_env_item_data.to_dict()
-                runtime_secret_env.append(runtime_secret_env_item)
+        volumes: list[dict[str, Any]] | Unset = UNSET
+        if not isinstance(self.volumes, Unset):
+            volumes = []
+            for volumes_item_data in self.volumes:
+                volumes_item = volumes_item_data.to_dict()
+                volumes.append(volumes_item)
+
+
+
+        volume_mounts: list[dict[str, Any]] | Unset = UNSET
+        if not isinstance(self.volume_mounts, Unset):
+            volume_mounts = []
+            for volume_mounts_item_data in self.volume_mounts:
+                volume_mounts_item = volume_mounts_item_data.to_dict()
+                volume_mounts.append(volume_mounts_item)
+
+
+
+        resolved_volumes: list[dict[str, Any]] | Unset = UNSET
+        if not isinstance(self.resolved_volumes, Unset):
+            resolved_volumes = []
+            for resolved_volumes_item_data in self.resolved_volumes:
+                resolved_volumes_item = resolved_volumes_item_data.to_dict()
+                resolved_volumes.append(resolved_volumes_item)
 
 
 
@@ -204,8 +217,6 @@ class RunnerWorkPayload:
             field_dict["runtime"] = runtime
         if runtime_config is not UNSET:
             field_dict["runtimeConfig"] = runtime_config
-        if resource_refs is not UNSET:
-            field_dict["resourceRefs"] = resource_refs
         if provider is not UNSET:
             field_dict["provider"] = provider
         if model is not UNSET:
@@ -220,8 +231,12 @@ class RunnerWorkPayload:
             field_dict["requiredRunnerCapability"] = required_runner_capability
         if runtime_env is not UNSET:
             field_dict["runtimeEnv"] = runtime_env
-        if runtime_secret_env is not UNSET:
-            field_dict["runtimeSecretEnv"] = runtime_secret_env
+        if volumes is not UNSET:
+            field_dict["volumes"] = volumes
+        if volume_mounts is not UNSET:
+            field_dict["volumeMounts"] = volume_mounts
+        if resolved_volumes is not UNSET:
+            field_dict["resolvedVolumes"] = resolved_volumes
         if initial_prompt is not UNSET:
             field_dict["initialPrompt"] = initial_prompt
         if resume is not UNSET:
@@ -245,14 +260,15 @@ class RunnerWorkPayload:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.runner_resource_ref import RunnerResourceRef
+        from ..models.runner_resolved_volume_mount import RunnerResolvedVolumeMount
         from ..models.runner_tool_call import RunnerToolCall
+        from ..models.runner_volume import RunnerVolume
+        from ..models.runner_volume_mount import RunnerVolumeMount
         from ..models.runner_work_payload_agent_snapshot import RunnerWorkPayloadAgentSnapshot
         from ..models.runner_work_payload_environment_snapshot_type_0 import RunnerWorkPayloadEnvironmentSnapshotType0
         from ..models.runner_work_payload_input import RunnerWorkPayloadInput
         from ..models.runner_work_payload_runtime_config import RunnerWorkPayloadRuntimeConfig
         from ..models.runner_work_payload_runtime_env import RunnerWorkPayloadRuntimeEnv
-        from ..models.runner_work_payload_runtime_secret_env_item import RunnerWorkPayloadRuntimeSecretEnvItem
         d = dict(src_dict)
         _protocol = d.pop("protocol", UNSET)
         protocol: RunnerWorkPayloadProtocol | Unset
@@ -280,18 +296,6 @@ class RunnerWorkPayload:
             runtime_config = RunnerWorkPayloadRuntimeConfig.from_dict(_runtime_config)
 
 
-
-
-        _resource_refs = d.pop("resourceRefs", UNSET)
-        resource_refs: list[RunnerResourceRef] | Unset = UNSET
-        if _resource_refs is not UNSET:
-            resource_refs = []
-            for resource_refs_item_data in _resource_refs:
-                resource_refs_item = RunnerResourceRef.from_dict(resource_refs_item_data)
-
-
-
-                resource_refs.append(resource_refs_item)
 
 
         provider = d.pop("provider", UNSET)
@@ -350,16 +354,40 @@ class RunnerWorkPayload:
 
 
 
-        _runtime_secret_env = d.pop("runtimeSecretEnv", UNSET)
-        runtime_secret_env: list[RunnerWorkPayloadRuntimeSecretEnvItem] | Unset = UNSET
-        if _runtime_secret_env is not UNSET:
-            runtime_secret_env = []
-            for runtime_secret_env_item_data in _runtime_secret_env:
-                runtime_secret_env_item = RunnerWorkPayloadRuntimeSecretEnvItem.from_dict(runtime_secret_env_item_data)
+        _volumes = d.pop("volumes", UNSET)
+        volumes: list[RunnerVolume] | Unset = UNSET
+        if _volumes is not UNSET:
+            volumes = []
+            for volumes_item_data in _volumes:
+                volumes_item = RunnerVolume.from_dict(volumes_item_data)
 
 
 
-                runtime_secret_env.append(runtime_secret_env_item)
+                volumes.append(volumes_item)
+
+
+        _volume_mounts = d.pop("volumeMounts", UNSET)
+        volume_mounts: list[RunnerVolumeMount] | Unset = UNSET
+        if _volume_mounts is not UNSET:
+            volume_mounts = []
+            for volume_mounts_item_data in _volume_mounts:
+                volume_mounts_item = RunnerVolumeMount.from_dict(volume_mounts_item_data)
+
+
+
+                volume_mounts.append(volume_mounts_item)
+
+
+        _resolved_volumes = d.pop("resolvedVolumes", UNSET)
+        resolved_volumes: list[RunnerResolvedVolumeMount] | Unset = UNSET
+        if _resolved_volumes is not UNSET:
+            resolved_volumes = []
+            for resolved_volumes_item_data in _resolved_volumes:
+                resolved_volumes_item = RunnerResolvedVolumeMount.from_dict(resolved_volumes_item_data)
+
+
+
+                resolved_volumes.append(resolved_volumes_item)
 
 
         def _parse_initial_prompt(data: object) -> None | str | Unset:
@@ -417,7 +445,6 @@ class RunnerWorkPayload:
             hosting_mode=hosting_mode,
             runtime=runtime,
             runtime_config=runtime_config,
-            resource_refs=resource_refs,
             provider=provider,
             model=model,
             agent_snapshot=agent_snapshot,
@@ -425,7 +452,9 @@ class RunnerWorkPayload:
             runtime_driver=runtime_driver,
             required_runner_capability=required_runner_capability,
             runtime_env=runtime_env,
-            runtime_secret_env=runtime_secret_env,
+            volumes=volumes,
+            volume_mounts=volume_mounts,
+            resolved_volumes=resolved_volumes,
             initial_prompt=initial_prompt,
             resume=resume,
             resume_token=resume_token,

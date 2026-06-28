@@ -339,12 +339,72 @@
         ],
         "additionalProperties": false
       },
-      "RunnerResourceRef": {
+      "RunnerResolvedVolumeFile": {
         "type": "object",
         "properties": {
+          "path": {
+            "type": "string",
+            "example": "GITHUB_TOKEN"
+          },
+          "content": {
+            "type": "string",
+            "example": "secret-value"
+          }
+        },
+        "required": [
+          "path",
+          "content"
+        ],
+        "additionalProperties": false
+      },
+      "RunnerResolvedVolumeMount": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "github-token"
+          },
+          "mountPath": {
+            "type": "string",
+            "example": "/workspace/.ama/secrets/github-token"
+          },
+          "readOnly": {
+            "type": "boolean",
+            "example": true
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunnerResolvedVolumeFile"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "mountPath",
+          "readOnly",
+          "files"
+        ],
+        "additionalProperties": false
+      },
+      "RunnerVolume": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "source"
+          },
           "type": {
             "type": "string",
+            "enum": [
+              "secret",
+              "github_repository",
+              "memory_store"
+            ],
             "example": "github_repository"
+          },
+          "secretRef": {
+            "type": "string"
           },
           "owner": {
             "type": "string",
@@ -358,17 +418,9 @@
             "type": "string",
             "example": "main"
           },
-          "mountPath": {
-            "type": "string",
-            "example": "repo"
-          },
           "storeId": {
             "type": "string",
             "example": "memstore_abc123"
-          },
-          "name": {
-            "type": "string",
-            "example": "Project memory"
           },
           "description": {
             "type": "string",
@@ -386,7 +438,29 @@
           }
         },
         "required": [
+          "name",
           "type"
+        ],
+        "additionalProperties": false
+      },
+      "RunnerVolumeMount": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "source"
+          },
+          "mountPath": {
+            "type": "string",
+            "example": "/workspace/repos/saltbo/any-managed-agents"
+          },
+          "readOnly": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "mountPath"
         ],
         "additionalProperties": false
       },
@@ -450,12 +524,6 @@
               "nullable": true
             }
           },
-          "resourceRefs": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/RunnerResourceRef"
-            }
-          },
           "provider": {
             "type": "string",
             "example": "provider_codex"
@@ -491,13 +559,22 @@
               "type": "string"
             }
           },
-          "runtimeSecretEnv": {
+          "volumes": {
             "type": "array",
             "items": {
-              "type": "object",
-              "additionalProperties": {
-                "nullable": true
-              }
+              "$ref": "#/components/schemas/RunnerVolume"
+            }
+          },
+          "volumeMounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunnerVolumeMount"
+            }
+          },
+          "resolvedVolumes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunnerResolvedVolumeMount"
             }
           },
           "initialPrompt": {
@@ -632,10 +709,16 @@
               "nullable": true
             }
           },
-          "resourceRefs": {
+          "volumes": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/RunnerResourceRef"
+              "$ref": "#/components/schemas/RunnerVolume"
+            }
+          },
+          "volumeMounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunnerVolumeMount"
             }
           }
         },
@@ -738,6 +821,52 @@
           "runnerClientId",
           "runnerScopes",
           "timestamp"
+        ]
+      },
+      "PublicConfig": {
+        "type": "object",
+        "properties": {
+          "auth": {
+            "$ref": "#/components/schemas/PublicAuthConfig"
+          }
+        },
+        "required": [
+          "auth"
+        ]
+      },
+      "PublicAuthConfig": {
+        "type": "object",
+        "properties": {
+          "oidc": {
+            "$ref": "#/components/schemas/PublicOidcConfig"
+          }
+        },
+        "required": [
+          "oidc"
+        ]
+      },
+      "PublicOidcConfig": {
+        "type": "object",
+        "nullable": true,
+        "properties": {
+          "issuer": {
+            "type": "string",
+            "format": "uri",
+            "example": "https://id.example.com/api/auth"
+          },
+          "clientId": {
+            "type": "string",
+            "example": "client_abc123"
+          },
+          "scope": {
+            "type": "string",
+            "example": "openid email profile"
+          }
+        },
+        "required": [
+          "issuer",
+          "clientId",
+          "scope"
         ]
       },
       "AuthConfig": {
@@ -4756,19 +4885,6 @@
             "type": "string",
             "example": "Research current Canadian banking bonus offers."
           },
-          "resourceRefs": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ResourceRef"
-            },
-            "example": [
-              {
-                "type": "github_repository",
-                "owner": "openai",
-                "repo": "openai"
-              }
-            ]
-          },
           "env": {
             "type": "object",
             "additionalProperties": {
@@ -4778,17 +4894,42 @@
               "AK_API_URL": "https://ak.example.com"
             }
           },
-          "secretEnv": {
+          "envFrom": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/SecretEnvEntry"
+              "$ref": "#/components/schemas/EnvFromEntry"
             },
             "example": [
               {
+                "type": "secret",
                 "name": "AK_AGENT_KEY",
-                "credentialRef": {
-                  "credentialId": "vaultcred_abc123"
-                }
+                "secretRef": "ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123"
+              }
+            ]
+          },
+          "volumes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Volume"
+            },
+            "example": [
+              {
+                "name": "project-secrets",
+                "type": "secret",
+                "secretRef": "ama://vaults/vault_abc123"
+              }
+            ]
+          },
+          "volumeMounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VolumeMount"
+            },
+            "example": [
+              {
+                "name": "project-secrets",
+                "mountPath": "/workspace/.ama/secrets/project",
+                "readOnly": true
               }
             ]
           },
@@ -4881,9 +5022,10 @@
           "runtime",
           "name",
           "promptTemplate",
-          "resourceRefs",
           "env",
-          "secretEnv",
+          "envFrom",
+          "volumes",
+          "volumeMounts",
           "schedule",
           "enabled",
           "nextDueAt",
@@ -4906,25 +5048,95 @@
         ],
         "example": "codex"
       },
-      "ResourceRef": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/GitHubRepositoryResourceRef"
-          },
-          {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
-          },
-          {
-            "$ref": "#/components/schemas/MemoryStoreResourceRef"
-          }
-        ]
-      },
-      "GitHubRepositoryResourceRef": {
+      "EnvFromEntry": {
         "type": "object",
         "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "secret"
+            ],
+            "example": "secret"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "example": "GITHUB_TOKEN"
+          },
+          "secretRef": {
+            "type": "string",
+            "minLength": 1,
+            "example": "ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123"
+          }
+        },
+        "required": [
+          "type",
+          "name",
+          "secretRef"
+        ],
+        "additionalProperties": false
+      },
+      "Volume": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/SecretVolume"
+          },
+          {
+            "$ref": "#/components/schemas/GitHubRepositoryVolume"
+          },
+          {
+            "$ref": "#/components/schemas/MemoryStoreVolume"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "secret": "#/components/schemas/SecretVolume",
+            "github_repository": "#/components/schemas/GitHubRepositoryVolume",
+            "memory_store": "#/components/schemas/MemoryStoreVolume"
+          }
+        }
+      },
+      "SecretVolume": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[A-Za-z0-9._-]+$",
+            "example": "github-token"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "secret"
+            ]
+          },
+          "secretRef": {
+            "type": "string",
+            "minLength": 1,
+            "example": "ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123"
+          }
+        },
+        "required": [
+          "name",
+          "type",
+          "secretRef"
+        ],
+        "additionalProperties": false
+      },
+      "GitHubRepositoryVolume": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[A-Za-z0-9._-]+$",
+            "example": "source"
+          },
           "type": {
             "type": "string",
             "enum": [
@@ -4948,25 +5160,28 @@
             "minLength": 1,
             "maxLength": 255
           },
-          "mountPath": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 200
-          },
           "credentialRef": {
             "$ref": "#/components/schemas/CredentialRef"
           }
         },
         "required": [
+          "name",
           "type",
           "owner",
           "repo"
         ],
         "additionalProperties": false
       },
-      "MemoryStoreResourceRef": {
+      "MemoryStoreVolume": {
         "type": "object",
         "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[A-Za-z0-9._-]+$",
+            "example": "team-memory"
+          },
           "type": {
             "type": "string",
             "enum": [
@@ -4985,32 +5200,47 @@
               "read_write"
             ],
             "example": "read_only"
+          },
+          "storeName": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
           }
         },
         "required": [
+          "name",
           "type",
           "storeId",
           "access"
         ],
         "additionalProperties": false
       },
-      "SecretEnvEntry": {
+      "VolumeMount": {
         "type": "object",
         "properties": {
           "name": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 120,
-            "example": "GITHUB_TOKEN"
+            "maxLength": 80,
+            "example": "github-token"
           },
-          "credentialRef": {
-            "$ref": "#/components/schemas/CredentialRef"
+          "mountPath": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "example": "/workspace/.ama/secrets/project"
+          },
+          "readOnly": {
+            "type": "boolean",
+            "example": true
           }
         },
         "required": [
           "name",
-          "credentialRef"
-        ]
+          "mountPath"
+        ],
+        "additionalProperties": false
       },
       "CreateTriggerRequest": {
         "type": "object",
@@ -5048,20 +5278,6 @@
             "maxLength": 16000,
             "example": "Research current Canadian banking bonus offers."
           },
-          "resourceRefs": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ResourceRef"
-            },
-            "maxItems": 50,
-            "example": [
-              {
-                "type": "github_repository",
-                "owner": "openai",
-                "repo": "openai"
-              }
-            ]
-          },
           "env": {
             "type": "object",
             "additionalProperties": {
@@ -5071,20 +5287,33 @@
               "AK_API_URL": "https://ak.example.com"
             }
           },
-          "secretEnv": {
+          "envFrom": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/SecretEnvEntry"
+              "$ref": "#/components/schemas/EnvFromEntry"
             },
             "maxItems": 50,
             "example": [
               {
+                "type": "secret",
                 "name": "AK_AGENT_KEY",
-                "credentialRef": {
-                  "credentialId": "vaultcred_abc123"
-                }
+                "secretRef": "ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123"
               }
             ]
+          },
+          "volumes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Volume"
+            },
+            "maxItems": 50
+          },
+          "volumeMounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VolumeMount"
+            },
+            "maxItems": 50
           },
           "schedule": {
             "type": "object",
@@ -5196,20 +5425,6 @@
             "maxLength": 16000,
             "example": "Research current Canadian banking bonus offers."
           },
-          "resourceRefs": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ResourceRef"
-            },
-            "maxItems": 50,
-            "example": [
-              {
-                "type": "github_repository",
-                "owner": "openai",
-                "repo": "openai"
-              }
-            ]
-          },
           "env": {
             "type": "object",
             "additionalProperties": {
@@ -5219,20 +5434,33 @@
               "AK_API_URL": "https://ak.example.com"
             }
           },
-          "secretEnv": {
+          "envFrom": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/SecretEnvEntry"
+              "$ref": "#/components/schemas/EnvFromEntry"
             },
             "maxItems": 50,
             "example": [
               {
+                "type": "secret",
                 "name": "AK_AGENT_KEY",
-                "credentialRef": {
-                  "credentialId": "vaultcred_abc123"
-                }
+                "secretRef": "ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123"
               }
             ]
+          },
+          "volumes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Volume"
+            },
+            "maxItems": 50
+          },
+          "volumeMounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VolumeMount"
+            },
+            "maxItems": 50
           },
           "schedule": {
             "type": "object",
@@ -5415,56 +5643,93 @@
       "Session": {
         "type": "object",
         "properties": {
-          "id": {
+          "metadata": {
+            "$ref": "#/components/schemas/SessionMetadata"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/SessionSpec"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SessionStatus"
+          }
+        },
+        "required": [
+          "metadata",
+          "spec",
+          "status"
+        ]
+      },
+      "SessionMetadata": {
+        "type": "object",
+        "properties": {
+          "uid": {
             "type": "string",
             "example": "session_abc123"
           },
-          "projectId": {
+          "pid": {
             "type": "string",
             "example": "project_abc123"
           },
+          "name": {
+            "type": "string",
+            "example": "Implement billing export"
+          },
+          "labels": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "annotations": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "createdBy": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "archivedAt": {
+            "type": "string",
+            "nullable": true,
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "uid",
+          "pid",
+          "name",
+          "labels",
+          "annotations",
+          "createdBy",
+          "createdAt",
+          "updatedAt",
+          "archivedAt"
+        ]
+      },
+      "SessionSpec": {
+        "type": "object",
+        "properties": {
           "agentId": {
             "type": "string",
             "example": "agent_abc123"
-          },
-          "agentVersionId": {
-            "type": "string",
-            "example": "agentver_abc123"
-          },
-          "agentSnapshot": {
-            "$ref": "#/components/schemas/SessionAgentSnapshot"
           },
           "environmentId": {
             "type": "string",
             "nullable": true,
             "example": "env_abc123"
           },
-          "environmentVersionId": {
-            "type": "string",
-            "nullable": true,
-            "example": "envver_abc123"
-          },
-          "environmentSnapshot": {
-            "$ref": "#/components/schemas/SessionEnvironmentSnapshot"
-          },
-          "title": {
-            "type": "string",
-            "nullable": true,
-            "example": "Implement billing export"
-          },
-          "resourceRefs": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ResourceRef"
-            },
-            "example": [
-              {
-                "type": "github_repository",
-                "owner": "saltbo",
-                "repo": "any-managed-agents",
-                "ref": "main"
-              }
-            ]
+          "runtime": {
+            "$ref": "#/components/schemas/Runtime"
           },
           "env": {
             "type": "object",
@@ -5475,25 +5740,61 @@
               "AK_API_URL": "https://ak.example.com"
             }
           },
-          "secretEnv": {
+          "envFrom": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/SecretEnvEntry"
+              "$ref": "#/components/schemas/EnvFromEntry"
             },
             "example": [
               {
+                "type": "secret",
                 "name": "AK_AGENT_KEY",
-                "credentialRef": {
-                  "credentialId": "vaultcred_abc123",
-                  "versionId": "vaultver_abc123"
-                }
+                "secretRef": "ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123"
               }
             ]
           },
-          "runtimeMetadata": {
-            "$ref": "#/components/schemas/SessionRuntimeMetadata"
+          "volumes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Volume"
+            },
+            "example": [
+              {
+                "name": "source",
+                "type": "github_repository",
+                "owner": "saltbo",
+                "repo": "any-managed-agents"
+              }
+            ]
           },
-          "state": {
+          "volumeMounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VolumeMount"
+            },
+            "example": [
+              {
+                "name": "source",
+                "mountPath": "/workspace/repos/saltbo/any-managed-agents",
+                "readOnly": true
+              }
+            ]
+          }
+        },
+        "required": [
+          "agentId",
+          "environmentId",
+          "runtime",
+          "env",
+          "envFrom",
+          "volumes",
+          "volumeMounts"
+        ]
+      },
+      "SessionStatus": {
+        "type": "object",
+        "properties": {
+          "phase": {
             "type": "string",
             "enum": [
               "pending",
@@ -5504,15 +5805,21 @@
             ],
             "example": "idle"
           },
-          "stateReason": {
+          "reason": {
             "type": "string",
             "nullable": true
           },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
+          "conditions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SessionCondition"
             }
+          },
+          "bindings": {
+            "$ref": "#/components/schemas/SessionBindings"
+          },
+          "placement": {
+            "$ref": "#/components/schemas/SessionPlacement"
           },
           "startedAt": {
             "type": "string",
@@ -5523,43 +5830,109 @@
             "type": "string",
             "nullable": true,
             "format": "date-time"
-          },
-          "archivedAt": {
+          }
+        },
+        "required": [
+          "phase",
+          "reason",
+          "conditions",
+          "bindings",
+          "placement",
+          "startedAt",
+          "stoppedAt"
+        ]
+      },
+      "SessionCondition": {
+        "type": "object",
+        "properties": {
+          "type": {
             "type": "string",
-            "nullable": true,
-            "format": "date-time"
+            "enum": [
+              "Scheduled",
+              "RuntimeReady",
+              "Running",
+              "Completed"
+            ]
           },
-          "createdAt": {
+          "status": {
             "type": "string",
-            "format": "date-time"
+            "enum": [
+              "True",
+              "False",
+              "Unknown"
+            ]
           },
-          "updatedAt": {
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "message": {
+            "type": "string",
+            "nullable": true
+          },
+          "lastTransitionAt": {
             "type": "string",
             "format": "date-time"
           }
         },
         "required": [
-          "id",
-          "projectId",
-          "agentId",
-          "agentVersionId",
-          "agentSnapshot",
-          "environmentId",
-          "environmentVersionId",
-          "environmentSnapshot",
-          "title",
-          "resourceRefs",
-          "env",
-          "secretEnv",
-          "runtimeMetadata",
-          "state",
-          "stateReason",
-          "metadata",
-          "startedAt",
-          "stoppedAt",
-          "archivedAt",
-          "createdAt",
-          "updatedAt"
+          "type",
+          "status",
+          "reason",
+          "message",
+          "lastTransitionAt"
+        ]
+      },
+      "SessionBindings": {
+        "type": "object",
+        "properties": {
+          "agent": {
+            "type": "object",
+            "properties": {
+              "versionId": {
+                "type": "string",
+                "example": "agentver_abc123"
+              },
+              "snapshot": {
+                "$ref": "#/components/schemas/SessionAgentSnapshot"
+              }
+            },
+            "required": [
+              "versionId",
+              "snapshot"
+            ]
+          },
+          "environment": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "nullable": true,
+                "example": "env_abc123"
+              },
+              "versionId": {
+                "type": "string",
+                "nullable": true,
+                "example": "envver_abc123"
+              },
+              "snapshot": {
+                "$ref": "#/components/schemas/SessionEnvironmentSnapshot"
+              }
+            },
+            "required": [
+              "id",
+              "versionId",
+              "snapshot"
+            ]
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/Runtime"
+          }
+        },
+        "required": [
+          "agent",
+          "environment",
+          "runtime"
         ]
       },
       "SessionAgentSnapshot": {
@@ -5753,20 +6126,12 @@
           "nullable": true
         }
       },
-      "SessionRuntimeMetadata": {
+      "SessionPlacement": {
         "type": "object",
+        "nullable": true,
         "properties": {
           "hostingMode": {
             "$ref": "#/components/schemas/EnvironmentHostingMode"
-          },
-          "runtime": {
-            "$ref": "#/components/schemas/Runtime"
-          },
-          "runtimeConfig": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
           },
           "provider": {
             "type": "string",
@@ -5795,8 +6160,6 @@
         },
         "required": [
           "hostingMode",
-          "runtime",
-          "runtimeConfig",
           "provider",
           "model",
           "driver",
@@ -5829,7 +6192,7 @@
               "sandboxMode": "workspace-write"
             }
           },
-          "title": {
+          "name": {
             "type": "string",
             "minLength": 1,
             "maxLength": 160,
@@ -5844,21 +6207,6 @@
               "ticket": "AMA-123"
             }
           },
-          "resourceRefs": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ResourceRef"
-            },
-            "maxItems": 50,
-            "example": [
-              {
-                "type": "github_repository",
-                "owner": "saltbo",
-                "repo": "any-managed-agents",
-                "ref": "main"
-              }
-            ]
-          },
           "env": {
             "type": "object",
             "additionalProperties": {
@@ -5869,30 +6217,39 @@
               "AK_AGENT_ID": "agent_abc123"
             }
           },
-          "secretEnv": {
+          "envFrom": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/SecretEnvEntry"
+              "$ref": "#/components/schemas/EnvFromEntry"
             },
             "maxItems": 50,
             "example": [
               {
+                "type": "secret",
                 "name": "AK_AGENT_KEY",
-                "credentialRef": {
-                  "credentialId": "vaultcred_abc123"
-                }
+                "secretRef": "ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123"
               }
             ]
+          },
+          "volumes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Volume"
+            },
+            "maxItems": 50
+          },
+          "volumeMounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VolumeMount"
+            },
+            "maxItems": 50
           },
           "initialPrompt": {
             "type": "string",
             "minLength": 1,
             "maxLength": 16000,
             "example": "Research Canadian banking bonus offers and summarize current opportunities."
-          },
-          "providerAccessOverride": {
-            "type": "boolean",
-            "example": false
           }
         },
         "required": [
@@ -5922,7 +6279,7 @@
       "UpdateSessionRequest": {
         "type": "object",
         "properties": {
-          "title": {
+          "name": {
             "type": "string",
             "nullable": true,
             "minLength": 1,
@@ -6882,20 +7239,13 @@
           "provider": {
             "type": "string",
             "enum": [
-              "ama-managed",
-              "cloudflare-secrets",
-              "external-vault"
+              "ama"
             ],
-            "example": "cloudflare-secrets"
+            "example": "ama"
           },
           "secretRef": {
             "type": "string",
-            "example": "cloudflare-secret:AMA_PROJECT_ABC123_TOKEN_V2"
-          },
-          "externalVaultPath": {
-            "type": "string",
-            "nullable": true,
-            "example": "vault://team/provider/token"
+            "example": "ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123"
           },
           "referenceName": {
             "type": "string",
@@ -6943,7 +7293,6 @@
           "version",
           "provider",
           "secretRef",
-          "externalVaultPath",
           "referenceName",
           "state",
           "hasSecret",
@@ -7009,26 +7358,11 @@
           "secret": {
             "type": "object",
             "properties": {
-              "provider": {
-                "type": "string",
-                "enum": [
-                  "ama-managed",
-                  "cloudflare-secrets",
-                  "external-vault"
-                ],
-                "example": "cloudflare-secrets"
-              },
               "secretValue": {
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 16000,
                 "example": "redacted-input-only"
-              },
-              "externalVaultPath": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 500,
-                "example": "vault://team/provider/token"
               },
               "referenceName": {
                 "type": "string",
@@ -7046,9 +7380,11 @@
                 }
               }
             },
+            "required": [
+              "secretValue"
+            ],
             "additionalProperties": false,
             "example": {
-              "provider": "cloudflare-secrets",
               "secretValue": "input-only"
             }
           }
@@ -7107,26 +7443,11 @@
       "CreateVaultCredentialVersionRequest": {
         "type": "object",
         "properties": {
-          "provider": {
-            "type": "string",
-            "enum": [
-              "ama-managed",
-              "cloudflare-secrets",
-              "external-vault"
-            ],
-            "example": "cloudflare-secrets"
-          },
           "secretValue": {
             "type": "string",
             "minLength": 1,
             "maxLength": 16000,
             "example": "redacted-input-only"
-          },
-          "externalVaultPath": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 500,
-            "example": "vault://team/provider/token"
           },
           "referenceName": {
             "type": "string",
@@ -7144,6 +7465,9 @@
             }
           }
         },
+        "required": [
+          "secretValue"
+        ],
         "additionalProperties": false
       }
     },
@@ -7164,6 +7488,27 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/configz": {
+      "get": {
+        "operationId": "readConfigz",
+        "tags": [
+          "Config"
+        ],
+        "summary": "Read public browser configuration",
+        "responses": {
+          "200": {
+            "description": "Public browser configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicConfig"
                 }
               }
             }
@@ -12552,7 +12897,7 @@
           "Sessions"
         ],
         "summary": "Update a session",
-        "description": "Partial update: title and metadata edits, the stop transition (state: \"stopped\"), and lifecycle archiving (archived: true|false).",
+        "description": "Partial update: name and metadata edits, the stop transition (state: \"stopped\"), and lifecycle archiving (archived: true|false).",
         "security": [
           {
             "bearerAuth": []

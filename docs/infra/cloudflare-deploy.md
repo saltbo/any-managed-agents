@@ -20,6 +20,9 @@ Required settings:
 - Issuer: `OIDC_ISSUER`
 - Client id: `OIDC_CLIENT_ID`
 - Client secret: store as Wrangler secret `OIDC_CLIENT_SECRET`
+- Introspection client id: `OIDC_INTROSPECTION_CLIENT_ID`
+- Introspection client secret: store as Wrangler secret
+  `OIDC_INTROSPECTION_CLIENT_SECRET`
 - Redirect URI: configure in the OIDC provider as `https://<worker-host>/auth/callback`
 - Scopes: `openid email profile`
 - Flow: authorization code with PKCE
@@ -51,8 +54,6 @@ Required Worker bindings and variables:
 - `SANDBOX`: Cloudflare Sandbox/Containers binding.
 - `AMA_RUNTIME_MODE=live` for deployed environments. Tests use
   `AMA_RUNTIME_MODE=test`.
-- `AMA_PI_BRIDGE_PORT` and `AMA_PI_BRIDGE_COMMAND`: legacy bridge-only settings.
-  They are not used by the normal v1 cloud-owned runtime path.
 
 ## Workers AI model configuration
 
@@ -63,20 +64,21 @@ does not call the Cloudflare REST API directly for model work.
 Required settings:
 
 - `AMA_DEFAULT_MODEL=@cf/moonshotai/kimi-k2.6`
-- `AMA_WORKERS_AI_ACCOUNT_ID=<cloudflare-account-id>`
-- `AMA_RUNTIME_AI_PROXY_TOKEN`: legacy bridge-only secret. It is not required by
-  the normal cloud-owned runtime path.
-- `AMA_AI_GATEWAY_ID`: optional Cloudflare AI Gateway id
+
+Optional settings:
+
+- `AMA_AI_GATEWAY_ID`: Cloudflare AI Gateway id for third-party gateway-routed
+  models. Native `@cf/` Workers AI models do not need a gateway id.
 
 Do not store raw provider credentials in D1, session events, UI state, or logs.
 The database may store metadata and secret references only.
 
 ## Vault credential encryption
 
-Vault credential storage encrypts managed secret values (the `ama-managed` and
-`cloudflare-secrets` providers) with AES-GCM before anything reaches D1.
+Vault credential storage encrypts managed secret values with AES-GCM before
+anything reaches D1.
 
-Required settings:
+Required settings for managed vault storage:
 
 - `AMA_VAULT_ENCRYPTION_KEY`: store as a Wrangler secret with at least 32
   characters. Credential creation and rotation fail fast when it is missing;

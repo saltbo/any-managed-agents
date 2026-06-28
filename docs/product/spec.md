@@ -99,20 +99,20 @@ Environment `networkPolicy.mode` is exactly `unrestricted`, `restricted`, or `of
 
 Sandbox instances follow the session lifecycle, are not reusable across sessions, and must not expose public ports.
 
-Session `resourceRefs` may include GitHub repository declarations:
+Session `volumes` may include GitHub repository declarations, mounted through `volumeMounts`:
 
 ```json
 {
+  "name": "source",
   "type": "github_repository",
   "owner": "saltbo",
   "repo": "any-managed-agents",
   "ref": "main",
-  "mountPath": "/workspace/repos/saltbo/any-managed-agents",
   "credentialRef": "vaultcred_abc123"
 }
 ```
 
-AMA stores only safe references. Raw tokens, clone URLs with embedded credentials, path traversal, and mount paths outside `/workspace` are rejected. `cloud` session startup writes `/workspace/.ama/resources.json` with declared GitHub resources sorted by mount path. The manifest is a deterministic setup contract for the selected runtime layer; repositories are not considered cloned or mounted until that layer performs setup using approved credential references.
+AMA stores only safe references. Raw tokens, clone URLs with embedded credentials, path traversal, and mount paths outside `/workspace` are rejected. Cloud and self-hosted runtime setup consume the same workspace volume model; repositories are not considered cloned or mounted until that layer performs setup using approved credential references.
 
 ## Spec Discipline
 

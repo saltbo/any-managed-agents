@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { Agent, Environment, Provider, Session } from '@/lib/api'
+import type { Agent, Environment, Provider } from '@/lib/api'
+import { buildTestSession } from '@/testing/session'
 import {
   agentHasSandboxExecution,
   defaultQuickstartEnvironmentForm,
@@ -15,7 +16,7 @@ import {
 const activeProvider = { enabled: true } as Provider
 const activeEnvironment = { archivedAt: null } as Environment
 const activeAgent = { archivedAt: null } as Agent
-const cloudSession = { state: 'idle' } as Session
+const cloudSession = buildTestSession({ phase: 'idle' })
 
 const emptyResources = { providers: [], environments: [], agents: [], sessions: [] }
 
@@ -68,7 +69,7 @@ describe('quickstart step sequencing — all-complete fallback [spec: quickstart
       providers: [{ enabled: true } as import('@/lib/api').Provider],
       environments: [{ archivedAt: null } as import('@/lib/api').Environment],
       agents: [{ archivedAt: null } as import('@/lib/api').Agent],
-      sessions: [{ state: 'idle' } as import('@/lib/api').Session],
+      sessions: [buildTestSession({ phase: 'idle' })],
     })
     expect(firstIncompleteStep(completion)).toBe('integration')
     // resolveQuickstartStep with null falls to firstIncompleteStep → 'integration'

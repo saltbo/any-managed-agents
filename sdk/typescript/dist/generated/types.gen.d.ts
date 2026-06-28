@@ -74,17 +74,32 @@ export type RunnerMemorySnapshot = {
     path: string;
     content: string;
 };
-export type RunnerResourceRef = {
-    type: string;
+export type RunnerResolvedVolumeFile = {
+    path: string;
+    content: string;
+};
+export type RunnerResolvedVolumeMount = {
+    name: string;
+    mountPath: string;
+    readOnly: boolean;
+    files: Array<RunnerResolvedVolumeFile>;
+};
+export type RunnerVolume = {
+    name: string;
+    type: 'secret' | 'github_repository' | 'memory_store';
+    secretRef?: string;
     owner?: string;
     repo?: string;
     ref?: string;
-    mountPath?: string;
     storeId?: string;
-    name?: string;
     description?: string | null;
     access?: string;
     memories?: Array<RunnerMemorySnapshot>;
+};
+export type RunnerVolumeMount = {
+    name: string;
+    mountPath: string;
+    readOnly?: boolean;
 };
 export type RunnerToolCall = {
     id?: string;
@@ -106,7 +121,6 @@ export type RunnerWorkPayload = {
     runtimeConfig?: {
         [key: string]: unknown;
     };
-    resourceRefs?: Array<RunnerResourceRef>;
     provider?: string;
     model?: string;
     agentSnapshot?: {
@@ -120,9 +134,9 @@ export type RunnerWorkPayload = {
     runtimeEnv?: {
         [key: string]: string;
     };
-    runtimeSecretEnv?: Array<{
-        [key: string]: unknown;
-    }>;
+    volumes?: Array<RunnerVolume>;
+    volumeMounts?: Array<RunnerVolumeMount>;
+    resolvedVolumes?: Array<RunnerResolvedVolumeMount>;
     initialPrompt?: string | null;
     resume?: boolean;
     resumeToken?: string | null;
@@ -164,7 +178,8 @@ export type RunnerSandboxRequest = {
     input?: {
         [key: string]: unknown;
     };
-    resourceRefs?: Array<RunnerResourceRef>;
+    volumes?: Array<RunnerVolume>;
+    volumeMounts?: Array<RunnerVolumeMount>;
 };
 export type RunnerChannelMessage = {
     type: string;
@@ -187,6 +202,17 @@ export type HealthResponse = {
     runnerScopes: string | null;
     timestamp: string;
 };
+export type PublicConfig = {
+    auth: PublicAuthConfig;
+};
+export type PublicAuthConfig = {
+    oidc: PublicOidcConfig;
+};
+export type PublicOidcConfig = {
+    issuer: string;
+    clientId: string;
+    scope: string;
+} | null;
 export type AuthConfig = {
     methods: Array<AuthMethod>;
 };
@@ -1033,11 +1059,12 @@ export type Trigger = {
     runtime: Runtime;
     name: string;
     promptTemplate: string;
-    resourceRefs: Array<ResourceRef>;
     env: {
         [key: string]: string;
     };
-    secretEnv: Array<SecretEnvEntry>;
+    envFrom: Array<EnvFromEntry>;
+    volumes: Array<Volume>;
+    volumeMounts: Array<VolumeMount>;
     schedule: {
         type: 'interval';
         intervalSeconds: number;
@@ -1056,25 +1083,43 @@ export type Trigger = {
     updatedAt: string;
 };
 export type Runtime = 'ama' | 'claude-code' | 'codex' | 'copilot';
-export type ResourceRef = GitHubRepositoryResourceRef | {
-    [key: string]: unknown;
-} | MemoryStoreResourceRef;
-export type GitHubRepositoryResourceRef = {
+export type EnvFromEntry = {
+    type: 'secret';
+    name: string;
+    secretRef: string;
+};
+export type Volume = ({
+    type: 'secret';
+} & SecretVolume) | ({
+    type: 'github_repository';
+} & GitHubRepositoryVolume) | ({
+    type: 'memory_store';
+} & MemoryStoreVolume);
+export type SecretVolume = {
+    name: string;
+    type: 'secret';
+    secretRef: string;
+};
+export type GitHubRepositoryVolume = {
+    name: string;
     type: 'github_repository';
     owner: string;
     repo: string;
     ref?: string;
-    mountPath?: string;
     credentialRef?: CredentialRef;
 };
-export type MemoryStoreResourceRef = {
+export type MemoryStoreVolume = {
+    name: string;
     type: 'memory_store';
     storeId: string;
     access: 'read_only' | 'read_write';
+    storeName?: string;
+    description?: string;
 };
-export type SecretEnvEntry = {
+export type VolumeMount = {
     name: string;
-    credentialRef: CredentialRef;
+    mountPath: string;
+    readOnly?: boolean;
 };
 export type CreateTriggerRequest = {
     type?: 'scheduled' | 'http';
@@ -1083,11 +1128,12 @@ export type CreateTriggerRequest = {
     runtime: Runtime;
     name: string;
     promptTemplate: string;
-    resourceRefs?: Array<ResourceRef>;
     env?: {
         [key: string]: string;
     };
-    secretEnv?: Array<SecretEnvEntry>;
+    envFrom?: Array<EnvFromEntry>;
+    volumes?: Array<Volume>;
+    volumeMounts?: Array<VolumeMount>;
     schedule?: {
         type?: 'interval';
         intervalSeconds: number;
@@ -1110,11 +1156,12 @@ export type UpdateTriggerRequest = {
     runtime?: Runtime;
     name?: string;
     promptTemplate?: string;
-    resourceRefs?: Array<ResourceRef>;
     env?: {
         [key: string]: string;
     };
-    secretEnv?: Array<SecretEnvEntry>;
+    envFrom?: Array<EnvFromEntry>;
+    volumes?: Array<Volume>;
+    volumeMounts?: Array<VolumeMount>;
     schedule?: {
         type?: 'interval';
         intervalSeconds: number;
@@ -1153,31 +1200,63 @@ export type CreateHttpTriggerRunRequest = {
     [key: string]: unknown;
 };
 export type Session = {
-    id: string;
-    projectId: string;
+    metadata: SessionMetadata;
+    spec: SessionSpec;
+    status: SessionStatus;
+};
+export type SessionMetadata = {
+    uid: string;
+    pid: string;
+    name: string;
+    labels: {
+        [key: string]: string;
+    };
+    annotations: {
+        [key: string]: string;
+    };
+    createdBy: string | null;
+    createdAt: string;
+    updatedAt: string;
+    archivedAt: string | null;
+};
+export type SessionSpec = {
     agentId: string;
-    agentVersionId: string;
-    agentSnapshot: SessionAgentSnapshot;
     environmentId: string | null;
-    environmentVersionId: string | null;
-    environmentSnapshot: SessionEnvironmentSnapshot;
-    title: string | null;
-    resourceRefs: Array<ResourceRef>;
+    runtime: Runtime;
     env: {
         [key: string]: string;
     };
-    secretEnv: Array<SecretEnvEntry>;
-    runtimeMetadata: SessionRuntimeMetadata;
-    state: 'pending' | 'running' | 'idle' | 'stopped' | 'error';
-    stateReason: string | null;
-    metadata: {
-        [key: string]: unknown;
-    };
+    envFrom: Array<EnvFromEntry>;
+    volumes: Array<Volume>;
+    volumeMounts: Array<VolumeMount>;
+};
+export type SessionStatus = {
+    phase: 'pending' | 'running' | 'idle' | 'stopped' | 'error';
+    reason: string | null;
+    conditions: Array<SessionCondition>;
+    bindings: SessionBindings;
+    placement: SessionPlacement;
     startedAt: string | null;
     stoppedAt: string | null;
-    archivedAt: string | null;
-    createdAt: string;
-    updatedAt: string;
+};
+export type SessionCondition = {
+    type: 'Scheduled' | 'RuntimeReady' | 'Running' | 'Completed';
+    status: 'True' | 'False' | 'Unknown';
+    reason: string | null;
+    message: string | null;
+    lastTransitionAt: string;
+};
+export type SessionBindings = {
+    agent: {
+        versionId: string;
+        snapshot: SessionAgentSnapshot;
+    };
+    environment: {
+        id: string | null;
+        versionId: string | null;
+        snapshot: SessionEnvironmentSnapshot;
+    };
+    runtime: Runtime;
 };
 export type SessionAgentSnapshot = {
     id: string;
@@ -1228,18 +1307,14 @@ export type SessionEnvironmentSnapshot = {
 export type SessionEnvironmentJsonObject = {
     [key: string]: unknown;
 };
-export type SessionRuntimeMetadata = {
+export type SessionPlacement = {
     hostingMode: EnvironmentHostingMode;
-    runtime: Runtime;
-    runtimeConfig: {
-        [key: string]: unknown;
-    };
     provider: string;
     model: string | null;
     driver: string | null;
     backend: string | null;
     protocol: string | null;
-};
+} | null;
 export type CreateSessionRequest = {
     agentId: string;
     environmentId?: string;
@@ -1247,24 +1322,24 @@ export type CreateSessionRequest = {
     runtimeConfig?: {
         [key: string]: unknown;
     };
-    title?: string;
+    name?: string;
     metadata?: {
         [key: string]: unknown;
     };
-    resourceRefs?: Array<ResourceRef>;
     env?: {
         [key: string]: string;
     };
-    secretEnv?: Array<SecretEnvEntry>;
+    envFrom?: Array<EnvFromEntry>;
+    volumes?: Array<Volume>;
+    volumeMounts?: Array<VolumeMount>;
     initialPrompt?: string;
-    providerAccessOverride?: boolean;
 };
 export type SessionListResponse = {
     data: Array<Session>;
     pagination: ListPagination;
 };
 export type UpdateSessionRequest = {
-    title?: string | null;
+    name?: string | null;
     metadata?: {
         [key: string]: unknown;
     };
@@ -1485,9 +1560,8 @@ export type VaultCredentialVersion = {
     vaultId: string;
     projectId: string | null;
     version: number;
-    provider: 'ama-managed' | 'cloudflare-secrets' | 'external-vault';
+    provider: 'ama';
     secretRef: string;
-    externalVaultPath: string | null;
     referenceName: string;
     state: 'active' | 'superseded' | 'revoked';
     hasSecret: boolean;
@@ -1510,9 +1584,7 @@ export type CreateVaultCredentialRequest = {
         [key: string]: unknown;
     };
     secret: {
-        provider?: 'ama-managed' | 'cloudflare-secrets' | 'external-vault';
-        secretValue?: string;
-        externalVaultPath?: string;
+        secretValue: string;
         referenceName?: string;
         metadata?: {
             [key: string]: unknown;
@@ -1531,13 +1603,67 @@ export type VaultCredentialVersionListResponse = {
     pagination: ListPagination;
 };
 export type CreateVaultCredentialVersionRequest = {
-    provider?: 'ama-managed' | 'cloudflare-secrets' | 'external-vault';
-    secretValue?: string;
-    externalVaultPath?: string;
+    secretValue: string;
     referenceName?: string;
     metadata?: {
         [key: string]: unknown;
     };
+};
+export type TriggerWritable = {
+    id: string;
+    projectId: string;
+    type: 'scheduled' | 'http';
+    agentId: string;
+    environmentId: string | null;
+    runtime: Runtime;
+    name: string;
+    promptTemplate: string;
+    env: {
+        [key: string]: string;
+    };
+    envFrom: Array<EnvFromEntry>;
+    volumes: Array<Volume>;
+    volumeMounts: Array<VolumeMount>;
+    schedule: {
+        type: 'interval';
+        intervalSeconds: number;
+        windowSeconds: number;
+    } | null;
+    enabled: boolean;
+    nextDueAt: string | null;
+    lastDispatchedAt: string | null;
+    lastRunId: string | null;
+    metadata: {
+        [key: string]: unknown;
+    };
+    createdByUserId: string | null;
+    archivedAt: string | null;
+    createdAt: string;
+    updatedAt: string;
+};
+export type TriggerListResponseWritable = {
+    data: Array<TriggerWritable>;
+    pagination: ListPagination;
+};
+export type SessionWritable = {
+    metadata: SessionMetadata;
+    spec: SessionSpecWritable;
+    status: SessionStatus;
+};
+export type SessionSpecWritable = {
+    agentId: string;
+    environmentId: string | null;
+    runtime: Runtime;
+    env: {
+        [key: string]: string;
+    };
+    envFrom: Array<EnvFromEntry>;
+    volumes: Array<Volume>;
+    volumeMounts: Array<VolumeMount>;
+};
+export type SessionListResponseWritable = {
+    data: Array<SessionWritable>;
+    pagination: ListPagination;
 };
 export type GetHealthData = {
     body?: never;
@@ -1552,6 +1678,19 @@ export type GetHealthResponses = {
     200: HealthResponse;
 };
 export type GetHealthResponse = GetHealthResponses[keyof GetHealthResponses];
+export type ReadConfigzData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/v1/configz';
+};
+export type ReadConfigzResponses = {
+    /**
+     * Public browser configuration
+     */
+    200: PublicConfig;
+};
+export type ReadConfigzResponse = ReadConfigzResponses[keyof ReadConfigzResponses];
 export type ReadAuthConfigData = {
     body?: never;
     path?: never;

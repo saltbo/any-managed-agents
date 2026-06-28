@@ -20,7 +20,7 @@ export function SessionsView({
   setSelectedIds: (ids: string[]) => void
   onArchive: (id: string) => void
 }) {
-  const selectableIds = sessions.filter((session) => !isArchived(session)).map((session) => session.id)
+  const selectableIds = sessions.filter((session) => !isArchived(session)).map((session) => session.metadata.uid)
   const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.includes(id))
   const toggleAll = (checked: boolean) => {
     setSelectedIds(checked ? selectableIds : [])
@@ -74,52 +74,55 @@ export function SessionsView({
       </TableHeader>
       <TableBody>
         {sessions.map((session) => (
-          <TableRow key={session.id}>
+          <TableRow key={session.metadata.uid}>
             <TableCell>
               <Checkbox
-                checked={selectedIds.includes(session.id)}
+                checked={selectedIds.includes(session.metadata.uid)}
                 disabled={isArchived(session)}
-                aria-label={`Select ${session.title ?? session.id}`}
-                onCheckedChange={(checked) => toggleOne(session.id, checked === true)}
+                aria-label={`Select ${session.metadata.name}`}
+                onCheckedChange={(checked) => toggleOne(session.metadata.uid, checked === true)}
               />
             </TableCell>
             <TableCell className="min-w-0">
               <div className="flex min-w-0 items-center gap-2">
-                <Link className="truncate font-medium hover:underline" to={`/sessions/${session.id}`}>
-                  {session.title ?? session.id}
+                <Link className="truncate font-medium hover:underline" to={`/sessions/${session.metadata.uid}`}>
+                  {session.metadata.name}
                 </Link>
                 <span className="truncate text-xs text-muted-foreground">
-                  {`${session.id} · ${session.agentSnapshot.providerId} / ${session.agentSnapshot.model ?? 'None'}`}
+                  {`${session.metadata.uid} · ${session.status.bindings.agent.snapshot.providerId} / ${session.status.bindings.agent.snapshot.model ?? 'None'}`}
                 </span>
               </div>
             </TableCell>
             <TableCell className="min-w-0">
-              <StatusBadge value={session.state} detail={session.state === 'error' ? session.stateReason : null} />
+              <StatusBadge
+                value={session.status.phase}
+                detail={session.status.phase === 'error' ? session.status.reason : null}
+              />
             </TableCell>
             <TableCell className="min-w-0">
-              <span className="block truncate">{`${session.agentSnapshot.instructions ?? session.agentId} · ${session.agentId}`}</span>
+              <span className="block truncate">{`${session.status.bindings.agent.snapshot.instructions ?? session.spec.agentId} · ${session.spec.agentId}`}</span>
             </TableCell>
             <TableCell className="min-w-0">
-              <span className="block truncate">{`${session.agentSnapshot.providerId} / ${session.agentSnapshot.model ?? 'None'}`}</span>
+              <span className="block truncate">{`${session.status.bindings.agent.snapshot.providerId} / ${session.status.bindings.agent.snapshot.model ?? 'None'}`}</span>
             </TableCell>
             <TableCell className="min-w-0">
               <span className="block truncate">
-                {`${hostingRuntimeLabel(session)} · ${session.environmentId ?? 'None'}`}
+                {`${hostingRuntimeLabel(session)} · ${session.spec.environmentId ?? 'None'}`}
               </span>
             </TableCell>
             <TableCell className="min-w-0">
-              <span className="block truncate">{formatDate(session.startedAt)}</span>
+              <span className="block truncate">{formatDate(session.status.startedAt)}</span>
             </TableCell>
             <TableCell className="min-w-0">
-              <span className="block truncate">{formatDate(session.updatedAt)}</span>
+              <span className="block truncate">{formatDate(session.metadata.updatedAt)}</span>
             </TableCell>
             <TableCell className="min-w-0">
-              <span className="block truncate">{formatDuration(session.startedAt, session.stoppedAt)}</span>
+              <span className="block truncate">{formatDuration(session.status.startedAt, session.status.stoppedAt)}</span>
             </TableCell>
             <TableCell>
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="outline" size="sm" asChild>
-                  <Link to={`/sessions/${session.id}`}>Open</Link>
+                  <Link to={`/sessions/${session.metadata.uid}`}>Open</Link>
                 </Button>
                 {!isArchived(session) ? (
                   <ConfirmAction
@@ -127,7 +130,7 @@ export function SessionsView({
                     description="Archive the selected session from active operations while preserving persisted events."
                     confirmLabel="Archive session"
                     destructive
-                    onConfirm={() => onArchive(session.id)}
+                    onConfirm={() => onArchive(session.metadata.uid)}
                   >
                     <Button type="button" variant="ghost" size="sm">
                       Archive
@@ -144,9 +147,10 @@ export function SessionsView({
 }
 
 function hostingRuntimeLabel(session: Session) {
-  if (!session.environmentSnapshot) {
+  const environmentSnapshot = session.status.bindings.environment.snapshot
+  if (!environmentSnapshot) {
     return 'None'
   }
-  const hostingMode = session.environmentSnapshot.hostingMode === 'self_hosted' ? 'Self-hosted' : 'Cloud'
-  return `${hostingMode} / ${session.runtimeMetadata.runtime}`
+  const hostingMode = environmentSnapshot.hostingMode === 'self_hosted' ? 'Self-hosted' : 'Cloud'
+  return `${hostingMode} / ${session.status.bindings.runtime}`
 }

@@ -60,9 +60,10 @@ const CredentialVersionSchema = z
     vaultId: z.string().openapi({ example: 'vault_abc123' }),
     projectId: z.string().nullable().openapi({ example: 'project_abc123' }),
     version: z.number().int().openapi({ example: 2 }),
-    provider: SecretProviderSchema.openapi({ example: 'cloudflare-secrets' }),
-    secretRef: z.string().openapi({ example: 'cloudflare-secret:AMA_PROJECT_ABC123_TOKEN_V2' }),
-    externalVaultPath: z.string().nullable().openapi({ example: 'vault://team/provider/token' }),
+    provider: SecretProviderSchema.openapi({ example: 'ama' }),
+    secretRef: z
+      .string()
+      .openapi({ example: 'ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123' }),
     referenceName: z.string().openapi({ example: 'AMA_PROJECT_ABC123_TOKEN_V2' }),
     state: z.enum(VERSION_STATES).openapi({ example: 'active' }),
     hasSecret: z.boolean().openapi({ example: true }),
@@ -110,9 +111,7 @@ const UpdateVaultSchema = CreateVaultSchema.partial()
 
 const SecretMaterialSchema = z
   .object({
-    provider: SecretProviderSchema.optional().openapi({ example: 'cloudflare-secrets' }),
-    secretValue: z.string().min(1).max(16000).optional().openapi({ example: 'redacted-input-only' }),
-    externalVaultPath: z.string().min(1).max(500).optional().openapi({ example: 'vault://team/provider/token' }),
+    secretValue: z.string().min(1).max(16000).openapi({ example: 'redacted-input-only' }),
     referenceName: z.string().min(1).max(160).optional().openapi({ example: 'AMA_PROJECT_TOKEN' }),
     metadata: JsonObjectSchema.optional().openapi({ example: { source: 'console' } }),
   })
@@ -126,7 +125,7 @@ const CreateCredentialSchema = z
       example: { connectorId: 'workers-ai', name: 'apiKey' },
     }),
     metadata: JsonObjectSchema.optional().openapi({ example: { owner: 'platform' } }),
-    secret: SecretMaterialSchema.openapi({ example: { provider: 'cloudflare-secrets', secretValue: 'input-only' } }),
+    secret: SecretMaterialSchema.openapi({ example: { secretValue: 'input-only' } }),
   })
   .openapi('CreateVaultCredentialRequest')
 
@@ -205,7 +204,6 @@ function serializeVersion(record: CredentialVersionRecord) {
     version: record.version,
     provider: record.provider,
     secretRef: record.secretRef,
-    externalVaultPath: record.externalVaultPath,
     referenceName: record.referenceName,
     state: record.state,
     hasSecret: record.hasSecret,

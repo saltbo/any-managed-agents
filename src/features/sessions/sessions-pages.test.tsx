@@ -13,6 +13,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Agent, Environment, ListResponse, Session, SessionEvent } from '@/lib/api'
 import { ApiError } from '@/lib/api'
 import { HttpResponse, http, server } from '@/test/msw'
+import { buildTestSession, type TestSessionOverrides } from '@/testing/session'
 import { CreateSessionSheet, formatCreateSessionError } from './CreateSessionSheet'
 import { SessionDetailPage } from './SessionDetailPage'
 import { SessionDetailView } from './SessionDetailView'
@@ -40,74 +41,8 @@ const _emptyList = <T,>() => listOf<T>()
 
 const now = '2026-05-23T00:00:00.000Z'
 
-function buildSession(overrides: Partial<Session> = {}): Session {
-  return {
-    id: 'session_1',
-    projectId: 'project_1',
-    agentId: 'agent_1',
-    agentVersionId: 'agentver_1',
-    agentSnapshot: {
-      id: 'agentver_1',
-      agentId: 'agent_1',
-      projectId: 'project_1',
-      version: 1,
-      instructions: 'Do the work',
-      providerId: 'workers-ai',
-      model: '@cf/moonshotai/kimi-k2.6',
-      skills: ['ama@coding-agent'],
-      subagents: [],
-      role: null,
-      capabilityTags: [],
-      handoffPolicy: {},
-      memoryPolicy: { enabled: false },
-      tools: [{ name: 'read' }, { name: 'write' }],
-      mcpConnectors: [],
-      metadata: {},
-      createdAt: now,
-    },
-    environmentId: 'env_1',
-    environmentVersionId: 'envver_1',
-    environmentSnapshot: {
-      id: 'envver_1',
-      environmentId: 'env_1',
-      projectId: 'project_1',
-      packages: [{ name: 'tsx', version: 'latest' }],
-      variables: {},
-      credentialRefs: [],
-      hostingMode: 'cloud',
-      networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
-      mcpPolicy: {},
-      packageManagerPolicy: {},
-      resourceLimits: { memoryMb: 1024 },
-      runtimeConfig: { image: 'node:24' },
-      metadata: {},
-      version: 1,
-      createdAt: now,
-    },
-    title: 'Test session',
-    resourceRefs: [],
-    env: {},
-    secretEnv: [],
-    runtimeMetadata: {
-      hostingMode: 'cloud',
-      runtime: 'ama',
-      runtimeConfig: { image: 'node:24' },
-      provider: 'workers-ai',
-      model: '@cf/moonshotai/kimi-k2.6',
-      driver: 'ama-cloud',
-      backend: 'ama-cloud',
-      protocol: 'ama-runtime-rpc',
-    },
-    state: 'idle',
-    stateReason: null,
-    metadata: {},
-    startedAt: now,
-    stoppedAt: null,
-    archivedAt: null,
-    createdAt: now,
-    updatedAt: now,
-    ...overrides,
-  }
+function buildSession(overrides: TestSessionOverrides = {}): Session {
+  return buildTestSession({ name: 'Test session', ...overrides })
 }
 
 function buildAgent(overrides: Partial<Agent> = {}): Agent {
@@ -235,7 +170,7 @@ function sessionNotFound() {
 }
 
 function sessionDetail(session: Session) {
-  return http.get(`*/api/v1/sessions/${session.id}`, () => HttpResponse.json(session))
+  return http.get(`*/api/v1/sessions/${session.metadata.uid}`, () => HttpResponse.json(session))
 }
 
 function agentDetail(agent: Agent) {
@@ -259,7 +194,7 @@ function environmentsList(envs: Environment[] = []) {
 }
 
 function sessionPatch(session: Session) {
-  return http.patch(`*/api/v1/sessions/${session.id}`, () => HttpResponse.json(session))
+  return http.patch(`*/api/v1/sessions/${session.metadata.uid}`, () => HttpResponse.json(session))
 }
 
 // ---------------------------------------------------------------------------
@@ -597,7 +532,7 @@ describe('SessionsView', () => {
 // ---------------------------------------------------------------------------
 
 describe('SessionDetailView', () => {
-  function renderDetailView(overrides: Partial<Session> = {}, runtimeOverrides: Partial<SessionRuntimeState> = {}) {
+  function renderDetailView(overrides: TestSessionOverrides = {}, runtimeOverrides: Partial<SessionRuntimeState> = {}) {
     const session = buildSession(overrides)
     render(
       <MemoryRouter>
@@ -700,15 +635,19 @@ describe('SessionDetailView', () => {
     }
   })
 
-  it('opens resources sheet when resources meta button is clicked', async () => {
+  it('opens volumes sheet when volumes meta button is clicked', async () => {
     renderDetailView({
-      resourceRefs: [{ type: 'github_repository', owner: 'acme', repo: 'app', ref: 'main', mountPath: '/workspace' }],
+      spec: {
+        ...buildSession().spec,
+        volumes: [{ name: 'repo', type: 'github_repository', owner: 'acme', repo: 'app', ref: 'main' }],
+        volumeMounts: [{ name: 'repo', mountPath: '/workspace' }],
+      },
     })
 
-    const resourcesButtons = screen.getAllByRole('button', { name: 'Open session resources' })
+    const resourcesButtons = screen.getAllByRole('button', { name: 'Open session volumes' })
     fireEvent.click(resourcesButtons[0]!)
 
-    await waitFor(() => expect(screen.getByText('Session resources')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Session volumes')).toBeTruthy())
     expect(screen.getByText('GitHub repositories')).toBeTruthy()
   })
 
@@ -810,25 +749,29 @@ describe('SessionDetailView', () => {
     expect(onArchive).toHaveBeenCalledWith('session_1')
   })
 
-  it('renders session without a title using session id in heading', () => {
-    renderDetailView({ title: null })
+  it('renders session without a name using session id in heading', () => {
+    renderDetailView({ name: null })
     expect(screen.getAllByText('session_1').length).toBeGreaterThan(0)
   })
 
-  it('renders non-github resource refs in resources sheet', async () => {
+  it('renders secret volumes in volumes sheet', async () => {
     renderDetailView({
-      resourceRefs: [{ type: 'custom', key: 'value' }],
+      spec: {
+        ...buildSession().spec,
+        volumes: [{ name: 'api-token', type: 'secret', secretRef: 'ama-secret://vault_1/api-token' }],
+        volumeMounts: [{ name: 'api-token', mountPath: '/run/secrets/api-token' }],
+      },
     })
 
-    const resourcesButtons = screen.getAllByRole('button', { name: 'Open session resources' })
+    const resourcesButtons = screen.getAllByRole('button', { name: 'Open session volumes' })
     fireEvent.click(resourcesButtons[0]!)
 
-    await waitFor(() => expect(screen.getByText('Session resources')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Session volumes')).toBeTruthy())
     expect(screen.getByText('0')).toBeTruthy()
   })
 
   it('renders canSend false when session is stopped', () => {
-    const session = buildSession({ state: 'stopped' })
+    const session = buildSession({ phase: 'stopped' })
     render(
       <MemoryRouter>
         <SessionDetailView
@@ -880,15 +823,19 @@ describe('SessionDetailView', () => {
     await waitFor(() => expect(screen.getByText('Environment snapshot captured for session_1')).toBeTruthy())
   })
 
-  it('opens resources sheet via second (mobile) resources button', async () => {
+  it('opens volumes sheet via second (mobile) resources button', async () => {
     renderDetailView({
-      resourceRefs: [{ type: 'github_repository', owner: 'acme', repo: 'app', ref: 'main', mountPath: '/workspace' }],
+      spec: {
+        ...buildSession().spec,
+        volumes: [{ name: 'repo', type: 'github_repository', owner: 'acme', repo: 'app', ref: 'main' }],
+        volumeMounts: [{ name: 'repo', mountPath: '/workspace' }],
+      },
     })
-    const resourcesButtons = screen.getAllByRole('button', { name: 'Open session resources' })
+    const resourcesButtons = screen.getAllByRole('button', { name: 'Open session volumes' })
     const targetBtn = resourcesButtons.length > 1 ? resourcesButtons[1]! : resourcesButtons[0]!
     fireEvent.click(targetBtn)
 
-    await waitFor(() => expect(screen.getByText('Session resources')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Session volumes')).toBeTruthy())
   })
 
   it('renders environment sheet with credentialRefs', async () => {
@@ -918,14 +865,18 @@ describe('SessionDetailView', () => {
     expect(screen.getByText('cred_1')).toBeTruthy()
   })
 
-  it('renders non-github resource refs in resources sheet (safeResourceView passthrough)', async () => {
+  it('renders memory store volumes in volumes sheet', async () => {
     renderDetailView({
-      resourceRefs: [{ type: 'file', path: '/workspace/data.json' }],
+      spec: {
+        ...buildSession().spec,
+        volumes: [{ name: 'memory', type: 'memory_store', storeId: 'memstore_1', access: 'read_only' }],
+        volumeMounts: [{ name: 'memory', mountPath: '/workspace/.ama/memory-stores/memstore_1' }],
+      },
     })
-    const resourcesButtons = screen.getAllByRole('button', { name: 'Open session resources' })
+    const resourcesButtons = screen.getAllByRole('button', { name: 'Open session volumes' })
     fireEvent.click(resourcesButtons[0]!)
 
-    await waitFor(() => expect(screen.getByText('Session resources')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Session volumes')).toBeTruthy())
   })
 
   it('renders "None" model in agent sheet when model is null', async () => {
@@ -993,7 +944,7 @@ describe('SessionDetailView', () => {
   })
 
   it('renders "None" for null environmentId in environment sheet', async () => {
-    renderDetailView({ environmentId: null })
+    renderDetailView({ environmentId: null, environmentSnapshot: buildSession().status.bindings.environment.snapshot })
 
     const envButtons = screen.getAllByRole('button', { name: 'Open environment details' })
     fireEvent.click(envButtons[0]!)
@@ -1002,24 +953,30 @@ describe('SessionDetailView', () => {
     expect(screen.getAllByText('None').length).toBeGreaterThan(0)
   })
 
-  it('includes credentialRef in safeResourceView when resource has a string credentialRef', async () => {
+  it('includes credentialRef in safeResourceView when resource has a credential reference', async () => {
     renderDetailView({
-      resourceRefs: [
-        {
-          type: 'github_repository',
-          owner: 'acme',
-          repo: 'app',
-          ref: 'main',
-          mountPath: '/workspace',
-          credentialRef: 'cred_abc',
-        },
-      ],
+      spec: {
+        ...buildSession().spec,
+        volumes: [
+          {
+            name: 'repo',
+            type: 'github_repository',
+            owner: 'acme',
+            repo: 'app',
+            ref: 'main',
+            credentialRef: { credentialId: 'cred_abc', versionId: 'ver_abc' },
+          },
+        ],
+        volumeMounts: [{ name: 'repo', mountPath: '/workspace' }],
+      },
     })
 
-    const resourcesButtons = screen.getAllByRole('button', { name: 'Open session resources' })
+    const resourcesButtons = screen.getAllByRole('button', { name: 'Open session volumes' })
     fireEvent.click(resourcesButtons[0]!)
 
-    await waitFor(() => expect(screen.getByText('Session resources')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('Session volumes')).toBeTruthy())
+    expect(screen.getByText(/cred_abc/)).toBeTruthy()
+    expect(screen.getByText(/ver_abc/)).toBeTruthy()
   })
 })
 
@@ -1498,7 +1455,7 @@ describe('CreateSessionSheet — formatCreateSessionError', () => {
   })
 
   it('submits the create session form and navigates to the new session', async () => {
-    const newSession = buildSession({ id: 'session_new', title: 'New session' })
+    const newSession = buildSession({ id: 'session_new', name: 'New session' })
     server.use(
       agentsList([buildAgent()]),
       environmentsList([buildEnvironment()]),
@@ -1673,8 +1630,8 @@ describe('SessionsPage', () => {
   it('filters sessions by search text', async () => {
     server.use(
       sessionsList([
-        buildSession({ title: 'Alpha session' }),
-        buildSession({ id: 'session_2', title: 'Beta session' }),
+        buildSession({ name: 'Alpha session' }),
+        buildSession({ id: 'session_2', name: 'Beta session' }),
       ]),
     )
 
@@ -1743,8 +1700,8 @@ describe('SessionsPage', () => {
 
   it('shows batch failure outcome when archive call fails', async () => {
     const sessions = [
-      buildSession({ id: 'session_1', title: 'First session' }),
-      buildSession({ id: 'session_2', title: 'Second session' }),
+      buildSession({ id: 'session_1', name: 'First session' }),
+      buildSession({ id: 'session_2', name: 'Second session' }),
     ]
     server.use(
       sessionsList(sessions),
@@ -1779,8 +1736,8 @@ describe('SessionsPage', () => {
   it('filters by error status showing only errored sessions', async () => {
     server.use(
       sessionsList([
-        buildSession({ id: 'session_1', title: 'Good session', state: 'idle' }),
-        buildSession({ id: 'session_2', title: 'Bad session', state: 'error', stateReason: 'crashed' }),
+        buildSession({ id: 'session_1', name: 'Good session', phase: 'idle' }),
+        buildSession({ id: 'session_2', name: 'Bad session', phase: 'error', reason: 'crashed' }),
       ]),
     )
 
@@ -1791,8 +1748,8 @@ describe('SessionsPage', () => {
   })
 
   it('sorts sessions by started-asc', async () => {
-    const older = buildSession({ id: 'session_old', title: 'Older', startedAt: '2026-01-01T00:00:00.000Z' })
-    const newer = buildSession({ id: 'session_new', title: 'Newer', startedAt: '2026-06-01T00:00:00.000Z' })
+    const older = buildSession({ id: 'session_old', name: 'Older', startedAt: '2026-01-01T00:00:00.000Z' })
+    const newer = buildSession({ id: 'session_new', name: 'Newer', startedAt: '2026-06-01T00:00:00.000Z' })
     server.use(sessionsList([newer, older]))
 
     renderSessionsPage(['/?sort=started-asc'])
@@ -1805,8 +1762,8 @@ describe('SessionsPage', () => {
   })
 
   it('sorts sessions by started-desc', async () => {
-    const older = buildSession({ id: 'session_old', title: 'Older', startedAt: '2026-01-01T00:00:00.000Z' })
-    const newer = buildSession({ id: 'session_new', title: 'Newer', startedAt: '2026-06-01T00:00:00.000Z' })
+    const older = buildSession({ id: 'session_old', name: 'Older', startedAt: '2026-01-01T00:00:00.000Z' })
+    const newer = buildSession({ id: 'session_new', name: 'Newer', startedAt: '2026-06-01T00:00:00.000Z' })
     server.use(sessionsList([older, newer]))
 
     renderSessionsPage(['/?sort=started-desc'])
@@ -1821,12 +1778,12 @@ describe('SessionsPage', () => {
   it('sorts sessions by updated-asc', async () => {
     const older = buildSession({
       id: 'session_old',
-      title: 'OlderUpdated',
+      name: 'OlderUpdated',
       updatedAt: '2026-01-01T00:00:00.000Z',
     })
     const newer = buildSession({
       id: 'session_new',
-      title: 'NewerUpdated',
+      name: 'NewerUpdated',
       updatedAt: '2026-06-01T00:00:00.000Z',
     })
     server.use(sessionsList([newer, older]))
@@ -1855,9 +1812,9 @@ describe('SessionsPage', () => {
 
   it('shows batch outcome with archived count and failure message when some sessions succeed', async () => {
     const sessions = [
-      buildSession({ id: 'session_1', title: 'First session' }),
-      buildSession({ id: 'session_2', title: 'Second session' }),
-      buildSession({ id: 'session_3', title: 'Third session' }),
+      buildSession({ id: 'session_1', name: 'First session' }),
+      buildSession({ id: 'session_2', name: 'Second session' }),
+      buildSession({ id: 'session_3', name: 'Third session' }),
     ]
     server.use(
       sessionsList(sessions),
@@ -1895,8 +1852,8 @@ describe('SessionsPage', () => {
 
   it('shows plural sessions count in batch success outcome', async () => {
     const sessions = [
-      buildSession({ id: 'session_1', title: 'First session' }),
-      buildSession({ id: 'session_2', title: 'Second session' }),
+      buildSession({ id: 'session_1', name: 'First session' }),
+      buildSession({ id: 'session_2', name: 'Second session' }),
     ]
     server.use(
       sessionsList(sessions),
@@ -1934,14 +1891,14 @@ describe('SessionsPage', () => {
   it('sorts sessions by started-asc when startedAt is null (falls back to createdAt)', async () => {
     const older = buildSession({
       id: 'session_old',
-      title: 'OlderCreated',
+      name: 'OlderCreated',
       startedAt: null,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
     })
     const newer = buildSession({
       id: 'session_new',
-      title: 'NewerCreated',
+      name: 'NewerCreated',
       startedAt: null,
       createdAt: '2026-06-01T00:00:00.000Z',
       updatedAt: '2026-06-01T00:00:00.000Z',
@@ -1958,7 +1915,7 @@ describe('SessionsPage', () => {
   })
 
   it('shows error message from api when archive call returns 4xx with error body', async () => {
-    const sessions = [buildSession({ id: 'session_1', title: 'Only session' })]
+    const sessions = [buildSession({ id: 'session_1', name: 'Only session' })]
     server.use(
       sessionsList(sessions),
       http.patch('*/api/v1/sessions/session_1', () =>
@@ -2028,7 +1985,7 @@ describe('SessionDetailPage', () => {
   })
 
   it('renders session detail view for a stopped session (agentId and environmentId present)', async () => {
-    const stoppedSession = buildSession({ id: 'session_stopped', state: 'stopped', stoppedAt: now })
+    const stoppedSession = buildSession({ id: 'session_stopped', phase: 'stopped', stoppedAt: now })
     server.use(
       sessionDetail(stoppedSession),
       agentDetail(buildAgent()),
@@ -2052,7 +2009,7 @@ describe('SessionDetailPage', () => {
   })
 
   it('invokes refreshEvents when Refresh events button is clicked', async () => {
-    const stoppedSession = buildSession({ id: 'session_stopped2', state: 'stopped', stoppedAt: now })
+    const stoppedSession = buildSession({ id: 'session_stopped2', phase: 'stopped', stoppedAt: now })
     server.use(
       sessionDetail(stoppedSession),
       agentDetail(buildAgent()),
@@ -2083,7 +2040,7 @@ describe('SessionDetailPage', () => {
     // Session responds immediately; events endpoint never responds.
     // This exercises the `eventsQuery.data?.data ?? EMPTY_EVENTS` branch (line 67)
     // where data is undefined while the events query is still loading.
-    const stoppedSession = buildSession({ id: 'session_events_pending', state: 'stopped', stoppedAt: now })
+    const stoppedSession = buildSession({ id: 'session_events_pending', phase: 'stopped', stoppedAt: now })
     server.use(
       sessionDetail(stoppedSession),
       agentDetail(buildAgent()),
@@ -2130,7 +2087,7 @@ describe('SessionDetailPage', () => {
   it('renders session detail view with no agentId/environmentId (enabled=false branches)', async () => {
     const minimalSession = buildSession({
       id: 'session_minimal',
-      state: 'stopped',
+      phase: 'stopped',
       stoppedAt: now,
       agentId: '',
       environmentId: null,

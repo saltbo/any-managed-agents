@@ -8,29 +8,28 @@ from attrs import field as _attrs_field
 
 from ..types import UNSET, Unset
 
-from typing import cast
-
-if TYPE_CHECKING:
-  from ..models.credential_ref import CredentialRef
 
 
 
 
 
-T = TypeVar("T", bound="SecretEnvEntry")
+
+T = TypeVar("T", bound="PublicOidcConfigType0")
 
 
 
 @_attrs_define
-class SecretEnvEntry:
+class PublicOidcConfigType0:
     """ 
         Attributes:
-            name (str):  Example: GITHUB_TOKEN.
-            credential_ref (CredentialRef):
+            issuer (str):  Example: https://id.example.com/api/auth.
+            client_id (str):  Example: client_abc123.
+            scope (str):  Example: openid email profile.
      """
 
-    name: str
-    credential_ref: CredentialRef
+    issuer: str
+    client_id: str
+    scope: str
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
 
 
@@ -38,17 +37,19 @@ class SecretEnvEntry:
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.credential_ref import CredentialRef
-        name = self.name
+        issuer = self.issuer
 
-        credential_ref = self.credential_ref.to_dict()
+        client_id = self.client_id
+
+        scope = self.scope
 
 
         field_dict: dict[str, Any] = {}
         field_dict.update(self.additional_properties)
         field_dict.update({
-            "name": name,
-            "credentialRef": credential_ref,
+            "issuer": issuer,
+            "clientId": client_id,
+            "scope": scope,
         })
 
         return field_dict
@@ -57,23 +58,22 @@ class SecretEnvEntry:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.credential_ref import CredentialRef
         d = dict(src_dict)
-        name = d.pop("name")
+        issuer = d.pop("issuer")
 
-        credential_ref = CredentialRef.from_dict(d.pop("credentialRef"))
+        client_id = d.pop("clientId")
 
+        scope = d.pop("scope")
 
-
-
-        secret_env_entry = cls(
-            name=name,
-            credential_ref=credential_ref,
+        public_oidc_config_type_0 = cls(
+            issuer=issuer,
+            client_id=client_id,
+            scope=scope,
         )
 
 
-        secret_env_entry.additional_properties = d
-        return secret_env_entry
+        public_oidc_config_type_0.additional_properties = d
+        return public_oidc_config_type_0
 
     @property
     def additional_keys(self) -> list[str]:

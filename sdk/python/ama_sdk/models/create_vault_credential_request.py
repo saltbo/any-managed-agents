@@ -30,8 +30,7 @@ class CreateVaultCredentialRequest:
         Attributes:
             name (str):  Example: Workers AI token.
             type_ (str):  Example: api_key.
-            secret (CreateVaultCredentialRequestSecret):  Example: {'provider': 'cloudflare-secrets', 'secretValue': 'input-
-                only'}.
+            secret (CreateVaultCredentialRequestSecret):  Example: {'secretValue': 'input-only'}.
             connector_binding (CreateVaultCredentialRequestConnectorBinding | Unset):  Example: {'connectorId': 'workers-
                 ai', 'name': 'apiKey'}.
             metadata (CreateVaultCredentialRequestMetadata | Unset):  Example: {'owner': 'platform'}.

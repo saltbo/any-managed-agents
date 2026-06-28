@@ -5,7 +5,7 @@ import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-o
 // - `state` = operational state machine; `archivedAt` = lifecycle (null = live).
 // - `enabled` boolean = operational toggle. Enum values never contain
 //   archived/deleted/paused.
-// - Credentials are always vault references (credential_id + optional
+// - Credentials are always secret references (credential_id + optional
 //   credential_version_id); no raw secret ref strings.
 // - organization_id stays in the DB for tenancy but is never exposed in API
 //   payloads.
@@ -244,7 +244,7 @@ export const environments = sqliteTable(
     description: text('description'),
     packages: text('packages').notNull().default('[]'),
     variables: text('variables').notNull().default('{}'),
-    // JSON array of { credentialId, versionId? } vault references. KEEP as JSON:
+    // JSON array of { credentialId, versionId? } secret references. KEEP as JSON:
     // the live row is the editable working copy snapshotted verbatim into an
     // environment_version on each runtime-config change (atomic value object).
     credentialRefs: text('credential_refs').notNull().default('[]'),
@@ -387,9 +387,8 @@ export const vaultCredentialVersions = sqliteTable(
     projectId: text('project_id').references(() => projects.id),
     version: integer('version').notNull(),
     // Mirrors SECRET_PROVIDERS (server/domain/vault.ts).
-    provider: text('provider', { enum: ['ama-managed', 'cloudflare-secrets', 'external-vault'] }).notNull(),
+    provider: text('provider', { enum: ['ama'] }).notNull(),
     secretRef: text('secret_ref').notNull(),
-    externalVaultPath: text('external_vault_path'),
     referenceName: text('reference_name').notNull(),
     // Mirrors VERSION_STATES (server/domain/vault.ts).
     state: text('state', { enum: ['active', 'superseded', 'revoked'] })
@@ -407,10 +406,7 @@ export const vaultCredentialVersions = sqliteTable(
     uniqueIndex('idx_vault_credential_versions_unique_credential_version').on(table.credentialId, table.version),
     index('idx_vault_credential_versions_vault_created').on(table.vaultId, table.createdAt, table.id),
     check('ck_vault_credential_versions_state', sql`${table.state} in ('active','superseded','revoked')`),
-    check(
-      'ck_vault_credential_versions_provider',
-      sql`${table.provider} in ('ama-managed','cloudflare-secrets','external-vault')`,
-    ),
+    check('ck_vault_credential_versions_provider', sql`${table.provider} in ('ama')`),
   ],
 )
 
@@ -429,12 +425,10 @@ export const sessions = sqliteTable(
     environmentVersionId: text('environment_version_id').references(() => environmentVersions.id),
     environmentSnapshot: text('environment_snapshot'),
     title: text('title'),
-    resourceRefs: text('resource_refs').notNull().default('[]'),
     env: text('env').notNull().default('{}'),
-    // JSON array of { name, credentialRef: { credentialId, versionId? } }. Part of
-    // the session's frozen execution spec — a snapshot value object, not relational
-    // state (no reverse-query path), so kept as JSON deliberately.
-    secretEnv: text('secret_env').notNull().default('[]'),
+    envFrom: text('env_from').notNull().default('[]'),
+    volumes: text('volumes').notNull().default('[]'),
+    volumeMounts: text('volume_mounts').notNull().default('[]'),
     projectId: text('project_id')
       .notNull()
       .references(() => projects.id),
@@ -600,12 +594,10 @@ export const triggers = sqliteTable(
     runtime: text('runtime', { enum: ['ama', 'claude-code', 'codex', 'copilot'] }).notNull(),
     name: text('name').notNull(),
     promptTemplate: text('prompt_template').notNull(),
-    resourceRefs: text('resource_refs').notNull().default('[]'),
     env: text('env').notNull().default('{}'),
-    // Ordered list of vault credential REFERENCES (name + {credentialId, versionId?});
-    // a value-object array, not relational state. Existence is validated at session
-    // creation (resolveSecretEnvEntries), not by FK. Kept as JSON deliberately.
-    secretEnv: text('secret_env').notNull().default('[]'),
+    envFrom: text('env_from').notNull().default('[]'),
+    volumes: text('volumes').notNull().default('[]'),
+    volumeMounts: text('volume_mounts').notNull().default('[]'),
     intervalSeconds: integer('interval_seconds'),
     windowSeconds: integer('window_seconds').default(0),
     enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),

@@ -81,7 +81,8 @@ export function createRunnerChannel(env: Env, resolveDoName: (sessionId: string)
     async readMemoryStoreMemories(input) {
       const result = await request(input.sessionId, {
         type: 'sandbox.readMemoryStores',
-        resourceRefs: input.resourceRefs,
+        volumes: input.volumes,
+        volumeMounts: input.volumeMounts,
       })
       return Array.isArray(result.stores)
         ? (result.stores as Array<{ storeId: string; memories: Array<{ path: string; content: string }> }>)

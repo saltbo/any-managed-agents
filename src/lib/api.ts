@@ -1,5 +1,5 @@
-import type { AmaSessionEventType } from '@shared/session-events'
 import { hc } from 'hono/client'
+import type { InferRequestType, InferResponseType } from 'hono/client'
 import type { AppType } from '../../server/app'
 import { getAccessToken } from './oidc'
 import { getSelectedProjectId } from './project-selection'
@@ -42,6 +42,16 @@ export interface AuthMethod {
 
 export interface AuthConfig {
   methods: AuthMethod[]
+}
+
+export interface PublicConfig {
+  auth: {
+    oidc: {
+      issuer: string
+      clientId: string
+      scope: string
+    } | null
+  }
 }
 
 export interface Project {
@@ -110,9 +120,10 @@ export interface Trigger {
   runtime: RuntimeName
   name: string
   promptTemplate: string
-  resourceRefs: SessionResourceRef[]
   env: Record<string, string>
-  secretEnv: SecretEnvEntry[]
+  envFrom: EnvFromEntry[]
+  volumes: Volume[]
+  volumeMounts: VolumeMount[]
   schedule: TriggerSchedule | null
   enabled: boolean
   nextDueAt: string | null
@@ -229,166 +240,6 @@ export interface EnvironmentVersion {
   createdAt: string
 }
 
-export type SessionState = 'pending' | 'running' | 'idle' | 'stopped' | 'error'
-
-export interface SecretEnvEntry {
-  name: string
-  credentialRef: CredentialRef
-}
-
-export interface SessionRuntimeMetadata {
-  hostingMode: EnvironmentHostingMode
-  runtime: RuntimeName
-  runtimeConfig: Record<string, unknown>
-  provider: string
-  model: string | null
-  driver: string | null
-  backend: string | null
-  protocol: string | null
-}
-
-export interface SessionAgentSnapshot {
-  id: string
-  agentId: string
-  projectId: string
-  version: number
-  instructions: string | null
-  providerId: string
-  model: string | null
-  skills: string[]
-  subagents: Record<string, unknown>[]
-  role: string | null
-  capabilityTags: string[]
-  handoffPolicy: Record<string, unknown>
-  memoryPolicy: Record<string, unknown>
-  tools: Record<string, unknown>[]
-  mcpConnectors: string[]
-  metadata: Record<string, unknown>
-  createdAt: string
-}
-
-export interface SessionEnvironmentSnapshot {
-  id: string
-  environmentId: string
-  projectId: string
-  version: number
-  packages: EnvironmentPackage[]
-  variables: Record<string, EnvironmentVariable>
-  credentialRefs: CredentialRef[]
-  hostingMode: EnvironmentHostingMode
-  networkPolicy: EnvironmentNetworkPolicy
-  mcpPolicy: Record<string, unknown>
-  packageManagerPolicy: Record<string, unknown>
-  resourceLimits: Record<string, unknown>
-  runtimeConfig: Record<string, unknown>
-  metadata: Record<string, unknown>
-  createdAt: string
-}
-
-export interface Session {
-  id: string
-  projectId: string
-  agentId: string
-  agentVersionId: string
-  agentSnapshot: SessionAgentSnapshot
-  environmentId: string | null
-  environmentVersionId: string | null
-  environmentSnapshot: SessionEnvironmentSnapshot | null
-  title: string | null
-  resourceRefs: SessionResourceRef[]
-  env: Record<string, unknown>
-  secretEnv: SecretEnvEntry[]
-  runtimeMetadata: SessionRuntimeMetadata
-  state: SessionState
-  stateReason: string | null
-  metadata: Record<string, unknown>
-  startedAt: string | null
-  stoppedAt: string | null
-  archivedAt: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-export interface SessionConnection {
-  sessionId: string
-  transport: string | null
-  path: string | null
-  state: SessionState
-  stateReason: string | null
-}
-
-export interface SessionMessage {
-  id: string
-  sessionId: string
-  type: 'prompt'
-  content: string
-  delivery: 'live' | 'queued'
-  state: 'accepted' | 'delivered' | 'failed'
-  error: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-export interface SessionApproval {
-  id: string
-  sessionId: string
-  toolCallId: string
-  toolName: string
-  input: Record<string, unknown>
-  relatedEventIds: string[]
-  state: 'pending' | 'approved' | 'denied'
-  reason: string | null
-  result: Record<string, unknown> | null
-  requestedAt: string
-  decidedAt: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-export interface SessionApprovalDecisionInput {
-  decision: 'approve' | 'deny'
-  reason?: string
-  result?: Record<string, unknown>
-}
-
-export interface SessionEvent {
-  id: string
-  projectId: string
-  sessionId: string
-  sequence: number
-  type: AmaSessionEventType
-  visibility: 'runtime' | 'transcript' | 'debug' | 'audit'
-  role: string | null
-  parentEventId: string | null
-  correlationId: string | null
-  payload: Record<string, unknown>
-  metadata: Record<string, unknown>
-  createdAt: string
-}
-
-export type GitHubRepositoryResourceRef = {
-  type: 'github_repository'
-  owner: string
-  repo: string
-  ref?: string
-  mountPath?: string
-  credentialRef?: CredentialRef
-}
-
-export type MemoryStoreAccess = 'read_only' | 'read_write'
-
-export type MemoryStoreResourceRef = {
-  type: 'memory_store'
-  storeId: string
-  access: MemoryStoreAccess
-  name?: string
-  description?: string | null
-  mountPath?: string
-  memories?: Array<{ path: string; content?: string }>
-}
-
-export type SessionResourceRef = GitHubRepositoryResourceRef | MemoryStoreResourceRef | Record<string, unknown>
-
 // A provider is now a global model vendor (anthropic, openai, …); the catalog is
 // shared across all projects and refreshed by the scheduled discovery job.
 export interface Provider {
@@ -464,9 +315,8 @@ export interface VaultCredentialVersion {
   vaultId: string
   projectId: string | null
   version: number
-  provider: 'ama-managed' | 'cloudflare-secrets' | 'external-vault'
+  provider: 'ama'
   secretRef: string
-  externalVaultPath: string | null
   referenceName: string
   state: 'active' | 'superseded' | 'revoked'
   hasSecret: boolean
@@ -695,9 +545,10 @@ export interface TriggerInput {
   runtime?: RuntimeName
   name?: string
   promptTemplate?: string
-  resourceRefs?: SessionResourceRef[]
   env?: Record<string, string>
-  secretEnv?: SecretEnvEntry[]
+  envFrom?: EnvFromEntry[]
+  volumes?: Volume[]
+  volumeMounts?: VolumeMount[]
   schedule?: Partial<Omit<TriggerSchedule, 'type'>> | null
   nextDueAt?: string
   metadata?: Record<string, unknown>
@@ -712,9 +563,10 @@ export interface CreateTriggerInput {
   promptTemplate: string
   schedule?: { type: 'interval'; intervalSeconds: number } | null
   enabled?: boolean
-  resourceRefs?: SessionResourceRef[]
   env?: Record<string, string>
-  secretEnv?: SecretEnvEntry[]
+  envFrom?: EnvFromEntry[]
+  volumes?: Volume[]
+  volumeMounts?: VolumeMount[]
   nextDueAt?: string
   metadata?: Record<string, unknown>
 }
@@ -736,19 +588,6 @@ export interface AgentInput {
   metadata?: Record<string, unknown>
 }
 
-export interface SessionInput {
-  agentId: string
-  environmentId: string
-  runtime: RuntimeName
-  runtimeConfig?: Record<string, unknown>
-  title?: string
-  initialPrompt?: string
-  metadata?: Record<string, unknown>
-  resourceRefs?: SessionResourceRef[]
-  env?: Record<string, string>
-  secretEnv?: SecretEnvEntry[]
-}
-
 export interface VaultInput {
   name: string
   description?: string
@@ -768,9 +607,7 @@ export interface MemoryStoreMemoryInput {
 }
 
 export interface VaultCredentialSecretInput {
-  provider?: 'ama-managed' | 'cloudflare-secrets' | 'external-vault'
-  secretValue?: string
-  externalVaultPath?: string
+  secretValue: string
   referenceName?: string
   metadata?: Record<string, unknown>
 }
@@ -828,6 +665,32 @@ const rpc = hc<AppType>('/', {
 
 const v1 = rpc.api.v1
 
+type ArrayItem<T> = T extends readonly (infer Item)[] ? Item : never
+type JsonListResponse<T> = Extract<T, { data: unknown[] }>
+type SessionsRpc = typeof v1.sessions
+type SessionRpc = SessionsRpc[':sessionId']
+
+export type SessionListResponse = InferResponseType<SessionsRpc['$get'], 200>
+export type Session = InferResponseType<SessionRpc['$get'], 200>
+export type SessionConnection = InferResponseType<SessionRpc['connection']['$get'], 200>
+export type SessionMessage = InferResponseType<SessionRpc['messages']['$post'], 201>
+export type SessionEventListResponse = JsonListResponse<InferResponseType<SessionRpc['events']['$get'], 200>>
+export type SessionEvent = ArrayItem<SessionEventListResponse['data']>
+export type SessionApprovalListResponse = InferResponseType<SessionRpc['approvals']['$get'], 200>
+export type SessionApproval = ArrayItem<SessionApprovalListResponse['data']>
+export type SessionInput = InferRequestType<SessionsRpc['$post']>['json']
+export type SessionApprovalDecisionInput = InferRequestType<SessionRpc['approvals'][':approvalId']['$patch']>['json']
+export type SessionState = Session['status']['phase']
+export type SessionPlacement = NonNullable<Session['status']['placement']>
+export type SessionAgentSnapshot = Session['status']['bindings']['agent']['snapshot']
+export type SessionEnvironmentSnapshot = NonNullable<Session['status']['bindings']['environment']['snapshot']>
+export type EnvFromEntry = ArrayItem<Session['spec']['envFrom']>
+export type Volume = ArrayItem<Session['spec']['volumes']>
+export type VolumeMount = ArrayItem<Session['spec']['volumeMounts']>
+export type GitHubRepositoryVolume = Extract<Volume, { type: 'github_repository' }>
+export type MemoryStoreVolume = Extract<Volume, { type: 'memory_store' }>
+export type MemoryStoreAccess = MemoryStoreVolume['access']
+
 type RpcResponse = Pick<Response, 'headers' | 'json' | 'ok' | 'status' | 'statusText' | 'text'>
 type RpcArg<T> = T extends (args: infer A, ...rest: never[]) => unknown ? A : never
 type RpcJson<T> = RpcArg<T> extends { json: infer J } ? J : never
@@ -874,6 +737,7 @@ function jsonArg<T>(json: RpcJson<T>) {
 }
 
 export const api = {
+  readConfigz: () => rpcRequest<PublicConfig>(v1.configz.$get()),
   readAuthConfig: (organization?: string) =>
     rpcRequest<AuthConfig>(v1.auth.config.$get({ query: organization ? { organization } : {} })),
   readCurrentSession: () => rpcRequest<AuthSession>(v1.auth.sessions.current.$get()),
@@ -939,7 +803,7 @@ export const api = {
       ),
     ),
   listSessions: (options: SessionListOptions = {}) =>
-    rpcRequest<ListResponse<Session>>(v1.sessions.$get(queryArg<typeof v1.sessions.$get>(options))),
+    rpcRequest<SessionListResponse>(v1.sessions.$get(queryArg<typeof v1.sessions.$get>(options))),
   createSession: (input: SessionInput) =>
     rpcRequest<Session>(v1.sessions.$post(jsonArg<typeof v1.sessions.$post>(input))),
   readSession: (id: string) => rpcRequest<Session>(v1.sessions[':sessionId'].$get({ param: { sessionId: id } })),
@@ -954,13 +818,13 @@ export const api = {
       v1.sessions[':sessionId'].messages.$post({ param: { sessionId: id }, json: { type: 'prompt', content } }),
     ),
   listSessionEvents: (id: string, options: SessionEventListOptions = {}) =>
-    rpcRequest<ListResponse<SessionEvent>>(
+    rpcRequest<SessionEventListResponse>(
       v1.sessions[':sessionId'].events.$get(
         paramQueryArg<(typeof v1.sessions)[':sessionId']['events']['$get']>({ sessionId: id }, options),
       ),
     ),
   listSessionApprovals: (id: string) =>
-    rpcRequest<ListResponse<SessionApproval>>(v1.sessions[':sessionId'].approvals.$get({ param: { sessionId: id } })),
+    rpcRequest<SessionApprovalListResponse>(v1.sessions[':sessionId'].approvals.$get({ param: { sessionId: id } })),
   decideSessionApproval: (id: string, approvalId: string, input: SessionApprovalDecisionInput) =>
     rpcRequest<SessionApproval>(
       v1.sessions[':sessionId'].approvals[':approvalId'].$patch({

@@ -8,7 +8,7 @@ import type {
 } from '@server/usecases/ports'
 import { and, eq, isNull, or } from 'drizzle-orm'
 import type { drizzle } from 'drizzle-orm/d1'
-import { vaultCredentials } from '../../db/schema'
+import { vaultCredentials, vaultCredentialVersions } from '../../db/schema'
 import type { Env } from '../../env'
 import {
   callMcpServerTool,
@@ -18,7 +18,7 @@ import {
   type McpClientErrorCategory,
   type McpClientTarget,
 } from './mcp-client'
-import { resolveRuntimeSecretEnv } from './runtime-secret-env'
+import { resolveRuntimeEnvFrom } from './runtime-secrets'
 
 type Db = ReturnType<typeof drizzle>
 
@@ -116,13 +116,31 @@ async function resolveAuthorization(env: Env, db: Db, target: McpConnectionTarge
     )
     .get()
   const versionId = credential?.activeVersionId ?? target.credentialVersionId ?? undefined
+  if (!versionId) {
+    return null
+  }
+  const version = await db
+    .select({ secretRef: vaultCredentialVersions.secretRef })
+    .from(vaultCredentialVersions)
+    .where(
+      and(
+        eq(vaultCredentialVersions.id, versionId),
+        eq(vaultCredentialVersions.credentialId, credentialId),
+        eq(vaultCredentialVersions.organizationId, target.organizationId),
+        or(eq(vaultCredentialVersions.projectId, target.projectId), isNull(vaultCredentialVersions.projectId)),
+      ),
+    )
+    .get()
+  if (!version) {
+    return null
+  }
   let resolved: Record<string, string>
   try {
-    resolved = await resolveRuntimeSecretEnv(
+    resolved = await resolveRuntimeEnvFrom(
       env,
       db,
       { organizationId: target.organizationId, projectId: target.projectId },
-      [{ name: 'credential', credentialRef: { credentialId, versionId } }],
+      [{ type: 'secret', name: 'credential', secretRef: version.secretRef }],
     )
   } catch (error) {
     throw new McpClientError('unauthorized', error)

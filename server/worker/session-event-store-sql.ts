@@ -11,7 +11,8 @@
 // rows.
 
 import { redactSensitiveValue } from '@server/redaction'
-import type { SessionEventPage, SessionEventQuery, SessionEventRecord } from '@server/usecases/ports'
+import { sessionEventVisibility, type SessionEvent } from '@server/domain/session'
+import type { SessionEventPage, SessionEventQuery } from '@server/usecases/ports'
 import {
   type CanonicalAmaSessionEvent,
   canonicalAmaSessionEventFromRuntimeEvent,
@@ -125,7 +126,7 @@ export function appendCanonicalEventToSql(
   // and must not have them recomputed; when given, they win over the store's
   // turn/transcript threading.
   overrides?: { parentEventId?: string | null; correlationId?: string | null },
-): { id: string; sequence: number; record: SessionEventRecord } {
+): { id: string; sequence: number; record: SessionEvent } {
   const eventId = newEventId()
   const parentEventId =
     overrides?.parentEventId !== undefined
@@ -344,10 +345,10 @@ export function exportSessionEventsJsonl(sql: SqlStorage, sessionId: string): st
   return rows.map((row) => JSON.stringify(serializeRow(row))).join('\n')
 }
 
-// Row → SessionEventRecord. Identical output to the D1 repo's serializeEvent:
+// Row → SessionEvent. Identical output to the D1 repo's serializeEvent:
 // canonicalises a non-canonical stored type, redacts payload/metadata on the way
 // out, and tags the raw type into metadata for non-canonical rows.
-export function serializeRow(row: EventRow): SessionEventRecord {
+export function serializeRow(row: EventRow): SessionEvent {
   const rawPayload = JSON.parse(row.payload) as Record<string, unknown>
   const rawMetadata = JSON.parse(row.metadata) as Record<string, unknown>
   const event = isAmaSessionEventType(row.type)
@@ -365,7 +366,7 @@ export function serializeRow(row: EventRow): SessionEventRecord {
     sessionId: row.session_id,
     sequence: row.sequence,
     type: event.type,
-    visibility: event.visibility,
+    visibility: sessionEventVisibility(event.visibility),
     role: event.role,
     parentEventId: row.parent_event_id,
     correlationId: row.correlation_id,

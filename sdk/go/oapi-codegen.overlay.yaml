@@ -128,15 +128,11 @@ actions:
     remove: true
   - target: $.components.schemas['Trigger']['properties']['metadata'].additionalProperties.nullable
     remove: true
-  - target: $.components.schemas['ResourceRef']['anyOf'][1].additionalProperties.nullable
-    remove: true
   - target: $.components.schemas['CreateTriggerRequest']['properties']['metadata'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['UpdateTriggerRequest']['properties']['metadata'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['TriggerRun']['properties']['metadata'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['Session']['properties']['metadata'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['SessionAgentSnapshot']['properties']['subagents']['items'].additionalProperties.nullable
     remove: true
@@ -149,8 +145,6 @@ actions:
   - target: $.components.schemas['SessionAgentSnapshot']['properties']['metadata'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['SessionEnvironmentJsonObject'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['SessionRuntimeMetadata']['properties']['runtimeConfig'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['CreateSessionRequest']['properties']['runtimeConfig'].additionalProperties.nullable
     remove: true

@@ -6,6 +6,7 @@ import { formatTime } from '@/console/format'
 import { SessionForm } from '@/console/forms'
 import { useClientPagination } from '@/console/use-client-pagination'
 import { type Agent, ApiError, type Environment, type Session, type SessionEvent } from '@/lib/api'
+import { buildTestSession, type TestSessionOverrides } from '@/testing/session'
 import { formatCreateSessionError } from './CreateSessionSheet'
 import { SessionDetailView } from './SessionDetailView'
 import { eventFilter, SessionRuntimePanel } from './SessionRuntimePanel'
@@ -17,74 +18,8 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-function buildSession(overrides: Partial<Session> = {}): Session {
-  return {
-    id: 'session_1',
-    projectId: 'project_1',
-    agentId: 'agent_1',
-    agentVersionId: 'agentver_1',
-    agentSnapshot: {
-      id: 'agentver_1',
-      agentId: 'agent_1',
-      projectId: 'project_1',
-      version: 1,
-      instructions: 'Do the work',
-      providerId: 'workers-ai',
-      model: '@cf/moonshotai/kimi-k2.6',
-      skills: ['ama@coding-agent'],
-      subagents: [],
-      role: null,
-      capabilityTags: [],
-      handoffPolicy: {},
-      memoryPolicy: { enabled: false },
-      tools: [{ name: 'read' }, { name: 'write' }],
-      mcpConnectors: [],
-      metadata: {},
-      createdAt: '2026-05-23T00:00:00.000Z',
-    },
-    environmentId: 'env_1',
-    environmentVersionId: 'envver_1',
-    environmentSnapshot: {
-      id: 'envver_1',
-      environmentId: 'env_1',
-      projectId: 'project_1',
-      packages: [{ name: 'tsx', version: 'latest' }],
-      variables: {},
-      credentialRefs: [],
-      hostingMode: 'cloud',
-      networkPolicy: { mode: 'restricted', allowedHosts: ['registry.npmjs.org'] },
-      mcpPolicy: {},
-      packageManagerPolicy: {},
-      resourceLimits: { memoryMb: 1024 },
-      runtimeConfig: { image: 'node:24' },
-      metadata: {},
-      version: 1,
-      createdAt: '2026-05-23T00:00:00.000Z',
-    },
-    title: 'First run workflow',
-    resourceRefs: [],
-    env: {},
-    secretEnv: [],
-    runtimeMetadata: {
-      hostingMode: 'cloud',
-      runtime: 'ama',
-      runtimeConfig: { image: 'node:24' },
-      provider: 'workers-ai',
-      model: '@cf/moonshotai/kimi-k2.6',
-      driver: 'ama-cloud',
-      backend: 'ama-cloud',
-      protocol: 'ama-runtime-rpc',
-    },
-    state: 'idle',
-    stateReason: null,
-    metadata: {},
-    startedAt: '2026-05-23T00:00:00.000Z',
-    stoppedAt: null,
-    archivedAt: null,
-    createdAt: '2026-05-23T00:00:00.000Z',
-    updatedAt: '2026-05-23T00:00:00.000Z',
-    ...overrides,
-  }
+function buildSession(overrides: TestSessionOverrides = {}): Session {
+  return buildTestSession({ name: 'First run workflow', ...overrides })
 }
 
 function buildAgent(overrides: Partial<Agent> = {}): Agent {
@@ -200,9 +135,10 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
           agentId: 'agent_1',
           environmentId: 'env_1',
           runtime: 'ama',
-          title: '',
+          name: '',
           metadata: '{}',
-          resourceRefs: '[]',
+          volumes: '[]',
+          volumeMounts: '[]',
         }}
         setValue={vi.fn()}
         agents={[buildAgent()]}
@@ -241,9 +177,9 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
     const sessions = Array.from({ length: 11 }, (_, index) =>
       buildSession({
         id: `session_${index + 1}`,
-        title: `Session ${index + 1}`,
-        state: index === 0 ? 'error' : 'idle',
-        stateReason: index === 0 ? 'Runtime crashed' : null,
+        name: `Session ${index + 1}`,
+        phase: index === 0 ? 'error' : 'idle',
+        reason: index === 0 ? 'Runtime crashed' : null,
       }),
     )
     function Harness() {
@@ -283,7 +219,7 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
   })
 
   it('renders one table row for one error session', () => {
-    const session = buildSession({ state: 'error', stateReason: 'Runtime crashed' })
+    const session = buildSession({ phase: 'error', reason: 'Runtime crashed' })
     render(
       <MemoryRouter>
         <SessionsView
@@ -323,13 +259,12 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
   it('renders session rows from Agent provider/model, hosting snapshots, and session runtime', () => {
     const session = buildSession({
       environmentSnapshot: {
-        ...buildSession().environmentSnapshot!,
+        ...buildSession().status.bindings.environment.snapshot!,
         hostingMode: 'self_hosted',
       },
-      runtimeMetadata: {
-        ...buildSession().runtimeMetadata,
-        hostingMode: 'self_hosted',
-        runtime: 'codex',
+      spec: { ...buildSession().spec, runtime: 'codex' },
+      status: {
+        placement: { ...buildSession().status.placement!, hostingMode: 'self_hosted' },
       },
     })
     render(
@@ -366,16 +301,15 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
 
   it('renders session detail facts from agent and environment snapshots instead of legacy model fields', () => {
     const session = buildSession({
-      state: 'pending',
-      stateReason: 'waiting-for-runner',
+      phase: 'pending',
+      reason: 'waiting-for-runner',
       environmentSnapshot: {
-        ...buildSession().environmentSnapshot!,
+        ...buildSession().status.bindings.environment.snapshot!,
         hostingMode: 'self_hosted',
       },
-      runtimeMetadata: {
-        ...buildSession().runtimeMetadata,
-        hostingMode: 'self_hosted',
-        runtime: 'codex',
+      spec: { ...buildSession().spec, runtime: 'codex' },
+      status: {
+        placement: { ...buildSession().status.placement!, hostingMode: 'self_hosted' },
       },
     })
 
@@ -411,17 +345,19 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
 
   it('renders memory store resources without exposing memory contents', () => {
     const session = buildSession({
-      resourceRefs: [
-        {
-          type: 'memory_store',
-          storeId: 'memstore_1',
-          name: 'Team memory',
-          description: 'Shared runbook',
-          access: 'read_write',
-          mountPath: '/workspace/.ama/memory-stores/memstore_1',
-          memories: [{ path: 'guide.md', content: 'secret content' }, 'legacy-memory'],
-        },
-      ],
+      spec: {
+        ...buildSession().spec,
+        volumes: [
+          {
+            type: 'memory_store',
+            name: 'Team memory',
+            storeId: 'memstore_1',
+            description: 'Shared runbook',
+            access: 'read_write',
+          },
+        ],
+        volumeMounts: [{ name: 'Team memory', mountPath: '/workspace/.ama/memory-stores/memstore_1' }],
+      },
     })
 
     render(
@@ -443,10 +379,9 @@ describe('[spec: sessions/console-detail] [spec: sessions/console-transcript] se
       </MemoryRouter>,
     )
 
-    fireEvent.click(screen.getAllByLabelText('Open session resources')[0]!)
-    expect(screen.getByText('Session resources')).toBeTruthy()
+    fireEvent.click(screen.getAllByLabelText('Open session volumes')[0]!)
+    expect(screen.getByText('Session volumes')).toBeTruthy()
     expect(screen.getByText(/memstore_1/)).toBeTruthy()
-    expect(screen.getByText(/guide.md/)).toBeTruthy()
     expect(screen.queryByText(/secret content/)).toBeNull()
   })
 

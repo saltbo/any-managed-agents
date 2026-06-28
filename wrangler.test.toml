@@ -3,6 +3,9 @@ main = "./server/worker.ts"
 compatibility_date = "2026-05-07"
 compatibility_flags = ["nodejs_compat"]
 
+[secrets]
+required = []
+
 [assets]
 binding = "ASSETS"
 not_found_handling = "single-page-application"
@@ -16,11 +19,6 @@ OIDC_CLIENT_ID = "ama-test"
 OIDC_RUNNER_CLIENT_ID = "ama-runner-test"
 AMA_E2E_TEST_AUTH = "true"
 AMA_ALLOWED_ORIGINS = "https://example.com"
-AMA_WORKERS_AI_ACCOUNT_ID = "test-account"
-AMA_RUNTIME_AI_PROXY_TOKEN = "test-runtime-ai-proxy-token"
-AMA_CLOUDFLARE_API_TOKEN = "test-cloudflare-token"
-AMA_CLOUDFLARE_SECRETS_STORE_ID = "test-secrets-store"
-AMA_APPROVED_EXTERNAL_VAULT_PREFIXES = "vault://team/"
 AMA_VAULT_ENCRYPTION_KEY = "test-vault-encryption-key-for-workers-suite-32-bytes"
 
 [[d1_databases]]

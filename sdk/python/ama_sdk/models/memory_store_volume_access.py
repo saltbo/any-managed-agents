@@ -1,6 +1,6 @@
 from enum import Enum
 
-class MemoryStoreResourceRefAccess(str, Enum):
+class MemoryStoreVolumeAccess(str, Enum):
     READ_ONLY = "read_only"
     READ_WRITE = "read_write"
 

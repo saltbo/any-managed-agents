@@ -8,22 +8,40 @@ import (
 	"github.com/samber/lo"
 )
 
-type ResourceRef struct {
+type Volume struct {
 	Type        string           `json:"type"`
+	Name        string           `json:"name"`
 	Owner       string           `json:"owner"`
 	Repo        string           `json:"repo"`
 	Ref         string           `json:"ref"`
-	MountPath   string           `json:"mountPath"`
 	StoreID     string           `json:"storeId"`
-	Name        string           `json:"name"`
 	Description *string          `json:"description"`
 	Access      string           `json:"access"`
+	SecretRef   string           `json:"secretRef"`
 	Memories    []MemorySnapshot `json:"memories"`
+}
+
+type VolumeMount struct {
+	Name      string `json:"name"`
+	MountPath string `json:"mountPath"`
+	ReadOnly  bool   `json:"readOnly"`
 }
 
 type MemorySnapshot struct {
 	Path    string `json:"path"`
 	Content string `json:"content"`
+}
+
+type ResolvedVolumeFile struct {
+	Path    string `json:"path"`
+	Content string `json:"content"`
+}
+
+type ResolvedVolumeMount struct {
+	Name      string               `json:"name"`
+	MountPath string               `json:"mountPath"`
+	ReadOnly  bool                 `json:"readOnly"`
+	Files     []ResolvedVolumeFile `json:"files"`
 }
 
 type RunnerChannelMessage = ama.RunnerChannelMessage
@@ -33,27 +51,29 @@ type RunnerRuntimeRequest = ama.RunnerRuntimeRequest
 type RunnerRuntimeToolCall = ama.RunnerRuntimeToolCall
 
 type WorkPayload struct {
-	Protocol                 string            `json:"protocol"`
-	Type                     string            `json:"type"`
-	SessionID                string            `json:"sessionId"`
-	HostingMode              string            `json:"hostingMode"`
-	Runtime                  string            `json:"runtime"`
-	RuntimeConfig            map[string]any    `json:"runtimeConfig"`
-	ResourceRefs             []ResourceRef     `json:"resourceRefs"`
-	Provider                 string            `json:"provider"`
-	Model                    string            `json:"model"`
-	AgentSnapshot            map[string]any    `json:"agentSnapshot"`
-	RuntimeDriver            string            `json:"runtimeDriver"`
-	RequiredRunnerCapability string            `json:"requiredRunnerCapability"`
-	RuntimeEnv               map[string]string `json:"runtimeEnv"`
-	InitialPrompt            *string           `json:"initialPrompt"`
-	Resume                   bool              `json:"resume"`
-	ResumeToken              string            `json:"resumeToken"`
-	Approved                 bool              `json:"approved"`
-	ToolCallID               string            `json:"toolCallId"`
-	ToolName                 string            `json:"toolName"`
-	Input                    map[string]any    `json:"input"`
-	ToolCall                 *ToolCall         `json:"toolCall"`
+	Protocol                 string                `json:"protocol"`
+	Type                     string                `json:"type"`
+	SessionID                string                `json:"sessionId"`
+	HostingMode              string                `json:"hostingMode"`
+	Runtime                  string                `json:"runtime"`
+	RuntimeConfig            map[string]any        `json:"runtimeConfig"`
+	Volumes                  []Volume              `json:"volumes"`
+	VolumeMounts             []VolumeMount         `json:"volumeMounts"`
+	Provider                 string                `json:"provider"`
+	Model                    string                `json:"model"`
+	AgentSnapshot            map[string]any        `json:"agentSnapshot"`
+	RuntimeDriver            string                `json:"runtimeDriver"`
+	RequiredRunnerCapability string                `json:"requiredRunnerCapability"`
+	RuntimeEnv               map[string]string     `json:"runtimeEnv"`
+	ResolvedVolumes          []ResolvedVolumeMount `json:"resolvedVolumes"`
+	InitialPrompt            *string               `json:"initialPrompt"`
+	Resume                   bool                  `json:"resume"`
+	ResumeToken              string                `json:"resumeToken"`
+	Approved                 bool                  `json:"approved"`
+	ToolCallID               string                `json:"toolCallId"`
+	ToolName                 string                `json:"toolName"`
+	Input                    map[string]any        `json:"input"`
+	ToolCall                 *ToolCall             `json:"toolCall"`
 }
 
 type ToolCall struct {
@@ -121,13 +141,15 @@ func workPayloadFromSDK(payload ama.RunnerWorkPayload) WorkPayload {
 		HostingMode:              stringValue(payload.HostingMode),
 		Runtime:                  stringValue(payload.Runtime),
 		RuntimeConfig:            jsonMap(payload.RuntimeConfig),
-		ResourceRefs:             resourceRefsFromSDK(payload.ResourceRefs),
+		Volumes:                  volumesFromSDK(payload.Volumes),
+		VolumeMounts:             volumeMountsFromSDK(payload.VolumeMounts),
 		Provider:                 stringValue(payload.Provider),
 		Model:                    stringValue(payload.Model),
 		AgentSnapshot:            jsonMap(payload.AgentSnapshot),
 		RuntimeDriver:            stringValue(payload.RuntimeDriver),
 		RequiredRunnerCapability: stringValue(payload.RequiredRunnerCapability),
 		RuntimeEnv:               stringMap(payload.RuntimeEnv),
+		ResolvedVolumes:          resolvedVolumesFromSDK(payload.ResolvedVolumes),
 		InitialPrompt:            payload.InitialPrompt,
 		Resume:                   boolValue(payload.Resume),
 		ResumeToken:              stringValue(payload.ResumeToken),
@@ -152,28 +174,61 @@ func toolCallFromSDK(toolCall *ama.RunnerToolCall) *ToolCall {
 	}
 }
 
-func resourceRefsFromSDK(refs *[]ama.RunnerResourceRef) []ResourceRef {
-	if refs == nil {
+func resolvedVolumesFromSDK(volumes *[]ama.RunnerResolvedVolumeMount) []ResolvedVolumeMount {
+	if volumes == nil {
 		return nil
 	}
-	return lo.Map(*refs, func(ref ama.RunnerResourceRef, _ int) ResourceRef {
-		return resourceRefFromSDK(ref)
+	return lo.Map(*volumes, func(volume ama.RunnerResolvedVolumeMount, _ int) ResolvedVolumeMount {
+		return ResolvedVolumeMount{
+			Name:      volume.Name,
+			MountPath: volume.MountPath,
+			ReadOnly:  volume.ReadOnly,
+			Files:     resolvedVolumeFilesFromSDK(volume.Files),
+		}
 	})
 }
 
-func resourceRefFromSDK(ref ama.RunnerResourceRef) ResourceRef {
-	return ResourceRef{
-		Type:        ref.Type,
-		Owner:       stringValue(ref.Owner),
-		Repo:        stringValue(ref.Repo),
-		Ref:         stringValue(ref.Ref),
-		MountPath:   stringValue(ref.MountPath),
-		StoreID:     stringValue(ref.StoreId),
-		Name:        stringValue(ref.Name),
-		Description: ref.Description,
-		Access:      stringValue(ref.Access),
-		Memories:    memorySnapshotsFromSDK(ref.Memories),
+func resolvedVolumeFilesFromSDK(files []ama.RunnerResolvedVolumeFile) []ResolvedVolumeFile {
+	return lo.Map(files, func(file ama.RunnerResolvedVolumeFile, _ int) ResolvedVolumeFile {
+		return ResolvedVolumeFile{Path: file.Path, Content: file.Content}
+	})
+}
+
+func volumesFromSDK(volumes *[]ama.RunnerVolume) []Volume {
+	if volumes == nil {
+		return nil
 	}
+	return lo.Map(*volumes, func(volume ama.RunnerVolume, _ int) Volume {
+		return volumeFromSDK(volume)
+	})
+}
+
+func volumeFromSDK(volume ama.RunnerVolume) Volume {
+	return Volume{
+		Type:        string(volume.Type),
+		Name:        volume.Name,
+		Owner:       stringValue(volume.Owner),
+		Repo:        stringValue(volume.Repo),
+		Ref:         stringValue(volume.Ref),
+		StoreID:     stringValue(volume.StoreId),
+		Description: volume.Description,
+		Access:      stringValue(volume.Access),
+		SecretRef:   stringValue(volume.SecretRef),
+		Memories:    memorySnapshotsFromSDK(volume.Memories),
+	}
+}
+
+func volumeMountsFromSDK(mounts *[]ama.RunnerVolumeMount) []VolumeMount {
+	if mounts == nil {
+		return nil
+	}
+	return lo.Map(*mounts, func(mount ama.RunnerVolumeMount, _ int) VolumeMount {
+		return VolumeMount{
+			Name:      mount.Name,
+			MountPath: mount.MountPath,
+			ReadOnly:  boolValue(mount.ReadOnly),
+		}
+	})
 }
 
 func memorySnapshotsFromSDK(memories *[]ama.RunnerMemorySnapshot) []MemorySnapshot {
@@ -243,8 +298,12 @@ func SandboxRequestInput(request RunnerSandboxRequest) map[string]any {
 	return jsonMap(request.Input)
 }
 
-func SandboxRequestResourceRefs(request RunnerSandboxRequest) []ResourceRef {
-	return resourceRefsFromSDK(request.ResourceRefs)
+func SandboxRequestVolumes(request RunnerSandboxRequest) []Volume {
+	return volumesFromSDK(request.Volumes)
+}
+
+func SandboxRequestVolumeMounts(request RunnerSandboxRequest) []VolumeMount {
+	return volumeMountsFromSDK(request.VolumeMounts)
 }
 
 func runnerWorkPayloadProtocol(protocol *ama.RunnerWorkPayloadProtocol) string {

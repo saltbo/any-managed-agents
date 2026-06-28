@@ -1,12 +1,15 @@
-import { hasSecretMaterial, mergeMetadataUpdate } from '@server/domain/session'
+import {
+  hasSecretMaterial,
+  mergeSessionUserMetadata,
+  type Session,
+  type SessionMessage,
+} from '@server/domain/session'
 import type { Deps } from './deps'
 import {
   type AuthScope,
   type PromptDispatchResult,
-  type SessionMessageRecord,
-  type SessionRecord,
+  type RuntimeSessionHandle,
   type SessionRuntimeError,
-  type SessionRuntimeRow,
   SessionValidationError,
 } from './ports'
 import { archiveSession, dispatchPrompt, stopSession, unarchiveSession } from './runtime/sessions'
@@ -14,27 +17,27 @@ import { archiveSession, dispatchPrompt, stopSession, unarchiveSession } from '.
 export type SessionWriteOutcome<T> = { ok: true; value: T } | { ok: false; error: SessionRuntimeError }
 
 export interface UpdateSessionPatch {
-  title?: string | null
+  name?: string | null
   metadata?: Record<string, unknown>
   state?: 'stopped'
   archived?: boolean
 }
 
 // Orchestrates the session PATCH decision tree: archived sessions only accept
-// an unarchive; otherwise apply title/metadata edits, then the stop transition,
+// an unarchive; otherwise apply name/metadata edits, then the stop transition,
 // then archiving — in that order, since a stop+archive request must stop the
 // live runtime before lifecycle archiving.
 export async function updateSession(
   deps: Deps,
   auth: AuthScope,
-  session: SessionRuntimeRow,
+  session: RuntimeSessionHandle,
   patch: UpdateSessionPatch,
   requestId: string | null,
-): Promise<SessionWriteOutcome<SessionRecord>> {
+): Promise<SessionWriteOutcome<Session>> {
   if (session.archivedAt) {
     if (
       patch.archived === false &&
-      patch.title === undefined &&
+      patch.name === undefined &&
       patch.metadata === undefined &&
       patch.state === undefined
     ) {
@@ -45,19 +48,20 @@ export async function updateSession(
   }
 
   let current = session
-  if (patch.title !== undefined || patch.metadata !== undefined) {
+  if (patch.name !== undefined || patch.metadata !== undefined) {
     if (hasSecretMaterial(patch.metadata)) {
       throw new SessionValidationError('Invalid session metadata', {
-        metadata: 'Secret material must be stored in vault references.',
+        metadata: 'Secret material must be stored in secret references.',
       })
     }
     const timestamp = new Date().toISOString()
-    const metadata = patch.metadata !== undefined ? mergeMetadataUpdate(current.metadata, patch.metadata) : undefined
+    const metadata =
+      patch.metadata !== undefined ? mergeSessionUserMetadata(current.metadata, patch.metadata) : undefined
     const updated = await deps.sessions.updateFields(
       auth.project.id,
       session.id,
       {
-        ...(patch.title !== undefined && patch.title !== null ? { title: patch.title } : {}),
+        ...(patch.name !== undefined && patch.name !== null ? { title: patch.name } : {}),
         ...(metadata !== undefined ? { metadata } : {}),
       },
       timestamp,
@@ -96,7 +100,7 @@ export async function updateSession(
 }
 
 export type SendMessageOutcome =
-  | { ok: true; message: SessionMessageRecord }
+  | { ok: true; message: SessionMessage }
   | { ok: false; status: 409 | 500; message: string; runtimeError?: Record<string, unknown> }
 
 // Sends a prompt to a live session: the runtime prompt usecase dispatches it
@@ -106,7 +110,7 @@ export type SendMessageOutcome =
 export async function sendSessionMessage(
   deps: Deps,
   auth: AuthScope,
-  session: SessionRuntimeRow,
+  session: RuntimeSessionHandle,
   content: string,
 ): Promise<SendMessageOutcome | { ok: false; status: 409; message: string; archived: true }> {
   if (session.archivedAt) {

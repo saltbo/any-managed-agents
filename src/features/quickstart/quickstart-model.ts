@@ -40,7 +40,9 @@ export function quickstartCompletion(resources: QuickstartResources): Quickstart
     environment: resources.environments.some((environment) => !isArchived(environment)),
     agent: resources.agents.some((agent) => !isArchived(agent)),
     session: resources.sessions.length > 0,
-    integration: resources.sessions.some((session) => session.state === 'idle' || session.state === 'running'),
+    integration: resources.sessions.some(
+      (session) => session.status.phase === 'idle' || session.status.phase === 'running',
+    ),
   }
 }
 

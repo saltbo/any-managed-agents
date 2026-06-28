@@ -55,12 +55,12 @@ func TestPrepareWorkspaceMountsGitHubRepositoryWorktree(t *testing.T) {
 	}
 	runGit(t, filepath.Dir(cacheDir), "clone", sourceDir, cacheDir)
 
-	workspace, err := Prepare(context.Background(), PrepareRequest{WorkDir: workDir, SessionID: "session_1", ResourceRefs: []protocol.ResourceRef{{
-		Type:      "github_repository",
-		Owner:     "saltbo",
-		Repo:      "zpan",
-		Ref:       "main",
-		MountPath: "/workspace/repos/saltbo/zpan",
+	workspace, err := Prepare(context.Background(), PrepareRequest{WorkDir: workDir, SessionID: "session_1", Volumes: []protocol.Volume{{
+		Type:  "github_repository",
+		Name:  "source",
+		Owner: "saltbo",
+		Repo:  "zpan",
+		Ref:   "main",
 	}}})
 	if err != nil {
 		t.Fatalf("expected workspace preparation success, got %v", err)
@@ -86,14 +86,14 @@ func TestPrepareWorkspaceMountsGitHubRepositoryWorktree(t *testing.T) {
 		t.Fatal("expected git worktree metadata file, got a full clone")
 	}
 	if _, err := os.Stat(filepath.Join(workspace.Root, ".ama", "resources.json")); !os.IsNotExist(err) {
-		t.Fatalf("expected no workspace resource manifest, got err=%v", err)
+		t.Fatalf("expected no legacy workspace manifest, got err=%v", err)
 	}
 	state, err := os.ReadFile(filepath.Join(workspace.Dir, SessionStateFileName))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(state), `"status": "mounted"`) || !strings.Contains(string(state), repoPath) {
-		t.Fatalf("expected mounted resource state, got %s", string(state))
+		t.Fatalf("expected mounted volume state, got %s", string(state))
 	}
 	if err := workspace.Cleanup(context.Background()); err != nil {
 		t.Fatalf("expected workspace cleanup success, got %v", err)
@@ -110,13 +110,12 @@ func TestPrepareWorkspaceMountsGitHubRepositoryWorktree(t *testing.T) {
 func TestPrepareWorkspaceMountsMemoryStoreFiles(t *testing.T) {
 	workDir := t.TempDir()
 	description := "maintainer notes"
-	workspace, err := Prepare(context.Background(), PrepareRequest{WorkDir: workDir, SessionID: "session_1", ResourceRefs: []protocol.ResourceRef{{
+	workspace, err := Prepare(context.Background(), PrepareRequest{WorkDir: workDir, SessionID: "session_1", Volumes: []protocol.Volume{{
 		Type:        "memory_store",
+		Name:        "maintainer-memory",
 		StoreID:     "memstore_1",
-		Name:        "Maintainer memory",
 		Description: &description,
 		Access:      "read_write",
-		MountPath:   "/workspace/.ama/memory-stores/memstore_1",
 		Memories: []protocol.MemorySnapshot{{
 			Path:    "ak-maintainer-heartbeat.md",
 			Content: "initial heartbeat\n",
@@ -144,7 +143,7 @@ func TestPrepareWorkspaceMountsMemoryStoreFiles(t *testing.T) {
 		t.Fatalf("expected updated memory snapshot, got %#v", got)
 	}
 	if _, err := os.Stat(filepath.Join(workspace.Root, ".ama", "resources.json")); !os.IsNotExist(err) {
-		t.Fatalf("expected no workspace resource manifest, got err=%v", err)
+		t.Fatalf("expected no legacy workspace manifest, got err=%v", err)
 	}
 	state, err := os.ReadFile(filepath.Join(workspace.Dir, SessionStateFileName))
 	if err != nil {
@@ -157,22 +156,22 @@ func TestPrepareWorkspaceMountsMemoryStoreFiles(t *testing.T) {
 	}
 }
 
-func TestWorkspaceReadsRequestedMemoryStores(t *testing.T) {
+func TestWorkspaceReadsWritableMemoryStores(t *testing.T) {
 	workDir := t.TempDir()
-	resource := protocol.ResourceRef{
-		Type:      "memory_store",
-		StoreID:   "memstore_1",
-		Access:    "read_write",
-		MountPath: "/workspace/.ama/memory-stores/memstore_1",
+	volume := protocol.Volume{
+		Type:    "memory_store",
+		Name:    "maintainer-memory",
+		StoreID: "memstore_1",
+		Access:  "read_write",
 		Memories: []protocol.MemorySnapshot{{
 			Path:    "notes/plan.md",
 			Content: "initial plan\n",
 		}},
 	}
 	workspace, err := Prepare(context.Background(), PrepareRequest{
-		WorkDir:      workDir,
-		SessionID:    "session_1",
-		ResourceRefs: []protocol.ResourceRef{resource},
+		WorkDir:   workDir,
+		SessionID: "session_1",
+		Volumes:   []protocol.Volume{volume},
 	})
 	if err != nil {
 		t.Fatalf("expected workspace preparation success, got %v", err)
@@ -182,7 +181,7 @@ func TestWorkspaceReadsRequestedMemoryStores(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stores, err := workspace.ReadMemoryStores([]protocol.ResourceRef{resource})
+	stores, err := workspace.ReadWritableMemoryStores()
 	if err != nil {
 		t.Fatalf("expected memory store read success, got %v", err)
 	}
@@ -217,11 +216,11 @@ func TestWorkspaceAgentSystemPromptIncludesCapabilities(t *testing.T) {
 }
 
 func TestPrepareWorkspaceRejectsUnsafeMemoryPath(t *testing.T) {
-	_, err := Prepare(context.Background(), PrepareRequest{WorkDir: t.TempDir(), SessionID: "session_1", ResourceRefs: []protocol.ResourceRef{{
-		Type:      "memory_store",
-		StoreID:   "memstore_1",
-		Access:    "read_write",
-		MountPath: "/workspace/.ama/memory-stores/memstore_1",
+	_, err := Prepare(context.Background(), PrepareRequest{WorkDir: t.TempDir(), SessionID: "session_1", Volumes: []protocol.Volume{{
+		Type:    "memory_store",
+		Name:    "maintainer-memory",
+		StoreID: "memstore_1",
+		Access:  "read_write",
 		Memories: []protocol.MemorySnapshot{{
 			Path:    "../outside.md",
 			Content: "bad",
@@ -233,11 +232,11 @@ func TestPrepareWorkspaceRejectsUnsafeMemoryPath(t *testing.T) {
 }
 
 func TestCleanupWorkspaceRemovesReadOnlyMemoryStore(t *testing.T) {
-	workspace, err := Prepare(context.Background(), PrepareRequest{WorkDir: t.TempDir(), SessionID: "session_1", ResourceRefs: []protocol.ResourceRef{{
-		Type:      "memory_store",
-		StoreID:   "memstore_1",
-		Access:    "read_only",
-		MountPath: "/workspace/.ama/memory-stores/memstore_1",
+	workspace, err := Prepare(context.Background(), PrepareRequest{WorkDir: t.TempDir(), SessionID: "session_1", Volumes: []protocol.Volume{{
+		Type:    "memory_store",
+		Name:    "maintainer-memory",
+		StoreID: "memstore_1",
+		Access:  "read_only",
 		Memories: []protocol.MemorySnapshot{{
 			Path:    "ak-maintainer-heartbeat.md",
 			Content: "initial heartbeat\n",
@@ -273,19 +272,19 @@ func TestPrepareWorkspaceConfiguresSessionScopedGitCredentialFromGHToken(t *test
 		t.Fatal(err)
 	}
 	runGit(t, filepath.Dir(cacheDir), "clone", sourceDir, cacheDir)
-	resource := protocol.ResourceRef{
-		Type:      "github_repository",
-		Owner:     "saltbo",
-		Repo:      "zpan",
-		Ref:       "main",
-		MountPath: "/workspace/repos/saltbo/zpan",
+	volume := protocol.Volume{
+		Type:  "github_repository",
+		Name:  "source",
+		Owner: "saltbo",
+		Repo:  "zpan",
+		Ref:   "main",
 	}
 
 	workspace, err := Prepare(context.Background(), PrepareRequest{
-		WorkDir:      workDir,
-		SessionID:    "session_1",
-		ResourceRefs: []protocol.ResourceRef{resource},
-		RuntimeEnv:   map[string]string{"GH_TOKEN": "ghs_session_token"},
+		WorkDir:    workDir,
+		SessionID:  "session_1",
+		Volumes:    []protocol.Volume{volume},
+		RuntimeEnv: map[string]string{"GH_TOKEN": "ghs_session_token"},
 	})
 	if err != nil {
 		t.Fatalf("expected workspace preparation success, got %v", err)
@@ -317,9 +316,9 @@ func TestPrepareWorkspaceConfiguresSessionScopedGitCredentialFromGHToken(t *test
 	// A token must stay scoped to its session: a second workspace from the
 	// same repository cache prepared without GH_TOKEN sees no helper.
 	second, err := Prepare(context.Background(), PrepareRequest{
-		WorkDir:      workDir,
-		SessionID:    "session_2",
-		ResourceRefs: []protocol.ResourceRef{resource},
+		WorkDir:   workDir,
+		SessionID: "session_2",
+		Volumes:   []protocol.Volume{volume},
 	})
 	if err != nil {
 		t.Fatalf("expected second workspace preparation success, got %v", err)
@@ -359,12 +358,12 @@ func TestPrepareWorkspaceSerializesSharedRepositoryCache(t *testing.T) {
 	}
 	runGit(t, filepath.Dir(cacheDir), "clone", sourceDir, cacheDir)
 
-	resource := protocol.ResourceRef{
-		Type:      "github_repository",
-		Owner:     "saltbo",
-		Repo:      "zpan",
-		Ref:       "main",
-		MountPath: "/workspace/repos/saltbo/zpan",
+	volume := protocol.Volume{
+		Type:  "github_repository",
+		Name:  "source",
+		Owner: "saltbo",
+		Repo:  "zpan",
+		Ref:   "main",
 	}
 	workspaces := make(chan *Workspace, 2)
 	errs := make(chan error, 2)
@@ -374,9 +373,9 @@ func TestPrepareWorkspaceSerializesSharedRepositoryCache(t *testing.T) {
 		go func(sessionID string) {
 			defer wg.Done()
 			workspace, err := Prepare(context.Background(), PrepareRequest{
-				WorkDir:      workDir,
-				SessionID:    sessionID,
-				ResourceRefs: []protocol.ResourceRef{resource},
+				WorkDir:   workDir,
+				SessionID: sessionID,
+				Volumes:   []protocol.Volume{volume},
 			})
 			if err != nil {
 				errs <- err

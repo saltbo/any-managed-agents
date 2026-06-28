@@ -6,9 +6,10 @@
 // parallel. A turn claims the lease (active_turn_id) for the whole continuation
 // chain; a concurrent turn loses the compare-and-set and is deferred. A crashed
 // holder's lease expires (turn_lease_expires_at) so the next turn reclaims it.
+import type { SessionState } from '../session'
 import { newId, now } from './util'
 
-export type SessionState = 'pending' | 'idle' | 'running' | 'stopped' | 'error'
+export type { SessionState }
 
 // Lease TTL: comfortably above a single cloud-turn invocation's soft budget
 // (CLOUD_TURN_SOFT_BUDGET_MS, 4 min) and renewed per event, so a live turn never

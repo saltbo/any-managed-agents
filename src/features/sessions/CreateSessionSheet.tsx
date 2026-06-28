@@ -8,7 +8,7 @@ import { emptySession } from '@/console/defaults'
 import { isArchived, parseJsonObject, parseJsonObjectArray } from '@/console/format'
 import { SessionForm } from '@/console/forms'
 import type { SessionFormState } from '@/console/types'
-import { ApiError, api, type Session } from '@/lib/api'
+import { ApiError, api, type Session, type SessionInput } from '@/lib/api'
 import { errorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 
@@ -50,17 +50,18 @@ export function CreateSessionSheet({
         agentId: form.agentId,
         environmentId: form.environmentId,
         runtime: form.runtime,
-        ...(form.title ? { title: form.title } : {}),
+        ...(form.name ? { name: form.name } : {}),
         metadata: parseJsonObject(form.metadata, 'Metadata'),
-        resourceRefs: parseJsonObjectArray(form.resourceRefs, 'Resource refs'),
+        volumes: parseJsonObjectArray(form.volumes, 'Volumes') as SessionInput['volumes'],
+        volumeMounts: parseJsonObjectArray(form.volumeMounts, 'Volume mounts') as SessionInput['volumeMounts'],
       }),
     onSuccess: (session: Session) => {
       onOpenChange(false)
       setForm(emptySession)
       toast.success('Session created')
-      queryClient.setQueryData(queryKeys.sessions.detail(session.id), session)
+      queryClient.setQueryData(queryKeys.sessions.detail(session.metadata.uid), session)
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all })
-      void navigate(`/sessions/${session.id}`)
+      void navigate(`/sessions/${session.metadata.uid}`)
     },
     onError: (error) => toast.error(formatCreateSessionError(error)),
   })

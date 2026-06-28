@@ -41,14 +41,19 @@ export function SessionDetailView({
   onAbortRuntime: () => void
 }) {
   const [pendingAction, setPendingAction] = useState<'stop' | 'archive' | null>(null)
-  const [activeResource, setActiveResource] = useState<'agent' | 'environment' | 'resources' | null>(null)
-  const shortSessionId = `${session.id.slice(0, 5)}...${session.id.slice(-7)}`
-  const duration = formatDuration(session.startedAt, session.stoppedAt)
-  const agentName = agentDisplayName || session.agentSnapshot.instructions || session.agentId
-  const environmentName = String(environmentDisplayName ?? session.environmentId ?? 'Environment')
-  const agentProviderModel = `${session.agentSnapshot.providerId} / ${session.agentSnapshot.model ?? 'None'}`
-  const hostingRuntime = session.environmentSnapshot
-    ? `${hostingModeLabel(session.environmentSnapshot.hostingMode)} / ${session.runtimeMetadata.runtime}`
+  const [activeSheet, setActiveSheet] = useState<'agent' | 'environment' | 'volumes' | null>(null)
+  const sessionId = session.metadata.uid
+  const phase = session.status.phase
+  const agentSnapshot = session.status.bindings.agent.snapshot
+  const environmentSnapshot = session.status.bindings.environment.snapshot
+  const volumes = session.spec.volumes
+  const shortSessionId = `${sessionId.slice(0, 5)}...${sessionId.slice(-7)}`
+  const duration = formatDuration(session.status.startedAt, session.status.stoppedAt)
+  const agentName = agentDisplayName || agentSnapshot.instructions || session.spec.agentId
+  const environmentName = String(environmentDisplayName ?? session.spec.environmentId ?? 'Environment')
+  const agentProviderModel = `${agentSnapshot.providerId} / ${agentSnapshot.model ?? 'None'}`
+  const hostingRuntime = environmentSnapshot
+    ? `${hostingModeLabel(environmentSnapshot.hostingMode)} / ${session.status.bindings.runtime}`
     : 'No environment snapshot'
   return (
     <div className="flex min-h-[calc(100dvh-5rem)] flex-col bg-background lg:min-h-screen">
@@ -86,34 +91,34 @@ export function SessionDetailView({
           <div className="flex min-w-0 flex-col gap-2">
             <div className="flex min-w-0 items-center gap-2 overflow-hidden">
               <h1 className="min-w-24 flex-1 truncate text-3xl font-semibold tracking-normal text-foreground">
-                {session.title ?? session.id}
+                {session.metadata.name}
               </h1>
               <div className="shrink-0">
-                <StatusBadge value={session.state} detail={session.state === 'error' ? session.stateReason : null} />
+                <StatusBadge value={phase} detail={phase === 'error' ? session.status.reason : null} />
               </div>
               <div className="hidden min-w-0 shrink items-center gap-2 text-sm text-muted-foreground md:flex">
                 <SessionMeta
                   icon={<GitBranch className="size-4" />}
                   value={agentName}
                   label="Open agent details"
-                  onClick={() => setActiveResource('agent')}
+                  onClick={() => setActiveSheet('agent')}
                 />
                 <SessionMeta
                   icon={<Cloud className="size-4" />}
                   value={environmentName}
                   label="Open environment details"
-                  onClick={() => setActiveResource('environment')}
-                  disabled={!session.environmentSnapshot}
+                  onClick={() => setActiveSheet('environment')}
+                  disabled={!environmentSnapshot}
                 />
                 <SessionMeta icon={<Timer className="size-4" />} value={duration} />
                 <SessionMeta
                   icon={<Boxes className="size-4" />}
-                  value={`${session.resourceRefs.length} resources`}
-                  label="Open session resources"
-                  onClick={() => setActiveResource('resources')}
+                  value={`${volumes.length} volumes`}
+                  label="Open session volumes"
+                  onClick={() => setActiveSheet('volumes')}
                 />
                 <Separator orientation="vertical" className="h-4" />
-                <span className="shrink-0">{formatRelativeTime(session.updatedAt)}</span>
+                <span className="shrink-0">{formatRelativeTime(session.metadata.updatedAt)}</span>
               </div>
             </div>
             <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-2 text-sm text-muted-foreground md:hidden">
@@ -121,23 +126,23 @@ export function SessionDetailView({
                 icon={<GitBranch className="size-4" />}
                 value={agentName}
                 label="Open agent details"
-                onClick={() => setActiveResource('agent')}
+                onClick={() => setActiveSheet('agent')}
               />
               <SessionMeta
                 icon={<Cloud className="size-4" />}
                 value={environmentName}
                 label="Open environment details"
-                onClick={() => setActiveResource('environment')}
-                disabled={!session.environmentSnapshot}
+                onClick={() => setActiveSheet('environment')}
+                disabled={!environmentSnapshot}
               />
               <SessionMeta icon={<Timer className="size-4" />} value={duration} />
               <SessionMeta
                 icon={<Boxes className="size-4" />}
-                value={`${session.resourceRefs.length} resources`}
-                label="Open session resources"
-                onClick={() => setActiveResource('resources')}
+                value={`${volumes.length} volumes`}
+                label="Open session volumes"
+                onClick={() => setActiveSheet('volumes')}
               />
-              <span className="shrink-0">{formatRelativeTime(session.updatedAt)}</span>
+              <span className="shrink-0">{formatRelativeTime(session.metadata.updatedAt)}</span>
             </div>
             <div className="sr-only">
               <span className="truncate font-mono">Agent provider/model {agentProviderModel}</span>
@@ -146,8 +151,8 @@ export function SessionDetailView({
             <dl className="grid gap-2 pt-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
               <SessionFact label="Agent provider/model" value={agentProviderModel} />
               <SessionFact label="Hosting / runtime" value={hostingRuntime} />
-              <SessionFact label="Hosting mode" value={session.environmentSnapshot?.hostingMode ?? 'None'} />
-              <SessionFact label="Runtime status" value={session.stateReason ?? session.state} />
+              <SessionFact label="Hosting mode" value={environmentSnapshot?.hostingMode ?? 'None'} />
+              <SessionFact label="Runtime status" value={session.status.reason ?? phase} />
             </dl>
           </div>
         </div>
@@ -161,94 +166,91 @@ export function SessionDetailView({
         onSend={onSendMessage}
         onAbort={onAbortRuntime}
         onRefreshEvents={onRefreshEvents}
-        canSend={session.state === 'idle'}
+        canSend={phase === 'idle'}
       />
       <Sheet
-        open={activeResource !== null}
+        open={activeSheet !== null}
         onOpenChange={(open) => {
           /* v8 ignore start -- Radix never calls onOpenChange(true) in controlled mode (jsdom) */
-          if (!open) setActiveResource(null)
+          if (!open) setActiveSheet(null)
           /* v8 ignore stop */
         }}
       >
         <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
-          {activeResource === 'agent' ? (
-            <ResourceSheet
+          {activeSheet === 'agent' ? (
+            <SnapshotSheet
               title={agentName}
-              description={`Agent snapshot captured for ${session.id}`}
+              description={`Agent snapshot captured for ${sessionId}`}
               meta={
                 <MetaGrid>
-                  <Meta label="Agent id" value={session.agentId} />
-                  <Meta label="Version" value={`v${session.agentSnapshot.version}`} />
-                  <Meta label="Provider" value={session.agentSnapshot.providerId} />
-                  <Meta label="Model" value={session.agentSnapshot.model ?? 'None'} />
-                  <Meta label="Skills" value={session.agentSnapshot.skills.join(', ') || 'None'} />
+                  <Meta label="Agent id" value={session.spec.agentId} />
+                  <Meta label="Version" value={`v${agentSnapshot.version}`} />
+                  <Meta label="Provider" value={agentSnapshot.providerId} />
+                  <Meta label="Model" value={agentSnapshot.model ?? 'None'} />
+                  <Meta label="Skills" value={agentSnapshot.skills.join(', ') || 'None'} />
                   <Meta label="Tools" value={agentSnapshotToolNames(session).join(', ') || 'None'} />
-                  <Meta label="MCP connectors" value={session.agentSnapshot.mcpConnectors.join(', ') || 'None'} />
+                  <Meta label="MCP connectors" value={agentSnapshot.mcpConnectors.join(', ') || 'None'} />
                 </MetaGrid>
               }
               json={{
-                instructions: session.agentSnapshot.instructions,
-                metadata: session.agentSnapshot.metadata,
+                instructions: agentSnapshot.instructions,
+                metadata: agentSnapshot.metadata,
               }}
             />
           ) : null}
-          {activeResource === 'environment' && session.environmentSnapshot ? (
-            <ResourceSheet
+          {activeSheet === 'environment' && environmentSnapshot ? (
+            <SnapshotSheet
               title={environmentName}
-              description={`Environment snapshot captured for ${session.id}`}
+              description={`Environment snapshot captured for ${sessionId}`}
               meta={
                 <MetaGrid>
-                  <Meta label="Environment id" value={session.environmentId ?? 'None'} />
-                  <Meta label="Version" value={`v${session.environmentSnapshot.version}`} />
-                  <Meta label="Hosting mode" value={session.environmentSnapshot.hostingMode} />
-                  <Meta label="Runtime" value={session.runtimeMetadata.runtime} />
-                  <Meta label="Runtime config" value={stringifyJson(session.environmentSnapshot.runtimeConfig)} />
+                  <Meta label="Environment id" value={session.spec.environmentId ?? 'None'} />
+                  <Meta label="Version" value={`v${environmentSnapshot.version}`} />
+                  <Meta label="Hosting mode" value={environmentSnapshot.hostingMode} />
+                  <Meta label="Runtime" value={session.status.bindings.runtime} />
+                  <Meta label="Runtime config" value={stringifyJson(environmentSnapshot.runtimeConfig)} />
                   <Meta
                     label="Packages"
-                    value={session.environmentSnapshot.packages.map((item) => item.name).join(', ') || 'None'}
+                    value={environmentSnapshot.packages.map((item) => item.name).join(', ') || 'None'}
                   />
                   <Meta
                     label="Variables"
-                    value={Object.keys(session.environmentSnapshot.variables).join(', ') || 'None'}
+                    value={Object.keys(environmentSnapshot.variables).join(', ') || 'None'}
                   />
                   <Meta
                     label="Credential refs"
-                    value={
-                      session.environmentSnapshot.credentialRefs.map((item) => item.credentialId).join(', ') || 'None'
-                    }
+                    value={environmentSnapshot.credentialRefs.map((item) => item.credentialId).join(', ') || 'None'}
                   />
                 </MetaGrid>
               }
               json={{
-                networkPolicy: session.environmentSnapshot.networkPolicy,
-                mcpPolicy: session.environmentSnapshot.mcpPolicy,
-                packageManagerPolicy: session.environmentSnapshot.packageManagerPolicy,
-                resourceLimits: session.environmentSnapshot.resourceLimits,
-                metadata: session.environmentSnapshot.metadata,
+                networkPolicy: environmentSnapshot.networkPolicy,
+                mcpPolicy: environmentSnapshot.mcpPolicy,
+                packageManagerPolicy: environmentSnapshot.packageManagerPolicy,
+                resourceLimits: environmentSnapshot.resourceLimits,
+                metadata: environmentSnapshot.metadata,
               }}
             />
           ) : null}
-          {activeResource === 'resources' ? (
-            <ResourceSheet
-              title="Session resources"
-              description={`Safe resource references captured for ${session.id}`}
+          {activeSheet === 'volumes' ? (
+            <SnapshotSheet
+              title="Session volumes"
+              description={`Mountable session inputs captured for ${sessionId}`}
               meta={
                 <MetaGrid>
-                  <Meta label="Count" value={String(session.resourceRefs.length)} />
-                  <Meta label="GitHub repositories" value={String(githubResources(session).length)} />
+                  <Meta label="Count" value={String(volumes.length)} />
+                  <Meta label="GitHub repositories" value={String(githubVolumes(session).length)} />
                   <Meta
                     label="Memory stores"
-                    value={
-                      memoryStoreResources(session).length === 0 ? 'None' : String(memoryStoreResources(session).length)
-                    }
+                    value={memoryStoreVolumes(session).length === 0 ? 'None' : String(memoryStoreVolumes(session).length)}
                   />
                   <Meta label="Workspace manifest" value="/workspace/.ama/resources.json" />
                   <Meta label="Setup status" value="Declared for runtime executor setup" />
                 </MetaGrid>
               }
               json={{
-                resources: session.resourceRefs.map(safeResourceView),
+                volumes: volumes.map(safeVolumeView),
+                volumeMounts: session.spec.volumeMounts,
               }}
             />
           ) : null}
@@ -261,7 +263,7 @@ export function SessionDetailView({
         destructive
         open={pendingAction === 'stop'}
         onOpenChange={(open) => !open && setPendingAction(null)}
-        onConfirm={() => onStop(session.id)}
+        onConfirm={() => onStop(sessionId)}
       />
       <ConfirmAction
         title="Archive session?"
@@ -270,7 +272,7 @@ export function SessionDetailView({
         destructive
         open={pendingAction === 'archive'}
         onOpenChange={(open) => !open && setPendingAction(null)}
-        onConfirm={() => onArchive(session.id)}
+        onConfirm={() => onArchive(sessionId)}
       />
     </div>
   )
@@ -290,46 +292,54 @@ function hostingModeLabel(value: string) {
 }
 
 function agentSnapshotToolNames(session: Session) {
-  return session.agentSnapshot.tools
+  return session.status.bindings.agent.snapshot.tools
     .map((tool) => (typeof tool.name === 'string' ? tool.name : null))
     .filter((name): name is string => Boolean(name))
 }
 
-function githubResources(session: Session) {
-  return session.resourceRefs.filter((resource) => resource.type === 'github_repository')
+function githubVolumes(session: Session) {
+  return session.spec.volumes.filter((volume) => volume.type === 'github_repository')
 }
 
-function memoryStoreResources(session: Session) {
-  return session.resourceRefs.filter((resource) => resource.type === 'memory_store')
+function memoryStoreVolumes(session: Session) {
+  return session.spec.volumes.filter((volume) => volume.type === 'memory_store')
 }
 
-function safeResourceView(resource: Record<string, unknown>) {
-  if (resource.type === 'memory_store') {
+function safeVolumeView(volume: Record<string, unknown>) {
+  if (volume.type === 'memory_store') {
     return {
-      type: resource.type,
-      storeId: resource.storeId,
-      name: resource.name,
-      description: resource.description,
-      access: resource.access,
-      mountPath: resource.mountPath,
-      memories: Array.isArray(resource.memories)
-        ? resource.memories.map((memory) =>
+      name: volume.name,
+      type: volume.type,
+      storeId: volume.storeId,
+      description: volume.description,
+      access: volume.access,
+      memories: Array.isArray(volume.memories)
+        ? volume.memories.map((memory) =>
             memory && typeof memory === 'object' ? { path: (memory as Record<string, unknown>).path } : memory,
           )
         : [],
     }
   }
-  if (resource.type !== 'github_repository') {
-    return resource
+  if (volume.type !== 'github_repository') {
+    return volume
   }
   return {
-    type: resource.type,
-    owner: resource.owner,
-    repo: resource.repo,
-    ref: resource.ref,
-    mountPath: resource.mountPath,
-    ...(typeof resource.credentialRef === 'string' ? { credentialRef: resource.credentialRef } : {}),
+    name: volume.name,
+    type: volume.type,
+    owner: volume.owner,
+    repo: volume.repo,
+    ref: volume.ref,
+    ...(isCredentialRef(volume.credentialRef) ? { credentialRef: volume.credentialRef } : {}),
   }
+}
+
+function isCredentialRef(value: unknown): value is { credentialId: string; versionId?: string } {
+  return (
+    Boolean(value) &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    typeof (value as Record<string, unknown>).credentialId === 'string'
+  )
 }
 
 function SessionMeta({
@@ -369,7 +379,7 @@ function SessionMeta({
   )
 }
 
-function ResourceSheet({
+function SnapshotSheet({
   title,
   description,
   meta,

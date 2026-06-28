@@ -3568,14 +3568,6 @@
           "autoincrement": false,
           "default": "'{}'"
         },
-        "secret_env": {
-          "name": "secret_env",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'[]'"
-        },
         "project_id": {
           "name": "project_id",
           "type": "text",
@@ -3710,6 +3702,30 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "env_from": {
+          "name": "env_from",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'[]'"
+        },
+        "volumes": {
+          "name": "volumes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'[]'"
+        },
+        "volume_mounts": {
+          "name": "volume_mounts",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'[]'"
         }
       },
       "indexes": {
@@ -4251,14 +4267,6 @@
           "autoincrement": false,
           "default": "'{}'"
         },
-        "secret_env": {
-          "name": "secret_env",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'[]'"
-        },
         "interval_seconds": {
           "name": "interval_seconds",
           "type": "integer",
@@ -4338,6 +4346,30 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "env_from": {
+          "name": "env_from",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'[]'"
+        },
+        "volumes": {
+          "name": "volumes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'[]'"
+        },
+        "volume_mounts": {
+          "name": "volume_mounts",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'[]'"
         }
       },
       "indexes": {
@@ -4673,13 +4705,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "external_vault_path": {
-          "name": "external_vault_path",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "reference_name": {
           "name": "reference_name",
           "type": "text",
@@ -4802,7 +4827,7 @@
         },
         "ck_vault_credential_versions_provider": {
           "name": "ck_vault_credential_versions_provider",
-          "value": "\"vault_credential_versions\".\"provider\" in ('ama-managed','cloudflare-secrets','external-vault')"
+          "value": "\"vault_credential_versions\".\"provider\" in ('ama')"
         }
       }
     },

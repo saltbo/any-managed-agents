@@ -24,6 +24,7 @@ interface OpenApiDocument {
 const METHODS = new Set(['get', 'post', 'put', 'patch', 'delete'])
 const EXPECTED_RESTISH_OPERATIONS = {
   System: ['getHealth'],
+  Config: ['readConfigz'],
   Auth: ['createAuthSession', 'readAuthConfig'],
   Projects: ['listProjects', 'createProject'],
   Agents: ['listAgents', 'createAgent'],
@@ -74,6 +75,7 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.openapi).toBe('3.0.0')
     expect(doc.servers).toEqual([{ url: '/' }])
     expect(doc.paths).toHaveProperty('/api/v1/health')
+    expect(doc.paths).toHaveProperty('/api/v1/configz')
     expect(doc.paths).toHaveProperty('/api/v1/projects')
     expect(doc.paths).toHaveProperty('/api/v1/auth/config')
     expect(doc.paths).toHaveProperty('/api/v1/auth/sessions')
@@ -209,6 +211,7 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.paths['/api/v1/triggers/{triggerId}/runs']).toHaveProperty('post')
 
     expect(doc.paths['/api/v1/health'].get.security).toBeUndefined()
+    expect(doc.paths['/api/v1/configz'].get.security).toBeUndefined()
     expect(doc.paths['/api/v1/auth/config'].get.security).toBeUndefined()
     expect(doc.paths['/api/v1/auth/sessions'].post.security).toBeUndefined()
     expect(doc.paths['/api/v1/agents'].get.security).toEqual([{ bearerAuth: [] }])
@@ -285,7 +288,7 @@ describe('[CF] OpenAPI documentation', () => {
     expect(doc.components?.schemas).toHaveProperty('Runtime')
     expect(doc.components?.schemas).toHaveProperty('Session')
     expect(doc.components?.schemas).toHaveProperty('SessionEnvironmentSnapshot')
-    expect(doc.components?.schemas).toHaveProperty('SessionRuntimeMetadata')
+    expect(doc.components?.schemas).toHaveProperty('SessionPlacement')
     expect(doc.components?.schemas).toHaveProperty('CreateSessionRequest')
     expect(doc.components?.schemas).toHaveProperty('UpdateSessionRequest')
     expect(doc.components?.schemas).toHaveProperty('CreateSessionMessageRequest')
@@ -359,9 +362,10 @@ describe('[CF] OpenAPI documentation', () => {
       environmentId: { type: 'string', minLength: 1 },
       name: { type: 'string', minLength: 1, maxLength: 160 },
       promptTemplate: { type: 'string', minLength: 1, maxLength: 16000 },
-      resourceRefs: { type: 'array' },
+      volumes: { type: 'array' },
+      volumeMounts: { type: 'array' },
       env: { type: 'object' },
-      secretEnv: { type: 'array' },
+      envFrom: { type: 'array' },
       schedule: { type: 'object' },
       enabled: { type: 'boolean' },
       metadata: { type: 'object' },
@@ -499,8 +503,15 @@ describe('[CF] OpenAPI documentation', () => {
       }
     >
 
-    expect(schemas.Session.required).toContain('runtimeMetadata')
-    expect(schemas.Session.properties).toHaveProperty('runtimeMetadata')
+    expect(schemas.Session.required).toEqual(expect.arrayContaining(['metadata', 'spec', 'status']))
+    expect(schemas.Session.properties).toEqual(
+      expect.objectContaining({
+        metadata: { $ref: '#/components/schemas/SessionMetadata' },
+        spec: { $ref: '#/components/schemas/SessionSpec' },
+        status: { $ref: '#/components/schemas/SessionStatus' },
+      }),
+    )
+    expect(schemas.Session.properties).not.toHaveProperty('runtimeMetadata')
     expect(schemas.Session.properties).not.toHaveProperty('piRuntimeId')
     expect(schemas.Session.properties).not.toHaveProperty('piProcessId')
     expect(schemas.Session.properties).not.toHaveProperty('modelProvider')
@@ -510,15 +521,14 @@ describe('[CF] OpenAPI documentation', () => {
     expect(schemas.Session.properties).not.toHaveProperty('durableObjectName')
     expect(schemas.Session.properties).not.toHaveProperty('sandboxId')
     expect(schemas.Session.properties).not.toHaveProperty('runtimeEndpointPath')
-    expect(schemas.SessionRuntimeMetadata.required).toEqual(
-      expect.arrayContaining(['hostingMode', 'runtime', 'runtimeConfig', 'provider', 'model', 'driver']),
+    expect(schemas.SessionPlacement.required).toEqual(
+      expect.arrayContaining(['hostingMode', 'provider', 'model', 'driver', 'backend', 'protocol']),
     )
-    expect(schemas.SessionRuntimeMetadata.properties).toEqual(
+    expect(schemas.SessionPlacement.properties).toEqual(
       expect.objectContaining({
         hostingMode: { $ref: '#/components/schemas/EnvironmentHostingMode' },
-        runtime: { $ref: '#/components/schemas/Runtime' },
       }),
     )
-    expect(schemas.SessionRuntimeMetadata.properties).not.toHaveProperty('runtimeOwner')
+    expect(schemas.SessionPlacement.properties).not.toHaveProperty('runtimeOwner')
   })
 })

@@ -167,13 +167,14 @@ async function dispatchTrigger(deps: Deps, trigger: DueTrigger, heartbeatAt: str
       // for the runtime at dispatch time.
       environmentId: trigger.environmentId,
       options: {
-        title: trigger.name,
+        name: trigger.name,
         metadata: sessionMetadata,
-        resourceRefs: trigger.resourceRefs,
         runtime: trigger.runtime,
         initialPrompt: trigger.promptTemplate,
         env: trigger.env,
-        secretEnv: trigger.secretEnv,
+        envFrom: trigger.envFrom,
+        volumes: trigger.volumes,
+        volumeMounts: trigger.volumeMounts,
       },
       requestId: run.correlationId,
     })
@@ -185,9 +186,9 @@ async function dispatchTrigger(deps: Deps, trigger: DueTrigger, heartbeatAt: str
     }
 
     const session = result.value
-    await deps.triggerDispatch.markRunDispatched(trigger, run, session.id, sessionMetadata)
-    await recordDispatch(deps, auth, trigger, run, { ok: true, sessionId: session.id })
-    return runResult(run, trigger.id, 'dispatched', session.id, null)
+    await deps.triggerDispatch.markRunDispatched(trigger, run, session.metadata.uid, sessionMetadata)
+    await recordDispatch(deps, auth, trigger, run, { ok: true, sessionId: session.metadata.uid })
+    return runResult(run, trigger.id, 'dispatched', session.metadata.uid, null)
   } catch (error) {
     const message = safeMessage(error)
     await failRun(deps, auth, trigger, run, message)
@@ -361,13 +362,14 @@ export async function dispatchHttpTrigger(
     agentId: trigger.agentId,
     environmentId: trigger.environmentId,
     options: {
-      title: trigger.name,
+      name: trigger.name,
       metadata: key ? { ...sessionMetadata, key } : sessionMetadata,
-      resourceRefs: trigger.resourceRefs,
       runtime: trigger.runtime,
       initialPrompt: renderedPrompt,
       env: trigger.env,
-      secretEnv: trigger.secretEnv,
+      envFrom: trigger.envFrom,
+      volumes: trigger.volumes,
+      volumeMounts: trigger.volumeMounts,
     },
     requestId: run.correlationId,
   })
@@ -389,16 +391,16 @@ export async function dispatchHttpTrigger(
   await deps.triggerDispatch.markRunDispatched(
     trigger,
     run,
-    result.value.id,
+    result.value.metadata.uid,
     key ? { ...sessionMetadata, key } : sessionMetadata,
   )
-  await recordHttpDispatch(deps, auth, trigger, run, { ok: true, sessionId: result.value.id })
+  await recordHttpDispatch(deps, auth, trigger, run, { ok: true, sessionId: result.value.metadata.uid })
   return {
     runId: run.id,
     triggerId: trigger.id,
     triggeredAt,
     state: 'dispatched',
-    sessionId: result.value.id,
+    sessionId: result.value.metadata.uid,
     errorMessage: null,
   }
 }

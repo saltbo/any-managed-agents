@@ -138,20 +138,20 @@ export function QuickstartPage() {
         agentId: agent.id,
         environmentId: environment.id,
         runtime: 'ama',
-        title: 'Workers AI starter session',
+        name: 'Workers AI starter session',
         initialPrompt: SAFE_EXAMPLE_PROMPT,
       })
       return session
     },
     onSuccess: async (session) => {
       toast.success('Workers AI starter session created')
-      setSelectedEnvironmentId(session.environmentId)
+      setSelectedEnvironmentId(session.spec.environmentId ?? '')
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.agents.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.environments.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all }),
       ])
-      goToStep('session', session.id)
+      goToStep('session', session.metadata.uid)
     },
     /* v8 ignore start -- error is always an Error instance in practice */
     onError: (error) => toast.error(errorMessage(error)),
@@ -189,8 +189,8 @@ export function QuickstartPage() {
     activeEnvironments.find((environment) => environment.id === selectedEnvironmentId) ?? activeEnvironments[0] ?? null
   const previewSessionId = searchParams.get('session')
   const integrationSession =
-    sessions.find((session) => session.id === previewSessionId) ??
-    sessions.find((session) => session.state === 'idle' || session.state === 'running') ??
+    sessions.find((session) => session.metadata.uid === previewSessionId) ??
+    sessions.find((session) => session.status.phase === 'idle' || session.status.phase === 'running') ??
     sessions[0] ??
     null
 
@@ -267,9 +267,9 @@ export function QuickstartPage() {
           integrationSession
             ? {
                 origin: window.location.origin,
-                agentId: integrationSession.agentId,
-                environmentId: integrationSession.environmentId,
-                sessionId: integrationSession.id,
+                agentId: integrationSession.spec.agentId,
+                environmentId: integrationSession.spec.environmentId,
+                sessionId: integrationSession.metadata.uid,
                 runtimePath: null,
               }
             : /* v8 ignore start -- integration step only unlocked when sessions non-empty */ null

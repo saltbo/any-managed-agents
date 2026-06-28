@@ -405,10 +405,12 @@ func (r LeaseWorker) finalizeRuntimeSession(
 
 func (r LeaseWorker) prepareWorkspace(ctx context.Context, payload protocol.WorkPayload) (*workspace.Workspace, error) {
 	prepared, err := workspace.Prepare(ctx, workspace.PrepareRequest{
-		WorkDir:      r.Config.WorkDir,
-		SessionID:    payload.SessionID,
-		ResourceRefs: payload.ResourceRefs,
-		RuntimeEnv:   payload.RuntimeEnv,
+		WorkDir:         r.Config.WorkDir,
+		SessionID:       payload.SessionID,
+		Volumes:         payload.Volumes,
+		VolumeMounts:    payload.VolumeMounts,
+		ResolvedVolumes: payload.ResolvedVolumes,
+		RuntimeEnv:      payload.RuntimeEnv,
 	})
 	if err != nil {
 		return nil, err

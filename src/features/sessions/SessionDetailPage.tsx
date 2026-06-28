@@ -20,23 +20,23 @@ export function SessionDetailPage() {
     queryFn: () => api.readSession(sessionId as string),
     enabled: Boolean(sessionId),
     /* v8 ignore start -- refetchInterval is a React Query internal callback */
-    refetchInterval: (query) => (query.state.data?.state === 'pending' ? 2000 : false),
+    refetchInterval: (query) => (query.state.data?.status.phase === 'pending' ? 2000 : false),
     /* v8 ignore stop */
   })
   const session = sessionQuery.data ?? null
   const agentQuery = useQuery({
-    queryKey: queryKeys.agents.detail(session?.agentId ?? ''),
+    queryKey: queryKeys.agents.detail(session?.spec.agentId ?? ''),
     /* v8 ignore start -- queryFn only runs when enabled=true (agentId is truthy), so `?? ''` fallback is unreachable */
-    queryFn: () => api.readAgent(session?.agentId ?? ''),
+    queryFn: () => api.readAgent(session?.spec.agentId ?? ''),
     /* v8 ignore stop */
-    enabled: Boolean(session?.agentId),
+    enabled: Boolean(session?.spec.agentId),
   })
   const environmentQuery = useQuery({
-    queryKey: queryKeys.environments.detail(session?.environmentId ?? ''),
+    queryKey: queryKeys.environments.detail(session?.spec.environmentId ?? ''),
     /* v8 ignore start -- queryFn only runs when enabled=true (environmentId is truthy), so `?? ''` fallback is unreachable */
-    queryFn: () => api.readEnvironment(session?.environmentId ?? ''),
+    queryFn: () => api.readEnvironment(session?.spec.environmentId ?? ''),
     /* v8 ignore stop */
-    enabled: Boolean(session?.environmentId),
+    enabled: Boolean(session?.spec.environmentId),
   })
   const eventsQuery = useQuery({
     queryKey: queryKeys.sessions.events(sessionId ?? ''),

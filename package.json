@@ -6,7 +6,7 @@
   "type": "module",
   "packageManager": "pnpm@10.30.2",
   "scripts": {
-    "dev": "CLOUDFLARE_ENV=staging vite dev",
+    "dev": "vite dev",
     "build": "vite build",
     "build:staging": "CLOUDFLARE_ENV=staging vite build",
     "deploy": "pnpm run db:migrate:d1:prod && pnpm run build && wrangler deploy",

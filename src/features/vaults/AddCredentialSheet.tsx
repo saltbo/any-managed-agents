@@ -52,7 +52,7 @@ export function AddCredentialSheet({
           ...(form.connectorBindingName ? { name: form.connectorBindingName } : {}),
         },
         metadata: parseJsonObject(form.metadata, 'Metadata'),
-        secret: { provider: 'ama-managed', secretValue: form.secretValue },
+        secret: { secretValue: form.secretValue },
       }),
     onSuccess: () => {
       onOpenChange(false)

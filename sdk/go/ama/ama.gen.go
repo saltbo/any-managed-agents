@@ -574,48 +574,6 @@ func (e CreateTriggerRequestType) Valid() bool {
 	}
 }
 
-// Defines values for CreateVaultCredentialRequestSecretProvider.
-const (
-	CreateVaultCredentialRequestSecretProviderAmaManaged        CreateVaultCredentialRequestSecretProvider = "ama-managed"
-	CreateVaultCredentialRequestSecretProviderCloudflareSecrets CreateVaultCredentialRequestSecretProvider = "cloudflare-secrets"
-	CreateVaultCredentialRequestSecretProviderExternalVault     CreateVaultCredentialRequestSecretProvider = "external-vault"
-)
-
-// Valid indicates whether the value is a known member of the CreateVaultCredentialRequestSecretProvider enum.
-func (e CreateVaultCredentialRequestSecretProvider) Valid() bool {
-	switch e {
-	case CreateVaultCredentialRequestSecretProviderAmaManaged:
-		return true
-	case CreateVaultCredentialRequestSecretProviderCloudflareSecrets:
-		return true
-	case CreateVaultCredentialRequestSecretProviderExternalVault:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for CreateVaultCredentialVersionRequestProvider.
-const (
-	CreateVaultCredentialVersionRequestProviderAmaManaged        CreateVaultCredentialVersionRequestProvider = "ama-managed"
-	CreateVaultCredentialVersionRequestProviderCloudflareSecrets CreateVaultCredentialVersionRequestProvider = "cloudflare-secrets"
-	CreateVaultCredentialVersionRequestProviderExternalVault     CreateVaultCredentialVersionRequestProvider = "external-vault"
-)
-
-// Valid indicates whether the value is a known member of the CreateVaultCredentialVersionRequestProvider enum.
-func (e CreateVaultCredentialVersionRequestProvider) Valid() bool {
-	switch e {
-	case CreateVaultCredentialVersionRequestProviderAmaManaged:
-		return true
-	case CreateVaultCredentialVersionRequestProviderCloudflareSecrets:
-		return true
-	case CreateVaultCredentialVersionRequestProviderExternalVault:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for CreateVaultRequestScope.
 const (
 	CreateVaultRequestScopeOrganization CreateVaultRequestScope = "organization"
@@ -628,6 +586,21 @@ func (e CreateVaultRequestScope) Valid() bool {
 	case CreateVaultRequestScopeOrganization:
 		return true
 	case CreateVaultRequestScopeProject:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for EnvFromEntryType.
+const (
+	EnvFromEntryTypeSecret EnvFromEntryType = "secret"
+)
+
+// Valid indicates whether the value is a known member of the EnvFromEntryType enum.
+func (e EnvFromEntryType) Valid() bool {
+	switch e {
+	case EnvFromEntryTypeSecret:
 		return true
 	default:
 		return false
@@ -709,13 +682,13 @@ func (e EnvironmentNetworkPolicyMode) Valid() bool {
 	}
 }
 
-// Defines values for GitHubRepositoryResourceRefType.
+// Defines values for GitHubRepositoryVolumeType.
 const (
-	GithubRepository GitHubRepositoryResourceRefType = "github_repository"
+	GithubRepository GitHubRepositoryVolumeType = "github_repository"
 )
 
-// Valid indicates whether the value is a known member of the GitHubRepositoryResourceRefType enum.
-func (e GitHubRepositoryResourceRefType) Valid() bool {
+// Valid indicates whether the value is a known member of the GitHubRepositoryVolumeType enum.
+func (e GitHubRepositoryVolumeType) Valid() bool {
 	switch e {
 	case GithubRepository:
 		return true
@@ -781,14 +754,14 @@ func (e LeaseState) Valid() bool {
 	}
 }
 
-// Defines values for MemoryStoreResourceRefAccess.
+// Defines values for MemoryStoreVolumeAccess.
 const (
-	ReadOnly  MemoryStoreResourceRefAccess = "read_only"
-	ReadWrite MemoryStoreResourceRefAccess = "read_write"
+	ReadOnly  MemoryStoreVolumeAccess = "read_only"
+	ReadWrite MemoryStoreVolumeAccess = "read_write"
 )
 
-// Valid indicates whether the value is a known member of the MemoryStoreResourceRefAccess enum.
-func (e MemoryStoreResourceRefAccess) Valid() bool {
+// Valid indicates whether the value is a known member of the MemoryStoreVolumeAccess enum.
+func (e MemoryStoreVolumeAccess) Valid() bool {
 	switch e {
 	case ReadOnly:
 		return true
@@ -799,15 +772,15 @@ func (e MemoryStoreResourceRefAccess) Valid() bool {
 	}
 }
 
-// Defines values for MemoryStoreResourceRefType.
+// Defines values for MemoryStoreVolumeType.
 const (
-	MemoryStoreResourceRefTypeMemoryStore MemoryStoreResourceRefType = "memory_store"
+	MemoryStoreVolumeTypeMemoryStore MemoryStoreVolumeType = "memory_store"
 )
 
-// Valid indicates whether the value is a known member of the MemoryStoreResourceRefType enum.
-func (e MemoryStoreResourceRefType) Valid() bool {
+// Valid indicates whether the value is a known member of the MemoryStoreVolumeType enum.
+func (e MemoryStoreVolumeType) Valid() bool {
 	switch e {
-	case MemoryStoreResourceRefTypeMemoryStore:
+	case MemoryStoreVolumeTypeMemoryStore:
 		return true
 	default:
 		return false
@@ -1024,6 +997,27 @@ func (e RunnerRuntimeInventoryState) Valid() bool {
 	}
 }
 
+// Defines values for RunnerVolumeType.
+const (
+	RunnerVolumeTypeGithubRepository RunnerVolumeType = "github_repository"
+	RunnerVolumeTypeMemoryStore      RunnerVolumeType = "memory_store"
+	RunnerVolumeTypeSecret           RunnerVolumeType = "secret"
+)
+
+// Valid indicates whether the value is a known member of the RunnerVolumeType enum.
+func (e RunnerVolumeType) Valid() bool {
+	switch e {
+	case RunnerVolumeTypeGithubRepository:
+		return true
+	case RunnerVolumeTypeMemoryStore:
+		return true
+	case RunnerVolumeTypeSecret:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RunnerWorkPayloadProtocol.
 const (
 	AmaRunnerWork RunnerWorkPayloadProtocol = "ama-runner-work"
@@ -1041,49 +1035,37 @@ func (e RunnerWorkPayloadProtocol) Valid() bool {
 
 // Defines values for Runtime.
 const (
-	Ama        Runtime = "ama"
-	ClaudeCode Runtime = "claude-code"
-	Codex      Runtime = "codex"
-	Copilot    Runtime = "copilot"
+	RuntimeAma        Runtime = "ama"
+	RuntimeClaudeCode Runtime = "claude-code"
+	RuntimeCodex      Runtime = "codex"
+	RuntimeCopilot    Runtime = "copilot"
 )
 
 // Valid indicates whether the value is a known member of the Runtime enum.
 func (e Runtime) Valid() bool {
 	switch e {
-	case Ama:
+	case RuntimeAma:
 		return true
-	case ClaudeCode:
+	case RuntimeClaudeCode:
 		return true
-	case Codex:
+	case RuntimeCodex:
 		return true
-	case Copilot:
+	case RuntimeCopilot:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for SessionState.
+// Defines values for SecretVolumeType.
 const (
-	SessionStateError   SessionState = "error"
-	SessionStateIdle    SessionState = "idle"
-	SessionStatePending SessionState = "pending"
-	SessionStateRunning SessionState = "running"
-	SessionStateStopped SessionState = "stopped"
+	Secret SecretVolumeType = "secret"
 )
 
-// Valid indicates whether the value is a known member of the SessionState enum.
-func (e SessionState) Valid() bool {
+// Valid indicates whether the value is a known member of the SecretVolumeType enum.
+func (e SecretVolumeType) Valid() bool {
 	switch e {
-	case SessionStateError:
-		return true
-	case SessionStateIdle:
-		return true
-	case SessionStatePending:
-		return true
-	case SessionStateRunning:
-		return true
-	case SessionStateStopped:
+	case Secret:
 		return true
 	default:
 		return false
@@ -1201,6 +1183,51 @@ const (
 func (e SessionBackfillResponseType) Valid() bool {
 	switch e {
 	case SessionBackfillResponseTypeBackfill:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionConditionStatus.
+const (
+	SessionConditionStatusFalse   SessionConditionStatus = "False"
+	SessionConditionStatusTrue    SessionConditionStatus = "True"
+	SessionConditionStatusUnknown SessionConditionStatus = "Unknown"
+)
+
+// Valid indicates whether the value is a known member of the SessionConditionStatus enum.
+func (e SessionConditionStatus) Valid() bool {
+	switch e {
+	case SessionConditionStatusFalse:
+		return true
+	case SessionConditionStatusTrue:
+		return true
+	case SessionConditionStatusUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionConditionType.
+const (
+	SessionConditionTypeCompleted    SessionConditionType = "Completed"
+	SessionConditionTypeRunning      SessionConditionType = "Running"
+	SessionConditionTypeRuntimeReady SessionConditionType = "RuntimeReady"
+	SessionConditionTypeScheduled    SessionConditionType = "Scheduled"
+)
+
+// Valid indicates whether the value is a known member of the SessionConditionType enum.
+func (e SessionConditionType) Valid() bool {
+	switch e {
+	case SessionConditionTypeCompleted:
+		return true
+	case SessionConditionTypeRunning:
+		return true
+	case SessionConditionTypeRuntimeReady:
+		return true
+	case SessionConditionTypeScheduled:
 		return true
 	default:
 		return false
@@ -1423,6 +1450,33 @@ const (
 func (e SessionRunnerUnavailableType) Valid() bool {
 	switch e {
 	case RunnerUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SessionStatusPhase.
+const (
+	SessionStatusPhaseError   SessionStatusPhase = "error"
+	SessionStatusPhaseIdle    SessionStatusPhase = "idle"
+	SessionStatusPhasePending SessionStatusPhase = "pending"
+	SessionStatusPhaseRunning SessionStatusPhase = "running"
+	SessionStatusPhaseStopped SessionStatusPhase = "stopped"
+)
+
+// Valid indicates whether the value is a known member of the SessionStatusPhase enum.
+func (e SessionStatusPhase) Valid() bool {
+	switch e {
+	case SessionStatusPhaseError:
+		return true
+	case SessionStatusPhaseIdle:
+		return true
+	case SessionStatusPhasePending:
+		return true
+	case SessionStatusPhaseRunning:
+		return true
+	case SessionStatusPhaseStopped:
 		return true
 	default:
 		return false
@@ -1659,16 +1713,16 @@ func (e UpdateTriggerRequestScheduleType) Valid() bool {
 
 // Defines values for UpdateTriggerRequestType.
 const (
-	Http      UpdateTriggerRequestType = "http"
-	Scheduled UpdateTriggerRequestType = "scheduled"
+	UpdateTriggerRequestTypeHttp      UpdateTriggerRequestType = "http"
+	UpdateTriggerRequestTypeScheduled UpdateTriggerRequestType = "scheduled"
 )
 
 // Valid indicates whether the value is a known member of the UpdateTriggerRequestType enum.
 func (e UpdateTriggerRequestType) Valid() bool {
 	switch e {
-	case Http:
+	case UpdateTriggerRequestTypeHttp:
 		return true
-	case Scheduled:
+	case UpdateTriggerRequestTypeScheduled:
 		return true
 	default:
 		return false
@@ -1833,19 +1887,13 @@ func (e VaultCredentialState) Valid() bool {
 
 // Defines values for VaultCredentialVersionProvider.
 const (
-	AmaManaged        VaultCredentialVersionProvider = "ama-managed"
-	CloudflareSecrets VaultCredentialVersionProvider = "cloudflare-secrets"
-	ExternalVault     VaultCredentialVersionProvider = "external-vault"
+	VaultCredentialVersionProviderAma VaultCredentialVersionProvider = "ama"
 )
 
 // Valid indicates whether the value is a known member of the VaultCredentialVersionProvider enum.
 func (e VaultCredentialVersionProvider) Valid() bool {
 	switch e {
-	case AmaManaged:
-		return true
-	case CloudflareSecrets:
-		return true
-	case ExternalVault:
+	case VaultCredentialVersionProviderAma:
 		return true
 	default:
 		return false
@@ -2304,16 +2352,16 @@ func (e ReadUsageSummaryParamsGroupBy) Valid() bool {
 
 // Defines values for ListVaultsParamsArchived.
 const (
-	ListVaultsParamsArchivedFalse ListVaultsParamsArchived = "false"
-	ListVaultsParamsArchivedTrue  ListVaultsParamsArchived = "true"
+	False ListVaultsParamsArchived = "false"
+	True  ListVaultsParamsArchived = "true"
 )
 
 // Valid indicates whether the value is a known member of the ListVaultsParamsArchived enum.
 func (e ListVaultsParamsArchived) Valid() bool {
 	switch e {
-	case ListVaultsParamsArchivedFalse:
+	case False:
 		return true
-	case ListVaultsParamsArchivedTrue:
+	case True:
 		return true
 	default:
 		return false
@@ -2886,17 +2934,17 @@ type CreateSessionMessageRequestType string
 
 // CreateSessionRequest defines model for CreateSessionRequest.
 type CreateSessionRequest struct {
-	AgentId                string                  `json:"agentId"`
-	Env                    *map[string]string      `json:"env,omitempty"`
-	EnvironmentId          *string                 `json:"environmentId,omitempty"`
-	InitialPrompt          *string                 `json:"initialPrompt,omitempty"`
-	Metadata               *map[string]interface{} `json:"metadata,omitempty"`
-	ProviderAccessOverride *bool                   `json:"providerAccessOverride,omitempty"`
-	ResourceRefs           *[]ResourceRef          `json:"resourceRefs,omitempty"`
-	Runtime                Runtime                 `json:"runtime"`
-	RuntimeConfig          *map[string]interface{} `json:"runtimeConfig,omitempty"`
-	SecretEnv              *[]SecretEnvEntry       `json:"secretEnv,omitempty"`
-	Title                  *string                 `json:"title,omitempty"`
+	AgentId       string                  `json:"agentId"`
+	Env           *map[string]string      `json:"env,omitempty"`
+	EnvFrom       *[]EnvFromEntry         `json:"envFrom,omitempty"`
+	EnvironmentId *string                 `json:"environmentId,omitempty"`
+	InitialPrompt *string                 `json:"initialPrompt,omitempty"`
+	Metadata      *map[string]interface{} `json:"metadata,omitempty"`
+	Name          *string                 `json:"name,omitempty"`
+	Runtime       Runtime                 `json:"runtime"`
+	RuntimeConfig *map[string]interface{} `json:"runtimeConfig,omitempty"`
+	VolumeMounts  *[]VolumeMount          `json:"volumeMounts,omitempty"`
+	Volumes       *[]Volume               `json:"volumes,omitempty"`
 }
 
 // CreateToolCallRequest defines model for CreateToolCallRequest.
@@ -2910,20 +2958,21 @@ type CreateTriggerRequest struct {
 	AgentId        string                  `json:"agentId"`
 	Enabled        *bool                   `json:"enabled,omitempty"`
 	Env            *map[string]string      `json:"env,omitempty"`
+	EnvFrom        *[]EnvFromEntry         `json:"envFrom,omitempty"`
 	EnvironmentId  *string                 `json:"environmentId,omitempty"`
 	Metadata       *map[string]interface{} `json:"metadata,omitempty"`
 	Name           string                  `json:"name"`
 	NextDueAt      *time.Time              `json:"nextDueAt,omitempty"`
 	PromptTemplate string                  `json:"promptTemplate"`
-	ResourceRefs   *[]ResourceRef          `json:"resourceRefs,omitempty"`
 	Runtime        Runtime                 `json:"runtime"`
 	Schedule       *struct {
 		IntervalSeconds int                               `json:"intervalSeconds"`
 		Type            *CreateTriggerRequestScheduleType `json:"type,omitempty"`
 		WindowSeconds   *int                              `json:"windowSeconds,omitempty"`
 	} `json:"schedule,omitempty"`
-	SecretEnv *[]SecretEnvEntry         `json:"secretEnv,omitempty"`
-	Type      *CreateTriggerRequestType `json:"type,omitempty"`
+	Type         *CreateTriggerRequestType `json:"type,omitempty"`
+	VolumeMounts *[]VolumeMount            `json:"volumeMounts,omitempty"`
+	Volumes      *[]Volume                 `json:"volumes,omitempty"`
 }
 
 // CreateTriggerRequestScheduleType defines model for CreateTriggerRequest.Schedule.Type.
@@ -2941,29 +2990,19 @@ type CreateVaultCredentialRequest struct {
 	Metadata *map[string]interface{} `json:"metadata,omitempty"`
 	Name     string                  `json:"name"`
 	Secret   struct {
-		ExternalVaultPath *string                                     `json:"externalVaultPath,omitempty"`
-		Metadata          *map[string]interface{}                     `json:"metadata,omitempty"`
-		Provider          *CreateVaultCredentialRequestSecretProvider `json:"provider,omitempty"`
-		ReferenceName     *string                                     `json:"referenceName,omitempty"`
-		SecretValue       *string                                     `json:"secretValue,omitempty"`
+		Metadata      *map[string]interface{} `json:"metadata,omitempty"`
+		ReferenceName *string                 `json:"referenceName,omitempty"`
+		SecretValue   string                  `json:"secretValue"`
 	} `json:"secret"`
 	Type string `json:"type"`
 }
 
-// CreateVaultCredentialRequestSecretProvider defines model for CreateVaultCredentialRequest.Secret.Provider.
-type CreateVaultCredentialRequestSecretProvider string
-
 // CreateVaultCredentialVersionRequest defines model for CreateVaultCredentialVersionRequest.
 type CreateVaultCredentialVersionRequest struct {
-	ExternalVaultPath *string                                      `json:"externalVaultPath,omitempty"`
-	Metadata          *map[string]interface{}                      `json:"metadata,omitempty"`
-	Provider          *CreateVaultCredentialVersionRequestProvider `json:"provider,omitempty"`
-	ReferenceName     *string                                      `json:"referenceName,omitempty"`
-	SecretValue       *string                                      `json:"secretValue,omitempty"`
+	Metadata      *map[string]interface{} `json:"metadata,omitempty"`
+	ReferenceName *string                 `json:"referenceName,omitempty"`
+	SecretValue   string                  `json:"secretValue"`
 }
-
-// CreateVaultCredentialVersionRequestProvider defines model for CreateVaultCredentialVersionRequest.Provider.
-type CreateVaultCredentialVersionRequestProvider string
 
 // CreateVaultRequest defines model for CreateVaultRequest.
 type CreateVaultRequest struct {
@@ -2981,6 +3020,16 @@ type CredentialRef struct {
 	CredentialId string  `json:"credentialId"`
 	VersionId    *string `json:"versionId,omitempty"`
 }
+
+// EnvFromEntry defines model for EnvFromEntry.
+type EnvFromEntry struct {
+	Name      string           `json:"name"`
+	SecretRef string           `json:"secretRef"`
+	Type      EnvFromEntryType `json:"type"`
+}
+
+// EnvFromEntryType defines model for EnvFromEntry.Type.
+type EnvFromEntryType string
 
 // Environment defines model for Environment.
 type Environment struct {
@@ -3094,18 +3143,18 @@ type ErrorResponse struct {
 	} `json:"error"`
 }
 
-// GitHubRepositoryResourceRef defines model for GitHubRepositoryResourceRef.
-type GitHubRepositoryResourceRef struct {
-	CredentialRef *CredentialRef                  `json:"credentialRef,omitempty"`
-	MountPath     *string                         `json:"mountPath,omitempty"`
-	Owner         string                          `json:"owner"`
-	Ref           *string                         `json:"ref,omitempty"`
-	Repo          string                          `json:"repo"`
-	Type          GitHubRepositoryResourceRefType `json:"type"`
+// GitHubRepositoryVolume defines model for GitHubRepositoryVolume.
+type GitHubRepositoryVolume struct {
+	CredentialRef *CredentialRef             `json:"credentialRef,omitempty"`
+	Name          string                     `json:"name"`
+	Owner         string                     `json:"owner"`
+	Ref           *string                    `json:"ref,omitempty"`
+	Repo          string                     `json:"repo"`
+	Type          GitHubRepositoryVolumeType `json:"type"`
 }
 
-// GitHubRepositoryResourceRefType defines model for GitHubRepositoryResourceRef.Type.
-type GitHubRepositoryResourceRefType string
+// GitHubRepositoryVolumeType defines model for GitHubRepositoryVolume.Type.
+type GitHubRepositoryVolumeType string
 
 // HealthResponse defines model for HealthResponse.
 type HealthResponse struct {
@@ -3189,18 +3238,21 @@ type MemoryStoreMemoryListResponse struct {
 	Pagination ListPagination      `json:"pagination"`
 }
 
-// MemoryStoreResourceRef defines model for MemoryStoreResourceRef.
-type MemoryStoreResourceRef struct {
-	Access  MemoryStoreResourceRefAccess `json:"access"`
-	StoreId string                       `json:"storeId"`
-	Type    MemoryStoreResourceRefType   `json:"type"`
+// MemoryStoreVolume defines model for MemoryStoreVolume.
+type MemoryStoreVolume struct {
+	Access      MemoryStoreVolumeAccess `json:"access"`
+	Description *string                 `json:"description,omitempty"`
+	Name        string                  `json:"name"`
+	StoreId     string                  `json:"storeId"`
+	StoreName   *string                 `json:"storeName,omitempty"`
+	Type        MemoryStoreVolumeType   `json:"type"`
 }
 
-// MemoryStoreResourceRefAccess defines model for MemoryStoreResourceRef.Access.
-type MemoryStoreResourceRefAccess string
+// MemoryStoreVolumeAccess defines model for MemoryStoreVolume.Access.
+type MemoryStoreVolumeAccess string
 
-// MemoryStoreResourceRefType defines model for MemoryStoreResourceRef.Type.
-type MemoryStoreResourceRefType string
+// MemoryStoreVolumeType defines model for MemoryStoreVolume.Type.
+type MemoryStoreVolumeType string
 
 // Project defines model for Project.
 type Project struct {
@@ -3290,6 +3342,23 @@ type ProviderModelPricing struct {
 	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
+// PublicAuthConfig defines model for PublicAuthConfig.
+type PublicAuthConfig struct {
+	Oidc *PublicOidcConfig `json:"oidc"`
+}
+
+// PublicConfig defines model for PublicConfig.
+type PublicConfig struct {
+	Auth PublicAuthConfig `json:"auth"`
+}
+
+// PublicOidcConfig defines model for PublicOidcConfig.
+type PublicOidcConfig struct {
+	ClientId string `json:"clientId"`
+	Issuer   string `json:"issuer"`
+	Scope    string `json:"scope"`
+}
+
 // PutRunnerHeartbeatRequest defines model for PutRunnerHeartbeatRequest.
 type PutRunnerHeartbeatRequest struct {
 	Capabilities     *[]string                       `json:"capabilities,omitempty"`
@@ -3308,14 +3377,6 @@ type ReplaceAgentMemoryRequest struct {
 	Content  string                  `json:"content"`
 	Metadata *map[string]interface{} `json:"metadata,omitempty"`
 }
-
-// ResourceRef defines model for ResourceRef.
-type ResourceRef struct {
-	union json.RawMessage
-}
-
-// ResourceRef1 defines model for .
-type ResourceRef1 map[string]interface{}
 
 // Runner defines model for Runner.
 type Runner struct {
@@ -3395,18 +3456,18 @@ type RunnerMemorySnapshot struct {
 	Path    string `json:"path"`
 }
 
-// RunnerResourceRef defines model for RunnerResourceRef.
-type RunnerResourceRef struct {
-	Access      *string                 `json:"access,omitempty"`
-	Description *string                 `json:"description,omitempty"`
-	Memories    *[]RunnerMemorySnapshot `json:"memories,omitempty"`
-	MountPath   *string                 `json:"mountPath,omitempty"`
-	Name        *string                 `json:"name,omitempty"`
-	Owner       *string                 `json:"owner,omitempty"`
-	Ref         *string                 `json:"ref,omitempty"`
-	Repo        *string                 `json:"repo,omitempty"`
-	StoreId     *string                 `json:"storeId,omitempty"`
-	Type        string                  `json:"type"`
+// RunnerResolvedVolumeFile defines model for RunnerResolvedVolumeFile.
+type RunnerResolvedVolumeFile struct {
+	Content string `json:"content"`
+	Path    string `json:"path"`
+}
+
+// RunnerResolvedVolumeMount defines model for RunnerResolvedVolumeMount.
+type RunnerResolvedVolumeMount struct {
+	Files     []RunnerResolvedVolumeFile `json:"files"`
+	MountPath string                     `json:"mountPath"`
+	Name      string                     `json:"name"`
+	ReadOnly  bool                       `json:"readOnly"`
 }
 
 // RunnerRuntimeInventory defines model for RunnerRuntimeInventory.
@@ -3436,10 +3497,11 @@ type RunnerRuntimeToolCall struct {
 // RunnerSandboxRequest defines model for RunnerSandboxRequest.
 type RunnerSandboxRequest struct {
 	Input        *map[string]*interface{} `json:"input,omitempty"`
-	ResourceRefs *[]RunnerResourceRef     `json:"resourceRefs,omitempty"`
 	ToolCallId   *string                  `json:"toolCallId,omitempty"`
 	ToolName     *string                  `json:"toolName,omitempty"`
 	Type         string                   `json:"type"`
+	VolumeMounts *[]RunnerVolumeMount     `json:"volumeMounts,omitempty"`
+	Volumes      *[]RunnerVolume          `json:"volumes,omitempty"`
 }
 
 // RunnerSessionCommand defines model for RunnerSessionCommand.
@@ -3463,31 +3525,56 @@ type RunnerToolCall struct {
 	Name      *string                  `json:"name,omitempty"`
 }
 
+// RunnerVolume defines model for RunnerVolume.
+type RunnerVolume struct {
+	Access      *string                 `json:"access,omitempty"`
+	Description *string                 `json:"description,omitempty"`
+	Memories    *[]RunnerMemorySnapshot `json:"memories,omitempty"`
+	Name        string                  `json:"name"`
+	Owner       *string                 `json:"owner,omitempty"`
+	Ref         *string                 `json:"ref,omitempty"`
+	Repo        *string                 `json:"repo,omitempty"`
+	SecretRef   *string                 `json:"secretRef,omitempty"`
+	StoreId     *string                 `json:"storeId,omitempty"`
+	Type        RunnerVolumeType        `json:"type"`
+}
+
+// RunnerVolumeType defines model for RunnerVolume.Type.
+type RunnerVolumeType string
+
+// RunnerVolumeMount defines model for RunnerVolumeMount.
+type RunnerVolumeMount struct {
+	MountPath string `json:"mountPath"`
+	Name      string `json:"name"`
+	ReadOnly  *bool  `json:"readOnly,omitempty"`
+}
+
 // RunnerWorkPayload defines model for RunnerWorkPayload.
 type RunnerWorkPayload struct {
-	AgentSnapshot            *map[string]*interface{}   `json:"agentSnapshot,omitempty"`
-	Approved                 *bool                      `json:"approved,omitempty"`
-	EnvironmentSnapshot      *map[string]*interface{}   `json:"environmentSnapshot,omitempty"`
-	HostingMode              *string                    `json:"hostingMode,omitempty"`
-	InitialPrompt            *string                    `json:"initialPrompt,omitempty"`
-	Input                    *map[string]*interface{}   `json:"input,omitempty"`
-	Model                    *string                    `json:"model,omitempty"`
-	Protocol                 *RunnerWorkPayloadProtocol `json:"protocol,omitempty"`
-	Provider                 *string                    `json:"provider,omitempty"`
-	RequiredRunnerCapability *string                    `json:"requiredRunnerCapability,omitempty"`
-	ResourceRefs             *[]RunnerResourceRef       `json:"resourceRefs,omitempty"`
-	Resume                   *bool                      `json:"resume,omitempty"`
-	ResumeToken              *string                    `json:"resumeToken,omitempty"`
-	Runtime                  *string                    `json:"runtime,omitempty"`
-	RuntimeConfig            *map[string]*interface{}   `json:"runtimeConfig,omitempty"`
-	RuntimeDriver            *string                    `json:"runtimeDriver,omitempty"`
-	RuntimeEnv               *map[string]string         `json:"runtimeEnv,omitempty"`
-	RuntimeSecretEnv         *[]map[string]*interface{} `json:"runtimeSecretEnv,omitempty"`
-	SessionId                *string                    `json:"sessionId,omitempty"`
-	ToolCall                 *RunnerToolCall            `json:"toolCall,omitempty"`
-	ToolCallId               *string                    `json:"toolCallId,omitempty"`
-	ToolName                 *string                    `json:"toolName,omitempty"`
-	Type                     *string                    `json:"type,omitempty"`
+	AgentSnapshot            *map[string]*interface{}     `json:"agentSnapshot,omitempty"`
+	Approved                 *bool                        `json:"approved,omitempty"`
+	EnvironmentSnapshot      *map[string]*interface{}     `json:"environmentSnapshot,omitempty"`
+	HostingMode              *string                      `json:"hostingMode,omitempty"`
+	InitialPrompt            *string                      `json:"initialPrompt,omitempty"`
+	Input                    *map[string]*interface{}     `json:"input,omitempty"`
+	Model                    *string                      `json:"model,omitempty"`
+	Protocol                 *RunnerWorkPayloadProtocol   `json:"protocol,omitempty"`
+	Provider                 *string                      `json:"provider,omitempty"`
+	RequiredRunnerCapability *string                      `json:"requiredRunnerCapability,omitempty"`
+	ResolvedVolumes          *[]RunnerResolvedVolumeMount `json:"resolvedVolumes,omitempty"`
+	Resume                   *bool                        `json:"resume,omitempty"`
+	ResumeToken              *string                      `json:"resumeToken,omitempty"`
+	Runtime                  *string                      `json:"runtime,omitempty"`
+	RuntimeConfig            *map[string]*interface{}     `json:"runtimeConfig,omitempty"`
+	RuntimeDriver            *string                      `json:"runtimeDriver,omitempty"`
+	RuntimeEnv               *map[string]string           `json:"runtimeEnv,omitempty"`
+	SessionId                *string                      `json:"sessionId,omitempty"`
+	ToolCall                 *RunnerToolCall              `json:"toolCall,omitempty"`
+	ToolCallId               *string                      `json:"toolCallId,omitempty"`
+	ToolName                 *string                      `json:"toolName,omitempty"`
+	Type                     *string                      `json:"type,omitempty"`
+	VolumeMounts             *[]RunnerVolumeMount         `json:"volumeMounts,omitempty"`
+	Volumes                  *[]RunnerVolume              `json:"volumes,omitempty"`
 }
 
 // RunnerWorkPayloadProtocol defines model for RunnerWorkPayload.Protocol.
@@ -3509,39 +3596,22 @@ type RuntimeUsageWindow struct {
 	Utilization float32 `json:"utilization"`
 }
 
-// SecretEnvEntry defines model for SecretEnvEntry.
-type SecretEnvEntry struct {
-	CredentialRef CredentialRef `json:"credentialRef"`
-	Name          string        `json:"name"`
+// SecretVolume defines model for SecretVolume.
+type SecretVolume struct {
+	Name      string           `json:"name"`
+	SecretRef string           `json:"secretRef"`
+	Type      SecretVolumeType `json:"type"`
 }
+
+// SecretVolumeType defines model for SecretVolume.Type.
+type SecretVolumeType string
 
 // Session defines model for Session.
 type Session struct {
-	AgentId              string                      `json:"agentId"`
-	AgentSnapshot        SessionAgentSnapshot        `json:"agentSnapshot"`
-	AgentVersionId       string                      `json:"agentVersionId"`
-	ArchivedAt           *time.Time                  `json:"archivedAt"`
-	CreatedAt            time.Time                   `json:"createdAt"`
-	Env                  map[string]string           `json:"env"`
-	EnvironmentId        *string                     `json:"environmentId"`
-	EnvironmentSnapshot  *SessionEnvironmentSnapshot `json:"environmentSnapshot"`
-	EnvironmentVersionId *string                     `json:"environmentVersionId"`
-	Id                   string                      `json:"id"`
-	Metadata             map[string]interface{}      `json:"metadata"`
-	ProjectId            string                      `json:"projectId"`
-	ResourceRefs         []ResourceRef               `json:"resourceRefs"`
-	RuntimeMetadata      SessionRuntimeMetadata      `json:"runtimeMetadata"`
-	SecretEnv            []SecretEnvEntry            `json:"secretEnv"`
-	StartedAt            *time.Time                  `json:"startedAt"`
-	State                SessionState                `json:"state"`
-	StateReason          *string                     `json:"stateReason"`
-	StoppedAt            *time.Time                  `json:"stoppedAt"`
-	Title                *string                     `json:"title"`
-	UpdatedAt            time.Time                   `json:"updatedAt"`
+	Metadata SessionMetadata `json:"metadata"`
+	Spec     SessionSpec     `json:"spec"`
+	Status   SessionStatus   `json:"status"`
 }
-
-// SessionState defines model for Session.State.
-type SessionState string
 
 // SessionAbortFrame defines model for SessionAbortFrame.
 type SessionAbortFrame struct {
@@ -3651,10 +3721,39 @@ type SessionBackfillResponse struct {
 // SessionBackfillResponseType defines model for SessionBackfillResponse.Type.
 type SessionBackfillResponseType string
 
+// SessionBindings defines model for SessionBindings.
+type SessionBindings struct {
+	Agent struct {
+		Snapshot  SessionAgentSnapshot `json:"snapshot"`
+		VersionId string               `json:"versionId"`
+	} `json:"agent"`
+	Environment struct {
+		Id        *string                     `json:"id"`
+		Snapshot  *SessionEnvironmentSnapshot `json:"snapshot"`
+		VersionId *string                     `json:"versionId"`
+	} `json:"environment"`
+	Runtime Runtime `json:"runtime"`
+}
+
 // SessionClientFrame defines model for SessionClientFrame.
 type SessionClientFrame struct {
 	union json.RawMessage
 }
+
+// SessionCondition defines model for SessionCondition.
+type SessionCondition struct {
+	LastTransitionAt time.Time              `json:"lastTransitionAt"`
+	Message          *string                `json:"message"`
+	Reason           *string                `json:"reason"`
+	Status           SessionConditionStatus `json:"status"`
+	Type             SessionConditionType   `json:"type"`
+}
+
+// SessionConditionStatus defines model for SessionCondition.Status.
+type SessionConditionStatus string
+
+// SessionConditionType defines model for SessionCondition.Type.
+type SessionConditionType string
 
 // SessionConnection defines model for SessionConnection.
 type SessionConnection struct {
@@ -3776,6 +3875,29 @@ type SessionMessageListResponse struct {
 	Pagination ListPagination   `json:"pagination"`
 }
 
+// SessionMetadata defines model for SessionMetadata.
+type SessionMetadata struct {
+	Annotations map[string]string `json:"annotations"`
+	ArchivedAt  *time.Time        `json:"archivedAt"`
+	CreatedAt   time.Time         `json:"createdAt"`
+	CreatedBy   *string           `json:"createdBy"`
+	Labels      map[string]string `json:"labels"`
+	Name        string            `json:"name"`
+	Pid         string            `json:"pid"`
+	Uid         string            `json:"uid"`
+	UpdatedAt   time.Time         `json:"updatedAt"`
+}
+
+// SessionPlacement defines model for SessionPlacement.
+type SessionPlacement struct {
+	Backend     *string                `json:"backend"`
+	Driver      *string                `json:"driver"`
+	HostingMode EnvironmentHostingMode `json:"hostingMode"`
+	Model       *string                `json:"model"`
+	Protocol    *string                `json:"protocol"`
+	Provider    string                 `json:"provider"`
+}
+
 // SessionPromptFrame defines model for SessionPromptFrame.
 type SessionPromptFrame struct {
 	Content string                 `json:"content"`
@@ -3794,17 +3916,30 @@ type SessionRunnerUnavailable struct {
 // SessionRunnerUnavailableType defines model for SessionRunnerUnavailable.Type.
 type SessionRunnerUnavailableType string
 
-// SessionRuntimeMetadata defines model for SessionRuntimeMetadata.
-type SessionRuntimeMetadata struct {
-	Backend       *string                `json:"backend"`
-	Driver        *string                `json:"driver"`
-	HostingMode   EnvironmentHostingMode `json:"hostingMode"`
-	Model         *string                `json:"model"`
-	Protocol      *string                `json:"protocol"`
-	Provider      string                 `json:"provider"`
-	Runtime       Runtime                `json:"runtime"`
-	RuntimeConfig map[string]interface{} `json:"runtimeConfig"`
+// SessionSpec defines model for SessionSpec.
+type SessionSpec struct {
+	AgentId       string            `json:"agentId"`
+	Env           map[string]string `json:"env"`
+	EnvFrom       []EnvFromEntry    `json:"envFrom"`
+	EnvironmentId *string           `json:"environmentId"`
+	Runtime       Runtime           `json:"runtime"`
+	VolumeMounts  []VolumeMount     `json:"volumeMounts"`
+	Volumes       []Volume          `json:"volumes"`
 }
+
+// SessionStatus defines model for SessionStatus.
+type SessionStatus struct {
+	Bindings   SessionBindings    `json:"bindings"`
+	Conditions []SessionCondition `json:"conditions"`
+	Phase      SessionStatusPhase `json:"phase"`
+	Placement  *SessionPlacement  `json:"placement"`
+	Reason     *string            `json:"reason"`
+	StartedAt  *time.Time         `json:"startedAt"`
+	StoppedAt  *time.Time         `json:"stoppedAt"`
+}
+
+// SessionStatusPhase defines model for SessionStatus.Phase.
+type SessionStatusPhase string
 
 // SessionSteerFrame defines model for SessionSteerFrame.
 type SessionSteerFrame struct {
@@ -3853,6 +3988,7 @@ type Trigger struct {
 	CreatedByUserId  *string                `json:"createdByUserId"`
 	Enabled          bool                   `json:"enabled"`
 	Env              map[string]string      `json:"env"`
+	EnvFrom          []EnvFromEntry         `json:"envFrom"`
 	EnvironmentId    *string                `json:"environmentId"`
 	Id               string                 `json:"id"`
 	LastDispatchedAt *time.Time             `json:"lastDispatchedAt"`
@@ -3862,16 +3998,16 @@ type Trigger struct {
 	NextDueAt        *time.Time             `json:"nextDueAt"`
 	ProjectId        string                 `json:"projectId"`
 	PromptTemplate   string                 `json:"promptTemplate"`
-	ResourceRefs     []ResourceRef          `json:"resourceRefs"`
 	Runtime          Runtime                `json:"runtime"`
 	Schedule         *struct {
 		IntervalSeconds int                 `json:"intervalSeconds"`
 		Type            TriggerScheduleType `json:"type"`
 		WindowSeconds   int                 `json:"windowSeconds"`
 	} `json:"schedule"`
-	SecretEnv []SecretEnvEntry `json:"secretEnv"`
-	Type      TriggerType      `json:"type"`
-	UpdatedAt time.Time        `json:"updatedAt"`
+	Type         TriggerType   `json:"type"`
+	UpdatedAt    time.Time     `json:"updatedAt"`
+	VolumeMounts []VolumeMount `json:"volumeMounts"`
+	Volumes      []Volume      `json:"volumes"`
 }
 
 // TriggerScheduleType defines model for Trigger.Schedule.Type.
@@ -4038,8 +4174,8 @@ type UpdateRunnerRequestState string
 type UpdateSessionRequest struct {
 	Archived *bool                      `json:"archived,omitempty"`
 	Metadata *map[string]interface{}    `json:"metadata,omitempty"`
+	Name     *string                    `json:"name,omitempty"`
 	State    *UpdateSessionRequestState `json:"state,omitempty"`
-	Title    *string                    `json:"title,omitempty"`
 }
 
 // UpdateSessionRequestState defines model for UpdateSessionRequest.State.
@@ -4051,20 +4187,21 @@ type UpdateTriggerRequest struct {
 	Archived       *bool                   `json:"archived,omitempty"`
 	Enabled        *bool                   `json:"enabled,omitempty"`
 	Env            *map[string]string      `json:"env,omitempty"`
+	EnvFrom        *[]EnvFromEntry         `json:"envFrom,omitempty"`
 	EnvironmentId  *string                 `json:"environmentId,omitempty"`
 	Metadata       *map[string]interface{} `json:"metadata,omitempty"`
 	Name           *string                 `json:"name,omitempty"`
 	NextDueAt      *time.Time              `json:"nextDueAt,omitempty"`
 	PromptTemplate *string                 `json:"promptTemplate,omitempty"`
-	ResourceRefs   *[]ResourceRef          `json:"resourceRefs,omitempty"`
 	Runtime        *Runtime                `json:"runtime,omitempty"`
 	Schedule       *struct {
 		IntervalSeconds int                               `json:"intervalSeconds"`
 		Type            *UpdateTriggerRequestScheduleType `json:"type,omitempty"`
 		WindowSeconds   *int                              `json:"windowSeconds,omitempty"`
 	} `json:"schedule,omitempty"`
-	SecretEnv *[]SecretEnvEntry         `json:"secretEnv,omitempty"`
-	Type      *UpdateTriggerRequestType `json:"type,omitempty"`
+	Type         *UpdateTriggerRequestType `json:"type,omitempty"`
+	VolumeMounts *[]VolumeMount            `json:"volumeMounts,omitempty"`
+	Volumes      *[]Volume                 `json:"volumes,omitempty"`
 }
 
 // UpdateTriggerRequestScheduleType defines model for UpdateTriggerRequest.Schedule.Type.
@@ -4212,21 +4349,20 @@ type VaultCredentialListResponse struct {
 
 // VaultCredentialVersion defines model for VaultCredentialVersion.
 type VaultCredentialVersion struct {
-	CreatedAt         time.Time                      `json:"createdAt"`
-	CredentialId      string                         `json:"credentialId"`
-	ExternalVaultPath *string                        `json:"externalVaultPath"`
-	HasSecret         bool                           `json:"hasSecret"`
-	Id                string                         `json:"id"`
-	Metadata          VaultJsonObject                `json:"metadata"`
-	ProjectId         *string                        `json:"projectId"`
-	Provider          VaultCredentialVersionProvider `json:"provider"`
-	ReferenceName     string                         `json:"referenceName"`
-	RevokedAt         *time.Time                     `json:"revokedAt"`
-	SecretRef         string                         `json:"secretRef"`
-	State             VaultCredentialVersionState    `json:"state"`
-	SupersededAt      *time.Time                     `json:"supersededAt"`
-	VaultId           string                         `json:"vaultId"`
-	Version           int                            `json:"version"`
+	CreatedAt     time.Time                      `json:"createdAt"`
+	CredentialId  string                         `json:"credentialId"`
+	HasSecret     bool                           `json:"hasSecret"`
+	Id            string                         `json:"id"`
+	Metadata      VaultJsonObject                `json:"metadata"`
+	ProjectId     *string                        `json:"projectId"`
+	Provider      VaultCredentialVersionProvider `json:"provider"`
+	ReferenceName string                         `json:"referenceName"`
+	RevokedAt     *time.Time                     `json:"revokedAt"`
+	SecretRef     string                         `json:"secretRef"`
+	State         VaultCredentialVersionState    `json:"state"`
+	SupersededAt  *time.Time                     `json:"supersededAt"`
+	VaultId       string                         `json:"vaultId"`
+	Version       int                            `json:"version"`
 }
 
 // VaultCredentialVersionProvider defines model for VaultCredentialVersion.Provider.
@@ -4248,6 +4384,18 @@ type VaultJsonObject map[string]interface{}
 type VaultListResponse struct {
 	Data       []Vault        `json:"data"`
 	Pagination ListPagination `json:"pagination"`
+}
+
+// Volume defines model for Volume.
+type Volume struct {
+	union json.RawMessage
+}
+
+// VolumeMount defines model for VolumeMount.
+type VolumeMount struct {
+	MountPath string `json:"mountPath"`
+	Name      string `json:"name"`
+	ReadOnly  *bool  `json:"readOnly,omitempty"`
 }
 
 // WorkItem defines model for WorkItem.
@@ -5108,94 +5256,6 @@ func (a ProviderModelPricing) MarshalJSON() ([]byte, error) {
 	return json.Marshal(object)
 }
 
-// AsGitHubRepositoryResourceRef returns the union data inside the ResourceRef as a GitHubRepositoryResourceRef
-func (t ResourceRef) AsGitHubRepositoryResourceRef() (GitHubRepositoryResourceRef, error) {
-	var body GitHubRepositoryResourceRef
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromGitHubRepositoryResourceRef overwrites any union data inside the ResourceRef as the provided GitHubRepositoryResourceRef
-func (t *ResourceRef) FromGitHubRepositoryResourceRef(v GitHubRepositoryResourceRef) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeGitHubRepositoryResourceRef performs a merge with any union data inside the ResourceRef, using the provided GitHubRepositoryResourceRef
-func (t *ResourceRef) MergeGitHubRepositoryResourceRef(v GitHubRepositoryResourceRef) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsResourceRef1 returns the union data inside the ResourceRef as a ResourceRef1
-func (t ResourceRef) AsResourceRef1() (ResourceRef1, error) {
-	var body ResourceRef1
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromResourceRef1 overwrites any union data inside the ResourceRef as the provided ResourceRef1
-func (t *ResourceRef) FromResourceRef1(v ResourceRef1) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeResourceRef1 performs a merge with any union data inside the ResourceRef, using the provided ResourceRef1
-func (t *ResourceRef) MergeResourceRef1(v ResourceRef1) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsMemoryStoreResourceRef returns the union data inside the ResourceRef as a MemoryStoreResourceRef
-func (t ResourceRef) AsMemoryStoreResourceRef() (MemoryStoreResourceRef, error) {
-	var body MemoryStoreResourceRef
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromMemoryStoreResourceRef overwrites any union data inside the ResourceRef as the provided MemoryStoreResourceRef
-func (t *ResourceRef) FromMemoryStoreResourceRef(v MemoryStoreResourceRef) error {
-	b, err := json.Marshal(v)
-	t.union = b
-	return err
-}
-
-// MergeMemoryStoreResourceRef performs a merge with any union data inside the ResourceRef, using the provided MemoryStoreResourceRef
-func (t *ResourceRef) MergeMemoryStoreResourceRef(v MemoryStoreResourceRef) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-func (t ResourceRef) MarshalJSON() ([]byte, error) {
-	b, err := t.union.MarshalJSON()
-	return b, err
-}
-
-func (t *ResourceRef) UnmarshalJSON(b []byte) error {
-	err := t.union.UnmarshalJSON(b)
-	return err
-}
-
 // AsSessionPromptFrame returns the union data inside the SessionClientFrame as a SessionPromptFrame
 func (t SessionClientFrame) AsSessionPromptFrame() (SessionPromptFrame, error) {
 	var body SessionPromptFrame
@@ -5375,6 +5435,125 @@ func (t *SessionClientFrame) UnmarshalJSON(b []byte) error {
 	return err
 }
 
+// AsSecretVolume returns the union data inside the Volume as a SecretVolume
+func (t Volume) AsSecretVolume() (SecretVolume, error) {
+	var body SecretVolume
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSecretVolume overwrites any union data inside the Volume as the provided SecretVolume
+func (t *Volume) FromSecretVolume(v SecretVolume) error {
+	v.Type = "secret"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSecretVolume performs a merge with any union data inside the Volume, using the provided SecretVolume
+func (t *Volume) MergeSecretVolume(v SecretVolume) error {
+	v.Type = "secret"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsGitHubRepositoryVolume returns the union data inside the Volume as a GitHubRepositoryVolume
+func (t Volume) AsGitHubRepositoryVolume() (GitHubRepositoryVolume, error) {
+	var body GitHubRepositoryVolume
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromGitHubRepositoryVolume overwrites any union data inside the Volume as the provided GitHubRepositoryVolume
+func (t *Volume) FromGitHubRepositoryVolume(v GitHubRepositoryVolume) error {
+	v.Type = "github_repository"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeGitHubRepositoryVolume performs a merge with any union data inside the Volume, using the provided GitHubRepositoryVolume
+func (t *Volume) MergeGitHubRepositoryVolume(v GitHubRepositoryVolume) error {
+	v.Type = "github_repository"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsMemoryStoreVolume returns the union data inside the Volume as a MemoryStoreVolume
+func (t Volume) AsMemoryStoreVolume() (MemoryStoreVolume, error) {
+	var body MemoryStoreVolume
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromMemoryStoreVolume overwrites any union data inside the Volume as the provided MemoryStoreVolume
+func (t *Volume) FromMemoryStoreVolume(v MemoryStoreVolume) error {
+	v.Type = "memory_store"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeMemoryStoreVolume performs a merge with any union data inside the Volume, using the provided MemoryStoreVolume
+func (t *Volume) MergeMemoryStoreVolume(v MemoryStoreVolume) error {
+	v.Type = "memory_store"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t Volume) Discriminator() (string, error) {
+	var discriminator struct {
+		Discriminator string `json:"type"`
+	}
+	err := json.Unmarshal(t.union, &discriminator)
+	return discriminator.Discriminator, err
+}
+
+func (t Volume) ValueByDiscriminator() (interface{}, error) {
+	discriminator, err := t.Discriminator()
+	if err != nil {
+		return nil, err
+	}
+	switch discriminator {
+	case "github_repository":
+		return t.AsGitHubRepositoryVolume()
+	case "memory_store":
+		return t.AsMemoryStoreVolume()
+	case "secret":
+		return t.AsSecretVolume()
+	default:
+		return nil, errors.New("unknown discriminator value: " + discriminator)
+	}
+}
+
+func (t Volume) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *Volume) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
 // RequestEditorFn  is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
 
@@ -5519,6 +5698,9 @@ type ClientInterface interface {
 	UpdateBudgetWithBody(ctx context.Context, budgetId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	UpdateBudget(ctx context.Context, budgetId string, body UpdateBudgetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReadConfigz request
+	ReadConfigz(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListConnections request
 	ListConnections(ctx context.Context, params *ListConnectionsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -6128,6 +6310,18 @@ func (c *APIClient) UpdateBudgetWithBody(ctx context.Context, budgetId string, c
 
 func (c *APIClient) UpdateBudget(ctx context.Context, budgetId string, body UpdateBudgetJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateBudgetRequest(c.Server, budgetId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *APIClient) ReadConfigz(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReadConfigzRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -8456,6 +8650,33 @@ func NewUpdateBudgetRequestWithBody(server string, budgetId string, contentType 
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewReadConfigzRequest generates requests for ReadConfigz
+func NewReadConfigzRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/configz")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -13284,6 +13505,9 @@ type ClientWithResponsesInterface interface {
 
 	UpdateBudgetWithResponse(ctx context.Context, budgetId string, body UpdateBudgetJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateBudgetResponse, error)
 
+	// ReadConfigzWithResponse request
+	ReadConfigzWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ReadConfigzResponse, error)
+
 	// ListConnectionsWithResponse request
 	ListConnectionsWithResponse(ctx context.Context, params *ListConnectionsParams, reqEditors ...RequestEditorFn) (*ListConnectionsResponse, error)
 
@@ -14224,6 +14448,36 @@ func (r UpdateBudgetResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r UpdateBudgetResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ReadConfigzResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PublicConfig
+}
+
+// Status returns HTTPResponse.Status
+func (r ReadConfigzResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReadConfigzResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReadConfigzResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -17177,6 +17431,15 @@ func (c *ClientWithResponses) UpdateBudgetWithResponse(ctx context.Context, budg
 	return ParseUpdateBudgetResponse(rsp)
 }
 
+// ReadConfigzWithResponse request returning *ReadConfigzResponse
+func (c *ClientWithResponses) ReadConfigzWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ReadConfigzResponse, error) {
+	rsp, err := c.ReadConfigz(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReadConfigzResponse(rsp)
+}
+
 // ListConnectionsWithResponse request returning *ListConnectionsResponse
 func (c *ClientWithResponses) ListConnectionsWithResponse(ctx context.Context, params *ListConnectionsParams, reqEditors ...RequestEditorFn) (*ListConnectionsResponse, error) {
 	rsp, err := c.ListConnections(ctx, params, reqEditors...)
@@ -18942,6 +19205,32 @@ func ParseUpdateBudgetResponse(rsp *http.Response) (*UpdateBudgetResponse, error
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseReadConfigzResponse parses an HTTP response from a ReadConfigzWithResponse call
+func ParseReadConfigzResponse(rsp *http.Response) (*ReadConfigzResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReadConfigzResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PublicConfig
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	}
 

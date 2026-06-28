@@ -7,6 +7,7 @@ import { registerAgentRoutes } from './http/agents'
 import { registerAuditRecordRoutes } from './http/audit-records'
 import { registerAuthRoutes } from './http/auth'
 import { registerBudgetRoutes } from './http/budgets'
+import { registerConfigzRoutes } from './http/configz'
 import { registerConnectionRoutes } from './http/connections'
 import { registerConnectorRoutes } from './http/connectors'
 import e2e from './http/e2e'
@@ -17,7 +18,6 @@ import { registerMemoryStoreRoutes } from './http/memory-stores'
 import { registerProjectRoutes } from './http/projects'
 import { registerProviderRoutes } from './http/providers'
 import { registerRunnerRoutes } from './http/runners'
-import runtimeAi from './http/runtime-ai'
 import { registerRuntimeProxy } from './http/runtime-proxy'
 import { registerSessionRoutes } from './http/sessions'
 import { registerTriggerRoutes } from './http/triggers'
@@ -57,10 +57,10 @@ export function createApp() {
 
   // Every control-plane resource lives under /api/v1. Auth and its federation
   // config are the one namespaced area (the IdP boundary; also disambiguates
-  // login sessions from agent /sessions). The two /api/v1/runtime routes are
-  // protocol-adapter endpoints: their wire shape is dictated by external
-  // protocols (ACP tunnel, OpenAI-compatible inference) and is therefore
-  // exempt from REST resource modeling (docs/api-v1-design.md §1.8).
+  // login sessions from agent /sessions). The /api/v1/runtime session proxy is
+  // a protocol-adapter endpoint: its wire shape is dictated by the runtime
+  // tunnel protocol and is therefore exempt from REST resource modeling
+  // (docs/api-v1-design.md §1.8).
   // agents, environments, providers, vaults, connectors, connections, the
   // governance resources, and the usage/audit reporting resources are migrated
   // to the clean-architecture http layer. Each registers its OpenAPI
@@ -68,6 +68,7 @@ export function createApp() {
   // a sub-router mounted at the resource's original chain position, so the
   // assembled route order and AppType stay identical.
   const auth = registerAuthRoutes(createDepsApiRouter())
+  const configz = registerConfigzRoutes(createDepsApiRouter())
   const projects = registerProjectRoutes(createDepsApiRouter())
   const triggers = registerTriggerRoutes(createDepsApiRouter())
   const agents = registerAgentRoutes(createDepsApiRouter())
@@ -88,13 +89,13 @@ export function createApp() {
 
   const routes = app
     .route('/api/v1/health', health)
+    .route('/api/v1/configz', configz)
     .route('/api/v1/e2e', e2e)
     .route('/api/v1/auth', auth)
     .route('/api/v1/projects', projects)
     .route('/api/v1/agents', agents)
     .route('/api/v1/environments', environments)
     .route('/api/v1/providers', providers)
-    .route('/api/v1/runtime', runtimeAi)
     .route('/api/v1/runners', runners)
     .route('/api/v1/work-items', workItems)
     .route('/api/v1/leases', leases)

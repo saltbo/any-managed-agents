@@ -74,7 +74,8 @@ function candidate(overrides: Partial<WorkItemClaimCandidate> = {}): WorkItemCla
 function fakeDeps(overrides: {
   leases?: Partial<Deps['leases']>
   workItems?: Partial<Deps['workItems']>
-  resolve?: Deps['runtimeSecretEnv']['resolve']
+  resolveEnv?: Deps['runtimeSecrets']['resolveEnv']
+  resolveVolumes?: Deps['runtimeSecrets']['resolveVolumes']
 }): Deps {
   const leases: Deps['leases'] = {
     list: async () => ({ rows: [], hasMore: false }),
@@ -95,10 +96,11 @@ function fakeDeps(overrides: {
     activeLeaseRunnerId: async () => null,
     ...overrides.workItems,
   }
-  const runtimeSecretEnv: Deps['runtimeSecretEnv'] = {
-    resolve: overrides.resolve ?? (async () => ({})),
+  const runtimeSecrets: Deps['runtimeSecrets'] = {
+    resolveEnv: overrides.resolveEnv ?? (async () => ({})),
+    resolveVolumes: overrides.resolveVolumes ?? (async () => []),
   }
-  return { leases, workItems, runtimeSecretEnv } as unknown as Deps
+  return { leases, workItems, runtimeSecrets } as unknown as Deps
 }
 
 describe('[spec: runners/claim-eligibility] claimLease', () => {
@@ -157,11 +159,11 @@ describe('[spec: runners/claim-eligibility] claimLease', () => {
           leases: {
             claimCandidate: async () =>
               candidate({
-                rawPayload: { type: 'session.start', requiredRunnerCapability: CAP, runtimeSecretEnv: [{}] },
+                rawPayload: { type: 'session.start', requiredRunnerCapability: CAP, envFrom: [{}] },
               }),
             failClaim,
           },
-          resolve: async () => {
+          resolveEnv: async () => {
             throw new Error('credential revoked')
           },
         }),
@@ -246,11 +248,11 @@ describe('[spec: runners/claim-eligibility] claimLease', () => {
           leases: {
             claimCandidate: async () =>
               candidate({
-                rawPayload: { type: 'session.start', requiredRunnerCapability: CAP, runtimeSecretEnv: [{}] },
+                rawPayload: { type: 'session.start', requiredRunnerCapability: CAP, envFrom: [{}] },
               }),
             failClaim,
           },
-          resolve: async () => {
+          resolveEnv: async () => {
             throw 'string error'
           },
         }),
@@ -276,24 +278,24 @@ describe('materializeWorkItemPayload', () => {
     expect(payload).toEqual({})
   })
 
-  it('passes through a session-start payload unchanged when runtimeSecretEnv is empty', async () => {
+  it('strips declared secret fields from a session-start payload when no refs are present', async () => {
     const deps = fakeDeps({
       workItems: {
-        rawPayload: async () => ({ type: 'session.start', runtimeSecretEnv: [] }),
+        rawPayload: async () => ({ type: 'session.start', envFrom: [], volumes: [], volumeMounts: [] }),
       },
     })
     const payload = await materializeWorkItemPayload(deps, scope, { id: 'work_1' } as WorkItemRecord)
-    expect(payload).toEqual({ type: 'session.start', runtimeSecretEnv: [] })
+    expect(payload).toEqual({ type: 'session.start' })
   })
 
-  it('treats non-array runtimeSecretEnv as empty and returns payload unchanged', async () => {
+  it('treats non-array envFrom as empty and strips it from the runtime payload', async () => {
     const deps = fakeDeps({
       workItems: {
-        rawPayload: async () => ({ type: 'session.start', runtimeSecretEnv: 'not-an-array' }),
+        rawPayload: async () => ({ type: 'session.start', envFrom: 'not-an-array' }),
       },
     })
     const payload = await materializeWorkItemPayload(deps, scope, { id: 'work_1' } as WorkItemRecord)
-    expect(payload).toMatchObject({ type: 'session.start' })
+    expect(payload).toEqual({ type: 'session.start' })
   })
 
   it('resolves secret env into runtimeEnv for session starts', async () => {
@@ -302,13 +304,14 @@ describe('materializeWorkItemPayload', () => {
         rawPayload: async () => ({
           type: 'session.start',
           runtimeEnv: { EXISTING: 'a' },
-          runtimeSecretEnv: [{ name: 'TOKEN', credentialRef: { credentialId: 'cred_1' } }],
+          envFrom: [{ type: 'secret', name: 'TOKEN', secretRef: 'ama://vaults/v/credentials/c/versions/ver' }],
         }),
       },
-      resolve: async () => ({ TOKEN: 'secret' }),
+      resolveEnv: async () => ({ TOKEN: 'secret' }),
     })
     const payload = await materializeWorkItemPayload(deps, scope, { id: 'work_1' } as WorkItemRecord)
     expect(payload.runtimeEnv).toEqual({ EXISTING: 'a', TOKEN: 'secret' })
+    expect(payload).not.toHaveProperty('envFrom')
   })
 
   it('resolves secret env when no runtimeEnv exists yet in the payload', async () => {
@@ -316,12 +319,13 @@ describe('materializeWorkItemPayload', () => {
       workItems: {
         rawPayload: async () => ({
           type: 'session.start',
-          runtimeSecretEnv: [{ name: 'API_KEY', credentialRef: { credentialId: 'cred_1' } }],
+          envFrom: [{ type: 'secret', name: 'API_KEY', secretRef: 'ama://vaults/v/credentials/c/versions/ver' }],
         }),
       },
-      resolve: async () => ({ API_KEY: 'mysecret' }),
+      resolveEnv: async () => ({ API_KEY: 'mysecret' }),
     })
     const payload = await materializeWorkItemPayload(deps, scope, { id: 'work_1' } as WorkItemRecord)
     expect(payload.runtimeEnv).toEqual({ API_KEY: 'mysecret' })
+    expect(payload).not.toHaveProperty('envFrom')
   })
 })

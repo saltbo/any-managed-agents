@@ -5,6 +5,10 @@ import { client } from './client.gen.js';
  */
 export const getHealth = (options) => (options?.client ?? client).get({ url: '/api/v1/health', ...options });
 /**
+ * Read public browser configuration
+ */
+export const readConfigz = (options) => (options?.client ?? client).get({ url: '/api/v1/configz', ...options });
+/**
  * Discover available sign-in methods for an organization
  */
 export const readAuthConfig = (options) => (options?.client ?? client).get({ url: '/api/v1/auth/config', ...options });
@@ -672,7 +676,7 @@ export const readSession = (options) => (options.client ?? client).get({
 /**
  * Update a session
  *
- * Partial update: title and metadata edits, the stop transition (state: "stopped"), and lifecycle archiving (archived: true|false).
+ * Partial update: name and metadata edits, the stop transition (state: "stopped"), and lifecycle archiving (archived: true|false).
  */
 export const updateSession = (options) => (options.client ?? client).patch({
     security: [{ scheme: 'bearer', type: 'http' }],

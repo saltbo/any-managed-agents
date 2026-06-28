@@ -73,7 +73,8 @@ async function createCliRelaySession(authorization: string, agentId: string, env
     body: JSON.stringify({ agentId, environmentId, runtime: 'claude-code' }),
   })
   if (res.status !== 201) throw new Error(`Session creation failed: ${res.status} ${await res.text()}`)
-  return (await res.json()) as { id: string; state: string }
+  const session = (await res.json()) as { metadata: { uid: string }; status: { phase: string } }
+  return { ...session, id: session.metadata.uid, state: session.status.phase }
 }
 
 async function registerRunner(authorization: string, environmentId: string) {

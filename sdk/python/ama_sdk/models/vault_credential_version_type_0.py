@@ -33,9 +33,8 @@ class VaultCredentialVersionType0:
             vault_id (str):  Example: vault_abc123.
             project_id (None | str):  Example: project_abc123.
             version (int):  Example: 2.
-            provider (VaultCredentialVersionType0Provider):  Example: cloudflare-secrets.
-            secret_ref (str):  Example: cloudflare-secret:AMA_PROJECT_ABC123_TOKEN_V2.
-            external_vault_path (None | str):  Example: vault://team/provider/token.
+            provider (VaultCredentialVersionType0Provider):  Example: ama.
+            secret_ref (str):  Example: ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123.
             reference_name (str):  Example: AMA_PROJECT_ABC123_TOKEN_V2.
             state (VaultCredentialVersionType0State):  Example: active.
             has_secret (bool):  Example: True.
@@ -52,7 +51,6 @@ class VaultCredentialVersionType0:
     version: int
     provider: VaultCredentialVersionType0Provider
     secret_ref: str
-    external_vault_path: None | str
     reference_name: str
     state: VaultCredentialVersionType0State
     has_secret: bool
@@ -82,9 +80,6 @@ class VaultCredentialVersionType0:
         provider = self.provider.value
 
         secret_ref = self.secret_ref
-
-        external_vault_path: None | str
-        external_vault_path = self.external_vault_path
 
         reference_name = self.reference_name
 
@@ -119,7 +114,6 @@ class VaultCredentialVersionType0:
             "version": version,
             "provider": provider,
             "secretRef": secret_ref,
-            "externalVaultPath": external_vault_path,
             "referenceName": reference_name,
             "state": state,
             "hasSecret": has_secret,
@@ -159,14 +153,6 @@ class VaultCredentialVersionType0:
 
 
         secret_ref = d.pop("secretRef")
-
-        def _parse_external_vault_path(data: object) -> None | str:
-            if data is None:
-                return data
-            return cast(None | str, data)
-
-        external_vault_path = _parse_external_vault_path(d.pop("externalVaultPath"))
-
 
         reference_name = d.pop("referenceName")
 
@@ -231,7 +217,6 @@ class VaultCredentialVersionType0:
             version=version,
             provider=provider,
             secret_ref=secret_ref,
-            external_vault_path=external_vault_path,
             reference_name=reference_name,
             state=state,
             has_secret=has_secret,

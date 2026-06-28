@@ -1,7 +1,7 @@
 import { SELF } from 'cloudflare:test'
 import { env } from 'cloudflare:workers'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cloudflareSecretRequests, defaultClaims, setupOidcProvider, signIn } from './auth'
+import { setupOidcProvider, signIn } from './auth'
 
 async function jsonFetch(path: string, authorization: string, init: RequestInit = {}) {
   return await SELF.fetch(`https://example.com${path}`, {
@@ -97,7 +97,7 @@ describe('[CF] /api/v1/vaults', () => {
       body: JSON.stringify({
         name: 'Archived vault token',
         type: 'api_key',
-        secret: { provider: 'cloudflare-secrets', secretValue: 'raw-secret-for-archived-vault' },
+        secret: { secretValue: 'raw-secret-for-archived-vault' },
       }),
     })
     expect(createCredentialRes.status).toBe(409)
@@ -130,7 +130,7 @@ describe('[CF] /api/v1/vaults', () => {
         name: 'Workers AI token',
         type: 'api_key',
         connectorBinding: { connectorId: 'workers-ai', name: 'apiKey' },
-        secret: { provider: 'cloudflare-secrets', secretValue: rawSecret },
+        secret: { secretValue: rawSecret },
       }),
     })
     expect(createCredentialRes.status).toBe(201)
@@ -148,8 +148,6 @@ describe('[CF] /api/v1/vaults', () => {
     expect(credential.activeVersion).not.toHaveProperty('status')
     expect(credential.activeVersion).not.toHaveProperty('deletedAt')
     expect(JSON.stringify(credential)).not.toContain(rawSecret)
-    expect(cloudflareSecretRequests().writes).toHaveLength(1)
-    expect(JSON.stringify(cloudflareSecretRequests().writes[0])).toContain(rawSecret)
 
     const readCredentialRes = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials/${credential.id}`, authorization)
     expect(readCredentialRes.status).toBe(200)
@@ -169,7 +167,7 @@ describe('[CF] /api/v1/vaults', () => {
     })
 
     const dbRows = await env.DB.prepare(
-      'SELECT vault_credentials.id, vault_credentials.connector_binding, vault_credentials.metadata, vault_credential_versions.secret_ref, vault_credential_versions.external_vault_path, vault_credential_versions.reference_name, vault_credential_versions.metadata AS version_metadata FROM vault_credentials JOIN vault_credential_versions ON vault_credentials.id = vault_credential_versions.credential_id',
+      'SELECT vault_credentials.id, vault_credentials.connector_binding, vault_credentials.metadata, vault_credential_versions.secret_ref, vault_credential_versions.reference_name, vault_credential_versions.metadata AS version_metadata FROM vault_credentials JOIN vault_credential_versions ON vault_credentials.id = vault_credential_versions.credential_id',
     ).all()
     expect(JSON.stringify(dbRows.results)).not.toContain(rawSecret)
 
@@ -178,7 +176,7 @@ describe('[CF] /api/v1/vaults', () => {
       body: JSON.stringify({
         name: 'Invalid token',
         type: 'api_key',
-        secret: { provider: 'external-vault' },
+        secret: {},
       }),
     })
     expect(invalidCredentialRes.status).toBe(400)
@@ -187,26 +185,12 @@ describe('[CF] /api/v1/vaults', () => {
       .first<{ count: number }>()
     expect(credentialCount?.count).toBe(1)
 
-    const mixedProviderRes = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials`, authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'Mixed token',
-        type: 'api_key',
-        secret: {
-          provider: 'external-vault',
-          secretValue: 'raw-secret-that-must-be-rejected',
-          externalVaultPath: 'vault://team/mixed/token',
-        },
-      }),
-    })
-    expect(mixedProviderRes.status).toBe(400)
-
     const rotateRes = await jsonFetch(
       `/api/v1/vaults/${vault.id}/credentials/${credential.id}/versions`,
       authorization,
       {
         method: 'POST',
-        body: JSON.stringify({ provider: 'cloudflare-secrets', secretValue: rotatedSecret }),
+        body: JSON.stringify({ secretValue: rotatedSecret }),
       },
     )
     expect(rotateRes.status).toBe(201)
@@ -216,8 +200,6 @@ describe('[CF] /api/v1/vaults', () => {
     }
     expect(rotated.activeVersion.version).toBe(2)
     expect(JSON.stringify(rotated)).not.toContain(rotatedSecret)
-    expect(cloudflareSecretRequests().writes).toHaveLength(2)
-    expect(JSON.stringify(cloudflareSecretRequests().writes[1])).toContain(rotatedSecret)
 
     const versionsAfterRotateRes = await jsonFetch(
       `/api/v1/vaults/${vault.id}/credentials/${credential.id}/versions`,
@@ -270,7 +252,7 @@ describe('[CF] /api/v1/vaults', () => {
       authorization,
       {
         method: 'POST',
-        body: JSON.stringify({ provider: 'cloudflare-secrets', secretValue: thirdSecret }),
+        body: JSON.stringify({ secretValue: thirdSecret }),
       },
     )
     expect(thirdRotateRes.status).toBe(201)
@@ -293,7 +275,6 @@ describe('[CF] /api/v1/vaults', () => {
       { method: 'DELETE' },
     )
     expect(deleteUnusedRes.status).toBe(204)
-    expect(cloudflareSecretRequests().deletes).toContain(`secret_AMA_${credential.id.toUpperCase()}_V2`)
 
     const deletedVersionRes = await jsonFetch(
       `/api/v1/vaults/${vault.id}/credentials/${credential.id}/versions/${secondVersionId}`,
@@ -323,7 +304,7 @@ describe('[CF] /api/v1/vaults', () => {
     expect(JSON.stringify(versions)).not.toContain(thirdSecret)
 
     const rotatedDbRows = await env.DB.prepare(
-      'SELECT secret_ref, external_vault_path, reference_name, metadata FROM vault_credential_versions',
+      'SELECT provider, secret_ref, reference_name, metadata FROM vault_credential_versions',
     ).all()
     expect(JSON.stringify(rotatedDbRows.results)).not.toContain(rawSecret)
     expect(JSON.stringify(rotatedDbRows.results)).not.toContain(rotatedSecret)
@@ -363,52 +344,13 @@ describe('[CF] /api/v1/vaults', () => {
       authorization,
       {
         method: 'POST',
-        body: JSON.stringify({ provider: 'cloudflare-secrets', secretValue: 'after-revoke' }),
+        body: JSON.stringify({ secretValue: 'after-revoke' }),
       },
     )
     expect(rotateRevokedRes.status).toBe(409)
     await expect(rotateRevokedRes.json()).resolves.toMatchObject({
       error: { type: 'conflict', message: 'Credential is not active' },
     })
-  })
-
-  it('supports approved external vault paths without exposing cross-project metadata', async () => {
-    const authorization = await signIn()
-    const vaultRes = await jsonFetch('/api/v1/vaults', authorization, {
-      method: 'POST',
-      body: JSON.stringify({ name: 'External vault' }),
-    })
-    const vault = (await vaultRes.json()) as { id: string }
-    const credentialRes = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials`, authorization, {
-      method: 'POST',
-      body: JSON.stringify({
-        name: 'GitHub token',
-        type: 'oauth_token',
-        secret: { provider: 'external-vault', externalVaultPath: 'vault://team/github/token' },
-      }),
-    })
-    expect(credentialRes.status).toBe(201)
-    await expect(credentialRes.json()).resolves.toMatchObject({
-      activeVersion: {
-        provider: 'external-vault',
-        secretRef: 'vault://team/github/token',
-        externalVaultPath: 'vault://team/github/token',
-        hasSecret: true,
-      },
-    })
-
-    const otherCookie = await signIn({
-      ...defaultClaims(),
-      sub: 'user_456',
-      email: 'other@example.com',
-      org_id: 'org_flare_456',
-      org_name: 'Other Org',
-    })
-    const crossProjectRead = await jsonFetch(`/api/v1/vaults/${vault.id}`, otherCookie)
-    expect(crossProjectRead.status).toBe(404)
-
-    const crossProjectCredentialRead = await jsonFetch(`/api/v1/vaults/${vault.id}/credentials`, otherCookie)
-    expect(crossProjectCredentialRead.status).toBe(404)
   })
 
   it('isolates project vaults inside the same organization and shares organization-scoped vaults [spec: vaults/api-tenancy]', async () => {

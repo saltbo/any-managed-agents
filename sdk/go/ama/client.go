@@ -44,6 +44,7 @@ type clientCore struct {
 type Client struct {
 	core         *clientCore
 	System       SystemService
+	Configz      ConfigzService
 	Auth         AuthService
 	Projects     ProjectsService
 	Agents       AgentsService
@@ -77,6 +78,7 @@ func New(config ClientConfig) (*Client, error) {
 	}
 	client := &Client{core: core}
 	client.System = SystemService{client: core}
+	client.Configz = ConfigzService{client: core}
 	client.Auth = AuthService{client: core}
 	client.Projects = ProjectsService{client: core}
 	client.Agents = AgentsService{client: core}
@@ -267,6 +269,18 @@ type SystemService struct {
 
 func (s SystemService) Health(ctx context.Context) (*HealthResponse, error) {
 	response, err := s.client.raw.GetHealthWithResponse(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return unwrap(response.StatusCode(), response.Body, response.JSON200)
+}
+
+type ConfigzService struct {
+	client *clientCore
+}
+
+func (s ConfigzService) Get(ctx context.Context) (*PublicConfig, error) {
+	response, err := s.client.raw.ReadConfigzWithResponse(ctx)
 	if err != nil {
 		return nil, err
 	}

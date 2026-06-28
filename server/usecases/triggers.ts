@@ -8,24 +8,24 @@ import {
   TriggerValidationError,
 } from './ports'
 
-// Raw secrets must be stored as vault references, so trigger metadata, resource
-// refs, and plain env are rejected when they carry secret-like material.
+// Raw secrets must be stored as secret references, so trigger metadata, resource
+// volumes, and plain env are rejected when they carry secret-like material.
 function rejectSecretMaterial(input: {
   metadata?: Record<string, unknown> | undefined
-  resourceRefs?: Record<string, unknown>[] | undefined
+  volumes?: TriggerConfig['volumes'] | undefined
   env?: Record<string, string> | undefined
 }) {
   if (input.metadata !== undefined && hasSecretMaterial(input.metadata)) {
     throw new TriggerValidationError('Invalid trigger metadata', {
-      metadata: 'Secret material must be stored in vault references.',
+      metadata: 'Secret material must be stored in secret references.',
     })
   }
   if (
-    (input.resourceRefs !== undefined && hasSecretMaterial(input.resourceRefs)) ||
+    (input.volumes !== undefined && hasSecretMaterial(input.volumes)) ||
     (input.env !== undefined && hasSecretMaterial(input.env))
   ) {
     throw new TriggerValidationError('Invalid trigger session configuration', {
-      resourceRefs: 'Resource references must not contain secret material.',
+      volumes: 'Volumes must not contain secret material.',
       env: 'Environment variables must not contain raw secret material.',
     })
   }
@@ -87,9 +87,10 @@ export async function createTrigger(deps: Deps, auth: AuthScope, input: CreateTr
     runtime: input.config.runtime,
     name: input.config.name,
     promptTemplate: input.config.promptTemplate,
-    resourceRefs: input.config.resourceRefs,
     env: input.config.env,
-    secretEnv: input.config.secretEnv,
+    envFrom: input.config.envFrom,
+    volumes: input.config.volumes,
+    volumeMounts: input.config.volumeMounts,
     schedule: timing.schedule,
     enabled: input.config.enabled,
     nextDueAt: timing.nextDueAt,
@@ -113,9 +114,10 @@ export interface UpdateTriggerPatch {
   runtime?: TriggerConfig['runtime']
   name?: string
   promptTemplate?: string
-  resourceRefs?: Record<string, unknown>[]
   env?: Record<string, string>
-  secretEnv?: TriggerConfig['secretEnv']
+  envFrom?: TriggerConfig['envFrom']
+  volumes?: TriggerConfig['volumes']
+  volumeMounts?: TriggerConfig['volumeMounts']
   schedule?: { intervalSeconds?: number; windowSeconds?: number } | null
   enabled?: boolean
   archived?: boolean
@@ -170,7 +172,7 @@ export async function updateTrigger(
   if (trigger.archivedAt !== null && patch.archived !== false) {
     throw new TriggerConflictError('Archived triggers cannot be updated')
   }
-  rejectSecretMaterial({ metadata: patch.metadata, resourceRefs: patch.resourceRefs, env: patch.env })
+  rejectSecretMaterial({ metadata: patch.metadata, volumes: patch.volumes, env: patch.env })
   const timing = mergeSchedule(trigger, patch)
 
   const agentId = patch.agentId ?? trigger.agentId
@@ -189,9 +191,10 @@ export async function updateTrigger(
     runtime: patch.runtime ?? trigger.runtime,
     name: patch.name ?? trigger.name,
     promptTemplate: patch.promptTemplate ?? trigger.promptTemplate,
-    resourceRefs: patch.resourceRefs ?? trigger.resourceRefs,
     env: patch.env ?? trigger.env,
-    secretEnv: patch.secretEnv ?? trigger.secretEnv,
+    envFrom: patch.envFrom ?? trigger.envFrom,
+    volumes: patch.volumes ?? trigger.volumes,
+    volumeMounts: patch.volumeMounts ?? trigger.volumeMounts,
     schedule: timing.schedule,
     enabled: patch.enabled ?? trigger.enabled,
     nextDueAt: timing.nextDueAt,

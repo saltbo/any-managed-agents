@@ -100,28 +100,35 @@ describe('[CF] restish/OpenAPI control-plane path [spec: api-contracts/restish]'
     })
     expect(sessionRes.status).toBe(201)
     const session = (await sessionRes.json()) as {
-      id: string
-      agentId: string
-      agentVersionId: string
-      environmentId: string
-      environmentVersionId: string
-      state: string
+      metadata: { uid: string }
+      spec: { agentId: string; environmentId: string | null }
+      status: {
+        phase: string
+        bindings: {
+          agent: { versionId: string }
+          environment: { versionId: string | null }
+        }
+      }
     }
 
     expect(session).toMatchObject({
-      agentId: agent.id,
-      agentVersionId: agent.currentVersionId,
-      environmentId: environment.id,
-      environmentVersionId: environment.currentVersionId,
-      state: 'idle',
+      spec: { agentId: agent.id, environmentId: environment.id },
+      status: {
+        phase: 'idle',
+        bindings: {
+          agent: { versionId: agent.currentVersionId },
+          environment: { versionId: environment.currentVersionId },
+        },
+      },
     })
 
-    const connectionRes = await jsonFetch(`/api/v1/sessions/${session.id}/connection`, authorization)
+    const sessionId = session.metadata.uid
+    const connectionRes = await jsonFetch(`/api/v1/sessions/${sessionId}/connection`, authorization)
     expect(connectionRes.status).toBe(200)
     expect(await connectionRes.json()).toMatchObject({
-      sessionId: session.id,
+      sessionId,
       transport: 'websocket',
-      path: `/api/v1/sessions/${session.id}/socket`,
+      path: `/api/v1/sessions/${sessionId}/socket`,
       state: 'idle',
     })
   })

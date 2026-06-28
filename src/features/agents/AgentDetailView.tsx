@@ -48,7 +48,7 @@ function AgentDetailContent({
     setSelectedVersionId((current) => current || versions[0]?.id || '')
   }, [versions])
 
-  const agentSessions = sessions.filter((session) => session.agentId === agent.id)
+  const agentSessions = sessions.filter((session) => session.spec.agentId === agent.id)
   const currentVersion = useMemo(
     () =>
       versions.find((version) => version.id === selectedVersionId) ??

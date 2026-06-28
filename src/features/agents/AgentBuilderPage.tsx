@@ -77,7 +77,7 @@ export function AgentBuilderPage() {
     queryFn: () => api.readSession(testSessionId as string),
     enabled: Boolean(testSessionId),
     refetchInterval: (query) =>
-      query.state.data && ['pending', 'running'].includes(query.state.data.state) ? 750 : false,
+      query.state.data && ['pending', 'running'].includes(query.state.data.status.phase) ? 750 : false,
   })
   const testEventsQuery = useQuery({
     queryKey: queryKeys.sessions.events(testSessionId ?? ''),
@@ -85,7 +85,7 @@ export function AgentBuilderPage() {
     enabled: Boolean(testSessionId),
     refetchInterval: (query) => {
       const hasAssistantMessage = (query.state.data?.data ?? []).some((event) => event.type === 'message_end')
-      const state = testSessionQuery.data?.state
+      const state = testSessionQuery.data?.status.phase
       const terminal = state !== undefined && !['pending', 'running'].includes(state)
       return terminal && hasAssistantMessage ? false : 1000
     },
@@ -131,14 +131,14 @@ export function AgentBuilderPage() {
         agentId: agent.id,
         environmentId,
         runtime: 'ama',
-        title: `${agent.name} draft test`,
+        name: `${agent.name} draft test`,
         initialPrompt: testPrompt.trim(),
       })
       return { agent, session }
     },
     onSuccess: ({ agent, session }) => {
       setDraftAgent(agent)
-      setTestSessionId(session.id)
+      setTestSessionId(session.metadata.uid)
       toast.success('Draft test session started')
       void queryClient.invalidateQueries({ queryKey: queryKeys.agents.all })
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all })
@@ -269,9 +269,12 @@ export function AgentBuilderPage() {
                 <div className="grid gap-2 rounded-lg border p-3">
                   <div className="flex flex-wrap items-center gap-2 text-sm">
                     <span className="font-medium">Draft test transcript</span>
-                    <StatusBadge value={testSession.state} detail={testSession.stateReason} />
-                    <Link className="text-xs text-muted-foreground underline" to={`/sessions/${testSession.id}`}>
-                      Open session {testSession.id}
+                    <StatusBadge value={testSession.status.phase} detail={testSession.status.reason} />
+                    <Link
+                      className="text-xs text-muted-foreground underline"
+                      to={`/sessions/${testSession.metadata.uid}`}
+                    >
+                      Open session {testSession.metadata.uid}
                     </Link>
                   </div>
                   {/* v8 ignore start */}

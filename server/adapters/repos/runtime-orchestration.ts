@@ -1,5 +1,6 @@
 import { parseJson } from '@server/domain/runtime/session-snapshot'
 import { runnerSupportsRuntimeProviderModel } from '@server/domain/runtime-catalog'
+import { vaultIdFromRef } from '@server/domain/vault'
 import type { SessionOrchestrationStore } from '@server/usecases/ports'
 import type {
   AgentRow,
@@ -494,20 +495,26 @@ export function createRuntimeOrchestrationRepo(db: Db): SessionOrchestrationStor
       return Boolean(credential)
     },
 
-    async activeCredentialForSecretEnv(
+    // ── secret-env resolution (runtime dispatch) ───────────────────────────
+    async secretVersionForResolution(
       organizationId: string,
       projectId: string,
-      credentialId: string,
-    ): Promise<{ id: string; activeVersionId: string | null } | null> {
+      secretRef: string,
+    ): Promise<{ state: string; metadata: string; secretRef: string } | null> {
       return (
         (await db
-          .select({ id: vaultCredentials.id, activeVersionId: vaultCredentials.activeVersionId })
-          .from(vaultCredentials)
+          .select({
+            state: vaultCredentialVersions.state,
+            metadata: vaultCredentialVersions.metadata,
+            secretRef: vaultCredentialVersions.secretRef,
+          })
+          .from(vaultCredentialVersions)
+          .innerJoin(vaultCredentials, eq(vaultCredentialVersions.credentialId, vaultCredentials.id))
           .where(
             and(
-              eq(vaultCredentials.id, credentialId),
-              eq(vaultCredentials.organizationId, organizationId),
-              or(eq(vaultCredentials.projectId, projectId), isNull(vaultCredentials.projectId)),
+              eq(vaultCredentialVersions.secretRef, secretRef),
+              eq(vaultCredentialVersions.organizationId, organizationId),
+              or(eq(vaultCredentialVersions.projectId, projectId), isNull(vaultCredentialVersions.projectId)),
               eq(vaultCredentials.state, 'active'),
             ),
           )
@@ -515,72 +522,33 @@ export function createRuntimeOrchestrationRepo(db: Db): SessionOrchestrationStor
       )
     },
 
-    async activeVersionForCredentialExists(credentialId: string, versionId: string): Promise<boolean> {
-      const version = await db
-        .select({ id: vaultCredentialVersions.id })
-        .from(vaultCredentialVersions)
+    async vaultVersionsForResolution(
+      organizationId: string,
+      projectId: string,
+      secretRef: string,
+    ): Promise<{ name: string; state: string; metadata: string; secretRef: string }[] | null> {
+      const vaultId = vaultIdFromRef(secretRef)
+      if (!vaultId) {
+        return null
+      }
+      return await db
+        .select({
+          name: vaultCredentials.name,
+          state: vaultCredentialVersions.state,
+          metadata: vaultCredentialVersions.metadata,
+          secretRef: vaultCredentialVersions.secretRef,
+        })
+        .from(vaultCredentials)
+        .innerJoin(vaultCredentialVersions, eq(vaultCredentials.activeVersionId, vaultCredentialVersions.id))
         .where(
           and(
-            eq(vaultCredentialVersions.id, versionId),
-            eq(vaultCredentialVersions.credentialId, credentialId),
+            eq(vaultCredentials.vaultId, vaultId),
+            eq(vaultCredentials.organizationId, organizationId),
+            or(eq(vaultCredentials.projectId, projectId), isNull(vaultCredentials.projectId)),
+            eq(vaultCredentials.state, 'active'),
             eq(vaultCredentialVersions.state, 'active'),
           ),
         )
-        .get()
-      return Boolean(version)
-    },
-
-    // ── secret-env resolution (runtime dispatch) ───────────────────────────
-    async credentialForResolution(
-      organizationId: string,
-      projectId: string,
-      credentialId: string,
-    ): Promise<{ state: string; activeVersionId: string | null } | null> {
-      return (
-        (await db
-          .select({ state: vaultCredentials.state, activeVersionId: vaultCredentials.activeVersionId })
-          .from(vaultCredentials)
-          .where(
-            and(
-              eq(vaultCredentials.id, credentialId),
-              eq(vaultCredentials.organizationId, organizationId),
-              or(eq(vaultCredentials.projectId, projectId), isNull(vaultCredentials.projectId)),
-            ),
-          )
-          .get()) ?? null
-      )
-    },
-
-    async credentialVersionForResolution(
-      organizationId: string,
-      projectId: string,
-      credentialId: string,
-      versionId: string,
-    ): Promise<{
-      state: string
-      metadata: string
-      externalVaultPath: string | null
-      secretRef: string
-    } | null> {
-      return (
-        (await db
-          .select({
-            state: vaultCredentialVersions.state,
-            metadata: vaultCredentialVersions.metadata,
-            externalVaultPath: vaultCredentialVersions.externalVaultPath,
-            secretRef: vaultCredentialVersions.secretRef,
-          })
-          .from(vaultCredentialVersions)
-          .where(
-            and(
-              eq(vaultCredentialVersions.id, versionId),
-              eq(vaultCredentialVersions.credentialId, credentialId),
-              eq(vaultCredentialVersions.organizationId, organizationId),
-              or(eq(vaultCredentialVersions.projectId, projectId), isNull(vaultCredentialVersions.projectId)),
-            ),
-          )
-          .get()) ?? null
-      )
     },
 
     // ── work-item enqueue + resume ──────────────────────────────────────────

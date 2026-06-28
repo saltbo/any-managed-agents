@@ -12,8 +12,9 @@ from ..types import UNSET, Unset
 from typing import cast
 
 if TYPE_CHECKING:
-  from ..models.runner_resource_ref import RunnerResourceRef
   from ..models.runner_sandbox_request_input import RunnerSandboxRequestInput
+  from ..models.runner_volume import RunnerVolume
+  from ..models.runner_volume_mount import RunnerVolumeMount
 
 
 
@@ -31,22 +32,25 @@ class RunnerSandboxRequest:
             tool_call_id (str | Unset):  Example: call_abc123.
             tool_name (str | Unset):  Example: sandbox.exec.
             input_ (RunnerSandboxRequestInput | Unset):
-            resource_refs (list[RunnerResourceRef] | Unset):
+            volumes (list[RunnerVolume] | Unset):
+            volume_mounts (list[RunnerVolumeMount] | Unset):
      """
 
     type_: str
     tool_call_id: str | Unset = UNSET
     tool_name: str | Unset = UNSET
     input_: RunnerSandboxRequestInput | Unset = UNSET
-    resource_refs: list[RunnerResourceRef] | Unset = UNSET
+    volumes: list[RunnerVolume] | Unset = UNSET
+    volume_mounts: list[RunnerVolumeMount] | Unset = UNSET
 
 
 
 
 
     def to_dict(self) -> dict[str, Any]:
-        from ..models.runner_resource_ref import RunnerResourceRef
         from ..models.runner_sandbox_request_input import RunnerSandboxRequestInput
+        from ..models.runner_volume import RunnerVolume
+        from ..models.runner_volume_mount import RunnerVolumeMount
         type_ = self.type_
 
         tool_call_id = self.tool_call_id
@@ -57,12 +61,21 @@ class RunnerSandboxRequest:
         if not isinstance(self.input_, Unset):
             input_ = self.input_.to_dict()
 
-        resource_refs: list[dict[str, Any]] | Unset = UNSET
-        if not isinstance(self.resource_refs, Unset):
-            resource_refs = []
-            for resource_refs_item_data in self.resource_refs:
-                resource_refs_item = resource_refs_item_data.to_dict()
-                resource_refs.append(resource_refs_item)
+        volumes: list[dict[str, Any]] | Unset = UNSET
+        if not isinstance(self.volumes, Unset):
+            volumes = []
+            for volumes_item_data in self.volumes:
+                volumes_item = volumes_item_data.to_dict()
+                volumes.append(volumes_item)
+
+
+
+        volume_mounts: list[dict[str, Any]] | Unset = UNSET
+        if not isinstance(self.volume_mounts, Unset):
+            volume_mounts = []
+            for volume_mounts_item_data in self.volume_mounts:
+                volume_mounts_item = volume_mounts_item_data.to_dict()
+                volume_mounts.append(volume_mounts_item)
 
 
 
@@ -78,8 +91,10 @@ class RunnerSandboxRequest:
             field_dict["toolName"] = tool_name
         if input_ is not UNSET:
             field_dict["input"] = input_
-        if resource_refs is not UNSET:
-            field_dict["resourceRefs"] = resource_refs
+        if volumes is not UNSET:
+            field_dict["volumes"] = volumes
+        if volume_mounts is not UNSET:
+            field_dict["volumeMounts"] = volume_mounts
 
         return field_dict
 
@@ -87,8 +102,9 @@ class RunnerSandboxRequest:
 
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
-        from ..models.runner_resource_ref import RunnerResourceRef
         from ..models.runner_sandbox_request_input import RunnerSandboxRequestInput
+        from ..models.runner_volume import RunnerVolume
+        from ..models.runner_volume_mount import RunnerVolumeMount
         d = dict(src_dict)
         type_ = d.pop("type")
 
@@ -106,16 +122,28 @@ class RunnerSandboxRequest:
 
 
 
-        _resource_refs = d.pop("resourceRefs", UNSET)
-        resource_refs: list[RunnerResourceRef] | Unset = UNSET
-        if _resource_refs is not UNSET:
-            resource_refs = []
-            for resource_refs_item_data in _resource_refs:
-                resource_refs_item = RunnerResourceRef.from_dict(resource_refs_item_data)
+        _volumes = d.pop("volumes", UNSET)
+        volumes: list[RunnerVolume] | Unset = UNSET
+        if _volumes is not UNSET:
+            volumes = []
+            for volumes_item_data in _volumes:
+                volumes_item = RunnerVolume.from_dict(volumes_item_data)
 
 
 
-                resource_refs.append(resource_refs_item)
+                volumes.append(volumes_item)
+
+
+        _volume_mounts = d.pop("volumeMounts", UNSET)
+        volume_mounts: list[RunnerVolumeMount] | Unset = UNSET
+        if _volume_mounts is not UNSET:
+            volume_mounts = []
+            for volume_mounts_item_data in _volume_mounts:
+                volume_mounts_item = RunnerVolumeMount.from_dict(volume_mounts_item_data)
+
+
+
+                volume_mounts.append(volume_mounts_item)
 
 
         runner_sandbox_request = cls(
@@ -123,7 +151,8 @@ class RunnerSandboxRequest:
             tool_call_id=tool_call_id,
             tool_name=tool_name,
             input_=input_,
-            resource_refs=resource_refs,
+            volumes=volumes,
+            volume_mounts=volume_mounts,
         )
 
         return runner_sandbox_request

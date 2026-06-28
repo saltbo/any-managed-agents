@@ -41,7 +41,7 @@ async function createRunnerCredential(authorization: string) {
     body: JSON.stringify({
       name: 'Self-hosted runner token',
       type: 'session_env_secret',
-      secret: { provider: 'cloudflare-secrets', secretValue: 'raw-runner-credential' },
+      secret: { secretValue: 'raw-runner-credential' },
     }),
   })
   expect(credentialRes.status).toBe(201)

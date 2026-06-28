@@ -92,7 +92,7 @@ const deps: CloudTurnDeps = {
   cloudRuntime: {} as never,
   amaTurnExecutor: { runTurn: (input: unknown) => runSessionTurnMock(input as never) } as never,
   cloudTurnQueue: cloudTurnQueue as never,
-  runtimeSecretEnv: { resolve: async () => ({}) } as never,
+  runtimeSecrets: { resolveEnv: async () => ({}), resolveVolumes: async () => [] } as never,
   // runTurn is mocked, so the built callbacks are never exercised; a minimal gate
   // factory keeps buildSessionTurnCallbacks happy.
   createApprovalGate: () =>
@@ -300,7 +300,6 @@ describe('consumeCloudTurnMessage — cloud-command turn path [spec: runtime/clo
       projectId: 'proj_1',
       runtime: 'totally-not-a-runtime',
       runtimeConfig: {},
-      resourceRefs: [],
       auditAction: 'session.initial_prompt',
     } as unknown as Parameters<typeof consumeCloudTurnMessage>[1])
 
@@ -330,12 +329,12 @@ describe('consumeCloudTurnMessage — cloud-command turn path [spec: runtime/clo
 // Robustness tests for startup partial-failure (H5 FIX 1): startSessionRuntimeForRow
 // must not leak a provisioned sandbox when the pending→idle CAS no-ops (lost-row
 // race). Deps-first: the sandbox runtime host (start/stop), the MCP snapshot, and
-// the secret-env resolve all arrive on `deps`, so the test wires fakes at those
+// the runtime env resolve all arrive on `deps`, so the test wires fakes at those
 // seams.
 describe('startSessionRuntimeForRow — startup partial-failure (H5 FIX 1)', () => {
   const startSessionRuntimeMock = vi.fn<(env: unknown, input: unknown) => Promise<unknown>>()
   const stopSessionRuntimeMock = vi.fn<(env: unknown, sandboxId: unknown) => Promise<undefined>>(async () => undefined)
-  const resolveRuntimeSecretEnvMock = vi.fn(async () => ({}))
+  const resolveRuntimeEnvFromMock = vi.fn(async () => ({}))
 
   const startupDeps: CloudTurnDeps = {
     sessionOrchestration: store as never,
@@ -361,7 +360,7 @@ describe('startSessionRuntimeForRow — startup partial-failure (H5 FIX 1)', () 
     } as never,
     amaTurnExecutor: { runTurn: (input: unknown) => runSessionTurnMock(input as never) } as never,
     cloudTurnQueue: cloudTurnQueue as never,
-    runtimeSecretEnv: { resolve: () => resolveRuntimeSecretEnvMock() } as never,
+    runtimeSecrets: { resolveEnv: () => resolveRuntimeEnvFromMock(), resolveVolumes: async () => [] } as never,
     createApprovalGate: () =>
       ({
         shouldSuppressEvent: () => false,
@@ -400,8 +399,8 @@ describe('startSessionRuntimeForRow — startup partial-failure (H5 FIX 1)', () 
     })
     stopSessionRuntimeMock.mockReset()
     stopSessionRuntimeMock.mockResolvedValue(undefined)
-    resolveRuntimeSecretEnvMock.mockReset()
-    resolveRuntimeSecretEnvMock.mockResolvedValue({})
+    resolveRuntimeEnvFromMock.mockReset()
+    resolveRuntimeEnvFromMock.mockResolvedValue({})
     recordAuditMock.mockReset()
     findSessionMock.mockReset()
     findSessionMock.mockResolvedValue(pendingRow())
@@ -423,9 +422,8 @@ describe('startSessionRuntimeForRow — startup partial-failure (H5 FIX 1)', () 
       environmentSnapshot: null,
       runtime: 'ama',
       runtimeConfig: {},
-      resourceRefs: [],
       env: {},
-      secretEnv: [],
+      envFrom: [],
       initialPrompt: 'hello',
     })
 
@@ -450,9 +448,8 @@ describe('startSessionRuntimeForRow — startup partial-failure (H5 FIX 1)', () 
       environmentSnapshot: null,
       runtime: 'ama',
       runtimeConfig: {},
-      resourceRefs: [],
       env: {},
-      secretEnv: [],
+      envFrom: [],
       initialPrompt: 'hello',
     })
 

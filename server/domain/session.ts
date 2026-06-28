@@ -1,4 +1,15 @@
-// Pure session rules. No drizzle, no env, no hono. The operational state
+import type { AmaSessionEventType } from '@shared/session-events'
+import type {
+  EnvironmentCredentialRef,
+  EnvironmentHostingMode,
+  EnvironmentNetworkPolicy,
+  EnvironmentPackage,
+  EnvironmentVariable,
+} from './environment'
+import type { RuntimeName } from './runtime-catalog'
+import type { EnvFromEntry, Volume, VolumeMount } from './runtime/execution-inputs'
+
+// Pure session rules and entities. No drizzle, no env, no hono. The operational state
 // machine, hosting-mode derivation, prompt-delivery decision, approval-state
 // purity, and the pure parts of snapshot construction live here so the usecase
 // and runtime layers share one source of truth that is unit-testable in
@@ -17,8 +28,169 @@ export const APPROVAL_STATES = ['pending', 'approved', 'denied'] as const
 export type ApprovalState = (typeof APPROVAL_STATES)[number]
 
 export const EVENT_VISIBILITIES = ['runtime', 'transcript', 'debug', 'audit'] as const
+export type EventVisibility = (typeof EVENT_VISIBILITIES)[number]
 
 export type SessionHostingMode = 'cloud' | 'self_hosted'
+
+export interface Session {
+  metadata: SessionMetadata
+  spec: SessionSpec
+  status: SessionStatus
+}
+export interface SessionMetadata {
+  uid: string
+  pid: string
+  name: string
+  labels: Record<string, string>
+  annotations: Record<string, string>
+  createdBy: string | null
+  createdAt: string
+  updatedAt: string
+  archivedAt: string | null
+}
+
+export interface SessionSpec {
+  agentId: string
+  environmentId: string | null
+  runtime: RuntimeName
+  env: Record<string, string>
+  envFrom: EnvFromEntry[]
+  volumes: Volume[]
+  volumeMounts: VolumeMount[]
+}
+
+export interface SessionStatus {
+  phase: SessionState
+  reason: string | null
+  conditions: SessionCondition[]
+  bindings: SessionBindings
+  placement: SessionPlacement | null
+  startedAt: string | null
+  stoppedAt: string | null
+}
+
+export interface SessionCondition {
+  type: 'Scheduled' | 'RuntimeReady' | 'Running' | 'Completed'
+  status: 'True' | 'False' | 'Unknown'
+  reason: string | null
+  message: string | null
+  lastTransitionAt: string
+}
+
+export interface SessionBindings {
+  agent: BoundSessionAgent
+  environment: BoundSessionEnvironment
+  runtime: RuntimeName
+}
+
+export interface BoundSessionAgent {
+  versionId: string
+  snapshot: SessionAgentSnapshot
+}
+
+export interface BoundSessionEnvironment {
+  id: string | null
+  versionId: string | null
+  snapshot: SessionEnvironmentSnapshot | null
+}
+
+export interface SessionPlacement {
+  hostingMode: SessionHostingMode
+  provider: string
+  model: string | null
+  driver: string | null
+  backend: string | null
+  protocol: string | null
+}
+
+export interface SessionAgentSnapshot {
+  id: string
+  agentId: string
+  projectId: string
+  version: number
+  instructions: string | null
+  providerId: string
+  model: string | null
+  skills: string[]
+  subagents: Record<string, unknown>[]
+  role: string | null
+  capabilityTags: string[]
+  handoffPolicy: Record<string, unknown>
+  memoryPolicy: Record<string, unknown>
+  tools: Record<string, unknown>[]
+  mcpConnectors: string[]
+  metadata: Record<string, unknown>
+  createdAt: string
+}
+
+export interface SessionEnvironmentSnapshot {
+  id: string
+  environmentId: string
+  projectId: string
+  version: number
+  packages: EnvironmentPackage[]
+  variables: Record<string, EnvironmentVariable>
+  credentialRefs: EnvironmentCredentialRef[]
+  hostingMode: EnvironmentHostingMode
+  networkPolicy: EnvironmentNetworkPolicy
+  mcpPolicy: Record<string, unknown>
+  packageManagerPolicy: Record<string, unknown>
+  resourceLimits: Record<string, unknown>
+  runtimeConfig: Record<string, unknown>
+  metadata: Record<string, unknown>
+  createdAt: string
+}
+
+export interface SessionConnection {
+  sessionId: string
+  transport: string | null
+  path: string | null
+  state: SessionState
+  stateReason: string | null
+}
+
+export interface SessionMessage {
+  id: string
+  sessionId: string
+  type: 'prompt'
+  content: string
+  delivery: MessageDelivery
+  state: MessageState
+  error: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SessionEvent {
+  id: string
+  projectId: string
+  sessionId: string
+  sequence: number
+  type: AmaSessionEventType
+  visibility: EventVisibility
+  role: string | null
+  parentEventId: string | null
+  correlationId: string | null
+  payload: Record<string, unknown>
+  metadata: Record<string, unknown>
+  createdAt: string
+}
+
+export interface SessionApproval {
+  id: string
+  sessionId: string
+  toolCallId: string
+  toolName: string
+  input: Record<string, unknown>
+  relatedEventIds: string[]
+  state: ApprovalState
+  reason: string | null
+  result: Record<string, unknown> | null
+  requestedAt: string
+  decidedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
 
 // A session accepts prompts only while its runtime is live (idle or running).
 export function sessionAcceptsPrompts(state: SessionState): boolean {
@@ -28,6 +200,13 @@ export function sessionAcceptsPrompts(state: SessionState): boolean {
 // A session is terminal once it has stopped or errored.
 export function sessionIsTerminal(state: SessionState): boolean {
   return state === 'stopped' || state === 'error'
+}
+
+export function sessionEventVisibility(value: string): EventVisibility {
+  if (value === 'runtime' || value === 'transcript' || value === 'debug' || value === 'audit') {
+    return value
+  }
+  throw new Error(`Invalid session event visibility: ${value}`)
 }
 
 // Self-hosted sessions never own a sandbox; cloud sessions always do. The
@@ -78,13 +257,69 @@ export function hasEmbeddedCredentialUrl(value: unknown): boolean {
   return Object.values(value).some(hasEmbeddedCredentialUrl)
 }
 
-// Merges a metadata patch onto the current metadata, dropping keys the patch
-// sets to null (the v1 metadata-delete convention).
-export function mergeMetadataUpdate(
+export function sessionUserMetadata(input: Record<string, unknown> | undefined): {
+  labels: Record<string, string>
+  annotations: Record<string, string>
+} {
+  const labels = stringRecord(input?.labels)
+  const annotations = stringRecord(input?.annotations)
+  for (const [key, value] of Object.entries(input ?? {})) {
+    if (key === 'labels' || key === 'annotations' || value === null || value === undefined) {
+      continue
+    }
+    if (typeof value === 'string') {
+      annotations[key] = value
+    }
+  }
+  return { labels, annotations }
+}
+
+export function mergeSessionUserMetadata(
   current: Record<string, unknown>,
   update: Record<string, unknown>,
 ): Record<string, unknown> {
-  return Object.fromEntries(Object.entries({ ...current, ...update }).filter(([key]) => update[key] !== null))
+  const currentLabels = stringRecord(current.labels)
+  const currentAnnotations = stringRecord(current.annotations)
+  const { labels: patchLabels, annotations: patchAnnotations } = sessionUserMetadata(update)
+  for (const [key, value] of Object.entries(objectRecord(update.labels))) {
+    if (value === null) {
+      delete currentLabels[key]
+    } else if (typeof value === 'string') {
+      currentLabels[key] = value
+    }
+  }
+  for (const [key, value] of Object.entries(objectRecord(update.annotations))) {
+    if (value === null) {
+      delete currentAnnotations[key]
+    } else if (typeof value === 'string') {
+      currentAnnotations[key] = value
+    }
+  }
+  for (const [key, value] of Object.entries(update)) {
+    if (key === 'labels' || key === 'annotations') {
+      continue
+    }
+    if (value === null) {
+      delete currentAnnotations[key]
+    } else if (typeof value === 'string') {
+      currentAnnotations[key] = value
+    }
+  }
+  return {
+    ...current,
+    labels: { ...currentLabels, ...patchLabels },
+    annotations: { ...currentAnnotations, ...patchAnnotations },
+  }
+}
+
+function objectRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+}
+
+function stringRecord(value: unknown): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(objectRecord(value)).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+  )
 }
 
 // Normalizes a github_repository resource mount path to a clean /workspace

@@ -1,12 +1,13 @@
-export type WorkspaceResourceManifest = {
+export type WorkspaceVolumeManifest = {
   version: 1
   workspaceRoot: string
-  resources: WorkspaceResource[]
+  volumes: WorkspaceVolume[]
 }
 
-export type WorkspaceResource =
+export type WorkspaceVolume =
   | {
       type: 'github_repository'
+      name: unknown
       owner: unknown
       repo: unknown
       mountPath: unknown

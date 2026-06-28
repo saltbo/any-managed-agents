@@ -21,7 +21,7 @@ import type {
   ProviderRepo,
   RunnerChannel,
   RunnerRepo,
-  RuntimeSecretEnvGateway,
+  RuntimeSecretGateway,
   RuntimeWorkspaceReader,
   SecretStoreGateway,
   SessionEventPort,
@@ -74,7 +74,7 @@ export interface Deps {
   runners: RunnerRepo
   workItems: WorkItemRepo
   leases: LeaseRepo
-  runtimeSecretEnv: RuntimeSecretEnvGateway
+  runtimeSecrets: RuntimeSecretGateway
   cloudTurnQueue: CloudTurnQueue
   runnerChannel: RunnerChannel
   cloudRuntime: CloudRuntimeLifecycle

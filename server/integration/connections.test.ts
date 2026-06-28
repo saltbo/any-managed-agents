@@ -24,8 +24,7 @@ interface McpFixtureCall {
 
 // Streamable-HTTP MCP server stub on the worker's outbound fetch. The MCP
 // client in the route under test performs real JSON-RPC initialize/list/call
-// round trips against it. Cloudflare secrets-store writes stay stubbed the
-// same way setupOidcProvider does.
+// round trips against it.
 function stubMcpFixture(options: {
   acceptedToken: () => string
   failure?: () => 'network' | null
@@ -36,15 +35,6 @@ function stubMcpFixture(options: {
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(input instanceof Request ? input.url : input.toString())
-      if (url.hostname === 'api.cloudflare.com' && url.pathname.includes('/secrets_store/stores/')) {
-        if (init?.method === 'POST') {
-          const secrets = JSON.parse(String(init.body)) as Array<{ name: string }>
-          return Response.json({ success: true, result: secrets.map((secret) => ({ id: `secret_${secret.name}` })) })
-        }
-        if (init?.method === 'DELETE') {
-          return Response.json({ success: true, result: null })
-        }
-      }
       if (url.hostname !== 'mcp.fixture.test') {
         return new Response('not found', { status: 404 })
       }
@@ -117,10 +107,7 @@ async function createCredential(authorization: string, scope?: 'organization') {
       name: 'GitHub token',
       type: 'api_key',
       connectorBinding: { connectorId: 'github', name: 'token' },
-      secret: {
-        provider: 'cloudflare-secrets',
-        secretValue: scope === 'organization' ? 'org-github-token' : 'raw-github-token',
-      },
+      secret: { secretValue: scope === 'organization' ? 'org-github-token' : 'raw-github-token' },
     }),
   })
   expect(credentialRes.status).toBe(201)
@@ -156,7 +143,8 @@ async function createSession(authorization: string, tools = ['mcp:github.repo.re
     body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
   })
   expect(sessionRes.status).toBe(201)
-  return (await sessionRes.json()) as { id: string }
+  const session = (await sessionRes.json()) as { metadata: { uid: string } }
+  return { ...session, id: session.metadata.uid }
 }
 
 async function setProjectMcpPolicy(authorization: string, mcpPolicy: Record<string, unknown>) {
@@ -490,7 +478,7 @@ describe('[CF] Connections, tools, policy, and tool call execution [spec: mcp/co
       authorization,
       {
         method: 'POST',
-        body: JSON.stringify({ provider: 'cloudflare-secrets', secretValue: 'rotated-github-token' }),
+        body: JSON.stringify({ secretValue: 'rotated-github-token' }),
       },
     )
     expect(rotateRes.status).toBe(201)
@@ -720,7 +708,8 @@ describe('[CF] Connections, tools, policy, and tool call execution [spec: mcp/co
       body: JSON.stringify({ agentId: agent.id, environmentId: environment.id, runtime: 'ama' }),
     })
     expect(sessionRes.status).toBe(201)
-    const session = (await sessionRes.json()) as { id: string }
+    const createdSession = (await sessionRes.json()) as { metadata: { uid: string } }
+    const session = { ...createdSession, id: createdSession.metadata.uid }
 
     const callRes = await jsonFetch(`/api/v1/connections/${connection.id}/tools/repo.read/calls`, authorization, {
       method: 'POST',

@@ -34,6 +34,20 @@ describe('[CF] auth v1', () => {
     })
   })
 
+  it('exposes public browser config through configz', async () => {
+    const res = await SELF.fetch('https://example.com/api/v1/configz')
+    expect(res.status).toBe(200)
+    await expect(res.json()).resolves.toEqual({
+      auth: {
+        oidc: {
+          issuer: 'https://oidc.test',
+          clientId: 'ama-test',
+          scope: 'openid email profile',
+        },
+      },
+    })
+  })
+
   it('accepts an organization hint on the discovery config', async () => {
     const res = await SELF.fetch('https://example.com/api/v1/auth/config?organization=example-org')
     expect(res.status).toBe(200)

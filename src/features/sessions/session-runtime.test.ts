@@ -14,7 +14,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-function event(sequence: number, type: AmaSessionEventType, payload: Record<string, unknown>): SessionEvent {
+function event(sequence: number, type: AmaSessionEventType, payload: SessionEvent['payload']): SessionEvent {
   return {
     id: `event_${sequence}`,
     projectId: 'project_1',

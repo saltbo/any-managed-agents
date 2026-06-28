@@ -3,6 +3,8 @@ import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-pool-worker
 import react from '@vitejs/plugin-react-swc'
 import { defineConfig } from 'vitest/config'
 
+process.env.CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV = 'false'
+
 export default defineConfig({
   resolve: {
     alias: {

@@ -102,7 +102,7 @@ def sync_detailed(
 ) -> Response[ErrorResponse | Session]:
     r""" Update a session
 
-     Partial update: title and metadata edits, the stop transition (state: \"stopped\"), and lifecycle
+     Partial update: name and metadata edits, the stop transition (state: \"stopped\"), and lifecycle
     archiving (archived: true|false).
 
     Args:
@@ -139,7 +139,7 @@ def sync(
 ) -> ErrorResponse | Session | None:
     r""" Update a session
 
-     Partial update: title and metadata edits, the stop transition (state: \"stopped\"), and lifecycle
+     Partial update: name and metadata edits, the stop transition (state: \"stopped\"), and lifecycle
     archiving (archived: true|false).
 
     Args:
@@ -171,7 +171,7 @@ async def asyncio_detailed(
 ) -> Response[ErrorResponse | Session]:
     r""" Update a session
 
-     Partial update: title and metadata edits, the stop transition (state: \"stopped\"), and lifecycle
+     Partial update: name and metadata edits, the stop transition (state: \"stopped\"), and lifecycle
     archiving (archived: true|false).
 
     Args:
@@ -208,7 +208,7 @@ async def asyncio(
 ) -> ErrorResponse | Session | None:
     r""" Update a session
 
-     Partial update: title and metadata edits, the stop transition (state: \"stopped\"), and lifecycle
+     Partial update: name and metadata edits, the stop transition (state: \"stopped\"), and lifecycle
     archiving (archived: true|false).
 
     Args:

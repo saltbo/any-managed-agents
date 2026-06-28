@@ -186,7 +186,7 @@ func (h *SandboxHandle) ExecuteSandbox(ctx context.Context, request protocol.Run
 	case "sandbox.stop":
 		return ama.JSON{"ok": true}, h.Close(ctx)
 	case "sandbox.readMemoryStores":
-		stores, err := workspace.ReadMemoryStores(protocol.SandboxRequestResourceRefs(request))
+		stores, err := workspace.ReadWritableMemoryStores()
 		if err != nil {
 			return nil, err
 		}

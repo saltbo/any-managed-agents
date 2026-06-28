@@ -1,6 +1,6 @@
 from enum import Enum
 
-class SessionState(str, Enum):
+class SessionStatusPhase(str, Enum):
     ERROR = "error"
     IDLE = "idle"
     PENDING = "pending"

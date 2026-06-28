@@ -21,7 +21,7 @@ import { useSessionActions } from './use-session-actions'
 // plus unprocessed items stay selected so a retry needs no guessing.
 export interface BatchArchiveOutcome {
   archived: string[]
-  failed: { id: string; title: string; message: string } | null
+  failed: { id: string; name: string; message: string } | null
   unprocessed: string[]
 }
 
@@ -39,20 +39,21 @@ export function SessionsPage() {
     queryKey: queryKeys.sessions.list(archived),
     queryFn: () => api.listSessions({ archived }),
     /* v8 ignore start -- refetchInterval is a React Query internal callback, unreachable in unit tests */
-    refetchInterval: (query) => (query.state.data?.data.some((session) => session.state === 'pending') ? 2000 : false),
+    refetchInterval: (query) =>
+      query.state.data?.data.some((session) => session.status.phase === 'pending') ? 2000 : false,
     /* v8 ignore stop */
   })
   const sessions = useMemo(() => {
     const filtered = (sessionsQuery.data?.data ?? []).filter(
       (session) =>
-        (status === 'all' || (status === 'archived' ? isArchived(session) : session.state === status)) &&
-        matchesSearch(search, session.title, session.agentId),
+        (status === 'all' || (status === 'archived' ? isArchived(session) : session.status.phase === status)) &&
+        matchesSearch(search, session.metadata.name, session.spec.agentId),
     )
     return [...filtered].sort((a, b) => {
-      const startedA = Date.parse(a.startedAt ?? a.createdAt)
-      const startedB = Date.parse(b.startedAt ?? b.createdAt)
-      const updatedA = Date.parse(a.updatedAt)
-      const updatedB = Date.parse(b.updatedAt)
+      const startedA = Date.parse(a.status.startedAt ?? a.metadata.createdAt)
+      const startedB = Date.parse(b.status.startedAt ?? b.metadata.createdAt)
+      const updatedA = Date.parse(a.metadata.updatedAt)
+      const updatedB = Date.parse(b.metadata.updatedAt)
       if (sort === 'started-asc') return startedA - startedB
       if (sort === 'started-desc') return startedB - startedA
       if (sort === 'updated-asc') return updatedA - updatedB
@@ -69,17 +70,17 @@ export function SessionsPage() {
         await api.archiveSession(id)
         archived.push(id)
       } catch (error) {
-        const failedSession = sessions.find((session) => session.id === id)
+        const failedSession = sessions.find((session) => session.metadata.uid === id)
         const failed = {
           id,
-          title: failedSession?.title ?? id,
+          name: failedSession?.metadata.name ?? id,
           message: errorMessage(error),
         }
         const unprocessed = queue.slice(index + 1)
         setBatchOutcome({ archived, failed, unprocessed })
         // The failed and unprocessed items stay selected for a precise retry.
         setSelectedIds([id, ...unprocessed])
-        toast.error(`Batch archive stopped: ${failed.title} failed`)
+        toast.error(`Batch archive stopped: ${failed.name} failed`)
         void queryClient.invalidateQueries({ queryKey: queryKeys.sessions.all })
         return
       }
@@ -171,7 +172,7 @@ export function SessionsPage() {
             ? `Archived ${batchOutcome.archived.length} session${batchOutcome.archived.length === 1 ? '' : 's'}. `
             : ''}
           {batchOutcome.failed
-            ? `Failed on "${batchOutcome.failed.title}": ${batchOutcome.failed.message}. ${batchOutcome.unprocessed.length} not processed — failed and remaining sessions stay selected for retry.`
+            ? `Failed on "${batchOutcome.failed.name}": ${batchOutcome.failed.message}. ${batchOutcome.unprocessed.length} not processed — failed and remaining sessions stay selected for retry.`
             : 'All selected sessions archived.'}
         </output>
       ) : null}

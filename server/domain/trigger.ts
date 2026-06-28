@@ -1,5 +1,5 @@
 // Pure trigger rules: secret-material detection (so raw secrets are kept out of
-// metadata, resource refs, and plain env — they must use vault references),
+// metadata, resource refs, and plain env — they must use secret references),
 // interval-based next-due computation, and the constrained HTTP prompt template
 // renderer.
 

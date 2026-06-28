@@ -8,10 +8,10 @@ Feature: Vaults
 
   @vaults/secret-reference @domain
   Scenario: Build safe secret references and strip stored secret material
-    Given a credential is stored through Cloudflare Secrets, an AMA-managed store, or an approved external vault
+    Given a credential is stored through the AMA vault provider
     When the secret reference is built
     Then it derives a provider, reference name, and safe secret reference without the raw value
-    And external-vault references require an approved path and reject inline secret values
+    And provider selection is not exposed until a concrete provider implementation exists
     And stored secret material is stripped from version metadata before it is returned
 
   @vaults/encryption @domain
@@ -69,7 +69,7 @@ Feature: Vaults
     When one project stores a credential
     Then project-scoped vaults are isolated inside the same organization
     And organization-scoped vaults are shared across the organization through explicit scope
-    And approved external vault paths are supported without exposing cross-project metadata
+    And credential metadata remains scoped without exposing cross-project secret references
 
   # ── Web console (web: list, detail, add credential in jsdom) ──
 

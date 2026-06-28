@@ -1,7 +1,7 @@
 import { createRoute, type OpenAPIHono, z } from '@hono/zod-openapi'
 import { requireAuth } from '../auth/session'
 import { RuntimeSchema } from '../contracts/environment-contracts'
-import { type ResourceRef, ResourceRefSchema } from '../contracts/execution-spec'
+import { VolumeMountSchema, VolumeSchema } from '../contracts/execution-spec'
 import {
   AuthenticatedOperation,
   type DepsEnv,
@@ -10,11 +10,11 @@ import {
   listQuerySchema,
   listResponseSchema,
   parseListCursor,
-  SecretEnvEntrySchema,
+  EnvFromEntrySchema,
 } from '../openapi'
 import { dispatchHttpTrigger } from '../usecases/dispatch-triggers'
 import {
-  type SecretEnvEntry,
+  type EnvFromEntry,
   TriggerConflictError,
   type TriggerRecord,
   type TriggerRunRecord,
@@ -40,12 +40,21 @@ const TriggerSchema = z
     runtime: RuntimeSchema.openapi({ example: 'codex' }),
     name: z.string().openapi({ example: 'Daily research heartbeat' }),
     promptTemplate: z.string().openapi({ example: 'Research current Canadian banking bonus offers.' }),
-    resourceRefs: z.array(ResourceRefSchema).openapi({
-      example: [{ type: 'github_repository', owner: 'openai', repo: 'openai' }],
-    }),
     env: EnvSchema.openapi({ example: { AK_API_URL: 'https://ak.example.com' } }),
-    secretEnv: z.array(SecretEnvEntrySchema).openapi({
-      example: [{ name: 'AK_AGENT_KEY', credentialRef: { credentialId: 'vaultcred_abc123' } }],
+    envFrom: z.array(EnvFromEntrySchema).openapi({
+      example: [
+        {
+          type: 'secret',
+          name: 'AK_AGENT_KEY',
+          secretRef: 'ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123',
+        },
+      ],
+    }),
+    volumes: z.array(VolumeSchema).openapi({
+      example: [{ name: 'project-secrets', type: 'secret', secretRef: 'ama://vaults/vault_abc123' }],
+    }),
+    volumeMounts: z.array(VolumeMountSchema).openapi({
+      example: [{ name: 'project-secrets', mountPath: '/workspace/.ama/secrets/project', readOnly: true }],
     }),
     schedule: z
       .object({
@@ -106,21 +115,22 @@ const CreateTriggerSchema = z
     promptTemplate: z.string().trim().min(1).max(16000).openapi({
       example: 'Research current Canadian banking bonus offers.',
     }),
-    resourceRefs: z
-      .array(ResourceRefSchema)
-      .max(50)
-      .optional()
-      .openapi({
-        example: [{ type: 'github_repository', owner: 'openai', repo: 'openai' }],
-      }),
     env: EnvSchema.optional().openapi({ example: { AK_API_URL: 'https://ak.example.com' } }),
-    secretEnv: z
-      .array(SecretEnvEntrySchema)
+    envFrom: z
+      .array(EnvFromEntrySchema)
       .max(50)
       .optional()
       .openapi({
-        example: [{ name: 'AK_AGENT_KEY', credentialRef: { credentialId: 'vaultcred_abc123' } }],
+        example: [
+          {
+            type: 'secret',
+            name: 'AK_AGENT_KEY',
+            secretRef: 'ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123',
+          },
+        ],
       }),
+    volumes: z.array(VolumeSchema).max(50).optional(),
+    volumeMounts: z.array(VolumeMountSchema).max(50).optional(),
     schedule: SchedulePayloadSchema.nullable().optional(),
     enabled: z.boolean().optional().openapi({ example: true }),
     nextDueAt: z.string().datetime().optional().openapi({ example: '2026-05-26T12:00:00.000Z' }),
@@ -139,21 +149,22 @@ const UpdateTriggerSchema = z
     promptTemplate: z.string().trim().min(1).max(16000).optional().openapi({
       example: 'Research current Canadian banking bonus offers.',
     }),
-    resourceRefs: z
-      .array(ResourceRefSchema)
-      .max(50)
-      .optional()
-      .openapi({
-        example: [{ type: 'github_repository', owner: 'openai', repo: 'openai' }],
-      }),
     env: EnvSchema.optional().openapi({ example: { AK_API_URL: 'https://ak.example.com' } }),
-    secretEnv: z
-      .array(SecretEnvEntrySchema)
+    envFrom: z
+      .array(EnvFromEntrySchema)
       .max(50)
       .optional()
       .openapi({
-        example: [{ name: 'AK_AGENT_KEY', credentialRef: { credentialId: 'vaultcred_abc123' } }],
+        example: [
+          {
+            type: 'secret',
+            name: 'AK_AGENT_KEY',
+            secretRef: 'ama://vaults/vault_abc123/credentials/vaultcred_abc123/versions/vaultver_abc123',
+          },
+        ],
       }),
+    volumes: z.array(VolumeSchema).max(50).optional(),
+    volumeMounts: z.array(VolumeMountSchema).max(50).optional(),
     schedule: SchedulePayloadSchema.nullable().optional(),
     enabled: z.boolean().optional().openapi({ example: false }),
     archived: z.boolean().optional().openapi({ example: true }),
@@ -200,15 +211,11 @@ function errorBody(type: string, message: string, details?: Record<string, unkno
   return { error: { type, message, ...(details ? { details } : {}) } } as const
 }
 
-// Drops the absent versionId entirely so the entry matches the exactOptional
-// SecretEnvEntry contract (no explicit undefined on the wire-facing type).
-function normalizeSecretEnv(entries: z.infer<typeof SecretEnvEntrySchema>[]): SecretEnvEntry[] {
+function normalizeSecretEnv(entries: z.infer<typeof EnvFromEntrySchema>[]): EnvFromEntry[] {
   return entries.map((entry) => ({
+    type: 'secret',
     name: entry.name,
-    credentialRef: {
-      credentialId: entry.credentialRef.credentialId,
-      ...(entry.credentialRef.versionId ? { versionId: entry.credentialRef.versionId } : {}),
-    },
+    secretRef: entry.secretRef,
   }))
 }
 
@@ -222,9 +229,10 @@ function serializeTrigger(record: TriggerRecord) {
     runtime: record.runtime,
     name: record.name,
     promptTemplate: record.promptTemplate,
-    resourceRefs: record.resourceRefs as ResourceRef[],
     env: record.env,
-    secretEnv: record.secretEnv,
+    envFrom: record.envFrom,
+    volumes: record.volumes,
+    volumeMounts: record.volumeMounts,
     schedule: record.schedule
       ? {
           type: 'interval' as const,
@@ -437,9 +445,10 @@ export function registerTriggerRoutes(routes: TriggerRoutes) {
             runtime: body.runtime,
             name: body.name,
             promptTemplate: body.promptTemplate,
-            resourceRefs: body.resourceRefs ?? [],
             env: body.env ?? {},
-            secretEnv: normalizeSecretEnv(body.secretEnv ?? []),
+            envFrom: normalizeSecretEnv(body.envFrom ?? []),
+            volumes: body.volumes ?? [],
+            volumeMounts: body.volumeMounts ?? [],
             schedule:
               triggerType === 'scheduled' && body.schedule
                 ? {
@@ -659,9 +668,10 @@ function patchFromBody(body: z.infer<typeof UpdateTriggerSchema>): UpdateTrigger
     ...(body.runtime !== undefined ? { runtime: body.runtime } : {}),
     ...(body.name !== undefined ? { name: body.name } : {}),
     ...(body.promptTemplate !== undefined ? { promptTemplate: body.promptTemplate } : {}),
-    ...(body.resourceRefs !== undefined ? { resourceRefs: body.resourceRefs } : {}),
     ...(body.env !== undefined ? { env: body.env } : {}),
-    ...(body.secretEnv !== undefined ? { secretEnv: normalizeSecretEnv(body.secretEnv) } : {}),
+    ...(body.envFrom !== undefined ? { envFrom: normalizeSecretEnv(body.envFrom) } : {}),
+    ...(body.volumes !== undefined ? { volumes: body.volumes } : {}),
+    ...(body.volumeMounts !== undefined ? { volumeMounts: body.volumeMounts } : {}),
     ...(body.schedule === null
       ? { schedule: null }
       : body.schedule !== undefined

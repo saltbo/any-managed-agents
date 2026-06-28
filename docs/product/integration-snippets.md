@@ -101,12 +101,18 @@ const agent = await client.agents.create({
 const session = await client.sessions.create({
   agentId: agent.id,
   environmentId: environment.id,
-  resourceRefs: [
+  volumes: [
     {
+      name: 'source',
       type: 'github_repository',
       owner: 'saltbo',
       repo: 'any-managed-agents',
       ref: 'main',
+    },
+  ],
+  volumeMounts: [
+    {
+      name: 'source',
       mountPath: '/workspace/repos/saltbo/any-managed-agents',
     },
   ],
@@ -119,8 +125,6 @@ The stable facade is split by audience:
 - `createAmaRunnerClient` / `ama.NewRunner` / `create_ama_runner_client` expose runner protocol resources: runner channel, runner heartbeat, work items, leases, and runner-side session event ingestion.
 
 Runtime task interaction is separate from restish control-plane automation. Use the `runtimeEndpointPath` returned by session reads with AMA runtime helpers. Do not define a new CLI-level runtime protocol.
-
-`cloud` sessions also expose a deterministic `/workspace/.ama/resources.json` manifest inside the sandbox. It declares safe GitHub repository refs and target mount paths for the selected runtime to set up; it does not imply that AMA has already cloned the repositories.
 
 Regenerate repo-local SDK scaffolds from the Hono-generated OpenAPI document before publishing SDK changes:
 

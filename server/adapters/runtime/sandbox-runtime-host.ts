@@ -2,9 +2,18 @@ import type { AgentMessage } from '@earendil-works/pi-agent-core'
 import { getModel, type Model } from '@earendil-works/pi-ai'
 import { normalizeMemoryPath } from '@server/domain/memory-store'
 import { runtimeEndpointPath } from '@server/domain/runtime/driver'
+import {
+  isGitHubRepositoryVolume,
+  isMemoryStoreVolume,
+  type MemoryStoreVolume,
+  type Volume,
+  type VolumeMount,
+  volumeMountPath,
+} from '@server/domain/runtime/execution-inputs'
 import type {
   AmaTurnExecutor,
   CloudRuntimeLifecycle,
+  ResolvedVolumeMount,
   RunnerChannel,
   RuntimeWorkspaceReader,
   SessionSandboxExecutor,
@@ -24,7 +33,6 @@ import type {
   ToolExecutor,
 } from '../../usecases/runtime/engine/ports'
 import { runTurn, runtimeMessagesFromEvents } from '../../usecases/runtime/engine/turn-engine'
-import type { RuntimeSecretEnvEntry } from '../gateways/runtime-secret-env'
 import { toolExecutor } from './sandbox-tool-executor'
 import { workersAiModelClient } from './workers-ai-model-client'
 
@@ -55,12 +63,10 @@ export type SessionRuntimeStartInput = {
   agentSnapshot: Record<string, unknown>
   environmentSnapshot: Record<string, unknown> | null
   mcpSnapshot?: Record<string, unknown>
-  resourceRefs?: Record<string, unknown>[]
+  volumes?: Volume[]
+  volumeMounts?: VolumeMount[]
   runtimeEnv?: Record<string, string>
-  runtimeSecretEnv?: RuntimeSecretEnvEntry[]
-  // Secret env values already resolved from the vault by the control plane.
-  // Applied to the sandbox session env but never written to workspace files.
-  resolvedSecretEnv?: Record<string, string>
+  resolvedVolumes?: ResolvedVolumeMount[]
 }
 
 export type SessionRuntimeStartResult = {
@@ -122,32 +128,33 @@ async function getSandboxBinding() {
 
 export { runtimeEndpointPath }
 
-export function workspaceResourceManifest(resourceRefs: Record<string, unknown>[] = []) {
-  const githubResources = resourceRefs
-    .filter((resourceRef) => resourceRef.type === 'github_repository')
-    .map((resourceRef) => ({
+export function workspaceVolumeManifest(volumes: Volume[] = [], volumeMounts: VolumeMount[] = []) {
+  const githubVolumes = volumes
+    .filter(isGitHubRepositoryVolume)
+    .map((volume) => ({
       type: 'github_repository',
-      owner: resourceRef.owner,
-      repo: resourceRef.repo,
-      mountPath: resourceRef.mountPath,
-      ...(typeof resourceRef.ref === 'string' ? { ref: resourceRef.ref } : {}),
+      name: volume.name,
+      owner: volume.owner,
+      repo: volume.repo,
+      mountPath: volumeMountPath(volume.name, volumeMounts),
+      ...(typeof volume.ref === 'string' ? { ref: volume.ref } : {}),
       // The unified { credentialId, versionId? } reference passes through as
       // declarative metadata; the workspace resolves the git token from env.
-      ...(resourceRef.credentialRef ? { credentialRef: resourceRef.credentialRef } : {}),
+      ...(volume.credentialRef ? { credentialRef: volume.credentialRef } : {}),
       status: 'declared',
     }))
     .sort((left, right) => String(left.mountPath).localeCompare(String(right.mountPath)))
-  const memoryStoreResources = resourceRefs
-    .filter((resourceRef) => resourceRef.type === 'memory_store')
-    .map((resourceRef) => ({
+  const memoryStoreVolumes = volumes
+    .filter(isMemoryStoreVolume)
+    .map((volume) => ({
       type: 'memory_store',
-      storeId: resourceRef.storeId,
-      name: resourceRef.name,
-      description: resourceRef.description ?? null,
-      access: resourceRef.access,
-      mountPath: resourceRef.mountPath,
-      memories: Array.isArray(resourceRef.memories)
-        ? resourceRef.memories.map((memory) => ({
+      storeId: volume.storeId,
+      name: volume.name,
+      description: volume.description ?? null,
+      access: volume.access,
+      mountPath: volumeMountPath(volume.name, volumeMounts),
+      memories: Array.isArray(volume.memories)
+        ? volume.memories.map((memory) => ({
             path: typeof memory === 'object' && memory ? (memory as Record<string, unknown>).path : null,
           }))
         : [],
@@ -157,7 +164,7 @@ export function workspaceResourceManifest(resourceRefs: Record<string, unknown>[
   return {
     version: 1,
     workspaceRoot: '/workspace',
-    resources: [...githubResources, ...memoryStoreResources],
+    volumes: [...githubVolumes, ...memoryStoreVolumes],
   }
 }
 
@@ -188,12 +195,17 @@ function shellQuote(value: string) {
 
 // Parity with the self-hosted runner's prepareRuntimeWorkspace: configure the
 // agent git identity, store the GitHub credential, and clone declared
-// github_repository resources so the agent starts with a ready workspace.
+// github_repository volumes so the agent starts with a ready workspace.
 async function prepareCloudWorkspace(
   sandbox: CloudWorkspaceSandbox,
-  values: { resourceRefs: Record<string, unknown>[]; env: Record<string, string> },
+  values: {
+    volumes: Volume[]
+    volumeMounts: VolumeMount[]
+    env: Record<string, string>
+    resolvedVolumes: ResolvedVolumeMount[]
+  },
 ) {
-  const manifest = workspaceResourceManifest(values.resourceRefs)
+  const manifest = workspaceVolumeManifest(values.volumes, values.volumeMounts)
   const token = values.env.GH_TOKEN ?? values.env.GITHUB_TOKEN
   if (values.env.GIT_AUTHOR_NAME) {
     await execOrThrow(sandbox, `git config --global user.name ${shellQuote(values.env.GIT_AUTHOR_NAME)}`)
@@ -208,36 +220,36 @@ async function prepareCloudWorkspace(
     })
   }
 
-  const githubResources = manifest.resources.filter((resource) => resource.type === 'github_repository') as Array<
+  const githubVolumes = manifest.volumes.filter((volume) => volume.type === 'github_repository') as Array<
     Record<string, unknown>
   >
-  for (const resource of githubResources) {
-    const owner = String(resource.owner ?? '')
-    const repo = String(resource.repo ?? '')
+  for (const volume of githubVolumes) {
+    const owner = String(volume.owner ?? '')
+    const repo = String(volume.repo ?? '')
     if (!GITHUB_NAME_RE.test(owner) || !GITHUB_NAME_RE.test(repo)) {
-      throw new Error(`Invalid github_repository resource: ${owner}/${repo}`)
+      throw new Error(`Invalid github_repository volume: ${owner}/${repo}`)
     }
     const mountPath =
-      typeof resource.mountPath === 'string' && resource.mountPath
-        ? resource.mountPath
-        : `/workspace/repos/${owner}/${repo}`
+      typeof volume.mountPath === 'string' && volume.mountPath ? volume.mountPath : `/workspace/repos/${owner}/${repo}`
     if (!mountPath.startsWith('/workspace/')) {
       throw new Error(`github_repository mountPath must stay under /workspace: ${mountPath}`)
     }
     await execOrThrow(sandbox, `git clone https://github.com/${owner}/${repo}.git ${shellQuote(mountPath)}`, {
       timeout: GIT_CLONE_TIMEOUT_MS,
     })
-    if (typeof resource.ref === 'string' && resource.ref) {
-      await execOrThrow(sandbox, `git -C ${shellQuote(mountPath)} checkout ${shellQuote(resource.ref)}`)
+    if (typeof volume.ref === 'string' && volume.ref) {
+      await execOrThrow(sandbox, `git -C ${shellQuote(mountPath)} checkout ${shellQuote(volume.ref)}`)
     }
   }
-  for (const resourceRef of values.resourceRefs.filter((resourceRef) => resourceRef.type === 'memory_store')) {
-    const mountPath = String(resourceRef.mountPath ?? `/workspace/.ama/memory-stores/${resourceRef.storeId}`)
+  for (const volume of values.volumes.filter(isMemoryStoreVolume)) {
+    const mountPath = String(
+      volumeMountPath(volume.name, values.volumeMounts) ?? `/workspace/.ama/memory-stores/${volume.storeId}`,
+    )
     if (!mountPath.startsWith('/workspace/.ama/memory-stores/')) {
       throw new Error(`Invalid memory_store mount path: ${mountPath}`)
     }
     await execOrThrow(sandbox, `mkdir -p ${shellQuote(mountPath)}`)
-    const memories = Array.isArray(resourceRef.memories) ? resourceRef.memories : []
+    const memories = Array.isArray(volume.memories) ? volume.memories : []
     for (const memory of memories) {
       if (!memory || typeof memory !== 'object') {
         continue
@@ -253,7 +265,28 @@ async function prepareCloudWorkspace(
       await execOrThrow(sandbox, `mkdir -p ${shellQuote(parentPath)}`)
       await sandbox.writeFile(fullPath, content, { encoding: 'utf-8' })
     }
-    if (resourceRef.access === 'read_only') {
+    if (volume.access === 'read_only') {
+      await execOrThrow(sandbox, `chmod -R a-w ${shellQuote(mountPath)}`)
+    }
+  }
+  for (const volume of values.resolvedVolumes) {
+    const mountPath = volume.mountPath
+    if (!mountPath.startsWith('/workspace/')) {
+      throw new Error(`Invalid secret volume mount path: ${mountPath}`)
+    }
+    await execOrThrow(sandbox, `mkdir -p ${shellQuote(mountPath)}`)
+    for (const file of volume.files) {
+      const path = file.path
+      const content = file.content
+      if (!path || path.startsWith('/') || path.includes('..')) {
+        throw new Error(`Invalid secret volume file path: ${path}`)
+      }
+      const fullPath = `${mountPath}/${path}`
+      const parentPath = fullPath.slice(0, fullPath.lastIndexOf('/'))
+      await execOrThrow(sandbox, `mkdir -p ${shellQuote(parentPath)}`)
+      await sandbox.writeFile(fullPath, content, { encoding: 'utf-8' })
+    }
+    if (volume.readOnly) {
       await execOrThrow(sandbox, `chmod -R a-w ${shellQuote(mountPath)}`)
     }
   }
@@ -267,13 +300,15 @@ export async function startSessionRuntime(
   if (env.AMA_RUNTIME_MODE !== 'test') {
     const getSandbox = await getSandboxBinding()
     const sandbox = getSandbox(env.SANDBOX, input.sandboxId, { keepAlive: true, normalizeId: true })
-    const sessionEnv = { ...(input.runtimeEnv ?? {}), ...(input.resolvedSecretEnv ?? {}) }
+    const sessionEnv = input.runtimeEnv ?? {}
     if (Object.keys(sessionEnv).length > 0) {
       await sandbox.setEnvVars(sessionEnv)
     }
     await prepareCloudWorkspace(sandbox, {
-      resourceRefs: input.resourceRefs ?? [],
+      volumes: input.volumes ?? [],
+      volumeMounts: input.volumeMounts ?? [],
       env: sessionEnv,
+      resolvedVolumes: input.resolvedVolumes ?? [],
     })
   }
 
@@ -298,7 +333,7 @@ export async function stopSessionRuntime(env: Env, sandboxId: string) {
 
 export async function readMemoryStoreMemories(
   env: Env,
-  input: { sandboxId: string; resourceRefs: Record<string, unknown>[] },
+  input: { sandboxId: string; volumes: MemoryStoreVolume[]; volumeMounts: VolumeMount[] },
 ) {
   if (env.AMA_RUNTIME_MODE === 'test') {
     return []
@@ -306,12 +341,12 @@ export async function readMemoryStoreMemories(
   const getSandbox = await getSandboxBinding()
   const sandbox = getSandbox(env.SANDBOX, input.sandboxId, { keepAlive: true, normalizeId: true })
   const stores: Array<{ storeId: string; memories: Array<{ path: string; content: string }> }> = []
-  for (const resourceRef of input.resourceRefs) {
-    if (resourceRef.type !== 'memory_store' || resourceRef.access !== 'read_write') {
+  for (const volume of input.volumes) {
+    if (volume.access !== 'read_write') {
       continue
     }
-    const storeId = String(resourceRef.storeId ?? '')
-    const mountPath = String(resourceRef.mountPath ?? '')
+    const storeId = String(volume.storeId ?? '')
+    const mountPath = String(volumeMountPath(volume.name, input.volumeMounts) ?? '')
     if (!storeId || !mountPath.startsWith('/workspace/.ama/memory-stores/')) {
       continue
     }
@@ -488,7 +523,8 @@ export function createRuntimeExecutionAdapters(
           }
           return await options.runnerChannel.readMemoryStoreMemories({
             sessionId: input.sessionId,
-            resourceRefs: input.resourceRefs,
+            volumes: input.volumes,
+            volumeMounts: input.volumeMounts,
           })
         }
         return readMemoryStoreMemories(env, input)

@@ -1,9 +1,9 @@
 // Pure vault credential rules: secret-reference construction, credential/version
 // state machine, and reference-pinning checks. Zero outward imports — directly
-// unit-testable. Secret storage (crypto, Cloudflare secrets) is a boundary and
-// lives behind the SecretStore gateway, not here.
+// unit-testable. Secret storage is a boundary and lives behind the SecretStore
+// gateway, not here.
 
-export const SECRET_PROVIDERS = ['ama-managed', 'cloudflare-secrets', 'external-vault'] as const
+export const SECRET_PROVIDERS = ['ama'] as const
 export const VAULT_SCOPES = ['project', 'organization'] as const
 export const CREDENTIAL_STATES = ['active', 'revoked'] as const
 export const VERSION_STATES = ['active', 'superseded', 'revoked'] as const
@@ -14,11 +14,15 @@ export type CredentialState = (typeof CREDENTIAL_STATES)[number]
 export type VersionState = (typeof VERSION_STATES)[number]
 
 export interface SecretMaterial {
-  provider?: SecretProvider | undefined
   secretValue?: string | undefined
-  externalVaultPath?: string | undefined
   referenceName?: string | undefined
   metadata?: Record<string, unknown> | undefined
+}
+
+export interface SecretIdentity {
+  vaultId: string
+  credentialId: string
+  versionId: string
 }
 
 // The safe (secret-free) reference fields a credential version persists. The
@@ -26,7 +30,6 @@ export interface SecretMaterial {
 export interface SecretReference {
   provider: SecretProvider
   secretRef: string
-  externalVaultPath: string | null
   referenceName: string
   hasSecret: boolean
   metadata: Record<string, unknown>
@@ -36,56 +39,51 @@ function secretReferenceName(credentialId: string, version: number, requestedNam
   return requestedName ?? `AMA_${credentialId.toUpperCase()}_V${version}`
 }
 
+function uriPathSegment(value: string) {
+  return encodeURIComponent(value)
+}
+
+export function credentialVersionSecretRef(identity: SecretIdentity) {
+  return `ama://vaults/${uriPathSegment(identity.vaultId)}/credentials/${uriPathSegment(identity.credentialId)}/versions/${uriPathSegment(identity.versionId)}`
+}
+
+export function amaSecretRef(vaultId: string) {
+  return `ama://vaults/${uriPathSegment(vaultId)}`
+}
+
+export function vaultIdFromRef(secretRef: string): string | null {
+  let parsed: URL
+  try {
+    parsed = new URL(secretRef)
+  } catch {
+    return null
+  }
+  if (parsed.protocol !== 'ama:' || parsed.hostname !== 'vaults') {
+    return null
+  }
+  const [vaultId, ...rest] = parsed.pathname.split('/').filter(Boolean)
+  return vaultId && rest.length === 0 ? decodeURIComponent(vaultId) : null
+}
+
+export function secretRefPinsVersion(secretRef: unknown, version: { id: string; credentialId: string; vaultId: string }) {
+  return typeof secretRef === 'string' && secretRef === credentialVersionSecretRef({
+    vaultId: version.vaultId,
+    credentialId: version.credentialId,
+    versionId: version.id,
+  })
+}
+
 // Builds the safe reference for a credential version from the requested secret
 // material, validating the provider-specific field combination. Throws on an
 // invalid combination so the http layer maps it to a 400.
-export function secretReference(credentialId: string, version: number, values: SecretMaterial): SecretReference {
-  const provider = values.provider ?? 'cloudflare-secrets'
-  if (provider === 'external-vault') {
-    if (values.secretValue) {
-      throw new Error('secretValue is not accepted for external-vault credentials')
-    }
-    if (!values.externalVaultPath) {
-      throw new Error('externalVaultPath is required for external-vault credentials')
-    }
-    return {
-      provider,
-      secretRef: values.externalVaultPath,
-      externalVaultPath: values.externalVaultPath,
-      referenceName: values.referenceName ?? values.externalVaultPath,
-      hasSecret: true,
-      metadata: values.metadata ?? {},
-    }
-  }
-  if (provider === 'ama-managed') {
-    if (!values.secretValue) {
-      throw new Error('secretValue is required for ama-managed credentials')
-    }
-    if (values.externalVaultPath) {
-      throw new Error('externalVaultPath is not accepted for ama-managed credentials')
-    }
-    const referenceName = secretReferenceName(credentialId, version, values.referenceName)
-    return {
-      provider,
-      secretRef: `ama-managed:${referenceName}`,
-      externalVaultPath: null,
-      referenceName,
-      hasSecret: true,
-      metadata: values.metadata ?? {},
-    }
-  }
-
+export function secretReference(identity: SecretIdentity, version: number, values: SecretMaterial): SecretReference {
   if (!values.secretValue) {
-    throw new Error('secretValue is required for cloudflare-secrets credentials')
+    throw new Error('secretValue is required for AMA vault credentials')
   }
-  if (values.externalVaultPath) {
-    throw new Error('externalVaultPath is not accepted for cloudflare-secrets credentials')
-  }
-  const referenceName = secretReferenceName(credentialId, version, values.referenceName)
+  const referenceName = secretReferenceName(identity.credentialId, version, values.referenceName)
   return {
-    provider,
-    secretRef: `cloudflare-secret:${referenceName}`,
-    externalVaultPath: null,
+    provider: 'ama',
+    secretRef: credentialVersionSecretRef(identity),
     referenceName,
     hasSecret: true,
     metadata: values.metadata ?? {},

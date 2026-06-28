@@ -67,9 +67,8 @@ function credential(overrides: Partial<VaultCredential> = {}): VaultCredential {
       vaultId: 'vault_1',
       projectId: 'project_1',
       version: 2,
-      provider: 'cloudflare-secrets',
-      secretRef: 'cloudflare-secret:AMA_VAULTCRED_1_V2',
-      externalVaultPath: null,
+      provider: 'ama',
+      secretRef: 'ama://vaults/vault_1/credentials/vaultcred_1/versions/vaultver_2',
       referenceName: 'AMA_VAULTCRED_1_V2',
       state: 'active',
       hasSecret: true,
@@ -1041,7 +1040,7 @@ describe('[spec: vaults/rotate-credential-sheet] RotateCredentialSheet', () => {
     fireEvent.change(screen.getByLabelText('New secret value'), { target: { value: 'rotated-secret' } })
     fireEvent.click(screen.getByRole('button', { name: /Rotate credential/i }))
 
-    await waitFor(() => expect(capturedBody.provider).toBe('ama-managed'))
+    await waitFor(() => expect(capturedBody.secretValue).toBe('rotated-secret'))
     expect(capturedBody.secretValue).toBe('rotated-secret')
   })
 

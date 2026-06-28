@@ -4,7 +4,8 @@
 // fan-out; this gateway is the typed call surface the routing store uses for
 // cloud-loop (ama) sessions.
 
-import type { SessionEventPage, SessionEventQuery, SessionEventRecord } from '@server/usecases/ports'
+import type { SessionEvent } from '@server/domain/session'
+import type { SessionEventPage, SessionEventQuery } from '@server/usecases/ports'
 import type { CanonicalAmaSessionEvent } from '@shared/session-events'
 import type { Env } from '../../env'
 
@@ -37,7 +38,7 @@ export interface SessionDoEventStore {
     scope: SessionEventScope,
     canonicalEvent: CanonicalAmaSessionEvent,
     overrides?: SessionEventOverrides,
-  ): Promise<{ id: string; sequence: number; record: SessionEventRecord }>
+  ): Promise<{ id: string; sequence: number; record: SessionEvent }>
   query(sessionId: string, query: SessionEventQuery): Promise<SessionEventPage>
   // The relay read for a CLI session: the DO forwards a backfill to the live
   // runner (the sole store) and canonicalises its log in memory. `runnerUnavailable`

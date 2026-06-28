@@ -216,6 +216,10 @@ export function createAmaClient(config: AmaClientConfig) {
       health: () => unwrap(ops.getHealth({ client })),
     },
 
+    configz: {
+      get: () => unwrap(ops.readConfigz({ client })),
+    },
+
     auth: {
       config: (query?: types.ReadAuthConfigData['query']) => unwrap(ops.readAuthConfig({ client, query })),
       createSession: (body: types.CreateAuthSessionRequest) => unwrap(ops.createAuthSession({ client, body })),

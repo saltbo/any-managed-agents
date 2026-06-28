@@ -1,5 +1,5 @@
 import type { McpConnectionTarget } from '@server/usecases/ports'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Env } from '../../env'
 
 // --- hoisted mocks ---
@@ -7,7 +7,7 @@ import type { Env } from '../../env'
 const listMcpServerToolsMock = vi.fn()
 const callMcpServerToolMock = vi.fn()
 const categorizeMcpClientFailureMock = vi.fn()
-const resolveRuntimeSecretEnvMock = vi.fn()
+const resolveRuntimeEnvFromMock = vi.fn()
 
 vi.mock('./mcp-client', () => ({
   listMcpServerTools: listMcpServerToolsMock,
@@ -22,8 +22,8 @@ vi.mock('./mcp-client', () => ({
   },
 }))
 
-vi.mock('./runtime-secret-env', () => ({
-  resolveRuntimeSecretEnv: resolveRuntimeSecretEnvMock,
+vi.mock('./runtime-secrets', () => ({
+  resolveRuntimeEnvFrom: resolveRuntimeEnvFromMock,
 }))
 
 // Import under test after mocks are registered
@@ -31,8 +31,11 @@ const { createMcpGateway, normalizedMcpError } = await import('./mcp')
 
 const env = { AMA_VAULT_ENCRYPTION_KEY: 'x'.repeat(32) } as unknown as Env
 
-function makeDb(credentialRow: { activeVersionId: string | null } | undefined = undefined) {
-  const getMock = vi.fn().mockResolvedValue(credentialRow)
+function makeDb(
+  credentialRow: { activeVersionId: string | null } | undefined = undefined,
+  versionRow: { secretRef: string } | undefined = { secretRef: 'ama://vaults/v/credentials/cred_1/versions/ver_1' },
+) {
+  const getMock = vi.fn().mockResolvedValueOnce(credentialRow).mockResolvedValue(versionRow)
   const whereMock = vi.fn().mockReturnValue({ get: getMock })
   const fromMock = vi.fn().mockReturnValue({ where: whereMock })
   const selectMock = vi.fn().mockReturnValue({ from: fromMock })
@@ -47,6 +50,13 @@ const baseTarget: McpConnectionTarget = {
   credentialId: null,
   credentialVersionId: null,
 }
+
+beforeEach(() => {
+  listMcpServerToolsMock.mockReset()
+  callMcpServerToolMock.mockReset()
+  categorizeMcpClientFailureMock.mockReset()
+  resolveRuntimeEnvFromMock.mockReset()
+})
 
 describe('[spec: mcp/gateway] normalizedMcpError', () => {
   it('maps categorizeMcpClientFailure result to the stable error surface', () => {
@@ -152,7 +162,7 @@ describe('[spec: mcp/gateway] createMcpGateway — listTools', () => {
   })
 
   it('resolves the credential and passes the Bearer token when credentialId is set', async () => {
-    resolveRuntimeSecretEnvMock.mockResolvedValueOnce({ credential: 'my-api-token' })
+    resolveRuntimeEnvFromMock.mockResolvedValueOnce({ credential: 'my-api-token' })
     listMcpServerToolsMock.mockResolvedValueOnce([])
 
     const db = makeDb({ activeVersionId: 'ver_1' })
@@ -166,22 +176,27 @@ describe('[spec: mcp/gateway] createMcpGateway — listTools', () => {
   })
 
   it('falls back to credentialVersionId from target when activeVersionId is null', async () => {
-    resolveRuntimeSecretEnvMock.mockResolvedValueOnce({ credential: 'fallback-token' })
+    resolveRuntimeEnvFromMock.mockResolvedValueOnce({ credential: 'fallback-token' })
     listMcpServerToolsMock.mockResolvedValueOnce([])
 
-    // Simulate no matching credential row
+    // Simulate no matching credential row; the pinned target version is still
+    // looked up and resolved to its secretRef.
     const db = makeDb(undefined)
     const gateway = createMcpGateway(env, db)
     const target: McpConnectionTarget = { ...baseTarget, credentialId: 'cred_1', credentialVersionId: 'ver_pinned' }
     await gateway.listTools(target)
 
-    const [, , , itemsArg] = resolveRuntimeSecretEnvMock.mock.calls.at(-1) ?? []
+    const [, , , itemsArg] = resolveRuntimeEnvFromMock.mock.calls.at(-1) ?? []
     const firstItem = Array.isArray(itemsArg) ? itemsArg[0] : null
-    expect(firstItem?.credentialRef?.versionId).toBe('ver_pinned')
+    expect(firstItem).toEqual({
+      type: 'secret',
+      name: 'credential',
+      secretRef: 'ama://vaults/v/credentials/cred_1/versions/ver_1',
+    })
   })
 
   it('passes null authorization when the resolved credential value is not a string', async () => {
-    resolveRuntimeSecretEnvMock.mockResolvedValueOnce({ credential: undefined })
+    resolveRuntimeEnvFromMock.mockResolvedValueOnce({ credential: undefined })
     listMcpServerToolsMock.mockResolvedValueOnce([])
 
     const db = makeDb({ activeVersionId: 'ver_1' })
@@ -192,8 +207,7 @@ describe('[spec: mcp/gateway] createMcpGateway — listTools', () => {
     expect(listMcpServerToolsMock).toHaveBeenCalledWith(expect.objectContaining({ authorization: null }))
   })
 
-  it('uses undefined versionId when both activeVersionId and credentialVersionId are null', async () => {
-    resolveRuntimeSecretEnvMock.mockResolvedValueOnce({ credential: 'token' })
+  it('passes null authorization when no credential version can be selected', async () => {
     listMcpServerToolsMock.mockResolvedValueOnce([])
 
     // credential row exists but activeVersionId is null; target also has null credentialVersionId
@@ -202,14 +216,12 @@ describe('[spec: mcp/gateway] createMcpGateway — listTools', () => {
     const target: McpConnectionTarget = { ...baseTarget, credentialId: 'cred_1', credentialVersionId: null }
     await gateway.listTools(target)
 
-    const [, , , itemsArg] = resolveRuntimeSecretEnvMock.mock.calls.at(-1) ?? []
-    const firstItem = Array.isArray(itemsArg) ? itemsArg[0] : null
-    // versionId should be undefined (not null, not a string)
-    expect(firstItem?.credentialRef?.versionId).toBeUndefined()
+    expect(resolveRuntimeEnvFromMock).not.toHaveBeenCalled()
+    expect(listMcpServerToolsMock).toHaveBeenCalledWith(expect.objectContaining({ authorization: null }))
   })
 
-  it('wraps resolveRuntimeSecretEnv rejection as McpClientError(unauthorized)', async () => {
-    resolveRuntimeSecretEnvMock.mockRejectedValueOnce(new Error('vault revoked'))
+  it('wraps resolveRuntimeEnvFrom rejection as McpClientError(unauthorized)', async () => {
+    resolveRuntimeEnvFromMock.mockRejectedValueOnce(new Error('vault revoked'))
     listMcpServerToolsMock.mockResolvedValueOnce([])
 
     const db = makeDb({ activeVersionId: 'ver_1' })

@@ -59,7 +59,7 @@ const agent = await client.agents.create({
   model: '@cf/moonshotai/kimi-k2.6',
 })
 
-const session = await client.sessions.create({ agentId: agent.id, environmentId: env.id, runtime: 'ama', title: 'Research' })
+const session = await client.sessions.create({ agentId: agent.id, environmentId: env.id, runtime: 'ama', name: 'Research' })
 
 try {
   const found = await client.agents.get(agentId)
