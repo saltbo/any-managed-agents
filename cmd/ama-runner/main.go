@@ -6,11 +6,23 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/saltbo/any-managed-agents/cmd/ama-runner/internal/runner"
+	runnercmd "github.com/saltbo/any-managed-agents/cmd/ama-runner/internal/cmd"
+	"github.com/saltbo/any-managed-agents/cmd/ama-runner/pkg/version"
+)
+
+var (
+	runnerVersion   = "dev"
+	runnerCommit    = "unknown"
+	runnerBuildDate = "unknown"
 )
 
 func main() {
-	if err := runner.Run(os.Args[1:]); err != nil && !errors.Is(err, context.Canceled) {
+	build := version.Info{
+		Version:   runnerVersion,
+		Commit:    runnerCommit,
+		BuildDate: runnerBuildDate,
+	}
+	if err := runnercmd.Run(os.Args[1:], build); err != nil && !errors.Is(err, context.Canceled) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

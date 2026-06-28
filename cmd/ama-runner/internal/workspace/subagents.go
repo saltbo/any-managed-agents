@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/samber/lo"
 )
 
 // subagentProfile mirrors the subagent entries the control plane embeds in the
@@ -27,13 +29,12 @@ func agentSubagentProfiles(agentSnapshot map[string]any) []subagentProfile {
 	if !ok {
 		return nil
 	}
-	profiles := make([]subagentProfile, 0, len(raw))
-	for _, item := range raw {
+	return lo.FilterMap(raw, func(item any, _ int) (subagentProfile, bool) {
 		entry, ok := item.(map[string]any)
 		if !ok {
-			continue
+			return subagentProfile{}, false
 		}
-		profiles = append(profiles, subagentProfile{
+		return subagentProfile{
 			ID:               snapshotString(entry["id"]),
 			Username:         snapshotString(entry["username"]),
 			Name:             snapshotString(entry["name"]),
@@ -41,9 +42,8 @@ func agentSubagentProfiles(agentSnapshot map[string]any) []subagentProfile {
 			Instructions:     snapshotString(entry["instructions"]),
 			Role:             snapshotString(entry["role"]),
 			ModelPreferences: snapshotStringMap(entry["modelPreferences"]),
-		})
-	}
-	return profiles
+		}, true
+	})
 }
 
 func snapshotString(value any) string {

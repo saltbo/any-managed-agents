@@ -321,7 +321,9 @@ const putHeartbeatRoute = createRoute({
 })
 
 const RunnerChannelMetadataSchema = z
-  .object({ upgrade: z.literal('websocket').openapi({ example: 'websocket' }) })
+  .object({
+    upgrade: z.literal('websocket').openapi({ example: 'websocket' }),
+  })
   .openapi('RunnerChannelMetadata')
 
 const connectRunnerChannelRoute = createRoute({

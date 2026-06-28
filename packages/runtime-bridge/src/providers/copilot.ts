@@ -93,6 +93,8 @@ function* mapCopilotEvent(event: SessionEvent, state: CopilotState): Generator<A
 
 export const copilotProvider: RuntimeProvider = {
   name: 'copilot',
+  binary: 'copilot',
+  fallbackModels: ['copilot-cli'],
   async execute(request: RuntimeProviderRequest): Promise<RuntimeProviderHandle> {
     const systemPrompt = agentSystemPrompt(request)
     // Without an explicit cliPath the SDK resolves @github/copilot via

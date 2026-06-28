@@ -1,6 +1,7 @@
 import { swaggerUI } from '@hono/swagger-ui'
 import { cors } from 'hono/cors'
 import { createDeps } from './composition'
+import { RUNNER_PROTOCOL_SCHEMAS } from './contracts/runner-protocol'
 import type { Env } from './env'
 import { registerAgentRoutes } from './http/agents'
 import { registerAuditRecordRoutes } from './http/audit-records'
@@ -118,6 +119,9 @@ export function createApp() {
     .route('/api/v1/vaults', vaults)
 
   routes.openAPIRegistry.registerComponent('securitySchemes', 'bearerAuth', ApiSecuritySchemes.bearerAuth)
+  for (const [name, schema] of Object.entries(RUNNER_PROTOCOL_SCHEMAS)) {
+    routes.openAPIRegistry.register(name, schema)
+  }
 
   routes.doc('/api/v1/openapi.json', {
     openapi: '3.0.0',

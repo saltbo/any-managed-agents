@@ -7,9 +7,11 @@ import {
   createResumeTokenWatcher,
   type RuntimeBridgeInput,
   type RuntimeBridgeOutput,
+  type RuntimeInventoryEntry,
   type RuntimeProviderHandle,
 } from './protocol'
-import { getProvider } from './providers/registry'
+import { resolveCliPath } from './providers/cli-host'
+import { getProvider, listProviders } from './providers/registry'
 import { isE2eBridgeTest, probeFailureStatus, runE2eBridgeTest, TEST_MODE_RUNTIME_MODELS } from './run-modes'
 
 type ActiveRun = {
@@ -74,57 +76,73 @@ async function run(request: Extract<RuntimeBridgeInput, { type: 'run' }>) {
   }
 }
 
-async function fetchUsage(request: Extract<RuntimeBridgeInput, { type: 'fetchUsage' }>) {
-  try {
-    const provider = getProvider(request.runtime)
-    const windows = provider.fetchUsage ? await provider.fetchUsage({ env: request.env }) : null
-    write({ type: 'result', requestId: request.requestId, result: { windows: windows ?? null } })
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    write({ type: 'error', requestId: request.requestId, error: bridgeError(message, 'runtime_usage_error') })
-  }
-}
-
-async function detectModels(request: Extract<RuntimeBridgeInput, { type: 'detectModels' }>) {
-  try {
-    if (process.env.AMA_RUNTIME_BRIDGE_TEST_MODE === '1') {
-      write({
-        type: 'result',
-        requestId: request.requestId,
-        result: {
-          models: TEST_MODE_RUNTIME_MODELS[request.runtime] ?? null,
-          status: 'ready',
-          version: 'bridge-test',
-          detail: 'deterministic bridge test runtime',
-        },
+async function inventory(request: Extract<RuntimeBridgeInput, { type: 'inventory' }>) {
+  const runtimes: RuntimeInventoryEntry[] = []
+  const bridgeTestMode = process.env.AMA_RUNTIME_BRIDGE_TEST_MODE === '1'
+  for (const provider of listProviders()) {
+    const installed = bridgeTestMode || Boolean(resolveCliPath(provider.binary))
+    if (!installed) {
+      runtimes.push({
+        runtime: provider.name,
+        binary: provider.binary,
+        installed: false,
+        fallbackModels: provider.fallbackModels,
+        models: [],
+        status: 'missing',
+        detail: `${provider.binary} CLI not found on PATH`,
       })
-      return
+      continue
     }
-    const provider = getProvider(request.runtime)
-    const models = provider.listModels ? await provider.listModels({ env: request.env }) : null
-    write({
-      type: 'result',
-      requestId: request.requestId,
-      result:
-        models && models.length > 0
-          ? { models, status: 'ready', detail: `host CLI enumerated ${models.length} models` }
-          : {
-              models: null,
-              status: 'unauthenticated',
-              detail: 'host CLI exposed no models; authenticate the runtime CLI',
-            },
-    })
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    write({
-      type: 'result',
-      requestId: request.requestId,
-      result: { models: null, status: probeFailureStatus(message), detail: 'host model enumeration failed' },
+    let models: string[] = []
+    let status = 'ready'
+    let detail = 'host CLI is available'
+    try {
+      if (bridgeTestMode) {
+        models = TEST_MODE_RUNTIME_MODELS[provider.name] ?? []
+        detail = 'deterministic bridge test runtime'
+      } else {
+        models = provider.listModels ? ((await provider.listModels({ env: request.env })) ?? []) : []
+        if (models && models.length > 0) {
+          detail = `host CLI enumerated ${models.length} models`
+        } else {
+          status = 'unauthenticated'
+          detail = 'host CLI exposed no models; authenticate the runtime CLI'
+        }
+      }
+    } catch (err) {
+      status = probeFailureStatus(err instanceof Error ? err.message : String(err))
+      detail = 'host model enumeration failed'
+    }
+
+    let usageWindows = null
+    let limitedDetail: string | null = null
+    if (request.includeUsage && provider.fetchUsage && !bridgeTestMode) {
+      try {
+        usageWindows = await provider.fetchUsage({ env: request.env })
+      } catch {
+        usageWindows = null
+      }
+      if ((!usageWindows || usageWindows.length === 0) && provider.usageUnavailableDetail) {
+        limitedDetail = provider.usageUnavailableDetail
+      }
+    }
+
+    runtimes.push({
+      runtime: provider.name,
+      binary: provider.binary,
+      installed: true,
+      fallbackModels: provider.fallbackModels,
+      models,
+      status,
+      detail,
+      ...(usageWindows ? { usageWindows } : {}),
+      ...(limitedDetail ? { limitedDetail } : {}),
     })
   }
+  write({ type: 'result', requestId: request.requestId, result: { runtimes } })
 }
 
-async function control(message: Exclude<RuntimeBridgeInput, { type: 'run' | 'fetchUsage' | 'detectModels' }>) {
+async function control(message: Exclude<RuntimeBridgeInput, { type: 'run' | 'inventory' }>) {
   const state = active.get(message.requestId)
   if (!state?.handle) {
     write({
@@ -166,10 +184,8 @@ lines.on('line', (line) => {
       if (!message) return
       if (message.type === 'run') {
         await run(message)
-      } else if (message.type === 'fetchUsage') {
-        await fetchUsage(message)
-      } else if (message.type === 'detectModels') {
-        await detectModels(message)
+      } else if (message.type === 'inventory') {
+        await inventory(message)
       } else {
         await control(message)
       }

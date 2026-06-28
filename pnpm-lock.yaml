@@ -204,7 +204,11 @@ importers:
 
   packages/runtime-bridge: {}
 
-  packages/runtime-contracts: {}
+  packages/runtime-contracts:
+    dependencies:
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
 
   sdk/typescript:
     devDependencies:

@@ -1,0 +1,6 @@
+package: sessionevent
+output: session_events_gen.go
+generate:
+  models: true
+output-options:
+  skip-prune: true

@@ -13,11 +13,10 @@ generate:
   models: true
   client: true
 output-options:
-  # The hand-written runtime client in client.go already owns the name `Client`
-  # (with the WebSocket session-channel logic). Generate the REST client under a
-  # distinct name so both coexist in package ama.
+  skip-prune: true
+  # Keep the generated REST transport under an explicit raw name. The stable Go
+  # facade in ama/client.go owns the public Client type.
   client-type-name: APIClient
-  # Rename generated models that collide with hand-written types we keep.
   overlay:
     path: oapi-codegen.overlay.yaml
 compatibility:

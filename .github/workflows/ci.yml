@@ -43,6 +43,7 @@ jobs:
       - run: pnpm run lint:escapes
       - run: pnpm run lint:types
       - run: pnpm run typecheck
+      - run: pnpm run contract:check
       - run: pnpm run openapi:check
       - run: pnpm --filter @any-managed-agents/sdk run typecheck
       - run: pnpm --filter @any-managed-agents/sdk run smoke

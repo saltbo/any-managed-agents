@@ -2,23 +2,61 @@ package sandbox
 
 import (
 	"context"
-	"github.com/saltbo/any-managed-agents/cmd/ama-runner/internal/layout"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/saltbo/any-managed-agents/cmd/ama-runner/internal/workspace"
 )
 
 func TestWorkspaceRootAndRelativePathRejectsEscapes(t *testing.T) {
 	root := t.TempDir()
-	if _, _, err := WorkspaceRootAndRelativePath(root, "/workspace/file.txt"); err != nil {
+	gotRoot, relative, err := WorkspaceRootAndRelativePath(root, "/workspace/nested/file.txt")
+	if err != nil {
 		t.Fatalf("expected /workspace path to resolve: %v", err)
+	}
+	if gotRoot == "" || relative != filepath.Join("nested", "file.txt") {
+		t.Fatalf("unexpected workspace path result root=%q relative=%q", gotRoot, relative)
 	}
 	for _, path := range []string{"../outside", "/tmp/outside", "/workspace/../outside"} {
 		if _, _, err := WorkspaceRootAndRelativePath(root, path); err == nil {
 			t.Fatalf("expected %q to be rejected", path)
 		}
+	}
+}
+
+func TestEnsureWorkspaceParentRejectsUnsafeParents(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "file-parent"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := EnsureWorkspaceParent(root, filepath.Join("file-parent", "child")); err == nil {
+		t.Fatal("expected file parent error")
+	}
+
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(root, "link-parent")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	if _, err := EnsureWorkspaceParent(root, filepath.Join("link-parent", "child")); err == nil {
+		t.Fatal("expected symlink parent error")
+	}
+}
+
+func TestEnsureUnderWorkspaceRejectsOutsidePath(t *testing.T) {
+	root := t.TempDir()
+	if err := EnsureUnderWorkspace(root, filepath.Dir(root)); err == nil {
+		t.Fatal("expected outside workspace error")
+	}
+}
+
+func TestAsExitErrorIgnoresNonExitErrors(t *testing.T) {
+	var exitErr *exec.ExitError
+	if AsExitError(os.ErrPermission, &exitErr) || exitErr != nil {
+		t.Fatal("expected non-exit error not to match exec.ExitError")
 	}
 }
 
@@ -125,7 +163,7 @@ func TestProcessAdapterDoesNotExposeDaemonAMAEnvironment(t *testing.T) {
 
 func TestProcessCommandEnvironmentUsesSessionPrivateDirsForRuntimeWorkspace(t *testing.T) {
 	sessionDir := filepath.Join(t.TempDir(), "sessions", "session_1")
-	workDir := filepath.Join(sessionDir, layout.WorkspaceDirName)
+	workDir := filepath.Join(sessionDir, workspace.WorkspaceDirName)
 	if err := os.MkdirAll(workDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -157,7 +195,7 @@ func TestProcessCommandEnvironmentUsesSessionPrivateDirsForRuntimeWorkspace(t *t
 
 func TestProcessCommandEnvironmentKeepsOrdinaryWorkspaceDirsLocal(t *testing.T) {
 	parent := t.TempDir()
-	workDir := filepath.Join(parent, layout.WorkspaceDirName)
+	workDir := filepath.Join(parent, workspace.WorkspaceDirName)
 	if err := os.MkdirAll(workDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

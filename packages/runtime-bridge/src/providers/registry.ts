@@ -14,3 +14,7 @@ export function getProvider(runtime: RuntimeBridgeRequest['runtime']) {
   if (!provider) throw new Error(`Unsupported runtime provider: ${runtime}`)
   return provider
 }
+
+export function listProviders() {
+  return Array.from(providers.values())
+}

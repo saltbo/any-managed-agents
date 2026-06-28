@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/saltbo/any-managed-agents/cmd/ama-runner/internal/layout"
+	"github.com/saltbo/any-managed-agents/cmd/ama-runner/internal/workspace"
 )
 
 type ToolRequest struct {
@@ -197,11 +197,11 @@ func ProcessCommandEnvironment(workDir string) ([]string, error) {
 }
 
 func ProcessEnvironmentRoot(workDir string) string {
-	if filepath.Base(workDir) != layout.WorkspaceDirName {
+	if filepath.Base(workDir) != workspace.WorkspaceDirName {
 		return workDir
 	}
 	sessionDir := filepath.Dir(workDir)
-	if filepath.Base(filepath.Dir(sessionDir)) != layout.SessionsDirName {
+	if filepath.Base(filepath.Dir(sessionDir)) != workspace.SessionsDirName {
 		return workDir
 	}
 	return sessionDir

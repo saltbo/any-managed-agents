@@ -1,0 +1,376 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "AMA Runtime Bridge Protocol",
+    "version": "1.0.0"
+  },
+  "paths": {},
+  "components": {
+    "schemas": {
+      "JSON": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "ExternalRuntimeName": {
+        "type": "string",
+        "enum": [
+          "claude-code",
+          "codex",
+          "copilot"
+        ],
+        "x-enum-varnames": [
+          "ExternalRuntimeClaudeCode",
+          "ExternalRuntimeCodex",
+          "ExternalRuntimeCopilot"
+        ]
+      },
+      "AmaSessionEventType": {
+        "type": "string",
+        "enum": [
+          "agent_start",
+          "agent_end",
+          "turn_start",
+          "turn_end",
+          "session_stop",
+          "session_checkpoint",
+          "session_resume",
+          "message_start",
+          "message_update",
+          "message_end",
+          "tool_execution_start",
+          "tool_execution_update",
+          "tool_execution_end",
+          "usage.recorded",
+          "policy.decision",
+          "permission.request",
+          "runtime.error",
+          "runtime.metadata",
+          "runtime.output",
+          "runner.metadata"
+        ],
+        "x-enum-varnames": [
+          "EventTypeAgentStart",
+          "EventTypeAgentEnd",
+          "EventTypeTurnStart",
+          "EventTypeTurnEnd",
+          "EventTypeSessionStop",
+          "EventTypeSessionCheckpoint",
+          "EventTypeSessionResume",
+          "EventTypeMessageStart",
+          "EventTypeMessageUpdate",
+          "EventTypeMessageEnd",
+          "EventTypeToolExecutionStart",
+          "EventTypeToolExecutionUpdate",
+          "EventTypeToolExecutionEnd",
+          "EventTypeUsageRecorded",
+          "EventTypePolicyDecision",
+          "EventTypePermissionRequest",
+          "EventTypeRuntimeError",
+          "EventTypeRuntimeMetadata",
+          "EventTypeRuntimeOutput",
+          "EventTypeRunnerMetadata"
+        ]
+      },
+      "BridgeRunRequest": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "run"
+            ],
+            "x-enum-varnames": [
+              "BridgeMessageTypeRun"
+            ]
+          },
+          "requestId": {
+            "type": "string",
+            "x-go-name": "RequestID"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/ExternalRuntimeName"
+          },
+          "sessionId": {
+            "type": "string",
+            "x-go-name": "SessionID"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "env": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "agentSnapshot": {
+            "$ref": "#/components/schemas/JSON",
+            "x-go-name": "AgentSnapshot"
+          },
+          "runtimeConfig": {
+            "$ref": "#/components/schemas/JSON",
+            "x-go-name": "RuntimeConfig"
+          },
+          "resumeToken": {
+            "type": "string",
+            "x-go-name": "ResumeToken"
+          },
+          "resume": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "type",
+          "requestId",
+          "runtime",
+          "sessionId",
+          "cwd",
+          "env",
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "BridgeControl": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "abort",
+              "send",
+              "permissionDecision"
+            ],
+            "x-enum-varnames": [
+              "BridgeMessageTypeAbort",
+              "BridgeMessageTypeSend",
+              "BridgeMessageTypePermissionDecision"
+            ]
+          },
+          "requestId": {
+            "type": "string",
+            "x-go-name": "RequestID"
+          },
+          "message": {
+            "type": "string"
+          },
+          "permissionId": {
+            "type": "string",
+            "x-go-name": "PermissionID"
+          },
+          "allowed": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "requestId"
+        ],
+        "additionalProperties": false
+      },
+      "BridgeInventoryRequest": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "inventory"
+            ],
+            "x-enum-varnames": [
+              "BridgeMessageTypeInventory"
+            ]
+          },
+          "requestId": {
+            "type": "string",
+            "x-go-name": "RequestID"
+          },
+          "env": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "includeUsage": {
+            "type": "boolean",
+            "x-go-name": "IncludeUsage"
+          }
+        },
+        "required": [
+          "type",
+          "requestId",
+          "env"
+        ],
+        "additionalProperties": false
+      },
+      "BridgeOutput": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "sessionEvent",
+              "resumeToken",
+              "result",
+              "error"
+            ],
+            "x-enum-varnames": [
+              "BridgeMessageTypeReady",
+              "BridgeMessageTypeSessionEvent",
+              "BridgeMessageTypeResumeToken",
+              "BridgeMessageTypeResult",
+              "BridgeMessageTypeError"
+            ]
+          },
+          "requestId": {
+            "type": "string",
+            "x-go-name": "RequestID"
+          },
+          "eventType": {
+            "$ref": "#/components/schemas/AmaSessionEventType",
+            "x-go-name": "EventType"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/JSON"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/JSON"
+          },
+          "result": {
+            "$ref": "#/components/schemas/JSON"
+          },
+          "error": {
+            "$ref": "#/components/schemas/BridgeError"
+          },
+          "resumeToken": {
+            "type": "string",
+            "x-go-name": "ResumeToken"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "additionalProperties": false
+      },
+      "BridgeError": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "details": {}
+        },
+        "required": [
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "BridgeInventoryResult": {
+        "type": "object",
+        "properties": {
+          "runtimes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BridgeInventoryRuntime"
+            }
+          }
+        },
+        "required": [
+          "runtimes"
+        ],
+        "additionalProperties": false
+      },
+      "BridgeInventoryRuntime": {
+        "type": "object",
+        "properties": {
+          "runtime": {
+            "$ref": "#/components/schemas/ExternalRuntimeName"
+          },
+          "binary": {
+            "type": "string"
+          },
+          "installed": {
+            "type": "boolean"
+          },
+          "fallbackModels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "x-go-name": "FallbackModels"
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "usageWindows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BridgeUsageWindow"
+            },
+            "x-go-name": "UsageWindows"
+          },
+          "limitedDetail": {
+            "type": "string",
+            "x-go-name": "LimitedDetail"
+          }
+        },
+        "required": [
+          "runtime",
+          "binary",
+          "installed",
+          "fallbackModels",
+          "models",
+          "status",
+          "detail"
+        ],
+        "additionalProperties": false
+      },
+      "BridgeUsageWindow": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "utilization": {
+            "type": "number"
+          },
+          "resetsAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "utilization",
+          "resetsAt"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}

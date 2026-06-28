@@ -10,5 +10,8 @@
     "./sandbox-tools": "./src/sandbox-tools.ts",
     "./session-events": "./src/session-events.ts",
     "./workspace-manifest": "./src/workspace-manifest.ts"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
   }
 }

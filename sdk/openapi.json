@@ -321,6 +321,373 @@
           }
         }
       },
+      "RunnerMemorySnapshot": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "example": "notes/plan.md"
+          },
+          "content": {
+            "type": "string",
+            "example": "Project notes"
+          }
+        },
+        "required": [
+          "path",
+          "content"
+        ],
+        "additionalProperties": false
+      },
+      "RunnerResourceRef": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "example": "github_repository"
+          },
+          "owner": {
+            "type": "string",
+            "example": "saltbo"
+          },
+          "repo": {
+            "type": "string",
+            "example": "any-managed-agents"
+          },
+          "ref": {
+            "type": "string",
+            "example": "main"
+          },
+          "mountPath": {
+            "type": "string",
+            "example": "repo"
+          },
+          "storeId": {
+            "type": "string",
+            "example": "memstore_abc123"
+          },
+          "name": {
+            "type": "string",
+            "example": "Project memory"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "access": {
+            "type": "string",
+            "example": "read_write"
+          },
+          "memories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunnerMemorySnapshot"
+            }
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "additionalProperties": false
+      },
+      "RunnerToolCall": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "call_abc123"
+          },
+          "name": {
+            "type": "string",
+            "example": "sandbox.exec"
+          },
+          "arguments": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          },
+          "input": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          },
+          "approved": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RunnerWorkPayload": {
+        "type": "object",
+        "properties": {
+          "protocol": {
+            "type": "string",
+            "enum": [
+              "ama-runner-work"
+            ]
+          },
+          "type": {
+            "type": "string",
+            "example": "session.start"
+          },
+          "sessionId": {
+            "type": "string",
+            "example": "session_abc123"
+          },
+          "hostingMode": {
+            "type": "string",
+            "example": "self_hosted"
+          },
+          "runtime": {
+            "type": "string",
+            "example": "codex"
+          },
+          "runtimeConfig": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          },
+          "resourceRefs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunnerResourceRef"
+            }
+          },
+          "provider": {
+            "type": "string",
+            "example": "provider_codex"
+          },
+          "model": {
+            "type": "string",
+            "example": "gpt-5.3-codex"
+          },
+          "agentSnapshot": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          },
+          "environmentSnapshot": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": {
+              "nullable": true
+            }
+          },
+          "runtimeDriver": {
+            "type": "string",
+            "example": "codex-self-hosted"
+          },
+          "requiredRunnerCapability": {
+            "type": "string",
+            "nullable": true
+          },
+          "runtimeEnv": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "runtimeSecretEnv": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {
+                "nullable": true
+              }
+            }
+          },
+          "initialPrompt": {
+            "type": "string",
+            "nullable": true
+          },
+          "resume": {
+            "type": "boolean"
+          },
+          "resumeToken": {
+            "type": "string",
+            "nullable": true
+          },
+          "approved": {
+            "type": "boolean"
+          },
+          "toolCallId": {
+            "type": "string",
+            "example": "call_abc123"
+          },
+          "toolName": {
+            "type": "string",
+            "example": "sandbox.exec"
+          },
+          "input": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          },
+          "toolCall": {
+            "$ref": "#/components/schemas/RunnerToolCall"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RunnerRuntimeToolCall": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "tool_1"
+          },
+          "name": {
+            "type": "string",
+            "example": "sandbox.exec"
+          },
+          "input": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          },
+          "arguments": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "RunnerRuntimeRequest": {
+        "type": "object",
+        "properties": {
+          "toolCalls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunnerRuntimeToolCall"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "RunnerSessionCommand": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "runnercmd_abc123"
+          },
+          "type": {
+            "type": "string",
+            "example": "send"
+          },
+          "path": {
+            "type": "string",
+            "example": "/rpc"
+          },
+          "message": {
+            "type": "string",
+            "example": "continue"
+          },
+          "reason": {
+            "type": "string",
+            "example": "user cancelled"
+          },
+          "permissionId": {
+            "type": "string",
+            "example": "perm_abc123"
+          },
+          "allowed": {
+            "type": "boolean"
+          },
+          "body": {
+            "$ref": "#/components/schemas/RunnerRuntimeRequest"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "additionalProperties": false
+      },
+      "RunnerSandboxRequest": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "example": "sandbox.execute"
+          },
+          "toolCallId": {
+            "type": "string",
+            "example": "call_abc123"
+          },
+          "toolName": {
+            "type": "string",
+            "example": "sandbox.exec"
+          },
+          "input": {
+            "type": "object",
+            "additionalProperties": {
+              "nullable": true
+            }
+          },
+          "resourceRefs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunnerResourceRef"
+            }
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "additionalProperties": false
+      },
+      "RunnerChannelMessage": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "example": "session.command"
+          },
+          "eventId": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string",
+            "example": "session_abc123"
+          },
+          "runnerId": {
+            "type": "string",
+            "example": "runner_abc123"
+          },
+          "leaseId": {
+            "type": "string",
+            "example": "lease_abc123"
+          },
+          "workItemId": {
+            "type": "string",
+            "example": "work_abc123"
+          },
+          "command": {
+            "$ref": "#/components/schemas/RunnerSessionCommand"
+          },
+          "request": {
+            "$ref": "#/components/schemas/RunnerSandboxRequest"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "additionalProperties": false
+      },
       "HealthResponse": {
         "type": "object",
         "properties": {

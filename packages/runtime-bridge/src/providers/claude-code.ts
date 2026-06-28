@@ -156,6 +156,9 @@ function* mapClaudeMessage(msg: SDKMessage): Generator<AmaRuntimeEvent> {
 
 export const claudeCodeProvider: RuntimeProvider = {
   name: 'claude-code',
+  binary: 'claude',
+  fallbackModels: ['claude-sonnet-4-6'],
+  usageUnavailableDetail: 'Claude Code quota usage unavailable; scheduling paused until the usage probe succeeds',
   execute(request: RuntimeProviderRequest): Promise<RuntimeProviderHandle> {
     const abortController = new AbortController()
     const claudePath = resolveCliPath('claude')

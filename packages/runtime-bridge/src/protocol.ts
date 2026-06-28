@@ -3,10 +3,9 @@ import type { AmaRuntimeEvent, RuntimeBridgeRequest, RuntimeUsageWindow } from '
 export type {
   AmaRuntimeEvent,
   RuntimeBridgeInput,
-  RuntimeBridgeModelsRequest,
   RuntimeBridgeOutput,
   RuntimeBridgeRequest,
-  RuntimeBridgeUsageRequest,
+  RuntimeInventoryEntry,
   RuntimeUsageWindow,
 } from '@ama/runtime-contracts/bridge-protocol'
 
@@ -22,6 +21,9 @@ export type RuntimeProviderRequest = RuntimeBridgeRequest
 
 export type RuntimeProvider = {
   readonly name: RuntimeBridgeRequest['runtime']
+  readonly binary: string
+  readonly fallbackModels: string[]
+  readonly usageUnavailableDetail?: string
   execute(request: RuntimeProviderRequest): Promise<RuntimeProviderHandle>
   /**
    * Resolve the host provider account's quota/rate-limit windows for this

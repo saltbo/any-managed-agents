@@ -1,0 +1,59 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "AMA Session Event Types",
+    "version": "1.0.0"
+  },
+  "paths": {},
+  "components": {
+    "schemas": {
+      "AmaSessionEventType": {
+        "type": "string",
+        "enum": [
+          "agent_start",
+          "agent_end",
+          "turn_start",
+          "turn_end",
+          "session_stop",
+          "session_checkpoint",
+          "session_resume",
+          "message_start",
+          "message_update",
+          "message_end",
+          "tool_execution_start",
+          "tool_execution_update",
+          "tool_execution_end",
+          "usage.recorded",
+          "policy.decision",
+          "permission.request",
+          "runtime.error",
+          "runtime.metadata",
+          "runtime.output",
+          "runner.metadata"
+        ],
+        "x-enum-varnames": [
+          "EventTypeAgentStart",
+          "EventTypeAgentEnd",
+          "EventTypeTurnStart",
+          "EventTypeTurnEnd",
+          "EventTypeSessionStop",
+          "EventTypeSessionCheckpoint",
+          "EventTypeSessionResume",
+          "EventTypeMessageStart",
+          "EventTypeMessageUpdate",
+          "EventTypeMessageEnd",
+          "EventTypeToolExecutionStart",
+          "EventTypeToolExecutionUpdate",
+          "EventTypeToolExecutionEnd",
+          "EventTypeUsageRecorded",
+          "EventTypePolicyDecision",
+          "EventTypePermissionRequest",
+          "EventTypeRuntimeError",
+          "EventTypeRuntimeMetadata",
+          "EventTypeRuntimeOutput",
+          "EventTypeRunnerMetadata"
+        ]
+      }
+    }
+  }
+}

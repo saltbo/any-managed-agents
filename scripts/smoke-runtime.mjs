@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import readline from 'node:readline'
 
-const BUNDLE = join(process.cwd(), 'cmd', 'ama-runner', 'internal', 'hostruntime', 'runtime_bridge_bundle.mjs')
+const BUNDLE = join(process.cwd(), 'cmd', 'ama-runner', 'pkg', 'runtimebridge', 'bundle.mjs')
 let passed = 0
 let failed = 0
 
@@ -112,16 +112,21 @@ const requestBase = (runtime, requestId, overrides = {}) => ({
   ...overrides,
 })
 
-async function bridgeModelProbe(runtime) {
-  console.log(`\n[${runtime}] model probe`)
+async function bridgeInventory() {
+  console.log('\n[bridge] runtime inventory')
   const bridge = startBridge()
   await bridge.waitReady()
-  const requestId = `models_${runtime.replace(/[^a-z0-9]/gi, '_')}`
-  bridge.send({ type: 'detectModels', requestId, runtime, env: {} })
+  const requestId = 'inventory_all'
+  bridge.send({ type: 'inventory', requestId, env: {}, includeUsage: true })
   await bridge.waitForResult(requestId)
   const result = bridge.outputs.find((message) => message.requestId === requestId && message.type === 'result')?.result
-  ok('reports ready status', result?.status === 'ready', `(result=${JSON.stringify(result)})`)
-  ok('reports at least one model', Array.isArray(result?.models) && result.models.length > 0)
+  const runtimes = Array.isArray(result?.runtimes) ? result.runtimes : []
+  for (const runtime of ['codex', 'claude-code', 'copilot']) {
+    const entry = runtimes.find((item) => item.runtime === runtime)
+    ok(`${runtime} inventory entry`, Boolean(entry), `(result=${JSON.stringify(result)})`)
+    ok(`${runtime} installed in test mode`, entry?.installed === true)
+    ok(`${runtime} reports models or fallback`, Boolean(entry?.models?.length || entry?.fallbackModels?.length))
+  }
   bridge.stop()
 }
 
@@ -210,9 +215,7 @@ async function amaRejectedByBridge() {
 
 async function main() {
   console.log(`Smoke testing runner runtime bridge: ${BUNDLE}`)
-  await bridgeModelProbe('codex')
-  await bridgeModelProbe('claude-code')
-  await bridgeModelProbe('copilot')
+  await bridgeInventory()
   await deterministicRun('codex')
   await liveRunWithPrompt()
   await livePermissionFlow()

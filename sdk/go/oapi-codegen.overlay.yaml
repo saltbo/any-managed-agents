@@ -2,23 +2,12 @@ overlay: 1.0.0
 info:
   title: AMA Go SDK generation overlay
   version: 1.0.0
-# Generated alongside oapi-codegen.config.yaml. Two concerns:
-#  1. Rename generated models that collide with hand-written SDK types
-#     (runners.go) kept for the self-hosted runner protocol.
-#  2. Drop the meaningless `nullable: true` on free-form additionalProperties
-#     / items values. oapi-codegen renders those as *interface{} but its
-#     additionalProperties helper methods assume interface{}, which does not
-#     compile. Removing the nullable flag yields plain interface{}.
+# Generated alongside oapi-codegen.config.yaml. Drops meaningless `nullable:
+# true` on free-form additionalProperties/items values. oapi-codegen renders
+# those as *interface{} but its additionalProperties helper methods assume
+# interface{}, which does not compile. Removing the nullable flag yields plain
+# interface{}.
 actions:
-  - target: $.components.schemas.Runner
-    update:
-      x-go-name: GeneratedRunner
-  - target: $.components.schemas.CreateRunnerRequest
-    update:
-      x-go-name: GeneratedCreateRunnerRequest
-  - target: $.components.schemas.ErrorResponse
-    update:
-      x-go-name: GeneratedErrorResponse
   - target: $.components.schemas['FederatedTenant']['properties']['metadata'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['ErrorResponse']['properties']['error']['properties']['issues'].items.nullable

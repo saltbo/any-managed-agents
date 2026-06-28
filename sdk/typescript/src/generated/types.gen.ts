@@ -83,6 +83,123 @@ export type SessionClientFrame = ({
     type: 'backfill';
 } & SessionBackfillRequestFrame);
 
+export type RunnerMemorySnapshot = {
+    path: string;
+    content: string;
+};
+
+export type RunnerResourceRef = {
+    type: string;
+    owner?: string;
+    repo?: string;
+    ref?: string;
+    mountPath?: string;
+    storeId?: string;
+    name?: string;
+    description?: string | null;
+    access?: string;
+    memories?: Array<RunnerMemorySnapshot>;
+};
+
+export type RunnerToolCall = {
+    id?: string;
+    name?: string;
+    arguments?: {
+        [key: string]: unknown;
+    };
+    input?: {
+        [key: string]: unknown;
+    };
+    approved?: boolean;
+};
+
+export type RunnerWorkPayload = {
+    protocol?: 'ama-runner-work';
+    type?: string;
+    sessionId?: string;
+    hostingMode?: string;
+    runtime?: string;
+    runtimeConfig?: {
+        [key: string]: unknown;
+    };
+    resourceRefs?: Array<RunnerResourceRef>;
+    provider?: string;
+    model?: string;
+    agentSnapshot?: {
+        [key: string]: unknown;
+    };
+    environmentSnapshot?: {
+        [key: string]: unknown;
+    } | null;
+    runtimeDriver?: string;
+    requiredRunnerCapability?: string | null;
+    runtimeEnv?: {
+        [key: string]: string;
+    };
+    runtimeSecretEnv?: Array<{
+        [key: string]: unknown;
+    }>;
+    initialPrompt?: string | null;
+    resume?: boolean;
+    resumeToken?: string | null;
+    approved?: boolean;
+    toolCallId?: string;
+    toolName?: string;
+    input?: {
+        [key: string]: unknown;
+    };
+    toolCall?: RunnerToolCall;
+};
+
+export type RunnerRuntimeToolCall = {
+    id?: string;
+    name?: string;
+    input?: {
+        [key: string]: unknown;
+    };
+    arguments?: {
+        [key: string]: unknown;
+    };
+};
+
+export type RunnerRuntimeRequest = {
+    toolCalls?: Array<RunnerRuntimeToolCall>;
+};
+
+export type RunnerSessionCommand = {
+    id?: string;
+    type: string;
+    path?: string;
+    message?: string;
+    reason?: string;
+    permissionId?: string;
+    allowed?: boolean;
+    body?: RunnerRuntimeRequest;
+};
+
+export type RunnerSandboxRequest = {
+    type: string;
+    toolCallId?: string;
+    toolName?: string;
+    input?: {
+        [key: string]: unknown;
+    };
+    resourceRefs?: Array<RunnerResourceRef>;
+};
+
+export type RunnerChannelMessage = {
+    type: string;
+    eventId?: string;
+    requestId?: string;
+    message?: string;
+    sessionId?: string;
+    runnerId?: string;
+    leaseId?: string;
+    workItemId?: string;
+    command?: RunnerSessionCommand;
+    request?: RunnerSandboxRequest;
+};
+
 export type HealthResponse = {
     status: 'ok';
     name: string;

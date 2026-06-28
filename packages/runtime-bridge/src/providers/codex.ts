@@ -139,6 +139,8 @@ function* mapThreadEvent(event: ThreadEvent): Generator<AmaRuntimeEvent> {
 
 export const codexProvider: RuntimeProvider = {
   name: 'codex',
+  binary: 'codex',
+  fallbackModels: ['gpt-5.3-codex'],
   async execute(request: RuntimeProviderRequest): Promise<RuntimeProviderHandle> {
     let resumeToken = request.resumeToken
     const abortController = new AbortController()

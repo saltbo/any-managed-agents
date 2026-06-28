@@ -243,16 +243,37 @@ from .replace_policy_request_metadata import ReplacePolicyRequestMetadata
 from .resource_ref_type_1 import ResourceRefType1
 from .runner import Runner
 from .runner_auth_mode import RunnerAuthMode
+from .runner_channel_message import RunnerChannelMessage
 from .runner_channel_metadata import RunnerChannelMetadata
 from .runner_channel_metadata_upgrade import RunnerChannelMetadataUpgrade
 from .runner_credential_ref import RunnerCredentialRef
 from .runner_heartbeat import RunnerHeartbeat
 from .runner_heartbeat_state import RunnerHeartbeatState
 from .runner_list_response import RunnerListResponse
+from .runner_memory_snapshot import RunnerMemorySnapshot
 from .runner_metadata import RunnerMetadata
+from .runner_resource_ref import RunnerResourceRef
 from .runner_runtime_inventory import RunnerRuntimeInventory
 from .runner_runtime_inventory_state import RunnerRuntimeInventoryState
+from .runner_runtime_request import RunnerRuntimeRequest
+from .runner_runtime_tool_call import RunnerRuntimeToolCall
+from .runner_runtime_tool_call_arguments import RunnerRuntimeToolCallArguments
+from .runner_runtime_tool_call_input import RunnerRuntimeToolCallInput
+from .runner_sandbox_request import RunnerSandboxRequest
+from .runner_sandbox_request_input import RunnerSandboxRequestInput
+from .runner_session_command import RunnerSessionCommand
 from .runner_state import RunnerState
+from .runner_tool_call import RunnerToolCall
+from .runner_tool_call_arguments import RunnerToolCallArguments
+from .runner_tool_call_input import RunnerToolCallInput
+from .runner_work_payload import RunnerWorkPayload
+from .runner_work_payload_agent_snapshot import RunnerWorkPayloadAgentSnapshot
+from .runner_work_payload_environment_snapshot_type_0 import RunnerWorkPayloadEnvironmentSnapshotType0
+from .runner_work_payload_input import RunnerWorkPayloadInput
+from .runner_work_payload_protocol import RunnerWorkPayloadProtocol
+from .runner_work_payload_runtime_config import RunnerWorkPayloadRuntimeConfig
+from .runner_work_payload_runtime_env import RunnerWorkPayloadRuntimeEnv
+from .runner_work_payload_runtime_secret_env_item import RunnerWorkPayloadRuntimeSecretEnvItem
 from .runtime import Runtime
 from .runtime_usage import RuntimeUsage
 from .runtime_usage_window import RuntimeUsageWindow
@@ -661,16 +682,37 @@ __all__ = (
     "ResourceRefType1",
     "Runner",
     "RunnerAuthMode",
+    "RunnerChannelMessage",
     "RunnerChannelMetadata",
     "RunnerChannelMetadataUpgrade",
     "RunnerCredentialRef",
     "RunnerHeartbeat",
     "RunnerHeartbeatState",
     "RunnerListResponse",
+    "RunnerMemorySnapshot",
     "RunnerMetadata",
+    "RunnerResourceRef",
     "RunnerRuntimeInventory",
     "RunnerRuntimeInventoryState",
+    "RunnerRuntimeRequest",
+    "RunnerRuntimeToolCall",
+    "RunnerRuntimeToolCallArguments",
+    "RunnerRuntimeToolCallInput",
+    "RunnerSandboxRequest",
+    "RunnerSandboxRequestInput",
+    "RunnerSessionCommand",
     "RunnerState",
+    "RunnerToolCall",
+    "RunnerToolCallArguments",
+    "RunnerToolCallInput",
+    "RunnerWorkPayload",
+    "RunnerWorkPayloadAgentSnapshot",
+    "RunnerWorkPayloadEnvironmentSnapshotType0",
+    "RunnerWorkPayloadInput",
+    "RunnerWorkPayloadProtocol",
+    "RunnerWorkPayloadRuntimeConfig",
+    "RunnerWorkPayloadRuntimeEnv",
+    "RunnerWorkPayloadRuntimeSecretEnvItem",
     "Runtime",
     "RuntimeUsage",
     "RuntimeUsageWindow",
