@@ -168,21 +168,7 @@ actions:
     remove: true
   - target: $.components.schemas['SessionAgentSnapshot']['properties']['metadata'].additionalProperties.nullable
     remove: true
-  - target: $.components.schemas['SessionEnvironmentSnapshot']['properties']['packages']['items'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['SessionEnvironmentSnapshot']['properties']['variables'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['SessionEnvironmentSnapshot']['properties']['credentialRefs']['items'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['SessionEnvironmentSnapshot']['properties']['mcpPolicy'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['SessionEnvironmentSnapshot']['properties']['packageManagerPolicy'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['SessionEnvironmentSnapshot']['properties']['resourceLimits'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['SessionEnvironmentSnapshot']['properties']['runtimeConfig'].additionalProperties.nullable
-    remove: true
-  - target: $.components.schemas['SessionEnvironmentSnapshot']['properties']['metadata'].additionalProperties.nullable
+  - target: $.components.schemas['SessionEnvironmentJsonObject'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['SessionRuntimeMetadata']['properties']['runtimeConfig'].additionalProperties.nullable
     remove: true
@@ -214,7 +200,7 @@ actions:
     remove: true
   - target: $.components.schemas['VaultCredential']['properties']['metadata'].additionalProperties.nullable
     remove: true
-  - target: $.components.schemas['VaultCredentialVersion']['properties']['metadata'].additionalProperties.nullable
+  - target: $.components.schemas['VaultJsonObject'].additionalProperties.nullable
     remove: true
   - target: $.components.schemas['CreateVaultCredentialRequest']['properties']['metadata'].additionalProperties.nullable
     remove: true

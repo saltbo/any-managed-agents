@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+import asyncio
+import json
+from collections.abc import AsyncIterator
 from typing import Any
+from urllib.parse import quote, urlencode, urlparse, urlunparse
+
+import websockets
 
 from .client import AuthenticatedClient, Client
 from .api.agents import create_agent as create_agent_api
@@ -70,14 +76,12 @@ from .api.providers import list_provider_models as list_provider_models_api
 from .api.providers import list_providers as list_providers_api
 from .api.providers import read_provider as read_provider_api
 from .api.providers import refresh_catalog as refresh_catalog_api
-from .api.runners import connect_runner_channel as connect_runner_channel_api
 from .api.runners import create_runner as create_runner_api
 from .api.runners import list_runners as list_runners_api
 from .api.runners import put_runner_heartbeat as put_runner_heartbeat_api
 from .api.runners import read_runner as read_runner_api
 from .api.runners import read_runner_heartbeat as read_runner_heartbeat_api
 from .api.runners import update_runner as update_runner_api
-from .api.sessions import connect_session_socket as connect_session_socket_api
 from .api.sessions import create_session as create_session_api
 from .api.sessions import create_session_events as create_session_events_api
 from .api.sessions import create_session_message as create_session_message_api
@@ -127,6 +131,117 @@ class AmaApiError(Exception):
         self.body = body
 
 
+class JsonWebSocket:
+    def __init__(self, url: str, headers: dict[str, str]) -> None:
+        self.url = url
+        self.headers = headers
+        self._socket: Any | None = None
+
+    async def connect(self) -> "JsonWebSocket":
+        self._socket = await websockets.connect(self.url, additional_headers=self.headers or None)
+        return self
+
+    async def __aenter__(self) -> "JsonWebSocket":
+        return await self.connect()
+
+    async def __aexit__(self, *args: Any) -> None:
+        await self.close()
+
+    def _connected(self) -> Any:
+        if self._socket is None:
+            raise RuntimeError("WebSocket is not connected; use 'async with' or await connect().")
+        return self._socket
+
+    async def recv_json(self) -> Any:
+        return json.loads(await self._connected().recv())
+
+    async def send_json(self, value: Any) -> None:
+        await self._connected().send(json.dumps(value))
+
+    async def close(self, code: int = 1000, reason: str = "") -> None:
+        if self._socket is not None:
+            await self._socket.close(code=code, reason=reason)
+            self._socket = None
+
+
+class RunnerChannel(JsonWebSocket):
+    async def messages(self) -> AsyncIterator[Any]:
+        while True:
+            yield await self.recv_json()
+
+    async def send(self, frame: Any) -> None:
+        await self.send_json(frame)
+
+
+class SessionStream(JsonWebSocket):
+    def __init__(self, url: str, headers: dict[str, str]) -> None:
+        super().__init__(url, headers)
+        self._events: asyncio.Queue[Any | None] = asyncio.Queue()
+        self._frames: asyncio.Queue[Any | None] = asyncio.Queue()
+        self._backfills: dict[str, asyncio.Future[Any]] = {}
+        self._reader: asyncio.Task[None] | None = None
+        self._backfill_seq = 0
+
+    async def connect(self) -> "SessionStream":
+        await super().connect()
+        self._reader = asyncio.create_task(self._read_loop())
+        return self
+
+    async def _read_loop(self) -> None:
+        try:
+            async for message in self._connected():
+                frame = json.loads(message)
+                frame_type = frame.get("type") if isinstance(frame, dict) else None
+                if frame_type == "event":
+                    await self._events.put(frame.get("event"))
+                elif frame_type == "backfill":
+                    request_id = frame.get("requestId")
+                    future = self._backfills.pop(request_id, None)
+                    if future is not None and not future.done():
+                        future.set_result(frame)
+                else:
+                    await self._frames.put(frame)
+        except Exception as error:
+            for future in self._backfills.values():
+                if not future.done():
+                    future.set_exception(error)
+            self._backfills.clear()
+        finally:
+            await self._events.put(None)
+            await self._frames.put(None)
+
+    async def events(self) -> AsyncIterator[Any]:
+        while True:
+            event = await self._events.get()
+            if event is None:
+                return
+            yield event
+
+    async def frames(self) -> AsyncIterator[Any]:
+        while True:
+            frame = await self._frames.get()
+            if frame is None:
+                return
+            yield frame
+
+    async def send(self, frame: Any) -> None:
+        await self.send_json(frame)
+
+    async def backfill(self, **options: Any) -> Any:
+        self._backfill_seq += 1
+        request_id = f"bf_{self._backfill_seq}"
+        future: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
+        self._backfills[request_id] = future
+        await self.send_json({"type": "backfill", "requestId": request_id, **options})
+        return await future
+
+    async def close(self, code: int = 1000, reason: str = "") -> None:
+        if self._reader is not None:
+            self._reader.cancel()
+            self._reader = None
+        await super().close(code=code, reason=reason)
+
+
 class AmaClient:
     def __init__(
         self,
@@ -139,26 +254,30 @@ class AmaClient:
         merged_headers = dict(headers or {})
         if project_id:
             merged_headers["x-ama-project-id"] = project_id
+        self._base_url = base_url
+        self._access_token = access_token
+        self._project_id = project_id
+        self._headers = merged_headers
         self._client = client or _new_generated_client(base_url, access_token, merged_headers)
-        self.system = _SystemResource(self._client)
-        self.auth = _AuthResource(self._client)
-        self.projects = _ProjectsResource(self._client)
-        self.agents = _AgentsResource(self._client)
-        self.environments = _EnvironmentsResource(self._client)
-        self.providers = _ProvidersResource(self._client)
-        self.runners = _RunnersResource(self._client)
-        self.work_items = _WorkItemsResource(self._client)
-        self.leases = _LeasesResource(self._client)
-        self.policies = _PoliciesResource(self._client)
-        self.budgets = _BudgetsResource(self._client)
-        self.connectors = _ConnectorsResource(self._client)
-        self.connections = _ConnectionsResource(self._client)
-        self.audit = _AuditResource(self._client)
-        self.triggers = _TriggersResource(self._client)
-        self.sessions = _SessionsResource(self._client)
-        self.memory_stores = _MemoryStoresResource(self._client)
-        self.vaults = _VaultsResource(self._client)
-        self.usage = _UsageResource(self._client)
+        self.system = _SystemResource(self)
+        self.auth = _AuthResource(self)
+        self.projects = _ProjectsResource(self)
+        self.agents = _AgentsResource(self)
+        self.environments = _EnvironmentsResource(self)
+        self.providers = _ProvidersResource(self)
+        self.runners = _RunnersResource(self)
+        self.work_items = _WorkItemsResource(self)
+        self.leases = _LeasesResource(self)
+        self.policies = _PoliciesResource(self)
+        self.budgets = _BudgetsResource(self)
+        self.connectors = _ConnectorsResource(self)
+        self.connections = _ConnectionsResource(self)
+        self.audit = _AuditResource(self)
+        self.triggers = _TriggersResource(self)
+        self.sessions = _SessionsResource(self)
+        self.memory_stores = _MemoryStoresResource(self)
+        self.vaults = _VaultsResource(self)
+        self.usage = _UsageResource(self)
 
     @property
     def raw(self) -> AuthenticatedClient | Client:
@@ -180,6 +299,31 @@ def _new_generated_client(base_url: str, access_token: str | None, headers: dict
     return Client(base_url=base_url, headers=headers)
 
 
+def _websocket_url(base_url: str, path: str, access_token: str | None, project_id: str | None) -> str:
+    parsed = urlparse(base_url.rstrip("/") + path)
+    if parsed.scheme == "https":
+        scheme = "wss"
+    elif parsed.scheme == "http":
+        scheme = "ws"
+    else:
+        raise ValueError("AMA base URL must use http or https")
+    query = {}
+    if access_token:
+        query["access_token"] = access_token
+    if project_id:
+        query["x-ama-project-id"] = project_id
+    return urlunparse((scheme, parsed.netloc, parsed.path, "", urlencode(query), ""))
+
+
+def _websocket_headers(headers: dict[str, str], access_token: str | None, project_id: str | None) -> dict[str, str]:
+    result = dict(headers)
+    if access_token:
+        result["authorization"] = f"Bearer {access_token}"
+    if project_id:
+        result["x-ama-project-id"] = project_id
+    return result
+
+
 def _unwrap(response: Any) -> Any:
     status = int(response.status_code)
     if 200 <= status <= 299:
@@ -194,15 +338,17 @@ def _unwrap(response: Any) -> Any:
 
 
 class _SystemResource:
-    def __init__(self, client: AuthenticatedClient | Client) -> None:
-        self._client = client
+    def __init__(self, owner: AmaClient) -> None:
+        self._owner = owner
+        self._client = owner.raw
 
     def health(self) -> Any:
         return _unwrap(get_health_api.sync_detailed(client=self._client))
 
 class _AuthResource:
-    def __init__(self, client: AuthenticatedClient | Client) -> None:
-        self._client = client
+    def __init__(self, owner: AmaClient) -> None:
+        self._owner = owner
+        self._client = owner.raw
 
     def config(self, **query: Any) -> Any:
         return _unwrap(read_auth_config_api.sync_detailed(client=self._client, **query))
@@ -232,8 +378,9 @@ class _AuthResource:
         return _unwrap(delete_federated_tenant_api.sync_detailed(tenant_id=tenant_id, client=self._client))
 
 class _ProjectsResource:
-    def __init__(self, client: AuthenticatedClient | Client) -> None:
-        self._client = client
+    def __init__(self, owner: AmaClient) -> None:
+        self._owner = owner
+        self._client = owner.raw
 
     def list(self, **query: Any) -> Any:
         return _unwrap(list_projects_api.sync_detailed(client=self._client, **query))
@@ -245,8 +392,9 @@ class _ProjectsResource:
         return _unwrap(read_project_api.sync_detailed(project_id=project_id, client=self._client))
 
 class _AgentsResource:
-    def __init__(self, client: AuthenticatedClient | Client) -> None:
-        self._client = client
+    def __init__(self, owner: AmaClient) -> None:
+        self._owner = owner
+        self._client = owner.raw
 
     def list(self, **query: Any) -> Any:
         return _unwrap(list_agents_api.sync_detailed(client=self._client, **query))
@@ -276,8 +424,9 @@ class _AgentsResource:
         return _unwrap(read_agent_version_api.sync_detailed(agent_id=agent_id, version=version, client=self._client))
 
 class _EnvironmentsResource:
-    def __init__(self, client: AuthenticatedClient | Client) -> None:
-        self._client = client
+    def __init__(self, owner: AmaClient) -> None:
+        self._owner = owner
+        self._client = owner.raw
 
     def list(self, **query: Any) -> Any:
         return _unwrap(list_environments_api.sync_detailed(client=self._client, **query))
@@ -298,8 +447,9 @@ class _EnvironmentsResource:
         return _unwrap(read_environment_version_api.sync_detailed(environment_id=environment_id, version=version, client=self._client))
 
 class _ProvidersResource:
-    def __init__(self, client: AuthenticatedClient | Client) -> None:
-        self._client = client
+    def __init__(self, owner: AmaClient) -> None:
+        self._owner = owner
+        self._client = owner.raw
 
     def list(self) -> Any:
         return _unwrap(list_providers_api.sync_detailed(client=self._client))
@@ -317,8 +467,9 @@ class _ProvidersResource:
         return _unwrap(list_provider_models_api.sync_detailed(provider_id=provider_id, client=self._client))
 
 class _RunnersResource:
-    def __init__(self, client: AuthenticatedClient | Client) -> None:
-        self._client = client
+    def __init__(self, owner: AmaClient) -> None:
+        self._owner = owner
+        self._client = owner.raw
 
     def list(self, **query: Any) -> Any:
         return _unwrap(list_runners_api.sync_detailed(client=self._client, **query))
@@ -332,8 +483,11 @@ class _RunnersResource:
     def update(self, runner_id: str, body: Any) -> Any:
         return _unwrap(update_runner_api.sync_detailed(runner_id=runner_id, client=self._client, body=body))
 
-    def channel(self, runner_id: str) -> Any:
-        return _unwrap(connect_runner_channel_api.sync_detailed(runner_id=runner_id, client=self._client))
+    def channel(self, runner_id: str) -> RunnerChannel:
+        return RunnerChannel(
+            _websocket_url(self._owner._base_url, f"/api/v1/runners/{quote(runner_id)}/channel", self._owner._access_token, self._owner._project_id),
+            _websocket_headers(self._owner._headers, self._owner._access_token, self._owner._project_id),
+        )
 
     def get_heartbeat(self, runner_id: str) -> Any:
         return _unwrap(read_runner_heartbeat_api.sync_detailed(runner_id=runner_id, client=self._client))
@@ -342,8 +496,9 @@ class _RunnersResource:
         return _unwrap(put_runner_heartbeat_api.sync_detailed(runner_id=runner_id, client=self._client, body=body))
 
 class _WorkItemsResource:
-    def __init__(self, client: AuthenticatedClient | Client) -> None:
-        self._client = client
+    def __init__(self, owner: AmaClient) -> None:
+        self._owner = owner
+        self._client = owner.raw
 
     def list(self, **query: Any) -> Any:
         return _unwrap(list_work_items_api.sync_detailed(client=self._client, **query))
@@ -352,8 +507,9 @@ class _WorkItemsResource:
         return _unwrap(read_work_item_api.sync_detailed(work_item_id=work_item_id, client=self._client))
 
 class _LeasesResource:
-    def __init__(self, client: AuthenticatedClient | Client) -> None:
-        self._client = client
+    def __init__(self, owner: AmaClient) -> None:
+        self._owner = owner
+        self._client = owner.raw
 
     def list(self, **query: Any) -> Any:
         return _unwrap(list_leases_api.sync_detailed(client=self._client, **query))
@@ -368,8 +524,9 @@ class _LeasesResource:
         return _unwrap(update_lease_api.sync_detailed(lease_id=lease_id, client=self._client, body=body))
 
 class _PoliciesResource:
-    def __init__(self, client: AuthenticatedClient | Client) -> None:
-        self._client = client
+    def __init__(self, owner: AmaClient) -> None:
+        self._owner = owner
+        self._client = owner.raw
 
     def list(self) -> Any:
         return _unwrap(list_policies_api.sync_detailed(client=self._client))
@@ -390,8 +547,9 @@ class _PoliciesResource:
         return _unwrap(read_effective_policy_api.sync_detailed(client=self._client, **query))
 
 class _BudgetsResource:
-    def __init__(self, client: AuthenticatedClient | Client) -> None:
-        self._client = client
+    def __init__(self, owner: AmaClient) -> None:
+        self._owner = owner
+        self._client = owner.raw
 
     def list(self) -> Any:
         return _unwrap(list_budgets_api.sync_detailed(client=self._client))
@@ -409,8 +567,9 @@ class _BudgetsResource:
         return _unwrap(delete_budget_api.sync_detailed(budget_id=budget_id, client=self._client))
 
 class _ConnectorsResource:
-    def __init__(self, client: AuthenticatedClient | Client) -> None:
-        self._client = client
+    def __init__(self, owner: AmaClient) -> None:
+        self._owner = owner
+        self._client = owner.raw
 
     def list(self, **query: Any) -> Any:
         return _unwrap(list_connectors_api.sync_detailed(client=self._client, **query))
@@ -419,8 +578,9 @@ class _ConnectorsResource:
         return _unwrap(read_connector_api.sync_detailed(connector_id=connector_id, client=self._client))
 
 class _ConnectionsResource:
-    def __init__(self, client: AuthenticatedClient | Client) -> None:
-        self._client = client
+    def __init__(self, owner: AmaClient) -> None:
+        self._owner = owner
+        self._client = owner.raw
 
     def list(self, **query: Any) -> Any:
         return _unwrap(list_connections_api.sync_detailed(client=self._client, **query))
@@ -447,8 +607,9 @@ class _ConnectionsResource:
         return _unwrap(read_tool_call_api.sync_detailed(connection_id=connection_id, tool_name=tool_name, call_id=call_id, client=self._client))
 
 class _AuditResource:
-    def __init__(self, client: AuthenticatedClient | Client) -> None:
-        self._client = client
+    def __init__(self, owner: AmaClient) -> None:
+        self._owner = owner
+        self._client = owner.raw
 
     def list_records(self, **query: Any) -> Any:
         return _unwrap(list_audit_records_api.sync_detailed(client=self._client, **query))
@@ -457,8 +618,9 @@ class _AuditResource:
         return _unwrap(read_audit_record_api.sync_detailed(record_id=record_id, client=self._client))
 
 class _TriggersResource:
-    def __init__(self, client: AuthenticatedClient | Client) -> None:
-        self._client = client
+    def __init__(self, owner: AmaClient) -> None:
+        self._owner = owner
+        self._client = owner.raw
 
     def list(self, **query: Any) -> Any:
         return _unwrap(list_triggers_api.sync_detailed(client=self._client, **query))
@@ -485,8 +647,9 @@ class _TriggersResource:
         return _unwrap(read_trigger_run_api.sync_detailed(trigger_id=trigger_id, run_id=run_id, client=self._client))
 
 class _SessionsResource:
-    def __init__(self, client: AuthenticatedClient | Client) -> None:
-        self._client = client
+    def __init__(self, owner: AmaClient) -> None:
+        self._owner = owner
+        self._client = owner.raw
 
     def list(self, **query: Any) -> Any:
         return _unwrap(list_sessions_api.sync_detailed(client=self._client, **query))
@@ -503,8 +666,11 @@ class _SessionsResource:
     def connection(self, session_id: str) -> Any:
         return _unwrap(read_session_connection_api.sync_detailed(session_id=session_id, client=self._client))
 
-    def socket(self, session_id: str) -> Any:
-        return _unwrap(connect_session_socket_api.sync_detailed(session_id=session_id, client=self._client))
+    def stream(self, session_id: str) -> SessionStream:
+        return SessionStream(
+            _websocket_url(self._owner._base_url, f"/api/v1/sessions/{quote(session_id)}/socket", self._owner._access_token, self._owner._project_id),
+            _websocket_headers(self._owner._headers, self._owner._access_token, self._owner._project_id),
+        )
 
     def list_messages(self, session_id: str, **query: Any) -> Any:
         return _unwrap(list_session_messages_api.sync_detailed(session_id=session_id, client=self._client, **query))
@@ -531,8 +697,9 @@ class _SessionsResource:
         return _unwrap(decide_session_approval_api.sync_detailed(session_id=session_id, approval_id=approval_id, client=self._client, body=body))
 
 class _MemoryStoresResource:
-    def __init__(self, client: AuthenticatedClient | Client) -> None:
-        self._client = client
+    def __init__(self, owner: AmaClient) -> None:
+        self._owner = owner
+        self._client = owner.raw
 
     def list(self, **query: Any) -> Any:
         return _unwrap(list_memory_stores_api.sync_detailed(client=self._client, **query))
@@ -559,8 +726,9 @@ class _MemoryStoresResource:
         return _unwrap(delete_memory_store_memory_api.sync_detailed(store_id=store_id, memory_id=memory_id, client=self._client))
 
 class _VaultsResource:
-    def __init__(self, client: AuthenticatedClient | Client) -> None:
-        self._client = client
+    def __init__(self, owner: AmaClient) -> None:
+        self._owner = owner
+        self._client = owner.raw
 
     def list(self, **query: Any) -> Any:
         return _unwrap(list_vaults_api.sync_detailed(client=self._client, **query))
@@ -599,8 +767,9 @@ class _VaultsResource:
         return _unwrap(delete_vault_credential_version_api.sync_detailed(vault_id=vault_id, credential_id=credential_id, version_id=version_id, client=self._client))
 
 class _UsageResource:
-    def __init__(self, client: AuthenticatedClient | Client) -> None:
-        self._client = client
+    def __init__(self, owner: AmaClient) -> None:
+        self._owner = owner
+        self._client = owner.raw
 
     def list_records(self, **query: Any) -> Any:
         return _unwrap(list_usage_records_api.sync_detailed(client=self._client, **query))

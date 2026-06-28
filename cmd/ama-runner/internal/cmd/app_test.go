@@ -117,6 +117,9 @@ func TestRunWithContextWiresSDKDaemonAndStops(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/work-items":
 			_, _ = w.Write([]byte(`{"data":[],"pagination":{"limit":50,"hasMore":false,"nextCursor":null}}`))
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/channel"):
+			if got := r.Header.Get("authorization"); got != "Bearer token" {
+				t.Fatalf("expected runner channel authorization header, got %q", got)
+			}
 			// The relay hub dials the per-runner channel via WebSocket upgrade.
 			// A non-upgrade response causes the hub to log a warning and retry
 			// after its reconnect delay, which is fine for this integration test.
@@ -140,51 +143,5 @@ func TestRunWithContextWiresSDKDaemonAndStops(t *testing.T) {
 	}
 	if heartbeatCount < 2 {
 		t.Fatalf("expected active and offline heartbeats, got %d", heartbeatCount)
-	}
-}
-
-func TestV1RunnerChannelURLBuildsWSSFromHTTPS(t *testing.T) {
-	url, err := v1RunnerChannelURL("https://ama.example.com", "runner_42")
-	if err != nil {
-		t.Fatalf("expected success, got %v", err)
-	}
-	want := "wss://ama.example.com/api/v1/runners/runner_42/channel"
-	if url != want {
-		t.Fatalf("expected %q, got %q", want, url)
-	}
-}
-
-func TestV1RunnerChannelURLBuildsWSFromHTTP(t *testing.T) {
-	url, err := v1RunnerChannelURL("http://localhost:8080", "runner_1")
-	if err != nil {
-		t.Fatalf("expected success, got %v", err)
-	}
-	want := "ws://localhost:8080/api/v1/runners/runner_1/channel"
-	if url != want {
-		t.Fatalf("expected %q, got %q", want, url)
-	}
-}
-
-func TestV1RunnerChannelURLRejectsNonHTTPScheme(t *testing.T) {
-	_, err := v1RunnerChannelURL("ftp://ama.example.com", "runner_1")
-	if err == nil {
-		t.Fatal("expected http/https scheme error, got nil")
-	}
-}
-
-func TestV1RunnerChannelURLRejectsEmptyOrigin(t *testing.T) {
-	_, err := v1RunnerChannelURL("", "runner_1")
-	if err == nil {
-		t.Fatal("expected empty origin error")
-	}
-}
-
-func TestV1WebSocketBaseURLStripsPathAndQuery(t *testing.T) {
-	base, err := v1WebSocketBaseURL("https://ama.example.com/some/path?q=1#frag")
-	if err != nil {
-		t.Fatalf("expected success, got %v", err)
-	}
-	if base != "wss://ama.example.com" {
-		t.Fatalf("expected path/query stripped, got %q", base)
 	}
 }

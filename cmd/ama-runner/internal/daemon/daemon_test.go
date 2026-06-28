@@ -206,7 +206,7 @@ func fakeRunnerResource(id string, name string) ama.Runner {
 	}
 }
 
-func (f *fakeAMAServer) OpenRunnerChannel(context.Context, string) (runnersession.Channel, error) {
+func (f *fakeAMAServer) Channel(context.Context, string) (runnersession.Channel, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.opens += 1

@@ -160,14 +160,14 @@ export function quickstartIntegrationExamples(input: QuickstartIntegrationInput)
     `restish get ${input.origin}/api/v1/sessions/${input.sessionId} ${authHeader}`,
   ].join('\n')
   const sdk = [
-    "import { AmaClient } from '@any-managed-agents/sdk'",
+    "import { createAmaClient } from '@any-managed-agents/sdk'",
     '',
-    'const client = new AmaClient({',
-    `  origin: '${input.origin}',`,
+    'const client = createAmaClient({',
+    `  baseUrl: '${input.origin}',`,
     '  accessToken: process.env.AMA_ACCESS_TOKEN ?? "",',
     '})',
-    `const session = await client.request('readSession', { path: { sessionId: '${input.sessionId}' } })`,
-    `const events = await client.request('listSessionEvents', { path: { sessionId: '${input.sessionId}' } })`,
+    `const session = await client.sessions.get('${input.sessionId}')`,
+    `const events = await client.sessions.listEvents('${input.sessionId}')`,
   ].join('\n')
   return { curl, restish, sdk }
 }

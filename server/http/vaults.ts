@@ -29,6 +29,7 @@ import { requestId } from './request-context'
 type VaultRoutes = OpenAPIHono<DepsEnv>
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
+const VaultJsonObjectSchema = JsonObjectSchema.openapi('VaultJsonObject')
 const SecretProviderSchema = z.enum(SECRET_PROVIDERS)
 
 const ConnectorBindingSchema = z
@@ -65,7 +66,7 @@ const CredentialVersionSchema = z
     referenceName: z.string().openapi({ example: 'AMA_PROJECT_ABC123_TOKEN_V2' }),
     state: z.enum(VERSION_STATES).openapi({ example: 'active' }),
     hasSecret: z.boolean().openapi({ example: true }),
-    metadata: JsonObjectSchema.openapi({ example: { rotatedBy: 'operator' } }),
+    metadata: VaultJsonObjectSchema.openapi({ example: { rotatedBy: 'operator' } }),
     createdAt: z.string().datetime().openapi({ example: '2026-05-24T00:00:00.000Z' }),
     supersededAt: z.string().datetime().nullable().openapi({ example: '2026-05-24T01:00:00.000Z' }),
     revokedAt: z.string().datetime().nullable().openapi({ example: null }),

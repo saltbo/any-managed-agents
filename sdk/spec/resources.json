@@ -114,7 +114,7 @@
       { "name": "get", "operationId": "readSession" },
       { "name": "update", "operationId": "updateSession" },
       { "name": "connection", "operationId": "readSessionConnection" },
-      { "name": "socket", "operationId": "connectSessionSocket" },
+      { "name": "stream", "operationId": "connectSessionSocket" },
       { "name": "listMessages", "operationId": "listSessionMessages" },
       { "name": "createMessage", "operationId": "createSessionMessage" },
       { "name": "getMessage", "operationId": "readSessionMessage" },

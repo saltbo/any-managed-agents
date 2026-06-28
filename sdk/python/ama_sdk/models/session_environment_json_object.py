@@ -14,12 +14,12 @@ from ..types import UNSET, Unset
 
 
 
-T = TypeVar("T", bound="SessionEnvironmentSnapshotType0Metadata")
+T = TypeVar("T", bound="SessionEnvironmentJsonObject")
 
 
 
 @_attrs_define
-class SessionEnvironmentSnapshotType0Metadata:
+class SessionEnvironmentJsonObject:
     """ 
      """
 
@@ -41,12 +41,12 @@ class SessionEnvironmentSnapshotType0Metadata:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        session_environment_snapshot_type_0_metadata = cls(
+        session_environment_json_object = cls(
         )
 
 
-        session_environment_snapshot_type_0_metadata.additional_properties = d
-        return session_environment_snapshot_type_0_metadata
+        session_environment_json_object.additional_properties = d
+        return session_environment_json_object
 
     @property
     def additional_keys(self) -> list[str]:

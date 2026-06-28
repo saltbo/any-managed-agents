@@ -306,14 +306,8 @@ from .session_backfill_response_type import SessionBackfillResponseType
 from .session_connection import SessionConnection
 from .session_connection_state import SessionConnectionState
 from .session_env import SessionEnv
-from .session_environment_snapshot_type_0_credential_refs_item import SessionEnvironmentSnapshotType0CredentialRefsItem
-from .session_environment_snapshot_type_0_mcp_policy import SessionEnvironmentSnapshotType0McpPolicy
-from .session_environment_snapshot_type_0_metadata import SessionEnvironmentSnapshotType0Metadata
-from .session_environment_snapshot_type_0_package_manager_policy import SessionEnvironmentSnapshotType0PackageManagerPolicy
-from .session_environment_snapshot_type_0_packages_item import SessionEnvironmentSnapshotType0PackagesItem
-from .session_environment_snapshot_type_0_resource_limits import SessionEnvironmentSnapshotType0ResourceLimits
-from .session_environment_snapshot_type_0_runtime_config import SessionEnvironmentSnapshotType0RuntimeConfig
-from .session_environment_snapshot_type_0_variables import SessionEnvironmentSnapshotType0Variables
+from .session_environment_json_object import SessionEnvironmentJsonObject
+from .session_environment_snapshot_type_0 import SessionEnvironmentSnapshotType0
 from .session_event import SessionEvent
 from .session_event_input import SessionEventInput
 from .session_event_input_metadata import SessionEventInputMetadata
@@ -425,9 +419,10 @@ from .vault_credential_list_response import VaultCredentialListResponse
 from .vault_credential_metadata import VaultCredentialMetadata
 from .vault_credential_state import VaultCredentialState
 from .vault_credential_version_list_response import VaultCredentialVersionListResponse
-from .vault_credential_version_type_0_metadata import VaultCredentialVersionType0Metadata
+from .vault_credential_version_type_0 import VaultCredentialVersionType0
 from .vault_credential_version_type_0_provider import VaultCredentialVersionType0Provider
 from .vault_credential_version_type_0_state import VaultCredentialVersionType0State
+from .vault_json_object import VaultJsonObject
 from .vault_list_response import VaultListResponse
 from .vault_metadata import VaultMetadata
 from .vault_scope import VaultScope
@@ -745,14 +740,8 @@ __all__ = (
     "SessionConnection",
     "SessionConnectionState",
     "SessionEnv",
-    "SessionEnvironmentSnapshotType0CredentialRefsItem",
-    "SessionEnvironmentSnapshotType0McpPolicy",
-    "SessionEnvironmentSnapshotType0Metadata",
-    "SessionEnvironmentSnapshotType0PackageManagerPolicy",
-    "SessionEnvironmentSnapshotType0PackagesItem",
-    "SessionEnvironmentSnapshotType0ResourceLimits",
-    "SessionEnvironmentSnapshotType0RuntimeConfig",
-    "SessionEnvironmentSnapshotType0Variables",
+    "SessionEnvironmentJsonObject",
+    "SessionEnvironmentSnapshotType0",
     "SessionEvent",
     "SessionEventInput",
     "SessionEventInputMetadata",
@@ -864,9 +853,10 @@ __all__ = (
     "VaultCredentialMetadata",
     "VaultCredentialState",
     "VaultCredentialVersionListResponse",
-    "VaultCredentialVersionType0Metadata",
+    "VaultCredentialVersionType0",
     "VaultCredentialVersionType0Provider",
     "VaultCredentialVersionType0State",
+    "VaultJsonObject",
     "VaultListResponse",
     "VaultMetadata",
     "VaultScope",

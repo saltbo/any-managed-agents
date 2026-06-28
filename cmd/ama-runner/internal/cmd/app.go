@@ -6,19 +6,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
-	"github.com/coder/websocket"
 	"github.com/saltbo/any-managed-agents/cmd/ama-runner/internal/auth"
 	runnerconfig "github.com/saltbo/any-managed-agents/cmd/ama-runner/internal/config"
 	"github.com/saltbo/any-managed-agents/cmd/ama-runner/internal/daemon"
 	"github.com/saltbo/any-managed-agents/cmd/ama-runner/internal/sandbox"
-	runnersession "github.com/saltbo/any-managed-agents/cmd/ama-runner/internal/session"
 	"github.com/saltbo/any-managed-agents/cmd/ama-runner/pkg/version"
 	ama "github.com/saltbo/any-managed-agents/sdk/go/ama"
 )
@@ -66,9 +62,10 @@ func (a Application) Run(ctx context.Context) error {
 		},
 	}
 	client, err := ama.New(ama.ClientConfig{
-		BaseURL:    config.Origin,
-		ProjectID:  config.ProjectID,
-		HTTPClient: authHTTPClient,
+		BaseURL:             config.Origin,
+		AccessTokenProvider: tokens.AccessToken,
+		ProjectID:           config.ProjectID,
+		HTTPClient:          authHTTPClient,
 	})
 	if err != nil {
 		return err
@@ -76,7 +73,7 @@ func (a Application) Run(ctx context.Context) error {
 	process := daemon.Daemon{
 		Config:   config,
 		Client:   client,
-		Channels: v1SessionChannelOpener{origin: config.Origin, projectID: config.ProjectID, tokens: tokens},
+		Channels: client.Runners,
 		Adapter:  sandbox.ProcessAdapter{CommandTimeout: config.CommandTimeout, ShutdownGraceInterval: config.ShutdownGraceInterval},
 		Build:    a.buildInfo(),
 	}
@@ -148,106 +145,4 @@ func (a Application) runVersion(args []string) error {
 	}
 	_, err := fmt.Fprintf(stdout, "%s %s (%s, built %s)\n", info.Name, info.Version, info.Commit, info.BuildDate)
 	return err
-}
-
-type v1SessionChannelOpener struct {
-	origin    string
-	projectID string
-	tokens    *TokenSource
-}
-
-// OpenRunnerChannel dials the per-runner relay channel
-// (GET /api/v1/runners/{runnerId}/channel). One channel per runner carries every
-// session it hosts, multiplexed by the per-frame sessionId, and outlives any lease.
-func (o v1SessionChannelOpener) OpenRunnerChannel(
-	ctx context.Context,
-	runnerID string,
-) (runnersession.Channel, error) {
-	endpoint, err := v1RunnerChannelURL(o.origin, runnerID)
-	if err != nil {
-		return nil, err
-	}
-	return o.dial(ctx, endpoint)
-}
-
-func (o v1SessionChannelOpener) dial(ctx context.Context, endpoint string) (runnersession.Channel, error) {
-	headers := http.Header{}
-	if o.tokens != nil {
-		token, err := o.tokens.AccessToken(ctx)
-		if err != nil {
-			return nil, err
-		}
-		if token != "" {
-			headers.Set("authorization", "Bearer "+token)
-		}
-	}
-	if o.projectID != "" {
-		headers.Set("x-ama-project-id", o.projectID)
-	}
-	conn, _, err := websocket.Dial(ctx, endpoint, &websocket.DialOptions{HTTPHeader: headers})
-	if err != nil {
-		return nil, err
-	}
-	return &websocketSessionChannel{Conn: conn}, nil
-}
-
-type websocketSessionChannel struct {
-	Conn *websocket.Conn
-}
-
-func (ch *websocketSessionChannel) ReadJSON(ctx context.Context, out any) error {
-	_, data, err := ch.Conn.Read(ctx)
-	if err != nil {
-		return err
-	}
-	return json.Unmarshal(data, out)
-}
-
-func (ch *websocketSessionChannel) WriteJSON(ctx context.Context, value any) error {
-	data, err := json.Marshal(value)
-	if err != nil {
-		return err
-	}
-	return ch.Conn.Write(ctx, websocket.MessageText, data)
-}
-
-func (ch *websocketSessionChannel) Close(statusCode int, reason string) error {
-	return ch.Conn.Close(websocket.StatusCode(statusCode), reason)
-}
-
-// v1WebSocketBaseURL turns the AMA origin into its ws/wss base (scheme flipped,
-// path/query/fragment stripped) - the shared root for every v1 channel URL.
-func v1WebSocketBaseURL(origin string) (string, error) {
-	if strings.TrimSpace(origin) == "" {
-		return "", fmt.Errorf("AMA origin is required")
-	}
-	parsed, err := url.Parse(strings.TrimRight(origin, "/"))
-	if err != nil {
-		return "", err
-	}
-	switch parsed.Scheme {
-	case "https":
-		parsed.Scheme = "wss"
-	case "http":
-		parsed.Scheme = "ws"
-	default:
-		return "", fmt.Errorf("AMA origin must use http or https")
-	}
-	parsed.Path = "/"
-	parsed.RawPath = ""
-	parsed.RawQuery = ""
-	parsed.Fragment = ""
-	return strings.TrimRight(parsed.String(), "/"), nil
-}
-
-// v1RunnerChannelURL builds the per-runner relay channel URL (CLI runtimes). One
-// channel per runner multiplexes every CLI session it hosts (the sessionId rides
-// per-frame), so it outlives any single lease and serves a completed session's
-// history while the runner is online.
-func v1RunnerChannelURL(origin string, runnerID string) (string, error) {
-	base, err := v1WebSocketBaseURL(origin)
-	if err != nil {
-		return "", err
-	}
-	return base + "/api/v1/runners/" + url.PathEscape(runnerID) + "/channel", nil
 }

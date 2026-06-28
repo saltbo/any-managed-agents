@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/coder/websocket"
 )
 
 func TestClientFacadeConfiguresHeadersAndCallsGeneratedOperation(t *testing.T) {
@@ -51,7 +53,13 @@ func TestClientFacadeConfiguresHeadersAndCallsGeneratedOperation(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := New(ClientConfig{BaseURL: server.URL, AccessToken: "token_1", ProjectID: "project_1"})
+	client, err := New(ClientConfig{
+		BaseURL:   server.URL,
+		ProjectID: "project_1",
+		AccessTokenProvider: func(context.Context) (string, error) {
+			return "token_1", nil
+		},
+	})
 	if err != nil {
 		t.Fatalf("expected client, got %v", err)
 	}
@@ -61,6 +69,44 @@ func TestClientFacadeConfiguresHeadersAndCallsGeneratedOperation(t *testing.T) {
 	}
 	if runner.Id != "runner_1" {
 		t.Fatalf("expected decoded runner, got %#v", runner)
+	}
+}
+
+func TestClientFacadeOpensRunnerWebSocketChannel(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/runners/runner_42/channel" || r.Method != http.MethodGet {
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+		if got := r.Header.Get("authorization"); got != "Bearer token_ws" {
+			t.Fatalf("expected authorization header, got %q", got)
+		}
+		if got := r.Header.Get("x-ama-project-id"); got != "project_ws" {
+			t.Fatalf("expected project header, got %q", got)
+		}
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			t.Fatalf("expected websocket upgrade, got %v", err)
+		}
+		defer conn.Close(websocket.StatusNormalClosure, "done")
+	}))
+	defer server.Close()
+
+	client, err := New(ClientConfig{
+		BaseURL:   server.URL,
+		ProjectID: "project_ws",
+		AccessTokenProvider: func(context.Context) (string, error) {
+			return "token_ws", nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected client, got %v", err)
+	}
+	channel, err := client.Runners.Channel(context.Background(), "runner_42")
+	if err != nil {
+		t.Fatalf("expected runner channel, got %v", err)
+	}
+	if err := channel.Close(1000, "test complete"); err != nil {
+		t.Fatalf("expected close success, got %v", err)
 	}
 }
 

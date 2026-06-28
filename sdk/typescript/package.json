@@ -19,7 +19,7 @@
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.json",
     "generate": "openapi-ts",
-    "smoke": "pnpm run build && node -e \"import('@any-managed-agents/sdk').then((sdk) => { if (typeof sdk.createSession !== 'function') throw new Error('SDK createSession export is missing') })\"",
+    "smoke": "pnpm run build && node -e \"import('@any-managed-agents/sdk').then((sdk) => { if (typeof sdk.createAmaClient !== 'function') throw new Error('SDK createAmaClient export is missing') })\"",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {

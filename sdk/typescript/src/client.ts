@@ -32,6 +32,165 @@ async function unwrap<TData>(call: Promise<{ data: TData | undefined; error?: un
   throw new AmaApiError(response?.status, typeof body === 'string' ? body : JSON.stringify(body ?? {}), body)
 }
 
+export interface SessionStream {
+  events: AsyncIterable<types.SessionEvent>
+  send(frame: types.SessionClientFrame): Promise<void>
+  backfill(options?: { cursor?: number; limit?: number; eventType?: string; visibility?: string }): Promise<types.SessionBackfillResponse>
+  close(): void
+}
+
+export interface RunnerChannel {
+  messages: AsyncIterable<types.RunnerChannelMessage>
+  send(frame: types.RunnerChannelMessage): Promise<void>
+  close(): void
+}
+
+type SessionStreamFrame =
+  | { type: 'event'; event: types.SessionEvent }
+  | (types.SessionBackfillResponse & { type: 'backfill' })
+  | { type: 'runner_unavailable'; message: string }
+
+function websocketURL(config: AmaClientConfig, path: string): URL {
+  const url = new URL(path, config.baseUrl)
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+  if (config.accessToken) {
+    url.searchParams.set('access_token', config.accessToken)
+  }
+  if (config.projectId) {
+    url.searchParams.set('x-ama-project-id', config.projectId)
+  }
+  return url
+}
+
+function createSessionStream(config: AmaClientConfig, sessionId: string): SessionStream {
+  const socket = new WebSocket(websocketURL(config, `/api/v1/sessions/${encodeURIComponent(sessionId)}/socket`).toString())
+  const buffered: types.SessionEvent[] = []
+  const waiters: Array<(result: IteratorResult<types.SessionEvent>) => void> = []
+  const backfillWaiters = new Map<string, (response: types.SessionBackfillResponse) => void>()
+  let done = false
+
+  const drainDone = () => {
+    done = true
+    for (const resolve of waiters.splice(0)) {
+      resolve({ value: undefined, done: true })
+    }
+  }
+
+  socket.addEventListener('message', (event: MessageEvent) => {
+    const frame = JSON.parse(typeof event.data === 'string' ? event.data : '') as SessionStreamFrame
+    if (frame.type === 'event') {
+      const waiter = waiters.shift()
+      if (waiter) {
+        waiter({ value: frame.event, done: false })
+      } else {
+        buffered.push(frame.event)
+      }
+    } else if (frame.type === 'backfill') {
+      const resolve = frame.requestId ? backfillWaiters.get(frame.requestId) : undefined
+      if (frame.requestId) {
+        backfillWaiters.delete(frame.requestId)
+      }
+      resolve?.(frame)
+    }
+  })
+  socket.addEventListener('close', drainDone)
+
+  const ready = new Promise<void>((resolve, reject) => {
+    socket.addEventListener('open', () => resolve())
+    socket.addEventListener('error', () => reject(new Error('Session socket failed to open')))
+  })
+
+  let backfillSeq = 0
+  return {
+    events: {
+      [Symbol.asyncIterator]() {
+        return {
+          next(): Promise<IteratorResult<types.SessionEvent>> {
+            const value = buffered.shift()
+            if (value !== undefined) {
+              return Promise.resolve({ value, done: false })
+            }
+            if (done) {
+              return Promise.resolve({ value: undefined, done: true })
+            }
+            return new Promise((resolve) => waiters.push(resolve))
+          },
+        }
+      },
+    },
+    async send(frame) {
+      await ready
+      socket.send(JSON.stringify(frame))
+    },
+    async backfill(options = {}) {
+      await ready
+      const requestId = `bf_${(backfillSeq += 1)}`
+      const response = new Promise<types.SessionBackfillResponse>((resolve) => backfillWaiters.set(requestId, resolve))
+      socket.send(JSON.stringify({ type: 'backfill', requestId, ...options }))
+      return response
+    },
+    close() {
+      socket.close()
+    },
+  }
+}
+
+function createRunnerChannel(config: AmaClientConfig, runnerId: string): RunnerChannel {
+  const socket = new WebSocket(websocketURL(config, `/api/v1/runners/${encodeURIComponent(runnerId)}/channel`).toString())
+  const buffered: types.RunnerChannelMessage[] = []
+  const waiters: Array<(result: IteratorResult<types.RunnerChannelMessage>) => void> = []
+  let done = false
+
+  const drainDone = () => {
+    done = true
+    for (const resolve of waiters.splice(0)) {
+      resolve({ value: undefined, done: true })
+    }
+  }
+
+  socket.addEventListener('message', (event: MessageEvent) => {
+    const frame = JSON.parse(typeof event.data === 'string' ? event.data : '') as types.RunnerChannelMessage
+    const waiter = waiters.shift()
+    if (waiter) {
+      waiter({ value: frame, done: false })
+    } else {
+      buffered.push(frame)
+    }
+  })
+  socket.addEventListener('close', drainDone)
+
+  const ready = new Promise<void>((resolve, reject) => {
+    socket.addEventListener('open', () => resolve())
+    socket.addEventListener('error', () => reject(new Error('Runner channel failed to open')))
+  })
+
+  return {
+    messages: {
+      [Symbol.asyncIterator]() {
+        return {
+          next(): Promise<IteratorResult<types.RunnerChannelMessage>> {
+            const value = buffered.shift()
+            if (value !== undefined) {
+              return Promise.resolve({ value, done: false })
+            }
+            if (done) {
+              return Promise.resolve({ value: undefined, done: true })
+            }
+            return new Promise((resolve) => waiters.push(resolve))
+          },
+        }
+      },
+    },
+    async send(frame) {
+      await ready
+      socket.send(JSON.stringify(frame))
+    },
+    close() {
+      socket.close()
+    },
+  }
+}
+
 export type AmaClient = ReturnType<typeof createAmaClient>
 
 export function createAmaClient(config: AmaClientConfig) {
@@ -105,7 +264,7 @@ export function createAmaClient(config: AmaClientConfig) {
       create: (body: types.CreateRunnerRequest) => unwrap(ops.createRunner({ client, body })),
       get: (runnerId: string) => unwrap(ops.readRunner({ client, path: { runnerId } })),
       update: (runnerId: string, body: types.UpdateRunnerRequest) => unwrap(ops.updateRunner({ client, path: { runnerId }, body })),
-      channel: (runnerId: string) => unwrap(ops.connectRunnerChannel({ client, path: { runnerId } })),
+      channel: (runnerId: string): RunnerChannel => createRunnerChannel(config, runnerId),
       getHeartbeat: (runnerId: string) => unwrap(ops.readRunnerHeartbeat({ client, path: { runnerId } })),
       putHeartbeat: (runnerId: string, body: types.PutRunnerHeartbeatRequest) => unwrap(ops.putRunnerHeartbeat({ client, path: { runnerId }, body })),
     },
@@ -177,7 +336,7 @@ export function createAmaClient(config: AmaClientConfig) {
       get: (sessionId: string) => unwrap(ops.readSession({ client, path: { sessionId } })),
       update: (sessionId: string, body: types.UpdateSessionRequest) => unwrap(ops.updateSession({ client, path: { sessionId }, body })),
       connection: (sessionId: string) => unwrap(ops.readSessionConnection({ client, path: { sessionId } })),
-      socket: (sessionId: string) => unwrap(ops.connectSessionSocket({ client, path: { sessionId } })),
+      stream: (sessionId: string): SessionStream => createSessionStream(config, sessionId),
       listMessages: (sessionId: string, query?: types.ListSessionMessagesData['query']) => unwrap(ops.listSessionMessages({ client, path: { sessionId }, query })),
       createMessage: (sessionId: string, body: types.CreateSessionMessageRequest) => unwrap(ops.createSessionMessage({ client, path: { sessionId }, body })),
       getMessage: (sessionId: string, messageId: string) => unwrap(ops.readSessionMessage({ client, path: { sessionId, messageId } })),

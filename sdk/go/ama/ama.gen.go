@@ -3968,23 +3968,26 @@ type SessionConnection struct {
 // SessionConnectionState defines model for SessionConnection.State.
 type SessionConnectionState string
 
+// SessionEnvironmentJsonObject defines model for SessionEnvironmentJsonObject.
+type SessionEnvironmentJsonObject map[string]interface{}
+
 // SessionEnvironmentSnapshot defines model for SessionEnvironmentSnapshot.
 type SessionEnvironmentSnapshot struct {
-	CreatedAt            time.Time                `json:"createdAt"`
-	CredentialRefs       []map[string]interface{} `json:"credentialRefs"`
-	EnvironmentId        string                   `json:"environmentId"`
-	HostingMode          EnvironmentHostingMode   `json:"hostingMode"`
-	Id                   string                   `json:"id"`
-	McpPolicy            map[string]interface{}   `json:"mcpPolicy"`
-	Metadata             map[string]interface{}   `json:"metadata"`
-	NetworkPolicy        EnvironmentNetworkPolicy `json:"networkPolicy"`
-	PackageManagerPolicy map[string]interface{}   `json:"packageManagerPolicy"`
-	Packages             []map[string]interface{} `json:"packages"`
-	ProjectId            string                   `json:"projectId"`
-	ResourceLimits       map[string]interface{}   `json:"resourceLimits"`
-	RuntimeConfig        map[string]interface{}   `json:"runtimeConfig"`
-	Variables            map[string]interface{}   `json:"variables"`
-	Version              int                      `json:"version"`
+	CreatedAt            time.Time                      `json:"createdAt"`
+	CredentialRefs       []SessionEnvironmentJsonObject `json:"credentialRefs"`
+	EnvironmentId        string                         `json:"environmentId"`
+	HostingMode          EnvironmentHostingMode         `json:"hostingMode"`
+	Id                   string                         `json:"id"`
+	McpPolicy            SessionEnvironmentJsonObject   `json:"mcpPolicy"`
+	Metadata             SessionEnvironmentJsonObject   `json:"metadata"`
+	NetworkPolicy        EnvironmentNetworkPolicy       `json:"networkPolicy"`
+	PackageManagerPolicy SessionEnvironmentJsonObject   `json:"packageManagerPolicy"`
+	Packages             []SessionEnvironmentJsonObject `json:"packages"`
+	ProjectId            string                         `json:"projectId"`
+	ResourceLimits       SessionEnvironmentJsonObject   `json:"resourceLimits"`
+	RuntimeConfig        SessionEnvironmentJsonObject   `json:"runtimeConfig"`
+	Variables            SessionEnvironmentJsonObject   `json:"variables"`
+	Version              int                            `json:"version"`
 }
 
 // SessionEvent defines model for SessionEvent.
@@ -4531,7 +4534,7 @@ type VaultCredentialVersion struct {
 	ExternalVaultPath *string                        `json:"externalVaultPath"`
 	HasSecret         bool                           `json:"hasSecret"`
 	Id                string                         `json:"id"`
-	Metadata          map[string]interface{}         `json:"metadata"`
+	Metadata          VaultJsonObject                `json:"metadata"`
 	ProjectId         *string                        `json:"projectId"`
 	Provider          VaultCredentialVersionProvider `json:"provider"`
 	ReferenceName     string                         `json:"referenceName"`
@@ -4554,6 +4557,9 @@ type VaultCredentialVersionListResponse struct {
 	Data       []*VaultCredentialVersion `json:"data"`
 	Pagination ListPagination            `json:"pagination"`
 }
+
+// VaultJsonObject defines model for VaultJsonObject.
+type VaultJsonObject map[string]interface{}
 
 // VaultListResponse defines model for VaultListResponse.
 type VaultListResponse struct {

@@ -78,8 +78,9 @@ Generated SDKs are generated from or mechanically aligned with `/api/openapi.jso
 
 ```ts
 const client = createAmaClient({
-  origin: window.location.origin,
-  credentials: 'include',
+  baseUrl: window.location.origin,
+  accessToken,
+  projectId,
 })
 
 const environment = await client.environments.create({

@@ -2,10 +2,14 @@ package ama
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
+
+	"github.com/coder/websocket"
 )
 
 // Regenerate the typed models and REST client (ama.gen.go) from the OpenAPI doc.
@@ -17,50 +21,66 @@ import (
 
 type JSON = map[string]interface{}
 
+type AccessTokenProvider func(context.Context) (string, error)
+
 type ClientConfig struct {
-	BaseURL     string
-	AccessToken string
-	ProjectID   string
-	Headers     map[string]string
-	HTTPClient  HttpRequestDoer
+	BaseURL             string
+	AccessToken         string
+	AccessTokenProvider AccessTokenProvider
+	ProjectID           string
+	Headers             map[string]string
+	HTTPClient          HttpRequestDoer
 }
 
 type Client struct {
-	raw          *ClientWithResponses
-	System       SystemService
-	Auth         AuthService
-	Projects     ProjectsService
-	Agents       AgentsService
-	Environments EnvironmentsService
-	Providers    ProvidersService
-	Runners      RunnersService
-	WorkItems    WorkItemsService
-	Leases       LeasesService
-	Policies     PoliciesService
-	Budgets      BudgetsService
-	Connectors   ConnectorsService
-	Connections  ConnectionsService
-	Audit        AuditService
-	Triggers     TriggersService
-	Sessions     SessionsService
-	MemoryStores MemoryStoresService
-	Vaults       VaultsService
-	Usage        UsageService
+	raw                 *ClientWithResponses
+	baseURL             string
+	accessToken         string
+	accessTokenProvider AccessTokenProvider
+	projectID           string
+	headers             map[string]string
+	System              SystemService
+	Auth                AuthService
+	Projects            ProjectsService
+	Agents              AgentsService
+	Environments        EnvironmentsService
+	Providers           ProvidersService
+	Runners             RunnersService
+	WorkItems           WorkItemsService
+	Leases              LeasesService
+	Policies            PoliciesService
+	Budgets             BudgetsService
+	Connectors          ConnectorsService
+	Connections         ConnectionsService
+	Audit               AuditService
+	Triggers            TriggersService
+	Sessions            SessionsService
+	MemoryStores        MemoryStoresService
+	Vaults              VaultsService
+	Usage               UsageService
 }
 
 func New(config ClientConfig) (*Client, error) {
 	if strings.TrimSpace(config.BaseURL) == "" {
 		return nil, fmt.Errorf("AMA base URL is required")
 	}
+	headers := map[string]string{}
+	for key, value := range config.Headers {
+		headers[key] = value
+	}
 	opts := []ClientOption{
-		WithRequestEditorFn(func(_ context.Context, request *http.Request) error {
-			if config.AccessToken != "" {
-				request.Header.Set("authorization", "Bearer "+config.AccessToken)
+		WithRequestEditorFn(func(ctx context.Context, request *http.Request) error {
+			token, err := accessToken(ctx, config.AccessToken, config.AccessTokenProvider)
+			if err != nil {
+				return err
+			}
+			if token != "" {
+				request.Header.Set("authorization", "Bearer "+token)
 			}
 			if config.ProjectID != "" {
 				request.Header.Set("x-ama-project-id", config.ProjectID)
 			}
-			for key, value := range config.Headers {
+			for key, value := range headers {
 				request.Header.Set(key, value)
 			}
 			return nil
@@ -69,11 +89,12 @@ func New(config ClientConfig) (*Client, error) {
 	if config.HTTPClient != nil {
 		opts = append(opts, WithHTTPClient(config.HTTPClient))
 	}
-	raw, err := NewClientWithResponses(strings.TrimRight(config.BaseURL, "/"), opts...)
+	baseURL := strings.TrimRight(config.BaseURL, "/")
+	raw, err := NewClientWithResponses(baseURL, opts...)
 	if err != nil {
 		return nil, err
 	}
-	client := &Client{raw: raw}
+	client := &Client{raw: raw, baseURL: baseURL, accessToken: config.AccessToken, accessTokenProvider: config.AccessTokenProvider, projectID: config.ProjectID, headers: headers}
 	client.System = SystemService{client: client}
 	client.Auth = AuthService{client: client}
 	client.Projects = ProjectsService{client: client}
@@ -122,6 +143,89 @@ func StatusCode(err error) (int, bool) {
 		return apiErr.Status, true
 	}
 	return 0, false
+}
+
+type JSONChannel interface {
+	ReadJSON(ctx context.Context, out any) error
+	WriteJSON(ctx context.Context, value any) error
+	Close(statusCode int, reason string) error
+}
+
+type WebSocketChannel struct {
+	Conn *websocket.Conn
+}
+
+func (c *WebSocketChannel) ReadJSON(ctx context.Context, out any) error {
+	_, data, err := c.Conn.Read(ctx)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, out)
+}
+
+func (c *WebSocketChannel) WriteJSON(ctx context.Context, value any) error {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	return c.Conn.Write(ctx, websocket.MessageText, data)
+}
+
+func (c *WebSocketChannel) Close(statusCode int, reason string) error {
+	return c.Conn.Close(websocket.StatusCode(statusCode), reason)
+}
+
+func (c *Client) dialWebSocket(ctx context.Context, path string) (JSONChannel, error) {
+	endpoint, err := c.webSocketURL(path)
+	if err != nil {
+		return nil, err
+	}
+	headers := http.Header{}
+	for key, value := range c.headers {
+		headers.Set(key, value)
+	}
+	token, err := accessToken(ctx, c.accessToken, c.accessTokenProvider)
+	if err != nil {
+		return nil, err
+	}
+	if token != "" {
+		headers.Set("authorization", "Bearer "+token)
+	}
+	if c.projectID != "" {
+		headers.Set("x-ama-project-id", c.projectID)
+	}
+	conn, _, err := websocket.Dial(ctx, endpoint, &websocket.DialOptions{HTTPHeader: headers})
+	if err != nil {
+		return nil, err
+	}
+	return &WebSocketChannel{Conn: conn}, nil
+}
+
+func (c *Client) webSocketURL(path string) (string, error) {
+	parsed, err := url.Parse(c.baseURL)
+	if err != nil {
+		return "", err
+	}
+	switch parsed.Scheme {
+	case "https":
+		parsed.Scheme = "wss"
+	case "http":
+		parsed.Scheme = "ws"
+	default:
+		return "", fmt.Errorf("AMA base URL must use http or https")
+	}
+	parsed.Path = path
+	parsed.RawPath = ""
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String(), nil
+}
+
+func accessToken(ctx context.Context, static string, provider AccessTokenProvider) (string, error) {
+	if provider != nil {
+		return provider(ctx)
+	}
+	return static, nil
 }
 
 type SystemService struct {
@@ -448,12 +552,8 @@ func (s RunnersService) Update(ctx context.Context, runnerID string, body Update
 	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON400, response.JSON401, response.JSON403, response.JSON404, response.JSON409)
 }
 
-func (s RunnersService) Channel(ctx context.Context, runnerID string) (*RunnerChannelMetadata, error) {
-	response, err := s.client.raw.ConnectRunnerChannelWithResponse(ctx, runnerID)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON401, response.JSON403, response.JSON404, response.JSON426)
+func (s RunnersService) Channel(ctx context.Context, runnerID string) (JSONChannel, error) {
+	return s.client.dialWebSocket(ctx, "/api/v1/runners/"+url.PathEscape(runnerID)+"/channel")
 }
 
 func (s RunnersService) GetHeartbeat(ctx context.Context, runnerID string) (*RunnerHeartbeat, error) {
@@ -844,12 +944,8 @@ func (s SessionsService) Connection(ctx context.Context, sessionID string) (*Ses
 	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON401, response.JSON404)
 }
 
-func (s SessionsService) Socket(ctx context.Context, sessionID string) (*SessionConnection, error) {
-	response, err := s.client.raw.ConnectSessionSocketWithResponse(ctx, sessionID)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON401, response.JSON404, response.JSON426)
+func (s SessionsService) Stream(ctx context.Context, sessionID string) (JSONChannel, error) {
+	return s.client.dialWebSocket(ctx, "/api/v1/sessions/"+url.PathEscape(sessionID)+"/socket")
 }
 
 func (s SessionsService) ListMessages(ctx context.Context, sessionID string, params *ListSessionMessagesParams) (*SessionMessageListResponse, error) {

@@ -13,17 +13,12 @@ import (
 	ama "github.com/saltbo/any-managed-agents/sdk/go/ama"
 )
 
-type Channel interface {
-	ReadJSON(ctx context.Context, out any) error
-	WriteJSON(ctx context.Context, value any) error
-	Close(statusCode int, reason string) error
-}
+type Channel = ama.JSONChannel
 
 // Opener dials the per-runner relay channel
-// (GET /api/v1/runners/{runnerId}/channel). Implemented by the same v1 opener that
-// dials per-lease ama channels.
+// (GET /api/v1/runners/{runnerId}/channel).
 type Opener interface {
-	OpenRunnerChannel(ctx context.Context, runnerID string) (Channel, error)
+	Channel(ctx context.Context, runnerID string) (Channel, error)
 }
 
 // Relay owns the runner's single persistent relay channel and multiplexes every
@@ -95,7 +90,7 @@ func (h *Relay) Run(ctx context.Context) {
 }
 
 func (h *Relay) connectAndServe(ctx context.Context) error {
-	conn, err := h.opener.OpenRunnerChannel(ctx, h.runnerID)
+	conn, err := h.opener.Channel(ctx, h.runnerID)
 	if err != nil {
 		return err
 	}

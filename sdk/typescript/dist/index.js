@@ -1,9 +1,8 @@
 // Public entry point for @any-managed-agents/sdk.
 //
 // Prefer the stable facade: `createAmaClient(...).<resource>.<verb>(...)`.
-// It is hand-maintained (src/client.ts) and insulates consumers from the
-// generated layer — the generator can be re-shaped or swapped without changing
-// the facade's call signatures.
+// It is generated from sdk/spec/resources.json and insulates consumers from the
+// raw OpenAPI operation layer.
 //
 // Everything under ./generated is produced by `pnpm run generate`
 // (@hey-api/openapi-ts) from sdk/openapi.json — do not edit it by hand. The raw

@@ -52,6 +52,7 @@ const APPROVAL_STATES = ['pending', 'approved', 'denied'] as const
 const MAX_EVENT_BATCH = 100
 
 const JsonObjectSchema = z.record(z.string(), z.unknown())
+const SessionEnvironmentJsonObjectSchema = JsonObjectSchema.openapi('SessionEnvironmentJsonObject')
 
 const AgentVersionSnapshotSchema = z
   .object({
@@ -81,16 +82,16 @@ const EnvironmentVersionSnapshotSchema = z
     environmentId: z.string(),
     projectId: z.string(),
     version: z.number().int(),
-    packages: z.array(JsonObjectSchema),
-    variables: JsonObjectSchema,
-    credentialRefs: z.array(JsonObjectSchema),
+    packages: z.array(SessionEnvironmentJsonObjectSchema),
+    variables: SessionEnvironmentJsonObjectSchema,
+    credentialRefs: z.array(SessionEnvironmentJsonObjectSchema),
     hostingMode: EnvironmentHostingModeSchema,
     networkPolicy: EnvironmentNetworkPolicySchema,
-    mcpPolicy: JsonObjectSchema,
-    packageManagerPolicy: JsonObjectSchema,
-    resourceLimits: JsonObjectSchema,
-    runtimeConfig: JsonObjectSchema,
-    metadata: JsonObjectSchema,
+    mcpPolicy: SessionEnvironmentJsonObjectSchema,
+    packageManagerPolicy: SessionEnvironmentJsonObjectSchema,
+    resourceLimits: SessionEnvironmentJsonObjectSchema,
+    runtimeConfig: SessionEnvironmentJsonObjectSchema,
+    metadata: SessionEnvironmentJsonObjectSchema,
     createdAt: z.string().datetime(),
   })
   .openapi('SessionEnvironmentSnapshot')

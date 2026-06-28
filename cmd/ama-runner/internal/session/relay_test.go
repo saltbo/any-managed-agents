@@ -21,7 +21,7 @@ type fakeOpener struct {
 	err     error
 }
 
-func (f *fakeOpener) OpenRunnerChannel(_ context.Context, _ string) (Channel, error) {
+func (f *fakeOpener) Channel(_ context.Context, _ string) (Channel, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -648,7 +648,7 @@ type countingOpener struct {
 	count    *int
 }
 
-func (o *countingOpener) OpenRunnerChannel(_ context.Context, _ string) (Channel, error) {
+func (o *countingOpener) Channel(_ context.Context, _ string) (Channel, error) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	idx := *o.count

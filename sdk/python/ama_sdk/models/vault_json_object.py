@@ -14,13 +14,16 @@ from ..types import UNSET, Unset
 
 
 
-T = TypeVar("T", bound="SessionEnvironmentSnapshotType0PackagesItem")
+T = TypeVar("T", bound="VaultJsonObject")
 
 
 
 @_attrs_define
-class SessionEnvironmentSnapshotType0PackagesItem:
+class VaultJsonObject:
     """ 
+        Example:
+            {'rotatedBy': 'operator'}
+
      """
 
     additional_properties: dict[str, Any] = _attrs_field(init=False, factory=dict)
@@ -41,12 +44,12 @@ class SessionEnvironmentSnapshotType0PackagesItem:
     @classmethod
     def from_dict(cls: type[T], src_dict: Mapping[str, Any]) -> T:
         d = dict(src_dict)
-        session_environment_snapshot_type_0_packages_item = cls(
+        vault_json_object = cls(
         )
 
 
-        session_environment_snapshot_type_0_packages_item.additional_properties = d
-        return session_environment_snapshot_type_0_packages_item
+        vault_json_object.additional_properties = d
+        return vault_json_object
 
     @property
     def additional_keys(self) -> list[str]:

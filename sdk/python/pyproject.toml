@@ -12,6 +12,7 @@ license = "Apache-2.0"
 dependencies = [
     "httpx>=0.23.1,<0.29.0",
     "attrs>=22.2.0",
+    "websockets>=14.0,<16.0",
 ]
 
 [tool.hatch.build.targets.wheel]

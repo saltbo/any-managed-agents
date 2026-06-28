@@ -22,6 +22,139 @@ async function unwrap(call) {
     const body = error ?? data;
     throw new AmaApiError(response?.status, typeof body === 'string' ? body : JSON.stringify(body ?? {}), body);
 }
+function websocketURL(config, path) {
+    const url = new URL(path, config.baseUrl);
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    if (config.accessToken) {
+        url.searchParams.set('access_token', config.accessToken);
+    }
+    if (config.projectId) {
+        url.searchParams.set('x-ama-project-id', config.projectId);
+    }
+    return url;
+}
+function createSessionStream(config, sessionId) {
+    const socket = new WebSocket(websocketURL(config, `/api/v1/sessions/${encodeURIComponent(sessionId)}/socket`).toString());
+    const buffered = [];
+    const waiters = [];
+    const backfillWaiters = new Map();
+    let done = false;
+    const drainDone = () => {
+        done = true;
+        for (const resolve of waiters.splice(0)) {
+            resolve({ value: undefined, done: true });
+        }
+    };
+    socket.addEventListener('message', (event) => {
+        const frame = JSON.parse(typeof event.data === 'string' ? event.data : '');
+        if (frame.type === 'event') {
+            const waiter = waiters.shift();
+            if (waiter) {
+                waiter({ value: frame.event, done: false });
+            }
+            else {
+                buffered.push(frame.event);
+            }
+        }
+        else if (frame.type === 'backfill') {
+            const resolve = frame.requestId ? backfillWaiters.get(frame.requestId) : undefined;
+            if (frame.requestId) {
+                backfillWaiters.delete(frame.requestId);
+            }
+            resolve?.(frame);
+        }
+    });
+    socket.addEventListener('close', drainDone);
+    const ready = new Promise((resolve, reject) => {
+        socket.addEventListener('open', () => resolve());
+        socket.addEventListener('error', () => reject(new Error('Session socket failed to open')));
+    });
+    let backfillSeq = 0;
+    return {
+        events: {
+            [Symbol.asyncIterator]() {
+                return {
+                    next() {
+                        const value = buffered.shift();
+                        if (value !== undefined) {
+                            return Promise.resolve({ value, done: false });
+                        }
+                        if (done) {
+                            return Promise.resolve({ value: undefined, done: true });
+                        }
+                        return new Promise((resolve) => waiters.push(resolve));
+                    },
+                };
+            },
+        },
+        async send(frame) {
+            await ready;
+            socket.send(JSON.stringify(frame));
+        },
+        async backfill(options = {}) {
+            await ready;
+            const requestId = `bf_${(backfillSeq += 1)}`;
+            const response = new Promise((resolve) => backfillWaiters.set(requestId, resolve));
+            socket.send(JSON.stringify({ type: 'backfill', requestId, ...options }));
+            return response;
+        },
+        close() {
+            socket.close();
+        },
+    };
+}
+function createRunnerChannel(config, runnerId) {
+    const socket = new WebSocket(websocketURL(config, `/api/v1/runners/${encodeURIComponent(runnerId)}/channel`).toString());
+    const buffered = [];
+    const waiters = [];
+    let done = false;
+    const drainDone = () => {
+        done = true;
+        for (const resolve of waiters.splice(0)) {
+            resolve({ value: undefined, done: true });
+        }
+    };
+    socket.addEventListener('message', (event) => {
+        const frame = JSON.parse(typeof event.data === 'string' ? event.data : '');
+        const waiter = waiters.shift();
+        if (waiter) {
+            waiter({ value: frame, done: false });
+        }
+        else {
+            buffered.push(frame);
+        }
+    });
+    socket.addEventListener('close', drainDone);
+    const ready = new Promise((resolve, reject) => {
+        socket.addEventListener('open', () => resolve());
+        socket.addEventListener('error', () => reject(new Error('Runner channel failed to open')));
+    });
+    return {
+        messages: {
+            [Symbol.asyncIterator]() {
+                return {
+                    next() {
+                        const value = buffered.shift();
+                        if (value !== undefined) {
+                            return Promise.resolve({ value, done: false });
+                        }
+                        if (done) {
+                            return Promise.resolve({ value: undefined, done: true });
+                        }
+                        return new Promise((resolve) => waiters.push(resolve));
+                    },
+                };
+            },
+        },
+        async send(frame) {
+            await ready;
+            socket.send(JSON.stringify(frame));
+        },
+        close() {
+            socket.close();
+        },
+    };
+}
 export function createAmaClient(config) {
     const client = createClient(createConfig({
         baseUrl: config.baseUrl,
@@ -83,7 +216,7 @@ export function createAmaClient(config) {
             create: (body) => unwrap(ops.createRunner({ client, body })),
             get: (runnerId) => unwrap(ops.readRunner({ client, path: { runnerId } })),
             update: (runnerId, body) => unwrap(ops.updateRunner({ client, path: { runnerId }, body })),
-            channel: (runnerId) => unwrap(ops.connectRunnerChannel({ client, path: { runnerId } })),
+            channel: (runnerId) => createRunnerChannel(config, runnerId),
             getHeartbeat: (runnerId) => unwrap(ops.readRunnerHeartbeat({ client, path: { runnerId } })),
             putHeartbeat: (runnerId, body) => unwrap(ops.putRunnerHeartbeat({ client, path: { runnerId }, body })),
         },
@@ -146,7 +279,7 @@ export function createAmaClient(config) {
             get: (sessionId) => unwrap(ops.readSession({ client, path: { sessionId } })),
             update: (sessionId, body) => unwrap(ops.updateSession({ client, path: { sessionId }, body })),
             connection: (sessionId) => unwrap(ops.readSessionConnection({ client, path: { sessionId } })),
-            socket: (sessionId) => unwrap(ops.connectSessionSocket({ client, path: { sessionId } })),
+            stream: (sessionId) => createSessionStream(config, sessionId),
             listMessages: (sessionId, query) => unwrap(ops.listSessionMessages({ client, path: { sessionId }, query })),
             createMessage: (sessionId, body) => unwrap(ops.createSessionMessage({ client, path: { sessionId }, body })),
             getMessage: (sessionId, messageId) => unwrap(ops.readSessionMessage({ client, path: { sessionId, messageId } })),

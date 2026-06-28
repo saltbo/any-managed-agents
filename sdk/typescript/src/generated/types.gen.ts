@@ -1486,34 +1486,22 @@ export type SessionEnvironmentSnapshot = {
     environmentId: string;
     projectId: string;
     version: number;
-    packages: Array<{
-        [key: string]: unknown;
-    }>;
-    variables: {
-        [key: string]: unknown;
-    };
-    credentialRefs: Array<{
-        [key: string]: unknown;
-    }>;
+    packages: Array<SessionEnvironmentJsonObject>;
+    variables: SessionEnvironmentJsonObject;
+    credentialRefs: Array<SessionEnvironmentJsonObject>;
     hostingMode: EnvironmentHostingMode;
     networkPolicy: EnvironmentNetworkPolicy;
-    mcpPolicy: {
-        [key: string]: unknown;
-    };
-    packageManagerPolicy: {
-        [key: string]: unknown;
-    };
-    resourceLimits: {
-        [key: string]: unknown;
-    };
-    runtimeConfig: {
-        [key: string]: unknown;
-    };
-    metadata: {
-        [key: string]: unknown;
-    };
+    mcpPolicy: SessionEnvironmentJsonObject;
+    packageManagerPolicy: SessionEnvironmentJsonObject;
+    resourceLimits: SessionEnvironmentJsonObject;
+    runtimeConfig: SessionEnvironmentJsonObject;
+    metadata: SessionEnvironmentJsonObject;
     createdAt: string;
 } | null;
+
+export type SessionEnvironmentJsonObject = {
+    [key: string]: unknown;
+};
 
 export type SessionRuntimeMetadata = {
     hostingMode: EnvironmentHostingMode;
@@ -1807,13 +1795,15 @@ export type VaultCredentialVersion = {
     referenceName: string;
     state: 'active' | 'superseded' | 'revoked';
     hasSecret: boolean;
-    metadata: {
-        [key: string]: unknown;
-    };
+    metadata: VaultJsonObject;
     createdAt: string;
     supersededAt: string | null;
     revokedAt: string | null;
 } | null;
+
+export type VaultJsonObject = {
+    [key: string]: unknown;
+};
 
 export type CreateVaultCredentialRequest = {
     name: string;

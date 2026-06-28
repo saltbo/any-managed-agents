@@ -6285,25 +6285,16 @@
           "packages": {
             "type": "array",
             "items": {
-              "type": "object",
-              "additionalProperties": {
-                "nullable": true
-              }
+              "$ref": "#/components/schemas/SessionEnvironmentJsonObject"
             }
           },
           "variables": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
+            "$ref": "#/components/schemas/SessionEnvironmentJsonObject"
           },
           "credentialRefs": {
             "type": "array",
             "items": {
-              "type": "object",
-              "additionalProperties": {
-                "nullable": true
-              }
+              "$ref": "#/components/schemas/SessionEnvironmentJsonObject"
             }
           },
           "hostingMode": {
@@ -6313,34 +6304,19 @@
             "$ref": "#/components/schemas/EnvironmentNetworkPolicy"
           },
           "mcpPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
+            "$ref": "#/components/schemas/SessionEnvironmentJsonObject"
           },
           "packageManagerPolicy": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
+            "$ref": "#/components/schemas/SessionEnvironmentJsonObject"
           },
           "resourceLimits": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
+            "$ref": "#/components/schemas/SessionEnvironmentJsonObject"
           },
           "runtimeConfig": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
+            "$ref": "#/components/schemas/SessionEnvironmentJsonObject"
           },
           "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            }
+            "$ref": "#/components/schemas/SessionEnvironmentJsonObject"
           },
           "createdAt": {
             "type": "string",
@@ -6364,6 +6340,12 @@
           "metadata",
           "createdAt"
         ]
+      },
+      "SessionEnvironmentJsonObject": {
+        "type": "object",
+        "additionalProperties": {
+          "nullable": true
+        }
       },
       "SessionRuntimeMetadata": {
         "type": "object",
@@ -7527,13 +7509,7 @@
             "example": true
           },
           "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "nullable": true
-            },
-            "example": {
-              "rotatedBy": "operator"
-            }
+            "$ref": "#/components/schemas/VaultJsonObject"
           },
           "createdAt": {
             "type": "string",
@@ -7570,6 +7546,15 @@
           "supersededAt",
           "revokedAt"
         ]
+      },
+      "VaultJsonObject": {
+        "type": "object",
+        "additionalProperties": {
+          "nullable": true
+        },
+        "example": {
+          "rotatedBy": "operator"
+        }
       },
       "CreateVaultCredentialRequest": {
         "type": "object",

@@ -11,6 +11,22 @@ export declare class AmaApiError extends Error {
     readonly body: unknown;
     constructor(status: number | undefined, responseText: string, body: unknown);
 }
+export interface SessionStream {
+    events: AsyncIterable<types.SessionEvent>;
+    send(frame: types.SessionClientFrame): Promise<void>;
+    backfill(options?: {
+        cursor?: number;
+        limit?: number;
+        eventType?: string;
+        visibility?: string;
+    }): Promise<types.SessionBackfillResponse>;
+    close(): void;
+}
+export interface RunnerChannel {
+    messages: AsyncIterable<types.RunnerChannelMessage>;
+    send(frame: types.RunnerChannelMessage): Promise<void>;
+    close(): void;
+}
 export type AmaClient = ReturnType<typeof createAmaClient>;
 export declare function createAmaClient(config: AmaClientConfig): {
     raw: import("./generated/client/types.gen.js").Client;
@@ -64,7 +80,7 @@ export declare function createAmaClient(config: AmaClientConfig): {
         create: (body: types.CreateRunnerRequest) => Promise<types.Runner>;
         get: (runnerId: string) => Promise<types.Runner>;
         update: (runnerId: string, body: types.UpdateRunnerRequest) => Promise<types.Runner>;
-        channel: (runnerId: string) => Promise<types.RunnerChannelMetadata>;
+        channel: (runnerId: string) => RunnerChannel;
         getHeartbeat: (runnerId: string) => Promise<types.RunnerHeartbeat>;
         putHeartbeat: (runnerId: string, body: types.PutRunnerHeartbeatRequest) => Promise<types.RunnerHeartbeat>;
     };
@@ -129,7 +145,7 @@ export declare function createAmaClient(config: AmaClientConfig): {
         get: (sessionId: string) => Promise<types.Session>;
         update: (sessionId: string, body: types.UpdateSessionRequest) => Promise<types.Session>;
         connection: (sessionId: string) => Promise<types.SessionConnection>;
-        socket: (sessionId: string) => Promise<types.SessionConnection>;
+        stream: (sessionId: string) => SessionStream;
         listMessages: (sessionId: string, query?: types.ListSessionMessagesData["query"]) => Promise<types.SessionMessageListResponse>;
         createMessage: (sessionId: string, body: types.CreateSessionMessageRequest) => Promise<types.SessionMessage>;
         getMessage: (sessionId: string, messageId: string) => Promise<types.SessionMessage>;
@@ -172,9 +188,7 @@ export declare function createAmaClient(config: AmaClientConfig): {
             referenceName: string;
             state: "active" | "superseded" | "revoked";
             hasSecret: boolean;
-            metadata: {
-                [key: string]: unknown;
-            };
+            metadata: types.VaultJsonObject;
             createdAt: string;
             supersededAt: string | null;
             revokedAt: string | null;
