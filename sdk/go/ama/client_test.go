@@ -72,7 +72,7 @@ func TestClientFacadeConfiguresHeadersAndCallsGeneratedOperation(t *testing.T) {
 	}
 }
 
-func TestClientFacadeOpensRunnerWebSocketChannel(t *testing.T) {
+func TestRunnerClientFacadeOpensRunnerWebSocketChannel(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/runners/runner_42/channel" || r.Method != http.MethodGet {
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
@@ -91,7 +91,7 @@ func TestClientFacadeOpensRunnerWebSocketChannel(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := New(ClientConfig{
+	client, err := NewRunner(ClientConfig{
 		BaseURL:   server.URL,
 		ProjectID: "project_ws",
 		AccessTokenProvider: func(context.Context) (string, error) {

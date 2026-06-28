@@ -61,7 +61,7 @@ func (a Application) Run(ctx context.Context) error {
 			Tokens: tokens,
 		},
 	}
-	client, err := ama.New(ama.ClientConfig{
+	client, err := ama.NewRunner(ama.ClientConfig{
 		BaseURL:             config.Origin,
 		AccessTokenProvider: tokens.AccessToken,
 		ProjectID:           config.ProjectID,

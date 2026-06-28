@@ -33,3 +33,24 @@ client = create_ama_client(
 
 project = client.projects.create(CreateProjectRequest(name="Control Plane"))
 ```
+
+Runner protocol calls use `create_ama_runner_client`. That facade contains work
+item, lease, heartbeat, and runner channel methods that are intentionally absent
+from the public `create_ama_client` facade.
+
+```python
+from ama_sdk import create_ama_runner_client
+from ama_sdk.models.put_runner_heartbeat_request import PutRunnerHeartbeatRequest
+from ama_sdk.models.put_runner_heartbeat_request_state import PutRunnerHeartbeatRequestState
+
+runner = create_ama_runner_client(
+    base_url="https://ama.example.com",
+    access_token=access_token,
+    project_id=project_id,
+)
+
+runner.runners.put_heartbeat(
+    runner_id,
+    PutRunnerHeartbeatRequest(state=PutRunnerHeartbeatRequestState.ACTIVE),
+)
+```

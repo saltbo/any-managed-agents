@@ -3,9 +3,9 @@
 This directory is the Go SDK module for the external Any Managed Agents
 control-plane API.
 
-`ama.gen.go` is generated from `sdk/openapi.json`. `ama/client.go` is the stable
-facade generated from `sdk/spec/resources.json`, the shared SDK shape used by
-the TypeScript, Go, and Python SDKs.
+`ama.gen.go` is generated from `sdk/openapi.json`. `ama/client.go` contains the
+stable facades generated from `sdk/spec/resources.json`, the shared SDK shape
+used by the TypeScript, Go, and Python SDKs.
 
 Regenerate generated operation metadata from the route-generated OpenAPI document:
 
@@ -31,4 +31,22 @@ if err != nil {
 }
 
 project, err := client.Projects.Create(ctx, ama.CreateProjectRequest{Name: "Control Plane"})
+```
+
+Runner protocol calls use `ama.NewRunner`. That facade contains work item,
+lease, heartbeat, and runner channel methods that are intentionally absent from
+the public `ama.New` client.
+
+```go
+runner, err := ama.NewRunner(ama.ClientConfig{
+	BaseURL:     "https://ama.example.com",
+	AccessToken: accessToken,
+	ProjectID:   projectID,
+})
+if err != nil {
+	return err
+}
+
+state := ama.PutRunnerHeartbeatRequestStateActive
+_, err = runner.Runners.PutHeartbeat(ctx, runnerID, ama.PutRunnerHeartbeatRequest{State: &state})
 ```

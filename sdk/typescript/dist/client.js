@@ -1,5 +1,5 @@
-// Stable facade generated from sdk/spec/resources.json.
-// The generated OpenAPI layer owns HTTP shapes; this file owns public SDK shape.
+// Stable facades generated from sdk/spec/resources.json.
+// The generated OpenAPI layer owns HTTP shapes; this file owns SDK shape.
 import { createClient, createConfig } from './generated/client/index.js';
 import * as ops from './generated/sdk.gen.js';
 export class AmaApiError extends Error {
@@ -155,8 +155,8 @@ function createRunnerChannel(config, runnerId) {
         },
     };
 }
-export function createAmaClient(config) {
-    const client = createClient(createConfig({
+function createConfiguredClient(config) {
+    return createClient(createConfig({
         baseUrl: config.baseUrl,
         headers: {
             ...(config.accessToken ? { authorization: `Bearer ${config.accessToken}` } : {}),
@@ -164,6 +164,9 @@ export function createAmaClient(config) {
             ...config.headers,
         },
     }));
+}
+export function createAmaClient(config) {
+    const client = createConfiguredClient(config);
     return {
         raw: client,
         system: {
@@ -174,11 +177,13 @@ export function createAmaClient(config) {
             createSession: (body) => unwrap(ops.createAuthSession({ client, body })),
             currentSession: () => unwrap(ops.readCurrentAuthSession({ client })),
             deleteCurrentSession: () => unwrap(ops.deleteCurrentAuthSession({ client })),
-            listFederatedTenants: (query) => unwrap(ops.listFederatedTenants({ client, query })),
-            createFederatedTenant: (body) => unwrap(ops.createFederatedTenant({ client, body })),
-            getFederatedTenant: (tenantId) => unwrap(ops.readFederatedTenant({ client, path: { tenantId } })),
-            updateFederatedTenant: (tenantId, body) => unwrap(ops.updateFederatedTenant({ client, path: { tenantId }, body })),
-            deleteFederatedTenant: (tenantId) => unwrap(ops.deleteFederatedTenant({ client, path: { tenantId } })),
+        },
+        federatedTenants: {
+            list: (query) => unwrap(ops.listFederatedTenants({ client, query })),
+            create: (body) => unwrap(ops.createFederatedTenant({ client, body })),
+            get: (tenantId) => unwrap(ops.readFederatedTenant({ client, path: { tenantId } })),
+            update: (tenantId, body) => unwrap(ops.updateFederatedTenant({ client, path: { tenantId }, body })),
+            delete: (tenantId) => unwrap(ops.deleteFederatedTenant({ client, path: { tenantId } })),
         },
         projects: {
             list: (query) => unwrap(ops.listProjects({ client, query })),
@@ -216,19 +221,6 @@ export function createAmaClient(config) {
             create: (body) => unwrap(ops.createRunner({ client, body })),
             get: (runnerId) => unwrap(ops.readRunner({ client, path: { runnerId } })),
             update: (runnerId, body) => unwrap(ops.updateRunner({ client, path: { runnerId }, body })),
-            channel: (runnerId) => createRunnerChannel(config, runnerId),
-            getHeartbeat: (runnerId) => unwrap(ops.readRunnerHeartbeat({ client, path: { runnerId } })),
-            putHeartbeat: (runnerId, body) => unwrap(ops.putRunnerHeartbeat({ client, path: { runnerId }, body })),
-        },
-        workItems: {
-            list: (query) => unwrap(ops.listWorkItems({ client, query })),
-            get: (workItemId) => unwrap(ops.readWorkItem({ client, path: { workItemId } })),
-        },
-        leases: {
-            list: (query) => unwrap(ops.listLeases({ client, query })),
-            create: (body) => unwrap(ops.createLease({ client, body })),
-            get: (leaseId) => unwrap(ops.readLease({ client, path: { leaseId } })),
-            update: (leaseId, body) => unwrap(ops.updateLease({ client, path: { leaseId }, body })),
         },
         policies: {
             list: () => unwrap(ops.listPolicies({ client })),
@@ -256,7 +248,7 @@ export function createAmaClient(config) {
             update: (connectionId, body) => unwrap(ops.updateConnection({ client, path: { connectionId }, body })),
             listTools: (connectionId) => unwrap(ops.listConnectionTools({ client, path: { connectionId } })),
             listToolCalls: (connectionId, toolName, query) => unwrap(ops.listToolCalls({ client, path: { connectionId, toolName }, query })),
-            createToolCall: (connectionId, toolName, body) => unwrap(ops.createToolCall({ client, path: { connectionId, toolName }, body })),
+            callTool: (connectionId, toolName, body) => unwrap(ops.createToolCall({ client, path: { connectionId, toolName }, body })),
             getToolCall: (connectionId, toolName, callId) => unwrap(ops.readToolCall({ client, path: { connectionId, toolName, callId } })),
         },
         audit: {
@@ -278,13 +270,12 @@ export function createAmaClient(config) {
             create: (body) => unwrap(ops.createSession({ client, body })),
             get: (sessionId) => unwrap(ops.readSession({ client, path: { sessionId } })),
             update: (sessionId, body) => unwrap(ops.updateSession({ client, path: { sessionId }, body })),
-            connection: (sessionId) => unwrap(ops.readSessionConnection({ client, path: { sessionId } })),
+            getConnection: (sessionId) => unwrap(ops.readSessionConnection({ client, path: { sessionId } })),
             stream: (sessionId) => createSessionStream(config, sessionId),
             listMessages: (sessionId, query) => unwrap(ops.listSessionMessages({ client, path: { sessionId }, query })),
             createMessage: (sessionId, body) => unwrap(ops.createSessionMessage({ client, path: { sessionId }, body })),
             getMessage: (sessionId, messageId) => unwrap(ops.readSessionMessage({ client, path: { sessionId, messageId } })),
             listEvents: (sessionId, query) => unwrap(ops.listSessionEvents({ client, path: { sessionId }, query })),
-            createEvents: (sessionId, body) => unwrap(ops.createSessionEvents({ client, path: { sessionId }, body })),
             listApprovals: (sessionId) => unwrap(ops.listSessionApprovals({ client, path: { sessionId } })),
             getApproval: (sessionId, approvalId) => unwrap(ops.readSessionApproval({ client, path: { sessionId, approvalId } })),
             decideApproval: (sessionId, approvalId, body) => unwrap(ops.decideSessionApproval({ client, path: { sessionId, approvalId }, body })),
@@ -316,7 +307,38 @@ export function createAmaClient(config) {
         usage: {
             listRecords: (query) => unwrap(ops.listUsageRecords({ client, query })),
             getRecord: (recordId) => unwrap(ops.readUsageRecord({ client, path: { recordId } })),
-            summary: (query) => unwrap(ops.readUsageSummary({ client, query })),
+            getSummary: (query) => unwrap(ops.readUsageSummary({ client, query })),
+        },
+    };
+}
+export function createAmaRunnerClient(config) {
+    const client = createConfiguredClient(config);
+    return {
+        raw: client,
+        system: {
+            health: () => unwrap(ops.getHealth({ client })),
+        },
+        runners: {
+            list: (query) => unwrap(ops.listRunners({ client, query })),
+            create: (body) => unwrap(ops.createRunner({ client, body })),
+            get: (runnerId) => unwrap(ops.readRunner({ client, path: { runnerId } })),
+            update: (runnerId, body) => unwrap(ops.updateRunner({ client, path: { runnerId }, body })),
+            channel: (runnerId) => createRunnerChannel(config, runnerId),
+            getHeartbeat: (runnerId) => unwrap(ops.readRunnerHeartbeat({ client, path: { runnerId } })),
+            putHeartbeat: (runnerId, body) => unwrap(ops.putRunnerHeartbeat({ client, path: { runnerId }, body })),
+        },
+        workItems: {
+            list: (query) => unwrap(ops.listWorkItems({ client, query })),
+            get: (workItemId) => unwrap(ops.readWorkItem({ client, path: { workItemId } })),
+        },
+        leases: {
+            list: (query) => unwrap(ops.listLeases({ client, query })),
+            create: (body) => unwrap(ops.createLease({ client, body })),
+            get: (leaseId) => unwrap(ops.readLease({ client, path: { leaseId } })),
+            update: (leaseId, body) => unwrap(ops.updateLease({ client, path: { leaseId }, body })),
+        },
+        sessions: {
+            createEvents: (sessionId, body) => unwrap(ops.createSessionEvents({ client, path: { sessionId }, body })),
         },
     };
 }

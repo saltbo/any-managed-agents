@@ -8,10 +8,12 @@ is no hand-written client surface to drift from the contract.
 ## Layout
 
 - `src/generated/` — output of `@hey-api/openapi-ts`. Do not edit by hand.
-- `src/client.ts` — the stable generated **facade** consumers code
-  against (`createAmaClient(...).<resource>.<verb>(...)`). It delegates to the
-  generated functions, so the generated layer can be re-shaped — or the
-  generator swapped — without changing these call signatures.
+- `src/client.ts` — the stable generated **facades** consumers code against:
+  `createAmaClient(...).<resource>.<verb>(...)` for public control-plane calls
+  and `createAmaRunnerClient(...).<resource>.<verb>(...)` for runner protocol
+  calls. They delegate to the generated functions, so the generated layer can
+  be re-shaped — or the generator swapped — without changing these call
+  signatures.
 - `src/index.ts` — public barrel: exports the facade plus the raw generated
   operations/models as an escape hatch.
 - `openapi-ts.config.ts` — generator config (input `../openapi.json`).
@@ -72,6 +74,17 @@ try {
 The generated operation functions (`createAgent`, `readSession`, …) and
 `createClient`/`createConfig` are also exported as an escape hatch, reachable as
 `client.raw` too.
+
+Runner protocol calls use the runner facade so internal work leasing and
+heartbeat endpoints do not leak into the public client shape:
+
+```ts
+import { createAmaRunnerClient } from '@any-managed-agents/sdk'
+
+const runner = createAmaRunnerClient({ baseUrl, accessToken, projectId })
+await runner.runners.putHeartbeat(runnerId, { state: 'active' })
+const channel = runner.runners.channel(runnerId)
+```
 
 The web console does not import this package; console code uses the
 project-local Hono RPC client in `src/lib/api.ts`.

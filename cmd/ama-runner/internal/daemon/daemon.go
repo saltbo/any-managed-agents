@@ -21,7 +21,7 @@ import (
 
 type Daemon struct {
 	Config           runnerconfig.Config
-	Client           *ama.Client
+	Client           *ama.RunnerClient
 	Channels         runnersession.Opener
 	Adapter          sandbox.SandboxAdapter
 	RuntimeAdapter   runtime.Adapter

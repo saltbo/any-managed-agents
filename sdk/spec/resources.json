@@ -1,157 +1,178 @@
 {
-  "version": 1,
-  "resources": [
-    { "name": "system", "methods": [
-      { "name": "health", "operationId": "getHealth" }
-    ] },
-    { "name": "auth", "methods": [
-      { "name": "config", "operationId": "readAuthConfig" },
-      { "name": "createSession", "operationId": "createAuthSession" },
-      { "name": "currentSession", "operationId": "readCurrentAuthSession" },
-      { "name": "deleteCurrentSession", "operationId": "deleteCurrentAuthSession" },
-      { "name": "listFederatedTenants", "operationId": "listFederatedTenants" },
-      { "name": "createFederatedTenant", "operationId": "createFederatedTenant" },
-      { "name": "getFederatedTenant", "operationId": "readFederatedTenant" },
-      { "name": "updateFederatedTenant", "operationId": "updateFederatedTenant" },
-      { "name": "deleteFederatedTenant", "operationId": "deleteFederatedTenant" }
-    ] },
-    { "name": "projects", "methods": [
-      { "name": "list", "operationId": "listProjects" },
-      { "name": "create", "operationId": "createProject" },
-      { "name": "get", "operationId": "readProject" }
-    ] },
-    { "name": "agents", "methods": [
-      { "name": "list", "operationId": "listAgents" },
-      { "name": "create", "operationId": "createAgent" },
-      { "name": "get", "operationId": "readAgent" },
-      { "name": "update", "operationId": "updateAgent" },
-      { "name": "listHandoffCandidates", "operationId": "listAgentHandoffCandidates" },
-      { "name": "getMemory", "operationId": "readAgentMemory" },
-      { "name": "replaceMemory", "operationId": "replaceAgentMemory" },
-      { "name": "listVersions", "operationId": "listAgentVersions" },
-      { "name": "getVersion", "operationId": "readAgentVersion" }
-    ] },
-    { "name": "environments", "methods": [
-      { "name": "list", "operationId": "listEnvironments" },
-      { "name": "create", "operationId": "createEnvironment" },
-      { "name": "get", "operationId": "readEnvironment" },
-      { "name": "update", "operationId": "updateEnvironment" },
-      { "name": "listVersions", "operationId": "listEnvironmentVersions" },
-      { "name": "getVersion", "operationId": "readEnvironmentVersion" }
-    ] },
-    { "name": "providers", "methods": [
-      { "name": "list", "operationId": "listProviders" },
-      { "name": "listModels", "operationId": "listModels" },
-      { "name": "refreshCatalog", "operationId": "refreshCatalog" },
-      { "name": "get", "operationId": "readProvider" },
-      { "name": "listProviderModels", "operationId": "listProviderModels" }
-    ] },
-    { "name": "runners", "methods": [
-      { "name": "list", "operationId": "listRunners" },
-      { "name": "create", "operationId": "createRunner" },
-      { "name": "get", "operationId": "readRunner" },
-      { "name": "update", "operationId": "updateRunner" },
-      { "name": "channel", "operationId": "connectRunnerChannel" },
-      { "name": "getHeartbeat", "operationId": "readRunnerHeartbeat" },
-      { "name": "putHeartbeat", "operationId": "putRunnerHeartbeat" }
-    ] },
-    { "name": "workItems", "methods": [
-      { "name": "list", "operationId": "listWorkItems" },
-      { "name": "get", "operationId": "readWorkItem" }
-    ] },
-    { "name": "leases", "methods": [
-      { "name": "list", "operationId": "listLeases" },
-      { "name": "create", "operationId": "createLease" },
-      { "name": "get", "operationId": "readLease" },
-      { "name": "update", "operationId": "updateLease" }
-    ] },
-    { "name": "policies", "methods": [
-      { "name": "list", "operationId": "listPolicies" },
-      { "name": "create", "operationId": "createPolicy" },
-      { "name": "get", "operationId": "readPolicy" },
-      { "name": "replace", "operationId": "replacePolicy" },
-      { "name": "delete", "operationId": "deletePolicy" },
-      { "name": "effective", "operationId": "readEffectivePolicy" }
-    ] },
-    { "name": "budgets", "methods": [
-      { "name": "list", "operationId": "listBudgets" },
-      { "name": "create", "operationId": "createBudget" },
-      { "name": "get", "operationId": "readBudget" },
-      { "name": "update", "operationId": "updateBudget" },
-      { "name": "delete", "operationId": "deleteBudget" }
-    ] },
-    { "name": "connectors", "methods": [
-      { "name": "list", "operationId": "listConnectors" },
-      { "name": "get", "operationId": "readConnector" }
-    ] },
-    { "name": "connections", "methods": [
-      { "name": "list", "operationId": "listConnections" },
-      { "name": "create", "operationId": "createConnection" },
-      { "name": "get", "operationId": "readConnection" },
-      { "name": "update", "operationId": "updateConnection" },
-      { "name": "listTools", "operationId": "listConnectionTools" },
-      { "name": "listToolCalls", "operationId": "listToolCalls" },
-      { "name": "createToolCall", "operationId": "createToolCall" },
-      { "name": "getToolCall", "operationId": "readToolCall" }
-    ] },
-    { "name": "audit", "methods": [
-      { "name": "listRecords", "operationId": "listAuditRecords" },
-      { "name": "getRecord", "operationId": "readAuditRecord" }
-    ] },
-    { "name": "triggers", "methods": [
-      { "name": "list", "operationId": "listTriggers" },
-      { "name": "create", "operationId": "createTrigger" },
-      { "name": "get", "operationId": "readTrigger" },
-      { "name": "update", "operationId": "updateTrigger" },
-      { "name": "delete", "operationId": "deleteTrigger" },
-      { "name": "listRuns", "operationId": "listTriggerRuns" },
-      { "name": "createRun", "operationId": "createTriggerRun" },
-      { "name": "getRun", "operationId": "readTriggerRun" }
-    ] },
-    { "name": "sessions", "methods": [
-      { "name": "list", "operationId": "listSessions" },
-      { "name": "create", "operationId": "createSession" },
-      { "name": "get", "operationId": "readSession" },
-      { "name": "update", "operationId": "updateSession" },
-      { "name": "connection", "operationId": "readSessionConnection" },
-      { "name": "stream", "operationId": "connectSessionSocket" },
-      { "name": "listMessages", "operationId": "listSessionMessages" },
-      { "name": "createMessage", "operationId": "createSessionMessage" },
-      { "name": "getMessage", "operationId": "readSessionMessage" },
-      { "name": "listEvents", "operationId": "listSessionEvents" },
-      { "name": "createEvents", "operationId": "createSessionEvents" },
-      { "name": "listApprovals", "operationId": "listSessionApprovals" },
-      { "name": "getApproval", "operationId": "readSessionApproval" },
-      { "name": "decideApproval", "operationId": "decideSessionApproval" }
-    ] },
-    { "name": "memoryStores", "methods": [
-      { "name": "list", "operationId": "listMemoryStores" },
-      { "name": "create", "operationId": "createMemoryStore" },
-      { "name": "get", "operationId": "readMemoryStore" },
-      { "name": "update", "operationId": "updateMemoryStore" },
-      { "name": "listMemories", "operationId": "listMemoryStoreMemories" },
-      { "name": "createMemory", "operationId": "createMemoryStoreMemory" },
-      { "name": "updateMemory", "operationId": "updateMemoryStoreMemory" },
-      { "name": "deleteMemory", "operationId": "deleteMemoryStoreMemory" }
-    ] },
-    { "name": "vaults", "methods": [
-      { "name": "list", "operationId": "listVaults" },
-      { "name": "create", "operationId": "createVault" },
-      { "name": "get", "operationId": "readVault" },
-      { "name": "update", "operationId": "updateVault" },
-      { "name": "listCredentials", "operationId": "listVaultCredentials" },
-      { "name": "createCredential", "operationId": "createVaultCredential" },
-      { "name": "getCredential", "operationId": "readVaultCredential" },
-      { "name": "updateCredential", "operationId": "updateVaultCredential" },
-      { "name": "listCredentialVersions", "operationId": "listVaultCredentialVersions" },
-      { "name": "createCredentialVersion", "operationId": "createVaultCredentialVersion" },
-      { "name": "getCredentialVersion", "operationId": "readVaultCredentialVersion" },
-      { "name": "deleteCredentialVersion", "operationId": "deleteVaultCredentialVersion" }
-    ] },
-    { "name": "usage", "methods": [
-      { "name": "listRecords", "operationId": "listUsageRecords" },
-      { "name": "getRecord", "operationId": "readUsageRecord" },
-      { "name": "summary", "operationId": "readUsageSummary" }
-    ] }
-  ]
+  "version": 2,
+  "facades": {
+    "public": {
+      "resources": [
+        { "name": "system", "methods": [
+          { "name": "health", "operationId": "getHealth" }
+        ] },
+        { "name": "auth", "methods": [
+          { "name": "config", "operationId": "readAuthConfig" },
+          { "name": "createSession", "operationId": "createAuthSession" },
+          { "name": "currentSession", "operationId": "readCurrentAuthSession" },
+          { "name": "deleteCurrentSession", "operationId": "deleteCurrentAuthSession" }
+        ] },
+        { "name": "federatedTenants", "methods": [
+          { "name": "list", "operationId": "listFederatedTenants" },
+          { "name": "create", "operationId": "createFederatedTenant" },
+          { "name": "get", "operationId": "readFederatedTenant" },
+          { "name": "update", "operationId": "updateFederatedTenant" },
+          { "name": "delete", "operationId": "deleteFederatedTenant" }
+        ] },
+        { "name": "projects", "methods": [
+          { "name": "list", "operationId": "listProjects" },
+          { "name": "create", "operationId": "createProject" },
+          { "name": "get", "operationId": "readProject" }
+        ] },
+        { "name": "agents", "methods": [
+          { "name": "list", "operationId": "listAgents" },
+          { "name": "create", "operationId": "createAgent" },
+          { "name": "get", "operationId": "readAgent" },
+          { "name": "update", "operationId": "updateAgent" },
+          { "name": "listHandoffCandidates", "operationId": "listAgentHandoffCandidates" },
+          { "name": "getMemory", "operationId": "readAgentMemory" },
+          { "name": "replaceMemory", "operationId": "replaceAgentMemory" },
+          { "name": "listVersions", "operationId": "listAgentVersions" },
+          { "name": "getVersion", "operationId": "readAgentVersion" }
+        ] },
+        { "name": "environments", "methods": [
+          { "name": "list", "operationId": "listEnvironments" },
+          { "name": "create", "operationId": "createEnvironment" },
+          { "name": "get", "operationId": "readEnvironment" },
+          { "name": "update", "operationId": "updateEnvironment" },
+          { "name": "listVersions", "operationId": "listEnvironmentVersions" },
+          { "name": "getVersion", "operationId": "readEnvironmentVersion" }
+        ] },
+        { "name": "providers", "methods": [
+          { "name": "list", "operationId": "listProviders" },
+          { "name": "listModels", "operationId": "listModels" },
+          { "name": "refreshCatalog", "operationId": "refreshCatalog" },
+          { "name": "get", "operationId": "readProvider" },
+          { "name": "listProviderModels", "operationId": "listProviderModels" }
+        ] },
+        { "name": "runners", "methods": [
+          { "name": "list", "operationId": "listRunners" },
+          { "name": "create", "operationId": "createRunner" },
+          { "name": "get", "operationId": "readRunner" },
+          { "name": "update", "operationId": "updateRunner" }
+        ] },
+        { "name": "policies", "methods": [
+          { "name": "list", "operationId": "listPolicies" },
+          { "name": "create", "operationId": "createPolicy" },
+          { "name": "get", "operationId": "readPolicy" },
+          { "name": "replace", "operationId": "replacePolicy" },
+          { "name": "delete", "operationId": "deletePolicy" },
+          { "name": "effective", "operationId": "readEffectivePolicy" }
+        ] },
+        { "name": "budgets", "methods": [
+          { "name": "list", "operationId": "listBudgets" },
+          { "name": "create", "operationId": "createBudget" },
+          { "name": "get", "operationId": "readBudget" },
+          { "name": "update", "operationId": "updateBudget" },
+          { "name": "delete", "operationId": "deleteBudget" }
+        ] },
+        { "name": "connectors", "methods": [
+          { "name": "list", "operationId": "listConnectors" },
+          { "name": "get", "operationId": "readConnector" }
+        ] },
+        { "name": "connections", "methods": [
+          { "name": "list", "operationId": "listConnections" },
+          { "name": "create", "operationId": "createConnection" },
+          { "name": "get", "operationId": "readConnection" },
+          { "name": "update", "operationId": "updateConnection" },
+          { "name": "listTools", "operationId": "listConnectionTools" },
+          { "name": "listToolCalls", "operationId": "listToolCalls" },
+          { "name": "callTool", "operationId": "createToolCall" },
+          { "name": "getToolCall", "operationId": "readToolCall" }
+        ] },
+        { "name": "audit", "methods": [
+          { "name": "listRecords", "operationId": "listAuditRecords" },
+          { "name": "getRecord", "operationId": "readAuditRecord" }
+        ] },
+        { "name": "triggers", "methods": [
+          { "name": "list", "operationId": "listTriggers" },
+          { "name": "create", "operationId": "createTrigger" },
+          { "name": "get", "operationId": "readTrigger" },
+          { "name": "update", "operationId": "updateTrigger" },
+          { "name": "delete", "operationId": "deleteTrigger" },
+          { "name": "listRuns", "operationId": "listTriggerRuns" },
+          { "name": "createRun", "operationId": "createTriggerRun" },
+          { "name": "getRun", "operationId": "readTriggerRun" }
+        ] },
+        { "name": "sessions", "methods": [
+          { "name": "list", "operationId": "listSessions" },
+          { "name": "create", "operationId": "createSession" },
+          { "name": "get", "operationId": "readSession" },
+          { "name": "update", "operationId": "updateSession" },
+          { "name": "getConnection", "operationId": "readSessionConnection" },
+          { "name": "stream", "operationId": "connectSessionSocket" },
+          { "name": "listMessages", "operationId": "listSessionMessages" },
+          { "name": "createMessage", "operationId": "createSessionMessage" },
+          { "name": "getMessage", "operationId": "readSessionMessage" },
+          { "name": "listEvents", "operationId": "listSessionEvents" },
+          { "name": "listApprovals", "operationId": "listSessionApprovals" },
+          { "name": "getApproval", "operationId": "readSessionApproval" },
+          { "name": "decideApproval", "operationId": "decideSessionApproval" }
+        ] },
+        { "name": "memoryStores", "methods": [
+          { "name": "list", "operationId": "listMemoryStores" },
+          { "name": "create", "operationId": "createMemoryStore" },
+          { "name": "get", "operationId": "readMemoryStore" },
+          { "name": "update", "operationId": "updateMemoryStore" },
+          { "name": "listMemories", "operationId": "listMemoryStoreMemories" },
+          { "name": "createMemory", "operationId": "createMemoryStoreMemory" },
+          { "name": "updateMemory", "operationId": "updateMemoryStoreMemory" },
+          { "name": "deleteMemory", "operationId": "deleteMemoryStoreMemory" }
+        ] },
+        { "name": "vaults", "methods": [
+          { "name": "list", "operationId": "listVaults" },
+          { "name": "create", "operationId": "createVault" },
+          { "name": "get", "operationId": "readVault" },
+          { "name": "update", "operationId": "updateVault" },
+          { "name": "listCredentials", "operationId": "listVaultCredentials" },
+          { "name": "createCredential", "operationId": "createVaultCredential" },
+          { "name": "getCredential", "operationId": "readVaultCredential" },
+          { "name": "updateCredential", "operationId": "updateVaultCredential" },
+          { "name": "listCredentialVersions", "operationId": "listVaultCredentialVersions" },
+          { "name": "createCredentialVersion", "operationId": "createVaultCredentialVersion" },
+          { "name": "getCredentialVersion", "operationId": "readVaultCredentialVersion" },
+          { "name": "deleteCredentialVersion", "operationId": "deleteVaultCredentialVersion" }
+        ] },
+        { "name": "usage", "methods": [
+          { "name": "listRecords", "operationId": "listUsageRecords" },
+          { "name": "getRecord", "operationId": "readUsageRecord" },
+          { "name": "getSummary", "operationId": "readUsageSummary" }
+        ] }
+      ]
+    },
+    "runner": {
+      "resources": [
+        { "name": "system", "methods": [
+          { "name": "health", "operationId": "getHealth" }
+        ] },
+        { "name": "runners", "methods": [
+          { "name": "list", "operationId": "listRunners" },
+          { "name": "create", "operationId": "createRunner" },
+          { "name": "get", "operationId": "readRunner" },
+          { "name": "update", "operationId": "updateRunner" },
+          { "name": "channel", "operationId": "connectRunnerChannel" },
+          { "name": "getHeartbeat", "operationId": "readRunnerHeartbeat" },
+          { "name": "putHeartbeat", "operationId": "putRunnerHeartbeat" }
+        ] },
+        { "name": "workItems", "methods": [
+          { "name": "list", "operationId": "listWorkItems" },
+          { "name": "get", "operationId": "readWorkItem" }
+        ] },
+        { "name": "leases", "methods": [
+          { "name": "list", "operationId": "listLeases" },
+          { "name": "create", "operationId": "createLease" },
+          { "name": "get", "operationId": "readLease" },
+          { "name": "update", "operationId": "updateLease" }
+        ] },
+        { "name": "sessions", "methods": [
+          { "name": "createEvents", "operationId": "createSessionEvents" }
+        ] }
+      ]
+    }
+  }
 }

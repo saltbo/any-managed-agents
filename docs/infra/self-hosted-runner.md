@@ -1,6 +1,6 @@
 # Self-Hosted AMA Runner
 
-`cmd/ama-runner` is the first self-hosted tool-executor daemon for Any Managed Agents. AMA keeps ownership of the agent loop, work queue, policy decisions, session state, and event storage. The runner leases AMA-owned self-hosted work and reports structured events/results back through the public control-plane API.
+`cmd/ama-runner` is the first self-hosted tool-executor daemon for Any Managed Agents. AMA keeps ownership of the agent loop, work queue, policy decisions, session state, and event storage. The runner leases AMA-owned self-hosted work and reports structured events/results back through the runner protocol API.
 
 The daemon is intentionally not a Pi or PyAgent runtime host. It must not launch local Pi loops, expose runner-local session URLs, or accept unapproved local work.
 
@@ -19,7 +19,7 @@ require github.com/saltbo/any-managed-agents/sdk/go v0.0.0
 replace github.com/saltbo/any-managed-agents/sdk/go => ../../sdk/go
 ```
 
-All control-plane calls go through `sdk/go/ama`. The daemon does not maintain a separate API client outside SDK transport configuration.
+All AMA API calls go through `sdk/go/ama`. The daemon uses `ama.NewRunner` for runner protocol calls and does not maintain a separate API client outside SDK transport configuration.
 
 ## Login And Configuration
 
@@ -29,7 +29,7 @@ Authenticate the runner with FlareAuth/OIDC device login before starting the dae
 ama-runner login --origin "https://ama.example.com"
 ```
 
-The command discovers the AMA control plane OIDC metadata from `/api/health`, starts the provider device authorization flow for the registered runner client, prints the verification URL/code, and stores the returned token material in the local runner config file. It never prints access or refresh tokens.
+The command discovers the AMA control plane OIDC metadata from `/api/v1/health`, starts the provider device authorization flow for the registered runner client, prints the verification URL/code, and stores the returned token material in the local runner config file. It never prints access or refresh tokens.
 
 By default, the config file is:
 
@@ -96,11 +96,11 @@ Do not use this adapter for untrusted workloads. Docker/OCI isolation should be 
 
 At startup, the daemon:
 
-1. Checks `/api/health` for an AMA control plane.
+1. Checks `/api/v1/health` for an AMA control plane.
 2. Loads the saved FlareAuth/OIDC device-login token unless an explicit token override is supplied.
 3. Registers a runner when no runner id is configured.
 4. Sends an active heartbeat with capabilities and adapter metadata.
-5. Claims work with `POST /api/runners/{runnerId}/leases`.
+5. Lists available work with `GET /api/v1/work-items` and claims it with `POST /api/v1/leases`.
 6. Uploads structured lease events.
 7. Renews active leases while local work is running.
 8. Finishes leases as `completed`, `failed`, or `cancelled`.

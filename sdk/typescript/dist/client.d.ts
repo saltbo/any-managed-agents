@@ -38,11 +38,13 @@ export declare function createAmaClient(config: AmaClientConfig): {
         createSession: (body: types.CreateAuthSessionRequest) => Promise<types.AuthSession>;
         currentSession: () => Promise<types.AuthSession>;
         deleteCurrentSession: () => Promise<void>;
-        listFederatedTenants: (query?: types.ListFederatedTenantsData["query"]) => Promise<types.FederatedTenantListResponse>;
-        createFederatedTenant: (body: types.CreateFederatedTenantRequest) => Promise<types.FederatedTenant>;
-        getFederatedTenant: (tenantId: string) => Promise<types.FederatedTenant>;
-        updateFederatedTenant: (tenantId: string, body: types.UpdateFederatedTenantRequest) => Promise<types.FederatedTenant>;
-        deleteFederatedTenant: (tenantId: string) => Promise<void>;
+    };
+    federatedTenants: {
+        list: (query?: types.ListFederatedTenantsData["query"]) => Promise<types.FederatedTenantListResponse>;
+        create: (body: types.CreateFederatedTenantRequest) => Promise<types.FederatedTenant>;
+        get: (tenantId: string) => Promise<types.FederatedTenant>;
+        update: (tenantId: string, body: types.UpdateFederatedTenantRequest) => Promise<types.FederatedTenant>;
+        delete: (tenantId: string) => Promise<void>;
     };
     projects: {
         list: (query?: types.ListProjectsData["query"]) => Promise<types.ProjectListResponse>;
@@ -80,19 +82,6 @@ export declare function createAmaClient(config: AmaClientConfig): {
         create: (body: types.CreateRunnerRequest) => Promise<types.Runner>;
         get: (runnerId: string) => Promise<types.Runner>;
         update: (runnerId: string, body: types.UpdateRunnerRequest) => Promise<types.Runner>;
-        channel: (runnerId: string) => RunnerChannel;
-        getHeartbeat: (runnerId: string) => Promise<types.RunnerHeartbeat>;
-        putHeartbeat: (runnerId: string, body: types.PutRunnerHeartbeatRequest) => Promise<types.RunnerHeartbeat>;
-    };
-    workItems: {
-        list: (query?: types.ListWorkItemsData["query"]) => Promise<types.WorkItemListResponse>;
-        get: (workItemId: string) => Promise<types.WorkItem>;
-    };
-    leases: {
-        list: (query?: types.ListLeasesData["query"]) => Promise<types.LeaseListResponse>;
-        create: (body: types.CreateLeaseRequest) => Promise<types.Lease>;
-        get: (leaseId: string) => Promise<types.Lease>;
-        update: (leaseId: string, body: types.UpdateLeaseRequest) => Promise<types.Lease>;
     };
     policies: {
         list: () => Promise<types.PolicyListResponse>;
@@ -120,7 +109,7 @@ export declare function createAmaClient(config: AmaClientConfig): {
         update: (connectionId: string, body: types.UpdateConnectionRequest) => Promise<types.Connection>;
         listTools: (connectionId: string) => Promise<types.ConnectionToolListResponse>;
         listToolCalls: (connectionId: string, toolName: string, query?: types.ListToolCallsData["query"]) => Promise<types.ToolCallListResponse>;
-        createToolCall: (connectionId: string, toolName: string, body: types.CreateToolCallRequest) => Promise<types.ToolCall>;
+        callTool: (connectionId: string, toolName: string, body: types.CreateToolCallRequest) => Promise<types.ToolCall>;
         getToolCall: (connectionId: string, toolName: string, callId: string) => Promise<types.ToolCall>;
     };
     audit: {
@@ -144,13 +133,12 @@ export declare function createAmaClient(config: AmaClientConfig): {
         create: (body: types.CreateSessionRequest) => Promise<types.Session>;
         get: (sessionId: string) => Promise<types.Session>;
         update: (sessionId: string, body: types.UpdateSessionRequest) => Promise<types.Session>;
-        connection: (sessionId: string) => Promise<types.SessionConnection>;
+        getConnection: (sessionId: string) => Promise<types.SessionConnection>;
         stream: (sessionId: string) => SessionStream;
         listMessages: (sessionId: string, query?: types.ListSessionMessagesData["query"]) => Promise<types.SessionMessageListResponse>;
         createMessage: (sessionId: string, body: types.CreateSessionMessageRequest) => Promise<types.SessionMessage>;
         getMessage: (sessionId: string, messageId: string) => Promise<types.SessionMessage>;
         listEvents: (sessionId: string, query?: types.ListSessionEventsData["query"]) => Promise<types.SessionEventListResponse>;
-        createEvents: (sessionId: string, body: types.CreateSessionEventsRequest) => Promise<types.SessionEventsAccepted>;
         listApprovals: (sessionId: string) => Promise<types.SessionApprovalListResponse>;
         getApproval: (sessionId: string, approvalId: string) => Promise<types.SessionApproval>;
         decideApproval: (sessionId: string, approvalId: string, body: types.SessionApprovalDecisionRequest) => Promise<types.SessionApproval>;
@@ -198,6 +186,35 @@ export declare function createAmaClient(config: AmaClientConfig): {
     usage: {
         listRecords: (query?: types.ListUsageRecordsData["query"]) => Promise<types.UsageRecordListResponse>;
         getRecord: (recordId: string) => Promise<types.UsageRecord>;
-        summary: (query?: types.ReadUsageSummaryData["query"]) => Promise<types.UsageSummary>;
+        getSummary: (query?: types.ReadUsageSummaryData["query"]) => Promise<types.UsageSummary>;
+    };
+};
+export type AmaRunnerClient = ReturnType<typeof createAmaRunnerClient>;
+export declare function createAmaRunnerClient(config: AmaClientConfig): {
+    raw: import("./generated/client/types.gen.js").Client;
+    system: {
+        health: () => Promise<types.HealthResponse>;
+    };
+    runners: {
+        list: (query?: types.ListRunnersData["query"]) => Promise<types.RunnerListResponse>;
+        create: (body: types.CreateRunnerRequest) => Promise<types.Runner>;
+        get: (runnerId: string) => Promise<types.Runner>;
+        update: (runnerId: string, body: types.UpdateRunnerRequest) => Promise<types.Runner>;
+        channel: (runnerId: string) => RunnerChannel;
+        getHeartbeat: (runnerId: string) => Promise<types.RunnerHeartbeat>;
+        putHeartbeat: (runnerId: string, body: types.PutRunnerHeartbeatRequest) => Promise<types.RunnerHeartbeat>;
+    };
+    workItems: {
+        list: (query?: types.ListWorkItemsData["query"]) => Promise<types.WorkItemListResponse>;
+        get: (workItemId: string) => Promise<types.WorkItem>;
+    };
+    leases: {
+        list: (query?: types.ListLeasesData["query"]) => Promise<types.LeaseListResponse>;
+        create: (body: types.CreateLeaseRequest) => Promise<types.Lease>;
+        get: (leaseId: string) => Promise<types.Lease>;
+        update: (leaseId: string, body: types.UpdateLeaseRequest) => Promise<types.Lease>;
+    };
+    sessions: {
+        createEvents: (sessionId: string, body: types.CreateSessionEventsRequest) => Promise<types.SessionEventsAccepted>;
     };
 };

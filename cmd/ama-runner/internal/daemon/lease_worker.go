@@ -21,7 +21,7 @@ import (
 
 type LeaseWorker struct {
 	Config              runnerconfig.Config
-	Client              *ama.Client
+	Client              *ama.RunnerClient
 	SandboxAdapter      sandbox.SandboxAdapter
 	RuntimeAdapter      runtime.Adapter
 	RuntimeBridge       runtime.Bridge

@@ -32,35 +32,88 @@ type ClientConfig struct {
 	HTTPClient          HttpRequestDoer
 }
 
-type Client struct {
+type clientCore struct {
 	raw                 *ClientWithResponses
 	baseURL             string
 	accessToken         string
 	accessTokenProvider AccessTokenProvider
 	projectID           string
 	headers             map[string]string
-	System              SystemService
-	Auth                AuthService
-	Projects            ProjectsService
-	Agents              AgentsService
-	Environments        EnvironmentsService
-	Providers           ProvidersService
-	Runners             RunnersService
-	WorkItems           WorkItemsService
-	Leases              LeasesService
-	Policies            PoliciesService
-	Budgets             BudgetsService
-	Connectors          ConnectorsService
-	Connections         ConnectionsService
-	Audit               AuditService
-	Triggers            TriggersService
-	Sessions            SessionsService
-	MemoryStores        MemoryStoresService
-	Vaults              VaultsService
-	Usage               UsageService
+}
+
+type Client struct {
+	core             *clientCore
+	System           SystemService
+	Auth             AuthService
+	FederatedTenants FederatedTenantsService
+	Projects         ProjectsService
+	Agents           AgentsService
+	Environments     EnvironmentsService
+	Providers        ProvidersService
+	Runners          RunnersService
+	Policies         PoliciesService
+	Budgets          BudgetsService
+	Connectors       ConnectorsService
+	Connections      ConnectionsService
+	Audit            AuditService
+	Triggers         TriggersService
+	Sessions         SessionsService
+	MemoryStores     MemoryStoresService
+	Vaults           VaultsService
+	Usage            UsageService
+}
+
+type RunnerClient struct {
+	core      *clientCore
+	System    RunnerSystemService
+	Runners   RunnerRunnersService
+	WorkItems RunnerWorkItemsService
+	Leases    RunnerLeasesService
+	Sessions  RunnerSessionsService
 }
 
 func New(config ClientConfig) (*Client, error) {
+	core, err := newClientCore(config)
+	if err != nil {
+		return nil, err
+	}
+	client := &Client{core: core}
+	client.System = SystemService{client: core}
+	client.Auth = AuthService{client: core}
+	client.FederatedTenants = FederatedTenantsService{client: core}
+	client.Projects = ProjectsService{client: core}
+	client.Agents = AgentsService{client: core}
+	client.Environments = EnvironmentsService{client: core}
+	client.Providers = ProvidersService{client: core}
+	client.Runners = RunnersService{client: core}
+	client.Policies = PoliciesService{client: core}
+	client.Budgets = BudgetsService{client: core}
+	client.Connectors = ConnectorsService{client: core}
+	client.Connections = ConnectionsService{client: core}
+	client.Audit = AuditService{client: core}
+	client.Triggers = TriggersService{client: core}
+	client.Sessions = SessionsService{client: core}
+	client.MemoryStores = MemoryStoresService{client: core}
+	client.Vaults = VaultsService{client: core}
+	client.Usage = UsageService{client: core}
+	return client, nil
+}
+
+func NewRunner(config ClientConfig) (*RunnerClient, error) {
+	core, err := newClientCore(config)
+	if err != nil {
+		return nil, err
+	}
+	client := &RunnerClient{core: core}
+	client.System = RunnerSystemService{client: core}
+	client.Runners = RunnerRunnersService{client: core}
+	client.WorkItems = RunnerWorkItemsService{client: core}
+	client.Leases = RunnerLeasesService{client: core}
+	client.Sessions = RunnerSessionsService{client: core}
+	return client, nil
+}
+
+func newClientCore(config ClientConfig) (*clientCore, error) {
 	if strings.TrimSpace(config.BaseURL) == "" {
 		return nil, fmt.Errorf("AMA base URL is required")
 	}
@@ -94,31 +147,15 @@ func New(config ClientConfig) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	client := &Client{raw: raw, baseURL: baseURL, accessToken: config.AccessToken, accessTokenProvider: config.AccessTokenProvider, projectID: config.ProjectID, headers: headers}
-	client.System = SystemService{client: client}
-	client.Auth = AuthService{client: client}
-	client.Projects = ProjectsService{client: client}
-	client.Agents = AgentsService{client: client}
-	client.Environments = EnvironmentsService{client: client}
-	client.Providers = ProvidersService{client: client}
-	client.Runners = RunnersService{client: client}
-	client.WorkItems = WorkItemsService{client: client}
-	client.Leases = LeasesService{client: client}
-	client.Policies = PoliciesService{client: client}
-	client.Budgets = BudgetsService{client: client}
-	client.Connectors = ConnectorsService{client: client}
-	client.Connections = ConnectionsService{client: client}
-	client.Audit = AuditService{client: client}
-	client.Triggers = TriggersService{client: client}
-	client.Sessions = SessionsService{client: client}
-	client.MemoryStores = MemoryStoresService{client: client}
-	client.Vaults = VaultsService{client: client}
-	client.Usage = UsageService{client: client}
-	return client, nil
+	return &clientCore{raw: raw, baseURL: baseURL, accessToken: config.AccessToken, accessTokenProvider: config.AccessTokenProvider, projectID: config.ProjectID, headers: headers}, nil
 }
 
 func (c *Client) Raw() *ClientWithResponses {
-	return c.raw
+	return c.core.raw
+}
+
+func (c *RunnerClient) Raw() *ClientWithResponses {
+	return c.core.raw
 }
 
 type APIError struct {
@@ -175,7 +212,7 @@ func (c *WebSocketChannel) Close(statusCode int, reason string) error {
 	return c.Conn.Close(websocket.StatusCode(statusCode), reason)
 }
 
-func (c *Client) dialWebSocket(ctx context.Context, path string) (JSONChannel, error) {
+func (c *clientCore) dialWebSocket(ctx context.Context, path string) (JSONChannel, error) {
 	endpoint, err := c.webSocketURL(path)
 	if err != nil {
 		return nil, err
@@ -201,7 +238,7 @@ func (c *Client) dialWebSocket(ctx context.Context, path string) (JSONChannel, e
 	return &WebSocketChannel{Conn: conn}, nil
 }
 
-func (c *Client) webSocketURL(path string) (string, error) {
+func (c *clientCore) webSocketURL(path string) (string, error) {
 	parsed, err := url.Parse(c.baseURL)
 	if err != nil {
 		return "", err
@@ -229,7 +266,7 @@ func accessToken(ctx context.Context, static string, provider AccessTokenProvide
 }
 
 type SystemService struct {
-	client *Client
+	client *clientCore
 }
 
 func (s SystemService) Health(ctx context.Context) (*HealthResponse, error) {
@@ -241,7 +278,7 @@ func (s SystemService) Health(ctx context.Context) (*HealthResponse, error) {
 }
 
 type AuthService struct {
-	client *Client
+	client *clientCore
 }
 
 func (s AuthService) Config(ctx context.Context, params *ReadAuthConfigParams) (*AuthConfig, error) {
@@ -276,7 +313,11 @@ func (s AuthService) DeleteCurrentSession(ctx context.Context) error {
 	return unwrapEmpty(response.StatusCode(), response.Body)
 }
 
-func (s AuthService) ListFederatedTenants(ctx context.Context, params *ListFederatedTenantsParams) (*FederatedTenantListResponse, error) {
+type FederatedTenantsService struct {
+	client *clientCore
+}
+
+func (s FederatedTenantsService) List(ctx context.Context, params *ListFederatedTenantsParams) (*FederatedTenantListResponse, error) {
 	response, err := s.client.raw.ListFederatedTenantsWithResponse(ctx, params)
 	if err != nil {
 		return nil, err
@@ -284,7 +325,7 @@ func (s AuthService) ListFederatedTenants(ctx context.Context, params *ListFeder
 	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON400, response.JSON401)
 }
 
-func (s AuthService) CreateFederatedTenant(ctx context.Context, body CreateFederatedTenantRequest) (*FederatedTenant, error) {
+func (s FederatedTenantsService) Create(ctx context.Context, body CreateFederatedTenantRequest) (*FederatedTenant, error) {
 	response, err := s.client.raw.CreateFederatedTenantWithResponse(ctx, body)
 	if err != nil {
 		return nil, err
@@ -292,7 +333,7 @@ func (s AuthService) CreateFederatedTenant(ctx context.Context, body CreateFeder
 	return unwrap(response.StatusCode(), response.Body, response.JSON201, response.JSON401, response.JSON409)
 }
 
-func (s AuthService) GetFederatedTenant(ctx context.Context, tenantID string) (*FederatedTenant, error) {
+func (s FederatedTenantsService) Get(ctx context.Context, tenantID string) (*FederatedTenant, error) {
 	response, err := s.client.raw.ReadFederatedTenantWithResponse(ctx, tenantID)
 	if err != nil {
 		return nil, err
@@ -300,7 +341,7 @@ func (s AuthService) GetFederatedTenant(ctx context.Context, tenantID string) (*
 	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON401, response.JSON404)
 }
 
-func (s AuthService) UpdateFederatedTenant(ctx context.Context, tenantID string, body UpdateFederatedTenantRequest) (*FederatedTenant, error) {
+func (s FederatedTenantsService) Update(ctx context.Context, tenantID string, body UpdateFederatedTenantRequest) (*FederatedTenant, error) {
 	response, err := s.client.raw.UpdateFederatedTenantWithResponse(ctx, tenantID, body)
 	if err != nil {
 		return nil, err
@@ -308,7 +349,7 @@ func (s AuthService) UpdateFederatedTenant(ctx context.Context, tenantID string,
 	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON401, response.JSON404)
 }
 
-func (s AuthService) DeleteFederatedTenant(ctx context.Context, tenantID string) error {
+func (s FederatedTenantsService) Delete(ctx context.Context, tenantID string) error {
 	response, err := s.client.raw.DeleteFederatedTenantWithResponse(ctx, tenantID)
 	if err != nil {
 		return err
@@ -317,7 +358,7 @@ func (s AuthService) DeleteFederatedTenant(ctx context.Context, tenantID string)
 }
 
 type ProjectsService struct {
-	client *Client
+	client *clientCore
 }
 
 func (s ProjectsService) List(ctx context.Context, params *ListProjectsParams) (*ProjectListResponse, error) {
@@ -345,7 +386,7 @@ func (s ProjectsService) Get(ctx context.Context, projectID string) (*Project, e
 }
 
 type AgentsService struct {
-	client *Client
+	client *clientCore
 }
 
 func (s AgentsService) List(ctx context.Context, params *ListAgentsParams) (*AgentListResponse, error) {
@@ -421,7 +462,7 @@ func (s AgentsService) GetVersion(ctx context.Context, agentID string, version i
 }
 
 type EnvironmentsService struct {
-	client *Client
+	client *clientCore
 }
 
 func (s EnvironmentsService) List(ctx context.Context, params *ListEnvironmentsParams) (*EnvironmentListResponse, error) {
@@ -473,7 +514,7 @@ func (s EnvironmentsService) GetVersion(ctx context.Context, environmentID strin
 }
 
 type ProvidersService struct {
-	client *Client
+	client *clientCore
 }
 
 func (s ProvidersService) List(ctx context.Context) (*ProviderListResponse, error) {
@@ -517,7 +558,7 @@ func (s ProvidersService) ListProviderModels(ctx context.Context, providerID str
 }
 
 type RunnersService struct {
-	client *Client
+	client *clientCore
 }
 
 func (s RunnersService) List(ctx context.Context, params *ListRunnersParams) (*RunnerListResponse, error) {
@@ -552,84 +593,8 @@ func (s RunnersService) Update(ctx context.Context, runnerID string, body Update
 	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON400, response.JSON401, response.JSON403, response.JSON404, response.JSON409)
 }
 
-func (s RunnersService) Channel(ctx context.Context, runnerID string) (JSONChannel, error) {
-	return s.client.dialWebSocket(ctx, "/api/v1/runners/"+url.PathEscape(runnerID)+"/channel")
-}
-
-func (s RunnersService) GetHeartbeat(ctx context.Context, runnerID string) (*RunnerHeartbeat, error) {
-	response, err := s.client.raw.ReadRunnerHeartbeatWithResponse(ctx, runnerID)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON401, response.JSON403, response.JSON404)
-}
-
-func (s RunnersService) PutHeartbeat(ctx context.Context, runnerID string, body PutRunnerHeartbeatRequest) (*RunnerHeartbeat, error) {
-	response, err := s.client.raw.PutRunnerHeartbeatWithResponse(ctx, runnerID, body)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON400, response.JSON401, response.JSON403, response.JSON404, response.JSON409)
-}
-
-type WorkItemsService struct {
-	client *Client
-}
-
-func (s WorkItemsService) List(ctx context.Context, params *ListWorkItemsParams) (*WorkItemListResponse, error) {
-	response, err := s.client.raw.ListWorkItemsWithResponse(ctx, params)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON400, response.JSON401)
-}
-
-func (s WorkItemsService) Get(ctx context.Context, workItemID string) (*WorkItem, error) {
-	response, err := s.client.raw.ReadWorkItemWithResponse(ctx, workItemID)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON401, response.JSON404, response.JSON409)
-}
-
-type LeasesService struct {
-	client *Client
-}
-
-func (s LeasesService) List(ctx context.Context, params *ListLeasesParams) (*LeaseListResponse, error) {
-	response, err := s.client.raw.ListLeasesWithResponse(ctx, params)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON400, response.JSON401, response.JSON403)
-}
-
-func (s LeasesService) Create(ctx context.Context, body CreateLeaseRequest) (*Lease, error) {
-	response, err := s.client.raw.CreateLeaseWithResponse(ctx, body)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON201, response.JSON400, response.JSON401, response.JSON403, response.JSON404, response.JSON409)
-}
-
-func (s LeasesService) Get(ctx context.Context, leaseID string) (*Lease, error) {
-	response, err := s.client.raw.ReadLeaseWithResponse(ctx, leaseID)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON401, response.JSON403, response.JSON404)
-}
-
-func (s LeasesService) Update(ctx context.Context, leaseID string, body UpdateLeaseRequest) (*Lease, error) {
-	response, err := s.client.raw.UpdateLeaseWithResponse(ctx, leaseID, body)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON400, response.JSON401, response.JSON403, response.JSON404, response.JSON409)
-}
-
 type PoliciesService struct {
-	client *Client
+	client *clientCore
 }
 
 func (s PoliciesService) List(ctx context.Context) (*PolicyListResponse, error) {
@@ -681,7 +646,7 @@ func (s PoliciesService) Effective(ctx context.Context, params *ReadEffectivePol
 }
 
 type BudgetsService struct {
-	client *Client
+	client *clientCore
 }
 
 func (s BudgetsService) List(ctx context.Context) (*BudgetListResponse, error) {
@@ -725,7 +690,7 @@ func (s BudgetsService) Delete(ctx context.Context, budgetID string) error {
 }
 
 type ConnectorsService struct {
-	client *Client
+	client *clientCore
 }
 
 func (s ConnectorsService) List(ctx context.Context, params *ListConnectorsParams) (*ConnectorListResponse, error) {
@@ -745,7 +710,7 @@ func (s ConnectorsService) Get(ctx context.Context, connectorID string) (*Connec
 }
 
 type ConnectionsService struct {
-	client *Client
+	client *clientCore
 }
 
 func (s ConnectionsService) List(ctx context.Context, params *ListConnectionsParams) (*ConnectionListResponse, error) {
@@ -796,7 +761,7 @@ func (s ConnectionsService) ListToolCalls(ctx context.Context, connectionID stri
 	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON400, response.JSON401, response.JSON404)
 }
 
-func (s ConnectionsService) CreateToolCall(ctx context.Context, connectionID string, toolName string, body CreateToolCallRequest) (*ToolCall, error) {
+func (s ConnectionsService) CallTool(ctx context.Context, connectionID string, toolName string, body CreateToolCallRequest) (*ToolCall, error) {
 	response, err := s.client.raw.CreateToolCallWithResponse(ctx, connectionID, toolName, body)
 	if err != nil {
 		return nil, err
@@ -813,7 +778,7 @@ func (s ConnectionsService) GetToolCall(ctx context.Context, connectionID string
 }
 
 type AuditService struct {
-	client *Client
+	client *clientCore
 }
 
 func (s AuditService) ListRecords(ctx context.Context, params *ListAuditRecordsParams) (*AuditRecordListResponse, error) {
@@ -833,7 +798,7 @@ func (s AuditService) GetRecord(ctx context.Context, recordID string) (*AuditRec
 }
 
 type TriggersService struct {
-	client *Client
+	client *clientCore
 }
 
 func (s TriggersService) List(ctx context.Context, params *ListTriggersParams) (*TriggerListResponse, error) {
@@ -901,7 +866,7 @@ func (s TriggersService) GetRun(ctx context.Context, triggerID string, runID str
 }
 
 type SessionsService struct {
-	client *Client
+	client *clientCore
 }
 
 func (s SessionsService) List(ctx context.Context, params *ListSessionsParams) (*SessionListResponse, error) {
@@ -936,7 +901,7 @@ func (s SessionsService) Update(ctx context.Context, sessionID string, body Upda
 	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON400, response.JSON401, response.JSON404, response.JSON409)
 }
 
-func (s SessionsService) Connection(ctx context.Context, sessionID string) (*SessionConnection, error) {
+func (s SessionsService) GetConnection(ctx context.Context, sessionID string) (*SessionConnection, error) {
 	response, err := s.client.raw.ReadSessionConnectionWithResponse(ctx, sessionID)
 	if err != nil {
 		return nil, err
@@ -980,14 +945,6 @@ func (s SessionsService) ListEvents(ctx context.Context, sessionID string, param
 	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON400, response.JSON401, response.JSON404)
 }
 
-func (s SessionsService) CreateEvents(ctx context.Context, sessionID string, body CreateSessionEventsRequest) (*SessionEventsAccepted, error) {
-	response, err := s.client.raw.CreateSessionEventsWithResponse(ctx, sessionID, body)
-	if err != nil {
-		return nil, err
-	}
-	return unwrap(response.StatusCode(), response.Body, response.JSON201, response.JSON400, response.JSON401, response.JSON403, response.JSON404)
-}
-
 func (s SessionsService) ListApprovals(ctx context.Context, sessionID string) (*SessionApprovalListResponse, error) {
 	response, err := s.client.raw.ListSessionApprovalsWithResponse(ctx, sessionID)
 	if err != nil {
@@ -1013,7 +970,7 @@ func (s SessionsService) DecideApproval(ctx context.Context, sessionID string, a
 }
 
 type MemoryStoresService struct {
-	client *Client
+	client *clientCore
 }
 
 func (s MemoryStoresService) List(ctx context.Context, params *ListMemoryStoresParams) (*MemoryStoreListResponse, error) {
@@ -1081,7 +1038,7 @@ func (s MemoryStoresService) DeleteMemory(ctx context.Context, storeID string, m
 }
 
 type VaultsService struct {
-	client *Client
+	client *clientCore
 }
 
 func (s VaultsService) List(ctx context.Context, params *ListVaultsParams) (*VaultListResponse, error) {
@@ -1181,7 +1138,7 @@ func (s VaultsService) DeleteCredentialVersion(ctx context.Context, vaultID stri
 }
 
 type UsageService struct {
-	client *Client
+	client *clientCore
 }
 
 func (s UsageService) ListRecords(ctx context.Context, params *ListUsageRecordsParams) (*UsageRecordListResponse, error) {
@@ -1200,12 +1157,148 @@ func (s UsageService) GetRecord(ctx context.Context, recordID string) (*UsageRec
 	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON401, response.JSON404)
 }
 
-func (s UsageService) Summary(ctx context.Context, params *ReadUsageSummaryParams) (*UsageSummary, error) {
+func (s UsageService) GetSummary(ctx context.Context, params *ReadUsageSummaryParams) (*UsageSummary, error) {
 	response, err := s.client.raw.ReadUsageSummaryWithResponse(ctx, params)
 	if err != nil {
 		return nil, err
 	}
 	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON400, response.JSON401)
+}
+
+type RunnerSystemService struct {
+	client *clientCore
+}
+
+func (s RunnerSystemService) Health(ctx context.Context) (*HealthResponse, error) {
+	response, err := s.client.raw.GetHealthWithResponse(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return unwrap(response.StatusCode(), response.Body, response.JSON200)
+}
+
+type RunnerRunnersService struct {
+	client *clientCore
+}
+
+func (s RunnerRunnersService) List(ctx context.Context, params *ListRunnersParams) (*RunnerListResponse, error) {
+	response, err := s.client.raw.ListRunnersWithResponse(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON400, response.JSON401, response.JSON403)
+}
+
+func (s RunnerRunnersService) Create(ctx context.Context, body CreateRunnerRequest) (*Runner, error) {
+	response, err := s.client.raw.CreateRunnerWithResponse(ctx, body)
+	if err != nil {
+		return nil, err
+	}
+	return unwrap(response.StatusCode(), response.Body, response.JSON201, response.JSON400, response.JSON401, response.JSON409)
+}
+
+func (s RunnerRunnersService) Get(ctx context.Context, runnerID string) (*Runner, error) {
+	response, err := s.client.raw.ReadRunnerWithResponse(ctx, runnerID)
+	if err != nil {
+		return nil, err
+	}
+	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON401, response.JSON403, response.JSON404)
+}
+
+func (s RunnerRunnersService) Update(ctx context.Context, runnerID string, body UpdateRunnerRequest) (*Runner, error) {
+	response, err := s.client.raw.UpdateRunnerWithResponse(ctx, runnerID, body)
+	if err != nil {
+		return nil, err
+	}
+	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON400, response.JSON401, response.JSON403, response.JSON404, response.JSON409)
+}
+
+func (s RunnerRunnersService) Channel(ctx context.Context, runnerID string) (JSONChannel, error) {
+	return s.client.dialWebSocket(ctx, "/api/v1/runners/"+url.PathEscape(runnerID)+"/channel")
+}
+
+func (s RunnerRunnersService) GetHeartbeat(ctx context.Context, runnerID string) (*RunnerHeartbeat, error) {
+	response, err := s.client.raw.ReadRunnerHeartbeatWithResponse(ctx, runnerID)
+	if err != nil {
+		return nil, err
+	}
+	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON401, response.JSON403, response.JSON404)
+}
+
+func (s RunnerRunnersService) PutHeartbeat(ctx context.Context, runnerID string, body PutRunnerHeartbeatRequest) (*RunnerHeartbeat, error) {
+	response, err := s.client.raw.PutRunnerHeartbeatWithResponse(ctx, runnerID, body)
+	if err != nil {
+		return nil, err
+	}
+	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON400, response.JSON401, response.JSON403, response.JSON404, response.JSON409)
+}
+
+type RunnerWorkItemsService struct {
+	client *clientCore
+}
+
+func (s RunnerWorkItemsService) List(ctx context.Context, params *ListWorkItemsParams) (*WorkItemListResponse, error) {
+	response, err := s.client.raw.ListWorkItemsWithResponse(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON400, response.JSON401)
+}
+
+func (s RunnerWorkItemsService) Get(ctx context.Context, workItemID string) (*WorkItem, error) {
+	response, err := s.client.raw.ReadWorkItemWithResponse(ctx, workItemID)
+	if err != nil {
+		return nil, err
+	}
+	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON401, response.JSON404, response.JSON409)
+}
+
+type RunnerLeasesService struct {
+	client *clientCore
+}
+
+func (s RunnerLeasesService) List(ctx context.Context, params *ListLeasesParams) (*LeaseListResponse, error) {
+	response, err := s.client.raw.ListLeasesWithResponse(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON400, response.JSON401, response.JSON403)
+}
+
+func (s RunnerLeasesService) Create(ctx context.Context, body CreateLeaseRequest) (*Lease, error) {
+	response, err := s.client.raw.CreateLeaseWithResponse(ctx, body)
+	if err != nil {
+		return nil, err
+	}
+	return unwrap(response.StatusCode(), response.Body, response.JSON201, response.JSON400, response.JSON401, response.JSON403, response.JSON404, response.JSON409)
+}
+
+func (s RunnerLeasesService) Get(ctx context.Context, leaseID string) (*Lease, error) {
+	response, err := s.client.raw.ReadLeaseWithResponse(ctx, leaseID)
+	if err != nil {
+		return nil, err
+	}
+	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON401, response.JSON403, response.JSON404)
+}
+
+func (s RunnerLeasesService) Update(ctx context.Context, leaseID string, body UpdateLeaseRequest) (*Lease, error) {
+	response, err := s.client.raw.UpdateLeaseWithResponse(ctx, leaseID, body)
+	if err != nil {
+		return nil, err
+	}
+	return unwrap(response.StatusCode(), response.Body, response.JSON200, response.JSON400, response.JSON401, response.JSON403, response.JSON404, response.JSON409)
+}
+
+type RunnerSessionsService struct {
+	client *clientCore
+}
+
+func (s RunnerSessionsService) CreateEvents(ctx context.Context, sessionID string, body CreateSessionEventsRequest) (*SessionEventsAccepted, error) {
+	response, err := s.client.raw.CreateSessionEventsWithResponse(ctx, sessionID, body)
+	if err != nil {
+		return nil, err
+	}
+	return unwrap(response.StatusCode(), response.Body, response.JSON201, response.JSON400, response.JSON401, response.JSON403, response.JSON404)
 }
 
 func unwrap[T any](status int, responseBody []byte, data *T, errors ...*ErrorResponse) (*T, error) {

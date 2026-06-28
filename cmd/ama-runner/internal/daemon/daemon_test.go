@@ -52,15 +52,15 @@ type fakeAMAServer struct {
 	channelErr   error
 	opens        int
 	server       *httptest.Server
-	sdk          *ama.Client
+	sdk          *ama.RunnerClient
 }
 
-func (f *fakeAMAServer) sdkClient() *ama.Client {
+func (f *fakeAMAServer) sdkClient() *ama.RunnerClient {
 	if f.sdk != nil {
 		return f.sdk
 	}
 	f.server = httptest.NewServer(f)
-	sdk, err := ama.New(ama.ClientConfig{BaseURL: f.server.URL})
+	sdk, err := ama.NewRunner(ama.ClientConfig{BaseURL: f.server.URL})
 	if err != nil {
 		panic(err)
 	}

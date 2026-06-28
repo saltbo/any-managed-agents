@@ -1,6 +1,8 @@
 // Public entry point for @any-managed-agents/sdk.
 //
-// Prefer the stable facade: `createAmaClient(...).<resource>.<verb>(...)`.
+// Prefer the stable facades: `createAmaClient(...).<resource>.<verb>(...)`
+// for public control-plane calls and `createAmaRunnerClient(...)` for runner
+// protocol calls.
 // It is generated from sdk/spec/resources.json and insulates consumers from the
 // raw OpenAPI operation layer.
 //
@@ -8,6 +10,6 @@
 // (@hey-api/openapi-ts) from sdk/openapi.json — do not edit it by hand. The raw
 // typed operation functions and models are also re-exported below as an escape
 // hatch for operations the facade does not wrap yet.
-export { createAmaClient, AmaApiError } from './client.js';
+export { createAmaClient, createAmaRunnerClient, AmaApiError } from './client.js';
 export * from './generated/index.js';
 export { createClient, createConfig, mergeHeaders } from './generated/client/index.js';
