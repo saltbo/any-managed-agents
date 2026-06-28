@@ -687,14 +687,14 @@ func TestRunOnceFailsCodexLeaseOnRuntimeAdapterFailure(t *testing.T) {
 
 func TestCodexSessionWorkspaceRejectsTraversalBeforeCreatingDirectory(t *testing.T) {
 	workDir := t.TempDir()
-	_, err := workspace.SessionWorkspace(workDir, "../outside-session")
+	_, err := workspace.Open(workDir, "../outside-session")
 	if err == nil || !strings.Contains(err.Error(), "single path segment") {
 		t.Fatalf("expected session id validation error, got %v", err)
 	}
 	if _, statErr := os.Stat(filepath.Join(workDir, "..", "outside-session")); !os.IsNotExist(statErr) {
 		t.Fatalf("expected no directory outside workspace, stat error %v", statErr)
 	}
-	_, err = workspace.SessionWorkspace(workDir, "..")
+	_, err = workspace.Open(workDir, "..")
 	if err == nil || !strings.Contains(err.Error(), "single path segment") {
 		t.Fatalf("expected parent segment validation error, got %v", err)
 	}

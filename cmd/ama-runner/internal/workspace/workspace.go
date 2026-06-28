@@ -3,9 +3,11 @@ package workspace
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -19,10 +21,15 @@ const SessionsDirName = "sessions"
 const WorkspaceDirName = "workspace"
 const SessionStateFileName = "state.json"
 
-type Manager struct{}
+type PrepareRequest struct {
+	WorkDir      string
+	SessionID    string
+	ResourceRefs []protocol.ResourceRef
+	RuntimeEnv   map[string]string
+}
 
-type Prepared struct {
-	SessionDir   string
+type Workspace struct {
+	Dir          string
 	Root         string
 	Cwd          string
 	worktrees    []preparedWorktree
@@ -66,23 +73,23 @@ type mountedResource struct {
 	Status      string                    `json:"status"`
 }
 
-func (m Manager) PrepareRuntime(ctx context.Context, workDir string, sessionID string, resourceRefs []protocol.ResourceRef, runtimeEnv map[string]string) (Prepared, error) {
-	root, err := SessionWorkspace(workDir, sessionID)
+func Prepare(ctx context.Context, request PrepareRequest) (*Workspace, error) {
+	workspace, err := Open(request.WorkDir, request.SessionID)
 	if err != nil {
-		return Prepared{}, err
+		return nil, err
 	}
-	sessionDir := filepath.Dir(root)
-	githubResources := githubRepositoryResources(resourceRefs)
-	memoryResources := memoryStoreResources(resourceRefs)
+	githubResources := githubRepositoryResources(request.ResourceRefs)
+	memoryResources := memoryStoreResources(request.ResourceRefs)
 	mounted := make([]mountedResource, 0, len(githubResources)+len(memoryResources))
 	worktrees := make([]preparedWorktree, 0, len(githubResources))
 	memoryStores := make([]preparedMemoryStore, 0, len(memoryResources))
-	cwd := root
 	for _, resource := range githubResources {
-		localPath, cacheDir, err := materializeGitHubRepository(ctx, workDir, root, resource)
+		localPath, cacheDir, err := materializeGitHubRepository(ctx, request.WorkDir, workspace.Root, resource)
 		if err != nil {
-			_ = m.CleanupRuntime(context.Background(), Prepared{SessionDir: sessionDir, Root: root, Cwd: cwd, worktrees: worktrees, memoryStores: memoryStores})
-			return Prepared{}, err
+			workspace.worktrees = worktrees
+			workspace.memoryStores = memoryStores
+			_ = workspace.Cleanup(context.Background())
+			return nil, err
 		}
 		mounted = append(mounted, mountedResource{
 			Type:      resource.Type,
@@ -96,10 +103,12 @@ func (m Manager) PrepareRuntime(ctx context.Context, workDir string, sessionID s
 		worktrees = append(worktrees, preparedWorktree{cacheDir: cacheDir, path: localPath})
 	}
 	for _, resource := range memoryResources {
-		localPath, err := materializeMemoryStore(root, resource)
+		localPath, err := materializeMemoryStore(workspace.Root, resource)
 		if err != nil {
-			_ = m.CleanupRuntime(context.Background(), Prepared{SessionDir: sessionDir, Root: root, Cwd: cwd, worktrees: worktrees, memoryStores: memoryStores})
-			return Prepared{}, err
+			workspace.worktrees = worktrees
+			workspace.memoryStores = memoryStores
+			_ = workspace.Cleanup(context.Background())
+			return nil, err
 		}
 		mounted = append(mounted, mountedResource{
 			Type:        resource.Type,
@@ -114,58 +123,60 @@ func (m Manager) PrepareRuntime(ctx context.Context, workDir string, sessionID s
 		})
 		memoryStores = append(memoryStores, preparedMemoryStore{storeID: resource.StoreID, path: localPath, access: resource.Access})
 	}
-	if err := configureWorkspaceGitCredential(ctx, sessionDir, worktrees, workspaceGitHubToken(runtimeEnv)); err != nil {
-		_ = m.CleanupRuntime(context.Background(), Prepared{SessionDir: sessionDir, Root: root, Cwd: cwd, worktrees: worktrees, memoryStores: memoryStores})
-		return Prepared{}, err
+	workspace.worktrees = worktrees
+	workspace.memoryStores = memoryStores
+	if err := configureWorkspaceGitCredential(ctx, workspace.Dir, worktrees, workspaceGitHubToken(request.RuntimeEnv)); err != nil {
+		_ = workspace.Cleanup(context.Background())
+		return nil, err
 	}
-	if err := writeSessionState(sessionDir, root, mounted); err != nil {
-		_ = m.CleanupRuntime(context.Background(), Prepared{SessionDir: sessionDir, Root: root, Cwd: cwd, worktrees: worktrees, memoryStores: memoryStores})
-		return Prepared{}, err
+	if err := writeSessionState(workspace.Dir, workspace.Root, mounted); err != nil {
+		_ = workspace.Cleanup(context.Background())
+		return nil, err
 	}
-	return Prepared{SessionDir: sessionDir, Root: root, Cwd: cwd, worktrees: worktrees, memoryStores: memoryStores}, nil
+	return workspace, nil
 }
 
-func SessionWorkspace(workDir string, sessionID string) (string, error) {
+func Open(workDir string, sessionID string) (*Workspace, error) {
 	if sessionID == "" || filepath.Base(sessionID) != sessionID || sessionID == "." || sessionID == ".." {
-		return "", fmt.Errorf("session id must be a single path segment")
+		return nil, fmt.Errorf("session id must be a single path segment")
 	}
 	root, err := filepath.Abs(workDir)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if err := os.MkdirAll(root, 0o755); err != nil {
-		return "", err
+		return nil, err
 	}
 	resolvedRoot, err := filepath.EvalSymlinks(root)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	sessionDir := filepath.Join(resolvedRoot, SessionsDirName, sessionID)
 	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
-		return "", err
+		return nil, err
 	}
 	resolvedSessionDir, err := filepath.EvalSymlinks(sessionDir)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	if err := EnsureUnderWorkspace(resolvedRoot, resolvedSessionDir); err != nil {
-		return "", err
+	if err := ensureUnderWorkspace(resolvedRoot, resolvedSessionDir); err != nil {
+		return nil, err
 	}
 	workspaceDir := filepath.Join(resolvedSessionDir, WorkspaceDirName)
 	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
-		return "", err
+		return nil, err
 	}
 	resolvedWorkspaceDir, err := filepath.EvalSymlinks(workspaceDir)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	if err := EnsureUnderWorkspace(resolvedSessionDir, resolvedWorkspaceDir); err != nil {
-		return "", err
+	if err := ensureUnderWorkspace(resolvedSessionDir, resolvedWorkspaceDir); err != nil {
+		return nil, err
 	}
-	return resolvedWorkspaceDir, nil
+	return &Workspace{Dir: resolvedSessionDir, Root: resolvedWorkspaceDir, Cwd: resolvedWorkspaceDir}, nil
 }
 
-func EnsureUnderWorkspace(root string, resolved string) error {
+func ensureUnderWorkspace(root string, resolved string) error {
 	resolved, err := filepath.Abs(resolved)
 	if err != nil {
 		return err
@@ -178,6 +189,82 @@ func EnsureUnderWorkspace(root string, resolved string) error {
 		return fmt.Errorf("workspace paths must stay under workspace")
 	}
 	return nil
+}
+
+func (w *Workspace) PrepareAgent(ctx context.Context, runtimeName string, agentSnapshot map[string]any) error {
+	if w == nil || agentSnapshot == nil {
+		return nil
+	}
+	for _, skill := range agentSkillRefs(agentSnapshot) {
+		if err := installAgentSkill(ctx, w.Cwd, runtimeName, skill); err != nil {
+			return err
+		}
+	}
+	return materializeSubagents(w.Cwd, runtimeName, agentSubagentProfiles(agentSnapshot))
+}
+
+func (w *Workspace) AgentSystemPrompt(agentSnapshot map[string]any) string {
+	sections := []string{}
+	for _, key := range []string{"systemPrompt", "instructions"} {
+		if value, ok := agentSnapshot[key].(string); ok && strings.TrimSpace(value) != "" {
+			sections = append(sections, strings.TrimSpace(value))
+			break
+		}
+	}
+	if section := agentCapabilitiesSection(agentSnapshot); section != "" {
+		sections = append(sections, section)
+	}
+	return strings.Join(sections, "\n\n")
+}
+
+func (w *Workspace) ReadMemoryStores(resourceRefs []protocol.ResourceRef) ([]MemoryStoreSnapshot, error) {
+	if w == nil {
+		return nil, errors.New("workspace is not prepared")
+	}
+	stores := []MemoryStoreSnapshot{}
+	for _, resource := range resourceRefs {
+		if resource.Type != "memory_store" || resource.Access != "read_write" {
+			continue
+		}
+		mountPath := strings.TrimPrefix(resource.MountPath, "/workspace/")
+		if mountPath == "" || strings.HasPrefix(mountPath, "..") {
+			return nil, errors.New("invalid memory store mount path")
+		}
+		localRoot := filepath.Join(w.Root, mountPath)
+		if err := ensureUnderWorkspace(w.Root, localRoot); err != nil {
+			return nil, err
+		}
+		memories, err := readMemoryFiles(localRoot)
+		if os.IsNotExist(err) {
+			err = nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		sort.Slice(memories, func(i, j int) bool {
+			return memories[i].Path < memories[j].Path
+		})
+		stores = append(stores, MemoryStoreSnapshot{StoreID: resource.StoreID, Memories: memories})
+	}
+	return stores, nil
+}
+
+func (w *Workspace) ReadWritableMemoryStores() ([]MemoryStoreSnapshot, error) {
+	if w == nil {
+		return nil, errors.New("workspace is not prepared")
+	}
+	stores := make([]MemoryStoreSnapshot, 0, len(w.memoryStores))
+	for _, store := range w.memoryStores {
+		if store.access != "read_write" {
+			continue
+		}
+		memories, err := readMemoryFiles(store.path)
+		if err != nil {
+			return nil, err
+		}
+		stores = append(stores, MemoryStoreSnapshot{StoreID: store.storeID, Memories: memories})
+	}
+	return stores, nil
 }
 
 // workspaceGitHubToken mirrors the cloud workspace token resolution:
@@ -236,15 +323,18 @@ func configureWorktreeCredentialHelper(ctx context.Context, worktreePath string,
 	return git(ctx, worktreePath, "config", "--worktree", "--add", "credential.helper", helper)
 }
 
-func (m Manager) CleanupRuntime(ctx context.Context, workspace Prepared) error {
+func (w *Workspace) Cleanup(ctx context.Context) error {
+	if w == nil {
+		return nil
+	}
 	var errs []string
-	for _, memoryStore := range workspace.memoryStores {
+	for _, memoryStore := range w.memoryStores {
 		if err := resetMemoryStorePermissions(memoryStore.path); err != nil {
 			errs = append(errs, err.Error())
 		}
 	}
-	for i := len(workspace.worktrees) - 1; i >= 0; i-- {
-		worktree := workspace.worktrees[i]
+	for i := len(w.worktrees) - 1; i >= 0; i-- {
+		worktree := w.worktrees[i]
 		if !fileExists(filepath.Join(worktree.cacheDir, ".git")) {
 			continue
 		}
@@ -260,8 +350,8 @@ func (m Manager) CleanupRuntime(ctx context.Context, workspace Prepared) error {
 		}
 		lock.Unlock()
 	}
-	if workspace.Root != "" {
-		if err := os.RemoveAll(workspace.Root); err != nil {
+	if w.Root != "" {
+		if err := os.RemoveAll(w.Root); err != nil {
 			errs = append(errs, err.Error())
 		}
 	}
@@ -271,7 +361,7 @@ func (m Manager) CleanupRuntime(ctx context.Context, workspace Prepared) error {
 	return nil
 }
 
-func (m Manager) CleanupStaleRuntime(ctx context.Context, workDir string, retention time.Duration) error {
+func CleanupStale(ctx context.Context, workDir string, retention time.Duration) error {
 	if retention <= 0 {
 		return nil
 	}
@@ -298,8 +388,8 @@ func (m Manager) CleanupStaleRuntime(ctx context.Context, workDir string, retent
 			continue
 		}
 		root := filepath.Join(sessionsDir, entry.Name())
-		workspace := staleRuntimeWorkspace(workDir, root)
-		if err := m.CleanupRuntime(ctx, workspace); err != nil {
+		workspace := staleWorkspace(workDir, root)
+		if err := workspace.Cleanup(ctx); err != nil {
 			errs = append(errs, err.Error())
 		}
 		if err := os.RemoveAll(root); err != nil {
@@ -312,12 +402,12 @@ func (m Manager) CleanupStaleRuntime(ctx context.Context, workDir string, retent
 	return nil
 }
 
-func staleRuntimeWorkspace(workDir string, sessionDir string) Prepared {
+func staleWorkspace(workDir string, sessionDir string) *Workspace {
 	workspaceRoot := filepath.Join(sessionDir, WorkspaceDirName)
-	workspace := Prepared{SessionDir: sessionDir, Root: workspaceRoot, Cwd: workspaceRoot}
+	workspace := &Workspace{Dir: sessionDir, Root: workspaceRoot, Cwd: workspaceRoot}
 	data, err := os.ReadFile(filepath.Join(sessionDir, SessionStateFileName))
 	if err != nil {
-		return staleRuntimeWorkspaceFromLegacyManifest(workDir, sessionDir)
+		return staleWorkspaceFromLegacyManifest(workDir, sessionDir)
 	}
 	var state struct {
 		Resources []mountedResource `json:"resources"`
@@ -325,12 +415,12 @@ func staleRuntimeWorkspace(workDir string, sessionDir string) Prepared {
 	if err := json.Unmarshal(data, &state); err != nil {
 		return workspace
 	}
-	addMountedResources(workDir, &workspace, state.Resources)
+	addMountedResources(workDir, workspace, state.Resources)
 	return workspace
 }
 
-func staleRuntimeWorkspaceFromLegacyManifest(workDir string, sessionDir string) Prepared {
-	workspace := Prepared{SessionDir: sessionDir, Root: sessionDir, Cwd: sessionDir}
+func staleWorkspaceFromLegacyManifest(workDir string, sessionDir string) *Workspace {
+	workspace := &Workspace{Dir: sessionDir, Root: sessionDir, Cwd: sessionDir}
 	data, err := os.ReadFile(filepath.Join(sessionDir, ".ama", "resources.json"))
 	if err != nil {
 		return workspace
@@ -341,11 +431,11 @@ func staleRuntimeWorkspaceFromLegacyManifest(workDir string, sessionDir string) 
 	if err := json.Unmarshal(data, &manifest); err != nil {
 		return workspace
 	}
-	addMountedResources(workDir, &workspace, manifest.Resources)
+	addMountedResources(workDir, workspace, manifest.Resources)
 	return workspace
 }
 
-func addMountedResources(workDir string, workspace *Prepared, resources []mountedResource) {
+func addMountedResources(workDir string, workspace *Workspace, resources []mountedResource) {
 	for _, resource := range resources {
 		if resource.LocalPath == "" {
 			continue

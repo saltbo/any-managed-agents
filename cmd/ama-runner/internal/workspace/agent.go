@@ -12,32 +12,6 @@ import (
 	"github.com/samber/lo"
 )
 
-func (m Manager) PrepareAgent(ctx context.Context, cwd string, runtimeName string, agentSnapshot map[string]any) error {
-	if agentSnapshot == nil {
-		return nil
-	}
-	for _, skill := range agentSkillRefs(agentSnapshot) {
-		if err := installAgentSkill(ctx, cwd, runtimeName, skill); err != nil {
-			return err
-		}
-	}
-	return materializeSubagents(cwd, runtimeName, agentSubagentProfiles(agentSnapshot))
-}
-
-func (m Manager) AgentSystemPrompt(agentSnapshot map[string]any) string {
-	sections := []string{}
-	for _, key := range []string{"systemPrompt", "instructions"} {
-		if value, ok := agentSnapshot[key].(string); ok && strings.TrimSpace(value) != "" {
-			sections = append(sections, strings.TrimSpace(value))
-			break
-		}
-	}
-	if section := agentCapabilitiesSection(agentSnapshot); section != "" {
-		sections = append(sections, section)
-	}
-	return strings.Join(sections, "\n\n")
-}
-
 func agentCapabilitiesSection(agentSnapshot map[string]any) string {
 	parts := []string{}
 	if skills := agentStringArray(agentSnapshot["skills"]); len(skills) > 0 {

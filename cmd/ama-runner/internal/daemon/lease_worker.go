@@ -25,7 +25,6 @@ type LeaseWorker struct {
 	SandboxAdapter      sandbox.SandboxAdapter
 	RuntimeAdapter      runtime.Adapter
 	RuntimeBridge       runtime.Bridge
-	Workspace           workspace.Manager
 	Relay               *runnersession.Relay
 	RunnerID            string
 	CurrentCapabilities func() []string
@@ -231,7 +230,7 @@ func (r LeaseWorker) runAMASandboxSession(ctx context.Context, lease *ama.Lease,
 		}
 		return err
 	}
-	handle := runnersession.NewSandboxHandle(payload.SessionID, workspace, r.SandboxAdapter, r.Workspace)
+	handle := runnersession.NewSandboxHandle(payload.SessionID, workspace, r.SandboxAdapter)
 	relay.Register(payload.SessionID, handle)
 	if err := r.uploadSessionEvent(leaseCtx, payload.SessionID, "runner.sandbox.ready", ama.JSON{
 		"sessionId": payload.SessionID,
@@ -404,24 +403,28 @@ func (r LeaseWorker) finalizeRuntimeSession(
 	return result.Err
 }
 
-func (r LeaseWorker) prepareWorkspace(ctx context.Context, payload protocol.WorkPayload) (workspace.Prepared, error) {
-	workspaceManager := r.Workspace
-	prepared, err := workspaceManager.PrepareRuntime(ctx, r.Config.WorkDir, payload.SessionID, payload.ResourceRefs, payload.RuntimeEnv)
+func (r LeaseWorker) prepareWorkspace(ctx context.Context, payload protocol.WorkPayload) (*workspace.Workspace, error) {
+	prepared, err := workspace.Prepare(ctx, workspace.PrepareRequest{
+		WorkDir:      r.Config.WorkDir,
+		SessionID:    payload.SessionID,
+		ResourceRefs: payload.ResourceRefs,
+		RuntimeEnv:   payload.RuntimeEnv,
+	})
 	if err != nil {
-		return workspace.Prepared{}, err
+		return nil, err
 	}
-	if err := workspaceManager.PrepareAgent(ctx, prepared.Cwd, payload.Runtime, payload.AgentSnapshot); err != nil {
-		_ = workspaceManager.CleanupRuntime(context.Background(), prepared)
-		return workspace.Prepared{}, err
+	if err := prepared.PrepareAgent(ctx, payload.Runtime, payload.AgentSnapshot); err != nil {
+		_ = prepared.Cleanup(context.Background())
+		return nil, err
 	}
 	return prepared, nil
 }
 
-func (r LeaseWorker) attachMemoryStores(prepared workspace.Prepared, result runtime.Result) runtime.Result {
+func (r LeaseWorker) attachMemoryStores(prepared *workspace.Workspace, result runtime.Result) runtime.Result {
 	if result.Err != nil && !successfulRuntimeResult(result.Output) {
 		return result
 	}
-	memoryStores, err := r.Workspace.ReadWritableMemoryStoreSnapshots(prepared)
+	memoryStores, err := prepared.ReadWritableMemoryStores()
 	if err != nil {
 		result.Err = err
 		return result

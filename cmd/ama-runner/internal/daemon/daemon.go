@@ -26,7 +26,6 @@ type Daemon struct {
 	Adapter          sandbox.SandboxAdapter
 	RuntimeAdapter   runtime.Adapter
 	RuntimeBridge    runtime.Bridge
-	Workspace        workspace.Manager
 	IdentityStore    *IdentityStore
 	RuntimeInventory *runtime.Inventory
 	Build            version.Info
@@ -45,10 +44,6 @@ func (d *Daemon) runtimeBridge() runtime.Bridge {
 		bridge.ShutdownGraceInterval = d.Config.ShutdownGraceInterval
 	}
 	return bridge
-}
-
-func (d *Daemon) workspaceManager() workspace.Manager {
-	return d.Workspace
 }
 
 func (d *Daemon) identityStore() IdentityStore {
@@ -76,7 +71,7 @@ func (d *Daemon) Start(ctx context.Context) error {
 	if err := os.MkdirAll(d.Config.WorkDir, 0o755); err != nil {
 		return err
 	}
-	if err := d.workspaceManager().CleanupStaleRuntime(ctx, d.Config.WorkDir, workspace.RuntimeRetention); err != nil {
+	if err := workspace.CleanupStale(ctx, d.Config.WorkDir, workspace.RuntimeRetention); err != nil {
 		return err
 	}
 	health, err := d.Client.System.Health(ctx)
@@ -286,7 +281,6 @@ func (d *Daemon) leaseWorker() LeaseWorker {
 		SandboxAdapter:      d.Adapter,
 		RuntimeAdapter:      d.RuntimeAdapter,
 		RuntimeBridge:       d.runtimeBridge(),
-		Workspace:           d.workspaceManager(),
 		Relay:               relay,
 		RunnerID:            d.RunnerID,
 		CurrentCapabilities: d.currentCapabilities,

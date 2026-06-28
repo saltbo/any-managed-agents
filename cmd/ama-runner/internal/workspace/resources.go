@@ -3,17 +3,14 @@ package workspace
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/saltbo/any-managed-agents/cmd/ama-runner/internal/protocol"
-	ama "github.com/saltbo/any-managed-agents/sdk/go/ama"
 	"github.com/samber/lo"
 )
 
@@ -33,57 +30,6 @@ func memoryManifestEntries(memories []protocol.MemorySnapshot) []protocol.Memory
 	return lo.Map(memories, func(memory protocol.MemorySnapshot, _ int) protocol.MemorySnapshot {
 		return protocol.MemorySnapshot{Path: memory.Path}
 	})
-}
-
-func (m Manager) ReadMemoryStores(workspaceRoot string, resourceRefs []protocol.ResourceRef) ([]ama.JSON, error) {
-	stores := []ama.JSON{}
-	for _, resource := range resourceRefs {
-		if resource.Type != "memory_store" || resource.Access != "read_write" {
-			continue
-		}
-		mountPath := strings.TrimPrefix(resource.MountPath, "/workspace/")
-		if mountPath == "" || strings.HasPrefix(mountPath, "..") {
-			return nil, errors.New("invalid memory store mount path")
-		}
-		localRoot := filepath.Join(workspaceRoot, mountPath)
-		if err := EnsureUnderWorkspace(workspaceRoot, localRoot); err != nil {
-			return nil, err
-		}
-		memories := []ama.JSON{}
-		err := filepath.WalkDir(localRoot, func(path string, entry os.DirEntry, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
-			}
-			if entry.IsDir() {
-				return nil
-			}
-			relative, err := filepath.Rel(localRoot, path)
-			if err != nil {
-				return err
-			}
-			content, err := os.ReadFile(path)
-			if err != nil {
-				return err
-			}
-			memories = append(memories, ama.JSON{"path": filepath.ToSlash(relative), "content": string(content)})
-			return nil
-		})
-		if os.IsNotExist(err) {
-			err = nil
-		}
-		if err != nil {
-			return nil, err
-		}
-		sort.Slice(memories, func(i, j int) bool {
-			return memories[i]["path"].(string) < memories[j]["path"].(string)
-		})
-		stores = append(stores, ama.JSON{"storeId": resource.StoreID, "memories": memories})
-	}
-	return stores, nil
-}
-
-func ensureUnderWorkspace(root string, resolved string) error {
-	return EnsureUnderWorkspace(root, resolved)
 }
 
 func materializeGitHubRepository(ctx context.Context, workDir string, sessionRoot string, resource protocol.ResourceRef) (string, string, error) {
@@ -192,21 +138,6 @@ func localMemoryStoreMountPath(sessionRoot string, resource protocol.ResourceRef
 		return "", err
 	}
 	return resolved, nil
-}
-
-func (m Manager) ReadWritableMemoryStoreSnapshots(workspace Prepared) ([]MemoryStoreSnapshot, error) {
-	stores := make([]MemoryStoreSnapshot, 0, len(workspace.memoryStores))
-	for _, store := range workspace.memoryStores {
-		if store.access != "read_write" {
-			continue
-		}
-		memories, err := readMemoryFiles(store.path)
-		if err != nil {
-			return nil, err
-		}
-		stores = append(stores, MemoryStoreSnapshot{StoreID: store.storeID, Memories: memories})
-	}
-	return stores, nil
 }
 
 type MemoryStoreSnapshot struct {

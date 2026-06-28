@@ -31,7 +31,7 @@ func reviewerSnapshot() map[string]any {
 
 func TestPrepareAgentWorkspaceWritesClaudeSubagentDefinition(t *testing.T) {
 	cwd := t.TempDir()
-	if err := (Manager{}).PrepareAgent(context.Background(), cwd, "claude-code", reviewerSnapshot()); err != nil {
+	if err := (&Workspace{Cwd: cwd}).PrepareAgent(context.Background(), "claude-code", reviewerSnapshot()); err != nil {
 		t.Fatalf("expected workspace preparation success, got %v", err)
 	}
 	content, err := os.ReadFile(filepath.Join(cwd, ".claude", "agents", "reviewer.md"))
@@ -62,7 +62,7 @@ Be strict about error handling.
 
 func TestPrepareAgentWorkspaceWritesCopilotSubagentWithoutModel(t *testing.T) {
 	cwd := t.TempDir()
-	if err := (Manager{}).PrepareAgent(context.Background(), cwd, "copilot", reviewerSnapshot()); err != nil {
+	if err := (&Workspace{Cwd: cwd}).PrepareAgent(context.Background(), "copilot", reviewerSnapshot()); err != nil {
 		t.Fatalf("expected workspace preparation success, got %v", err)
 	}
 	content, err := os.ReadFile(filepath.Join(cwd, ".claude", "agents", "reviewer.md"))
@@ -79,7 +79,7 @@ func TestPrepareAgentWorkspaceWritesCopilotSubagentWithoutModel(t *testing.T) {
 
 func TestPrepareAgentWorkspaceWritesCodexSubagentTOML(t *testing.T) {
 	cwd := t.TempDir()
-	if err := (Manager{}).PrepareAgent(context.Background(), cwd, "codex", reviewerSnapshot()); err != nil {
+	if err := (&Workspace{Cwd: cwd}).PrepareAgent(context.Background(), "codex", reviewerSnapshot()); err != nil {
 		t.Fatalf("expected workspace preparation success, got %v", err)
 	}
 	content, err := os.ReadFile(filepath.Join(cwd, ".codex", "agents", "reviewer.toml"))
@@ -110,7 +110,7 @@ Be strict about error handling.
 
 func TestPrepareAgentWorkspaceDoesNotWriteSystemPromptFile(t *testing.T) {
 	cwd := t.TempDir()
-	if err := (Manager{}).PrepareAgent(context.Background(), cwd, "codex", reviewerSnapshot()); err != nil {
+	if err := (&Workspace{Cwd: cwd}).PrepareAgent(context.Background(), "codex", reviewerSnapshot()); err != nil {
 		t.Fatalf("expected workspace preparation success, got %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(cwd, ".ama", "system-prompt.md")); !os.IsNotExist(err) {

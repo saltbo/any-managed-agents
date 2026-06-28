@@ -123,20 +123,18 @@ func bridgeControlFrame(command protocol.RunnerSessionCommand) runtime.BridgeCon
 }
 
 type SandboxHandle struct {
-	sessionID        string
-	workspace        workspace.Prepared
-	workspaceClosed  bool
-	workspaceManager workspace.Manager
-	adapter          sandbox.SandboxAdapter
-	mu               sync.Mutex
+	sessionID       string
+	workspace       *workspace.Workspace
+	workspaceClosed bool
+	adapter         sandbox.SandboxAdapter
+	mu              sync.Mutex
 }
 
-func NewSandboxHandle(sessionID string, prepared workspace.Prepared, adapter sandbox.SandboxAdapter, workspaceManager workspace.Manager) *SandboxHandle {
+func NewSandboxHandle(sessionID string, prepared *workspace.Workspace, adapter sandbox.SandboxAdapter) *SandboxHandle {
 	return &SandboxHandle{
-		sessionID:        sessionID,
-		workspace:        prepared,
-		adapter:          adapter,
-		workspaceManager: workspaceManager,
+		sessionID: sessionID,
+		workspace: prepared,
+		adapter:   adapter,
 	}
 }
 
@@ -149,7 +147,7 @@ func (h *SandboxHandle) Close(ctx context.Context) error {
 	h.workspaceClosed = true
 	workspace := h.workspace
 	h.mu.Unlock()
-	return h.workspaceManager.CleanupRuntime(ctx, workspace)
+	return workspace.Cleanup(ctx)
 }
 
 func (h *SandboxHandle) ExecuteSandbox(ctx context.Context, request protocol.RunnerSandboxRequest) (ama.JSON, error) {
@@ -160,6 +158,9 @@ func (h *SandboxHandle) ExecuteSandbox(ctx context.Context, request protocol.Run
 	h.mu.Unlock()
 	if closed || adapter == nil {
 		return nil, errors.New("runner sandbox is not registered for session")
+	}
+	if workspace == nil {
+		return nil, errors.New("runner workspace is not registered for session")
 	}
 	switch protocol.SandboxRequestType(request) {
 	case "sandbox.execute":
@@ -185,7 +186,7 @@ func (h *SandboxHandle) ExecuteSandbox(ctx context.Context, request protocol.Run
 	case "sandbox.stop":
 		return ama.JSON{"ok": true}, h.Close(ctx)
 	case "sandbox.readMemoryStores":
-		stores, err := h.workspaceManager.ReadMemoryStores(workspace.Root, protocol.SandboxRequestResourceRefs(request))
+		stores, err := workspace.ReadMemoryStores(protocol.SandboxRequestResourceRefs(request))
 		if err != nil {
 			return nil, err
 		}
