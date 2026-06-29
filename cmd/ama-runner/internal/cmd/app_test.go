@@ -120,7 +120,7 @@ func TestRunWithContextWiresSDKDaemonAndStops(t *testing.T) {
 			if got := r.Header.Get("authorization"); got != "Bearer token" {
 				t.Fatalf("expected runner channel authorization header, got %q", got)
 			}
-			// The relay hub dials the per-runner channel via WebSocket upgrade.
+			// The relay hub dials the runner pool channel via WebSocket upgrade.
 			// A non-upgrade response causes the hub to log a warning and retry
 			// after its reconnect delay, which is fine for this integration test.
 			w.WriteHeader(http.StatusBadRequest)
@@ -134,7 +134,6 @@ func TestRunWithContextWiresSDKDaemonAndStops(t *testing.T) {
 		"AMA_API_SERVER":                  server.URL,
 		"AMA_TOKEN":                       "token",
 		"AMA_RUNNER_ALLOW_UNSAFE_PROCESS": "true",
-		"AMA_RUNNER_POLL_INTERVAL":        "1s",
 		"XDG_STATE_HOME":                  t.TempDir(),
 	}
 	err := Application{Getenv: func(key string) string { return env[key] }}.Run(ctx)

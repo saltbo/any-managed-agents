@@ -816,7 +816,6 @@ func TestStartRegistersRunnerAndSendsOfflineHeartbeatOnShutdown(t *testing.T) {
 	adapter := &fakeAdapter{}
 	daemon := testDaemon(client, adapter)
 	daemon.RunnerID = ""
-	daemon.Config.PollInterval = time.Hour
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
@@ -875,67 +874,60 @@ func TestStartFailsFastOnAMAServerSetupErrors(t *testing.T) {
 	}
 }
 
-func TestStartContinuesAfterLeasePollingErrors(t *testing.T) {
+func TestStartDoesNotPollForWorkItems(t *testing.T) {
 	client := &fakeAMAServer{claimErr: errors.New("claim failed")}
 	daemon := testDaemon(client, &fakeAdapter{})
-	daemon.Config.PollInterval = time.Millisecond
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
 		done <- daemon.Start(ctx)
 	}()
-	deadline := time.After(time.Second)
-	for {
-		client.mu.Lock()
-		claims := client.claims
-		client.mu.Unlock()
-		if claims >= 2 {
-			cancel()
-			break
-		}
-		select {
-		case <-deadline:
-			t.Fatal("timed out waiting for runner to continue after claim errors")
-		default:
-			time.Sleep(time.Millisecond)
-		}
-	}
+	time.Sleep(50 * time.Millisecond)
+	cancel()
 	if err := <-done; !errors.Is(err, context.Canceled) {
-		t.Fatalf("expected context cancellation after continued polling, got %v", err)
+		t.Fatalf("expected context cancellation, got %v", err)
+	}
+	client.mu.Lock()
+	claims := client.claims
+	client.mu.Unlock()
+	if claims != 0 {
+		t.Fatalf("expected runner Start not to poll work items, got %d polls", claims)
 	}
 }
 
-func TestStartClaimsUpToMaxConcurrentLeases(t *testing.T) {
-	client := &fakeAMAServer{lease: approvedLease()}
-	adapter := &fakeAdapter{waitForCancel: true}
+func TestStartRunsPushedWorkAssignments(t *testing.T) {
+	work := approvedLease()
+	hubChannel := newFakeSessionChannel(ama.JSON{"type": "runner.channel.accepted"})
+	client := &fakeAMAServer{lease: work, hubChannel: hubChannel}
+	adapter := &fakeAdapter{result: sandbox.ToolResult{Output: ama.JSON{"ok": true}}}
 	daemon := testDaemon(client, adapter)
-	daemon.Config.MaxConcurrent = 3
-	daemon.Config.PollInterval = time.Hour
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	done := make(chan error, 1)
 	go func() {
 		done <- daemon.Start(ctx)
 	}()
+	hubChannel.push(ama.JSON{"type": "work.assigned", "lease": work.lease, "workItem": work.workItem})
 	deadline := time.After(time.Second)
 	for {
 		client.mu.Lock()
-		claims := client.claims
+		updates := len(client.updates)
 		client.mu.Unlock()
-		if claims >= 3 {
+		if updates > 0 {
 			cancel()
 			break
 		}
 		select {
 		case err := <-done:
-			t.Fatalf("runner exited before claiming concurrent leases: %v", err)
+			t.Fatalf("runner exited before completing assigned work: %v", err)
 		case <-deadline:
-			t.Fatal("timed out waiting for concurrent lease claims")
+			t.Fatal("timed out waiting for assigned work completion")
 		default:
 			time.Sleep(time.Millisecond)
 		}
 	}
 	if err := <-done; !errors.Is(err, context.Canceled) {
-		t.Fatalf("expected context cancellation after concurrent leases, got %v", err)
+		t.Fatalf("expected context cancellation after assigned work, got %v", err)
 	}
 }
 
@@ -1065,7 +1057,6 @@ func testDaemon(client *fakeAMAServer, adapter sandbox.SandboxAdapter) Daemon {
 			StateDir:              workDir,
 			WorkDir:               workDir,
 			MaxConcurrent:         1,
-			PollInterval:          time.Second,
 			HeartbeatInterval:     time.Second,
 			LeaseDurationSeconds:  60,
 			RenewInterval:         time.Hour,

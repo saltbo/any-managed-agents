@@ -111,7 +111,7 @@ export async function dispatchSessionPrompt(
 }
 
 async function queueSelfHostedSessionPrompt(
-  deps: Pick<PromptDeps, 'sessionOrchestration'>,
+  deps: Pick<PromptDeps, 'sessionOrchestration' | 'runnerChannel'>,
   auth: AuthScope,
   session: SessionRow,
   content: string,

@@ -321,7 +321,24 @@ function createControlPlane(runtime, gitConfig) {
     unauthorized: [],
     leased: false,
     completed: false,
+    assignmentsSent: 0,
     workItem: createWorkItem(runtime, gitConfig),
+  }
+
+  function assignedWorkItem() {
+    return { ...state.workItem, state: 'leased', runnerId: RUNNER_ID, leaseId: LEASE_ID }
+  }
+
+  function sendAssignment(socket) {
+    if (state.leased || state.completed) return
+    state.leased = true
+    state.assignmentsSent += 1
+    sendWebSocket(socket, {
+      type: 'work.assigned',
+      runnerId: RUNNER_ID,
+      lease: newLease(),
+      workItem: assignedWorkItem(),
+    })
   }
 
   const server = createServer(async (request, response) => {
@@ -420,6 +437,7 @@ function createControlPlane(runtime, gitConfig) {
       ].join('\r\n'),
     )
     sendWebSocket(socket, { type: 'runner.channel.accepted' })
+    sendAssignment(socket)
     let buffered = Buffer.alloc(0)
     socket.on('data', (chunk) => {
       buffered = Buffer.concat([buffered, chunk])
@@ -499,6 +517,7 @@ function createResumeControlPlane(runtime) {
     interrupted: false,
     completed: false,
     resumeToken: '',
+    assignmentsSent: 0,
   }
   const workItem = (id, resume = false) => ({
     id,
@@ -554,6 +573,30 @@ function createResumeControlPlane(runtime) {
       updatedAt: now,
       ...(state.resumeToken ? { resumeToken: state.resumeToken } : {}),
     }
+  }
+
+  function assignmentForCurrentPhase() {
+    if (state.phase === 'first' && !state.firstLeased) {
+      state.firstLeased = true
+      state.assignmentsSent += 1
+      return {
+        type: 'work.assigned',
+        runnerId: RUNNER_ID,
+        lease: lease(firstLeaseId, firstWorkItemId),
+        workItem: { ...workItem(firstWorkItemId), state: 'leased', runnerId: RUNNER_ID, leaseId: firstLeaseId },
+      }
+    }
+    if (state.phase === 'second' && !state.secondLeased) {
+      state.secondLeased = true
+      state.assignmentsSent += 1
+      return {
+        type: 'work.assigned',
+        runnerId: RUNNER_ID,
+        lease: lease(secondLeaseId, secondWorkItemId),
+        workItem: { ...workItem(secondWorkItemId, true), state: 'leased', runnerId: RUNNER_ID, leaseId: secondLeaseId },
+      }
+    }
+    return null
   }
 
   const server = createServer(async (request, response) => {
@@ -625,6 +668,8 @@ function createResumeControlPlane(runtime) {
     if (typeof key !== 'string') return socket.destroy()
     socket.write(['HTTP/1.1 101 Switching Protocols', 'Upgrade: websocket', 'Connection: Upgrade', `Sec-WebSocket-Accept: ${websocketAccept(key)}`, '\r\n'].join('\r\n'))
     sendWebSocket(socket, { type: 'runner.channel.accepted' })
+    const assignment = assignmentForCurrentPhase()
+    if (assignment) sendWebSocket(socket, assignment)
     state.channelSockets.push(socket)
     let buffered = Buffer.alloc(0)
     socket.on('data', (chunk) => {
@@ -761,7 +806,8 @@ function assertSmokeState(workDir, controlPlaneState, runtime, gitConfig) {
   }
   if (controlPlaneState.runnerCreates.length !== 1) fail('runner was not registered exactly once')
   if (controlPlaneState.heartbeats.length === 0) fail('runner heartbeat was not sent')
-  if (controlPlaneState.leaseCreates.length !== 1) fail('runner did not claim exactly one lease')
+  if (controlPlaneState.leaseCreates.length !== 0) fail('runner should not poll and claim leases anymore')
+  if (controlPlaneState.assignmentsSent !== 1) fail('control plane did not push exactly one work assignment')
 
   return { sessionDir, workspace, eventLog, eventCount: events.length, events }
 }
@@ -790,8 +836,6 @@ function startRunner(runnerPath, origin, stateDir, workDir) {
       '--allow-unsafe-process',
       '--max-concurrent',
       '1',
-      '--poll-interval',
-      '500ms',
       '--heartbeat-interval',
       '2s',
       '--lease-seconds',

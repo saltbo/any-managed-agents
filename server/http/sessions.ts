@@ -1147,10 +1147,7 @@ export function registerSessionRoutes(routes: SessionRoutes) {
       if (c.req.header('upgrade')?.toLowerCase() !== 'websocket') {
         return c.json(asSessionConnectionResponse(connection), 200)
       }
-      const runtimeRow = await deps.sessions.findRuntimeRow(auth.project.id, sessionId)
-      const doName =
-        runtimeRow?.metadata.runtime === 'ama' ? sessionId : await deps.sessions.resolveRelayDoName(sessionId)
-      return upgradeSessionBrowserSocket(c.env, c.req.raw, doName, {
+      return upgradeSessionBrowserSocket(c.env, c.req.raw, sessionId, {
         sessionId,
         organizationId: auth.organization.id,
         projectId: auth.project.id,

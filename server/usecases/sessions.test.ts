@@ -159,7 +159,7 @@ function fakeDeps(
     listApprovals: async () => [],
     findApproval: async () => null,
     activeSessionLeaseForRunner: async () => null,
-    resolveRelayDoName: async (sessionId) => sessionId,
+    resolveRunnerEnvironmentId: async () => 'env_1',
     resolveSandboxBackend: async () => null,
     ...overrides.sessions,
   }

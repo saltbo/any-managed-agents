@@ -31,7 +31,6 @@ class PutRunnerHeartbeatRequest:
         Attributes:
             state (PutRunnerHeartbeatRequestState | Unset):  Example: active.
             capabilities (list[str] | Unset):  Example: ['node', 'git'].
-            current_load (int | Unset):  Example: 1.
             runtime_usage (list[RuntimeUsage] | Unset):
             runtime_inventory (list[RunnerRuntimeInventory] | Unset):
             metadata (PutRunnerHeartbeatRequestMetadata | Unset):  Example: {'hostname': 'runner-1'}.
@@ -39,7 +38,6 @@ class PutRunnerHeartbeatRequest:
 
     state: PutRunnerHeartbeatRequestState | Unset = UNSET
     capabilities: list[str] | Unset = UNSET
-    current_load: int | Unset = UNSET
     runtime_usage: list[RuntimeUsage] | Unset = UNSET
     runtime_inventory: list[RunnerRuntimeInventory] | Unset = UNSET
     metadata: PutRunnerHeartbeatRequestMetadata | Unset = UNSET
@@ -62,8 +60,6 @@ class PutRunnerHeartbeatRequest:
             capabilities = self.capabilities
 
 
-
-        current_load = self.current_load
 
         runtime_usage: list[dict[str, Any]] | Unset = UNSET
         if not isinstance(self.runtime_usage, Unset):
@@ -96,8 +92,6 @@ class PutRunnerHeartbeatRequest:
             field_dict["state"] = state
         if capabilities is not UNSET:
             field_dict["capabilities"] = capabilities
-        if current_load is not UNSET:
-            field_dict["currentLoad"] = current_load
         if runtime_usage is not UNSET:
             field_dict["runtimeUsage"] = runtime_usage
         if runtime_inventory is not UNSET:
@@ -127,8 +121,6 @@ class PutRunnerHeartbeatRequest:
 
         capabilities = cast(list[str], d.pop("capabilities", UNSET))
 
-
-        current_load = d.pop("currentLoad", UNSET)
 
         _runtime_usage = d.pop("runtimeUsage", UNSET)
         runtime_usage: list[RuntimeUsage] | Unset = UNSET
@@ -167,7 +159,6 @@ class PutRunnerHeartbeatRequest:
         put_runner_heartbeat_request = cls(
             state=state,
             capabilities=capabilities,
-            current_load=current_load,
             runtime_usage=runtime_usage,
             runtime_inventory=runtime_inventory,
             metadata=metadata,

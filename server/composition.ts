@@ -45,7 +45,7 @@ export function createDeps(env: Env): Deps {
   // pre-migration cloud + self-hosted CLI → the existing D1 repo methods. The DO
   // gateway + cloud-loop checker are shared with the MCP event port so the
   // per-session lookup is cached once.
-  const sessionDoEvents = createSessionDoEventStore(env, (sessionId) => sessions.resolveRelayDoName(sessionId))
+  const sessionDoEvents = createSessionDoEventStore(env)
   const isCloudLoop = createCloudLoopChecker(db)
   const sessionEventStore = createSessionEventStore(db, isCloudLoop, sessionDoEvents, {
     append: (scope, canonicalEvent, overrides) =>
@@ -53,7 +53,7 @@ export function createDeps(env: Env): Deps {
     queryEvents: (sessionId, query) => sessions.queryEvents(sessionId, query),
     eventStream: (sessionId) => sessionOrchestration.sessionEventStream(sessionId),
   })
-  const runnerChannel = createRunnerChannel(env, (sessionId) => sessions.resolveRelayDoName(sessionId))
+  const runnerChannel = createRunnerChannel(env, (sessionId) => sessions.resolveRunnerEnvironmentId(sessionId))
   const runtimeExecution = createRuntimeExecutionAdapters(env, {
     runnerChannel,
     resolveSandboxBackend: (sessionId) => sessions.resolveSandboxBackend(sessionId),

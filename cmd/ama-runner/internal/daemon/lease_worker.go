@@ -68,6 +68,27 @@ func (r LeaseWorker) RunOne(ctx context.Context) error {
 	return nil
 }
 
+func (r LeaseWorker) RunAssigned(ctx context.Context, lease *ama.Lease, workItem *ama.WorkItem) error {
+	sessionID := workItemSessionID(workItem)
+	err := r.runClaimedWork(ctx, lease, workItem)
+	if r.Relay != nil {
+		state := "completed"
+		if err != nil {
+			if ctx.Err() != nil {
+				state = "cancelled"
+			} else {
+				state = "failed"
+			}
+		}
+		r.Relay.NotifyWorkFinished(context.Background(), sessionID, lease.Id, state)
+	}
+	if err != nil {
+		return err
+	}
+	slog.Info("work item completed", "workItemId", lease.WorkItemId, "sessionId", sessionID)
+	return nil
+}
+
 func (r LeaseWorker) claimLease(ctx context.Context) (*ama.Lease, *ama.WorkItem, error) {
 	state := ama.ListWorkItemsParamsStateAvailable
 	workItems, err := r.Client.WorkItems.List(ctx, &ama.ListWorkItemsParams{State: &state})

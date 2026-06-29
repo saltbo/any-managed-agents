@@ -126,6 +126,9 @@ const deps: CreateSessionDeps = {
     resolveEnv: async () => ({}),
     resolveWorkspaceManifest: async () => ({ root: '/workspace', mounts: [] }),
   } as never,
+  runnerChannel: {
+    assignWork: async () => true,
+  } as never,
   createApprovalGate: () => ({}) as never,
   rereadStartedSession: false,
 }

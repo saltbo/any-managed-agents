@@ -145,7 +145,6 @@ func TestLoadConfigFlagsOverrideEnvironment(t *testing.T) {
 		"--allow-unsafe-process",
 		"--workdir", "/tmp/flag-work",
 		"--max-concurrent", "1",
-		"--poll-interval", "2s",
 		"--heartbeat-interval", "10s",
 		"--lease-seconds", "30",
 		"--renew-interval", "5s",
@@ -158,7 +157,7 @@ func TestLoadConfigFlagsOverrideEnvironment(t *testing.T) {
 	if config.Origin != "https://flag.example.test" || config.Token != "flag-token" || config.ProjectID != "project_flag" {
 		t.Fatalf("flags did not override env: %#v", config)
 	}
-	if config.WorkDir != "/tmp/flag-work" || config.PollInterval != 2*time.Second || config.CommandTimeout != 45*time.Second {
+	if config.WorkDir != "/tmp/flag-work" || config.CommandTimeout != 45*time.Second {
 		t.Fatalf("unexpected flag values: %#v", config)
 	}
 }
@@ -204,7 +203,6 @@ func TestConfigValidateRejectsInvalidBoundaries(t *testing.T) {
 		StateDir:              t.TempDir(),
 		WorkDir:               t.TempDir(),
 		MaxConcurrent:         1,
-		PollInterval:          time.Second,
 		HeartbeatInterval:     20 * time.Second,
 		LeaseDurationSeconds:  60,
 		RenewInterval:         20 * time.Second,
@@ -223,7 +221,6 @@ func TestConfigValidateRejectsInvalidBoundaries(t *testing.T) {
 		{"lease", func(c *Config) { c.LeaseDurationSeconds = 10 }, "lease duration"},
 		{"heartbeat", func(c *Config) { c.HeartbeatInterval = time.Minute }, "heartbeat interval"},
 		{"renew", func(c *Config) { c.RenewInterval = time.Minute }, "renew interval"},
-		{"poll", func(c *Config) { c.PollInterval = 0 }, "must be greater than zero"},
 		{"maxSession", func(c *Config) { c.MaxSessionDuration = -time.Second }, "max session duration"},
 	}
 	for _, tc := range cases {
@@ -413,7 +410,6 @@ func TestMergeConfigOverrideBranches(t *testing.T) {
 		StateDir:              "state",
 		WorkDir:               "work",
 		MaxConcurrent:         2,
-		PollInterval:          time.Second,
 		HeartbeatInterval:     2 * time.Second,
 		LeaseDurationSeconds:  3,
 		RenewInterval:         4 * time.Second,
@@ -428,7 +424,6 @@ func TestMergeConfigOverrideBranches(t *testing.T) {
 		got.StateDir != "state" ||
 		got.WorkDir != "work" ||
 		got.MaxConcurrent != 2 ||
-		got.PollInterval != time.Second ||
 		got.HeartbeatInterval != 2*time.Second ||
 		got.LeaseDurationSeconds != 3 ||
 		got.RenewInterval != 4*time.Second ||

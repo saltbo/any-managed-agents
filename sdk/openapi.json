@@ -3027,12 +3027,6 @@
               "git"
             ]
           },
-          "currentLoad": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 1000,
-            "example": 1
-          },
           "runtimeUsage": {
             "type": "array",
             "items": {

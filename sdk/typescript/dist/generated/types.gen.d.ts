@@ -661,7 +661,6 @@ export type RunnerHeartbeat = {
 export type PutRunnerHeartbeatRequest = {
     state?: 'active' | 'draining' | 'offline';
     capabilities?: Array<string>;
-    currentLoad?: number;
     runtimeUsage?: Array<RuntimeUsage>;
     runtimeInventory?: Array<RunnerRuntimeInventory>;
     metadata?: {

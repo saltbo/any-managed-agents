@@ -1271,7 +1271,6 @@ export interface UpdateRunnerFields {
 export interface RunnerHeartbeatFields {
   state: string
   capabilities: string[]
-  currentLoad: number
   runtimeUsage: RuntimeUsage[]
   runtimeInventory: RuntimeInventoryEntry[]
   metadata: Record<string, unknown>
@@ -1556,6 +1555,12 @@ export interface CloudTurnQueue {
 // This gateway talks to that DO over its internal fetch protocol and never
 // touches control-plane tables. The only implementation lives in adapters.
 export interface RunnerChannel {
+  assignWork(input: {
+    organizationId: string
+    projectId: string
+    environmentId: string
+    workItemId: string
+  }): Promise<boolean>
   // Whether the session's runner channel DO has an accepted (active) runner.
   isAccepted(sessionId: string): Promise<boolean>
   // Dispatches a command to the runner over the channel; true when accepted.
@@ -1986,11 +1991,7 @@ export interface SessionRepo {
   // paths that hand the session to the runtime gateway.
   findRuntimeRow(projectId: string, sessionId: string): Promise<RuntimeSessionHandle | null>
   readConnection(projectId: string, sessionId: string): Promise<SessionConnection | null>
-  // The Session DO instance name a session's relay traffic routes to: the runner
-  // id for a CLI relay session (one per-runner DO multiplexes its sessions), else
-  // the sessionId (ama/cloud). Lets the browser socket + dispatch reach the live
-  // runner channel even after the session's lease has ended.
-  resolveRelayDoName(sessionId: string): Promise<string>
+  resolveRunnerEnvironmentId(sessionId: string): Promise<string | null>
   // The sandbox executor backend for a cloud-loop session. Null means the
   // default Cloudflare Sandbox backend.
   resolveSandboxBackend(sessionId: string): Promise<string | null>

@@ -243,7 +243,6 @@ export function createRunnerRepo(db: Db): RunnerRepo {
         .set({
           state: fields.state as RunnerStateColumn,
           capabilities: stringify(fields.capabilities),
-          currentLoad: fields.currentLoad,
           runtimeUsage: stringify(fields.runtimeUsage),
           runtimeInventory: stringify(fields.runtimeInventory),
           metadata: stringify(fields.metadata),

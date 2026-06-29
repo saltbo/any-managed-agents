@@ -156,7 +156,6 @@ export function registerWorkItemRoutes(routes: WorkItemRoutes) {
       if (auth instanceof Response) {
         return auth
       }
-      await deps.leases.expireStale(auth.project.id)
       const { state, sessionId, runnerId, search, createdFrom, createdTo, limit = 50, cursor } = c.req.valid('query')
       let parsedCursor: ReturnType<typeof parseListCursor> | null = null
       try {

@@ -3244,7 +3244,6 @@ type PublicOidcConfig struct {
 // PutRunnerHeartbeatRequest defines model for PutRunnerHeartbeatRequest.
 type PutRunnerHeartbeatRequest struct {
 	Capabilities     *[]string                       `json:"capabilities,omitempty"`
-	CurrentLoad      *int                            `json:"currentLoad,omitempty"`
 	Metadata         *map[string]interface{}         `json:"metadata,omitempty"`
 	RuntimeInventory *[]RunnerRuntimeInventory       `json:"runtimeInventory,omitempty"`
 	RuntimeUsage     *[]RuntimeUsage                 `json:"runtimeUsage,omitempty"`

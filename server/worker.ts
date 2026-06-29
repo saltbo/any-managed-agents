@@ -7,6 +7,7 @@ import { refreshPlatformCatalog } from './usecases/providers'
 import { consumeCloudTurnMessage, markCloudTurnDeadLettered, markStalledCloudSessions } from './usecases/runtime'
 
 export { Sandbox } from '@cloudflare/sandbox'
+export { RunnerPoolObject } from './worker/runner-pool-object'
 export { SessionObject } from './worker/session-object'
 
 const app = createApp()

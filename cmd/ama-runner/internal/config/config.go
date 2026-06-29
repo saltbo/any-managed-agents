@@ -24,7 +24,6 @@ type Config struct {
 	StateDir              string        `json:"stateDir"`
 	WorkDir               string        `json:"workDir"`
 	MaxConcurrent         int           `json:"maxConcurrent"`
-	PollInterval          time.Duration `json:"pollInterval"`
 	HeartbeatInterval     time.Duration `json:"heartbeatInterval"`
 	LeaseDurationSeconds  int           `json:"leaseDurationSeconds"`
 	RenewInterval         time.Duration `json:"renewInterval"`
@@ -44,10 +43,6 @@ func LoadConfig(args []string, getenv func(string) string) (Config, error) {
 		return Config{}, err
 	}
 	envMaxConcurrent, err := parseEnvInt(getenv, "AMA_RUNNER_MAX_CONCURRENT", 5)
-	if err != nil {
-		return Config{}, err
-	}
-	envPollInterval, err := parseEnvDuration(getenv, "AMA_RUNNER_POLL_INTERVAL", 5*time.Second)
 	if err != nil {
 		return Config{}, err
 	}
@@ -88,7 +83,6 @@ func LoadConfig(args []string, getenv func(string) string) (Config, error) {
 		StateDir:              envOr(getenv, "AMA_RUNNER_STATE_DIR", defaultStateDir(getenv)),
 		WorkDir:               envOr(getenv, "AMA_RUNNER_WORKDIR", defaultWorkDir(getenv)),
 		MaxConcurrent:         envMaxConcurrent,
-		PollInterval:          envPollInterval,
 		HeartbeatInterval:     envHeartbeatInterval,
 		LeaseDurationSeconds:  envLeaseDurationSeconds,
 		RenewInterval:         envRenewInterval,
@@ -108,7 +102,6 @@ func LoadConfig(args []string, getenv func(string) string) (Config, error) {
 	stateDir := flags.String("state-dir", config.StateDir, "runner local state directory")
 	workDir := flags.String("workdir", config.WorkDir, "local work directory")
 	maxConcurrent := flags.Int("max-concurrent", config.MaxConcurrent, "max concurrent leases")
-	pollInterval := flags.Duration("poll-interval", config.PollInterval, "lease poll interval")
 	heartbeatInterval := flags.Duration("heartbeat-interval", config.HeartbeatInterval, "runner heartbeat interval")
 	leaseSeconds := flags.Int("lease-seconds", config.LeaseDurationSeconds, "lease duration in seconds")
 	renewInterval := flags.Duration("renew-interval", config.RenewInterval, "lease renew interval")
@@ -165,9 +158,6 @@ func LoadConfig(args []string, getenv func(string) string) (Config, error) {
 	}
 	if visited["max-concurrent"] {
 		config.MaxConcurrent = *maxConcurrent
-	}
-	if visited["poll-interval"] {
-		config.PollInterval = *pollInterval
 	}
 	if visited["heartbeat-interval"] {
 		config.HeartbeatInterval = *heartbeatInterval
@@ -249,8 +239,8 @@ func (c Config) Validate() error {
 	if c.RenewInterval <= 0 || c.RenewInterval >= leaseDuration {
 		return fmt.Errorf("renew interval must be greater than zero and less than lease duration")
 	}
-	if c.PollInterval <= 0 || c.CommandTimeout <= 0 || c.ShutdownGraceInterval <= 0 {
-		return fmt.Errorf("poll, command timeout, and shutdown grace intervals must be greater than zero")
+	if c.CommandTimeout <= 0 || c.ShutdownGraceInterval <= 0 {
+		return fmt.Errorf("command timeout and shutdown grace intervals must be greater than zero")
 	}
 	if c.MaxSessionDuration < 0 {
 		return fmt.Errorf("max session duration must be zero (disabled) or greater")

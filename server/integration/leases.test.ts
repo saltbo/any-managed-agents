@@ -113,7 +113,7 @@ async function registerActiveRunner(
   const runner = (await runnerRes.json()) as { id: string }
   const heartbeatRes = await jsonFetch(`/api/v1/runners/${runner.id}/heartbeat`, authorization, {
     method: 'PUT',
-    body: JSON.stringify({ state: 'active', currentLoad: 0, capabilities }),
+    body: JSON.stringify({ state: 'active', capabilities }),
   })
   expect(heartbeatRes.status).toBe(200)
   return runner
@@ -528,8 +528,8 @@ describe('[CF] /api/v1/leases', () => {
     const expired = new Date(Date.now() - 60_000).toISOString()
     await env.DB.prepare('UPDATE leases SET expires_at = ? WHERE id = ?').bind(expired, lease.id).run()
 
-    // Any queue read sweeps stale leases back to available work.
-    const sweptRes = await jsonFetch(`/api/v1/work-items/${workItem.id}`, authorization)
+    // Lease maintenance sweeps stale leases back to available work; work-item reads are passive.
+    const sweptRes = await jsonFetch('/api/v1/leases', authorization)
     expect(sweptRes.status).toBe(200)
     const listRes = await jsonFetch(`/api/v1/work-items?sessionId=${session.id}`, authorization)
     const list = (await listRes.json()) as { data: Array<{ id: string; state: string }> }

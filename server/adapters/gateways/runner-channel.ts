@@ -3,18 +3,24 @@ import type { Env } from '../../env'
 
 const RUNNER_SANDBOX_REQUEST_TIMEOUT_MS = 120_000
 
-// Self-hosted runner session channels live in a Session Durable Object. This
-// gateway talks to that DO over its internal fetch protocol and never touches
-// control-plane tables, so it is runtime infrastructure rather than the runners
-// HTTP resource. The DO instance is resolved per session: a CLI relay session
-// routes to its per-runner instance (idFromName(runnerId)), shared across the
-// runner's sessions, so a command reaches the live runner channel even after the
-// session's own lease ended. `resolveDoName` (injected at composition) owns that
-// session→instance mapping; the command always carries its sessionId in the body.
-export function createRunnerChannel(env: Env, resolveDoName: (sessionId: string) => Promise<string>): RunnerChannel {
+// Self-hosted runner channels live in a RunnerPool Durable Object, one pool per
+// environment. This gateway resolves a session to its environment and talks to
+// that pool over its internal fetch protocol.
+export function createRunnerChannel(
+  env: Env,
+  resolveEnvironmentId: (sessionId: string) => Promise<string | null>,
+): RunnerChannel {
+  async function pool(sessionId: string) {
+    const environmentId = await resolveEnvironmentId(sessionId)
+    if (!environmentId) {
+      throw new Error('Session has no runner environment')
+    }
+    return env.RUNNER_POOL.get(env.RUNNER_POOL.idFromName(environmentId))
+  }
+
   async function request(sessionId: string, request: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const stub = env.SESSION.get(env.SESSION.idFromName(await resolveDoName(sessionId)))
-    const response = await stub.fetch('https://session-object/request', {
+    const stub = await pool(sessionId)
+    const response = await stub.fetch('https://runner-pool/request', {
       method: 'POST',
       body: JSON.stringify({ sessionId, request, timeoutMs: RUNNER_SANDBOX_REQUEST_TIMEOUT_MS }),
     })
@@ -29,9 +35,21 @@ export function createRunnerChannel(env: Env, resolveDoName: (sessionId: string)
   }
 
   return {
+    async assignWork(input): Promise<boolean> {
+      const stub = env.RUNNER_POOL.get(env.RUNNER_POOL.idFromName(input.environmentId))
+      const response = await stub.fetch('https://runner-pool/assign', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      })
+      return response.status === 202
+    },
+
     async isAccepted(sessionId: string): Promise<boolean> {
-      const stub = env.SESSION.get(env.SESSION.idFromName(await resolveDoName(sessionId)))
-      const response = await stub.fetch('https://session-object/status')
+      const stub = await pool(sessionId)
+      const response = await stub.fetch('https://runner-pool/status', {
+        method: 'POST',
+        body: JSON.stringify({ sessionId }),
+      })
       if (!response.ok) {
         return false
       }
@@ -40,10 +58,8 @@ export function createRunnerChannel(env: Env, resolveDoName: (sessionId: string)
     },
 
     async dispatch(sessionId: string, command: Record<string, unknown>): Promise<boolean> {
-      const stub = env.SESSION.get(env.SESSION.idFromName(await resolveDoName(sessionId)))
-      // The DO routes the command by sessionId: the per-runner channel multiplexes
-      // many sessions, so the target rides in the body alongside the command.
-      const response = await stub.fetch('https://session-object/dispatch', {
+      const stub = await pool(sessionId)
+      const response = await stub.fetch('https://runner-pool/dispatch', {
         method: 'POST',
         body: JSON.stringify({ sessionId, command }),
       })

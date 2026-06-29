@@ -1,11 +1,9 @@
-// Integration tests for the per-runner relay end-to-end path.
+// Integration tests for the RunnerPool relay end-to-end path.
 //
 // The runner opens GET /api/v1/runners/{runnerId}/channel (101 WebSocket),
-// which the HTTP layer routes to a Session DO keyed by idFromName(runnerId).
-// CLI relay sessions (claude-code/codex/copilot) store their relay traffic on
-// that SAME DO instance: resolveRelayDoName resolves them to the runnerId after
-// a lease has bound work_items.runner_id. The browser socket for such a session
-// therefore lands on the runner's DO, not the session's own DO.
+// which the HTTP layer routes to the RunnerPool DO keyed by environmentId.
+// RunnerPool accepts runner.event frames and writes them into the per-session
+// Session DO. Browser sockets always connect to the per-session Session DO.
 //
 // Tests:
 // 1. Fan-out multiplexing: runner.event sent by the runner channel fans out to
@@ -14,6 +12,8 @@
 //    first. The first socket's close handler must NOT tear down the newly
 //    installed socket (the DO guards teardown by socket identity). Proved by
 //    sending on the second socket and confirming the browser receives the event.
+// 3. Assignment push: creating a self-hosted session while a runner is connected
+//    pushes work.assigned over the RunnerPool WebSocket without runner polling.
 
 import { SELF } from 'cloudflare:test'
 import { runtimeProviderModelCapability } from '@server/domain/runtime-catalog'
@@ -97,8 +97,8 @@ async function heartbeatRunner(authorization: string, runnerId: string) {
   if (res.status !== 200) throw new Error(`Heartbeat failed: ${res.status} ${await res.text()}`)
 }
 
-// Claim the work item for this session, binding work_items.runner_id so that
-// resolveRelayDoName returns the runnerId for the browser socket routing.
+// Claim the work item for this session so the session represents a self-hosted
+// runner execution.
 async function claimSessionLease(authorization: string, sessionId: string, runnerId: string) {
   const workRes = await jsonFetch(`/api/v1/work-items?state=available&sessionId=${sessionId}`, authorization)
   if (workRes.status !== 200) throw new Error(`Work list failed: ${workRes.status}`)
@@ -144,9 +144,8 @@ async function openRunnerChannel(authorization: string, runnerId: string) {
   return { ws, frames, waitForFrame }
 }
 
-// Open the browser WebSocket for a session. For CLI relay sessions with a
-// leased work item, the HTTP layer routes this to idFromName(runnerId) — the
-// same DO as the runner channel.
+// Open the browser WebSocket for a session. Browser sockets route to the
+// per-session Session DO; RunnerPool writes relayed runner events into it.
 async function openBrowserSocket(authorization: string, sessionId: string) {
   const res = await SELF.fetch(`https://example.com/api/v1/sessions/${sessionId}/socket`, {
     headers: { authorization, Upgrade: 'websocket' },
@@ -189,19 +188,19 @@ describe('[CF] per-runner relay end-to-end', () => {
     const agent = await createAgent(authorization)
     const runner = await registerRunner(authorization, environment.id)
 
-    // Create session + claim lease to bind work_items.runner_id = runner.id.
+    // Create session + claim lease to represent a self-hosted runner execution.
     const session = await createCliRelaySession(authorization, agent.id, environment.id)
     expect(session.state).toBe('pending')
     await heartbeatRunner(authorization, runner.id)
     await claimSessionLease(authorization, session.id, runner.id)
 
-    // Open the runner channel — DO keyed by idFromName(runnerId).
+    // Open the runner channel — RunnerPool is keyed by environmentId.
     const runnerCh = await openRunnerChannel(authorization, runner.id)
     const accepted = await runnerCh.waitForFrame((f) => f.type === 'runner.channel.accepted', 'runner.channel.accepted')
     expect(accepted).toMatchObject({ type: 'runner.channel.accepted', runnerId: runner.id })
 
-    // Open the browser socket for S1. resolveRelayDoName returns runnerId (CLI
-    // relay runtime + leased work item), so this lands on the SAME DO instance.
+    // Open the browser socket for S1. Browser traffic lands on the per-session
+    // Session DO; RunnerPool writes relayed events into that same store.
     const browser = await openBrowserSocket(authorization, session.id)
 
     // Runner sends a runner.event for session S1.
@@ -228,13 +227,50 @@ describe('[CF] per-runner relay end-to-end', () => {
     browser.ws.close()
   })
 
+  it('pushes self-hosted session work to an online runner without polling', async () => {
+    const authorization = await signIn()
+    const environment = await createSelfHostedEnvironment(authorization)
+    const agent = await createAgent(authorization)
+    const runner = await registerRunner(authorization, environment.id)
+    await heartbeatRunner(authorization, runner.id)
+
+    const runnerCh = await openRunnerChannel(authorization, runner.id)
+    await runnerCh.waitForFrame((f) => f.type === 'runner.channel.accepted', 'runner.channel.accepted')
+
+    const session = await createCliRelaySession(authorization, agent.id, environment.id)
+    const assigned = await runnerCh.waitForFrame((f) => f.type === 'work.assigned', 'work.assigned')
+    expect(assigned).toMatchObject({
+      type: 'work.assigned',
+      runnerId: runner.id,
+      lease: { runnerId: runner.id, state: 'active' },
+      workItem: {
+        sessionId: session.id,
+        environmentId: environment.id,
+        type: 'session.start',
+        state: 'leased',
+      },
+    })
+
+    const workItem = assigned.workItem as { id: string }
+    const workRes = await jsonFetch(`/api/v1/work-items/${workItem.id}`, authorization)
+    expect(workRes.status).toBe(200)
+    await expect(workRes.json()).resolves.toMatchObject({
+      id: workItem.id,
+      sessionId: session.id,
+      runnerId: runner.id,
+      state: 'leased',
+    })
+
+    runnerCh.ws.close()
+  })
+
   it('does not clobber the active channel when the runner reconnects [spec: runners/relay-reconnect]', async () => {
     const authorization = await signIn()
     const environment = await createSelfHostedEnvironment(authorization)
     const agent = await createAgent(authorization)
     const runner = await registerRunner(authorization, environment.id)
 
-    // Create session + claim lease so browser socket routes to runner's DO.
+    // Create session + claim lease so this is a self-hosted runner session.
     const session = await createCliRelaySession(authorization, agent.id, environment.id)
     await heartbeatRunner(authorization, runner.id)
     await claimSessionLease(authorization, session.id, runner.id)
@@ -243,7 +279,7 @@ describe('[CF] per-runner relay end-to-end', () => {
     const first = await openRunnerChannel(authorization, runner.id)
     await first.waitForFrame((f) => f.type === 'runner.channel.accepted', 'first runner.channel.accepted')
 
-    // Open a SECOND runner channel for the same runnerId (reconnect). The DO
+    // Open a SECOND runner channel for the same runnerId (reconnect). RunnerPool
     // supersedes the first socket: it closes the first and installs the second.
     // The first socket's 'close' handler must NOT tear down the second socket
     // (the guard checks socket identity, not runnerId).
@@ -254,12 +290,12 @@ describe('[CF] per-runner relay end-to-end', () => {
     )
     expect(secondAccepted).toMatchObject({ type: 'runner.channel.accepted', runnerId: runner.id })
 
-    // Open a browser socket — it routes to the runner's DO.
+    // Open a browser socket — it routes to the per-session Session DO.
     const browser = await openBrowserSocket(authorization, session.id)
 
-    // Send a runner.event on the SECOND (active) socket. If the first socket's
-    // close handler had nulled out runnerScope/socket, the event would be
-    // silently dropped and the browser would never receive the frame.
+    // Send a runner.event on the SECOND (active) socket. If reconnect teardown
+    // clobbered the new runner connection, the browser would never receive the
+    // event written into its Session DO.
     second.ws.send(
       JSON.stringify({
         type: 'runner.event',

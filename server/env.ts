@@ -6,9 +6,10 @@ export interface Env {
   ASSETS: Fetcher
   OIDC_PROVIDER?: Fetcher
   SANDBOX: DurableObjectNamespace<Sandbox>
-  // The per-session Session DO (idFromName(sessionId)): self-hosted runner
-  // bridge today; cloud event store + browser WebSocket hub as it evolves.
+  // The per-session Session DO (idFromName(sessionId)): event store + browser WebSocket hub.
   SESSION: DurableObjectNamespace
+  // The per-environment runner pool DO (idFromName(environmentId)): self-hosted runner channel + dispatch.
+  RUNNER_POOL: DurableObjectNamespace
   // Cold archive for ended cloud sessions: one events.jsonl object per session.
   SESSION_EVENTS: R2Bucket
   // Cloud session turn queue; absent in test mode where turns run inline.

@@ -14,6 +14,7 @@ import (
 )
 
 type Channel = ama.JSONChannel
+type AssignmentHandler func(context.Context, *ama.Lease, *ama.WorkItem)
 
 // Opener dials the per-runner relay channel
 // (GET /api/v1/runners/{runnerId}/channel).
@@ -35,6 +36,7 @@ type Relay struct {
 	opener   Opener
 	runnerID string
 	executor string
+	assign   AssignmentHandler
 	// storeDir is {WorkDir}/sessions; a session's log is storeDir/{sessionId}/events.jsonl.
 	storeDir string
 
@@ -57,11 +59,16 @@ type RelayStamp struct {
 	CreatedAt string
 }
 
-func NewRelay(opener Opener, runnerID string, executor string, workDir string) *Relay {
+func NewRelay(opener Opener, runnerID string, executor string, workDir string, assignmentHandlers ...AssignmentHandler) *Relay {
+	var assign AssignmentHandler
+	if len(assignmentHandlers) > 0 {
+		assign = assignmentHandlers[0]
+	}
 	return &Relay{
 		opener:   opener,
 		runnerID: runnerID,
 		executor: executor,
+		assign:   assign,
 		storeDir: filepath.Join(workDir, workspace.SessionsDirName),
 		sessions: map[string]Handle{},
 	}
@@ -140,6 +147,8 @@ func (h *Relay) readLoop(ctx context.Context, conn Channel) error {
 			continue
 		}
 		switch message.Type {
+		case "work.assigned":
+			h.handleWorkAssigned(ctx, raw)
 		case "session.backfill_request":
 			h.handleBackfillRequest(ctx, conn, message)
 		case "session.command":
@@ -151,6 +160,25 @@ func (h *Relay) readLoop(ctx context.Context, conn Channel) error {
 			// are fire-and-forget; runner.channel.accepted is the handshake, already seen.
 		}
 	}
+}
+
+func (h *Relay) handleWorkAssigned(ctx context.Context, raw json.RawMessage) {
+	if h.assign == nil {
+		return
+	}
+	var frame struct {
+		Lease    ama.Lease    `json:"lease"`
+		WorkItem ama.WorkItem `json:"workItem"`
+	}
+	if err := json.Unmarshal(raw, &frame); err != nil {
+		slog.Warn("runner relay work assignment is invalid; dropping", "error", err)
+		return
+	}
+	if frame.Lease.Id == "" || frame.WorkItem.Id == "" {
+		slog.Warn("runner relay work assignment is missing lease or work item")
+		return
+	}
+	h.assign(ctx, &frame.Lease, &frame.WorkItem)
 }
 
 func (h *Relay) handleSandboxRequest(ctx context.Context, conn Channel, message protocol.RunnerChannelMessage) {
@@ -312,5 +340,27 @@ func (h *Relay) RelayEvent(ctx context.Context, sessionID string, eventType stri
 	}
 	if err := h.conn.WriteJSON(ctx, message); err != nil {
 		slog.Warn("runner failed to relay event live", "sessionId", sessionID, "error", err)
+	}
+}
+
+func (h *Relay) NotifyWorkFinished(ctx context.Context, sessionID string, leaseID string, state string) {
+	frameType := "work.completed"
+	switch state {
+	case "failed":
+		frameType = "work.failed"
+	case "cancelled":
+		frameType = "work.cancelled"
+	}
+	h.writeMu.Lock()
+	defer h.writeMu.Unlock()
+	if h.conn == nil {
+		return
+	}
+	if err := h.conn.WriteJSON(ctx, ama.JSON{
+		"type":      frameType,
+		"sessionId": sessionID,
+		"leaseId":   leaseID,
+	}); err != nil {
+		slog.Warn("runner failed to notify work completion", "sessionId", sessionID, "leaseId", leaseID, "error", err)
 	}
 }

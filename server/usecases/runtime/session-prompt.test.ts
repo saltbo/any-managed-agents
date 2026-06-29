@@ -91,6 +91,7 @@ function depsFor(session: SessionRow, queueResult = true) {
       queueSessionWorkWhenState,
     },
     runnerChannel: {
+      assignWork: async () => true,
       isAccepted: async () => false,
       dispatch: async () => false,
     },

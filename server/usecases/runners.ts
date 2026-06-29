@@ -147,7 +147,6 @@ export async function updateRunner(
 export interface HeartbeatPatch {
   state?: 'active' | 'draining' | 'offline'
   capabilities?: string[]
-  currentLoad?: number
   runtimeUsage?: RuntimeUsage[]
   runtimeInventory?: RuntimeInventoryEntry[]
   metadata?: Record<string, unknown>
@@ -178,7 +177,6 @@ export async function recordRunnerHeartbeat(
     {
       state: patch.state ?? 'active',
       capabilities: patch.capabilities ?? runner.capabilities,
-      currentLoad: patch.currentLoad ?? runner.currentLoad,
       runtimeUsage: patch.runtimeUsage ?? runner.runtimeUsage,
       runtimeInventory: patch.runtimeInventory ?? runner.runtimeInventory,
       metadata: patch.metadata ?? runner.metadata,

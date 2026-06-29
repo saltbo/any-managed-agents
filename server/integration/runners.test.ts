@@ -108,7 +108,6 @@ describe('[CF] /api/v1/runners', () => {
       method: 'PUT',
       body: JSON.stringify({
         state: 'active',
-        currentLoad: 1,
         capabilities: ['node', 'git', 'sandbox.exec', 'workspace', DEFAULT_AMA_RUNNER_CAPABILITY],
         runtimeUsage: [
           {
@@ -124,7 +123,7 @@ describe('[CF] /api/v1/runners', () => {
     expect(heartbeat).toMatchObject({
       runnerId,
       state: 'active',
-      currentLoad: 1,
+      currentLoad: 0,
       runtimeUsage: [{ runtime: 'claude-code', windows: [{ label: '5-Hour', utilization: 23 }] }],
       runtimeInventory: [{ runtime: 'claude-code', version: '2.0.1', state: 'ready' }],
       lastHeartbeatAt: expect.any(String),
@@ -139,7 +138,7 @@ describe('[CF] /api/v1/runners', () => {
     await expect(readRunnerRes.json()).resolves.toMatchObject({
       id: runnerId,
       state: 'active',
-      currentLoad: 1,
+      currentLoad: 0,
       capabilities: ['node', 'git', 'sandbox.exec', 'workspace', DEFAULT_AMA_RUNNER_CAPABILITY],
       lastHeartbeatAt: expect.any(String),
     })
@@ -313,10 +312,11 @@ describe('[CF] /api/v1/runners', () => {
     })
     expect(missingRes.status).toBe(404)
 
-    // 101: valid runner → WebSocket upgrade accepted
+    // 101: valid environment-bound runner → WebSocket upgrade accepted
+    const environment = await createSelfHostedEnvironment(authorization)
     const runnerRes = await jsonFetch('/api/v1/runners', authorization, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Channel test runner' }),
+      body: JSON.stringify({ name: 'Channel test runner', environmentId: environment.id }),
     })
     expect(runnerRes.status).toBe(201)
     const runner = (await runnerRes.json()) as { id: string }
@@ -395,7 +395,7 @@ describe('[CF] /api/v1/runners', () => {
 
     const heartbeatRes = await jsonFetch(`/api/v1/runners/${runner.id}/heartbeat`, runnerAuthorization, {
       method: 'PUT',
-      body: JSON.stringify({ state: 'active', currentLoad: 0 }),
+      body: JSON.stringify({ state: 'active' }),
     })
     expect(heartbeatRes.status).toBe(200)
     await expect(heartbeatRes.json()).resolves.toMatchObject({ runnerId: runner.id, state: 'active' })

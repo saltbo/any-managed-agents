@@ -88,7 +88,7 @@ async function registerActiveRunner(authorization: string, environmentId: string
   const runner = (await runnerRes.json()) as { id: string }
   const heartbeatRes = await jsonFetch(`/api/v1/runners/${runner.id}/heartbeat`, authorization, {
     method: 'PUT',
-    body: JSON.stringify({ state: 'active', currentLoad: 0, capabilities }),
+    body: JSON.stringify({ state: 'active', capabilities }),
   })
   expect(heartbeatRes.status).toBe(200)
   return runner

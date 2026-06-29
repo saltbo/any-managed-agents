@@ -73,7 +73,6 @@ type configFile struct {
 	StateDir              string       `json:"stateDir"`
 	WorkDir               string       `json:"workDir"`
 	MaxConcurrent         int          `json:"maxConcurrent"`
-	PollInterval          durationJSON `json:"pollInterval"`
 	HeartbeatInterval     durationJSON `json:"heartbeatInterval"`
 	LeaseDurationSeconds  int          `json:"leaseDurationSeconds"`
 	RenewInterval         durationJSON `json:"renewInterval"`
@@ -92,7 +91,6 @@ func (c configFile) Config() Config {
 		StateDir:              c.StateDir,
 		WorkDir:               c.WorkDir,
 		MaxConcurrent:         c.MaxConcurrent,
-		PollInterval:          time.Duration(c.PollInterval),
 		HeartbeatInterval:     time.Duration(c.HeartbeatInterval),
 		LeaseDurationSeconds:  c.LeaseDurationSeconds,
 		RenewInterval:         time.Duration(c.RenewInterval),
@@ -149,9 +147,6 @@ func mergeConfig(base Config, override Config) Config {
 	}
 	if override.MaxConcurrent != 0 {
 		base.MaxConcurrent = override.MaxConcurrent
-	}
-	if override.PollInterval != 0 {
-		base.PollInterval = override.PollInterval
 	}
 	if override.HeartbeatInterval != 0 {
 		base.HeartbeatInterval = override.HeartbeatInterval

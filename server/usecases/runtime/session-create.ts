@@ -43,6 +43,7 @@ import { SESSION_DO_EVENT_STORE } from '@shared/session-events'
 import type {
   AgentRow,
   AuthScope,
+  RunnerChannel,
   SessionCreateOptions,
   SessionOrchestrationStore,
   SessionRow,
@@ -64,7 +65,7 @@ const VOLUME_NAME_PATTERN = /^[A-Za-z0-9._-]+$/
 // test mode the inline cloud launch ran synchronously so the row is re-read to
 // surface the started session; in production the launch is fire-and-forget and
 // the pending row is returned as-is.
-export type CreateSessionDeps = CloudTurnDeps & { rereadStartedSession: boolean }
+export type CreateSessionDeps = CloudTurnDeps & { runnerChannel: RunnerChannel; rereadStartedSession: boolean }
 
 type SessionRuntimeError = {
   status: 400 | 403 | 404 | 409 | 500
@@ -254,7 +255,7 @@ async function sessionInitialPrompt(
 // ── Work item enqueue ───────────────────────────────────────────────────────
 
 export async function enqueueSelfHostedSessionWork(
-  deps: Pick<CreateSessionDeps, 'sessionOrchestration'>,
+  deps: Pick<CreateSessionDeps, 'sessionOrchestration' | 'runnerChannel'>,
   auth: AuthScope,
   values: {
     session: SessionRow
@@ -272,24 +273,43 @@ export async function enqueueSelfHostedSessionWork(
   },
 ) {
   const timestamp = now()
-  await deps.sessionOrchestration.insertWorkItem(selfHostedSessionWorkItem(auth, values, timestamp))
+  const workItem = selfHostedSessionWorkItem(auth, values, timestamp)
+  await deps.sessionOrchestration.insertWorkItem(workItem)
+  if (workItem.environmentId) {
+    await deps.runnerChannel.assignWork({
+      organizationId: auth.organization.id,
+      projectId: auth.project.id,
+      environmentId: workItem.environmentId,
+      workItemId: workItem.id,
+    })
+  }
 }
 
 export async function queueSelfHostedSessionWorkWhenState(
-  deps: Pick<CreateSessionDeps, 'sessionOrchestration'>,
+  deps: Pick<CreateSessionDeps, 'sessionOrchestration' | 'runnerChannel'>,
   auth: AuthScope,
   values: Parameters<typeof enqueueSelfHostedSessionWork>[2],
   expected: string | string[],
   sessionUpdate: SessionUpdate,
   timestamp = now(),
 ) {
-  return await deps.sessionOrchestration.queueSessionWorkWhenState(
+  const workItem = selfHostedSessionWorkItem(auth, values, timestamp)
+  const queued = await deps.sessionOrchestration.queueSessionWorkWhenState(
     auth.project.id,
     values.session.id,
     expected,
     sessionUpdate,
-    selfHostedSessionWorkItem(auth, values, timestamp),
+    workItem,
   )
+  if (queued && workItem.environmentId) {
+    await deps.runnerChannel.assignWork({
+      organizationId: auth.organization.id,
+      projectId: auth.project.id,
+      environmentId: workItem.environmentId,
+      workItemId: workItem.id,
+    })
+  }
+  return queued
 }
 
 function selfHostedSessionWorkItem(

@@ -15,7 +15,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -36,6 +35,7 @@ type Daemon struct {
 	RunnerID     string
 	mu           sync.Mutex
 	activeLeases int
+	leaseWG      sync.WaitGroup
 }
 
 func (d *Daemon) runtimeBridge() runtime.Bridge {
@@ -90,20 +90,18 @@ func (d *Daemon) Start(ctx context.Context) error {
 		}
 		return err
 	}
-	// One-time readiness line so `ak logs` shows the runner came up and is
-	// connected/polling even when it is idle (no work in the queue). List the
-	// detected runtime names only — not the full capability-token matrix
-	// (runtime×provider×model), which is internal scheduling data.
+	// One-time readiness line so logs show the runner came up and is connected
+	// even when it is idle. List runtime names only — not the full capability
+	// token matrix (runtime×provider×model), which is internal scheduling data.
 	runtimeNames := lo.Map(d.currentRuntimeInventory(), func(item runtime.RuntimeInventoryEntry, _ int) string {
 		return item.Runtime
 	})
-	slog.Info("runner ready; polling for work",
+	slog.Info("runner ready; waiting for work assignments",
 		"runnerId", d.RunnerID,
 		"projectId", d.Config.ProjectID,
 		"environmentId", d.Config.EnvironmentID,
 		"runtimes", strings.Join(runtimeNames, ", "),
 		"maxConcurrent", d.Config.MaxConcurrent,
-		"pollInterval", d.Config.PollInterval.String(),
 	)
 	go d.runUsageCollector(ctx)
 	// Open the per-runner relay channel for CLI sessions and keep it for the
@@ -113,28 +111,20 @@ func (d *Daemon) Start(ctx context.Context) error {
 
 	heartbeatTicker := time.NewTicker(d.Config.HeartbeatInterval)
 	defer heartbeatTicker.Stop()
-	pollTimer := time.NewTimer(0)
-	defer pollTimer.Stop()
 	heartbeatFailures := 0
-	// Approximate consecutive-failure count: lease goroutines run while the
-	// poll timer is being reset, so the backoff may briefly lag the true
-	// count. That is fine — the backoff only needs to stop a broken control
-	// plane from being hammered at full poll speed.
-	var leaseFailures atomic.Int64
-	var inFlight sync.WaitGroup
 	for {
 		select {
 		case <-ctx.Done():
 			// Wait for in-flight lease goroutines so their interrupted/failed
 			// finalization reaches the control plane before the process exits;
 			// otherwise recovery silently degrades to lease-expiry timing.
-			d.drainInFlightLeases(&inFlight)
+			d.drainInFlightLeases(&d.leaseWG)
 			_ = d.sendOfflineHeartbeat(context.Background())
 			return ctx.Err()
 		case <-heartbeatTicker.C:
 			if err := d.heartbeat(ctx); err != nil {
 				if ctx.Err() != nil {
-					d.drainInFlightLeases(&inFlight)
+					d.drainInFlightLeases(&d.leaseWG)
 					_ = d.sendOfflineHeartbeat(context.Background())
 					return ctx.Err()
 				}
@@ -146,7 +136,7 @@ func (d *Daemon) Start(ctx context.Context) error {
 						heartbeatFailures++
 						slog.Warn("runner re-registration failed", "consecutiveFailures", heartbeatFailures, "error", recoverErr)
 						if heartbeatFailures >= heartbeatMaxConsecutiveFailures {
-							d.drainInFlightLeases(&inFlight)
+							d.drainInFlightLeases(&d.leaseWG)
 							return fmt.Errorf("runner re-registration failed %d consecutive times: %w", heartbeatFailures, recoverErr)
 						}
 						continue
@@ -160,41 +150,12 @@ func (d *Daemon) Start(ctx context.Context) error {
 				heartbeatFailures++
 				slog.Warn("runner heartbeat failed", "consecutiveFailures", heartbeatFailures, "error", err)
 				if heartbeatFailures >= heartbeatMaxConsecutiveFailures {
-					d.drainInFlightLeases(&inFlight)
+					d.drainInFlightLeases(&d.leaseWG)
 					return fmt.Errorf("runner heartbeat failed %d consecutive times: %w", heartbeatFailures, err)
 				}
 				continue
 			}
 			heartbeatFailures = 0
-		case <-pollTimer.C:
-			for d.tryAcquireLeaseSlot() {
-				inFlight.Add(1)
-				go func() {
-					defer inFlight.Done()
-					defer d.releaseLeaseSlot()
-					err := d.runOneLease(ctx)
-					if err == nil {
-						leaseFailures.Store(0)
-						return
-					}
-					// Shutdown cancellation is handled by the ctx.Done() drain
-					// path, which sends the offline heartbeat once.
-					if ctx.Err() != nil {
-						return
-					}
-					if isLeaseInactive(err) {
-						// A lease that is no longer active is normal: the session
-						// finished or another runner took over. Not a failure to
-						// back off on, and not WARN-worthy.
-						leaseFailures.Store(0)
-						slog.Info("runner lease ended", "error", err)
-					} else {
-						leaseFailures.Add(1)
-						slog.Warn("runner lease failed", "consecutiveFailures", leaseFailures.Load(), "error", err)
-					}
-				}()
-			}
-			pollTimer.Reset(leasePollDelay(d.Config.PollInterval, leaseFailures.Load()))
 		}
 	}
 }
@@ -263,12 +224,34 @@ func (d *Daemon) startRelay(ctx context.Context) {
 	if d.relay != nil {
 		return
 	}
-	d.relay = runnersession.NewRelay(d.Channels, d.RunnerID, d.Config.SandboxAdapter, d.Config.WorkDir)
+	d.relay = runnersession.NewRelay(d.Channels, d.RunnerID, d.Config.SandboxAdapter, d.Config.WorkDir, d.runAssignedWork)
 	go d.relay.Run(ctx)
 }
 
 func (d *Daemon) runOneLease(ctx context.Context) error {
 	return d.leaseWorker().RunOne(ctx)
+}
+
+func (d *Daemon) runAssignedWork(ctx context.Context, lease *ama.Lease, workItem *ama.WorkItem) {
+	if !d.tryAcquireLeaseSlot() {
+		slog.Warn("runner received work assignment while at local capacity", "workItemId", workItem.Id, "leaseId", lease.Id)
+		return
+	}
+	d.leaseWG.Add(1)
+	go func() {
+		defer d.leaseWG.Done()
+		defer d.releaseLeaseSlot()
+		if err := d.leaseWorker().RunAssigned(ctx, lease, workItem); err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			if isLeaseInactive(err) {
+				slog.Info("runner assigned lease ended", "leaseId", lease.Id, "error", err)
+				return
+			}
+			slog.Warn("runner assigned lease failed", "leaseId", lease.Id, "workItemId", workItem.Id, "error", err)
+		}
+	}()
 }
 
 func (d *Daemon) leaseWorker() LeaseWorker {
@@ -388,7 +371,6 @@ func (d *Daemon) ensureRunner(ctx context.Context) (string, error) {
 }
 
 func (d *Daemon) heartbeat(ctx context.Context) error {
-	load := d.activeLoad()
 	machineID, err := d.identityStore().EnsureMachineID()
 	if err != nil {
 		return err
@@ -398,7 +380,6 @@ func (d *Daemon) heartbeat(ctx context.Context) error {
 	_, err = d.Client.Runners.PutHeartbeat(ctx, d.RunnerID, ama.PutRunnerHeartbeatRequest{
 		State:            lo.ToPtr(ama.PutRunnerHeartbeatRequestStateActive),
 		Capabilities:     lo.ToPtr(capabilities),
-		CurrentLoad:      &load,
 		RuntimeUsage:     lo.ToPtr(runnerRuntimeUsage(d.getRuntimeUsage())),
 		RuntimeInventory: lo.ToPtr(runnerRuntimeInventory(d.currentRuntimeInventory())),
 		Metadata: lo.ToPtr(ama.JSON{
@@ -415,10 +396,8 @@ func (d *Daemon) heartbeat(ctx context.Context) error {
 }
 
 func (d *Daemon) sendOfflineHeartbeat(ctx context.Context) error {
-	load := 0
 	_, err := d.Client.Runners.PutHeartbeat(ctx, d.RunnerID, ama.PutRunnerHeartbeatRequest{
-		State:       lo.ToPtr(ama.PutRunnerHeartbeatRequestStateOffline),
-		CurrentLoad: &load,
+		State: lo.ToPtr(ama.PutRunnerHeartbeatRequestStateOffline),
 	})
 	return err
 }

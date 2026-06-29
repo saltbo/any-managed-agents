@@ -39,6 +39,10 @@ class_name = "Sandbox"
 name = "SESSION"
 class_name = "SessionObject"
 
+[[durable_objects.bindings]]
+name = "RUNNER_POOL"
+class_name = "RunnerPoolObject"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["ManagedAgent"]
@@ -58,3 +62,7 @@ deleted_classes = ["ManagedAgent"]
 [[migrations]]
 tag = "v5"
 renamed_classes = [{ from = "RunnerSessionChannelObject", to = "SessionObject" }]
+
+[[migrations]]
+tag = "v6"
+new_sqlite_classes = ["RunnerPoolObject"]

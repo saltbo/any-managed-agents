@@ -71,6 +71,10 @@ class_name = "Sandbox"
 name = "SESSION"
 class_name = "SessionObject"
 
+[[durable_objects.bindings]]
+name = "RUNNER_POOL"
+class_name = "RunnerPoolObject"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["ManagedAgent"]
@@ -97,6 +101,10 @@ deleted_classes = ["ManagedAgent"]
 [[migrations]]
 tag = "v5"
 renamed_classes = [{ from = "RunnerSessionChannelObject", to = "SessionObject" }]
+
+[[migrations]]
+tag = "v6"
+new_sqlite_classes = ["RunnerPoolObject"]
 
 [[containers]]
 class_name = "Sandbox"
@@ -161,6 +169,10 @@ class_name = "Sandbox"
 name = "SESSION"
 class_name = "SessionObject"
 
+[[env.staging.durable_objects.bindings]]
+name = "RUNNER_POOL"
+class_name = "RunnerPoolObject"
+
 [[env.staging.containers]]
 class_name = "Sandbox"
 name = "any-managed-agents-staging-sandbox"
@@ -208,6 +220,10 @@ class_name = "Sandbox"
 [[env.e2e.durable_objects.bindings]]
 name = "SESSION"
 class_name = "SessionObject"
+
+[[env.e2e.durable_objects.bindings]]
+name = "RUNNER_POOL"
+class_name = "RunnerPoolObject"
 
 [[env.e2e.containers]]
 class_name = "Sandbox"

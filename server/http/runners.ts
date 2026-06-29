@@ -132,7 +132,6 @@ const PutHeartbeatSchema = z
       .max(100)
       .optional()
       .openapi({ example: ['node', 'git'] }),
-    currentLoad: z.number().int().min(0).max(1000).optional().openapi({ example: 1 }),
     runtimeUsage: z.array(RuntimeUsageSchema).max(20).optional(),
     runtimeInventory: z.array(RuntimeInventorySchema).max(20).optional(),
     metadata: JsonObjectSchema.optional().openapi({ example: { hostname: 'runner-1' } }),
@@ -376,7 +375,17 @@ async function connectRunnerChannel(c: Context<DepsEnv>) {
   if (!runnerOperationAuthorized(c.env, auth, runner)) {
     return runnerForbidden(c)
   }
-  return upgradeRunnerRelayChannel(c.env, c.req.raw, runnerId, auth.organization.id, auth.project.id)
+  if (!runner.environmentId) {
+    return errorResponse(c, 409, 'conflict', 'Runner must be bound to an environment before opening a channel')
+  }
+  return upgradeRunnerRelayChannel(
+    c.env,
+    c.req.raw,
+    runnerId,
+    auth.organization.id,
+    auth.project.id,
+    runner.environmentId,
+  )
 }
 
 function upgradeRunnerRelayChannel(
@@ -385,12 +394,14 @@ function upgradeRunnerRelayChannel(
   runnerId: string,
   organizationId: string,
   projectId: string,
+  environmentId: string,
 ) {
-  const stub = env.SESSION.get(env.SESSION.idFromName(runnerId))
-  const url = new URL('https://session-object/runner-connect')
+  const stub = env.RUNNER_POOL.get(env.RUNNER_POOL.idFromName(environmentId))
+  const url = new URL('https://runner-pool/runner-connect')
   url.searchParams.set('runnerId', runnerId)
   url.searchParams.set('organizationId', organizationId)
   url.searchParams.set('projectId', projectId)
+  url.searchParams.set('environmentId', environmentId)
   return stub.fetch(new Request(url, request))
 }
 
@@ -578,7 +589,6 @@ export function registerRunnerRoutes(routes: RunnerRoutes) {
         const updated = await recordRunnerHeartbeat(deps, auth.project.id, runner, {
           ...(body.state !== undefined ? { state: body.state } : {}),
           ...(body.capabilities !== undefined ? { capabilities: body.capabilities } : {}),
-          ...(body.currentLoad !== undefined ? { currentLoad: body.currentLoad } : {}),
           ...(body.runtimeUsage !== undefined ? { runtimeUsage: body.runtimeUsage } : {}),
           ...(body.runtimeInventory !== undefined
             ? { runtimeInventory: normalizeInventory(body.runtimeInventory) }

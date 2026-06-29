@@ -221,8 +221,8 @@ export function queryEventsFromSql(sql: SqlStorage, sessionId: string, query: Se
   return { rows: rows.slice(0, query.limit).map(serializeRow), hasMore }
 }
 
-// One event in a runner's local log, relayed verbatim from the store-and-serve
-// runner over the channel — the bytes the cloud never kept a copy of.
+// One event in a runner's local log, relayed over the channel before the cloud
+// stores it in the per-session Session DO.
 export interface RelayedRunnerEvent {
   id: string
   sequence: number
@@ -232,16 +232,8 @@ export interface RelayedRunnerEvent {
   createdAt: string
 }
 
-// The relay's second implementation of the store query: a CLI relay session's
-// events live only on the runner, so the read path canonicalises the runner's
-// raw log in memory (no cloud copy) — threading turn/transcript correlation the
-// same way appendCanonicalEventToSql does — then applies the same filter/cursor
-// /pagination as queryEventsFromSql so a relayed page is indistinguishable from
-// a DO-served one.
 // Per-session threading state for the relay canonicaliser: turn nesting + message
-// correlation carry across events. The SAME machine drives both the full-log
-// backfill (queryRelayedEvents) and the DO's live fan (stepRelayEvent), so a
-// pushed event is byte-identical to its backfilled twin.
+// correlation carry across events.
 export interface RelayThreadState {
   currentTurnId: string | null
   lastMessageType: string | null
@@ -293,32 +285,33 @@ export function stepRelayEvent(raw: RelayedRunnerEvent, scope: SessionEventScope
   }
 }
 
-export function queryRelayedEvents(
-  rawEvents: RelayedRunnerEvent[],
+export function appendRelayedEventToSql(
+  sql: SqlStorage,
   scope: SessionEventScope,
-  query: SessionEventQuery,
-): SessionEventPage {
-  const state = newRelayThreadState()
-  const rows: EventRow[] = rawEvents.map((raw) => stepRelayEvent(raw, scope, state))
-
-  const visibility = query.visibility ?? 'runtime'
-  let filtered = rows.filter((row) => row.visibility === visibility)
-  if (query.type) {
-    filtered = filtered.filter((row) => row.type === query.type)
-  }
-  if (query.createdFrom) {
-    filtered = filtered.filter((row) => row.created_at >= query.createdFrom!)
-  }
-  if (query.createdTo) {
-    filtered = filtered.filter((row) => row.created_at <= query.createdTo!)
-  }
-  const cursor = query.cursor ?? (query.order === 'asc' ? 0 : undefined)
-  if (cursor !== undefined) {
-    filtered = filtered.filter((row) => (query.order === 'asc' ? row.sequence > cursor : row.sequence < cursor))
-  }
-  filtered.sort((a, b) => (query.order === 'asc' ? a.sequence - b.sequence : b.sequence - a.sequence))
-  const hasMore = filtered.length > query.limit
-  return { rows: filtered.slice(0, query.limit).map(serializeRow), hasMore }
+  raw: RelayedRunnerEvent,
+  state: RelayThreadState,
+): SessionEvent | null {
+  const row = stepRelayEvent(raw, scope, state)
+  sql.exec(
+    'INSERT OR IGNORE INTO session_events (id, organization_id, project_id, session_id, sequence, type, visibility, role, parent_event_id, correlation_id, payload, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    row.id,
+    row.organization_id,
+    row.project_id,
+    row.session_id,
+    row.sequence,
+    row.type,
+    row.visibility,
+    row.role,
+    row.parent_event_id,
+    row.correlation_id,
+    row.payload,
+    row.metadata,
+    row.created_at,
+  )
+  const inserted = sql
+    .exec<EventRow>('SELECT * FROM session_events WHERE session_id = ? AND id = ? LIMIT 1', scope.sessionId, raw.id)
+    .toArray()[0]
+  return inserted ? serializeRow(inserted) : null
 }
 
 export function countSessionEvents(sql: SqlStorage, sessionId: string): number {
