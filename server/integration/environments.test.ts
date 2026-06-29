@@ -24,7 +24,7 @@ async function connectMcp(authorization: string) {
     method: 'POST',
     body: JSON.stringify({
       name: 'GitHub token',
-      type: 'Opaque',
+      type: 'opaque',
       secret: { stringData: { value: 'raw-github-token' } },
     }),
   })

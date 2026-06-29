@@ -96,7 +96,7 @@ describe('[CF] /api/v1/vaults', () => {
       method: 'POST',
       body: JSON.stringify({
         name: 'Archived vault token',
-        type: 'Opaque',
+        type: 'opaque',
         secret: { stringData: { value: 'raw-secret-for-archived-vault' } },
       }),
     })
@@ -128,7 +128,7 @@ describe('[CF] /api/v1/vaults', () => {
       method: 'POST',
       body: JSON.stringify({
         name: 'Workers AI token',
-        type: 'Opaque',
+        type: 'opaque',
         secret: { stringData: { value: rawSecret } },
       }),
     })
@@ -174,7 +174,7 @@ describe('[CF] /api/v1/vaults', () => {
       method: 'POST',
       body: JSON.stringify({
         name: 'Invalid token',
-        type: 'Opaque',
+        type: 'opaque',
         secret: {},
       }),
     })
@@ -351,21 +351,21 @@ describe('[CF] /api/v1/vaults', () => {
     const cases = [
       {
         name: 'basic-auth',
-        type: 'kubernetes.io/basic-auth',
+        type: 'ama.dev/basic-auth',
         stringData: { username: 'service-user', password: 'service-password' },
         dataKeys: ['password', 'username'],
         raw: 'service-password',
       },
       {
         name: 'ssh-auth',
-        type: 'kubernetes.io/ssh-auth',
+        type: 'ama.dev/ssh-auth',
         stringData: { 'ssh-privatekey': '-----BEGIN OPENSSH PRIVATE KEY-----' },
         dataKeys: ['ssh-privatekey'],
         raw: '-----BEGIN OPENSSH PRIVATE KEY-----',
       },
       {
         name: 'tls',
-        type: 'kubernetes.io/tls',
+        type: 'ama.dev/tls',
         stringData: { 'tls.crt': '-----BEGIN CERTIFICATE-----', 'tls.key': '-----BEGIN PRIVATE KEY-----' },
         dataKeys: ['tls.crt', 'tls.key'],
         raw: '-----BEGIN PRIVATE KEY-----',
@@ -410,7 +410,7 @@ describe('[CF] /api/v1/vaults', () => {
       method: 'POST',
       body: JSON.stringify({
         name: 'bad-basic-auth',
-        type: 'kubernetes.io/basic-auth',
+        type: 'ama.dev/basic-auth',
         secret: { stringData: { username: 'service-user' } },
       }),
     })
@@ -423,7 +423,7 @@ describe('[CF] /api/v1/vaults', () => {
       method: 'POST',
       body: JSON.stringify({
         name: 'bad-tls',
-        type: 'kubernetes.io/tls',
+        type: 'ama.dev/tls',
         secret: { stringData: { 'tls.crt': 'crt', 'tls.key': 'key', token: 'not-allowed' } },
       }),
     })
@@ -436,7 +436,7 @@ describe('[CF] /api/v1/vaults', () => {
       method: 'POST',
       body: JSON.stringify({
         name: 'bad-string-data',
-        type: 'Opaque',
+        type: 'opaque',
         secret: { stringData: { enabled: true } },
       }),
     })

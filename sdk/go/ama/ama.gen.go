@@ -459,28 +459,28 @@ func (e CreateTriggerRequestType) Valid() bool {
 
 // Defines values for CreateVaultCredentialRequestType.
 const (
-	CreateVaultCredentialRequestTypeAmaDevoauthToken      CreateVaultCredentialRequestType = "ama.dev/oauth-token"
-	CreateVaultCredentialRequestTypeAmaDevprivateKeyJwk   CreateVaultCredentialRequestType = "ama.dev/private-key-jwk"
-	CreateVaultCredentialRequestTypeKubernetesIobasicAuth CreateVaultCredentialRequestType = "kubernetes.io/basic-auth"
-	CreateVaultCredentialRequestTypeKubernetesIosshAuth   CreateVaultCredentialRequestType = "kubernetes.io/ssh-auth"
-	CreateVaultCredentialRequestTypeKubernetesIotls       CreateVaultCredentialRequestType = "kubernetes.io/tls"
-	CreateVaultCredentialRequestTypeOpaque                CreateVaultCredentialRequestType = "Opaque"
+	CreateVaultCredentialRequestTypeBasicAuth     CreateVaultCredentialRequestType = "ama.dev/basic-auth"
+	CreateVaultCredentialRequestTypeOauthToken    CreateVaultCredentialRequestType = "ama.dev/oauth-token"
+	CreateVaultCredentialRequestTypeOpaque        CreateVaultCredentialRequestType = "opaque"
+	CreateVaultCredentialRequestTypePrivateKeyJwk CreateVaultCredentialRequestType = "ama.dev/private-key-jwk"
+	CreateVaultCredentialRequestTypeSshAuth       CreateVaultCredentialRequestType = "ama.dev/ssh-auth"
+	CreateVaultCredentialRequestTypeTls           CreateVaultCredentialRequestType = "ama.dev/tls"
 )
 
 // Valid indicates whether the value is a known member of the CreateVaultCredentialRequestType enum.
 func (e CreateVaultCredentialRequestType) Valid() bool {
 	switch e {
-	case CreateVaultCredentialRequestTypeAmaDevoauthToken:
+	case CreateVaultCredentialRequestTypeBasicAuth:
 		return true
-	case CreateVaultCredentialRequestTypeAmaDevprivateKeyJwk:
-		return true
-	case CreateVaultCredentialRequestTypeKubernetesIobasicAuth:
-		return true
-	case CreateVaultCredentialRequestTypeKubernetesIosshAuth:
-		return true
-	case CreateVaultCredentialRequestTypeKubernetesIotls:
+	case CreateVaultCredentialRequestTypeOauthToken:
 		return true
 	case CreateVaultCredentialRequestTypeOpaque:
+		return true
+	case CreateVaultCredentialRequestTypePrivateKeyJwk:
+		return true
+	case CreateVaultCredentialRequestTypeSshAuth:
+		return true
+	case CreateVaultCredentialRequestTypeTls:
 		return true
 	default:
 		return false
@@ -1773,28 +1773,28 @@ func (e VaultCredentialState) Valid() bool {
 
 // Defines values for VaultCredentialType.
 const (
-	VaultCredentialTypeAmaDevoauthToken      VaultCredentialType = "ama.dev/oauth-token"
-	VaultCredentialTypeAmaDevprivateKeyJwk   VaultCredentialType = "ama.dev/private-key-jwk"
-	VaultCredentialTypeKubernetesIobasicAuth VaultCredentialType = "kubernetes.io/basic-auth"
-	VaultCredentialTypeKubernetesIosshAuth   VaultCredentialType = "kubernetes.io/ssh-auth"
-	VaultCredentialTypeKubernetesIotls       VaultCredentialType = "kubernetes.io/tls"
-	VaultCredentialTypeOpaque                VaultCredentialType = "Opaque"
+	VaultCredentialTypeBasicAuth     VaultCredentialType = "ama.dev/basic-auth"
+	VaultCredentialTypeOauthToken    VaultCredentialType = "ama.dev/oauth-token"
+	VaultCredentialTypeOpaque        VaultCredentialType = "opaque"
+	VaultCredentialTypePrivateKeyJwk VaultCredentialType = "ama.dev/private-key-jwk"
+	VaultCredentialTypeSshAuth       VaultCredentialType = "ama.dev/ssh-auth"
+	VaultCredentialTypeTls           VaultCredentialType = "ama.dev/tls"
 )
 
 // Valid indicates whether the value is a known member of the VaultCredentialType enum.
 func (e VaultCredentialType) Valid() bool {
 	switch e {
-	case VaultCredentialTypeAmaDevoauthToken:
+	case VaultCredentialTypeBasicAuth:
 		return true
-	case VaultCredentialTypeAmaDevprivateKeyJwk:
-		return true
-	case VaultCredentialTypeKubernetesIobasicAuth:
-		return true
-	case VaultCredentialTypeKubernetesIosshAuth:
-		return true
-	case VaultCredentialTypeKubernetesIotls:
+	case VaultCredentialTypeOauthToken:
 		return true
 	case VaultCredentialTypeOpaque:
+		return true
+	case VaultCredentialTypePrivateKeyJwk:
+		return true
+	case VaultCredentialTypeSshAuth:
+		return true
+	case VaultCredentialTypeTls:
 		return true
 	default:
 		return false

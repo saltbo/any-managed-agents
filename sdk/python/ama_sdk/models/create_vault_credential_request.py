@@ -29,7 +29,7 @@ class CreateVaultCredentialRequest:
     """ 
         Attributes:
             name (str):  Example: Workers AI token.
-            type_ (CreateVaultCredentialRequestType):  Example: Opaque.
+            type_ (CreateVaultCredentialRequestType):  Example: opaque.
             secret (CreateVaultCredentialRequestSecret):  Example: {'stringData': {'token': 'input-only'}}.
             metadata (CreateVaultCredentialRequestMetadata | Unset):  Example: {'owner': 'platform'}.
      """

@@ -21,6 +21,15 @@ import type { Env } from '../server/env'
 type OpenApiDocument = {
   openapi: string
   paths: Record<string, Record<string, { operationId?: string }>>
+  components?: {
+    schemas?: Record<string, JSONSchema>
+  }
+}
+
+type JSONSchema = {
+  properties?: Record<string, JSONSchema>
+  enum?: string[]
+  [key: string]: unknown
 }
 
 const ROOT = path.join(import.meta.dirname, '..')
@@ -30,6 +39,7 @@ async function main() {
 
   // 1. Emit the canonical OpenAPI snapshot from the live Hono routes.
   const document = await routeGeneratedOpenApi()
+  stabilizeSdkSchemaNames(document)
   await writeFile(path.join(ROOT, 'sdk/openapi.json'), `${JSON.stringify(document, null, 2)}\n`)
 
   // 2. Drive each language's generator from that snapshot.
@@ -81,6 +91,36 @@ async function routeGeneratedOpenApi() {
     throw new Error(`OpenAPI generation failed with HTTP ${response.status}`)
   }
   return (await response.json()) as OpenApiDocument
+}
+
+function stabilizeSdkSchemaNames(document: OpenApiDocument) {
+  setPropertyEnumNames(document, 'VaultCredential', 'type', [
+    'VaultCredentialTypeOpaque',
+    'VaultCredentialTypeBasicAuth',
+    'VaultCredentialTypeSshAuth',
+    'VaultCredentialTypeTls',
+    'VaultCredentialTypePrivateKeyJwk',
+    'VaultCredentialTypeOauthToken',
+  ])
+  setPropertyEnumNames(document, 'CreateVaultCredentialRequest', 'type', [
+    'CreateVaultCredentialRequestTypeOpaque',
+    'CreateVaultCredentialRequestTypeBasicAuth',
+    'CreateVaultCredentialRequestTypeSshAuth',
+    'CreateVaultCredentialRequestTypeTls',
+    'CreateVaultCredentialRequestTypePrivateKeyJwk',
+    'CreateVaultCredentialRequestTypeOauthToken',
+  ])
+}
+
+function setPropertyEnumNames(document: OpenApiDocument, schemaName: string, propertyName: string, names: string[]) {
+  const property = document.components?.schemas?.[schemaName]?.properties?.[propertyName]
+  if (!property) {
+    throw new Error(`OpenAPI schema property ${schemaName}.${propertyName} not found`)
+  }
+  if (!property.enum || property.enum.length !== names.length) {
+    throw new Error(`OpenAPI schema property ${schemaName}.${propertyName} enum does not match varnames`)
+  }
+  property['x-enum-varnames'] = names
 }
 
 await main()

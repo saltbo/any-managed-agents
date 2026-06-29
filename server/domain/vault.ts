@@ -6,10 +6,10 @@
 export const SECRET_PROVIDERS = ['ama'] as const
 export const VAULT_SCOPES = ['project', 'organization'] as const
 export const CREDENTIAL_TYPES = [
-  'Opaque',
-  'kubernetes.io/basic-auth',
-  'kubernetes.io/ssh-auth',
-  'kubernetes.io/tls',
+  'opaque',
+  'ama.dev/basic-auth',
+  'ama.dev/ssh-auth',
+  'ama.dev/tls',
   'ama.dev/private-key-jwk',
   'ama.dev/oauth-token',
 ] as const
@@ -124,13 +124,13 @@ export function secretRefIdentity(secretRef: string): SecretRefIdentity | null {
 
 function requiredKeys(type: CredentialType): string[] {
   switch (type) {
-    case 'Opaque':
+    case 'opaque':
       return []
-    case 'kubernetes.io/basic-auth':
+    case 'ama.dev/basic-auth':
       return ['username', 'password']
-    case 'kubernetes.io/ssh-auth':
+    case 'ama.dev/ssh-auth':
       return ['ssh-privatekey']
-    case 'kubernetes.io/tls':
+    case 'ama.dev/tls':
       return ['tls.crt', 'tls.key']
     case 'ama.dev/private-key-jwk':
       return ['jwk']
@@ -162,7 +162,7 @@ export function validateSecretData(type: CredentialType, stringData: Record<stri
       return { [`stringData.${key}`]: `Credential type ${type} requires ${key}.` }
     }
   }
-  if (type !== 'Opaque') {
+  if (type !== 'opaque') {
     for (const key of keys) {
       if (!allowed.has(key)) {
         return { [`stringData.${key}`]: `Credential type ${type} does not define ${key}.` }

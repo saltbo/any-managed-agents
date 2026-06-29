@@ -12,7 +12,7 @@ describe('[spec: vaults/secret-reference] secretReference', () => {
     const ref = secretReference(
       { vaultId: 'vault_abc', credentialId: 'vaultcred_abc', versionId: 'vaultver_abc' },
       1,
-      'Opaque',
+      'opaque',
       { stringData: { value: 'token' } },
     )
     expect(ref).toMatchObject({
@@ -27,7 +27,7 @@ describe('[spec: vaults/secret-reference] secretReference', () => {
     const ref = secretReference(
       { vaultId: 'vault_abc', credentialId: 'vaultcred_abc', versionId: 'vaultver_3' },
       3,
-      'Opaque',
+      'opaque',
       {
         stringData: { value: 'token' },
         referenceName: 'CUSTOM',
@@ -38,7 +38,7 @@ describe('[spec: vaults/secret-reference] secretReference', () => {
   })
 
   it('requires string data', () => {
-    expect(() => secretReference({ vaultId: 'vault_abc', credentialId: 'c', versionId: 'v' }, 1, 'Opaque', {})).toThrow(
+    expect(() => secretReference({ vaultId: 'vault_abc', credentialId: 'c', versionId: 'v' }, 1, 'opaque', {})).toThrow(
       /At least one data key is required/,
     )
   })

@@ -141,7 +141,7 @@ async function connectMcp(authorization: string, connectorId: string) {
     method: 'POST',
     body: JSON.stringify({
       name: `${connectorId} token`,
-      type: 'Opaque',
+      type: 'opaque',
       secret: { stringData: { value: `raw-${connectorId}-token` } },
     }),
   })
@@ -891,17 +891,17 @@ describe('[CF] /api/v1/sessions', () => {
     const vault = await createVault(authorization)
     const gitCredential = await createCredential(authorization, vault.id, {
       name: 'git-basic-auth',
-      type: 'kubernetes.io/basic-auth',
+      type: 'ama.dev/basic-auth',
       stringData: { username: 'git-user', password: 'git-password' },
     })
     const appSecret = await createCredential(authorization, vault.id, {
       name: 'app-config',
-      type: 'Opaque',
+      type: 'opaque',
       stringData: { alpha: 'secret-alpha', beta: 'secret-beta' },
     })
     await createCredential(authorization, vault.id, {
       name: 'tls-cert',
-      type: 'kubernetes.io/tls',
+      type: 'ama.dev/tls',
       stringData: { 'tls.crt': '-----BEGIN CERTIFICATE-----', 'tls.key': '-----BEGIN PRIVATE KEY-----' },
     })
 

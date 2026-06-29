@@ -56,7 +56,7 @@ function credential(overrides: Partial<VaultCredential> = {}): VaultCredential {
     vaultId: 'vault_1',
     projectId: 'project_1',
     name: 'OpenAI key',
-    type: 'Opaque',
+    type: 'opaque',
     metadata: {},
     state: 'active',
     activeVersionId: 'vaultver_1',
@@ -942,7 +942,7 @@ describe('[spec: vaults/add-credential-sheet] AddCredentialSheet', () => {
     await waitFor(() =>
       expect(capturedBody).toEqual({
         name: 'My key',
-        type: 'Opaque',
+        type: 'opaque',
         metadata: {},
         secret: { stringData: { value: 'sk-secret' } },
       }),

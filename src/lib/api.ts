@@ -326,10 +326,10 @@ export interface VaultCredentialVersion {
 }
 
 export type CredentialType =
-  | 'Opaque'
-  | 'kubernetes.io/basic-auth'
-  | 'kubernetes.io/ssh-auth'
-  | 'kubernetes.io/tls'
+  | 'opaque'
+  | 'ama.dev/basic-auth'
+  | 'ama.dev/ssh-auth'
+  | 'ama.dev/tls'
   | 'ama.dev/private-key-jwk'
   | 'ama.dev/oauth-token'
 

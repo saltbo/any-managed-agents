@@ -32,7 +32,7 @@ function credential(overrides: Partial<CredentialRecord> = {}): CredentialRecord
     organizationId: 'org_1',
     projectId: 'project_1',
     name: 'Token',
-    type: 'Opaque',
+    type: 'opaque',
     metadata: {},
     state: 'active',
     activeVersionId: 'vaultver_1',
@@ -164,7 +164,7 @@ describe('[spec: vaults/credential-create] createCredential', () => {
     })
     const result = await createCredential(deps, vault(), {
       name: 'Token',
-      type: 'Opaque',
+      type: 'opaque',
       metadata: {},
       secret: { stringData: { value: 'raw' } },
     })
@@ -181,7 +181,7 @@ describe('[spec: vaults/credential-create] createCredential', () => {
     })
     const result = await createCredential(deps, vault(), {
       name: 'Token',
-      type: 'Opaque',
+      type: 'opaque',
       metadata: {},
       secret: { stringData: { value: 'raw' } },
     })
@@ -192,7 +192,7 @@ describe('[spec: vaults/credential-create] createCredential', () => {
     await expect(
       createCredential(fakeDeps(), vault(), {
         name: 'Token',
-        type: 'Opaque',
+        type: 'opaque',
         metadata: {},
         secret: {},
       }),
@@ -210,7 +210,7 @@ describe('[spec: vaults/credential-create] createCredential', () => {
     await expect(
       createCredential(deps, vault(), {
         name: 'Token',
-        type: 'Opaque',
+        type: 'opaque',
         metadata: {},
         secret: { stringData: { value: 'raw' } },
       }),

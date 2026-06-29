@@ -721,7 +721,7 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
         vaultId: 'vault_1',
         projectId: 'p1',
         name: 'API Key',
-        type: 'Opaque',
+        type: 'opaque',
         metadata: {},
         state: 'active' as const,
         activeVersionId: null,
@@ -736,7 +736,7 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
       vi.stubGlobal('fetch', fetchMock)
       await api.createVaultCredential('vault_1', {
         name: 'API Key',
-        type: 'Opaque',
+        type: 'opaque',
         secret: { stringData: { value: 'raw' } },
       })
       const [, init] = fetchMock.mock.calls[0]!
@@ -774,7 +774,7 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
         vaultId: 'vault_1',
         projectId: 'p1',
         name: 'API Key',
-        type: 'Opaque',
+        type: 'opaque',
         metadata: {},
         state: 'revoked' as const,
         activeVersionId: null,
@@ -797,7 +797,7 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
         vaultId: 'vault_1',
         projectId: 'p1',
         name: 'API Key',
-        type: 'Opaque',
+        type: 'opaque',
         metadata: {},
         state: 'revoked' as const,
         activeVersionId: null,

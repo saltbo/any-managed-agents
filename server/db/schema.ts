@@ -343,10 +343,10 @@ export const vaultCredentials = sqliteTable(
     name: text('name').notNull(),
     type: text('type', {
       enum: [
-        'Opaque',
-        'kubernetes.io/basic-auth',
-        'kubernetes.io/ssh-auth',
-        'kubernetes.io/tls',
+        'opaque',
+        'ama.dev/basic-auth',
+        'ama.dev/ssh-auth',
+        'ama.dev/tls',
         'ama.dev/private-key-jwk',
         'ama.dev/oauth-token',
       ],
@@ -373,7 +373,7 @@ export const vaultCredentials = sqliteTable(
     check('ck_vault_credentials_state', sql`${table.state} in ('active','revoked')`),
     check(
       'ck_vault_credentials_type',
-      sql`${table.type} in ('Opaque','kubernetes.io/basic-auth','kubernetes.io/ssh-auth','kubernetes.io/tls','ama.dev/private-key-jwk','ama.dev/oauth-token')`,
+      sql`${table.type} in ('opaque','ama.dev/basic-auth','ama.dev/ssh-auth','ama.dev/tls','ama.dev/private-key-jwk','ama.dev/oauth-token')`,
     ),
   ],
 )

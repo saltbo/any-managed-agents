@@ -2,9 +2,21 @@ UPDATE `vault_credentials`
 SET `type` = CASE
   WHEN `type` = 'session_env_secret' AND json_valid(`metadata`) AND json_extract(`metadata`, '$.purpose') = 'agent-session'
     THEN 'ama.dev/private-key-jwk'
-  WHEN `type` IN ('Opaque','kubernetes.io/basic-auth','kubernetes.io/ssh-auth','kubernetes.io/tls','ama.dev/private-key-jwk','ama.dev/oauth-token')
+  WHEN `type` = 'Opaque'
+    THEN 'opaque'
+  WHEN `type` = 'kubernetes.io/basic-auth'
+    THEN 'ama.dev/basic-auth'
+  WHEN `type` = 'kubernetes.io/ssh-auth'
+    THEN 'ama.dev/ssh-auth'
+  WHEN `type` = 'kubernetes.io/tls'
+    THEN 'ama.dev/tls'
+  WHEN `type` = 'ama.dev/private-key-jwk'
+    THEN 'ama.dev/private-key-jwk'
+  WHEN `type` = 'ama.dev/oauth-token'
+    THEN 'ama.dev/oauth-token'
+  WHEN `type` IN ('opaque','ama.dev/basic-auth','ama.dev/ssh-auth','ama.dev/tls','ama.dev/private-key-jwk','ama.dev/oauth-token')
     THEN `type`
-  ELSE 'Opaque'
+  ELSE 'opaque'
 END;--> statement-breakpoint
 
 UPDATE `vault_credential_versions`

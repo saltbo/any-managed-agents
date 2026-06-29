@@ -57,7 +57,7 @@ async function createSessionEnvFrom(authorization: string) {
     method: 'POST',
     body: JSON.stringify({
       name: 'AK agent session key',
-      type: 'Opaque',
+      type: 'opaque',
       secret: { stringData: { value: 'raw-ak-agent-key' } },
     }),
   })

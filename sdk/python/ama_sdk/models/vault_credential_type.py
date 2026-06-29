@@ -1,12 +1,12 @@
 from enum import Enum
 
 class VaultCredentialType(str, Enum):
-    AMA_DEVOAUTH_TOKEN = "ama.dev/oauth-token"
-    AMA_DEVPRIVATE_KEY_JWK = "ama.dev/private-key-jwk"
-    KUBERNETES_IOBASIC_AUTH = "kubernetes.io/basic-auth"
-    KUBERNETES_IOSSH_AUTH = "kubernetes.io/ssh-auth"
-    KUBERNETES_IOTLS = "kubernetes.io/tls"
-    OPAQUE = "Opaque"
+    VAULT_CREDENTIAL_TYPE_BASIC_AUTH = "ama.dev/basic-auth"
+    VAULT_CREDENTIAL_TYPE_OAUTH_TOKEN = "ama.dev/oauth-token"
+    VAULT_CREDENTIAL_TYPE_OPAQUE = "opaque"
+    VAULT_CREDENTIAL_TYPE_PRIVATE_KEY_JWK = "ama.dev/private-key-jwk"
+    VAULT_CREDENTIAL_TYPE_SSH_AUTH = "ama.dev/ssh-auth"
+    VAULT_CREDENTIAL_TYPE_TLS = "ama.dev/tls"
 
     def __str__(self) -> str:
         return str(self.value)

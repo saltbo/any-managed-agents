@@ -33,7 +33,7 @@ class VaultCredential:
             vault_id (str):  Example: vault_abc123.
             project_id (None | str):  Example: project_abc123.
             name (str):  Example: Workers AI token.
-            type_ (VaultCredentialType):  Example: Opaque.
+            type_ (VaultCredentialType):  Example: opaque.
             metadata (VaultCredentialMetadata):  Example: {'owner': 'platform'}.
             state (VaultCredentialState):  Example: active.
             active_version_id (None | str):  Example: vaultver_abc123.

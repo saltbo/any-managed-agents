@@ -236,7 +236,7 @@ function credential(overrides: Partial<VaultCredential> = {}): VaultCredential {
     vaultId: 'vault_1',
     projectId: 'project_1',
     name: 'Workers token',
-    type: 'Opaque',
+    type: 'opaque',
     metadata: {},
     state: 'active',
     activeVersionId: 'vaultver_1',

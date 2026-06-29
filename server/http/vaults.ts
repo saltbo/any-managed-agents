@@ -77,7 +77,7 @@ const CredentialSchema = z
     vaultId: z.string().openapi({ example: 'vault_abc123' }),
     projectId: z.string().nullable().openapi({ example: 'project_abc123' }),
     name: z.string().openapi({ example: 'Workers AI token' }),
-    type: CredentialTypeSchema.openapi({ example: 'Opaque' }),
+    type: CredentialTypeSchema.openapi({ example: 'opaque' }),
     metadata: JsonObjectSchema.openapi({ example: { owner: 'platform' } }),
     state: z.enum(CREDENTIAL_STATES).openapi({ example: 'active' }),
     activeVersionId: z.string().nullable().openapi({ example: 'vaultver_abc123' }),
@@ -119,7 +119,7 @@ const SecretMaterialSchema = z
 const CreateCredentialSchema = z
   .object({
     name: z.string().min(1).max(120).openapi({ example: 'Workers AI token' }),
-    type: CredentialTypeSchema.openapi({ example: 'Opaque' }),
+    type: CredentialTypeSchema.openapi({ example: 'opaque' }),
     metadata: JsonObjectSchema.optional().openapi({ example: { owner: 'platform' } }),
     secret: SecretMaterialSchema.openapi({ example: { stringData: { token: 'input-only' } } }),
   })

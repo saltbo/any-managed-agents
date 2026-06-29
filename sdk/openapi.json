@@ -6731,14 +6731,22 @@
           "type": {
             "type": "string",
             "enum": [
-              "Opaque",
-              "kubernetes.io/basic-auth",
-              "kubernetes.io/ssh-auth",
-              "kubernetes.io/tls",
+              "opaque",
+              "ama.dev/basic-auth",
+              "ama.dev/ssh-auth",
+              "ama.dev/tls",
               "ama.dev/private-key-jwk",
               "ama.dev/oauth-token"
             ],
-            "example": "Opaque"
+            "example": "opaque",
+            "x-enum-varnames": [
+              "VaultCredentialTypeOpaque",
+              "VaultCredentialTypeBasicAuth",
+              "VaultCredentialTypeSshAuth",
+              "VaultCredentialTypeTls",
+              "VaultCredentialTypePrivateKeyJwk",
+              "VaultCredentialTypeOauthToken"
+            ]
           },
           "metadata": {
             "type": "object",
@@ -6931,14 +6939,22 @@
           "type": {
             "type": "string",
             "enum": [
-              "Opaque",
-              "kubernetes.io/basic-auth",
-              "kubernetes.io/ssh-auth",
-              "kubernetes.io/tls",
+              "opaque",
+              "ama.dev/basic-auth",
+              "ama.dev/ssh-auth",
+              "ama.dev/tls",
               "ama.dev/private-key-jwk",
               "ama.dev/oauth-token"
             ],
-            "example": "Opaque"
+            "example": "opaque",
+            "x-enum-varnames": [
+              "CreateVaultCredentialRequestTypeOpaque",
+              "CreateVaultCredentialRequestTypeBasicAuth",
+              "CreateVaultCredentialRequestTypeSshAuth",
+              "CreateVaultCredentialRequestTypeTls",
+              "CreateVaultCredentialRequestTypePrivateKeyJwk",
+              "CreateVaultCredentialRequestTypeOauthToken"
+            ]
           },
           "metadata": {
             "type": "object",
