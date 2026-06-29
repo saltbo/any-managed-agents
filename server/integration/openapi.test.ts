@@ -396,31 +396,55 @@ describe('[CF] OpenAPI documentation', () => {
     })
 
     const createTriggerSchema = doc.components?.schemas?.CreateTriggerRequest as {
-      properties?: Record<string, { type?: string; minLength?: number; maxLength?: number; properties?: unknown }>
+      properties?: Record<
+        string,
+        {
+          type?: string
+          minLength?: number
+          maxLength?: number
+          nullable?: boolean
+          properties?: Record<string, unknown>
+          required?: string[]
+          oneOf?: unknown[]
+          $ref?: string
+        }
+      >
       required?: string[]
     }
     const createTriggerProperties = createTriggerSchema?.properties
     expect(createTriggerProperties).toMatchObject({
-      agentId: { type: 'string', minLength: 1 },
-      environmentId: { type: 'string', minLength: 1 },
       name: { type: 'string', minLength: 1, maxLength: 160 },
+      source: { oneOf: expect.any(Array) },
+      suspend: { type: 'boolean' },
+      template: { type: 'object' },
+      nextDueAt: { type: 'string' },
+    })
+    expect(createTriggerSchema?.required).toEqual(expect.arrayContaining(['name', 'source', 'template']))
+    expect(createTriggerSchema?.required).not.toContain('nextDueAt')
+    expect(createTriggerSchema?.required).not.toContain('suspend')
+    const templateSpec = createTriggerProperties?.template?.properties?.spec as
+      | {
+          properties?: Record<
+            string,
+            { type?: string; nullable?: boolean; minLength?: number; maxLength?: number; $ref?: string }
+          >
+          required?: string[]
+        }
+      | undefined
+    expect(templateSpec?.properties).toMatchObject({
+      agentId: { type: 'string', minLength: 1 },
+      environmentId: { type: 'string', nullable: true, minLength: 1 },
+      runtime: { $ref: '#/components/schemas/Runtime' },
       promptTemplate: { type: 'string', minLength: 1, maxLength: 16000 },
       volumes: { type: 'array' },
       volumeMounts: { type: 'array' },
       env: { type: 'object' },
       envFrom: { type: 'array' },
-      schedule: { type: 'object' },
-      enabled: { type: 'boolean' },
-      metadata: { type: 'object' },
     })
-    expect(createTriggerProperties?.runtime).toEqual({ $ref: '#/components/schemas/Runtime' })
     // environmentId is optional: an unpinned trigger resolves an environment per
-    // dispatch, so it must NOT be in the required set.
-    expect(createTriggerSchema?.required).toEqual(
-      expect.arrayContaining(['agentId', 'runtime', 'name', 'promptTemplate']),
-    )
-    expect(createTriggerSchema?.required).not.toContain('schedule')
-    expect(createTriggerSchema?.required).not.toContain('environmentId')
+    // dispatch, so it must NOT be in the template spec required set.
+    expect(templateSpec?.required).toEqual(expect.arrayContaining(['agentId', 'runtime', 'promptTemplate']))
+    expect(templateSpec?.required).not.toContain('environmentId')
 
     const triggerRunProperties = (
       doc.components?.schemas?.TriggerRun as {
