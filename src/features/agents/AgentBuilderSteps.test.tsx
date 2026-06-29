@@ -272,6 +272,11 @@ describe('CoreStep', () => {
     expect(screen.getByText(/custom-model/)).toBeInTheDocument()
   })
 
+  it('renders catalog display name when available', async () => {
+    renderCoreStep({}, [buildProviderModel({ displayName: 'Kimi Latest', availability: 'available' })])
+    expect(await screen.findByText(/Kimi Latest/)).toBeInTheDocument()
+  })
+
   it('renders default model when model is in empty catalog', () => {
     const draft = { ...emptyBuilderDraft, provider: 'workers-ai', model: '@cf/moonshotai/kimi-k2.6' }
     renderCoreStep({ draft })

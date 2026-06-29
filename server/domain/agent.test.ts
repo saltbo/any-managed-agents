@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   type AgentToolAttachment,
+  defaultAgentHandoff,
   governanceBlocksTool,
   hasSecretMaterial,
   matchesHandoffTarget,
@@ -137,6 +138,27 @@ describe('[spec: agents/validation] validateHandoff', () => {
       handoff: 'Secret material must be stored in a vault.',
     })
   })
+
+  it('rejects secret-looking handoff target role and capability values', () => {
+    expect(
+      validateHandoff({
+        enabled: true,
+        accepts: { roles: [], capabilities: [] },
+        targets: [{ role: 'raw-secret-value-xxxxxxxxxxxxxxxxx' }],
+      }),
+    ).toEqual({
+      handoff: 'Secret material must be stored in a vault.',
+    })
+    expect(
+      validateHandoff({
+        enabled: true,
+        accepts: { roles: [], capabilities: [] },
+        targets: [{ capability: 'raw-secret-value-xxxxxxxxxxxxxxxxx' }],
+      }),
+    ).toEqual({
+      handoff: 'Secret material must be stored in a vault.',
+    })
+  })
 })
 
 describe('[spec: agents/validation] hasSecretMaterial', () => {
@@ -193,6 +215,10 @@ describe('[spec: agents/lifecycle] nextVersionNumber', () => {
 })
 
 describe('[spec: agents/handoff] handoff target resolution', () => {
+  it('provides the default disabled handoff contract', () => {
+    expect(defaultAgentHandoff()).toEqual({ enabled: false, accepts: { roles: [], capabilities: [] }, targets: [] })
+  })
+
   it('matches a candidate by role or capability', () => {
     const candidate = {
       role: 'worker',

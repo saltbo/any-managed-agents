@@ -573,6 +573,173 @@ describe('shared API client [spec: web-console/rpc-client]', () => {
   })
 
   // ---------------------------------------------------------------------------
+  // Triggers API
+  // ---------------------------------------------------------------------------
+  describe('triggers API', () => {
+    const triggerFixture = {
+      metadata: {
+        uid: 'trigger_1',
+        pid: 'project_1',
+        name: 'Nightly run',
+        description: null,
+        labels: {},
+        annotations: {},
+        createdBy: 'user_1',
+        createdAt: '',
+        updatedAt: '',
+        archivedAt: null,
+      },
+      spec: {
+        agentId: 'agent_1',
+        environmentId: null,
+        runtime: 'ama',
+        prompt: 'Run checks',
+        schedule: { type: 'interval' as const, intervalSeconds: 3600, windowSeconds: 0 },
+      },
+      status: { phase: 'active' as const, enabled: true, lastRunAt: null, nextRunAt: null },
+    }
+
+    it('listTriggers serializes list options', async () => {
+      const fetchMock = makeJsonFetch(listPage)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.listTriggers({ enabled: true, limit: 10 })
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/triggers')
+      expect(url).toContain('enabled=true')
+      expect(url).toContain('limit=10')
+    })
+
+    it('createTrigger posts JSON', async () => {
+      const fetchMock = makeJsonFetch(triggerFixture)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.createTrigger({
+        name: 'Nightly run',
+        agentId: 'agent_1',
+        runtime: 'ama',
+        promptTemplate: 'Run checks',
+        schedule: { type: 'interval', intervalSeconds: 3600, windowSeconds: 0 },
+      })
+      const [, init] = fetchMock.mock.calls[0]!
+      expect(init?.method).toBe('POST')
+    })
+
+    it('readTrigger calls /api/v1/triggers/:triggerId', async () => {
+      const fetchMock = makeJsonFetch(triggerFixture)
+      vi.stubGlobal('fetch', fetchMock)
+      const result = await api.readTrigger('trigger_1')
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/triggers/trigger_1')
+      expect(result.metadata.uid).toBe('trigger_1')
+    })
+
+    it('updateTrigger patches the trigger', async () => {
+      const fetchMock = makeJsonFetch(triggerFixture)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.updateTrigger('trigger_1', { enabled: false })
+      const [url, init] = fetchMock.mock.calls[0]!
+      expect(url).toContain('/api/v1/triggers/trigger_1')
+      expect(init?.method).toBe('PATCH')
+    })
+
+    it('deleteTrigger deletes the trigger', async () => {
+      const fetchMock = makeEmptyFetch(204)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.deleteTrigger('trigger_1')
+      const [url, init] = fetchMock.mock.calls[0]!
+      expect(url).toContain('/api/v1/triggers/trigger_1')
+      expect(init?.method).toBe('DELETE')
+    })
+
+    it('listTriggerRuns calls the runs sub-resource', async () => {
+      const fetchMock = makeJsonFetch(listPage)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.listTriggerRuns('trigger_1', { limit: 5 })
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/triggers/trigger_1/runs')
+      expect(url).toContain('limit=5')
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // Memory Stores API
+  // ---------------------------------------------------------------------------
+  describe('memory stores API', () => {
+    const memoryStoreFixture = {
+      metadata: {
+        uid: 'mem_1',
+        pid: 'project_1',
+        name: 'Project memory',
+        description: null,
+        labels: {},
+        annotations: {},
+        createdBy: 'user_1',
+        createdAt: '',
+        updatedAt: '',
+        archivedAt: null,
+      },
+      spec: { scope: 'project' as const },
+      status: { phase: 'active' as const, memoryCount: 0 },
+    }
+    const memoryFixture = {
+      metadata: {
+        uid: 'memory_1',
+        pid: 'project_1',
+        name: 'facts.md',
+        description: null,
+        labels: {},
+        annotations: {},
+        createdBy: 'user_1',
+        createdAt: '',
+        updatedAt: '',
+        archivedAt: null,
+      },
+      spec: { storeId: 'mem_1', path: 'facts.md', content: 'facts' },
+      status: { phase: 'active' as const },
+    }
+
+    it('listMemoryStores serializes list options', async () => {
+      const fetchMock = makeJsonFetch(listPage)
+      vi.stubGlobal('fetch', fetchMock)
+      await api.listMemoryStores({ archived: true, search: 'project' })
+      const url = fetchMock.mock.calls[0]?.[0] as string
+      expect(url).toContain('/api/v1/memory-stores')
+      expect(url).toContain('archived=true')
+      expect(url).toContain('search=project')
+    })
+
+    it('reads, creates, updates, and archives memory stores', async () => {
+      const fetchMock = makeJsonFetch(memoryStoreFixture)
+      vi.stubGlobal('fetch', fetchMock)
+
+      await api.readMemoryStore('mem_1')
+      await api.createMemoryStore({ name: 'Project memory' })
+      await api.updateMemoryStore('mem_1', { description: 'Shared facts' })
+      await api.archiveMemoryStore('mem_1')
+
+      expect(fetchMock.mock.calls[0]?.[0] as string).toContain('/api/v1/memory-stores/mem_1')
+      expect(fetchMock.mock.calls[1]?.[1]?.method).toBe('POST')
+      expect(fetchMock.mock.calls[2]?.[1]?.method).toBe('PATCH')
+      expect(fetchMock.mock.calls[3]?.[1]?.method).toBe('PATCH')
+    })
+
+    it('manages memory records under a memory store', async () => {
+      const fetchMock = makeJsonFetch(memoryFixture)
+      vi.stubGlobal('fetch', fetchMock)
+
+      await api.listMemoryStoreMemories('mem_1', { limit: 5 })
+      await api.createMemoryStoreMemory('mem_1', { path: 'facts.md', content: 'facts' })
+      await api.updateMemoryStoreMemory('mem_1', 'memory_1', { content: 'new facts' })
+      await api.deleteMemoryStoreMemory('mem_1', 'memory_1')
+
+      expect(fetchMock.mock.calls[0]?.[0] as string).toContain('/api/v1/memory-stores/mem_1/memories')
+      expect(fetchMock.mock.calls[0]?.[0] as string).toContain('limit=5')
+      expect(fetchMock.mock.calls[1]?.[1]?.method).toBe('POST')
+      expect(fetchMock.mock.calls[2]?.[1]?.method).toBe('PATCH')
+      expect(fetchMock.mock.calls[3]?.[1]?.method).toBe('DELETE')
+    })
+  })
+
+  // ---------------------------------------------------------------------------
   // Providers API
   // ---------------------------------------------------------------------------
   describe('providers API', () => {

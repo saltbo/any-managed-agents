@@ -322,6 +322,20 @@ describe('[spec: environments/console-detail] EnvironmentDetailView', () => {
     expect(screen.getByText('open')).toBeTruthy()
   })
 
+  it('shows limited networking when no allowed hosts are configured', () => {
+    const env = environment({
+      networking: { type: 'limited', allowMcpServers: false, allowPackageManagers: false },
+    })
+    render(
+      <MemoryRouter>
+        <EnvironmentDetailView environment={env} sessions={[]} onArchive={vi.fn()} />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByText('Limited:')).toBeTruthy()
+    expect(screen.getAllByText('Blocked')).toHaveLength(2)
+  })
+
   it('only shows archive button for non-archived environment', () => {
     render(
       <MemoryRouter>
